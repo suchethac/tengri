@@ -13,7 +13,7 @@ from jax import Array
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, PARAMS as _AGN_PARAMS
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.polar_dust import (
-    polar_cone_covering_fraction,
+    polar_cone_covering_factor,
     polar_dust_emission,
     polar_dust_extinction,
 )
@@ -109,6 +109,7 @@ def polar_dust_reemission_lnu(
     agn_polar_T: float = _DEFAULT_AGN_POLAR_T,
     agn_polar_beta: float = _DEFAULT_AGN_POLAR_BETA,
     agn_polar_law: str = "smc",
+    agn_polar_reference: str = "bolometric",
     **_params,
 ) -> Array:
     r"""Compute polar-dust graybody reemission in L_ν units.
@@ -156,6 +157,15 @@ def polar_dust_reemission_lnu(
     agn_polar_law : str, optional
         Extinction law (``"smc"`` / ``"calzetti"`` / ``"gaskell"``).
         Default ``"smc"``.
+    agn_polar_reference : {'bolometric', 'face_on'}, optional
+        Which disc reference luminosity ``l_in`` represents, forwarded to
+        :func:`~tengri.components.agn.polar_dust.polar_cone_covering_factor`
+        (R60). ``'bolometric'`` (default) is the hemisphere-integrated
+        ``10**agn_log_lbol`` that ``agn_norm='independent'`` and
+        ``'conserving'`` put on the disc; ``'face_on'`` is CIGALE's
+        inclination-specific ``disk`` template, which
+        ``agn_norm='cigale_joint'`` ties the disc to via ``agn_power x R``.
+        The two frames differ by exactly 18/7, so the caller states it.
 
     Returns
     -------
@@ -204,9 +214,13 @@ def polar_dust_reemission_lnu(
 
     # Cone-covering factor (task13 fix-round-1 item 1): only the fraction of
     # the disc's bolometric luminosity within the polar cone can ever be
-    # absorbed by the polar dust -- see polar_cone_covering_fraction's
-    # docstring for the derivation. Function of agn_polar_oa alone.
-    l_absorbed_total = polar_cone_covering_fraction(agn_polar_oa) * l_absorbed_total
+    # absorbed by the polar dust -- see polar_cone_covering_factor's
+    # docstring for the derivation. A function of agn_polar_oa AND the
+    # reference frame ``l_in`` is expressed in (R60): the same geometry, 18/7
+    # apart between the bolometric and face-on disc conventions.
+    l_absorbed_total = (
+        polar_cone_covering_factor(agn_polar_oa, reference=agn_polar_reference) * l_absorbed_total
+    )
 
     # Returns L_ν in erg/s/Hz.
     l_nu_reemit = polar_dust_emission(

@@ -437,6 +437,7 @@ def _agn_sed_components(
     L_lambda_lines_iso: Array,
     central_mask: Array | float,
     atten_factor: Array,
+    torus_factor: Array | float,
     l_nu_conv: Array,
     L_nu_polar: Array,
 ) -> dict[str, Array]:
@@ -463,7 +464,15 @@ def _agn_sed_components(
     central_mask : array_like or float
         Stage-4.5 Type-1/2 obscuration factor applied to disc + aniso-lines.
     atten_factor : array_like, shape (n_wave,)
-        Stage-5 attenuation-block multiplicative factor.
+        Stage-5 attenuation-block multiplicative factor, applied to the
+        central engine (disc + lines).
+    torus_factor : array_like or float
+        What multiplies the torus. Equal to ``atten_factor`` for a genuine
+        foreground screen; for the ``polar_dust`` block it is instead the
+        scalar budget share ``1 - share`` under the joint/conserving
+        policies, or ``1.0`` under ``'independent'`` -- the polar screen
+        reddens the disc, not the torus IR (R61), and the torus is rescaled
+        only because the two share one dust budget (R59).
     l_nu_conv : array_like, shape (n_wave,)
         :math:`\lambda^2/c` conversion factor, L_lambda -> L_nu [Hz/Å].
     L_nu_polar : array_like, shape (n_wave,)
@@ -486,7 +495,7 @@ def _agn_sed_components(
     ) * central_mask + L_lambda_lines_iso
     return {
         "disc": L_lambda_disc * central_mask * atten_factor * l_nu_conv,
-        "torus": L_lambda_torus * atten_factor * l_nu_conv,
+        "torus": L_lambda_torus * torus_factor * l_nu_conv,
         "lines": L_lambda_lines_total * atten_factor * l_nu_conv,
         "polar": L_nu_polar,
     }
@@ -692,6 +701,7 @@ agn_torus_block, agn_attenuation_block : str
     _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
     _disc_R = None
     _disc_incl = None
+    _disc_R_faceon = None
     # ``agn_norm`` policy: "cigale_joint" (current default) ties disc/torus to
     # the single agn_power reference (only meaningful for the SKIRTOR torus,
     # whose template ratios define R, #556); "conserving" debits the disc
@@ -708,7 +718,7 @@ agn_torus_block, agn_attenuation_block : str
     _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
     if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
         _skirtor_bundle = _templates_for("torus", agn_torus_block)
-        _disc_R, _disc_incl, _ = skirtor_disc_dust_ratio(
+        _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,
             jnp.ones_like(wave),
@@ -897,24 +907,105 @@ agn_torus_block, agn_attenuation_block : str
     atten_fn = resolve_agn_block("attenuation", agn_attenuation_block)
     factor = atten_fn(wave, **params)
 
-    L_lambda_total = (L_lambda_central + L_lambda_torus) * factor
-
     # Convert to L_nu [erg/s/Hz] using L_nu = L_lambda * lambda^2 / c.
     _conv = wave**2 / C_AA_PER_S
-    L_nu_atten = L_lambda_total * _conv
 
     # Stage 6 (conditional): polar-dust reemission (CIGALE skirtor2016 polar
     # dust convention; Yang et al. 2020, MNRAS, 491, 740, section 2.2.2).
-    # When polar_dust attenuation is selected, the absorbed photons are re-emitted
-    # as a geometry-independent FIR graybody. Compute and add this to the SED.
     # Static dispatch on agn_attenuation_block (a Python string) is JIT-safe.
     if agn_attenuation_block == "polar_dust":
-        # Compute reemission in L_nu from the pre-attenuation SED (torus-screened
-        # central engine + torus IR).
-        L_lambda_pre_atten = L_lambda_central + L_lambda_torus
-        L_nu_reemit = polar_dust_reemission_lnu(wave, L_lambda_pre_atten, **params)
+        # R61: the polar screen reddens the DISC, never the torus IR. The polar
+        # dust sits in the cone between the observer and the central engine;
+        # the torus IR neither passes through it nor feeds its re-emission
+        # budget, which is disc light. CIGALE reddens only ``disk``
+        # (skirtor2016.py: ``self.SKIRTOR2016.disk *= ext_fac``) and integrates
+        # ``AGN1.disk (1 - ext_fac)`` alone for the absorbed power. Feeding the
+        # torus in as well was an inconsistency with no physics behind it;
+        # measured, it inflated the absorbed integral by 1.7% (SMC extinction
+        # is nearly transparent in the IR, which is why it stayed small and
+        # unnoticed) while making the torus carry a screen it should not see.
+        #
+        # R60: which cone factor applies depends on what ``L_lambda_disc``
+        # represents under the active policy -- the two frames are exactly
+        # 18/7 apart, so this is stated, never inherited. Under cigale_joint
+        # with the SKIRTOR torus the Stage-4 R-tie has just normalized the disc
+        # to CIGALE's own inclination-specific ``disk`` (``agn_power x R``), so
+        # the face-on convention applies; otherwise the disc carries the
+        # hemisphere-integrated bolometric ``10**agn_log_lbol``.
+        _polar_reference = (
+            "face_on"
+            if (_agn_norm == "cigale_joint" and agn_torus_block == "skirtor")
+            else "bolometric"
+        )
+        # R60, carried to its conclusion: ``g`` is referenced to
+        # ``int L(theta=0) dlambda``, CIGALE's face-on, UN-reddened SKIRTOR
+        # disc integral -- not the OBSERVER-inclination, R-tied
+        # ``L_lambda_disc`` Stage 4 just built (which carries both the
+        # ``disk(i)/disk(0)`` reweighting and the reddened, anisotropy-scaled
+        # ``_disc_R``). Handing that array to ``g`` would apply a face-on
+        # factor to a non-face-on, wrongly-scaled luminosity -- the very frame
+        # mismatch the ruling forbids. ``skirtor_disc_dust_ratio`` already
+        # derives exactly the right scale for this,
+        # ``_disc_R_faceon = int_disk0 / int_dust`` (its own docstring: "the
+        # ratio the polar l_ext proxy needs") -- so rebuild the face-on array
+        # from the PRE-Stage-4 disc shape (``_disc_intrinsic``, before the
+        # inclination reweighting and before the ``_disc_R`` rescale),
+        # renormalized to unit integral and rescaled by
+        # ``agn_power * _disc_R_faceon``, mirroring exactly how Stage 4 built
+        # ``_disc_scaled`` from the same shape via ``agn_power * _disc_R``.
+        _polar_disc = L_lambda_disc
+        if _polar_reference == "face_on" and _disc_R_faceon is not None:
+            _disc_shape_unit = _disc_intrinsic / jnp.maximum(
+                jnp.trapezoid(_disc_intrinsic, wave), 1e-30
+            )
+            _polar_disc = _disc_shape_unit * (_agn_power * _disc_R_faceon)
+        _polar_params = {k: v for k, v in params.items() if k != "agn_polar_reference"}
+        L_nu_reemit = polar_dust_reemission_lnu(
+            wave,
+            _polar_disc,
+            agn_polar_reference=_polar_reference,
+            **_polar_params,
+        )
+
+        # R59: under the joint and conserving policies the AGN dust budget
+        # INCLUDES the polar re-emission -- torus + polar = the budget -- so
+        # the AGN dust total is invariant in E(B-V), exactly as CIGALE's is
+        # (skirtor2016.py adds the polar blackbody to ``dust`` BEFORE
+        # ``norm = 1/int dust``, then splits: ``lumin_dust = agn_power``,
+        # ``lumin_torus = agn_power - lumin_polar_dust``). The torus block has
+        # already normalized itself to the budget, so the share comes out of
+        # it rather than being added on top. ``share`` is < 1 by construction,
+        # so no E(B-V) can drive the torus negative.
+        #
+        # Under 'independent' each component stays on its own luminosity scale
+        # -- that is the policy's contract -- so the re-emission is additive
+        # and the total grows by the absorbed polar power.
+        # Both budgets in the SAME measure. The torus is an L_lambda density
+        # and the graybody an L_nu one, and on a finite grid the two
+        # quadratures of one spectrum differ by ~1e-6 relative -- enough to
+        # leave the "invariant total" drifting at that level. Converting the
+        # torus to L_nu first and integrating both over nu makes the split
+        # exact by construction.
+        _nu = C_AA_PER_S / wave
+        if _agn_norm in ("cigale_joint", "conserving"):
+            _agn_dust_budget = jnp.abs(jnp.trapezoid(L_lambda_torus * _conv, _nu))
+            _polar_power = jnp.abs(jnp.trapezoid(L_nu_reemit, _nu))
+            _share = _polar_power / jnp.maximum(_agn_dust_budget + _polar_power, 1e-300)
+            _torus_factor = 1.0 - _share
+            # Renormalize the graybody from its own absorbed power to the
+            # budget share, so torus + polar integrates to _agn_dust_budget.
+            L_nu_reemit = L_nu_reemit * (
+                _agn_dust_budget * _share / jnp.maximum(_polar_power, 1e-300)
+            )
+        else:
+            _torus_factor = 1.0
+        L_lambda_total = L_lambda_central * factor + L_lambda_torus * _torus_factor
     else:
         L_nu_reemit = jnp.zeros_like(wave)
+        _torus_factor = factor
+        L_lambda_total = (L_lambda_central + L_lambda_torus) * factor
+
+    L_nu_atten = L_lambda_total * _conv
     L_nu_result = L_nu_atten + L_nu_reemit
 
     # Public per-sub-block rest-frame SEDs (NAMING_CONTRACT §4b.5):
@@ -929,6 +1020,7 @@ agn_torus_block, agn_attenuation_block : str
             L_lambda_lines_iso=L_lambda_lines_iso,
             central_mask=_central_mask,
             atten_factor=factor,
+            torus_factor=_torus_factor,
             l_nu_conv=_conv,
             L_nu_polar=L_nu_reemit,
         )

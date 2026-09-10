@@ -318,6 +318,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The composable-AGN polar-dust attenuation block no longer disagrees with
+  CIGALE's `skirtor2016` module on how the torus and polar re-emission share
+  the AGN dust budget, which reference luminosity the polar covering factor
+  multiplies, and what the polar screen reddens. Under
+  `agn_norm='cigale_joint'`/`'conserving'`, the AGN dust budget now **includes**
+  the polar re-emission (torus + polar = the budget, so the total is invariant
+  in `agn_polar_ebv` to floating point -- measured `1.0` to `1e-16` relative
+  across `agn_polar_ebv` in `{0, 0.03, 0.1, 0.3}`, against 1.00/1.41/1.92/2.33
+  before); under `'independent'` the polar term stays additive on its own
+  scale, as the policy's contract requires (measured 1.00/1.29/1.65/1.96 --
+  unchanged). `polar_cone_covering_factor(opening_angle_deg, reference=...)`
+  replaces the single-reference `polar_cone_covering_fraction`: CIGALE's
+  `g(oa) = 7/18 - sin^2(oa)/6 - (2/9)sin^3(oa)` (referenced to
+  `int L(theta=0) dlambda`, its face-on flux-table convention) applies when the
+  disc is CIGALE's inclination-specific `disk` template
+  (`agn_norm='cigale_joint'` with the SKIRTOR torus, tied via `agn_power x R`);
+  `f_cone(oa) = 1 - (3/7)sin^2 oa - (4/7)sin^3 oa` (hemisphere-integrated
+  bolometric) applies under `'independent'`/`'conserving'`. The two factors are
+  exactly proportional (`f_cone/g = 18/7`), so picking the wrong one silently
+  moves the polar re-emission by 2.571x; the function refuses an unrecognized
+  `reference` rather than defaulting. Reproducing CIGALE's face-on integral
+  needed the disc's *un-inclination-weighted* shape rescaled by
+  `skirtor_disc_dust_ratio`'s `R_faceon = int_disk0/int_dust` output (already
+  derived there for exactly this, previously discarded) -- rescaling the
+  Stage-4 R-tied (inclination-weighted, `R`-scaled) disc by the inclination
+  ratio alone reuses the wrong proportionality constant and was off by ~20%.
+  Measured at the SKIRTOR fiducial (`t=7, pl=1, q=1, oa=40, i=30, disk_type=1,
+  fracAGN=0.3, law=0, EBV=0.03, T=100, beta=1.6`) against a live `pcigale`
+  `skirtor2016` run, normalized to the same AGN dust budget: torus 1.05x
+  (100 um) / 1.08x (1 mm), polar 0.95x at both -- both within 5%, the residual
+  torus-side gap traced (via a polar-dust-disabled control) to the pre-existing
+  SKIRTOR torus *template* interpolation, unaffected by this fix. Finally, the
+  polar screen now reddens the disc only: the torus IR is removed from both
+  the screen input and the absorbed-luminosity integrand (CIGALE reddens only
+  `disk`, never its torus thermal emission).
+
 - Rule 4 of the composable-AGN recipe validator no longer names
   `nlr={'type': 'analytic'}` as disc-anchored. `nlr_analytic_block` is
   illuminated by the intrinsic bolometric `10**agn_log_lbol` and its body opens

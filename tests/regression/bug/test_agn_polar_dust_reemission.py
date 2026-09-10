@@ -121,6 +121,20 @@ class TestPolarDustCoveringFactor:
     absorbed luminosity :func:`polar_dust_extinction` returns is
     geometry-independent (Yang+2020 §2.2.2): cos_inc has no effect on it at
     all, so this identity is exact at every inclination by construction.
+
+    **Which policy this measures (R60).** The factor asserted here is
+    ``f_cone``, the cone's share of the disc's HEMISPHERE-INTEGRATED
+    bolometric luminosity -- the reference that
+    ``agn_norm='independent'`` and ``'conserving'`` put on the disc
+    (``10**agn_log_lbol``). It is called through
+    :func:`polar_dust_reemission_lnu`'s default
+    ``agn_polar_reference='bolometric'``, so that is the policy these cases
+    run under, and the identity is correct there. Under
+    ``agn_norm='cigale_joint'`` with the SKIRTOR torus the disc is instead
+    tied to CIGALE's inclination-specific ``disk`` template, whose factor is
+    ``g = (7/18) f_cone`` -- exactly 18/7 smaller. That twin is
+    :class:`TestPolarDustCoveringFactorFaceOnReference` below; neither pin
+    replaces the other, they pin two different reference frames.
     """
 
     #: Synthetic disc-like spectrum: an arbitrary smooth power law, exactly
@@ -201,6 +215,85 @@ class TestPolarDustCoveringFactor:
             f"sed_agn_polar at agn_polar_oa=10deg vs 80deg differs by only "
             f"{max_rel_diff:.3e} relative -- the cone-covering factor has no effect."
         )
+
+
+class TestPolarDustCoveringFactorFaceOnReference:
+    """The ``'face_on'`` twin of the pin above (R60).
+
+    The polar-cone geometry is one thing measured against two disc reference
+    luminosities, and the two differ by **exactly 18/7**:
+
+    * ``f_cone(oa) = 1 - (3/7)sin^2 oa - (4/7)sin^3 oa`` against the
+      hemisphere-integrated bolometric ``L_bol = (7 pi/3) I_0``;
+    * ``g(oa) = 7/18 - sin^2(oa)/6 - (2/9) sin^3(oa)`` against
+      ``int L(theta=0) dlambda``, the face-on value a SKIRTOR flux table
+      carries (already multiplied by ``4 pi d^2``, hence the compensating
+      ``1/4 pi`` folded into ``g``) -- CIGALE's ``skirtor2016`` convention.
+
+    Reproduced from pcigale at ``oa=40``: ``g = 0.261007`` against
+    ``f_cone = 0.671162``, ratio 2.571429 = 18/7.
+
+    Picking a reference silently would move the polar re-emission by that
+    2.571x, so :func:`polar_cone_covering_factor` refuses an unknown one
+    rather than defaulting.
+    """
+
+    _L_LAMBDA_DISC = 1e10 * (_WAVE / 5000.0) ** (-1.5)
+    _EBV = 0.3
+
+    @pytest.mark.parametrize("oa", [10.0, 40.0, 45.0, 80.0])
+    def test_face_on_factor_is_exactly_seven_eighteenths_of_bolometric(self, oa):
+        from tengri.components.agn.polar_dust import polar_cone_covering_factor
+
+        bol = float(polar_cone_covering_factor(oa, reference="bolometric"))
+        face = float(polar_cone_covering_factor(oa, reference="face_on"))
+        assert face == pytest.approx((7.0 / 18.0) * bol, rel=1e-12, abs=0.0)
+
+    def test_matches_pcigale_g_at_the_skirtor_fiducial(self):
+        """The face-on branch reproduces CIGALE's own ``l_ext`` coefficient."""
+        from tengri.components.agn.polar_dust import polar_cone_covering_factor
+
+        assert float(polar_cone_covering_factor(40.0, reference="face_on")) == pytest.approx(
+            0.261007, rel=1e-5, abs=0.0
+        )
+        assert float(polar_cone_covering_factor(40.0, reference="bolometric")) == pytest.approx(
+            0.671162, rel=1e-5, abs=0.0
+        )
+
+    @pytest.mark.parametrize("oa", [10.0, 45.0, 80.0])
+    def test_reemitted_tracks_the_face_on_factor(self, oa):
+        """The same absorbed-equals-reemitted identity, in the face-on frame."""
+        from tengri.components.agn.polar_dust import (
+            polar_cone_covering_factor,
+            polar_dust_extinction,
+        )
+
+        reemitted = polar_dust_reemission_lnu(
+            _WAVE,
+            self._L_LAMBDA_DISC,
+            agn_polar_ebv=self._EBV,
+            agn_cos_inc=1.0,
+            agn_polar_oa=oa,
+            agn_polar_reference="face_on",
+        )
+        _att, absorbed_per_bin = polar_dust_extinction(
+            self._L_LAMBDA_DISC, _WAVE, cos_inc=1.0, opening_angle_deg=oa, ebv=self._EBV
+        )
+        idx = jnp.argsort(_WAVE)
+        absorbed = jnp.trapezoid(absorbed_per_bin[idx], _WAVE[idx])
+        cone_absorbed = polar_cone_covering_factor(oa, reference="face_on") * absorbed
+        assert float(cone_absorbed) != 0.0
+        rel = abs(_integrate_lnu_bolometric(reemitted) - float(cone_absorbed)) / float(
+            cone_absorbed
+        )
+        assert rel < 1e-6, f"oa={oa}: face-on reemission is not the cone-absorbed power"
+
+    def test_unknown_reference_raises(self):
+        """No defaulting: an unknown frame is a 2.571x error."""
+        from tengri.components.agn.polar_dust import polar_cone_covering_factor
+
+        with pytest.raises(ValueError, match=r"reference"):
+            polar_cone_covering_factor(40.0, reference="whatever")
 
 
 class TestPolarDustOpeningAngleAndBetaMoveSED:

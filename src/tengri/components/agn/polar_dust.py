@@ -290,8 +290,110 @@ def polar_cone_covering_fraction(opening_angle_deg: float) -> jnp.ndarray:
     .. [2] Stalevski, M. et al. 2012, MNRAS, 420, 2756 (disc anisotropic
        emission law). arXiv:1109.1286.
     """
+    return polar_cone_covering_factor(opening_angle_deg, reference="bolometric")
+
+
+#: The two disc reference luminosities a polar-cone factor can be taken against.
+#:
+#: ``"bolometric"`` -- the disc's hemisphere-integrated luminosity,
+#: :math:`L_{\rm bol} = (7\pi/3) I_0`. ``"face_on"`` -- the face-on value
+#: :math:`\int L(\theta{=}0)\,d\lambda` carried by a SKIRTOR flux table
+#: (already multiplied by :math:`4\pi d^2`, so it needs the compensating
+#: :math:`1/4\pi`), which is CIGALE's convention.
+_POLAR_CONE_REFERENCES = ("bolometric", "face_on")
+
+
+def polar_cone_covering_factor(
+    opening_angle_deg: float, *, reference: str = "bolometric"
+) -> jnp.ndarray:
+    r"""Polar-cone factor against a named disc reference luminosity (R60).
+
+    The geometry is one thing measured two ways. Integrating the SKIRTOR
+    anisotropic disc law :math:`I(\theta) = I_0\cos\theta\,(1 + 2\cos\theta)`
+    over the escape cone :math:`\theta \in [0, 90^\circ - \Phi]` gives one
+    solid-angle share, but the number you multiply depends on which disc
+    luminosity you are handed:
+
+    .. math::
+
+        f_{\rm cone}(\Phi) &= 1 - \tfrac{3}{7}\sin^2\Phi
+                              - \tfrac{4}{7}\sin^3\Phi
+        \qquad\text{(against } L_{\rm bol} = (7\pi/3)\,I_0\text{)} \\
+        g(\Phi) &= \tfrac{7}{18} - \tfrac{1}{6}\sin^2\Phi
+                   - \tfrac{2}{9}\sin^3\Phi
+        \qquad\text{(against } \textstyle\int L(\theta{=}0)\,d\lambda\text{)}
+
+    with :math:`\Phi` the torus half-opening angle from the equator. The two
+    are **exactly proportional**:
+
+    .. math::
+
+        g(\Phi) \equiv \tfrac{7}{18}\,f_{\rm cone}(\Phi),
+        \qquad f_{\rm cone}/g = 18/7 = 2.571428\ldots
+
+    so they never disagree about geometry, only about the reference frame. The
+    :math:`7/18` is the SKIRTOR flux-table bookkeeping: those models are given
+    in flux already multiplied by :math:`4\pi d^2`, and an anisotropic source
+    needs the :math:`1/4\pi` back, which CIGALE's ``skirtor2016`` folds into
+    :math:`g` (see its ``l_ext`` derivation).
+
+    **Which reference applies is a normalization-policy question, and the
+    caller must state it** -- picking one silently moves the polar re-emission
+    by 2.571x. Under ``agn_norm='cigale_joint'`` with the SKIRTOR torus the
+    disc is tied to CIGALE's own inclination-specific ``disk`` template
+    (``agn_power x R``), so ``reference='face_on'``. Under
+    ``'independent'``/``'conserving'`` the disc carries the
+    hemisphere-integrated bolometric :math:`10^{\rm agn\_log\_lbol}`, so
+    ``reference='bolometric'``.
+
+    Parameters
+    ----------
+    opening_angle_deg : float
+        Torus half-opening angle :math:`\Phi` [deg, from the equator] --
+        ``agn_polar_oa``.
+    reference : {'bolometric', 'face_on'}, optional
+        The disc reference luminosity the factor will multiply. Default
+        ``'bolometric'``.
+
+    Returns
+    -------
+    factor : ndarray, scalar
+        Dimensionless. ``f_cone`` for ``'bolometric'`` (1 at
+        :math:`\Phi = 0^\circ`, 0 at :math:`90^\circ`), ``g`` for
+        ``'face_on'`` (:math:`7/18` at :math:`0^\circ`, 0 at
+        :math:`90^\circ`).
+
+    Raises
+    ------
+    ValueError
+        On an unrecognized ``reference``. There is no defaulting here: an
+        unknown frame is a 2.571x error with no tolerance at which it is small.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, ``jnp`` only (``reference`` is a static Python
+    string). **Gradient-safe**: yes, :math:`\sin\Phi` is smooth everywhere.
+
+    References
+    ----------
+    .. [1] Yang, A., et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust,
+       section 2.2.2). https://doi.org/10.1093/mnras/stz3001
+    .. [2] Stalevski, M. et al. 2012, MNRAS, 420, 2756 (the disc anisotropic
+       emission law both forms integrate). arXiv:1109.1286.
+    """
+    if reference not in _POLAR_CONE_REFERENCES:
+        raise ValueError(
+            f"polar_cone_covering_factor: reference={reference!r} is not one of "
+            f"{_POLAR_CONE_REFERENCES}. The two frames differ by exactly 18/7 "
+            f"(2.5714x), so there is no safe default: state which disc "
+            f"luminosity the factor multiplies. 'face_on' for CIGALE's "
+            f"inclination-specific disk template (agn_norm='cigale_joint' with "
+            f"the SKIRTOR torus), 'bolometric' for the hemisphere-integrated "
+            f"10**agn_log_lbol ('independent'/'conserving')."
+        )
     sin_phi = jnp.sin(jnp.radians(jnp.asarray(opening_angle_deg)))
-    return 1.0 - (3.0 / 7.0) * sin_phi**2 - (4.0 / 7.0) * sin_phi**3
+    f_cone = 1.0 - (3.0 / 7.0) * sin_phi**2 - (4.0 / 7.0) * sin_phi**3
+    return f_cone if reference == "bolometric" else (7.0 / 18.0) * f_cone
 
 
 def polar_dust_extinction(
