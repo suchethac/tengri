@@ -27,8 +27,11 @@ All functions are pure JAX and JIT-compatible.
 Bin boundaries are asymmetric, deliberately. Ages older than the last edge form
 no stars: the bins are the model, and extending the oldest one past its edge
 puts mass outside the normalization, which sums bin widths only (#1978). Ages
-younger than the first edge take the youngest bin's rate, because
-``psb_suess2022`` anchors its edges at 0.3 Gyr and relies on it.
+younger than the first edge take the *youngest* bin's rate, which is the
+nearest bin and the only defensible extrapolation; the index arithmetic would
+otherwise run off the low end and, JAX indexing being modular, hand back the
+OLDEST bin's rate instead. Every ladder these functions build starts at zero
+lookback, so the low end is reached only by a caller supplying its own edges.
 
 References
 ----------
@@ -77,8 +80,12 @@ def _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins):
     -----
     **JIT-compatible**: yes, ``jnp`` primitives only.
 
-    Ages *below* the first edge are deliberately clamped into the youngest bin.
-    ``psb_suess2022`` starts its edges at 0.3 Gyr and relies on that.
+    Ages *below* the first edge are deliberately clamped into the youngest bin,
+    the nearest one. The clamp is load-bearing rather than cosmetic:
+    ``searchsorted`` returns 0 there, so the index is -1, and JAX indexing is
+    modular, which would silently serve the OLDEST bin's rate to the youngest
+    ages. Every ladder built in this module starts at zero lookback, so this is
+    reached only when a caller supplies its own ``bin_edges_gyr``.
 
     Ages *above* the last edge are zeroed, and that is the fix for #1978. They
     used to be clamped into the oldest bin, which extended that bin's SFR to the
@@ -756,16 +763,24 @@ def psb_continuity_flex(
     splices ``tflex_gyr`` in ahead of ``bin_edges_gyr[1:]``, which requires the
     caller to keep ``tflex_gyr`` below the first fixed edge. With the shipped
     default ladder that first edge is 0.3 Gyr while ``tflex_gyr``'s prior runs
-    from 0.5 to 5.0 Gyr, so the edges cross and
-    :func:`jax.numpy.searchsorted` is evaluated on a non-ascending array.
-    Deriving the fixed bins from ``tflex_gyr`` removes the ordering constraint
-    instead of asking the user to respect it.
+    to 5.0 Gyr, so the edges cross and :func:`jax.numpy.searchsorted` is
+    evaluated on a non-ascending array. Deriving the fixed bins from
+    ``tflex_gyr`` removes the ordering constraint instead of asking the user to
+    respect it.
 
     Implements the post-starburst-optimized non-parametric SFH of Suess et al.
     2022 [1]_, on the Prospector continuity machinery (Johnson et al. 2021
-    [2]_), with the flexible zone resolved into equal-width bins. The step
-    between the oldest flex bin and the youngest fixed bin is pinned at 0: the
-    two share an SFR.
+    [2]_). The step between the oldest flex bin and the youngest fixed bin is
+    pinned at 0: the two share an SFR.
+
+    **Approximation of Suess et al. 2022, Sect. 3.1.4, in two places.** That
+    paper divides the flexible zone into bins of equal *mass* whose edges move,
+    and fixes the old-bin edges by a template; both zones here are cut into
+    bins of equal *width*, the flexible ones carrying free amplitudes
+    (``flex_*``) and the fixed ones laid out from ``tflex_gyr``. The two
+    constructions agree only where the history is flat across the zone
+    concerned. Valid as a reparameterization of the same three-part shape, not
+    as a reproduction of the paper's bin edges.
 
     References
     ----------
@@ -1018,8 +1033,8 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
     """Lookback-time bin edges [yr] for a non-parametric SFH callable (#765).
 
     The piecewise-constant non-parametric SFHs (continuity / dirichlet /
-    psb_continuity / continuity_flex) have sharp bin-edge transitions. When the
-    SFH is sampled onto a log-spaced integrand grid for DSPS, those edges fall
+    continuity_flex / psb_continuity_flex) have sharp bin-edge transitions. When
+    the SFH is sampled onto a log-spaced integrand grid for DSPS, those edges fall
     *between* grid points, so DSPS interpolates across each step and smears the
     mass distribution; a resolution-insensitive 2-4.5 % optical residual vs
     Prospector (#765). Injecting these exact edges as knots makes the step
@@ -1027,17 +1042,51 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
 
     Returns the ascending bin edges in [yr], or ``None`` for callables without
     a known edge set (which then keep the plain dense integrand).
+
+    The post-starburst families are reached through :func:`psb_continuity_flex`:
+    both registry entries name that callable, and it derives the whole ladder
+    from ``tlast_gyr`` / ``tflex_gyr``. It had no branch here until #2184, so
+    both entries were served the plain integrand and paid the smearing this
+    function exists to remove: measured on a 256-node lookback grid, 1.1 % on
+    the intrinsic SED and 0.0047 dex on the formed mass. :func:`psb_continuity`
+    has no branch of its own, because no registry entry names it and its edges
+    are not knowable from ``sfh_kwargs`` alone (the caller supplies the fixed
+    ladder separately).
     """
     if fn is continuity_flex:
         return _continuity_flex_edges_yr(sfh_kwargs)
-    if fn is psb_continuity:
-        tlast_gyr = sfh_kwargs.get("tlast_gyr", 0.5)
-        tflex_gyr = sfh_kwargs.get("tflex_gyr", 2.0)
-        old_edges_gyr = DEFAULT_BIN_EDGES_GYR[2:]  # [0.3, 1.0, 3.0, 6.0, 13.7]
-        return jnp.concatenate([jnp.array([0.0, tlast_gyr, tflex_gyr]), old_edges_gyr[1:]]) * 1e9
+    if fn is psb_continuity_flex:
+        return _psb_flex_edges_yr(sfh_kwargs)
     if fn is continuity or fn is dirichlet:
         return DEFAULT_BIN_EDGES_GYR * 1e9
     return None
+
+
+def _psb_flex_edges_yr(sfh_kwargs: dict) -> jnp.ndarray:
+    """The ladder :func:`psb_continuity_flex` lays down, in [yr].
+
+    Mirrors that function's own construction: ``[0, tlast_gyr]``, then
+    ``n_flex`` equal-width flexible edges out to ``tflex_gyr``, then ``n_fixed``
+    equal-width fixed edges out to the oldest age. Both counts are read the same
+    way the shape function reads them, off the ``flex_*`` keyword names and off
+    ``bin_edges_gyr``'s length, so the two cannot drift apart silently.
+    """
+    tlast_gyr = sfh_kwargs.get("tlast_gyr", 0.2)
+    tflex_gyr = sfh_kwargs.get("tflex_gyr", 2.0)
+    n_flex_bins = sum(1 for k in sfh_kwargs if k.startswith("flex_")) + 1
+
+    bin_edges_gyr = sfh_kwargs.get("bin_edges_gyr")
+    if bin_edges_gyr is None:
+        n_fixed = PSB_FLEX_DEFAULT_N_FIXED
+        max_age_gyr = PSB_FLEX_DEFAULT_MAX_AGE_GYR
+    else:
+        bin_edges_gyr = jnp.asarray(bin_edges_gyr)
+        n_fixed = bin_edges_gyr.shape[0] - 1
+        max_age_gyr = bin_edges_gyr[-1]
+
+    flex_edges_gyr = jnp.linspace(tlast_gyr, tflex_gyr, n_flex_bins + 1)[1:]
+    fixed_edges_gyr = jnp.linspace(tflex_gyr, max_age_gyr, n_fixed + 1)[1:]
+    return jnp.concatenate([jnp.array([0.0, tlast_gyr]), flex_edges_gyr, fixed_edges_gyr]) * 1e9
 
 
 def continuity_flex_prior_logp(

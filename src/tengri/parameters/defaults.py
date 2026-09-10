@@ -72,7 +72,7 @@ _NULLABLE: dict[str, tuple[str, ...]] = {
 # Hardcoded fallback in case the TOML file is missing or unreadable
 _FALLBACK_FROM_CONFIG: dict[str, Any] = {
     "sfh": "tsnorm",
-    "dust": "charlot_fall",
+    "dust_attenuation_law": "charlot_fall",
     "nebular": None,
     "agn": None,
     "redshift": 0.1,
@@ -139,7 +139,7 @@ def get_from_config_defaults() -> dict[str, Any]:
 
     Returns
     -------
-    dict with keys: sfh, dust, nebular, agn, redshift
+    dict with keys: sfh, dust_attenuation_law, nebular, agn, redshift
     """
     try:
         data = load_defaults()

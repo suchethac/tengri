@@ -68,6 +68,7 @@ from tengri.parameters._builders import (
     _build_param_registry,
     _resolve_lazy_bucket,
 )
+from tengri.parameters._dust_laws import resolve_dust_screen_laws
 from tengri.parameters.priors import (
     Distribution,
     Fixed,
@@ -908,25 +909,13 @@ class Parameters:
         law_neb_explicit = kwargs.pop("dust_law_neb", None)
 
         # Grammar builds: dust_law_bc/dust_law_diff are already set by _translate_dust_attenuation
-        # (after validation). Flat-kwarg: both None, apply power_law defaults.
-        if self.dust_model == "single_component":
-            # Single-component: law_bc is the only law, law_diff is inherited from it.
-            if law_bc_explicit is not None:
-                self.dust_law_bc = law_bc_explicit
-            else:
-                # Flat-kwarg: no law provided, use power_law default.
-                self.dust_law_bc = "power_law"
-            self.dust_law_diff = self.dust_law_bc
-        else:
-            # Two-component or off/wg00: use laws as provided or apply power_law defaults.
-            if law_bc_explicit is not None or law_diff_explicit is not None:
-                # At least one law provided (grammar already validated the XOR).
-                self.dust_law_bc = law_bc_explicit or law_diff_explicit
-                self.dust_law_diff = law_diff_explicit or law_bc_explicit
-            else:
-                # Flat-kwarg: no laws provided, use power_law for both.
-                self.dust_law_bc = "power_law"
-                self.dust_law_diff = "power_law"
+        # (after validation). Flat-kwarg: both None, apply power_law defaults. Single
+        # source of truth for this resolution: tengri.parameters._dust_laws (#2224
+        # single_component discard fix; #1989 two_component/off/wg00 inheritance
+        # unchanged).
+        self.dust_law_bc, self.dust_law_diff = resolve_dust_screen_laws(
+            self.dust_model, law_bc_explicit, law_diff_explicit
+        )
 
         # Nebular birth-cloud law. None -> inherit the stellar birth cloud
         # (``dust_law_bc``), so the nebular continuum is reddened exactly like

@@ -3543,11 +3543,10 @@ def _first_order_chain_scan(
 # -- is the fixed-length leapfrog scan it already was.
 
 
-@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8))
-def _hmc_low_rank_full_scan(
+@functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7))
+def _hmc_low_rank_warmup_only(
     init_flat,
     warmup_key,
-    chain_keys,
     logdensity_fn_2arg,
     data_args,
     n_warmup,
@@ -3555,13 +3554,25 @@ def _hmc_low_rank_full_scan(
     max_rank,
     target_accept_rate,
 ):
-    """Outer JIT: low-rank window adaptation plus a fixed-length HMC scan.
+    """Low-rank window adaptation only, returning the tuned parameters.
 
-    Identical to :func:`_hmc_full_scan` except that the warmup is
-    ``blackjax.window_adaptation_low_rank`` rather than
-    ``blackjax.window_adaptation``, so the adapted inverse mass matrix is a
-    ``LowRankInverseMassMatrix`` pytree rather than a ``(D,)`` or ``(D, D)``
-    array.
+    Split out of the fused warmup-plus-sampling scan this backend used to run,
+    for the two reasons the HMC and NUTS runners were split earlier.
+
+    **A seam for the #1999 probe.** Window adaptation can return a step size
+    above the stability limit of its own returned metric, and a low-rank metric
+    is a full metric with structure -- it carries the same failure mode, and the
+    measured rows in ``bench/reports/2026-09-06_low_rank_metric_d74.md`` show it
+    doing so: up to 433 divergences and a unique-draw fraction of 0.587 on a
+    D = 74 posterior, against zero divergences on the diagonal arm at the same
+    trajectory length. With warmup fused into the sampling scan there was
+    nowhere for :func:`_stabilize_dense_mass_step` to run.
+
+    **One sampling program for every chain.** While the two halves were fused,
+    chain 0 sampled inside the warmup program and chains 1..n-1 ran the separate
+    :func:`_hmc_chain_scan`, so a multi-chain fit ran two structurally different
+    compiled computations over one adaptation. That is the shape that made NUTS
+    irreproducible under a pinned key before its own split.
 
     Parameters
     ----------
@@ -3569,8 +3580,6 @@ def _hmc_low_rank_full_scan(
         Initial position in the sampled latent space [dimensionless].
     warmup_key : PRNGKey
         Key for warmup.
-    chain_keys : ndarray, shape (n_chain, 2)
-        Pre-split keys; ``n_chain = n_burnin + n_samples``.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)`` [nats].
     data_args : pytree (traced)
@@ -3586,14 +3595,17 @@ def _hmc_low_rank_full_scan(
 
     Returns
     -------
-    positions : ndarray, shape (n_chain, D)
-        Draws in the sampled latent space.
-    divergent : ndarray, shape (n_chain,)
-        Per-draw divergence flag.
     step_size : ndarray, shape ()
         Adapted step size [dimensionless].
     inv_mass_matrix : LowRankInverseMassMatrix
         A pytree, not an array -- callers must not call ``float()`` on it.
+        Its leaves are ``sigma (D,)``, ``U (D, max_rank)`` and ``lam
+        (max_rank,)``.
+    warmup_divergent : ndarray of bool, shape (n_warmup,)
+        Per-step divergence flags, for the dead-warmup refusal (#2088). The
+        adaptation's default info filter keeps these and drops only the raw
+        draw and gradient buffers, whose retention is an O(num_steps * buffer *
+        D) allocation and was a reported cause of warmup OOM.
 
     Notes
     -----
@@ -3611,16 +3623,6 @@ def _hmc_low_rank_full_scan(
         target_acceptance_rate=target_accept_rate,
         num_integration_steps=n_leapfrog,
     )
-    (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
-    step_size = parameters["step_size"]
-    inv_mass_matrix = parameters["inverse_mass_matrix"]
-
-    kernel = _get_hmc_kernel()
-
-    def _step(s, k):
-        """Advance HMC by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, n_leapfrog)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, step_size, inv_mass_matrix
+    (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    warmup_divergent = jnp.asarray(info.info.is_divergent)
+    return parameters["step_size"], parameters["inverse_mass_matrix"], warmup_divergent

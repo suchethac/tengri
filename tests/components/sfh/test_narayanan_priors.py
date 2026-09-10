@@ -1,47 +1,90 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for Narayanan+2018 redshift-dependent dust attenuation priors."""
+"""Narayanan+2018 redshift-dependent dust attenuation priors.
+
+The slope and bump centers moved with #2199. They used to be
+``delta = -0.2 - 0.1 z`` and ``bump = max(0, 1 - 0.15 z)``, closed forms that
+appear nowhere in Narayanan, Conroy, Davé, Johnson & Popping 2018 (ApJ 869, 70,
+arXiv:1805.06905, doi:10.3847/1538-4357/aaed25) and whose slope term steepened
+the curve with redshift, opposite the paper's own Section 5.1. They are now the
+published median curves, through the same fitted table
+``narayanan_z`` interpolates, so this file pins the *direction* the paper states
+plus agreement with that single source, and no longer a formula.
+"""
 
 import numpy as np
+import pytest
 
+from tengri.components.dust.attenuation import (
+    _NARAYANAN_BUMP_STRENGTH,
+    _NARAYANAN_DELTA,
+)
 from tengri.components.dust.priors import narayanan_prior, narayanan_tau_prior
 from tengri.parameters.priors import Gaussian
 
+pytestmark = pytest.mark.bounds
+
 
 class TestNarayananPrior:
-    """Test narayanan_prior(z) returns correct z-dependent distributions."""
+    """narayanan_prior(z) centers on the published median at z."""
 
-    def test_z0_baseline_delta(self):
-        """At z=0, delta mean should be ~-0.2."""
-        priors = narayanan_prior(z=0.0)
-        np.testing.assert_allclose(priors["dust_delta"].mu, -0.2, atol=1e-10)
+    def test_centers_are_the_fitted_table_at_the_nodes(self):
+        """At every tabulated redshift the center must be the table entry.
 
-    def test_z0_baseline_bump(self):
-        """At z=0, bump strength mean should be ~1.0."""
-        priors = narayanan_prior(z=0.0)
-        np.testing.assert_allclose(priors["dust_bump_strength"].mu, 1.0, atol=1e-10)
+        One source for the medians. A second copy of the numbers here would be
+        free to drift from the one the law evaluates, and a user would then get
+        a prior centered somewhere the model cannot reach.
+        """
+        for index, z in enumerate((0, 1, 2, 3, 4, 5, 6)):
+            priors = narayanan_prior(z=float(z))
+            np.testing.assert_allclose(
+                priors["dust_delta"].mu, float(_NARAYANAN_DELTA[index]), atol=0.0, rtol=1e-12
+            )
+            np.testing.assert_allclose(
+                priors["dust_bump_strength"].mu,
+                float(_NARAYANAN_BUMP_STRENGTH[index]),
+                atol=0.0,
+                rtol=1e-12,
+            )
 
-    def test_delta_more_negative_at_high_z(self):
-        """Higher z should give more negative (steeper) delta."""
-        priors_z0 = narayanan_prior(z=0.0)
-        priors_z4 = narayanan_prior(z=4.0)
-        assert priors_z4["dust_delta"].mu < priors_z0["dust_delta"].mu
+    def test_delta_grows_less_negative_with_redshift(self):
+        """The curve gets grayer with z, which is a rising delta.
 
-    def test_z4_delta_value(self):
-        """At z=4, delta mean should be -0.2 - 0.1*4 = -0.6."""
-        priors = narayanan_prior(z=4.0)
-        np.testing.assert_allclose(priors["dust_delta"].mu, -0.6, atol=1e-10)
+        Narayanan et al. 2018 Section 5.1. The old center did the opposite.
+        """
+        assert narayanan_prior(z=6.0)["dust_delta"].mu > narayanan_prior(z=0.0)["dust_delta"].mu
 
-    def test_bump_floors_at_zero(self):
-        """Bump strength mean should never go negative."""
-        # At z=10, formula gives 1.0 - 0.15*10 = -0.5, but should floor at 0
-        priors = narayanan_prior(z=10.0)
-        assert priors["dust_bump_strength"].mu >= 0.0
+    def test_the_bump_weakens_with_redshift(self):
+        """E_b = m (0.85 - 1.9 delta) must fall from z=0 to z=6, and stay positive.
 
-    def test_bump_floors_exact_at_threshold(self):
-        """At z = 1/0.15 ~ 6.67, bump should be exactly 0."""
-        z_threshold = 1.0 / 0.15
-        priors = narayanan_prior(z=z_threshold)
-        np.testing.assert_allclose(priors["dust_bump_strength"].mu, 0.0, atol=1e-10)
+        Measured on the fitted table: 6.36 at z=0 against 1.96 at z=6. The bump
+        does not vanish, which the old ``max(0, 1 - 0.15 z)`` center forced it
+        to above z = 6.67.
+        """
+
+        def e_b(z: float) -> float:
+            priors = narayanan_prior(z=z)
+            delta = priors["dust_delta"].mu
+            return float(priors["dust_bump_strength"].mu * (0.85 - 1.9 * delta))
+
+        assert e_b(0.0) > e_b(6.0) > 0.0
+        np.testing.assert_allclose(e_b(0.0), 6.3576, atol=1e-3)
+        np.testing.assert_allclose(e_b(6.0), 1.9637, atol=1e-3)
+
+    def test_outside_the_tabulated_range_the_end_node_is_held(self):
+        """No extrapolation past the redshifts the paper tabulates."""
+        for z_out, z_end in ((-1.0, 0.0), (10.0, 6.0)):
+            out = narayanan_prior(z=z_out)
+            end = narayanan_prior(z=z_end)
+            assert out["dust_delta"].mu == end["dust_delta"].mu
+            assert out["dust_bump_strength"].mu == end["dust_bump_strength"].mu
+
+    def test_between_nodes_the_center_interpolates(self):
+        """A half-integer redshift must land between its two neighbors."""
+        lo = narayanan_prior(z=2.0)["dust_delta"].mu
+        mid = narayanan_prior(z=2.5)["dust_delta"].mu
+        hi = narayanan_prior(z=3.0)["dust_delta"].mu
+        assert min(lo, hi) <= mid <= max(lo, hi)
+        np.testing.assert_allclose(mid, 0.5 * (lo + hi), rtol=1e-12)
 
     def test_returns_gaussian_distributions(self):
         """Both values should be Gaussian distribution instances."""
@@ -60,14 +103,20 @@ class TestNarayananPrior:
         np.testing.assert_allclose(priors["dust_delta"].sigma, 0.15, atol=1e-10)
         np.testing.assert_allclose(priors["dust_bump_strength"].sigma, 0.3, atol=1e-10)
 
+    def test_the_prior_is_usable_on_the_law_it_names(self):
+        """The keys must be exactly what ``kriek_conroy`` reads.
 
-import pytest
+        These are priors on ``kriek_conroy``'s two shape parameters, not on
+        ``narayanan_z``, which since #2199 reads redshift and nothing else.
+        """
+        from tengri.components.dust.laws._registry import law_kwarg_names
 
-pytestmark = pytest.mark.bounds
+        assert set(narayanan_prior(z=1.0)) <= law_kwarg_names("kriek_conroy")
+        assert not set(narayanan_prior(z=1.0)) & law_kwarg_names("narayanan_z")
 
 
 class TestNarayananTauPrior:
-    """Test narayanan_tau_prior(z, log_mstar)."""
+    """narayanan_tau_prior(z, log_mstar). Unchanged by #2199."""
 
     def test_returns_dict_with_tau_diff(self):
         """Should return dict with dust_tau_diff key."""

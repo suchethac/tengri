@@ -22,7 +22,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Parameters, SEDModel
+from tengri import DEFAULT, Parameters, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
@@ -71,23 +71,31 @@ def _bakedin_spec():
     )
 
 
-def _cue_spec():
-    return Parameters(
-        mean_sfh_type="dpl",
-        sfh_dpl_alpha=Fixed(2.0),
-        sfh_dpl_beta=Fixed(1.0),
-        sfh_dpl_tau_gyr=Fixed(5.0),
-        sfh_dpl_age_gyr=Fixed(5.0),
-        sfh_dpl_log_total_mass=Fixed(1.0),
-        met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.1),
-        dust_tau_bc=Fixed(0.0),
-        dust_tau_diff=Fixed(0.0),
-        nebular_backend="cue",
-        neb_logU=Uniform(-4.0, -2.0),
-        neb_xi_ion=Fixed(25.5),
-        apply_igm=False,
-    )
+def _build_cue(ssp, obs):
+    """A Cue-backend model, built through the group grammar.
+
+    This was a `Parameters(..., nebular_backend="cue", neb_xi_ion=Fixed(25.5))`
+    spec. Both of those keys are gone: `nebular_backend` moved into the `neb`
+    group as `{'type': 'cue'}`, and `neb_xi_ion` is no longer a parameter at
+    all. Neither removal was noticed, because this file gates on an SSP grid
+    that nothing generates, so it has never run in CI (#2183).
+
+    `neb_logU` stays free -- the tests below pass exactly that one parameter.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "cue", "logU": Uniform(-4.0, -2.0), "other_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.1),
+        )
 
 
 def _silent_build(spec, ssp, obs, **kwargs):
@@ -117,18 +125,24 @@ def test_cue_backend_publishes_weights_for_jit(ssp_bare, obs):
     so ``predict_observables_jit`` threads it.
     """
     try:
-        model = _silent_build(_cue_spec(), ssp_bare, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+        model = _build_cue(ssp_bare, obs)
+    except (ImportError, FileNotFoundError):
         pytest.skip("Cue backend not available")
 
     td = model._template_data_for_jit()
     assert td is not None, "Cue backend should publish non-None template_data"
-    # The Cue backend carries multiple arrays (NN layer weights). The
-    # structure varies per backend; we just check at least one array
-    # is present.
+    assert "nebular" in td, (
+        f"Cue weights should be published under the 'nebular' key; got {sorted(td)}"
+    )
+    # `len(array_leaves) > 0` was the original claim, which a single stray
+    # array satisfies. Cue is an NN emulator: its weights are hundreds of
+    # arrays (measured 417), so a floor well above one is what distinguishes
+    # "the emulator was threaded" from "something was".
     leaves, _ = jax.tree.flatten(td)
     array_leaves = [leaf for leaf in leaves if hasattr(leaf, "shape")]
-    assert len(array_leaves) > 0, "template_data should contain at least one array leaf"
+    assert len(array_leaves) >= 10, (
+        f"template_data should carry the Cue weight arrays; got {len(array_leaves)} leaves"
+    )
 
 
 # ── JIT-path bit-exactness ──────────────────────────────────────────────────
@@ -154,8 +168,8 @@ def test_jit_and_non_jit_paths_agree_with_cue(ssp_bare, obs):
     routes correctly through both paths.
     """
     try:
-        model = _silent_build(_cue_spec(), ssp_bare, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+        model = _build_cue(ssp_bare, obs)
+    except (ImportError, FileNotFoundError):
         pytest.skip("Cue backend not available")
 
     params = {"neb_logU": jnp.asarray(-3.0)}

@@ -16,7 +16,7 @@ The AGN radio component is selected via
   releases.
 - ``"dpl"``: AGNfitter-rx broken double power-law with phenomenological
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
-  Martinez-Ramirez+2024 Eq. 9-10). Uses ``radio_alpha_thin``,
+  Martinez-Ramirez+2024 Eq. (2)). Uses ``radio_alpha_thin``,
   ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
 
 Physical synchrotron-aging kernels (Jaffe & Perola 1973;

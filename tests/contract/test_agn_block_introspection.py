@@ -104,18 +104,19 @@ def test_list_agn_blocks_symmetric_with_describe():
 @pytest.mark.contract
 def test_generic_describe_finds_agn_blocks():
     """tengri.describe(name) returns AGN block records in cross-kind search."""
-    # Try a known block name.
-    try:
-        blocks = tengri.list_agn_blocks()
-        if blocks:
-            test_name = blocks[0]["name"]
-            # Try the generic describe function.
-            rec = tengri.describe(test_name)
-            assert rec["name"] == test_name
-            assert rec.get("kind") == "agn_block"
-    except KeyError:
-        # It's OK if no blocks are registered yet (e.g., in early CI).
-        pytest.skip("No AGN blocks registered to test generic describe().")
+    # Neither the ``if blocks:`` nor the ``except KeyError`` below it survived
+    # measurement: 49 blocks are registered and ``describe`` returns every key,
+    # so both branches were dead. Together they let this test pass having
+    # asserted nothing -- the ``if`` skipped the body, and the handler turned a
+    # missing key (a real defect in ``describe``) into a skip whose message
+    # blamed registration instead.
+    blocks = tengri.list_agn_blocks()
+    assert blocks, "no AGN blocks registered, so generic describe() is unverified"
+
+    test_name = blocks[0]["name"]
+    rec = tengri.describe(test_name)
+    assert rec["name"] == test_name
+    assert rec.get("kind") == "agn_block"
 
 
 @pytest.mark.contract

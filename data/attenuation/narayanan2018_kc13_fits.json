@@ -1,0 +1,97 @@
+{
+  "source_data": "attenuation/narayanan2018_median_curves.dat",
+  "generated_by": "scripts/fit_narayanan2018_medians.py",
+  "form": "tengri.components.dust.attenuation.kriek_conroy",
+  "fit_range_angstrom": [
+    1250.0,
+    10000.0
+  ],
+  "n_fit_points": 912,
+  "normalization": "norm is the fitted A(5500 A) / tau_3000: the data are normalized by the 3000 A optical depth, kriek_conroy by k(5500 A) = 1.",
+  "fits": [
+    {
+      "dust_delta": -0.5555790140809852,
+      "dust_bump_strength": 3.336277843127103,
+      "E_b": 6.357611480749142,
+      "norm": 0.3661436615657421,
+      "rms": 0.018060484933922826,
+      "max_abs_residual": 0.09994481114882037,
+      "n_distinct_solutions": 1,
+      "rms_spread": 1.0408340855860843e-17,
+      "on_bound": [],
+      "z": 0
+    },
+    {
+      "dust_delta": -0.2910618326689639,
+      "dust_bump_strength": 1.9767528352381496,
+      "E_b": 2.7734187855726007,
+      "norm": 0.43145097060932364,
+      "rms": 0.024325094974207814,
+      "max_abs_residual": 0.13147869232844744,
+      "n_distinct_solutions": 1,
+      "rms_spread": 6.938893903907228e-18,
+      "on_bound": [],
+      "z": 1
+    },
+    {
+      "dust_delta": -0.4655455976558615,
+      "dust_bump_strength": 2.926977165512936,
+      "E_b": 5.076949124989176,
+      "norm": 0.40427481981473407,
+      "rms": 0.014493903572931706,
+      "max_abs_residual": 0.08832055726762422,
+      "n_distinct_solutions": 1,
+      "rms_spread": 1.734723475976807e-18,
+      "on_bound": [],
+      "z": 2
+    },
+    {
+      "dust_delta": -0.38570378510780945,
+      "dust_bump_strength": 3.389079602445048,
+      "E_b": 5.364361240398268,
+      "norm": 0.4343187095938292,
+      "rms": 0.010693072414356703,
+      "max_abs_residual": 0.09929629429770181,
+      "n_distinct_solutions": 1,
+      "rms_spread": 1.0408340855860843e-17,
+      "on_bound": [],
+      "z": 3
+    },
+    {
+      "dust_delta": -0.32995141823672564,
+      "dust_bump_strength": 3.6339238083055148,
+      "E_b": 5.3669700342574425,
+      "norm": 0.4464089299947077,
+      "rms": 0.012168610221796227,
+      "max_abs_residual": 0.08917923058446009,
+      "n_distinct_solutions": 1,
+      "rms_spread": 3.469446951953614e-18,
+      "on_bound": [],
+      "z": 4
+    },
+    {
+      "dust_delta": 0.13785066855951653,
+      "dust_bump_strength": 3.3729209110204086,
+      "E_b": 1.9835599094605272,
+      "norm": 0.6187319543100765,
+      "rms": 0.019166950242367135,
+      "max_abs_residual": 0.07748973842491624,
+      "n_distinct_solutions": 1,
+      "rms_spread": 3.469446951953614e-18,
+      "on_bound": [],
+      "z": 5
+    },
+    {
+      "dust_delta": 0.07950863548914745,
+      "dust_bump_strength": 2.809597222823232,
+      "E_b": 1.9637218806242778,
+      "norm": 0.5975097421079048,
+      "rms": 0.009895083550848921,
+      "max_abs_residual": 0.04257897816961498,
+      "n_distinct_solutions": 1,
+      "rms_spread": 5.204170427930421e-18,
+      "on_bound": [],
+      "z": 6
+    }
+  ]
+}

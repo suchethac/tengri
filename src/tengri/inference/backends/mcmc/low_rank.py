@@ -55,8 +55,12 @@ from tengri.inference._sample_utils import (
 )
 from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
+    _get_hmc_kernel,
     _hmc_chain_scan,
-    _hmc_low_rank_full_scan,
+    _hmc_low_rank_warmup_only,
+    _stabilize_dense_mass_step,
+    final_window_divergence_frac,
+    refuse_dead_warmup,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -137,9 +141,11 @@ def run_hmc_low_rank(
     -------
     Posterior
         Draws in physical parameters. ``diagnostics`` carries ``n_divergent``,
-        ``step_size``, ``max_rank`` and the preconditioning record. The inverse
-        mass matrix is **not** reported: it is a pytree, not a number, and a
-        float cast on it raises.
+        ``step_size``, ``max_rank``, ``dense_mass_step_backoffs`` (how many
+        times the #1999 probe halved the adapted step), ``warmup_divergence_frac``
+        when the warmup record was long enough to carry a verdict, and the
+        preconditioning record. The inverse mass matrix is **not** reported: it
+        is a pytree, not a number, and a float cast on it raises.
 
     Raises
     ------
@@ -147,9 +153,20 @@ def run_hmc_low_rank(
         If blackjax is not installed.
     ValueError
         If ``max_rank`` is not a positive integer.
+    DeadFitError
+        If the final warmup window was almost entirely divergent (#2088), or if
+        the #1999 probe could not find a stable step size within its backoff
+        budget. Both are refusals rather than a frozen posterior handed back.
 
     Notes
     -----
+    Warmup is split from sampling, so every chain -- chain 0 included -- runs
+    the same compiled ``_hmc_chain_scan``, and the #1999 post-adaptation
+    stability probe has a Python seam to run in. A low-rank metric is a full
+    metric with structure and carries the same mis-scaling failure mode a dense
+    one does; ``bench/reports/2026-09-06_low_rank_metric_d74.md`` measured it
+    doing so on a D = 74 posterior.
+
     No adaptation caching. ``window_adaptation_low_rank`` returns a pytree
     rather than an array, and the shared adaptation cache is keyed and
     round-tripped for arrays; caching it is a correctness question this
@@ -218,14 +235,13 @@ def run_hmc_low_rank(
     # neither (``bench/reports/2026-08-31_catalog_preconditioning.md``,
     # Finding 5).
     with compile_timer(
-        "hmc_low_rank_full_scan",
+        "hmc_low_rank_warmup",
         fitter.compile_signature(),
         method="mcmc_hmc_lowrank",
     ):
-        pos, div, step_size, inv_mass_matrix = _hmc_low_rank_full_scan(
+        step_size, inv_mass_matrix, warmup_divergent = _hmc_low_rank_warmup_only(
             starts[0],
             warmup_key,
-            chain_keys[0],
             log_posterior_flat_2arg,
             data_args,
             int(n_warmup),
@@ -233,11 +249,53 @@ def run_hmc_low_rank(
             int(max_rank),
             float(target_accept_rate),
         )
-        jax.block_until_ready(pos)
-    positions_per_chain = [pos]
-    divergent_per_chain = [div]
+        jax.block_until_ready(step_size)
 
-    for c in range(1, n_chains):
+    # Post-adaptation step-size stability probe (#1999). A low-rank metric is a
+    # full metric with structure, so window adaptation can hand back a step above
+    # its stability limit exactly as it does for a dense one -- and on the D = 74
+    # field posterior it was measured doing so, at up to 433 divergences and a
+    # unique-draw fraction of 0.587 where the diagonal arm had none
+    # (``bench/reports/2026-09-06_low_rank_metric_d74.md``). The probe takes the
+    # inverse mass matrix as an opaque traced argument and never casts it, so the
+    # ``LowRankInverseMassMatrix`` pytree passes through unchanged; that is
+    # asserted directly in the unit tests rather than assumed.
+    initial_state = blackjax.mcmc.hmc.init(
+        starts[0], lambda p: log_posterior_flat_2arg(p, data_args)
+    )
+    step_size, backoff_count = _stabilize_dense_mass_step(
+        _get_hmc_kernel(),
+        initial_state,
+        log_posterior_flat_2arg,
+        data_args,
+        float(step_size),
+        inv_mass_matrix,
+        int(n_leapfrog_steps),
+        sampler_name="HMC low-rank",
+    )
+    step_size = jnp.asarray(step_size)
+    if verbose and backoff_count > 0:
+        logger.info(
+            "  Low-rank metric probe: step size backoff applied (%d halving(s))",
+            backoff_count,
+        )
+
+    # Refuse before the sampling scan compiles (#2088).
+    warmup_divergence_frac = final_window_divergence_frac(warmup_divergent, int(n_warmup))
+    refuse_dead_warmup(
+        warmup_divergence_frac,
+        sampler="HMC low-rank",
+        step_size=float(step_size),
+        n_warmup=int(n_warmup),
+        n_samples=int(n_samples),
+    )
+
+    # Every chain now runs the SAME compiled sampling program, chain 0 included.
+    # While warmup and chain 0 were fused, a multi-chain fit ran two structurally
+    # different computations over one adaptation.
+    positions_per_chain = []
+    divergent_per_chain = []
+    for c in range(n_chains):
         state = blackjax.mcmc.hmc.init(starts[c], lambda p: log_posterior_flat_2arg(p, data_args))
         with compile_timer(
             "hmc_low_rank_chain_scan",
@@ -292,6 +350,12 @@ def run_hmc_low_rank(
             "n_leapfrog_steps": n_leapfrog_steps,
             "max_rank": int(max_rank),
             "n_divergent": n_divergent,
+            "dense_mass_step_backoffs": int(backoff_count),
+            **(
+                {}
+                if warmup_divergence_frac is None
+                else {"warmup_divergence_frac": warmup_divergence_frac}
+            ),
             "step_size": float(step_size),
             "preconditioned": bool(problem.enabled),
             "metric_condition": problem.metric_condition,

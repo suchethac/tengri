@@ -147,6 +147,99 @@ def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bo
     return dense_mass_matrix
 
 
+#: Largest sampled dimension at which a dense mass matrix is actually allocated.
+#:
+#: Above this the dense request is refused and the fit falls back to a diagonal
+#: metric, because the mass matrix alone is O(D^2) and warmup has been measured
+#: at 20+ GB on problems well below this size (#319).
+#:
+#: **The fallback is not neutral, and that is why it is announced rather than
+#: applied quietly.** On the D = 74 field posterior a diagonal metric recovers
+#: only a small fraction of the conditioning a full one would, against a raw
+#: condition number of 5.4e4; taken on the metric rather than the covariance it
+#: leaves the geometry worse than it found it. A caller who asked for dense and
+#: silently received diagonal has had the sampler's most important setting
+#: changed underneath them.
+DENSE_MASS_MAX_DIM: int = 30
+
+
+def resolve_dense_mass_gate(
+    dense_mass_matrix: bool | None,
+    n_dim: int,
+    *,
+    method: str,
+    verbose: bool = True,
+) -> bool:
+    """Resolve the mass-matrix policy AND the high-D cap, in one place.
+
+    Six sites carried six copies of the same conjunction of policy and cap,
+    with four different behaviors: NUTS logged the downgrade at INFO and only
+    when ``verbose``; HMC did it silently; dynamic HMC did it silently from a
+    signature that defaults to ``dense_mass_matrix=True``; and the catalog path
+    applied the auto-policy without the cap at all, under a comment saying it
+    used "the same policy the single-galaxy samplers use". A fix or a message
+    applied to one of them reached one of them, which is the failure mode this
+    codebase has hit repeatedly. This is the single seam.
+
+    Parameters
+    ----------
+    dense_mass_matrix : bool or None
+        The caller's request. ``None`` resolves through the #319 auto-policy
+        (:func:`_resolve_dense_mass_matrix`); ``True`` / ``False`` are explicit.
+    n_dim : int
+        Sampled dimension, i.e. the length of the flat latent vector -- not the
+        count of named free parameters, which is smaller whenever a field latent
+        vector is present (#1408).
+    method : str
+        Method name for the message, e.g. ``"mcmc_hmc"``.
+    verbose : bool, optional
+        Whether to log the routine (auto-policy) downgrade. The warning for an
+        *explicit* request that could not be honored is emitted regardless:
+        losing a setting the caller chose is not a verbosity question.
+
+    Returns
+    -------
+    use_dense : bool
+        Whether to adapt a dense mass matrix.
+
+    Warns
+    -----
+    UserWarning
+        When dense was requested at ``n_dim > DENSE_MASS_MAX_DIM`` and the fit
+        is proceeding on a diagonal metric instead. Carries ``n_dim`` and
+        ``max_dim`` as measurements.
+    """
+    resolved = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim)
+    if not resolved or n_dim <= DENSE_MASS_MAX_DIM:
+        return resolved
+    from tengri.config.exceptions import warn_measured
+
+    warn_measured(
+        f"{method}: dense_mass_matrix=True at D={n_dim} exceeds the "
+        f"D<={DENSE_MASS_MAX_DIM} cap (the mass matrix alone is O(D^2), and "
+        f"warmup has been measured at 20+ GB well below this size, #319). "
+        f"Falling back to a DIAGONAL metric. That fallback is not neutral: on "
+        f"a D=74 field posterior the diagonal metric was measured recovering "
+        f"only a small fraction of the conditioning a full one recovers, "
+        f"against a raw condition number of 5.4e4, so a poorly mixing fit here "
+        f"is a likely consequence of the metric rather than of the sampler. "
+        f"Pass dense_mass_matrix=False to make the diagonal choice explicit "
+        f"and silence this.",
+        UserWarning,
+        stacklevel=3,
+        n_dim=n_dim,
+        max_dim=DENSE_MASS_MAX_DIM,
+    )
+    if verbose:
+        logger.info(
+            "  %s: dense mass matrix refused at D=%d (> %d); using a diagonal metric.",
+            method,
+            n_dim,
+            DENSE_MASS_MAX_DIM,
+        )
+    return False
+
+
 def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> None:
     """Warn before NUTS warmup OOMs at D >= 8 with dense mass matrix (#319).
 
@@ -488,16 +581,13 @@ def run_nuts(
     # Diagonal: O(D) per step, sufficient when init_from=Posterior
     #   (VI already decorrelated) or D>30.
     # (``n_dim`` already computed above for the #319 auto-policy.)
-    use_dense = dense_mass_matrix
-    if dense_mass_matrix and n_dim > 30:
-        use_dense = False
-        if verbose:
-            logger.info(
-                "  Auto-switching to diagonal mass matrix (D=%d>30). "
-                "Dense would be O(D²)=%d per step.",
-                n_dim,
-                n_dim**2,
-            )
+    # One seam for the policy AND the cap, shared with HMC and dynamic HMC.
+    # ``dense_mass_matrix`` has already been through the #319 auto-policy above,
+    # so what reaches here is an effective request; passing it back through the
+    # resolver is idempotent and keeps the cap and its message in one place.
+    use_dense = resolve_dense_mass_gate(
+        dense_mass_matrix, n_dim, method="mcmc_nuts", verbose=verbose
+    )
 
     # ``precondition`` changes the sampled geometry, so a cached step size and mass
     # matrix from the un-preconditioned run must not be reused.

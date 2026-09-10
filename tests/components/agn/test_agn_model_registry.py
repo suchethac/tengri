@@ -60,7 +60,7 @@ class TestAGNModelCombinations:
         wl = jnp.logspace(np.log10(100), np.log10(5e5), 1000)
         try:
             L = np.array(fn(wl, agn_log_lbol=11.0))
-        except (FileNotFoundError, KeyError, ValueError):
+        except FileNotFoundError:
             pytest.skip(f"{name} requires data files not present or has configuration issues")
         L_pos = L[L > 0]
         assert len(L_pos) > 0, f"{name}: all-zero/negative output"
@@ -88,7 +88,7 @@ class TestAGNModelCombinations:
         try:
             a = np.array(fn(wl, agn_log_lbol=10.0))
             b = np.array(fn(wl, agn_log_lbol=11.0))
-        except (FileNotFoundError, KeyError, ValueError):
+        except FileNotFoundError:
             pytest.skip(f"{name} requires data files not present or has configuration issues")
         # qsogen has mild Baldwin effect; most models linear.
         if a.max() == 0.0:

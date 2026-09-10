@@ -12,8 +12,10 @@ visible as soon as #1975 let a ladder be bounded to the age of the universe: a
 correctly bounded model still reported most of its mass forming before the Big
 Bang, because the warning integrates the clamped tail.
 
-The low-end clamp is deliberate and stays: ``psb_suess2022`` uses edges starting
-at 0.3 Gyr and relies on younger ages taking the youngest bin's rate.
+The low-end clamp is deliberate and stays, for a reason of its own: below the
+first edge ``searchsorted`` gives index -1, and JAX indexing is modular, so
+without the clamp the youngest ages would be served the OLDEST bin's rate.
+Clamping sends them to the nearest bin instead.
 """
 
 import numpy as np
@@ -63,14 +65,22 @@ class TestNoStarFormationPastTheLastEdge:
         assert np.all(sfr > 0.0)
         assert np.all(np.isfinite(sfr))
 
-    def test_youngest_bin_still_covers_ages_below_the_first_edge(self):
-        """The low-end clamp is load-bearing for psb_suess2022 and must survive."""
+    def test_youngest_bin_still_covers_the_ages_below_the_first_edge(self):
+        """The low-end clamp must survive the high-end fix.
+
+        These ages are below the *supplied* ``bin_edges_gyr``, which start at
+        0.3 Gyr, but ``psb_continuity`` prepends ``[0, tlast]`` to build its
+        ladder, so they are inside its first bin and the clamp never fires:
+        that is why the SFR is positive here. The clamp is what keeps it that
+        way for a caller whose own ladder does start above zero, where index -1
+        would otherwise wrap around to the oldest bin.
+        """
         old_edges = DEFAULT_BIN_EDGES_GYR[2:]  # starts at 0.3 Gyr
-        age_yr = np.array([1e6, 1e7, 1e8])  # all below the first edge
+        age_yr = np.array([1e6, 1e7, 1e8])  # all below that first supplied edge
         sfr = np.asarray(
             psb_continuity(age_yr, log_total_mass=10.0, bin_edges_gyr=np.asarray(old_edges))
         )
         assert np.all(sfr > 0.0), (
-            "ages below the first edge lost their SFR: the low-end clamp was "
-            "removed along with the high-end one (#1978)"
+            "the youngest ages lost their SFR: the low-end clamp was removed "
+            "along with the high-end one (#1978)"
         )

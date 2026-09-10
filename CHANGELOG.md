@@ -104,6 +104,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- `SEDModel.from_config`'s dust parameter docstring stated a MODEL name
+  (`"charlot_fall"`) and LAW names (`"calzetti"`, `"kl04"`, …) as though they
+  were the same kind of thing. It now states plainly that one law is applied
+  explicitly to BOTH attenuation screens (birth cloud + diffuse ISM), and that
+  `"charlot_fall"` (the default) is an alias for `"power_law"` on both
+  screens — the classic Charlot & Fall (2000) model — not a law-registry name
+  in its own right (#2021). `suggest_parameters`'s `dust_law_bc` default is
+  aligned from a stale hardcoded `"power_law"` to `None`, and its resolved
+  `(dust_law_bc, dust_law_diff)` pair now goes through the same
+  `resolve_dust_screen_laws` rule `Parameters()` itself uses, so the printed
+  cheatsheet cannot describe a configuration `Parameters()` would refuse
+  (#2224).
 - **An explicit `neb={'type': 'ssp'}` (or `{'type': 'none'}`) now silences
   `BakedInNebularWarning`; an omitted `neb=` still fires it (R49).** Both
   spellings resolve to the same `BakedInBackend` as an omitted `neb=`
@@ -258,6 +270,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   any group raises a loud legacy-key error naming `agn_nlr_alpha_pl` and the
   placement that works (#2214).
 
+### Deprecated
+
+- `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
+  renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to
+  `dust_attenuation_law`, but emits a `DeprecationWarning`; passing both with
+  disagreeing values raises `ValueError`. `dust=` will be removed in a later
+  release (#2021).
+
 ### Removed
 
 - The `stellar` build group (#1720). Metallicity is now configured through
@@ -317,6 +337,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   explicit-law rule.
 
 ### Fixed
+
+- `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
+  had two consequences. The #1999 post-adaptation stability probe had nowhere to
+  run, leaving the one dense-capable metric path reachable above the D=30 cap
+  with no step-size remediation; and chain 0 sampled inside the warmup program
+  while chains 1..n-1 ran the separate `_hmc_chain_scan`, so a multi-chain fit
+  ran two structurally different compiled programs over one adaptation — the
+  shape that made NUTS irreproducible under a pinned key before its own split.
+  The fused scan is replaced by `_hmc_low_rank_warmup_only` plus the shared
+  chain scan; the probe and the dead-warmup refusal (#2088) are wired in, and
+  `dense_mass_step_backoffs` / `warmup_divergence_frac` join the diagnostics.
+  Measured on a D=74 posterior, the probe declines on all 12 rows and returns a
+  bit-identical adapted step size, so this is insurance rather than repair
+  (`bench/reports/2026-09-06_low_rank_metric_d74.md`, Finding 6).
+
+- The dense mass-matrix cap is one seam, and crossing it is no longer silent.
+  `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
+  behaviors: `mcmc_nuts` logged the downgrade at INFO and only when
+  `verbose=True`, `mcmc_hmc` applied it silently, `mcmc_dynamic_hmc` applied it
+  silently from a signature that *defaults* to `dense_mass_matrix=True`,
+  `CatalogFitter` applied the auto-policy without the cap at all — under a
+  comment claiming it used "the same policy the single-galaxy samplers use" —
+  and `fit_batch`, which shares one adaptation across a whole batch, applied it
+  silently too. So an explicit `dense_mass_matrix=True` on a wide problem got a
+  diagonal metric, or an O(D^2) allocation, depending only on which entry point
+  the caller used, and in most cases with no way to find out. All six now route
+  through `resolve_dense_mass_gate`, which honors the request where it can and
+  raises a `UserWarning` carrying `n_dim` and `max_dim` where it cannot. The
+  warning fires regardless of `verbose`: losing the sampler's most consequential
+  setting is not a verbosity question. Nothing about which metric is *chosen*
+  changes — every existing fit gets the same mass matrix it got before.
+
+
+- Flat `Parameters(dust_model="single_component", dust_law_diff=...)` silently
+  discarded `dust_law_diff` and built `power_law` on the one attenuation
+  screen; a disagreeing `(dust_law_bc, dust_law_diff)` pair silently kept
+  `dust_law_bc` and dropped the other, so the model built was not the one
+  requested and nothing said so. Both shapes now raise `ValueError` naming
+  `dust_law_bc` as the single-screen spelling; the working shapes are
+  unaffected -- `dust_law_bc` alone still inherits into `dust_law_diff`, and
+  an already-equal pair (what the grammar path writes for
+  `single_component`) still builds. `two_component`/`wg00`/`off` inheritance
+  (#1989) is unchanged in both directions (#2224).
+
+- `SEDModel.from_config(dust=...)` named only the birth-cloud screen
+  (`spec_kwargs["dust_law_bc"] = dust`); the diffuse-ISM screen's law was
+  filled in only because the model happens to stay `dust_model="two_component"`
+  and the low-level inheritance of #1989 backfilled `dust_law_diff` from
+  `dust_law_bc` -- an accident of a default `from_config` never set on
+  purpose, not an explicit choice. `from_config` now resolves both screens
+  explicitly through the same resolver #2224 introduced
+  (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
+  not inherited (#2021).
 
 - The composable-AGN polar-dust attenuation block no longer disagrees with
   CIGALE's `skirtor2016` module on how the torus and polar re-emission share

@@ -360,6 +360,15 @@ class TestModelFromConfigInterface:
         defs = get_from_config_defaults()
         assert isinstance(defs["sfh"], str)
         assert len(defs["sfh"]) > 0
+        # #2021: `dust=` is renamed to `dust_attenuation_law=` (one law applied
+        # explicitly to both attenuation screens); `dust=` survives only as a
+        # deprecated alias forwarded through **model_kwargs, not as a named
+        # parameter of this signature.
+        assert "dust_attenuation_law" in sig.parameters
+        assert sig.parameters["dust_attenuation_law"].default is ...
+        assert "dust" not in sig.parameters
+        assert isinstance(defs["dust_attenuation_law"], str)
+        assert len(defs["dust_attenuation_law"]) > 0
 
 
 # ── SSP-required integration tests ────────────────────────────────
