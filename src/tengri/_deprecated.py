@@ -6,7 +6,7 @@ is reorganized toward the structure described in
 ``docs/dev/api_migration_v0.x.md``. Every entry here MUST have a matching
 row in that migration document.
 
-The three patterns provided:
+The four patterns provided:
 
 - :func:`deprecated_alias`: wraps a callable so calling it emits one
   ``DeprecationWarning`` and then forwards to the new implementation.
@@ -14,10 +14,13 @@ The three patterns provided:
   ``__getattr__`` (PEP 562). Use this when the old name is a class or
   constant rather than a function.
 - :func:`resolve_renamed_flag`: for a boolean *keyword argument* that was
-  renamed. The other two replace a whole symbol; this one lets a single
+  renamed. The first two replace a whole symbol; this one lets a single
   parameter change spelling without breaking the call.
+- :func:`renamed_kwarg`: a decorator for a non-boolean keyword argument that
+  was renamed; the old spelling is forwarded with a warning and the wrapped
+  signature reports only the new name.
 
-All three helpers are intentionally tiny; deprecation should never become
+All four helpers are intentionally tiny; deprecation should never become
 infrastructure.
 """
 
