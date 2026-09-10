@@ -515,9 +515,9 @@ class TestDaleRadioGuardMeasuresTheTemplate:
         path, edge, index = self._MEASURED_RED_ENDS[name]
         if not os.path.exists(path):
             pytest.skip(f"{path} not available")
-        got_edge, got_index = _red_end_from_grid_file(path)
-        assert got_edge == pytest.approx(edge, rel=1e-3, abs=0.0)
-        assert got_index == pytest.approx(index, rel=1e-2, abs=0.0)
+        got = _red_end_from_grid_file(path)
+        assert got.red_edge_aa == pytest.approx(edge, rel=1e-3, abs=0.0)
+        assert got.index == pytest.approx(index, rel=1e-2, abs=0.0)
 
     @pytest.mark.parametrize("name", sorted(_MEASURED_RED_ENDS))
     def test_only_dale2014_reads_as_a_radio_tail(self, name):
@@ -723,10 +723,10 @@ class TestRadioTailRuleIsNonThermalAtItsBoundaries:
 
         for index_nu in (-0.8, -0.1, 0.0, 0.99, 1.0, 3.6):
             path = self._synthetic_grid(tmp_path / f"m{index_nu}.h5", 2.2e9, index_nu)
-            edge, got = _red_end_from_grid_file(path)
-            assert edge == pytest.approx(2.2e9, rel=1e-9, abs=0.0)
-            assert got == pytest.approx(index_nu, rel=0.0, abs=1e-9), (
-                f"a synthetic L_nu ~ nu^{index_nu} tail measured {got}"
+            got = _red_end_from_grid_file(path)
+            assert got.red_edge_aa == pytest.approx(2.2e9, rel=1e-9, abs=0.0)
+            assert got.index == pytest.approx(index_nu, rel=0.0, abs=1e-9), (
+                f"a synthetic L_nu ~ nu^{index_nu} tail measured {got.index}"
             )
 
     @pytest.mark.parametrize(
@@ -771,3 +771,148 @@ class TestRadioTailRuleIsNonThermalAtItsBoundaries:
                 f"the 1e8 A threshold and cannot overlap the 1.34-10 GHz window; "
                 f"got {tail!r}"
             )
+
+
+@pytest.mark.contract
+class TestRedEndWavelengthUnits:
+    """The red-end reader must not assume a unit the file does not declare.
+
+    ``_red_end_from_grid_file`` resolves the wavelength axis by trying
+    ``wavelength_aa``, ``wavelength``, ``wavelength_um`` in order. The middle
+    key was scaled by 1e4, a micron assumption -- but every grid in this
+    repository that uses the bare key ``wavelength`` stores **Angstrom**:
+    ``dl07_templates.h5``, ``dl07_templates_v2.h5``, ``dl14_templates.h5``
+    (1e4-1e8 A) and ``skirtor_templates_v{2,3}.h5`` (10-1e8 A), three of them
+    saying so in a declared ``unit``/``units``/``wavelength_unit`` attribute.
+    ``load_dale2014_lnu_grid``'s v2 branch reads ``f["wavelength"]`` as A with
+    no scale.
+
+    Today the mistake is masked: none of those files carries a row dataset
+    under a key the reader recognizes, so it returns ``None`` and nothing is
+    refused. But any grid pairing ``wavelength`` with rows -- a user's own,
+    or a future vendored one -- would report a red edge 1e4x too red and be
+    falsely refused whenever SF radio is active. So the scale comes from the
+    file's declared unit attribute when it has one, and otherwise from this
+    repository's key convention, and the reader says which it used.
+    """
+
+    @staticmethod
+    def _grid(path, wave_key, wave_values, *, dataset_attrs=None, file_attrs=None):
+        """One-row grid under an arbitrary wavelength key, rising in wavelength."""
+        import h5py
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import DALE2014_UNIT_L_NU
+
+        wave = np.asarray(wave_values, dtype=float)
+        rows = (wave / wave.max()) ** 0.8  # alpha = -0.8, a synchrotron tail
+        with h5py.File(path, "w") as f:
+            ds = f.create_dataset(wave_key, data=wave)
+            for k, v in (dataset_attrs or {}).items():
+                ds.attrs[k] = v
+            f.create_dataset("alpha_grid", data=np.array([1.0, 2.0]))
+            f.create_dataset("templates_sf", data=np.vstack([rows, rows]))
+            f.attrs["spectra_unit"] = DALE2014_UNIT_L_NU
+            for k, v in (file_attrs or {}).items():
+                f.attrs[k] = v
+        return str(path)
+
+    def test_bare_wavelength_key_is_angstrom_by_repo_convention(self, tmp_path):
+        """``wavelength`` with no declared unit is A, not micron."""
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        wave = np.geomspace(3600.0, 2.2459e9, 400)
+        got = _red_end_from_grid_file(self._grid(tmp_path / "bare.h5", "wavelength", wave))
+        assert got.red_edge_aa == pytest.approx(2.2459e9, rel=1e-9, abs=0.0), (
+            f"a 3600-2.2459e9 A grid under the key 'wavelength' measured "
+            f"{got.red_edge_aa:.6e} A; a 1e4 micron factor would read 2.2459e+13 A and "
+            "falsely refuse it"
+        )
+        assert "angstrom" in got.wavelength_unit.lower()
+        assert got.wavelength_key == "wavelength"
+
+    @pytest.mark.parametrize(
+        ("dataset_attrs", "file_attrs"),
+        [
+            ({"unit": "micron"}, None),
+            ({"units": "um"}, None),
+            (None, {"wavelength_unit": "micron"}),
+        ],
+    )
+    def test_a_declared_micron_unit_wins_over_the_key_convention(
+        self, tmp_path, dataset_attrs, file_attrs
+    ):
+        """The three attribute spellings this repository's own grids use."""
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        wave_um = np.geomspace(0.36, 2.2459e5, 400)
+        got = _red_end_from_grid_file(
+            self._grid(
+                tmp_path / "declared.h5",
+                "wavelength",
+                wave_um,
+                dataset_attrs=dataset_attrs,
+                file_attrs=file_attrs,
+            )
+        )
+        assert got.red_edge_aa == pytest.approx(2.2459e9, rel=1e-9, abs=0.0)
+        assert "micron" in got.wavelength_unit.lower()
+
+    def test_a_declared_angstrom_unit_is_honored_on_the_micron_key(self, tmp_path):
+        """The mirror: a declaration overrides ``_um`` too, rather than being
+        overridden by it. Otherwise "read the declaration" is only half a
+        rule, and a mislabeled key would still decide the answer."""
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        wave = np.geomspace(3600.0, 2.2459e9, 400)
+        got = _red_end_from_grid_file(
+            self._grid(
+                tmp_path / "mixed.h5", "wavelength_um", wave, dataset_attrs={"unit": "Angstrom"}
+            )
+        )
+        assert got.red_edge_aa == pytest.approx(2.2459e9, rel=1e-9, abs=0.0)
+        assert "angstrom" in got.wavelength_unit.lower()
+
+    #: ``grid file -> (wavelength key, scale to A)``: the three real grids the
+    #: guard measures a red end on today. The edge must equal the h5py-read
+    #: axis maximum converted to A -- read here independently, not quoted.
+    _REAL_GRIDS: ClassVar[dict[str, tuple[str, float]]] = {
+        "data/dale2014_templates.h5": ("wavelength_aa", 1.0),
+        "data/dale2014_templates_cigale.h5": ("wavelength_aa", 1.0),
+        "data/astrodust_templates.h5": ("wavelength_um", 1.0e4),
+        "data/bosa_templates.h5": ("wavelength_aa", 1.0),
+        "data/schreiber2016_templates.h5": ("wavelength_aa", 1.0),
+    }
+
+    @pytest.mark.parametrize("path", sorted(_REAL_GRIDS))
+    def test_real_grids_measure_their_own_axis_in_angstrom(self, path):
+        """No shipped grid's red edge is off by a unit factor."""
+        import os
+
+        import h5py
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        key, scale = self._REAL_GRIDS[path]
+        with h5py.File(path, "r") as f:
+            axis_max_aa = float(np.asarray(f[key][()], dtype=float).ravel().max()) * scale
+        got = _red_end_from_grid_file(path)
+        assert got.wavelength_key == key
+        assert got.red_edge_aa <= axis_max_aa * (1.0 + 1e-9), (
+            f"{path}: measured emitting edge {got.red_edge_aa:.6e} A exceeds the axis "
+            f"maximum {axis_max_aa:.6e} A -- a unit factor is being applied twice"
+        )
+        assert got.red_edge_aa >= axis_max_aa / 1.0e3, (
+            f"{path}: measured emitting edge {got.red_edge_aa:.6e} A is more than 1000x "
+            f"blueward of the axis maximum {axis_max_aa:.6e} A -- the axis is probably "
+            "being read in the wrong unit"
+        )

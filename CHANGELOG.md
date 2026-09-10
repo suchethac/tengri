@@ -511,6 +511,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   while its `alpha=2.0` row alone stops at 6.026e7 Å, and a build-time refusal
   has to hold for every alpha a fit can reach. A model whose red end cannot be
   measured -- a closed-form law, or an uninstalled grid -- is not refused.
+  The reader no longer assumes a wavelength unit the file does not declare: it
+  reads a declared `unit`/`units` attribute on the wavelength dataset or a
+  file-level `wavelength_unit`, and only falls back to this repository's key
+  convention (`wavelength_aa` and the bare `wavelength` in Å,
+  `wavelength_um` in micron) when the file declares none, reporting which it
+  used in the refusal message. The bare key `wavelength` was being scaled by
+  1e4 as if it were micron, while every grid here that uses it stores Å --
+  `dl07_templates{,_v2}.h5` and `dl14_templates.h5` at 1e4-1e8 Å,
+  `skirtor_templates_v{2,3}.h5` at 10-1e8 Å, three of them saying so in an
+  attribute. It was masked only because none of those files carries a row
+  dataset under a key the reader recognizes; measured on a synthetic grid, a
+  3600-2.2459e9 Å axis under that key read **2.2459e13 Å** and would have
+  been falsely refused whenever SF radio was active. `_red_end_from_grid_file`
+  now returns a named `GridRedEnd` carrying the key and unit alongside the
+  edge and index.
 
 - A user-provided `agn_log_lbol` is no longer accepted and discarded when the
   CIGALE fracAGN coupling owns the AGN power. #2069 already refused a **free**

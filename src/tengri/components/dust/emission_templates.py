@@ -30,6 +30,7 @@ Re-exported here from emission.py:
 import functools
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import jax.numpy as jnp
 
@@ -2444,8 +2445,135 @@ _RADIO_TAIL_RED_EDGE_AA = 1.0e8
 #: the side that never fires spuriously.
 _RADIO_TAIL_MIN_THERMAL_INDEX = 1.0
 
+#: Declared wavelength-unit strings a grid may carry, to their factor to Å.
+#:
+#: Matched case-insensitively after stripping whitespace. A grid that declares
+#: its unit is believed over any convention: this repository's own grids
+#: declare it three different ways (``dl07_templates_v2.h5`` and
+#: ``skirtor_templates_v2.h5`` as a dataset ``unit`` attribute,
+#: ``dl14_templates.h5`` as ``units``, ``dale2014_templates.h5`` and
+#: ``bosa_templates.h5`` as a file-level ``wavelength_unit``), and all of them
+#: say Angstrom.
+_WAVELENGTH_UNIT_TO_AA: dict[str, float] = {
+    "a": 1.0,
+    "aa": 1.0,
+    "angstrom": 1.0,
+    "angstroms": 1.0,
+    "\u00c5": 1.0,
+    "nm": 10.0,
+    "nanometer": 10.0,
+    "nanometers": 10.0,
+    "um": 1.0e4,
+    "\u00b5m": 1.0e4,
+    "\u03bcm": 1.0e4,
+    "micron": 1.0e4,
+    "microns": 1.0e4,
+    "micrometer": 1.0e4,
+    "micrometers": 1.0e4,
+    "m": 1.0e10,
+    "meter": 1.0e10,
+    "meters": 1.0e10,
+}
 
-def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
+#: Fallback factor to Å per wavelength dataset key, used only when the file
+#: declares no unit of its own.
+#:
+#: The bare key ``wavelength`` is **Angstrom** here. Every grid in this
+#: repository that uses it stores Angstrom -- ``dl07_templates{,_v2}.h5`` and
+#: ``dl14_templates.h5`` span 1e4-1e8 Å, ``skirtor_templates_v{2,3}.h5`` span
+#: 10-1e8 Å -- and ``load_dale2014_lnu_grid``'s v2 branch reads
+#: ``f["wavelength"]`` as Å with no scale. Reading it as micron instead
+#: reported a red edge 1e4x too red (measured 2.2459e13 Å for a 2.2459e9 Å
+#: grid, even one declaring ``unit='Angstrom'``), a latent false refusal for
+#: any grid pairing that key with template rows. ``wavelength_um`` carries its
+#: unit in its name, which is what ``astrodust_templates.h5`` relies on.
+_WAVELENGTH_KEY_TO_AA: dict[str, float] = {
+    "wavelength_aa": 1.0,
+    "wavelength": 1.0,
+    "wavelength_um": 1.0e4,
+}
+
+
+#: Canonical name per factor to Å, so a declaration's spelling ("um", "\u00b5m",
+#: "microns") is reported under one name with the raw text quoted beside it.
+_CANONICAL_WAVELENGTH_UNIT: dict[float, str] = {
+    1.0: "Angstrom",
+    10.0: "nm",
+    1.0e4: "micron",
+    1.0e10: "meter",
+}
+
+
+class GridRedEnd(NamedTuple):
+    r"""Red end of a dust-emission grid, with the unit it was read in.
+
+    Attributes
+    ----------
+    red_edge_aa : float
+        Reddest wavelength [Å] at which any template row is non-zero.
+    index : float
+        Smallest red-end spectral index :math:`d\ln L_\nu / d\ln\nu` any
+        row shows over the reddest decade of the emitting span. Negative or
+        near zero is non-thermal (radio); :math:`\ge 3` is thermal dust.
+    wavelength_key : str
+        The dataset key the wavelength axis was read from.
+    wavelength_unit : str
+        Human-readable statement of the unit used and where it came from -- a
+        declared attribute, or this repository's key convention. Carried so a
+        refusal can say which, since a wrong assumption here scales the red
+        edge by orders of magnitude.
+    """
+
+    red_edge_aa: float
+    index: float
+    wavelength_key: str
+    wavelength_unit: str
+
+
+def _wavelength_scale_to_aa(dataset, handle, key: str) -> tuple[float, str]:
+    """``(factor to Å, where that factor came from)`` for one wavelength axis.
+
+    A declared unit attribute wins over the key convention, in both
+    directions: a ``wavelength_um`` dataset declaring Angstrom is read as
+    Angstrom. An unrecognized declaration falls back to the key convention
+    and says so, rather than raising -- an unmeasurable red end must not break
+    model construction (the #1970 guard's own contract), and the key name is
+    itself an explicit declaration in this repository.
+    """
+    declared = None
+    # On the wavelength DATASET a bare ``unit``/``units`` unambiguously
+    # describes the wavelength; at FILE level only the qualified
+    # ``wavelength_unit`` does -- several grids here carry a file-level
+    # ``units_emission`` / ``spectra_unit`` describing the flux instead, and a
+    # bare ``units`` there would be the same kind of ambiguity.
+    for source, attrs, names in (
+        ("dataset", dataset.attrs, ("unit", "units", "wavelength_unit")),
+        ("file", handle.attrs, ("wavelength_unit",)),
+    ):
+        for attr_name in names:
+            raw = attrs.get(attr_name)
+            if raw is None:
+                continue
+            text = raw.decode() if isinstance(raw, bytes) else str(raw)
+            scale = _WAVELENGTH_UNIT_TO_AA.get(text.strip().lower())
+            if scale is not None:
+                name = _CANONICAL_WAVELENGTH_UNIT[scale]
+                return scale, (
+                    f"{name} (declared: {source} attribute {attr_name!r} = {text.strip()!r})"
+                )
+            if declared is None:
+                declared = f"{source} attribute {attr_name!r} = {text.strip()!r}"
+    fallback = _WAVELENGTH_KEY_TO_AA[key]
+    unit = _CANONICAL_WAVELENGTH_UNIT[fallback]
+    if declared is not None:
+        return fallback, (
+            f"{unit} (repository convention for the key {key!r}; the file's "
+            f"{declared} is not a unit this reader recognizes)"
+        )
+    return fallback, f"{unit} (repository convention for the key {key!r}; none declared)"
+
+
+def _red_end_from_grid_file(path: str) -> GridRedEnd | None:
     r"""Red edge of a dust-emission grid and its :math:`L_\nu` slope there.
 
     Parameters
@@ -2455,12 +2583,12 @@ def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
 
     Returns
     -------
-    tuple[float, float] or None
-        ``(red_edge_aa, red_end_index)`` -- the reddest wavelength [Å] at
-        which any template row is non-zero, and the SMALLEST red-end spectral
-        index :math:`d\ln L_\nu / d\ln\nu` any row shows over the reddest
-        decade of that span. ``None`` when the file carries no recognizable
-        wavelength/template pair.
+    GridRedEnd or None
+        The reddest wavelength [Å] at which any template row is non-zero, the
+        SMALLEST red-end spectral index :math:`d\ln L_\nu / d\ln\nu` any row
+        shows over the reddest decade of that span, and the wavelength key and
+        unit those were read in. ``None`` when the file carries no
+        recognizable wavelength/template pair.
 
     Notes
     -----
@@ -2499,13 +2627,16 @@ def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
 
     with h5py.File(path, "r") as f:
         wave = None
-        for key, scale in (
-            ("wavelength_aa", 1.0),
-            ("wavelength", 1.0e4),
-            ("wavelength_um", 1.0e4),
-        ):
+        wave_key = ""
+        wave_unit = ""
+        # Keys in preference order; the SCALE is resolved per file, from its
+        # own declared unit where it has one, never assumed from the key alone
+        # (see _wavelength_scale_to_aa and _WAVELENGTH_KEY_TO_AA).
+        for key in _WAVELENGTH_KEY_TO_AA:
             if isinstance(f.get(key), h5py.Dataset):
+                scale, wave_unit = _wavelength_scale_to_aa(f[key], f, key)
                 wave = np.asarray(f[key][()], dtype=float).ravel() * scale
+                wave_key = key
                 break
         if wave is None or wave.size == 0:
             return None
@@ -2561,7 +2692,12 @@ def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
         index = min(index, float(fit[0]))
     if not np.isfinite(index):
         return None
-    return edge, index
+    return GridRedEnd(
+        red_edge_aa=edge,
+        index=index,
+        wavelength_key=wave_key,
+        wavelength_unit=wave_unit,
+    )
 
 
 def dust_emission_red_edge_aa(name: str) -> float | None:
@@ -2604,11 +2740,11 @@ def dust_emission_red_edge_aa(name: str) -> float | None:
     77270000.0
     """
     measured = _dust_emission_red_end(name)
-    return None if measured is None else measured[0]
+    return None if measured is None else measured.red_edge_aa
 
 
-def _dust_emission_red_end(name: str) -> tuple[float, float] | None:
-    r"""``(red_edge_aa, red_end_index)`` of the grid ``name`` will evaluate.
+def _dust_emission_red_end(name: str) -> GridRedEnd | None:
+    r""":class:`GridRedEnd` of the grid ``name`` will evaluate.
 
     The index is :math:`d\ln L_\nu / d\ln\nu` over the reddest decade of
     the emitting span -- see :func:`_red_end_from_grid_file`.
@@ -2622,7 +2758,15 @@ def _dust_emission_red_end(name: str) -> tuple[float, float] | None:
     # different grid than its vendored default reports that grid's numbers.
     stamped = getattr(DUST_EMISSION_MODELS.get(name), "dust_emission_red_end", None)
     if stamped is not None:
-        return float(stamped[0]), float(stamped[1])
+        # Stamped by ``create_dale2014_from_grid`` from this same reader, so
+        # it is already a GridRedEnd; rebuilt rather than returned as-is so a
+        # hand-stamped plain pair still reads back with the fields named.
+        return GridRedEnd(
+            red_edge_aa=float(stamped[0]),
+            index=float(stamped[1]),
+            wavelength_key=getattr(stamped, "wavelength_key", ""),
+            wavelength_unit=getattr(stamped, "wavelength_unit", "unrecorded"),
+        )
 
     entry = _DUST_EMISSION_GRID_AXES.get(_DUST_EMISSION_ALIASES.get(name, name))
     if entry is None:
@@ -2702,9 +2846,11 @@ def dust_emission_radio_tail_aa(name: str) -> float | None:
     measured = _dust_emission_red_end(name)
     if measured is None:
         return None
-    edge, index = measured
-    if edge > _RADIO_TAIL_RED_EDGE_AA and index < _RADIO_TAIL_MIN_THERMAL_INDEX:
-        return edge
+    if (
+        measured.red_edge_aa > _RADIO_TAIL_RED_EDGE_AA
+        and measured.index < _RADIO_TAIL_MIN_THERMAL_INDEX
+    ):
+        return measured.red_edge_aa
     return None
 
 

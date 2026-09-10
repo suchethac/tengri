@@ -1218,7 +1218,8 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     if red_edge is None:
         return  # Not template-backed, grid absent, or no rising radio tail
 
-    index = _dust_emission_red_end(emission)[1]
+    measured = _dust_emission_red_end(emission)
+    index = measured.index
     ghz = 2.99792458e18 / red_edge / 1.0e9
     raise ConfigError(
         f"The Dale+2014-family dust emission template selected by "
@@ -1228,7 +1229,9 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
         f"dlnL_nu/dlnnu = {index:+.3f}, below the 1.0 that separates a radio "
         f"continuum (flat or falling toward higher frequency: synchrotron "
         f"-0.8, free-free -0.1) from thermal dust (Rayleigh-Jeans, "
-        f"nu^(2+beta), so >= 3). Combining it with an "
+        f"nu^(2+beta), so >= 3). The axis was read from the grid's "
+        f"{measured.wavelength_key!r} dataset in {measured.wavelength_unit}. "
+        f"Combining it with an "
         f"active SF radio block (radio.sf.type != 'none') causes "
         f"double-counting of the radio continuum (~2x in rest_sed between "
         f"~1.34 and ~10 GHz). "
