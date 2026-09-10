@@ -146,13 +146,23 @@ def test_warm_model_matches_fresh_model(ssp_data_fsps, target, name):
     )
 
 
-#: Bound, not pin: measured 0, 1, 0, 3 divergences of 400 draws across seeds
-#: 3-6 on macOS and 1 of 400 on Linux CI for seed 3 -- this test's exact
-#: settings -- so 1% sits above every observed rate with margin while a
-#: sampler that diverges on tens of draws still fails. The exact zero this
-#: replaces was a one-machine measurement, not the property this test
-#: guards.
-_MAX_DIVERGENCE_FRAC = 0.01
+#: Sampler-health floor, not a pin. The R-hat assertion below is the mixing
+#: guard this test exists for; this bound only catches a sampler that is
+#: actually unhealthy. The divergence count is not reproducible run to run,
+#: even at this exact pinned seed: three Linux CI runs of seed 3 (same or
+#: near-identical source) gave 1, at most 4, and 14 divergent draws of 400
+#: (0.25% to 3.5%), and macOS seeds 3-6 gave 0, 1, 0, 3 -- per-CPU XLA code
+#: generation changes the last bits and NUTS trajectories amplify them, so
+#: the count varies at the few-percent level regardless of the seed. 10%
+#: sits about three times above the worst observed rate (3.5%) and an
+#: order of magnitude below the fitter's own dead-sampler threshold
+#: (``DEAD_SAMPLING_DIVERGENCE_FRAC = 0.9``,
+#: ``inference/backends/mcmc/_shared.py:442``), so a sampler that diverges
+#: on tens of percent of draws still fails here long before the fitter
+#: would refuse it. The on-record dead-sampler defects this bound would
+#: still catch: #2128 (100% divergent sampling draws) and #2087 (the
+#: all-divergent detection it motivated) -- both a wide margin past 10%.
+_MAX_DIVERGENCE_FRAC = 0.10
 
 
 def test_nuts_split_warmup_keeps_sampling_quality(ssp_data_fsps, target):
@@ -167,16 +177,29 @@ def test_nuts_split_warmup_keeps_sampling_quality(ssp_data_fsps, target):
     above by ``test_repeated_fit_on_reused_model_is_identical`` and
     ``test_warm_model_matches_fresh_model``.
 
+    ``worst_rhat < 1.1`` is the mixing guard this test exists for.
     ``n_divergent`` is the sum of BlackJAX's per-draw ``is_divergent`` over
     the sampling-phase scan across all chains and post-warmup samples
     (``inference/backends/mcmc/nuts.py:794``); warmup-phase divergences are
     excluded from this count and tracked separately as
-    ``warmup_divergence_frac``. The bound below is a fraction, not an exact
-    zero, matching the codebase's own fraction-based dead-fit guards
-    (``refuse_dead_sampling``, ``inference/backends/mcmc/_shared.py:586``;
-    ``refuse_dead_warmup``, ``inference/backends/mcmc/_shared.py:490``) --
-    see ``_MAX_DIVERGENCE_FRAC`` above for the measurements behind the 1%
-    bound.
+    ``warmup_divergence_frac``. The divergence bound is a sampler-health
+    floor, not a pin: three Linux CI runs of this exact seed gave 1, at
+    most 4, and 14 divergent draws of 400 (0.25% to 3.5%) with the same or
+    near-identical source, and macOS seeds 3-6 gave 0, 1, 0, 3 -- the count
+    is not reproducible run to run even with a pinned seed, because
+    per-CPU XLA code generation changes the last bits and NUTS trajectories
+    amplify them. 10% sits about three times above the worst observed rate
+    and an order of magnitude below the fitter's own dead-sampler
+    threshold (``DEAD_SAMPLING_DIVERGENCE_FRAC = 0.9``,
+    ``inference/backends/mcmc/_shared.py:442``, used by
+    ``refuse_dead_sampling``, ``inference/backends/mcmc/_shared.py:586``,
+    and mirrored by ``refuse_dead_warmup``,
+    ``inference/backends/mcmc/_shared.py:490``), so a sampler diverging on
+    tens of percent of draws still fails here long before the fitter would
+    refuse it. The on-record dead-sampler defects #2128 (100% divergent
+    sampling draws) and #2087 (the all-divergent detection it motivated)
+    would fail this bound by a wide margin. See ``_MAX_DIVERGENCE_FRAC``
+    above for the full measurement table.
     """
     flux, noise = target
     _, forward = _build(ssp_data_fsps)
