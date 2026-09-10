@@ -585,8 +585,6 @@ class Parameters:
             mean_sfh_type,
             nebular=self.nebular_mode,
             dust_model=self.dust_model,
-            dust_law_bc=self.dust_law_bc,
-            dust_law_diff=self.dust_law_diff,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,

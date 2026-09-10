@@ -2904,8 +2904,6 @@ def suggest_parameters(
         mean_sfh_type=mean_sfh_type,
         nebular=nebular_flag,
         dust_model=dust_model,
-        dust_law_bc=dust_law_bc,
-        dust_law_diff=dust_law_diff,
         dust_emission=dust_emission,
         agn_model=agn_model,
         radio=radio,
