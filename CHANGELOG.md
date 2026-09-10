@@ -31,6 +31,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   could not reach the Narayanan et al. (2018) MUFASA-fitted bump multipliers
   (up to 3.634 at z=4) that `narayanan_prior` itself now centers on (#2226).
 
+- `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
+  had two consequences. The #1999 post-adaptation stability probe had nowhere to
+  run, leaving the one dense-capable metric path reachable above the D=30 cap
+  with no step-size remediation; and chain 0 sampled inside the warmup program
+  while chains 1..n-1 ran the separate `_hmc_chain_scan`, so a multi-chain fit
+  ran two structurally different compiled programs over one adaptation — the
+  shape that made NUTS irreproducible under a pinned key before its own split.
+  The fused scan is replaced by `_hmc_low_rank_warmup_only` plus the shared
+  chain scan; the probe and the dead-warmup refusal (#2088) are wired in, and
+  `dense_mass_step_backoffs` / `warmup_divergence_frac` join the diagnostics.
+  Measured on a D=74 posterior, the probe declines on all 12 rows and returns a
+  bit-identical adapted step size, so this is insurance rather than repair
+  (`bench/reports/2026-09-06_low_rank_metric_d74.md`, Finding 6).
+
+- The dense mass-matrix cap is one seam, and crossing it is no longer silent.
+  `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
+  behaviors: `mcmc_nuts` logged the downgrade at INFO and only when
+  `verbose=True`, `mcmc_hmc` applied it silently, `mcmc_dynamic_hmc` applied it
+  silently from a signature that *defaults* to `dense_mass_matrix=True`,
+  `CatalogFitter` applied the auto-policy without the cap at all — under a
+  comment claiming it used "the same policy the single-galaxy samplers use" —
+  and `fit_batch`, which shares one adaptation across a whole batch, applied it
+  silently too. So an explicit `dense_mass_matrix=True` on a wide problem got a
+  diagonal metric, or an O(D^2) allocation, depending only on which entry point
+  the caller used, and in most cases with no way to find out. All six now route
+  through `resolve_dense_mass_gate`, which honors the request where it can and
+  raises a `UserWarning` carrying `n_dim` and `max_dim` where it cannot. The
+  warning fires regardless of `verbose`: losing the sampler's most consequential
+  setting is not a verbosity question. Nothing about which metric is *chosen*
+  changes — every existing fit gets the same mass matrix it got before.
+
+- `_mass_scale_lnu`'s forward product went `nan` in float32 on the
+  `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
+  with **byte-identical optimized HLO**, so the graph did not change and the
+  emitted kernel did. `total_mass * L_sun` is ~3.8e43 (`inf` in float32), and a
+  backend that emits its own kernel for the fused `multiply -> multiply ->
+  reduce` may hoist the two scalar broadcasts into that single factor. Ages
+  beyond the galaxy's age carry an exactly-zero SFH weight, so `inf * 0` is
+  `nan` and the reduction over age is `nan` at every pixel. PR #2100 had
+  already pinned the *reverse* pass's grouping for the same overflow; this is
+  the same hazard reached from the forward. The grouping is now stated in the
+  graph with `optimization_barrier`, on both spellings of the product — the
+  function body and the `custom_jvp`'s `primal_out` — because fixing only one
+  leaves the differentiated forward `nan` while the undifferentiated one is
+  finite. Float64 is bit-identical, verified as equality rather than tolerance
+  across all sixteen seams, which matters because the barrier changes emitted
+  HLO for every fit. Note the assertion hole that hid this: the seam checks
+  asserted gradients were non-zero, and `nan != 0.0` is `True` — the mirror of
+  #2100's hole, where `isfinite` admitted zero. This closes the float32
+  symptom only; the separate float64 non-finiteness on six `spec/*/auto_*`
+  seams is not established as the same defect and #2178 stays open for it
+  (#2178, #2100).
+
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
@@ -66,6 +119,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `Posterior.save()` writes the free names into the file and `Posterior.load()`
   restores them, so a reload without `model=` no longer re-creates the false
   positive; files written before this load unchanged (#2087).
+
+- Flat `Parameters(dust_model="single_component", dust_law_diff=...)` silently
+  discarded `dust_law_diff` and built `power_law` on the one attenuation
+  screen; a disagreeing `(dust_law_bc, dust_law_diff)` pair silently kept
+  `dust_law_bc` and dropped the other, so the model built was not the one
+  requested and nothing said so. Both shapes now raise `ValueError` naming
+  `dust_law_bc` as the single-screen spelling; the working shapes are
+  unaffected -- `dust_law_bc` alone still inherits into `dust_law_diff`, and
+  an already-equal pair (what the grammar path writes for
+  `single_component`) still builds. `two_component`/`wg00`/`off` inheritance
+  (#1989) is unchanged in both directions (#2224).
+
+- `SEDModel.from_config(dust=...)` named only the birth-cloud screen
+  (`spec_kwargs["dust_law_bc"] = dust`); the diffuse-ISM screen's law was
+  filled in only because the model happens to stay `dust_model="two_component"`
+  and the low-level inheritance of #1989 backfilled `dust_law_diff` from
+  `dust_law_bc` -- an accident of a default `from_config` never set on
+  purpose, not an explicit choice. `from_config` now resolves both screens
+  explicitly through the same resolver #2224 introduced
+  (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
+  not inherited (#2021).
 
 ### Added
 
@@ -219,6 +293,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     and its depth is `tau_v`, not `tau_bc`/`tau_diff`.
   The low-level `Parameters(dust_law_bc=…)` kwargs path is unchanged and still
   inherits `dust_law_diff` from `dust_law_bc`.
+- `SEDModel.from_config`'s dust parameter docstring stated a MODEL name
+  (`"charlot_fall"`) and LAW names (`"calzetti"`, `"kl04"`, …) as though they
+  were the same kind of thing. It now states plainly that one law is applied
+  explicitly to BOTH attenuation screens (birth cloud + diffuse ISM), and that
+  `"charlot_fall"` (the default) is an alias for `"power_law"` on both
+  screens — the classic Charlot & Fall (2000) model — not a law-registry name
+  in its own right (#2021). `suggest_parameters`'s `dust_law_bc` default is
+  aligned from a stale hardcoded `"power_law"` to `None`, and its resolved
+  `(dust_law_bc, dust_law_diff)` pair now goes through the same
+  `resolve_dust_screen_laws` rule `Parameters()` itself uses, so the printed
+  cheatsheet cannot describe a configuration `Parameters()` would refuse
+  (#2224).
 - **Example gallery curated and refocused**: Pruned 283 → 121 gallery
   scripts across 17 sections; removed inference/fit-comparison examples (they
   belong in notebooks), dissolved `inference`, `workflows`, `multiwavelength`,
@@ -323,6 +409,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Padova, BaSTI) with nebular baked into the SSP LUT — so the full render
   stays fast (~0.7 ms/eval, vs ~2 ms for the Cue emulator, which timed out
   the render at 7 galaxies).
+
+### Deprecated
+
+- `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
+  renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to
+  `dust_attenuation_law`, but emits a `DeprecationWarning`; passing both with
+  disagreeing values raises `ValueError`. `dust=` will be removed in a later
+  release (#2021).
 
 ## [0.1.0] - 2026-05-22
 

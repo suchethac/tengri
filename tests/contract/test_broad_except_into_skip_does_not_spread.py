@@ -65,11 +65,28 @@ _BROAD = {"Exception", "BaseException"}
 #: here" is a claim about the observer, and it is worth one attempt to make
 #: the observation before recording an exemption -- an unrunnable test looks
 #: identical whether the cause is a missing grid or a bug in the test.
+#: Thirteen entries were struck when the handlers they named were narrowed to the
+#: exception the environment actually raises. That is the direction this ratchet
+#: exists to allow, and the assertion below says so in as many words.
+#:
+#: A companion guard, ``tools/check_test_skip_handlers.py``, enforces the same
+#: idea one step further out and with a different philosophy, so it is worth
+#: knowing which does what:
+#:
+#:   * this file  -- ``Exception``/``BaseException``/bare only, judged by an
+#:     inventory, because "only a per-site read can" judge the survivors. It
+#:     scans module scope too, which the tool does not, and it covers
+#:     ``tests/crossval/``.
+#:   * the tool   -- *any* class that is not environmental (``KeyError``,
+#:     ``ValueError``, ``TypeError`` ...), with no allowlist, but exempting a
+#:     handler that *gates* its skip on a claim that can fail (``assert`` /
+#:     ``raise`` / ``pytest.fail``). That exemption is why it stays silent on
+#:     two entries still listed here: ``test_presets.py`` re-raises anything
+#:     whose message is not about SSP data, and
+#:     ``test_fixed_params_reach_every_entry_point.py`` asserts the exception is
+#:     on a named table first.
 KNOWN: frozenset[tuple[str, str]] = frozenset(
     {
-        ("components/sfh/test_sfh_delayed.py", "test_delayed_buildable_via_sedmodel_build"),
-        ("contract/test_compile_cache.py", "minimal_catalog_setup"),
-        ("contract/test_compile_cache.py", "minimal_model_and_data"),
         # Narrowed on this branch to a named exemption table, but the handler is
         # still shaped like the others: it catches Exception, then asserts the
         # entry point is listed in RAISES_ON_BARE_PARAMS and the type matches.
@@ -77,30 +94,11 @@ KNOWN: frozenset[tuple[str, str]] = frozenset(
             "contract/test_fixed_params_reach_every_entry_point.py",
             "test_entry_point_honors_a_fixed_redshift",
         ),
-        ("contract/test_nebular_fdust.py", "test_cb19_fdust_reduces_lines"),
-        ("contract/test_nebular_fdust.py", "test_cloudy_grid_fdust_reduces_lines"),
         ("contract/test_presets.py", "test_preset_can_sample"),
         ("crossval/test_full_sed_crossval.py", "test_tengri_nonparametric_color_trend"),
         ("crossval/test_full_sed_crossval.py", "test_tengri_vs_cigale_skirtor_shape"),
         ("crossval/test_geovi_crossval.py", "test_converged_hamiltonian_close"),
         ("crossval/test_geovi_crossval.py", "test_posterior_stds_agree"),
-        ("physics/conservation/test_filter_convolution.py", "test_matches_ssp_precompute"),
-        ("regression/agn/test_skirtor_jit_thread_arrays_1198.py", "<module>"),
-        ("regression/agn/test_vs_cigale_skirtor.py", "skirtor_component"),
-        ("regression/agn/test_vs_cigale_skirtor.py", "skirtor_components_fn"),
-        (
-            "regression/bug/test_bug_389_spectrum_wave_obs_fallback.py",
-            "test_predict_spectrum_raises_without_any_grid",
-        ),
-        (
-            "regression/bug/test_bug_389_spectrum_wave_obs_fallback.py",
-            "test_predict_spectrum_uses_observation_wave_obs_when_unset",
-        ),
-        (
-            "regression/bug/test_bug_390_dust_emission_preload.py",
-            "test_sedmodel_preloads_dale2014_at_construction",
-        ),
-        ("regression/bug/test_bug_464_pytree_meta_arrays.py", "test_cue_weights_aux_is_hashable"),
     }
 )
 

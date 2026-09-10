@@ -166,14 +166,14 @@ class TestComputeGridWeightsContract:
         def call_weights(grid):
             return compute_grid_weights(1.0, grid)
 
-        # jit traces without executing size/shape checks
-        # A size-1 grid should not raise during tracing
-        try:
-            result = jax.jit(call_weights)(jnp.array([2.0]))
-            # This may or may not execute, but it should not raise during jit setup
-            assert result.shape == (1,)
-        except (ValueError, IndexError):
-            pytest.skip("Traced execution is platform-dependent")
+        # jit traces without executing size/shape checks, so a size-1 grid
+        # must not raise. This ran inside a ``try`` that skipped on
+        # ``(ValueError, IndexError)`` under the message "platform-dependent" --
+        # in a test named ``_does_not_raise``, which made the raise it exists to
+        # forbid report as a skip. CI pins JAX_PLATFORMS=cpu; a raise here is a
+        # failure.
+        result = jax.jit(call_weights)(jnp.array([2.0]))
+        assert result.shape == (1,)
 
     def test_inside_jit_no_raise_on_traced_grid(self):
         """Traced grid inside jit does not raise, only at call time."""

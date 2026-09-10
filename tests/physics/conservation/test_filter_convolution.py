@@ -81,7 +81,7 @@ class TestPreintegrateGridSSPCrossval:
         # Load 2 SDSS filters
         try:
             filter_waves, filter_trans, _ = load_filter_set(["sdss_r", "sdss_i"])
-        except Exception:
+        except (FileNotFoundError, OSError):
             pytest.skip("Filter data not available")
 
         # Fixed redshift

@@ -27,7 +27,7 @@ def test_predict_spectrum_uses_observation_wave_obs_when_unset():
 
     try:
         ssp = tengri.load_ssp()
-    except Exception:
+    except FileNotFoundError:
         pytest.skip("SSP fixture not present")
 
     wave_obs = np.linspace(4000.0, 7000.0, 64)
@@ -60,7 +60,7 @@ def test_predict_spectrum_raises_without_any_grid():
 
     try:
         ssp = tengri.load_ssp()
-    except Exception:
+    except FileNotFoundError:
         pytest.skip("SSP fixture not present")
 
     # No observation at all → no spectroscopy fallback path.

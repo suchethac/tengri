@@ -111,6 +111,29 @@ class ParameterDefaultMissingError(ParameterError):
     """
 
 
+class DIGNotOnNebularGridError(ParameterError):
+    r"""DIG mixing was asked of the per-Q_H nebular grid, which has no DIG axis (#2195).
+
+    The grid built by :meth:`tengri.SEDModel.enable_fast_nebular` (also reached
+    through ``approx=FeaturePrecomp()``) tabulates the nebular emission over
+    whichever of ``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas`` are free, and
+    reconstructs it as :math:`Q_H \times \mathrm{interp}(\text{grid})`. Neither
+    ``neb_dig_frac`` nor ``neb_dig_delta_logU`` is a candidate axis, and the
+    reconstruction has no second ionization regime to mix in, so an armed grid
+    drops DIG mixing entirely: both parameters go silently inert together.
+
+    Raised at the point the grid is armed, which is where the incompatibility
+    first becomes concrete, rather than being discovered as a posterior on two
+    parameters the likelihood never saw.
+
+    Parameters
+    ----------
+    message : str
+        Human-readable error description naming the offending disposition of
+        ``neb_dig_frac`` and both ways out.
+    """
+
+
 class ConfigError(TengriError, ValueError):
     """Invalid Config construction or missing fields.
 
@@ -271,6 +294,14 @@ class WildcardNoOpWarning(UserWarning):
     Filter this category if writing the wildcard anyway is deliberate (e.g. a
     generic recipe that always sets ``'all_params': FREE`` across every
     group it configures, whether or not a given group has anything to free).
+
+    .. note::
+       Since #2187, ``parse_groups`` no longer emits this warning: a wildcard
+       that covers zero parameters raises :class:`ParameterError` instead (an
+       empty wildcard is never something a fit should run with silently).
+       This class stays defined -- and importable -- for any caller still
+       holding a filter for it; it is simply never instantiated by
+       :mod:`tengri.parameters.groups` any more.
 
     See Also
     --------
