@@ -207,7 +207,10 @@ def _fast_path_unsupported_sfh_fns():
       finite zero; silent, and beside correct photometry (#1395).
 
     Keyed on the function object rather than the model name so that a second
-    registry entry sharing one of these implementations is guarded too.
+    registry entry sharing one of these implementations is guarded too. A
+    *wrapper* around a guarded function is a different object and needs its own
+    entry: ``psb_continuity_flex`` calls ``psb_continuity`` and is just as
+    binned, but was invisible here until #2184 moved ``psb_suess2022`` onto it.
     Imported lazily to avoid import-order coupling at module load.
 
     Returns
@@ -221,6 +224,7 @@ def _fast_path_unsupported_sfh_fns():
         continuity_flex,
         dirichlet,
         psb_continuity,
+        psb_continuity_flex,
     )
     from tengri.components.stellar.sfh.registry import _table_sfh_placeholder
 
@@ -230,6 +234,7 @@ def _fast_path_unsupported_sfh_fns():
         continuity_flex: binned,
         dirichlet: binned,
         psb_continuity: binned,
+        psb_continuity_flex: binned,
         _table_sfh_placeholder: (
             "the tabulated history is supplied at apply(), which the fast path never "
             "reaches, so the fast path would evaluate an all-zero placeholder and "
@@ -704,10 +709,10 @@ def _mass_scale_lnu(per_msun_lsun, total_mass):
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes. The forward is the plain triple product, so the
-    value is bit-identical to writing it inline. The custom VJP exists only to
-    pin the reverse pass's multiply *order*, which autodiff otherwise leaves to
-    XLA:
+    **JIT/grad/vmap-safe**: yes. The forward is the triple product with its
+    grouping pinned (see the barrier at the return, #2178), so the value is
+    bit-identical to writing it inline in that order. The custom rule pins the
+    reverse pass's multiply *order*, which autodiff otherwise leaves to XLA:
 
     * ``d/d(per_msun) = (g * total_mass) * L_sun`` -- ``g * total_mass`` first,
       so the standalone Jacobian ``total_mass * L_sun`` ~3.8e43 (``inf`` in
@@ -716,7 +721,10 @@ def _mass_scale_lnu(per_msun_lsun, total_mass):
       (~3.8e18) first, avoiding the ``g * per_msun`` (~1e-41) float32 underflow.
 
     Under a plain product, XLA's fused reverse pass materializes ``total_mass *
-    L_sun`` as a standalone Jacobian and overflows float32 to ``inf``. Multiplied
+    L_sun`` as a standalone Jacobian and overflows float32 to ``inf``. The same
+    product is reachable in the *forward* pass, from a backend kernel rather
+    than from an autodiff rule, which is what #2178 measured; hence the barrier
+    on the primal as well as on the tangent. Multiplied
     by any incoming cotangent that is itself finite, the ``inf`` still poisons
     the SSP-contraction ``dot_general`` (``inf``/``nan``) regardless of the
     cotangent's magnitude. Folding L_sun into the einsum operand does not survive
@@ -738,7 +746,20 @@ def _mass_scale_lnu(per_msun_lsun, total_mass):
     transposition, and the transpose of the groupings below is exactly the
     hand-written VJP this replaces.
     """
-    return total_mass * per_msun_lsun * LSUN_ERG_PER_S
+    # The barrier pins the PRIMAL's grouping for the same reason the rule below
+    # pins the tangent's (#2178). Python evaluates this left to right, so the
+    # written form is ``(total_mass * per_msun_lsun) * L_sun``, in which no
+    # intermediate leaves float32 range, and the emitted HLO records that order
+    # faithfully. The order is not honored all the way down: a CPU backend that
+    # emits its own kernel for the fused ``multiply -> multiply -> reduce`` is
+    # free to hoist the two scalar broadcasts into a single scalar factor, and
+    # ``total_mass * L_sun`` ~3.8e43 is ``inf`` in float32. Ages beyond the
+    # galaxy's age carry an exactly-zero SFH weight, so ``inf * 0`` is ``nan``
+    # and the reduction over age is ``nan`` at every pixel. Measured on the
+    # ``SpectrumPrecomp`` seam: byte-identical optimized HLO, finite under
+    # jaxlib 0.11.0 and ``nan`` under 0.11.1. So the grouping has to be stated
+    # in the graph rather than left to whichever kernel the backend emits.
+    return jax.lax.optimization_barrier(total_mass * per_msun_lsun) * LSUN_ERG_PER_S
 
 
 @_mass_scale_lnu.defjvp
@@ -747,10 +768,15 @@ def _mass_scale_lnu_jvp(primals, tangents):
 
     Transposing these two terms gives ``d/d(per_msun) = (g*total_mass)*L_sun``
     and ``d/d(total_mass) = sum(g*(per_msun*L_sun))``: the safe reverse pass.
+
+    ``primal_out`` carries the same barrier as the rule's own primal: this is a
+    second, independent spelling of the forward product, and a fix applied to
+    only one of them leaves the differentiated forward ``nan`` while the
+    undifferentiated one is finite (#2178).
     """
     per_msun_lsun, total_mass = primals
     d_per_msun, d_total_mass = tangents
-    primal_out = total_mass * per_msun_lsun * LSUN_ERG_PER_S
+    primal_out = jax.lax.optimization_barrier(total_mass * per_msun_lsun) * LSUN_ERG_PER_S
     # ``optimization_barrier`` is what keeps the grouping: a ``custom_jvp``'s
     # transpose is inlined into the backward jaxpr and XLA is then free to
     # re-associate it back into ``total_mass * L_sun`` (3.8e43, inf in float32)
@@ -2133,8 +2159,8 @@ class StellarSEDComponent:
             # Siblings of entries already on this list: they reuse the same
             # shape-function machinery (a closed-form
             # lookback-time curve, a truncated exponential, and the very
-            # ``psb_continuity`` callable ``psb_suess2022`` uses), so there is
-            # no new forward path to validate.
+            # ``psb_continuity_flex`` callable ``psb_suess2022`` runs since
+            # #2184), so there is no new forward path to validate.
             "dpl_lookback",
             "trunc_exp",
             "psb_flex",

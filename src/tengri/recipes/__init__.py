@@ -368,7 +368,14 @@ def agn_panchromatic() -> dict:
         neb=builders.neb.cue(all_params=Fixed(DEFAULT)),
         agn=builders.agn.composable(
             all_params=FREE,
-            disc=builders.agn.disc.multicolor(all_params=FREE),
+            # No 'all_params' on the disc block itself (#2187): every
+            # multicolor-disc parameter (agn_log_lbol, agn_log_mbh,
+            # agn_cos_inc, agn_a_spin, agn_lum_ratio, agn_ir_frac) is a
+            # *shared* AGN parameter -- partitioned under "agn", never
+            # "agn.disc" -- so the composable-level wildcard above already
+            # frees every one of them. A wildcard restated on 'disc' itself
+            # covers zero parameters under 'multicolor' and now raises.
+            disc=builders.agn.disc.multicolor(),
             torus=builders.agn.torus.skirtor(all_params=FREE),
             nlr=builders.agn.nlr.analytic(all_params=FREE),
         ),

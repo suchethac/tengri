@@ -204,7 +204,17 @@ class TestToGroupsRoundtrip:
         assert original.fixed_params == roundtripped.fixed_params
 
     def test_round_trip_mixed_free_fixed(self):
-        """Mixed free and fixed params roundtrip."""
+        """Mixed free and fixed params roundtrip.
+
+        ``redshift=FREE`` genuinely frees redshift (#2187 owner reversal):
+        ``redshift`` declares a default ``free_prior=Uniform(0.0, 20.0)``
+        (``tengri.parameters._shared.PARAMS``), so ``FREE`` lands on that
+        interval rather than raising. ``to_groups()`` emits the *resolved*
+        distribution, not the ``FREE`` sentinel (``get_distribution`` at the
+        emitter, ``groups.py``), so the round-tripped spec is built from
+        ``redshift=Uniform(0.0, 20.0)`` explicitly -- the two specs still
+        agree on the concrete distribution either way.
+        """
         original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
             dust_attenuation={
@@ -215,10 +225,15 @@ class TestToGroupsRoundtrip:
             },
             redshift=FREE,
         )
+        assert "redshift" in original.free_params
+        assert original.get_distribution("redshift") == Uniform(0.0, 20.0)
+
         roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
+        assert "redshift" in roundtripped.free_params
+        assert roundtripped.get_distribution("redshift") == Uniform(0.0, 20.0)
 
         for name in original.all_params:
             orig_dist = original.get_distribution(name)

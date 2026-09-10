@@ -106,7 +106,6 @@ from tengri.config.exceptions import (
     AdvisoryWarning,
     DefaultFixedParametersWarning,
     ParameterError,
-    WildcardNoOpWarning,
     WildcardPartialFreeWarning,
     warn_measured,
 )
@@ -1016,7 +1015,23 @@ def parse_groups(**kwargs) -> Parameters:
                 val = kwargs[param_name]
                 # Resolve sentinels
                 if val is FREE:
-                    resolved_kwargs[param_name] = structural_params.get_distribution(param_name)
+                    # An explicit, per-parameter FREE must be honored or refused
+                    # -- never silently pinned (#2187 follow-up). Expand through
+                    # the same free_prior lookup every other FREE resolution
+                    # uses; if that still comes back Fixed, there is no
+                    # declared range to open and the request cannot be
+                    # honored.
+                    toplevel_registry_default = structural_params.get_distribution(param_name)
+                    expanded = _expand_free(param_name, toplevel_registry_default)
+                    if expanded.is_fixed:
+                        raise ParameterError(
+                            f"{param_name!r}: FREE cannot be honored -- "
+                            f"{param_name!r} has no declared free prior (its "
+                            f"registry default is Fixed({expanded.value!r})). "
+                            f"Pass an explicit prior instead, e.g. "
+                            f"{param_name}=Uniform(lo, hi)."
+                        )
+                    resolved_kwargs[param_name] = expanded
                     provenance[param_name] = "user_free"
                 elif _is_default_fixed(val):
                     # Fixed(DEFAULT) resolves through the same canonical-table
@@ -1599,16 +1614,6 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
     return shown, top, example
 
 
-#: Top-level groups whose structural choice can make them declare literally
-#: zero parameters: ``igm`` without ``patchy`` (its only top-level knobs,
-#: ``igm_bubble_mpc``/``igm_x_HI``, are declared only then), and ``radio`` /
-#: ``shock`` when every sub-model they can select is switched to ``'none'``
-#: (no component gets built at all). Named explicitly rather than every
-#: top-level group so that seeding below cannot start warning about some
-#: other group's legitimate wildcard by accident.
-_GROUPS_THAT_CAN_DECLARE_NOTHING: tuple[str, ...] = ("igm", "radio", "shock")
-
-
 def _seed_zero_declaration_wildcards(
     outcome: dict[str, list[tuple[str, bool]]], kwargs: dict
 ) -> dict[str, list[tuple[str, bool]]]:
@@ -1625,10 +1630,20 @@ def _seed_zero_declaration_wildcards(
     outcome for :func:`_check_wildcard_freed_something` to ever be asked
     about.
 
-    This adds an explicit empty entry for exactly that case -- scoped to
-    :data:`_GROUPS_THAT_CAN_DECLARE_NOTHING`, the groups measured to actually
-    reach zero under a real structural choice -- so the adjudicator gets a
-    chance to say so instead of never being consulted.
+    This adds an explicit empty entry for exactly that case. Which groups need
+    it is *derived* from ``kwargs`` rather than named by a hand-maintained
+    census (#2187): a zero-declaration outcome is not confined to the three
+    groups (``igm``, ``radio``, ``shock``) an earlier version of this function
+    special-cased. ``met={'type': 'table'}`` and a ``dust_emission`` variant
+    whose grid-support scope is the empty frozenset (``dh02_ce01``,
+    ``pah_drude``) tag every one of their parameters
+    ``wildcard_fixed_inactive`` before the resolve loop ever records anything,
+    and an AGN sub-block whose params fall outside the shared AGN scope
+    (``agn.feii`` under ``qsogen_balmer``) does the same -- none of those were
+    in the census, so their wildcards resolved silently. Walking every dict
+    the caller actually passed makes the set exhaustive by construction
+    instead of by memory: it will keep working for a future component that
+    reaches zero under some structural choice nobody has measured yet.
 
     Parameters
     ----------
@@ -1637,26 +1652,44 @@ def _seed_zero_declaration_wildcards(
         resolve loop (and narrowed by
         :func:`_narrow_outcome_to_selected_component`).
     kwargs : dict
-        :func:`parse_groups` kwargs after Pass-0 wildcard-key normalization,
-        so every ``all_params``/``other_params`` spelling is already the
-        internal ``'*'`` (:data:`tengri.parameters.sentinels.WILDCARD_KEY`).
+        :func:`parse_groups` kwargs after Pass-0 wildcard-key normalization
+        AND after :func:`_validate_user_keys` has run, so every
+        ``all_params``/``other_params`` spelling is already the internal
+        ``'*'`` (:data:`tengri.parameters.sentinels.WILDCARD_KEY`) and every
+        surviving dict-valued kwarg key names a recognized group or sub-block.
 
     Returns
     -------
     dict
         ``outcome`` with an empty list added for each zero-declaration group
-        whose wildcard disposition is ``FREE``. A group already present in
-        ``outcome``, or whose disposition is not ``FREE`` (unset, or
-        ``Fixed(DEFAULT)`` -- imperative and never a candidate for this),
+        or sub-block whose wildcard disposition is ``FREE``. A group already
+        present in ``outcome``, or whose disposition is not ``FREE`` (unset,
+        or ``Fixed(DEFAULT)`` -- imperative and never a candidate for this),
         passes through untouched.
     """
     seeded = dict(outcome)
-    for group in _GROUPS_THAT_CAN_DECLARE_NOTHING:
-        if group in seeded:
-            continue
-        group_dict = kwargs.get(group)
+
+    def _maybe_seed(name: str, group_dict: object) -> None:
+        if name in seeded:
+            return
         if isinstance(group_dict, dict) and group_dict.get(WILDCARD_KEY) is FREE:
-            seeded[group] = []
+            seeded[name] = []
+
+    # Top level: every dict-valued kwarg IS a group (post-validation), so the
+    # walk over kwargs.items() is the census -- no group name is hardcoded.
+    for key, value in kwargs.items():
+        _maybe_seed(key, value)
+
+    # Sub-blocks: derive the dotted paths from the grammar's own structural
+    # census rather than a second hand list, so a new sub-block is covered the
+    # moment it is registered there.
+    for path in sorted(k for k in _GROUP_STRUCTURAL_KEYS if "." in k):
+        parent, child = path.split(".", 1)
+        parent_dict = kwargs.get(parent)
+        if not isinstance(parent_dict, dict):
+            continue
+        _maybe_seed(path, parent_dict.get(child))
+
     return seeded
 
 
@@ -1676,10 +1709,14 @@ def _check_wildcard_freed_something(
 
     * freed everything; silent, the request was honored;
     * covered nothing at all -- the group declares no parameters under this
-      configuration, so there was nothing to attempt;
-      :class:`WildcardNoOpWarning` (via :func:`_seed_zero_declaration_wildcards`,
-      which is what gives such a group an (empty) entry here in the first
-      place -- a group with no entry at all is never seen by this function);
+      configuration, so there was nothing to attempt; :class:`ParameterError`
+      (via :func:`_seed_zero_declaration_wildcards`, which is what gives such
+      a group an (empty) entry here in the first place -- a group with no
+      entry at all is never seen by this function). This used to warn
+      (:class:`WildcardNoOpWarning`) rather than raise; #2187 found that a
+      warning here is exactly as swallowable as the silence it replaced, and
+      an empty wildcard is never useful, so it now raises like the other
+      never-intended outcome below;
     * covered something and freed none of it; :class:`ParameterError`, since
       that is never intended;
     * freed some, but not all, of what it covered; :class:`WildcardPartialFreeWarning`
@@ -1702,28 +1739,30 @@ def _check_wildcard_freed_something(
     Raises
     ------
     ParameterError
-        If any group's wildcard covered one or more parameters and freed
-        zero of them.
+        If any group's wildcard covered zero parameters (nothing to free in
+        the first place), or covered one or more parameters and froze every
+        one of them.
 
     Warns
     -----
-    WildcardNoOpWarning
-        If a group's wildcard covered zero parameters -- nothing to free in
-        the first place.
     WildcardPartialFreeWarning
         If a group's wildcard freed some, but not all, of what it covered.
     """
     for group, entries in sorted(outcome.items()):
         if not entries:
-            warnings.warn(
-                f"'all_params'/'other_params': FREE in group {group!r} freed "
-                f"no parameters -- it declares none to free under this "
-                f"configuration. Remove the wildcard, or pass explicit "
-                f"priors for the parameters you meant to vary.",
-                WildcardNoOpWarning,
-                stacklevel=3,
+            raise ParameterError(
+                f"'all_params'/'other_params': FREE in group {group!r} "
+                f"covers no parameters -- this group declares none to free "
+                f"under the selected configuration.\n"
+                f"FREE resolves each parameter's registry default; with "
+                f"nothing declared here there is nothing for it to resolve, "
+                f"so the fit would silently not vary anything in this "
+                f"group.\n"
+                f"Remove the wildcard, or pass explicit priors for the "
+                f"parameters you meant to vary (e.g. {group.split('.')[0]}="
+                f"{{'param_name': Uniform(lo, hi)}} for whichever parameter "
+                f"your chosen configuration actually declares)."
             )
-            continue
         stuck = [name for name, freed in entries if not freed]
         if not stuck:
             # Freed everything it covered; exactly what was asked for.
@@ -2451,6 +2490,46 @@ def _validate_sfh_bin_edges(sfh_type, edges) -> None:
     validate_bin_edges_gyr(sfh_type, edges)
 
 
+def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
+    """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
+
+    Reads what the group dict says about ``tlast_gyr`` and ``tflex_gyr``, in the
+    grammar's own order of precedence, and hands both to the registry. The rule
+    itself lives there, beside :func:`validate_bin_edges_gyr`, so the grammar
+    owns only the lookup.
+
+    The lookup goes through :func:`_override_key_for`, the same resolution
+    :func:`_resolve_value` performs, so every spelling the grammar accepts for
+    these two parameters reaches the check: short (``tflex_gyr``), full
+    (``sfh_psb2022_tflex_gyr``), and legacy. Reading only the short key left the
+    full-name spelling of a crossing accepted, which is a guard with a bypass.
+    When neither is present the wildcard applies, and when there is no wildcard
+    either the registry default does.
+
+    By this pass ``all_params`` / ``other_params`` have been normalized to the
+    ``'*'`` key; both spellings are still read so the lookup does not depend on
+    that normalization staying upstream of this call.
+    """
+    from tengri.components.stellar.sfh.registry import (
+        psb_quench_param_names,
+        validate_psb_quench_ordering,
+    )
+
+    names = psb_quench_param_names(sfh_type)
+    if names is None:
+        return
+
+    wildcard = sfh_dict.get("*")
+    if wildcard is None:
+        wildcard = sfh_dict.get("all_params", sfh_dict.get("other_params"))
+
+    given = []
+    for full_name in names:
+        key = _override_key_for(full_name, sfh_dict, warn=False)
+        given.append(sfh_dict[key] if key is not None else wildcard)
+    validate_psb_quench_ordering(sfh_type, *given)
+
+
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
 
@@ -2559,6 +2638,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                 suggestions = difflib.get_close_matches(type_name, valid, n=3, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                 raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
+            _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
 
@@ -2576,6 +2656,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
 
+    _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
 
 
@@ -5179,6 +5260,58 @@ def _partition_by_group(
     return partition
 
 
+def _override_key_for(param_name: str, group_dict: dict, *, warn: bool = True) -> str | None:
+    """The key in ``group_dict`` that overrides ``param_name``, or None.
+
+    Parameters
+    ----------
+    param_name : str
+        Full parameter name (``sfh_dpl_alpha``).
+    group_dict : dict
+        The user's group dict.
+    warn : bool, optional
+        Emit the once-per-name deprecation warning when the match is a legacy
+        spelling. Default True. Pass False from a *validator* that only reads
+        the dict, so a build does not warn twice for one key.
+
+    Returns
+    -------
+    str or None
+        The matching key, in the grammar's own order of precedence: the short
+        form (``logU``), then the full-prefixed form (``neb_logU``), then each
+        legacy alias in both spellings.
+
+    Notes
+    -----
+    Both spellings are accepted because :func:`_short_names_for_group` admits
+    both, so silently dropping the full-prefixed form here would be a footgun
+    (#424). A renamed parameter also invalidates its *short* key: after
+    ``agn_frac`` became ``agn_lum_ratio``, ``agn={'frac': 0.5}`` read as
+    "Unknown key" (#1296), so legacy spellings resolve too.
+
+    Factored out so that every reader of a group dict resolves the same key.
+    A guard that reads only one spelling is a guard with a documented bypass:
+    #2184's quench-ordering check shipped reading only the short form and was
+    silent on the full-name spelling of the very crossing it exists to refuse.
+    """
+    short_name = _extract_short_name(param_name, group_dict)
+    if short_name in group_dict:
+        return short_name
+    if param_name != short_name and param_name in group_dict:
+        return param_name
+
+    from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
+
+    for legacy_full in legacy_names_for(param_name):
+        legacy_short = _extract_short_name(legacy_full, group_dict)
+        for candidate in (legacy_short, legacy_full):
+            if candidate in group_dict:
+                if warn:
+                    _warn_once_if_legacy(candidate, short_name)
+                return candidate
+    return None
+
+
 def _resolve_value(
     param_name: str,
     group_dict: dict,
@@ -5225,36 +5358,8 @@ def _resolve_value(
     ValueError
         If a parameter name in group_dict is unknown for this group.
     """
-    # Extract the short name (e.g., 'alpha' from 'sfh_dpl_alpha')
-    # by removing the group prefix
     short_name = _extract_short_name(param_name, group_dict)
-
-    # Accept either the short form ('logU') or the full-prefixed form
-    # ('neb_logU') as a per-param override key. The validator already
-    # admits both names (see _short_names_for_group), so silently
-    # dropping the full-prefix form here would be a footgun (issue #424).
-    override_key = None
-    if short_name in group_dict:
-        override_key = short_name
-    elif param_name != short_name and param_name in group_dict:
-        override_key = param_name
-    else:
-        # A renamed parameter also invalidates its *short* key: after
-        # agn_frac -> agn_lum_ratio, `agn={'frac': 0.5}` became "Unknown key"
-        # (#1296). Accept the legacy spelling, both short and full, and warn
-        # -- the full-name alias map alone does not cover the grammar's short
-        # form, because the short form is derived by stripping the prefix.
-        from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
-
-        for legacy_full in legacy_names_for(param_name):
-            legacy_short = _extract_short_name(legacy_full, group_dict)
-            for candidate in (legacy_short, legacy_full):
-                if candidate in group_dict:
-                    _warn_once_if_legacy(candidate, short_name)
-                    override_key = candidate
-                    break
-            if override_key is not None:
-                break
+    override_key = _override_key_for(param_name, group_dict)
 
     # Check for per-param override
     if override_key is not None:
@@ -5293,7 +5398,23 @@ def _resolve_value(
         if val is DEFAULT:
             raise _bare_default_error(param_name)
         if val is FREE:
-            return _expand_free(param_name, registry_default), "user_free"
+            # An explicit, per-parameter FREE must be honored or refused --
+            # never silently pinned (#2187 follow-up). Some parameters
+            # deliberately declare no free prior (e.g. ``met_alpha_fe``: a
+            # wildcard cannot know whether the loaded SSP grid even carries
+            # an alpha-enhanced axis), so a request that cannot be honored is
+            # a configuration error, not a bug in the parameter -- the
+            # message reads as "pass an explicit prior", never as "this is
+            # broken".
+            expanded = _expand_free(param_name, registry_default)
+            if expanded.is_fixed:
+                raise ParameterError(
+                    f"{short_name!r}: FREE cannot be honored -- {param_name!r} "
+                    f"has no declared free prior (its registry default is "
+                    f"Fixed({expanded.value!r})). Pass an explicit prior "
+                    f"instead, e.g. {short_name}: Uniform(lo, hi)."
+                )
+            return expanded, "user_free"
         elif _is_default_fixed(val):
             # Fixed(DEFAULT) converts the registry default to Fixed at its
             # canonical-table value (#412) -- the same resolver every other

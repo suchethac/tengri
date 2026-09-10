@@ -720,6 +720,14 @@ class FeaturePrecomp:
     *not* allowed for spectral indices, where a break is a flux **ratio** and a
     smooth additive offset does not cancel.
 
+    **What it refuses.** The grid tabulates a single photoionization regime, so
+    DIG mixing has no place in it: a build with ``neb_dig_frac`` free or fixed
+    non-zero raises
+    :class:`~tengri.config.exceptions.DIGNotOnNebularGridError` rather than
+    reconstructing the HII term alone and leaving both DIG parameters inert
+    (#2195). Pin ``neb_dig_frac`` at 0, its declared default, or keep the exact
+    path for the nebular channel.
+
     **JIT-compatible**: the resulting line prediction is JIT- and gradient-safe;
     the one-time build is eager.
 
@@ -5634,6 +5642,12 @@ class SEDModel:
         ------
         ValueError
             If no Q_H-linear nebular backend (Cue) is configured.
+        DIGNotOnNebularGridError
+            If DIG mixing is active (``neb_dig_frac`` free, or fixed non-zero).
+            The grid has no DIG axis and no second photoionization regime to
+            mix, so it would answer with the HII term alone and leave both DIG
+            parameters inert (#2195). Reachable on dusty builds too: dust
+            disarms the grid for photometry, not for the line channel.
 
         Notes
         -----
@@ -8985,7 +8999,7 @@ class SEDModel:
         cls,
         ssp,
         sfh=...,
-        dust=...,
+        dust_attenuation_law=...,
         nebular=...,
         agn=...,
         redshift=...,
@@ -9006,8 +9020,13 @@ class SEDModel:
             Path to SSP HDF5 file, or a pre-loaded ``SSPData`` instance.
         sfh : str
             SFH family name, e.g. ``"tsnorm"``, ``"dpl"``, ``"dpl+field"``.
-        dust : str
-            Dust attenuation law. ``"charlot_fall"`` (default), ``"calzetti"``, etc.
+        dust_attenuation_law : str
+            Dust attenuation law applied to BOTH screens (birth cloud +
+            diffuse ISM) of the default two-component model, e.g.
+            ``"calzetti"``, ``"kl04"``. ``"charlot_fall"`` (the default) is
+            an alias for ``"power_law"`` on both screens -- the classic
+            Charlot & Fall (2000) model -- not a law-registry name. ``dust=``
+            is a deprecated alias for this parameter.
         nebular : str or None
             Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
             ``"mappings"``, ``"cue"``, ``"shock"``, or None.
@@ -9034,8 +9053,8 @@ class SEDModel:
         Notes
         -----
         Ellipsis (``...``) placeholders in optional parameters map to
-        defaults from ``defaults.toml``. For example, ``dust=...`` uses
-        the default dust attenuation law.
+        defaults from ``defaults.toml``. For example,
+        ``dust_attenuation_law=...`` uses the default dust attenuation law.
 
         Examples
         --------
@@ -9064,7 +9083,7 @@ class SEDModel:
             cls,
             ssp,
             sfh=_r(sfh),
-            dust=_r(dust),
+            dust_attenuation_law=_r(dust_attenuation_law),
             nebular=_r(nebular),
             agn=_r(agn),
             redshift=_r(redshift),

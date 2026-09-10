@@ -35,6 +35,8 @@ verdict count the selected engine's **own** declared parameters:
 ``draine_li2007``       3, 1 freeable       **warns** ("1 of 3")
 ``modified_blackbody``  3, 1 freeable       **warns**
 ``astrodust``           1, freeable         silent — all of its own freed
+``pah_drude``           0                   **raises** ("covers no parameters", #2187)
+``dh02_ce01``           0                   **raises** ("covers no parameters", #2187)
 ======================  ==================  =========================
 
 Without the narrowing those counts are all "7 of 22", diluted by parameters the
@@ -307,10 +309,11 @@ def test_wildcard_frees_at_least_one_live_parameter(
     if emission_type in NOTHING_FREEABLE:
         pytest.skip(f"{emission_type} has nothing freeable — covered by the raise test")
     if emission_type in DECLARES_NOTHING:
-        # Not a failure: freeing nothing is the correct outcome for an engine
-        # that reads nothing, and is asserted positively by
-        # test_no_freed_parameter_is_inert, which stays enabled for these.
-        pytest.skip(f"{emission_type} declares no parameters — freeing none is correct")
+        # Not a failure: since #2187 this build raises ParameterError before
+        # a model ever exists (a zero-declaration wildcard is refused, not
+        # silently accepted). Asserted positively by
+        # test_wildcard_raises_when_the_backend_declares_nothing.
+        pytest.skip(f"{emission_type} declares no parameters — the wildcard now raises")
 
     model = _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
     freed, live = _live_params(model)
@@ -351,6 +354,27 @@ def test_wildcard_refuses_when_the_backend_has_nothing_freeable(
     )
 
 
+@pytest.mark.parametrize("emission_type", sorted(DECLARES_NOTHING))
+def test_wildcard_raises_when_the_backend_declares_nothing(
+    synthetic_ssp_wide, panchromatic_obs, emission_type
+):
+    """A backend that declares no parameters at all must refuse, not build silently.
+
+    Before #2187 this built happily with a freed-nothing model, indistinguishable
+    at the call site from a wildcard that did its job. Distinct from
+    :func:`test_wildcard_refuses_when_the_backend_has_nothing_freeable`: these
+    backends (``pah_drude``, ``dh02_ce01``) declare *zero* parameters, so the
+    error is "covers no parameters" rather than "freed 0 of N".
+    """
+    with pytest.raises(ParameterError, match=r"covers no parameters") as excinfo:
+        _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
+
+    message = str(excinfo.value)
+    assert "'dust_emission'" in message, (
+        f"the guard fired but did not name the group the user configured: {message}"
+    )
+
+
 def test_the_freed_set_depends_on_the_backend(synthetic_ssp_wide, panchromatic_obs):
     """The expansion resolves per backend, not once for the whole sub-block (#1482).
 
@@ -385,6 +409,13 @@ def test_no_freed_parameter_is_inert(synthetic_ssp_wide, panchromatic_obs, emiss
     """
     if emission_type in NOTHING_FREEABLE:
         pytest.skip(f"{emission_type} has nothing freeable — covered by the raise test")
+    if emission_type in DECLARES_NOTHING:
+        # Not a failure: since #2187 this build raises ParameterError before
+        # a model ever exists (a zero-declaration wildcard is refused, not
+        # silently accepted), so "which of the freed params are inert" is not
+        # a question this fixture can ask. Covered by
+        # test_wildcard_raises_when_the_backend_declares_nothing.
+        pytest.skip(f"{emission_type} declares no parameters — the wildcard now raises")
 
     model = _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
     freed, live = _live_params(model)

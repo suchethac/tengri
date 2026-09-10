@@ -68,9 +68,11 @@ def main() -> None:
             _shared._hmc_full_scan,
             (init, wkey, keys, _target, scales, N_WARMUP, 10, False, 0.85),
         ),
-        "hmc L=10 lowrank": (
-            _shared._hmc_low_rank_full_scan,
-            (init, wkey, keys, _target, scales, N_WARMUP, 10, 2, 0.85),
+        # Warmup only; the sampling half is ``_hmc_chain_scan``, shared with
+        # ``mcmc_hmc``, so it is already priced by that row.
+        "hmc L=10 lowrank (warmup)": (
+            _shared._hmc_low_rank_warmup_only,
+            (init, wkey, _target, scales, N_WARMUP, 10, 2, 0.85),
         ),
         "barker": (
             _shared._first_order_full_scan,
