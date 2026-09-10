@@ -240,34 +240,59 @@ class TestFracAGNDustCoupling944:
             "Torus is not contributing under dust + fracAGN."
         )
 
-    def test_dust_present_fracagn_both_norm_modes(self, synthetic_ssp_wide, synthetic_tophat_obs):
-        """Dust present + fracAGN works under both norm modes.
+    def _build_with_norm(self, ssp, obs, norm_mode):
+        """One dust + fracAGN build under the given cross-block norm policy."""
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "const"},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+            },
+            dust_emission={"type": "dale2014"},
+            agn={
+                "type": "composable",
+                "norm": norm_mode,
+                "torus": {"type": "skirtor"},
+                "fracAGN": Fixed(0.3),
+            },
+            redshift=Fixed(0.1),
+        )
 
-        Tests both 'cigale_joint' and 'independent' normalization modes
-        to ensure the coupling doesn't break either path.
+    @pytest.mark.parametrize("norm_mode", ("cigale_joint", "conserving"))
+    def test_dust_present_fracagn_joint_norm_modes(
+        self, synthetic_ssp_wide, synthetic_tophat_obs, norm_mode
+    ):
+        """Dust present + fracAGN works under both JOINT norm modes.
+
+        This test used to sweep ``('cigale_joint', 'independent')``, to check
+        that #944's coupling did not break either path. Ruling R65 removed the
+        second: ``'independent'`` puts the disc on ``10**agn_log_lbol`` while
+        fracAGN puts the torus on ``L_absorbed x f/(1-f)``, so their ratio
+        reports the stellar mass (measured: ``int(disc)/int(torus)`` runs
+        5.00e+10 at ``log M* = 0`` to 5.00e-02 at 12) and ``SEDModel.build``
+        now refuses the pair -- see
+        ``test_independent_norm_with_active_fracagn_is_refused`` below and
+        ``tests/contract/test_agn_norm_ir_frac_coherence.py``. The sweep keeps
+        two entries so this stays a sweep and not a single case:
+        ``'conserving'`` is the other policy that admits the pair.
         """
         import jax
 
-        for norm_mode in ("cigale_joint", "independent"):
-            model = SEDModel.build(
-                ssp_data=synthetic_ssp_wide,
-                observation=synthetic_tophat_obs,
-                sfh={"type": "const"},
-                dust_attenuation={
-                    "type": "two_component",
-                    "law": "calzetti",
-                },
-                dust_emission={"type": "dale2014"},
-                agn={
-                    "type": "composable",
-                    "norm": norm_mode,
-                    "torus": {"type": "skirtor"},
-                    "fracAGN": Fixed(0.3),
-                },
-                redshift=Fixed(0.1),
-            )
+        model = self._build_with_norm(synthetic_ssp_wide, synthetic_tophat_obs, norm_mode)
+        params = model.spec.sample(jax.random.PRNGKey(0))
+        pred = model.predict(params)
+        assert pred is not None, f"Prediction failed for norm_mode={norm_mode}"
 
-            # Just verify it builds and predicts without error
-            params = model.spec.sample(jax.random.PRNGKey(0))
-            pred = model.predict(params)
-            assert pred is not None, f"Prediction failed for norm_mode={norm_mode}"
+    def test_independent_norm_with_active_fracagn_is_refused(
+        self, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
+        """The arm R65 removed from the sweep above, pinned as a refusal.
+
+        Recorded here rather than deleted: this exact build used to be
+        asserted to succeed, and #944's own subject (fracAGN needs a dust
+        component) is untouched by the change.
+        """
+        with pytest.raises(ConfigError, match=r"agn_norm='independent'"):
+            self._build_with_norm(synthetic_ssp_wide, synthetic_tophat_obs, "independent")
