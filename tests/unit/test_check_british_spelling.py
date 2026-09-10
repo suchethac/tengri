@@ -92,3 +92,26 @@ def test_fix_text_is_case_preserving():
     # allowlisted key is left untouched by --fix
     key = "log10_specific_ionising_luminosity"
     assert mod.fix_text(f'f["{key}"]') == f'f["{key}"]'
+
+
+def test_pcigale_normalise_keyword_not_flagged_but_prose_is():
+    """pcigale's own ``normalise`` keyword is an external API spelling.
+
+    ``sfhdelayed``/``sfhdelayedbq`` declare a parameter literally named
+    ``normalise``; passing ``normalize`` raises "unexpected parameter" and
+    setting the wrong key is silently ignored. The reproduction notebooks
+    both call it and quote it in prose, so the allowlist has to cover
+    ``normalise=True`` and ``normalise=False`` -- and no more than that: a
+    bare token entry would exempt the word repo-wide and blind the guard to
+    tengri's own British prose, which is the failure the module docstring
+    records.
+    """
+    for keyword in ("normalise=True", "normalise=False"):
+        assert keyword in mod.ALLOWED_PHRASES, f"{keyword!r} missing from ALLOWED_PHRASES"
+        assert not _flagged(f"        sfh_module.parameters({keyword})")
+        assert not _flagged(f"# CIGALE's `sfhdelayed(..., {keyword})` integrates the tau-delayed")
+    # The same word in ordinary prose, and in tengri's own identifiers, stays
+    # flagged: the allowlist is positional, not a token exemption.
+    assert "normalise" in _flagged("we normalise the template before fitting")
+    assert "normalise" in _flagged("def normalise_template(x): ...")
+    assert "normalisation" in _flagged("the normalisation is arbitrary")

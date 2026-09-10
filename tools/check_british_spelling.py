@@ -161,10 +161,21 @@ ALLOWED_PHRASES = (
     # silently ignored (the module falls back to its own default). An
     # external data-contract key (NAMING_CONTRACT §10), not tengri prose, and
     # scoped to the exact call-site spellings rather than a token entry so
-    # ordinary "normalise" prose elsewhere in scripts/ stays flagged.
-    "normalise=True,",
+    # ordinary "normalise" prose elsewhere stays flagged -- which the guard's
+    # own test asserts in both directions.
+    #
+    # ``normalise=True``/``normalise=False`` are the keyword spellings as
+    # written at a call site and as quoted in prose about one; they subsume
+    # the earlier ``"normalise=True,"`` and
+    # ``"normalise=True → sfh.sfr_integrated"`` entries, which were the same
+    # spelling with more punctuation attached. The reproduction/cigale
+    # notebook and its drivers both call the keyword and quote it while
+    # explaining the tengri equivalent (``log_total_mass = 0.0``), so the
+    # entries have to cover the bare ``keyword=value`` form rather than one
+    # exact surrounding line.
+    "normalise=True",
+    "normalise=False",
     'sfh.parameters["normalise"]',
-    "normalise=True → sfh.sfr_integrated",
     # Stalevski, Fritz, Baes, Nakos & Popović 2012, "3D radiative transfer
     # modelling of the dusty tori around active galactic nuclei as a clumpy
     # two-phase medium", MNRAS 420, 2756. arXiv:1109.1286,

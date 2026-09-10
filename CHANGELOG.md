@@ -591,7 +591,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   A contract test also pins that the three public routes onto one Dale grid
   (the `dale2014_cigale` registry entry, `create_dale2014_from_grid`, and
   `register_dale2014_tabulated`, which had no test reference anywhere) deliver
-  bit-identical templates.
+  bit-identical templates -- its array-level half now compares the literal
+  path against the grid the registry entry *resolves*, rather than against a
+  second call on the same path, which asserted only determinism.
+  The refusal reaches `.npz` grids too (that branch used to hard-code
+  "convert"), and its advice is now conditional on the container: for HDF5 it
+  names the file attribute and the two regeneration scripts, and for `.npz` it
+  names the array entry to add, because both scripts write HDF5 and could
+  never produce that file -- advice a user cannot follow is the #1364 defect.
 
 - The composable AGN `validate_block_recipe` "no disc, active downstream"
   advisory (Rule 3) named every active `nlr`/`blr`/`feii`/`torus` block when

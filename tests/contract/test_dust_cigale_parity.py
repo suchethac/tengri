@@ -496,6 +496,78 @@ class TestDale2014GridUnitIsDeclaredNotGuessed:
                 f.attrs["spectra_unit"] = unit_attr
         return str(path)
 
+    def _npz_grid(self, tmp_path, unit_value):
+        """The same grid as ``_grid`` but in the ``.npz`` layout.
+
+        The ``.npz`` branch takes the declaration from an ARRAY ENTRY named
+        ``spectra_unit``, not from a file attribute, and neither
+        ``regenerate_dale2014_from_cigale.py`` nor
+        ``regenerate_dale2014_from_official.py`` writes ``.npz`` -- so the
+        remedy the refusal offers must differ from the HDF5 one.
+        """
+        wave = np.geomspace(2.0e4, 6.0e7, 128)
+        rows = np.stack([(wave / 1.0e6) ** -1.5, (wave / 1.0e6) ** -2.0])
+        rows = np.stack([r / np.trapezoid(r, wave) for r in rows])
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        path = tmp_path / "dale_probe.npz"
+        payload = {
+            "wavelength_aa": wave,
+            "alpha_grid": np.array([1.0, 2.0]),
+            "templates_sf": rows,
+        }
+        if unit_value is not None:
+            payload["spectra_unit"] = np.array(unit_value)
+        np.savez(path, **payload)
+        return str(path)
+
+    def test_npz_refusal_offers_an_npz_remedy_not_the_h5_scripts(self, tmp_path):
+        """An ``.npz`` grid is refused with advice that applies to ``.npz``.
+
+        The R56 refusal reaches ``.npz`` grids too -- that branch used to
+        hard-code ``already_lnu = False`` -- but both regeneration scripts it
+        named write HDF5, so for an ``.npz`` grid the message was advice that
+        cannot be followed (#1364's rule). It must instead say which entry to
+        add to the archive.
+        """
+        from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
+
+        path = self._npz_grid(tmp_path, None)
+        with pytest.raises(ValueError) as exc:
+            load_dale2014_lnu_grid(path)
+        msg = str(exc.value)
+        assert "regenerate_dale2014" not in msg, (
+            "the .npz refusal names an HDF5-writing regeneration script, which cannot "
+            f"produce a .npz grid: {msg}"
+        )
+        assert "np.savez" in msg or "npz" in msg, (
+            f"the .npz refusal must say how to declare the unit in an .npz archive: {msg}"
+        )
+        assert "spectra_unit" in msg
+
+    def test_h5_refusal_still_names_the_regeneration_scripts(self, tmp_path):
+        """The mirror: for HDF5 the scripts ARE the remedy, and stay named."""
+        from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
+
+        path = self._grid(tmp_path, None, lnu_values=True)
+        with pytest.raises(ValueError) as exc:
+            load_dale2014_lnu_grid(path)
+        msg = str(exc.value)
+        assert "regenerate_dale2014_from_cigale.py" in msg
+        assert "regenerate_dale2014_from_official.py" in msg
+
+    def test_npz_grid_with_a_declared_unit_loads(self, tmp_path):
+        """Non-vacuity: the ``.npz`` path works once the unit is declared, so
+        the refusal above is about the declaration and not about ``.npz``
+        support being broken."""
+        from tengri.components.dust.emission_templates import (
+            DALE2014_UNIT_L_LAMBDA,
+            load_dale2014_lnu_grid,
+        )
+
+        path = self._npz_grid(tmp_path, DALE2014_UNIT_L_LAMBDA)
+        loaded = load_dale2014_lnu_grid(path)
+        assert np.asarray(loaded["templates_sf"]).shape[0] == 2
+
     def test_absent_unit_attribute_raises(self, tmp_path):
         """A Dale grid with no ``spectra_unit`` is refused, not guessed at."""
         from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
@@ -645,11 +717,38 @@ class TestDale2014RegistryPathsAgree:
         assert np.array_equal(registered, expected), (
             "register_dale2014_tabulated and create_dale2014_from_grid disagree on the same file"
         )
-        # And the arrays behind them, not just one SED slice.
+        # And the arrays behind them, not just one SED slice. The second
+        # operand has to come from the path the REGISTRY resolves, not from
+        # ``path`` again: comparing ``load_dale2014_lnu_grid(path)`` with
+        # itself asserts determinism, which no defect this class exists for
+        # can break. Resolved the way ``_dust_emission_red_end`` resolves it,
+        # so a registry entry re-pointed at another grid fails here.
+        from tengri._data_setup import find_data
+        from tengri.components.dust.emission_templates import (
+            _DUST_EMISSION_ALIASES,
+            _DUST_EMISSION_GRID_AXES,
+        )
+
+        entry = _DUST_EMISSION_GRID_AXES[
+            _DUST_EMISSION_ALIASES.get("dale2014_cigale", "dale2014_cigale")
+        ]
+        stem = entry[0].rsplit(".", 1)[0]
+        registry_path = find_data(stem + "_v2.h5", entry[0])
+        assert registry_path is not None, (
+            f"the dale2014_cigale registry entry names {entry[0]!r}, which does not "
+            "resolve to a file on disk"
+        )
+        via_registry_name = load_dale2014_lnu_grid(str(registry_path))
         for key in ("wavelength_aa", "alpha_grid", "templates_sf", "templates_qso"):
             a = direct[key]
-            b = load_dale2014_lnu_grid(path)[key]
+            b = via_registry_name[key]
             if a is None:
-                assert b is None
+                assert b is None, (
+                    f"{key} is absent from {path!r} but present in the grid the "
+                    f"dale2014_cigale registry entry resolves ({registry_path})"
+                )
                 continue
-            assert np.array_equal(np.asarray(a), np.asarray(b)), key
+            assert np.array_equal(np.asarray(a), np.asarray(b)), (
+                f"{key} differs between {path!r} and the grid the dale2014_cigale "
+                f"registry entry resolves ({registry_path})"
+            )

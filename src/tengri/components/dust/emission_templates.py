@@ -742,7 +742,10 @@ def _dale2014_already_lnu(declared: str | None, grid_path: str) -> bool:
     declared : str or None
         The grid's ``spectra_unit`` declaration, or ``None`` when absent.
     grid_path : str
-        Path to the grid, for the refusal message.
+        Path to the grid, for the refusal message. Its suffix selects the
+        remedy the message offers: the two regeneration scripts write HDF5, so
+        naming them to the owner of a ``.npz`` grid would be advice that
+        cannot be followed.
 
     Returns
     -------
@@ -763,6 +766,25 @@ def _dale2014_already_lnu(declared: str | None, grid_path: str) -> bool:
     if declared in DALE2014_ACCEPTED_UNITS:
         return declared == DALE2014_UNIT_L_NU
     seen = "absent" if declared is None else repr(declared)
+    # Where the declaration LIVES differs by container: an HDF5 file attribute
+    # (``f.attrs["spectra_unit"]``) against an ``.npz`` array entry
+    # (``data["spectra_unit"]``). This refusal reaches ``.npz`` grids too --
+    # that branch used to hard-code "convert" -- and both regeneration scripts
+    # write HDF5, so for a ``.npz`` grid they are not a remedy at all.
+    if grid_path.endswith(".npz"):
+        remedy = (
+            "For an .npz grid, add an entry named 'spectra_unit' holding that "
+            "string: np.savez(path, spectra_unit=np.array(<value>), "
+            "**existing_arrays). The two regeneration scripts under scripts/ "
+            "write HDF5, so they cannot produce this file."
+        )
+    else:
+        remedy = (
+            "For an HDF5 grid this is the file attribute "
+            "f.attrs['spectra_unit']. Regenerate with "
+            "scripts/regenerate_dale2014_from_cigale.py or "
+            "scripts/regenerate_dale2014_from_official.py, which write it."
+        )
     raise ValueError(
         f"Dale2014 grid {grid_path!r} does not declare a readable "
         f"'spectra_unit' ({seen}). The stored unit decides whether the "
@@ -772,8 +794,7 @@ def _dale2014_already_lnu(declared: str | None, grid_path: str) -> bool:
         f"it cannot be inferred. Set 'spectra_unit' to exactly one of:\n"
         f"  {DALE2014_UNIT_L_NU!r}\n"
         f"  {DALE2014_UNIT_L_LAMBDA!r}\n"
-        f"Regenerate with scripts/regenerate_dale2014_from_cigale.py or "
-        f"scripts/regenerate_dale2014_from_official.py, which write it."
+        f"{remedy}"
     )
 
 
