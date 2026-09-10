@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test truncation flag logic for bounded distributions.
 
 Addresses issue #2233: truncation flag must be derived from the distribution's
@@ -11,6 +12,8 @@ import numpy as np
 import pytest
 
 from tengri.parameters.priors import Gaussian, Laplace, LogNormal, StudentT
+
+pytestmark = pytest.mark.contract
 
 
 def test_default_lognormal_is_not_truncated_and_is_exactly_affine():
