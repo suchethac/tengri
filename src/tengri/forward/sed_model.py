@@ -4331,6 +4331,16 @@ class SEDModel:
         ``jax.enable_x64(False)``, which switched off every dtype-keyed float32
         path downstream and produced NaN gradients with nothing raised (#1392).
         See ``build_precision`` below.
+
+        ``dust_live_shape_params_sig`` (#2231): the sorted set of dust
+        attenuation shape parameter names (``dust_slope``/``dust_delta``/
+        ``dust_Rv``/``dust_bump_strength``) :meth:`_requested_law_shape_params`
+        resolved as "live" for this build. Two models can share a law and the
+        same set of fixed parameter NAMES (already covered by
+        ``spec_fixed_id``) while disagreeing on which of those names are live
+        vs read the law's own published default -- without this entry they
+        collide on one compiled closure and the second model silently
+        inherits the first's live/not-live decision.
         """
         # SSP grid shapes (n_met, n_age, n_wave)
         ssp_flux_shape = tuple(self.ssp_data.ssp_flux.shape)
@@ -4448,6 +4458,42 @@ class SEDModel:
         # LyC-in-energy-balance (FSPS parity, #961) rescales L_IR without
         # changing the graph shape -> must enter the signature (color-leak).
         dust_eb_include_lyc_sig = bool(getattr(self, "_dust_eb_include_lyc", False))
+
+        # Requested dust attenuation shape parameters (#2231's newly-exposed
+        # color-leak). Whether a shape parameter (dust_slope / dust_delta /
+        # dust_Rv / dust_bump_strength) is "live" is a build-time Python
+        # branch inside ``DustAttenuationSEDComponent`` / ``DustSEDComponent``
+        # (see :meth:`_requested_law_shape_params`): live means apply() reads
+        # the value from ``fixed_values`` at call time, not-live means
+        # precompute() bakes a cached ``k(lambda)`` from the law's own
+        # published default and apply() never looks at the value again. That
+        # decision changes what the compiled closure DOES with a fixed
+        # parameter of the same NAME (``spec_fixed_id`` below already keys
+        # the set of fixed names, not their liveness), so two models sharing
+        # a law and the same fixed names but different live-shape-parameter
+        # sets must not share a compiled kernel -- the second would silently
+        # inherit the first's live/not-live branch and its baked curve. Names
+        # only, sorted for a deterministic hash; the underlying VALUES ride
+        # the ``fixed_values`` runtime JIT input like every other fixed
+        # parameter, same rationale as ``spec_fixed_id``.
+        #
+        # Before #2231 a flat ``Parameters(...)`` spec's shape parameters
+        # were unconditionally not-live, so this axis was always identical
+        # across flat models and the gap below was unreachable from that
+        # surface; #2231 lets a flat spec become live, which is what exposes
+        # the collision this entry closes.
+        if dust_model == "single_component":
+            dust_live_shape_params_sig = tuple(sorted(self._requested_law_shape_params()))
+        else:
+            dust_live_shape_params_sig = tuple(
+                sorted(
+                    self._requested_law_shape_params(
+                        getattr(self, "_dust_law_bc", None),
+                        getattr(self, "_dust_law_diff", None),
+                        getattr(self, "_dust_law_neb", None),
+                    )
+                )
+            )
 
         # Nebular backend (by class name)
         nebular_backend_name = (
@@ -4798,6 +4844,7 @@ class SEDModel:
             dust_lyman_cutoff_sig,
             dust_lyc_absorb_all_sig,
             dust_eb_include_lyc_sig,
+            dust_live_shape_params_sig,
             astrodust_spinning_dust,
             astrodust_f_cnm,
             nebular_backend_name,
@@ -8508,11 +8555,23 @@ class SEDModel:
         "did somebody ask for this ``dust_*`` value, or should the law's own
         published default stand?", and ``redshift`` has no per-law default to
         stand: a law that names it in its signature reads the model's redshift
-        or reads nothing. Where that bypass is load-bearing is the flat
-        ``Parameters(...)`` escape hatch, whose specs carry no
-        ``_group_provenance`` at all, so every name there reads as
-        ``registry_default``; :meth:`SEDModel.build` requires a redshift and
-        always records it as a request, so on that path the two branches agree.
+        or reads nothing. :meth:`SEDModel.build` requires a redshift and always
+        records it as a request; the flat ``Parameters(...)`` escape hatch
+        records it in ``_flat_provenance`` (below) since #2231 and carried no
+        provenance at all before that -- the bypass keeps the two branches in
+        agreement on every path.
+
+        Two provenance sources, read in priority order. A grammar-built spec
+        (``parse_groups`` / ``SEDModel.build``) carries ``spec._group_provenance``,
+        a name -> tag map covering every parameter, including the untouched ones
+        (``"registry_default"``). A flat ``Parameters(...)`` spec carries no such
+        map, but since #2231 it carries ``spec._flat_provenance`` instead: a
+        narrower map recording only the parameters the caller actually named in
+        the constructor call, tagged ``"user_prior"``/``"user_fixed"``. A name
+        absent from ``_flat_provenance`` was never passed, so it falls through
+        to ``"registry_default"`` below exactly as before -- a flat spec that
+        never mentions a shape parameter still gets the law's own published
+        default, bit-identical to pre-#2231.
         """
         from tengri.parameters.groups import _law_shape_params
 
@@ -8529,7 +8588,10 @@ class SEDModel:
                 continue
         if not reads:
             return frozenset()
-        provenance = getattr(self.spec, "_group_provenance", None) or {}
+        provenance = getattr(self.spec, "_group_provenance", None)
+        if provenance is None:
+            provenance = getattr(self.spec, "_flat_provenance", None)
+        provenance = provenance or {}
         return frozenset(
             name
             for name in reads

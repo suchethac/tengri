@@ -669,6 +669,43 @@ class Parameters:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
 
+        # Flat-form provenance (#2231). A bare ``Parameters(...)`` call never
+        # sees ``parse_groups``'s richer ``_group_provenance`` map: that
+        # attribute is attached to the finished instance AFTER construction
+        # (``object.__setattr__(final_params, "_group_provenance", ...)`` in
+        # ``parameters/groups.py``), invisible to this constructor. Without
+        # any record of what the caller actually typed, a dust attenuation
+        # shape parameter (``dust_slope``, ``dust_delta``, ``dust_Rv``,
+        # ``dust_bump_strength``) set on a flat spec read as
+        # ``registry_default`` everywhere downstream, and
+        # ``SEDModel._requested_law_shape_params`` silently evaluated the
+        # law's own published default instead of the caller's value (#2231).
+        #
+        # Record one here: ``"user_prior"`` for an explicitly-passed free
+        # distribution, ``"user_fixed"`` for an explicitly-passed Fixed or
+        # bare value. This is a presence check on ``resolved_kwargs``, never
+        # a comparison against a registry default, so pinning a parameter AT
+        # its published value (e.g. ``dust_bump_strength=Fixed(1.0)``, KC13's
+        # own default) still counts as a request -- a value comparison would
+        # silently un-request exactly that case.
+        #
+        # Stored under a name distinct from ``_group_provenance`` on purpose.
+        # Several consumers treat that attribute's mere presence as "this
+        # spec was built by parse_groups": ``translate.py``'s
+        # ``legacy_flat_spec`` gate (which exempts flat AGN/radio/xray/igm
+        # families from the missing-parameter check), and the
+        # summary()/to_groups() wildcard-collapse machinery. Reusing the name
+        # here would flip those switches for every flat spec that names even
+        # one parameter -- effectively every flat spec, since ``redshift`` is
+        # almost always explicit. The one consumer that reads requestedness
+        # today, ``SEDModel._requested_law_shape_params``, falls back to this
+        # map ONLY when ``_group_provenance`` is absent, so parse_groups' own
+        # map -- attached after this constructor returns -- always wins.
+        self._flat_provenance: dict[str, str] = {
+            name: ("user_fixed" if self._distributions[name].is_fixed else "user_prior")
+            for name in user_names
+        }
+
         # Eagerly validate the composable block recipe now that distributions
         # exist: a typo raises and suspicious combos warn *before* the forward
         # model is built. Passing the concrete agn_polar_ebv (a Fixed value, not
