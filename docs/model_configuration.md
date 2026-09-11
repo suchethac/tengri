@@ -308,7 +308,7 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'spinning_dust'` — Include small spinning dust grains (default: auto from type).
 - `'f_cnm'` — Cold neutral medium fraction (parametrization-dependent).
-- `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`), or `Uniform(...)` to leave it free.
+- `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`). `FREE` selects the declared default free prior, `Gaussian(1.0, 0.2)` truncated at 0; pass an explicit `Uniform(...)` (or any other prior) to override it.
 
 **Minimal example:**
 ```python
@@ -316,7 +316,7 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 ```
 
 **Gotchas:**
-- Energy balance: `eta_balance` defaults to `Fixed(1.0)`, which enforces `L_IR = L_absorbed`. Setting it free or to a constant ≠ 1 decouples IR and absorption.
+- Energy balance: `eta_balance` defaults to `Fixed(1.0)`, which enforces `L_IR = L_absorbed`. `FREE` resolves to `Gaussian(1.0, 0.2)` truncated at 0. Setting it free or to a constant ≠ 1 decouples IR and absorption.
 - Missing dust_emission (or `{'type': 'none'}`) is valid and common for UV-only work.
 
 

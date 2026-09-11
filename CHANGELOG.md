@@ -64,6 +64,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   re-emission pool receives. A source whose screen choice is `"none"` is
   unattenuated and so contributes exactly zero to the integral, with no
   separate on/off branch needed.
+- `dust_eta_balance`'s declared free prior is a linear `Gaussian(1.0, 0.2)`
+  truncated at 0 (was `LogNormal(0, 0.2)` on log eta);
+  `builders.dust.emission.relaxed_energy_balance(sigma=)` takes the linear
+  sigma.
 
 ### Fixed
 
