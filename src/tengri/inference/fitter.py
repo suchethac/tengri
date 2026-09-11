@@ -1197,14 +1197,12 @@ class Fitter:
 
             from tengri.agn.priors import prior_energy_balance
 
-
             def extra(params, state):
                 return prior_energy_balance(
                     l_gal_att=state.derived["L_absorbed"],
                     l_sb_emit=state.derived["L_ir"],
                     mode="restrictive",
                 )
-
 
             fitter = Fitter(model, data, noise, extra_log_prior=extra)
 

@@ -89,10 +89,10 @@ class SkirtorDiscDustGrid(NamedTuple):
 
     Attributes
     ----------
-    disk : jnp.ndarray, shape (*axes_shape, n_native)
+    disk : jnp.ndarray, shape (\*axes_shape, n_native)
         Accretion-disc (direct + scattered) template :math:`L_\lambda`,
         divided by the cell's ``norm``. [normalized]
-    dust : jnp.ndarray, shape (*axes_shape, n_native)
+    dust : jnp.ndarray, shape (\*axes_shape, n_native)
         Torus thermal template :math:`L_\lambda`, divided by the same
         ``norm``, hence of unit integral over the native grid (10 on the
         Angstrom axis). [normalized]
@@ -101,7 +101,7 @@ class SkirtorDiscDustGrid(NamedTuple):
     axes : tuple of jnp.ndarray
         Strictly-ascending parameter axes ``(tau, p, q, oa, R, cos_inc)``
         (a legacy 5-axis grid drops ``R``).
-    norm : jnp.ndarray, shape (*axes_shape), or None
+    norm : jnp.ndarray, shape (\*axes_shape), or None
         The physical scale divided out of ``disk`` and ``dust``, per
         parameter cell and with no wavelength axis: see
         :func:`_load_grid_arrays`. ``None`` for a grid that carries the
@@ -1435,8 +1435,9 @@ def skirtor_disc_attenuation_from_grid(
         column) yields identity attenuation.
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, \
-agn_radius_ratio, agn_cos_inc : float, optional
+    agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor : float, optional
+        SKIRTOR grid coordinates.
+    agn_radius_ratio, agn_cos_inc : float, optional
         SKIRTOR grid coordinates.
 
     Returns

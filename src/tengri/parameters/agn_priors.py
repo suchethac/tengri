@@ -1031,8 +1031,18 @@ def agnfitter_priors(
     energy_balance_mode : {"flexible", "restrictive"}, optional
         Passed to :func:`prior_energy_balance`. Default ``"flexible"``
         (``SETTINGS_AGNfitter.py``'s ``PRIOR_energy_balance`` default).
-    enable_energy_balance, enable_stellar_mass, enable_agn_fraction,
-    enable_low_agn_fraction, enable_midir_uv, enable_uv_xrays,
+    enable_energy_balance, enable_stellar_mass, enable_agn_fraction : bool, optional
+        Which of the eight priors to evaluate. Defaults are
+        :data:`AGNFITTER_PRIOR_DEFAULTS`, matching
+        ``example/SETTINGS_AGNfitter.py`` where a corresponding ``PRIOR_*``
+        flag exists (see that dict's own docstring for the two flags that
+        do not map cleanly, and why).
+    enable_low_agn_fraction, enable_midir_uv, enable_uv_xrays : bool, optional
+        Which of the eight priors to evaluate. Defaults are
+        :data:`AGNFITTER_PRIOR_DEFAULTS`, matching
+        ``example/SETTINGS_AGNfitter.py`` where a corresponding ``PRIOR_*``
+        flag exists (see that dict's own docstring for the two flags that
+        do not map cleanly, and why).
     enable_ir_xrays, enable_ir_syn_fraction : bool, optional
         Which of the eight priors to evaluate. Defaults are
         :data:`AGNFITTER_PRIOR_DEFAULTS`, matching
