@@ -187,10 +187,12 @@ def run_hmc(
     # backstop for an explicit `dense_mass_matrix=True` on a large problem.
     from tengri.inference.backends.mcmc.nuts import (
         _maybe_warn_high_memory_nuts,
-        _resolve_dense_mass_matrix,
+        resolve_dense_mass_gate,
     )
 
-    use_dense = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim) and n_dim <= 30
+    use_dense = resolve_dense_mass_gate(
+        dense_mass_matrix, n_dim, method="mcmc_hmc", verbose=verbose
+    )
     # HMC carries the same O(D^2) warmup cost as NUTS, so it gets the same
     # warning. It never had one: the shared high-D advisory keys on method name
     # and fires above D = 30, where HMC has already fallen back to diagonal.

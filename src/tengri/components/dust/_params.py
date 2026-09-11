@@ -368,14 +368,9 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Fraction of unobscured sightlines (Lower 2022)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
-        # Deliberately NO free_prior, despite a clean [0, 1] domain. The test is
-        # not "does this have a valid range?" but "is freeing it what a caller
-        # means by `dust: all_params: FREE`?": and here that is empirically no:
-        # all 11 call sites in this repo (4 recipes, 7 gallery examples) want
-        # that wildcard to mean {tau_bc, tau_diff}. f_obscuration is a
-        # two-population geometry knob whose default 0.0 is a modeling stance,
-        # and it is strongly degenerate with tau_diff. Freeing it stays explicit:
-        # pass f_obscuration=Uniform(0, 1).
+        # Deliberately NO free_prior. The reason is recorded once, in the REFUSED
+        # ledger of tools/check_param_free_priors.py ("explicit-only"); do not
+        # restate it here so the two cannot drift again. Explicit priors work.
     ),
     ParamDeclaration(
         "dust_bump_strength",
@@ -404,7 +399,17 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # attenuation.py:426 computes
         # ``e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)`` (KC13 Eq. 3),
         # so 0 is bump-free (this default) and 1 is KC13 as published.
-        free_prior=Uniform(0.0, 2.0, "UV bump strength at 2175A", default=0.0),
+        #
+        # The ceiling is 4.0, not 1.0 or 2.0 (#2226): Narayanan, Conroy, Davé,
+        # Johnson & Popping (2018, ApJ 869, 70, doi:10.3847/1538-4357/aaed25)
+        # fit MUFASA-simulated galaxies with bump multipliers up to 3.634 (at
+        # z=4, ``_NARAYANAN_BUMP_STRENGTH`` in ``attenuation.py``) -- a
+        # ``kriek_conroy`` fit with ``dust_bump_strength: FREE`` needs to reach
+        # what the paper finds, not only KC13's own value of 1. 4.0 sits ~10%
+        # above the highest fitted node. ``narayanan_prior``'s explicit
+        # ``Gaussian`` (``components/dust/priors.py``) bypasses this
+        # ``free_prior`` entirely; only FREE/wildcard callers see the ceiling.
+        free_prior=Uniform(0.0, 4.0, "UV bump strength at 2175A", default=0.0),
     ),
     ParamDeclaration(
         "dust_delta",

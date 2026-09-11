@@ -179,18 +179,25 @@ def test_orchestrator_jit_grad_traces_once(ssp, base_params):
 
 @pytest.fixture(scope="module")
 def full_chain_params(base_params):
-    """``base_params`` extended with the dust + AGN keys."""
+    """``base_params`` extended with the dust-attenuation + AGN keys.
+
+    Dust-*emission* parameters are deliberately NOT listed here: they are
+    declared by whichever emission component the test parametrizes over
+    (``modified_blackbody``, ``casey2012``, ...), and a hand-copied dict
+    goes stale the moment a component gains a new declared parameter --
+    exactly what stranded this fixture when #2167 added
+    ``dust_lambda_0_um`` to ``casey2012``/``graybody`` and every
+    ``casey2012`` parametrization here started raising ``KeyError`` in
+    the schedule-gated slow tier (#2236). ``test_full_chain_composability``
+    builds the emission keys from the selected component's own
+    declarations via ``default_params_dict`` instead.
+    """
     return {
         **base_params,
-        # dust two-component
+        # dust two-component (attenuation only)
         "dust_tau_bc": jnp.asarray(1.0),
         "dust_tau_diff": jnp.asarray(0.3),
         "dust_slope": jnp.asarray(-0.7),
-        "dust_T": jnp.asarray(35.0),
-        "dust_beta_ir": jnp.asarray(1.6),
-        # dust emission component params (modified_blackbody + casey2012)
-        "dust_epsilon_mbb": jnp.asarray(1.0),
-        "dust_alpha_mir": jnp.asarray(2.0),
         # AGN
         "agn_log_lbol": jnp.asarray(11.0),
         "agn_lum_ratio": jnp.asarray(0.1),
@@ -219,6 +226,7 @@ def test_full_chain_composability(ssp, full_chain_params, agn_model, dust_law, e
     )
     from tengri.components.sed_model_component import _REGISTRY
 
+    emission_component = _REGISTRY[emission_model]()
     chain = [
         StellarSEDComponent(ssp_data=ssp),
         NebularSEDComponent(config=NebularSEDComponentConfig(backend="baked_in")),
@@ -226,15 +234,29 @@ def test_full_chain_composability(ssp, full_chain_params, agn_model, dust_law, e
         DustSEDComponent(config=DustSEDComponentConfig(law_bc=dust_law, law_diff=dust_law)),
         # Emission is a separate registry component now; placed after the attenuator so
         # it reads the published L_ir (energy balance).
-        _REGISTRY[emission_model](),
+        emission_component,
         RadioSEDComponent(),
         XRaySEDComponent(),
         IGMSEDComponent(),
     ]
     state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
 
-    s_eager = run_components(chain, state0, full_chain_params)
-    s_jit = jax.jit(lambda p: run_components(chain, state0, p))(full_chain_params)
+    # Emission-component params read off the component's own declarations
+    # instead of a hand-written list: whatever ``emission_model`` declares
+    # (T, beta_ir, and model-specific extras such as casey2012's
+    # lambda_0_um/alpha_mir or graybody's epsilon_mbb) gets its declared
+    # default, with dust_T/dust_beta_ir pinned to this fixture's chosen
+    # values. A parameter a future model declares is picked up
+    # automatically; one this fixture used to list by hand cannot go
+    # stale again (#2236).
+    emission_params = default_params_dict(
+        [emission_component],
+        overrides={"dust_T": jnp.asarray(35.0), "dust_beta_ir": jnp.asarray(1.6)},
+    )
+    params = {**full_chain_params, **emission_params}
+
+    s_eager = run_components(chain, state0, params)
+    s_jit = jax.jit(lambda p: run_components(chain, state0, p))(params)
 
     chex.assert_tree_all_finite(s_eager.sed_intrinsic)
     # JIT determinism check across diverse model paths. rtol=1e-6 (not 1e-12):

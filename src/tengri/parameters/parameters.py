@@ -68,6 +68,7 @@ from tengri.parameters._builders import (
     _build_param_registry,
     _resolve_lazy_bucket,
 )
+from tengri.parameters._dust_laws import resolve_dust_screen_laws
 from tengri.parameters.priors import (
     Distribution,
     Fixed,
@@ -668,6 +669,43 @@ class Parameters:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
 
+        # Flat-form provenance (#2231). A bare ``Parameters(...)`` call never
+        # sees ``parse_groups``'s richer ``_group_provenance`` map: that
+        # attribute is attached to the finished instance AFTER construction
+        # (``object.__setattr__(final_params, "_group_provenance", ...)`` in
+        # ``parameters/groups.py``), invisible to this constructor. Without
+        # any record of what the caller actually typed, a dust attenuation
+        # shape parameter (``dust_slope``, ``dust_delta``, ``dust_Rv``,
+        # ``dust_bump_strength``) set on a flat spec read as
+        # ``registry_default`` everywhere downstream, and
+        # ``SEDModel._requested_law_shape_params`` silently evaluated the
+        # law's own published default instead of the caller's value (#2231).
+        #
+        # Record one here: ``"user_prior"`` for an explicitly-passed free
+        # distribution, ``"user_fixed"`` for an explicitly-passed Fixed or
+        # bare value. This is a presence check on ``resolved_kwargs``, never
+        # a comparison against a registry default, so pinning a parameter AT
+        # its published value (e.g. ``dust_bump_strength=Fixed(1.0)``, KC13's
+        # own default) still counts as a request -- a value comparison would
+        # silently un-request exactly that case.
+        #
+        # Stored under a name distinct from ``_group_provenance`` on purpose.
+        # Several consumers treat that attribute's mere presence as "this
+        # spec was built by parse_groups": ``translate.py``'s
+        # ``legacy_flat_spec`` gate (which exempts flat AGN/radio/xray/igm
+        # families from the missing-parameter check), and the
+        # summary()/to_groups() wildcard-collapse machinery. Reusing the name
+        # here would flip those switches for every flat spec that names even
+        # one parameter -- effectively every flat spec, since ``redshift`` is
+        # almost always explicit. The one consumer that reads requestedness
+        # today, ``SEDModel._requested_law_shape_params``, falls back to this
+        # map ONLY when ``_group_provenance`` is absent, so parse_groups' own
+        # map -- attached after this constructor returns -- always wins.
+        self._flat_provenance: dict[str, str] = {
+            name: ("user_fixed" if self._distributions[name].is_fixed else "user_prior")
+            for name in user_names
+        }
+
         # Eagerly validate the composable block recipe now that distributions
         # exist: a typo raises and suspicious combos warn *before* the forward
         # model is built. Passing the concrete agn_polar_ebv (a Fixed value, not
@@ -891,25 +929,13 @@ class Parameters:
         law_neb_explicit = kwargs.pop("dust_law_neb", None)
 
         # Grammar builds: dust_law_bc/dust_law_diff are already set by _translate_dust_attenuation
-        # (after validation). Flat-kwarg: both None, apply power_law defaults.
-        if self.dust_model == "single_component":
-            # Single-component: law_bc is the only law, law_diff is inherited from it.
-            if law_bc_explicit is not None:
-                self.dust_law_bc = law_bc_explicit
-            else:
-                # Flat-kwarg: no law provided, use power_law default.
-                self.dust_law_bc = "power_law"
-            self.dust_law_diff = self.dust_law_bc
-        else:
-            # Two-component or off/wg00: use laws as provided or apply power_law defaults.
-            if law_bc_explicit is not None or law_diff_explicit is not None:
-                # At least one law provided (grammar already validated the XOR).
-                self.dust_law_bc = law_bc_explicit or law_diff_explicit
-                self.dust_law_diff = law_diff_explicit or law_bc_explicit
-            else:
-                # Flat-kwarg: no laws provided, use power_law for both.
-                self.dust_law_bc = "power_law"
-                self.dust_law_diff = "power_law"
+        # (after validation). Flat-kwarg: both None, apply power_law defaults. Single
+        # source of truth for this resolution: tengri.parameters._dust_laws (#2224
+        # single_component discard fix; #1989 two_component/off/wg00 inheritance
+        # unchanged).
+        self.dust_law_bc, self.dust_law_diff = resolve_dust_screen_laws(
+            self.dust_model, law_bc_explicit, law_diff_explicit
+        )
 
         # Nebular birth-cloud law. None -> inherit the stellar birth cloud
         # (``dust_law_bc``), so the nebular continuum is reddened exactly like
@@ -2089,6 +2115,12 @@ class Parameters:
             # not the one the declaration carries (#1586).
             "user_free_grid": "[user FREE -> grid]",
             "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
+            # The "_zcap" suffix marks a declared free prior (an SF-onset
+            # lookback) that was capped at the age of the universe at the
+            # build's own source redshift. Same shown-never-silent principle
+            # as "_grid" above, see _narrow_free_priors_to_z.
+            "user_free_zcap": "[user FREE -> z cap]",
+            "wildcard_free_zcap": f"[{WILDCARD_ALIAS} FREE -> z cap]",
             # A wildcard-FREE that found no declared prior. The parameter stays
             # Fixed, so reporting the request would put a row reading FREE
             # inside the Fixed block (#1726). The remedy is in the tag: give it

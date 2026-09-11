@@ -562,3 +562,21 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `tools/check_file_sizes.py` — CI guard ratcheting repository growth. #1817 declined the history rewrite (public since 2026-03-21 with two third-party forks, so renumbering every commit SHA buys clone size and nothing else), which leaves the accumulation rate as the part that compounds. Outside `data/` the ten largest tracked files are all `.ipynb` between 4 and 9 MiB, almost entirely base64 PNG. Existing offenders are listed in `INVENTORY` and may stay but not grow; `data/` gets its own higher limit for the SSP grids. `--list` prints current sizes
 - `tools/check_tracked_not_ignored.py` — CI guard that no tracked file is one its own `.gitignore` would exclude. Git applies ignore rules to *untracked* files only, so a file added before a rule keeps working while the repository declares its directory disposable, and every consequence is silent: `git add -A` will not recover it after a delete-and-re-add, ruff skips it inside a git checkout (an unanchored `profiling/` hid `src/tengri/profiling/` from `ruff check`, and two real defects sat there — #1598), and duplicates can accumulate unseen (28 filter curves did; twenty of them made `data/filters/` unreachable for the gallery — #1857). 41 files were in this state. Two honest fixes, and choosing is the point: add a `!` negation if the file is needed, delete it if not. **No allowlist**, deliberately — it would be a third option recording neither. Note a negation cannot re-include a file whose parent *directory* is excluded, so write `dir/**` when you need an exception inside. Requires `git check-ignore --no-index`: without that flag it reports clean for every input it exists to catch
 - `tools/check_claude_md_paths.py` — CI guard that every repo path named in **this file** exists. The guard above resolves *symbols*; this one resolves *paths*, and nothing did before `area:examples` spent an unknown stretch pointing at a *docs/examples/* that has never existed. **Code markup on a path in this file is an assertion that the path exists** — that is the rule the guard enforces, so write a path you are describing rather than citing (a removed one, a hypothetical) as plain text. A token resolves against the repo root or against `src/tengri/` (this file writes `parameters/groups.py` and 16 others package-relative). Bare basenames (`cue.py`) are references, not paths, and are deliberately not checked
+- `tools/check_test_skip_handlers.py` — CI guard that a test cannot convert an
+  arbitrary failure into a skip. `except FileNotFoundError: pytest.skip(...)` is
+  honest — that class can only mean the environment lacks a file. `except
+  Exception:` also catches `AssertionError`, and the run then reports SKIPPED,
+  which reads as "not applicable here" rather than "this is broken". Five
+  `CompileCache` tests had never executed under exactly this shape: the fixture
+  passed `observation={...}` (a dict, where an `Observation` belongs) and the
+  handler relabelled the resulting `TypeError` as "Could not create minimal
+  model". Three fixes are accepted and choosing between them is the point —
+  narrow the handler, delete it so the failure fails, or **gate** the skip on a
+  claim that can fail (`assert` / `raise` / `pytest.fail`) before skipping.
+  Deliberately **no per-site allowlist**: it would be a fourth option recording
+  none of those choices. Scans every function in a test file, not only `test_*`
+  — seven of the sites it found were in *fixtures*, which skip every test they
+  feed — and matches helper skips (`_skip_with_tally`), not just `pytest.skip`.
+  `tests/crossval/` is out of scope, stated in the docstring: it is deselected
+  from the default run and absent from CI, so narrowing cannot be measured
+  there. `--list` prints every site with its verdict

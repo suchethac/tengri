@@ -43,7 +43,7 @@ def test_sedmodel_preloads_dale2014_at_construction():
 
     try:
         ssp = tengri.load_ssp()
-    except Exception:
+    except FileNotFoundError:
         pytest.skip("SSP fixture not present")
 
     # Force clean state so the assertion measures this construction.
@@ -62,7 +62,7 @@ def test_sedmodel_preloads_dale2014_at_construction():
             neb={"type": "ssp", "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=tengri.Fixed(0.05),
         )
-    except Exception as exc:
+    except (FileNotFoundError, OSError) as exc:
         # If the dale2014 template fixture is missing the construction
         # path may not complete, but the preload guard still ran — the
         # `contextlib.suppress(Exception)` wrapper around the preload

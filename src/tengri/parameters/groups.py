@@ -1226,6 +1226,7 @@ def parse_groups(**kwargs) -> Parameters:
     # ── Construct final Parameters ────────────────────────────────────
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    _narrow_free_priors_to_z(resolved_kwargs, provenance)
 
     final_params = Parameters(**resolved_kwargs)
     # Fill in provenance for params not touched by user/wildcard
@@ -1264,6 +1265,12 @@ _GRID_NARROWED_SUFFIX = "_grid"
 #: is carried by the base tag, so :func:`_base_provenance` strips either.
 _WILDCARD_PINNED_SUFFIX = "_pinned"
 
+#: Marks a provenance tag whose free prior was capped at the age of the
+#: universe at the build's own source redshift (see
+#: :func:`_narrow_free_priors_to_z`). A parse-time cosmological narrowing, not
+#: a component grid, hence its own suffix distinct from ``_GRID_NARROWED_SUFFIX``.
+_Z_NARROWED_SUFFIX = "_zcap"
+
 #: Least fraction of a declared range that may survive an automatic narrowing.
 #:
 #: Trimming a modest dead tail is a tidy-up. Cutting a 2.5 dex prior down to
@@ -1290,6 +1297,11 @@ def _base_provenance(tag: str) -> str:
     the user asked for ``all_params: FREE`` and that is what ``to_groups()``
     should hand back.
 
+    ``wildcard_free_zcap`` is the same shape again: the declared free prior
+    was capped at the age of the universe at the build's own source redshift
+    (:func:`_narrow_free_priors_to_z`), and the request was still
+    ``all_params: FREE``, not an explicit narrowed range.
+
     Parameters
     ----------
     tag : str
@@ -1300,7 +1312,7 @@ def _base_provenance(tag: str) -> str:
     str
         The tag without its outcome marker.
     """
-    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX):
+    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX, _Z_NARROWED_SUFFIX):
         if tag.endswith(suffix):
             return tag[: -len(suffix)]
     return tag
@@ -1442,6 +1454,180 @@ def _narrow_free_priors_to_grid(
                 default=default,
             )
             provenance[pname] = provenance[pname] + "_grid"
+
+
+#: SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
+#: correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
+#: each one at ``age_at_z(z)`` when the build's redshift floor is known.
+#: Membership here is purely "this narrows", not "this is freeable" -- that is
+#: the declaration's business (``free_prior`` in the SFH registry, see
+#: ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr`` in
+#: ``components/stellar/sfh/registry.py``). A model that does not declare one
+#: of these (e.g. a ``dpl``-only build) simply never resolves it, and this
+#: tuple has nothing to narrow.
+_Z_CAPPED_ONSET_PARAMS: tuple[str, ...] = (
+    "sfh_exp_start_gyr",
+    "sfh_dexp_start_gyr",
+    "sfh_const_start_gyr",
+)
+
+
+def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None:
+    """Cap SF-onset lookback priors at the age of the universe at the source z.
+
+    :data:`_Z_CAPPED_ONSET_PARAMS` each declare a static ``free_prior``
+    ceiling of today's cosmic age (``_AGE_UNIV_GYR``, z=0) -- the widest value
+    that is ever correct, since a registry declaration cannot know the source
+    redshift a given build will use. This intersects that declared range with
+    ``[lo, age_at_z(z_floor)]``, where ``z_floor`` is the lowest redshift the
+    build's ``redshift`` prior admits (its floor for a free redshift, or the
+    value itself for ``Fixed``): a bound generous enough for z~0 otherwise
+    admits draws at z=2 where star formation never happens, producing a
+    zero-mass galaxy with an exactly-zero gradient (measured in
+    ``test_bug_1031_dense_basis_composite::test_working_sfh_topologies_still_predict[dexp]``).
+
+    Mutates ``resolved`` in place and retags ``provenance`` so
+    :meth:`~tengri.parameters.parameters.Parameters.summary` shows the
+    narrowing rather than silently reporting a range the declaration never
+    promised on its own.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, mutated in place.
+    provenance : dict of str to str
+        Resolution tag per parameter.
+
+    Raises
+    ------
+    ParameterError
+        If the cap falls at or below the parameter's declared floor -- the
+        onset window has vanished entirely (only reachable for
+        ``sfh_const_start_gyr``'s 0.01 Gyr floor at z >~ 30, so in practice
+        never, but handled rather than silently producing an inverted
+        ``Uniform``).
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+
+    Deliberately narrow in scope, mirroring :func:`_narrow_free_priors_to_grid`:
+
+    - Only :class:`~tengri.parameters.priors.Uniform` is narrowed, and only a
+      parameter whose provenance is in :data:`_DECLARATION_SOURCED_FREE` --
+      never a user's own explicit ``Uniform`` (that would silently substitute
+      a different prior for the one they wrote).
+    - Narrowing only ever shrinks: ``new_hi = min(hi, cap)``, never raised.
+    - Degrades to a no-op, rather than raising, when the redshift cannot be
+      read at this point: introspection callers (``_allow_empty_wildcard``)
+      legitimately reach here with no ``"redshift"`` key at all, and the
+      required-redshift ``ValueError`` that would otherwise catch a genuine
+      omission is raised later, after this function returns.
+
+    Deliberately does **NOT** apply :data:`_MIN_RETAINED_FRACTION`: at z=6 the
+    cap retains roughly 6.5% of the 13.81 Gyr declared range (0.9 / 13.81),
+    and declining to narrow on that basis would reintroduce exactly the
+    zero-flux draws this pass exists to prevent. For a cosmological ceiling
+    the narrowing IS the physics, not a tidy-up of an incidentally dead tail.
+
+    A catalog fit with a per-galaxy redshift cannot be narrowed here: the
+    build's ``redshift`` is one placeholder value (``Fixed(z0)`` with a
+    ``catalog_z_range``, or one galaxy's), and ``parse_groups`` never sees the
+    catalog table -- ``approx=WavePrecomp(catalog_z_range=...)`` is dropped by
+    :data:`_SEDMODEL_PASSTHROUGH` before this function runs. That case is
+    refused where the catalog IS visible:
+    :class:`~tengri.inference.catalog.Catalog` raises when it finds a
+    z-narrowed onset parameter free beside a ``redshift_col``; see
+    :func:`_z_narrowed_onset_params`.
+    """
+    from tengri.parameters.priors import Uniform
+    from tengri.utils.cosmology import age_at_z
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None:
+        # No redshift to narrow against yet -- either not given at all
+        # (introspection's `_allow_empty_wildcard`, whose caller has no
+        # target redshift) or not yet resolved. Either way, raising here
+        # would preempt the more specific "redshift is required" error this
+        # function's caller raises afterwards; leaving the static declaration
+        # untouched is exactly the earlier, correct-but-wide behavior.
+        return
+    try:
+        z_floor = redshift_dist.bounds[0]
+    except (AttributeError, NotImplementedError):
+        return
+    if z_floor is None:
+        return
+    cap = float(age_at_z(float(z_floor)))
+
+    for pname in _Z_CAPPED_ONSET_PARAMS:
+        if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
+            continue
+        dist = resolved.get(pname)
+        if not isinstance(dist, Uniform):
+            continue
+        lo, hi = dist.bounds
+        new_hi = min(hi, cap)
+        if new_hi <= lo:
+            raise ParameterError(
+                f"{pname!r}: the age of the universe at redshift {z_floor:g} is "
+                f"{cap:.4g} Gyr, at or below this parameter's declared floor of "
+                f"{lo:g} Gyr -- there is no admissible SF-onset window left at "
+                f"this redshift. Pass an explicit prior for {pname} that is "
+                f"valid for your target (e.g. {pname}=Uniform({lo:g}, ...) as a "
+                f"flat kwarg, or the equivalent sfh={{...}} override), or use a "
+                f"lower redshift."
+            )
+        if new_hi >= hi:
+            continue  # declared range already sits inside the cap
+        default = dist.default
+        if default is not None:
+            default = min(max(default, lo), new_hi)
+        resolved[pname] = Uniform(
+            lo,
+            new_hi,
+            dist.description,
+            units=dist.units,
+            default=default,
+        )
+        provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+
+
+def _z_narrowed_onset_params(spec) -> frozenset[str]:
+    """Free :data:`_Z_CAPPED_ONSET_PARAMS` on ``spec`` whose prior was z-narrowed.
+
+    Parameters
+    ----------
+    spec : Parameters
+        A spec built via :func:`parse_groups` (or ``SEDModel.build``).
+
+    Returns
+    -------
+    frozenset of str
+        Names from :data:`_Z_CAPPED_ONSET_PARAMS` that are free on ``spec``
+        and whose provenance carries :data:`_Z_NARROWED_SUFFIX` -- i.e.
+        ``all_params: FREE`` (or an explicit per-parameter ``FREE``) was
+        capped at ``age_at_z`` of the build's own redshift. Empty for a spec
+        not built via ``parse_groups`` (no ``_group_provenance``), or one
+        whose onset params were never freed, or freed against an explicit
+        user prior (never narrowed).
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; introspection only.
+
+    Exists so a caller that CAN see a catalog's per-galaxy redshift --
+    :class:`~tengri.inference.catalog.Catalog` -- can detect a cap computed
+    against a single placeholder redshift without duplicating
+    :data:`_Z_CAPPED_ONSET_PARAMS` or the provenance-suffix convention.
+    """
+    provenance = getattr(spec, "_group_provenance", None) or {}
+    free = set(getattr(spec, "free_params", ()))
+    return frozenset(
+        name
+        for name in _Z_CAPPED_ONSET_PARAMS
+        if name in free and str(provenance.get(name, "")).endswith(_Z_NARROWED_SUFFIX)
+    )
 
 
 #: Sub-block group name -> the ``structural_params`` attribute naming the
@@ -2029,6 +2215,14 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     flat parameter (``dust_slope``). ``_TWO_COMPONENT_LAW_PARAMS`` is the
     existing map between them; a signature name already spelled ``dust_*`` is
     its own flat name.
+
+    ``redshift`` is the one name here that is neither (#2199). It is a bare
+    model-wide parameter, not a ``dust_*`` key the grammar accepts, so the
+    ``dust_``-prefix branch dropped it and ``narayanan_z`` -- the only law whose
+    shape depends on it -- was evaluated at z = 0 whatever the model said. A law
+    that names it in its signature gets it listed here, which is what puts it in
+    ``live_shape_params`` and so both past the single screen's frozen curve cache
+    and into the keyword dict that screen splats.
     """
     from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
     from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
@@ -2042,7 +2236,7 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
         flat = kwarg_to_flat.get(kwarg)
         if flat is not None:
             names.add(flat)
-        elif kwarg.startswith("dust_"):
+        elif kwarg.startswith("dust_") or kwarg == "redshift":
             names.add(kwarg)
     return frozenset(names)
 
@@ -2482,6 +2676,46 @@ def _validate_sfh_bin_edges(sfh_type, edges) -> None:
     validate_bin_edges_gyr(sfh_type, edges)
 
 
+def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
+    """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
+
+    Reads what the group dict says about ``tlast_gyr`` and ``tflex_gyr``, in the
+    grammar's own order of precedence, and hands both to the registry. The rule
+    itself lives there, beside :func:`validate_bin_edges_gyr`, so the grammar
+    owns only the lookup.
+
+    The lookup goes through :func:`_override_key_for`, the same resolution
+    :func:`_resolve_value` performs, so every spelling the grammar accepts for
+    these two parameters reaches the check: short (``tflex_gyr``), full
+    (``sfh_psb2022_tflex_gyr``), and legacy. Reading only the short key left the
+    full-name spelling of a crossing accepted, which is a guard with a bypass.
+    When neither is present the wildcard applies, and when there is no wildcard
+    either the registry default does.
+
+    By this pass ``all_params`` / ``other_params`` have been normalized to the
+    ``'*'`` key; both spellings are still read so the lookup does not depend on
+    that normalization staying upstream of this call.
+    """
+    from tengri.components.stellar.sfh.registry import (
+        psb_quench_param_names,
+        validate_psb_quench_ordering,
+    )
+
+    names = psb_quench_param_names(sfh_type)
+    if names is None:
+        return
+
+    wildcard = sfh_dict.get("*")
+    if wildcard is None:
+        wildcard = sfh_dict.get("all_params", sfh_dict.get("other_params"))
+
+    given = []
+    for full_name in names:
+        key = _override_key_for(full_name, sfh_dict, warn=False)
+        given.append(sfh_dict[key] if key is not None else wildcard)
+    validate_psb_quench_ordering(sfh_type, *given)
+
+
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
 
@@ -2590,6 +2824,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                 suggestions = difflib.get_close_matches(type_name, valid, n=3, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                 raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
+            _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
 
@@ -2607,6 +2842,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
 
+    _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
 
 
@@ -4389,8 +4625,9 @@ def _reject_foreign_variant_keys(
     Raises
     ------
     ParameterError
-        Naming the group, the selected variant, the offending key, and the
-        keys that variant does accept.
+        Naming the group, the selected variant, the offending key, the keys
+        that variant does accept, and -- for ``dust_attenuation`` -- the
+        registered laws that do read the offending key.
     """
     foreign = sorted(k for k in user_dict if k in group_spellings and k not in accepted_spellings)
     if not foreign:
@@ -4408,8 +4645,44 @@ def _reject_foreign_variant_keys(
         f"(either spelling, short or fully prefixed). "
         f"Drop the {noun}, select a variant that reads {pronoun}, or use the "
         f"'all_params' / 'other_params' wildcard to set the policy for every parameter "
-        f"this variant does read."
+        f"this variant does read." + _laws_reading_hint(group, foreign)
     )
+
+
+def _laws_reading_hint(group: str, foreign: list[str]) -> str:
+    """Name the attenuation laws that read a key the selected law does not.
+
+    Parameters
+    ----------
+    group : str
+        Group being validated; only ``"dust_attenuation"`` gets a hint.
+    foreign : list of str
+        Rejected keys, in either spelling.
+
+    Returns
+    -------
+    str
+        A sentence to append to the rejection message, or ``""``.
+
+    Notes
+    -----
+    "Select a variant that reads it" is true and unhelpful when the user has to
+    guess which of 22 registered laws that is. Derived from the registry rather
+    than listed here, so a law registered later appears without an edit. ``#2199``
+    is the case that made it worth having: ``narayanan_z`` *is* the published
+    median curve at z and reads no slope or bump at all, and the answer a user
+    wants is the name of the law that does, which is ``kriek_conroy``.
+    """
+    if group != "dust_attenuation":
+        return ""
+    from tengri.components.dust.laws._registry import DUST_LAWS
+
+    wanted = {k if k.startswith("dust_") else f"dust_{k}" for k in foreign}
+    readers = sorted(law for law in DUST_LAWS if wanted & set(_law_shape_params(law)))
+    if not readers:
+        return ""
+    noun = "keys" if len(foreign) > 1 else "key"
+    return f" Laws that do read the {noun}: {', '.join(readers)}."
 
 
 def _validate_user_keys(
@@ -5173,6 +5446,58 @@ def _partition_by_group(
     return partition
 
 
+def _override_key_for(param_name: str, group_dict: dict, *, warn: bool = True) -> str | None:
+    """The key in ``group_dict`` that overrides ``param_name``, or None.
+
+    Parameters
+    ----------
+    param_name : str
+        Full parameter name (``sfh_dpl_alpha``).
+    group_dict : dict
+        The user's group dict.
+    warn : bool, optional
+        Emit the once-per-name deprecation warning when the match is a legacy
+        spelling. Default True. Pass False from a *validator* that only reads
+        the dict, so a build does not warn twice for one key.
+
+    Returns
+    -------
+    str or None
+        The matching key, in the grammar's own order of precedence: the short
+        form (``logU``), then the full-prefixed form (``neb_logU``), then each
+        legacy alias in both spellings.
+
+    Notes
+    -----
+    Both spellings are accepted because :func:`_short_names_for_group` admits
+    both, so silently dropping the full-prefixed form here would be a footgun
+    (#424). A renamed parameter also invalidates its *short* key: after
+    ``agn_frac`` became ``agn_lum_ratio``, ``agn={'frac': 0.5}`` read as
+    "Unknown key" (#1296), so legacy spellings resolve too.
+
+    Factored out so that every reader of a group dict resolves the same key.
+    A guard that reads only one spelling is a guard with a documented bypass:
+    #2184's quench-ordering check shipped reading only the short form and was
+    silent on the full-name spelling of the very crossing it exists to refuse.
+    """
+    short_name = _extract_short_name(param_name, group_dict)
+    if short_name in group_dict:
+        return short_name
+    if param_name != short_name and param_name in group_dict:
+        return param_name
+
+    from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
+
+    for legacy_full in legacy_names_for(param_name):
+        legacy_short = _extract_short_name(legacy_full, group_dict)
+        for candidate in (legacy_short, legacy_full):
+            if candidate in group_dict:
+                if warn:
+                    _warn_once_if_legacy(candidate, short_name)
+                return candidate
+    return None
+
+
 def _resolve_value(
     param_name: str,
     group_dict: dict,
@@ -5219,36 +5544,8 @@ def _resolve_value(
     ValueError
         If a parameter name in group_dict is unknown for this group.
     """
-    # Extract the short name (e.g., 'alpha' from 'sfh_dpl_alpha')
-    # by removing the group prefix
     short_name = _extract_short_name(param_name, group_dict)
-
-    # Accept either the short form ('logU') or the full-prefixed form
-    # ('neb_logU') as a per-param override key. The validator already
-    # admits both names (see _short_names_for_group), so silently
-    # dropping the full-prefix form here would be a footgun (issue #424).
-    override_key = None
-    if short_name in group_dict:
-        override_key = short_name
-    elif param_name != short_name and param_name in group_dict:
-        override_key = param_name
-    else:
-        # A renamed parameter also invalidates its *short* key: after
-        # agn_frac -> agn_lum_ratio, `agn={'frac': 0.5}` became "Unknown key"
-        # (#1296). Accept the legacy spelling, both short and full, and warn
-        # -- the full-name alias map alone does not cover the grammar's short
-        # form, because the short form is derived by stripping the prefix.
-        from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
-
-        for legacy_full in legacy_names_for(param_name):
-            legacy_short = _extract_short_name(legacy_full, group_dict)
-            for candidate in (legacy_short, legacy_full):
-                if candidate in group_dict:
-                    _warn_once_if_legacy(candidate, short_name)
-                    override_key = candidate
-                    break
-            if override_key is not None:
-                break
+    override_key = _override_key_for(param_name, group_dict)
 
     # Check for per-param override
     if override_key is not None:

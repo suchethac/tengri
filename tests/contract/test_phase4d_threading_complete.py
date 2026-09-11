@@ -355,7 +355,7 @@ class TestAGNSKIRTORTemplateThreading:
 
         try:
             model = _silent_build(spec, ssp_wne, obs)
-        except (FileNotFoundError, ValueError):
+        except FileNotFoundError:
             pytest.skip("SKIRTOR grid not available")
 
         fixed_vals = model.spec.get_fixed_values()

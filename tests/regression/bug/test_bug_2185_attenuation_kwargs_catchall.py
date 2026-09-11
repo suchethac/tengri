@@ -81,7 +81,7 @@ _LIVE_FLOOR = 1e-6
 
 #: Per-screen key stem -> two values well inside the parameter's declared prior.
 #: ``dust_slope`` Uniform(-1.5, -0.3), ``dust_Rv`` Uniform(2.0, 6.0),
-#: ``dust_delta`` Uniform(-1.0, 0.4), ``dust_bump_strength`` Uniform(0.0, 2.0).
+#: ``dust_delta`` Uniform(-1.0, 0.4), ``dust_bump_strength`` Uniform(0.0, 4.0).
 _SCREEN_SWEEP: dict[str, tuple[float, float]] = {
     "slope": (-1.4, -0.4),
     "Rv": (2.2, 5.8),
