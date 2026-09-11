@@ -2050,7 +2050,8 @@ plt.show()
 # different disc spectrum is a different factor, which is why the polar share
 # printed here differs from §9's on *both* sides. What is left in the polar
 # residual once the disc shape is accounted for is the two codes' SMC screens
-# and their quadrature of the SKIRTOR face-on reference.
+# and their quadrature of the SKIRTOR face-on reference; §9d prints both terms
+# and the 0.982987× they multiply to.
 
 # %%
 sed_skirtor0 = C.run_chain(
@@ -2170,6 +2171,145 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(_ymax_b * 1e-6, _ymax_b * 2)
 fig.tight_layout()
 save_fig("cigale_09b_disc_skirtor.png")
+
+
+# %% [markdown]
+# ### §9d What separates the polar reference
+#
+# Both codes set the polar dust's absorbed power from the same product,
+# `g(oa) × R_faceon × J`: the polar cone's share of the disc's anisotropic
+# emission, the face-on disc integral measured against the SKIRTOR dust
+# integral, and `J = ∫disc·(1 − e^−τ) dλ / ∫disc dλ`, the fraction of the disc
+# spectrum the polar screen absorbs. `g(oa)` is the same closed form on both
+# sides and cancels from the comparison. The cell below prints the other two
+# and the two terms their ratio factors into.
+#
+# `R_faceon` itself agrees: tengri reads **4.553520** off the vendored SKIRTOR
+# grid against pcigale's own **4.562211**, a ratio of **0.998095×** (−0.19 %).
+# What separates the polar reference is the pair of terms printed beneath it.
+#
+# **The wavelength axis.** The vendored grid carries **136** wavelengths across
+# 10 Å – 10⁸ Å where pcigale's carries **948**, and each code integrates on its
+# own. Holding the curve fixed and changing only the axis is enough to move the
+# absorbed fraction from 0.222842 to **0.232605**: the coarser axis is worth
+# **+4.18 %**.
+#
+# **The extinction curve.** The two codes apply different published SMC
+# parameterizations. tengri's polar screen uses Pei (1992) Table 4 SMC Bar —
+# the six-component generalized Drude sum, with that table's own `R_V = 2.93`.
+# CIGALE's `skirtor2016.k_ext` uses the SMC power law `k = 1.39 (λ/µm)^−1.2`
+# (Bongiorno et al. 2012, in the Prevot et al. 1984 family), replaced below
+# 100 nm by a tabulated curve rescaled to meet it at that boundary. These are
+# two descriptions of the same extinction, not an error in either, and they
+# differ wavelength by wavelength: the printed `A(λ)/E(B−V)` ratios run
+# **1.076** at 912 Å, **1.011** at 2500 Å, **0.972** at 5500 Å and **1.207** at
+# 1 µm. Integrated against the disc spectrum the curve is worth **−5.65 %**.
+#
+# The two terms multiply to **0.982987×**: tengri sets its polar dust from
+# 1.70 % less absorbed disc power than pcigale does, and nothing else enters
+# the reference.
+
+# %%
+from pcigale.data import SimpleDatabase as _CigaleDB
+from pcigale.sed_modules.skirtor2016 import k_ext as _cigale_k_ext
+from pcigale.sed_modules.skirtor2016 import schartmann2005_disk as _cigale_disc
+
+from tengri.components.agn.disc_cigale import schartmann2005_disk_spectrum
+from tengri.components.agn.skirtor import load_skirtor_bundle, skirtor_disc_dust_ratio
+from tengri.components.dust.attenuation import smc as _tengri_smc
+
+_OA_SKIRTOR, _EBV_POLAR, _RV_SMC = 40.0, 0.03, 2.93
+_COS_I_FIDUCIAL = float(np.cos(np.deg2rad(30.0)))
+
+# tengri's face-on reference, straight off the vendored grid. The tie is given
+# an unreddened disc (`ext_fac = 1`), exactly as the composable AGN calls it:
+# the polar screen enters through J below, not through R_faceon.
+_w_tie = np.logspace(1.0, 7.0, 20000)
+_tie = skirtor_disc_dust_ratio(
+    _w_tie,
+    schartmann2005_disk_spectrum(_w_tie),
+    np.ones_like(_w_tie),
+    _template=load_skirtor_bundle().disc_dust,
+    agn_oa_skirtor=_OA_SKIRTOR,
+    agn_cos_inc=_COS_I_FIDUCIAL,
+)
+_R_faceon_t = float(_tie.R_faceon)
+_wave_native = np.asarray(_tie.wave_native)
+_disc_shape_t = np.asarray(_tie.faceon_shape_native)
+
+# pcigale's own, rebuilt from its database the way skirtor2016._init_code does:
+# the i = 0 record carried onto the observer record's luminosity scale by
+# norm(0)/norm(i), divided by that record's dust integral.
+with _CigaleDB("skirtor2016") as _db:
+    _sk_i = _db.get(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30)
+    _sk_0 = _db.get(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=0)
+_wave_c_nm = np.asarray(_sk_i.wl)
+_R_faceon_c = float(
+    np.trapezoid(np.asarray(_sk_0.disk) * (_sk_0.norm / _sk_i.norm), x=np.asarray(_sk_0.wl))
+    / np.trapezoid(np.asarray(_sk_i.dust), x=_wave_c_nm)
+)
+
+# Both SMC curves on one dense axis. `k_ext` rescales its sub-100 nm branch to
+# meet the power law at the last grid point below that boundary, so it has to
+# be evaluated once on an axis that resolves the boundary rather than sampled
+# point by point.
+_w_dense = np.logspace(1.0, 6.0, 20001)
+_k_cigale_dense = _cigale_k_ext(_w_dense / 10.0, 0)
+_k_tengri_dense = np.asarray(_tengri_smc(_w_dense)) * _RV_SMC
+
+
+def _absorbed_fraction(disc_shape, wave_aa, k_lambda):
+    """J = ∫disc·(1 − 10^(−0.4·k·E(B−V))) dλ / ∫disc dλ [dimensionless]."""
+    _transmitted = 10.0 ** (-0.4 * k_lambda * _EBV_POLAR)
+    return float(
+        np.trapezoid(disc_shape * (1.0 - _transmitted), wave_aa)
+        / np.trapezoid(disc_shape, wave_aa)
+    )
+
+
+_J_t = _absorbed_fraction(_disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_tengri_dense))
+# CIGALE's curve on tengri's axis: the control that separates the two terms.
+_J_c_on_native = _absorbed_fraction(
+    _disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_cigale_dense)
+)
+_J_c = _absorbed_fraction(
+    _cigale_disc(_wave_c_nm), _wave_c_nm * 10.0, _cigale_k_ext(_wave_c_nm, 0)
+)
+
+_term_quadrature = (_R_faceon_t * _J_c_on_native) / (_R_faceon_c * _J_c)
+_term_curve = _J_t / _J_c_on_native
+_polar_reference_ratio = (_R_faceon_t * _J_t) / (_R_faceon_c * _J_c)
+
+print("§9d polar reference g(oa)·R_faceon·J, tengri against pcigale (i = 30°):")
+print(
+    f"  R_faceon = ∫disc(face-on)/∫dust: tengri {_R_faceon_t:.6f}, "
+    f"pcigale {_R_faceon_c:.6f} → {_R_faceon_t / _R_faceon_c:.6f}× "
+    f"({(_R_faceon_t / _R_faceon_c - 1) * 100:+.2f}%)"
+)
+print(
+    f"  wavelength axis: vendored grid {_wave_native.size} points, "
+    f"pcigale {_wave_c_nm.size}, same 10 Å–10⁸ Å span"
+)
+print(
+    f"  J absorbed fraction: tengri {_J_t:.6f}, pcigale {_J_c:.6f} "
+    f"(CIGALE's curve on the vendored axis: {_J_c_on_native:.6f})"
+)
+print(
+    f"  term 1, wavelength quadrature: {_term_quadrature:.6f}× "
+    f"({(_term_quadrature - 1) * 100:+.2f}%)"
+)
+print(f"  term 2, SMC extinction curve:  {_term_curve:.6f}× ({(_term_curve - 1) * 100:+.2f}%)")
+print(
+    f"  product {_term_quadrature * _term_curve:.6f}× = polar reference ratio "
+    f"{_polar_reference_ratio:.6f}× ({(_polar_reference_ratio - 1) * 100:+.2f}%)"
+)
+print(
+    "  A(λ)/E(B−V), pcigale / tengri: "
+    + ", ".join(
+        f"{float(np.interp(_x, _w_dense, _k_cigale_dense)) / float(np.interp(_x, _w_dense, _k_tengri_dense)):.3f} at {_label}"
+        for _x, _label in ((912.0, "912 Å"), (2500.0, "2500 Å"), (5500.0, "5500 Å"), (1e4, "1 µm"))
+    )
+)
 
 
 # %% [markdown]
@@ -2929,7 +3069,11 @@ plt.show()
 #   screen — so neither the screen's contribution nor the polar share is
 #   common to the two pairings: pcigale's own share of its AGN dust budget
 #   moves 0.2098 → 0.2307 between its two disc types, and tengri's 0.1830 →
-#   0.1868 with it.
+#   0.1868 with it. §9d takes the reference the two codes build that component
+#   from — `g(oa) × R_faceon × J` — and prints it term by term: `R_faceon`
+#   agrees to 0.998095×, and the reference's 0.982987× is the vendored grid's
+#   136-point wavelength axis (+4.18 %) against the two published SMC curves,
+#   Pei (1992) Table 4 and the 1.39 (λ/µm)^−1.2 power law (−5.65 %).
 # * **§10 X-ray.** Matched to 4 decimal places on disc L_2500, then a
 #   fraction of a percent at 2 keV, and the Yang+2022 inclination tilt is the
 #   same function on both sides across i = 0–80°.
