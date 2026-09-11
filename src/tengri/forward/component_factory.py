@@ -365,6 +365,12 @@ def build_components(
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
     dust_law_neb: str | None = None,
+    # Per-source dust-screen choice (#2234 replacement). Only threaded
+    # into DustSEDComponentConfig (the two_component atten_type below);
+    # single_component/wg00/off never read them.
+    dust_nebular_screen: str = "birth_cloud",
+    dust_shock_screen: str = "diffuse",
+    dust_agn_screen: str = "none",
     dust_law_overrides: dict | None = None,
     dust_lyman_cutoff_aa: float = 0.0,
     dust_lyc_absorb_all: bool = False,
@@ -407,24 +413,36 @@ def build_components(
 ) -> list[SEDComponent]:
     r"""Construct an ordered :class:`SEDComponent` list for the orchestrator.
 
-    The component order is the **canonical pipeline order**, which any
-    orchestrator-driven prediction should follow:
+    The component order is the **canonical pipeline order** (stellar,
+    nebular, shock, dust, agn, radio, xray, igm), which any
+    orchestrator-driven prediction should follow. This is the order
+    :func:`~tengri.forward.orchestrator.topological_sort` derives from the
+    declared cross-component inputs/outputs, not merely the order this
+    function happens to ``.append()`` in below:
 
     1. ``StellarSEDComponent``, emits the stellar SED, publishes
        ``lnu_age``, ``ssp_ages_yr``, ``log_metallicity_history``,
        ``nion``, etc.
     2. ``NebularSEDComponent``, adds nebular emission to
        ``sed_intrinsic`` (no-op for the BakedIn backend).
-    3. ``AGNSEDComponent``, adds AGN disc + torus + lines and
-       publishes ``L_agn_bol``.
-    4. ``DustSEDComponent``, applies two-component attenuation to
-       the per-age cube, integrates absorbed luminosity, adds IR
-       re-emission, publishes ``L_ir``.
-    5. ``RadioSEDComponent``, synchrotron, reads ``L_ir``,
+    3. ``ShockNebular`` (optional, #851), adds MAPPINGS V shock emission,
+       an additive component composing with any photoionized nebular
+       backend.
+    4. ``DustSEDComponent``, applies two-component attenuation to the
+       per-age stellar cube; also attenuates the nebular continuum + line
+       catalog and the shock SED per their own configured screens
+       (``nebular_screen`` / ``shock_screen``, #2234); integrates absorbed
+       luminosity, adds IR re-emission, publishes ``L_ir``.
+    5. ``AGNSEDComponent``, adds AGN disc + torus + lines and publishes
+       ``L_agn_bol``. AGN light runs AFTER dust, so it is never attenuated
+       by the galaxy's own dust screens (``agn_screen`` is validated to
+       stay ``"none"``): the AGN component carries its own polar-dust
+       screen instead, matching the CIGALE convention.
+    6. ``RadioSEDComponent``, synchrotron, reads ``L_ir``,
        ``log_mstar``, ``L_agn_bol`` with documented fallbacks.
-    6. ``XRaySEDComponent``, XRBs + AGN corona, reads ``sfr``,
+    7. ``XRaySEDComponent``, XRBs + AGN corona, reads ``sfr``,
        ``log_mstar``, ``L_agn_bol``.
-    7. ``IGMSEDComponent``, multiplies ``sed_observed`` by Inoue+2014
+    8. ``IGMSEDComponent``, multiplies ``sed_observed`` by Inoue+2014
        transmission (no-op if no observed-frame SED yet).
 
     Parameters
@@ -462,6 +480,11 @@ def build_components(
     dust_law_neb : str or None
         Nebular birth-cloud attenuation-law key. ``None`` inherits
         ``dust_law_bc`` (nebular reddened like the youngest stars).
+    dust_nebular_screen, dust_shock_screen, dust_agn_screen : str
+        Per-source dust-screen choice (#2234 replacement): one of
+        ``"birth_cloud"``, ``"diffuse"``, ``"none"``. Defaults
+        ``"birth_cloud"`` / ``"diffuse"`` / ``"none"`` respectively. Only
+        consulted when ``dust_model="two_component"``.
     dust_emission_model : str
         IR emission template registry key.
     use_dust : bool
@@ -539,6 +562,9 @@ def build_components(
                 law_bc=dust_law_bc,
                 law_diff=dust_law_diff,
                 law_neb=dust_law_neb,
+                nebular_screen=dust_nebular_screen,
+                shock_screen=dust_shock_screen,
+                agn_screen=dust_agn_screen,
                 # #1833: without this the shared Fixed(0.0) dust_bump_strength /
                 # dust_delta overwrote each law's published default. Only reaches
                 # here from SEDModel, which is the only caller that knows who

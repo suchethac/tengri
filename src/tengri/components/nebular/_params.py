@@ -414,25 +414,65 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         units="km/s",
     ),
     ParamDeclaration(
-        # Neither shock grid axis gets a free_prior, and the reason is in their
-        # own descriptions: both are *snapped to the nearest grid point*. A
-        # continuous prior over a snapped axis is piecewise constant, so its
-        # gradient is exactly zero almost everywhere and a gradient-based
-        # sampler cannot move along it -- the parameter would look free and
-        # behave frozen, which is the failure mode #887 exists to remove rather
-        # than one to introduce. Fitting these needs either a grid-interpolating
-        # kernel or an explicitly discrete sampler; until then set them
-        # structurally.
+        # #2065: measured from the population mask in
+        # data/mappings_templates.h5 (mappings5/shock_pop_mask, via
+        # tengri.components.nebular.shock.population_envelope), not
+        # transcribed. "Populated" means: this density node has at least one
+        # populated B-field cell -- the outer envelope, not full 2-D coverage
+        # (case (c), #2066, still applies inside it).
+        #
+        # Per-abundance envelope (log10 cm^-3), all 5 shipped abundances:
+        #   Allen2008_Solar        [-2.0,  3.0]  (75/210 (density,B) cells)
+        #   Allen2008_SMC          [ 0.0,  0.0]  (8/210 cells; single node)
+        #   Allen2008_LMC          [ 0.0,  0.0]  (8/210 cells; single node)
+        #   Allen2008_Dopita2005   [ 0.0,  0.0]  (8/210 cells; single node)
+        #   Allen2008_TwiceSolar   [ 0.0,  0.0]  (8/210 cells; single node)
+        #
+        # The declared interval below is solar's (the default abundance) full
+        # measured envelope, which happens to equal the grid's declared axis
+        # extent (every density node has SOME populated B) -- it is also safe
+        # for the other four abundances in the sense that it CONTAINS their
+        # single populated point (0.0), so ``all_params: FREE`` never
+        # unconditionally fails regardless of ``shock_abundance``; the #2065
+        # build-time guard (``SEDModel._validate_shock_coverage``) catches the
+        # per-abundance detail a static declaration cannot -- warning on the
+        # sparse abundances' near-total dead fraction, raising if a caller
+        # narrows the prior away from the one point that works.
+        # No ``bound_check``, deliberately: unlike ``shock_velocity`` (whose
+        # bound IS the grid's hard axis range), the honest per-abundance
+        # coverage question here is not "is this inside the declared axis" --
+        # it is "is this inside the POPULATED region", which depends on
+        # ``shock_abundance`` and is answered at build time by
+        # ``SEDModel._validate_shock_coverage`` (#2065), with a richer message
+        # than a static bound could give (naming the abundance, the measured
+        # range, and the dead fraction on partial overlap). A static
+        # ``bound_check`` matching this free_prior would also make that
+        # guard's "partial overlap -> warn" branch unreachable for every
+        # shipped abundance (solar's own envelope already equals the full
+        # declared axis; see the table above), silently narrowing the guard
+        # to raise-or-pass only.
         "shock_log_density",
         Fixed(0.0),
-        "Log10 pre-shock density in cm^-3; snapped to nearest grid point",
+        "Log10 pre-shock density in cm^-3; continuously interpolated "
+        "(triweight kernel, #2066); measured populated envelope [-2, 3] at "
+        "solar abundance (#2065)",
+        free_prior=Uniform(
+            -2.0, 3.0, "Log10 pre-shock density", units="log10(cm^-3)", default=0.0
+        ),
         units="log10(cm^-3)",
     ),
     ParamDeclaration(
+        # No free_prior: real gradient since the index-space interpolation fix
+        # (#2066), but a ~18% autodiff-vs-FD smoothness mismatch on the 2-D
+        # coupled sparse grid (case (c),
+        # docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md) --
+        # unlike shock_log_density, whose gradient is FD-exact at the measured
+        # probe point. A family-aware interpolant (#2066) is the prerequisite
+        # for a default free prior on this axis; explicit priors work today.
         "shock_b_over_sqrt_n",
         Fixed(1.0),
-        "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG (MAPPINGS V); "
-        "snapped to nearest grid point",
+        "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG "
+        "(MAPPINGS V); continuously interpolated (triweight kernel, #2066)",
     ),
     # NOTE: the categorical ``shock_abundance`` / ``shock_component`` knobs are
     # NOT free parameters: they are static structural config on Parameters
