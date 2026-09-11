@@ -576,6 +576,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **The default inference method is `mcmc_nuts_fast`** (was `vi`): four NUTS
+  chains, 150 warmup steps, no separate burn-in, 300 draws, target acceptance
+  0.8, on the mass-profiled posterior with the dense metric and, when the CPU
+  is exposed as devices (`TENGRI_HOST_DEVICES`), pmapped chains. Measured at
+  9.5-17.2 s per galaxy on eight logical cores across twelve `ctl-dpl` /
+  `ctl-jwst` seeds with min ESS >= 100 on eleven
+  (`bench/reports/2026-09-11_profile_mass_20s.md`). `forward.fit(data)`,
+  `Fitter.run()` and `fit_batch` all share it; `fit_batch` runs it one galaxy
+  at a time (the vmapped shared-adaptation engine is measured to freeze
+  lanes). `method="vi"` is unchanged and still selectable. The new method is
+  canonical (`mcmc_nuts_fast`), primary tier, and every setting is
+  overridable; its draw budget lives in `defaults.toml`
+  `[inference.mcmc_nuts_fast]`.
+
 - **NUTS/HMC/dynamic-HMC `dense_mass_matrix=None` auto-policy is dense at
   D <= 12, not D < 8** (behavioral change, #319 revision). The D < 8 cliff
   generalized a `mean_sfh_type="dense_basis"` finding (22.78 GB warmup peak

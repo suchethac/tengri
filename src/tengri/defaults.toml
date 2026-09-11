@@ -153,6 +153,15 @@ refresh_rate = 0.0        # Partial momentum refresh rate (0 = pure ray tracing)
 n_warmup  = 500    # HMC warmup (dual-averaging step-size adaptation)
 n_samples = 1000   # Posterior samples after warmup
 
+[inference.mcmc_nuts_fast]
+# The 20 s photometry recipe (bench/reports/2026-09-11_profile_mass_20s.md):
+# the warmup is the burn-in, four chains give the split R-hat its teeth.
+n_chains           = 4
+n_warmup           = 150
+n_burnin           = 0
+n_samples          = 300
+target_accept_rate = 0.8
+
 
 [inference.mcmc_ess]
 n_burnin  = 200   # Elliptical Slice Sampling burn-in steps

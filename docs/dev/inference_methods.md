@@ -56,6 +56,7 @@ NIFTy is the computational library implementing geoVI; the `vi` method uses its 
 
 | Problem | D | Recommended | Fallback |
 |---------|--:|-------------|----------|
+| Photometry, parametric SFH (the default) | 7-12 | `mcmc_nuts_fast` (4 chains x 150 + 300, mass profiled, dense metric; 15-20 s on 8 cores) | `mcmc_nuts` |
 | Smooth SFH, few bands | ~7 | `vi` (15 iter) | `mcmc_raytrace` |
 | Stochastic SFH, photometry | ~137 | `vi` (15 iter) | `vi_linear` (20 iter) |
 | Stochastic SFH, spectrum | ~200 | `vi_linear` (20 iter) | `vi` (25 iter) |
@@ -74,14 +75,18 @@ from tengri import SEDModel, Parameters, Fitter
 model = SEDModel(spec, ssp)
 fitter = Fitter(model, data, noise)
 
-# Simple (vi is the default)
-result = fitter.run("vi", n_iterations=15)
+# Simple: the default is mcmc_nuts_fast -- four NUTS chains, 150 warmup steps,
+# no separate burn-in, 300 draws, on the mass-profiled posterior with a dense
+# metric (bench/reports/2026-09-11_profile_mass_20s.md). Export
+# TENGRI_HOST_DEVICES=4 before importing tengri to pmap the chains.
+result = fitter.run()
+result = fitter.run("vi", n_iterations=15)     # geoVI, the previous default
 
 # With initialization from MAP
 result_map = fitter.run("map", n_steps=1500)
 result = fitter.run("vi", init_from=result_map)
 
-# Batch fitting (default method: vi)
+# Batch fitting (default method: mcmc_nuts_fast, one galaxy at a time)
 results = fitter.fit_batch(galaxies)
 
 # Access results

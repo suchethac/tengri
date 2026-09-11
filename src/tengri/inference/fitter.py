@@ -94,6 +94,7 @@ _MANY_EVAL_SAMPLERS = frozenset(
     {
         "mcmc",
         "mcmc_nuts",
+        "mcmc_nuts_fast",
         "mcmc_hmc",
         "mcmc_dynamic_hmc",
         "mcmc_chees",
@@ -184,6 +185,7 @@ _CANONICAL_METHODS = {
     "mcmc",  # auto: NUTS (D≤20) or Ray Tracing (D>20)
     "mcmc_raytrace",
     "mcmc_nuts",
+    "mcmc_nuts_fast",  # the 20 s photometry recipe; the default method
     "mcmc_hmc",
     "mcmc_dynamic_hmc",
     "mcmc_chees",
@@ -4289,7 +4291,7 @@ class Fitter:
         self,
         batch,
         *,
-        method="vi",
+        method=DEFAULT_METHOD,
         key=None,
         verbose=True,
         **kwargs,
