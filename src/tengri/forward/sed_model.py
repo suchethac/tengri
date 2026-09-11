@@ -5398,13 +5398,16 @@ class SEDModel:
                 log_nion = self._compute_log_nion(params)
                 log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
             all_waves = jnp.asarray(grid.wavelengths)
-            # Both lookups (HII and, unless the short-circuit fires, DIG) go
-            # through the log10 form: the linear sibling
-            # ``reconstruct_nebular_line_lums`` is ~1e40 erg/s, out of
-            # float32 range (#2269), and mixing two such linear lookups
-            # would reintroduce exactly that overflow. `log_domain=True`
-            # keeps the mix itself in log10 space (`_log10_weighted_mix`)
-            # rather than exponentiating each lookup to mix and re-logging.
+            # Both lookups (HII and DIG) go through the log10 form: the
+            # linear sibling ``reconstruct_nebular_line_lums`` is ~1e40
+            # erg/s, out of float32 range (#2269), and mixing two such linear
+            # lookups would reintroduce exactly that overflow.
+            # `log_domain=True` keeps the mix itself in log10 space
+            # (`_log10_weighted_mix`) rather than exponentiating each lookup
+            # to mix and re-logging. ``full_params["neb_dig_frac"]`` is a
+            # JAX array here (never a Python literal), so the zero-fraction
+            # short-circuit never fires on this path -- both lookups always
+            # run, even at the declared ``Fixed(0.0)`` default (#2262).
             full_params = {**self.spec.get_fixed_values(), **params}
             log_all_lums = mix_dig_grid_reconstruction(
                 reconstruct_nebular_line_log_lums,

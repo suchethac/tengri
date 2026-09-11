@@ -36,12 +36,13 @@ from tengri.components.nebular.dig import mix_dig_grid_reconstruction
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.nebular.nebular_grid_precompute import (
     precompute_nebular_grid,
+    reconstruct_nebular_line_log_lums,
     reconstruct_nebular_line_lums,
     reconstruct_nebular_lines,
     reconstruct_nebular_phot,
 )
 from tengri.observation.line_flux_data import LineFluxData
-from tengri.utils.scale import apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, pow10
 
 pytestmark = pytest.mark.contract
 
@@ -452,6 +453,21 @@ def _reconstruct_line_flux(nion, point, table):
     return reconstruct_nebular_lines(nion, point, Z, table)
 
 
+def _reconstruct_line_flux_log(log_nion, point, table):
+    """Log10-domain 3-arg adapter: log10 observed flux at this module's fixed ``Z``.
+
+    The log-domain analog of :func:`_reconstruct_line_flux`: mirrors
+    ``reconstruct_nebular_lines``'s own body (log10 intrinsic luminosity via
+    ``reconstruct_nebular_line_log_lums``, then subtract the log10 cosmology
+    divisor) without the final ``pow10``, so ``mix_dig_grid_reconstruction``
+    can mix the HII and DIG evaluations in log space (``log_domain=True``) --
+    the branch ``predict_line_fluxes`` actually takes on the shipped
+    ``FeaturePrecomp`` fast path (#2263 review I1: the linear adapter above
+    exercises a branch production code never takes for lines).
+    """
+    return reconstruct_nebular_line_log_lums(log_nion, point, table) - _log10_four_pi_dl2(Z)
+
+
 def _worst_rel(fast, exact):
     """Worst-case relative error, ignoring entries below 0.1 % of the peak."""
     fast = np.asarray(fast)
@@ -467,6 +483,14 @@ def _dig_parity(m, table, *, n_seeds, seed0):
     forward (``mix_dig_emission`` / ``mix_dig_line_luminosities``, unaffected
     by #2222), sampling ``m.spec`` (so ``neb_dig_frac`` / ``neb_dig_delta_logU``
     take whatever disposition -- Fixed or FREE -- ``m`` was built with).
+
+    The line channel goes through ``_reconstruct_line_flux_log`` with
+    ``log_domain=True`` (#2263 review I1): that is the branch
+    ``predict_line_fluxes`` actually takes on the shipped ``FeaturePrecomp``
+    fast path (``reconstruct_nebular_line_log_lums`` mixed via
+    :func:`~tengri.components.nebular.dig._log10_weighted_mix`), not the
+    linear ``reconstruct_nebular_lines`` / ``_linear_mix`` pair the plain
+    ``_reconstruct_line_flux`` adapter exercises.
     """
     worst_phot = worst_line = 0.0
     for i in range(n_seeds):
@@ -490,13 +514,16 @@ def _dig_parity(m, table, *, n_seeds, seed0):
             m.predict_line_fluxes(p, target_wavelengths=_LW, redden=False, state=st)
         )
         fast_line = np.asarray(
-            mix_dig_grid_reconstruction(
-                _reconstruct_line_flux,
-                _nion(m, p),
-                p,
-                table,
-                neb_dig_frac=p["neb_dig_frac"],
-                neb_dig_delta_logU=p["neb_dig_delta_logU"],
+            pow10(
+                mix_dig_grid_reconstruction(
+                    _reconstruct_line_flux_log,
+                    log_nion,
+                    p,
+                    table,
+                    neb_dig_frac=p["neb_dig_frac"],
+                    neb_dig_delta_logU=p["neb_dig_delta_logU"],
+                    log_domain=True,
+                )
             )
         )
         worst_line = max(worst_line, _worst_rel(fast_line, exact_line))
