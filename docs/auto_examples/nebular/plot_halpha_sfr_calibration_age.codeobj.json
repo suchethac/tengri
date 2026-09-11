@@ -1,4 +1,20 @@
 {
+ "L_SUN": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.utils.physics_constants",
+   "module_short": "tengri.utils.physics_constants",
+   "name": "L_SUN"
+  }
+ ],
  "age_myr": [
   {
    "is_class": false,
@@ -481,7 +497,7 @@
    "name": "PRNGKey"
   }
  ],
- "l_halpha": [
+ "l_halpha_erg_s": [
   {
    "is_class": false,
    "is_explicit": false,
