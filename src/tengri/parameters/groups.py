@@ -412,6 +412,17 @@ def _valid_dust_emission_types() -> frozenset[str]:
     maintenance. Union with the alias map keys (e.g., draine2021_pah →
     draine2021_pah_ir) so grammar type names resolve correctly.
 
+    A ``"*_ir"``-suffixed registry name that is only reachable as an alias
+    *target* (never registered under its own short spelling, unlike
+    ``draine_li2007``/``draine_li2014``/``modified_blackbody``, which keep
+    their un-suffixed registry name directly valid alongside their ``dl07``/
+    ``dl14``/``mbb`` aliases) is a ``SEDModelComponent`` parity mirror, not a
+    grammar-facing engine name (see ``TestBuildResolverDustEmission`` and
+    #738) -- it must be reached only through its alias, e.g.
+    ``draine2021_pah`` for ``draine2021_pah_ir``. Excluding it here is what
+    keeps ``_standalone_dust_emission_types`` and the ``dust_emission.type``
+    grammar from also accepting the leaked internal spelling.
+
     Includes ``energy_balance_split`` (a registered two-temperature + AGN-IR
     component publishing ``sed_dust_ir``, Kokorev+2021; a real model, not a
     helper). Also includes ``_LAZY_DUST_EMISSION_TYPES`` (ADR-0005 / ADR-0008).
@@ -429,7 +440,14 @@ def _valid_dust_emission_types() -> frozenset[str]:
     # Add alias keys (grammar names that map to registry names)
     alias_keys = frozenset(_EMISSION_TYPE_ALIASES.keys())
 
-    return dust_ir_components | alias_keys | _LAZY_DUST_EMISSION_TYPES
+    # "*_ir" alias targets (e.g. draine2021_pah_ir) are internal component
+    # names, not public grammar -- drop them even though their outputs
+    # otherwise qualify them for dust_ir_components above.
+    leaked_ir_targets = frozenset(
+        value for value in _EMISSION_TYPE_ALIASES.values() if value.endswith("_ir")
+    )
+
+    return (dust_ir_components - leaked_ir_targets) | alias_keys | _LAZY_DUST_EMISSION_TYPES
 
 
 def _dust_emission_component_class(emission_type: str):

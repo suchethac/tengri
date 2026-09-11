@@ -100,15 +100,6 @@ class TestBuildResolverDustEmission:
         components (``schreiber2016_ir``/``draine2021_pah_ir``, still in
         ``_REGISTRY``). They used to be silently accepted then fail at predict
         (the removed #738 footgun).
-
-        KNOWN GAP: the ``draine2021_pah_ir`` case currently fails this
-        assertion (``DID NOT RAISE``). ``_valid_dust_emission_types()``
-        (``parameters/groups.py``) accepts any ``_REGISTRY`` component whose
-        outputs include ``sed_dust_ir``, and this component declares that
-        output while ``schreiber2016_ir`` does not, so it slips through as
-        valid grammar despite being a parity mirror. Fixing the validator is
-        a production-behavior decision outside a contract-test update; left
-        red pending that decision rather than weakened to pass.
         """
         # dust_attenuation now requires an explicit law (laws are EXPLICIT,
         # not implied by a default) -- an empty dict raises on the
