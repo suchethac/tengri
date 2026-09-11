@@ -1195,19 +1195,18 @@ class Fitter:
         extra term; the returned log-prior is bit-identical to before this
         parameter existed). Example, the AGNfitter energy-balance prior::
 
-            from tengri.agn.priors import prior_energy_balance
-
             def extra(params, state):
+                from tengri.agn.priors import prior_energy_balance
+
                 return prior_energy_balance(
                     l_gal_att=state.derived["L_absorbed"],
                     l_sb_emit=state.derived["L_ir"],
                     mode="restrictive",
                 )
 
-            fitter = Fitter(model, data, noise, extra_log_prior=extra)
-
-        (The derived-key names above are illustrative; verify them against
-        the specific model's published ``state.derived`` keys.)
+        passed as ``Fitter(model, data, noise, extra_log_prior=extra)``. (The
+        derived-key names above are illustrative; verify them against the
+        specific model's published ``state.derived`` keys.)
 
     Returns
     -------
