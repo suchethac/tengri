@@ -110,6 +110,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.scipy.special import logsumexp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import render_nebular_lines
@@ -1909,6 +1910,50 @@ class CueBackend:
 
         # Convert from internal Lsun/Hz to erg/s/Hz
         return neb_sed * _LSUN_ERG
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this backend's structure.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from the loaded network weights and identity
+            flags. Sort indices and SSP-derived precompute tables are
+            excluded: both are deterministic functions of ``weights`` and of
+            ``ssp_data`` (content-keyed here and at the model level,
+            respectively), so recomputing from the same inputs reproduces
+            them exactly.
+        """
+        return derive_key(self, _CUE_BACKEND_CACHE_KEY_POLICY)
+
+
+_CUE_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
+    "name": content("backend identity string"),
+    "has_free_params": content("whether ionization params are fittable"),
+    "has_continuum": content("whether the backend publishes a continuum"),
+    "weights": content(
+        "trained Speculator network weights define the emitted nebular lines + continuum"
+    ),
+    "default_gas_logqion": content("default ionizing-photon normalization"),
+    "_line_sort_idx": exclude("argsort of weights.nn_line_wav; weights is already content-keyed"),
+    "_cont_sort_idx": exclude("argsort of weights.cont_wav; weights is already content-keyed"),
+    "_ionspec_table": exclude(
+        "precomputed from ssp_data (content-keyed at the model level); "
+        "deterministic function of an already-keyed input"
+    ),
+    "_logqion_table": exclude(
+        "precomputed from ssp_data (content-keyed at the model level); "
+        "deterministic function of an already-keyed input"
+    ),
+    "_seglum_table": exclude(
+        "precomputed from ssp_data (content-keyed at the model level); "
+        "deterministic function of an already-keyed input"
+    ),
+    "_ssp_lgmet": exclude("stashed ssp_data.ssp_lgmet, already content-keyed at the model level"),
+    "_ssp_log_age_yr": exclude(
+        "stashed ssp_data age grid, already content-keyed at the model level"
+    ),
+}
 
 
 # ── JIT-compiled pure-functional API (for use in inference loops) ─
