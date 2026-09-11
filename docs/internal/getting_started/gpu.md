@@ -179,12 +179,32 @@ test's own float32 arm uses exactly that pattern
 (`tests/regression/precision/test_fisher_float32.py`), and now passes on CUDA
 with no `JAX_ENABLE_X64` set in the environment at all.
 
-One float32 caveat on CUDA beyond that:
+Float32 caveats on CUDA beyond that:
 
 - `jax.grad` of a raw observable (e.g. `sum(predict_photometry)`) returns
   **identically zero** in float32, on any device. Fits are unaffected — the
   likelihood standardizes by sigma before squaring — but do not differentiate raw
   fluxes in float32.
+- XLA:GPU flushes float32 subnormals to zero, so a reduction whose summands sit
+  below ~1e-38 reads exactly `0.0` on the GPU where the CPU keeps a ~1e-8. Two
+  gradient assertions in the precision tree carry a `finite-only` marker for this
+  reason. A property that is exactly `0.0` on CUDA and one float32 ULP off zero on
+  CPU is the GPU being *right*, not wrong (#2293).
+- `jnp.ldexp` is one ULP off in float64 on CUDA (XLA's lowering); tengri's
+  power-of-two split in `observation/line_measurement.py` multiplies by an exact
+  `2**112` instead. Prefer that form over `ldexp` in new range-safety code.
+
+To run the precision tree on the GPU:
+
+```bash
+JAX_PLATFORMS=cuda XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    pytest tests/regression/precision -q
+```
+
+with **no** `JAX_ENABLE_X64` in the environment: `tests/conftest.py` forces x64 on
+and each test toggles float32 itself, so `JAX_ENABLE_X64=0` makes the float64
+*reference* arms run in float32 (~27 spurious failures). Measured 2026-09-12 on an
+RTX 3060 (jaxlib 0.11.0): __CUDA_PRECISION__.
 
 float32 geoVI with marginalized emission lines used to fail outright on CUDA
 (`marginalize_emission_lines` built a degenerate `(n_lines, n_lines)` GEMM via
