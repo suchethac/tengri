@@ -19,13 +19,19 @@ where log U_DIG = log U_HII + Δ log U, with Δ log U = −1 dex (default).
 
 When f_DIG = 0 (default), collapses to pure HII region emission.
 
-Two public channel entry points share one mixing core
+Three public channel entry points share one mixing core
 (:func:`_mix_dig_backend_evaluations`): :func:`mix_dig_emission` for the
 continuum SED (``predict_nebular_sed``) and :func:`mix_dig_line_luminosities`
-for the discrete line catalog (``predict_nebular_line_luminosities``). Both
-build one frozen keyword dict and reuse it for the HII and DIG backend calls,
-so any extra backend-specific kwarg (e.g. an ionizing population resolved by
-the caller) reaches both evaluations identically (#2221).
+for the discrete line catalog (``predict_nebular_line_luminosities``), both
+against a live backend forward. Both build one frozen keyword dict and reuse
+it for the HII and DIG backend calls, so any extra backend-specific kwarg
+(e.g. an ionizing population resolved by the caller) reaches both evaluations
+identically (#2221).
+
+:func:`mix_dig_grid_reconstruction` is the third: the same two-query-point mix
+against the tabulated per-Q_H nebular grid
+(:mod:`~tengri.components.nebular.nebular_grid_precompute`) instead of a live
+backend forward, for the ``FeaturePrecomp`` fast path (#2222).
 """
 
 import jax.numpy as jnp
@@ -325,6 +331,98 @@ def mix_dig_line_luminosities(
         line_waves, line_lums_hii = hii_result
         _, line_lums_dig = dig_result
         return line_waves, (1.0 - frac) * line_lums_hii + frac * line_lums_dig
+
+    return _mix_dig_backend_evaluations(
+        _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU
+    )
+
+
+def mix_dig_grid_reconstruction(
+    reconstruct, amplitude, point, table, neb_dig_frac, neb_dig_delta_logU
+):
+    r"""Mix two per-Q_H grid reconstructions (HII + DIG) at a shifted ``neb_logU`` (#2222).
+
+    The tabulated-grid analog of :func:`mix_dig_emission` /
+    :func:`mix_dig_line_luminosities`: instead of two live backend forwards,
+    this calls the same
+    :mod:`~tengri.components.nebular.nebular_grid_precompute` reconstruction
+    function twice -- once at ``point["neb_logU"]`` (HII) and, unless the
+    zero-fraction short-circuit fires, again at ``point["neb_logU"] +
+    neb_dig_delta_logU`` (DIG) -- and mixes with the same core
+    (:func:`_mix_dig_backend_evaluations`) the other two wrappers share.
+    ``neb_logU`` is one of ``table.axis_names`` whenever DIG mixing could be
+    active (``nebular_grid_precompute._dig_may_be_active``), with its range
+    extended to cover both query points, so both are always resolvable
+    against ``table`` without clipping.
+
+    Parameters
+    ----------
+    reconstruct : callable
+        ``reconstruct(amplitude, point, table) -> array``. One of
+        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_phot`,
+        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_restband`,
+        or
+        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_line_lums`.
+    amplitude : float or array
+        The Q_H-derived amplitude ``reconstruct`` expects: ``log_nion`` [dex
+        re photons/s] for the photometry / rest-band channels, linear
+        ``nion`` [photons/s] for the line-luminosity channel.
+    point : Mapping
+        Interpolation point: ``point[name]`` for every ``name`` in
+        ``table.axis_names``, including ``neb_logU`` whenever that is one of
+        them. A ``point`` with no ``"neb_logU"`` key is fine when
+        ``"neb_logU"`` is not a table axis (DIG necessarily inactive then).
+    table : NebularGridTable
+        The grid to interpolate
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`).
+    neb_dig_frac : float
+        DIG mass fraction. [dimensionless, in [0, 1]]
+    neb_dig_delta_logU : float
+        Offset in ionization parameter for DIG (negative). [dex]
+
+    Returns
+    -------
+    array
+        Whatever ``reconstruct`` returns: the HII-only reconstruction when
+        ``neb_dig_frac`` short-circuits, else the linear mix
+        ``(1 - f) * hii + f * dig``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes -- node-exact PCHIP interpolation (inside
+    ``reconstruct``) plus a linear mix, both pure ``jnp`` operations. Same
+    short-circuit contract as :func:`mix_dig_emission`: a Python-literal
+    ``neb_dig_frac == 0.0`` skips the second interpolation entirely (one
+    ``reconstruct`` call, the pre-DIG cost); a traced ``neb_dig_frac`` runs
+    both.
+
+    References
+    ----------
+    .. [1] L. M. Haffner et al., "The warm ionized medium in spiral galaxies,"
+       Rev. Mod. Phys., 81, 969 (2009).
+       https://doi.org/10.1103/RevModPhys.81.969
+    .. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
+       formation, time variability, and the diffuse ionized gas," MNRAS, 513,
+       2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
+    """
+    # ``point.get(..., 0.0)``, not ``point["neb_logU"]``: DIG mixing is
+    # unconditionally wired into every use_grid call site, including tables
+    # built with DIG inactive (neb_dig_frac Fixed at its declared 0.0), whose
+    # axes may not include "neb_logU" at all (e.g. only met_logzsol free).
+    # ``reconstruct`` reads only ``point[name] for name in table.axis_names``,
+    # so a "neb_logU" key that names no axis is inert regardless of its
+    # value; the 0.0 placeholder is never read in that case. When
+    # "neb_logU" IS an axis, the caller (component.py / sed_model.py) always
+    # supplies it, so the placeholder never masks a real value.
+    neb_logU = jnp.asarray(point.get("neb_logU", 0.0))
+
+    def _evaluate(logU):
+        query = dict(point)
+        query["neb_logU"] = logU
+        return reconstruct(amplitude, query, table)
+
+    def _combine(hii_result, dig_result, frac):
+        return (1.0 - frac) * hii_result + frac * dig_result
 
     return _mix_dig_backend_evaluations(
         _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU

@@ -45,9 +45,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.translate import LOG10_ZSUN
+from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.scale import apply_log10_scale, pow10
 
@@ -55,6 +57,8 @@ from tengri.utils.scale import apply_log10_scale, pow10
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
 #: conditions. ``neb_fesc`` stays fixed (it rescales the escaping continuum, not
 #: a smooth interpolation axis) and the ionizing-spectrum params are SSP-derived.
+#: ``neb_logU`` also joins the axes whenever DIG mixing could be active, even
+#: when it is itself Fixed (#2222): see ``_dig_may_be_active``.
 _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
 
 #: Fallback grid bounds used ONLY when a free axis's prior exposes no finite
@@ -65,7 +69,26 @@ _DEFAULT_RANGE = {
     "met_logzsol": (-2.0, 0.5),
     "neb_logU": (-4.0, -1.0),
     "neb_logZ_gas": (-1.0, 0.5),
+    # Only reached if neb_dig_delta_logU is free with a prior exposing no
+    # finite bounds; mirrors its registered Uniform(-4, 0) support (#2222).
+    "neb_dig_delta_logU": (-4.0, 0.0),
 }
+
+#: ``neb_logU``'s declared registry default (#2222): the query-point value
+#: used for the HII lookup when ``neb_logU`` joins ``axis_names`` purely
+#: because DIG mixing could be active and the caller's params dict does not
+#: carry an explicit value for it (a Fixed parameter is not guaranteed
+#: present in every params dict a caller builds by hand). Read from the one
+#: declaration (``NebularSEDComponent``'s ``PARAMS``) rather than repeated as
+#: a literal, so this and ``component.py``'s own ``common_kwargs`` default
+#: cannot drift apart.
+NEB_LOGU_DEFAULT: float = declared_default(_NEB_PARAM_DECLARATIONS, "neb_logU")
+
+#: ``neb_dig_delta_logU``'s declared registry default, for the same reason
+#: (used only internally, by :func:`_dig_delta_logU_support`).
+_NEB_DIG_DELTA_LOGU_DEFAULT: float = declared_default(
+    _NEB_PARAM_DECLARATIONS, "neb_dig_delta_logU"
+)
 
 #: Extra resolution on the ``met_logzsol`` axis relative to the smooth gas axes.
 #:
@@ -172,6 +195,9 @@ class NebularGridTable:
     axis_names : tuple of str
         Free parameters gridded, in interpolation order (subset of
         :data:`_CANDIDATE_AXES`). Empty when all ionization params are fixed.
+        ``neb_logU`` is included even when Fixed whenever DIG mixing could be
+        active (:func:`_dig_may_be_active`), since the DIG lookup always
+        needs a second query point distinct from the HII one (#2222).
     axes : tuple of ndarray
         One grid-value array per axis, ascending.
     log_line_per_qh : ndarray, shape ``(*grid_dims, n_lines)``
@@ -287,16 +313,16 @@ def _snap_axis_to_nodes(lo, hi, n, nodes):
     return np.sort(np.concatenate([uniform[keep], interior]))
 
 
-def _axis_range(spec, name):
-    """(lo, hi) grid bounds for a free axis: from its prior's finite support.
+def _finite_prior_bounds(dist):
+    """(lo, hi) finite bounds of ``dist``, or ``None`` if it exposes none.
 
     Reads the bounded prior's support (``bounds`` tuple, else ``lo``/``hi``: the
-    attributes tengri's :class:`Uniform` / :class:`LogUniform` expose). Only when
-    the prior has no finite support (e.g. an unbounded Gaussian used as an axis)
-    does it fall back to :data:`_DEFAULT_RANGE`, and it warns rather than silently
-    ignoring the prior: a too-narrow grid would extrapolate and bias the fit.
+    attributes tengri's :class:`Uniform` / :class:`LogUniform` expose). Shared
+    by :func:`_axis_range` (candidate grid axes) and
+    :func:`_dig_delta_logU_support` (``neb_dig_delta_logU``, not itself an
+    axis, but read the same way to size the DIG-extended ``neb_logU`` range,
+    #2222), so the bound-extraction rule cannot drift between the two.
     """
-    dist = spec.get_distribution(name)
     candidates = []
     b = getattr(dist, "bounds", None)
     if b is not None:
@@ -309,6 +335,21 @@ def _axis_range(spec, name):
     for clo, chi in candidates:
         if math.isfinite(clo) and math.isfinite(chi) and clo < chi:
             return clo, chi
+    return None
+
+
+def _axis_range(spec, name):
+    """(lo, hi) grid bounds for a free axis: from its prior's finite support.
+
+    Only when the prior has no finite support (e.g. an unbounded Gaussian used
+    as an axis) does it fall back to :data:`_DEFAULT_RANGE`, and it warns
+    rather than silently ignoring the prior: a too-narrow grid would
+    extrapolate and bias the fit.
+    """
+    dist = spec.get_distribution(name)
+    bounds = _finite_prior_bounds(dist)
+    if bounds is not None:
+        return bounds
     warnings.warn(
         f"nebular grid: prior for {name!r} ({type(dist).__name__}) exposes no "
         f"finite [lo, hi] support; falling back to default range "
@@ -371,80 +412,144 @@ def _refuse_tabulated_metallicity(model):
     )
 
 
-def _refuse_active_dig_mixing(spec):
-    r"""Refuse DIG mixing, which this grid has no axis for (#2195).
+def _dig_may_be_active(spec) -> bool:
+    """True if DIG mixing may be active: ``neb_dig_frac`` free, or fixed non-zero.
 
-    The reconstruction is :math:`Q_H \times \mathrm{interp}(\ell)` over
-    :data:`_CANDIDATE_AXES`, one photoionization regime evaluated at one
-    ionization parameter. DIG mixing is a second regime,
+    Governs two grid-building decisions (#2222): whether ``neb_logU`` joins
+    ``axis_names`` even when it is itself Fixed (the DIG lookup always needs a
+    second query point distinct from the HII one), and how far the
+    ``neb_logU`` axis range must extend to cover it
+    (:func:`_dig_extended_logU_range`).
 
-    .. math::
-
-        L(\lambda) = (1 - f_{\mathrm{DIG}}) \, L_{\mathrm{HII}}(\lambda, \log U)
-            + f_{\mathrm{DIG}} \, L_{\mathrm{DIG}}(\lambda, \log U + \Delta \log U)
-
-    with :math:`f_{\mathrm{DIG}}` = ``neb_dig_frac`` [dimensionless, in 0 to 1]
-    and :math:`\Delta \log U` = ``neb_dig_delta_logU`` [dex]. Neither parameter
-    is a candidate axis, and the stored :math:`\ell` carries no second regime to
-    mix, so an armed grid returns the HII term alone: both DIG parameters go
-    inert together, silently, wherever the grid answers.
-
-    This is not a dust-free corner. ``must_materialize_sed`` disarms the grid
-    for the **photometry** channel of any chain that reads ``sed_nebular``,
-    which every dusty model does, but the **line** channel reconstructs from
-    the grid whenever one is attached
-    (``SEDModel.predict_line_fluxes``), dusty or not. So the refusal is
-    reachable on dusty and dust-free builds alike, and a fit that reads lines is
-    the case it matters most for.
+    Before #2222 this same predicate (then named ``_refuse_active_dig_mixing``)
+    raised ``DIGNotOnNebularGridError``; the grid now serves DIG mixing via two
+    lookups (:func:`~tengri.components.nebular.dig.mix_dig_grid_reconstruction`)
+    rather than refusing it.
 
     Parameters
     ----------
     spec : Parameters
         The model's parameter specification.
 
-    Raises
-    ------
-    DIGNotOnNebularGridError
-        When ``neb_dig_frac`` is free, or fixed at a non-zero value.
-
-    Notes
-    -----
-    **JIT-compatible**: no; composition-time only.
-
-    References
-    ----------
-    .. [1] L. M. Haffner et al., "The warm ionized medium in spiral galaxies,"
-       Rev. Mod. Phys., 81, 969 (2009).
-       https://doi.org/10.1103/RevModPhys.81.969
-    .. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
-       formation, time variability, and the diffuse ionized gas," MNRAS, 513,
-       2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
+    Returns
+    -------
+    bool
+        Whether ``neb_dig_frac`` can take a nonzero value for this spec.
     """
-    from tengri.config.exceptions import DIGNotOnNebularGridError
-
     if "neb_dig_frac" not in spec.all_params:
-        return
+        return False
     if "neb_dig_frac" in spec.free_params:
-        disposition = "neb_dig_frac is free"
-    else:
-        value = spec.fixed_value("neb_dig_frac")
-        if value is None or float(value) == 0.0:
-            return
-        disposition = f"neb_dig_frac is fixed at {float(value)}"
+        return True
+    value = spec.fixed_value("neb_dig_frac")
+    return value is not None and float(value) != 0.0
 
-    raise DIGNotOnNebularGridError(
-        "the nebular precompute grid cannot represent DIG mixing, and "
-        f"{disposition}. The grid tabulates one photoionization regime over "
-        f"{list(_CANDIDATE_AXES)}; neither neb_dig_frac nor neb_dig_delta_logU "
-        "is an axis, and the stored luminosity-per-Q_H holds no second regime, "
-        "so a reconstruction returns the HII term alone and both DIG parameters "
-        "become inert. Fix (one of):\n"
-        "  1. Turn DIG mixing off for this fit: "
-        "neb={..., 'dig_frac': Fixed(0.0)}, which is the declared default.\n"
-        "  2. Keep DIG mixing and stay on the exact path: drop FeaturePrecomp "
-        "from approx= (WavePrecomp alone is unaffected and still applies), or "
-        "do not call enable_fast_nebular."
+
+def _own_logU_support(spec):
+    """(lo, hi) support of ``neb_logU`` itself: prior bounds if free, else its
+    pinned scalar as a degenerate ``(value, value)`` point.
+
+    The "own" support this model's ``neb_logU`` explores, before any
+    DIG-driven extension (:func:`_dig_extended_logU_range`) widens it.
+    """
+    if "neb_logU" in spec.free_params:
+        return _axis_range(spec, "neb_logU")
+    value = spec.fixed_value("neb_logU")
+    value = NEB_LOGU_DEFAULT if value is None else float(value)
+    return value, value
+
+
+def _dig_delta_logU_support(spec):
+    """(lo, hi) support of ``neb_dig_delta_logU``: prior bounds if free, else
+    its pinned scalar as a degenerate ``(value, value)`` point.
+    """
+    if "neb_dig_delta_logU" not in spec.all_params:
+        return _NEB_DIG_DELTA_LOGU_DEFAULT, _NEB_DIG_DELTA_LOGU_DEFAULT
+    if "neb_dig_delta_logU" not in spec.free_params:
+        value = spec.fixed_value("neb_dig_delta_logU")
+        value = _NEB_DIG_DELTA_LOGU_DEFAULT if value is None else float(value)
+        return value, value
+    dist = spec.get_distribution("neb_dig_delta_logU")
+    bounds = _finite_prior_bounds(dist)
+    if bounds is not None:
+        return bounds
+    warnings.warn(
+        f"nebular grid: prior for 'neb_dig_delta_logU' ({type(dist).__name__}) "
+        f"exposes no finite [lo, hi] support; falling back to its registered "
+        f"range {_DEFAULT_RANGE['neb_dig_delta_logU']}. The neb_logU axis "
+        f"extension for active DIG mixing (#2222) may be too narrow.",
+        stacklevel=3,
     )
+    return _DEFAULT_RANGE["neb_dig_delta_logU"]
+
+
+def _dig_extended_logU_range(own_lo, own_hi, delta_bounds):
+    r"""Extend a ``neb_logU`` range to cover the DIG-shifted query point (#2222).
+
+    DIG mixing evaluates the grid a second time at
+    :math:`\log U + \Delta\log U` (:func:`~tengri.components.nebular.dig.
+    mix_dig_grid_reconstruction`). The returned range is the union of
+    ``(own_lo, own_hi)`` with that range shifted by ``delta_bounds`` (the
+    Minkowski sum of the two intervals), so a subsequent
+    ``jnp.linspace(lo, hi, n)`` axis covers both the HII query point and every
+    DIG query point the model's priors can produce -- never clipping, which
+    :func:`~tengri.utils.grid_interp.interp_nd_pchip` does silently outside the
+    axis and which an earlier probe (kept in the #2222 research notes) measured
+    at 3/10 random seeds giving 5.1e-2 / 4.2e-1 worst-case relative error,
+    versus 1.17e-3 / 1.41e-3 with the range extended (measured on this
+    implementation; see :func:`precompute_nebular_grid`'s Notes).
+
+    Parameters
+    ----------
+    own_lo, own_hi : float
+        ``neb_logU``'s own support (:func:`_own_logU_support`). [log10(U)]
+    delta_bounds : tuple of float
+        ``(lo, hi)`` support of ``neb_dig_delta_logU``
+        (:func:`_dig_delta_logU_support`). [dex]
+
+    Returns
+    -------
+    tuple of float
+        ``(lo, hi)`` extended range. [log10(U)]
+    """
+    delta_lo, delta_hi = delta_bounds
+    lo = min(own_lo, own_lo + delta_lo)
+    hi = max(own_hi, own_hi + delta_hi)
+    return lo, hi
+
+
+def _preserve_spacing_n(base_n, own_lo, own_hi, ext_lo, ext_hi):
+    """Node count for an extended ``neb_logU`` axis that keeps the original spacing.
+
+    When ``neb_logU`` was already going to be a free axis before DIG-awareness
+    widened its range, resolving the wider range at the SAME node count
+    (``base_n``) would thin out the nodes covering the original HII-only
+    region, degrading ``neb_dig_frac = 0`` parity purely because DIG was
+    armed elsewhere in the spec. Scaling the node count by the range ratio
+    keeps the spacing, and hence that parity, unchanged (#2222).
+
+    Parameters
+    ----------
+    base_n : int
+        Node count :func:`precompute_nebular_grid` would have used for
+        ``neb_logU`` absent the DIG extension.
+    own_lo, own_hi : float
+        ``neb_logU``'s own (un-extended) support. [log10(U)]
+    ext_lo, ext_hi : float
+        The DIG-extended range (:func:`_dig_extended_logU_range`). [log10(U)]
+
+    Returns
+    -------
+    int
+        Node count for the extended axis. Equal to ``base_n`` when
+        ``own_lo == own_hi`` (``neb_logU`` is Fixed and joins the axis purely
+        because DIG could be active: there is no pre-existing spacing to
+        preserve), else scaled up to hold the un-extended spacing fixed.
+    """
+    if own_hi <= own_lo:
+        return base_n
+    dx = (own_hi - own_lo) / max(base_n - 1, 1)
+    width = ext_hi - ext_lo
+    return max(_MIN_N_GRID, math.ceil(width / dx) + 1)
 
 
 def precompute_nebular_grid(
@@ -464,6 +569,12 @@ def precompute_nebular_grid(
     the ionizing-spectrum shape is the Q_H-weighted age mix, so re-weighting the SFH
     shifts the forbidden-line emissivity slightly), so the reference SFH is nearly
     but not exactly arbitrary: well inside the interpolation error.
+
+    ``neb_logU`` is also gridded, and its range extended (never fixed at a
+    single point), whenever DIG mixing could be active (``neb_dig_frac`` free,
+    or fixed non-zero; see :func:`_dig_may_be_active`), because
+    :func:`~tengri.components.nebular.dig.mix_dig_grid_reconstruction` needs a
+    second query point at ``neb_logU + neb_dig_delta_logU`` (#2222).
 
     Parameters
     ----------
@@ -525,16 +636,44 @@ def precompute_nebular_grid(
     snapped + linear                  23      0.46 %      0.24 %
     snapped + linear                  30      0.28 %      0.15 %
     ==========================  ========  ==========  ==========
+
+    **DIG mixing (#2222)**: two lookups against this same table (HII at
+    ``neb_logU``, DIG at ``neb_logU + neb_dig_delta_logU``), mixed by
+    ``neb_dig_frac``. Measured worst-case relative error over 10 seeds
+    (FSPS/MILES, dpl SFH, z = 0.15, ``neb_logU`` the only free axis,
+    ``neb_dig_delta_logU = -1.0``, against the exact path): 1.17e-3
+    (photometry) / 1.41e-3 (lines) at ``neb_dig_frac = 0.3`` with the axis
+    extended from ``(-4, -1)`` to ``(-5, -1)`` (14 nodes to 19) to cover both
+    query points, versus 1.72e-3 / 2.04e-3 at ``neb_dig_frac = 0`` (DIG
+    absent, un-extended, 14 nodes) on the same fixture -- DIG mixing costs no
+    accuracy relative to the table's own baseline; both comfortably inside
+    this repository's 3e-2 parity ceiling. Freeing ``neb_dig_frac`` too (same
+    fixture) gives 1.34e-3 / 1.91e-3; freeing ``neb_dig_delta_logU`` as well
+    (the widest extension, ``(-8, -1)``, 32 nodes) and querying at a forced
+    ``neb_dig_frac = 0`` still gives 4.6e-4 / 1.35e-3 -- at least as tight as
+    the baseline, confirming the node-spacing preservation
+    (:func:`_preserve_spacing_n`) does its job. Without the extension,
+    :func:`~tengri.utils.grid_interp.interp_nd_pchip` clips the DIG query
+    silently whenever it falls outside the un-extended axis: an earlier probe
+    (#2222 research notes) measured 3 of 10 seeds at 5.1e-2 / 4.2e-1, an order
+    of magnitude worse. Before #2222 an active ``neb_dig_frac`` raised
+    ``ValueError`` at this call (``DIGNotOnNebularGridError``, now removed);
+    this is the only
+    unsupported-combination refusal this module carried, so removing it
+    leaves ``_refuse_tabulated_metallicity`` as the sole remaining one.
     """
     validate_n_grid(n_grid)
 
     spec = model.spec
     free = set(spec.free_params)
-    axis_names = tuple(p for p in _CANDIDATE_AXES if p in free)
+    dig_active = _dig_may_be_active(spec)
+    # neb_logU joins the axes whenever DIG mixing could be active (#2222),
+    # even when it is itself Fixed: the DIG lookup always needs a second
+    # query point (neb_logU + neb_dig_delta_logU) distinct from the HII one.
+    axis_names = tuple(p for p in _CANDIDATE_AXES if p in free or (dig_active and p == "neb_logU"))
     ranges = ranges or {}
 
     _refuse_tabulated_metallicity(model)
-    _refuse_active_dig_mixing(spec)
 
     met_nodes = _ssp_met_nodes(model) if snap_met_to_ssp_nodes else None
 
@@ -586,18 +725,43 @@ def precompute_nebular_grid(
     # which is why a stand-in serves: and why one already has to, since the
     # whole grid is built at a single sampled SFH for parametric models too.
     ref_params = {**reference_history_params(model, redshift=ref_z), **ref_params}
+    # The table stores ONE photoionization regime per node (pure HII, no DIG):
+    # DIG mixing happens at RECONSTRUCTION time via two lookups into this same
+    # table (dig.py's mix_dig_grid_reconstruction), not by baking a mix into
+    # the node itself. Each per-node build below calls model.predict_state /
+    # predict_line_fluxes on the ORIGINAL (not-yet-grid-attached) chain, which
+    # still applies the exact path's own DIG mix
+    # (mix_dig_emission/mix_dig_line_luminosities) whenever neb_dig_frac is
+    # nonzero -- and ref_params may carry the model's actual Fixed value
+    # (#2222 allows building a grid from a DIG-active model). A Python-literal
+    # 0.0 here makes that mix's own short-circuit fire during every node
+    # build, regardless of the reference model's disposition, so the stored
+    # per-Q_H value is always the undiluted HII term.
+    ref_params["neb_dig_frac"] = 0.0
     log10_ref_divisor = _log10_four_pi_dl2(ref_z)  # observed flux -> luminosity
 
     axes, axis_kinds = [], []
     for name in axis_names:
-        lo, hi = ranges.get(name, _axis_range(spec, name))
+        if name in ranges:
+            lo, hi = ranges[name]
+            n_points = _axis_n(name)
+        elif name == "neb_logU" and dig_active:
+            # Extend to cover the DIG-shifted query point (never clip, never
+            # refuse: #2222), and preserve the node spacing neb_logU would
+            # have had absent DIG so neb_dig_frac=0 parity does not degrade.
+            own_lo, own_hi = _own_logU_support(spec)
+            lo, hi = _dig_extended_logU_range(own_lo, own_hi, _dig_delta_logU_support(spec))
+            n_points = _preserve_spacing_n(_axis_n(name), own_lo, own_hi, lo, hi)
+        else:
+            lo, hi = _axis_range(spec, name)
+            n_points = _axis_n(name)
         if name == "met_logzsol" and met_nodes is not None:
             # knots on the kinks -> the cubic's cross-kink tangent is the error
             # floor, so this axis interpolates linearly (#1020)
-            axes.append(jnp.asarray(_snap_axis_to_nodes(lo, hi, _axis_n(name), met_nodes)))
+            axes.append(jnp.asarray(_snap_axis_to_nodes(lo, hi, n_points, met_nodes)))
             axis_kinds.append("linear")
         else:
-            axes.append(jnp.linspace(lo, hi, _axis_n(name)))
+            axes.append(jnp.linspace(lo, hi, n_points))
             axis_kinds.append("pchip")
     axes = tuple(axes)
     axis_kinds = tuple(axis_kinds)

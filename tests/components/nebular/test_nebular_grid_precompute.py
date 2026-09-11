@@ -32,6 +32,7 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
+from tengri.components.nebular.dig import mix_dig_grid_reconstruction
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.nebular.nebular_grid_precompute import (
     precompute_nebular_grid,
@@ -419,3 +420,345 @@ def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
         f"({worst['uniform']:.2%}) at equal size"
     )
     assert worst["snapped"] < 0.01, f"[OIII] worst-case {worst['snapped']:.2%} exceeds 1 %"
+
+
+# ── DIG mixing on the grid (#2222) ──────────────────────────────────────────
+#
+# Before #2222, arming the grid with an active ``neb_dig_frac`` (free, or
+# fixed non-zero) raised ``DIGNotOnNebularGridError``: the grid tabulated one
+# photoionization regime and had no axis to represent a second one. The grid
+# now extends ``neb_logU``'s axis (never clips, never refuses) to also cover
+# the DIG-shifted query point ``neb_logU + neb_dig_delta_logU``, and mixes two
+# lookups against the SAME table via ``dig.mix_dig_grid_reconstruction``. See
+# ``nebular_grid_precompute._dig_may_be_active`` /
+# ``_dig_extended_logU_range`` / ``_preserve_spacing_n``.
+#
+# The table itself always stores the undiluted HII term per node (build-time
+# forwards force ``neb_dig_frac = 0.0``, see the comment on that line in
+# ``precompute_nebular_grid``): DIG mixing is applied only at reconstruction.
+
+
+def _reconstruct_line_flux(nion, point, table):
+    """3-arg adapter: ``reconstruct_nebular_lines`` at this module's fixed ``Z``.
+
+    ``mix_dig_grid_reconstruction`` expects a 3-arg ``reconstruct(amplitude,
+    point, table)`` (the shape ``reconstruct_nebular_phot`` /
+    ``reconstruct_nebular_restband`` / ``reconstruct_nebular_line_lums``
+    already have); ``reconstruct_nebular_lines`` additionally takes a
+    redshift, so this binds it at the fixture's fixed ``Z``, giving observed
+    flux instead of intrinsic luminosity (matching what
+    ``model.predict_line_fluxes(..., redden=False)`` returns).
+    """
+    return reconstruct_nebular_lines(nion, point, Z, table)
+
+
+def _worst_rel(fast, exact):
+    """Worst-case relative error, ignoring entries below 0.1 % of the peak."""
+    fast = np.asarray(fast)
+    exact = np.asarray(exact)
+    strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
+    return float(np.max(np.abs(fast - exact)[strong] / (np.abs(exact)[strong] + 1e-40)))
+
+
+def _dig_parity(m, table, *, n_seeds, seed0):
+    """Worst-case (photometry, lines) relative error of the two-lookup DIG mix.
+
+    Compares ``mix_dig_grid_reconstruction`` against ``m``'s own exact-path
+    forward (``mix_dig_emission`` / ``mix_dig_line_luminosities``, unaffected
+    by #2222), sampling ``m.spec`` (so ``neb_dig_frac`` / ``neb_dig_delta_logU``
+    take whatever disposition -- Fixed or FREE -- ``m`` was built with).
+    """
+    worst_phot = worst_line = 0.0
+    for i in range(n_seeds):
+        p = dict(m.spec.sample(jax.random.PRNGKey(seed0 + i)))
+        st = m.predict_state(p)
+        exact_phot = np.asarray(st.derived["nebular_phot_lnu_precomp"])
+        log_nion = float(np.asarray(st.derived["log_nion"]))
+        fast_phot = np.asarray(
+            mix_dig_grid_reconstruction(
+                reconstruct_nebular_phot,
+                log_nion,
+                p,
+                table,
+                neb_dig_frac=p["neb_dig_frac"],
+                neb_dig_delta_logU=p["neb_dig_delta_logU"],
+            )
+        )
+        worst_phot = max(worst_phot, _worst_rel(fast_phot, exact_phot))
+
+        exact_line = np.asarray(
+            m.predict_line_fluxes(p, target_wavelengths=_LW, redden=False, state=st)
+        )
+        fast_line = np.asarray(
+            mix_dig_grid_reconstruction(
+                _reconstruct_line_flux,
+                _nion(m, p),
+                p,
+                table,
+                neb_dig_frac=p["neb_dig_frac"],
+                neb_dig_delta_logU=p["neb_dig_delta_logU"],
+            )
+        )
+        worst_line = max(worst_line, _worst_rel(fast_line, exact_line))
+    return worst_phot, worst_line
+
+
+def test_reconstruct_matches_exact_with_dig_mixing_fixed_frac():
+    r"""Two-lookup grid DIG mix matches the exact DIG-mixed forward (#2222).
+
+    ``neb_dig_frac = 0.3`` fixed, ``neb_dig_delta_logU = -1.0`` fixed,
+    ``neb_logU`` the only free axis (``Uniform(-4, -1)``), auto-extended to
+    ``(-5, -1)`` (14 nodes to 19) because DIG could be active. Measured
+    worst-case relative error over 10 seeds against the exact path (this
+    fixture, FSPS/MILES, dpl SFH, z = 0.15): 1.17e-3 (photometry) / 1.41e-3
+    (lines), inside this module's 3e-2 parity ceiling and no worse than the
+    DIG-absent baseline on the SAME fixture (``neb_dig_frac`` pinned at its
+    declared 0.0, un-extended 14-node axis): 1.72e-3 / 2.04e-3.
+    """
+    neb = {
+        "type": "cue",
+        "all_params": Fixed(DEFAULT),
+        "logU": Uniform(-4.0, -1.0),
+        "dig_frac": Fixed(0.3),
+        "dig_delta_logU": Fixed(-1.0),
+    }
+    m = _wave_model(neb, sfh_wild=Fixed(DEFAULT))
+    table = precompute_nebular_grid(m, _LW, n_grid=14)
+    assert table.axis_names == ("neb_logU",), table.axis_names
+    ax = np.asarray(table.axes[0])
+    assert ax.min() == pytest.approx(-5.0, abs=1e-6), f"axis min {ax.min()} != -5.0"
+
+    worst_phot, worst_line = _dig_parity(m, table, n_seeds=10, seed0=700)
+    assert worst_phot < 3e-2, f"DIG-mixed photometry reconstruction off by {worst_phot:.2e}"
+    assert worst_line < 3e-2, f"DIG-mixed line reconstruction off by {worst_line:.2e}"
+
+
+def test_reconstruct_matches_exact_with_dig_mixing_free_frac():
+    """As above, but ``neb_dig_frac`` is FREE and sampled per draw, not pinned.
+
+    Confirms the two-lookup mix and its axis extension hold across the whole
+    ``neb_dig_frac`` prior, not merely at one fixed value.
+    """
+    neb = {
+        "type": "cue",
+        "all_params": Fixed(DEFAULT),
+        "logU": Uniform(-4.0, -1.0),
+        "dig_frac": FREE,
+        "dig_delta_logU": Fixed(-1.0),
+    }
+    m = _wave_model(neb, sfh_wild=Fixed(DEFAULT))
+    table = precompute_nebular_grid(m, _LW, n_grid=14)
+    assert table.axis_names == ("neb_logU",), table.axis_names
+
+    worst_phot, worst_line = _dig_parity(m, table, n_seeds=10, seed0=800)
+    assert worst_phot < 3e-2, f"DIG-mixed photometry reconstruction off by {worst_phot:.2e}"
+    assert worst_line < 3e-2, f"DIG-mixed line reconstruction off by {worst_line:.2e}"
+
+
+def test_dig_extended_axis_preserves_zero_frac_parity():
+    """Extending ``neb_logU`` for DIG must not degrade ``neb_dig_frac = 0`` parity.
+
+    Widening the axis to cover the DIG-shifted query point, at the SAME node
+    count, would thin the nodes covering the original HII-only region and
+    degrade this baseline purely because DIG *could* be active elsewhere in
+    the spec (both ``neb_dig_frac`` and ``neb_dig_delta_logU`` are FREE here,
+    the widest extension this fixture can produce: axis widens from
+    ``(-4, -1)``/14 nodes to ``(-8, -1)``/32 nodes). ``_preserve_spacing_n``
+    scales the node count to hold the pre-extension spacing fixed, so parity
+    at a query with ``neb_dig_frac`` forced to a Python ``0.0`` must match the
+    DIG-absent baseline (1.72e-3 photometry / 2.04e-3 lines, un-extended
+    14-node axis, ``test_reconstruct_matches_exact_with_dig_mixing_fixed_frac``'s
+    docstring), the spacing rule #2222 requires. Measured here: 4.6e-4 / 1.35e-3
+    -- as tight as, or tighter than, the baseline.
+    """
+    neb = {
+        "type": "cue",
+        "all_params": Fixed(DEFAULT),
+        "logU": Uniform(-4.0, -1.0),
+        "dig_frac": FREE,
+        "dig_delta_logU": FREE,
+    }
+    m = _wave_model(neb, sfh_wild=Fixed(DEFAULT))
+    table = precompute_nebular_grid(m, _LW, n_grid=14)
+    assert table.axis_names == ("neb_logU",), table.axis_names
+    ax = np.asarray(table.axes[0])
+    assert ax.min() < -4.0, "axis should be extended: dig_frac is free here"
+
+    worst_phot = worst_line = 0.0
+    for i in range(6):
+        p = dict(m.spec.sample(jax.random.PRNGKey(900 + i)))
+        p["neb_dig_frac"] = 0.0  # Python literal: forces the short-circuit
+        st = m.predict_state(p)
+        exact_phot = np.asarray(st.derived["nebular_phot_lnu_precomp"])
+        log_nion = float(np.asarray(st.derived["log_nion"]))
+        fast_phot = np.asarray(reconstruct_nebular_phot(log_nion, p, table))
+        worst_phot = max(worst_phot, _worst_rel(fast_phot, exact_phot))
+
+        exact_line = np.asarray(
+            m.predict_line_fluxes(p, target_wavelengths=_LW, redden=False, state=st)
+        )
+        fast_line = np.asarray(_reconstruct_line_flux(_nion(m, p), p, table))
+        worst_line = max(worst_line, _worst_rel(fast_line, exact_line))
+
+    assert worst_phot < 3e-2, f"zero-frac photometry parity degraded to {worst_phot:.2e}"
+    assert worst_line < 3e-2, f"zero-frac line parity degraded to {worst_line:.2e}"
+
+
+def test_dig_extends_logU_axis_and_includes_fixed_logU():
+    """``neb_logU``'s axis extends for DIG, and joins the axes even when Fixed.
+
+    With ``neb_logU`` ``Uniform(-4, -1)`` and ``neb_dig_delta_logU`` fixed at
+    -1.0, the built axis low end is -5.0 (own range union the DIG-shifted
+    range). With ``neb_logU`` ``Fixed(-2.5)`` and DIG active, ``neb_logU``
+    still joins ``axis_names``: the DIG lookup always needs a second query
+    point distinct from the HII one.
+    """
+    m_free = _model(
+        {
+            "type": "cue",
+            "all_params": Fixed(DEFAULT),
+            "logU": Uniform(-4.0, -1.0),
+            "dig_frac": Fixed(0.3),
+            "dig_delta_logU": Fixed(-1.0),
+        },
+        sfh_wild=Fixed(DEFAULT),
+    )
+    table_free = precompute_nebular_grid(m_free, _LW, n_grid=14)
+    assert table_free.axis_names == ("neb_logU",)
+    ax = np.asarray(table_free.axes[0])
+    assert ax.min() == pytest.approx(-5.0, abs=1e-6), f"axis min {ax.min()} != -5.0"
+    assert ax.max() == pytest.approx(-1.0, abs=1e-6), f"axis max {ax.max()} != -1.0"
+
+    m_fixed_logu = _model(
+        {
+            "type": "cue",
+            "all_params": Fixed(DEFAULT),
+            "logU": Fixed(-2.5),
+            "dig_frac": Fixed(0.3),
+            "dig_delta_logU": Fixed(-1.0),
+        },
+        sfh_wild=Fixed(DEFAULT),
+    )
+    assert m_fixed_logu.spec.fixed_value("neb_logU") == pytest.approx(-2.5)
+    table_fixed = precompute_nebular_grid(m_fixed_logu, _LW, n_grid=14)
+    assert "neb_logU" in table_fixed.axis_names, (
+        "neb_logU must join the axes purely because DIG could be active, "
+        "even though it is itself Fixed"
+    )
+
+
+def test_dig_grid_reconstruction_is_jittable_and_gradient_safe():
+    """jit + grad through the two-lookup mix, w.r.t. both DIG parameters (#2222)."""
+    m = _model(
+        {
+            "type": "cue",
+            "all_params": Fixed(DEFAULT),
+            "logU": Uniform(-4.0, -1.0),
+            "dig_frac": Fixed(0.3),
+            "dig_delta_logU": Fixed(-1.0),
+        },
+        sfh_wild=Fixed(DEFAULT),
+    )
+    table = precompute_nebular_grid(m, _LW, n_grid=14)
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    nion = _nion(m, p)
+
+    def total_delta(delta):
+        return jnp.sum(
+            mix_dig_grid_reconstruction(
+                _reconstruct_line_flux,
+                nion,
+                p,
+                table,
+                neb_dig_frac=jnp.asarray(0.3),
+                neb_dig_delta_logU=delta,
+            )
+        )
+
+    val = jax.jit(total_delta)(jnp.asarray(-1.0))
+    g = jax.jit(jax.grad(total_delta))(jnp.asarray(-1.0))
+    assert np.isfinite(float(val)) and np.isfinite(float(g))
+
+    def total_frac(frac):
+        return jnp.sum(
+            mix_dig_grid_reconstruction(
+                _reconstruct_line_flux,
+                nion,
+                p,
+                table,
+                neb_dig_frac=frac,
+                neb_dig_delta_logU=jnp.asarray(-1.0),
+            )
+        )
+
+    val2 = jax.jit(total_frac)(jnp.asarray(0.3))
+    g2 = jax.jit(jax.grad(total_frac))(jnp.asarray(0.3))
+    assert np.isfinite(float(val2)) and np.isfinite(float(g2))
+
+
+def test_zero_frac_calls_interpolator_once_per_channel(monkeypatch):
+    """A Python-literal ``neb_dig_frac = 0.0`` must not pay a second interpolation.
+
+    The short-circuit lives in ``dig.py``'s ``_mix_dig_backend_evaluations``;
+    this counts calls into ``interp_nd_pchip`` to prove
+    ``mix_dig_grid_reconstruction`` actually skips the DIG lookup rather than
+    computing and discarding it, when called with a genuine Python ``0.0``.
+
+    **Function-level only.** End to end (``SEDModel.build`` ->
+    ``predict_photometry`` / ``predict_line_fluxes``), ``params`` is always a
+    JAX array or tracer by the time it reaches this call -- never a Python
+    float -- so the short-circuit does not fire there today, mirroring #2221's
+    own measured finding for the exact path (its ``M2`` review note). Measured
+    on a ``Fixed(0.0)`` ``FeaturePrecomp`` cue model, no dust, WavePrecomp
+    photometry + 2 target lines: ``predict_photometry`` makes 4 interpolator
+    calls (2 channels x 2 lookups) and ``predict_line_fluxes`` makes 2 (1
+    channel x 2 lookups) -- twice what this test demonstrates is possible.
+    Not fixed here (tracked as its own issue, alongside #2221's identical gap
+    for the exact path); this test only proves the mixing function's own
+    short-circuit contract.
+    """
+    import tengri.components.nebular.nebular_grid_precompute as ngp
+
+    neb = {
+        "type": "cue",
+        "all_params": Fixed(DEFAULT),
+        "logU": Uniform(-4.0, -1.0),
+        "dig_frac": Fixed(0.3),
+        "dig_delta_logU": Fixed(-1.0),
+    }
+    m = _wave_model(neb, sfh_wild=Fixed(DEFAULT))
+    table = precompute_nebular_grid(m, _LW, n_grid=14)
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    nion = _nion(m, p)
+    log_nion = _log_nion(m, p)
+
+    calls = []
+    real = ngp.interp_nd_pchip
+
+    def _counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(ngp, "interp_nd_pchip", _counting)
+
+    for reconstruct, amplitude in (
+        (ngp.reconstruct_nebular_phot, log_nion),
+        (ngp.reconstruct_nebular_line_lums, nion),
+    ):
+        calls.clear()
+        mix_dig_grid_reconstruction(
+            reconstruct, amplitude, p, table, neb_dig_frac=0.0, neb_dig_delta_logU=-1.0
+        )
+        assert len(calls) == 1, (
+            f"{reconstruct.__name__}: expected exactly one interpolator call at "
+            f"neb_dig_frac=0.0, got {len(calls)}"
+        )
+
+        calls.clear()
+        mix_dig_grid_reconstruction(
+            reconstruct, amplitude, p, table, neb_dig_frac=0.3, neb_dig_delta_logU=-1.0
+        )
+        assert len(calls) == 2, (
+            f"{reconstruct.__name__}: expected two interpolator calls at "
+            f"neb_dig_frac=0.3, got {len(calls)}"
+        )
