@@ -76,6 +76,7 @@ from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
+    ParameterError,
     ParameterMapError,
     TengriIOError,
     warn_measured,
@@ -1894,6 +1895,7 @@ class SEDModel:
 
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
+        self._validate_shock_coverage(spec)
 
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
@@ -3487,6 +3489,139 @@ class SEDModel:
         self._shock_component = getattr(spec, "shock_component", "combined")
 
         return delta
+
+    def _validate_shock_coverage(self, spec) -> None:
+        """Raise/warn when a shock density/B-field value has no grid support.
+
+        A shock build whose ``shock_log_density`` / ``shock_b_over_sqrt_n``
+        value sits in unpopulated MAPPINGS V grid territory predicts an
+        exactly-zero shock spectrum with no error (#2065): the ratio grid is
+        zero-filled at unpopulated (density, B) cells, so the model compiles
+        and runs, it just never contributes shock line flux. Catch this here,
+        at construction, where ``shock_abundance`` is a concrete Python string
+        and raising ``ParameterError`` is legal; the JIT'd predict path
+        cannot raise on a traced value.
+
+        Uses :func:`tengri.components.nebular.shock.population_envelope`, a
+        cheap numpy-only summary of the sparse grid's per-axis coverage (see
+        its docstring for exactly what it does and does not catch: it is not
+        aware of the 2-D coupling between density and B, so a value inside
+        the envelope on one axis can still fall in a locally-unpopulated
+        pocket -- case (c), #2066).
+
+        Parameters
+        ----------
+        spec : Parameters
+            The (already parsed) parameter spec; read only for the
+            ``shock_log_density`` / ``shock_b_over_sqrt_n`` distributions.
+
+        Raises
+        ------
+        ParameterError
+            A ``Fixed`` value lands outside the populated envelope, a free
+            prior's support lies entirely outside it, or the selected
+            (abundance, component) has no populated cells at all.
+
+        Warns
+        -----
+        UserWarning
+            A free prior's support only partially overlaps the populated
+            envelope: usable, but the sampler wastes the dead fraction of its
+            prior mass.
+        """
+        if not self._uses_shock:
+            return
+
+        from tengri.components.nebular.shock import population_envelope
+
+        envelope = population_envelope(self._shock_abundance, self._shock_component)
+        if envelope is None:
+            return  # data/mappings_templates.h5 absent; fallback path has no sparsity to guard
+        dens_lo, dens_hi, b_lo, b_hi = envelope
+
+        where = (
+            f"shock_abundance={self._shock_abundance!r}, shock_component={self._shock_component!r}"
+        )
+        distributions = getattr(spec, "_distributions", {})
+        for name, (lo, hi) in (
+            ("shock_log_density", (dens_lo, dens_hi)),
+            ("shock_b_over_sqrt_n", (b_lo, b_hi)),
+        ):
+            dist = distributions.get(name)
+            if dist is None:
+                continue
+
+            if np.isnan(lo):
+                raise ParameterError(
+                    f"{name} builds a shock component for {where}, which has "
+                    "NO populated MAPPINGS V grid cells at all: every build "
+                    "predicts an exactly-zero shock spectrum (#2065). Choose "
+                    "a different shock_abundance / shock_component, or "
+                    "disable the group (shock={'type': 'none'})."
+                )
+
+            if dist.is_fixed:
+                val = float(dist.value)
+                if not (lo <= val <= hi):
+                    raise ParameterError(
+                        f"{name}={val:.4g} lands outside the populated "
+                        f"MAPPINGS V range [{lo:.4g}, {hi:.4g}] for {where}: "
+                        "this build predicts an exactly-zero shock spectrum "
+                        "with no error (#2065). Set it within the populated "
+                        "range, or pick a different shock_abundance."
+                    )
+                continue
+
+            p_lo, p_hi = float(dist.lo), float(dist.hi)
+            if lo == hi:
+                # Degenerate (single-node) envelope, e.g. the four non-solar
+                # shipped abundances (data only at log_density=0.0): an
+                # interval-vs-interval overlap WIDTH against a point is
+                # always zero, which would read as "entirely outside" even
+                # when the prior does contain that one populated value.
+                # Judge by containment of the point instead.
+                if not (p_lo <= lo <= p_hi):
+                    raise ParameterError(
+                        f"{name}'s free prior [{p_lo:.4g}, {p_hi:.4g}] does "
+                        f"not contain the single populated MAPPINGS V value "
+                        f"({lo:.4g}) for {where}: every draw predicts an "
+                        "exactly-zero shock spectrum (#2065). Include that "
+                        "value in the prior, or pick a different "
+                        "shock_abundance."
+                    )
+                # Only one exact value in a continuous prior works: almost
+                # all of its mass is dead, but not raise-worthy (the point
+                # is reachable, and the smoothing kernel gives partial
+                # credit near it).
+                dead_frac = 1.0
+            else:
+                overlap = max(0.0, min(p_hi, hi) - max(p_lo, lo))
+                width = p_hi - p_lo
+                if overlap <= 0.0:
+                    raise ParameterError(
+                        f"{name}'s free prior [{p_lo:.4g}, {p_hi:.4g}] lies "
+                        f"entirely outside the populated MAPPINGS V range "
+                        f"[{lo:.4g}, {hi:.4g}] for {where}: every draw predicts "
+                        "an exactly-zero shock spectrum (#2065). Narrow the "
+                        "prior to overlap the populated range, or pick a "
+                        "different shock_abundance."
+                    )
+                dead_frac = 1.0 - overlap / width
+            if dead_frac > 1e-9:
+                warn_measured(
+                    f"{name}'s free prior [{p_lo:.4g}, {p_hi:.4g}] extends "
+                    f"{dead_frac:.0%} outside the populated MAPPINGS V range "
+                    f"[{lo:.4g}, {hi:.4g}] for {where}. Draws in the dead "
+                    "region predict an exactly-zero shock spectrum (#2065); "
+                    "the fit is usable but the sampler wastes that fraction "
+                    "of its prior mass.",
+                    dead_fraction=dead_frac,
+                    prior_lo=p_lo,
+                    prior_hi=p_hi,
+                    envelope_lo=lo,
+                    envelope_hi=hi,
+                    stacklevel=3,
+                )
 
     @staticmethod
     def _calibration_param_map(observation):
