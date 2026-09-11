@@ -104,7 +104,7 @@ _SPEC_WAVE = np.linspace(4000.0, 9000.0, 128)
 def _declared_range(pattern: str) -> tuple[str, float, float]:
     """``(name, lo, hi)`` of the widest declared prior matching *pattern*.
 
-    Read from the registry, never transcribed from a grid axis or a fixture: commit
+    Read from the registry, never hand-entered from a grid axis or a fixture: commit
     45741f4cd is the case where a *grid axis* range was used as a prior and the
     two shared no point at all.
     """

@@ -187,8 +187,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.blocks.nlr:nlr_feltre_block",
             "tengri.components.agn.blocks.nlr:nlr_synthesizer_block",
             "tengri.components.agn.blocks.nlr:nlr_synthesizer_spectra_block",
-            "tengri.components.agn.blocks.runner:compose_l_nu",
-            "tengri.components.agn.blocks.torus:skirtor_torus_block",
             "tengri.components.agn.disc:_compute_bh_params",
             "tengri.components.agn.disc:_compute_zone_radii",
             "tengri.components.agn.disc:kubota_done_disc",
@@ -199,6 +197,7 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.fritz:create_fritz_from_grid.fritz_grid",
             "tengri.components.agn.fritz:fritz_sed_from_grid",
             "tengri.components.agn.grahsp.model:compute_grahsp_sed",
+            "tengri.components.agn.kd18_agnfitter:_renormalize",
             "tengri.components.agn.kd_precompute:_compute_bh_and_radii",
             "tengri.components.agn.kd_precompute:kubota_done_disc_preintegrated",
             "tengri.components.agn.qsogen:_qsogen_components",
@@ -207,10 +206,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.skirtor:_skirtor_grid_sed",
             "tengri.components.agn.skirtor:create_skirtor_components_from_grid.skirtor_components",
             "tengri.components.agn.skirtor:create_skirtor_raw_total_from_grid.fn",
-            "tengri.components.agn.skirtor_agnfitter_precompute:build_lookup."
-            "skirtor_agnfitter_phot_collapsed",
-            "tengri.components.agn.skirtor_agnfitter_precompute:"
-            "build_skirtor_agnfitter_photometry_lookup.skirtor_agnfitter_photometry",
             "tengri.components.agn.slone_netzer:slone_netzer_sed_from_grid",
             "tengri.components.agn.torus:create_nenkova_from_grid.nenkova_grid",
             "tengri.components.agn.torus:simple_torus",
