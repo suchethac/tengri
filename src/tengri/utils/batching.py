@@ -40,7 +40,10 @@ __all__ = ["vmap_chunked"]
 # mismatch, an OOM) is a real bug and must propagate: catching it here would
 # silently reclassify it as a fact of life and route around it forever (#1128).
 _NOT_TRACEABLE = (
-    jax.errors.ConcretizationTypeError,  # base of the Tracer*ConversionError family
+    jax.errors.ConcretizationTypeError,
+    jax.errors.TracerArrayConversionError,  # sibling, NOT subclass; np.asarray on jax 0.11 (#2264)
+    jax.errors.TracerBoolConversionError,  # subclass on jax 0.11; listed for family explicitness
+    jax.errors.TracerIntegerConversionError,  # sibling, NOT subclass, on jax 0.11 (#2264)
     jax.errors.UnexpectedTracerError,
     jax.errors.NonConcreteBooleanIndexError,
 )
