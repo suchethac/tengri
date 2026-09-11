@@ -42,6 +42,7 @@ from dataclasses import KW_ONLY, dataclass
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.observation.noise import (
     censored_neg_log_likelihood as _censored_neg_log_lik,
@@ -162,6 +163,37 @@ class GaussianLikelihood:
     def declared_parameters(self):
         return []
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``obs``/``err`` by shape, the rest by content.
+
+        Returns
+        -------
+        tuple
+            Derived from :data:`_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY`.
+
+        Notes
+        -----
+        ``obs``/``err`` are per-galaxy DATA (identical, for the auto-built case,
+        to ``Fitter.data``/``Fitter.noise``): keying them by content would leak
+        data values into ``Fitter._engine_cache_key()``, which must depend only
+        on data SHAPE (#2163 E.5). Every other field is configuration that
+        genuinely changes the likelihood function.
+        """
+        return derive_key(self, _GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "err": shape("per-galaxy data; program shape depends on length, not values"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "sigma_floor": content("fractional systematic floor changes the likelihood"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "obs_key": content("data_args routing key changes which traced input is read"),
+    "err_key": content("data_args routing key changes which traced input is read"),
+    "presence_key": content("presence-masking routing key changes the likelihood"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # 2. Student-t, heavy-tailed
@@ -233,6 +265,27 @@ class StudentTLikelihood:
     def declared_parameters(self):
         return []
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``obs``/``err`` by shape, the rest by content.
+
+        See :meth:`GaussianLikelihood.cache_key` for the rationale.
+        """
+        return derive_key(self, _STUDENT_T_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_STUDENT_T_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "err": shape("per-galaxy data; program shape depends on length, not values"),
+    "dof": content("degrees of freedom changes the likelihood's tail weight"),
+    "f_cal": content("fractional calibration uncertainty is baked into the likelihood"),
+    "f_cal_param": content("routing to a free f_cal parameter changes the graph"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "obs_key": content("data_args routing key changes which traced input is read"),
+    "err_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # 3. Censored, upper / lower limits
@@ -301,6 +354,33 @@ class CensoredLikelihood:
     def declared_parameters(self):
         return []
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``obs``/``err``/``mask`` by shape, the rest by content.
+
+        See :meth:`GaussianLikelihood.cache_key` for the rationale. ``mask``
+        is shape-only for the same reason as ``obs``/``err``: the per-point
+        censoring FLAGS are per-galaxy data (``Fitter.data_mask``'s own
+        PRESENCE, not its values, is what selects this likelihood class at
+        all -- see ``ENGINE_POLICY['data_mask']``).
+        """
+        return derive_key(self, _CENSORED_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_CENSORED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "err": shape("per-galaxy data; program shape depends on length, not values"),
+    "mask": shape("per-galaxy censoring flags; PRESENCE (not values) selects this class"),
+    "f_cal": content("fractional calibration uncertainty is baked into the likelihood"),
+    "f_cal_param": content("routing to a free f_cal parameter changes the graph"),
+    "dof": content("Student-t vs Gaussian for detected points changes the likelihood"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "obs_key": content("data_args routing key changes which traced input is read"),
+    "err_key": content("data_args routing key changes which traced input is read"),
+    "mask_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # 4. Multivariate Gaussian, correlated noise
@@ -356,3 +436,26 @@ class MultivariateGaussianLikelihood:
 
     def declared_parameters(self):
         return []
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``obs`` by shape, the rest by content.
+
+        ``cov_inv`` is content, not shape: unlike ``obs``, it is built once
+        from ``Observation.spectroscopy.covariance`` -- a per-MODEL, not
+        per-galaxy, structural input -- so keying it by content is safe
+        (over-keying, at worst) and correct if a future caller ever DOES
+        vary it per Fitter.
+        """
+        return derive_key(self, _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "cov_inv": content(
+        "the noise covariance basis; a per-model structural input, not per-galaxy data"
+    ),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "obs_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}

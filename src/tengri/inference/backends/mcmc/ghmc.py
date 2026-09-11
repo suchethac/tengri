@@ -26,6 +26,7 @@ import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
+    _ADAPT_IRRELEVANT,
     _MEADS_JITTER_SCALE,
     _get_cached_adaptation,
     _get_flat_logdensity,
@@ -34,6 +35,7 @@ from tengri.inference.backends.mcmc._shared import (
     _resolve_meads_ensemble,
     _set_cached_adaptation,
     _vmap_chains,
+    adaptation_method_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -226,28 +228,45 @@ def run_ghmc(
     # Namespaced to this backend, not "hmc": the cache is keyed by tuple, so borrowing
     # another sampler's prefix is a collision waiting on the next field either side
     # adds. GHMC tunes a different kernel and must not inherit HMC's step size.
-    # Every knob that *produces* the adaptation belongs in the key -- warmup length,
-    # ensemble shape, dispersion, and any hand-pinned alpha/delta -- because leaving
-    # one out makes it silently inert on a model that already holds an entry.
-    # ``target_accept_rate`` is deliberately absent: MEADS does not read it, and the
-    # call above warns rather than pretending it did.
+    # adaptation_method_key binds every real run_ghmc parameter that produces the
+    # adaptation -- warmup length, ensemble shape, dispersion, any hand-pinned
+    # alpha/delta -- via _ADAPT_IRRELEVANT, so a knob nobody excludes cannot go
+    # silently inert on a model that already holds an entry (#2163).
+    # ``target_accept_rate`` is excluded here, on top of the shared ledger: MEADS
+    # does not read it, and the call above warns rather than pretending it did.
+    # ``ensemble_size`` is RESOLVED from n_ensemble/n_chains/n_folds, not itself a
+    # call kwarg, so it stays an explicit extra entry.
     #
     # The trailing ``True`` pins "always diagonal" and must stay both LAST and on
     # this one line: #1454 asserts on this statement as text, matching up to the
     # first ``)`` and reading the final element. That is what keeps GHMC out of
     # the dense-mass advisory, so the tuning rides in a single grouped element
     # rather than being spliced in after it.
-    tuning = (
-        int(n_warmup),
-        int(ensemble_size),
-        int(n_folds),
-        float(ensemble_jitter),
-        None if alpha is None else float(alpha),
-        None if delta is None else float(delta),
-        None if low_rank_rank is None else int(low_rank_rank),
-        float(low_rank_window_fraction),
+    tuning = adaptation_method_key(
+        "ghmc",
+        run_ghmc,
+        dict(
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            n_chains=n_chains,
+            n_ensemble=n_ensemble,
+            n_folds=n_folds,
+            ensemble_jitter=ensemble_jitter,
+            alpha=alpha,
+            delta=delta,
+            low_rank_rank=low_rank_rank,
+            low_rank_window_fraction=low_rank_window_fraction,
+            target_accept_rate=target_accept_rate,
+            verbose=verbose,
+        ),
+        exclude={
+            **_ADAPT_IRRELEVANT,
+            "target_accept_rate": "MEADS does not read it; the call above warns "
+            "rather than pretending it did",
+        },
     )
-    adapt_key = ("ghmc", tuning, True)
+    adapt_key = ("ghmc", ensemble_size, tuning, True)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically, cache presence is
