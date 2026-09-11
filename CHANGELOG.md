@@ -64,17 +64,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   re-emission pool receives. A source whose screen choice is `"none"` is
   unattenuated and so contributes exactly zero to the integral, with no
   separate on/off branch needed.
-- `import tengri` and `tengri.utils.devices.setup_jax` now set
-  `jax_default_matmul_precision="highest"` themselves whenever x64 ends up off
-  via `JAX_ENABLE_X64` or `setup_jax(enable_x64=False)`, and
-  `JAX_DEFAULT_MATMUL_PRECISION` is not already set, so a float32 session
-  selected either of those two ways no longer silently gets TF32 matmuls on
-  Ampere+ (measured 4.5% error on Fisher-matrix parameter error bars). CPU is
-  unaffected (no TF32 path); an explicit `JAX_DEFAULT_MATMUL_PRECISION` always
-  wins. Does not cover an ad hoc `with jax.enable_x64(False): ...` block left
-  under an x64-on environment/global default -- that moment is invisible to
-  this mechanism, and `test_fisher_float32.py`, which uses exactly that
-  pattern, still fails on CUDA when run without `JAX_ENABLE_X64` set (#2022).
+- `import tengri` raises the default matmul precision to `"highest"` at
+  import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
+  set or the live config already holds a value; `tengri.utils.devices.setup_jax`
+  mirrors it. On Ampere+, XLA otherwise lowers float32 matmuls to TF32
+  (measured 4.5% error on Fisher-matrix parameter error bars); the knob only
+  affects float32 matmuls, so this is a no-op for a float64 session and for
+  CPU (no TF32 path), and measured zero speed cost. Being unconditional also
+  covers a float32 arm entered later through a bare
+  `with jax.enable_x64(False): ...` while the process default stays x64-on --
+  exactly the pattern `test_fisher_float32.py`'s own float32 arm uses. An
+  explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
 
 ### Fixed
 

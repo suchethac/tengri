@@ -1,13 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``import tengri`` raises matmul precision when x64 is off (#2022).
+"""``import tengri`` raises matmul precision at import, unconditionally (#2022).
 
 On Ampere and later, XLA lowers float32 matmuls to TF32 (10-bit mantissa
 against float32's 24) unless ``jax_default_matmul_precision`` is set to
 ``"highest"``. tengri's own float32 numerics are calibrated on the full
-float32 path: measured 4.5% error on Fisher-matrix parameter error bars.
-Since ``import tengri`` already knows when x64 ends up off (#1840), it raises
-matmul precision itself at that moment rather than leaving every float32
-session to rediscover the hazard on a GPU.
+float32 path: measured 4.5% error on Fisher-matrix parameter error bars, and
+zero speed cost from raising the precision.
+
+``import tengri`` raises it regardless of the x64 request: the knob only
+governs how float32 matmuls lower (TF32 is a float32-adjacent format), so it
+changes nothing for a float64 session, and setting it only when x64 ends up
+off at import would miss every float32 arm entered later through a bare
+``with jax.enable_x64(False): ...`` while the process default stays x64-on
+-- exactly the pattern ``test_fisher_float32.py``'s own float32 arm uses.
 
 These run in subprocesses for the same reason as
 ``test_x64_env_override.py``: the behavior under test is import-time and
@@ -84,6 +89,14 @@ _REPORT = """
 """
 
 
+def test_matmul_precision_defaults_to_highest_when_x64_is_on():
+    """x64 on (the default), env unset -- tengri raises matmul precision anyway."""
+    env = _env(JAX_ENABLE_X64=None, JAX_DEFAULT_MATMUL_PRECISION=None)
+    out = _probe(env, _REPORT).stdout
+    assert "X64 True" in out, f"x64 default was lost:\n{out}"
+    assert "MATMUL highest" in out, f"matmul precision was not raised:\n{out}"
+
+
 def test_matmul_precision_defaults_to_highest_when_x64_is_off():
     """x64 off, env unset -- tengri raises matmul precision itself."""
     env = _env(JAX_ENABLE_X64="0", JAX_DEFAULT_MATMUL_PRECISION=None)
@@ -93,56 +106,56 @@ def test_matmul_precision_defaults_to_highest_when_x64_is_off():
 
 
 def test_explicit_matmul_precision_env_wins():
-    """x64 off, env set to something else -- the user's choice survives."""
-    env = _env(JAX_ENABLE_X64="0", JAX_DEFAULT_MATMUL_PRECISION="default")
-    out = _probe(env, _REPORT).stdout
-    assert "X64 False" in out, f"x64 was not honored as off:\n{out}"
-    assert "MATMUL default" in out, f"tengri overrode the user's explicit setting:\n{out}"
+    """env set to something else -- the user's choice survives, x64 on or off."""
+    for x64_request in ("0", None):
+        env = _env(JAX_ENABLE_X64=x64_request, JAX_DEFAULT_MATMUL_PRECISION="default")
+        out = _probe(env, _REPORT).stdout
+        assert "MATMUL default" in out, (
+            f"tengri overrode the user's explicit setting (JAX_ENABLE_X64={x64_request!r}):\n{out}"
+        )
 
 
-def test_matmul_precision_untouched_when_x64_is_on():
-    """x64 on (the default) -- tengri leaves matmul precision alone."""
-    env = _env(JAX_ENABLE_X64=None, JAX_DEFAULT_MATMUL_PRECISION=None)
-    out = _probe(env, _REPORT).stdout
-    assert "X64 True" in out, f"x64 default was lost:\n{out}"
-    assert "MATMUL None" in out, f"tengri set matmul precision even though x64 stayed on:\n{out}"
-
-
-def test_setup_jax_raises_matmul_precision_when_x64_is_disabled():
-    """``setup_jax(enable_x64=False)`` mirrors the import-time default."""
-    env = _env(JAX_ENABLE_X64=None, JAX_DEFAULT_MATMUL_PRECISION=None)
-    out = _probe(
-        env,
-        """
-        import warnings
-        warnings.simplefilter("ignore")
-        import jax
-        import tengri
-        print("TENGRI_FILE", tengri.__file__)
-        from tengri.utils.devices import setup_jax
-        setup_jax(enable_x64=False, platform="cpu")
-        print("X64", jax.config.jax_enable_x64)
-        print("MATMUL", jax.config.jax_default_matmul_precision)
-        """,
-    ).stdout
-    assert "X64 False" in out, f"setup_jax did not disable x64:\n{out}"
-    assert "MATMUL highest" in out, f"setup_jax did not raise matmul precision:\n{out}"
+def test_setup_jax_raises_matmul_precision_regardless_of_enable_x64():
+    """``setup_jax`` mirrors the import-time default for both ``enable_x64`` values."""
+    for enable_x64 in (True, False):
+        env = _env(JAX_ENABLE_X64=None, JAX_DEFAULT_MATMUL_PRECISION=None)
+        out = _probe(
+            env,
+            f"""
+            import warnings
+            warnings.simplefilter("ignore")
+            import jax
+            import tengri
+            print("TENGRI_FILE", tengri.__file__)
+            from tengri.utils.devices import setup_jax
+            setup_jax(enable_x64={enable_x64}, platform="cpu")
+            print("X64", jax.config.jax_enable_x64)
+            print("MATMUL", jax.config.jax_default_matmul_precision)
+            """,
+        ).stdout
+        assert f"X64 {enable_x64}" in out, f"setup_jax did not set x64={enable_x64}:\n{out}"
+        assert "MATMUL highest" in out, (
+            f"setup_jax(enable_x64={enable_x64}) did not raise matmul precision:\n{out}"
+        )
 
 
 def test_setup_jax_respects_explicit_matmul_precision_env():
-    """``setup_jax(enable_x64=False)`` still lets an explicit env value win."""
-    env = _env(JAX_ENABLE_X64=None, JAX_DEFAULT_MATMUL_PRECISION="default")
-    out = _probe(
-        env,
-        """
-        import warnings
-        warnings.simplefilter("ignore")
-        import jax
-        import tengri
-        print("TENGRI_FILE", tengri.__file__)
-        from tengri.utils.devices import setup_jax
-        setup_jax(enable_x64=False, platform="cpu")
-        print("MATMUL", jax.config.jax_default_matmul_precision)
-        """,
-    ).stdout
-    assert "MATMUL default" in out, f"setup_jax overrode the user's explicit setting:\n{out}"
+    """``setup_jax`` still lets an explicit env value win, for either ``enable_x64``."""
+    for enable_x64 in (True, False):
+        env = _env(JAX_ENABLE_X64=None, JAX_DEFAULT_MATMUL_PRECISION="default")
+        out = _probe(
+            env,
+            f"""
+            import warnings
+            warnings.simplefilter("ignore")
+            import jax
+            import tengri
+            print("TENGRI_FILE", tengri.__file__)
+            from tengri.utils.devices import setup_jax
+            setup_jax(enable_x64={enable_x64}, platform="cpu")
+            print("MATMUL", jax.config.jax_default_matmul_precision)
+            """,
+        ).stdout
+        assert "MATMUL default" in out, (
+            f"setup_jax(enable_x64={enable_x64}) overrode the user's explicit setting:\n{out}"
+        )

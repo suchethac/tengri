@@ -152,10 +152,11 @@ vectorized backends that completes — with the convergence caveat above.
 
 ## float32 on CUDA: the matmul precision is set automatically
 
-`import tengri` sets `jax_default_matmul_precision="highest"` itself whenever
-x64 ends up off (`JAX_ENABLE_X64=0`, or `setup_jax(enable_x64=False)`) and you
-have not already set `JAX_DEFAULT_MATMUL_PRECISION` yourself (#2022). To
-override, set the environment variable before import:
+`import tengri` raises the default matmul precision to `"highest"` at import,
+unconditionally — regardless of whether the session ends up float32 or
+float64 — unless `JAX_DEFAULT_MATMUL_PRECISION` is already set, or the live
+JAX config already holds a value. `setup_jax` (`tengri.utils.devices`) mirrors
+it. Override with the environment variable before import:
 
 ```bash
 export JAX_DEFAULT_MATMUL_PRECISION=default  # or any other value; your choice wins
@@ -168,18 +169,15 @@ alone does **not** fix it: XLA chooses its own algorithm, so the JAX-level knob 
 the one that binds. It costs no measurable speed, since float32's advantage here is
 halved memory traffic rather than tensor cores.
 
-**This only covers the two documented ways to select float32** —
-`JAX_ENABLE_X64=0` at import and `setup_jax(enable_x64=False)` — because those
-are the only two moments tengri can see the choice being made. A bare
-`with jax.enable_x64(False): ...` around a snippet, with the environment/global
-default left at x64-on, is invisible to this mechanism: matmul precision is
-whatever it was left at, so that snippet can still silently run its float32
-arm on TF32. The Fisher-matrix test itself uses exactly that pattern (see
-`tests/regression/precision/test_fisher_float32.py`) and still fails the
-4.5%-error-bars assertion on CUDA when run without `JAX_ENABLE_X64` set in the
-environment — set the env var, call `setup_jax`, or set
-`JAX_DEFAULT_MATMUL_PRECISION=highest` yourself around an ad hoc
-`enable_x64(False)` block.
+The setting is unconditional on purpose: `jax_default_matmul_precision` only
+governs how *float32* matmuls lower (TF32 is a float32-adjacent format), so
+raising it is a no-op for a float64 session — nothing to trade away by doing
+it every time. That also means it protects a float32 arm entered later
+through a bare `with jax.enable_x64(False): ...`, with the process default
+left at x64-on, which an x64-state-gated version would miss. The Fisher-matrix
+test's own float32 arm uses exactly that pattern
+(`tests/regression/precision/test_fisher_float32.py`), and now passes on CUDA
+with no `JAX_ENABLE_X64` set in the environment at all.
 
 One float32 caveat on CUDA beyond that:
 
