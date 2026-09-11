@@ -204,7 +204,7 @@ JAX_PLATFORMS=cuda XLA_PYTHON_CLIENT_PREALLOCATE=false \
 with **no** `JAX_ENABLE_X64` in the environment: `tests/conftest.py` forces x64 on
 and each test toggles float32 itself, so `JAX_ENABLE_X64=0` makes the float64
 *reference* arms run in float32 (~27 spurious failures). Measured 2026-09-12 on an
-RTX 3060 (jaxlib 0.11.0): __CUDA_PRECISION__.
+RTX 3060 (jaxlib 0.11.0), on the tree carrying #2279, #2284 and #2304: 730 passed, 16 skipped, 6 xfailed, 0 failed — the same counts as the CPU run.
 
 float32 geoVI with marginalized emission lines used to fail outright on CUDA
 (`marginalize_emission_lines` built a degenerate `(n_lines, n_lines)` GEMM via

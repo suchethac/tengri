@@ -1398,8 +1398,9 @@ sites), #2300 (a stale parity reference read as a device defect); and #2304 (#22
 
 - `tests/regression/precision` on CPU: 730 passed, 16 skipped, 6 xfailed, 0 unexpected XPASS.
 - The same tree on CUDA with **no** `JAX_ENABLE_X64` / `JAX_DEFAULT_MATMUL_PRECISION` in the
-  environment: 727 passed, 16 skipped, 6 xfailed; the three failures were two keyword-only
-  calls fixed on the stack and #2293 (below).
+  environment: 730 passed, 16 skipped, 6 xfailed, 0 failed on the final tree (#2279, #2284,
+  #2304 merged locally; 38 min on the RTX 3060). The first CUDA pass had read 727 + 3: two
+  keyword-only calls, fixed on the stack, and #2293 (below).
 - **The criterion itself**, pure float32 (`JAX_ENABLE_X64=0` before Python) against a float64
   process, converged L-BFGS-B MAP from the shared truth, SNR 30, z = 0.1:
 
