@@ -366,13 +366,25 @@ def _eline_inputs():
     )
 
 
+# These two also cover a second, CUDA-only defect (#2023): the normal-equation
+# GEMM `marginalize_emission_lines` used to build with `g.T @ g` hit "GEMM is
+# not supported by cublasLt and legacy cublas fallback is removed" on JAX
+# 0.11 -- reachable here because this test suite forces x64 on globally
+# (`tests/conftest.py`) and only the `_f32` helper flips it off, locally,
+# around the call, so the operands arrived float64-valued and got truncated
+# at the jit boundary. See "CUDA GEMM lowering (#2023)" in
+# `marginalize_emission_lines`'s docstring for that fix. `_eline_inputs()` is
+# called from inside `run()`, i.e. inside the `_f32` context below, rather
+# than before it, so the operands are genuinely float32 from construction:
+# built outside that context, on a backend with no float64 at all (Apple MPS
+# via jax-mps), the `jnp.full`/`jnp.asarray` calls in `_eline_inputs()` raise
+# before either test reaches `marginalize_emission_lines`.
 def test_marginalize_emission_lines_is_finite_in_float32():
     """All three outputs must be finite at a real spectroscopic sigma."""
     from tengri.observation.eline_marginalization import marginalize_emission_lines
 
-    residual, noise, design = _eline_inputs()
-
     def run():
+        residual, noise, design = _eline_inputs()
         ln_l, a_hat, a_cov = marginalize_emission_lines(residual, noise, design)
         return jnp.concatenate([jnp.atleast_1d(ln_l), a_hat, a_cov.ravel()])
 
@@ -392,9 +404,8 @@ def test_marginalize_emission_lines_gradient_is_finite_in_float32():
     """Its docstring promises gradient-safety; hold it to that in float32."""
     from tengri.observation.eline_marginalization import marginalize_emission_lines
 
-    residual, noise, design = _eline_inputs()
-
     def run():
+        residual, noise, design = _eline_inputs()
         return jax.grad(lambda r: marginalize_emission_lines(r, noise, design)[0])(residual)
 
     got = np.asarray(_f32(run), dtype=np.float64)

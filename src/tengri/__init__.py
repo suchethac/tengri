@@ -168,6 +168,23 @@ elif _X64_REQUEST.strip().lower() in {"0", "false", "no", "off"}:
 
     _install_x64_guard()
 
+    # On Ampere+, XLA lowers float32 matmuls to TF32 (10-bit mantissa) unless
+    # told otherwise, and tengri's float32 numerics are calibrated on the full
+    # 24-bit float32 path: measured 4.5% error on Fisher-matrix parameter error
+    # bars (#2022). This is unconditional on backend -- CPU has no TF32 path,
+    # so the config write is simply a no-op there -- and never calls
+    # jax.devices(), which would pin the backend before tengri finishes
+    # importing. An explicit JAX_DEFAULT_MATMUL_PRECISION in the environment
+    # always wins.
+    _matmul_precision_note = ""
+    if "JAX_DEFAULT_MATMUL_PRECISION" not in _os.environ:
+        jax.config.update("jax_default_matmul_precision", "highest")
+        _matmul_precision_note = (
+            " Matmul precision has also been raised to 'highest' so Ampere+ "
+            "GPUs do not silently lower float32 matmuls to TF32 (#2022); set "
+            "JAX_DEFAULT_MATMUL_PRECISION yourself to override."
+        )
+
     _warnings.warn(
         f"JAX_ENABLE_X64={_X64_REQUEST}: tengri is honoring your request for "
         "float32 and is NOT enabling 64-bit precision. Cosmological distances "
@@ -175,7 +192,7 @@ elif _X64_REQUEST.strip().lower() in {"0", "false", "no", "off"}:
         "code that forms d_L^2 directly will produce inf. tengri's own "
         "projection avoids it by applying (1+z)/(4*pi*d_L^2) as a log10 "
         "offset, but third-party code may not. Unset JAX_ENABLE_X64 to "
-        "restore the float64 default.",
+        "restore the float64 default." + _matmul_precision_note,
         UserWarning,
         stacklevel=2,
     )

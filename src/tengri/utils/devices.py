@@ -28,7 +28,10 @@ def setup_jax(
     platform : str, optional
         Force platform: "cpu", "gpu", "tpu". If None, auto-detect.
     enable_x64 : bool
-        Enable 64-bit precision (recommended for SED fitting).
+        Enable 64-bit precision (recommended for SED fitting). Passing
+        ``False`` also raises ``jax_default_matmul_precision`` to
+        ``"highest"``, unless ``JAX_DEFAULT_MATMUL_PRECISION`` is already set,
+        so float32 matmuls do not silently lower to TF32 on Ampere+ (#2022).
     gpu_memory_fraction : float, optional
         Fraction of GPU memory to use (0-1). If None, use JAX default.
         Set to e.g. 0.8 to leave room for other processes.
@@ -77,6 +80,14 @@ def setup_jax(
     import jax
 
     jax.config.update("jax_enable_x64", enable_x64)
+
+    # Mirror tengri/__init__.py's import-time default (#2022): on Ampere+, XLA
+    # lowers float32 matmuls to TF32 unless told otherwise, at a measured 4.5%
+    # cost on Fisher-matrix parameter error bars. Unconditional on backend --
+    # CPU has no TF32 path, so this is a no-op there -- and an explicit
+    # JAX_DEFAULT_MATMUL_PRECISION in the environment always wins.
+    if not enable_x64 and "JAX_DEFAULT_MATMUL_PRECISION" not in os.environ:
+        jax.config.update("jax_default_matmul_precision", "highest")
 
 
 def device_info() -> dict:

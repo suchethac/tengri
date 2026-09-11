@@ -64,6 +64,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   re-emission pool receives. A source whose screen choice is `"none"` is
   unattenuated and so contributes exactly zero to the integral, with no
   separate on/off branch needed.
+- `import tengri` and `tengri.utils.devices.setup_jax` now set
+  `jax_default_matmul_precision="highest"` themselves whenever x64 ends up off
+  via `JAX_ENABLE_X64` or `setup_jax(enable_x64=False)`, and
+  `JAX_DEFAULT_MATMUL_PRECISION` is not already set, so a float32 session
+  selected either of those two ways no longer silently gets TF32 matmuls on
+  Ampere+ (measured 4.5% error on Fisher-matrix parameter error bars). CPU is
+  unaffected (no TF32 path); an explicit `JAX_DEFAULT_MATMUL_PRECISION` always
+  wins. Does not cover an ad hoc `with jax.enable_x64(False): ...` block left
+  under an x64-on environment/global default -- that moment is invisible to
+  this mechanism, and `test_fisher_float32.py`, which uses exactly that
+  pattern, still fails on CUDA when run without `JAX_ENABLE_X64` set (#2022).
 
 ### Fixed
 
@@ -78,6 +89,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   apart. `tests/regression/bug/test_bug_2223_line_screen_kwargs.py::test_fallback_is_actually_exercised_by_fast_nebular`
   tightens from `rtol=2e-4` to `rtol=1e-10` now that both paths agree on the
   identical wavelength.
+- `marginalize_emission_lines` no longer crashes float32 geoVI on CUDA. Its
+  `(n_lines, n_lines)` normal-equation GEMM (`g.T @ g`, degenerate at the
+  handful of emission lines this is ever called with) hit "GEMM is not
+  supported by cublasLt and legacy cublas fallback is removed" under JAX
+  0.11 whenever the operands arrived float64-valued and were traced under
+  x64 disabled. Replaced with an explicit broadcast-multiply-sum, which
+  never lowers to a GEMM; float64 CPU output is bit-identical to the matmul
+  it replaced (rtol 1e-12) (#2023).
 
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
