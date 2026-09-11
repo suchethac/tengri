@@ -110,6 +110,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
@@ -1079,3 +1080,51 @@ class CloudyGridBackend:
 
         # Convert from internal Lsun/Hz to erg/s/Hz
         return neb_sed * _LSUN_ERG
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this backend's structure.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from the loaded grid and identity flags.
+            Triweight bin edges and SSP-derived Q_H tables are excluded:
+            both are deterministic functions of ``grid`` and ``ssp_data``
+            (content-keyed here and at the model level, respectively).
+        """
+        return derive_key(self, _CLOUDY_GRID_BACKEND_CACHE_KEY_POLICY)
+
+
+_CLOUDY_GRID_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
+    "name": content("backend identity string"),
+    "has_free_params": content("whether ionization params are fittable"),
+    "has_continuum": content("whether the backend publishes a continuum"),
+    "_grid_interp": content("interpolation mode changes the emitted nebular SED"),
+    "_grid_scatter": content("triweight kernel bandwidth changes the emitted nebular SED"),
+    "grid": content("CLOUDY grid tables define the emitted nebular emission"),
+    "_max_neb_log_age": content("young-age cutoff changes which SSP bins contribute"),
+    "_edges_z_line": exclude("triweight bin edges, a deterministic function of the grid"),
+    "_edges_age_line": exclude("triweight bin edges, a deterministic function of the grid"),
+    "_edges_u_line": exclude("triweight bin edges, a deterministic function of the grid"),
+    "_edges_z_cont": exclude("triweight bin edges, a deterministic function of the grid"),
+    "_edges_age_cont": exclude("triweight bin edges, a deterministic function of the grid"),
+    "_edges_u_cont": exclude("triweight bin edges, a deterministic function of the grid"),
+    "_qh_table": exclude(
+        "Q_H precompute table, a deterministic function of ssp_data "
+        "(content-keyed at the model level) and grid (content-keyed above)"
+    ),
+    "_log_qh_scale": exclude("normalization of _qh_table, same derivation"),
+    "_qh_log_met": exclude("stashed ssp_data.ssp_lgmet, already content-keyed at the model level"),
+    "_qh_log_age": exclude("stashed ssp_data age grid, already content-keyed at the model level"),
+    "_young_idx": exclude("indices into the age grid above, same derivation"),
+    "_n_young": exclude("count derived from _young_idx, same derivation"),
+    "_preint_continuum": exclude(
+        "photometry preintegration cache: a build-time optimization derived "
+        "from the grid and the model's own filters, both already keyed elsewhere"
+    ),
+    "_preint_lines": exclude(
+        "photometry preintegration cache: a build-time optimization derived "
+        "from the grid and the model's own filters, both already keyed elsewhere"
+    ),
+    "_has_preint_photometry": exclude("flag mirroring the preintegration cache above"),
+}

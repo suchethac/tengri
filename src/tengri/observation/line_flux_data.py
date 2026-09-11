@@ -28,6 +28,7 @@ import dataclasses
 import jax.numpy as jnp
 import jax.scipy.special as jsp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.observation.line_list import _DEFAULT_OPTICAL_LINES
 
 _NAME_TO_WAVELENGTH: dict[str, float] = {t[0]: t[1] for t in _DEFAULT_OPTICAL_LINES}
@@ -146,6 +147,23 @@ class LineFluxData:
             if bool(jnp.any(both)):
                 bad = [nm for nm, b in zip(self.names, both) if bool(b)]
                 raise ValueError(f"lines marked as BOTH upper and lower limit: {bad}, pick one.")
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this line flux data.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from line names, wavelengths, limit masks, and array shapes.
+
+        Notes
+        -----
+        Line names, wavelengths, and limit flags are keyed by content as they
+        define the likelihood function. Flux and error values are keyed by
+        shape only (array values don't affect the program, only the per-galaxy
+        data does).
+        """
+        return derive_key(self, _LINE_FLUX_DATA_CACHE_KEY_POLICY)
 
     @property
     def limit_mask(self) -> jnp.ndarray | None:
@@ -341,3 +359,13 @@ class LineFluxData:
 
         """
         return f"{self.n_lines} lines ({', '.join(self.names)})"
+
+
+_LINE_FLUX_DATA_CACHE_KEY_POLICY: KeyPolicy = {
+    "names": content("line names determine the likelihood function"),
+    "fluxes": shape("per-galaxy data, not part of the structural program"),
+    "errors": shape("per-galaxy data, not part of the structural program"),
+    "wavelengths": content("line wavelengths determine the likelihood function"),
+    "is_upper_limit": content("upper limit flags define the likelihood function"),
+    "is_lower_limit": content("lower limit flags define the likelihood function"),
+}

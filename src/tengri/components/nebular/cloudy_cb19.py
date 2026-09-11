@@ -159,6 +159,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
@@ -1394,3 +1395,47 @@ class CB19Backend:
             f"CB19Backend(sed_type={self.sed_type!r}, imf={self.imf!r}, "
             f"mup={self.mup}, hbfrac={self.hbfrac})"
         )
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this backend's structure.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from the loaded grid and configuration.
+            SSP-derived Q_H tables and the photometry preintegration cache
+            are excluded: both are deterministic functions of ``grid``
+            and ``ssp_data``, content-keyed here and at the model level.
+        """
+        return derive_key(self, _CB19_BACKEND_CACHE_KEY_POLICY)
+
+
+_CB19_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
+    "has_continuum": content("whether the backend publishes a continuum"),
+    "sed_type": content("ionizing SED type selects a different grid slice"),
+    "imf": content("IMF selects a different grid slice"),
+    "mup": content("upper stellar mass limit selects a different grid slice"),
+    "hbfrac": content("radiation- vs matter-bounded fraction changes emitted lines"),
+    "grid_path": content("grid file identity"),
+    "grid": content("CB19 CLOUDY grid tables define the emitted nebular emission"),
+    "_log_hb_per_qh": exclude("scalar read off grid.log_hb_per_qh, already content-keyed"),
+    "_max_neb_log_age": content("young-age cutoff changes which SSP bins contribute"),
+    "_qh_table": exclude(
+        "Q_H precompute table, a deterministic function of ssp_data "
+        "(content-keyed at the model level) and grid (content-keyed above)"
+    ),
+    "_qh_log_met": exclude("stashed ssp_data.ssp_lgmet, already content-keyed at the model level"),
+    "_qh_log_age": exclude("stashed ssp_data age grid, already content-keyed at the model level"),
+    "_young_idx": exclude("indices into the age grid above, same derivation"),
+    "_log_qh_scale": exclude("normalization of _qh_table, same derivation"),
+    "_preint_continuum": exclude(
+        "photometry preintegration cache: a build-time optimization derived "
+        "from the grid and the model's own filters, both already keyed elsewhere"
+    ),
+    "_preint_lines": exclude(
+        "photometry preintegration cache: a build-time optimization derived "
+        "from the grid and the model's own filters, both already keyed elsewhere"
+    ),
+    "_line_lum_collapsed": exclude("derived from the preintegration cache above"),
+    "_has_preint_photometry": exclude("flag mirroring the preintegration cache above"),
+}

@@ -69,6 +69,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._cache_keys import frozen_dataclass_key
 from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
@@ -564,6 +565,19 @@ class WavePrecomp:
         object.__setattr__(self, "n_subbands", n_sub)
         object.__setattr__(self, "taylor_correction", taylor)
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this configuration, field by field.
+
+        Returns
+        -------
+        tuple
+            ``(type_qualname, ((field_name, baked_value), ...))``. Explicit
+            rather than relying on ``tengri._cache_keys.baked``'s
+            generic frozen-dataclass fallback, so a resolved config always
+            keys the same way regardless of how it is reached.
+        """
+        return frozen_dataclass_key(self)
+
 
 @dataclasses.dataclass(frozen=True)
 class SpectrumPrecomp:
@@ -614,6 +628,16 @@ class SpectrumPrecomp:
     dust attenuation at each pixel wavelength exactly (a pixel is a point, not a
     bandpass), so there is no effective-wavelength residual to correct and this
     flag does not change the spectroscopy result."""
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this configuration, field by field.
+
+        Returns
+        -------
+        tuple
+            ``(type_qualname, ((field_name, baked_value), ...))``.
+        """
+        return frozen_dataclass_key(self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -752,6 +776,16 @@ class FeaturePrecomp:
         from tengri.components.nebular.nebular_grid_precompute import validate_n_grid
 
         validate_n_grid(self.n_grid)
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this configuration, field by field.
+
+        Returns
+        -------
+        tuple
+            ``(type_qualname, ((field_name, baked_value), ...))``.
+        """
+        return frozen_dataclass_key(self)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1933,6 +1967,23 @@ class SEDModel:
             param_map=self._param_map,
             igm_fn=self._igm_fn,
         )
+
+        # Structural component configs, unconditionally at construction (#2163).
+        # Deliberately NOT read off ``_cached_component_chain``: that cache is
+        # only populated here-and-now when approx=WavePrecomp()/SpectrumPrecomp()
+        # is active (see below); on the exact path it stays lazy until the first
+        # predict. Reading configs off it would make compile_signature() differ
+        # between two calls on the SAME fresh model, before vs. after a predict,
+        # which the memoization contract cannot tolerate. build_components() is
+        # re-run inside _build_component_chain() when that runs (eagerly below,
+        # or lazily on first use); the backend/law objects it wires in were
+        # already loaded earlier in __init__, so the second call is cheap.
+        self._component_configs = tuple((c.name, c.config) for c in self._build_chain_configs())
+
+        # Memo for compile_signature() (#2163). None until the first call;
+        # cleared by _invalidate_signature() from the two methods that change
+        # structure after construction.
+        self._signature_memo = None
 
         # Eagerly build + cache the component chain when SpectrumPrecomp is
         # active. The fixed-z spectrum LUT (precompute_spectroscopy) runs
@@ -3532,6 +3583,10 @@ class SEDModel:
 
         # Freeze the merged map using MappingProxyType
         self._param_map = types.MappingProxyType(merged)
+        # _param_map is a structural row (#2163): the frozen name map decides
+        # which runtime inputs exist. Invalidate the memoized signature so a
+        # later compile_signature() call re-derives it under the new map.
+        self._invalidate_signature()
 
     def _warm_grid_caches(self) -> None:
         """Warm @functools.cache loaders to avoid tracer leaks from HDF5 grids.
@@ -4313,15 +4368,43 @@ class SEDModel:
         Returns
         -------
         tuple
-            Hashable immutable signature. Entries are immutable types
-            (int, str, tuple, bool, None) or tuples thereof.
+            Hashable immutable signature: ``(type_qualname, version, entries,
+            tail)`` from ``tengri._cache_keys.derive_key``. Still a plain
+            hashable, equality-comparable tuple, so everything downstream
+            that treats the signature as an opaque cache key
+            (``Fitter._engine_cache_key``, the module-level engine cache) is
+            unaffected by this method's internals.
 
         Notes
         -----
-        This signature is used by Fitter._get_or_build_engine to key the
-        module-level _SHARED_ENGINE_CACHE. Changes to SEDModel initialization
-        that affect JIT graph shape MUST be added to this method to avoid
-        silent miscompilation.
+        Memoized on the instance (``self._signature_memo``): after the first
+        call, every later call on the SAME model returns the identical
+        object rather than recomputing the ledger. Only two methods change a
+        model's STRUCTURE after construction --
+        :meth:`_validate_and_freeze_param_map` and
+        :meth:`enable_fast_nebular` -- and both call
+        :meth:`_invalidate_signature` to clear the memo. A source-level
+        guard test walks every other :class:`SEDModel` method that assigns
+        ``self.<attr>`` outside a constructor helper and fails if one
+        touches a non-excluded row without also invalidating
+        (``tests/contract/test_compile_signature_invariants.py``).
+
+        The signature is derived from a policy ledger over every model
+        attribute (``tengri.forward._signature_policy.SIGNATURE_POLICY``),
+        not a hand-written field list. Each attribute is classified as
+        content (hash the value), shape (hash shape+dtype only), or excluded
+        (a memo cache or the runtime state container, both recomputed from
+        already-keyed structure). **An attribute the ledger does not
+        classify is a bug, never a hand-edit here**: add a row to
+        ``_signature_policy.py`` and nothing else changes.
+        ``tengri._cache_keys.assert_policy_complete`` fails the day a
+        new, unclassified attribute appears, which is what closes the class
+        of bug that motivated this rewrite -- #1122 (``n_subbands`` missing
+        from the hand list), #1462 (seven AGN block selectors missing),
+        #2145 (the SSP metallicity GRID VALUES missing), #2237 (the live
+        dust shape-parameter set missing) -- each a field nobody remembered
+        to add, each silently sharing one model's compiled kernel with a
+        structurally different one.
 
         "Structure" includes **precision**. The structural-kernel cache in
         :meth:`_get_or_build_predict_observables_jit` returns a closure that
@@ -4330,567 +4413,48 @@ class SEDModel:
         used to reach the components as a float64 ``wave`` under
         ``jax.enable_x64(False)``, which switched off every dtype-keyed float32
         path downstream and produced NaN gradients with nothing raised (#1392).
-        See ``build_precision`` below.
+        Precision is a JAX *session* setting, not a ``vars(self)`` attribute,
+        so it rides the ``tail`` passed to ``derive_key`` (``x64``,
+        ``backend``) rather than a ledger row.
 
-        ``dust_live_shape_params_sig`` (#2231): the sorted set of dust
-        attenuation shape parameter names (``dust_slope``/``dust_delta``/
-        ``dust_Rv``/``dust_bump_strength``) :meth:`_requested_law_shape_params`
-        resolved as "live" for this build. Two models can share a law and the
-        same set of fixed parameter NAMES (already covered by
-        ``spec_fixed_id``) while disagreeing on which of those names are live
-        vs read the law's own published default -- without this entry they
-        collide on one compiled closure and the second model silently
-        inherits the first's live/not-live decision.
+        The spectroscopy projector's structural axes -- resample mode,
+        calibration order, and whether a banded resolution matrix or the
+        Gaussian LSF applies -- are exactly the #1135/#1149/#1166
+        cache-collision class this whole mechanism guards against (two
+        models differing only in one of these must never share a compiled
+        kernel). They are keyed through ``Spectroscopy.cache_key()``,
+        delegated via the ``observation`` row below, not re-derived here.
         """
-        # SSP grid shapes (n_met, n_age, n_wave)
-        ssp_flux_shape = tuple(self.ssp_data.ssp_flux.shape)
-        ssp_lgmet_shape = tuple(self.ssp_data.ssp_lgmet.shape)
+        memo = self._signature_memo
+        if memo is not None:
+            return memo
 
-        # SSP metallicity grid VALUES (not just shape).
-        # Hybrid and compositional kernels close over actual ssp_lgmet values,
-        # so two models with same shape but different grids must have different signatures.
-        ssp_lgmet_array = np.asarray(self.ssp_data.ssp_lgmet)
-        ssp_lgmet_id = (
-            int(ssp_lgmet_array.tobytes().__hash__())
-            if hasattr(ssp_lgmet_array, "tobytes")
-            else hash(tuple(map(float, ssp_lgmet_array)))
+        from tengri._cache_keys import derive_key
+        from tengri.forward._signature_policy import SIGNATURE_POLICY, SIGNATURE_VERSION
+
+        signature = derive_key(
+            self,
+            SIGNATURE_POLICY,
+            version=SIGNATURE_VERSION,
+            tail=(
+                ("x64", bool(jax.config.jax_enable_x64)),
+                ("backend", jax.default_backend()),
+            ),
         )
+        self._signature_memo = signature
+        return signature
 
-        # SSP flux grid CONTENT (not just shape/lgmet).
-        # The inference closure bakes the SSP grid, so two models with same
-        # shape/lgmet but different ssp_flux must have different signatures
-        # (#1973). Two SSP grids "of identical shape" is the scenario that
-        # _get_or_build_engine's docstring advertised as safe sharing; it is
-        # the scenario that produces +1 dex stellar mass errors when the second
-        # model silently runs the first model's physics.
-        # Content-hashed once per grid and cached on the SSPData instance;
-        # cost is 17-100 ms first call (depending on grid size), zero for
-        # subsequent calls on the same object.
-        from tengri.components.stellar.sps.dsps_wrapper import get_ssp_content_hash
+    def _invalidate_signature(self) -> None:
+        """Clear the memoized :meth:`compile_signature`.
 
-        ssp_flux_id = get_ssp_content_hash(self.ssp_data)
-
-        # Alpha-Fe enhancement presence
-        has_alpha_fe = hasattr(self.ssp_data, "ssp_alpha_fe")
-
-        # Filter grid dimensions
-        n_filters = len(self.filter_waves) if self.filter_waves is not None else 0
-        filter_wave_shape = tuple(self.filter_waves[0].shape) if self.filter_waves else ()
-        filter_trans_dtype = str(self.filter_trans[0].dtype) if self.filter_trans else "none"
-
-        # Filter transmission VALUES (not just dtype).
-        # Hybrid kernels close over actual filter_trans curves, so two models with
-        # same dtype but different filter profiles must have different signatures.
-        if self.filter_trans is not None and self.filter_trans:
-            filter_trans_id = hash(tuple(np.asarray(t).tobytes() for t in self.filter_trans))
-        else:
-            filter_trans_id = "none"
-
-        # Filter wavelength VALUES (not just shape). Issue #2068: the photometry closure
-        # bakes the filter wavelength arrays, so two models with same transmission and
-        # shape but different wavelength grids must have different signatures.
-        # Otherwise the second model silently reuses the first's compiled photometry
-        # which has baked the first model's wavelengths, producing silent photometry
-        # errors (measured: optical-vs-IR top-hats produce identical sigs; they should not).
-        if self.filter_waves is not None and self.filter_waves:
-            filter_wave_id = hash(tuple(np.asarray(w).tobytes() for w in self.filter_waves))
-        else:
-            filter_wave_id = "none"
-
-        # Filter-convolution convention (ADR-0017). The photometry channel
-        # closes over it, so models that differ only in convention must not
-        # share a compiled observables closure.
-        _phot = getattr(self.observation, "photometry", None)
-        phot_convention = str(getattr(_phot, "convention", FilterConvention.BESSELL))
-
-        # Dust configuration
-        dust_model = str(self._dust_model)
-        dust_scheme = str(self._dust_scheme)
-        dust_emission_model = str(self._dust_emission_model or "none")
-
-        # Astrodust+PAH (HD23) configuration: spinning dust (AME) enable flag
-        # and cold-neutral-medium filling fraction. These affect the emitted
-        # SED shape without changing the graph structure, so they must be
-        # keyed to prevent silent cache collisions (#1093).
-        astrodust_spinning_dust = bool(getattr(self, "_astrodust_spinning_dust", False))
-        astrodust_f_cnm = float(getattr(self, "_astrodust_f_cnm", 0.28))
-
-        # WG00 (dust_type=3) structural selectors. Different geometry / dust
-        # curve / local structure tabulate distinct attenuation curves, so each
-        # combination must get its own compiled kernel. "none" when unused.
-        wg00_selectors = (
-            (
-                str(getattr(self, "_wg00_dust_curve", "mw")),
-                str(getattr(self, "_wg00_geometry", "shell")),
-                str(getattr(self, "_wg00_structure", "homogeneous")),
-            )
-            if dust_model == "wg00"
-            else ("none",)
-        )
-
-        # Dust law functions (by name to avoid closure capture)
-        dust_law_bc_fn_name = self._dust_law_bc_fn.__name__ if self._dust_law_bc_fn else "none"
-        dust_law_diff_fn_name = (
-            self._dust_law_diff_fn.__name__ if self._dust_law_diff_fn else "none"
-        )
-        # Nebular birth-cloud law (None -> inherits bc). It reddens only the
-        # nebular continuum, so a change is invisible to the stellar graph
-        # shape; it MUST enter the signature or the kernel cache leaks one
-        # model's nebular reddening into another (color-leak).
-        dust_law_neb_name = str(getattr(self, "_dust_law_neb", None) or "inherit_bc")
-        # Per-component law-parameter overrides change the baked-in chain
-        # constants (e.g. birth-cloud dust_slope) but not its graph shape, so two
-        # models that differ only here MUST get distinct signatures or the
-        # kernel cache leaks one's attenuation into the other (color-leak).
-        _ovr = getattr(self, "_dust_law_overrides", None) or {}
-        dust_law_overrides_sig = tuple(
-            (comp, tuple(sorted((k, float(v)) for k, v in (_ovr.get(comp) or {}).items())))
-            for comp in ("bc", "diff", "neb")
-        )
-        # Lyman-limit clip zeros the FUV curve but leaves the graph shape
-        # unchanged, so two models that differ only here MUST get distinct
-        # signatures or the kernel cache leaks one's FUV attenuation into the
-        # other (color-leak), exactly like ``dust_law_overrides_sig`` above.
-        dust_lyman_cutoff_sig = float(getattr(self, "_dust_lyman_cutoff_aa", 0.0))
-        # Young-only vs absorb-all stellar LyC changes the baked below-912 chain
-        # output but not its graph shape -> must enter the signature (color-leak).
-        dust_lyc_absorb_all_sig = bool(getattr(self, "_dust_lyc_absorb_all", False))
-        # LyC-in-energy-balance (FSPS parity, #961) rescales L_IR without
-        # changing the graph shape -> must enter the signature (color-leak).
-        dust_eb_include_lyc_sig = bool(getattr(self, "_dust_eb_include_lyc", False))
-
-        # Requested dust attenuation shape parameters (#2231's newly-exposed
-        # color-leak). Whether a shape parameter (dust_slope / dust_delta /
-        # dust_Rv / dust_bump_strength) is "live" is a build-time Python
-        # branch inside ``DustAttenuationSEDComponent`` / ``DustSEDComponent``
-        # (see :meth:`_requested_law_shape_params`): live means apply() reads
-        # the value from ``fixed_values`` at call time, not-live means
-        # precompute() bakes a cached ``k(lambda)`` from the law's own
-        # published default and apply() never looks at the value again. That
-        # decision changes what the compiled closure DOES with a fixed
-        # parameter of the same NAME (``spec_fixed_id`` below already keys
-        # the set of fixed names, not their liveness), so two models sharing
-        # a law and the same fixed names but different live-shape-parameter
-        # sets must not share a compiled kernel -- the second would silently
-        # inherit the first's live/not-live branch and its baked curve. Names
-        # only, sorted for a deterministic hash; the underlying VALUES ride
-        # the ``fixed_values`` runtime JIT input like every other fixed
-        # parameter, same rationale as ``spec_fixed_id``.
-        #
-        # Before #2231 a flat ``Parameters(...)`` spec's shape parameters
-        # were unconditionally not-live, so this axis was always identical
-        # across flat models and the gap below was unreachable from that
-        # surface; #2231 lets a flat spec become live, which is what exposes
-        # the collision this entry closes.
-        if dust_model == "single_component":
-            dust_live_shape_params_sig = tuple(sorted(self._requested_law_shape_params()))
-        else:
-            dust_live_shape_params_sig = tuple(
-                sorted(
-                    self._requested_law_shape_params(
-                        getattr(self, "_dust_law_bc", None),
-                        getattr(self, "_dust_law_diff", None),
-                        getattr(self, "_dust_law_neb", None),
-                    )
-                )
-            )
-
-        # Nebular backend (by class name)
-        nebular_backend_name = (
-            type(self._nebular_backend).__name__ if self._nebular_backend is not None else "none"
-        )
-
-        # IGM configuration
-        uses_igm = bool(self._uses_igm)
-        igm_model = str(self._igm_model or "none")
-        uses_dla = bool(self._uses_dla)
-
-        # AGN configuration.
-        #
-        # ``agn_model`` carries no discriminating power on its own: the
-        # composable surface is the only non-deprecated one, so
-        # ``list_agn_models()`` returns exactly one selectable entry and every
-        # composable model hashes to the same string. The six block selectors
-        # ARE the AGN axis, and each one swaps the emitting physics (a torus
-        # library, a disc SED, an NLR/BLR line set) without changing the graph
-        # shape, so omitting them left the entire axis unkeyed and the
-        # first-built kernel won, exactly like the fixed-z case below (#1450).
-        # Measured: torus='skirtor' vs 'cat3d_wind' agreed bit-for-bit within a
-        # process and disagreed by 60% in W4 across processes, depending only
-        # on build order.
-        agn_model = str(self._agn_model or "none")
-        agn_luminosity_mode = bool(self._agn_luminosity_mode)
-        agn_blocks = (
-            str(getattr(self, "_agn_disc_block", "none") or "none"),
-            str(getattr(self, "_agn_torus_block", "none") or "none"),
-            str(getattr(self, "_agn_nlr_block", "none") or "none"),
-            str(getattr(self, "_agn_blr_block", "none") or "none"),
-            str(getattr(self, "_agn_feii_block", "none") or "none"),
-            str(getattr(self, "_agn_attenuation_block", "none") or "none"),
-        )
-        # Cross-block normalization policy (#556). 'cigale_joint' ties
-        # disc/torus/polar to one energy-conserving reference; 'independent'
-        # puts each on its own luminosity scale. Same graph, different emitted
-        # SED, a signature entry, not a flag.
-        agn_norm = str(getattr(self, "_agn_norm", "cigale_joint") or "cigale_joint")
-
-        # Radio and X-ray
-        uses_radio = bool(self._uses_radio)
-        uses_xray = bool(self._uses_xray)
-        # WHICH X-ray model, not merely whether one is attached. ``_xray_model``
-        # was stored at construction but never keyed, so `agn_xray_corona` and
-        # `xray_aird` shared a compiled kernel and the first one built won,
-        # the same class as the AGN block selectors (#1450) and the radio
-        # models beside it, which do carry their selector. The collision is
-        # invisible in optical/IR photometry because X-ray emission lands at
-        # keV, which is why a flux-based sweep reads this axis as "inert"
-        # rather than unkeyed; the signature shows it directly (#1462).
-        xray_model = str(getattr(self, "_xray_model", "none") or "none") if uses_xray else "none"
-        uses_shock = bool(self._uses_shock)
-        # Shock normalization + categorical knobs change the emitted SED, so
-        # they are part of the structural fingerprint (#851).
-        shock_cfg = (
-            str(getattr(self, "_shock_norm", "frac")),
-            str(getattr(self, "_shock_abundance", "solar")),
-            str(getattr(self, "_shock_component", "combined")),
-        )
-
-        # SFH configuration
-        mean_sfh_type = str(self.spec.mean_sfh_type)
-        met_mode = str(self._met_mode)
-        stochastic = bool(self.spec.stochastic)
-        n_grid = int(self._n_grid)
-        # SFH→SSP age-weight kernel (#964). "cic" and "dsps" produce different
-        # age weights on the SAME graph shape, so without this entry two models
-        # differing only in ``age_kernel`` share a compiled kernel and the
-        # second silently returns the first's photometry.
-        age_kernel = str(getattr(self.spec, "age_kernel", None) or "auto")
-        # Non-parametric SFH bin edges (#1975). Exactly the ``age_kernel``
-        # hazard: custom edges change the age weights on the SAME graph shape,
-        # so without this entry two models differing only in their bin layout
-        # share a compiled kernel and the second silently returns the first's
-        # photometry. Hashed by value; "default" is the model's own ladder.
-        _bin_edges = getattr(self.spec, "bin_edges_gyr", None)
-        sfh_bin_edges = (
-            "default"
-            if _bin_edges is None
-            else hash(tuple(map(float, np.asarray(_bin_edges).ravel())))
-        )
-        # GP-field parameterization (#1355). Same hazard as ``age_kernel``: a
-        # different ``centering`` changes the xi -> SFH map without changing the
-        # graph shape, so without this entry two models differing only in
-        # ``field_centering`` share a compiled kernel and the second returns the
-        # first's photometry, which would make the A/B this knob exists for
-        # report a null result.
-        field_centering = round(float(getattr(self.spec, "field_centering", 1.0)), 8)
-
-        # Alpha-Fe evolution
-        alpha_fe_evolving = bool(self._alpha_fe_evolving)
-
-        # Redshift configuration. The actual fixed-z value is part of the
-        # structural fingerprint because the compiled kernels close over
-        # ``_dl_cm_fixed``, ``_igm_fn`` precomputed tables, and effective
-        # rest wavelengths, all derived from ``_z_fixed`` at construction.
-        # Without the value, two models at different fixed z would share
-        # a cached kernel and produce identical photometry (the kernel
-        # built first wins). Float is rounded to a stable hash key.
-        z_fixed = (
-            ("fixed", round(float(self._z_fixed), 8)) if self._z_fixed is not None else ("free",)
-        )
-        # Catalog-fit reuse: the explicit range is part of the signature
-        # so two models with different catalog ranges don't share a
-        # compiled kernel (their ztable shape can differ).
-        catalog_z_range = (
-            ("catalog", round(self._catalog_z_range[0], 8), round(self._catalog_z_range[1], 8))
-            if self._catalog_z_range is not None
-            else ("none",)
-        )
-
-        # Instrument/spectroscopy
-        has_spectroscopy = self.observation is not None and self.observation.can_do_spectroscopy
-        if has_spectroscopy:
-            spec_wave_shape = tuple(self.observation.spectroscopy.wave_obs.shape)
-            # Spectroscopy wavelength VALUES (not just shape). Issue #2068: the
-            # spectrum projector closure bakes the spectroscopy wavelength array,
-            # so two models with same pixel count but different wavelength grids
-            # must have different signatures. Otherwise the second model silently
-            # reuses the first's compiled spectrum which has baked the first
-            # model's wavelengths, producing silent spectroscopy errors.
-            spec_wave_id = hash(np.asarray(self.observation.spectroscopy.wave_obs).tobytes())
-            sigma_lib_kms = float(self._sigma_lib_kms)
-            lsf_resolution = self._lsf_resolution
-            # The calibration order is structural: the compiled kernel closes over
-            # an ``Observation`` whose projector reads ``cal_c1..cN`` out of the
-            # param dict. Two models differing ONLY in ``calibration_order`` must
-            # not share a cache slot, the second would inherit the first's
-            # coefficient lookup and either apply a calibration it was never given
-            # or raise ``KeyError: 'cal_c1'`` on a dict that rightly has no such key.
-            calibration_order = int(self.observation.spectroscopy.calibration_order)
-            # The RESOLVED resample decision (#1166): the spectrum projector closes
-            # over whether it point-samples or flux-conservingly integrates the
-            # model onto the pixels. Two models differing only in ``resample`` (or
-            # in an ``"auto"`` decision that lands differently for their grids) must
-            # NOT share a compiled kernel, otherwise the second silently inherits
-            # the first's resampler. Keyed on the resolved bool, not the mode
-            # string, so ``"auto"`` collides only with an explicit mode that
-            # actually resamples the same way.
-            spec_resample_conserving = bool(
-                self.observation.spectroscopy.resolve_conserving(self.wavelengths)
-            )
-            # The banded resolution matrix (#1163) is structural: the spectrum
-            # projector closes over whether it applies ``R @ model`` or the
-            # Gaussian ``apply_lsf``. Two models differing only in
-            # ``resolution_matrix`` must NOT share a compiled kernel, else the
-            # second silently inherits the first's projector and drops (or
-            # wrongly reuses) the matrix. Keyed on presence + band shape, which
-            # is all the structural cache needs. Same cache-collision class as
-            # #1135/#1149/#1166.
-            _rm = self.observation.spectroscopy.resolution_matrix
-            spec_resolution_matrix = (
-                tuple(jnp.asarray(_rm.data).shape) if _rm is not None else None
-            )
-        else:
-            spec_wave_shape = ()
-            spec_wave_id = "none"
-            sigma_lib_kms = 0.0
-            lsf_resolution = None
-            calibration_order = 0
-            spec_resample_conserving = False
-            spec_resolution_matrix = None
-
-        # csp_integration is deliberately NOT part of the signature. Every value
-        # produces an identical program (#1500), so including it split the compile
-        # cache five ways and recompiled the whole model to compute the same
-        # numbers. Measured: 5 distinct signatures, 0 differing outputs.
-
-        # ``forward_dtype`` is deliberately NOT part of this key (#1433). It is
-        # retired and casts nothing, so two models differing only in it compute
-        # bit-identical results, keying on it bought a second compile of an
-        # identical kernel and nothing else. Anyone who wires it must put it back
-        # here in the same change, or the two precisions will share a kernel.
-
-        # Effective build precision (#1392). ``forward_dtype`` stays
-        # "float64" in a **pure** float32 run (which is entered with
-        # ``jax.enable_x64(False)``, not with that knob), so on its own it cannot
-        # separate a float64 model from a float32 one, and since it casts nothing
-        # (#1433) it could not do so at any setting.
-        # It must: ``_get_or_build_predict_observables_jit`` caches a closure that
-        # captured ``self``, keyed on this signature, so without a precision entry
-        # a float32 model is handed the float64 model's kernel, carrying that
-        # model's float64 wave grid. Every float32 gate downstream keys on a dtype
-        # and so switches itself off, silently, producing NaN gradients rather than
-        # an error (observed in the AGN block: #1392).
-        build_precision = (
-            str(self._rest_wavelength.dtype),
-            bool(jax.config.jax_enable_x64),
-        )
-
-        # Metallicity interpolation mode
-        met_interp = str(self._met_interp)
-        z_interp = str(self._z_interp)
-
-        # Radio-specific flags
-        radio_include_freefree = (
-            bool(self._radio_include_freefree)
-            if hasattr(self, "_radio_include_freefree")
-            else False
-        )
-        radio_sfr_mode = str(self._radio_sfr_mode) if hasattr(self, "_radio_sfr_mode") else "none"
-        radio_agn_model = (
-            str(self._radio_agn_model) if hasattr(self, "_radio_agn_model") else "powerlaw"
-        )
-
-        # Velocity dispersion
-        has_sigma_v = bool(self._has_sigma_v)
-
-        # Compile mode
-        compile_mode = str(self._compile_mode)
-
-        # Approximation settings, resolved and sorted.
-        # 2026-05-20: include the resolved WavePrecomp configuration
-        # so two models with different ztable sampling (n_z / z_min / z_max)
-        # get distinct cache slots. Without this, ``WavePrecomp(n_z=100)`` and
-        # ``WavePrecomp(n_z=200)`` would collide and the second galaxy would
-        # reuse the first's stale compiled LUT.
-        approx_resolved_flags = tuple(
-            sorted((k, bool(v)) for k, v in (self._approx or {}).items() if isinstance(v, bool))
-        )
-
-        # The sub-band quadrature order changes the compiled kernel and the numbers
-        # it produces (#1122). It is an int, so (unlike ``taylor_correction``) it
-        # is NOT picked up by ``approx_resolved_flags`` above, which filters on
-        # ``isinstance(v, bool)``. Without it, WavePrecomp(n_subbands=3) and
-        # (n_subbands=8) collide and the second silently reuses the first's kernel.
-        #
-        # Keyed off the *resolved* value rather than re-derived from the config
-        # object: the resolution rule (photometry knobs come from a WavePrecomp,
-        # never from a SpectrumPrecomp) lives in one place, and a signature that
-        # re-derives it can silently disagree with the physics it is caching.
-        approx_n_subbands = int((self._approx or {}).get("n_subbands", 0))
-
-        # ...and the same hazard generalized. ``band_integration`` is a *string*,
-        # so it is invisible to ``approx_resolved_flags`` (bools only) and to
-        # ``approx_n_subbands`` (that one key). It currently distinguishes kernels
-        # only *incidentally*, because resolving it writes n_subbands and
-        # taylor_correction to values that differ per scheme, which is exactly
-        # the kind of accident that stops holding the moment someone adds a
-        # scheme that leaves those two alone.
-        #
-        # Capturing every non-bool field generically means the next knob added to
-        # ApproxPolicy is covered on the day it is added, rather than after two
-        # models silently share a kernel. Cheap: the policy has 8 fields.
-        approx_scalar_fields = tuple(
-            sorted(
-                (k, v)
-                for k, v in (self._approx or {}).items()
-                if not isinstance(v, bool) and isinstance(v, (str, int, float, type(None)))
-            )
-        )
-
-        # FeaturePrecomp leaves NO trace in ``self._approx``, it sets
-        # ``_fast_line_measurement`` instead, so neither ``approx_resolved_flags``
-        # nor ``approx_n_subbands`` above can see it, and two models differing only
-        # in FeaturePrecomp produced an IDENTICAL signature. Whichever was built
-        # first won the JIT cache and the second silently reused its gradient:
-        # measured 12.4 ms vs 0.5 ms for the same objective (~25x), and the loser
-        # was whichever came second, not whichever was slower.
-        #
-        # Worse than the lost speed, it is a correctness hazard: two models with
-        # different approximations sharing one compiled gradient means the second
-        # computes the FIRST's approximation. Benign only while the two happen to
-        # be bit-identical, which is luck, not a contract.
-        #
-        # Keyed off the same resolved state the PUBLIC ``model.approx`` reports
-        # (``ApproxState.feature_precomp``), so what a user is shown and what the
-        # cache keys on cannot drift apart, they disagreed here, which is exactly
-        # how this survived.
-        approx_feature_precomp = bool(getattr(self, "_fast_line_measurement", False))
-
-        def _cfg_key(cfg):
-            if cfg is None:
-                return None
-            return (
-                ("n_z", int(cfg.n_z)),
-                ("z_min", None if cfg.z_min is None else round(float(cfg.z_min), 12)),
-                ("z_max", None if cfg.z_max is None else round(float(cfg.z_max), 12)),
-            )
-
-        if self._approx_config is not None or self._approx_config_spec is not None:
-            # Key BOTH configs so a composite ``(WavePrecomp, SpectrumPrecomp)``
-            # model (#610) gets a distinct slot from either single-LUT model and
-            # from a composite with different ztable sampling.
-            approx_resolved = (
-                approx_resolved_flags,
-                ("primary", _cfg_key(self._approx_config)),
-                ("spec", _cfg_key(self._approx_config_spec)),
-                ("n_subbands", approx_n_subbands),
-                approx_scalar_fields,
-            )
-        else:
-            # The scalar fields ride BOTH branches. Carrying them only on the
-            # first would make the band-integration scheme invisible to the
-            # signature on exactly the models that took the other path.
-            approx_resolved = (approx_resolved_flags, approx_scalar_fields)
-
-        # 2026-05-20: drop fixed-parameter VALUES from the
-        # cache key. Keep names + types-of-fixed only. Two SEDModels with
-        # the same physics + same SSP + same filters + same WavePrecomp
-        # config + same FREE-parameter shape and same set of fixed names
-        # now share a compile slot. Their actual fixed VALUES are threaded
-        # as a runtime JIT input (see ``_get_or_build_predict_observables_jit``
-        # below) so the compiled function uses the correct per-galaxy
-        # values at call time. Shape-affecting fixed config
-        # (mean_sfh_type, met_mode, dust_model, agn_model, etc.) already
-        # has its own dedicated signature entries above and stays distinct.
-        spec_fixed_id = tuple(sorted(self.spec.fixed_params))
-
-        # Fast nebular grid (#950): when attached via ``enable_fast_nebular`` the
-        # nebular photometry + line channels reconstruct from a per-Q_H grid and
-        # the Cue forward is pruned. That is a DIFFERENT compiled graph AND the
-        # kernel closes over the grid arrays, so a fast model must not share a
-        # slot with the exact model, nor with a fast model over different
-        # ionization axes / grid values (would silently reuse a stale kernel,
-        # the color-leak failure mode this signature exists to prevent).
-        _grid = getattr(self, "_nebular_grid_table", None)
-        if _grid is not None:
-            nebular_grid_sig = (
-                "grid",
-                tuple(_grid.axis_names),
-                int(np.asarray(_grid.log_line_per_qh).tobytes().__hash__()),
-            )
-        else:
-            nebular_grid_sig = ("none",)
-
-        return (
-            ssp_flux_shape,
-            ssp_lgmet_shape,
-            ssp_lgmet_id,
-            ssp_flux_id,
-            has_alpha_fe,
-            n_filters,
-            filter_wave_shape,
-            filter_trans_dtype,
-            filter_trans_id,
-            filter_wave_id,
-            phot_convention,
-            dust_model,
-            dust_scheme,
-            dust_emission_model,
-            dust_law_bc_fn_name,
-            dust_law_diff_fn_name,
-            dust_law_neb_name,
-            wg00_selectors,
-            dust_law_overrides_sig,
-            dust_lyman_cutoff_sig,
-            dust_lyc_absorb_all_sig,
-            dust_eb_include_lyc_sig,
-            dust_live_shape_params_sig,
-            astrodust_spinning_dust,
-            astrodust_f_cnm,
-            nebular_backend_name,
-            uses_igm,
-            igm_model,
-            uses_dla,
-            agn_model,
-            agn_luminosity_mode,
-            agn_blocks,
-            agn_norm,
-            uses_radio,
-            uses_xray,
-            xray_model,
-            uses_shock,
-            shock_cfg,
-            mean_sfh_type,
-            met_mode,
-            stochastic,
-            n_grid,
-            age_kernel,
-            sfh_bin_edges,
-            field_centering,
-            alpha_fe_evolving,
-            z_fixed,
-            catalog_z_range,
-            has_spectroscopy,
-            spec_wave_shape,
-            spec_wave_id,
-            sigma_lib_kms,
-            lsf_resolution,
-            calibration_order,
-            spec_resample_conserving,
-            spec_resolution_matrix,
-            build_precision,
-            met_interp,
-            z_interp,
-            radio_include_freefree,
-            radio_sfr_mode,
-            radio_agn_model,
-            has_sigma_v,
-            compile_mode,
-            approx_resolved,
-            approx_feature_precomp,
-            spec_fixed_id,
-            nebular_grid_sig,
-        )
+        Called by the two post-construction methods that change model
+        STRUCTURE: :meth:`_validate_and_freeze_param_map` (sets
+        ``_param_map``) and :meth:`enable_fast_nebular` (sets
+        ``_nebular_grid_table`` and drops the chain memo). A source-level
+        guard test enforces that no other method needs to call this: see
+        :meth:`compile_signature`'s Notes.
+        """
+        self._signature_memo = None
 
     def predict_photometry(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
         """Compute observed photometric flux densities through all filters.
@@ -5766,8 +5330,9 @@ class SEDModel:
         self._nebular_grid_table = table
         # Rebuild the chain from scratch (exact, no grid) and swap in the
         # grid-carrying nebular component so ``apply`` takes the fast branch.
-        # compile_signature() now differs (nebular_grid_sig), so the next
-        # predict_* builds a fresh kernel over this chain, no stale reuse.
+        # compile_signature() now differs (the _nebular_grid_table row,
+        # invalidated below), so the next predict_* builds a fresh kernel
+        # over this chain, no stale reuse.
         chain = self._build_component_chain()
         # Whether the grid may also serve the photometry channel. It may only
         # when nothing downstream reads the continuum, because serving
@@ -5788,6 +5353,10 @@ class SEDModel:
             else c
             for c in chain
         ]
+        # _nebular_grid_table is structural (#2163): a fast-nebular model is a
+        # different compiled graph. Invalidate the memoized signature so the
+        # next compile_signature() call sees it.
+        self._invalidate_signature()
         return self
 
     def _compute_nion(self, params):
@@ -8604,13 +8173,30 @@ class SEDModel:
             in self._REQUESTED_PROVENANCE
         )
 
-    def _build_component_chain(self):
-        """Construct the orchestrator chain from ``self``'s settings.
+    def _build_chain_configs(self):
+        """Construct the raw, un-precomputed :class:`SEDComponent` chain.
 
         Reads ``self.spec`` and the ``_dust_*``/``_nebular_backend``/
-        ``_agn_model``/``_uses_*`` attributes set in :meth:`__init__`
-        and produces a list of :class:`SEDComponent` adapters in the
-        canonical pipeline order.
+        ``_agn_model``/``_uses_*`` attributes set in :meth:`__init__` and
+        calls :func:`~tengri.forward.component_factory.build_components`,
+        returning its chain in canonical pipeline order, with each
+        component's ``config`` field set but no ``precompute()`` run yet.
+
+        Notes
+        -----
+        Split out of :meth:`_build_component_chain` so ``__init__`` can call
+        it directly to populate ``self._component_configs`` (#2163):
+        :meth:`_build_component_chain` itself only runs eagerly, at
+        construction time, when ``approx=WavePrecomp()`` or
+        ``SpectrumPrecomp()`` is active; on the exact path it runs lazily, on
+        the first ``predict_state``/``_feature_chain`` call. Reading
+        component configs off ``_cached_component_chain`` would therefore
+        make ``compile_signature()`` depend on whether a predict has already
+        run, which two calls on the SAME fresh model must never disagree on.
+        This method is cheap (component construction only; the backend
+        objects it wires in were already loaded earlier in ``__init__``),
+        so calling it unconditionally here costs nothing the exact path
+        wasn't already going to pay once :meth:`_build_component_chain` ran.
         """
         from tengri.components.stellar.sfh.registry import apply_compositor_swap
         from tengri.forward.component_factory import build_components
@@ -8743,6 +8329,16 @@ class SEDModel:
             shock_abundance=getattr(self, "_shock_abundance", "solar"),
             shock_component=getattr(self, "_shock_component", "combined"),
         )
+        return chain
+
+    def _build_component_chain(self):
+        """Construct the orchestrator chain from ``self``'s settings.
+
+        Builds on :meth:`_build_chain_configs` (structural-only) with the
+        per-component ``precompute()`` pass that resolves template data and,
+        when active, the ``WavePrecomp``/``SpectrumPrecomp`` LUTs.
+        """
+        chain = self._build_chain_configs()
 
         # SINGLE BUILD-TIME PRECOMPUTATION PASS: resolve all component data before
         # first predict, unconditionally at build time (not gated on approx flags).
