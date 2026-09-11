@@ -284,6 +284,9 @@ def test_every_structural_key_has_a_roundtrip_rule():
         # a PARAMETER (dust_eta_balance) reachable as a dust_emission grammar key,
         # emitted by the parameter walk rather than by a structural rule
         "eta_balance",
+        # Same case: a PARAMETER (dust_log_L_ir), the total dust IR budget
+        # override (#2187-series), reachable as a dust_emission grammar key.
+        "log_L_ir",
     } | {
         f"{stem}_{comp}"
         for stem in ("slope", "bump_strength", "delta", "Rv")

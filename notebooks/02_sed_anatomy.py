@@ -429,7 +429,10 @@ print(model_edited.summary())
 #   metallicity history projects onto an age × wavelength grid and sums
 #   to the intrinsic L_ν.
 # - **Dust attenuation.** Birth-cloud (Calzetti) and diffuse-ISM optical
-#   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`.
+#   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`. The
+#   two-component group also decides which screen each emission source
+#   passes through (`nebular_screen`, default birth cloud; `shock_screen`,
+#   default diffuse; `agn_screen`, default none).
 # - **Dust emission.** Dale 2014 / Draine–Li / THEMIS templates
 #   re-radiate `L_ir` from 8 to 1000 µm.
 # - **Nebular.** Cue (neural emulator on Cloudy 17.03) gives photoionized

@@ -112,6 +112,12 @@ REFUSED: dict[str, tuple[str, str]] = {
     # what made them declarable, which is the general remedy this ground was
     # pointing at (same shape as the "inert" scoping fix noted above).
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
+    "dust_log_L_ir": (
+        "target-dependent",
+        "absolute (log) luminosity; no galaxy-independent interval -- declaring "
+        "it at all is itself the energy-balance opt-out (#2187-series), so a "
+        "wildcard must never reach it and silently decouple the IR budget",
+    ),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
         "not-continuous",

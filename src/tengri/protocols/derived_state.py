@@ -225,6 +225,16 @@ class DerivedState:
     #: log10(L_ir / (erg/s)) [dex]: the float32-safe form of ``L_ir``, which
     #: is ~1e43 and therefore outside the float32 range entirely (#1206).
     log_L_ir: jnp.ndarray | None = None
+    #: log10(L_absorbed / (erg/s)) [dex]: the ABSORBED stellar+nebular energy
+    #: budget, independent of ``dust_eta_balance`` and of a declared
+    #: ``dust_log_L_ir`` override -- unlike ``log_L_ir`` (the re-emitted
+    #: budget), this key never moves. Split out of the ``log_L_ir`` publisher
+    #: (#1837/#2187-series): three readers (AGN torus coupling,
+    #: ``pred.l_dust_absorbed`` via ``component_factory.py`` and
+    #: ``stellar/component.py``) want ABSORBED energy specifically and were
+    #: reading ``log_L_ir`` as a stand-in, which is only correct when
+    #: eta == 1 and no override is declared.
+    log_L_absorbed: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
