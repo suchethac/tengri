@@ -163,8 +163,18 @@ def _log_nu_to_wavelength_angstrom(log_nu_hz: np.ndarray) -> np.ndarray:
     return (_C_LIGHT_M_S / nu_hz) * 1e10
 
 
-def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
-    """Read CAT3D_mean_3p.pickle and emit tengri's ``cat3d_wind_torus_grid.h5``."""
+def build(
+    input_pickle: Path,
+    output_h5: Path,
+    n_wave: int = 4096,
+    source_label: str = "AGNfitter-rX_v0.1/models/TORUS/CAT3D_mean_3p.pickle",
+) -> None:
+    """Read CAT3D_mean_3p.pickle and emit tengri's ``cat3d_wind_torus_grid.h5``.
+
+    ``source_label`` is the provenance string written to the ``source_pickle``
+    attribute: the path inside the pinned upstream archive, not wherever this
+    machine holds the file.
+    """
     df = _safe_load(input_pickle)
     for col in ("incl-values", "a-values", "fwd-values", "wavelength", "SED"):
         if col not in df.columns:
@@ -240,7 +250,11 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         g.create_dataset("fwd_axis", data=fwd_axis, compression="gzip")
         g.create_dataset("wavelength", data=common_wave, compression="gzip")
         g.create_dataset("template", data=template, compression="gzip")
-        g.attrs["source_pickle"] = str(input_pickle)
+        # The path INSIDE the pinned upstream archive, never where this
+        # machine happened to keep it: an absolute path here ships a
+        # contributor's home directory to every user of the public
+        # repository (tools/check_no_local_paths.py).
+        g.attrs["source_pickle"] = source_label
         g.attrs["n_incl"] = incl_axis.size
         g.attrs["n_a"] = a_axis.size
         g.attrs["n_fwd"] = fwd_axis.size
@@ -284,10 +298,16 @@ def _cli() -> None:
         "(pinned tag) instead of reading --input. No AGNfitter install needed.",
     )
     args = p.parse_args()
-    from _agnfitter_download import resolve
+    from _agnfitter_download import archive_relpath, resolve
 
-    input_pickle = resolve(args.input, "models/TORUS/CAT3D_mean_3p.pickle", download=args.download)
-    build(input_pickle, args.output, n_wave=args.n_wave)
+    repo_relpath = "models/TORUS/CAT3D_mean_3p.pickle"
+    input_pickle = resolve(args.input, repo_relpath, download=args.download)
+    build(
+        input_pickle,
+        args.output,
+        n_wave=args.n_wave,
+        source_label=archive_relpath(repo_relpath),
+    )
 
 
 if __name__ == "__main__":

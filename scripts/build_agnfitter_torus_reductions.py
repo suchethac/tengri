@@ -204,6 +204,7 @@ def _build_native_grid(
     output_h5: Path,
     group_name: str,
     source_pickle: Path,
+    source_label: str,
     *,
     row_slice: slice | None = None,
 ) -> None:
@@ -225,6 +226,11 @@ def _build_native_grid(
         ``source_pickle``'s bookkeeping attribute.
     source_pickle : Path
         Path to the upstream pickle, for provenance attributes.
+    source_label : str
+        Provenance string for the ``source_pickle`` attribute: the path
+        INSIDE the pinned upstream archive (``AGNfitter-rX_v0.1/models/...``).
+        Kept separate from ``source_pickle`` because that one is wherever this
+        machine holds the file, which must never reach a committed grid.
     row_slice : slice, optional
         If given, ``df = df.iloc[row_slice]`` before building (AGNfitter-rX
         concatenates disjoint sub-libraries into one pickle for CAT3D; see
@@ -298,7 +304,12 @@ def _build_native_grid(
             g.create_dataset(f"{c.replace('-values', '')}_axis", data=arr, compression="gzip")
         g.create_dataset("wavelength", data=wavelength_aa, compression="gzip")
         g.create_dataset("template", data=template, compression="gzip")
-        g.attrs["source_pickle"] = str(source_pickle)
+        # The path INSIDE the pinned upstream archive, never where this
+        # machine happened to keep it: an absolute path here ships a
+        # contributor's home directory to every user of the public
+        # repository (tools/check_no_local_paths.py). ``source_sha256``
+        # below is what pins the actual bytes.
+        g.attrs["source_pickle"] = source_label
         g.attrs["source_sha256"] = _sha256_of(source_pickle)
         for c, arr in zip(axis_cols, axis_arrays, strict=True):
             g.attrs[f"n_{c.replace('-values', '')}"] = int(arr.size)
@@ -315,15 +326,20 @@ def _build_native_grid(
     )
 
 
-def build_nk08_2p(input_pickle: Path, output_h5: Path) -> None:
+def build_nk08_2p(input_pickle: Path, output_h5: Path, source_label: str) -> None:
     """Build ``nenkova_agnfitter_2p_torus_grid.h5`` from ``NK0_mean_2p.pickle``."""
     df = _safe_load(input_pickle)
     _build_native_grid(
-        df, ["incl-values", "oa-values"], output_h5, "nenkova_agnfitter_2p", input_pickle
+        df,
+        ["incl-values", "oa-values"],
+        output_h5,
+        "nenkova_agnfitter_2p",
+        input_pickle,
+        source_label,
     )
 
 
-def build_nk08_3p(input_pickle: Path, output_h5: Path) -> None:
+def build_nk08_3p(input_pickle: Path, output_h5: Path, source_label: str) -> None:
     """Build ``nenkova_agnfitter_3p_torus_grid.h5`` from ``NK0_mean_3p.pickle``."""
     df = _safe_load(input_pickle)
     _build_native_grid(
@@ -332,22 +348,27 @@ def build_nk08_3p(input_pickle: Path, output_h5: Path) -> None:
         output_h5,
         "nenkova_agnfitter_3p",
         input_pickle,
+        source_label,
     )
 
 
-def build_skirtor_mean1p(input_pickle: Path, output_h5: Path) -> None:
+def build_skirtor_mean1p(input_pickle: Path, output_h5: Path, source_label: str) -> None:
     """Build ``skirtor_mean1p_torus_grid.h5`` from ``SKIRTOR_mean_1p.pickle``."""
     df = _safe_load(input_pickle)
-    _build_native_grid(df, ["incl-values"], output_h5, "skirtor_mean1p", input_pickle)
+    _build_native_grid(
+        df, ["incl-values"], output_h5, "skirtor_mean1p", input_pickle, source_label
+    )
 
 
-def build_skirtor_mean2p(input_pickle: Path, output_h5: Path) -> None:
+def build_skirtor_mean2p(input_pickle: Path, output_h5: Path, source_label: str) -> None:
     """Build ``skirtor_mean2p_torus_grid.h5`` from ``SKIRTOR_mean_2p.pickle``."""
     df = _safe_load(input_pickle)
-    _build_native_grid(df, ["oa-values", "incl-values"], output_h5, "skirtor_mean2p", input_pickle)
+    _build_native_grid(
+        df, ["oa-values", "incl-values"], output_h5, "skirtor_mean2p", input_pickle, source_label
+    )
 
 
-def build_cat3d_lowfwd(input_pickle: Path, output_h5: Path) -> None:
+def build_cat3d_lowfwd(input_pickle: Path, output_h5: Path, source_label: str) -> None:
     """Build ``cat3d_wind_lowfwd_torus_grid.h5`` from rows 0-209 of ``CAT3D_mean_3p.pickle``.
 
     Mirrors ``scripts/build_cat3d_wind_grid.py``'s row-210+ slice for the
@@ -368,6 +389,7 @@ def build_cat3d_lowfwd(input_pickle: Path, output_h5: Path) -> None:
         output_h5,
         "cat3d_wind_lowfwd",
         input_pickle,
+        source_label,
         row_slice=slice(0, 210),
     )
 
@@ -423,15 +445,14 @@ def _cli() -> None:
         "instead of reading --torus-dir. No AGNfitter install needed.",
     )
     args = p.parse_args()
-    from _agnfitter_download import resolve
+    from _agnfitter_download import archive_relpath, resolve
 
     for name, pickle_name, out_name, fn in _SPECS:
         if args.which != "all" and args.which != name:
             continue
-        input_pickle = resolve(
-            args.torus_dir / pickle_name, f"models/TORUS/{pickle_name}", download=args.download
-        )
-        fn(input_pickle, args.output_dir / out_name)
+        repo_relpath = f"models/TORUS/{pickle_name}"
+        input_pickle = resolve(args.torus_dir / pickle_name, repo_relpath, download=args.download)
+        fn(input_pickle, args.output_dir / out_name, archive_relpath(repo_relpath))
 
 
 if __name__ == "__main__":

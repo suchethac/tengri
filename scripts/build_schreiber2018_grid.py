@@ -104,8 +104,17 @@ def _table_to_lnu(fits_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return tdust, wave_aa, l_nu
 
 
-def build(input_dir: Path, output_h5: Path) -> None:
-    """Read the S17 dust + PAH FITS and emit ``schreiber2018_templates.h5``."""
+def build(
+    input_dir: Path,
+    output_h5: Path,
+    source_label: str = "AGNfitter-rX_v0.1/models/STARBURST",
+) -> None:
+    """Read the S17 dust + PAH FITS and emit ``schreiber2018_templates.h5``.
+
+    ``source_label`` is the provenance string written to the ``source_dir``
+    attribute: the directory inside the pinned upstream archive, not wherever
+    this machine holds it.
+    """
     dust_path = input_dir / "s17_lowvsg_dust.fits"
     pah_path = input_dir / "s17_lowvsg_pah.fits"
     tdust_d, wave_d, dust_lnu = _table_to_lnu(dust_path)
@@ -139,7 +148,12 @@ def build(input_dir: Path, output_h5: Path) -> None:
         g.create_dataset("wavelength", data=common_wave, compression="gzip")
         g.create_dataset("dust", data=dust_grid, compression="gzip")
         g.create_dataset("pah", data=pah_grid, compression="gzip")
-        g.attrs["source_dir"] = str(input_dir)
+        # The directory INSIDE the pinned upstream archive, never where this
+        # machine happened to keep it: an absolute path here ships a
+        # contributor's home directory to every user of the public
+        # repository (tools/check_no_local_paths.py). The two
+        # ``source_sha256_*`` attributes below pin the actual bytes.
+        g.attrs["source_dir"] = source_label
         g.attrs["n_tdust"] = n_t
         g.attrs["n_wave"] = n_wave
         g.attrs["tdust_unit"] = "K"

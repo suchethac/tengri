@@ -167,8 +167,18 @@ def _regrid_templates(
     return common, out
 
 
-def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
-    """Read NK0_mean_1p.pickle and emit tengri's ``nenkova_agnfitter_torus_grid.h5``."""
+def build(
+    input_pickle: Path,
+    output_h5: Path,
+    n_wave: int = 4096,
+    source_label: str = "AGNfitter-rX_v0.1/models/TORUS/NK0_mean_1p.pickle",
+) -> None:
+    """Read NK0_mean_1p.pickle and emit tengri's ``nenkova_agnfitter_torus_grid.h5``.
+
+    ``source_label`` is the provenance string written to the ``source_pickle``
+    attribute: the path inside the pinned upstream archive, not wherever this
+    machine holds the file.
+    """
     d = _safe_load(input_pickle)
 
     missing = {"incl-values", "wavelength", "SED"} - set(d.keys())
@@ -193,7 +203,11 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         g.create_dataset("incl_axis", data=incl_values, compression="gzip")
         g.create_dataset("wavelength", data=wavelength_aa, compression="gzip")
         g.create_dataset("template", data=template, compression="gzip")
-        g.attrs["source_pickle"] = str(input_pickle)
+        # The path INSIDE the pinned upstream archive, never where this
+        # machine happened to keep it: an absolute path here ships a
+        # contributor's home directory to every user of the public
+        # repository (tools/check_no_local_paths.py).
+        g.attrs["source_pickle"] = source_label
         g.attrs["n_incl"] = n_incl
         g.attrs["n_wave"] = n_wave
         g.attrs["wavelength_unit"] = "Angstrom"
@@ -229,10 +243,16 @@ def _cli() -> None:
         "instead of reading --input. No AGNfitter install needed.",
     )
     args = p.parse_args()
-    from _agnfitter_download import resolve
+    from _agnfitter_download import archive_relpath, resolve
 
-    input_pickle = resolve(args.input, "models/TORUS/NK0_mean_1p.pickle", download=args.download)
-    build(input_pickle, args.output, n_wave=args.n_wave)
+    repo_relpath = "models/TORUS/NK0_mean_1p.pickle"
+    input_pickle = resolve(args.input, repo_relpath, download=args.download)
+    build(
+        input_pickle,
+        args.output,
+        n_wave=args.n_wave,
+        source_label=archive_relpath(repo_relpath),
+    )
 
 
 if __name__ == "__main__":

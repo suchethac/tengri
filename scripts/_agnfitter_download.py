@@ -45,6 +45,29 @@ def _cache_dir() -> Path:
     return cache
 
 
+def archive_relpath(repo_relpath: str) -> str:
+    """Provenance label for a file inside the pinned upstream archive.
+
+    A ``source_pickle`` / ``source_dir`` attribute records WHICH upstream file
+    a vendored grid was reduced from, so it must name a location inside the
+    archive -- never wherever the builder happened to find it on one machine.
+    An absolute path there ships a contributor's home directory to every user
+    of the public repository and is caught by ``tools/check_no_local_paths.py``.
+
+    Parameters
+    ----------
+    repo_relpath : str
+        Path inside the AGNfitter repo, e.g. ``models/TORUS/S04.pickle``.
+
+    Returns
+    -------
+    str
+        ``<pinned tag>/<repo_relpath>``, e.g.
+        ``AGNfitter-rX_v0.1/models/TORUS/S04.pickle``.
+    """
+    return f"{AGNFITTER_REF}/{repo_relpath.lstrip('/')}"
+
+
 def raw_url(repo_relpath: str) -> str:
     """Build the raw-content URL for a repo-relative path at the pinned ref.
 
