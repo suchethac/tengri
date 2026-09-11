@@ -97,3 +97,7 @@ def test_population_fit_with_free_noise_frac_cal_runs(synthetic_ssp, simple_obse
 
     grad = jax.grad(lambda x: engine["hamiltonian"](x, fitter._data_args))(xi)
     assert np.all(np.isfinite(np.asarray(grad))), "hamiltonian gradient is non-finite"
+    assert np.any(np.asarray(grad) != 0.0), (
+        "`np.asarray(grad)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )

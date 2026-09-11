@@ -88,6 +88,10 @@ def test_stellar_sed_gradient_is_finite_in_pure_float32(synthetic_ssp_wide, para
         "backward materialized total_mass*L_sun (~3.8e43, inf in float32); L_sun "
         "must be folded into the SSP operand inside the einsum"
     )
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     # Same gradient to float32 precision (the fold is algebraically identical).
     assert abs(g32.astype(np.float64) / g64 - 1.0) < 1e-3, (
         f"float32 gradient {float(g32):.4e} departs from float64 {g64:.4e}"

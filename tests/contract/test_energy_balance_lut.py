@@ -117,6 +117,10 @@ def test_eb_lut_gradient_is_finite(synthetic_ssp_wide):
     p = {**m.spec.get_fixed_values(), **m.spec.sample(jax.random.PRNGKey(2))}
     g = jax.jit(jax.grad(lambda q: jnp.sum(m.predict_photometry(q))))(p)
     assert np.all(np.isfinite(np.asarray(g["dust_tau_bc"])))
+    assert np.any(np.asarray(g["dust_tau_bc"]) != 0.0), (
+        "`np.asarray(g['dust_tau_bc'])` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 # ── the interpolation only ever needs four nodes ──────────────────────────
@@ -216,6 +220,10 @@ def test_sparse_bracket_gradient_matches_the_dense_weight_vector():
         got = jax.grad(sparse, argnums=(0, 1))(*args)
         want = jax.grad(dense, argnums=(0, 1))(*args)
         assert np.all(np.isfinite(np.asarray(got)))
+        assert np.any(np.asarray(got) != 0.0), (
+            "`np.asarray(got)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(np.asarray(got), np.asarray(want), rtol=1e-9, atol=0.0)
 
 

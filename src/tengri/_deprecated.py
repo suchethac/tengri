@@ -259,16 +259,16 @@ def renamed_kwarg(old: str, new: str, *, drop_version: str = "1.0") -> Callable[
 
     Notes
     -----
-    Use as a decorator on a function before the registry decorator::
+    Use as a decorator on a function after (below) the registry decorator::
 
-        @renamed_kwarg("n_slope", "dust_slope")
         @register_dust_law("power_law", ...)
+        @renamed_kwarg("n_slope", "dust_slope")
         def power_law(wavelength, dust_slope: float = -0.7): ...
 
-    Python applies decorators bottom-up, so the registry decorator
-    stores the raw function (with the *new* name), and the
-    ``inspect.signature`` reports only the *new* parameter.
-    The wrapper, stored at the module level, still accepts *old*.
+    Python applies decorators bottom-up, so ``@renamed_kwarg`` wraps the
+    raw function first, then ``@register_dust_law`` stores the wrapped version
+    in the registry. This way both the module-level attribute and the registry
+    callable accept the *old* parameter name with a DeprecationWarning.
 
     Examples
     --------

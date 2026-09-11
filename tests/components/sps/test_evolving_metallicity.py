@@ -245,6 +245,10 @@ class TestEvolvingMetallicityGradients:
         grad = assert_grad_matches_fd(loss, log_z_per_age)
         chex.assert_tree_all_finite(grad)
         assert jnp.any(grad != 0.0), "Gradients must be non-zero"
+        assert jnp.all(jnp.isfinite(grad)), (
+            "`grad` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     def test_grad_wrt_ramp_params(self, ssp_flux, ssp_lgmet, ssp_lg_age_gyr):
         """Gradients w.r.t. ramp parameters (initial, final) should flow."""
@@ -283,7 +287,15 @@ class TestEvolvingMetallicityGradients:
         )
 
         assert g_jax_init != 0.0, "Gradient w.r.t. initial Z must be non-zero"
+        assert np.all(np.isfinite(g_jax_init)), (
+            "`g_jax_init` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
         assert g_jax_final != 0.0, "Gradient w.r.t. final Z must be non-zero"
+        assert np.all(np.isfinite(g_jax_final)), (
+            "`g_jax_final` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     def test_grad_autodiff_vs_finite_diff(self, ssp_flux, ssp_lgmet, ssp_lg_age_gyr):
         """Autodiff gradient matches central finite differences."""

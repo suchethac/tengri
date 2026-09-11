@@ -223,6 +223,10 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     ref = ref.astype(np.float64)
     peak = float(np.abs(ref).max())
     assert np.all(np.isfinite(ref)), "setup: float64 dust IR is not finite"
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert 0.0 < peak < 3.4e38, f"setup: emitted SED {peak:.3e} is not float32-representable"
 
     with jax.enable_x64(False):
@@ -255,6 +259,10 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     assert total is not None, "probe setup failed: total SED was not published"
     assert np.all(np.isfinite(total)), (
         f"{emission_type}: dust IR poisoned the total SED in float32"
+    )
+    assert np.any(total != 0.0), (
+        "`total` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 
@@ -403,6 +411,10 @@ def test_building_blocks_are_float32_clean_and_refuse_standalone_selection(
     ref = np.asarray(state.derived["sed_dust_ir"], dtype=np.float64)
     peak = float(np.abs(ref).max())
     assert np.all(np.isfinite(ref)), "setup: float64 dust IR is not finite"
+    assert np.any(ref != 0.0), (
+        "setup: float64 dust IR is identically zero — finite is not enough, a building "
+        "block that emits nothing cannot be compared against float32 (#2100)"
+    )
     assert 0.0 < peak < 3.4e38, f"setup: emitted SED {peak:.3e} is not float32-representable"
 
     # The reason it is a building block, measured rather than asserted: a
@@ -419,6 +431,10 @@ def test_building_blocks_are_float32_clean_and_refuse_standalone_selection(
     assert float(np.isfinite(got).mean()) == 1.0, (
         f"{emission_type}: sed_dust_ir is not fully finite in pure float32"
     )
+    assert np.any(got != 0.0), (
+        f"{emission_type}: sed_dust_ir is identically zero in pure float32 — finite is not "
+        "enough, a collapsed building block is as unusable as a NaN one (#2100)"
+    )
     peak_relative_error = float(np.abs(got.astype(np.float64) - ref).max() / peak)
     assert peak_relative_error < 2.0e-2, (
         f"{emission_type}: float32 dust IR departs from float64 by "
@@ -432,6 +448,10 @@ def test_photometry_is_finite_in_pure_float32(synthetic_ssp_wide):
     model = _model(ssp, "dale2014")
     sed64 = np.asarray(model.predict_state({}).sed_intrinsic, dtype=np.float64)
     assert np.all(np.isfinite(sed64)), "setup: float64 SED is not finite"
+    assert np.any(sed64 != 0.0), (
+        "`sed64` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     with jax.enable_x64(False):
         sed32 = np.asarray(_model(ssp, "dale2014").predict_state({}).sed_intrinsic)
@@ -440,6 +460,10 @@ def test_photometry_is_finite_in_pure_float32(synthetic_ssp_wide):
         f"total SED non-finite in pure float32 "
         f"({float(np.isfinite(sed32).mean()):.2%} finite) — dust IR is the last "
         "out-of-range consumer in the chain"
+    )
+    assert np.any(sed32 != 0.0), (
+        "`sed32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 

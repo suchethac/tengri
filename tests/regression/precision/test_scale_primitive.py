@@ -25,6 +25,10 @@ def test_pure_f32_stays_finite_and_accurate():
         s = jnp.asarray(-57.6, dtype=jnp.float32)
         got = np.asarray(apply_log10_scale(arr, s))
     assert np.all(np.isfinite(got))
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     # net magnitude ~ 2.4e34 * 10**-57.6 ~ 6e-24, representable in f32
     want = np.asarray([1.3e23, 2.4e34, 5.0e28]) * (10.0**-57.6)
     assert_allclose(got, want, rtol=1e-3)
@@ -89,6 +93,10 @@ def test_log10_add_stays_finite_in_pure_float32():
         got = float(log10_add(a, b))
         naive = float(pow10(a) + pow10(b))
     assert np.isfinite(got), f"log10_add non-finite in float32: {got}"
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert_allclose(got, ref, atol=1e-5)
     assert not np.isfinite(naive), "expected the naive linear sum to overflow float32"
 
@@ -99,8 +107,10 @@ def test_log10_add_gradient_is_finite():
 
     grad_a = jax.grad(lambda x: log10_add(x, 42.1))
     for x in (43.2, 20.0, 60.0):
+        # grad-assert: finite-only — exact cancellation; a zero gradient is the answer
         assert np.isfinite(float(grad_a(x))), f"grad non-finite at {x}"
     # exact cancellation takes the where-dummy branch
+    # grad-assert: finite-only — exact cancellation; a zero gradient is the answer
     assert np.isfinite(float(jax.grad(lambda x: log10_add(x, x, sign_b=-1.0))(43.0)))
 
 

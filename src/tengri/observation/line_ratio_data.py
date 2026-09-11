@@ -34,6 +34,7 @@ import dataclasses
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.observation.line_list import _DEFAULT_OPTICAL_LINES
 
 _NAME_TO_WAVELENGTH: dict[str, float] = {t[0]: t[1] for t in _DEFAULT_OPTICAL_LINES}
@@ -103,6 +104,23 @@ class LineRatioData:
                     f"{field_name} shape {arr.shape} does not match expected ({n},) "
                     f"for {n} ratios."
                 )
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this line ratio data.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from line names, wavelengths, log_space flag, and array shapes.
+
+        Notes
+        -----
+        Line names, wavelengths, and log_space are keyed by content as they
+        define the likelihood function. Ratio and error values are keyed by
+        shape only (array values don't affect the program, only the per-galaxy
+        data does).
+        """
+        return derive_key(self, _LINE_RATIO_DATA_CACHE_KEY_POLICY)
 
     @property
     def n_ratios(self) -> int:
@@ -227,3 +245,14 @@ class LineRatioData:
         )
         space = "log10" if self.log_space else "linear"
         return f"{self.n_ratios} line ratios [{space}] ({pairs})"
+
+
+_LINE_RATIO_DATA_CACHE_KEY_POLICY: KeyPolicy = {
+    "numerators": content("numerator line names determine the likelihood function"),
+    "denominators": content("denominator line names determine the likelihood function"),
+    "ratios": shape("per-galaxy data, not part of the structural program"),
+    "errors": shape("per-galaxy data, not part of the structural program"),
+    "numerator_waves": content("numerator line wavelengths determine the likelihood function"),
+    "denominator_waves": content("denominator line wavelengths determine the likelihood function"),
+    "log_space": content("log vs linear space choice changes the likelihood function"),
+}

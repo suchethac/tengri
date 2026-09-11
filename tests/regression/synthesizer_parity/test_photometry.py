@@ -172,3 +172,7 @@ def test_filter_jit_and_grad_compatible():
     )
     assert jnp.isfinite(val) and val > 0
     assert bool(jnp.all(jnp.isfinite(grad))), "non-finite gradient through filter convolution"
+    assert jnp.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )

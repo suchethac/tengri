@@ -144,7 +144,15 @@ class TestMadau1995IGM:
 
         # Both gradients should be finite
         assert jnp.isfinite(grad_jax), f"JAX grad is not finite: {grad_jax}"
+        assert jnp.any(grad_jax != 0.0), (
+            "`grad_jax` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         assert np.isfinite(grad_fd), f"FD grad is not finite: {grad_fd}"
+        assert np.any(grad_fd != 0.0), (
+            "`grad_fd` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         # Sign check: negative (more absorption at higher z)
         assert grad_jax < 0.0, (

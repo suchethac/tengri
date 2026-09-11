@@ -40,6 +40,10 @@ def test_compute_grid_weights_accepts_f64_grid_under_pure_float32():
         w = np.asarray(w)
 
     assert np.all(np.isfinite(w)), f"weights non-finite: {w}"
+    assert np.any(w != 0.0), (
+        "`w` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert_allclose(w.sum(), 1.0, rtol=1e-5)
 
 
@@ -64,5 +68,9 @@ def test_compute_grid_weights_nearest_fallback_under_float32():
     with jax.enable_x64(False):
         w = np.asarray(compute_grid_weights(x, grid, scatter=1e-6, edges=edges))
     assert np.all(np.isfinite(w))
+    assert np.any(w != 0.0), (
+        "`w` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert_allclose(w.sum(), 1.0, rtol=1e-5)
     assert int(np.argmax(w)) == 2, "fallback must select the nearest node"

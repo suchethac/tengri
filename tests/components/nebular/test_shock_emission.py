@@ -256,6 +256,10 @@ class TestShockDifferentiable:
             err_msg="compute_shock_sed: FD check ∂/∂velocity",
         )
         assert grad_jax != 0.0
+        assert np.all(np.isfinite(grad_jax)), (
+            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     def test_grad_wrt_luminosity(self):
         wave = jnp.linspace(3000.0, 8000.0, 500)
@@ -272,6 +276,10 @@ class TestShockDifferentiable:
             err_msg="compute_shock_sed: FD check ∂/∂luminosity",
         )
         assert grad_jax != 0.0
+        assert np.all(np.isfinite(grad_jax)), (
+            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
 
 # ── Integration with Parameters ────────────────────────────────────

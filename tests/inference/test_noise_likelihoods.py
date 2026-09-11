@@ -120,6 +120,10 @@ class TestPoissonNoiseLikelihood:
         pred0 = jnp.array([100.0])
         grad_val = assert_grad_matches_fd(loss, pred0)
         assert jnp.isfinite(grad_val[0])
+        assert jnp.any(grad_val[0] != 0.0), (
+            "`grad_val[0]` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_outlier_same_as_inlier(self):
         """Residual |d - m| drives variance, not magnitude."""
@@ -239,7 +243,29 @@ class TestStudentTLikelihood:
         grad_sigma = jax.grad(loss_sigma)(jnp.array([1.0]))
 
         assert jnp.isfinite(grad_pred[0])
+        assert jnp.any(grad_pred[0] != 0.0), (
+            "`grad_pred[0]` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
+
+        # grad-assert: finite-only — sigma=1.0 against residual |1.0 - 0.0| = 1.0 is
+        # exactly sigma's own maximum-likelihood point. The Student-t NLL derivative
+        # is 1/s - (nu+1)r^2 / (s*(nu*s^2 + r^2)), which vanishes iff s == |r|, so the
+        # zero here is a stationary point rather than a severed gradient path — it
+        # CROSSES zero at this sigma (measured -0.506 at s=0.8, +0.333 at s=1.5).
         assert jnp.isfinite(grad_sigma[0])
+
+        # "flows through sigma" is the claim this test's name makes, so state it
+        # where it is actually testable: one step off the MLE, finite AND non-zero.
+        grad_sigma_off = jax.grad(loss_sigma)(jnp.array([1.5]))
+        assert jnp.isfinite(grad_sigma_off[0]), (
+            "non-finite d(NLL)/d(sigma) at sigma=1.5, one step off the MLE"
+        )
+        assert jnp.any(grad_sigma_off[0] != 0.0), (
+            "`grad_sigma_off[0]` is identically zero away from sigma's MLE, so the "
+            "gradient does not flow through sigma at all — finite is not enough, a "
+            "value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_symmetry_residual(self):
         """log_prob depends on |obs - pred|, so (obs, pred) ↔ (pred, obs) up

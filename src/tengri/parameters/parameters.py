@@ -59,6 +59,7 @@ import zlib
 import jax
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
 from tengri.parameters._aliases import (
     resolve_param_name,
@@ -2252,6 +2253,27 @@ class Parameters:
             self.summary()
         return buf.getvalue().rstrip("\n")
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this parameter specification.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from all parameter attributes.
+
+        Notes
+        -----
+        Includes which parameters are fixed/free via a tail entry;
+        prior bounds and values are structural and covered through the
+        Fitter engine's key (#1972). Excludes _distributions and
+        _param_registry as they are computed from parameter names alone.
+        """
+        # Fixed/free structure is critical: changing which params are free moves the key
+        fixed_names = tuple(sorted(self.fixed_params))
+        free_names = tuple(sorted(self.free_params))
+        tail = (("fixed_names", fixed_names), ("free_names", free_names))
+        return derive_key(self, _PARAMETERS_CACHE_KEY_POLICY, tail=tail)
+
     def __repr__(self) -> str:
         lines = [f"Parameters(mean_sfh_type={self._mean_sfh_type},"]
         for name in sorted(self._distributions.keys()):
@@ -2261,3 +2283,101 @@ class Parameters:
             lines.append(f"    {'n_grid':30s} = {self._n_grid},")
         lines.append(")")
         return "\n".join(lines)
+
+
+_PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
+    # Structural settings: which components are enabled
+    "_mean_sfh_type": content("SFH model selection determines parameters"),
+    "_n_grid": content("grid size for stochastic SFH determines parameters"),
+    "_nebular_cb19": content("nebular backend selection determines parameters"),
+    "_nebular_mappings": content("nebular backend selection determines parameters"),
+    "_nebular_mappings_agn": content("nebular backend selection determines parameters"),
+    "age_kernel": content("age kernel type (CIC vs DSPS) affects SFH integration"),
+    "agn_attenuation_block": content("AGN attenuation type determines parameters"),
+    "agn_axis_grids": content("AGN axis grids determine parameters"),
+    "agn_blr_block": content("AGN BLR type determines parameters"),
+    "agn_disc_block": content("AGN disc type determines parameters"),
+    "agn_feii_block": content("AGN FeII type determines parameters"),
+    "agn_model": content("AGN model selection determines parameters"),
+    "agn_nlr_block": content("AGN NLR type determines parameters"),
+    "agn_norm": content("AGN normalization mode determines parameters"),
+    "agn_torus_block": content("AGN torus type determines parameters"),
+    "alpha_fe_evolving": content("metallicity evolution choice determines parameters"),
+    "apply_igm": content("IGM application affects forward model"),
+    "astrodust_f_cnm": content("astrodust model variant determines parameters"),
+    "astrodust_spinning_dust": content("astrodust model variant determines parameters"),
+    "bin_edges_gyr": content("bin edges for binned SFH model determine parameters"),
+    "chem_evol": content("chemical evolution model determines parameters"),
+    "cloudy_grid_path": content("CLOUDY grid path determines available parameters"),
+    "cue_full_catalog": content("CUE full catalog setting determines parameters"),
+    "cue_weights_path": content("CUE weights path affects model"),
+    "dla": content("DLA model determines parameters"),
+    "dl07_grid_path": content("DL07 grid path determines available parameters"),
+    "dust_approx": content("dust approximation type determines parameters"),
+    "dust_eb_include_lyc": content("dust LyC treatment determines parameters"),
+    "dust_emission": content("dust emission model selection determines parameters"),
+    "dust_law_bc": content("birth cloud dust law determines parameters"),
+    "dust_law_diff": content("diffuse dust law determines parameters"),
+    "dust_law_neb": content("nebular dust law determines parameters"),
+    "dust_nebular_screen": content("which screen the nebular light passes through (#2234)"),
+    "dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
+    "dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
+    "dust_law_overrides": content("dust law parameter overrides determine parameters"),
+    "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
+    "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
+    "dust_model": content("dust model type determines parameters"),
+    "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
+    "dust_wg00_geometry": content("WG00 dust geometry determines parameters"),
+    "dust_wg00_structure": content("WG00 dust structure determines parameters"),
+    "eline_broad": content("broad line component flag determines parameters"),
+    "eline_mode": content("emission line fitting mode determines parameters"),
+    "evolving_metallicity": content("metallicity evolution choice determines parameters"),
+    "field_centering": content("field centering parameter affects SFH model"),
+    "foreground_ebmv_mw": content("foreground dust affects model"),
+    "foreground_law": content("foreground extinction law determines parameters"),
+    "foreground_rv": content("foreground RV affects model"),
+    "igm_model": content("IGM model selection determines parameters"),
+    "igm_patchy": content("patchy IGM affects model"),
+    "lgmet_scatter": content("metallicity scatter determines model behavior"),
+    "met_interp": content("metallicity interpolation method determines parameters"),
+    "met_mode": content("metallicity mode determines parameters"),
+    "neb_ionization": content("nebular ionization source determines parameters"),
+    "nebular": content("nebular emission backend determines parameters"),
+    "nebular_mappings_agn_density": content("MAPPINGS AGN density determines parameters"),
+    "nebular_mappings_agn_grid_path": content("MAPPINGS AGN grid path determines parameters"),
+    "nebular_mappings_agn_ionizing_source_warning": content(
+        "MAPPINGS AGN ionizing source affects model"
+    ),
+    "nebular_mappings_density": content("MAPPINGS density determines parameters"),
+    "nebular_mappings_grid_path": content("MAPPINGS grid path determines parameters"),
+    "nebular_mappings_ionizing_source_warning": content("MAPPINGS ionizing source affects model"),
+    "nebular_mappings_model": content("MAPPINGS model determines parameters"),
+    "nebular_mode": content("nebular mode determines which parameters are used"),
+    "radio": content("radio component flag determines parameters"),
+    "radio_agn_model": content("radio AGN model determines parameters"),
+    "radio_sfr_mode": content("radio SFR mode determines parameters"),
+    "shock": content("shock component flag determines parameters"),
+    "shock_abundance": content("shock abundance setting determines parameters"),
+    "shock_component": content("shock component type determines parameters"),
+    "shock_norm": content("shock normalization determines parameters"),
+    "xray": content("X-ray component flag determines parameters"),
+    "xray_model": content("X-ray model determines parameters"),
+    "z_interp": content("redshift interpolation method determines model behavior"),
+    # Priors and distributions: which parameters are free vs fixed
+    "_defaults": content("default values determine fixed parameter values"),
+    "_flat_provenance": content("parameter provenance (name, group origin) determines structure"),
+    "_group_provenance": content(
+        "grammar builds attach it via parse_groups; it decides which shape parameters reach "
+        "the laws"
+    ),
+    "_mirrors": content("parameter mirror relationships determine structure"),
+    "_user_provided": content("user-provided parameters determine parameter source"),
+    "_valid_param_names": content("valid parameter names define scope"),
+    # Excluded: these are derived or runtime-only
+    "_distributions": exclude(
+        "prior bounds and values are runtime inputs of the Fitter engine (#1972)"
+    ),
+    "_param_registry": exclude(
+        "registry is a pure function of parameter names (keyed) and installed registry"
+    ),
+}

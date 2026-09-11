@@ -123,6 +123,10 @@ class TestContinuityFlexSFH:
 
         g = assert_grad_matches_fd(total_sfr, 0.5)
         assert jnp.isfinite(g)
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_gradient_through_flex_ratio(self):
         """Gradient w.r.t. a flex bin ratio should be finite."""
@@ -133,6 +137,10 @@ class TestContinuityFlexSFH:
 
         g = assert_grad_matches_fd(total_sfr, 0.3)
         assert jnp.isfinite(g)
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_prior_logp_zero_ratios(self):
         """All-zero ratios should give maximum log-probability.

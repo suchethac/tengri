@@ -184,6 +184,10 @@ def test_float32_likelihood_gradient_survives_the_peak_factorization(ssp_bare, o
     _, g32 = _nlp_gradient(ssp_bare, obs, groups, flux, noise, x64=False, dtype=jnp.float32)
 
     assert np.all(np.isfinite(g32)), f"float32 gradient is non-finite for the {seam} seam: {g32}"
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
     # 1e-2 sits two orders below the 0.30 defect and an order above the 1.1e-3 the fix
     # achieves, so it is neither brittle nor able to pass while the bug is present.

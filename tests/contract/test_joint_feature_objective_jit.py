@@ -138,6 +138,10 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
     assert np.isfinite(v)
     gfn = jax.jit(jax.grad(lambda p, d: nlp(p, d)))
     assert np.isfinite(_grad_max(gfn, x0, da))
+    assert np.any(_grad_max(gfn, x0, da) != 0.0), (
+        "`_grad_max(gfn, x0, da)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     # (3) the index channel is not a silent drop: corrupt Dn4000 -> objective moves
     sid_bad = SpectralIndexData(
@@ -225,6 +229,10 @@ def test_desi_joint_phot_lines_dn4000_objective(ssp_data_fsps):
     assert np.isfinite(v)
     gfn = jax.jit(jax.grad(lambda p, d: nlp(p, d)))
     assert np.isfinite(_grad_max(gfn, x0, da))
+    assert np.any(_grad_max(gfn, x0, da) != 0.0), (
+        "`_grad_max(gfn, x0, da)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     # lines contribute: 3x the observed line fluxes -> objective must move
     lines_bad = LineFluxData(
