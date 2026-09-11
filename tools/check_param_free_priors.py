@@ -37,11 +37,15 @@ grounds for refusing, and the distinction matters when revisiting them:
 ``target-dependent``
     The admissible range is set by the source being fitted rather than by
     physics or a grid, so no static interval is correct for every target. An
-    absolute luminosity or SFR has no galaxy-independent scale; an SF-onset
-    lookback is capped by the age of the universe at the source redshift (8.6
-    Gyr at z=0.5, 0.9 at z=6), so a bound generous enough for z~0 admits
-    zero-star-formation draws at z=2. These must be freed against the caller's
-    own target.
+    absolute luminosity or SFR has no galaxy-independent scale (``dust_L_agn_ir``)
+    and must be freed against the caller's own target. SF-onset lookbacks used
+    to sit here too -- capped by the age of the universe at the source
+    redshift (8.6 Gyr at z=0.5, 0.9 at z=6), so a bound generous enough for
+    z~0 admits zero-star-formation draws at z=2 -- until a parse-time
+    ``age_at_z(z)`` narrowing pass (``parameters/groups.py``'s
+    ``_narrow_free_priors_to_z``) made a static declaration usable: see
+    ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr``
+    in the SFH registry, now declared rather than refused.
 ``explicit-only``
     A genuine per-object freedom with a genuine range, withheld from the
     wildcard because the data a default fit has cannot constrain it. Freeing it
@@ -75,9 +79,20 @@ REFUSED: dict[str, tuple[str, str]] = {
     # dust_Rv, dust_delta, dust_bump_strength, dust_slope -- are declared now.
     # Scoping the dust wildcard to the laws the build selects is what made them
     # declarable, which is the general remedy this ground was pointing at.
-    "dust_frac_agn": ("inert", "needs templates_qso; the default Dale file ships only SF"),
-    "neb_logZ_gas": ("inert", "range is the selected nebular backend's grid; neb is unscoped"),
     "neb_xid": ("inert", "Feltre NLR only, and a 3-node grid inside a wider validator"),
+    "neb_hbfrac": (
+        "inert",
+        "declared but never wired -- constructor-only argument; HbFrac axis "
+        "collapsed at grid load (#2213)",
+    ),
+    "shock_b_over_sqrt_n": (
+        "inert",
+        "real gradient since the index-space fix but ~18% autodiff-vs-FD "
+        "smoothness mismatch on the 2D-coupled sparse grid (case (c), "
+        "docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md); a "
+        "family-aware interpolant (#2066) is the prerequisite for a default "
+        "free prior; explicit priors work today",
+    ),
     # ── fixed-by-physics: real range, but not a per-object freedom ──
     "radio_alpha_ff": ("fixed-by-physics", "optically-thin bremsstrahlung is -0.1 analytically"),
     "radio_delv_mass_slope": ("fixed-by-physics", "FIRRC slope; degenerate at fixed (M*, z)"),
@@ -88,38 +103,66 @@ REFUSED: dict[str, tuple[str, str]] = {
     "xray_gamma_lmxb": ("fixed-by-physics", "Lehmer+2016 population constant; see xray_det_lmxb"),
     "met_alpha_fe": ("fixed-by-physics", "pre-existing decision; only constrained by spectra"),
     "met_alpha_fe_young": ("fixed-by-physics", "as met_alpha_fe"),
-    "dust_f_obscuration": ("fixed-by-physics", "pre-existing decision; degenerate with tau_diff"),
     # ── target-dependent: the bound is set by the source, not by physics ──
+    # The three SF-onset lookbacks that used to sit here --
+    # sfh_exp_start_gyr / sfh_dexp_start_gyr / sfh_const_start_gyr -- are
+    # declared now: a static Uniform(lo, _AGE_UNIV_GYR) ceiling in the SFH
+    # registry, narrowed at parse time to age_at_z(z) by
+    # parameters/groups.py's _narrow_free_priors_to_z whenever the build's
+    # redshift is known. Scoping the ceiling to the actual source redshift is
+    # what made them declarable, which is the general remedy this ground was
+    # pointing at (same shape as the "inert" scoping fix noted above).
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
-    "sfh_snorm_burst_burst_sfr": ("target-dependent", "absolute SFR; scale set by the galaxy"),
-    "sfh_tsnorm_burst_burst_sfr": ("target-dependent", "as the snorm variant"),
-    "sfh_exp_start_gyr": ("target-dependent", "onset capped by the age of the universe at z"),
-    "sfh_dexp_start_gyr": ("target-dependent", "as sfh_exp_start_gyr; caught by test_bug_1031"),
-    "sfh_const_start_gyr": ("target-dependent", "as sfh_exp_start_gyr"),
+    "dust_log_L_ir": (
+        "target-dependent",
+        "absolute (log) luminosity; no galaxy-independent interval -- declaring "
+        "it at all is itself the energy-balance opt-out (#2187-series), so a "
+        "wildcard must never reach it and silently decouple the IR budget",
+    ),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
         "not-continuous",
         "validator requires int; selects one of 3 shapes",
     ),
-    "neb_hbfrac": ("not-continuous", "snapped to the nearest of 2 grid values at load time"),
-    "shock_log_density": ("not-continuous", "snapped to nearest grid point -- zero gradient"),
-    "shock_b_over_sqrt_n": ("not-continuous", "snapped to nearest grid point -- zero gradient"),
     "noise_dof": ("not-continuous", "0 is a sentinel selecting the Gaussian likelihood"),
     "dla_z": ("not-continuous", "0 is a sentinel meaning 'use the source redshift'"),
-    "redshift": ("not-continuous", "top-level grammar argument; survey-dependent range"),
     "sfh_const_end_gyr": ("not-continuous", "ordering constraint with sfh_const_start_gyr"),
+    "sfh_dpl_lookback_end_gyr": (
+        "not-continuous",
+        "ordering constraint with sfh_dpl_lookback_age_gyr; overlapping supports are refused",
+    ),
+    "sfh_trunc_exp_end_gyr": (
+        "not-continuous",
+        "ordering constraint with sfh_trunc_exp_age_gyr; overlapping supports are refused",
+    ),
     # ── explicit-only: real freedom, but not one a default fit can constrain ──
     "met_logzsol_scatter": (
         "explicit-only",
         "MDF second moment; declaring one added it to 6 of 10 shipped recipes",
     ),
-    # ── no-evidence: revisit these first ──
-    "radio_alpha_thin": ("no-evidence", "needs Table 1 of Martinez-Ramirez+2024"),
-    "radio_alpha_thick": (
-        "no-evidence",
-        "needs Table 1 of Martinez-Ramirez+2024; sign convention",
+    "dust_frac_agn": (
+        "explicit-only",
+        "real range [0, 0.99); the QSO-carrying grid ships (dale2014_cigale, "
+        "wired and tested), but the registry is flat (one declaration shared "
+        "by both Dale engines), so a global free would open it as an inert "
+        "dimension under plain SF-only dale2014 (#1482 class) -- free it "
+        "explicitly beside dale2014_cigale",
     ),
-    "agn_grahsp_a_bc": ("no-evidence", "needs the GRAHSP prior table (arXiv:2405.19297)"),
+    "dust_f_obscuration": (
+        "explicit-only",
+        "achromatic transmission floor, only partially/regime-dependently "
+        "degenerate with tau_diff (unverified in-repo -- the old claim "
+        "overstated it); withheld because every in-repo wildcard call site "
+        "means {tau_bc, tau_diff}; explicit Uniform(0.0, 0.5) works (worked "
+        "example in parameters.py)",
+    ),
+    # ── no-evidence: revisit these first ──
+    "agn_grahsp_a_bc": (
+        "no-evidence",
+        "GRAHSP tested and dropped the Balmer component (arXiv:2405.19297 "
+        "Sec 2.1.2); no range in the paper's prior table or reference code "
+        "(default 0.0 only) -- any interval would be invented",
+    ),
     "xray_delta_alpha_ox": ("no-evidence", "needs the Just+2007 alpha_ox intrinsic scatter"),
     "agn_xray_delta_alpha_ox": ("no-evidence", "as xray_delta_alpha_ox; kept in step with it"),
 }

@@ -1190,6 +1190,286 @@ deprecate.
 
 ---
 
+## Wildcard/per-parameter FREE that frees nothing now raises (2026-09, #2187)
+
+**Breaking — no shim.** `'all_params'/'other_params': FREE`, and an
+explicitly named per-parameter `FREE`, that cannot actually free anything now
+raise `ParameterError` instead of silently building a model with that physics
+pinned. The prior behavior — a `WildcardNoOpWarning` for an empty-coverage
+wildcard, and total silence for a Fixed-only parameter reached by name or by
+wildcard fallback — was exactly as swallowable as the bug it exists to catch:
+nothing in an ordinary test run distinguishes "the fit ran with N free
+parameters" from "the fit ran with N-1 free parameters and one silently
+pinned."
+
+| old                                                                                                          | new                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Empty-coverage wildcard, e.g. `igm={'type': 'inoue14', 'all_params': FREE}` — warned `WildcardNoOpWarning`, built anyway at z=0.1 with no IGM knob varying | Raises `ParameterError` ("... covers no parameters ..."); remove the wildcard or pass an explicit prior for a parameter the configuration actually declares |
+| Explicit per-parameter `FREE` on a parameter with no declared `free_prior`, e.g. `met={'type': 'table', 'alpha_fe': FREE}` — silently pinned it at its `Fixed` default, no warning at all | Raises `ParameterError` ("... has no declared free prior ..."); pass an explicit prior for a parameter you genuinely mean to vary — `met_alpha_fe` itself is the declared-but-unshipped alpha-enhancement axis (its liveness has never been measured), so there the honest fix is to drop the key, not to free it |
+| `redshift=FREE` — silently resolved to `Fixed(0.1)` (the registry default), a model built at z=0.1 with zero warning | `redshift` declares `free_prior=Uniform(0.0, 20.0)`, so `redshift=FREE` genuinely frees it; an explicit prior narrows it |
+| `sfh={'type': 'snorm_burst', 'all_params': FREE}` (and `'tsnorm_burst'`) — froze `burst_sfr` at `Fixed(0.0)`, so the (successfully freed) `burst_age` was a zero-gradient dimension: varying where a zero-height plateau sits changes nothing | `burst_sfr` now declares `free_prior=Uniform(0.0, 10.0)` — a dimensionless burst-plateau amplitude ratio, not a Msun/yr rate — and frees alongside `burst_age` |
+
+A wildcard that frees a genuine strict *subset* of what it covers is
+unaffected by this change and still only warns (`WildcardPartialFreeWarning`,
+#1474), because a partial free is sometimes the correct outcome — `dust_Rv`
+is fixed by definition under a Calzetti law, and several shipped recipes free
+a strict subset today. Only the two harder outcomes above — zero parameters
+covered, or covered-but-none-freed — escalated from warning (or silence) to
+`ParameterError`.
+
+**`redshift=FREE`** deserves its own note because it is the highest-traffic
+case. `redshift` had no declared `free_prior` since the grammar's first
+version, so `redshift=FREE` always silently built a model at the registry's
+`Fixed(0.1)` default — a ~1e17 flux-scale error for anyone who actually meant
+to fit the redshift. `redshift` now declares `free_prior=Uniform(0.0, 20.0)`,
+an interval that spans and exceeds every shipped recipe's redshift prior
+(`Uniform(0.01, 6)`, `Uniform(3.5, 10)`, `Uniform(0.01, 12)`), so
+`redshift=FREE` genuinely frees it instead of raising or silently pinning. An
+explicit user prior still narrows it. **This can change the dimensionality of
+a model for code that wrote `redshift=FREE` expecting it to do nothing** (the
+silent-pinning behavior this whole issue exists to fix): that code's
+expectation was itself the bug, and it should now either pass an explicit
+`redshift=Fixed(z)`/`Uniform(lo, hi)` or accept that redshift is a genuinely
+free dimension.
+
+**`burst_sfr`** (`sfh_snorm_burst_burst_sfr` / `sfh_tsnorm_burst_burst_sfr`)
+is the one case in this batch where the right fix was to *add* a
+`free_prior`, not just to raise more loudly. The parameter was declared with
+no `free_prior` on the claim that it is "an absolute rate in Msun/yr" with no
+galaxy-independent interval — true of ProSpect's own `massfunc_snorm_burst`
+(Robotham et al. 2020), whose amplitude is never rescaled, but false of
+tengri's independent implementation: `snorm_burst`/`snorm_trunc_burst` add
+the flat burst plateau to the *bare*, un-rescaled skew-normal kernel and only
+then renormalize the whole composite to `log_total_mass`
+(`_renormalize_to_mass`), which divides out any absolute scale. `burst_sfr`
+is therefore a dimensionless ratio of the burst plateau's height to the
+smooth kernel's own unit peak — exactly the kind of galaxy-independent
+quantity a `free_prior` can state. `Uniform(0.0, 10.0)` is calibrated by
+numerical integration of the composite shape, not asserted: at this model's
+own registry defaults (`width=1 Gyr`, `burst_age=0.1 Gyr`) it spans burst
+mass fractions from ~0.4% to ~29%, reaching as high as ~89% at the edges of
+the model's own declared `width`/`burst_age` ranges. See the `ParamDef`
+comment in `src/tengri/components/stellar/sfh/registry.py` for the full
+derivation.
+
+---
+
+## SF-onset lookbacks gain a redshift-aware `free_prior` (2026-09)
+
+**Non-breaking; a build-time dimensionality change for anyone using
+`all_params: FREE` on these three parameters.** `sfh_exp_start_gyr`,
+`sfh_dexp_start_gyr` and `sfh_const_start_gyr` (the SF-onset lookback for the
+`exp`, `dexp` and `const` SFH models) were REFUSED in
+`tools/check_param_free_priors.py` under the `target-dependent` ground: the
+admissible ceiling is the age of the universe at the source redshift, which a
+static registry declaration cannot know, so `'all_params': FREE` always left
+them silently pinned at their `Fixed` default.
+
+They now declare a static `free_prior` ceiling of today's cosmic age
+(`_AGE_UNIV_GYR`, z=0 — the widest value that is ever correct, mirroring the
+`default=_AGE_UNIV_GYR` convention already used on `sfh_dpl_age_gyr` and
+friends), and `parameters/groups.py`'s new `_narrow_free_priors_to_z` narrows
+that declared range to `age_at_z(z)` at parse time, whenever the build's
+`redshift` prior has a knowable floor. `sfh_const_start_gyr`'s floor is 0.01
+(not 0): its `bound_check` requires `lo > 0`, and `Parameters._validate_orderings`
+separately requires it to exceed `sfh_const_end_gyr`'s `Fixed(0.0)` ceiling.
+
+| old                                                                                                                          | new                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sfh={'type': 'dexp', 'all_params': FREE}` — `sfh_dexp_start_gyr` silently pinned at `Fixed(0.0)`, no warning, no free dimension | `sfh_dexp_start_gyr` genuinely frees, `Uniform(0.0, age_at_z(z))` — e.g. `[0, 8.6]` Gyr at `redshift=Fixed(0.5)`, `[0, 13.1]` Gyr at `redshift=Fixed(0.05)` |
+| A user's own explicit `sfh={'start_gyr': Uniform(0, 5)}` — unaffected then, unaffected now                                     | Still untouched: only a declaration-sourced free prior (`user_free`/`wildcard_free` provenance) is ever narrowed, never an explicit user `Uniform`          |
+| A free `redshift=Uniform(0, 20)` — the onset stayed at the static `_AGE_UNIV_GYR` ceiling regardless                            | Narrows against the redshift prior's own **floor** (z=0 here), so the cap is unchanged — a free redshift with a z=0 floor can promise nothing tighter        |
+
+**Deliberately no `_MIN_RETAINED_FRACTION` floor here** (contrast the
+template-grid narrowing above): at z=6 the cap retains only ~6.5% of the
+declared 13.81 Gyr range, and for a cosmological ceiling that narrowing IS the
+physics, not a tidy-up of an incidentally dead tail — declining to narrow
+because the retained fraction looks small would reintroduce exactly the
+zero-star-formation draws (and the resulting zero-flux, zero-gradient galaxy;
+see `test_bug_1031_dense_basis_composite`) this change exists to prevent.
+
+**Catalogs with a per-galaxy redshift refuse this combination outright.**
+`parse_groups` narrows against the build's *one* `redshift` value (a
+placeholder `Fixed(z0)` when a `catalog_z_range` is in play); a catalog whose
+rows span many redshifts cannot be represented by that single cap.
+`tengri.Catalog` raises at construction when `redshift_col` is given and any
+z-narrowed onset parameter is free, naming the parameter and the redshift the
+cap was computed against; the fix is an explicit onset prior valid across the
+whole catalog, e.g. `sfh={'start_gyr': Uniform(lo, hi)}`.
+
+**Recipe impact, measured before/after across all ten shipped recipes**
+(`sorted(parse_groups(**recipes.<name>()).free_params)`, diffed): nine are
+unaffected — none of `star_forming_photometry`, `high_z`, `photoz`,
+`agn_panchromatic`, `composable_agn`, `stochastic_sfh_jwst`,
+`mock_recovery_minimal`, `dust_demo` or `unified_agn` uses a `start_gyr`-onset
+SFH with the wildcard live over it. `quiescent_z0` does —
+`sfh=builders.sfh.dexp(all_params=FREE)` at `redshift=Fixed(0.05)` — and gains
+one free dimension it did not have before: `sfh_dexp_start_gyr`, now
+`Uniform(0.0, 13.11)` (≈ `age_at_z(0.05)`). This is the intended effect of
+the fix, not a regression: the recipe's own docstring already advertises
+"SFH: Delayed-exponential (dexp) **with all parameters free**," and
+`sfh_dexp_start_gyr` was the one parameter that claim didn't cover. The
+frozen free-parameter contract in `tests/contract/test_recipes.py`
+(`RECIPE_FREE_PARAMS["quiescent_z0"]`) is updated to include it, per that
+test's own "regenerate a line only for a deliberate recipe change" rule.
+
+---
+
+## `from_config(dust=)` renamed to `dust_attenuation_law=` (2026-09-09, #2021)
+
+`SEDModel.from_config` / `build_model_from_config` named only the birth-cloud
+attenuation screen from a single `dust=` string; the diffuse-ISM screen's law
+was filled in only because the model happens to stay
+`dust_model="two_component"` and the low-level inheritance of #1989
+backfilled `dust_law_diff` from `dust_law_bc`. Renamed to make explicit what
+the parameter actually does: one law, applied to BOTH screens.
+
+| Old spelling                          | New spelling                                     | Status (v0.x)                                     |
+| -------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
+| `SEDModel.from_config(dust="calzetti")` | `SEDModel.from_config(dust_attenuation_law="calzetti")` | `dust=` still works: deprecated alias, warns, forwards |
+
+`"charlot_fall"` (the default) is documented as an alias for `"power_law"`
+applied to both screens -- the classic Charlot & Fall (2000) model -- not a
+law-registry name. Passing both `dust=` and `dust_attenuation_law=` with
+disagreeing values raises `ValueError`; the deprecated alias is slated for
+removal in a later release.
+
+---
+
+## `shock_log_density` frees under the wildcard; out-of-coverage shock builds now raise/warn (2026-09-10, #2065)
+
+**Breaking for `shock={'all_params': FREE}` users** (in the #2187 sense: it
+was previously-silent physics, now surfaced). `shock_log_density` was the
+last continuous knob in the `shock` group with no declared `free_prior`;
+`all_params: FREE` left it pinned at `Fixed(0.0)` with only a
+`WildcardPartialFreeWarning` naming it as stuck. It now declares
+`free_prior=Uniform(-2.0, 3.0)` -- the measured MAPPINGS V solar-abundance
+populated envelope (every density node has at least one populated B-field
+cell; see the per-abundance table on the `SHOCK_PARAMS` declaration in
+`_params.py`) -- so `shock={'all_params': FREE}` now frees it alongside
+`shock_frac`/`shock_log_lhalpha` and `shock_velocity`. `shock_b_over_sqrt_n`
+is unaffected and stays pinned (case (c), #2066: a real but ~18%
+autodiff-vs-FD-mismatched gradient on the 2-D-coupled sparse B axis --
+explicit priors work today, a default free prior needs a family-aware
+interpolant first).
+
+The second half is a genuine new refusal, not just a freeing change: a shock
+build whose `shock_log_density` / `shock_b_over_sqrt_n` (`Fixed` value, or
+free-prior support) has no populated grid support now raises `ParameterError`
+at construction, or warns naming the exact dead fraction on a partial
+free-prior overlap -- instead of silently compiling a model that predicts an
+exactly-zero shock spectrum with no signal that anything is wrong.
+
+| old                                                                                                          | new                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `shock={'all_params': FREE}` — froze `shock_log_density` at `Fixed(0.0)`, named as stuck in the partial-free warning | Frees `shock_log_density` at `Uniform(-2.0, 3.0)`; `shock_b_over_sqrt_n` is the only one still named as stuck |
+| `shock={'abundance': 'lmc', 'log_density': 2.9}` (or any Fixed/free value with no grid support for the selected abundance) — built silently, predicted an exactly-zero shock spectrum at every call | Raises `ParameterError` at `SEDModel.build`, naming the value, the abundance, and the populated range; a free prior with partial overlap warns with the measured dead fraction instead |
+
+See `docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md` for the
+full diagnosis (case (c): why the B axis stays inert) and
+`tests/regression/bug/test_bug_2065_shock_silent_zero.py` /
+`tests/contract/test_shock_group_free_priors.py` for the contract.
+
+---
+
+## Law keyword `n_slope` renamed to `dust_slope` (2026-09-11)
+
+The attenuation-law keyword `n_slope` on `power_law` and `conroy2010` is renamed
+`dust_slope` to align law-function keywords with registry names (`dust_slope`,
+`dust_Rv`, `dust_delta`, …) and grammar stems (`slope`, `Rv`, `delta`, …). This
+three-vocabulary mismatch — old function arg, new registry name, new grammar
+stem — has been resolved to one rule: law keyword = `dust_` + grammar stem.
+
+| Old spelling                         | New spelling                        | Status (v0.x)                              |
+| ------------------------------------ | ----------------------------------- | ------------------------------------------ |
+| `power_law(wave, n_slope=-0.7)`     | `power_law(wave, dust_slope=-0.7)` | `n_slope=` still works: deprecated alias, warns, forwards |
+| `(("n_slope", -1.0),)` overrides     | `(("dust_slope", -1.0),)` overrides | Dicts use `dust_slope` only               |
+| `conroy2010(wave, n_slope=-0.7, dust_Rv=3.1)` | `conroy2010(wave, dust_slope=-0.7, dust_Rv=3.1)` | `n_slope=` still works: deprecated alias, warns, forwards |
+
+The registry callables, `law_kwarg_names()`, and per-screen override dicts
+(`dust_law_overrides`, `bc_law_overrides`, `neb_law_overrides`) use `dust_slope`
+only. Grammar spellings (`slope`, `slope_bc`, `slope_diff`, …) are unchanged.
+`n_slope=` will be removed in v1.0.
+
+---
+
+## `dust_log_L_ir` — total dust IR budget override (2026-09-11, #2187-series)
+
+A new parameter, `dust_log_L_ir` (`log10(L_IR/Lsun)`, API-level log-solar per
+the `agn_log_lbol` convention), lets a build state the total dust IR budget
+directly instead of deriving it from energy balance. **Declaring it at all —
+`Fixed` or any free prior — is itself the opt-out**: the publish branch in
+every dust-attenuation component (`two_component`, `single_component`,
+`wg00`) replaces `log_L_ir = log_L_absorbed + log10(dust_eta_balance)`
+outright with `dust_log_L_ir + LOG10_L_SUN`. Leaving it undeclared keeps
+strict/relaxed energy balance exactly as before — bit-identical, not merely
+close. Grammar: `dust_emission={'log_L_ir': Fixed(11.0)}` (short key, same
+pattern as `eta_balance` -> `dust_eta_balance`), accepted for every emission
+engine (it is a group-level knob, not any one engine's own parameter). It
+declares no `free_prior` — an absolute luminosity has no galaxy-independent
+interval, and a wildcard reaching it would silently decouple the IR budget
+from the absorbed energy — so `dust_emission={'all_params': FREE}` never
+frees it; free it explicitly.
+
+**`dust_eta_balance` is inert once the override is declared**, and `SEDModel`
+now raises `ParameterError` at construction if it is free, or `Fixed` at a
+value other than 1.0, alongside a declared `dust_log_L_ir` — the two
+parameters would otherwise silently disagree about who sets the IR budget.
+An explicit `Fixed(1.0)` passes (it states, redundantly but harmlessly, the
+one value that was always going to be inert).
+
+**Radio follows the override, not just dust**: the FIR-radio-correlation
+synchrotron amplitude (`radio_sfr_mode='bell2003'`/`'delvecchio2021'`/
+`'molnar2021'`) reads the published `L_ir`/`log_L_ir`, so declaring
+`dust_log_L_ir` moves the radio SED too. This is not a dust-only knob.
+
+### Behavior fix bundled with this feature: `log_L_absorbed` split from `log_L_ir`
+
+`log_L_ir` used to do two jobs: the re-emitted IR budget (`log_L_absorbed +
+log10(eta)`) and, for three readers, a stand-in for the ABSORBED
+stellar+nebular energy the dust screen actually intercepted. That
+conflation was only silently correct while `dust_eta_balance == 1` (the
+universal default up to now) — under a relaxed `dust_eta_balance` those
+three readers were already returning the absorbed energy scaled by eta, a
+pre-existing bug this change fixes as a side effect of giving the override
+somewhere unambiguous to land. Every dust-attenuation publisher now also
+publishes a `log_L_absorbed` / `L_absorbed` companion pair that never moves
+with `dust_eta_balance` or a declared `dust_log_L_ir`, and the three readers
+— `pred.l_dust_absorbed`, the legacy `predict_sed_quantities` bridge in
+`component_factory.py`, and the AGN CIGALE fracAGN torus coupling
+(`agn_ir_frac > 0`) — were repointed to it.
+
+| old                                                                                                   | new                                                                                                    |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Energy balance only: `log_L_ir = log_L_absorbed + log10(dust_eta_balance)`, always                     | Declaring `dust_log_L_ir` replaces `log_L_ir` outright; undeclared is bit-identical to the old formula   |
+| `pred.l_dust_absorbed` (and two internal readers) read `log_L_ir` — scaled silently by a relaxed eta     | Read the new `log_L_absorbed` key — invariant under `dust_eta_balance` and under the override            |
+| `dust_eta_balance` free/non-unity had no interaction with an IR-budget override (none existed)          | Raises `ParameterError` at build if free/non-unity alongside a declared `dust_log_L_ir`                  |
+
+See `tests/regression/bug/test_dust_log_l_absorbed_split.py` (the behavior
+fix) and `tests/contract/test_dust_log_l_ir_override.py` (the feature) for
+the pinned contracts, and `tools/check_param_free_priors.py`'s `REFUSED`
+ledger for the "declaring it at all is the opt-out" reasoning recorded once.
+
+**Known limitation, not introduced here**: `bosa`'s dust-IR template shape
+is selected from the *L_ir value it is fed* (`log_ltir` in
+`dust_emission_precompute.py`), which already tracked whichever budget the
+attenuation component published (eta-scaled or, now, the override) — the
+wiring itself needed no change. A separate, pre-existing, unrelated defect
+was found while probing this: `EmissionComponent.factors_l_ir` defaults to
+`True` and BOSA does not override it, so `apply()`'s L_ir-factoring
+shortcut evaluates BOSA's `predict()` at `L_ir = 1` (a fixed, non-physical
+grid corner) and rescales linearly — which measurably freezes BOSA's
+emitted shape regardless of the galaxy's true absorbed luminosity (verified:
+identical normalized `sed_dust_ir` shape across a 1000x `L_ir` range). This
+predates the override and is orthogonal to it; fixing it is a physics change
+with its own blast radius and is out of scope here — filed for follow-up
+rather than folded in. `dh02_ce01`'s known grid-axis limitation (its shape
+is pinned to the `log10(L_IR/Lsun) = 10` template regardless of the true
+`L_ir`, documented on the component) is likewise untouched: both are
+pre-existing, and repointing either is a physics change with a moved number.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

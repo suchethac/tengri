@@ -308,6 +308,10 @@ class TestJIT:
 
         ln_l, a_hat, a_cov = marginalize_emission_lines(residual, noise, G)
         assert jnp.isfinite(ln_l)
+        assert jnp.any(ln_l != 0.0), (
+            "`ln_l` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         chex.assert_tree_all_finite(a_hat)
         chex.assert_tree_all_finite(a_cov)
 
@@ -339,6 +343,10 @@ class TestJIT:
         data = continuum + 0.5
         ln_l, model = pipeline(data, continuum, noise)
         assert jnp.isfinite(ln_l)
+        assert jnp.any(ln_l != 0.0), (
+            "`ln_l` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         chex.assert_tree_all_finite(model)
 
 
@@ -460,6 +468,10 @@ class TestEdgeCases:
         # Should not crash — prior regularizes the underdetermined system
         ln_l, a_hat, _a_cov = marginalize_emission_lines(residual, noise, G)
         assert jnp.isfinite(ln_l), "Should handle n_lines > n_pix"
+        assert jnp.any(ln_l != 0.0), (
+            "`ln_l` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         chex.assert_tree_all_finite(a_hat)
 
     def test_posterior_covariance_symmetric(self, simple_setup):

@@ -2,15 +2,26 @@
 """Invariant tests for emission_helpers.py.
 
 Bug classes covered:
-- Shape regression: output shape must match input wave shape for all helpers.
-- Energy conservation: L_transmitted + L_absorbed = L_incident within 1%,
-  with L_absorbed computed via the canonical energy-balance integral
-  (:func:`tengri.forward.energy_balance.bolometric_absorbed`, #922).
-- Zero-dust identity: tau_bc=0, tau_diff=0 → attenuation factor ≈ 1 everywhere.
-- Mode completeness: all four modes ("bc", "diff", "neb", "none") return finite arrays.
 - IGM: z=0 → transmission=1, no NaN for short-wavelength photons.
 
-No SSP data needed. All tests use synthetic jnp arrays.
+``attenuate_emission``, this module's dust-attenuation helper for emission
+components, was removed in #2223 (no public callers; the no-state line-screen
+fallback now dispatches to the dust component's own
+``attenuate_line_catalog``, so its old ``{dust_slope, dust_bump_strength}`` kwarg
+dict -- which could not thread ``dust_delta``/``dust_Rv``/``redshift`` -- is
+gone). The classes this file used to run through that function covered:
+
+- shape (output shape matches input wave shape) and mode completeness (all
+  four modes return finite arrays): now exercised on the live dust components
+  in ``tests/components/dust/test_dust.py`` (two-component) and
+  ``tests/components/dust/test_single_component_dust.py`` (single-component);
+- zero-dust identity (tau=0 -> attenuation ~1): same two files;
+- absorbed luminosity / energy conservation (L_transmitted + L_absorbed =
+  L_incident): ``tests/contract/test_dust_energy_balance.py``;
+- the line-vs-continuum parity ``attenuate_emission``'s missing kwargs broke
+  (#2223 itself): ``tests/regression/bug/test_bug_2223_line_screen_kwargs.py``.
+
+No SSP data needed. The remaining test uses synthetic jnp arrays.
 """
 
 from __future__ import annotations
@@ -21,274 +32,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri.forward.emission_helpers import (
-    _C_AA,
-    attenuate_emission,
-)
-from tengri.forward.energy_balance import bolometric_absorbed
 from tests._bounds import assert_non_negative
-
-# ── Helpers: synthetic grids and mock dust laws ───────────────────
-
-_N_WAVE = 150
-_WAVE = jnp.linspace(1000.0, 25000.0, _N_WAVE)  # Å
-
-
-def _flat_sed(n: int = _N_WAVE, amplitude: float = 1e-15) -> jnp.ndarray:
-    """Flat (spectrally constant) SED in erg/s/Hz."""
-    return jnp.ones(n) * amplitude
-
-
-def _power_sed(wave: jnp.ndarray, alpha: float = -1.0, amplitude: float = 1e-15) -> jnp.ndarray:
-    """Power-law SED L_nu ∝ lambda^alpha."""
-    return amplitude * (wave / wave[len(wave) // 2]) ** alpha
-
-
-def _const_law(wave: jnp.ndarray, *, n_slope: float = -0.7, dust_bump_strength: float = 0.0):
-    """Trivially constant dust law k(λ) = 1.0 for all λ."""
-    return jnp.ones_like(wave)
-
-
-def _calzetti_approx(wave: jnp.ndarray, *, n_slope: float = -0.7, dust_bump_strength: float = 0.0):
-    """Approximate Calzetti-style power-law k(λ) = (V/λ)^0.7."""
-    return (5500.0 / wave) ** 0.7
-
-
-def _absorbed(sed_in: jnp.ndarray, sed_out: jnp.ndarray, wave: jnp.ndarray) -> float:
-    """Positive absorbed luminosity [erg/s] via the canonical integral (unmasked)."""
-    nu = _C_AA / wave
-    signed = bolometric_absorbed(sed_in, sed_out, nu, wave=wave, lyman_cutoff_aa=None)
-    return float(jnp.abs(signed))
-
-
-# ── Shape invariants ──────────────────────────────────────────────
-
-
-class TestAttenuateEmissionShape:
-    @pytest.mark.parametrize("n_wave", [10, 50, 200])
-    def test_output_shape_matches_input(self, n_wave: int) -> None:
-        wave = jnp.linspace(1000.0, 20000.0, n_wave)
-        sed = _flat_sed(n_wave)
-        sed_out = attenuate_emission(
-            sed,
-            wave,
-            "bc",
-            tau_bc=0.3,
-            tau_diff=0.5,
-            law_bc_fn=_const_law,
-            law_diff_fn=_const_law,
-        )
-        assert sed_out.shape == (n_wave,), (
-            f"Output shape {sed_out.shape} does not match input shape ({n_wave},)"
-        )
-
-    @pytest.mark.parametrize("mode", ["bc", "diff", "neb", "none"])
-    def test_all_modes_return_correct_shape(self, mode: str) -> None:
-        sed = _flat_sed()
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            mode,
-            tau_bc=0.3,
-            tau_diff=0.5,
-            law_bc_fn=_const_law,
-            law_diff_fn=_const_law,
-            neb_bc_fn=_const_law,
-        )
-        assert sed_out.shape == (_N_WAVE,), (
-            f"Mode {mode!r}: output shape {sed_out.shape} ≠ ({_N_WAVE},)"
-        )
-
-
-# ── Absorbed luminosity (canonical integral over the helper's output) ─
-
-
-class TestAbsorbedLuminosity:
-    def test_l_absorbed_is_finite(self) -> None:
-        sed = _flat_sed()
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            "bc",
-            tau_bc=0.5,
-            tau_diff=0.5,
-            law_bc_fn=_const_law,
-            law_diff_fn=_const_law,
-        )
-        assert jnp.isfinite(_absorbed(sed, sed_out, _WAVE)), "L_absorbed is not finite"
-
-    def test_l_absorbed_positive_for_positive_tau(self) -> None:
-        """Nonzero optical depth must absorb a strictly positive luminosity."""
-        sed = _flat_sed()
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            "bc",
-            tau_bc=0.5,
-            tau_diff=0.5,
-            law_bc_fn=_const_law,
-            law_diff_fn=_const_law,
-        )
-        assert _absorbed(sed, sed_out, _WAVE) > 0.0, "tau > 0 should absorb luminosity"
-
-
-# ── All four modes return finite arrays ───────────────────────────
-
-
-class TestAttenuateEmissionModes:
-    @pytest.mark.parametrize("mode", ["bc", "diff", "neb", "none"])
-    def test_mode_returns_finite_sed(self, mode: str) -> None:
-        sed = _power_sed(_WAVE)
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            mode,
-            tau_bc=0.3,
-            tau_diff=0.5,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-            neb_bc_fn=_const_law,
-        )
-        assert jnp.all(jnp.isfinite(sed_out)), (
-            f"Mode {mode!r}: output SED contains non-finite values"
-        )
-        assert jnp.isfinite(_absorbed(sed, sed_out, _WAVE)), (
-            f"Mode {mode!r}: L_absorbed is non-finite"
-        )
-
-    @pytest.mark.parametrize("mode", ["bc", "diff", "neb"])
-    def test_attenuated_sed_not_greater_than_input(self, mode: str) -> None:
-        """Attenuation must not amplify the SED (L_out ≤ L_in pixel-wise)."""
-        sed = _flat_sed()
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            mode,
-            tau_bc=0.3,
-            tau_diff=0.5,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-        )
-        assert jnp.all(sed_out <= sed + 1e-30), (
-            f"Mode {mode!r}: attenuated SED exceeds input SED at some wavelengths"
-        )
-
-
-# ── Zero-dust identity ────────────────────────────────────────────
-
-
-class TestZeroDustIdentity:
-    def test_zero_tau_bc_and_diff_returns_input(self) -> None:
-        """With tau_bc=0 and tau_diff=0, output must be ≈ input everywhere."""
-        sed = _power_sed(_WAVE)
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            "bc",
-            tau_bc=0.0,
-            tau_diff=0.0,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-        )
-        rel_err = jnp.abs(sed_out - sed) / (jnp.abs(sed) + 1e-40)
-        max_rel_err = float(jnp.max(rel_err))
-        assert max_rel_err < 1e-6, (
-            f"Zero-dust case: max relative error {max_rel_err:.2e} (should be ~0)"
-        )
-
-    def test_zero_dust_none_mode_returns_input(self) -> None:
-        """mode='none' must always return the input SED exactly."""
-        sed = _power_sed(_WAVE)
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            "none",
-            tau_bc=0.3,
-            tau_diff=0.5,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-        )
-        assert jnp.allclose(sed_out, sed, atol=0.0, rtol=0.0), (
-            "mode='none' did not return input SED exactly"
-        )
-        L_absorbed = _absorbed(sed, sed_out, _WAVE)
-        assert L_absorbed == 0.0, f"mode='none' L_absorbed should be 0, got {L_absorbed}"
-
-
-# ── Energy conservation ───────────────────────────────────────────
-
-
-class TestEnergyConservation:
-    def _integrate_luminosity(self, sed: jnp.ndarray, wave: jnp.ndarray) -> float:
-        """Integrate L_nu over frequency ν = c/λ to get total luminosity (erg/s)."""
-        nu = _C_AA / wave
-        return float(-jnp.trapezoid(sed, nu))
-
-    @pytest.mark.parametrize("mode", ["bc", "diff"])
-    def test_energy_conservation_within_1pct(self, mode: str) -> None:
-        """L_transmitted + L_absorbed ≈ L_incident within 1%."""
-        sed = _flat_sed(amplitude=1e-15)
-        tau = 0.5
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            mode,
-            tau_bc=tau,
-            tau_diff=tau,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-        )
-        L_absorbed = _absorbed(sed, sed_out, _WAVE)
-
-        L_incident = self._integrate_luminosity(sed, _WAVE)
-        L_transmitted = self._integrate_luminosity(sed_out, _WAVE)
-
-        rel_err = abs(L_transmitted + L_absorbed - L_incident) / (L_incident + 1e-40)
-        assert rel_err < 0.01, (
-            f"Mode {mode!r}: energy not conserved to 1%. "
-            f"L_incident={L_incident:.3e}, L_transmitted={L_transmitted:.3e}, "
-            f"L_absorbed={L_absorbed:.3e}, rel_err={rel_err:.3%}"
-        )
-
-    def test_none_mode_zero_absorbed(self) -> None:
-        """mode='none' must have exactly zero absorbed luminosity."""
-        sed = _flat_sed()
-        sed_out = attenuate_emission(
-            sed,
-            _WAVE,
-            "none",
-            tau_bc=0.3,
-            tau_diff=0.5,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-        )
-        assert _absorbed(sed, sed_out, _WAVE) == 0.0
-
-    def test_high_tau_absorbs_most_luminosity(self) -> None:
-        """Very high optical depth should absorb nearly all incident luminosity."""
-        sed = _flat_sed(amplitude=1e-15)
-        sed_out_high = attenuate_emission(
-            sed,
-            _WAVE,
-            "bc",
-            tau_bc=10.0,
-            tau_diff=10.0,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-        )
-        sed_out_low = attenuate_emission(
-            sed,
-            _WAVE,
-            "bc",
-            tau_bc=0.1,
-            tau_diff=0.1,
-            law_bc_fn=_calzetti_approx,
-            law_diff_fn=_calzetti_approx,
-        )
-        assert _absorbed(sed, sed_out_high, _WAVE) > _absorbed(sed, sed_out_low, _WAVE), (
-            "Higher optical depth should absorb more luminosity"
-        )
-
 
 # ── IGM absorption ────────────────────────────────────────────────
 

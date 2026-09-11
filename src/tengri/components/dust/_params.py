@@ -60,12 +60,27 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_beta_ir",
         Fixed(1.6),
         "IR emissivity index for graybody/Casey emission",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
         # beta = 1.60 +/- 0.38 (Casey 2012). Floored at 1.0 -- where grain
         # models put the physical minimum, and below the widely presumed 1.5 --
-        # and carried to +2.4 sigma above the mean.
+        # and carried to +2.4 sigma above the mean. Relaxed to >= 0 to support
+        # pure blackbody (beta=0, emissivity ~ 1 everywhere); all closures are
+        # well-defined at beta=0.
         free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.6),
+    ),
+    ParamDeclaration(
+        "dust_lambda_0_um",
+        Fixed(200.0),
+        "General-opacity pivot wavelength (um) where the graybody optical depth is unity "
+        "(Casey 2012 Eq. 1: 200 um; Synthesizer's Greybody default is 100 um). "
+        "Used by graybody and casey2012; not used by modified_blackbody.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        units="um",
+        free_prior=Uniform(
+            50.0, 500.0, "Graybody opacity pivot wavelength", units="um", default=200.0
+        ),
     ),
     ParamDeclaration(
         "dust_alpha_mir",
@@ -317,6 +332,29 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 1]",
         free_prior=Uniform(0.0, 1.0, "MBB fraction of L_dust", default=1.0),
     ),
+    ParamDeclaration(
+        "dust_log_L_ir",
+        Fixed(10.0),
+        "Total dust IR budget log10(L_IR/Lsun) (API-level log-solar, the "
+        "agn_log_lbol convention). DECLARING this parameter AT ALL -- Fixed "
+        "or any free prior -- REPLACES the energy-balance IR budget "
+        "(log_L_ir = log_L_absorbed + log10(dust_eta_balance)) with this "
+        "value outright: it is not read unless the caller's build provenance "
+        "shows it was requested. Leaving it undeclared keeps strict/relaxed "
+        "energy balance exactly as before. Radio's FIR-radio-correlation "
+        "amplitudes (radio_sfr_mode='bell2003'/'delvecchio2021'/'molnar2021') "
+        "follow L_ir too, so declaring this is not a dust-only knob -- it also "
+        "moves the radio SED.",
+        lambda lo, hi: lo >= 0 and hi <= 16,
+        "must be in [0, 16]",
+        units="dex",
+        # Deliberately NO free_prior, same reasoning as dust_L_agn_ir just
+        # above: an absolute (log) luminosity has no galaxy-independent
+        # interval, and declaring this parameter at all is itself the
+        # energy-balance opt-out, so a blanket wildcard must never reach it
+        # and silently decouple the IR budget from the absorbed energy. Free
+        # it explicitly against your own luminosity scale.
+    ),
 )
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
@@ -353,14 +391,9 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Fraction of unobscured sightlines (Lower 2022)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
-        # Deliberately NO free_prior, despite a clean [0, 1] domain. The test is
-        # not "does this have a valid range?" but "is freeing it what a caller
-        # means by `dust: all_params: FREE`?": and here that is empirically no:
-        # all 11 call sites in this repo (4 recipes, 7 gallery examples) want
-        # that wildcard to mean {tau_bc, tau_diff}. f_obscuration is a
-        # two-population geometry knob whose default 0.0 is a modeling stance,
-        # and it is strongly degenerate with tau_diff. Freeing it stays explicit:
-        # pass f_obscuration=Uniform(0, 1).
+        # Deliberately NO free_prior. The reason is recorded once, in the REFUSED
+        # ledger of tools/check_param_free_priors.py ("explicit-only"); do not
+        # restate it here so the two cannot drift again. Explicit priors work.
     ),
     ParamDeclaration(
         "dust_bump_strength",
@@ -389,7 +422,17 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # attenuation.py:426 computes
         # ``e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)`` (KC13 Eq. 3),
         # so 0 is bump-free (this default) and 1 is KC13 as published.
-        free_prior=Uniform(0.0, 2.0, "UV bump strength at 2175A", default=0.0),
+        #
+        # The ceiling is 4.0, not 1.0 or 2.0 (#2226): Narayanan, Conroy, Davé,
+        # Johnson & Popping (2018, ApJ 869, 70, doi:10.3847/1538-4357/aaed25)
+        # fit MUFASA-simulated galaxies with bump multipliers up to 3.634 (at
+        # z=4, ``_NARAYANAN_BUMP_STRENGTH`` in ``attenuation.py``) -- a
+        # ``kriek_conroy`` fit with ``dust_bump_strength: FREE`` needs to reach
+        # what the paper finds, not only KC13's own value of 1. 4.0 sits ~10%
+        # above the highest fitted node. ``narayanan_prior``'s explicit
+        # ``Gaussian`` (``components/dust/priors.py``) bypasses this
+        # ``free_prior`` entirely; only FREE/wildcard callers see the ceiling.
+        free_prior=Uniform(0.0, 4.0, "UV bump strength at 2175A", default=0.0),
     ),
     ParamDeclaration(
         "dust_delta",

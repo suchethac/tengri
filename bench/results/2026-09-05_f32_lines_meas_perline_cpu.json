@@ -1,0 +1,210 @@
+{
+  "meta": {
+    "platform": "cpu",
+    "devices": [
+      "cpu:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": "cpu",
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": null,
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": null,
+      "TENGRI_DISABLE_JAX_CACHE": "1"
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    },
+    "spec_pixels": 256,
+    "spec_wave_range": [
+      4000.0,
+      9000.0
+    ],
+    "lines": [
+      "Hbeta",
+      "OIII_5007",
+      "Halpha",
+      "NII_6584"
+    ],
+    "mode": "seams",
+    "line_sigma_convention": "per_line",
+    "line_sigma_floor": 0.05
+  },
+  "rows": [
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "line_sigma_convention": "per_line",
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 21.03,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            29.0153075368835,
+            -232.9955286569616
+          ],
+          "grad_f32": [
+            29.05423355102539,
+            -230.1661376953125
+          ],
+          "grad_exact_f64": [
+            29.0153075368835,
+            -232.9955286569616
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.812681340585655,
+          "f64_vs_fd64": 7.098597266853145e-07,
+          "f32_vs_f64": 0.012051601740767028,
+          "f32_vs_f64_cw": 0.01214354188665482,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.012051601740767028,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -3649.708947986867,
+            14414.498695483406
+          ],
+          "grad_f32": [
+            -3652.17724609375,
+            14433.48046875
+          ],
+          "grad_exact_f64": [
+            -3649.708947986867,
+            14414.498695483406
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 2073.5968927705526,
+          "f64_vs_fd64": 1.84125083026231e-08,
+          "f32_vs_f64": 0.0012873164105992464,
+          "f32_vs_f64_cw": 0.0013168528207326375,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0012873164105992464,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "error": "ValueError: Likelihood channel 1 ('line_flux_constraint') evaluated at the reference parameters gives log_prob = nan, which is non-finite. Max |prediction| = 3.251e-28, max |data| = 7.442e-28. A chi-squared this large silently absorbs every other channel through floating-point rounding, check this channel's units against what the model predicts for it (#1495)."
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_fixedz",
+      "snr": 300.0,
+      "line_sigma_convention": "per_line",
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 19.15,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            290.15307536914474,
+            -2329.955286616332
+          ],
+          "grad_f32": [
+            288.26641845703125,
+            -2025.2646484375
+          ],
+          "grad_exact_f64": [
+            290.15307536914474,
+            -2329.955286616332
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.8126813408278295,
+          "f64_vs_fd64": 7.131889953492102e-06,
+          "f32_vs_f64": 0.1297711486919296,
+          "f32_vs_f64_cw": 0.13077102377415914,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.1297711486919296,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -370672.12437617534,
+            1481118.206466092
+          ],
+          "grad_f32": [
+            -370931.40625,
+            1483061.5
+          ],
+          "grad_exact_f64": [
+            -370672.12437617534,
+            1481118.206466092
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 219743.7877009772,
+          "f64_vs_fd64": 1.7912841069529846e-08,
+          "f32_vs_f64": 0.001284070169567012,
+          "f32_vs_f64_cw": 0.0013120448627423305,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.001284070169567012,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "auto_fixedz",
+      "snr": 300.0,
+      "error": "ValueError: Likelihood channel 1 ('line_flux_constraint') evaluated at the reference parameters gives log_prob = nan, which is non-finite. Max |prediction| = 3.251e-28, max |data| = 7.137e-28. A chi-squared this large silently absorbs every other channel through floating-point rounding, check this channel's units against what the model predicts for it (#1495)."
+    }
+  ]
+}

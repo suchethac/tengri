@@ -30,6 +30,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
+from tengri.components.dust.laws._registry import select_law_kwargs
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
@@ -90,6 +91,17 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     ``SEDModel._build_component_chain`` computes the set: it has the spec, and
     deciding once at build time keeps this a static Python branch rather than a
     comparison against a traced value inside ``apply()``.
+    """
+
+    log_l_ir_requested: bool = False
+    r"""Whether the caller declared ``dust_log_L_ir`` (total dust IR budget
+    override, #2187-series), resolved from spec provenance by
+    ``SEDModel._requested_dust_log_L_ir`` and frozen here the same way
+    :attr:`live_shape_params` is. ``True`` makes :meth:`DustAttenuationSEDComponent.apply`
+    replace ``log_L_ir = log_L_absorbed`` outright with
+    ``params["dust_log_L_ir"] + LOG10_L_SUN``; ``False`` (default, including a
+    component built directly with no spec to ask) keeps energy balance
+    unchanged. A static Python bool, not a traced value.
     """
 
 
@@ -158,9 +170,23 @@ class DustAttenuationSEDComponent(TemplateThreading):
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
         """
         return (
-            DerivedKey("L_ir", "erg/s", "Integrated dust-absorbed luminosity"),
-            DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (energy balance)"),
+            DerivedKey(
+                "L_ir",
+                "erg/s",
+                "Dust IR budget: L_absorbed unless a dust_log_L_ir override "
+                "is declared (#2187-series)",
+            ),
+            DerivedKey("L_absorbed", "erg/s", "The ABSORBED luminosity (energy balance)"),
             DerivedKey("log_L_ir", "dex", "log10(L_ir / (erg/s)); float32-safe form"),
+            DerivedKey(
+                "log_L_absorbed",
+                "dex",
+                "log10(L_absorbed / (erg/s)); the ABSORBED energy budget, "
+                "independent of any declared dust_log_L_ir override (#1837/"
+                "#2187-series split). This single screen applies no "
+                "dust_eta_balance scaling, so log_L_absorbed == log_L_ir unless "
+                "an override is declared.",
+            ),
             DerivedKey(
                 "dust_attenuation_factor",
                 "",
@@ -246,6 +272,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
         for flat in live - tabled:
             if flat in params:
                 kwargs[flat] = jnp.asarray(params[flat])
+        # ``live`` is the union over every law slot in play, so on a model whose
+        # screens carry different laws it can hold a keyword THIS law does not
+        # declare. The laws no longer absorb one in a ``**kwargs`` catch-all
+        # (#2185), so narrow before binding.
+        kwargs = select_law_kwargs(law_fn, kwargs)
         if not kwargs:
             return law_fn
 
@@ -253,6 +284,50 @@ class DustAttenuationSEDComponent(TemplateThreading):
             return law_fn(wave, **kwargs)
 
         return _bound
+
+    def attenuate_line_catalog(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        line_wave: jnp.ndarray,
+        log_line_lums: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """THE single source of the single-screen line attenuation (#1867, #2223).
+
+        Reuses :meth:`_curve`, evaluated at the line wavelengths, never the
+        cached ``k_lambda`` (bound to the pipeline wave grid, not the line
+        wavelengths). A caller with no
+        :class:`~tengri.protocols.component.ForwardState` (the no-state
+        fallback in ``SEDModel._attenuate_line_catalog``, used when
+        ``dust_model`` is off/wg00 or on the #950 ``enable_fast_nebular()``
+        grid path) gets exactly the shape parameters :meth:`apply` would have
+        given it, since both call this same method.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives ``dust_tau_v`` (required) plus the bare ``redshift``,
+            which :meth:`_curve` forwards to a law that declares it.
+        line_wave : ndarray, shape (n_lines,)
+            Rest-frame line wavelengths [Å].
+        log_line_lums : ndarray, shape (n_lines,)
+            log10 of the INTRINSIC line luminosities [dex, erg/s]. The log
+            form, never the linear one, which overflows float32 at typical
+            line luminosities (#1534/#1837).
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            log10 of the ATTENUATED line luminosities [dex, erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: yes, pure ``jnp`` plus a build-time registry
+        lookup inside :meth:`_curve`.
+        """
+        curve = self._curve(params)
+        tau_v = jnp.asarray(params["dust_tau_v"])
+        log10_e = 1.0 / jnp.log(10.0)
+        return jnp.asarray(log_line_lums) - tau_v * curve(jnp.asarray(line_wave)) * log10_e
 
     def precompute(
         self,
@@ -305,6 +380,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         r"""Apply screen attenuation to ``state.sed_intrinsic``.
 
@@ -315,7 +391,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
             ``None`` this method is a no-op (returns the input
             unchanged).
         params : mapping
-            Receives ``dust_*`` keys plus ``redshift`` (unused here).
+            Receives ``dust_*`` keys plus the bare ``redshift``, which
+            :meth:`_curve` forwards to a law that declares it (``narayanan_z``
+            is the one that does, #2199) and withholds from every law that does
+            not.
 
         Returns
         -------
@@ -357,11 +436,24 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
         # (#1206). The sign only tracks grid orientation; the energy is |L|.
-        log_l_ir, _ = bolometric_absorbed_log10(
+        log_l_absorbed, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave
         )
-        warn_if_corrupt(log_l_ir, component=type(self).__name__)
+        warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
+        if self.config.log_l_ir_requested:
+            # Total dust IR budget override (#2187-series): a STATIC branch
+            # (see ``DustAttenuationSEDComponentConfig.log_l_ir_requested``),
+            # so both branches stay JIT-clean; only the traced value of
+            # ``dust_log_L_ir`` is fittable. This screen applies no
+            # ``dust_eta_balance`` scaling of its own, so the override is the
+            # only way ``log_L_ir`` departs from ``log_L_absorbed`` here.
+            from tengri.utils.sed_quantities import LOG10_L_SUN
+
+            log_l_ir = jnp.asarray(params["dust_log_L_ir"]) + LOG10_L_SUN
+        else:
+            log_l_ir = log_l_absorbed
         l_ir = pow10(log_l_ir)  # erg/s
+        l_absorbed = pow10(log_l_absorbed)  # erg/s
 
         # Filter-level A(λ_eff) and A'(λ_eff) LUTs.
         # Published only when an upstream component (stellar) has put
@@ -370,30 +462,28 @@ class DustAttenuationSEDComponent(TemplateThreading):
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             L_ir=l_ir,
-            L_absorbed=l_ir,
+            L_absorbed=l_absorbed,
             log_L_ir=log_l_ir,
+            log_L_absorbed=log_l_absorbed,
             sed_dust_attenuated=attenuated,
         )
 
         # Discrete emission-line catalog, reddened with this component's single
-        # screen (#1867). The two-component component does the same in its §2c;
-        # omitting it here would leave every single-screen model reading
-        # INTRINSIC line luminosities from `pred.lines.*` and
+        # screen (#1867, #2223). The two-component component does the same in
+        # its §2c; omitting it here would leave every single-screen model
+        # reading INTRINSIC line luminosities from `pred.lines.*` and
         # `predict_properties`, which is the half-fix #1867 warns about.
         #
-        # `curve(line_wave)`, never the cached `k_lambda`: that array is bound
-        # to `state.wave` and means nothing at line wavelengths.
-        #
-        # Reads and publishes the LOG companion, never the linear `line_lums`,
-        # which is `inf` in float32 at ~1e41 erg/s (#1534/#1837). `-tau*k` is a
-        # log-domain quantity already; converting to dex is one division.
+        # `attenuate_line_catalog` re-evaluates `_curve(params)` at the line
+        # wavelengths, never the cached `k_lambda`: that array is bound to
+        # `state.wave` and means nothing at line wavelengths. It is also the
+        # SAME method the no-state fallback (`SEDModel._attenuate_line_catalog`)
+        # calls, so there is one implementation of this screen (#2223).
         _line_waves = state.derived.get("line_waves")
         _log_line_lums = state.derived.get("log_line_lums")
         if _line_waves is not None and _log_line_lums is not None:
-            line_wave = jnp.asarray(_line_waves)
-            log10_e = 1.0 / jnp.log(10.0)
-            derived_overrides["log_line_lums_attenuated"] = (
-                jnp.asarray(_log_line_lums) - tau_v * curve(line_wave) * log10_e
+            derived_overrides["log_line_lums_attenuated"] = self.attenuate_line_catalog(
+                params, _line_waves, _log_line_lums
             )
 
         filter_eff = state.derived.get("filter_eff_waves")

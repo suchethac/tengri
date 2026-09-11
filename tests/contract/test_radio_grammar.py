@@ -268,6 +268,13 @@ class TestRadioComponentPhysics:
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             radio={"sf": {"type": "bell2003"}, "agn": {"type": "none"}},
+            # FIRRC normalizes against L_ir: dust is required at build (#2106).
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert model.spec.radio is True
@@ -292,6 +299,13 @@ class TestRadioComponentPhysics:
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             radio={"sf": {"type": "delvecchio2021"}, "agn": {"type": "dpl"}},
+            # FIRRC normalizes against L_ir: dust is required at build (#2106).
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert model.spec.radio is True

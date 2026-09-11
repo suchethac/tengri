@@ -57,8 +57,21 @@ class TestShockLineRatios:
                 assert float(val) > 0.0, f"{name} at v={v} is not positive"
 
     def test_hbeta_is_unity(self):
-        """Hβ ratio should always be 1.0 (it is the reference line)."""
-        ratios = shock_line_ratios(300.0)
+        """Hβ ratio is 1.0 (it is the reference line) at a well-populated grid point.
+
+        Not at the function defaults (``shock_log_density=0.0,
+        shock_b_over_sqrt_n=1.0``): the real MAPPINGS V solar grid is only
+        35.7% populated in (density, B), and the smoothing kernel blends in
+        unpopulated (zero-filled) neighbor cells even exactly at a populated
+        node -- diluting Hβ away from 1.0 at that point (measured 0.7135).
+        This is the same sparsity-vs-kernel mismatch documented as case (c) in
+        docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md (#2066): the
+        triweight kernel cannot distinguish "zero because unpopulated" from
+        "physically zero". ``log_density=-2.0, b_over_sqrt_n=0.01`` sits in a
+        fully-populated 3x3 (density x B) neighborhood of the solar grid, so
+        the invariant holds there to the interpolation's own precision.
+        """
+        ratios = shock_line_ratios(300.0, shock_log_density=-2.0, shock_b_over_sqrt_n=0.01)
         assert float(ratios["Hb_4861A"]) == pytest.approx(1.0)
 
     def test_nii_enhanced_relative_to_case_b(self):
@@ -256,6 +269,10 @@ class TestShockDifferentiable:
             err_msg="compute_shock_sed: FD check ∂/∂velocity",
         )
         assert grad_jax != 0.0
+        assert np.all(np.isfinite(grad_jax)), (
+            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     def test_grad_wrt_luminosity(self):
         wave = jnp.linspace(3000.0, 8000.0, 500)
@@ -272,6 +289,10 @@ class TestShockDifferentiable:
             err_msg="compute_shock_sed: FD check ∂/∂luminosity",
         )
         assert grad_jax != 0.0
+        assert np.all(np.isfinite(grad_jax)), (
+            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
 
 # ── Integration with Parameters ────────────────────────────────────

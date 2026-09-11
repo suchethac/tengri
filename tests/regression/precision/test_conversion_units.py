@@ -63,6 +63,10 @@ def test_lnu_to_fnu_finite_f32(redshift):
 
     # Check finite
     assert jnp.isfinite(result_f32).all(), f"f32 result has NaN/Inf: {result_f32}"
+    assert jnp.any(result_f32 != 0.0), (
+        "`result_f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     # Check match (relaxed tolerance for float32)
     np.testing.assert_allclose(float(result_f32), float(result_f64), rtol=2e-3)
@@ -107,6 +111,10 @@ def test_fnu_to_lnu_finite_f32(redshift):
 
     # Check finite
     assert jnp.isfinite(result_f32).all(), f"f32 result has NaN/Inf: {result_f32}"
+    assert jnp.any(result_f32 != 0.0), (
+        "`result_f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     # Check match (relaxed tolerance for float32)
     np.testing.assert_allclose(float(result_f32), float(result_f64), rtol=2e-3)

@@ -143,7 +143,6 @@ kitchen_sink = dict(
         "all_params": Fixed(DEFAULT),
         "tau_bc": 0.8,
         "tau_diff": 0.3,
-        "slope": -0.4,
         # dale2014_cigale, not dale2014: this notebook also switches on a radio
         # block, and the plain Dale+2014 template embeds its own star-forming
         # radio synchrotron continuum out to 1.335 GHz. Running both double-counts
@@ -430,7 +429,10 @@ print(model_edited.summary())
 #   metallicity history projects onto an age × wavelength grid and sums
 #   to the intrinsic L_ν.
 # - **Dust attenuation.** Birth-cloud (Calzetti) and diffuse-ISM optical
-#   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`.
+#   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`. The
+#   two-component group also decides which screen each emission source
+#   passes through (`nebular_screen`, default birth cloud; `shock_screen`,
+#   default diffuse; `agn_screen`, default none).
 # - **Dust emission.** Dale 2014 / Draine–Li / THEMIS templates
 #   re-radiate `L_ir` from 8 to 1000 µm.
 # - **Nebular.** Cue (neural emulator on Cloudy 17.03) gives photoionized
@@ -475,7 +477,6 @@ money_shot = dict(
         "all_params": Fixed(DEFAULT),
         "tau_bc": 0.8,
         "tau_diff": 0.3,
-        "slope": -0.4,
         # dale2014_cigale, not dale2014: this notebook also switches on a radio
         # block, and the plain Dale+2014 template embeds its own star-forming
         # radio synchrotron continuum out to 1.335 GHz. Running both double-counts

@@ -100,6 +100,10 @@ class TestTwoStepMetallicity:
 
         g = assert_grad_matches_fd(loss, 1.0)
         assert jnp.isfinite(g)
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_output_shape(self, ssp_lg_age_gyr):
         result = two_step_metallicity(ssp_lg_age_gyr, -3.0, -1.5, 1.0)
@@ -170,8 +174,10 @@ class TestMetallicityBins:
         # SSP ages within bin range: use log10(age/yr)
         young_mask = (ssp_lg_age_gyr + 9.0 > 7.0) & (ssp_lg_age_gyr + 9.0 < 8.5)
         old_mask = (ssp_lg_age_gyr + 9.0 > 9.5) & (ssp_lg_age_gyr + 9.0 < 10.14)
-        if jnp.any(young_mask) and jnp.any(old_mask):
-            assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
+        assert jnp.any(young_mask) and jnp.any(old_mask), (
+            "probe setup failed: no young and old age ranges in grid"
+        )
+        assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
 
     def test_jit_compatible(self, ssp_lg_age_gyr, bin_edges_log_yr):
         n_bins = len(bin_edges_log_yr) - 1
@@ -218,8 +224,10 @@ class TestMetallicityBinsContinuity:
         )
         young_mask = ssp_lg_age_gyr < -1.5
         old_mask = ssp_lg_age_gyr > 0.5
-        if jnp.any(young_mask) and jnp.any(old_mask):
-            assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
+        assert jnp.any(young_mask) and jnp.any(old_mask), (
+            "probe setup failed: no young and old age ranges in grid"
+        )
+        assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
 
     def test_cumulative_sum_correct(self, ssp_lg_age_gyr, bin_edges_log_yr):
         """Final bin metallicity = base + sum(deltas)."""

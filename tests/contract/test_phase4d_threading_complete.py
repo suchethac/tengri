@@ -271,7 +271,7 @@ class TestDustIRTemplateThreading:
 
     @pytest.mark.parametrize(
         "dust_emission",
-        ["modified_blackbody", "casey2012"],  # Analytic models (no templates)
+        ["graybody", "modified_blackbody", "casey2012"],  # Analytic models (no templates)
     )
     def test_analytic_dust_models_no_templates(self, ssp_wne, obs, dust_emission):
         """Analytic dust emission models (no templates) work without threading."""
@@ -355,7 +355,7 @@ class TestAGNSKIRTORTemplateThreading:
 
         try:
             model = _silent_build(spec, ssp_wne, obs)
-        except (FileNotFoundError, ValueError):
+        except FileNotFoundError:
             pytest.skip("SKIRTOR grid not available")
 
         fixed_vals = model.spec.get_fixed_values()

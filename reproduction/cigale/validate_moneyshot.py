@@ -79,7 +79,6 @@ def tengri_moneyshot(ssp):
             "all_params": Fixed(DEFAULT),
             "tau_bc": 0.8,
             "tau_diff": 0.3,
-            "slope": -0.4,
         },
         dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT), "alpha_dale": 2.2},
         neb={"type": "cue", "all_params": Fixed(DEFAULT)},

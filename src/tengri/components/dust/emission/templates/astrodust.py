@@ -253,7 +253,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
         Returns
         -------
         dict or None
-            ``{"lgU_grid", "lnu_template", "norm_per_lgU", "lnu_spinning"}``
+            ``{"lgU_grid", "lnu_template", "lnu_spinning"}``
             when loaded, else ``None``.
 
         Raises
@@ -282,7 +282,6 @@ class AstrodustIRSEDComponent(EmissionComponent):
             wave_um=templates.wavelength_um,
             wave_aa=wave_aa,
         )
-        norms = integrate_lnu_over_nu(lnu_template, wave_aa)
 
         if self.config.spinning_dust:
             spd_um = self._compose_spinning_um(templates)
@@ -294,10 +293,24 @@ class AstrodustIRSEDComponent(EmissionComponent):
         else:
             spd_aa = jnp.zeros_like(wave_aa)
 
+        # Store the template at order unity. The published grid is ~1e-36
+        # erg/s/Hz per unit U, and ``jnp.interp`` across lgU forms the product
+        # (row difference) x (fractional offset), which for values that small
+        # falls below float32's 1.2e-38 normal floor and is flushed: measured
+        # in pure float32 at lgU = 0 (the grid stores that node as 2.7e-15,
+        # so the lookup is a genuine two-row blend), 1.3% of the peak in shape
+        # and 5% in the integral. A power of two keeps float64 bit-exact, and
+        # ``predict`` normalizes on the evaluation grid, so the scale cancels
+        # identically; the spinning-dust term carries the same factor so the
+        # two stay in ratio.
+        peak = jnp.max(lnu_template)
+        unit_scale = jnp.where(peak > 0.0, jnp.exp2(-jnp.floor(jnp.log2(peak))), 1.0)
+        lnu_template = lnu_template * unit_scale
+        spd_aa = spd_aa * unit_scale
+
         return {
             "lgU_grid": jnp.asarray(templates.lgU),
             "lnu_template": lnu_template,
-            "norm_per_lgU": norms,
             "lnu_spinning": spd_aa,
         }
 
@@ -312,17 +325,20 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
         Linearly interpolates the precomputed :math:`L_\nu(\lg U)` cube at the
         requested ``dust_lgU`` (clipped to the grid support :math:`[-3, 6]`),
-        rescales so its frequency integral equals ``L_ir``, and adds the
-        (``lgU``-independent) spinning-dust spectrum if it was included.
+        assembles the thermal and spinning-dust components, then rescales so
+        the frequency integral equals ``L_ir``.
 
         .. math::
 
-            L_\nu(\lambda) = \frac{L_{\rm ir}}{\int \hat L_\nu \, d\nu}\,
-            \hat L_\nu(\lambda;\lg U) + s\,L_\nu^{\rm spin}(\lambda),
+            L_\nu(\lambda) = \frac{L_{\rm ir}}{\int (\hat L_\nu + \hat L_\nu^{\rm spin}) \, d\nu}\,
+            (\hat L_\nu(\lambda;\lg U) + \hat L_\nu^{\rm spin}(\lambda)),
 
-        where :math:`\hat L_\nu` is the template shape at ``lgU`` and
-        :math:`s = L_{\rm ir} / \int \hat L_\nu\, d\nu` is the thermal-budget
-        scale [erg/s/Hz for :math:`L_\nu`, erg/s for :math:`L_{\rm ir}`].
+        where :math:`\hat L_\nu` is the thermal template shape at ``lgU`` and
+        :math:`\hat L_\nu^{\rm spin}` is the spinning-dust spectrum.
+
+        **Energy balance**: normalization happens once, on the evaluation grid,
+        after both additive terms are assembled. This ensures the delivered SED
+        integrates to L_absorbed regardless of the native template grid spacing.
 
         Parameters
         ----------
@@ -355,18 +371,22 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
         lgU_grid = data["lgU_grid"]
         lnu_template = data["lnu_template"]  # (n_lgU, n_wave)
-        norm_per_lgU = data["norm_per_lgU"]
         lnu_spinning = data["lnu_spinning"]
 
         lgU_clipped = jnp.clip(jnp.asarray(p["lgU"]), lgU_grid[0], lgU_grid[-1])
-        L_nu_shape = jax.vmap(
+        L_nu_thermal = jax.vmap(
             lambda col: jnp.interp(lgU_clipped, lgU_grid, col),
             in_axes=1,
         )(lnu_template)
-        norm_at_lgU = jnp.interp(lgU_clipped, lgU_grid, norm_per_lgU)
-        scale = jnp.where(norm_at_lgU > 0, L_ir / norm_at_lgU, 0.0)
 
-        # Spinning dust rides the same thermal-budget scale so its amplitude
-        # stays tied to the dust mass implied by L_ir.
-        sed_emission = L_nu_shape * scale + lnu_spinning * scale
+        # Assemble combined spectrum: thermal + spinning dust
+        combined_spectrum = L_nu_thermal + lnu_spinning
+
+        # Renormalize on the evaluation grid AFTER resampling and assembly, with
+        # the shared quadrature, so the published spectrum integrates to L_ir
+        # exactly regardless of the native template grid spacing.
+        t_integral = integrate_lnu_over_nu(combined_spectrum, jnp.asarray(wave))
+        norm = jnp.where(t_integral > 0.0, L_ir / t_integral, 0.0)
+
+        sed_emission = norm * combined_spectrum
         return sed_in + sed_emission, {"sed_dust_ir": sed_emission}

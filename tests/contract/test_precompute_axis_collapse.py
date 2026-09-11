@@ -83,7 +83,9 @@ from tests._data_skip import DATA_DIR, requires_cb19
 pytestmark = pytest.mark.contract
 
 _SILVA04_GRID = DATA_DIR / "silva04_torus_grid.h5"
-_CB19_GRID = DATA_DIR / "cb19_templates.h5"
+# The CB_19 rows take ``usable_cb19_grid_path`` instead: their subject is axis
+# collapse, not which file is on disk, and the packaged one may be the flat
+# placeholder of #924, which the loader refuses (#2181).
 
 requires_silva04_torus = pytest.mark.skipif(
     not _SILVA04_GRID.is_file(), reason=f"Silva04 torus grid not found at {_SILVA04_GRID}"
@@ -222,7 +224,14 @@ _CASES = [
     ("xray_lopez24_ax0", "xray", "xray_precompute", "xray_corona_lopez24", 0, 2, "xray", {}, ()),
     ("xray_lopez24_ax1", "xray", "xray_precompute", "xray_corona_lopez24", 1, 2, "xray", {}, ()),
     ("dust_mbb", "dust", "dust_analytic_precompute", "modified_blackbody", 0, 2, "radio", {}, ()),
-    ("dust_casey", "dust", "dust_analytic_precompute", "casey2012", 0, 3, "radio", {}, ()),
+    # casey2012 carries four axes since ``dust_lambda_0_um`` became a declared
+    # parameter: (T, beta_ir, alpha_mir, lambda_0_um). Pin the first and the
+    # new last one -- a pivot axis that no case reaches is a pivot axis whose
+    # collapse is unguarded.
+    ("dust_casey", "dust", "dust_analytic_precompute", "casey2012", 0, 4, "radio", {}, ()),
+    ("dust_casey_pivot", "dust", "dust_analytic_precompute", "casey2012", 3, 4, "radio", {}, ()),
+    # graybody: (T, beta_ir, lambda_0_um). Pin its pivot for the same reason.
+    ("dust_graybody", "dust", "dust_analytic_precompute", "graybody", 2, 3, "radio", {}, ()),
     (
         "silva04",
         "agn",
@@ -253,7 +262,7 @@ def test_axis_collapse_matches_full_lookup(
 
 
 @requires_cb19
-def test_cb19_collapse_axis0(filter_set_radio):
+def test_cb19_collapse_axis0(filter_set_radio, usable_cb19_grid_path):
     """CB19's 6-axis grid collapses on log_OH_total.
 
     CB19 now has 6 axes (log_OH, log_age, log_U, log_nH, log_CO, dNO).
@@ -266,7 +275,9 @@ def test_cb19_collapse_axis0(filter_set_radio):
     from tengri.components.nebular import cb19_precompute as adapter
 
     waves, trans = filter_set_radio
-    full = adapter.precompute(waves, trans, 0.5, parameters=None, filepath=str(_CB19_GRID))
+    full = adapter.precompute(
+        waves, trans, 0.5, parameters=None, filepath=str(usable_cb19_grid_path)
+    )
     assert len(full["axes"]) == 6, f"CB19 should have 6 axes, got {len(full['axes'])}"
 
     # Verify grid shape consistency: grid_axes matches axes
@@ -285,7 +296,7 @@ def test_cb19_collapse_axis0(filter_set_radio):
         trans,
         0.5,
         parameters=_mock_params({adapter.AXIS_PARAMS[0]: midpoints[0]}),
-        filepath=str(_CB19_GRID),
+        filepath=str(usable_cb19_grid_path),
     )
     coll_lookup_dict = adapter.build_lookup(coll)
     coll_lookup = coll_lookup_dict["predict_lines"]
@@ -308,13 +319,13 @@ def test_cb19_collapse_axis0(filter_set_radio):
 
 
 @requires_cb19
-def test_cb19_hbfrac_parameter(filter_set_radio):
+def test_cb19_hbfrac_parameter(filter_set_radio, usable_cb19_grid_path):
     """CB19 precompute accepts hbfrac parameter and threads it to the loader.
 
     HbFrac is a discrete load-time choice, not an interpolation axis. Verify that
     the hbfrac parameter is passed through to load_cb19_grid. The synthetic fixture
-    has identical line ratios for both HbFrac=0.0 and 1.0 slices (broadcast copies),
-    so we verify the wiring via monkeypatch.
+    carries identical line ratios for both HbFrac=0.0 and 1.0 slices, so the wiring
+    is verified by monkeypatch rather than by a value difference.
     """
     from tengri.components.nebular import cb19_precompute as adapter
 
@@ -326,7 +337,7 @@ def test_cb19_hbfrac_parameter(filter_set_radio):
     ) as mock_loader:
         # Call precompute with hbfrac=0.0
         result = adapter.precompute(
-            waves, trans, 0.5, parameters=None, filepath=str(_CB19_GRID), hbfrac=0.0
+            waves, trans, 0.5, parameters=None, filepath=str(usable_cb19_grid_path), hbfrac=0.0
         )
 
         # Verify loader was called with hbfrac=0.0

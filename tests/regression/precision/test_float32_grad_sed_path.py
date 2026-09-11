@@ -127,6 +127,10 @@ def test_radio_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
         f"L_nu={v64:.3e}); this test cannot say anything about the radio seam"
     )
     assert np.all(np.isfinite(g32)), f"float32 radio-band SED gradient is non-finite: {g32}"
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
     assert rel.max() < 1e-3, (
         f"float32 radio-band SED gradient disagrees with float64 by {rel.max():.2e} "
@@ -175,13 +179,25 @@ def test_multicolor_agn_sed_gradient_is_accurate_in_float32(ssp_bare, obs, log_l
     assert np.all(np.isfinite(g64)), (
         f"float64 gradient is already non-finite ({g64}) — the setup is wrong"
     )
+    assert np.any(g64 != 0.0), (
+        "`g64` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(v32), (
         f"float32 forward value is non-finite ({v32}) — a different bug from #1439"
+    )
+    assert np.any(v32 != 0.0), (
+        "`v32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     assert np.all(np.isfinite(g32)), (
         f"float32 SED gradient is non-finite (names={names}, f32={g32}, f64={g64}) "
         "while the forward pass is exact — multicolor_disc's float32 renormalization "
         "lost its L1 factorization (#1439)"
+    )
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
     assert rel.max() < 1e-3, (
@@ -213,8 +229,16 @@ def test_kubota_done_agn_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
     _, _, v32, g32 = _band_gradient(ssp_bare, obs, groups, x64=False, dtype=jnp.float32, **kw)
 
     assert np.isfinite(v32), f"float32 forward value is non-finite ({v32})"
+    assert np.any(v32 != 0.0), (
+        "`v32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.all(np.isfinite(g32)), (
         f"float32 SED gradient is non-finite (names={names}, f32={g32}, f64={g64})"
+    )
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
     assert rel.max() < 1e-3, (
@@ -266,12 +290,28 @@ def test_agn_sed_forward_mode_gradient_is_exact_in_float32(ssp_bare, obs):
     v32, g32 = v32_g32
 
     assert np.isfinite(v64) and np.isfinite(g64), f"setup: float64 is {v64}, {g64}"
+    assert np.any(g64 != 0.0), (
+        "`g64` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
+    assert np.any(v64 != 0.0), (
+        "`v64` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(v32), (
         f"float32 forward VALUE is non-finite ({v32}) — a dtype gate fell through "
         "to its float64 branch (#1439)"
     )
+    assert np.any(v32 != 0.0), (
+        "`v32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert abs(v32 - v64) / abs(v64) < 1e-3, f"float32 value {v32:.6e} vs {v64:.6e}"
     assert np.isfinite(g32), f"float32 forward-mode gradient is non-finite ({g32})"
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert abs(g32 - g64) / abs(g64) < 1e-3, (
         f"float32 forward-mode d/d(agn_log_lbol) {g32:.6e} vs float64 {g64:.6e}"
     )
@@ -292,10 +332,22 @@ def test_shape_invariant_disc_sed_gradient_is_exact_in_float32(ssp_bare, obs):
     _, _, v32, g32 = _band_gradient(ssp_bare, obs, groups, x64=False, dtype=jnp.float32, **kw)
 
     assert np.all(np.isfinite(g64)), f"setup: float64 gradient is {g64}"
+    assert np.any(g64 != 0.0), (
+        "`g64` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(v32), f"float32 forward value is non-finite ({v32})"
+    assert np.any(v32 != 0.0), (
+        "`v32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert abs(v32 - v64) / abs(v64) < 1e-3, f"float32 value {v32:.6e} vs {v64:.6e}"
     assert np.all(np.isfinite(g32)), (
         f"float32 reverse-mode gradient is non-finite (names={names}, f32={g32})"
+    )
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
     assert rel.max() < 1e-3, (

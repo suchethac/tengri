@@ -98,7 +98,7 @@ t_dust_pl, dust_pl = bench(
         p["tau_diff"],
         law_bc="power_law",
         law_diff="power_law",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5a. Dust (power_law):         {t_dust_pl:8.1f} μs")
@@ -113,7 +113,7 @@ t_dust_cal, dust_cal = bench(
         p["tau_diff"],
         law_bc="calzetti",
         law_diff="calzetti",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5b. Dust (calzetti):          {t_dust_cal:8.1f} μs")
@@ -128,7 +128,7 @@ t_dust_kc, _ = bench(
         p["tau_diff"],
         law_bc="kriek_conroy",
         law_diff="kriek_conroy",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5c. Dust (kriek_conroy):      {t_dust_kc:8.1f} μs")
@@ -143,7 +143,7 @@ t_dust_smc, _ = bench(
         p["tau_diff"],
         law_bc="smc",
         law_diff="smc",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5d. Dust (smc):               {t_dust_smc:8.1f} μs")
@@ -197,7 +197,6 @@ spec_cal = ParamSpec(
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
-    dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
     dust_law_bc="calzetti",
     dust_law_diff="calzetti",

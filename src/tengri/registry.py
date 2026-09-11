@@ -409,6 +409,17 @@ def _usage_hint(name: str, kind: str) -> str:
             f"'law': '{name}'}})"
         )
     if kind == "dust_emission":
+        from tengri.parameters.groups import _standalone_dust_emission_types
+
+        # A building block is refused by SEDModel.build, so handing the user a
+        # build call here would be advice that raises (#1275). Carry the reason
+        # and the next step instead, exactly as an ``unvalidated`` SFH row does.
+        if name not in _standalone_dust_emission_types():
+            return (
+                f"building block, not a standalone model: '{name}' re-emits only a "
+                "fraction of L_ir. Compose it with an energy-balanced continuum "
+                "model, or pick one from list_dust_emission_models()"
+            )
         # dust_emission requires a dust_attenuation block for energy balance;
         # show both groups together with the minimal attenuation spelling.
         return (
@@ -889,6 +900,16 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "citation": "Draine et al. 2021 (ApJ 917, 3)",
         "short_doc": "PAHspec grid: size distribution, ionization and starlight spectrum",
     },
+    # The registry key ``draine2021_pah`` resolves to (via _EMISSION_TYPE_ALIASES).
+    # It became separately selectable when the component joined the emission
+    # family — the menu is derived from the components publishing ``sed_dust_ir``
+    # — so it needs its own row, or it lists with a blank description and no
+    # credit.
+    "draine2021_pah_ir": {
+        "status": "production",
+        "citation": "Draine et al. 2021 (ApJ 917, 3)",
+        "short_doc": "PAHspec grid, canonical name (draine2021_pah resolves here)",
+    },
     "draine_li2007": {
         "status": "production",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
@@ -929,6 +950,12 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "citation": "Casey 2012 (MNRAS 425, 3094)",
         "short_doc": "Single-temperature modified blackbody (alias of modified_blackbody)",
     },
+    "graybody": {
+        "status": "production",
+        "citation": "Boquien et al. 2019 (A&A 622, A103) / Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "General-opacity graybody with free pivot "
+        "(Synthesizer Greybody optically_thin=False; CIGALE mbb)",
+    },
     "modified_blackbody": {
         "status": "production",
         "citation": "Casey 2012 (MNRAS 425, 3094)",
@@ -957,7 +984,12 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     "pah_drude": {
         "status": "production",
         "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
-        "short_doc": "Drude-profile PAH emission features",
+        # Stays listed on purpose: it is a real, validated PAH template that
+        # composes into custom models, and delisting it would hide it the way
+        # #1120 hid the unvalidated SFH types. What the row must not do is read
+        # like a model you can select — standalone it re-emits a measured
+        # 1.8925e-04 of L_ir, and SEDModel.build refuses it.
+        "short_doc": "Drude-profile PAH emission features (building block; not selectable standalone)",  # noqa: E501
     },
     "energy_balance_split": {
         "status": "experimental",
@@ -1075,7 +1107,13 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
         # grid file." The key is ``grid``; this hint advertised ``gridfile``,
         # so the line printed to fix one failure raised a different one:
         # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?", and
-        # nothing checked either. (``cb19`` ships its own grid and stands alone.)
+        # nothing checked either. (``cb19`` keeps the bare form for a
+        # different reason: its neb grammar has no ``grid`` key at all, so
+        # there is no hint to correct here -- not because it "ships its own
+        # grid and stands alone", which was never true. The shipped default
+        # is the flat placeholder (#924), and as of 2026-09 the upstream
+        # 3MdB CB_19 table is unpopulated pending the 3MdB team's own
+        # corrected grid and erratum (#2198).)
         if m["name"] == "cloudy":
             m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
     out = _filter_menu(out, "status", status, listing="list_nebular_backends")
@@ -2769,7 +2807,7 @@ def suggest_parameters(
     mean_sfh_type: str | list[str] = "dpl",
     agn_model: str | None = None,
     dust_law: str | None = None,
-    dust_law_bc: str | None = "power_law",
+    dust_law_bc: str | None = None,
     dust_law_diff: str | None = None,
     dust_emission: str | None = None,
     dust_model: str = "two_component",
@@ -2803,9 +2841,20 @@ def suggest_parameters(
     agn_model : str, optional
         Name from ``tengri.list_agn_models()``.  ``None`` → AGN off.
     dust_law : str, optional
-        Attenuation law name. For flat-kwarg Parameter() builds, defaults to
-        power_law when unset. For grammar builds (SEDModel.build), use 'law'
-        for single_component or both 'law_bc' and 'law_diff' for two_component.
+        Attenuation law name applied to BOTH screens: fills whichever of
+        ``dust_law_bc``/``dust_law_diff`` the caller left unnamed, so a lone
+        ``dust_law`` on ``single_component`` names its one screen, and on
+        ``two_component`` it names both unless overridden by an explicit
+        per-screen ``dust_law_bc``/``dust_law_diff``. For flat-kwarg
+        Parameter() builds, defaults to power_law when unset. For grammar
+        builds (SEDModel.build), use 'law' for single_component or both
+        'law_bc' and 'law_diff' for two_component.
+    dust_law_bc, dust_law_diff : str, optional
+        Default None. Mirror ``Parameters()``'s own ``dust_law_bc``/
+        ``dust_law_diff`` flat kwargs and are resolved through the same
+        ``tengri.parameters._dust_laws.resolve_dust_screen_laws`` rule, so
+        this cheatsheet cannot describe a configuration ``Parameters()``
+        itself would refuse.
     dust_emission : str, optional
         IR emission template family from
         ``tengri.list_dust_emission_models()``.
@@ -2835,17 +2884,26 @@ def suggest_parameters(
     >>> tengri.suggest_parameters(mean_sfh_type=["dpl", "field"])
     """
     from tengri.parameters._builders import _build_param_registry
+    from tengri.parameters._dust_laws import resolve_dust_screen_laws
 
     nebular_flag = nebular_backend is not None
-    if dust_law and not dust_law_diff:
-        # Treat single dust_law= as the diffuse component for two-component
-        dust_law_diff = dust_law
+    if dust_law:
+        # dust_law names ONE law for both screens (the single-law spelling
+        # documented above, e.g. "use 'law' for single_component"): it fills
+        # whichever screen the caller left unnamed, never only the diffuse
+        # one. Folding it into dust_law_diff alone regressed #2224's fix --
+        # a single-component dust_law_bc stayed None and the resolver
+        # correctly refused the resulting lone dust_law_diff.
+        dust_law_bc = dust_law_bc or dust_law
+        dust_law_diff = dust_law_diff or dust_law
+    # Same resolution rule Parameters._init_dust_config applies (#2224): the
+    # printed cheatsheet must not describe a (dust_model, dust_law_bc,
+    # dust_law_diff) triple that Parameters() itself would refuse.
+    dust_law_bc, dust_law_diff = resolve_dust_screen_laws(dust_model, dust_law_bc, dust_law_diff)
     registry, defaults = _build_param_registry(
         mean_sfh_type=mean_sfh_type,
         nebular=nebular_flag,
         dust_model=dust_model,
-        dust_law_bc=dust_law_bc,
-        dust_law_diff=dust_law_diff,
         dust_emission=dust_emission,
         agn_model=agn_model,
         radio=radio,
@@ -2879,8 +2937,9 @@ def suggest_parameters(
         parts.append(f"agn_model={agn_model!r}")
     if dust_emission:
         parts.append(f"dust_emission={dust_emission!r}")
-    if dust_law or dust_law_diff:
-        parts.append(f"dust_law_diff={(dust_law_diff or dust_law)!r}")
+    parts.append(f"dust_law_bc={dust_law_bc!r}")
+    if dust_law_diff != dust_law_bc:
+        parts.append(f"dust_law_diff={dust_law_diff!r}")
     if nebular_backend:
         parts.append(f"nebular_backend={nebular_backend!r}")
     _display(f"\nParameters configuration: {', '.join(parts)}")

@@ -66,7 +66,7 @@ class TestSingleComponentDust:
         """For power_law with negative slope, blue < red transmission."""
         from tengri.components.dust.attenuation import single_component_dust
 
-        trans = single_component_dust(wavelengths, tau_v=1.0, law="power_law", n_slope=-0.7)
+        trans = single_component_dust(wavelengths, tau_v=1.0, law="power_law", dust_slope=-0.7)
         # Blue end should have lower transmission than red end
         assert trans[0] < trans[-1]
 
@@ -76,7 +76,7 @@ class TestSingleComponentDust:
 
         tau_v = 1.5
         wave = jnp.array([5500.0])
-        trans = single_component_dust(wave, tau_v=tau_v, law="power_law", n_slope=-0.7)
+        trans = single_component_dust(wave, tau_v=tau_v, law="power_law", dust_slope=-0.7)
         # power_law at 5500A: k = (5500/5500)^n = 1.0
         expected = jnp.exp(-tau_v)
         assert jnp.allclose(trans, expected, rtol=1e-10)

@@ -6,8 +6,377 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `dust_log_L_ir` (`log10(L_IR/Lsun)`): a total dust IR budget override.
+  Declaring it -- `Fixed` or any free prior, via `dust_emission={'log_L_ir':
+  ...}` -- replaces the energy-balance IR budget (`log_L_ir =
+  log_L_absorbed + log10(dust_eta_balance)`) outright; leaving it undeclared
+  keeps strict/relaxed energy balance exactly as before. Declares no
+  `free_prior` (an absolute luminosity has no galaxy-independent interval),
+  so `dust_emission={'all_params': FREE}` never frees it. `dust_eta_balance`
+  is inert once the override is declared, and `SEDModel` now raises
+  `ParameterError` at construction if it is free or `Fixed` at a value other
+  than 1.0 alongside a declared `dust_log_L_ir`. Radio's FIR-radio-correlation
+  amplitude follows the override too (#2187-series).
+- Each non-stellar emission source now picks its own dust screen: the
+  `dust_attenuation` group gains `nebular_screen` (governs the nebular
+  continuum, the line catalog, and the fast-nebular fallback grid; default
+  `"birth_cloud"`), `shock_screen` (governs the MAPPINGS V shock SED; default
+  `"diffuse"`), and `agn_screen` (default, and today the only accepted value,
+  `"none"` — the AGN component runs after dust and carries its own
+  polar-dust screen). Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or
+  the synonym `"off"`; flat spellings `dust_nebular_screen` /
+  `dust_shock_screen` / `dust_agn_screen` mirror `dust_law_bc` /
+  `dust_law_neb`. One validator
+  (`tengri.parameters._dust_keys.resolve_screen_choices`) backs both
+  surfaces: an unknown value names the three choices; `agn_screen` other
+  than `none`/`off` is refused with the deferral reason above;
+  `single_component` dust refuses any value other than `none`/`off` or the
+  source's own default (a single screen has no birth-cloud/diffuse
+  distinction); `wg00`/`off` dust refuse the keys outright, like the other
+  two-screen-only keys. Every attenuation site (the nebular continuum, the
+  discrete line catalog, and the shock SED) routes through ONE helper,
+  `DustSEDComponent._screen_transmission`, so there is exactly one
+  implementation of the screen formula. Closes #2234 by replacement: a
+  configurable nebular screen (`neb_dust` modes `bc`/`diff`/`neb`/`none`)
+  existed in 2026-04 and died with #923/#2230, leaving `_neb_dust_mode` /
+  `_neb_dust_law_bc_fn` in `sed_model.py` as write-only remains (now
+  deleted); the choice is restored as explicit, validated config rather than
+  the old ungated mode string. Also closes #2235 by making the
+  `docs/model_reference/nebular.md` prose ("shock receives only diffuse ISM
+  attenuation") and the code agree — the code previously attenuated shock
+  unconditionally with the birth-cloud form — and by snapping (see Fixed,
+  below).
+
+### Changed
+
+- The shock SED's default dust screen flips from the unconditional
+  birth-cloud form (`tau_bc·k_bc + tau_diff·k_diff`) to diffuse-only
+  (`tau_diff·k_diff`): an AGN-outflow shock is not, in general, still
+  confined to the compact star-forming birth cloud the young-star screen
+  models, and the diffuse-only default now applies to every shock
+  normalization (`norm='frac'` and `norm='lhalpha'` alike). This is a
+  numeric change: on the `test_shock_attenuation_equivalence.py` fixture
+  (τ_bc=2, τ_diff=1, z=0.5, Calzetti, SDSS *gri*) the shock's photometric
+  contribution grows by roughly 8×-33× band to band, because dropping the
+  `tau_bc·k_bc` term removes the dominant attenuation factor. The
+  exact-vs-precomp agreement is unaffected by the flip (both screens agree
+  to float precision on that fixture, and the `test_precomp_channel_drift.py`
+  gap moves from 6.343e-04 to 6.289e-04 on its own fixture) because both
+  paths read the one `sed_shock_attenuated` value regardless of which screen
+  is selected. Set `dust_attenuation={'shock_screen': 'birth_cloud'}` to keep
+  the old default.
+- The dust energy-balance integral (`L_absorbed`, and so `L_ir`) now counts
+  the shock SED's absorbed power under its own `shock_screen` choice; before,
+  the shock SED was attenuated (once #1434 unified the exact and precomp
+  paths) but its absorbed power was never added to the integral — a
+  pre-existing gap between what the screens remove and what the IR
+  re-emission pool receives. A source whose screen choice is `"none"` is
+  unattenuated and so contributes exactly zero to the integral, with no
+  separate on/off branch needed.
+- `import tengri` raises the default matmul precision to `"highest"` at
+  import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
+  set or the live config already holds a value; `tengri.utils.devices.setup_jax`
+  mirrors it. On Ampere+, XLA otherwise lowers float32 matmuls to TF32
+  (measured 4.5% error on Fisher-matrix parameter error bars); the knob only
+  affects float32 matmuls, so this is a no-op for a float64 session and for
+  CPU (no TF32 path), and measured zero speed cost. Being unconditional also
+  covers a float32 arm entered later through a bare
+  `with jax.enable_x64(False): ...` while the process default stays x64-on --
+  exactly the pattern `test_fisher_float32.py`'s own float32 arm uses. An
+  explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
+
 ### Fixed
 
+- `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
+  stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
+  legacy `predict_sed_quantities` bridge, and the AGN CIGALE fracAGN torus
+  coupling), which was only silently correct at `dust_eta_balance == 1`.
+  Every dust-attenuation publisher now also publishes a `log_L_absorbed` /
+  `L_absorbed` companion pair invariant under `dust_eta_balance`, and the
+  three readers are repointed to it -- a relaxed `dust_eta_balance` no
+  longer leaks into the absorbed-energy reading (#2187-series).
+- `SEDModel.enable_fast_nebular` now snaps each requested target wavelength
+  within 0.5 Å of a true backend catalog line (read from
+  `state.derived["line_waves"]` via one reference forward pass) to that
+  line's exact wavelength, before building the per-Q_H grid. Previously the
+  fast grid tabulated exactly the caller's (possibly imprecise, e.g. a
+  rounded literature value or an air/vacuum slip) request, while the exact
+  path evaluated the dust screen at the backend's true, nearest-matched line
+  wavelength — two different points on the attenuation curve, up to ~0.1 Å
+  apart. `tests/regression/bug/test_bug_2223_line_screen_kwargs.py::test_fallback_is_actually_exercised_by_fast_nebular`
+  tightens from `rtol=2e-4` to `rtol=1e-10` now that both paths agree on the
+  identical wavelength.
+- `marginalize_emission_lines` no longer crashes float32 geoVI on CUDA. Its
+  `(n_lines, n_lines)` normal-equation GEMM (`g.T @ g`, degenerate at the
+  handful of emission lines this is ever called with) hit "GEMM is not
+  supported by cublasLt and legacy cublas fallback is removed" under JAX
+  0.11 whenever the operands arrived float64-valued and were traced under
+  x64 disabled. Replaced with an explicit broadcast-multiply-sum, which
+  never lowers to a GEMM; float64 CPU output is bit-identical to the matmul
+  it replaced (rtol 1e-12) (#2023).
+
+- A headline line property (`civ_1549`, from `KEY_LINES`) now warns instead of
+  returning a silent NaN when the currently selected nebular catalog carries
+  no entry within tolerance of its target wavelength; the warning names the
+  property, the backend, the nearest catalog line and its offset in
+  Angstrom, and the remedy (`neb={'type': 'cue', 'full_catalog': True}` when
+  the backend is cue and on the legacy subset). Generalizes across every
+  line-catalog backend (#2239).
+
+- The #2239 warning seam's static catalog accessor
+  (`_published_line_wavelengths_static`) now applies tengri's vacuum-wavelength
+  contract (`nebular_line_waves_to_vacuum`, hoisted into
+  `components/nebular/_shared.py` and shared with
+  `NebularSEDComponent.apply`) before comparing against a `KEY_LINES` target,
+  instead of comparing the backend's raw, sometimes-air catalog directly; the
+  mismatch reached up to 2.70 Angstrom against the 5 Angstrom match tolerance
+  (measured on cue's upstream, air-frame `.npy`), close enough to risk a false
+  warning or a missed one for lines not already covered by the #2239
+  regression test. `predict_photometry`, `rest_sed` and every already-tested
+  headline line are unaffected (#2239).
+
+- The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
+  ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
+  ``@renamed_kwarg`` wraps the function before ``@register_dust_law`` stores it
+  in the registry; the registry callable and ``list_laws()`` result now accept
+  the alias with a DeprecationWarning instead of raising TypeError. Per-dict
+  strictness is unchanged: ``select_law_kwargs`` and ``reject_unread_law_kwargs``
+  still reject ``n_slope`` (only the callable wrapper accepts it) (#2257).
+
+- The flat `Parameters(...)` form refuses a dust shape parameter or a
+  `dust_law_overrides` entry that the resolved attenuation law never reads, and
+  an override screen other than `bc`/`diff`/`neb`, through the same validator
+  the `SEDModel.build` grammar uses; before, `Parameters(dust_law_bc="calzetti",
+  dust_Rv=Fixed(4.0))` built and `dust_Rv` silently never reached the model.
+  Registry defaults on omission are unchanged. Inside `dust_attenuation={...}`
+  the full registry spellings (`dust_tau_bc`, `dust_law_bc`) are normalized to
+  the grammar stems before any check runs, so `tau_bc` plus `dust_tau_diff` no
+  longer trips a false completeness error and two spellings of one key raise;
+  conversely a lone `dust_tau_diff` in a two-component group is now refused
+  exactly like a lone `tau_diff` (the full spelling used to bypass the check),
+  so pin or free `tau_bc` explicitly next to `**narayanan_tau_prior(z)`.
+  `with_params()` and `merge_observation_params()` carry a fresh provenance map,
+  so a shape parameter merged into a flat spec is live. The twelve per-screen
+  grammar keys derive from one constant (`tengri.parameters._dust_keys`), and
+  `check_dust_law_kwargs.py` checks law keyword spelling at every call site in
+  `src/`, `tests/`, `bench/`, `examples/` and `analysis/`. Test, bench and analysis call sites that pinned `dust_slope` beside a law that never reads it drop the dead kwarg (`power_law` keeps its registry default of -0.7), and one engine-cache test that varied `dust_Rv` now does so under `cardelli`.
+
+- LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
+
+- The no-state emission-line dust screen (`SEDModel._attenuate_line_catalog`,
+  used when `dust_model` is `off`/`wg00` and by the #950
+  `enable_fast_nebular()` grid path) built its own law kwargs from exactly
+  `dust_slope` and `dust_bump_strength` via `emission_helpers.attenuate_emission`,
+  so `dust_delta` (kriek_conroy, salim, noll09, salim_sbl18, tea), `dust_Rv`
+  (cardelli, conroy2010) and `redshift` (narayanan_z) reached the CONTINUUM
+  screen but not the LINE screen, and per-screen overrides
+  (`slope_bc`/`slope_diff`) and `dust_f_obscuration` reached neither the
+  Lyman clip nor the covering fraction on the line side at all. It now
+  dispatches to the dust component's own `attenuate_line_catalog`
+  (`DustSEDComponent` / `DustAttenuationSEDComponent`), the same method the
+  live forward pass calls for its continuum, so there is exactly one
+  implementation of the two-component line screen. `attenuate_emission` is
+  removed; it had no public callers left (#2223).
+
+- `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
+  had two consequences. The #1999 post-adaptation stability probe had nowhere to
+  run, leaving the one dense-capable metric path reachable above the D=30 cap
+  with no step-size remediation; and chain 0 sampled inside the warmup program
+  while chains 1..n-1 ran the separate `_hmc_chain_scan`, so a multi-chain fit
+  ran two structurally different compiled programs over one adaptation — the
+  shape that made NUTS irreproducible under a pinned key before its own split.
+  The fused scan is replaced by `_hmc_low_rank_warmup_only` plus the shared
+  chain scan; the probe and the dead-warmup refusal (#2088) are wired in, and
+  `dense_mass_step_backoffs` / `warmup_divergence_frac` join the diagnostics.
+  Measured on a D=74 posterior, the probe declines on all 12 rows and returns a
+  bit-identical adapted step size, so this is insurance rather than repair
+  (`bench/reports/2026-09-06_low_rank_metric_d74.md`, Finding 6).
+
+- A flat `Parameters(...)` spec that freed or pinned a dust attenuation shape
+  parameter (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) had
+  the forward model never read it: `SEDModel._requested_law_shape_params`
+  decides which shape parameters are "live" from `spec._group_provenance`,
+  the richer map `parse_groups` attaches after construction, and a flat spec
+  never gets one, so every name resolved to `"registry_default"` and the
+  attenuation law silently evaluated its own published default no matter
+  what the flat spec declared — the parameter still appeared in
+  `free_params` and sampled a posterior that was exactly its prior.
+  `Parameters.__init__` now records a `_flat_provenance` map (distinct from
+  `_group_provenance`, so `parse_groups`, `translate.py`'s
+  `legacy_flat_spec` gate, and the flat-form `summary()` are all unaffected)
+  for every parameter the constructor call actually named, by presence in
+  the call rather than by comparing against a default — an explicit value
+  equal to a law's own published default (e.g. `dust_bump_strength=Fixed(1.0)`,
+  KC13's own value) is still a request. Measured: `dust_bump_strength`
+  0.0 -> 3.3 on `single_component` `kriek_conroy`, `galex_nuv` relative
+  change 0.00% -> 17.04%, matching the equivalent `parse_groups` build to
+  `rtol=1e-10` (#2231).
+
+- `SEDModel.compile_signature()` did not key on which dust attenuation shape
+  parameters (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) a
+  build resolved "live", so two structurally-identical models that disagreed
+  only on liveness collided on one compiled, closure-captured prediction
+  kernel — whichever was built (and called) first silently decided the
+  live/not-live branch for both. Before the #2231 fix above this axis was
+  unreachable from a flat `Parameters(...)` spec (its shape parameters were
+  always not-live), so the collision could not fire from that surface; that
+  fix is exactly what exposes it, since a flat spec can now resolve a shape
+  parameter live. `compile_signature()` now includes the sorted set of live
+  shape-parameter names (`dust_live_shape_params_sig`), same rationale as the
+  existing `dust_law_overrides_sig` / `dust_lyman_cutoff_sig` color-leak
+  entries. Measured end to end: a not-live `kriek_conroy` build followed by a
+  live one with `dust_bump_strength` overridden to 3.3 via the same
+  `params` dict previously reported identical `galex_nuv` photometry
+  (0.00% difference, the not-live kernel silently reused); with the fix the
+  two differ by 12.06% (#2231).
+
+- The dense mass-matrix cap is one seam, and crossing it is no longer silent.
+  `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
+  behaviors: `mcmc_nuts` logged the downgrade at INFO and only when
+  `verbose=True`, `mcmc_hmc` applied it silently, `mcmc_dynamic_hmc` applied it
+  silently from a signature that *defaults* to `dense_mass_matrix=True`,
+  `CatalogFitter` applied the auto-policy without the cap at all — under a
+  comment claiming it used "the same policy the single-galaxy samplers use" —
+  and `fit_batch`, which shares one adaptation across a whole batch, applied it
+  silently too. So an explicit `dense_mass_matrix=True` on a wide problem got a
+  diagonal metric, or an O(D^2) allocation, depending only on which entry point
+  the caller used, and in most cases with no way to find out. All six now route
+  through `resolve_dense_mass_gate`, which honors the request where it can and
+  raises a `UserWarning` carrying `n_dim` and `max_dim` where it cannot. The
+  warning fires regardless of `verbose`: losing the sampler's most consequential
+  setting is not a verbosity question. Nothing about which metric is *chosen*
+  changes — every existing fit gets the same mass matrix it got before.
+
+- `_mass_scale_lnu`'s forward product went `nan` in float32 on the
+  `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
+  with **byte-identical optimized HLO**, so the graph did not change and the
+  emitted kernel did. `total_mass * L_sun` is ~3.8e43 (`inf` in float32), and a
+  backend that emits its own kernel for the fused `multiply -> multiply ->
+  reduce` may hoist the two scalar broadcasts into that single factor. Ages
+  beyond the galaxy's age carry an exactly-zero SFH weight, so `inf * 0` is
+  `nan` and the reduction over age is `nan` at every pixel. PR #2100 had
+  already pinned the *reverse* pass's grouping for the same overflow; this is
+  the same hazard reached from the forward. The grouping is now stated in the
+  graph with `optimization_barrier`, on both spellings of the product — the
+  function body and the `custom_jvp`'s `primal_out` — because fixing only one
+  leaves the differentiated forward `nan` while the undifferentiated one is
+  finite. Float64 is bit-identical, verified as equality rather than tolerance
+  across all sixteen seams, which matters because the barrier changes emitted
+  HLO for every fit. Note the assertion hole that hid this: the seam checks
+  asserted gradients were non-zero, and `nan != 0.0` is `True` — the mirror of
+  #2100's hole, where `isfinite` admitted zero. This closes the float32
+  symptom, and the `spec/*/auto_*` symptom with it — see the next entry
+  (#2178, #2100).
+
+- The audit that came with `tools/check_gradient_assertions.py`: **279 test
+  sites** across 140 files asserted half the finite-AND-non-zero rule and now
+  assert both. 248 were the #2100 shape (finite, never non-zero) and 31 the
+  #2178 shape (non-zero, never finite). No assertion was weakened to make the
+  guard pass. 19 of the 279 carry the documented escape hatch
+  (`# grad-assert: finite-only — <reason>`): they evaluate at a point where the
+  derivative is zero for a reason. Some construct a degenerate input on purpose
+  — a zeroed window, an empty band, zero ionizing flux, an exact `log10_add`
+  cancellation, the Hessian-vector product of a linear scaling, a kernel
+  evaluated outside its band. Others sit on a genuine stationary point or an
+  inert direction: a prior's log-density differentiated at its own mode, a
+  Student-t NLL differentiated at `sigma`'s own maximum-likelihood point, a GP
+  field's PSD *correlation time* at an identically zero field (the timescale
+  only colors the field, so with no field there is nothing to color). Either way
+  zero is the correct answer there and only the finite half is a claim — and
+  where the surrounding test's real claim was that a gradient *flows*, that
+  claim is now stated a step away from the zero, where it can actually fail.
+
+- Two further tests turned out to be measuring nothing, both found by the
+  non-zero half of the rule and neither a gradient defect in `src/`:
+  `test_forward_model_end_to_end_jit` took its model from a fixture that fixes
+  *every* parameter, so `params` was `{}` — `all(... for g in grads.values())`
+  is vacuously True over an empty dict, and the test promised "finite
+  gradients" in its own docstring while taking none. It now builds a model with
+  two free dust optical depths and asserts the precondition that a free
+  parameter exists. `test_stochastic_gradients_finite` hand-rolled a loss that
+  attached only `psd_xi`, but `StellarSEDComponent` reads `sfh_field_xi` —
+  the exact trap `inference/loss_functions.py` attaches both keys to avoid, and
+  says so in a comment. The latent field never reached the model: `psd_xi`'s own
+  gradient summed to exactly 0.0 and `sfh_field_psd_sigma`'s was bit-identical
+  for a zero field and a random one. A finite-only check cannot see that, because
+  an identically zero array is finite. (Counts are what the guard reports when run over the upstream
+  tree at the merge base: 279 across 140 files at `6cc1a8b25`, against 277
+  across 139 at the previous merge base `850be10bc` — a delta of exactly the
+  two sites `main` added since, both in `test_float32_scale_seam_sweep.py`,
+  where the swept *forward* was pinned finite but never non-zero. An earlier
+  revision of this entry said 276/137, which was not one of those
+  measurements.)
+  Two of the repaired sites are the historical bugs themselves:
+  `test_inference_grad_float32.py` (still finite-only on `main`, which is how
+  #2100 stayed invisible) and the `!= 0.0` seam checks in
+  `test_float32_fitting_path_seams.py`.
+
+  The count is **disjoint from #2171's sweep**: re-measured against `main`
+  *after* that landed, this guard still reports the same 272 sites it reported
+  before, because #2171 repaired a different defect (an assertion wrapped in a
+  guard derived from its own subject, which declines to run) while this one
+  repairs a predicate that runs and admits the undecided state. Complementary,
+  not duplicative.
+
+- `test_met_table_grad_wrt_lgmet` was **vacuous**, and the guard found it. It
+  differentiated the total CSP mass with respect to `lgmet_table` and asserted
+  only `isfinite`. The metallicity table chooses which SSP template each age bin
+  draws from; it does not move mass between bins, so the total is *exactly*
+  invariant and the gradient is identically zero — as is the finite-difference
+  reference it was compared against, so the check compared 0 with 0. Measured:
+  `total_mass` is `7942282347.242821693420` at `lgmet`, at `lgmet+0.5`, at
+  `lgmet+2.0` and at `lgmet-2.0`, the same digits to the last one. The
+  conservation is now the claim, stated positively, and a second assertion
+  differentiates the *metallicity weights*, which the table does steer
+  (measured `max|grad| = 25.7`, all 20 entries non-zero), so the test measures a
+  gradient rather than a conservation law twice.
+
+- `TestCmbContrastFactorBounds::test_gradient_safety_float64` was **vacuous**,
+  and the guard found it. It differentiated `cmb_contrast_factor` at
+  `T_eff = 25 K, z = 10` and asserted only `isfinite`. The z = 10 CMB floor is
+  `2.725 x 11 = 29.98 K`, so at 25 K the factor is clamped to exactly zero at
+  all 601 wavelengths and the gradient is `-0.0` — finite, and measuring
+  nothing. Measured 2026-09-06: `sum = 0.0, grad = -0.0` there, against
+  `grad = 2.6` at `T_eff = 50 K` on the same grid. The sub-CMB point is now
+  pinned *as* zero (which is the correct physics) and a live point above the
+  floor is pinned finite AND non-zero, so the test measures a gradient again.
+
+- The `optimization_barrier` that PR #2194 put on `_mass_scale_lnu`'s primal
+  costs neither memory nor time, measured rather than assumed. On the
+  `spec/lut` seam at a realistic `(n_age, n_wave) = (93, 4096)`, four
+  interleaved before/after repetitions on an otherwise idle box (1-minute load
+  average stamped per run, 0.46 to 3.6): XLA's own compiled-memory analysis is
+  **byte-identical** in both arms — `temp` 1.558 MB (forward) and 4.701 MB
+  (forward+gradient) in float32, 3.115 MB and 9.396 MB in float64, with
+  `output`, `argument` and `alias` zero throughout — and peak process RSS is
+  2481.5 MB without the barrier against 2495.2 MB with it, a 0.55 % difference
+  dominated by the SSP load and the model build rather than the kernel. Forward
+  wall time is 1.040 ms against 1.034 ms; forward+gradient is 3.083 ms against
+  3.095 ms, a 0.4 % difference inside a per-arm spread of 22 %. The premise that
+  the barrier forces an extra `(n_age, n_wave)` materialization does **not**
+  hold: the einsum already produces that array as its own output and the barrier
+  sits on a scalar multiply of it, which XLA does in place. No approach is
+  switched, and the docstring's note that folding `L_sun` into the einsum
+  operand "does not survive" the SSP-as-`Parameter` path is left standing
+  un-relitigated — a standalone reproducer at the seam's shape does not
+  reproduce the defect at all, so it cannot adjudicate that note either way
+  (#2178, #2194).
+
+- **Symptom 2 of #2178 was the same defect, not a second one.** The float64
+  spectroscopy forward was reported non-finite on six `spec/*/auto_*` seams (CI
+  run 33958554553), and `_skip_if_lut_forward_is_broken` (#2143) was left in
+  place until that could be answered. Reproduced under jaxlib 0.11.1: the
+  float64 arm builds, fits and differentiates cleanly, and the `ValueError`
+  from `_check_channel_scales` — carrying that run's own
+  `max |data| = 1.618e-27` and `2.751e-29`, to the digit — comes from the
+  **float32** arm the same module-scoped fixture builds next. Six errors is two
+  seams times three tests. One defect at one threshold, attributed to the wrong
+  arm. With the forward grouping stated in the graph the guard fires on **no**
+  seam, so it is deleted rather than widened, and
+  `tests/regression/precision/test_float32_fitting_path_seams.py` runs
+  41 passed / 0 skipped / 6 xfailed on jaxlib 0.11.1 (#2178, #2143).
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
@@ -44,7 +413,159 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   restores them, so a reload without `model=` no longer re-creates the false
   positive; files written before this load unchanged (#2087).
 
+- Flat `Parameters(dust_model="single_component", dust_law_diff=...)` silently
+  discarded `dust_law_diff` and built `power_law` on the one attenuation
+  screen; a disagreeing `(dust_law_bc, dust_law_diff)` pair silently kept
+  `dust_law_bc` and dropped the other, so the model built was not the one
+  requested and nothing said so. Both shapes now raise `ValueError` naming
+  `dust_law_bc` as the single-screen spelling; the working shapes are
+  unaffected -- `dust_law_bc` alone still inherits into `dust_law_diff`, and
+  an already-equal pair (what the grammar path writes for
+  `single_component`) still builds. `two_component`/`wg00`/`off` inheritance
+  (#1989) is unchanged in both directions (#2224).
+
+- `SEDModel.from_config(dust=...)` named only the birth-cloud screen
+  (`spec_kwargs["dust_law_bc"] = dust`); the diffuse-ISM screen's law was
+  filled in only because the model happens to stay `dust_model="two_component"`
+  and the low-level inheritance of #1989 backfilled `dust_law_diff` from
+  `dust_law_bc` -- an accident of a default `from_config` never set on
+  purpose, not an explicit choice. `from_config` now resolves both screens
+  explicitly through the same resolver #2224 introduced
+  (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
+  not inherited (#2021).
+
+- `narayanan_prior(z)` and `narayanan_tau_prior(z, log_mstar)` centered
+  unbounded `Gaussian` priors on `dust_bump_strength` and `dust_tau_diff`,
+  both of which declare a `lo >= 0` `bound_check` — so the docstrings' own
+  Examples raised `ValueError: ... bounds (-inf, inf) violate physical
+  constraint: must be >= 0` at `Parameters` construction. Both Gaussians now
+  truncate at zero (`lo=0.0`); `dust_delta`, which has no such constraint
+  and whose fitted means straddle zero, stays unbounded. That fix exposed a
+  second, independent defect in `Gaussian`: `_truncated` was derived from
+  `self._cdf_lo > 0.0`, and for a bound more than ~8 sigma from the mean
+  `erf` underflows to exactly 0.0, so `_truncated` read `False` and
+  `unstandardize`/`sample` silently fell back to the untruncated affine map
+  — inert for a `lo=0.0` bound 6.6–12 sigma away from these two priors'
+  means. `_truncated` now reads the bound directly
+  (`self._lo > -inf or self._hi < inf`); behavior-preserving for every other
+  caller (every other bounded `Gaussian` in the tree already has at least one
+  bound within a few sigma, where the CDF does not underflow, so
+  `_truncated` already read `True` before this fix; every unbounded
+  `Gaussian` is untouched). Finally, `dust_bump_strength`'s declared
+  `free_prior` widened from `Uniform(0.0, 2.0)` to `Uniform(0.0, 4.0)`, since
+  the old ceiling
+  could not reach the Narayanan et al. (2018) MUFASA-fitted bump multipliers
+  (up to 3.634 at z=4) that `narayanan_prior` itself now centers on (#2226).
+
 ### Added
+
+- `bench/scripts/benchmark_float32_mps_parity.py` -- a self-contained pure-float32
+  parity sweep for the Apple GPU (#1206). Apple's own `jax-metal` last released 0.1.1
+  on 2024-10-08 and pins `jax == jaxlib >= 0.4.34`, not viable against tengri's JAX
+  0.11; the community `jax-mps` plugin (MLX-backed) is the path that works, but it has
+  no float64 at all. This script writes a float64 reference on CPU
+  (`--write-reference`) for six progressive model seams (`stellar_dust`, `+dust IR`,
+  `+Cue`, `+AGN`, `+radio+xray`, `panchromatic`) and, in its default mode, checks a
+  float32 rebuild against it -- max relative forward error, gradient error, and a
+  *converged* MAP fit's optimum parameter-vector deviation, PASS/FAIL at
+  3e-3 / 1e-2 / 1e-2. The MAP fit itself uses L-BFGS to genuine convergence
+  (`init_from` pinned to the shared truth; restarted from a stall rather than given a
+  bigger iteration cap, since scipy's line search can abandon a call well short of
+  its budget), with a non-zero exit if `--write-reference` cannot converge every seam,
+  so an unconverged reference can never be committed. The MAP-loss deviation is
+  reported as an informational column, not gated: at a converged optimum the loss is
+  stationary, so a parameter agreement of 1e-6 implies a loss agreement of order
+  1e-12 from that channel alone, and the ~1e-4 gap actually seen is float32's own
+  chi-squared evaluation (cancellation in `data - model` at SNR 30) -- already bounded
+  by the forward and gradient columns. Runnable on CPU, CUDA, or a Mac under the
+  `jax-mps` venv; refuses to run with `jax_enable_x64=True` and prints the one-line
+  environment fix instead. `docs/internal/getting_started/gpu.md` gains an "Apple GPU
+  via jax-mps" section replacing the old Metal note, with a shorter mirror in
+  `docs/performance/index.md`, `README.md`, and `docs/installation.md`.
+
+- `Observation` and its nested data classes, `Parameters` and `SSPData` expose `cache_key()`, each derived from a written policy ledger over every attribute (`tengri._cache_keys`), so a later structural signature can delegate instead of reaching into their fields (#2163).
+- `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
+  SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
+  `free_prior` and are dropped from `tools/check_param_free_priors.py`'s
+  REFUSED ledger. A static ceiling of today's cosmic age is narrowed to
+  `age_at_z(z)` at parse time (`parameters/groups.py`'s new
+  `_narrow_free_priors_to_z`) whenever the build's redshift is knowable, so
+  `'all_params': FREE` genuinely frees these onsets instead of silently
+  leaving them pinned. A catalog with a per-galaxy redshift refuses the
+  combination outright (the cap is only valid for one redshift). See
+  `docs/dev/api_migration_v0.x.md` for the full migration note, including the
+  one shipped recipe (`quiescent_z0`) whose free-parameter count changes.
+
+- `bench/scripts/probe_block_metric_structure.py` — scores a candidate
+  mass-matrix structure against the analytic metric without running a sampler.
+  For a layout it forms the structured inverse mass matrix, whitens with it, and
+  reports the condition number that survives alongside the matrix entries stored,
+  so diagonal / block / low-rank / dense sit on one frontier. It also reports a
+  **per-group verdict** — internal off-diagonal mass and internal-over-external
+  coupling for each candidate group — which turns "which groups deserve a dense
+  block" into a measurement. Used to answer #2166: block-structured mass matrices
+  are dominated by a rank-`k` correction to a diagonal on every fixture and every
+  storage budget tested, so the feature was declined rather than built. Numbers
+  and the reasoning in `bench/reports/2026-09-06_block_metric_structure.md`.
+
+- `tools/check_gradient_assertions.py`, wired into the `lint` job — a guard on
+  the "undecided treated as good" assertion class. A gradient has three states,
+  not two, and a predicate written against the *bad* state is satisfied for free
+  by the *undecided* one. Both halves have already shipped: #2100 pinned the
+  float32 seam gradients `isfinite`, and a gradient of exactly **zero is
+  finite**, so the identically-zero `sum(predict_photometry)` gradient passed on
+  CPU and GPU alike and the coverage meant to catch it structurally could not.
+  #2178 is the mirror — the seam checks pinned the gradient `!= 0.0`, `nan !=
+  0.0` is `True`, so a NaN satisfied a non-zero assertion, XPASSed a strict
+  xfail as a repaired underflow, and shipped a float32 NaN on the default
+  spectroscopy path. The rule is the conjunction: **finite AND non-zero,
+  asserted together**, never either alone. Scope is gradients everywhere under
+  `tests/`, plus every array under test in `tests/regression/precision/`, where
+  a forward that has collapsed to zero fails the float32 question exactly as a
+  NaN does. AST-based, with taint tracked through assignment so
+  `leaves = [np.asarray(v) for v in tree_leaves(g)]` is still `g` — deliberately
+  not a regex over source text, which 5d08a293e removed from this repository on
+  purpose (#2108) and which could not tell `x > 0` on a gradient from
+  `rel_err < 1e-5` on a residual. A lower bound (`max(abs(g)) > 0`) settles both
+  halves on its own, because NaN fails every ordered comparison; a value pinned
+  *as* zero or *as* NaN is the subject rather than the accident and is not asked
+  for a partner. The narrow escape hatch is
+  `# grad-assert: finite-only — <reason>` / `# grad-assert: nonzero-only —
+  <reason>`, and a marker carrying no reason is itself a CI failure. The guard
+  is verified against history, not intuition:
+  `tests/fixtures/assertion_holes/historical.py` transcribes both pre-fix
+  assertions verbatim and `tests/contract/test_gradient_assertion_guard.py`
+  pins that the guard fires on each (#2100, #2178).
+- `tools/check_float32_scale_seams.py` — enumerates the float32 **scale seams**
+  themselves rather than sampling a representative model. A scale seam is a site
+  where a large physical constant or unit conversion multiplies a
+  parameter-derived quantity; four bugs have now come out of that one shape
+  (#1388, #1439, #2100, #2178) and each was fixed where it was found. The check
+  parses `src/tengri` (AST, and evaluated constants — not a grep over source
+  text, per #2108), and for each seam asks how large the product can get inside
+  the range the parameter **declares in the registry**, never a range copied
+  from a grid axis (45741f4cd). 52 seams; 46 of them exceed float32's range
+  within their own declared prior, in 4 families — `L_sun * 10**agn_log_lbol`
+  (38 sites), `L_sun * 10**log_total_mass` (5), `M_sun * 10**agn_log_mbh` (2)
+  and the Lehmer LMXB mass term (1). Three families carry a recorded grouping
+  that keeps them safe; the fourth is filed as an open defect (#2210), because
+  recording a live defect as "handled" is worse than not recording it. Anything
+  new is an error, and a registration whose seam is gone is also an error, so
+  the inventory cannot rot. Runs in the `smoke` job, beside
+  `check_float32_representable_constants.py`, which is where the checks that
+  need tengri installed live — `lint` installs only ruff.
+
+- `tests/regression/precision/test_float32_scale_seam_sweep.py` — sweeps each
+  enumerated seam family across its parameter's whole declared prior in float32
+  and requires the gradient to be finite **and** non-zero at every point (`nan
+  != 0.0` is `True`, and zero is finite, so neither half is coverage alone). The
+  inventory is read from the tool rather than written down twice: the module
+  fails if the enumeration grows a family it does not sweep, which is what makes
+  the recorded reason a measurement instead of the only evidence. The sweep
+  refuted the first draft's reading of the black-hole-mass family as safe
+  (#2210): `M_sun * 10**agn_log_mbh` is 1.99e39 at the *bottom* of its declared
+  prior, and the float32 forward of a `kubota_done` disc is `nan` there under
+  jaxlib 0.11.1 while finite under 0.11.0.
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
@@ -172,6 +693,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Cue's default line catalog is now the full ~138-line set instead of the
+  128-line CLOUDY/FSPS-matched subset (`cue_full_catalog` defaults to
+  `True`); pass `neb={'type': 'cue', 'full_catalog': False}` (or
+  `Parameters(cue_full_catalog=False)`) to keep the legacy subset for
+  cross-code comparisons. Reverses the 2026-05 `#303` back-compat default.
+  `predict_photometry`, `rest_sed` and every other headline line are
+  bit-identical either way: only the discrete line catalog and `civ_1549`
+  change (#2239).
+
+- `SEDModel.compile_signature()` is derived from a policy ledger over every model attribute (`tengri.forward._signature_policy`) with the nested `cache_key()` of the observation, parameters and SSP grid, memoized on the instance and invalidated by the two structural mutators; four structural attributes the hand-written list never keyed (`lgmet_scatter`, the GP field kernel, `lsf_n_bins`, `igm_patchy`) now are, and an attribute nobody classifies fails a contract test instead of shipping a wrong number (#2163).
+- The four inference-side hand-written cache keys are now policy-derived too (#2163 E.5): `Fitter._engine_cache_key()` and `_data_fingerprint()` share a pair of complementary ledgers (`tengri.inference._engine_policy.ENGINE_POLICY`/`FINGERPRINT_POLICY`) over every `Fitter` attribute — engine `shape` rows are exactly the fingerprint's `content` rows — instead of two independently hand-maintained field lists that had never been checked against each other or against the live attribute set; the engine key gains a `_user_likelihood` row a custom Likelihood previously had no representation in at all, and `_line_flux_override`'s row is now the strictly more complete `LineFluxData.cache_key()` (per-line upper/lower-limit flags, not merely "any limit mask present"). Every MCMC backend's adaptation cache (`nuts`/`hmc`/`dynamic_hmc`/`chees`/`ghmc`/`mclmc`/`adjusted_mclmc`/`first_order`) now builds its tuning tuple through one `adaptation_method_key()` helper that binds the runner's own signature and drops a written exclusion ledger (`_ADAPT_IRRELEVANT`: `context`, `key`, `init_from`, `n_burnin`, `n_samples`, `n_chains`, `chain_method`, `verbose`), instead of a hand-picked tuple every backend maintained separately. `PreconditionedProblem.cache_key` is now a small policy ledger (`strength` content, everything else excluded — the wrapped closure and the per-galaxy starting position cannot be keyed without either aliasing two different whitening bases together or defeating cross-galaxy adaptation sharing) rather than a hand-picked `("whiten", strength)` tuple.
+- The on-disk WavePrecomp z-table and IGM subband caches are keyed by every field of a frozen request dataclass (`ZTableRequest`, `SubbandRequest`) instead of a hand-written field list, with one version constant per cache (both bumped, so existing tables recompute once) and the cosmology the integrand uses folded in as the #2145 tripwire; the ionizing-spectrum table gains a version constant (#2163).
 - Dust attenuation laws are explicit and required (#1989). A dust attenuation group
   spells its law as either `law` (one law, both screens) or, on `two_component` only,
   both `law_bc` and `law_diff` together — never one half of the pair, and never
@@ -184,6 +717,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     and its depth is `tau_v`, not `tau_bc`/`tau_diff`.
   The low-level `Parameters(dust_law_bc=…)` kwargs path is unchanged and still
   inherits `dust_law_diff` from `dust_law_bc`.
+- `SEDModel.from_config`'s dust parameter docstring stated a MODEL name
+  (`"charlot_fall"`) and LAW names (`"calzetti"`, `"kl04"`, …) as though they
+  were the same kind of thing. It now states plainly that one law is applied
+  explicitly to BOTH attenuation screens (birth cloud + diffuse ISM), and that
+  `"charlot_fall"` (the default) is an alias for `"power_law"` on both
+  screens — the classic Charlot & Fall (2000) model — not a law-registry name
+  in its own right (#2021). `suggest_parameters`'s `dust_law_bc` default is
+  aligned from a stale hardcoded `"power_law"` to `None`, and its resolved
+  `(dust_law_bc, dust_law_diff)` pair now goes through the same
+  `resolve_dust_screen_laws` rule `Parameters()` itself uses, so the printed
+  cheatsheet cannot describe a configuration `Parameters()` would refuse
+  (#2224).
 - **Example gallery curated and refocused**: Pruned 283 → 121 gallery
   scripts across 17 sections; removed inference/fit-comparison examples (they
   belong in notebooks), dissolved `inference`, `workflows`, `multiwavelength`,
@@ -288,6 +833,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Padova, BaSTI) with nebular baked into the SSP LUT — so the full render
   stays fast (~0.7 ms/eval, vs ~2 ms for the Cue emulator, which timed out
   the render at 7 galaxies).
+
+### Deprecated
+
+- Attenuation-law keyword `n_slope` is renamed `dust_slope` on `power_law` and
+  `conroy2010`, so the law keyword equals the registry name (`dust_slope`) and the
+  grammar stem (`slope`) for every shape parameter. `n_slope=` still works on the
+  public law functions with a DeprecationWarning; the registry callables, the
+  law-kwarg resolver and the per-screen override dicts (`dust_law_overrides`,
+  `bc_law_overrides`, `neb_law_overrides`) use `dust_slope` only.
+
+- `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
+  renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to
+  `dust_attenuation_law`, but emits a `DeprecationWarning`; passing both with
+  disagreeing values raises `ValueError`. `dust=` will be removed in a later
+  release (#2021).
 
 ## [0.1.0] - 2026-05-22
 

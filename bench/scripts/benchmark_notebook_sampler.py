@@ -749,12 +749,8 @@ NOTEBOOKS = {
             anchor="00now",
             superseded_by="#2044 (36d7189cf, 2026-08-23)",
             differs_in=(
-                "dust_attenuation.Rv",
                 "dust_attenuation.other_params",
-                "dust_attenuation.bump_strength",
-                "dust_attenuation.delta",
                 "dust_attenuation.f_obscuration",
-                "dust_attenuation.slope",
                 "dust_attenuation.tau_bc",
                 "dust_attenuation.tau_v",
                 "dust_attenuation.type",
@@ -766,11 +762,16 @@ NOTEBOOKS = {
                 "ssp.nebular",
             ),
             why=(
-                "The pre-#2044 quickstart. Fifteen spec keys differ from today's "
+                "The pre-#2044 quickstart. Eleven spec keys differ from today's "
                 "because #2044 replaced the SFH family, the dust component, the "
                 "nebular treatment, the SSP grid and the dimension in one commit. "
                 "Kept because 2026-08-17_quickstart_nuts_vs_hmc.md and the two "
-                "2026-08-30 reports measured THIS model."
+                "2026-08-30 reports measured THIS model. Four more used to be "
+                "listed here -- Rv, bump_strength, delta, slope -- and stopped "
+                "differing once ``to_groups()`` began emitting only the shape "
+                "parameters the selected law reads: Calzetti reads none of the "
+                "four, so both sides now omit all four rather than emitting them "
+                "with differently-shaped defaults."
             ),
         ),
         # PRNGKey(9) at SNR 30, not this file's usual (1, 20): these are
@@ -1089,6 +1090,18 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
     configs = {}
     if shipped_family(cfg) in families:
         configs[shipped_label(cfg)] = shipped
+        # The shipped call PLUS the analytic metric, at the fixture's OWN warmup
+        # length. ``nutswarm`` already pairs preconditioned and unpreconditioned
+        # arms, but only at the lengths in :data:`NUTS_WARMUP_SWEEP`, and two
+        # fixtures do not ship one of those: ``ctl-jwst`` warms up for 1000 steps
+        # and ``00`` / ``00pre`` for 1500. On those, every ``nutswarm`` pair also
+        # shortens warmup, so "the metric helped" and "the shorter warmup helped"
+        # arrive together and cannot be separated. This row changes exactly one
+        # thing against the baseline directly above it. Added by
+        # bench/reports/2026-09-06_photometry_20s.md, which needs the metric's
+        # effect isolated on four fixtures whose shipped warmups differ.
+        if shipped.get("method") == "mcmc_nuts" and shipped.get("precondition") is None:
+            configs[f"{shipped_label(cfg)}+precond"] = dict(shipped, precondition=0.5)
 
     draws = 150 if quick else max(600, shipped["n_samples"])
     warmup = 300 if quick else 1000

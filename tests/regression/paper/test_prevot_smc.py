@@ -124,6 +124,10 @@ class TestPrevotSMCFunction:
         grad_fd = fd_grad(f_scalar, 5500.0, eps=1.0)
         # Check that gradients are finite and close to FD estimate
         assert np.isfinite(grad_jax), "Gradient should be finite"
+        assert np.any(grad_jax != 0.0), (
+            "`grad_jax` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(grad_jax, grad_fd, rtol=0.05)
 
     def test_vectorization(self):
@@ -133,10 +137,13 @@ class TestPrevotSMCFunction:
         chex.assert_shape(result, (500,))
         chex.assert_tree_all_finite(result)
 
-    def test_kwargs_ignored(self):
-        """prevot_smc should accept and ignore extra kwargs."""
+    def test_extra_kwargs_raise(self):
+        """prevot_smc refuses a keyword it does not read (#2185).
+
+        It used to accept ``dust_Rv`` through a ``**_kwargs`` catch-all and
+        discard it, which is how a parameter can be declared free, sampled, and
+        never reach the curve. The signature is now the contract.
+        """
         wavs = jnp.array([5500.0])
-        # Should work with extra kwargs (like dust_Rv for other laws)
-        result1 = prevot_smc(wavs)
-        result2 = prevot_smc(wavs, dust_Rv=3.1)  # ignored kwarg
-        np.testing.assert_allclose(result1, result2, rtol=1e-15)
+        with pytest.raises(TypeError, match="dust_Rv"):
+            prevot_smc(wavs, dust_Rv=3.1)

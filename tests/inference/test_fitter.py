@@ -98,6 +98,10 @@ class TestLossFunction:
         grad = assert_grad_matches_fd(lambda p: loss_fn(p, data_args), init)
         for name, g in grad.items():
             assert jnp.all(jnp.isfinite(g)), f"Non-finite gradient for {name}"
+            assert jnp.any(g != 0.0), (
+                "`g` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
 
 class TestMAP:

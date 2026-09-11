@@ -129,6 +129,9 @@ class SpatialModelComponent:
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         """Default orchestration: slice params, lookup grid, call predict, write state."""
         prefix_len = len(self.parameter_prefix)

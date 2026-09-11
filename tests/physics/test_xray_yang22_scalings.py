@@ -121,6 +121,10 @@ def test_hmxb_smooth_in_metallicity() -> None:
 
     grad = assert_grad_matches_fd(hmxb_at_Z, jnp.array(0.02))
     assert jnp.isfinite(grad)
+    assert jnp.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     # At Z=Z_sun the quartic has negative slope (−62.12 + ...). Numerical:
     # d log L / dZ = (−62.12 + 1138.88·0.02 − 5501.4·0.0004 + 7873.3·8e-6)
     #             = −62.12 + 22.78 − 2.20 + 0.063 ≈ −41.5

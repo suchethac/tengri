@@ -53,12 +53,15 @@ Shorthand DPL equivalent::
 from __future__ import annotations
 
 import copy
+import types
 import zlib
 
 import jax
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
     resolve_sfh_type,
@@ -68,6 +71,14 @@ from tengri.parameters._builders import (
     _build_param_registry,
     _resolve_lazy_bucket,
 )
+from tengri.parameters._dust_keys import (
+    OVERRIDE_STEMS,
+    SCREEN_SOURCES,
+    resolve_screen_choices,
+    short_to_full,
+    validate_shape_requests,
+)
+from tengri.parameters._dust_laws import resolve_dust_screen_laws
 from tengri.parameters.priors import (
     Distribution,
     Fixed,
@@ -75,7 +86,19 @@ from tengri.parameters.priors import (
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
 
-__all__ = ["SETTINGS_KEYS", "Parameters"]
+__all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
+
+# CUE_FULL_CATALOG_DEFAULT (#2239) is declared in tengri.config.settings (a
+# leaf module: stdlib imports only) and re-exported here, so existing
+# ``from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT`` call
+# sites (e.g. parameters/groups.py) keep working unchanged. See that
+# module's docstring for the full rationale, including why every other
+# consumer (component.py, component_factory.py, cue.py, sed_model.py) now
+# imports it from tengri.config.settings directly at module level rather
+# than from here: this module sits at the end of a long import chain
+# (_builders -> observation -> components -> ... -> forward ->
+# component_factory -> components.nebular.component) that made a
+# module-level import of this name FROM HERE a real import cycle.
 
 
 def _stable_param_seed(name: str) -> int:
@@ -200,6 +223,17 @@ class Parameters:
         like the youngest stars (bagpipes/FSPS/CIGALE).  Set it to give
         HII-region emission its own birth-cloud curve while still sharing the
         diffuse ISM screen (``dust_law_diff``) with the stars.
+    dust_nebular_screen : str
+        Which screen attenuates the nebular continuum, the line catalog, and
+        the fast-nebular fallback grid (#2234).  One of ``"birth_cloud"``
+        (default), ``"diffuse"``, ``"none"``/``"off"``.
+    dust_shock_screen : str
+        Which screen attenuates the MAPPINGS V shock SED.  One of
+        ``"birth_cloud"``, ``"diffuse"`` (default), ``"none"``/``"off"``.
+    dust_agn_screen : str
+        Which screen attenuates AGN light.  ``"none"`` (default, and today
+        the only accepted value): the AGN component runs after dust and
+        carries its own polar-dust screen.
 
     **Dust Emission Settings**
 
@@ -437,11 +471,14 @@ class Parameters:
         # propagates through to :meth:`SEDModel._init_igm` (#344, #440).
         self.igm_model = kwargs.pop("igm_model", "inoue")
 
+        # Pop private grammar flag before any user-facing bookkeeping
+        grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs)
 
         # ── Dust ──────────────────────────────────────────────────
-        self._init_dust_config(kwargs)
+        self._init_dust_config(kwargs, validate_flat=not grammar_validated)
 
         # ── Component flags ───────────────────────────────────────
         self.igm_patchy = kwargs.pop("igm_patchy", False)
@@ -584,8 +621,6 @@ class Parameters:
             mean_sfh_type,
             nebular=self.nebular_mode,
             dust_model=self.dust_model,
-            dust_law_bc=self.dust_law_bc,
-            dust_law_diff=self.dust_law_diff,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
@@ -668,6 +703,45 @@ class Parameters:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
 
+        # Flat-form provenance (#2231). A bare ``Parameters(...)`` call never
+        # sees ``parse_groups``'s richer ``_group_provenance`` map: that
+        # attribute is attached to the finished instance AFTER construction
+        # (``object.__setattr__(final_params, "_group_provenance", ...)`` in
+        # ``parameters/groups.py``), invisible to this constructor. Without
+        # any record of what the caller actually typed, a dust attenuation
+        # shape parameter (``dust_slope``, ``dust_delta``, ``dust_Rv``,
+        # ``dust_bump_strength``) set on a flat spec read as
+        # ``registry_default`` everywhere downstream, and
+        # ``SEDModel._requested_law_shape_params`` silently evaluated the
+        # law's own published default instead of the caller's value (#2231).
+        #
+        # Record one here: ``"user_prior"`` for an explicitly-passed free
+        # distribution, ``"user_fixed"`` for an explicitly-passed Fixed or
+        # bare value. This is a presence check on ``resolved_kwargs``, never
+        # a comparison against a registry default, so pinning a parameter AT
+        # its published value (e.g. ``dust_bump_strength=Fixed(1.0)``, KC13's
+        # own default) still counts as a request -- a value comparison would
+        # silently un-request exactly that case.
+        #
+        # Stored under a name distinct from ``_group_provenance`` on purpose.
+        # Several consumers treat that attribute's mere presence as "this
+        # spec was built by parse_groups": ``translate.py``'s
+        # ``legacy_flat_spec`` gate (which exempts flat AGN/radio/xray/igm
+        # families from the missing-parameter check), and the
+        # summary()/to_groups() wildcard-collapse machinery. Reusing the name
+        # here would flip those switches for every flat spec that names even
+        # one parameter -- effectively every flat spec, since ``redshift`` is
+        # almost always explicit. The one consumer that reads requestedness
+        # today, ``SEDModel._requested_law_shape_params``, falls back to this
+        # map ONLY when ``_group_provenance`` is absent, so parse_groups' own
+        # map -- attached after this constructor returns -- always wins.
+        self._flat_provenance: types.MappingProxyType = types.MappingProxyType(
+            {
+                name: ("user_fixed" if self._distributions[name].is_fixed else "user_prior")
+                for name in user_names
+            }
+        )
+
         # Eagerly validate the composable block recipe now that distributions
         # exist: a typo raises and suspicious combos warn *before* the forward
         # model is built. Passing the concrete agn_polar_ebv (a Fixed value, not
@@ -747,11 +821,16 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
-        # When True, the Cue orchestrator path publishes the full
-        # ~271-species line catalog instead of the default 128
-        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
-        # read via ``pred.lines.get(wavelength)``. See #303.
-        self.cue_full_catalog = kwargs.pop("cue_full_catalog", False)
+        # See CUE_FULL_CATALOG_DEFAULT (imported above, declared in
+        # tengri.config.settings): the one declaration every other spelling
+        # of this default reads or derives from. ``True`` publishes the
+        # full ~138-species Cue-trained line
+        # catalog via ``state.derived["line_waves"/"line_lums"]``, so HeII
+        # 1640, C IV 1549, etc. can be read via ``pred.lines.get(wavelength)``.
+        # ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched subset
+        # (the sole default before #2239, added by #303), kept for cross-code
+        # comparisons.
+        self.cue_full_catalog = kwargs.pop("cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
@@ -859,7 +938,7 @@ class Parameters:
                     )
                     kwargs.pop(name)
 
-    def _init_dust_config(self, kwargs):
+    def _init_dust_config(self, kwargs, *, validate_flat: bool = True):
         """Resolve dust model, attenuation law, and emission from kwargs."""
         self.dust_model = kwargs.pop("dust_model", "two_component")
         # 'none' is the user-facing spelling; 'off' is the internal sentinel the
@@ -891,25 +970,13 @@ class Parameters:
         law_neb_explicit = kwargs.pop("dust_law_neb", None)
 
         # Grammar builds: dust_law_bc/dust_law_diff are already set by _translate_dust_attenuation
-        # (after validation). Flat-kwarg: both None, apply power_law defaults.
-        if self.dust_model == "single_component":
-            # Single-component: law_bc is the only law, law_diff is inherited from it.
-            if law_bc_explicit is not None:
-                self.dust_law_bc = law_bc_explicit
-            else:
-                # Flat-kwarg: no law provided, use power_law default.
-                self.dust_law_bc = "power_law"
-            self.dust_law_diff = self.dust_law_bc
-        else:
-            # Two-component or off/wg00: use laws as provided or apply power_law defaults.
-            if law_bc_explicit is not None or law_diff_explicit is not None:
-                # At least one law provided (grammar already validated the XOR).
-                self.dust_law_bc = law_bc_explicit or law_diff_explicit
-                self.dust_law_diff = law_diff_explicit or law_bc_explicit
-            else:
-                # Flat-kwarg: no laws provided, use power_law for both.
-                self.dust_law_bc = "power_law"
-                self.dust_law_diff = "power_law"
+        # (after validation). Flat-kwarg: both None, apply power_law defaults. Single
+        # source of truth for this resolution: tengri.parameters._dust_laws (#2224
+        # single_component discard fix; #1989 two_component/off/wg00 inheritance
+        # unchanged).
+        self.dust_law_bc, self.dust_law_diff = resolve_dust_screen_laws(
+            self.dust_model, law_bc_explicit, law_diff_explicit
+        )
 
         # Nebular birth-cloud law. None -> inherit the stellar birth cloud
         # (``dust_law_bc``), so the nebular continuum is reddened exactly like
@@ -917,12 +984,51 @@ class Parameters:
         # own birth-cloud curve while still sharing the diffuse ISM screen.
         self.dust_law_neb = law_neb_explicit
 
+        # Per-source dust-screen choice (#2234 replacement): which screen
+        # attenuates the nebular continuum + line catalog, the shock SED, and
+        # (validated to stay 'none' today) AGN light. One validator for both
+        # surfaces: a grammar `dust_attenuation={'nebular_screen': ...}` build
+        # and this flat-kwarg build are refused for the same reason.
+        # `resolve_screen_choices` returns an entry ONLY for a source the
+        # caller actually named, so an untouched model keeps the per-source
+        # default (see `_SCREEN_DEFAULTS`) without that default ever being
+        # validated as though it were an explicit (and possibly refused)
+        # request.
+        _screen_given = {
+            source: kwargs.pop(f"dust_{source}_screen", None) for source in SCREEN_SOURCES
+        }
+        _screen_choices = resolve_screen_choices(
+            _screen_given, dust_model=self.dust_model, surface="flat"
+        )
+        self.dust_nebular_screen = _screen_choices.get("nebular", "birth_cloud")
+        self.dust_shock_screen = _screen_choices.get("shock", "diffuse")
+        self.dust_agn_screen = _screen_choices.get("agn", "none")
+
         # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...,
         # 'neb': {...}}. Empty -> both stellar components share the global
         # dust_slope / dust_bump_strength / dust_delta / dust_Rv, and the
         # nebular birth cloud inherits the stellar birth-cloud params. Set by
         # the builder from slope_bc / delta_diff / slope_neb /…
         self.dust_law_overrides = kwargs.pop("dust_law_overrides", {}) or {}
+
+        # Validate flat-form dust shape parameters against the resolved laws.
+        # The grammar passes all shape parameters at their registry defaults and has
+        # already validated per-screen keys via _reject_per_screen_keys_no_law_reads
+        # and shared spellings via _dust_wildcard_scopes. Direct Parameters(...) calls
+        # name only what they mean, so this check only runs for them.
+        if validate_flat:
+            shape_names = tuple(short_to_full(stem) for stem in OVERRIDE_STEMS)
+            requests = [(name, None) for name in shape_names if name in kwargs]
+            for comp, overrides in self.dust_law_overrides.items():
+                for law_kw in overrides:
+                    requests.append((law_kw, comp))
+            if requests:
+                validate_shape_requests(
+                    requests,
+                    {"bc": self.dust_law_bc, "diff": self.dust_law_diff, "neb": self.dust_law_neb},
+                    surface="flat",
+                )
+
         # Lyman-limit clip [Å]: zero the attenuation curve below this wavelength
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.
         self.dust_lyman_cutoff_aa = float(kwargs.pop("dust_lyman_cutoff_aa", 0.0) or 0.0)
@@ -1508,6 +1614,7 @@ class Parameters:
         new_registry = dict(self._param_registry)
         new_defaults = dict(self._defaults)
 
+        merged_provenance = dict(self._flat_provenance)
         for name, val in kwargs.items():
             if name in self._user_provided:
                 # User explicitly set this param: their definition wins
@@ -1520,6 +1627,7 @@ class Parameters:
                 "",
             )
             new_defaults[name] = dist
+            merged_provenance[name] = "user_fixed" if dist.is_fixed else "user_prior"
 
         object.__setattr__(new_spec, "_distributions", new_distributions)
         object.__setattr__(new_spec, "_param_registry", new_registry)
@@ -1531,6 +1639,7 @@ class Parameters:
         )
         # Preserve user_provided set: auto-merged params are NOT user-provided
         object.__setattr__(new_spec, "_user_provided", self._user_provided)
+        object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
     def resolve_mirrors(self, params: dict) -> dict:
@@ -1779,8 +1888,14 @@ class Parameters:
         2
         """
         new_spec = copy.copy(self)
-        new_spec._distributions = {**self._distributions, **extra_params}
-        new_spec._valid_param_names = self._valid_param_names | frozenset(extra_params.keys())
+        new_distributions = {**self._distributions, **extra_params}
+        merged_provenance = dict(self._flat_provenance)
+        for name, dist in extra_params.items():
+            merged_provenance[name] = "user_fixed" if dist.is_fixed else "user_prior"
+        object.__setattr__(new_spec, "_distributions", new_distributions)
+        new_valid_names = self._valid_param_names | frozenset(extra_params.keys())
+        object.__setattr__(new_spec, "_valid_param_names", new_valid_names)
+        object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
@@ -2089,6 +2204,12 @@ class Parameters:
             # not the one the declaration carries (#1586).
             "user_free_grid": "[user FREE -> grid]",
             "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
+            # The "_zcap" suffix marks a declared free prior (an SF-onset
+            # lookback) that was capped at the age of the universe at the
+            # build's own source redshift. Same shown-never-silent principle
+            # as "_grid" above, see _narrow_free_priors_to_z.
+            "user_free_zcap": "[user FREE -> z cap]",
+            "wildcard_free_zcap": f"[{WILDCARD_ALIAS} FREE -> z cap]",
             # A wildcard-FREE that found no declared prior. The parameter stays
             # Fixed, so reporting the request would put a row reading FREE
             # inside the Fixed block (#1726). The remedy is in the tag: give it
@@ -2150,6 +2271,27 @@ class Parameters:
             self.summary()
         return buf.getvalue().rstrip("\n")
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this parameter specification.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from all parameter attributes.
+
+        Notes
+        -----
+        Includes which parameters are fixed/free via a tail entry;
+        prior bounds and values are structural and covered through the
+        Fitter engine's key (#1972). Excludes _distributions and
+        _param_registry as they are computed from parameter names alone.
+        """
+        # Fixed/free structure is critical: changing which params are free moves the key
+        fixed_names = tuple(sorted(self.fixed_params))
+        free_names = tuple(sorted(self.free_params))
+        tail = (("fixed_names", fixed_names), ("free_names", free_names))
+        return derive_key(self, _PARAMETERS_CACHE_KEY_POLICY, tail=tail)
+
     def __repr__(self) -> str:
         lines = [f"Parameters(mean_sfh_type={self._mean_sfh_type},"]
         for name in sorted(self._distributions.keys()):
@@ -2159,3 +2301,101 @@ class Parameters:
             lines.append(f"    {'n_grid':30s} = {self._n_grid},")
         lines.append(")")
         return "\n".join(lines)
+
+
+_PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
+    # Structural settings: which components are enabled
+    "_mean_sfh_type": content("SFH model selection determines parameters"),
+    "_n_grid": content("grid size for stochastic SFH determines parameters"),
+    "_nebular_cb19": content("nebular backend selection determines parameters"),
+    "_nebular_mappings": content("nebular backend selection determines parameters"),
+    "_nebular_mappings_agn": content("nebular backend selection determines parameters"),
+    "age_kernel": content("age kernel type (CIC vs DSPS) affects SFH integration"),
+    "agn_attenuation_block": content("AGN attenuation type determines parameters"),
+    "agn_axis_grids": content("AGN axis grids determine parameters"),
+    "agn_blr_block": content("AGN BLR type determines parameters"),
+    "agn_disc_block": content("AGN disc type determines parameters"),
+    "agn_feii_block": content("AGN FeII type determines parameters"),
+    "agn_model": content("AGN model selection determines parameters"),
+    "agn_nlr_block": content("AGN NLR type determines parameters"),
+    "agn_norm": content("AGN normalization mode determines parameters"),
+    "agn_torus_block": content("AGN torus type determines parameters"),
+    "alpha_fe_evolving": content("metallicity evolution choice determines parameters"),
+    "apply_igm": content("IGM application affects forward model"),
+    "astrodust_f_cnm": content("astrodust model variant determines parameters"),
+    "astrodust_spinning_dust": content("astrodust model variant determines parameters"),
+    "bin_edges_gyr": content("bin edges for binned SFH model determine parameters"),
+    "chem_evol": content("chemical evolution model determines parameters"),
+    "cloudy_grid_path": content("CLOUDY grid path determines available parameters"),
+    "cue_full_catalog": content("CUE full catalog setting determines parameters"),
+    "cue_weights_path": content("CUE weights path affects model"),
+    "dla": content("DLA model determines parameters"),
+    "dl07_grid_path": content("DL07 grid path determines available parameters"),
+    "dust_approx": content("dust approximation type determines parameters"),
+    "dust_eb_include_lyc": content("dust LyC treatment determines parameters"),
+    "dust_emission": content("dust emission model selection determines parameters"),
+    "dust_law_bc": content("birth cloud dust law determines parameters"),
+    "dust_law_diff": content("diffuse dust law determines parameters"),
+    "dust_law_neb": content("nebular dust law determines parameters"),
+    "dust_nebular_screen": content("which screen the nebular light passes through (#2234)"),
+    "dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
+    "dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
+    "dust_law_overrides": content("dust law parameter overrides determine parameters"),
+    "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
+    "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
+    "dust_model": content("dust model type determines parameters"),
+    "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
+    "dust_wg00_geometry": content("WG00 dust geometry determines parameters"),
+    "dust_wg00_structure": content("WG00 dust structure determines parameters"),
+    "eline_broad": content("broad line component flag determines parameters"),
+    "eline_mode": content("emission line fitting mode determines parameters"),
+    "evolving_metallicity": content("metallicity evolution choice determines parameters"),
+    "field_centering": content("field centering parameter affects SFH model"),
+    "foreground_ebmv_mw": content("foreground dust affects model"),
+    "foreground_law": content("foreground extinction law determines parameters"),
+    "foreground_rv": content("foreground RV affects model"),
+    "igm_model": content("IGM model selection determines parameters"),
+    "igm_patchy": content("patchy IGM affects model"),
+    "lgmet_scatter": content("metallicity scatter determines model behavior"),
+    "met_interp": content("metallicity interpolation method determines parameters"),
+    "met_mode": content("metallicity mode determines parameters"),
+    "neb_ionization": content("nebular ionization source determines parameters"),
+    "nebular": content("nebular emission backend determines parameters"),
+    "nebular_mappings_agn_density": content("MAPPINGS AGN density determines parameters"),
+    "nebular_mappings_agn_grid_path": content("MAPPINGS AGN grid path determines parameters"),
+    "nebular_mappings_agn_ionizing_source_warning": content(
+        "MAPPINGS AGN ionizing source affects model"
+    ),
+    "nebular_mappings_density": content("MAPPINGS density determines parameters"),
+    "nebular_mappings_grid_path": content("MAPPINGS grid path determines parameters"),
+    "nebular_mappings_ionizing_source_warning": content("MAPPINGS ionizing source affects model"),
+    "nebular_mappings_model": content("MAPPINGS model determines parameters"),
+    "nebular_mode": content("nebular mode determines which parameters are used"),
+    "radio": content("radio component flag determines parameters"),
+    "radio_agn_model": content("radio AGN model determines parameters"),
+    "radio_sfr_mode": content("radio SFR mode determines parameters"),
+    "shock": content("shock component flag determines parameters"),
+    "shock_abundance": content("shock abundance setting determines parameters"),
+    "shock_component": content("shock component type determines parameters"),
+    "shock_norm": content("shock normalization determines parameters"),
+    "xray": content("X-ray component flag determines parameters"),
+    "xray_model": content("X-ray model determines parameters"),
+    "z_interp": content("redshift interpolation method determines model behavior"),
+    # Priors and distributions: which parameters are free vs fixed
+    "_defaults": content("default values determine fixed parameter values"),
+    "_flat_provenance": content("parameter provenance (name, group origin) determines structure"),
+    "_group_provenance": content(
+        "grammar builds attach it via parse_groups; it decides which shape parameters reach "
+        "the laws"
+    ),
+    "_mirrors": content("parameter mirror relationships determine structure"),
+    "_user_provided": content("user-provided parameters determine parameter source"),
+    "_valid_param_names": content("valid parameter names define scope"),
+    # Excluded: these are derived or runtime-only
+    "_distributions": exclude(
+        "prior bounds and values are runtime inputs of the Fitter engine (#1972)"
+    ),
+    "_param_registry": exclude(
+        "registry is a pure function of parameter names (keyed) and installed registry"
+    ),
+}

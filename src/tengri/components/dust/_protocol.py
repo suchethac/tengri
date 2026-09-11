@@ -26,9 +26,9 @@ class DustAttenuationLaw(Protocol):
     --------
     Implementing a simple power-law dust law::
 
-        def my_powerlaw_dust(wavelength, n_slope=-0.7, **kwargs):
+        def my_powerlaw_dust(wavelength, dust_slope=-0.7, **kwargs):
             '''My custom dust law.'''
-            return (wavelength / 5500.0) ** n_slope
+            return (wavelength / 5500.0) ** dust_slope
 
     Registering it in the dust law registry::
 
@@ -36,15 +36,15 @@ class DustAttenuationLaw(Protocol):
 
 
         @register_dust_law("my_powerlaw")
-        def my_powerlaw_dust(wavelength, n_slope=-0.7, **kwargs):
-            return (wavelength / 5500.0) ** n_slope
+        def my_powerlaw_dust(wavelength, dust_slope=-0.7, **kwargs):
+            return (wavelength / 5500.0) ** dust_slope
 
     Using it in a model::
 
         from tengri.components.dust.attenuation import resolve_dust_law
 
         law = resolve_dust_law("my_powerlaw")
-        k = law(wavelengths, n_slope=-0.9)
+        k = law(wavelengths, dust_slope=-0.9)
 
     """
 
@@ -61,8 +61,15 @@ class DustAttenuationLaw(Protocol):
             Rest-frame wavelength grid [Å].
         **kwargs
             Law-specific parameters (e.g., dust_bump_strength, dust_delta,
-            dust_Rv, n_slope, redshift) [dimensionless]. Unknown kwargs must
-            be accepted but may be ignored via **_kwargs.
+            dust_Rv, dust_slope, redshift) [dimensionless]. An implementation
+            declares exactly the parameters it reads and MUST NOT add a
+            ``**_kwargs`` catch-all: the signature is what ``law_kwarg_names``
+            reports, what the build grammar scopes its keys against, and what
+            every caller narrows to before splatting. A catch-all makes the law
+            *accept* a parameter it fixes internally and discard the value in
+            silence, which is #2185 -- ``noll09`` took ``slope`` beside the
+            ``delta`` it actually reads, and four laws shipped that pair.
+            ``tools/check_dust_law_kwargs.py`` refuses a new one.
 
         Returns
         -------

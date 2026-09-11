@@ -1,0 +1,13 @@
+float32 max = 3.4028235e+38
+[cue/f64] has_catalog=True L_Halpha=4.601333560097227e+40
+    predict_line_fluxes: [4.81137257e-16 5.88262870e-16 1.69818365e-15 5.31329869e-16] dtype=float64
+    measure_line_fluxes: [ 2.79511224e-16  5.47373748e-16  1.27299772e-15 -1.31609692e-16] dtype=float64
+[cue/f32] has_catalog=True L_Halpha=inf
+    predict_line_fluxes: [nan nan nan nan] dtype=float32
+    measure_line_fluxes: [ 2.7955528e-16  5.4737397e-16  1.2729594e-15 -1.3157839e-16] dtype=float32
+[bakedin/f64] has_catalog=False L_Halpha=nan
+    predict_line_fluxes: ERR ValueError: No nebular backend with line prediction configured. Cannot compute line fluxes.
+    measure_line_fluxes: [2.76902145e-16 4.08517335e-16 1.34687419e-15 2.83884392e-18] dtype=float64
+[bakedin/f32] has_catalog=False L_Halpha=nan
+    predict_line_fluxes: ERR ValueError: No nebular backend with line prediction configured. Cannot compute line fluxes.
+    measure_line_fluxes: [2.7690402e-16 4.0852013e-16 1.3468796e-15 2.8441265e-18] dtype=float32

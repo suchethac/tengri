@@ -63,11 +63,41 @@ class TestPrecomputeDustAgeWeights:
         chex.assert_equal_shape([weights, age_grid])
 
     def test_young_stars_near_one(self, age_grid):
-        """Stars younger than t_birth have weight ~1."""
+        """Stars well below t_birth keep essentially all their birth-cloud weight.
+
+        The mask used to be ``age_grid < 1e5`` guarded by ``if jnp.any(...)``.
+        The fixture grid is ``10 ** linspace(5.5, 10.14, 107)``, so its youngest
+        age is 3.16e5 yr and **nothing** is below 1e5: the mask was empty, the
+        guard was False, and this test asserted nothing at all.
+
+        Measured on the fixture grid (t_birth = 1e7 yr): weight is 0.9933 at the
+        youngest age, 0.9675 at 1 Myr, 0.5097 at 10 Myr. So ``> 0.99`` is true
+        only for the first three nodes -- the old threshold was unsatisfiable
+        over any wider range, which the empty mask had hidden. Both halves are
+        asserted at their measured strengths, and the sample counts with them so
+        an empty mask fails instead of passing.
+        """
         weights = precompute_dust_age_weights(age_grid)
-        young_mask = age_grid < 1e5  # well below 10 Myr
-        if jnp.any(young_mask):
-            assert jnp.all(weights[young_mask] > 0.99)
+
+        # Essentially unattenuated at the young end.
+        youngest = age_grid < 4.0e5
+        assert int(jnp.sum(youngest)) >= 2, (
+            f"probe setup failed: {int(jnp.sum(youngest))} grid ages below 4e5 yr"
+        )
+        assert jnp.all(weights[youngest] > 0.99), (
+            f"youngest ages must keep >0.99 of the birth-cloud weight; "
+            f"min was {float(jnp.min(weights[youngest])):.4f}"
+        )
+
+        # Still near one an order of magnitude below t_birth.
+        young = age_grid < 1.0e6
+        assert int(jnp.sum(young)) >= 10, (
+            f"probe setup failed: only {int(jnp.sum(young))} grid ages below 1 Myr"
+        )
+        assert jnp.all(weights[young] > 0.95), (
+            f"ages below 1 Myr (10x younger than t_birth) must stay above 0.95; "
+            f"min was {float(jnp.min(weights[young])):.4f}"
+        )
 
     def test_old_stars_near_zero(self, age_grid):
         """Stars older than t_birth have weight ~0."""
@@ -117,13 +147,13 @@ class TestFastDustAgreement:
 
     def test_exact_agreement_photometry(self, age_grid, filter_wavelengths, dust_age_weights):
         """Fast and original agree exactly for photometric wavelengths."""
-        tau_v1, tau_v2, n_slope = 0.5, 0.3, -0.7
+        tau_v1, tau_v2, dust_slope = 0.5, 0.3, -0.7
         result_original = two_component_dust(
             filter_wavelengths,
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         result_fast = two_component_dust_fast(
@@ -131,20 +161,20 @@ class TestFastDustAgreement:
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)
 
     def test_exact_agreement_spectroscopy(self, age_grid, spectral_wavelengths, dust_age_weights):
         """Fast and original agree exactly for spectroscopic wavelengths."""
-        tau_v1, tau_v2, n_slope = 1.0, 0.5, -0.7
+        tau_v1, tau_v2, dust_slope = 1.0, 0.5, -0.7
         result_original = two_component_dust(
             spectral_wavelengths,
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         result_fast = two_component_dust_fast(
@@ -152,13 +182,13 @@ class TestFastDustAgreement:
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)
 
     @pytest.mark.parametrize(
-        "tau_v1,tau_v2,n_slope",
+        "tau_v1,tau_v2,dust_slope",
         [
             (0.0, 0.0, -0.7),  # no dust
             (3.0, 1.5, -0.7),  # heavy dust
@@ -174,7 +204,7 @@ class TestFastDustAgreement:
         dust_age_weights,
         tau_v1,
         tau_v2,
-        n_slope,
+        dust_slope,
     ):
         """Agreement holds across diverse dust parameter combinations."""
         result_original = two_component_dust(
@@ -182,7 +212,7 @@ class TestFastDustAgreement:
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         result_fast = two_component_dust_fast(
@@ -190,7 +220,7 @@ class TestFastDustAgreement:
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)

@@ -143,5 +143,5 @@ def test_fitter_run_map_on_hierarchical(synthetic_ssp, simple_observation) -> No
     assert result is not None
     assert hasattr(result, "params")
     for name, val in result.params.items():
-        if hasattr(val, "shape"):
-            assert jnp.all(jnp.isfinite(val)), f"MAP {name} non-finite: {val}"
+        assert hasattr(val, "shape"), "probe setup failed: val lacks a shape attribute"
+        assert jnp.all(jnp.isfinite(val)), f"MAP {name} non-finite: {val}"

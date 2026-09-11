@@ -32,9 +32,9 @@ class TestConstantThenExponentialSFH:
         sfr = constant_then_exponential(t_lookback, log_total_mass, tau, quench_age, age)
 
         mask = (t_lookback >= quench_age) & (t_lookback <= age)
-        if jnp.any(mask):
-            # SFR should be nonzero in the constant region
-            assert jnp.all(sfr[mask] > 0.0)
+        assert jnp.any(mask), "probe setup failed: mask selected no elements"
+        # SFR should be nonzero in the constant region
+        assert jnp.all(sfr[mask] > 0.0)
 
     def test_declining_region(self, t_lookback):
         """SFR declines exponentially for t_lb < quench_age (shape invariant)."""
@@ -45,9 +45,9 @@ class TestConstantThenExponentialSFH:
         sfr = constant_then_exponential(t_lookback, log_total_mass, tau, quench_age, age)
 
         mask = (t_lookback > 0) & (t_lookback < quench_age)
-        if jnp.any(mask):
-            # SFR should be nonzero and declining
-            assert jnp.all(sfr[mask] > 0.0)
+        assert jnp.any(mask), "probe setup failed: mask selected no elements"
+        # SFR should be nonzero and declining
+        assert jnp.all(sfr[mask] > 0.0)
 
     def test_zero_outside_age(self, t_lookback):
         """SFR is zero beyond the galaxy age."""
@@ -104,6 +104,10 @@ class TestConstantThenExponentialSFH:
 
         grad_val = assert_grad_matches_fd(scalar_fn, 10.0)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 # ── Registry tests ────────────────────────────────────────────────

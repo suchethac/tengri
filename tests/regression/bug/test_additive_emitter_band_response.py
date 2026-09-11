@@ -54,6 +54,7 @@ SHAPES = {
     "themis": {"qhac": 0.10},
     "casey2012": {"T": 40.0, "beta_ir": 1.8},
     "modified_blackbody": {"T": 40.0, "beta_ir": 1.8},
+    "graybody": {"T": 40.0, "beta_ir": 1.8, "lambda_0_um": 150.0},
     "schreiber2016": {},
     "schreiber2018": {},
     "astrodust": {},
@@ -67,6 +68,23 @@ SHAPES = {
 #: *property* (a homogeneity probe), not by consulting this list -- the list only
 #: pins the expected outcome for the models we ship.
 NON_HOMOGENEOUS = {"bosa"}
+
+
+def _selectable_shapes() -> list[str]:
+    """:data:`SHAPES` restricted to what ``SEDModel.build`` will actually build.
+
+    ``pah_drude`` is a PAH *building block*, refused as a model's only dust
+    emitter (standalone it re-emits a measured 1.8925e-04 of L_ir), so there is
+    no standalone model here to project through a band response. It stays in
+    :data:`SHAPES` — that dict is the ledger of every registered emitter and
+    its non-default shape knobs, and deleting the row would erase the record
+    rather than explain it — and drops out of the parametrizations by the same
+    derivation the builder uses.
+    """
+    from tengri.parameters.groups import _standalone_dust_emission_types
+
+    return sorted(set(SHAPES) & _standalone_dust_emission_types())
+
 
 # Emission-free WavePrecomp photometry compiles ~2.9e5 FLOPs. With the band response the
 # emitter adds only L_ir * R (a few ops per filter). The dense per-call integral cost
@@ -99,7 +117,7 @@ def _params(m):
 
 
 @pytest.mark.regression_bug
-@pytest.mark.parametrize("emission_type", sorted(SHAPES))
+@pytest.mark.parametrize("emission_type", _selectable_shapes())
 def test_band_response_is_exact_against_the_dense_filter_integral(emission_type):
     """L_ir * R must equal the full per-call filter integral, to fp roundoff.
 
@@ -143,7 +161,7 @@ def test_band_response_is_exact_against_the_dense_filter_integral(emission_type)
 
 
 @pytest.mark.regression_bug
-@pytest.mark.parametrize("emission_type", sorted(set(SHAPES) - NON_HOMOGENEOUS))
+@pytest.mark.parametrize("emission_type", sorted(set(_selectable_shapes()) - NON_HOMOGENEOUS))
 def test_dust_emission_does_not_force_a_dense_per_call_filter_integral(emission_type):
     """...and a homogeneous emitter must actually be fast.
 

@@ -50,8 +50,8 @@ _skip_no_bagpipes = pytest.mark.skipif(not HAS_BAGPIPES, reason="bagpipes not in
 class TestDustCurveCrossval:
     """Compare power-law attenuation curve shape (requires bagpipes)."""
 
-    @pytest.mark.parametrize("n_slope", [-0.7, -1.0, -1.3])
-    def test_power_law_shape_matches(self, optical_wavelengths, n_slope):
+    @pytest.mark.parametrize("dust_slope", [-0.7, -1.0, -1.3])
+    def test_power_law_shape_matches(self, optical_wavelengths, dust_slope):
         """The wavelength dependence (lambda/5500)^n should be identical.
 
         bagpipes CF00 returns A(lambda)/A_V = (5500/lambda)^n,
@@ -62,18 +62,18 @@ class TestDustCurveCrossval:
         wavs = optical_wavelengths
 
         # bagpipes CF00 curve: A(lam)/A_V
-        bp_dust = bagpipes_dust.dust_attenuation(wavs, {"type": "CF00", "n": -n_slope})
+        bp_dust = bagpipes_dust.dust_attenuation(wavs, {"type": "CF00", "n": -dust_slope})
         a_curve_bp = bp_dust.A_cont  # A(lam)/A_V = (5500/lam)^n_bp
 
         # tengri: for old stars (weight=0), transmission = exp(-tau_v2 * (lam/5500)^n)
         # The curve shape is (lam/5500)^n = (5500/lam)^(-n)
         # Mapping: A(lam)/A_V ∝ (5500/lam)^(-n_tengri)
-        # tengri n_slope = -0.7 means (lam/5500)^(-0.7) = (5500/lam)^(0.7)
+        # tengri dust_slope = -0.7 means (lam/5500)^(-0.7) = (5500/lam)^(0.7)
         # bagpipes n = 0.7 means (5500/lam)^(0.7)
         # So: bagpipes n_bp = -n_tengri
 
         # Build tengri attenuation curve shape for comparison
-        curve_tengri = (wavs / 5500.0) ** n_slope  # (lam/5500)^n
+        curve_tengri = (wavs / 5500.0) ** dust_slope  # (lam/5500)^n
 
         # Normalize both to V-band (5500 A) for shape comparison
         # At 5500A, both should be 1.0
@@ -86,7 +86,7 @@ class TestDustCurveCrossval:
             ratio_ds,
             ratio_bp,
             rtol=1e-4,
-            err_msg=f"Power-law curve shape mismatch for n={n_slope}",
+            err_msg=f"Power-law curve shape mismatch for n={dust_slope}",
         )
 
     def test_transmission_mapping_tau_to_av(self, optical_wavelengths):
@@ -99,7 +99,7 @@ class TestDustCurveCrossval:
         With A_V = tau_V * 2.5/ln(10), these should be identical.
         """
         wavs = optical_wavelengths
-        n_slope = -0.7
+        dust_slope = -0.7
         tau_v = 0.5
 
         # tengri transmission for old stars
@@ -112,13 +112,13 @@ class TestDustCurveCrossval:
                 tau_v2=tau_v,
                 law_bc="power_law",
                 law_diff="power_law",
-                n_slope=n_slope,
+                dust_slope=dust_slope,
             )
         )[0]  # shape (1, n_wave) -> (n_wave,)
 
         # bagpipes: A_V = tau_V * 2.5 / ln(10) = tau_V * 1.0857
         a_v = tau_v * 2.5 / np.log(10.0)
-        bp_dust = bagpipes_dust.dust_attenuation(wavs, {"type": "CF00", "n": -n_slope})
+        bp_dust = bagpipes_dust.dust_attenuation(wavs, {"type": "CF00", "n": -dust_slope})
         trans_bagpipes = 10.0 ** (-a_v * bp_dust.A_cont / 2.5)
 
         np.testing.assert_allclose(
@@ -132,7 +132,7 @@ class TestDustCurveCrossval:
     def test_transmission_range_consistency(self, optical_wavelengths, tau_v2):
         """Both codes should produce T in (0, 1] for physical tau values."""
         wavs = optical_wavelengths
-        n_slope = -0.7
+        dust_slope = -0.7
 
         # tengri (old stars)
         ages_old = np.array([1e10])
@@ -144,13 +144,13 @@ class TestDustCurveCrossval:
                 tau_v2,
                 law_bc="power_law",
                 law_diff="power_law",
-                n_slope=n_slope,
+                dust_slope=dust_slope,
             )
         )[0]
 
         # bagpipes
         a_v = tau_v2 * 2.5 / np.log(10.0)
-        bp_dust = bagpipes_dust.dust_attenuation(wavs, {"type": "CF00", "n": -n_slope})
+        bp_dust = bagpipes_dust.dust_attenuation(wavs, {"type": "CF00", "n": -dust_slope})
         trans_bp = 10.0 ** (-a_v * bp_dust.A_cont / 2.5)
 
         # Both in (0, 1]
@@ -466,7 +466,7 @@ class TestCharlotFallReference:
             tau_v2=tau_diff,
             law_bc="power_law",
             law_diff="power_law",
-            n_slope=-0.7,
+            dust_slope=-0.7,
             transition_width=0.1,  # sharp transition
         )
         trans = np.array(trans)
@@ -495,7 +495,7 @@ class TestCharlotFallReference:
             tau_v2=tau_diff,
             law_bc="power_law",
             law_diff="power_law",
-            n_slope=-0.7,
+            dust_slope=-0.7,
             transition_width=0.1,
         )
         trans = np.array(trans)
@@ -540,7 +540,7 @@ class TestCharlotFallReference:
             tau_v2=0.5,
             law_bc="power_law",
             law_diff="power_law",
-            n_slope=-0.7,
+            dust_slope=-0.7,
         )
         trans_v = np.array(trans[:, 0])
 
@@ -567,7 +567,7 @@ class TestWG00GeometriesReference:
         wave = jnp.array([5500.0])
         tau_v = 1.0
 
-        trans = float(wg00_shell(wave, tau_v=tau_v, law="power_law", n_slope=-0.7)[0])
+        trans = float(wg00_shell(wave, tau_v=tau_v, law="power_law", dust_slope=-0.7)[0])
         # k(5500) = (5500/5500)^(-0.7) = 1.0
         expected = np.exp(-tau_v * 1.0)
 
@@ -583,7 +583,7 @@ class TestWG00GeometriesReference:
         wave = jnp.array([5500.0])
         tau_v = 1.0
 
-        trans = float(wg00_cloudy(wave, tau_v=tau_v, law="power_law", n_slope=-0.7)[0])
+        trans = float(wg00_cloudy(wave, tau_v=tau_v, law="power_law", dust_slope=-0.7)[0])
         expected = (1.0 - np.exp(-tau_v)) / tau_v
 
         np.testing.assert_allclose(
@@ -604,7 +604,7 @@ class TestWG00GeometriesReference:
                 wave,
                 tau_v=tau_v,
                 law="power_law",
-                n_slope=-0.7,
+                dust_slope=-0.7,
                 n_clumps=n_clumps,
             )[0]
         )
@@ -638,7 +638,7 @@ class TestWG00GeometriesReference:
     def test_cloudy_transparent_at_low_tau(self) -> None:
         """Cloudy slab should approach T=1 at very low optical depth."""
         wave = jnp.array([5500.0])
-        trans = float(wg00_cloudy(wave, tau_v=1e-6, law="power_law", n_slope=-0.7)[0])
+        trans = float(wg00_cloudy(wave, tau_v=1e-6, law="power_law", dust_slope=-0.7)[0])
         np.testing.assert_allclose(trans, 1.0, atol=1e-4)
 
     def test_dusty_transparent_at_zero_tau(self) -> None:
@@ -649,7 +649,7 @@ class TestWG00GeometriesReference:
                 wave,
                 tau_v=0.0,
                 law="power_law",
-                n_slope=-0.7,
+                dust_slope=-0.7,
                 n_clumps=10.0,
             )[0]
         )

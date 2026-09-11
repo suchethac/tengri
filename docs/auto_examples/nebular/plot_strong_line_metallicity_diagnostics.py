@@ -68,7 +68,7 @@ model = tengri.SEDModel.build(
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 z_grid = np.linspace(-1.5, 0.4, 18)
-o3, n2_ha, hb, oii, ne3, sii, o3_o2, r23 = [np.empty_like(z_grid) for _ in range(8)]
+o3, n2_ha, hb, oii, sii, o3_o2, r23 = [np.empty_like(z_grid) for _ in range(7)]
 
 for i, z in enumerate(z_grid):
     p = {**baseline, "neb_logZ_gas": jnp.float64(z)}
@@ -77,7 +77,6 @@ for i, z in enumerate(z_grid):
     n2_ha[i] = float(L.nii_6584 / L.halpha)
     hb[i] = float(L.hbeta)
     oii[i] = float(L.oii)
-    ne3[i] = float(L.civ_1549)  # use CIV as alt high-ion probe
     sii[i] = float(L.sii_6717 + L.sii_6731)
     o3_o2[i] = float(L.oiii_5007 / L.oii)
     # R23 = ([O II] + [O III]) / H-beta (Pagel+1979, Kewley+2002)

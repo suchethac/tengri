@@ -27,12 +27,15 @@ References
 - Robotham+2020 (arXiv:2002.06980): snorm_burst, tsnorm_burst (ProSpect).
 - Carnall+2018: DPL.
 - Zacharegkas+2025 (arXiv:2506.19919): triweight burst.
+- Conroy+2009 (FSPS), Carnall+2018 (Bagpipes): declining_exp, trunc_exp.
+- Suess+2022 (ApJ 935, 146): psb_suess2022, psb_flex.
 
 """
 
 from __future__ import annotations
 
 import functools
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
@@ -55,6 +58,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     delayed_bq,
     delayed_exponential,
     dpl,
+    dpl_lookback,
     exponential,
     gaussian_burst,
     lnorm,
@@ -68,15 +72,17 @@ from tengri.components.stellar.sfh.mean_sfh import (
     snorm_trunc_burst,
     top_hat,
     triweight_burst,
+    trunc_exp,
     tsnorm,
 )
 from tengri.components.stellar.sfh.nonparametric import (
     CFLEX_DEFAULT_ANCHOR_GYR,
     DEFAULT_BIN_EDGES_GYR,
+    PSB_FLEX_DEFAULT_N_FIXED,
     continuity,
     continuity_flex,
     dirichlet,
-    psb_continuity,
+    psb_continuity_flex,
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
@@ -401,12 +407,40 @@ _snorm_burst_spec = SFHModelSpec(
         "sfh_snorm_burst_skew": ParamDef(
             "Skewness", _always_true, "", Uniform(-1.0, 1.0, default=0.0)
         ),
-        # burst_sfr deliberately gets no free_prior: it is an absolute rate in
-        # Msun/yr, so its plausible range is set by the galaxy being fitted and
-        # no galaxy-independent interval exists (same reasoning as
-        # ``dust_L_agn_ir``). Free it explicitly against your own SFR scale.
+        # burst_sfr is dimensionless, not an absolute rate. snorm_burst adds
+        # the flat burst plateau to the BARE skew-normal kernel -- whose peak
+        # value is exactly 1 at age=peak_lbt regardless of width/skew, since
+        # Y=0 there for any skew (see _skewed_gaussian_kernel) -- and only
+        # THEN rescales the whole composite so its integral equals
+        # 10**log_total_mass (_renormalize_to_mass). That renormalization
+        # divides out any absolute scale, so burst_sfr is really the ratio of
+        # the burst plateau's height to the smooth kernel's own unit peak, not
+        # a Msun/yr rate. The claim this replaces ("it is an absolute rate in
+        # Msun/yr") is true of ProSpect's own massfunc_snorm_burst
+        # (Robotham et al. 2020) -- there ``mSFR``/``mburst`` are absolute,
+        # un-rescaled Msun/yr amplitudes with no downstream mass
+        # normalization -- but false of tengri's independent implementation,
+        # which composes the identical functional form inside the
+        # log_total_mass convention shared by every parametric SFH in this
+        # module.
+        #
+        # free_prior=Uniform(0.0, 10.0) is calibrated on that composite by
+        # numerical integration (trapezoid on a 20000-point log-spaced grid,
+        # 1e5-1.4e10 yr), not asserted: at this model's own registry defaults
+        # (width=1 Gyr, burst_age=0.1 Gyr, skew=0) burst_sfr=10 delivers ~29%
+        # of the total formed mass in the burst (0.4% at burst_sfr=0.1); the
+        # achievable fraction at burst_sfr=10 ranges from ~9% (width at its
+        # declared max, 5 Gyr) to ~67% (width at its declared min, 0.2 Gyr) to
+        # ~89% (burst_age at its declared max, 2 Gyr) across the rest of this
+        # model's own declared free ranges -- comparable in order of magnitude
+        # to the separate mixture-type ``burst`` compositor's own
+        # ``log_fburst`` range (up to ~8% at its declared upper edge).
         "sfh_snorm_burst_burst_sfr": ParamDef(
-            "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+            "Burst plateau amplitude relative to the smooth kernel's unit peak [dimensionless]",
+            _lo_nonneg,
+            "must have lo >= 0",
+            Fixed(0.0),
+            Uniform(0.0, 10.0, "Burst amplitude ratio", default=0.0),
         ),
         "sfh_snorm_burst_burst_age_gyr": ParamDef(
             "Burst lookback duration (Gyr)",
@@ -468,9 +502,26 @@ _tsnorm_burst_spec = SFHModelSpec(
             "must have lo > 0",
             Uniform(1.0, 10.0, default=2.0),
         ),
-        # burst_sfr: no free_prior, for the same reason as the snorm variant.
+        # burst_sfr: same rationale as the snorm variant above -- the kernel
+        # and _renormalize_to_mass are shared, and burst_shape itself is
+        # identical (the truncation factor multiplies only the smooth kernel,
+        # never the burst plateau). The truncation does shrink the smooth
+        # kernel's own area (measured: ~2x smaller at this model's registry
+        # defaults, peak_lbt=5 Gyr and width=1 Gyr, largely independent of
+        # trunc's declared range since burst_age sits well inside the
+        # trunc_factor~1 regime ahead of the peak), so the same burst_sfr
+        # value delivers a somewhat LARGER burst mass fraction here than in
+        # the untruncated snorm_burst. The same free_prior is kept for both
+        # regardless -- one flat convention across the burst family rather
+        # than a per-shape-dependent range -- and it remains conservative:
+        # shrinking A_smooth only pushes the achievable mass fraction higher
+        # within the family's already-documented span, never outside it.
         "sfh_tsnorm_burst_burst_sfr": ParamDef(
-            "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+            "Burst plateau amplitude relative to the smooth kernel's unit peak [dimensionless]",
+            _lo_nonneg,
+            "must have lo >= 0",
+            Fixed(0.0),
+            Uniform(0.0, 10.0, "Burst amplitude ratio", default=0.0),
         ),
         "sfh_tsnorm_burst_burst_age_gyr": ParamDef(
             "Burst lookback duration (Gyr)",
@@ -628,6 +679,83 @@ _register(
     short_doc="Double power-law SFH",
 )
 
+# --- dpl_lookback (double power law in LOOKBACK time) ---
+# The same algebra as ``dpl`` above, applied to the stellar age instead of to
+# cosmic time since formation. The form is not symmetric under
+# T <-> age - T, so this is a different model, not a reparameterization:
+# measured against ``dpl`` on matched parameter sets, 41-96 % of the stellar
+# mass lands in different age bins. ``alpha``/``beta`` reuse ``dpl``'s ranges;
+# ``peak_gyr`` is a lookback time, so it spans the age axis rather than the
+# 0.1-12 Gyr turnover window of a cosmic-time tau.
+_register(
+    SFHModelSpec(
+        name="dpl_lookback",
+        fn=dpl_lookback,
+        params={
+            "sfh_dpl_lookback_alpha": ParamDef(
+                "DPL slope on the old side (large lookback)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 5.0, default=1.5),
+            ),
+            "sfh_dpl_lookback_beta": ParamDef(
+                "DPL slope on the young side (small lookback)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 3.0, default=1.0),
+            ),
+            "sfh_dpl_lookback_peak_gyr": ParamDef(
+                "DPL turnover lookback time (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 12.0, default=2.0),
+            ),
+            "sfh_dpl_lookback_age_gyr": ParamDef(
+                "Older truncation lookback time (Gyr); "
+                "set to age_of_universe(z) for a galaxy forming at the Big Bang",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+            ),
+            "sfh_dpl_lookback_end_gyr": ParamDef(
+                "Younger truncation lookback time (Gyr) "
+                "(0 = star formation continues to the epoch of observation)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Fixed(0.0),
+                # Deliberately NO free_prior, for the ordering reason spelled
+                # out on ``sfh_const_end_gyr`` below: ``end_gyr`` must stay
+                # under ``age_gyr`` and ``Parameters._validate_orderings``
+                # rejects overlapping supports, so a wildcard cannot split the
+                # age axis between them. Free it explicitly with a prior that
+                # stays below your ``age_gyr`` floor.
+            ),
+            "sfh_dpl_lookback_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5, default=10.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_dpl_lookback_alpha": ("alpha", 1.0, 0.0),
+            "sfh_dpl_lookback_beta": ("beta", 1.0, 0.0),
+            "sfh_dpl_lookback_peak_gyr": ("peak", 1e9, 0.0),
+            "sfh_dpl_lookback_age_gyr": ("age", 1e9, 0.0),
+            "sfh_dpl_lookback_end_gyr": ("end", 1e9, 0.0),
+            "sfh_dpl_lookback_log_total_mass": ("log_total_mass", 1.0, 0.0),
+        },
+        composition_type="additive",
+    ),
+    citation="Carnall et al. 2018 (MNRAS 480, 4379)",
+    short_doc=(
+        "Double power-law SFH in lookback time (stellar age, not cosmic time "
+        "since formation); beta carries the Carnall sign, so a positive beta "
+        "gives an interior peak"
+    ),
+)
+
 # --- const (constant) ---
 _register(
     SFHModelSpec(
@@ -645,10 +773,26 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(AGEMAX_YR / 1e9),
-                # No free_prior, for the redshift-dependence reason given on
-                # ``sfh_exp_start_gyr`` below, which applies to every SF-onset
-                # lookback: the ceiling is the age of the universe at the source
-                # redshift and the declaration cannot know it.
+                # Lower bound is 0.01, not 0: bound_check is _lo_positive (lo >
+                # 0), AND Parameters._validate_orderings requires this
+                # parameter's floor to exceed sfh_const_end_gyr's Fixed(0.0)
+                # ceiling (g_lo > l_hi) -- so lo must be strictly positive.
+                # Upper bound is today's cosmic age (_AGE_UNIV_GYR);
+                # parameters/groups.py's _narrow_free_priors_to_z narrows it to
+                # age_at_z(z) at parse time whenever the build's redshift floor
+                # is knowable -- same mechanism and rationale as
+                # sfh_exp_start_gyr below.
+                #
+                # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
+                # generic numerical safety ceiling reused from the lookback-time
+                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (13.81 Gyr, the
+                # actual age of the universe today), so it cannot double as this
+                # free_prior's default without violating its own bounds.
+                # _AGE_UNIV_GYR is used instead, following the same
+                # "default = ceiling" convention already used on
+                # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
+                # above.
+                Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
@@ -701,24 +845,33 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
-            # Deliberately NO free_prior (#887), and this covers the ``dexp`` and
-            # ``const`` onsets too. ``start`` is a lookback: these SFHs form
-            # stars only at ``t_lookback >= start``, so the parameter's ceiling
-            # is the age of the universe at the SOURCE redshift -- 8.6 Gyr at
-            # z=0.5, 3.3 at z=2, 0.9 at z=6. A declaration cannot know that, and
-            # no static interval is right for all of them: any bound generous
-            # enough for z~0 admits draws at z=2 where star formation never
-            # happens, giving a zero-mass galaxy and zero flux.
+            # ``start`` is a lookback: these SFHs form stars only at
+            # ``t_lookback >= start``, so the parameter's ceiling is the age of
+            # the universe at the SOURCE redshift -- 8.6 Gyr at z=0.5, 3.3 at
+            # z=2, 0.9 at z=6. This covers the ``dexp`` and ``const`` onsets
+            # too (see their own entries below/above).
             #
-            # Measured, not argued: declaring Uniform(0, 14) made
-            # test_bug_1031_dense_basis_composite::
+            # The static declaration below uses today's cosmic age
+            # (``_AGE_UNIV_GYR``, z=0) as the ceiling -- the widest value that
+            # is ever correct, since a declaration cannot know the source
+            # redshift. ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
+            # then narrows it to ``age_at_z(z)`` at parse time whenever the
+            # build's redshift floor is knowable, closing exactly the gap a
+            # static-only declaration could not: any bound generous enough for
+            # z~0 admits draws at z=2 where star formation never happens,
+            # giving a zero-mass galaxy and zero flux.
+            #
+            # Measured, not argued: declaring Uniform(0, 14) with no narrowing
+            # made test_bug_1031_dense_basis_composite::
             # test_working_sfh_topologies_still_predict[dexp] draw such a value
-            # at z=0.5 and fail `assert jnp.all(flux > 0)`.
-            #
-            # Free it explicitly against your own redshift, e.g.
-            # sfh={'start_gyr': Uniform(0, 6)} for a z=1 target.
+            # at z=0.5 and fail `assert jnp.all(flux > 0)` -- exactly the draw
+            # the narrowing pass now forecloses.
             "sfh_exp_start_gyr": ParamDef(
-                "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+                "Start lookback (Gyr)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Fixed(0.0),
+                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
             ),
         },
         settings={},
@@ -750,9 +903,15 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
-            # No free_prior -- see the shared note on ``sfh_exp_start_gyr``.
+            # Same redshift-dependent onset, same static ceiling, same
+            # parse-time z-narrowing -- see the shared note on
+            # ``sfh_exp_start_gyr`` above.
             "sfh_dexp_start_gyr": ParamDef(
-                "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+                "Start lookback (Gyr)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Fixed(0.0),
+                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
             ),
         },
         settings={},
@@ -818,6 +977,66 @@ _register(
         composition_type="additive",
     ),
     short_doc="Declining-τ SFH (FSPS sfh=1 / Bagpipes 'exponential')",
+    citation="Conroy et al. 2009 (FSPS); Carnall et al. 2018 (Bagpipes)",
+)
+
+# --- trunc_exp (declining-τ with a young-end cutoff) ---
+# ``declining_exp`` above with one addition: SFR is zero below ``end_gyr`` as
+# well as above ``age_gyr``, i.e. a galaxy that formed, declined, and then shut
+# off. Not expressible by any existing entry: ``const_exp`` is flat before its
+# quench epoch and decays only after it, and ``top_hat`` is constant inside its
+# window with no exponential at all. With ``end_gyr = 0`` this reduces to
+# ``declining_exp`` bit-exactly, which is what the shared-parameter regression
+# test pins.
+_register(
+    SFHModelSpec(
+        name="trunc_exp",
+        fn=trunc_exp,
+        params={
+            "sfh_trunc_exp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5, default=10.0),
+            ),
+            "sfh_trunc_exp_tau_gyr": ParamDef(
+                "e-folding timescale (Gyr); positive declines in cosmic time "
+                "(SFR rises with lookback age), negative rises",
+                _lo_positive,
+                "must have lo > 0",
+                # The declared support stays positive: tau = 0 is a pole, so a
+                # prior straddling it is a fit that samples a singularity. The
+                # callable accepts a negative tau (the rising branch) for
+                # anyone who declares one explicitly.
+                Uniform(0.1, 10.0, default=2.0),
+            ),
+            "sfh_trunc_exp_age_gyr": ParamDef(
+                "Galaxy age / lookback time of formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0, default=5.0),
+            ),
+            "sfh_trunc_exp_end_gyr": ParamDef(
+                "Lookback time at which SF ceases (Gyr) (0 = still forming stars)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Fixed(0.0),
+                # No free_prior: same ordering constraint as ``sfh_const_end_gyr``
+                # (``end_gyr`` must stay under ``age_gyr``, and overlapping
+                # supports are rejected). Free it explicitly against your own
+                # ``age_gyr`` floor.
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_trunc_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_trunc_exp_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_trunc_exp_age_gyr": ("age", 1e9, 0.0),
+            "sfh_trunc_exp_end_gyr": ("end", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="Exponential SFH truncated at both ends; declining_exp plus a young-end cutoff",
     citation="Conroy et al. 2009 (FSPS); Carnall et al. 2018 (Bagpipes)",
 )
 
@@ -1407,8 +1626,10 @@ _register(
                     f"Dirichlet stick-breaking variable {i}",
                     lambda lo, hi: lo >= 0 and hi <= 1,
                     "must be in [0, 1]",
-                    # Beta(1, 1) is exactly Uniform(0, 1); faithful Leja+2017
-                    # symmetric Dirichlet(1,...,1) marginal on mass fractions.
+                    # Uniform latent; `dirichlet` maps it through the
+                    # Beta(1, N-1-i) quantile before stick-breaking, so the
+                    # SFR fractions are exactly symmetric Dirichlet(1,...,1)
+                    # (Leja+2017).
                     Uniform(0.0, 1.0, default=0.5),
                 )
                 for i in range(6)  # 7 bins -> 6 auxiliary variables
@@ -1423,8 +1644,9 @@ _register(
     ),
     citation="Leja et al. 2017 (ApJ 837, 170)",
     short_doc=(
-        "Non-parametric Dirichlet SFH (Leja+17); "
-        "Beta(1,1) = Uniform(0,1) stick-breaking aux variables"
+        "Non-parametric Dirichlet SFH (Leja+17); Uniform(0,1) aux variables "
+        "mapped to Beta(1, N-1-i) quantiles, stick-broken into SFR fractions "
+        "with a symmetric Dirichlet(1,...,1) prior"
     ),
 )
 
@@ -1487,17 +1709,62 @@ _register(
 
 # --- psb_suess2022 (Suess+2022): post-starburst nonparametric SFH ---
 # Distinct from the existing `psb_wild2020` (Wilkinson+2020 parametric).
+#
+# Suess+2022 Sect. 3.1.4 builds the history in three parts: the oldest portion
+# is cut into three bins with fixed edges and variable SFR, the middle is a
+# flexible zone the paper divides into five equal-mass bins with movable edges,
+# and the youngest is one bin of variable length [0, tlast] with variable SFR.
+# This entry keeps the flexible zone as a SINGLE bin; `psb_flex` below resolves
+# it into five.
+#
 # Free params: log_total_mass, tlast_gyr (quenching epoch), tflex_gyr (upper
 # bound of the flex zone), ratio_young (youngest-vs-flex SFR ratio), and
-# ratio_old_0..N-2 for the fixed old bins. Defaults match Suess+2022: tlast
-# in [0.01, 1.0] Gyr, tflex in [0.5, 5.0] Gyr, StudentT(0, 0.3, 2) on ratios.
-# Default fixed old bins = DEFAULT_BIN_EDGES_GYR[2:] = [0.3, 1.0, 3.0, 6.0, 13.7]
-# -> 4 old bins -> 3 ratio_old_* parameters.
-_N_PSB_OLD_RATIOS = 3
+# ratio_old_0..N-2 for the fixed old bins. Suess+2022 Table 1 sets tlast
+# uniform in [0.01, 1.0] Gyr and a Student-t on every SFR ratio, here
+# StudentT(0, 0.3, 2); tflex_gyr carries tengri's Uniform(1.0, 5.0).
+#
+# That tflex floor is the tlast CEILING, deliberately: the flexible zone is
+# [tlast, tflex], so any joint draw with tlast > tflex gives it negative width,
+# which annihilates the zone and lets the youngest bin overrun it. Priors that
+# overlap cannot express that constraint, so the floor removes the overlap
+# instead. The paper loses nothing: Suess+2022 fix tflex at 2 Gyr and draw
+# tlast on [0.01, 1.0], and 2.0 remains the default here. Equality
+# (tlast = tflex = 1.0) stays legal and is the only contact point: measured, it
+# gives a zero-width flexible bin, a non-decreasing ladder, a finite
+# non-negative history, mass closed to 1.3e-4 and a finite gradient in tflex.
+# Pinned values bypass a prior, so `validate_psb_quench_ordering` below refuses
+# a crossing that `Fixed()` would otherwise smuggle past this floor.
+#
+# Two tengri layout choices, recorded here because neither is the paper's own
+# construction:
+#
+#   * The three fixed old bins are equal-width from `tflex_gyr` to 13.7 Gyr
+#     (`psb_continuity_flex`'s default), an approximation of the paper's
+#     template edges. Deriving them FROM `tflex_gyr` is what keeps the ladder
+#     ascending for every value the Uniform(1.0, 5.0) prior can draw. Until
+#     #2184 this entry spliced `tflex_gyr` in ahead of a fixed ladder starting
+#     at 0.3 Gyr, so the ladder crossed itself over that whole prior,
+#     `jnp.searchsorted` ran on an unsorted array, and the mass closed to
+#     1-3 % instead of exactly.
+#   * The `ratio_old_*` are ADJACENT steps within the fixed section, with the
+#     step from the oldest flex bin to the youngest fixed bin pinned at 0 (the
+#     two share an SFR), so three fixed bins take two ratios. The paper's three
+#     `log(SFRratio,old)` entries are each measured against the first flexible
+#     bin instead, which gives its fixed section one more free amplitude than
+#     this entry has.
+_N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
+
+#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
+#: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
+#: priors must not overlap or their joint support contains ladders whose
+#: flexible zone has negative width.
+_PSB_TLAST_CEIL_GYR = 1.0
+_PSB_TFLEX_FLOOR_GYR = _PSB_TLAST_CEIL_GYR
+
 _register(
     SFHModelSpec(
         name="psb_suess2022",
-        fn=psb_continuity,
+        fn=psb_continuity_flex,
         params={
             "sfh_psb2022_log_total_mass": ParamDef(
                 "log10 total stellar mass formed (Msun)",
@@ -1509,13 +1776,14 @@ _register(
                 "Quenching-onset lookback time (Gyr); width of the youngest bin",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 1.0, default=0.1),
+                Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.1),
             ),
             "sfh_psb2022_tflex_gyr": ParamDef(
-                "Upper boundary of the flexible quenching zone (Gyr)",
+                "Upper boundary of the flexible quenching zone (Gyr); prior floor "
+                "equals the tlast_gyr ceiling so the zone can never have negative width",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 5.0, default=2.0),
+                Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
             ),
             "sfh_psb2022_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex); large positive = recent burst",
@@ -1546,10 +1814,120 @@ _register(
         },
         composition_type="additive",
     ),
-    citation="Suess et al. 2022 (ApJ 935, 146); arXiv:2207.05895",
+    citation="Suess et al. 2022 (ApJ 935, 146); arXiv:2207.02883",
     short_doc=(
-        "Post-starburst non-parametric SFH (Suess+22): youngest bin [0, tlast] + "
-        "flex zone [tlast, tflex] + fixed old bins, with StudentT(0, 0.3, df=2) ratios"
+        "Post-starburst non-parametric SFH (Suess+22, nflex=1, nfixed=3): youngest "
+        "bin [0, tlast] + a single flex bin [tlast, tflex] + three equal-width fixed "
+        "old bins out to 13.7 Gyr, with StudentT(0, 0.3, df=2) ratios"
+    ),
+)
+
+
+# --- psb_flex (Suess+2022 post-starburst with a RESOLVED flexible zone) ---
+# The same physics, the same fixed section and the same ladder construction as
+# ``psb_suess2022``, with one difference: the flexible zone [tlast, tflex] is
+# cut into ``_N_PSB_FLEX_BINS`` equal-width bins whose relative amplitudes are
+# the ``ratio_flex_*`` parameters, instead of being a single bin.
+#
+# Both entries run the same shape function, which returns a bit-identical
+# history when no ``flex_*`` ratio is supplied, so ``psb_suess2022`` is exactly
+# its ``nflex = 1`` case. That equivalence is pinned by
+# ``tests/components/sfh/test_sfh_lookback_dpl_trunc_exp_psb_flex.py``.
+#
+# A third tengri layout choice on top of the two the ``psb_suess2022`` block
+# records, and flagged for the same reason: the five flexible bins here are
+# EQUAL-WIDTH with free amplitudes (``ratio_flex_*``), while Suess+2022
+# Sect. 3.1.4 gives the flexible zone five bins of EQUAL MASS whose edges move.
+# The two agree only for a flat history across the zone. Approximation, not
+# equivalence.
+#
+# ``tflex_gyr``'s prior floor is the ``tlast_gyr`` ceiling here too, for the
+# reason the ``psb_suess2022`` block states: overlapping priors would put
+# negative-width flexible zones in the joint support.
+#
+# The flex-bin count is fixed at registration rather than settable per build:
+# an SFH model's parameter list is read straight off its static registry
+# entry, so a per-build count would need a new structural seam through the
+# stellar component. This entry fixes five equal-width flexible bins and
+# three equal-width fixed old bins. Pinning a ``ratio_flex_i`` at 0 merges
+# its bin with the next one, so the coarser layouts stay reachable from this
+# entry.
+_N_PSB_FLEX_BINS = 5
+_N_PSB_FLEX_RATIOS = _N_PSB_FLEX_BINS - 1
+_N_PSB_FLEX_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
+_register(
+    SFHModelSpec(
+        name="psb_flex",
+        fn=psb_continuity_flex,
+        params={
+            "sfh_psb_flex_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0, default=10.0),
+            ),
+            "sfh_psb_flex_tlast_gyr": ParamDef(
+                "Quenching-onset lookback time (Gyr); width of the youngest bin",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.2),
+            ),
+            "sfh_psb_flex_tflex_gyr": ParamDef(
+                "Upper boundary of the flexible quenching zone (Gyr); prior floor "
+                "equals the tlast_gyr ceiling so the zone can never have negative width",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
+            ),
+            "sfh_psb_flex_ratio_young": ParamDef(
+                "log10(SFR_young / SFR_flex_0); large positive = recent burst",
+                _always_true,
+                "",
+                StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
+            ),
+            **{
+                f"sfh_psb_flex_ratio_flex_{i}": ParamDef(
+                    f"log10 SFR ratio flex bin {i}/{i + 1}",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
+                )
+                for i in range(_N_PSB_FLEX_RATIOS)
+            },
+            **{
+                f"sfh_psb_flex_ratio_old_{i}": ParamDef(
+                    f"log10 SFR ratio old bin {i}/{i + 1}",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
+                )
+                for i in range(_N_PSB_FLEX_OLD_RATIOS)
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_psb_flex_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_psb_flex_tlast_gyr": ("tlast_gyr", 1.0, 0.0),
+            "sfh_psb_flex_tflex_gyr": ("tflex_gyr", 1.0, 0.0),
+            "sfh_psb_flex_ratio_young": ("ratio_young", 1.0, 0.0),
+            # The shape function counts its flexible bins off the ``flex_*``
+            # kwarg names, so the internal name has to be exactly ``flex_i``.
+            **{
+                f"sfh_psb_flex_ratio_flex_{i}": (f"flex_{i}", 1.0, 0.0)
+                for i in range(_N_PSB_FLEX_RATIOS)
+            },
+            **{
+                f"sfh_psb_flex_ratio_old_{i}": (f"ratio_old_{i}", 1.0, 0.0)
+                for i in range(_N_PSB_FLEX_OLD_RATIOS)
+            },
+        },
+        composition_type="additive",
+    ),
+    citation="Suess et al. 2022 (ApJ 935, 146); arXiv:2207.02883",
+    short_doc=(
+        "Post-starburst non-parametric SFH with a resolved quenching zone "
+        "(nflex=5, nfixed=3): youngest bin [0, tlast] + five equal-width flex "
+        "bins out to tflex + three equal-width fixed old bins out to 13.7 Gyr"
     ),
 )
 
@@ -1872,6 +2250,7 @@ _NONPARAM_NAMES = frozenset(
         "continuity_flex",
         "bursty_continuity",
         "psb_suess2022",
+        "psb_flex",
         "prospector_beta",
     }
 )
@@ -1896,12 +2275,16 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
 
     Notes
     -----
-    The ratio-count rule holds only for the models whose shape function *is*
-    :func:`continuity` (``continuity``, ``bursty_continuity``,
-    ``prospector_beta``): they declare ``n_bins - 1`` ratios, so an array of
-    ``n`` edges needs exactly ``n - 2`` declared ratios. ``continuity_flex``
-    spends some of its parameters on bin *widths* and ``dirichlet`` declares no
-    ratios at all, so the rule is not applied to them.
+    Two families take a ratio-count rule, and they take the same arithmetic for
+    different reasons. The models whose shape function *is* :func:`continuity`
+    (``continuity``, ``bursty_continuity``, ``prospector_beta``) declare
+    ``n_bins - 1`` ratios, so ``n`` edges need exactly ``n - 2`` of them. The
+    post-starburst models on :func:`psb_continuity_flex` (``psb_suess2022``,
+    ``psb_flex``) read only the *length* and the last entry of the array, and
+    their ``ratio_old_*`` count the steps of the fixed section, which again
+    comes to ``n - 2``. ``continuity_flex`` spends some of its parameters on bin
+    *widths* and ``dirichlet`` declares no ratios at all, so the rule is not
+    applied to them.
 
     A mismatched count is not cosmetic: the surplus ratios are swallowed by the
     SFH's ``**ratio_kwargs``, sample a prior that reaches no bin, and change no
@@ -1927,7 +2310,30 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
         )
 
     spec = SFH_REGISTRY.get(sfh_type)
-    if spec is None or spec.fn is not continuity:
+    if spec is None:
+        return
+
+    if spec.fn is psb_continuity_flex:
+        # Both post-starburst entries (``psb_suess2022`` since #2184, and
+        # ``psb_flex``) read only the LENGTH and the last entry: the fixed old
+        # bins are equal-width from ``tflex_gyr`` to ``edges[-1]``. So the
+        # count rule is its own: ``n`` edges means ``n - 1`` fixed bins, which
+        # take ``n - 2`` ``ratio_old_*`` parameters. Surplus or missing ones
+        # are swallowed by ``**ratio_kwargs`` and change no output, which is
+        # the silent-config failure #1975 exists to refuse.
+        n_old = sum(1 for name in spec.params if "ratio_old_" in name)
+        n_needed = arr.shape[0] - 2
+        if n_old and n_needed != n_old:
+            raise ValueError(
+                f"sfh type={sfh_type!r} declares {n_old} ratio_old parameters, which needs "
+                f"{n_old + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
+                f"{n_old + 2} edges; only their count and their last entry (the oldest "
+                "lookback time) are used, because the fixed bins are equal-width from "
+                "tflex_gyr to that edge."
+            )
+        return
+
+    if spec.fn is not continuity:
         return
     n_declared = sum(1 for name in spec.params if "ratio" in name)
     n_needed = arr.shape[0] - 2  # n_bins - 1 ratios, with n_bins = len(edges) - 1
@@ -1939,11 +2345,305 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
         )
 
 
+#: SFH families whose flexible zone spans ``[tlast_gyr, tflex_gyr]`` and which
+#: therefore need those two ordered.
+_PSB_QUENCH_TYPES = frozenset({"psb_suess2022", "psb_flex"})
+
+
+def psb_quench_param_names(sfh_type) -> tuple[str, str] | None:
+    """The fully-prefixed quench-epoch parameter names of a post-starburst entry.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of an SFH.
+
+    Returns
+    -------
+    tuple of str, or None
+        ``(tlast_gyr, tflex_gyr)`` fully prefixed for this entry, or ``None``
+        for any SFH that has no flexible quenching zone.
+
+    Notes
+    -----
+    Exists so a caller can look these two parameters up in a user's group dict
+    under every spelling the grammar accepts without hard-coding the prefix,
+    which differs between the two post-starburst entries.
+    """
+    if not isinstance(sfh_type, str) or sfh_type not in _PSB_QUENCH_TYPES:
+        return None
+    spec = SFH_REGISTRY.get(sfh_type)
+    if spec is None:
+        return None
+    prefix = _spec_public_prefix(spec)
+    return f"{prefix}tlast_gyr", f"{prefix}tflex_gyr"
+
+
+def _reachable_range(spec, public_name, given):
+    """Smallest and largest value a build can give one parameter, or None.
+
+    ``given`` is what the grammar resolved for it: ``None`` or ``Fixed(DEFAULT)``
+    for "not named", which pins the registry default; the ``FREE`` sentinel for
+    the declared prior; a ``Fixed`` for a pinned scalar; any other
+    ``Distribution`` for a caller-supplied prior. Returns ``None`` for a form
+    this cannot read, so an unknown input is never turned into a false refusal.
+    """
+    from tengri.parameters.priors import _is_default_fixed
+    from tengri.parameters.sentinels import DEFAULT, FREE
+
+    declared = spec.params[public_name].default
+    if given is None or given is DEFAULT or _is_default_fixed(given):
+        value = float(declared.default)
+        return value, value
+    if given is FREE:
+        lo, hi = declared.bounds
+        return float(lo), float(hi)
+    if isinstance(given, Fixed):
+        value = given.value
+        if not isinstance(value, (int, float)):
+            return None
+        return float(value), float(value)
+    if isinstance(given, Distribution):
+        lo, hi = given.bounds
+        if not (math.isfinite(lo) and math.isfinite(hi)):
+            return None
+        return float(lo), float(hi)
+    if isinstance(given, (int, float)):
+        return float(given), float(given)
+    return None
+
+
+def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
+    """Refuse a post-starburst build whose flexible zone could have negative width.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of the SFH being built. Any family other than a
+        post-starburst one returns immediately.
+    tlast : Distribution or float or None
+        What the build grammar resolved for ``tlast_gyr``: a ``Fixed``, a free
+        ``Distribution``, the ``FREE`` sentinel, or ``None`` when the parameter
+        was not named (which pins it at the registry default).
+    tflex : Distribution or float or None
+        The same for ``tflex_gyr``.
+
+    Raises
+    ------
+    ValueError
+        If some ``tlast_gyr`` the build can reach is strictly greater than some
+        ``tflex_gyr`` it can reach.
+
+    Notes
+    -----
+    The flexible zone is ``[tlast_gyr, tflex_gyr]``. The declared priors cannot
+    cross, because ``tflex_gyr``'s floor is ``tlast_gyr``'s ceiling, but a
+    pinned value bypasses its prior, so a build can still ask for
+    ``tlast_gyr > tflex_gyr``. Nothing downstream raises there: the ladder stops
+    ascending, the flexible bin takes a negative width, the youngest bin
+    overruns it, and the total mass still closes, because the same signed widths
+    that build the history also normalize it. Measured at ``tlast_gyr = 1.0,
+    tflex_gyr = 0.5``: ladder ``[0, 1.0, 0.5, 4.9, 9.3, 13.7]``, integrated mass
+    1.000128 of the declared total. Silent, so it is refused here rather than
+    left to a mass-closure test that cannot see it.
+
+    Equality is legal, and is the single point the two priors share. Measured at
+    ``tlast_gyr = tflex_gyr = 1.0``: the flexible bin has zero width, the ladder
+    is non-decreasing, the history is finite and non-negative, the mass closes
+    to 1.3e-4 (the same as its neighbors), and ``d/d tflex_gyr`` is finite and
+    continuous with the interior.
+
+    **JIT-compatible**: not applicable; a build-time check on Python objects.
+    """
+    names = psb_quench_param_names(sfh_type)
+    if names is None:
+        return
+    spec = SFH_REGISTRY[sfh_type]
+    last = _reachable_range(spec, names[0], tlast)
+    flex = _reachable_range(spec, names[1], tflex)
+    if last is None or flex is None:
+        return
+    if last[1] <= flex[0]:
+        return
+
+    def _describe(name, rng):
+        if rng[0] == rng[1]:
+            return f"{name}={rng[0]:g} (pinned)"
+        return f"{name} in [{rng[0]:g}, {rng[1]:g}]"
+
+    raise ValueError(
+        f"sfh type={sfh_type!r} would put the flexible quenching zone "
+        f"[tlast_gyr, tflex_gyr] at negative width: "
+        f"{_describe('tlast_gyr', last)} reaches "
+        f"{last[1]:g} Gyr, above {_describe('tflex_gyr', flex)} at "
+        f"{flex[0]:g} Gyr. The zone starts at tlast_gyr and ends at tflex_gyr, so "
+        f"tlast_gyr must stay at or below tflex_gyr everywhere the build can "
+        f"reach; a crossing annihilates the flexible bin and lets the youngest "
+        f"bin overrun it, with the mass still closing and nothing raised. Raise "
+        f"tflex_gyr above {last[1]:g} Gyr, or pin tlast_gyr at or below "
+        f"{flex[0]:g} Gyr."
+    )
+
+
+def _spec_public_prefix(spec) -> str:
+    """The ``sfh_<abbrev>_`` prefix every parameter of an SFH spec shares.
+
+    Parameters
+    ----------
+    spec : SFHModelSpec
+        A registered SFH model specification.
+
+    Returns
+    -------
+    str
+        The shared prefix (``"sfh_norm_"``, ``"sfh_cont_"``, ``"sfh_db_"``),
+        or ``""`` when the spec declares no parameters or its names share no
+        such prefix.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time introspection of the registry.
+
+    A type's public prefix is not derivable from its name alone: nine families
+    abbreviate (``continuity`` declares ``sfh_cont_*``, ``dirichlet``
+    ``sfh_dir_*``, ``dense_basis`` ``sfh_db_*``, ``psb_wild2020``
+    ``sfh_psb_*``, ...). Every abbreviation is a single token after ``sfh_``,
+    which is what makes the two candidates below exhaustive: the type's own
+    name first, then the one token the first parameter spells.
+    """
+    names = tuple(spec.params or ())
+    if not names:
+        return ""
+    by_type = f"sfh_{spec.name}_"
+    if all(n.startswith(by_type) for n in names):
+        return by_type
+    parts = names[0].split("_")
+    if len(parts) < 3 or parts[0] != "sfh":
+        return ""
+    abbrev = f"sfh_{parts[1]}_"
+    return abbrev if all(n.startswith(abbrev) for n in names) else ""
+
+
+def _instance_repeated_spec(spec, ordinal: int):
+    """Give the ``ordinal``-th occurrence of an SFH type its own parameter names.
+
+    Parameters
+    ----------
+    spec : SFHModelSpec
+        The registry entry for the repeated type.
+    ordinal : int
+        1-based occurrence index within the composition list.
+
+    Returns
+    -------
+    SFHModelSpec
+        ``spec`` unchanged for ``ordinal == 1``; otherwise a copy whose public
+        parameter names carry the ordinal, e.g. ``sfh_norm_log_total_mass`` ->
+        ``sfh_norm_2_log_total_mass``.
+
+    Raises
+    ------
+    ValueError
+        If the type declares no shared public prefix to insert the ordinal
+        into, so a repeat could not be named without colliding.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time.
+
+    Only the *public* names change. The internal kwargs, the callable, the
+    settings and ``spec.name`` are the type's own and stay put: the composed
+    closure dispatches additive members by public name, so two instances of one
+    family reach their shared internal ``log_total_mass`` from different public
+    parameters, exactly as two *different* families already do (#372).
+    """
+    if ordinal == 1:
+        return spec
+    prefix = _spec_public_prefix(spec)
+    if not prefix:
+        raise ValueError(
+            f"SFH type {spec.name!r} cannot be repeated in a composition: its "
+            "parameters share no 'sfh_<type>_' prefix to number, so the second "
+            "instance would collide with the first. List it once."
+        )
+    cut = len(prefix)
+
+    def _numbered(name: str) -> str:
+        return f"{prefix}{ordinal}_{name[cut:]}"
+
+    return spec._replace(
+        params={_numbered(k): v for k, v in spec.params.items()},
+        internal_param_map={_numbered(k): v for k, v in spec.internal_param_map.items()},
+    )
+
+
+def _mix_burst_mass_fraction(t_lookback, smooth, burst_shape, f):
+    r"""Mix a burst into a smooth SFH at a fixed fraction of the formed mass.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr]. The evaluation grid; may ascend or descend.
+    smooth : array_like, shape (n_age,)
+        Summed additive (smooth) SFH on that grid [Msun/yr].
+    burst_shape : array_like, shape (n_age,)
+        Unnormalized, non-negative burst kernel on that grid [dimensionless].
+    f : float
+        Burst mass fraction, :math:`f = 10^{\log f_{\rm burst}} \in [0, 1)`.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Mixed SFH [Msun/yr] whose time integral equals that of ``smooth``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, JIT/grad/vmap-safe (no host-side branching, no
+    Python floats read off traced values).
+
+    With :math:`M = \int \mathrm{SFR}_{\rm smooth}\,\mathrm{d}t` the mass the
+    smooth members form on this grid, and :math:`B(t)` the burst kernel,
+
+    .. math::
+
+        \mathrm{SFR}(t) = (1 - f)\,\mathrm{SFR}_{\rm smooth}(t)
+                        + f\,M\,\frac{B(t)}{\int B\,\mathrm{d}t}
+
+    where :math:`t` is lookback time [yr], :math:`\mathrm{SFR}` is [Msun/yr],
+    :math:`M` is [Msun] and :math:`B` is dimensionless. Both terms integrate to
+    :math:`(1-f)M` and :math:`fM`, so :math:`\int \mathrm{SFR}\,\mathrm{d}t = M`
+    exactly: adding a burst redistributes formed mass in time, it never creates
+    or destroys it. The burst therefore carries exactly the fraction :math:`f`
+    of the formed mass its parameter is named for, and wherever :math:`B` is
+    zero the history is the smooth one scaled by exactly :math:`1 - f`.
+
+    Both integrals are trapezoidal on the caller's grid, so their ratio is
+    invariant under reversing it (a descending ``t_lookback`` flips the sign of
+    both). Integrating on the evaluation grid rather than reading the members'
+    declared ``log_total_mass`` is what makes the conservation exact rather than
+    approximate, and it is the only option that also covers the additive
+    families that declare no total mass (tabulated, non-parametric,
+    ``dense_basis``).
+
+    A burst whose compact support misses the grid entirely integrates to zero;
+    it then contributes nothing and the mixing fraction is zeroed with it, so
+    the formed mass is still :math:`M`. The double ``where`` is the standard JAX
+    safe-divide guard: a NaN in the unused branch would still poison the
+    gradient.
+    """
+    m_smooth = jnp.trapezoid(smooth, t_lookback)
+    s_burst = jnp.trapezoid(burst_shape, t_lookback)
+    live = jnp.abs(s_burst) > 0.0
+    safe = jnp.where(live, s_burst, 1.0)
+    f_eff = jnp.where(live, f, 0.0)
+    return (1.0 - f_eff) * smooth + f_eff * m_smooth * burst_shape / safe
+
+
 def resolve_sfh(
     mean_sfh_type: str | list[str],
     bin_edges_gyr: object = None,
 ) -> tuple[object, dict[str, ParamDef], dict[str, tuple[str, float, float]], dict[str, Any]]:
-    """Resolve SFH specification to a composed function + params.
+    r"""Resolve SFH specification to a composed function + params.
 
     Parameters
     ----------
@@ -1982,10 +2682,36 @@ def resolve_sfh(
 
     - **Additive**: smooth models summed. E.g., ``["tsnorm", "dpl"]`` yields
       ``SFR_total = SFR_tsnorm + SFR_dpl``.
-    - **Mixture** (burst): mass-fraction weighted, replaces smooth. E.g.,
-      ``["tsnorm", "burst"]`` yields ``SFR = (1-f)*SFR_tsnorm + f*burst_shape``.
+    - **Mixture** (burst): the burst takes a fraction
+      :math:`f = 10^{\log f_{\rm burst}}` of the mass the smooth members form,
+      and the smooth history is scaled by :math:`1 - f` to make room for it.
+      With :math:`M = \int \mathrm{SFR}_{\rm smooth}\,\mathrm{d}t` [Msun] over
+      the evaluation grid and :math:`B(t)` the burst kernel,
+
+      .. math::
+
+          \mathrm{SFR}(t) = (1 - f)\,\mathrm{SFR}_{\rm smooth}(t)
+                          + f\,M\,\frac{B(t)}{\int B\,\mathrm{d}t}
+
+      where :math:`t` is lookback time [yr] and :math:`\mathrm{SFR}` is
+      [Msun/yr]. The formed mass is :math:`M` whether or not a burst is
+      present, and wherever :math:`B` vanishes the history is exactly
+      :math:`1 - f` times the smooth one. See
+      ``_mix_burst_mass_fraction``.
     - **Modulator** (field): multiplicative GP modulation. E.g.,
       ``["tsnorm", "field"]`` yields ``SFR = SFR_tsnorm * exp(gp_x - K_0/2)``.
+
+    **Repeated members.** A type may appear more than once:
+    ``["norm", "norm"]`` is two Gaussian bursts, ``["const", "norm", "norm"]``
+    a plateau under two of them. The k-th occurrence (k >= 2) takes the type's
+    public prefix with the ordinal appended -- ``sfh_norm_log_total_mass`` for
+    the first, ``sfh_norm_2_log_total_mass`` for the second,
+    ``sfh_norm_3_...`` for the third -- with the same priors, defaults and
+    internal kwargs as the base entry, and dispatches to its own callable. The
+    grammar's short key for a repeat keeps the ordinal
+    (``norm_2_log_total_mass``). Only additive members can usefully repeat: a
+    second ``burst`` or ``field`` is still refused by the one-mixture and
+    one-modulator rules below.
 
     Auto-swap: ``dense_basis`` → ``dense_basis_pure`` if burst or field is
     present (to avoid SFR constraint interference with composition).
@@ -2005,13 +2731,18 @@ def resolve_sfh(
 
     mean_sfh_type = apply_compositor_swap(mean_sfh_type)
 
-    # Look up models
+    # Look up models. A type may appear more than once -- ``["norm", "norm"]``
+    # is two Gaussian bursts, a shape no single spec expresses -- so each
+    # occurrence after the first is instanced under its own public names
+    # (``_instance_repeated_spec``).
     specs = []
+    occurrences: dict[str, int] = {}
     for name in mean_sfh_type:
         if name not in SFH_REGISTRY:
             valid = sorted(SFH_REGISTRY.keys())
             raise KeyError(f"Unknown SFH model '{name}'. Valid models: {valid}")
-        specs.append(SFH_REGISTRY[name])
+        occurrences[name] = occurrences.get(name, 0) + 1
+        specs.append(_instance_repeated_spec(SFH_REGISTRY[name], occurrences[name]))
 
     additive = [s for s in specs if s.composition_type == "additive"]
     mixtures = [s for s in specs if s.composition_type == "mixture"]
@@ -2105,8 +2836,7 @@ def resolve_sfh(
                 kw, burst_pub_to_internal, burst_internal, skip=("log_fburst",)
             )
             burst_shape = burst_fn(t_lookback, **burst_kw)
-            # Normalize burst shape to match smooth integral scale
-            smooth = (1.0 - f) * smooth + f * burst_shape * jnp.max(smooth)
+            smooth = _mix_burst_mass_fraction(t_lookback, smooth, burst_shape, f)
 
         # 3. Apply field modulation
         if has_field and "gp_x" in kw and "k0_half" in kw:

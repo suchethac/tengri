@@ -48,7 +48,6 @@ def test_two_cue_models_predict_photometry_does_not_crash():
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_bc": 2.0,
                 "tau_diff": 0.5,
-                "slope": -0.7,
             },
             neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=Fixed(0.5),
@@ -69,7 +68,6 @@ def test_two_cue_models_predict_photometry_does_not_crash():
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_bc": 0.1,
                 "tau_diff": 0.05,
-                "slope": -0.7,
             },
             neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=Fixed(1.0),
@@ -97,7 +95,7 @@ def test_cue_weights_aux_is_hashable():
     pytest.importorskip("jax")
     try:
         from tengri.components.nebular.cue import load_cue_weights
-    except Exception:
+    except ImportError:
         pytest.skip("cue module not importable")
 
     try:

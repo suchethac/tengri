@@ -39,16 +39,26 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # with an identical repr -- so it was silently wrong whichever
         # comparison the check used. See the note in ``parse_groups``.
         #
-        # Deliberately NO free_prior (#887). Redshift is not a component
-        # parameter a group wildcard should reach into: it is a top-level
-        # argument of the build grammar with its own surface
-        # (``redshift=Fixed(z)`` for a known redshift, a distribution for a
-        # photo-z fit). Its sensible range is set by the survey rather than by
-        # physics -- there is no interval that is right for both an SDSS and a
-        # JWST target. Giving it a wildcard-reachable default range would let
-        # ``all_params: FREE`` somewhere else in the model quietly turn a
-        # fixed-redshift fit into a photo-z one, which is the largest
-        # behavioral change in the package.
+        # #2187 (owner reversal, 2026-09): ``redshift=FREE`` must genuinely
+        # free the parameter, the same as every other parameter with a
+        # defensible default range -- the #887 refusal-over-silent-pinning
+        # mechanism stays, but redshift is not one of the parameters that
+        # mechanism should catch. free_prior=Uniform(0.0, 20.0) is the
+        # owner-chosen default: it spans and exceeds every shipped recipe's
+        # redshift prior (photoz Uniform(0.01, 6.0), high_z Uniform(3.5,
+        # 10.0), stochastic/JWST Uniform(0.01, 12.0)), with headroom to
+        # z=20. An explicit user prior (``redshift=Uniform(lo, hi)``) still
+        # narrows it -- per-param entries override the FREE expansion.
+        # The lower bound sits at z=0 exactly: ``luminosity_distance``
+        # (utils/cosmology.py) maps z<=0 to the 10 pc absolute-magnitude
+        # convention, a finite, non-zero distance, so z=0 is a documented
+        # finite case for the flux projection, not a boundary accident.
+        # This is a top-level build-grammar argument, not a component
+        # parameter a group wildcard reaches into: ``all_params: FREE``
+        # inside some other group cannot touch it (``_toplevel`` partition,
+        # see ``groups.py``), so freeing it here does not risk quietly
+        # turning an unrelated group's wildcard into a photo-z fit.
+        free_prior=Uniform(0.0, 20.0, "Source redshift", units="", default=0.1),
     ),
     ParamDeclaration(
         "met_logzsol",

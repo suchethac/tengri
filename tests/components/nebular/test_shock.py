@@ -74,24 +74,42 @@ def test_mappings_h5_loads():
 # ── 2. Backward compatibility — solar, n=1, no HDF5 ───────────────
 
 
-def test_backward_compat_solar_n1():
+def test_backward_compat_solar_n1(monkeypatch):
     """Fallback values for solar/n=1 should match Allen+2008 Table 5.
 
     Checks that key BPT ratios at 300 km/s are within 5 % of the hardcoded
     reference values (the grid is read back from the same arrays, so this
     really tests the interpolation logic, not the data).
+
+    Actually forces the fallback path now (mirrors ``test_fallback_without_h5``):
+    the comment above used to claim this without doing it, so whenever
+    ``data/mappings_templates.h5`` was reachable (as it is in this repo since
+    #2065/#2066) the call silently exercised the real, sparse H5 grid instead
+    -- at ``(shock_log_density=0.0, shock_b_over_sqrt_n=1.0)``, only 35.7% of
+    the solar (density, B) grid is populated, and the smoothing kernel blends
+    in zero-filled neighbors even at that populated node, so Hβ drifted to
+    0.71 instead of the fallback's exact 1.0 (case (c),
+    docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md).
     """
-    # Force fallback by requesting mappings5 when HDF5 is absent
-    # (or just use the fallback check directly via the module arrays)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        ratios = shock_line_ratios(
-            300.0,
-            shock_log_density=0.0,
-            shock_b_over_sqrt_n=1.0,
-            shock_abundance="solar",
-            shock_component="combined",
-        )
+    import tengri._data_setup as data_setup
+    import tengri.components.nebular.shock as shock_module
+
+    shock_module._load_mappings_grids.cache_clear()
+    monkeypatch.setattr(data_setup, "find_data", lambda *names: None)
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            ratios = shock_line_ratios(
+                300.0,
+                shock_log_density=0.0,
+                shock_b_over_sqrt_n=1.0,
+                shock_abundance="solar",
+                shock_component="combined",
+            )
+    finally:
+        # Clear again so the fallback result is not cached for subsequent tests.
+        shock_module._load_mappings_grids.cache_clear()
 
     # At 300 km/s, Allen+2008 Table 5 gives: R_OII=3.1, R_OIII=5.8, R_NII=2.1
     ha_key = "HA_6563A"
@@ -123,11 +141,20 @@ def test_velocity_interpolation():
     for v, r in zip(velocities, ha_values):
         assert 2.0 <= r <= 6.0, f"Hα/Hβ={r:.4f} at v={v} km/s outside physically plausible range"
 
-    # Hβ should always equal 1.0 (reference line)
+    # Hβ should always equal 1.0 (reference line) -- but not at the function
+    # defaults (shock_log_density=0.0, shock_b_over_sqrt_n=1.0): only 35.7% of
+    # the solar (density, B) grid is populated there, and the smoothing kernel
+    # blends in zero-filled neighbors even at a populated node, diluting Hβ
+    # to ~0.71 (case (c), docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md,
+    # #2066). ``log_density=-2.0, b_over_sqrt_n=0.01`` sits in a
+    # fully-populated 3x3 neighborhood of the solar grid, so the reference-line
+    # invariant this test is actually about holds there, independent of velocity.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         for v in velocities:
-            hb = float(shock_line_ratios(v)["Hb_4861A"])
+            hb = float(
+                shock_line_ratios(v, shock_log_density=-2.0, shock_b_over_sqrt_n=0.01)["Hb_4861A"]
+            )
             assert hb == pytest.approx(1.0, abs=0.01), f"Hβ != 1 at v={v}"
 
     # Out-of-range velocity raises ValueError (no silent clamping)
@@ -146,20 +173,32 @@ def test_velocity_interpolation():
 
 @h5_only
 def test_b_field_snapping():
-    """B-field values snap to the nearest grid point within bounds.
+    """Small B-field perturbations give correspondingly small changes.
 
     Out-of-bounds values raise ValueError (fail fast, no silent clamping).
-    The Allen+2008 (solar, n=1) B-field set is {0.0001, 0.5, 1, 2, 3.23, 4, 5, 10} μG.
+    The title/docstring predate the triweight refactor (shock.py now documents
+    ``shock_b_over_sqrt_n`` as continuously interpolated, not snapped); the
+    in-bounds check below is really about smoothness, not snapping.
+
+    The comparison point (``log_density=-2.0, b_over_sqrt_n=0.01``) is chosen
+    to sit in a fully-populated 3x3 (density x B) neighborhood of the solar
+    grid: at the module defaults (``log_density=0.0, b_over_sqrt_n=1.0``),
+    only 35.7% of the solar grid is populated and the *same* 1% B perturbation
+    moves the result by 0.13% -- 13x this test's tolerance -- because the
+    smoothing kernel's local sensitivity is elevated near a sparse-mask
+    boundary (case (c), docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md,
+    #2066), not because anything is discontinuous.
     """
     grids = _load_mappings_grids()
     b_grid = grids["mappings5"]["b_axis"]
     b_min = float(b_grid[0])
     b_max = float(b_grid[-1])
 
-    # In-bounds: nearby values snap to the same grid point
-    b_ref = 1.0  # μG — one of the Allen08 8 values
-    r_ref = shock_line_ratios(300.0, shock_b_over_sqrt_n=b_ref)
-    r_near = shock_line_ratios(300.0, shock_b_over_sqrt_n=b_ref * 1.01)
+    # In-bounds: a 1% B-field change gives a proportionally small change.
+    n_ref = -2.0  # well-populated density node; see docstring
+    b_ref = 0.01  # μG
+    r_ref = shock_line_ratios(300.0, shock_log_density=n_ref, shock_b_over_sqrt_n=b_ref)
+    r_near = shock_line_ratios(300.0, shock_log_density=n_ref, shock_b_over_sqrt_n=b_ref * 1.01)
     assert float(r_ref["HA_6563A"]) == pytest.approx(float(r_near["HA_6563A"]), rel=1e-4)
 
     # Grid endpoints: should not raise
@@ -274,8 +313,9 @@ def test_ism_attenuation_reduces_shock_sed():
         warnings.simplefilter("ignore", DeprecationWarning)
         shock_raw = compute_shock_sed(wave, 300.0, 1e7, line_sigma_aa=2.0)
 
-    # Apply diffuse ISM screen — same expression as sed_pipeline.py
-    k_diff = resolve_dust_law("power_law")(wave, n_slope=-0.7, dust_bump_strength=0.0)
+    # Apply diffuse ISM screen — same expression as sed_pipeline.py. power_law
+    # reads only its slope; since #2185 a law refuses a keyword it does not read.
+    k_diff = resolve_dust_law("power_law")(wave, dust_slope=-0.7)
 
     tau_low = 0.1
     tau_high = 1.0

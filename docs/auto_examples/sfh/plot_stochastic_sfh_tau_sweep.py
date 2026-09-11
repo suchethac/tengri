@@ -1,0 +1,125 @@
+"""
+Correlation timescale τ sets how bursty a stochastic SFH looks at fixed σ
+==========================================================================
+
+The ``field`` compositor multiplies any mean SFH by a damped random walk in
+log SFR, ``C(Δt) = σ² exp(-|Δt|/τ)`` in dex². Amplitude and timescale are
+separate knobs: every curve here carries the same σ = 0.3 dex and the same
+latent draw, so the three differ *only* in how long the walk remembers.
+
+``psd_sigma`` is the standard deviation of log₁₀(SFR) in **dex**, not in
+natural log, and ``psd_tau_myr`` is the e-folding lag of the autocovariance
+itself — not a corner frequency, so no factor of 2π enters. tengri also
+applies the log-normal correction ``exp(x - K(0)/2)``, which keeps the
+*ensemble mean* linear SFR equal to the mean SFH; at σ = 0.3 dex, dropping it
+would put the mean 27 % high.
+
+The latent ``sfh_field_xi`` is an N(0, I) vector, one entry per SFH grid node,
+drawn by ``model.spec.sample(key)`` along with every other free parameter.
+Reusing one draw across the three models is what makes this a controlled
+comparison rather than three unrelated realizations.
+
+Reference: Iyer+2024 (arXiv:2208.05938); Caplar & Tacchella 2019.
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.cosmology import age_at_z
+from tengri.plot import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+REDSHIFT = 1.0
+SIGMA_DEX = 0.3
+TAUS_GYR = (0.1, 0.5, 2.0)
+
+# Star formation runs from the Big Bang to the epoch of observation, so the
+# walk spans the same baseline the galaxy has actually existed for.
+T_UNIV_GYR = float(age_at_z(REDSHIFT))
+
+ssp = tengri.load_ssp()
+
+
+def build(tau_gyr=None):
+    """A flat mean SFH at z = 1, optionally modulated by the GP field."""
+    const = {
+        "log_total_mass": tengri.Fixed(10.0),
+        "start_gyr": tengri.Fixed(T_UNIV_GYR),
+        "end_gyr": tengri.Fixed(0.0),
+    }
+    sfh = {"type": "const", **const, "all_params": tengri.Fixed(tengri.DEFAULT)}
+    if tau_gyr is not None:
+        sfh = {
+            "type": ["const", "field"],
+            **const,
+            "psd_sigma": tengri.Fixed(SIGMA_DEX),
+            "psd_tau_myr": tengri.Fixed(1e3 * tau_gyr),
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        }
+    return tengri.SEDModel.build(
+        ssp_data=ssp,
+        sfh=sfh,
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": tengri.Fixed(0.0),
+            "tau_diff": tengri.Fixed(0.0),
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        },
+        redshift=tengri.Fixed(REDSHIFT),
+        n_grid=256,
+    )
+
+
+def sfr_history(model, params):
+    """SFR and its lookback grid, straight off the built model."""
+    derived = model.predict_state(params).derived
+    return (
+        np.asarray(derived["sfh_grid_lbt_yr"]) / 1e9,
+        np.asarray(derived["sfr_history"]),
+    )
+
+
+models = {tau: build(tau) for tau in TAUS_GYR}
+mean_model = build()
+
+# One latent draw, shared by all three: the seed is the field realization.
+xi = models[TAUS_GYR[0]].spec.sample(jax.random.PRNGKey(42))["sfh_field_xi"]
+
+t_gyr, sfr_mean = sfr_history(mean_model, {})
+
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+cmap = plt.get_cmap("viridis")
+
+for i, tau in enumerate(TAUS_GYR):
+    _, sfr = sfr_history(models[tau], {"sfh_field_xi": xi})
+    ax.semilogy(
+        t_gyr,
+        sfr,
+        color=cmap(0.15 + 0.7 * i / (len(TAUS_GYR) - 1)),
+        lw=1.4,
+        label=rf"$\tau = {tau:g}$ Gyr",
+    )
+
+ax.semilogy(t_gyr, sfr_mean, color="0.35", ls="--", lw=1.2, label="mean SFH")
+
+# Star formation is switched on only between the Big Bang and z = 1; outside
+# that window the SFR is zero and has no place on a log axis.
+ax.set_xlim(0, T_UNIV_GYR)
+ax.set_ylim(1.5e-1, 2e1)
+ax.set_xlabel("Lookback time [Gyr]")
+ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+ax.legend(frameon=False, fontsize=8)
+
+fig.tight_layout()
+plt.savefig("plot_stochastic_sfh_tau_sweep.png", dpi=150, bbox_inches="tight")

@@ -29,12 +29,13 @@ class TestDustEmissionAnalyticPorts:
         return 1e44  # erg/s (arbitrary scale)
 
     def test_registry_contains_analytic_names(self):
-        """Verify all 4 analytic dust models are registered."""
+        """Verify all 5 analytic dust models are registered."""
         from tengri.components.sed_model_component import _REGISTRY
 
         required_names = {
             "modified_blackbody",
             "casey2012",
+            "graybody",
             "pah_drude",
             "schreiber2016",
         }
@@ -145,7 +146,7 @@ class TestDustEmissionAnalyticPorts:
         )
 
         # Component call
-        p = {"T": 35.0, "beta_ir": 1.8, "alpha_mir": 2.0, "redshift": 0.0}
+        p = {"T": 35.0, "beta_ir": 1.8, "alpha_mir": 2.0, "lambda_0_um": 200.0, "redshift": 0.0}
         sed_out, _published = comp.predict(
             p,
             jnp.zeros_like(wave_grid),
@@ -183,7 +184,7 @@ class TestDustEmissionAnalyticPorts:
         )
 
         # Component call
-        p = {"T": 35.0, "beta_ir": 1.8, "alpha_mir": 2.0, "redshift": z}
+        p = {"T": 35.0, "beta_ir": 1.8, "alpha_mir": 2.0, "lambda_0_um": 200.0, "redshift": z}
         sed_out, _published = comp.predict(
             p,
             jnp.zeros_like(wave_grid),
@@ -198,6 +199,80 @@ class TestDustEmissionAnalyticPorts:
             rtol=0.0,
             atol=0.0,
             err_msg=f"Casey2012 CMB parity broken at z={z}",
+        )
+
+    def test_graybody_z0_exact(self, wave_grid, L_ir):
+        """Graybody: z=0 golden test (exact match to closure)."""
+        from tengri.components.dust.emission import graybody as closure_fn
+        from tengri.components.sed_model_component import _REGISTRY
+
+        comp = _REGISTRY["graybody"]()
+
+        # Closure call (golden truth)
+        golden = closure_fn(
+            wave_grid,
+            L_ir,
+            dust_T=35.0,
+            dust_beta_ir=1.8,
+            dust_lambda_0_um=150.0,
+            dust_epsilon_mbb=1.0,
+            redshift=0.0,
+        )
+
+        # Component call
+        p = {"T": 35.0, "beta_ir": 1.8, "lambda_0_um": 150.0, "epsilon_mbb": 1.0, "redshift": 0.0}
+        sed_out, _published = comp.predict(
+            p,
+            jnp.zeros_like(wave_grid),
+            wave_grid,
+            L_ir=L_ir,
+        )
+
+        # Exact match
+        np.testing.assert_allclose(
+            sed_out,
+            golden,
+            rtol=0.0,
+            atol=0.0,
+            err_msg="Graybody component does not match closure exactly",
+        )
+
+    def test_graybody_cmb_parity(self, wave_grid, L_ir):
+        """Graybody: z>0 CMB parity (component vs direct closure)."""
+        from tengri.components.dust.emission import graybody as closure_fn
+        from tengri.components.sed_model_component import _REGISTRY
+
+        comp = _REGISTRY["graybody"]()
+
+        z = 6.0
+
+        # Closure call
+        golden = closure_fn(
+            wave_grid,
+            L_ir,
+            dust_T=35.0,
+            dust_beta_ir=1.8,
+            dust_lambda_0_um=150.0,
+            dust_epsilon_mbb=1.0,
+            redshift=z,
+        )
+
+        # Component call
+        p = {"T": 35.0, "beta_ir": 1.8, "lambda_0_um": 150.0, "epsilon_mbb": 1.0, "redshift": z}
+        sed_out, _published = comp.predict(
+            p,
+            jnp.zeros_like(wave_grid),
+            wave_grid,
+            L_ir=L_ir,
+        )
+
+        # Exact match
+        np.testing.assert_allclose(
+            sed_out,
+            golden,
+            rtol=0.0,
+            atol=0.0,
+            err_msg=f"Graybody CMB parity broken at z={z}",
         )
 
     def test_pah_drude_z0_exact(self, wave_grid, L_ir):
@@ -336,7 +411,7 @@ class TestDustEmissionAnalyticPorts:
 # were orphaned this way. Parametrizing over them is what makes them coverage
 # rather than decoration.
 
-_ANALYTIC_GOLDENS = ("casey2012", "modified_blackbody", "pah_drude", "schreiber2016")
+_ANALYTIC_GOLDENS = ("casey2012", "graybody", "modified_blackbody", "pah_drude", "schreiber2016")
 
 
 @pytest.mark.regression_bug

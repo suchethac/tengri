@@ -35,6 +35,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import importlib.metadata
+import inspect
 import warnings
 
 import jax
@@ -43,6 +44,7 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 from packaging.requirements import Requirement
 
+from tengri._cache_keys import baked
 from tengri.config.exceptions import BackendError, DeadFitError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
@@ -2969,6 +2971,94 @@ def _get_flat_logdensity(fitter, init_params):
     return logdensity_flat, unravel_fn, init_flat, fitter._data_args
 
 
+#: Runner-signature parameters that never change what warmup tunes. Every
+#: reason here is the backends' own pre-existing rationale (nuts.py, hmc.py,
+#: dynamic_hmc.py, chees.py, ghmc.py, mclmc.py, first_order.py all carried a
+#: version of this comment inline, next to a hand-built tuning tuple);
+#: :func:`adaptation_method_key` is the one place it is written down.
+_ADAPT_IRRELEVANT: dict[str, str] = {
+    "context": "the inference target, not a tuning knob -- already gates the cache "
+    "lookup through _adaptation_cache_key's own (engine key, fingerprint) pair",
+    "key": "a PRNG key advances the chain; it does not change the tuned step size or metric",
+    "init_from": "a starting point does not change the tuned step size or metric; "
+    "over-keying costs a re-warmup of up to ~20 min",
+    "n_burnin": "post-warmup draws discarded Python-side; does not change what is tuned",
+    "n_samples": "post-warmup draw count; does not change what is tuned",
+    "n_chains": "chain count; the same adaptation seeds every chain",
+    "chain_method": "sampling batching strategy (vmap/sequential); does not change what is tuned",
+    "verbose": "logging only",
+    "progress": "progress-reporting only",
+    "progress_bar": "progress-reporting only",
+    "callback": "callback hook only",
+}
+
+
+def adaptation_method_key(
+    backend_name: str,
+    fn,
+    bound_kwargs: dict,
+    *,
+    exclude: dict[str, str] = _ADAPT_IRRELEVANT,
+) -> tuple:
+    """Return a hashable method-key fragment for one sampler's adaptation cache.
+
+    Binds ``bound_kwargs`` against ``fn``'s own signature (the runner
+    function each backend defines, e.g. ``run_nuts``), applies its
+    defaults, drops every excluded name, and bakes the rest. Replaces a
+    hand-built tuple (``tuning = (n_warmup, target_accept_rate, ...)``) that
+    had to be remembered and extended by name every time a new tunable
+    knob was added to a runner's signature -- exactly the #2163 bug class:
+    a knob nobody added to the hand tuple goes silently inert the moment a
+    cached adaptation already exists for that model (see
+    ``_adaptation_cache_key``'s docstring for the measured consequence, a
+    500/1000/1500 warmup sweep that returned byte-identical diagnostics).
+
+    Parameters
+    ----------
+    backend_name : str
+        Backend name, carried through into the returned tuple so the
+        per-backend adaptation cache namespace stays visible in the key
+        (mirrors each backend's own ``adapt_key = ("name", ...)`` literal).
+    fn : callable
+        The runner function whose signature defines what is tunable
+        (``run_nuts``, ``run_hmc``, ...).
+    bound_kwargs : dict
+        The values the runner actually received for (a subset of) its own
+        parameters. Missing parameters are filled from ``fn``'s defaults.
+    exclude : dict[str, str], optional
+        Ledger of parameter names to drop, mapping name -> reason.
+        Default :data:`_ADAPT_IRRELEVANT`.
+
+    Returns
+    -------
+    tuple
+        ``(backend_name, kept)`` where ``kept`` is a tuple of
+        ``(name, baked_value)`` pairs, sorted by name, for every bound
+        parameter not in ``exclude``.
+
+    Notes
+    -----
+    Parameters resolved from a raw signature value to something ELSE before
+    they change the sampled geometry (``dense_mass_matrix=None`` resolving to
+    an auto-policy boolean via the model dimension, ``n_ensemble="auto"``
+    resolving via ``n_chains``, ``precondition=...`` resolving through
+    :func:`~tengri.inference.preconditioning.prepare_preconditioning` to a
+    ``Preconditioning`` whose ``cache_key`` also depends on the metric
+    estimate) are NOT fully captured by binding the raw kwarg alone. Each
+    backend that has such a value keeps it as an extra tuple entry
+    alongside this function's return, per its own call site -- this
+    function only replaces the hand-built tuple of DIRECTLY tunable knobs.
+    """
+    bound = inspect.signature(fn).bind_partial(**bound_kwargs)
+    bound.apply_defaults()
+    kept = tuple(
+        sorted(
+            (name, baked(value)) for name, value in bound.arguments.items() if name not in exclude
+        )
+    )
+    return (backend_name, kept)
+
+
 def _adaptation_cache_key(fitter, method_key):
     """Key an adaptation entry by engine shape, method, **and target data**.
 
@@ -3543,11 +3633,10 @@ def _first_order_chain_scan(
 # -- is the fixed-length leapfrog scan it already was.
 
 
-@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8))
-def _hmc_low_rank_full_scan(
+@functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7))
+def _hmc_low_rank_warmup_only(
     init_flat,
     warmup_key,
-    chain_keys,
     logdensity_fn_2arg,
     data_args,
     n_warmup,
@@ -3555,13 +3644,25 @@ def _hmc_low_rank_full_scan(
     max_rank,
     target_accept_rate,
 ):
-    """Outer JIT: low-rank window adaptation plus a fixed-length HMC scan.
+    """Low-rank window adaptation only, returning the tuned parameters.
 
-    Identical to :func:`_hmc_full_scan` except that the warmup is
-    ``blackjax.window_adaptation_low_rank`` rather than
-    ``blackjax.window_adaptation``, so the adapted inverse mass matrix is a
-    ``LowRankInverseMassMatrix`` pytree rather than a ``(D,)`` or ``(D, D)``
-    array.
+    Split out of the fused warmup-plus-sampling scan this backend used to run,
+    for the two reasons the HMC and NUTS runners were split earlier.
+
+    **A seam for the #1999 probe.** Window adaptation can return a step size
+    above the stability limit of its own returned metric, and a low-rank metric
+    is a full metric with structure -- it carries the same failure mode, and the
+    measured rows in ``bench/reports/2026-09-06_low_rank_metric_d74.md`` show it
+    doing so: up to 433 divergences and a unique-draw fraction of 0.587 on a
+    D = 74 posterior, against zero divergences on the diagonal arm at the same
+    trajectory length. With warmup fused into the sampling scan there was
+    nowhere for :func:`_stabilize_dense_mass_step` to run.
+
+    **One sampling program for every chain.** While the two halves were fused,
+    chain 0 sampled inside the warmup program and chains 1..n-1 ran the separate
+    :func:`_hmc_chain_scan`, so a multi-chain fit ran two structurally different
+    compiled computations over one adaptation. That is the shape that made NUTS
+    irreproducible under a pinned key before its own split.
 
     Parameters
     ----------
@@ -3569,8 +3670,6 @@ def _hmc_low_rank_full_scan(
         Initial position in the sampled latent space [dimensionless].
     warmup_key : PRNGKey
         Key for warmup.
-    chain_keys : ndarray, shape (n_chain, 2)
-        Pre-split keys; ``n_chain = n_burnin + n_samples``.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)`` [nats].
     data_args : pytree (traced)
@@ -3586,14 +3685,17 @@ def _hmc_low_rank_full_scan(
 
     Returns
     -------
-    positions : ndarray, shape (n_chain, D)
-        Draws in the sampled latent space.
-    divergent : ndarray, shape (n_chain,)
-        Per-draw divergence flag.
     step_size : ndarray, shape ()
         Adapted step size [dimensionless].
     inv_mass_matrix : LowRankInverseMassMatrix
         A pytree, not an array -- callers must not call ``float()`` on it.
+        Its leaves are ``sigma (D,)``, ``U (D, max_rank)`` and ``lam
+        (max_rank,)``.
+    warmup_divergent : ndarray of bool, shape (n_warmup,)
+        Per-step divergence flags, for the dead-warmup refusal (#2088). The
+        adaptation's default info filter keeps these and drops only the raw
+        draw and gradient buffers, whose retention is an O(num_steps * buffer *
+        D) allocation and was a reported cause of warmup OOM.
 
     Notes
     -----
@@ -3611,16 +3713,6 @@ def _hmc_low_rank_full_scan(
         target_acceptance_rate=target_accept_rate,
         num_integration_steps=n_leapfrog,
     )
-    (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
-    step_size = parameters["step_size"]
-    inv_mass_matrix = parameters["inverse_mass_matrix"]
-
-    kernel = _get_hmc_kernel()
-
-    def _step(s, k):
-        """Advance HMC by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, n_leapfrog)
-        return s, (s.position, info.is_divergent)
-
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, step_size, inv_mass_matrix
+    (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    warmup_divergent = jnp.asarray(info.info.is_divergent)
+    return parameters["step_size"], parameters["inverse_mass_matrix"], warmup_divergent

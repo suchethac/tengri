@@ -60,13 +60,13 @@ class TestISCORadius:
 
 
 class TestEddingtonLuminosity:
-    """Verify _eddington_luminosity() against the known formula."""
+    """Verify _log10_eddington_luminosity() against the known formula."""
 
     def test_eddington_luminosity_1e8(self):
         """L_Edd for 10^8 Msun should be ~1.26e46 erg/s."""
-        from tengri.components.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _log10_eddington_luminosity
 
-        l_edd = float(_eddington_luminosity(8.0))
+        l_edd = 10.0 ** float(_log10_eddington_luminosity(8.0))
         # L_Edd = 1.257e38 * (M/Msun) erg/s
         l_edd_expected = 1.257e38 * 1e8
         np.testing.assert_allclose(
@@ -78,10 +78,10 @@ class TestEddingtonLuminosity:
 
     def test_eddington_luminosity_scaling(self):
         """L_Edd should scale linearly with BH mass."""
-        from tengri.components.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _log10_eddington_luminosity
 
-        l6 = float(_eddington_luminosity(6.0))
-        l8 = float(_eddington_luminosity(8.0))
+        l6 = 10.0 ** float(_log10_eddington_luminosity(6.0))
+        l8 = 10.0 ** float(_log10_eddington_luminosity(8.0))
         ratio = l8 / l6
         np.testing.assert_allclose(
             ratio, 100.0, rtol=1e-6, err_msg="L_Edd does not scale linearly with M"

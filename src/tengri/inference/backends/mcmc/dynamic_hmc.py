@@ -20,6 +20,7 @@ from tengri.inference.backends.mcmc._shared import (
     _hmc_warmup_only,
     _set_cached_adaptation,
     _vmap_chains,
+    adaptation_method_key,
     final_window_divergence_frac,
     refuse_dead_sampling,
     refuse_dead_warmup,
@@ -116,7 +117,14 @@ def run_dynamic_hmc(
 
     n_dim = len(init_flat)
 
-    use_dense = dense_mass_matrix and n_dim <= 30
+    # Shared with HMC and NUTS. This backend defaults to dense in its own
+    # signature, so above the cap it was the one silently discarding a dense
+    # request on every call rather than only on an explicit one.
+    from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
+
+    use_dense = resolve_dense_mass_gate(
+        dense_mass_matrix, n_dim, method="mcmc_dynamic_hmc", verbose=verbose
+    )
 
     if verbose:
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
@@ -133,13 +141,26 @@ def run_dynamic_hmc(
     # dynamic_hmc.init needs random_generator_arg, incompatible with
     # window_adaptation. Use HMC warmup to tune step_size/mass matrix,
     # then initialize dynamic_hmc state separately.
-    # n_warmup and target_accept_rate belong in the key: they *produce* the
-    # adaptation, so leaving them out makes both knobs silently inert on a model
-    # that already holds an entry. Grouped into one element and kept on a single
-    # line because the namespace guard in test_preconditioning.py reads this
-    # statement as text, per line.
-    tuning = (int(n_warmup), float(target_accept_rate))
-    adapt_key = ("dynamic_hmc", not use_dense, tuning, problem.cache_key)
+    # Every knob adaptation_method_key binds is a real run_dynamic_hmc
+    # parameter; _ADAPT_IRRELEVANT drops the ones that do not change what
+    # warmup tunes. ``use_dense`` and ``problem.cache_key`` are resolved
+    # values, not raw call kwargs, so both stay as explicit extra entries --
+    # see nuts.py for the full rationale.
+    tuning = adaptation_method_key(
+        "dynamic_hmc",
+        run_dynamic_hmc,
+        dict(
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            n_chains=n_chains,
+            target_accept_rate=target_accept_rate,
+            dense_mass_matrix=dense_mass_matrix,
+            precondition=precondition,
+            verbose=verbose,
+        ),
+    )
+    adapt_key = ("dynamic_hmc", not use_dense, problem.cache_key, tuning)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically, cache presence is

@@ -9,8 +9,8 @@ runtime wavelength physics), draws the same parameters into both, and compares
 What is actually covered
 ------------------------
 One radio configuration, one X-ray configuration, three AGN templates
-(``qsogen``, ``silva04``, ``cat3d_wind``) and three analytic dust-IR models
-(``modified_blackbody``, ``casey2012``, ``pah_drude``).
+(``qsogen``, ``silva04``, ``cat3d_wind``) and four analytic dust-IR models
+(``modified_blackbody``, ``casey2012``, ``graybody``, ``pah_drude``).
 
 The previous version of this docstring claimed rather more, and the gap is the
 reason for most of this file's rewrite:
@@ -510,7 +510,7 @@ def _make_dust_model_pair(
     waves_list, trans_list : list
         Filter wavelengths and transmissions.
     dust_model : str
-        Dust emission model: "modified_blackbody", "casey2012", "pah_drude".
+        Dust emission model: "modified_blackbody", "casey2012", "graybody", "pah_drude".
     redshift : float
         Redshift (default 0.1).
     synthetic_ssp : SSPData
@@ -547,6 +547,10 @@ def _make_dust_model_pair(
         kwargs["dust_T"] = Fixed(40.0)
         kwargs["dust_beta_ir"] = Fixed(1.8)
         kwargs["dust_alpha_mir"] = Fixed(2.0)
+    elif dust_model == "graybody":
+        kwargs["dust_T"] = Fixed(35.0)
+        kwargs["dust_beta_ir"] = Fixed(1.6)
+        kwargs["dust_lambda_0_um"] = Fixed(150.0)
     # pah_drude has no free parameters (pure template)
 
     spec = Parameters(**kwargs)
@@ -606,6 +610,30 @@ class TestCasey2012PrecomputeEquivalence:
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
         _assert_equivalent(phot_precomp, phot_runtime, "casey2012 precompute↔runtime", rtol=1e-3)
+
+
+class TestGraybodyPrecomputeEquivalence:
+    """Test graybody analytic dust precompute↔runtime equivalence."""
+
+    def test_graybody(self, dust_ir_filter_set, synthetic_ssp):
+        """Graybody general-opacity model: dust_T, dust_beta_ir, dust_lambda_0_um axes."""
+        waves, trans = dust_ir_filter_set
+        model_runtime, model_precomp, spec = _make_dust_model_pair(
+            waves,
+            trans,
+            dust_model="graybody",
+            redshift=0.1,
+            synthetic_ssp=synthetic_ssp,
+        )
+
+        key = jax.random.PRNGKey(42)
+        params_runtime = spec.sample(key)
+        params_precomp = spec.sample(key)
+
+        phot_runtime = model_runtime.predict_photometry(params_runtime)
+        phot_precomp = model_precomp.predict_photometry(params_precomp)
+
+        _assert_equivalent(phot_precomp, phot_runtime, "graybody precompute↔runtime", rtol=1e-3)
 
 
 class TestPAHDrudePrecomputeEquivalence:

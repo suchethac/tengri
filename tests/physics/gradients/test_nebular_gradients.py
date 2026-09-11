@@ -66,8 +66,9 @@ Structural tests are fine on it; a gradient test cannot be. So the CB19 row
 carries ``requires_nondegenerate_cb19``, which reads the grid and asks whether
 there is a ``log_U`` signal to differentiate at all, rather than guessing
 whether the file on disk is the real download. That is the actual precondition,
-and it lifts by itself once someone runs
-``scripts/download_cb19_templates.py``.
+and it lifts once someone supplies a grid with real ``log_U`` variation --
+``scripts/download_cb19_templates.py`` cannot currently do that itself: the
+upstream 3MdB CB_19 table is unpopulated pending an erratum (#2198).
 
 Seven ``except Exception: pytest.skip(...)`` handlers are gone
 --------------------------------------------------------------
@@ -137,6 +138,10 @@ def _check_gradient(fn, x0, eps, label):
         f"{label}: autodiff returned {ad} at x={x0}. A finite forward value with a "
         f"non-finite gradient is the jnp.where gradient leak -- the unsafe branch is "
         f"still evaluated under grad even when the primal selects the safe one."
+    )
+    assert np.any(ad != 0.0), (
+        "`ad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
     sens = abs(x0 * ad / f0)

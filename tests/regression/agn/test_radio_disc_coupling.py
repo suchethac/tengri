@@ -255,8 +255,10 @@ class TestEndToEndRadioDiscCoupling:
         # TestRadioConsumesL4400; here we only require it when present.)
         sed_radio_mc = state_mc.derived.get("sed_radio")
         sed_radio_r6 = state_r6.derived.get("sed_radio")
-        if sed_radio_mc is not None and sed_radio_r6 is not None:
-            assert not jnp.allclose(sed_radio_mc, sed_radio_r6)
+        assert sed_radio_mc is not None and sed_radio_r6 is not None, (
+            "probe setup failed: sed_radio was not published"
+        )
+        assert not jnp.allclose(sed_radio_mc, sed_radio_r6)
 
     def test_radio_enabled_build_is_finite_with_and_without_disc(self, synthetic_ssp_wide):
         """End-to-end: radio build remains finite whether or not a disc is set.
@@ -282,5 +284,5 @@ class TestEndToEndRadioDiscCoupling:
             state = model.predict_state({})
             assert jnp.all(jnp.isfinite(state.sed_intrinsic)), f"non-finite SED for disc={disc}"
             sed_radio = state.derived.get("sed_radio")
-            if sed_radio is not None:
-                assert jnp.all(jnp.isfinite(sed_radio)), f"radio NaN/Inf for disc={disc}"
+            assert sed_radio is not None, "probe setup failed: sed_radio was not published"
+            assert jnp.all(jnp.isfinite(sed_radio)), f"radio NaN/Inf for disc={disc}"

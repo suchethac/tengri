@@ -19,16 +19,24 @@ from tengri.utils.physics_constants import C_AA
 pytestmark = pytest.mark.limit
 
 
-def test_exact_for_lnu_inverse_nu():
-    """L_nu = A/nu makes nu*L_nu constant in ln(lambda) — trapezoid is exact:
-    integral of L_nu d nu = A * ln(nu_max/nu_min)."""
+def test_exact_for_lnu_linear_in_nu():
+    """L_nu = a + b nu is integrated exactly by the trapezoid in nu.
+
+    The helper is the quadrature every template closure normalizes with on
+    the evaluation grid, so it must be the plain trapezoid in nu: that is
+    what makes a normalized ``sed_dust_ir`` integrate back to ``L_ir`` to
+    round-off (the energy-balance contract). The former nu*L_nu-in-ln(lambda)
+    form was exact for L_nu = A/nu instead and differed from this one by its
+    discretization error (1.4e-5 on the Draine et al. 2021 PAH grid).
+    """
     wave_aa = jnp.geomspace(1e3, 1e7, 401)
     nu = C_AA / wave_aa
-    amplitude = 3.7e18
-    l_nu = amplitude / nu
+    a, b = 3.7e18, 2.5e4
+    l_nu = a + b * nu
 
     result = integrate_lnu_over_nu(l_nu, wave_aa)
-    expected = amplitude * jnp.log(nu[0] / nu[-1])
+    nu_max, nu_min = nu[0], nu[-1]
+    expected = a * (nu_max - nu_min) + 0.5 * b * (nu_max**2 - nu_min**2)
 
     chex.assert_trees_all_close(result, expected, rtol=1e-12)
 

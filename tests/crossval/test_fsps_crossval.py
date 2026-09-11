@@ -143,7 +143,13 @@ class TestDustCF00Crossval:
             ages = jnp.array([1e10])
             trans_ds = float(
                 two_component_dust(
-                    wavs, ages, 0.0, tau_v2, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+                    wavs,
+                    ages,
+                    0.0,
+                    tau_v2,
+                    law_bc="power_law",
+                    law_diff="power_law",
+                    dust_slope=-0.7,
                 )[0, 0]
             )
 
@@ -185,7 +191,7 @@ class TestDustCF00Crossval:
                 tau_v2,
                 law_bc="power_law",
                 law_diff="power_law",
-                n_slope=-0.7,
+                dust_slope=-0.7,
             )
         )[0]
 
@@ -227,7 +233,7 @@ class TestDustCF00Crossval:
                 tau_v2,
                 law_bc="power_law",
                 law_diff="power_law",
-                n_slope=-0.7,
+                dust_slope=-0.7,
             )[0, 0]
         )
 

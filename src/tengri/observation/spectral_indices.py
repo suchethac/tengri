@@ -31,6 +31,8 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, shape
+
 # ── Index definition ──────────────────────────────────────────────
 
 
@@ -834,6 +836,22 @@ class SpectralIndexData:
         if errors.shape != (n,):
             raise ValueError(f"errors shape {errors.shape} does not match expected ({n},)")
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this spectral index data.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from index definitions and array shapes.
+
+        Notes
+        -----
+        Index definitions are keyed by content as they define the likelihood function.
+        Value and error arrays are keyed by shape only (array values don't affect
+        the program, only the per-galaxy data does).
+        """
+        return derive_key(self, _SPECTRAL_INDEX_DATA_CACHE_KEY_POLICY)
+
     @property
     def n_indices(self) -> int:
         """Number of spectral indices.
@@ -1005,3 +1023,10 @@ class SpectralIndexData:
 
         """
         return f"{self.n_indices} indices ({', '.join(self.names)})"
+
+
+_SPECTRAL_INDEX_DATA_CACHE_KEY_POLICY: KeyPolicy = {
+    "index_defs": content("index definitions determine which windows are measured"),
+    "values": shape("per-galaxy data, not part of the structural program"),
+    "errors": shape("per-galaxy data, not part of the structural program"),
+}

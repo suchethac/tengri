@@ -404,6 +404,30 @@ class Catalog:
                         "redshift=Fixed(...) with a catalog_z_range."
                     )
 
+                # Per-galaxy redshift is now confirmed to be in play. An
+                # SF-onset lookback (sfh_exp_start_gyr / sfh_dexp_start_gyr /
+                # sfh_const_start_gyr) freed by 'all_params: FREE' was capped
+                # at build time against age_at_z of the model's single
+                # placeholder redshift (see
+                # tengri.parameters.groups._narrow_free_priors_to_z) --
+                # parse_groups never saw this catalog's per-galaxy spread of
+                # redshifts, so that cap is not valid for every row. Refuse
+                # here, where the catalog IS visible, rather than silently
+                # fitting every galaxy against one galaxy's cosmic-age ceiling.
+                from tengri.parameters.groups import _z_narrowed_onset_params
+
+                z_narrowed = _z_narrowed_onset_params(model_spec)
+                if z_narrowed:
+                    raise ValueError(
+                        f"redshift_col was provided (per-galaxy redshift), but "
+                        f"{sorted(z_narrowed)} was freed by 'all_params: FREE' and "
+                        f"capped at the age of the universe at the model's single "
+                        f"redshift={redshift_prior.value:g} -- that cap is not valid "
+                        f"for every redshift in this catalog. Pass an explicit onset "
+                        f"prior that is valid across your whole catalog's redshift "
+                        f"range instead, e.g. sfh={{'start_gyr': Uniform(lo, hi)}}."
+                    )
+
                 # A catalog_z_range lets per-galaxy redshift flow as a runtime
                 # input so the program compiles ONCE. Without it, each distinct
                 # redshift recompiles the fit (correct, just slow), warn loudly

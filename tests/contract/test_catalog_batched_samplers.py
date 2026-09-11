@@ -230,7 +230,7 @@ class TestTheTreeDepthCapReachesWarmup:
             import blackjax
 
             original_adapt = blackjax.window_adaptation
-        except (ImportError, AttributeError):
+        except ImportError:
             # If blackjax not available or doesn't have window_adaptation,
             # skip this test
             pytest.skip("blackjax.window_adaptation not available")
@@ -312,6 +312,9 @@ class TestTheTreeDepthCapReachesWarmup:
         """
         from tengri.inference.backends.mcmc import nuts
 
+        # ``tuning`` used to be a hand-built tuple literal (``tuning = (int(n_warmup),
+        # ...)``); it is now built by ``adaptation_method_key(...)`` (#2163 E.5), so
+        # the span is bounded by "tuning = " (not "tuning = (") through "adapt_key = (".
         src = inspect.getsource(nuts.run_nuts)
-        tuning = src[src.index("    tuning = (") : src.index("adapt_key = (")]
+        tuning = src[src.index("    tuning = ") : src.index("adapt_key = (")]
         assert "max_num_doublings" in tuning

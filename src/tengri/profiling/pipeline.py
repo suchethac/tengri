@@ -225,11 +225,18 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
     )
 
     # 6. Dust attenuation
-    dust_kw = {}
-    if hasattr(model, "_dust_law_bc"):
-        dust_kw["law_bc"] = model._dust_law_bc
-        dust_kw["law_diff"] = model._dust_law_diff
-    dust_kw["n_slope"] = p.get("dust_slope", -0.7)
+    from tengri.components.dust._apply import resolve_bc_diff_law_params
+
+    # Use shared resolver to build bc/diff law parameter dicts
+    bc_params, diff_params = resolve_bc_diff_law_params(
+        p,
+        bc_overrides=None,
+        diff_overrides=None,
+        live_shape_params=None,
+        bc_law=getattr(model, "_dust_law_bc", None),
+        diff_law=getattr(model, "_dust_law_diff", None),
+        redshift=p.get("redshift"),
+    )
 
     steps.append(
         _time_step(
@@ -239,7 +246,10 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
                 model.ssp_ages_yr,
                 p["tau_bc"],
                 p["tau_diff"],
-                **dust_kw,
+                law_bc=getattr(model, "_dust_law_bc", "power_law"),
+                law_diff=getattr(model, "_dust_law_diff", "power_law"),
+                bc_params=bc_params,
+                diff_params=diff_params,
             ),
             n=n,
         )
@@ -249,7 +259,10 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
         model.ssp_ages_yr,
         p["tau_bc"],
         p["tau_diff"],
-        **dust_kw,
+        law_bc=getattr(model, "_dust_law_bc", "power_law"),
+        law_diff=getattr(model, "_dust_law_diff", "power_law"),
+        bc_params=bc_params,
+        diff_params=diff_params,
     )
 
     # 7. CSP SED (einsum)
@@ -307,7 +320,7 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
         gradient_us=grad_us,
         compile_us=None,
         path="EXACT",
-        n_free=len(model._spec.free_params),
+        n_free=len(model.spec.free_params),
         config_name="predict_photometry",
     )
 
@@ -395,7 +408,7 @@ def _profile_fused_path(model, params, n: int = 200) -> PipelineReport:
         gradient_us=grad_us,
         compile_us=fwd_compile,
         path="FUSED",
-        n_free=len(model._spec.free_params),
+        n_free=len(model.spec.free_params),
         config_name="predict_photometry",
     )
 

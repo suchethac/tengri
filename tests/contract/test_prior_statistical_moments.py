@@ -9,7 +9,7 @@ References
 - Prospector test_priors.py (bd-j/prospector)
 - Uniform: mean=(a+b)/2, var=(b-a)^2/12
 - LogUniform (reciprocal): mean=(b-a)/ln(b/a), var=(b^2-a^2)/(2*ln(b/a)) - mean^2
-- Gaussian: mean=mu, var=sigma^2 (exact by definition; clipping reduces var slightly)
+- Gaussian: mean=mu, var=sigma^2 (exact by definition; truncation at [lo, hi] reduces var)
 """
 
 import jax
@@ -137,10 +137,10 @@ class TestLogUniformMoments:
 
 
 class TestGaussianMoments:
-    """Gaussian with clipping at [lo, hi].
+    """Gaussian, exactly truncated at [lo, hi] via the inverse-CDF pushforward.
 
     For wide bounds relative to sigma, mean ≈ mu and var ≈ sigma^2.
-    Clipping reduces variance; we test the unclipped regime.
+    Truncation reduces variance; we test the effectively untruncated regime.
     """
 
     def test_mean_standard(self):

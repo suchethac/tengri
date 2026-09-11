@@ -31,8 +31,8 @@ def test_roundtrip_with_nebular_off():
     assert orig.nebular_mode == "off"
     groups = orig.to_groups()
     neb = groups.get("neb", None)
-    if neb is not None:
-        assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
+    assert neb is not None, "probe setup failed: the nebular group is absent"
+    assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
     # Round-trip must not raise
     rebuilt = parse_groups(**groups)
     assert rebuilt.nebular_mode == "off"
@@ -204,7 +204,17 @@ class TestToGroupsRoundtrip:
         assert original.fixed_params == roundtripped.fixed_params
 
     def test_round_trip_mixed_free_fixed(self):
-        """Mixed free and fixed params roundtrip."""
+        """Mixed free and fixed params roundtrip.
+
+        ``redshift=FREE`` genuinely frees redshift (#2187 owner reversal):
+        ``redshift`` declares a default ``free_prior=Uniform(0.0, 20.0)``
+        (``tengri.parameters._shared.PARAMS``), so ``FREE`` lands on that
+        interval rather than raising. ``to_groups()`` emits the *resolved*
+        distribution, not the ``FREE`` sentinel (``get_distribution`` at the
+        emitter, ``groups.py``), so the round-tripped spec is built from
+        ``redshift=Uniform(0.0, 20.0)`` explicitly -- the two specs still
+        agree on the concrete distribution either way.
+        """
         original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
             dust_attenuation={
@@ -215,10 +225,15 @@ class TestToGroupsRoundtrip:
             },
             redshift=FREE,
         )
+        assert "redshift" in original.free_params
+        assert original.get_distribution("redshift") == Uniform(0.0, 20.0)
+
         roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
+        assert "redshift" in roundtripped.free_params
+        assert roundtripped.get_distribution("redshift") == Uniform(0.0, 20.0)
 
         for name in original.all_params:
             orig_dist = original.get_distribution(name)
@@ -551,7 +566,18 @@ class TestWildcardSpellingConvention:
 
     def test_explicit_overrides_emit_other_params_last(self):
         """A group whose wildcard coexists with explicit per-param overrides
-        spells the wildcard 'other_params' and emits it as the LAST key."""
+        spells the wildcard 'other_params' and emits it as the LAST key.
+
+        The explicit entry is a real one (``tau_bc``). It used to be implicit:
+        a bare ``{'law': 'calzetti', 'all_params': FREE}`` emitted ``Rv``,
+        ``slope``, ``delta`` and ``bump_strength`` as explicit overrides,
+        because the FREE wildcard is variant-scoped and Calzetti reads none of
+        the four, so they fell out of the wildcard tag and into the override
+        list. That made this test's premise -- "explicit per-param entries
+        coexist" -- true by accident, and the dict it asserted on was one the
+        parser now refuses: the four are foreign keys under Calzetti and are no
+        longer emitted at all.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(
@@ -561,6 +587,7 @@ class TestWildcardSpellingConvention:
                     "type": "two_component",
                     "law": "calzetti",
                     "all_params": FREE,
+                    "tau_bc": Fixed(0.4),
                 },
             )
         result = spec.to_groups()

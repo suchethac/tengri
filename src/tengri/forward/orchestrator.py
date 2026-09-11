@@ -233,6 +233,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
     "log_L_ir": "dex",
+    "log_L_absorbed": "dex",
     "log_L_agn_bol": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
@@ -503,7 +504,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     -------
     list of SEDComponent
         Topologically ordered. For the canonical pipeline (stellar,
-        nebular, AGN, dust, radio, X-ray, IGM), this reproduces the
+        nebular, shock, dust, AGN, radio, X-ray, IGM), this reproduces the
         hand-coded order byte-for-byte, the snapshot test in
         :mod:`tests.integration.test_derived_contract_snapshots` is the
         regression guarantee.
@@ -893,6 +894,7 @@ def run_components(
     params: Mapping[str, jnp.ndarray],
     ssp_data: Any | None = None,
     template_data: Any | None = None,
+    ztable_data: Any | None = None,
 ) -> ForwardState:
     r"""Thread ``state`` through ``components`` in order.
 
@@ -919,6 +921,12 @@ def run_components(
         parameter. Components that do not need it should ignore the
         argument. Default ``None`` means components rely on their
         internal template data.
+    ztable_data : Any | None, optional
+        Precomputed photometric redshift table for stellar component.
+        When provided, is passed to each component's ``apply()`` method
+        as a JIT runtime parameter instead of closure capture,
+        preventing XLA from materializing it as a constant. Default
+        ``None`` means components rely on their internal z-table.
 
     Returns
     -------
@@ -948,7 +956,13 @@ def run_components(
     for component in components:
         sliced = slice_params_for_component(component, params)
         try:
-            state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+            state = component.apply(
+                state,
+                sliced,
+                ssp_data=ssp_data,
+                template_data=template_data,
+                ztable_data=ztable_data,
+            )
         except KeyError as exc:
             named = _name_missing_parameter(component, sliced, exc)
             if named is None:

@@ -41,7 +41,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:9156: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+    /tengri/src/tengri/forward/sed_model.py:9272: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
 
     To free metallicity parameters explicitly, pass either:
       met={'all_params': FREE}
@@ -50,7 +50,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
     Issue #1796
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:9156: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust_attenuation'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:9272: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust_attenuation'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust_attenuation={'dust_f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
@@ -164,7 +164,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.052 seconds)
+   **Total running time of the script:** (0 minutes 3.099 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:

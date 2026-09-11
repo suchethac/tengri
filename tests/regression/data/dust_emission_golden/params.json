@@ -6,17 +6,6 @@
   },
   "L_ir_erg_s": 1e+44,
   "templates": {
-    "astrodust": {
-      "params": {
-        "dust_umin": 1.0,
-        "dust_gamma_dl": 0.01,
-        "dust_qpah": 3.0
-      },
-      "call_path": "lazy_loader",
-      "output_shape": [
-        512
-      ]
-    },
     "bosa": {
       "params": {
         "dust_log_ssfr": -10.0
@@ -82,6 +71,19 @@
         512
       ]
     },
+    "graybody": {
+      "params": {
+        "dust_T": 35.0,
+        "dust_beta_ir": 1.8,
+        "dust_lambda_0_um": 150.0,
+        "dust_epsilon_mbb": 1.0,
+        "redshift": 0.0
+      },
+      "call_path": "closure",
+      "output_shape": [
+        512
+      ]
+    },
     "modified_blackbody": {
       "params": {
         "dust_T": 30.0,
@@ -114,6 +116,16 @@
         512
       ]
     },
+    "schreiber2018": {
+      "params": {
+        "dust_T": 30.0,
+        "dust_f_pah": 0.05
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    },
     "themis": {
       "params": {
         "dust_umin": 1.0,
@@ -127,10 +139,5 @@
       ]
     }
   },
-  "skipped": {
-    "schreiber2018": {
-      "reason": "RuntimeError",
-      "error": "'schreiber2018' lazy loader is in an inconsistent state \u2014 the first resolution did not replace the registry entry. Check schreiber2018_templates.h5 or use the modern SEDComponent path."
-    }
-  }
+  "skipped": {}
 }

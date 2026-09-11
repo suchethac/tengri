@@ -51,19 +51,35 @@ class TestPiecewisePowerlawDisk:
         np.testing.assert_allclose(integral, 1.0, rtol=0.01)
 
     def test_monotonicity_each_segment(self):
-        """Spectrum follows expected monotonicity in each segment."""
-        wavelength = jnp.linspace(8.0, 1e6, 1000)
+        """Spectrum follows expected monotonicity in each segment.
+
+        The grid is geometric, not linear. On the previous
+        ``jnp.linspace(8.0, 1e6, 1000)`` the spacing was ~1000 A across five
+        decades, so the 8-10 A segment held exactly **one** sample: measured
+        len(seg1)=1, len(seg3)=4. The positive-slope check was written as
+        ``if len(seg1) > 2:`` and therefore never executed -- the test reported
+        a pass having checked only the second segment. Geometric spacing gives
+        len(seg1)=19 and len(seg3)=333, and the counts are asserted so a future
+        grid change cannot quietly empty a segment again.
+        """
+        wavelength = jnp.geomspace(8.0, 1e6, 1000)
         limits = jnp.array([8.0, 10.0, 100.0, 5000.0, 1e6])
         coefs = jnp.array([0.2, -1.0, -1.5, -4.0])
         spectrum = piecewise_powerlaw_disk(wavelength, limits, coefs)
+
         # Segment 1 (8-10 A): positive slope (coef=0.2)
         seg1 = spectrum[(wavelength >= 8.0) & (wavelength < 10.0)]
-        if len(seg1) > 2:
-            assert seg1[-1] > seg1[0]
+        assert seg1.shape[0] > 2, f"probe setup failed: segment 1 has {seg1.shape[0]} samples"
+        assert seg1[-1] > seg1[0], (
+            f"segment 1 (8-10 A, coef=+0.2) must rise; got {seg1[0]:.3e} -> {seg1[-1]:.3e}"
+        )
+
         # Segment 3 (100-5000 A): negative slope (coef=-1.5)
         seg3 = spectrum[(wavelength >= 100.0) & (wavelength < 5000.0)]
-        if len(seg3) > 2:
-            assert seg3[-1] < seg3[0]
+        assert seg3.shape[0] > 2, f"probe setup failed: segment 3 has {seg3.shape[0]} samples"
+        assert seg3[-1] < seg3[0], (
+            f"segment 3 (100-5000 A, coef=-1.5) must fall; got {seg3[0]:.3e} -> {seg3[-1]:.3e}"
+        )
 
     def test_continuity_at_breakpoints(self):
         """Spectrum is continuous at segment breakpoints."""

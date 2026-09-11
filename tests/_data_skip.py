@@ -70,6 +70,59 @@ requires_mappings = pytest.mark.skipif(
     "(run scripts/download_mappings_templates.py)",
 )
 
+#: Basename of the Draine+2021 PAHspec grid, built by
+#: ``scripts/build_pahspec_hdf5.py``. At 104 MB it is not committed, so no CI
+#: runner has a copy.
+PAHSPEC_GRID_NAME = "pahspec_draine2021.h5"
+
+#: Both grammar spellings of the one PAHspec component: ``draine2021_pah`` is
+#: an alias that resolves to the ``draine2021_pah_ir`` registry key. A gate
+#: written against one spelling silently leaves the other ungated.
+PAHSPEC_EMISSION_TYPES = frozenset({"draine2021_pah", "draine2021_pah_ir"})
+
+
+def pahspec_grid_path() -> str | None:
+    """The PAHspec grid the Draine+2021 component would load, or ``None``.
+
+    Returns
+    -------
+    str or None
+        Path to the grid, or ``None`` when the component would find nothing.
+
+    Notes
+    -----
+    Unlike every other grid in this module, this one is **not** gated on
+    ``DATA_DIR / name``. ``Draine2021PAHIRSEDComponent.load`` reads
+    ``$TENGRI_PAHSPEC_PATH`` first and otherwise calls
+    :func:`tengri._data_setup.find_data_str`, whose search walks the ancestors
+    of the working directory. Those two locators disagree whenever the checkout
+    is a git worktree -- the grid sits in the parent checkout, the component
+    loads it, and a ``DATA_DIR``-gated test would skip a run that would have
+    passed. Asking the locator the component asks keeps the gate and the
+    behavior it guards on the same answer.
+    """
+    from tengri._data_setup import find_data_str
+    from tengri.components.dust.draine2021_pah import PAHSPEC_PATH_ENV
+
+    override = os.environ.get(PAHSPEC_PATH_ENV)
+    if override is not None:
+        return override if Path(override).is_file() else None
+    return find_data_str(PAHSPEC_GRID_NAME)
+
+
+def has_pahspec() -> bool:
+    """True when the Draine+2021 PAHspec grid is loadable on this machine."""
+    return pahspec_grid_path() is not None
+
+
+requires_pahspec = pytest.mark.skipif(
+    not has_pahspec(),
+    reason=f"Draine+2021 PAHspec grid ({PAHSPEC_GRID_NAME}) not found. Absent it "
+    "the component warns and contributes nothing -- the designed response to "
+    "missing data (#1278), so its emission cannot be measured here. Build it "
+    "with scripts/build_pahspec_hdf5.py or point $TENGRI_PAHSPEC_PATH at a copy.",
+)
+
 #: Photoionization grids and weights for the nebular backends.
 CLOUDY_GRID_MIST = DATA_DIR / "cloudy_grid_mist.h5"
 CUE_WEIGHTS = DATA_DIR / "cue_weights.npz"
@@ -89,25 +142,29 @@ requires_cue_weights = pytest.mark.skipif(
 
 requires_cb19 = pytest.mark.skipif(
     not CB19_TEMPLATES.is_file(),
-    reason=f"CB_19 photoionization grid not found at {CB19_TEMPLATES} "
-    "(run scripts/download_cb19_templates.py)",
+    reason=f"CB_19 photoionization grid not found at {CB19_TEMPLATES}. "
+    "scripts/download_cb19_templates.py cannot currently build one: the "
+    "upstream 3MdB CB_19 table is unpopulated pending an erratum (#2198); "
+    "see docs/internal/advanced/cb19_grid.md.",
 )
 
 
 def _cb19_log_u_axis_is_degenerate() -> bool:
     """True when the CB19 grid does not vary along ``log_U``.
 
-    ``tests/conftest.py::pytest_configure`` writes a synthetic CB19 grid when
-    the real one is absent, built by broadcasting ten Case B Hbeta ratios across
-    the full 7-D shape. It is therefore *constant* along every physical axis by
-    construction -- its own comment says "not production-grade, but enough to
-    break the degeneracy in plumbing tests".
+    A gradient test cannot run on a grid with no ``log_U`` signal: d/d_logU of
+    a constant is zero, and comparing that zero against a finite-difference
+    zero passes for any implementation. This answers "is there a logU signal
+    here to differentiate", which is the actual precondition, rather than
+    guessing whether the file on disk is the real download.
 
-    Structural tests are fine on it. A gradient test is not: d/d_logU of a
-    constant is zero, and comparing that zero against a finite-difference zero
-    passes for any implementation. This answers "is there a logU signal here to
-    differentiate", which is the actual precondition, rather than guessing
-    whether the file on disk is the real download.
+    Until #2181 this was true of the stand-in ``tests/conftest.py`` writes,
+    which broadcast ten Case B Hbeta ratios across the full 7-D shape and so
+    was constant along every physical axis. That stand-in now varies along
+    each of the five parameter-indexed axes
+    (:func:`tests._cb19_grid.write_synthetic_cb19_grid`), so this lifts wherever
+    the packaged file is either that fixture or the real download, and still
+    holds on a machine carrying the flat placeholder of #924.
     """
     if not CB19_TEMPLATES.is_file():
         return True
@@ -128,8 +185,10 @@ requires_nondegenerate_cb19 = pytest.mark.skipif(
     reason=f"the CB_19 grid at {CB19_TEMPLATES} is constant along log_U, so a "
     "gradient with respect to neb_logU is identically zero and cannot be "
     "checked against a finite difference. This is the synthetic fixture "
-    "tests/conftest.py writes when the real grid is missing -- run "
-    "scripts/download_cb19_templates.py for a grid with a live log_U axis.",
+    "tests/conftest.py writes when the real grid is missing; "
+    "scripts/download_cb19_templates.py would give a grid with a live "
+    "log_U axis, but as of 2026-09 it cannot build one (#2198): the "
+    "upstream 3MdB CB_19 table is unpopulated pending an erratum.",
 )
 
 

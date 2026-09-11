@@ -33,7 +33,7 @@ Available Attenuation Curves
 - **li08**: Li et al. (2008) Eq. (1) four-coefficient curve (continuum + FUV rise + 2175 Å bump)
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
 - **tea**: Haskell et al. (2024) TEA 3-param empirical (NIHAO-SKIRT bump-slope correlation)
-- **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (SIMBA RT)
+- **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (MUFASA RT)
 - **conroy2010**: Conroy+2010 mixed MW + power-law (FSPS dust_type=1)
 - **vw07_bc**: Wild+2007 birth cloud power-law (n=-1.3)
 - **vw07_diff**: Wild+2007 diffuse ISM power-law (n=-0.7)
@@ -73,6 +73,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._deprecated import renamed_kwarg as renamed_kwarg
 from tengri.components.dust.laws._registry import (
     _HEADLINE_LAWS as _HEADLINE_LAWS,
     DUST_LAWS as DUST_LAWS,
@@ -80,9 +81,12 @@ from tengri.components.dust.laws._registry import (
     _calzetti_kprime_unnormalized as _calzetti_kprime_unnormalized,
     _calzetti_l02_kprime as _calzetti_l02_kprime,
     _drude_profile as _drude_profile,
+    law_kwarg_names as law_kwarg_names,
     list_laws as list_laws,
     register_dust_law as register_dust_law,
+    reject_unread_law_kwargs as reject_unread_law_kwargs,
     resolve_dust_law as resolve_dust_law,
+    select_law_kwargs as select_law_kwargs,
 )
 from tengri.utils.physics_constants import V_BAND_ANGSTROM
 
@@ -94,10 +98,10 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
     citation="Charlot & Fall 2000 (ApJ 539, 718)",
     short_doc="Generic power-law attenuation",
 )
+@renamed_kwarg("n_slope", "dust_slope")
 def power_law(
     wavelength: jnp.ndarray,
-    n_slope: float = -0.7,
-    **_kwargs,
+    dust_slope: float = -0.7,
 ) -> jnp.ndarray:
     r"""Power-law dust attenuation curve following Charlot & Fall (2000).
 
@@ -105,7 +109,7 @@ def power_law(
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    n_slope : float, optional
+    dust_slope : float, optional
         Power-law slope. Default: -0.7 (standard Charlot & Fall). [dimensionless]
 
     Returns
@@ -132,7 +136,7 @@ def power_law(
        Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
-    return (wavelength / V_BAND_ANGSTROM) ** n_slope
+    return (wavelength / V_BAND_ANGSTROM) ** dust_slope
 
 
 @register_dust_law(
@@ -142,7 +146,6 @@ def power_law(
 )
 def vw07_bc(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Wild+2007 birth cloud: power-law with n = -1.3 (steep UV).
 
@@ -169,12 +172,22 @@ def vw07_bc(
 
         k(\lambda) = \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^{-1.3}
 
+    :math:`n = -1.3` is the Charlot & Fall (2000) [2]_ birth-cloud slope and is
+    a constant OF this law, not a parameter of it: the signature declares no
+    ``dust_slope``, so ``dust_attenuation={'law': 'vw07_bc', 'slope': ...}`` raises
+    rather than being accepted and discarded (#2185). Use ``power_law``, which
+    is the same curve with the slope free.
+
     References
     ----------
-    .. [1] V. Wild, S. Charlot, and P. Diminic, "CANDELS/CDF-S: Unveiling the
-       Nature of Distant Star Formation and its Evolution from z ~ 1.5,"
-       MNRAS, 381, 543 (2007).
-       https://doi.org/10.1111/j.1365-2966.2007.12255.x
+    .. [1] V. Wild, G. Kauffmann, T. Heckman, S. Charlot, G. Lemson,
+       J. Brinchmann, T. Reichard, and A. Pasquali, "Bursty stellar populations
+       and obscured active galactic nuclei in galaxy bulges," MNRAS, 381, 543
+       (2007). https://doi.org/10.1111/j.1365-2966.2007.12256.x
+
+    .. [2] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of
+       Starlight by Dust in Galaxies," ApJ, 539, 718 (2000).
+       https://doi.org/10.1086/309250
     """
     return (wavelength / V_BAND_ANGSTROM) ** (-1.3)
 
@@ -186,7 +199,6 @@ def vw07_bc(
 )
 def vw07_diff(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Wild+2007 diffuse ISM: power-law with n = -0.7 (standard CF00).
 
@@ -210,12 +222,19 @@ def vw07_diff(
 
         k(\lambda) = \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^{-0.7}
 
+    :math:`n = -0.7` is the Charlot & Fall (2000) [2]_ effective absorption
+    curve and is a constant OF this law, not a parameter of it: the signature
+    declares no ``dust_slope``, so
+    ``dust_attenuation={'law': 'vw07_diff', 'slope': ...}`` raises rather than
+    being accepted and discarded (#2185). Use ``power_law``, which is the same
+    curve with the slope free and the same -0.7 default.
+
     References
     ----------
-    .. [1] V. Wild, S. Charlot, and P. Diminic, "CANDELS/CDF-S: Unveiling the
-       Nature of Distant Star Formation and its Evolution from z ~ 1.5,"
-       MNRAS, 381, 543 (2007).
-       https://doi.org/10.1111/j.1365-2966.2007.12255.x
+    .. [1] V. Wild, G. Kauffmann, T. Heckman, S. Charlot, G. Lemson,
+       J. Brinchmann, T. Reichard, and A. Pasquali, "Bursty stellar populations
+       and obscured active galactic nuclei in galaxy bulges," MNRAS, 381, 543
+       (2007). https://doi.org/10.1111/j.1365-2966.2007.12256.x
 
     .. [2] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of
        Starlight by Dust in Galaxies," ApJ, 539, 718 (2000).
@@ -231,7 +250,6 @@ def vw07_diff(
 )
 def calzetti(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Calzetti et al. (2000) starburst attenuation curve.
 
@@ -262,6 +280,14 @@ def calzetti(
         \end{cases}
 
     then normalized: :math:`k(\lambda) = k'(\lambda) / R_V` with :math:`R_V = 4.05`.
+
+    :math:`R_V = 4.05 \pm 0.80` is the value Calzetti et al. (2000) [1]_ measure
+    for the starburst sample, and the piecewise polynomial above is fitted at it,
+    so R_V is a constant OF this law rather than a parameter of it. The signature
+    declares no ``dust_Rv``, so
+    ``dust_attenuation={'law': 'calzetti', 'Rv': ...}`` raises rather than being
+    accepted and discarded (#2185). Use ``cardelli`` or ``conroy2010`` for a free
+    R_V.
 
     References
     ----------
@@ -299,7 +325,6 @@ def calzetti(
 )
 def reddy15(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Reddy et al. (2015) MOSDEF dust attenuation curve.
 
@@ -374,7 +399,6 @@ def kriek_conroy(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = 1.0,
     dust_delta: float = 0.0,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Kriek & Conroy (2013) modified Calzetti + UV bump + slope delta.
 
@@ -553,7 +577,6 @@ _LMC_RV = 3.16
 )
 def smc(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     """SMC Bar extinction curve (Pei 1992, ApJ, 395, 130).
 
@@ -591,7 +614,6 @@ def smc(
 )
 def lmc(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     """LMC average extinction curve (Pei 1992, ApJ, 395, 130).
 
@@ -630,7 +652,6 @@ def lmc(
 )
 def prevot_smc(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Prevot et al. (1984) SMC extinction law for AGN obscuration.
 
@@ -725,7 +746,6 @@ def prevot_smc(
 def cardelli(
     wavelength: jnp.ndarray,
     dust_Rv: float = 3.1,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Cardelli, Clayton & Mathis (1989) MW extinction with free R_V.
 
@@ -830,7 +850,6 @@ def li08(
     dust_c2: float = 4.0,
     dust_c3: float = 2.0,
     dust_c4: float = 0.04,
-    **_kwargs,
 ) -> jnp.ndarray:
     """Li et al. (2008) analytical dust attenuation/extinction curve.
 
@@ -917,7 +936,6 @@ def salim(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = 0.0,
     dust_delta: float = 0.0,
-    **_kwargs,
 ) -> jnp.ndarray:
     """Salim et al. (2018) modified Calzetti law (DSPS/Zacharegkas+2025 default).
 
@@ -932,8 +950,6 @@ def salim(
         Amplitude of the 2175 Angstrom UV bump. [dimensionless]
     dust_delta : float
         Power-law tilt relative to Calzetti slope. [dimensionless]
-    **_kwargs
-        Ignored extra keyword arguments (for registry compatibility).
 
     Returns
     -------
@@ -966,7 +982,6 @@ def salim(
 )
 def leitherer02(
     wavelength: jnp.ndarray,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Leitherer et al. (2002) UV starburst attenuation curve.
 
@@ -1047,7 +1062,6 @@ def noll09(
     dust_delta: float = 0.0,
     dust_bump_x0: float = 0.2175,
     dust_bump_gamma: float = 0.035,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
 
@@ -1138,7 +1152,6 @@ def salim_sbl18(
     dust_delta: float = 0.0,
     dust_bump_x0: float = 0.2175,
     dust_bump_gamma: float = 0.035,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
 
@@ -1224,7 +1237,6 @@ def tea(
     wavelength: jnp.ndarray,
     dust_delta: float = -0.2,
     dust_tea_scatter: float = 0.0,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).
 
@@ -1271,34 +1283,78 @@ def tea(
     return kriek_conroy(wavelength, dust_delta=dust_delta, dust_bump_strength=eb)
 
 
+# The three tables below are the output of
+# ``scripts/fit_narayanan2018_medians.py``, which fits the Kriek & Conroy
+# (2013) form to ``data/attenuation/narayanan2018_median_curves.dat`` -- the
+# Narayanan et al. (2018) published medians, repackaged with attribution. Rerun
+# that script to reproduce every digit; it also writes
+# ``data/attenuation/narayanan2018_kc13_fits.json``, which
+# ``tests/regression/bug/test_bug_2199_narayanan_z_redshift.py`` reads back to
+# check this hand-copy against it.
+
+#: Redshifts at which Narayanan et al. (2018) publish a median attenuation curve.
+_NARAYANAN_Z_NODES = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+#: Kriek & Conroy (2013) slope :math:`\delta` fitted to each published median.
+#: Full precision, so that this table and the JSON the script writes are the
+#: same numbers and a golden pinned against either holds against both.
+_NARAYANAN_DELTA = jnp.array(
+    [
+        -0.5555790140809852,
+        -0.2910618326689639,
+        -0.4655455976558615,
+        -0.38570378510780945,
+        -0.32995141823672564,
+        0.13785066855951653,
+        0.07950863548914745,
+    ]
+)
+
+#: Multiplier on the KC13 bump amplitude fitted to each published median. The
+#: implied :math:`E_b = m\,(0.85 - 1.9\,\delta)` is 6.36, 2.77, 5.08, 5.36,
+#: 5.37, 1.98, 1.96 at z = 0 to 6.
+_NARAYANAN_BUMP_STRENGTH = jnp.array(
+    [
+        3.336277843127103,
+        1.9767528352381496,
+        2.926977165512936,
+        3.389079602445048,
+        3.6339238083055148,
+        3.3729209110204086,
+        2.809597222823232,
+    ]
+)
+
+
 @register_dust_law(
     "narayanan_z",
     citation="Narayanan et al. 2018 (ApJ 869, 70)",
-    short_doc="Narayanan et al. z-dependent attenuation (SIMBA)",
+    short_doc="Narayanan et al. z-dependent attenuation (MUFASA)",
 )
 def narayanan_z(
     wavelength: jnp.ndarray,
-    dust_delta: float = -0.2,
-    dust_bump_strength: float = 1.0,
     redshift: float = 0.0,
-    **_kwargs,
 ) -> jnp.ndarray:
     r"""Narayanan+2018 redshift-dependent attenuation.
 
-    Uses the Kriek & Conroy (2013) curve with z-dependent median
-    parameters calibrated on SIMBA cosmological radiative-transfer
-    simulations.
+    Evaluates the Kriek & Conroy (2013) curve [2]_ at slope and bump values
+    interpolated in redshift from a table fitted to the median attenuation
+    curves Narayanan et al. (2018) [1]_ publish for their 25 Mpc MUFASA
+    cosmological radiative-transfer run. The curve gets grayer with redshift,
+    which is the trend the paper reports in its Section 5.1.
+
+    Redshift is the **only** knob. This law *is* the published median at z; a
+    slope or bump of your own is a different model, and it is
+    :func:`kriek_conroy`, which takes exactly those two parameters. The grammar
+    refuses ``dust_delta`` and ``dust_bump_strength`` on this law and says so.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_delta : float
-        Power-law slope modification. [dimensionless] Default: -0.2 (triggers z-scaling).
-    dust_bump_strength : float
-        UV bump amplitude E_b. [dimensionless] Default: 1.0 (triggers z-scaling).
     redshift : float
-        Galaxy redshift. [dimensionless] Default: 0.0.
+        Galaxy redshift. [dimensionless] Default: 0.0. Supplied by the model,
+        not by the ``dust_attenuation`` group.
 
     Returns
     -------
@@ -1309,27 +1365,60 @@ def narayanan_z(
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    When default parameters are used (δ = -0.2, E_b = 1.0), the z-dependent
-    medians from SIMBA are applied:
+    **Gradient-safe**: yes, and continuous in ``redshift``: the table is read
+    with ``jnp.interp``, which is piecewise linear. The gradient is
+    **identically zero above z = 6 and below z = 0**, where the end node is
+    held rather than extrapolated, so a photometric-redshift fit that wanders
+    past z = 6 gets no curve-shape information from this law there; and it is
+    discontinuous in the second derivative at the seven integer nodes.
 
     .. math::
 
-        \delta(z) &\approx -0.2 - 0.1 z \quad \text{(steeper at high z)} \\
-        E_b(z) &\approx \max(0, 1.0 - 0.15 z) \quad \text{(weaker bump at high z)}
+        k(\lambda, z) = k_{\rm KC13}\bigl(\lambda;\ \delta(z),\ m(z)\bigr),
+
+    where :math:`\delta(z)` and :math:`m(z)` are linear interpolations of the
+    module tables ``_NARAYANAN_DELTA`` and ``_NARAYANAN_BUMP_STRENGTH`` in
+    :math:`z` [dimensionless], :math:`k_{\rm KC13}` is :func:`kriek_conroy`,
+    and :math:`m` multiplies that curve's bump amplitude
+    :math:`E_b = 0.85 - 1.9\,\delta`. Outside :math:`0 \le z \le 6` the table
+    is held at its end node rather than extrapolated.
+
+    **Approximation**: the Kriek & Conroy form fitted to published median
+    curves, not a formula the paper states. Narayanan et al. (2018) give the
+    redshift dependence as median curves (their Figure 9) and publish them at
+    the data URL below; ``scripts/fit_narayanan2018_medians.py`` fits three
+    parameters per redshift (:math:`\delta`, the bump multiplier and a
+    normalization) to the repackaged copy at
+    ``data/attenuation/narayanan2018_median_curves.dat``, and every number in
+    the tables above comes from that fit. Residual rms over the fit window
+    1250 Å to 1 μm is 0.018, 0.024, 0.014, 0.011, 0.012, 0.019 and 0.010 at
+    z = 0 to 6, against curves of order unity there, so the form reproduces the
+    medians to a few percent and no better. Valid over
+    :math:`0 \le z \le 6` and 1250 Å to 1 μm; blueward of 1250 Å the Calzetti
+    (2000) baseline the KC13 form tilts is itself an extrapolation, and the
+    fit excludes that region.
+
+    The published curves are normalized by the 3000 Å optical depth rather than
+    by A_V, so each fit carries a free normalization; that factor is *not*
+    applied here, because this function returns k(5500 Å) = 1 like every other
+    registered law and the overall depth is the model's ``dust_tau_v``.
 
     References
     ----------
-    .. [1] D. Narayanan, K. Kriek, C. C. Hayward, et al., "A Theory for the
-       Variation of Dust Attenuation Laws in Galaxies," ApJ, 869, 70 (2018).
-       https://doi.org/10.3847/1538-4357/aae386
+    .. [1] D. Narayanan, C. Conroy, R. Davé, B. D. Johnson and G. Popping,
+       "A Theory for the Variation of Dust Attenuation Laws in Galaxies,"
+       ApJ, 869, 70 (2018). arXiv:1805.06905.
+       https://doi.org/10.3847/1538-4357/aaed25
+       Median curves: https://bitbucket.org/desika/narayanan_attenuation_laws/
+    .. [2] M. Kriek and C. Conroy, "The Dust Attenuation Law in Distant
+       Galaxies: Evidence for Variation with Spectral Type," ApJL, 775, L16
+       (2013). https://doi.org/10.1088/2041-8205/775/1/L16
     """
-    # Use tolerance comparison (not ==) to avoid JIT-unsafe float equality on traced values.
-    delta_z = jnp.where(jnp.abs(dust_delta - (-0.2)) < 1e-6, -0.2 - 0.1 * redshift, dust_delta)
-    bump_z = jnp.where(
-        jnp.abs(dust_bump_strength - 1.0) < 1e-6,
-        jnp.maximum(0.0, 1.0 - 0.15 * redshift),
-        dust_bump_strength,
-    )
+    # ``jnp.interp`` holds the end node outside the tabulated range, which is
+    # the clip to 0 <= z <= 6 the fit range calls for; no separate clip.
+    z = jnp.asarray(redshift)
+    delta_z = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_DELTA)
+    bump_z = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_BUMP_STRENGTH)
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 
@@ -1338,11 +1427,11 @@ def narayanan_z(
     citation="Conroy et al. 2010 (ApJ 708, 58)",
     short_doc="Conroy+10 mixed MW + power-law (FSPS default)",
 )
+@renamed_kwarg("n_slope", "dust_slope")
 def conroy2010(
     wavelength: jnp.ndarray,
     dust_Rv: float = 3.1,
-    n_slope: float = -0.7,
-    **_kwargs,
+    dust_slope: float = -0.7,
 ) -> jnp.ndarray:
     r"""Conroy+2010 mixed MW + power-law attenuation (FSPS dust_type=1).
 
@@ -1355,7 +1444,7 @@ def conroy2010(
         Wavelength grid. [Å]
     dust_Rv : float
         Total-to-selective extinction ratio for the MW component. [dimensionless] Default: 3.1.
-    n_slope : float
+    dust_slope : float
         Power-law index for the long-wavelength component. [dimensionless] Default: -0.7.
 
     Returns
@@ -1383,7 +1472,7 @@ def conroy2010(
        https://doi.org/10.1088/0004-637X/708/1/58
     """
     k_mw = cardelli(wavelength, dust_Rv=dust_Rv)
-    k_pl = power_law(wavelength, n_slope=n_slope)
+    k_pl = power_law(wavelength, dust_slope=dust_slope)
     # Smooth sigmoid blend: MW dominates UV, power-law dominates IR
     x = jnp.log10(wavelength / V_BAND_ANGSTROM)
     blend = jax.nn.sigmoid(x / 0.05)
@@ -1462,7 +1551,8 @@ def wg00_shell(
        I. Point Source Embedded in a Clumpy Medium," ApJ, 528, 799 (2000).
        https://doi.org/10.1086/308197
     """
-    k = resolve_dust_law(law)(wavelength, **law_params)
+    reject_unread_law_kwargs(law_params, (law,), "wg00_shell")
+    k = resolve_dust_law(law)(wavelength, **select_law_kwargs(law, law_params))
     return jnp.exp(-tau_v * k)
 
 
@@ -1539,7 +1629,8 @@ def wg00_cloudy(
        Environments," ApJ, 528, 799 (2000). Section 3.2, "homogeneous" model.
        https://doi.org/10.1086/308197
     """
-    k = resolve_dust_law(law)(wavelength, **law_params)
+    reject_unread_law_kwargs(law_params, (law,), "wg00_cloudy")
+    k = resolve_dust_law(law)(wavelength, **select_law_kwargs(law, law_params))
     tau_k = tau_v * k
 
     # Numerically stable: for small tau_k, use Taylor expansion
@@ -1625,7 +1716,8 @@ def wg00_dusty(
        I. Point Source Embedded in a Clumpy Medium," ApJ, 528, 799 (2000).
        https://doi.org/10.1086/308197
     """
-    k = resolve_dust_law(law)(wavelength, **law_params)
+    reject_unread_law_kwargs(law_params, (law,), "wg00_dusty")
+    k = resolve_dust_law(law)(wavelength, **select_law_kwargs(law, law_params))
     tau_clump = tau_v / jnp.maximum(n_clumps, 1e-10)
     return jnp.exp(-n_clumps * (1.0 - jnp.exp(-tau_clump * k)))
 
@@ -1734,13 +1826,13 @@ def _make_grain_law(wave_aa: np.ndarray, k_norm: np.ndarray):
     Returns
     -------
     callable
-        Function ``(wavelength, **_kwargs) -> k(λ)`` compatible with
+        Function ``(wavelength) -> k(λ)`` compatible with
         ``@register_dust_law``.
     """
     _wave = jnp.asarray(wave_aa)
     _k = jnp.asarray(k_norm)
 
-    def _law(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+    def _law(wavelength: jnp.ndarray) -> jnp.ndarray:
         """Interpolate precomputed dust attenuation curve at given wavelengths."""
         return jnp.maximum(jnp.interp(wavelength, _wave, _k), 0.0)
 
@@ -1760,7 +1852,7 @@ except ImportError:
     _GRAIN_MODELS_AVAILABLE = False
 
 
-def _grain_law_unavailable(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+def _grain_law_unavailable(wavelength: jnp.ndarray) -> jnp.ndarray:
     """Fallback when dust-extinction package is not installed."""
     raise ImportError(
         "dust-extinction package required for grain model dust laws. "
@@ -1773,7 +1865,7 @@ def _grain_law_unavailable(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     citation="Weingartner & Draine 2001 (ApJ 548, 296)",
     short_doc="WD01 SMC Bar grain model attenuation",
 )
-def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+def wd01_smcbar(wavelength: jnp.ndarray) -> jnp.ndarray:
     r"""Weingartner & Draine (2001) SMC Bar grain model attenuation curve.
 
     Physically motivated dust grain-size + composition distribution for SMC-like
@@ -1821,7 +1913,7 @@ def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     citation="Weingartner & Draine 2001 (ApJ 548, 296)",
     short_doc="WD01 MW R_V=3.1 grain model attenuation",
 )
-def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+def wd01_mwrv31(wavelength: jnp.ndarray) -> jnp.ndarray:
     r"""Weingartner & Draine (2001) MW R_V=3.1 grain model attenuation curve.
 
     Physically motivated dust grain-size + composition distribution for Milky
@@ -1865,7 +1957,7 @@ def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     citation="Draine 2003 (ARA&A 41, 241)",
     short_doc="Draine 2003 MW R_V=3.1 grain model attenuation",
 )
-def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+def d03_mwrv31(wavelength: jnp.ndarray) -> jnp.ndarray:
     r"""Draine (2003) MW R_V=3.1 updated grain model attenuation curve.
 
     Updated Milky Way grain model incorporating revised PAH properties and
@@ -1908,7 +2000,7 @@ def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     citation="Hensley & Draine 2023 (ApJ 948, 55)",
     short_doc="Hensley & Draine 2023 astrodust+PAH grain model",
 )
-def hd23_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+def hd23_mwrv31(wavelength: jnp.ndarray) -> jnp.ndarray:
     r"""Hensley & Draine (2023) astrodust+PAH MW R_V=3.1 grain model.
 
     State-of-the-art MW grain model combining astrodust grains with PAH

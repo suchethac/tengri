@@ -22,10 +22,10 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 
 from tengri.components.agn.disc import (
-    _eddington_luminosity,
     _gravitational_radius,
     _isco_radius,
     _l_seed_geometric,
+    _log10_eddington_luminosity,
     _nt_l_diss_analytic,
     _r_hot_bisect,
     beloborodov_gamma_hot,
@@ -34,6 +34,12 @@ from tengri.components.agn.disc import (
 )
 from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
+
+
+def _eddington_luminosity(log_mbh):
+    """Linear Eddington luminosity [erg/s], from the log10 form disc.py carries (#2210)."""
+    return 10.0 ** _log10_eddington_luminosity(log_mbh)
+
 
 # ── beloborodov_gamma_hot ─────────────────────────────────────────
 
@@ -87,6 +93,10 @@ class TestBeloborodovGammaHot:
             err_msg="beloborodov_gamma_hot: FD check ∂γ_hot/∂l_diss_hot",
         )
         assert grad_jax != 0.0
+        assert np.all(np.isfinite(grad_jax)), (
+            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
 
 # ── compute_l2500 ─────────────────────────────────────────────────

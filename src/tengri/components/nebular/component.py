@@ -27,8 +27,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.template_threading import TemplateThreading
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -126,21 +128,26 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         :class:`BakedInBackend` is constructed. Default ``True`` for
         adapter use.
     cue_full_catalog : bool
-        For the ``"cue"`` backend only. When ``True``, expose the full
-        Cue-trained line catalog (~271 species) via ``state.derived
-        ["line_waves"]`` / ``["line_lums"]`` so users can query HeII
-        1640, HeI 10830 and other high-z diagnostics via
-        :meth:`tengri.forward.prediction.EmissionLines.get`. Default
-        ``False`` matches the pre-#303 behavior (128 CLOUDY/FSPS
-        lines) and avoids surprising users who iterate over
-        ``all_waves`` / ``all_lums``. No effect on the headline
-        Hα/Hβ/etc. named accessors, which always work.
+        For the ``"cue"`` backend only. When ``True`` (the default since
+        #2239), expose the full Cue-trained line catalog (~138 species) via
+        ``state.derived["line_waves"]`` / ``["line_lums"]`` so users can
+        query HeII 1640, C IV 1549 and other high-z diagnostics via
+        :meth:`tengri.forward.prediction.EmissionLines.get`. ``False``
+        narrows to the legacy 128-line CLOUDY/FSPS-matched subset (the sole
+        default before #2239, added by #303 to avoid surprising users who
+        iterated over ``all_waves`` / ``all_lums``); kept as the explicit
+        opt-out for cross-code comparisons. Affects one headline accessor:
+        ``civ_1549`` (C IV, a Cue-only line) has no entry within 5 A in the
+        128-line subset and returns NaN there with a warning (#2192's
+        no-match answer, made loud by #2239), while every other headline
+        Hα/Hβ/etc. accessor, ``predict_photometry`` and ``rest_sed`` are
+        bit-identical either way (#2236).
     """
 
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
-    cue_full_catalog: bool = False
+    cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -485,6 +492,7 @@ class NebularSEDComponent(TemplateThreading):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         r"""Compute nebular SED via the configured backend; add to ``sed_intrinsic``.
 
@@ -607,6 +615,14 @@ class NebularSEDComponent(TemplateThreading):
         _dig_frac_is_zero = isinstance(_dig_frac, (int, float)) and float(_dig_frac) == 0.0
         _dig_kwargs = None  # built on demand only when needed
         if not _dig_frac_is_zero:
+            # THE SNAPSHOT IS TAKEN HERE, ~80 lines above its first use. Any key
+            # a backend branch below adds to ``common_kwargs`` is therefore
+            # absent from this copy and must be handed to the DIG calls
+            # explicitly, or the DIG regime silently evaluates something the HII
+            # regime did not. That is exactly how #2195 happened: the cue branch
+            # resolved the ionizing population into ``common_kwargs`` after this
+            # line, so the DIG call fell back to Cue's population-independent
+            # defaults. See ``cue_population`` in the cue branch.
             _dig_kwargs = dict(common_kwargs)
             _dig_kwargs["neb_logU"] = common_kwargs["neb_logU"] + jnp.asarray(_dig_delta_logU)
 
@@ -675,23 +691,39 @@ class NebularSEDComponent(TemplateThreading):
             # ``predict_line_fluxes`` parity. Fall back to the explicit
             # ``gas_logqion`` shortcut only if upstream did not publish
             # ``age_weights`` (e.g. a chain without StellarSEDComponent).
+            #
+            # ``cue_population`` is kept as its own dict and passed to BOTH
+            # branches explicitly, the way the cloudy_grid branch below already
+            # passes ``ssp_weights`` / ``ssp_log_ages_yr`` (#2195). Folding it
+            # into ``common_kwargs`` alone is what the DIG branch could not see:
+            # ``_dig_kwargs`` is snapshotted well above this line, so the DIG
+            # call reached Cue with no population, fell back to
+            # ``default_gas_logqion = 49.1`` and the hard-coded young-starburst
+            # ``ionspec_*``, and mixed in a component whose normalization and
+            # ionizing-spectrum shape belonged to no galaxy. Line ratios cancel
+            # that; broadband photometry and absolute line luminosities do not.
             age_weights = state.derived.get("age_weights")
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
+            cue_population: dict = {}
             if "gas_logqion" in params:
-                common_kwargs["gas_logqion"] = jnp.asarray(params["gas_logqion"])
+                cue_population["gas_logqion"] = jnp.asarray(params["gas_logqion"])
             elif age_weights is not None and ssp_ages_yr is not None:
-                common_kwargs["ssp_weights"] = jnp.asarray(age_weights)
-                common_kwargs["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
+                cue_population["ssp_weights"] = jnp.asarray(age_weights)
+                cue_population["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
             else:
                 log_nion = state.derived.get("log_nion")
                 if log_nion is not None:
-                    common_kwargs["gas_logqion"] = jnp.maximum(log_nion, 0.0)
+                    cue_population["gas_logqion"] = jnp.maximum(log_nion, 0.0)
+            common_kwargs.update(cue_population)
             nebular_sed = self.backend.predict_nebular_sed(
                 **common_kwargs, **cue_extras, template_data=template_data
             )
             if _dig_kwargs is not None:
                 nebular_sed_dig = self.backend.predict_nebular_sed(
-                    **_dig_kwargs, **cue_extras, template_data=template_data
+                    **_dig_kwargs,
+                    **cue_population,
+                    **cue_extras,
+                    template_data=template_data,
                 )
                 _f = jnp.asarray(_dig_frac)
                 nebular_sed = (1.0 - _f) * nebular_sed + _f * nebular_sed_dig
@@ -743,8 +775,10 @@ class NebularSEDComponent(TemplateThreading):
                         cloudyfsps_only=cue_cloudyfsps_only,
                     )
                     if _dig_kwargs is not None:
+                        # ``cue_population`` explicitly, as above (#2195).
                         _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
                             **_dig_kwargs,
+                            **cue_population,
                             **cue_extras,
                             template_data=template_data,
                             cloudyfsps_only=cue_cloudyfsps_only,
@@ -767,65 +801,28 @@ class NebularSEDComponent(TemplateThreading):
                         )
                         _f = jnp.asarray(_dig_frac)
                         line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
-                # CLAUDE.md contract: vacuum wavelengths throughout.
+                # CLAUDE.md contract: vacuum wavelengths throughout. See
+                # ``nebular_line_waves_to_vacuum`` (components/nebular/_shared.py)
+                # for the upstream-Cue rationale and the Balmer-vote /
+                # Edlén (1953) mechanism; this is the ONE implementation,
+                # also called by the #2239 warning seam's static accessor
+                # (``forward/properties.py::_published_line_wavelengths_static``)
+                # so the two never compare air against vacuum.
                 #
-                # Upstream Cue (yi-jia-li/cue) ships TWO disagreeing files:
-                # ``lineList_wav.npy`` (what the network is keyed against:
-                # **air** in optical, CLOUDY-default convention) and
-                # ``cue_emlines_info.dat`` (newer parallel metadata:
-                # vacuum, but in a *different ordering* that does not
-                # match the network indices). The Li+2024 paper §2 states
-                # vacuum intent but the .npy never got regenerated.
-                #
-                # ``data/cue_weights.npz`` is built from the .npy because
-                # network indexing requires it. We translate at this
-                # boundary so internal indexing stays upstream-faithful
-                # while user-facing labels honor tengri's vacuum contract.
-                #
-                # Idempotency: probe the Balmer series. Vacuum and air
-                # wavelengths differ by ~1.3-1.8 Å in the optical, so a
-                # multi-line consensus is robust to a single near-coincidence
-                # or floating-point noise around any one probe value.
-                # Hα 6564.61 v / 6562.80 a, Hβ 4862.68 v / 4861.33 a,
-                # Hγ 4341.68 v / 4340.47 a.
+                # Trace-safe: under a jitted sampler (NUTS/HMC loss),
+                # ``line_waves`` arrives as a Tracer via the threaded
+                # ``template_data``, so numpy conversion / boolean indexing /
+                # Python branches raise: and the guard below used to swallow
+                # that, silently dropping the line catalog from
+                # ``state.derived`` (joint phot+lines fits then fail with a
+                # misleading "backend did not publish" error). This call
+                # relies on ``nebular_line_waves_to_vacuum``'s default
+                # ``xp=jax.numpy`` for exactly that reason -- unlike the
+                # #2239 seam's accessor (which passes ``xp=numpy`` because
+                # its input is always concrete), this ``line_waves`` can be
+                # a genuine tracer and must stay one.
                 if self.config.backend in ("cue", "cloudy_grid", "cb19", "mappings"):
-                    # Trace-safe implementation: under a jitted sampler
-                    # (NUTS/HMC loss), ``line_waves`` arrives as a Tracer
-                    # via the threaded ``template_data``, so numpy
-                    # conversion / boolean indexing / Python branches
-                    # raise: and the guard below used to swallow that,
-                    # silently dropping the line catalog from
-                    # ``state.derived`` (joint phot+lines fits then fail
-                    # with a misleading "backend did not publish" error).
-                    line_waves = jnp.asarray(line_waves)
-                    _BALMER_AIR_VAC = (
-                        (6562.80, 6564.61),
-                        (4861.33, 4862.68),
-                        (4340.47, 4341.68),
-                    )
-                    air_votes = jnp.asarray(0.0)
-                    vac_votes = jnp.asarray(0.0)
-                    for air_w, vac_w in _BALMER_AIR_VAC:
-                        mid = 0.5 * (air_w + vac_w)
-                        probe = line_waves[jnp.argmin(jnp.abs(line_waves - mid))]
-                        in_band = (probe > air_w - 1.0) & (probe < vac_w + 1.0)
-                        is_air = jnp.abs(probe - air_w) < jnp.abs(probe - vac_w)
-                        air_votes = air_votes + jnp.where(in_band & is_air, 1.0, 0.0)
-                        vac_votes = vac_votes + jnp.where(in_band & ~is_air, 1.0, 0.0)
-                    looks_air = (air_votes >= 2.0) & (air_votes > vac_votes)
-                    # Edlén (1953) air→vacuum, jnp inline (mirror of
-                    # ``tengri.utils.conversions.air_to_vacuum``, which is
-                    # numpy-only and not traceable).
-                    sigma = 1e4 / line_waves
-                    n_refr = (
-                        1.0
-                        + 6.4328e-5
-                        + 2.94981e-2 / (146.0 - sigma**2)
-                        + 2.5540e-4 / (41.0 - sigma**2)
-                    )
-                    in_optical = (line_waves >= 2000.0) & (line_waves <= 1.0e4)
-                    converted = jnp.where(in_optical, line_waves * n_refr, line_waves)
-                    line_waves = jnp.where(looks_air, converted, line_waves)
+                    line_waves = nebular_line_waves_to_vacuum(line_waves)
 
                 # THE unit seam (#1559). Every backend returns [Lsun]; the
                 # published ``line_lums`` DerivedKey is [erg/s], and
@@ -1290,7 +1287,11 @@ _LINES_PROPERTIES = {
     "civ_1549": Property(
         units="erg/s",
         group="lines",
-        doc="CIV 1549 line luminosity",
+        doc=(
+            "CIV 1549 line luminosity, NaN with a warning on cue's legacy "
+            "128-line subset (full_catalog=false), where no catalog line "
+            "falls within tolerance of this wavelength (#2239)"
+        ),
         fn=_civ_1549_fn,
     ),
     "oii": Property(

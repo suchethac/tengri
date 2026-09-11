@@ -3,19 +3,51 @@
 
 Ensures that:
 1. memory_mode changes do not affect compile_signature (no spurious recompile)
-2. The field count is pinned to catch accidental additions
-3. _engine_cache_key and compile_signature agree on the JIT-invariant fields
+2. Different memory_mode settings reuse the same cached engine
+
+The former field-count ratchet (2) and the tautological ``engine_key ==
+fitter_sig`` check (3) are retired (#2163 E.5): ``Fitter._engine_cache_key()``
+is now policy-derived (``tengri.inference._engine_policy.ENGINE_POLICY``),
+and its own completeness tests live in
+``tests/contract/test_inference_cache_keys.py``.
+
+Also covers SEDModel.compile_signature()'s own policy-ledger rewrite (#2163
+E.3): completeness of tengri.forward._signature_policy.SIGNATURE_POLICY over
+every representative build, memoization + invalidation, equal/unequal
+signature behavior under a battery of structural changes, and a
+source-level guard that no method can silently skip invalidation.
 """
 
 from __future__ import annotations
 
+import ast
+import inspect
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
-from tengri import Fitter, Parameters, SEDModel, Uniform
+from tengri import DEFAULT, Fitter, Parameters, SEDModel, Spectroscopy, Uniform
+from tengri._cache_keys import assert_policy_complete
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
+from tengri.forward import sed_model as sed_model_module
+from tengri.forward._signature_policy import SIGNATURE_POLICY
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
+from tests.contract._signature_builds import (
+    ALL_BUILDS,
+    BARE_STELLAR_NAME,
+    build_kitchen_sink_for_completeness,
+    build_photometry_star_forming,
+    build_spectroscopy_simple,
+    exercise_kitchen_sink,
+    predict_for_build,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -74,101 +106,24 @@ class TestCompileSignatureInvariants:
 
         assert sig_fast == sig_low, "compile_signature must be identical regardless of memory_mode"
 
-    def test_compile_signature_field_count_pinned(self, mock_ssp_data, photometry, spec_dpl):
-        """Pin the field count of compile_signature to catch accidental additions.
-
-        If this test fails, it means compile_signature() was changed.
-        Verify the change is intentional (affects HLO), then update this assertion.
-        """
-        model = SEDModel(spec_dpl, mock_ssp_data, observation=photometry)
-        data = jnp.ones(3)
-        noise = jnp.ones(3) * 0.1
-
-        fitter = Fitter(model, data, noise, data_type="photometry")
-        sig = fitter.compile_signature()
-
-        # sig is a tuple of (model_sig, fitter_sig)
-        model_sig, fitter_sig = sig
-
-        # model_sig is SEDModel.compile_signature()'s tuple; its per-field
-        # ledger lives in that method's own comments. Pinned here so a field
-        # cannot vanish silently — removing one is how #1973's collision
-        # shipped. Was 64 before #1973 added ssp_flux_id (grid CONTENT, not
-        # just shape/lgmet). Was 65 before #2068 added filter_wave_id and
-        # spec_wave_id (issue #2068: photometry/spectrum closures bake
-        # filter/spectroscopy wavelengths into their kernels).
-        assert len(model_sig) == 67, (
-            f"model_sig field count changed from 67 to {len(model_sig)}. "
-            "If intentional, update this assertion and the ledger in "
-            "SEDModel.compile_signature."
-        )
-
-        # fitter_sig should have exactly 10 fields:
-        # 1. data_type
-        # 2. stochastic
-        # 3. n_grid
-        # 4. len(data)
-        # 5. sorted free names
-        # 6. has_noise_model
-        # 7. _eline_marginalize
-        # 8. _eline_fitted
-        # 9. _calibration_marginalize
-        # 10. _eline_prior_type
-        # (memory_mode was removed; it was the 11th)
-        # 11. line_flux_key (wavelengths + limit-mask presence)
-        # 12. line_ratios present
-        # 13. spectral_indices present
-        # 14. data_mask present
-        # (11-14 added 2026-07: observation feature channels are baked into
-        # the loss closure, so they must key the engine/loss cache — else a
-        # joint phot+lines Fitter reuses a photometry-only compiled loss.)
-        # 15. params_override key (#1329): the per-fit fixed-value override is
-        # baked into the loss closure via fitter._fixed_values, so two fits
-        # differing only by override must compile distinct losses — else fit #2
-        # silently reuses fit #1's baked redshift. None when no override.
-        # 16. free-parameter prior identity: _primals_to_params calls
-        # dist.unstandardize(xi), which reads the distribution's Python floats
-        # at trace time, so the priors are baked constants. Without this entry
-        # two models differing only in a prior's bounds share one engine and
-        # fit #2's latent is decoded through fit #1's interval — a shift of
-        # order the prior width (measured 1.53 dex on log_total_mass). Free
-        # NAMES (field 5) do not cover it: changing Uniform(9.6, 11.1) to
-        # Uniform(7, 13) alters no name, shape, dtype or control flow. See
-        # tests/regression/bug/test_prior_bounds_key_the_engine_cache.py.
-        # 17. spec fixed VALUES (#1972 instance 2): _primals_to_params also
-        # bakes fitter._fixed_values, so two models differing only in a fixed
-        # scalar shared one engine — measured -0.18 dex on mass via dust_slope.
-        # 18. mirror map (#1972 instance 3): spec.resolve_mirrors bakes
-        # target -> source, so two specs sharing every name and prior but tying
-        # to different sources silently tied to the same one.
-        assert len(fitter_sig) == 18, (
-            f"fitter_sig field count changed from 18 to {len(fitter_sig)}. "
-            "If intentional, update this assertion and the docstring."
-        )
-
-    def test_engine_cache_key_matches_compile_signature_fields(
-        self, mock_ssp_data, photometry, spec_dpl
-    ):
-        """Verify _engine_cache_key() and compile_signature() agree on JIT-invariant fields.
-
-        Both methods should use the same fields (in the same order) to ensure that
-        smart-lean's cache key logic remains correct. _engine_cache_key is the
-        source of truth for which fields affect the compiled HLO; compile_signature
-        wraps it with the model signature.
-        """
-        model = SEDModel(spec_dpl, mock_ssp_data, observation=photometry)
-        data = jnp.ones(3)
-        noise = jnp.ones(3) * 0.1
-
-        fitter = Fitter(model, data, noise, data_type="photometry")
-
-        engine_key = fitter._engine_cache_key()
-        _, fitter_sig = fitter.compile_signature()
-
-        # _engine_cache_key returns the fitter_sig component (no model_sig prefix)
-        assert engine_key == fitter_sig, (
-            "engine_key and fitter_sig must be identical; smart-lean relies on this"
-        )
+    # ``test_compile_signature_field_count_pinned`` (a hand-counted
+    # ``len(fitter_sig) == 18`` ratchet) and ``test_engine_cache_key_matches_
+    # compile_signature_fields`` (``engine_key == fitter_sig``) are RETIRED
+    # (#2163 E.5): ``_engine_cache_key()`` is now derived from the
+    # ``tengri.inference._engine_policy.ENGINE_POLICY`` ledger over every
+    # Fitter attribute, the same policy-derived design ``test_sed_model_
+    # policy_complete`` below already applies to the model half. A
+    # hand-counted length pin on a policy-derived tuple is exactly the
+    # "forgot to add a field" hazard the ledger exists to close, moved into
+    # a test; ``engine_key == fitter_sig`` was tautological by construction
+    # (``compile_signature()`` builds ``fitter_sig`` by calling
+    # ``_engine_cache_key()`` directly) and asserted nothing beyond "this
+    # method returns what it returns". Both become
+    # ``test_engine_policy_complete`` / ``test_fingerprint_policy_complete`` /
+    # ``test_engine_and_fingerprint_ledgers_partition_fitter_attributes`` in
+    # ``tests/contract/test_inference_cache_keys.py``, which assert
+    # completeness (every Fitter attribute classified) over five
+    # representative Fitters instead of counting positions in one tuple.
 
     def test_different_memory_modes_reuse_same_engine(self, mock_ssp_data, photometry, spec_dpl):
         """Verify that different memory_mode settings would use the same cached engine.
@@ -397,3 +352,611 @@ class TestCompileSignatureInvariants:
         assert sig1 == sig2, (
             "Identical spectroscopy wavelength grids must produce equal signatures"
         )
+
+
+# ── #2163 E.3: policy-ledger completeness, memoization, equal/unequal ──────
+
+
+def test_sed_model_policy_complete():
+    """assert_policy_complete over every representative build (#2163).
+
+    Covers the seven E.3 representatives (A-G) after a predict pass, plus
+    one extra kitchen-sink build (H, not one of the seven -- see
+    ``tests/contract/_signature_builds.py``) exercised through
+    enable_fast_nebular, available_properties, and a full predict_state
+    call, so the lazily-created attributes that never appear on A-G
+    (_property_catalog, _index_window_lut_cache, _line_window_lut_cache,
+    _nebular_grid_table, _cached_full_state_chain, and the conditionally-set
+    radio scalars) are not "stale" ledger rows.
+    """
+    from tengri.observation.line_measurement import DESI_LINES
+    from tengri.observation.spectral_indices import STANDARD_INDICES
+
+    models = []
+    for _name, build_fn in ALL_BUILDS:
+        model = build_fn()
+        predict_for_build(model)
+        _ = model.available_properties
+        models.append(model)
+
+    # Materialize _line_window_lut_cache on build A (has dust IR, which the
+    # fast line-flux path admits) and _index_window_lut_cache on build B
+    # (no dust IR, which the fast index path requires).
+    model_a = build_photometry_star_forming()
+    params_a = predict_for_build(model_a)
+    model_a.measure_line_fluxes(params_a, DESI_LINES, approx=True)
+    models.append(model_a)
+
+    model_b = build_spectroscopy_simple()
+    params_b = predict_for_build(model_b)
+    model_b.predict_spectral_indices(params_b, (STANDARD_INDICES["Dn4000"],), approx=True)
+    models.append(model_b)
+
+    # H: Cue nebular + AGN + radio + shock, for the attributes A-G never touch.
+    model_h = build_kitchen_sink_for_completeness()
+    exercise_kitchen_sink(model_h)
+    models.append(model_h)
+
+    assert_policy_complete(models, SIGNATURE_POLICY)
+
+
+def test_signature_is_memoized_and_invalidated():
+    """The second compile_signature() call returns the identical object.
+
+    After enable_fast_nebular() the signature differs from the pre-grid
+    one, and is memoized again (third and fourth calls agree).
+    """
+    from tengri import (
+        Fixed as _Fixed,
+        Observation as _Observation,
+        Photometry as _Photometry,
+        SEDModel as _SEDModel,
+        WavePrecomp as _WavePrecomp,
+    )
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+    ssp_data = load_ssp_data(str(Path(__file__).resolve().parents[2] / "data" / BARE_STELLAR_NAME))
+    obs = _Observation(
+        photometry=_Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    )
+    model = _SEDModel.build(
+        ssp_data=ssp_data,
+        observation=obs,
+        approx=_WavePrecomp(),
+        sfh={"type": "dpl", "all_params": _Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": _Fixed(DEFAULT),
+        },
+        neb={"type": "cue", "all_params": _Fixed(DEFAULT)},
+        redshift=_Fixed(0.1),
+    )
+
+    sig1 = model.compile_signature()
+    sig2 = model.compile_signature()
+    assert sig1 is sig2, "second compile_signature() call must return the memoized object"
+
+    model.enable_fast_nebular([6564.61, 4862.68])
+    sig3 = model.compile_signature()
+    assert sig3 != sig1, "enable_fast_nebular() must invalidate the memoized signature"
+
+    sig4 = model.compile_signature()
+    assert sig3 is sig4, "the signature after enable_fast_nebular() must itself be memoized"
+
+
+class TestEqualContentDistinctObjects:
+    """Equal content, distinct objects -> equal signature (#2163)."""
+
+    def test_same_ssp_file_loaded_twice(self):
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+        path = str(Path(__file__).resolve().parents[2] / "data" / BARE_STELLAR_NAME)
+        ssp1 = load_ssp_data(path)
+        ssp2 = load_ssp_data(path)
+        obs = Observation(
+            photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+        )
+        spec = Parameters(
+            redshift=0.1, sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.3, 3.0)
+        )
+        model1 = SEDModel(spec, ssp1, observation=obs)
+        model2 = SEDModel(spec, ssp2, observation=obs)
+        assert model1.compile_signature() == model2.compile_signature()
+
+    def test_spectroscopy_rebuilt_from_equal_wave_obs_array(self):
+        wave_obs_1 = np.linspace(4000.0, 6000.0, 200)
+        wave_obs_2 = np.linspace(4000.0, 6000.0, 200)  # separately constructed, equal content
+        assert wave_obs_1 is not wave_obs_2
+        obs1 = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs_1, resolution=1500.0))
+        obs2 = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs_2, resolution=1500.0))
+        spec = Parameters(
+            redshift=0.1, sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.3, 3.0)
+        )
+        ssp = _mock_ssp()
+        model1 = SEDModel(spec, ssp, observation=obs1)
+        model2 = SEDModel(spec, ssp, observation=obs2)
+        assert model1.compile_signature() == model2.compile_signature()
+
+    def test_two_photometry_models_with_same_filters(self):
+        obs1 = Observation(
+            photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+        )
+        obs2 = Observation(
+            photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+        )
+        assert obs1 is not obs2
+        spec = Parameters(
+            redshift=0.1, sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.3, 3.0)
+        )
+        ssp = _mock_ssp()
+        model1 = SEDModel(spec, ssp, observation=obs1)
+        model2 = SEDModel(spec, ssp, observation=obs2)
+        assert model1.compile_signature() == model2.compile_signature()
+
+
+def _mock_ssp() -> SSPData:
+    n_met, n_age, n_wave = 8, 15, 200
+    return SSPData(
+        ssp_wave=jnp.logspace(3, 4.5, n_wave),
+        ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
+        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+    )
+
+
+class TestSameStructureDifferentData:
+    """Same structure, different DATA -> equal signature (#2163)."""
+
+    def test_spectroscopy_covariance_values_differ_same_shape(self):
+        """Two spectroscopy models differing only in covariance VALUES (same shape).
+
+        ``Spectroscopy.covariance`` is a ``shape``-mode row on its own ledger
+        (only the shape fixes the program; values are a runtime input), so
+        two otherwise-identical models with different covariance content
+        must still compile to one signature.
+        """
+        wave_obs = np.linspace(4000.0, 6000.0, 50)
+        cov1 = jnp.eye(50) * 0.01
+        cov2 = jnp.eye(50) * 0.25  # different values, same (50, 50) shape
+        obs1 = Observation(
+            spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=1500.0, covariance=cov1)
+        )
+        obs2 = Observation(
+            spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=1500.0, covariance=cov2)
+        )
+        spec = Parameters(
+            redshift=0.1, sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.3, 3.0)
+        )
+        ssp = _mock_ssp()
+        model1 = SEDModel(spec, ssp, observation=obs1)
+        model2 = SEDModel(spec, ssp, observation=obs2)
+        assert model1.compile_signature() == model2.compile_signature()
+
+    def test_photometry_fitter_data_differs_model_never_sees_flux(self):
+        """Two Fitters over the SAME model, differing only in observed flux/noise.
+
+        ``SEDModel.compile_signature()`` never depends on the observed data
+        arrays (the model is structure-only): constructing two Fitters that
+        differ only in ``data``/``noise`` must not change the ORIGINAL
+        model's own signature. (``fitter.model`` is not compared directly:
+        the deprecated ``Fitter(sed_model, ...)`` constructor path resolves
+        ``approx`` through ``_resolve_fit_approx`` and may hand back a
+        different -- but each internally self-consistent -- model object;
+        that resolution is orthogonal to what #2163 covers.)
+        """
+        obs = Observation(
+            photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+        )
+        spec = Parameters(
+            redshift=0.1, sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.3, 3.0)
+        )
+        ssp = _mock_ssp()
+        model = SEDModel(spec, ssp, observation=obs)
+        sig_before = model.compile_signature()
+
+        data_1, noise_1 = jnp.ones(5), jnp.ones(5) * 0.1
+        data_2, noise_2 = jnp.ones(5) * 3.7, jnp.ones(5) * 0.03
+        Fitter(model, data_1, noise_1, data_type="photometry")
+        Fitter(model, data_2, noise_2, data_type="photometry")
+
+        assert model.compile_signature() == sig_before, (
+            "constructing Fitters over a model must not change the model's own signature"
+        )
+
+
+# ── #2163: the four attributes the hand-written list never keyed ──────────
+#
+# Each pair below differs ONLY in the named attribute; each must produce a
+# distinct signature, AND a numeric probe must show the compiled output
+# differs (predict_photometry/predict_spectrum, or the closest analogous
+# observable, at the same params). Two of the four could not be shown to
+# move predict_photometry as specified -- both are reported verbatim below
+# rather than papering over a non-difference; see each test's docstring.
+
+
+def _bare_stellar_ssp():
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+    return load_ssp_data(str(Path(__file__).resolve().parents[2] / "data" / BARE_STELLAR_NAME))
+
+
+def test_igm_patchy_numeric_probe():
+    """igm_patchy False vs True at z=2.5 (where IGM absorption is material).
+
+    Measured: max relative difference in predict_photometry is 1.77e-5
+    (small -- IGM patchiness is a modest broadband effect -- but real and
+    reproducible; np.allclose's default atol=1e-8 would mask it against
+    these ~1e-27 erg/s/cm^2/Hz fluxes, so the comparison below uses atol=0
+    and compares the RELATIVE difference directly).
+    """
+    ssp = _bare_stellar_ssp()
+    obs = Observation(
+        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    )
+
+    def build(patchy):
+        from tengri import WavePrecomp as _WavePrecomp
+
+        spec = Parameters(
+            redshift=2.5,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            apply_igm=True,
+            igm_patchy=patchy,
+        )
+        return SEDModel(spec, ssp, observation=obs, approx=_WavePrecomp())
+
+    model_uniform = build(False)
+    model_patchy = build(True)
+    assert model_uniform.compile_signature() != model_patchy.compile_signature(), (
+        "igm_patchy must change compile_signature"
+    )
+
+    params = model_uniform.spec.sample(jax.random.PRNGKey(0))
+    f_uniform = model_uniform.predict_photometry(params)
+    f_patchy = model_patchy.predict_photometry(dict(params))
+    max_reldiff = float(jnp.max(jnp.abs(f_uniform - f_patchy) / jnp.abs(f_uniform)))
+    assert max_reldiff > 1e-8, (
+        f"igm_patchy must change predict_photometry; measured {max_reldiff:.3e}"
+    )
+
+
+def test_lsf_n_bins_numeric_probe():
+    """lsf_n_bins 64 vs 2 on a low-resolution spectroscopy model with an LSF.
+
+    Measured at R=2500/16-vs-4-bins (the brief's literal pairing): max
+    relative difference 3.2e-16 -- converged to floating-point noise, i.e.
+    no numeric difference at that resolution/bin-count. Reported verbatim.
+    At R=200 with 64-vs-2 bins the LSF approximation has not converged and
+    the difference is real: max relative difference ~5.0e-2, used below.
+    """
+    from tengri import Spectroscopy as _Spectroscopy
+
+    ssp = _bare_stellar_ssp()
+    wave_obs = np.linspace(4000.0, 7000.0, 400)
+
+    def build(n_bins):
+        obs = Observation(
+            spectroscopy=_Spectroscopy(wave_obs=wave_obs, resolution=200.0, lsf_n_bins=n_bins)
+        )
+        spec = Parameters(
+            redshift=0.05, sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.3, 3.0)
+        )
+        return SEDModel(spec, ssp, observation=obs)
+
+    model_fine = build(64)
+    model_coarse = build(2)
+    assert model_fine.compile_signature() != model_coarse.compile_signature(), (
+        "lsf_n_bins must change compile_signature"
+    )
+
+    params = model_fine.spec.sample(jax.random.PRNGKey(0))
+    f_fine = model_fine.predict_spectrum(params)
+    f_coarse = model_coarse.predict_spectrum(dict(params))
+    max_reldiff = float(jnp.max(jnp.abs(f_fine - f_coarse) / jnp.abs(f_fine)))
+    assert max_reldiff > 1e-8, (
+        f"lsf_n_bins must change predict_spectrum; measured {max_reldiff:.3e}"
+    )
+
+
+def test_lgmet_scatter_signature_differs():
+    """lgmet_scatter 0.1 vs 0.3 must change compile_signature.
+
+    Numeric probe reported verbatim, not asserted (see docstring below):
+    ``Parameters(lgmet_scatter=...)`` sets ``SEDModel._lgmet_scatter``
+    (this row), which ``StellarSEDComponent.predict`` reads only as the
+    FALLBACK in ``params.get("met_logzsol_scatter", self.config.lgmet_scatter)``.
+    Measured: on every build tried (met_logzsol Fixed or Uniform), the
+    auto-derived ``met_logzsol_scatter`` parameter is present in the sampled
+    params dict at its OWN registry default (0.1) regardless of the
+    ``lgmet_scatter=`` kwarg, so the fallback never engages and
+    predict_photometry is bit-identical (max reldiff exactly 0.0) between
+    the two builds. The kernel itself IS sensitive to scatter width (checked
+    directly against ``tengri.components.stellar.component._lgmet_weights``
+    at a metallicity centered on the SSP grid), so this is a real dead
+    build-time knob under the configurations reachable from the public API
+    today, not a broken kernel. Filed as a finding in the E.3 report rather
+    than a new issue (out of scope for the compile_signature policy rewrite).
+    """
+    ssp = _bare_stellar_ssp()
+    obs = Observation(
+        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    )
+
+    def build(scatter):
+        from tengri import WavePrecomp as _WavePrecomp
+
+        spec = Parameters(
+            redshift=0.1,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            lgmet_scatter=scatter,
+        )
+        return SEDModel(spec, ssp, observation=obs, approx=_WavePrecomp())
+
+    model_narrow = build(0.1)
+    model_wide = build(0.3)
+    assert model_narrow.compile_signature() != model_wide.compile_signature(), (
+        "lgmet_scatter must change compile_signature"
+    )
+
+    params = model_narrow.spec.sample(jax.random.PRNGKey(0))
+    f_narrow = model_narrow.predict_photometry(params)
+    f_wide = model_wide.predict_photometry(dict(params))
+    max_reldiff = float(jnp.max(jnp.abs(f_narrow - f_wide) / jnp.abs(f_narrow)))
+    # Reported, not asserted as a real difference: see docstring. The
+    # signature-inequality assertion above is the real regression guard;
+    # this documents the measured (null) numeric result precisely so it
+    # cannot silently start meaning something different later.
+    assert max_reldiff == 0.0, (
+        f"expected the diagnosed dead-fallback null result (0.0); measured {max_reldiff:.3e}. "
+        "If this is now nonzero, met_logzsol_scatter's auto-registration changed and "
+        "lgmet_scatter may have become reachable -- update this test's docstring and "
+        "tighten the assertion to `> 1e-8`."
+    )
+
+
+def test_gp_kernel_signature_differs():
+    """gp_kernel differing must change compile_signature; sfr_full must differ.
+
+    ``FIELD_MODEL_REGISTRY`` (``tengri.components.stellar.sfh.registry``)
+    has exactly one entry ("drw") and no public kwarg overrides it -- every
+    model built through ``SEDModel.build``/``Parameters(...)`` today gets
+    ``_gp_kernel == "drw"``. To get a genuine second value this test
+    monkeypatches a second registry entry (a trivially-scaled DRW kernel)
+    and the "field" SFH spec's OWN settings dict, restoring both after, so
+    two INDEPENDENTLY built models carry different kernels from
+    construction (not a post-hoc attribute mutation on a shared JIT chain).
+
+    Measured: predict_photometry (WavePrecomp path) is bit-identical
+    between the two models (max reldiff 0.0) even with a 5x-scaled kernel --
+    reported verbatim, not asserted as a difference. predict_sfh()['sfr_full']
+    DOES differ (not allclose), proving _gp_kernel is genuinely read at
+    predict time for at least one observable; the photometry non-response
+    is filed as a finding (WavePrecomp's field-modulated age-weight LUT may
+    not route through the per-model field kernel), out of scope here.
+    """
+    from tengri import (
+        FREE,
+        Fixed as _Fixed,
+        Observation as _Observation,
+        Photometry as _Photometry,
+        SEDModel as _SEDModel,
+        WavePrecomp as _WavePrecomp,
+    )
+    from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
+    from tengri.components.stellar.sfh.registry import FIELD_MODEL_REGISTRY, SFH_REGISTRY
+
+    def _scaled_drw(*a, **kw):
+        return compute_sqrt_power_drw(*a, **kw) * 5.0
+
+    ssp = _bare_stellar_ssp()
+    obs = _Observation(
+        photometry=_Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    )
+
+    def build():
+        return _SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            approx=_WavePrecomp(),
+            sfh={"type": ["dpl", "field"], "all_params": FREE},
+            redshift=_Fixed(0.1),
+        )
+
+    field_spec = SFH_REGISTRY["field"]
+    original_settings = dict(field_spec.settings)
+    FIELD_MODEL_REGISTRY["e3_test_scaled_drw"] = _scaled_drw
+    try:
+        model_drw = build()
+        field_spec.settings["sfh_field_model"] = "e3_test_scaled_drw"
+        model_scaled = build()
+
+        assert model_drw._gp_kernel == "drw"
+        assert model_scaled._gp_kernel == "e3_test_scaled_drw"
+        assert model_drw.compile_signature() != model_scaled.compile_signature(), (
+            "gp_kernel must change compile_signature"
+        )
+
+        # field_model is read from the registry at CALL time (not baked at
+        # construction), so the predict calls below must run before the
+        # finally block below restores/removes the monkeypatched entries.
+        params = model_drw.spec.sample(jax.random.PRNGKey(0))
+        sfh_drw = model_drw.predict_sfh(params)
+        sfh_scaled = model_scaled.predict_sfh(dict(params))
+        assert not np.allclose(
+            np.asarray(sfh_drw["sfr_full"]), np.asarray(sfh_scaled["sfr_full"]), atol=0
+        ), "gp_kernel must change predict_sfh()['sfr_full']"
+
+        f_drw = model_drw.predict_photometry(params)
+        f_scaled = model_scaled.predict_photometry(dict(params))
+        max_reldiff = float(jnp.max(jnp.abs(f_drw - f_scaled) / jnp.abs(f_drw)))
+    finally:
+        field_spec.settings.clear()
+        field_spec.settings.update(original_settings)
+        del FIELD_MODEL_REGISTRY["e3_test_scaled_drw"]
+
+    assert max_reldiff == 0.0, (
+        f"expected the diagnosed null result on predict_photometry (0.0); measured "
+        f"{max_reldiff:.3e}. If this is now nonzero, the WavePrecomp field-modulated "
+        "path may have become sensitive to _gp_kernel -- tighten this assertion."
+    )
+
+
+# ── Determinism across processes ───────────────────────────────────────────
+
+
+def test_compile_signature_deterministic_across_processes():
+    """Two subprocesses building the same photometry model agree on repr(sig)."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src_dir = repo_root / "src"
+    code = (
+        "import os, sys, warnings\n"
+        "warnings.filterwarnings('ignore')\n"
+        "os.environ.setdefault('JAX_PLATFORMS', 'cpu')\n"
+        f"sys.path.insert(0, {str(src_dir)!r})\n"
+        f"sys.path.insert(0, {str(repo_root)!r})\n"
+        "import jax\n"
+        "jax.config.update('jax_enable_x64', True)\n"
+        "from tests.contract._signature_builds import build_photometry_star_forming\n"
+        "model = build_photometry_star_forming()\n"
+        "print(repr(model.compile_signature()))\n"
+    )
+    env = dict(os.environ)
+    env["JAX_PLATFORMS"] = "cpu"
+
+    def run_once():
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            cwd=str(repo_root),
+            env=env,
+            timeout=180,
+        )
+        assert result.returncode == 0, f"subprocess failed: {result.stderr}"
+        return result.stdout.strip()
+
+    out1 = run_once()
+    out2 = run_once()
+    assert out1 == out2, "compile_signature() repr must be identical across processes"
+    assert out1, "subprocess produced no output"
+
+
+# ── Source-level guard: no structural mutator skips invalidation ──────────
+
+#: Methods whose name matches one of these prefixes are constructor helpers:
+#: called only during (or as part of) __init__, always assigning attributes
+#: this policy classifies (structural build-up, not a post-construction
+#: mutation). See SEDModel.compile_signature's Notes.
+_CTOR_HELPER_PREFIXES = ("__init__", "_init_", "_build_", "_resolve_", "_setup_", "_configure_")
+
+#: One documented exception: _additive_term_band_response assigns its memo
+#: cache via ``setattr(self, f"_{name}_term_response_cache", ...)``, a
+#: dynamic name the AST cannot resolve to a literal string. Manually
+#: verified (see tests/contract/_signature_builds.py and the E.3 report):
+#: for name in ("xray", "radio"), both targets
+#: (_xray_term_response_cache, _radio_term_response_cache) are EXCLUDE rows
+#: in SIGNATURE_POLICY, so this method needs no _invalidate_signature() call.
+_DYNAMIC_SETATTR_ALLOWLIST = {
+    "_additive_term_band_response": (
+        "setattr(self, f'_{name}_term_response_cache', ...): both possible "
+        "targets (_xray_term_response_cache, _radio_term_response_cache) are "
+        "EXCLUDE rows"
+    ),
+}
+
+
+def _sed_model_class_node() -> ast.ClassDef:
+    source = inspect.getsource(sed_model_module)
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "SEDModel":
+            return node
+    raise AssertionError("SEDModel class not found in sed_model.py")
+
+
+def _self_attr_assignments(method: ast.FunctionDef) -> tuple[set[str], bool]:
+    """Return (literal self.<attr> assignment targets, has_dynamic_setattr)."""
+    assigned: set[str] = set()
+    has_dynamic_setattr = False
+    for node in ast.walk(method):
+        if isinstance(node, (ast.Assign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if (
+                    isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "self"
+                ):
+                    assigned.add(target.attr)
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if (
+                isinstance(func, ast.Name)
+                and func.id == "setattr"
+                and len(node.args) >= 1
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == "self"
+            ):
+                if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant):
+                    assigned.add(node.args[1].value)
+                else:
+                    has_dynamic_setattr = True
+    return assigned, has_dynamic_setattr
+
+
+def _calls_invalidate_signature(method: ast.FunctionDef) -> bool:
+    for node in ast.walk(method):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "_invalidate_signature"
+        ):
+            return True
+    return False
+
+
+def test_every_structural_mutator_invalidates_the_signature():
+    """Every non-constructor SEDModel method either assigns only EXCLUDE
+    rows, or calls _invalidate_signature() (#2163).
+
+    A method the AST probe finds assigning a non-excluded row without
+    invalidating is exactly how a #1122/#1462/#2145/#2237-class collision
+    ships: a structural change that the memoized signature never sees.
+    """
+    class_node = _sed_model_class_node()
+    exclude_names = {
+        name for name, (mode, _reason) in SIGNATURE_POLICY.items() if mode == "exclude"
+    }
+
+    violations = []
+    checked = []
+    for node in class_node.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if node.name.startswith(_CTOR_HELPER_PREFIXES):
+            continue
+        assigned, has_dynamic_setattr = _self_attr_assignments(node)
+        if not assigned and not has_dynamic_setattr:
+            continue
+        checked.append(node.name)
+        if has_dynamic_setattr:
+            if node.name not in _DYNAMIC_SETATTR_ALLOWLIST:
+                violations.append(
+                    f"{node.name}: dynamic setattr(self, ...) target the AST cannot "
+                    "resolve, and not in _DYNAMIC_SETATTR_ALLOWLIST"
+                )
+            continue
+        non_excluded = assigned - exclude_names
+        if non_excluded and not _calls_invalidate_signature(node):
+            violations.append(
+                f"{node.name}: assigns non-excluded row(s) {sorted(non_excluded)} "
+                "without calling self._invalidate_signature()"
+            )
+
+    assert checked, "AST probe found no non-constructor methods assigning self.<attr> at all"
+    assert not violations, "structural mutator(s) skip signature invalidation:\n" + "\n".join(
+        violations
+    )

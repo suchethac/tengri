@@ -162,7 +162,14 @@ _KIND_INSTRUMENT: dict[str, tuple[float, float, str]] = {
 #: Groups a kind needs present before its own choice can matter.
 _KIND_SCAFFOLD: dict[str, dict] = {
     "xray": {"agn": _LUMINOUS_AGN},
-    "radio": {"agn": _LUMINOUS_AGN},
+    "radio": {
+        "agn": _LUMINOUS_AGN,
+        "dust_attenuation": {
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+    },
 }
 
 #: Wavelength window [A] a kind's physics actually occupies, when it is narrower
@@ -318,7 +325,7 @@ DECLARED_COINCIDENT: list[dict] = [
         "names": {"power_law", "vw07_diff"},
         "reason": (
             "vw07_diff is a fixed curve taking no parameters -- the Wild+2007 "
-            "diffuse slope -- and power_law's n_slope defaults to -0.7, the "
+            "diffuse slope -- and power_law's dust_slope defaults to -0.7, the "
             "same slope. One curve reached two ways, at default."
         ),
         "separator": (

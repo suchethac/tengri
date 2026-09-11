@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Free-parameter declarations owned by the nebular component.
+r"""Free-parameter declarations owned by the nebular component.
 
 Each tuple in this module is the canonical source for one legacy
 bucket in ``tengri.parameters._builders``:
@@ -33,6 +33,46 @@ with ``Uniform`` priors + physical defaults: the divergence #887 removed.
 The flat-builder still registers these Cue params only when the user provides
 them explicitly (an opt-in policy on the ``Parameters`` path, unchanged); the
 canonical prior/default is used when a param IS registered.
+
+Diffuse ionized gas: one pair, not two knobs (#2195)
+----------------------------------------------------
+``neb_dig_frac`` and ``neb_dig_delta_logU`` describe a two-regime nebula, and
+the offset is inert **by construction** whenever the fraction is zero:
+
+.. math::
+
+    L(\lambda) = (1 - f_{\mathrm{DIG}}) \, L_{\mathrm{HII}}(\lambda, \log U)
+        + f_{\mathrm{DIG}} \, L_{\mathrm{DIG}}(\lambda, \log U + \Delta \log U)
+
+where :math:`L` is the nebular luminosity [erg/s/Hz], :math:`f_{\mathrm{DIG}}`
+is ``neb_dig_frac`` [dimensionless, in 0 to 1], :math:`\log U` is ``neb_logU``
+[dex] and :math:`\Delta \log U` is ``neb_dig_delta_logU`` [dex, negative]. At
+:math:`f_{\mathrm{DIG}} = 0`, which is ``neb_dig_frac``'s declared default, the
+second term vanishes and no value of :math:`\Delta \log U` changes the
+prediction. Freeing the offset alone therefore hands a fit a parameter the
+likelihood cannot see; free ``neb_dig_frac`` alongside it, or pin the fraction
+at a non-zero value.
+
+That degenerate corner is why an inertness measurement on
+``neb_dig_delta_logU`` has to say which ``neb_dig_frac`` it held. An exact 0.0
+at the default is the identity above. A near-zero response at a **non-zero**
+fraction is a defect, and was one: #2195 measured 1.46e-6 relative photometry
+change at ``neb_dig_frac = 0.3`` against a 1.76e-2 in-model control, because
+the DIG branch reached the Cue backend without the ionizing population.
+
+The two-regime picture and the fractions it is calibrated against are from
+Haffner et al. [1]_ and Tacchella et al. [2]_; the same references, with the
+full physical description, are on
+:func:`~tengri.components.nebular.dig.mix_dig_emission`.
+
+References
+----------
+.. [1] L. M. Haffner et al., "The warm ionized medium in spiral galaxies,"
+   Rev. Mod. Phys., 81, 969 (2009).
+   https://doi.org/10.1103/RevModPhys.81.969
+.. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
+   formation, time variability, and the diffuse ionized gas," MNRAS, 513,
+   2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
 """
 
 from __future__ import annotations
@@ -51,20 +91,30 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "neb_logZ_gas",
-        Fixed(-0.3),  # will be overridden to match met_logzsol if not set
+        Fixed(-0.3),  # grammar always supplies this default (met inheritance is dead code)
         "Gas-phase metallicity log10(Z_gas/Zsun)",
-        # Deliberately NO free_prior, for the same reason as ``neb_xid`` (which
-        # lives in ``parameters/_builders.py::_AGN_EXTRAS``):
-        # its admissible range is the selected nebular backend's grid, and those
-        # differ (Cue, the Cloudy grids and the baked-in SSP tables do not share
-        # an extent). The ``neb`` group wildcard is not backend-scoped the way
-        # ``dust.emission`` is since #1482, so one declared range would be right
-        # for one backend and clipped or unreachable for the others.
+        # The interval is the intersection of every shipped backend's measured
+        # support in public log10(Z/Zsun) units: Cue's training design
+        # back-solved from the NN normalization constants gives [-2.20, 0.50];
+        # the four shipped CloudyGrid files' lines axes are [-1.30, 0.30] with
+        # continuum axes [-1.98, 0.20] (mist/pdva/prsc) and [-1.30, 0.30]
+        # (bpass), so worst-case [-1.30, 0.20] -- the binding constraint;
+        # CB19's log_OH axis maps to [-1.99, 0.49]. Deliberately conservative:
+        # Cue and CB19 have real headroom a single static prior forfeits, and
+        # ``free_prior`` is strictly one static Distribution per name (a
+        # variant-keyed range would be new mechanism). An explicit user prior
+        # still overrides.
         #
-        # It is also tied: absent an explicit setting it tracks ``met_logzsol``,
-        # so freeing it silently decouples gas-phase from stellar metallicity
-        # and adds a near-degenerate dimension. Free it explicitly when you mean
-        # to fit that decoupling, with a range drawn from your backend's grid.
+        # Stellar and gas-phase metallicity are separate knobs: the
+        # backend-level ``if neb_logZ_gas is None: ... = log_z`` inheritance
+        # is dead code on the build path, because the grammar always supplies
+        # this declared default. Freeing gas-phase Z simply adds an
+        # independent dimension beside ``met_logzsol`` -- an ordinary
+        # modeling choice, near-degenerate with it only to the extent the
+        # data cannot separate lines from continuum.
+        free_prior=Uniform(
+            -1.30, 0.20, "Gas-phase metallicity", units="log10(Z/Zsun)", default=-0.3
+        ),
     ),
     ParamDeclaration(
         "neb_fesc",
@@ -101,6 +151,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "neb_dig_delta_logU",
         Fixed(-1.0),
+        # Inert while neb_dig_frac is 0, its default: the module docstring above
+        # carries the mixing formula and the #2195 measurement. This string is
+        # the menu column rendered in docs/spine, so it stays as it is.
         "DIG ionization parameter offset (dex, negative)",
         lambda lo, hi: lo >= -4 and hi <= 0,
         "must be in [-4, 0]",
@@ -361,25 +414,65 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         units="km/s",
     ),
     ParamDeclaration(
-        # Neither shock grid axis gets a free_prior, and the reason is in their
-        # own descriptions: both are *snapped to the nearest grid point*. A
-        # continuous prior over a snapped axis is piecewise constant, so its
-        # gradient is exactly zero almost everywhere and a gradient-based
-        # sampler cannot move along it -- the parameter would look free and
-        # behave frozen, which is the failure mode #887 exists to remove rather
-        # than one to introduce. Fitting these needs either a grid-interpolating
-        # kernel or an explicitly discrete sampler; until then set them
-        # structurally.
+        # #2065: measured from the population mask in
+        # data/mappings_templates.h5 (mappings5/shock_pop_mask, via
+        # tengri.components.nebular.shock.population_envelope), not
+        # transcribed. "Populated" means: this density node has at least one
+        # populated B-field cell -- the outer envelope, not full 2-D coverage
+        # (case (c), #2066, still applies inside it).
+        #
+        # Per-abundance envelope (log10 cm^-3), all 5 shipped abundances:
+        #   Allen2008_Solar        [-2.0,  3.0]  (75/210 (density,B) cells)
+        #   Allen2008_SMC          [ 0.0,  0.0]  (8/210 cells; single node)
+        #   Allen2008_LMC          [ 0.0,  0.0]  (8/210 cells; single node)
+        #   Allen2008_Dopita2005   [ 0.0,  0.0]  (8/210 cells; single node)
+        #   Allen2008_TwiceSolar   [ 0.0,  0.0]  (8/210 cells; single node)
+        #
+        # The declared interval below is solar's (the default abundance) full
+        # measured envelope, which happens to equal the grid's declared axis
+        # extent (every density node has SOME populated B) -- it is also safe
+        # for the other four abundances in the sense that it CONTAINS their
+        # single populated point (0.0), so ``all_params: FREE`` never
+        # unconditionally fails regardless of ``shock_abundance``; the #2065
+        # build-time guard (``SEDModel._validate_shock_coverage``) catches the
+        # per-abundance detail a static declaration cannot -- warning on the
+        # sparse abundances' near-total dead fraction, raising if a caller
+        # narrows the prior away from the one point that works.
+        # No ``bound_check``, deliberately: unlike ``shock_velocity`` (whose
+        # bound IS the grid's hard axis range), the honest per-abundance
+        # coverage question here is not "is this inside the declared axis" --
+        # it is "is this inside the POPULATED region", which depends on
+        # ``shock_abundance`` and is answered at build time by
+        # ``SEDModel._validate_shock_coverage`` (#2065), with a richer message
+        # than a static bound could give (naming the abundance, the measured
+        # range, and the dead fraction on partial overlap). A static
+        # ``bound_check`` matching this free_prior would also make that
+        # guard's "partial overlap -> warn" branch unreachable for every
+        # shipped abundance (solar's own envelope already equals the full
+        # declared axis; see the table above), silently narrowing the guard
+        # to raise-or-pass only.
         "shock_log_density",
         Fixed(0.0),
-        "Log10 pre-shock density in cm^-3; snapped to nearest grid point",
+        "Log10 pre-shock density in cm^-3; continuously interpolated "
+        "(triweight kernel, #2066); measured populated envelope [-2, 3] at "
+        "solar abundance (#2065)",
+        free_prior=Uniform(
+            -2.0, 3.0, "Log10 pre-shock density", units="log10(cm^-3)", default=0.0
+        ),
         units="log10(cm^-3)",
     ),
     ParamDeclaration(
+        # No free_prior: real gradient since the index-space interpolation fix
+        # (#2066), but a ~18% autodiff-vs-FD smoothness mismatch on the 2-D
+        # coupled sparse grid (case (c),
+        # docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md) --
+        # unlike shock_log_density, whose gradient is FD-exact at the measured
+        # probe point. A family-aware interpolant (#2066) is the prerequisite
+        # for a default free prior on this axis; explicit priors work today.
         "shock_b_over_sqrt_n",
         Fixed(1.0),
-        "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG (MAPPINGS V); "
-        "snapped to nearest grid point",
+        "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG "
+        "(MAPPINGS V); continuously interpolated (triweight kernel, #2066)",
     ),
     # NOTE: the categorical ``shock_abundance`` / ``shock_component`` knobs are
     # NOT free parameters: they are static structural config on Parameters

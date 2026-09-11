@@ -4,7 +4,7 @@
 | `balmer_decrement` | — | lines | nebular | Balmer decrement: Hα/Hβ |
 | `bpt_nii` | dex | lines | nebular | BPT-NII diagnostic: log10([NII]6584 / Hα) |
 | `bpt_sii` | dex | lines | nebular | BPT-SII diagnostic: log10(([SII]6717+6731) / Hα) |
-| `civ_1549` | erg/s | lines | nebular | CIV 1549 line luminosity |
+| `civ_1549` | erg/s | lines | nebular | CIV 1549 line luminosity, NaN with a warning on cue's legacy 128-line subset (full_catalog=false), where no catalog line falls within tolerance of this wavelength (#2239) |
 | `dn4000` | — | sed | stellar | D n4000 break diagnostic |
 | `fuv_flux` | erg/s/Hz | sed | stellar | FUV flux (1000–1700 Å) |
 | `fuv_flux_intrinsic` | erg/s/Hz | sed | stellar | Intrinsic FUV flux before dust attenuation |
@@ -21,7 +21,7 @@
 | `l_x_agn` | erg/s | xray | xray | X-ray luminosity from AGN |
 | `l_x_total` | erg/s | xray | xray | Total X-ray luminosity (XRB + AGN) |
 | `l_x_xrb` | erg/s | xray | xray | X-ray luminosity from X-ray binaries |
-| `log_civ_1549` | dex | lines | nebular | log10 of civ 1549 line luminosity [dex re erg/s]; float32-safe form of `civ_1549` |
+| `log_civ_1549` | dex | lines | nebular | log10 of civ 1549 line luminosity, nan with a warning on cue's legacy 128-line subset (full_catalog=false), where no catalog line falls within tolerance of this wavelength (#2239) [dex re erg/s]; float32-safe form of `civ_1549` |
 | `log_halpha` | dex | lines | nebular | log10 of hα line luminosity [dex re erg/s]; float32-safe form of `halpha` |
 | `log_hbeta` | dex | lines | nebular | log10 of hβ line luminosity [dex re erg/s]; float32-safe form of `hbeta` |
 | `log_l_x_agn` | dex | xray | xray | log10 X-ray luminosity from AGN [dex re erg/s]; float32-safe form of `l_x_agn`. -inf when no AGN is present, where the linear form is 0.0 |

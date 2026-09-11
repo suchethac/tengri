@@ -30,6 +30,7 @@ from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import frozen_dataclass_key
 from tengri.protocols.derived_state import DerivedState
 
 # Deprecated alias kept on tengri.protocols.component for one release;
@@ -269,6 +270,19 @@ class SEDComponentConfig:
     """
 
     name: str = "component"
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this config, field by field.
+
+        Returns
+        -------
+        tuple
+            ``(type_qualname, ((field_name, baked_value), ...))``. Every
+            subclass (``DustSEDComponentConfig``, ``AGNSEDComponentConfig``,
+            ...) inherits this so a new config field is keyed the day it is
+            added, with no per-subclass override required.
+        """
+        return frozen_dataclass_key(self)
 
 
 @dataclass(frozen=True)
@@ -594,6 +608,7 @@ class SEDComponent(Protocol):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         """Pure JAX step.
 
@@ -625,6 +640,13 @@ class SEDComponent(Protocol):
             (typically nebular). Components that do not use it should
             ignore this argument. When provided, should override any
             template data held in ``self`` for JIT purposes.
+        ztable_data : Any | None, optional
+            Precomputed photometric redshift table. Passed by the
+            orchestrator for components that need it (typically stellar
+            with free-redshift configuration). Components that do not use it
+            should ignore this argument. When provided, should override any
+            z-table data held in ``self`` for JIT purposes, preventing
+            XLA from materializing large tables as constants.
 
         Returns
         -------

@@ -112,8 +112,20 @@ def test_bolometric_family_pure_float32_finite_and_accurate():
         naive = float(-jnp.trapezoid(s32, C_AA / w32) / L_SUN)
 
     assert np.isfinite(got_bol), f"l_bol non-finite in float32: {got_bol}"
+    assert np.any(got_bol != 0.0), (
+        "`got_bol` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(got_tir), f"l_tir non-finite in float32: {got_tir}"
+    assert np.any(got_tir != 0.0), (
+        "`got_tir` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(got_abs), f"l_dust_absorbed non-finite in float32: {got_abs}"
+    assert np.any(got_abs != 0.0), (
+        "`got_abs` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert not np.isfinite(naive), "expected the naive erg/s form to overflow float32"
     assert_allclose(got_bol, ref_bol, rtol=5e-3)
     assert_allclose(got_tir, ref_tir, rtol=5e-3)
@@ -134,6 +146,10 @@ def test_bolometric_zero_and_gradient_safety():
     for s in (1.0e20, 1.0e28):
         g = float(jax.grad(loss)(s))
         assert np.isfinite(g), f"gradient non-finite at scale {s}: {g}"
+        assert np.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 def test_luminosity_weighted_age_is_scale_free_in_float32():
@@ -146,6 +162,10 @@ def test_luminosity_weighted_age_is_scale_free_in_float32():
 
     ref = float(compute_luminosity_weighted_age(weights, flux, ages, wave))
     assert np.isfinite(ref)
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     with jax.enable_x64(False):
         got = float(
@@ -157,4 +177,8 @@ def test_luminosity_weighted_age_is_scale_free_in_float32():
             )
         )
     assert np.isfinite(got), f"weighted age non-finite in float32: {got}"
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert_allclose(got, ref, rtol=5e-3)

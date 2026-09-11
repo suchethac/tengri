@@ -64,7 +64,9 @@ import numpy as np
 logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
+from tengri._cache_keys import derive_key
 from tengri.config.exceptions import ParameterError
+from tengri.inference._engine_policy import ENGINE_POLICY, ENGINE_VERSION
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.jit_engine import build_jit_engine
@@ -990,6 +992,123 @@ def _memoized_predict_jit(model, name: str):
     return fn
 
 
+def _reject_non_finite_data(data, noise, presence) -> None:
+    """Refuse a NaN or Inf in the data a fit is about to be run on.
+
+    A non-finite datum makes the Gaussian likelihood non-finite, so the
+    objective is undefined everywhere and the optimizer wanders off its
+    initial value. It still returns a number. Measured on a five-band MAP fit
+    with one NaN flux::
+
+        clean       log_M = 9.999993   n_steps = 350   final_loss = 2.49e-06
+        one NaN     log_M = 9.942578   n_steps = 100   final_loss = nan
+
+    ``final_loss`` is ``nan`` and ``log_total_mass`` comes back looking like a
+    measurement — no warning, no error, 0.057 dex (14% in mass) from the truth
+    and not equal to the answer you get by genuinely dropping that band
+    (9.999996), so it is not masking either.
+
+    The catalog path has had the right semantics all along
+    (``catalog_ingest``): a non-finite flux means *absent*, selected by
+    ``missing='mask'``, and a non-finite error beside a finite flux is always
+    an error because "an unknown uncertainty is not an absent band". The
+    single-object path shared none of it, so the same array meant "this band is
+    missing" through ``CatalogFitter`` and "silently corrupt the fit" through
+    ``Fitter`` (#1777).
+
+    Absent bands are expressible here too — ``Fitter(..., presence=...)`` — so
+    this refuses rather than guessing, and names that argument. A band already
+    marked absent is exempt: its flux value is never read.
+
+    Parameters
+    ----------
+    data : array_like
+        Observed data vector.
+    noise : array_like
+        Per-datum uncertainties.
+    presence : array_like or None
+        Per-datum presence weights; entries that are zero mark absent data,
+        whose values are not read and so need not be finite.
+
+    Raises
+    ------
+    ValueError
+        If any datum that will actually be used is non-finite.
+    """
+    import numpy as _np
+
+    d = _np.asarray(data, dtype=float)
+    n = _np.asarray(noise, dtype=float)
+    used = _np.ones(d.shape, dtype=bool)
+    if presence is not None:
+        p = _np.asarray(presence, dtype=float)
+        if p.shape == d.shape:
+            used = p != 0.0
+
+    def _report(bad, what, detail):
+        idx = _np.where(bad)[0].tolist() if bad.ndim == 1 else _np.argwhere(bad).tolist()
+        raise ValueError(
+            f"{what} at index/indices {idx[:20]}{' ...' if len(idx) > 20 else ''}. "
+            f"{detail} The objective is undefined there, so the fit would return "
+            f"its starting value as if it were a result. To mark a band absent, "
+            f"pass presence= with 0 there; reading a catalog? CatalogFitter's "
+            f"missing='mask' does this for you."
+        )
+
+    if (bad := ~_np.isfinite(d) & used).any():
+        _report(bad, "Non-finite data", "The Gaussian likelihood becomes non-finite.")
+    if (bad := ~_np.isfinite(n) & used).any():
+        _report(
+            bad,
+            "Non-finite noise",
+            "An unknown uncertainty is not an absent band — mark the band absent "
+            "instead if that is what it means.",
+        )
+    # Zero measured identically to a NaN: final_loss nan, the optimizer stops
+    # early and the starting value is returned. Negative is not a sigma under
+    # any reading; chi2 squares it, so it currently gives the *right* answer
+    # and would hide a sign error upstream indefinitely.
+    if (bad := (n <= 0.0) & used & _np.isfinite(n)).any():
+        _report(
+            bad,
+            "Non-positive noise",
+            "A Gaussian sigma must be > 0; zero weights a datum infinitely.",
+        )
+
+
+def _neutralize_absent(data, noise, presence):
+    """Replace non-finite values at absent positions with finite placeholders.
+
+    Presence weighting multiplies a datum's contribution by zero, which removes
+    it from the sum — unless the value is non-finite, because ``0 * nan`` is
+    ``nan``. So a band correctly marked absent still poisons the objective
+    unless its value is neutralized first. Mirrors ``catalog_ingest``'s
+    ``np.nan_to_num`` step, whose comment says the placeholder "doesn't
+    matter, presence=False".
+
+    Parameters
+    ----------
+    data, noise : jnp.ndarray
+        Observed data and uncertainties.
+    presence : array_like
+        Per-datum presence weights; zero marks absent.
+
+    Returns
+    -------
+    tuple of jnp.ndarray
+        ``(data, noise)`` with non-finite entries at absent positions replaced
+        by 0.0 and 1.0 respectively. Present entries are untouched — the guard
+        has already refused any non-finite value among them.
+    """
+    p = jnp.asarray(presence)
+    if p.shape != data.shape:
+        return data, noise
+    absent = p == 0.0
+    data = jnp.where(absent & ~jnp.isfinite(data), 0.0, data)
+    noise = jnp.where(absent & ~jnp.isfinite(noise), 1.0, noise)
+    return data, noise
+
+
 class Fitter:
     """Inference engine for differentiable SED fitting with flexible method dispatch.
 
@@ -1217,6 +1336,15 @@ class Fitter:
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
+        _reject_non_finite_data(self.data, self.noise, presence)
+        # An absent datum's value is never *used*, but IEEE still propagates
+        # it: 0 * NaN is NaN, so a masked NaN poisons the likelihood exactly
+        # as an unmasked one does, and the guard above would be telling users
+        # to do something that does not work. ``catalog_ingest`` neutralizes
+        # the same way ("Set NaN flux to finite placeholder (doesn't matter,
+        # presence=False)").
+        if presence is not None:
+            self.data, self.noise = _neutralize_absent(self.data, self.noise, presence)
         if data_mask is not None:
             data_mask = jnp.asarray(data_mask)
             # A boolean mask here is a semantics trap: the censored
@@ -1985,7 +2113,8 @@ class Fitter:
         _supports = getattr(model, "_supports_jit_threading", None)
         _threadable = _supports() if callable(_supports) else True
         if _threadable and all(
-            hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")
+            hasattr(model, attr)
+            for attr in ("spec", "ssp_data", "_template_data_for_jit", "_ztable_data_for_jit")
         ):
             # Per-fit params override (#1329): the forward pass reads fixed values
             # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
@@ -2001,6 +2130,7 @@ class Fitter:
                 "fixed_values": jit_fixed_values,
                 "ssp_data": model.ssp_data,
                 "template_data": model._template_data_for_jit(),
+                "ztable_data": model._ztable_data_for_jit(),
             }
 
         return args
@@ -2162,112 +2292,61 @@ class Fitter:
         """Return a hashable key identifying the JIT engine shape.
 
         Two Fitters sharing the same Model will reuse the same compiled
-        engine if their cache keys match (same data_type, stochastic
-        flag, latent dimension, data length, free parameter names, noise
-        model presence, and observation feature channels).
+        engine if their cache keys match. Derived from every Fitter
+        attribute under ``tengri.inference._engine_policy.ENGINE_POLICY``
+        (see that module's docstring for the full rule and rationale) plus
+        a tail of entries the policy cannot express as a plain per-attribute
+        row: the ``_data_args`` key SET (structure; its values are
+        ``tengri.inference._sample_utils._data_fingerprint``'s job),
+        the redshift-filtered fixed values and per-fit override (#1972
+        instance 2, #1329), the free-parameter prior identity (#1972,
+        ``_free_prior_key``), and the fixed/free mirror map (#1972 instance
+        3, ``_mirror_key``).
 
-        The feature-channel entries (line fluxes / line ratios / spectral
-        indices / censoring mask) are load-bearing: the loss closure bakes
-        ``has_line_fluxes`` etc. in at build time, so two Fitters that
-        differ only in these channels produce *different* loss functions.
-        Without them in the key, a joint phot+lines fit silently reuses a
-        photometry-only engine and drops the line term from the
-        likelihood (or crashes with a missing ``line_flux_waves`` key,
-        depending on build order).
+        Notes
+        -----
+        This key is deliberately silent about the model's own structure
+        (component chain, SSP grid, Observation schema): every cache keyed
+        by this method is namespaced per ``model`` object already (see
+        ``_engine_policy.ENGINE_POLICY``'s module docstring), and
+        :meth:`compile_signature` additionally pairs
+        ``model.compile_signature()`` alongside this key for callers that
+        mix engines across models.
         """
-        from tengri.observation.noise import has_noise_model
-
-        obs = getattr(self.model, "observation", None)
-        line_flux_cfg = self._resolved_line_fluxes()
-        line_flux_key = (
+        tail = (
             (
-                tuple(round(float(w), 6) for w in np.asarray(line_flux_cfg.wavelengths)),
-                # Limit-mask PRESENCE selects Censored vs Gaussian adapters
-                # (structure); the mask VALUES ride through data_args.
-                getattr(line_flux_cfg, "limit_mask", None) is not None,
-            )
-            if line_flux_cfg is not None
-            else None
-        )
-        line_ratio_cfg = getattr(obs, "line_ratios", None) if obs is not None else None
-        index_cfg = getattr(obs, "spectral_indices", None) if obs is not None else None
-
-        return (
-            self.data_type,
-            self.spec.stochastic,
-            self.spec.n_grid if self.spec.stochastic else 0,
-            len(self.data),
-            tuple(sorted(self._free_names)),
-            has_noise_model(self.spec),
-            self._eline_marginalize,
-            self._eline_fitted,
-            self._calibration_marginalize,
-            self._eline_prior_type,
-            line_flux_key,
-            line_ratio_cfg is not None,
-            index_cfg is not None,
-            self.data_mask is not None,
-            # Per-fit params override (#1329): the loss closure bakes
-            # ``fitter._fixed_values``, which now carries the override, so two
-            # fits differing only by override MUST get distinct loss functions,
-            # exactly like the feature channels above. Without this, fit #2
-            # silently reuses fit #1's baked override.
-            #
-            # EXCEPT a runtime-routed redshift (#1316): it rides ``data_args``
-            # as a traced input, so distinct z legitimately share one program.
-            # Note a routed-z-only override yields ``()``, distinct from the
-            # no-override ``None``, a plain fit (no data_args redshift) never
-            # shares a closure whose baked z differs from its spec.
-            (
-                tuple(
-                    sorted(
-                        (k, round(float(v), 8))
-                        for k, v in self._params_override.items()
-                        if not (k == "redshift" and self._runtime_redshift is not None)
-                    )
-                )
-                if self._params_override
-                else None
+                "data_arg_names",
+                tuple(sorted(self._data_args)),
             ),
-            # Free-parameter PRIOR identity. ``_build_signal_response`` threads
-            # only data/noise through ``data_args``; the priors stay baked,
-            # because ``_primals_to_params`` calls ``dist.unstandardize(xi)``
-            # and that reads the distribution's Python floats at trace time
-            # (``Uniform``: ``lo + (hi - lo) * Phi(xi)``). Baked is fine, but
-            # only if keyed. Without this entry two models differing solely in a
-            # prior's bounds share one engine, and fit #2's latent is decoded
-            # through fit #1's interval: a shift of order the prior width, which
-            # on ``log_total_mass`` reads as a mass deviation of order dex.
-            # Exactly the ``params_override`` hazard above, one layer over.
-            # Free NAMES (field 5) cannot stand in for this: editing
-            # ``Uniform(9.6, 11.1)`` to ``Uniform(7, 13)`` changes no name, no
-            # shape, no dtype and no control flow.
-            self._free_prior_key(),
-            # Spec fixed values (#1972 instance 2). ``_primals_to_params`` also
-            # bakes ``fitter._fixed_values``, so two models differing only in a
-            # fixed scalar share one engine and fit #2 runs fit #1's physics,
-            # measured -0.18 dex on mass for ``dust_slope`` -0.7 -> 0.4.
-            #
-            # ``SEDModel.compile_signature`` dropped these on 2026-05-20 on the
-            # grounds that they "are threaded as a runtime JIT input"; that is
-            # true of the forward observables path and false of this closure, so
-            # do not take that comment as cover for removing this entry.
-            #
-            # Keying rather than threading is deliberate:
-            # ``get_or_build_signal_response`` returns a *stable function
-            # object* because JAX's trace cache is keyed by function identity,
-            # so partial-applying fixed values per fit would re-trace the whole
-            # physics stack per galaxy, the cost that cache exists to avoid.
-            # The keying is free for catalogs: these are per-MODEL values and a
-            # catalog uses one model, with per-galaxy variation flowing through
-            # ``_params_override`` (keyed above) or a runtime-routed redshift.
-            self._fixed_value_key(),
-            # Mirror map (#1972 instance 3). ``_primals_to_params`` calls
-            # ``spec.resolve_mirrors``, baking target -> source. Two specs can
-            # share every free name, every fixed name and every prior while
-            # tying the same target to a DIFFERENT source; without this entry
-            # the second silently ties to the first's source.
-            self._mirror_key(),
+            ("fixed_values", self._fixed_value_key()),
+            ("params_override", self._params_override_key()),
+            ("priors", self._free_prior_key()),
+            ("mirrors", self._mirror_key()),
+        )
+        return derive_key(self, ENGINE_POLICY, version=ENGINE_VERSION, tail=tail)
+
+    def _params_override_key(self) -> tuple | None:
+        """Return the per-fit params override, minus a runtime-routed redshift.
+
+        Per-fit params override (#1329): the loss closure bakes
+        ``fitter._fixed_values``, which carries the override, so two fits
+        differing only by override MUST get distinct loss functions.
+        Without this, fit #2 silently reuses fit #1's baked override.
+
+        EXCEPT a runtime-routed redshift (#1316): it rides ``data_args`` as
+        a traced input, so distinct z legitimately share one program. Note
+        a routed-z-only override yields ``()``, distinct from the
+        no-override ``None``: a plain fit (no data_args redshift) never
+        shares a closure whose baked z differs from its spec.
+        """
+        if not self._params_override:
+            return None
+        return tuple(
+            sorted(
+                (k, round(float(v), 8))
+                for k, v in self._params_override.items()
+                if not (k == "redshift" and self._runtime_redshift is not None)
+            )
         )
 
     def _free_prior_key(self) -> tuple:
@@ -2548,6 +2627,7 @@ class Fitter:
                 _hmc_full_scan,
                 _nuts_full_scan,
             )
+            from tengri.inference.backends.mcmc.nuts import DENSE_MASS_MAX_DIM
 
             log_posterior_flat_2arg, _, init_flat, data_args = _get_flat_logdensity(
                 self, dummy_pos
@@ -2556,7 +2636,11 @@ class Fitter:
             warmup_key = jax.random.PRNGKey(1)
             chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
             n_dim = len(init_flat)
-            use_dense = n_dim <= 30
+            # Which program shape to WARM, not which to fit with, so this
+            # reads the shared cap rather than calling the gate: a
+            # precompilation pass has no user request to refuse and must not
+            # warn about one.
+            use_dense = n_dim <= DENSE_MASS_MAX_DIM
 
             for method in mcmc_methods:
                 if verbose:
@@ -4310,7 +4394,14 @@ class Fitter:
         init_flats = jnp.stack([ravel_pytree(p)[0] for p in init_params_list])
 
         n_dim = init_flats.shape[1]
-        use_dense = dense_mass_matrix and n_dim <= 30
+        from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
+
+        # One adaptation is shared across the whole batch here, so a mass
+        # matrix silently downgraded on this seam is downgraded for every
+        # galaxy at once.
+        use_dense = resolve_dense_mass_gate(
+            dense_mass_matrix, n_dim, method="fit_batch", verbose=verbose
+        )
 
         # Adaptation on the first galaxy, shared across the batch. Wrapped in a
         # memoized jax.jit that takes the galaxy data as a *traced* argument so the

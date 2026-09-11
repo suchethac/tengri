@@ -146,13 +146,20 @@ class TestLawInheritance:
 
 class TestRoundTrip:
     def test_overrides_survive_to_groups(self, synthetic_ssp_wide, synthetic_tophat_obs):
-        """slope_bc / delta_diff round-trip through spec.to_groups()."""
+        """slope_bc / Rv_diff round-trip through spec.to_groups().
+
+        On ``conroy2010``, which reads both. The pair was ``slope_bc`` +
+        ``delta_diff`` until #2185: under the fixture's ``power_law`` no screen
+        reads a ``dust_delta``, so ``delta_diff`` was a value the curve
+        discarded, and the grammar now refuses it by name.
+        """
         model = _build(
             synthetic_ssp_wide,
             synthetic_tophat_obs,
+            law="conroy2010",
             slope_bc=-1.0,
-            delta_diff=0.1,
+            Rv_diff=4.0,
         )
         groups = model.spec.to_groups()
         assert groups["dust_attenuation"]["slope_bc"] == -1.0
-        assert groups["dust_attenuation"]["delta_diff"] == 0.1
+        assert groups["dust_attenuation"]["Rv_diff"] == 4.0

@@ -235,6 +235,10 @@ print()
 
 # %% [markdown]
 # ### Dust: two-component attenuation + nested emission
+#
+# The two-component group also decides which screen each emission source
+# passes through: `nebular_screen` (default birth cloud), `shock_screen`
+# (default diffuse), and `agn_screen` (default none).
 
 # %%
 print("Dust Model Tour")
@@ -447,7 +451,6 @@ base_groups_sfh = {
         "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -541,7 +544,8 @@ print()
 # emission. The shock bucket defaults to all fixed; to free parameters, use
 # explicit priors (e.g. `shock={'frac': Uniform(0, 1)}`). The `all_params: FREE`
 # wildcard is deliberately refused for shock — it is not a silent no-op but a
-# guard against misconfiguration.
+# guard against misconfiguration. Shock light passes the diffuse dust screen
+# by default (`dust_attenuation`'s `shock_screen`).
 
 # %%
 print("Shock Emission Tour")
@@ -656,7 +660,6 @@ groups_roundtrip = {
         "all_params": Fixed(DEFAULT),
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -713,7 +716,6 @@ for sfh_name, truth_sfh in sfh_families:
             "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
-            "slope": Fixed(-0.7),
         },
         "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
         "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -824,7 +826,6 @@ base_groups_dust = {
         "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -884,7 +885,6 @@ groups_nodust = {
         ),  # dust-free comparison: everything pinned, taus at zero (#1995)
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(0.0),
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -953,7 +953,6 @@ for idx, dust_law in enumerate(dust_laws):
             "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
-            "slope": Fixed(-0.7),
         },
         "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
         "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -1037,7 +1036,6 @@ base_groups_emission = {
         "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
-        "slope": Fixed(-0.7),
     },
     "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
@@ -1100,7 +1098,6 @@ for idx, emission in enumerate(dust_emissions):
             "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
-            "slope": Fixed(-0.7),
         },
         "dust_emission": {"type": emission, "all_params": Fixed(DEFAULT)},
         "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -1157,7 +1154,6 @@ for emission in dust_emissions:
             "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
-            "slope": Fixed(-0.7),
         },
         "dust_emission": {"type": emission, "all_params": Fixed(DEFAULT)},
         "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
@@ -1221,7 +1217,6 @@ groups_ref = {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Uniform(0.01, 0.1),
@@ -1238,7 +1233,6 @@ groups_free_z = {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Uniform(0.01, 0.1),  # FREE
@@ -1253,7 +1247,6 @@ groups_fixed_z = {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),  # FIXED
@@ -1295,7 +1288,6 @@ groups_perf = {
         "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
-        "slope": Fixed(-0.7),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),

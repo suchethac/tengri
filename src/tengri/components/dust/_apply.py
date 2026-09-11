@@ -16,7 +16,9 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.laws._registry import (
+    reject_unread_law_kwargs,
     resolve_dust_law,
+    select_law_kwargs,
 )
 
 
@@ -99,7 +101,7 @@ def precompute_dust_age_mask(
 #: Maps the law-function keyword to ``(flat_param_name, default)``. The
 #: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``.
 _TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
-    ("n_slope", "dust_slope", -0.7),
+    ("dust_slope", "dust_slope", -0.7),
     ("dust_bump_strength", "dust_bump_strength", 0.0),
     ("dust_delta", "dust_delta", 0.0),
     ("dust_Rv", "dust_Rv", 3.1),
@@ -109,7 +111,7 @@ _TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
 #: builder grammar to accept ``slope_bc`` / ``slope_diff`` / ``delta_bc`` etc.
 #: in the ``dust`` group and route them onto the per-component overrides.
 TWO_COMPONENT_OVERRIDE_KEYS: dict[str, str] = {
-    "slope": "n_slope",
+    "slope": "dust_slope",
     "bump_strength": "dust_bump_strength",
     "delta": "dust_delta",
     "Rv": "dust_Rv",
@@ -121,13 +123,16 @@ def resolve_bc_diff_law_params(
     bc_overrides: Mapping | None = None,
     diff_overrides: Mapping | None = None,
     live_shape_params: frozenset[str] | None = None,
+    bc_law: str | None = None,
+    diff_law: str | None = None,
+    redshift: jnp.ndarray | float | None = None,
 ) -> tuple[dict, dict]:
     """Split shared dust law parameters into birth-cloud and diffuse law dicts.
 
     For each two-component law parameter (slope, bump, delta, Rv), the value is
     the shared ``dust_<x>`` from ``params``, unless a per-component override is
     supplied in ``bc_overrides`` / ``diff_overrides`` (keyed by law-function
-    kwarg, e.g. ``n_slope``). The overrides are the static per-component
+    kwarg, e.g. ``dust_slope``). The overrides are the static per-component
     settings carried on :class:`DustSEDComponentConfig`. This is the single
     source of truth shared by every stellar two-component attenuation path, so
     they cannot diverge.
@@ -140,21 +145,30 @@ def resolve_bc_diff_law_params(
     params : Mapping
         Flat ``dust_*`` parameter mapping (JAX scalars or floats).
     bc_overrides, diff_overrides : Mapping, optional
-        Per-component law-kwarg overrides (e.g. ``{"n_slope": -1.0}`` for the
+        Per-component law-kwarg overrides (e.g. ``{"dust_slope": -1.0}`` for the
         FSPS birth-cloud convention). Always honored: an override *is* a
         request, whatever the provenance of the shared parameter.
     live_shape_params : frozenset of str, optional
         Flat names a caller actually asked for, resolved from spec provenance
         by :meth:`SEDModel._requested_law_shape_params` (#1808). Names outside
         this set are left out of the returned dicts. ``None`` keeps the
-        historical behavior of passing all four unconditionally, for the
-        direct callers that have no spec to ask.
+        historical behavior of offering all four, for the direct callers that
+        have no spec to ask.
+    bc_law, diff_law : str, optional
+        Registry keys of the two screens' laws. When given, each dict is
+        narrowed to the keywords *that* screen's law declares, so a parameter
+        the other screen's law reads is not offered to a law that would have to
+        discard it (#2185). ``None`` leaves the dict unnarrowed.
+    redshift : jnp.ndarray or float, optional
+        The model redshift [dimensionless], offered to both screens before the
+        narrowing above. ``None`` offers nothing, for the direct callers that
+        have no model to ask.
 
     Returns
     -------
     bc_params, diff_params : dict
         Keyword dicts ready to splat into an attenuation-law function (keys are
-        law-function kwargs, e.g. ``n_slope``).
+        law-function kwargs, e.g. ``dust_slope``).
 
     Notes
     -----
@@ -170,6 +184,21 @@ def resolve_bc_diff_law_params(
     silently returned a different law from the one selected; measured at 128%
     on the SED against ``single_component``, which had already been fixed by
     #1808. This is that fix reaching its second caller.
+
+    ``bc_law`` / ``diff_law`` are #2185. Both screens were handed the *union* of
+    the two laws' parameters and the laws absorbed the surplus in a ``**kwargs``
+    catch-all, so ``law_bc='calzetti', law_diff='cardelli'`` offered calzetti an
+    ``dust_Rv`` it fixes internally at 4.05. The laws no longer take that
+    catch-all, so the narrowing has to happen here, where the two laws are both
+    known.
+
+    ``redshift`` is #2199, and it deliberately skips the ``live_shape_params``
+    gate the four tabled parameters pass through. That gate protects each law's
+    own *published default* for a parameter the ``dust_attenuation`` grammar can
+    set; ``redshift`` is neither -- it is a model-wide value with no per-law
+    default to protect, and the grammar never accepts it as a dust key. The
+    narrowing below is what keeps it away from the laws that do not read it, and
+    ``narayanan_z`` is the only one that does.
     """
     bc_overrides = bc_overrides or {}
     diff_overrides = diff_overrides or {}
@@ -183,6 +212,13 @@ def resolve_bc_diff_law_params(
                 target[law_kw] = overrides[law_kw]
             elif requested:
                 target[law_kw] = shared
+    if redshift is not None:
+        bc["redshift"] = redshift
+        diff["redshift"] = redshift
+    if bc_law is not None:
+        bc = select_law_kwargs(bc_law, bc)
+    if diff_law is not None:
+        diff = select_law_kwargs(diff_law, diff)
     return bc, diff
 
 
@@ -270,7 +306,7 @@ def two_component_dust(
         Sigmoid transition width in dex. [dimensionless] Default: 0.3 (~5-20 Myr range).
     bc_params : dict, optional
         Per-component overrides for the **birth-cloud** law (e.g.
-        ``{"n_slope": -1.0}``). Merged on top of ``**law_params``, so any key
+        ``{"dust_slope": -1.0}``). Merged on top of ``**law_params``, so any key
         absent here falls back to the shared value. Enables FSPS-style
         independent indices (birth cloud ``dust1_index`` ≠ diffuse
         ``dust_index``). Default ``None`` → shared parameters.
@@ -284,7 +320,7 @@ def two_component_dust(
         :func:`apply_lyman_cutoff`).
     **law_params
         Shared keyword arguments passed to both attenuation curve functions
-        (e.g., ``n_slope``, ``dust_bump_strength``, ``dust_delta``,
+        (e.g., ``dust_slope``, ``dust_bump_strength``, ``dust_delta``,
         ``dust_Rv``). ``bc_params`` / ``diff_params`` override these
         per-component.
 
@@ -352,8 +388,13 @@ def two_component_dust(
     # ``dust1_index=-1.0``) without touching the diffuse ISM.
     bc_kw = {**law_params, **(bc_params or {})}
     diff_kw = {**law_params, **(diff_params or {})}
-    k_bc = resolve_dust_law(law_bc)(wavelength, **bc_kw)
-    k_diff = resolve_dust_law(law_diff)(wavelength, **diff_kw)
+    # The two screens can carry different laws, so a key that belongs to one is
+    # foreign to the other. Offer each law only what it declares -- and refuse a
+    # key NEITHER declares, which used to vanish into the laws' `**kwargs`
+    # (#2185).
+    reject_unread_law_kwargs({**bc_kw, **diff_kw}, (law_bc, law_diff), "two_component_dust")
+    k_bc = resolve_dust_law(law_bc)(wavelength, **select_law_kwargs(law_bc, bc_kw))
+    k_diff = resolve_dust_law(law_diff)(wavelength, **select_law_kwargs(law_diff, diff_kw))
     # Optional Lyman-limit clip: zero the curve below ``lyman_cutoff_aa`` (CIGALE
     # parity). ``cutoff_aa=0.0`` is a no-op, so the default leaves the FUV
     # extrapolation in place.
@@ -447,8 +488,9 @@ def two_component_dust_separable(
        Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
-    k_bc = law_bc_fn(wavelength, **law_params)
-    k_diff = law_diff_fn(wavelength, **law_params)
+    reject_unread_law_kwargs(law_params, (law_bc_fn, law_diff_fn), "two_component_dust_separable")
+    k_bc = law_bc_fn(wavelength, **select_law_kwargs(law_bc_fn, law_params))
+    k_diff = law_diff_fn(wavelength, **select_law_kwargs(law_diff_fn, law_params))
 
     # Diffuse ISM: age-independent → (n_wave,) exp instead of (n_age, n_wave)
     diffuse_trans = jnp.exp(-tau_v2 * k_diff)  # (n_wave,)
@@ -506,7 +548,7 @@ def two_component_dust_fast(
     f_obscuration : float
         Fraction of unattenuated sightlines. [dimensionless, in [0, 1]] Default: 0.0 (Lower 2022).
     **law_params
-        Passed to curve functions: ``n_slope``, ``dust_bump_strength``,
+        Passed to curve functions: ``dust_slope``, ``dust_bump_strength``,
         ``dust_delta``, ``dust_Rv``, etc.
 
     Returns
@@ -520,8 +562,9 @@ def two_component_dust_fast(
 
     **Gradient-safe**: yes, differentiable everywhere.
     """
-    k_bc = resolve_dust_law(law_bc)(wavelengths, **law_params)
-    k_diff = resolve_dust_law(law_diff)(wavelengths, **law_params)
+    reject_unread_law_kwargs(law_params, (law_bc, law_diff), "two_component_dust_fast")
+    k_bc = resolve_dust_law(law_bc)(wavelengths, **select_law_kwargs(law_bc, law_params))
+    k_diff = resolve_dust_law(law_diff)(wavelengths, **select_law_kwargs(law_diff, law_params))
 
     tau_lambda = dust_age_weights[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
 
@@ -558,7 +601,7 @@ def single_component_dust(
         Default: 0.0 (uniform foreground screen).
     **law_params
         Keyword arguments passed to the attenuation curve function
-        (e.g., ``n_slope``, ``dust_bump_strength``, ``dust_delta``, ``dust_Rv``).
+        (e.g., ``dust_slope``, ``dust_bump_strength``, ``dust_delta``, ``dust_Rv``).
 
     Returns
     -------
@@ -596,7 +639,8 @@ def single_component_dust(
        ApJ, 931, 14 (2022). arXiv:2203.00074.
        https://doi.org/10.3847/1538-4357/ac6959
     """
-    k = resolve_dust_law(law)(wavelength, **law_params)
+    reject_unread_law_kwargs(law_params, (law,), "single_component_dust")
+    k = resolve_dust_law(law)(wavelength, **select_law_kwargs(law, law_params))
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_v * k)
 
 

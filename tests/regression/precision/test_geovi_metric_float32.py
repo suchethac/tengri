@@ -130,6 +130,10 @@ def test_inv_noise_std_is_finite_in_float32():
         f"inv_noise_std is {f32[0]:.3e} in float32 — it was computed as "
         "sqrt(1/sigma**2), whose intermediate is inf"
     )
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     np.testing.assert_allclose(f32, f64, rtol=1e-6)
 
 
@@ -206,6 +210,10 @@ def test_metric_vec_is_finite_in_float32():
         f"restructured metric_vec still has {np.sum(~np.isfinite(new))} non-finite "
         "entries in float32"
     )
+    assert np.any(new != 0.0), (
+        "`new` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     np.testing.assert_allclose(new, f64, rtol=2e-5)
 
 
@@ -229,6 +237,10 @@ def test_metric_vec_survives_jit_constant_folding():
     assert np.all(np.isfinite(got)), (
         "metric_vec is non-finite under jit but finite eagerly — XLA "
         "re-associated the double division into 1/sigma**2"
+    )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 
@@ -354,13 +366,25 @@ def _eline_inputs():
     )
 
 
+# These two also cover a second, CUDA-only defect (#2023): the normal-equation
+# GEMM `marginalize_emission_lines` used to build with `g.T @ g` hit "GEMM is
+# not supported by cublasLt and legacy cublas fallback is removed" on JAX
+# 0.11 -- reachable here because this test suite forces x64 on globally
+# (`tests/conftest.py`) and only the `_f32` helper flips it off, locally,
+# around the call, so the operands arrived float64-valued and got truncated
+# at the jit boundary. See "CUDA GEMM lowering (#2023)" in
+# `marginalize_emission_lines`'s docstring for that fix. `_eline_inputs()` is
+# called from inside `run()`, i.e. inside the `_f32` context below, rather
+# than before it, so the operands are genuinely float32 from construction:
+# built outside that context, on a backend with no float64 at all (Apple MPS
+# via jax-mps), the `jnp.full`/`jnp.asarray` calls in `_eline_inputs()` raise
+# before either test reaches `marginalize_emission_lines`.
 def test_marginalize_emission_lines_is_finite_in_float32():
     """All three outputs must be finite at a real spectroscopic sigma."""
     from tengri.observation.eline_marginalization import marginalize_emission_lines
 
-    residual, noise, design = _eline_inputs()
-
     def run():
+        residual, noise, design = _eline_inputs()
         ln_l, a_hat, a_cov = marginalize_emission_lines(residual, noise, design)
         return jnp.concatenate([jnp.atleast_1d(ln_l), a_hat, a_cov.ravel()])
 
@@ -370,21 +394,28 @@ def test_marginalize_emission_lines_is_finite_in_float32():
         "marginalize_emission_lines are non-finite in float32 — n_inv = 1/sigma**2 "
         "is inf, so G^T N^-1 G is inf/NaN and the whole solve collapses"
     )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_marginalize_emission_lines_gradient_is_finite_in_float32():
     """Its docstring promises gradient-safety; hold it to that in float32."""
     from tengri.observation.eline_marginalization import marginalize_emission_lines
 
-    residual, noise, design = _eline_inputs()
-
     def run():
+        residual, noise, design = _eline_inputs()
         return jax.grad(lambda r: marginalize_emission_lines(r, noise, design)[0])(residual)
 
     got = np.asarray(_f32(run), dtype=np.float64)
     assert np.all(np.isfinite(got)), (
         "d ln_L_marg / d residual is non-finite in float32, contradicting the "
         "documented 'Gradient-safe: yes'"
+    )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 

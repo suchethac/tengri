@@ -212,6 +212,10 @@ def test_reconstruct_is_jittable_and_gradient_safe():
     val = jax.jit(total)(jnp.asarray(-2.5))
     g = jax.jit(jax.grad(total))(jnp.asarray(-2.5))
     assert np.isfinite(float(val)) and np.isfinite(float(g))
+    assert np.any(float(g) != 0.0), (
+        "`float(g)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_axis_range_reads_prior_not_default():
@@ -374,7 +378,11 @@ def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
     sensitive [OIII] line **while using no more grid points** — the snapped axis
     resolves the SSP-node kinks, so the cubic's cross-kink tangent error is gone.
     """
-    m = _model({"type": "cue", "all_params": Fixed(DEFAULT)}, sfh_wild=FREE)
+    m = _model(
+        {"type": "cue", "all_params": Fixed(DEFAULT)},
+        sfh_wild=FREE,
+        met={"logzsol": FREE},
+    )
     assert "met_logzsol" in m.spec.free_params
     lo, hi = -1.8, 0.2
     rng = {"met_logzsol": (lo, hi)}

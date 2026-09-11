@@ -209,6 +209,10 @@ def test_boosted_float32_gradient_matches_float64(measured):
     assert np.all(np.isfinite(boosted32)), (
         f"boosted float32 gradient is non-finite on the {seam} seam: {boosted32}"
     )
+    assert np.any(boosted32 != 0.0), (
+        "`boosted32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     rel = np.abs(boosted32 - plain64) / np.maximum(np.abs(plain64), 1e-300)
     assert rel.max() < 1e-3, (
         f"boosted float32 photometry gradient disagrees with float64 by {rel.max():.2e} "
@@ -288,6 +292,10 @@ def test_the_boost_survives_jit(measured):
         f"the boosted float32 gradient collapsed to zero under jit on the {seam} seam "
         f"(names={names}, eager={boosted32}, jit={jit32}) — XLA folded the boost "
         "against the divide (#1535's lesson, #1415's defect)"
+    )
+    assert np.all(np.isfinite(jit32)), (
+        "`jit32` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
     )
     rel = np.abs(jit32 - boosted32) / np.maximum(np.abs(boosted32), 1e-300)
     assert rel.max() < 1e-3, (

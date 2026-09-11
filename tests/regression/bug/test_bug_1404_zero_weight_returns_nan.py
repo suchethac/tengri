@@ -114,3 +114,7 @@ def test_gradient_is_not_poisoned_by_the_nan_branch():
     w = jnp.zeros(N_AGE).at[3].set(2.0)
     g = assert_grad_matches_fd(lambda ww: compute_mass_weighted_age(ww, AGES_YR), w)
     assert jnp.all(jnp.isfinite(g)), f"non-finite gradient: {g}"
+    assert jnp.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
