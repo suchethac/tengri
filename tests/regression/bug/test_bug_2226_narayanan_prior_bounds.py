@@ -128,19 +128,21 @@ def test_narayanan_tau_prior_flat_form_builds(z):
 
 @pytest.mark.parametrize("z", _REDSHIFTS)
 def test_narayanan_tau_prior_group_form_builds(z):
-    """Two-component group: ``dust_tau_bc`` stays Fixed at its declared
-    default, only ``dust_tau_diff`` is freed by the helper.
+    """Two-component group: ``dust_tau_bc`` is pinned at its declared default
+    explicitly, only ``dust_tau_diff`` is freed by the helper.
 
-    Trap: the completeness guard for the two-component ``tau_bc``/``tau_diff``
-    pair recognizes only the short stems (``tau_bc``, ``tau_diff``), so this
-    must pass the helper's own full-name key (``dust_tau_diff=``), not mix it
-    with a short-stem ``tau_bc=``.
+    A two-screen model must name both screens: since the grammar normalizes
+    every spelling before the completeness check, a lone ``dust_tau_diff`` is
+    refused exactly like a lone ``tau_diff`` (the full spelling used to slip
+    past a stem-only check). The caller states what happens to ``tau_bc``:
+    ``Fixed(DEFAULT)`` pins it, ``FREE`` would fit it.
     """
     spec = parse_groups(
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
+            "tau_bc": Fixed(DEFAULT),
             **narayanan_tau_prior(z),
         },
         redshift=Fixed(z),

@@ -252,7 +252,7 @@ class DerivedState:
     dust_diff_attenuation_slope_precomp: jnp.ndarray | None = None
     # The same two transmissions, evaluated at the sub-band quadrature nodes
     # (#1122), shape ``(n_age, n_filter, n_subbands)``. The law is evaluated live
-    # on the node grid rather than tabulated, so its shape parameters (``n_slope``,
+    # on the node grid rather than tabulated, so its shape parameters (``dust_slope``,
     # bump) stay FREE: no gate, unlike a tau-axis LUT.
     dust_bc_attenuation_subband_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_subband_precomp: jnp.ndarray | None = None

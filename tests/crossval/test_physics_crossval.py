@@ -141,7 +141,7 @@ class TestDustLawsCrossval:
         """Power-law k(λ) = (λ/5500)^n at 2000A."""
         from tengri.components.dust.attenuation import power_law
 
-        k = np.asarray(power_law(jnp.array([2000.0, 5500.0]), n_slope=-0.7))
+        k = np.asarray(power_law(jnp.array([2000.0, 5500.0]), dust_slope=-0.7))
         np.testing.assert_allclose(k[1], 1.0, atol=0.01)
         np.testing.assert_allclose(k[0], (2000.0 / 5500.0) ** (-0.7), rtol=0.01)
 

@@ -22,8 +22,13 @@ from tengri.parameters.priors import Fixed, Uniform
 
 @pytest.fixture
 def mirrored_spec():
+    # power_law (bc) reads dust_slope and kriek_conroy (diff) reads
+    # dust_delta, so both names are live and flat accepts them. The mirror
+    # mechanism, not physics, is the subject here.
     return Parameters(
         mean_sfh_type="tsnorm",
+        dust_law_bc="power_law",
+        dust_law_diff="kriek_conroy",
         dust_delta=Uniform(-1.0, 0.5),
         dust_slope="dust_delta",
     )
@@ -48,6 +53,8 @@ class TestMirrorDetection:
     def test_multiple_mirrors(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
+            dust_law_bc="power_law",
+            dust_law_diff="kriek_conroy",
             met_logzsol=Uniform(-2.0, 0.2),
             dust_delta=Uniform(-1.0, 0.5),
             dust_slope="dust_delta",
@@ -63,6 +70,8 @@ class TestChainValidation:
         with pytest.raises(ValueError, match="Chained mirror"):
             Parameters(
                 mean_sfh_type="tsnorm",
+                dust_law_bc="power_law",
+                dust_law_diff="kriek_conroy",
                 dust_delta=Uniform(-1.0, 0.5),
                 dust_slope="dust_delta",
                 dust_bump_strength="dust_slope",
@@ -124,6 +133,8 @@ class TestSummaryDisplay:
     def test_summary_mirror_not_in_fixed(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
+            dust_law_bc="power_law",
+            dust_law_diff="kriek_conroy",
             dust_delta=Uniform(-1.0, 0.5),
             dust_slope="dust_delta",
             redshift=Fixed(1.0),

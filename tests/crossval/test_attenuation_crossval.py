@@ -48,7 +48,7 @@ class TestConroy2010CrossVal:
     def test_deep_uv_matches_cardelli(self):
         """At far-UV wavelengths, conroy2010 should closely match Cardelli."""
         wave = jnp.linspace(1000.0, 2000.0, 100)
-        k_c10 = conroy2010(wave, dust_Rv=3.1, n_slope=-0.7)
+        k_c10 = conroy2010(wave, dust_Rv=3.1, dust_slope=-0.7)
         k_mw = cardelli(wave, dust_Rv=3.1)
         # Normalize Cardelli to match at V-band
         k_mw_v = float(cardelli(jnp.array([5500.0]), dust_Rv=3.1)[0])
@@ -62,8 +62,8 @@ class TestConroy2010CrossVal:
     def test_deep_ir_matches_power_law(self):
         """At NIR wavelengths, conroy2010 should closely match power_law."""
         wave = jnp.linspace(15000.0, 30000.0, 100)
-        k_c10 = conroy2010(wave, dust_Rv=3.1, n_slope=-0.7)
-        k_pl = power_law(wave, n_slope=-0.7)
+        k_c10 = conroy2010(wave, dust_Rv=3.1, dust_slope=-0.7)
+        k_pl = power_law(wave, dust_slope=-0.7)
         # At these wavelengths, sigmoid blend ~ 1 (power-law regime),
         # normalization factor k_v ~ 0.5 * k_mw(5500) + 0.5 * 1.0
         # The ratio should be very close (blend > 0.99)

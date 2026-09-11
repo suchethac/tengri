@@ -173,7 +173,7 @@ class TestDustySpectrumCrossval:
                 tau_v2,
                 law_bc="power_law",
                 law_diff="power_law",
-                n_slope=-0.7,
+                dust_slope=-0.7,
             )
         )[0]
 

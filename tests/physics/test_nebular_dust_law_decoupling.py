@@ -59,7 +59,7 @@ def test_default_nebular_inherits_birth_cloud_law():
     )
     neb = _recover_nebular(comp.apply(_state_with_nebular(sed_neb), params))
 
-    k = np.asarray(resolve_dust_law("power_law")(_WAVE, n_slope=-0.7))
+    k = np.asarray(resolve_dust_law("power_law")(_WAVE, dust_slope=-0.7))
     expected = np.asarray(sed_neb) * np.exp(-(1.0 * k + 0.5 * k))
     np.testing.assert_allclose(neb, expected, rtol=1e-5)
 
@@ -79,7 +79,7 @@ def test_law_neb_decouples_only_the_birth_cloud():
     # and takes no shape argument, so splatting the stellar bc dict into it is a
     # TypeError rather than four silently discarded values (#2185).
     k_bc = np.asarray(resolve_dust_law("calzetti")(_WAVE))
-    k_diff = np.asarray(resolve_dust_law("power_law")(_WAVE, n_slope=-0.7))
+    k_diff = np.asarray(resolve_dust_law("power_law")(_WAVE, dust_slope=-0.7))
     expected = np.asarray(sed_neb) * np.exp(-(1.0 * k_bc + 0.5 * k_diff))
     np.testing.assert_allclose(neb, expected, rtol=1e-5)
 
@@ -100,14 +100,14 @@ def test_neb_law_overrides_shift_only_nebular():
         config=DustSEDComponentConfig(
             law_bc="power_law",
             law_diff="power_law",
-            neb_law_overrides=(("n_slope", -1.3),),
+            neb_law_overrides=(("dust_slope", -1.3),),
         )
     )
     out = comp.apply(_state_with_nebular(sed_neb), params)
     neb = _recover_nebular(out)
 
     # Nebular bc slope is now -1.3 (override), tau_diff=0 so only the bc screen.
-    k_bc = np.asarray(resolve_dust_law("power_law")(_WAVE, n_slope=-1.3))
+    k_bc = np.asarray(resolve_dust_law("power_law")(_WAVE, dust_slope=-1.3))
     expected = np.asarray(sed_neb) * np.exp(-1.0 * k_bc)
     np.testing.assert_allclose(neb, expected, rtol=1e-5)
 

@@ -325,7 +325,7 @@ DECLARED_COINCIDENT: list[dict] = [
         "names": {"power_law", "vw07_diff"},
         "reason": (
             "vw07_diff is a fixed curve taking no parameters -- the Wild+2007 "
-            "diffuse slope -- and power_law's n_slope defaults to -0.7, the "
+            "diffuse slope -- and power_law's dust_slope defaults to -0.7, the "
             "same slope. One curve reached two ways, at default."
         ),
         "separator": (

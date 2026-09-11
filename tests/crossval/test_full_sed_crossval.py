@@ -583,7 +583,7 @@ def _build_tengri_sed_raw(
     logzsol: float = 0.0,
     tau_bc: float = 0.0,
     tau_diff: float = 0.0,
-    dust_slope: float = -0.7,
+    dust_slope: float | None = None,
     dust_law_bc: str = "power_law",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build tengri SED in absolute erg/s/Hz (not normalized by M_formed).
@@ -591,6 +591,10 @@ def _build_tengri_sed_raw(
     sfh_params: dict of fully-prefixed Parameters kwargs for the given sfh_type.
     dust_law_bc: attenuation curve for the birth cloud (and diffuse ISM by default).
       Accepted values: "power_law", "calzetti", "smc", "lmc", "cardelli".
+    dust_slope: power-law slope, passed only when given. The flat Parameters form
+      refuses a shape parameter the resolved law never reads (smc/lmc/calzetti read
+      none; cardelli reads dust_Rv), and omitting it keeps the registry default
+      (-0.7) for power_law, which is what every caller here relied on.
     Returns (wave_Å, L_nu_erg/s/Hz).
     """
     from tengri import Parameters
@@ -602,10 +606,11 @@ def _build_tengri_sed_raw(
         "met_logzsol": Fixed(logzsol),
         "dust_tau_bc": Fixed(tau_bc),
         "dust_tau_diff": Fixed(tau_diff),
-        "dust_slope": Fixed(dust_slope),
         "dust_law_bc": dust_law_bc,
         "redshift": 0.01,
     }
+    if dust_slope is not None:
+        kwargs["dust_slope"] = Fixed(dust_slope)
     kwargs.update({k: Fixed(v) for k, v in sfh_params.items()})
 
     spec = Parameters(**kwargs)
@@ -3372,7 +3377,7 @@ class TestSMCLMCDustLaw:
         wave_jax = jnp.array(wave)
 
         smc_curve = np.asarray(smc(wave_jax))
-        pl_curve = np.asarray(power_law(wave_jax, n_slope=-0.7))
+        pl_curve = np.asarray(power_law(wave_jax, dust_slope=-0.7))
 
         # Normalize both to 1 at V (5500 Å)
         v_idx = np.argmin(np.abs(wave - 5500.0))
