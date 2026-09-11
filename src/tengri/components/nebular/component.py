@@ -126,24 +126,26 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         :class:`BakedInBackend` is constructed. Default ``True`` for
         adapter use.
     cue_full_catalog : bool
-        For the ``"cue"`` backend only. When ``True``, expose the full
-        Cue-trained line catalog (~271 species) via ``state.derived
-        ["line_waves"]`` / ``["line_lums"]`` so users can query HeII
-        1640, HeI 10830 and other high-z diagnostics via
-        :meth:`tengri.forward.prediction.EmissionLines.get`. Default
-        ``False`` matches the pre-#303 behavior (128 CLOUDY/FSPS
-        lines) and avoids surprising users who iterate over
-        ``all_waves`` / ``all_lums``. Affects one headline accessor:
-        ``civ_1549`` (C IV, a Cue-only line) has no entry within 5 A
-        in the default 128-line subset and returns NaN there (#2192's
-        no-match answer), while every other headline Hα/Hβ/etc.
-        accessor is unaffected either way (#2236).
+        For the ``"cue"`` backend only. When ``True`` (the default since
+        #2239), expose the full Cue-trained line catalog (~138 species) via
+        ``state.derived["line_waves"]`` / ``["line_lums"]`` so users can
+        query HeII 1640, C IV 1549 and other high-z diagnostics via
+        :meth:`tengri.forward.prediction.EmissionLines.get`. ``False``
+        narrows to the legacy 128-line CLOUDY/FSPS-matched subset (the sole
+        default before #2239, added by #303 to avoid surprising users who
+        iterated over ``all_waves`` / ``all_lums``); kept as the explicit
+        opt-out for cross-code comparisons. Affects one headline accessor:
+        ``civ_1549`` (C IV, a Cue-only line) has no entry within 5 A in the
+        128-line subset and returns NaN there with a warning (#2192's
+        no-match answer, made loud by #2239), while every other headline
+        Hα/Hβ/etc. accessor, ``predict_photometry`` and ``rest_sed`` are
+        bit-identical either way (#2236).
     """
 
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
-    cue_full_catalog: bool = False
+    cue_full_catalog: bool = True
 
 
 @dataclass(frozen=True)

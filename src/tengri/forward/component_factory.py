@@ -334,10 +334,13 @@ def build_components(
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
-    # When ``True`` and ``nebular_backend == "cue"``, the orchestrator
-    # asks the Cue backend for the full ~271-species line catalog
-    # instead of the default 128 CLOUDY/FSPS subset. See #303.
-    cue_full_catalog: bool = False,
+    # When ``True`` (the default since #2239) and ``nebular_backend == "cue"``,
+    # the orchestrator asks the Cue backend for the full ~138-species line
+    # catalog; ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched
+    # subset (the sole default before #2239, added by #303). This default is
+    # a defensive fallback for direct callers of this function; the grammar
+    # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
+    cue_full_catalog: bool = True,
     # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
     # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.

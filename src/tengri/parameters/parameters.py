@@ -795,11 +795,18 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
-        # When True, the Cue orchestrator path publishes the full
-        # ~271-species line catalog instead of the default 128
-        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
-        # read via ``pred.lines.get(wavelength)``. See #303.
-        self.cue_full_catalog = kwargs.pop("cue_full_catalog", False)
+        # The one declaration of this default (#2239): every other spelling
+        # (``NebularSEDComponentConfig.cue_full_catalog``, ``build_components``'s
+        # own kwarg default, ``CueBackend``'s ``cloudyfsps_only``) either reads
+        # through this attribute or is a defensive fallback kept in sync with
+        # it for direct/bare callers that bypass the grammar. ``True`` (the
+        # default since #2239) publishes the full ~138-species Cue-trained
+        # line catalog via ``state.derived["line_waves"/"line_lums"]``, so
+        # HeII 1640, C IV 1549, etc. can be read via ``pred.lines.get(wavelength)``.
+        # ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched subset
+        # (the sole default before #2239, added by #303), kept for cross-code
+        # comparisons.
+        self.cue_full_catalog = kwargs.pop("cue_full_catalog", True)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)

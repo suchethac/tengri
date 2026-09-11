@@ -1300,7 +1300,10 @@ class CueBackend:
     def _forward_lines(
         self,
         p: dict,
-        cloudyfsps_only=True,
+        # Bare-call default; every production call site passes this
+        # explicitly (#2239: the resolved default is now False -- return the
+        # full catalog -- kept in sync with predict_nebular_line_luminosities).
+        cloudyfsps_only=False,
         neb_fesc=0.0,
         neb_fesc_lya=0.0,
         neb_fdust=0.0,
@@ -1563,7 +1566,7 @@ class CueBackend:
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         neb_fdust: float = 0.0,
-        cloudyfsps_only: bool = True,
+        cloudyfsps_only: bool = False,
         # Cue-specific overrides (bypass SSP-derived params)
         gas_logu: float | None = None,
         gas_logn: float = 2.0,
@@ -1610,7 +1613,9 @@ class CueBackend:
         neb_fdust : float
             Dust-absorption fraction of ionizing photons in HII regions [0, 1].
         cloudyfsps_only : bool
-            If True, return 128 CLOUDY/FSPS-matched lines.
+            If True, return only the 128 legacy CLOUDY/FSPS-matched lines
+            (kept for cross-code comparisons). Default False (#2239):
+            returns the full ~138-line Cue-trained catalog.
         gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
             Cue gas params (low-level). Override high-level derivation.
         gas_logqion : float or None

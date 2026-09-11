@@ -3608,11 +3608,14 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular_ssp"] = True
     elif neb_type == "cue":
         result["nebular_cue"] = True
-        # #303: opt into the full Cue catalog (~271 species) instead
-        # of the default 128 CLOUDY/FSPS subset so users can read
-        # HeII 1640, HeI 10830, etc. via pred.lines.get(wavelength).
-        if neb_dict.get("full_catalog", False):
-            result["cue_full_catalog"] = True
+        # cue's default catalog is the full ~138-line set (#2239); pass only
+        # an explicit override, mirroring the mappings model/density below:
+        # constructor defaults (``Parameters.__init__``) are the single
+        # source of truth. ``full_catalog: False`` narrows to the legacy
+        # 128-line CLOUDY/FSPS-matched subset (the default before #2239,
+        # added by #303) for cross-code comparisons.
+        if "full_catalog" in neb_dict:
+            result["cue_full_catalog"] = bool(neb_dict["full_catalog"])
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -4296,7 +4299,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # test's hand_written allowlist instead.
     ),
     "neb": (
-        _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),
+        _Structural("full_catalog", "cue_full_catalog", True, only_types=("cue",)),
         _Structural(
             "grid",
             "cloudy_grid_path",
