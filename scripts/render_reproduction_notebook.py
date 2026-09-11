@@ -10,7 +10,11 @@ reproduction notebook embeds figures instead of losing them to Agg -- fails
 loudly on any error output cell or a ``SystemExit``-truncated run (reusing
 ``tools/check_notebooks_executed.py``'s own detection logic, so a
 partially-aborted render cannot slip past this script only to be caught later
-by CI), then stamps the render with
+by CI), then scrubs this checkout's absolute path out of the captured outputs
+(``tools/_repro_render_shared.strip_local_paths``, shared with
+``scripts/execute_notebooks.py`` -- a warning banner prints the absolute
+``__file__`` of the module that raised it, so a render produced inside a
+worktree would otherwise ship that worktree's path), stamps the render with
 ``metadata["tengri_render"] = {"source_sha256", "executed_at",
 "tengri_version"}`` and publishes the ``.ipynb`` (plus its ``_figs/*.png``)
 to ``docs/reproduction/``.
@@ -41,7 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools._repro_render_shared import code_cell_source_sha256
+from tools._repro_render_shared import code_cell_source_sha256, strip_local_paths
 from tools.check_notebooks_executed import unexecuted
 
 
@@ -200,6 +204,18 @@ def render_slug(slug: str, *, root: Path = ROOT, timeout: int = 1800) -> Path:
             "success under nbclient). Generate the missing input named in that cell "
             "and re-run."
         )
+
+    # Redact this checkout before anything is written. A deprecation banner or
+    # traceback carries the absolute ``__file__`` of the module that raised it,
+    # so a render produced inside a worktree bakes that worktree's path into the
+    # output and ships it. Scrubbing here rather than after the write is what
+    # makes `publish_slug`'s byte copy clean as well: one scrub covers the
+    # source notebook and its docs twin, and there is only one file write to
+    # keep consistent. The stamp below is unaffected either way -- it hashes the
+    # `.py` source's code cells, never this file's bytes -- so the order is free
+    # and the single-write form is the one that cannot leave the two copies
+    # differing.
+    strip_local_paths(nb, root=root)
 
     nb.setdefault("metadata", {})["tengri_render"] = {
         "source_sha256": code_cell_source_sha256(py_path),
