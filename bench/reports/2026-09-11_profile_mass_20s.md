@@ -414,6 +414,32 @@ library's number. Model build (`SEDModel.build` + precompute-table load) is
 **25-27 s** per fresh model on this box and is outside the agreed budget; a
 notebook that rebuilds the model per galaxy pays it every time.
 
+## Finding 10 — VI is neither a faster posterior nor a metric for NUTS, and profiling must step aside for it
+
+geoVI (`method="vi"`, NIFTy, 15 KL iterations) on `ctl-dpl` seed 7 against a
+4 × (300 + 1000) NUTS reference (76 s): warm wall **30-40 s** — 6 s first
+iteration, then ~1.5 s per KL iteration, 1 s of draws, 6-10 GB RSS — against
+the default method's 26.8 s on the same fresh-model basis. Its posterior is
+**not adequate**: `sfh_dpl_age_gyr` 12.4 ± 1.5 against the reference's
+5.2 ± 1.7 (4.2σ), `dust_tau_diff` −3.5σ, `met_logzsol` +3.9σ, std ratios
+0.31-1.05 — self-consistent (reduced χ² 3.1) but a different basin, which is
+what `bench/reports/2026-08-31_vi_speed_evaluation.md` found before profiling
+existed. No supported path hands a VI covariance to `run_nuts` as a mass
+matrix (`dense_mass_matrix` is a policy flag, `precondition` a whitening
+strength); it would be new code. The other Gaussian-family backends
+(`vi_linear`, `vi_fullrank`, `vi_meanfield`, `laplace`, `pathfinder`) were
+not measured in this session.
+
+**A bug found on the way and fixed on the branch:** the NIFTy and native VI
+backends build their objective from the model and its spec, not from the
+Fitter's loss, so under `profile_mass="auto"` they fit with the mass **frozen
+at the placeholder** — geoVI returned mass 10.24 ± 0.08 against 11.96, age
+0.5 Gyr, reduced χ² 310. `Fitter.run` now resolves profiling per method:
+only backends that consume the Fitter's loss (`PROFILE_MASS_BACKENDS`: MAP,
+Laplace, every BlackJAX sampler, SMC, HMC-IS) keep it; any other method gets
+the original spec restored, logged under `"auto"` and refused under an
+explicit `True`.
+
 ## Caveats
 
 1. **Walls are contended** except the idle series in Finding 5; gradients are

@@ -355,10 +355,86 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
         **fitter.spec._distributions,
         mass_name: Fixed(placeholder),
     }
+    # Kept so :func:`resolve_profile_mass_for_method` can undo the rewrite at
+    # ``run()`` time for a backend that does not consume the profiled loss.
+    fitter._profile_mass_original_spec = fitter.spec
     fitter.spec = new_spec
     fitter._profile_mass_name = mass_name
     fitter._profile_mass_prior = ctx["mass_prior"]
     fitter._profile_mass_bounds = ctx["bounds"]
+
+
+#: Backends that consume the Fitter's own loss functions
+#: (``_get_or_build_loss_fn`` / ``_get_or_build_logdensity_fn`` / the
+#: log-likelihood pair) and therefore see the profiled marginal. Every
+#: BlackJAX sampler goes through ``mcmc/_shared._get_flat_logdensity``; MAP,
+#: Laplace, HMC-IS and SMC read the same seam. NIFTy geoVI/MGVI and the native
+#: Gaussian VI build their objective from the model and its spec directly, so
+#: under profiling they would fit with the mass frozen at the placeholder --
+#: measured on 2026-09-12 (ctl-dpl seed 7, geoVI: mass 10.24 against the NUTS
+#: reference 11.96, age 0.5 Gyr against 5.2). Anything not listed here runs
+#: unprofiled; add a backend only after checking it reads the Fitter's loss.
+PROFILE_MASS_BACKENDS = frozenset(
+    {
+        "map",
+        "laplace",
+        "mcmc",
+        "mcmc_nuts",
+        "mcmc_nuts_fast",
+        "mcmc_hmc",
+        "mcmc_dynamic_hmc",
+        "mcmc_ghmc",
+        "mcmc_chees",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
+        "mcmc_barker",
+        "mcmc_mala",
+        "mcmc_hmc_lowrank",
+        "mcmc_smc",
+        "hmc_is",
+    }
+)
+
+
+def disable_profile_mass(fitter: Fitter, reason: str) -> None:
+    """Undo the working-spec rewrite so the fitter samples the mass again.
+
+    Restores the original spec and the free-parameter bookkeeping derived
+    from it. The cached loss functions are keyed on the free-name tuple, so
+    the profiled ones become unreachable and the unprofiled ones rebuild on
+    first use; nothing is evicted by hand.
+    """
+    if not getattr(fitter, "_profile_mass", False):
+        return
+    original = getattr(fitter, "_profile_mass_original_spec", None)
+    if original is not None:
+        fitter.spec = original
+        fitter._free_names = fitter.spec.free_params
+        fitter._fixed_values = fitter.spec.get_fixed_values()
+        fitter._bounds = {n: fitter.spec.get_distribution(n).bounds for n in fitter._free_names}
+    fitter._profile_mass = False
+    fitter._profile_mass_resolved = False
+    fitter._profile_mass_reason = reason
+    logger.info("profile_mass: disabled for this fit (%s).", reason)
+
+
+def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> None:
+    """Keep profiling only for a backend that consumes the profiled loss.
+
+    Called from ``Fitter.run()`` once the method name is known. ``requested``
+    is the constructor's ``profile_mass`` argument: an explicit ``True`` on an
+    unsupported backend is an error, ``"auto"`` steps aside with a logged
+    reason, ``False`` was never engaged.
+    """
+    if not getattr(fitter, "_profile_mass", False) or method in PROFILE_MASS_BACKENDS:
+        return
+    reason = (
+        f"method={method!r} builds its objective from the model rather than the "
+        "Fitter's loss, so it cannot see the profiled marginal"
+    )
+    if requested is True:
+        raise ValueError(f"profile_mass=True but {reason}.")
+    disable_profile_mass(fitter, f"auto-disabled: {reason}")
 
 
 @contextlib.contextmanager

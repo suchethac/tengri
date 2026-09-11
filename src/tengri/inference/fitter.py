@@ -1447,6 +1447,7 @@ class Fitter:
         # docstring for the guards and the math.
         from tengri.inference.mass_profile import configure_profile_mass
 
+        self._profile_mass_requested = profile_mass
         configure_profile_mass(self, profile_mass, params_override)
 
         # ── Parameters ─────────────────────────────────────────────
@@ -3603,6 +3604,12 @@ class Fitter:
 
         # Resolve deprecated aliases and validate method
         method = resolve_method(method)
+
+        # Profiling was configured before the method was known; a backend that
+        # builds its own objective from the model must sample the mass itself.
+        from tengri.inference.mass_profile import resolve_profile_mass_for_method
+
+        resolve_profile_mass_for_method(self, method, self._profile_mass_requested)
 
         # #1671 made operational: this fit runs on a resolved precompute LUT,
         # so price the LUT's forward bias against this fit's SNR once, the

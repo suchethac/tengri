@@ -289,3 +289,53 @@ class TestAutoDefault:
         assert fitter._profile_mass is False
         assert fitter._profile_mass_resolved is False
         assert fitter._profile_mass_resolved is False
+
+
+def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
+    """A NIFTy VI fit must sample the mass itself: it never sees the profiled loss.
+
+    Measured 2026-09-12 (ctl-dpl seed 7): with the mass frozen at the placeholder
+    geoVI returned mass 10.24 against the NUTS reference 11.96. The run-time
+    resolution restores the original spec for such backends under ``"auto"`` and
+    refuses an explicit ``True``.
+    """
+    from tengri.inference.mass_profile import (
+        PROFILE_MASS_BACKENDS,
+        resolve_profile_mass_for_method,
+    )
+
+    assert "mcmc_nuts_fast" in PROFILE_MASS_BACKENDS
+    assert "vi" not in PROFILE_MASS_BACKENDS
+
+    class _Spec:
+        free_params = ("a", "m_log_total_mass")
+
+        def get_fixed_values(self):
+            return {}
+
+        def get_distribution(self, name):
+            class _D:
+                bounds = (0.0, 1.0)
+
+            return _D()
+
+    class _Fitter:
+        _profile_mass = True
+        _profile_mass_resolved = True
+        _profile_mass_reason = "auto-enabled"
+        _profile_mass_original_spec = _Spec()
+        spec = object()
+        _free_names = ("a",)
+
+    f = _Fitter()
+    resolve_profile_mass_for_method(f, "mcmc_nuts", "auto")
+    assert f._profile_mass is True  # a consumer keeps it
+
+    resolve_profile_mass_for_method(f, "vi", "auto")
+    assert f._profile_mass is False
+    assert tuple(f._free_names) == ("a", "m_log_total_mass")
+    assert "auto-disabled" in f._profile_mass_reason
+
+    g = _Fitter()
+    with pytest.raises(ValueError, match="profile_mass=True"):
+        resolve_profile_mass_for_method(g, "vi", True)
