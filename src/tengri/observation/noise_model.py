@@ -12,6 +12,7 @@ import dataclasses
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key
 from tengri.parameters.priors import Distribution, Fixed
 
 
@@ -83,6 +84,20 @@ class NoiseModel:
                         "only scalar or array of numeric values are supported"
                     )
                     raise TypeError(msg)
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this noise model.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from calibration floor and Student-t degrees of freedom.
+
+        Notes
+        -----
+        Both fields are included by content as they define the likelihood function.
+        """
+        return derive_key(self, _NOISE_MODEL_CACHE_KEY_POLICY)
 
     def validate_array_length(self, n_filters: int) -> None:
         """Validate that array calibration_floor matches the number of filters.
@@ -165,3 +180,9 @@ class NoiseModel:
         if self.student_t_dof is not None:
             parts.append(f"Student-t dof={self.student_t_dof}")
         return ", ".join(parts) if parts else "Gaussian (default)"
+
+
+_NOISE_MODEL_CACHE_KEY_POLICY: KeyPolicy = {
+    "calibration_floor": content("calibration floor affects likelihood normalization"),
+    "student_t_dof": content("Student-t degrees of freedom changes the likelihood function"),
+}

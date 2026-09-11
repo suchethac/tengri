@@ -209,6 +209,10 @@ class TestSpectralIndexData:
         )
         grad = assert_grad_matches_fd(sid.log_likelihood, jnp.array([1.9]))
         assert jnp.isfinite(grad).all()
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 # ── Standard catalog completeness ─────────────────────────────────
@@ -291,6 +295,10 @@ class TestMeasureIndex:
         flux = jnp.ones(500)
         grad = assert_grad_matches_fd(measure_fn, flux)
         assert jnp.isfinite(grad).all()
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_jit_compatible(self):
         """Index measurement works under JAX JIT."""
@@ -329,6 +337,10 @@ class TestMeasureIndex:
         flux = jnp.ones(500)
         hess_diag = assert_grad_matches_fd(lambda f: jnp.sum(jax.grad(measure_fn)(f)), flux)
         assert jnp.isfinite(hess_diag).all()
+        assert jnp.any(hess_diag != 0.0), (
+            "`hess_diag` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 # ── Observation integration ───────────────────────────────────────

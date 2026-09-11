@@ -124,6 +124,10 @@ def test_variable_noise_metric_is_finite_in_float32():
         f"{np.sum(~np.isfinite(got))}/{got.size} entries of the variable-noise "
         "metric are non-finite in float32 — H_ff = tau**2 overflows (#1617)"
     )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def _metric_with_h_tt_zeroed(a_f, a_t, data, xi, v):

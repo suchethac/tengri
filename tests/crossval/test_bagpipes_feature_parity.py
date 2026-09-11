@@ -326,6 +326,10 @@ class TestPSBSFHPhysics:
 
         grad_val = assert_grad_matches_fd(total_mass, 1.0)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 # ── 4. VW07 TWO-COMPONENT DUST ────────────────────────────────────

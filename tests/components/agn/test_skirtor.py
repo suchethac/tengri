@@ -812,6 +812,10 @@ class TestCreateSkirtorFromGridNpz:
         g_jax = float(jax.grad(lambda lbol: jnp.sum(fn(wave, agn_log_lbol=lbol)))(12.0))
         g_fd = fd_grad(lambda lbol: float(jnp.sum(fn(wave, agn_log_lbol=lbol))), 12.0)
         assert np.isfinite(g_jax), "NPZ path: autodiff gradient is not finite"
+        assert np.any(g_jax != 0.0), (
+            "`g_jax` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(
             g_jax, g_fd, rtol=1e-2, err_msg="NPZ path: autodiff gradient differs from FD by >1%"
         )

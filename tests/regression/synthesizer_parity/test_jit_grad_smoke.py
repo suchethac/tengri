@@ -147,6 +147,10 @@ def test_igm_transmission_grad_compatible(high_z_wavelength_grid):
         "P-24 BUG: gradient of IGM transmission w.r.t. z is non-finite. "
         "Derivative broken or outside JAX trace."
     )
+    assert jnp.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_cosmological_distance_finite_at_high_z():

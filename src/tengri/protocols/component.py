@@ -30,6 +30,7 @@ from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import frozen_dataclass_key
 from tengri.protocols.derived_state import DerivedState
 
 # Deprecated alias kept on tengri.protocols.component for one release;
@@ -320,6 +321,19 @@ class SEDComponentConfig:
     """
 
     name: str = "component"
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this config, field by field.
+
+        Returns
+        -------
+        tuple
+            ``(type_qualname, ((field_name, baked_value), ...))``. Every
+            subclass (``DustSEDComponentConfig``, ``AGNSEDComponentConfig``,
+            ...) inherits this so a new config field is keyed the day it is
+            added, with no per-subclass override required.
+        """
+        return frozen_dataclass_key(self)
 
 
 @dataclass(frozen=True)

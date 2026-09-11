@@ -68,6 +68,10 @@ def test_graybody_float32_gradient_is_finite(optically_thin):
     value, grad = _grad_and_value(x64=False, optically_thin=optically_thin)
 
     assert np.isfinite(value), "forward value must be finite (it always was)"
+    assert np.any(value != 0.0), (
+        "`value` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(grad), (
         f"float32 d(sum graybody)/dT is {grad!r}; the reverse pass must not form "
         "a squared denominator outside the float32 range (#1439)"
@@ -91,6 +95,10 @@ def test_graybody_float32_gradient_finite_across_temperatures():
     for T_eff in (10.0, 20.0, 35.0, 80.0, 200.0):
         _, grad = _grad_and_value(x64=False, optically_thin=False, T_eff=T_eff)
         assert np.isfinite(grad), f"NaN/inf gradient at T_eff={T_eff} K"
+        assert np.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 def test_graybody_float64_is_unchanged_by_the_regrouping():

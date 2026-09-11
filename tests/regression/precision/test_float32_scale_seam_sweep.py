@@ -432,6 +432,12 @@ def test_the_float32_gradient_is_finite_and_nonzero_across_the_declared_prior(sw
         assert np.all(np.isfinite(value)), (
             f"{sweep_id}: the forward itself is non-finite at {name}={x:.4g}"
         )
+        assert np.any(value != 0.0), (
+            f"{sweep_id}: the forward is exactly zero at {name}={x:.4g}. A dead "
+            "forward makes the gradient assertions above vacuous in the same way a "
+            "nan would -- there is nothing for d/d" + name + " to be a derivative "
+            "of. Measured non-zero at every swept point (min |value| 7.23e-28)."
+        )
 
 
 @_parametrize
@@ -446,4 +452,13 @@ def test_the_float64_arm_is_finite_and_nonzero_too(swept):
         assert np.all(np.isfinite(gradient)) and np.any(gradient != 0.0), (
             f"{sweep_id}: the float64 reference is unusable at {name}={x:.4g}: {gradient}"
         )
-        assert np.all(np.isfinite(value))
+        assert np.all(np.isfinite(value)), (
+            f"{sweep_id}: the float64 reference forward is non-finite at {name}={x:.4g}"
+        )
+        assert np.any(value != 0.0), (
+            f"{sweep_id}: the float64 reference forward is exactly zero at "
+            f"{name}={x:.4g}. This test exists so the float32 arm is not judged "
+            "against a number that does not exist, and a relative comparison of two "
+            "zeros is as undefined as one of two nans -- which is the whole reason "
+            "#2178's own fix pinned `predict_line_fluxes` non-zero beside finite."
+        )

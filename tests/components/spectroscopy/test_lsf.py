@@ -237,6 +237,10 @@ class TestLSFGradients:
 
         g = assert_grad_matches_fd(loss, delta_spectrum)
         assert jnp.all(jnp.isfinite(g))
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_gradient_finite_variable_r(self, wave, delta_spectrum):
         """Gradient w.r.t. input flux is finite (variable R)."""
@@ -247,6 +251,10 @@ class TestLSFGradients:
 
         g = assert_grad_matches_fd(loss, delta_spectrum)
         assert jnp.all(jnp.isfinite(g))
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_gradient_wrt_resolution_matches_finite_difference(self, wave, delta_spectrum):
         """Gradient w.r.t. scalar resolution matches finite differences."""

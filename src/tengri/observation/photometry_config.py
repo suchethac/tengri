@@ -12,6 +12,7 @@ from collections.abc import Sequence
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.observation.photometry import FilterCurve
 from tengri.utils.filter_convention import FilterConvention
 
@@ -296,6 +297,21 @@ class Photometry:
             f"got {type(filter_set)}"
         )
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this photometry configuration.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from filters, names, and convention.
+
+        Notes
+        -----
+        Derived fields (filter_waves, filter_trans, n_filters, _fw_padded,
+        _ft_padded, _n_valid) are excluded as they are computed from filters.
+        """
+        return derive_key(self, _PHOTOMETRY_CACHE_KEY_POLICY)
+
     def summary(self) -> str:
         """Return a one-line summary of the photometry configuration.
 
@@ -310,6 +326,19 @@ class Photometry:
 
         """
         return f"{self.n_filters} filters: {', '.join(self.names)}"
+
+
+_PHOTOMETRY_CACHE_KEY_POLICY: KeyPolicy = {
+    "filters": content("filter transmission curves define the bandpasses"),
+    "names": content("filter names identify the bandpass set"),
+    "convention": content("photon-counting vs energy convention changes the integral"),
+    "filter_waves": exclude("derived from filters in __post_init__"),
+    "filter_trans": exclude("derived from filters in __post_init__"),
+    "n_filters": exclude("derived from filters in __post_init__"),
+    "_fw_padded": exclude("derived from filters in __post_init__"),
+    "_ft_padded": exclude("derived from filters in __post_init__"),
+    "_n_valid": exclude("derived from filters in __post_init__"),
+}
 
 
 def resolve_runtime_photometry(filters, build_time=None):

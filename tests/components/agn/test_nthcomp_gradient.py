@@ -40,6 +40,10 @@ class TestNthcompGradientStability:
 
         grad = assert_grad_matches_fd(loss, val)
         assert jnp.isfinite(grad), f"Expected finite gradient, got {grad}"
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_clamp_interp_index_gradient_at_boundary(self):
         """The clamp's derivative by value, because ``isfinite`` cannot see a dead axis.
@@ -144,6 +148,10 @@ class TestNthcompGradientStability:
             f"gamma={gamma_val} is inside the table but its gradient is exactly "
             f"zero, so a fit cannot move here"
         )
+        assert jnp.all(jnp.isfinite(float(grad))), (
+            "`float(grad)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     @pytest.mark.parametrize("gamma_val", GAMMA_CLAMPED)
     def test_gamma_is_frozen_outside_the_table(self, gamma_val):
@@ -231,6 +239,10 @@ class TestNthcompGradientStability:
         assert float(grad) != 0.0, (
             f"kTe={kte_val} is inside the table but d/d(kTe) is exactly zero -- "
             f"the custom_jvp has stopped supplying the kTe tangent (#1822)"
+        )
+        assert jnp.all(jnp.isfinite(float(grad))), (
+            "`float(grad)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
         )
 
     @pytest.mark.parametrize("kte_val", KTE_CLAMPED)
@@ -413,6 +425,10 @@ class TestNthcompJVPRule:
 
         assert tangent_out.dtype == primal_out.dtype
         assert bool(jnp.all(jnp.isfinite(tangent_out)))
+        assert jnp.any(tangent_out != 0.0), (
+            "`tangent_out` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         # Reverse mode over the same mixed pairing must also survive.
         def loss(g):

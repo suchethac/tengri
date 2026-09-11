@@ -178,6 +178,10 @@ def test_the_companion_is_finite_in_float32_where_the_linear_overflows(ssp_bare)
             f"({float(np.asarray(lin64[name])):.4e} > {f32_max:.4e}). The companion is "
             "being computed after the overflow instead of from log_line_lums."
         )
+        assert np.any(value != 0.0), (
+            "`value` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 def test_a_doublet_companion_is_a_logsumexp_not_a_passthrough():

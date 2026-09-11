@@ -106,7 +106,9 @@ def main() -> int:
         )
         return 0
 
-    print(f"{len(offenders)} tracked file(s) their own .gitignore would exclude:\n", file=sys.stderr)
+    print(
+        f"{len(offenders)} tracked file(s) their own .gitignore would exclude:\n", file=sys.stderr
+    )
     for path, rule in offenders:
         print(f"  {path}\n      excluded by {rule}", file=sys.stderr)
     print(

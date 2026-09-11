@@ -84,6 +84,10 @@ class TestHelper:
 
         g = jax.jit(jax.grad(loss))(jnp.asarray(0.5))
         assert jnp.isfinite(g), "grad through the clip must be finite under jit"
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestTransmission:

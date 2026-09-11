@@ -154,6 +154,10 @@ def test_apply_jit_and_grad(component, loaded):
     assert np.isfinite(val) and val > 0
     grad = float(jax.grad(_run, argnums=1)(jnp.asarray(1.0e44), jnp.asarray(0.5)))
     assert np.isfinite(grad)
+    assert np.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_pah_only_component(fixture_path):

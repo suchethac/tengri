@@ -433,7 +433,15 @@ def test_the_gradient_is_exactly_zero_at_the_declared_defaults():
     # zeros above are the clip and not a broken derivative.
     live_mbh, live_ledd = grad(8.6, -2.5)
     assert float(live_mbh) != 0.0
+    assert jnp.all(jnp.isfinite(float(live_mbh))), (
+        "`float(live_mbh)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
     assert float(live_ledd) != 0.0
+    assert jnp.all(jnp.isfinite(float(live_ledd))), (
+        "`float(live_ledd)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
 
 
 # --------------------------------------------------------------------------

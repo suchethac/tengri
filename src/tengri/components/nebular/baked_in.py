@@ -10,6 +10,8 @@ import warnings
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key
+
 
 class BakedInNebularWarning(UserWarning):
     """Warning raised when BakedInBackend is used with SSPs.
@@ -94,6 +96,17 @@ class BakedInBackend:
                 raise ValueError(msg)
             warnings.warn(msg, BakedInNebularWarning, stacklevel=2)
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this backend's structure.
+
+        Returns
+        -------
+        tuple
+            Cache key. A no-op backend has no data-carrying structure beyond
+            its three identity flags.
+        """
+        return derive_key(self, _BAKED_IN_BACKEND_CACHE_KEY_POLICY)
+
     def predict_nebular_sed(
         self,
         ssp_weights: jnp.ndarray,
@@ -162,3 +175,10 @@ class BakedInBackend:
 
         """
         return jnp.array([]), jnp.array([])
+
+
+_BAKED_IN_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
+    "name": content("backend identity string"),
+    "has_free_params": content("whether ionization params are fittable"),
+    "has_continuum": content("whether the backend publishes a continuum"),
+}

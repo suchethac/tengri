@@ -36,14 +36,52 @@ def sed_model_minimal(synthetic_ssp, simple_observation):
 
 
 @pytest.mark.integration
-def test_forward_model_end_to_end_jit(sed_model_minimal, simple_observation) -> None:
+def test_forward_model_end_to_end_jit(synthetic_ssp, simple_observation) -> None:
     """ForwardModel.predict must be transparent under jax.jit.
 
     A loss function that wraps ForwardModel.predict and performs a
     likelihood-like computation must JIT-compile, run, and produce
-    finite gradients.
+    finite, non-zero gradients.
+
+    This builds its own model rather than taking ``sed_model_minimal``. That
+    fixture fixes *every* parameter — ``Fixed(DEFAULT)`` for both the SFH and
+    the dust law, ``neb`` off, ``redshift`` fixed — so ``spec.free_params`` is
+    empty and ``params`` came out ``{}``. With an empty dict there is nothing to
+    differentiate: ``assert_grad_matches_fd`` compares no entries and
+    ``all(jnp.isfinite(g).all() for g in grads.values())`` is **vacuously True**
+    over an empty ``.values()``. The test promised "finite gradients" in its own
+    docstring while taking none, and would have kept promising it if the forward
+    model were detached outright — the empty-collection twin of the #2100 hole
+    this guard exists for. A free redshift gives it one parameter the photometry
+    genuinely moves with, and the precondition below keeps the vacuity from
+    coming back.
+
+    The two dust optical depths are the free pair: attenuation is ``exp(-tau *
+    k(lambda))``, smooth in ``tau``, so the analytic gradient and the finite
+    difference inside ``assert_grad_matches_fd`` agree closely. (A free redshift
+    also works end to end, but it threads an interpolation table whose nodes are
+    kinks, where autodiff takes a one-sided slope and a central difference
+    averages both — a comparison that fails for reasons having nothing to do
+    with this test's subject.) ``two_component`` requires both halves of a
+    per-screen pair to be named together.
     """
+    from tengri import DEFAULT, SEDModel, Uniform
     from tengri.forward.forward_model import ForwardModel
+
+    sed_model_minimal = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+            "tau_diff": Uniform(0.0, 1.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.1),
+    )
 
     forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
 
@@ -56,11 +94,24 @@ def test_forward_model_end_to_end_jit(sed_model_minimal, simple_observation) -> 
         raise AssertionError(f"Prediction dict missing 'phot_fnu' key; got: {list(pred.keys())}")
 
     params = {name: jnp.float64(0.5) for name in sed_model_minimal.spec.free_params}
+    # Guard the guard: every assertion below quantifies over `grads.values()`, and
+    # `all()`/`any()` over an empty collection answer True/False without looking at
+    # anything. If the model exposes no free parameter there is no gradient under
+    # test and the rest of this function measures nothing.
+    assert params, (
+        "no free parameters, so the gradient assertions below are vacuous: "
+        f"spec.free_params = {list(sed_model_minimal.spec.free_params)}"
+    )
+
     value = loss(params)
     assert jnp.isfinite(value)
 
     grads = assert_grad_matches_fd(loss, params)
     assert all(jnp.isfinite(g).all() for g in grads.values())
+    assert any(jnp.any(g != 0.0) for g in grads.values()), (
+        "the end-to-end gradient is identically zero — finite is not enough, a detached "
+        "forward model is as unusable as a NaN one (#2100)"
+    )
 
 
 @pytest.mark.integration

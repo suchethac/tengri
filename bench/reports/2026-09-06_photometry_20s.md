@@ -9,6 +9,18 @@ only other row that converges on all six seeds is `05` + `nuts wcap=5+precond`
 at **2.87 M gradients and 1125 s** (56x). Eighteen of the twenty rows measured
 do not converge on all six seeds at all, and their projections are lower bounds.
 
+**Scope, added after publication.** Every row here uses a **diagonal** mass
+matrix: all five configs pass `dense_mass_matrix=False`, and the harness's
+`--dense` flag was never passed. The dense arm is therefore *absent from this
+campaign, not measured and rejected*, and the 32x figure is the cheapest of the
+**diagonal** configurations, not of all of them. It has since been measured on
+six seeds elsewhere: a dense window adaptation at D = 8 costs **3.4x fewer
+gradients per effective sample than the diagonal metric on the best of the six
+seeds**, converges on **none** of them, and **freezes one** (unique fraction
+0.089). It is a candidate default change for D >= 8 carrying a memory column,
+**not a route to 20 s**, and the verdict above stands. See *What was NOT
+measured* for the rows.
+
 **The two levers the brief nominated both work, and neither is close to enough.**
 The warmup tree-depth cap is the larger one: on `05` it takes the shipped call
 from >=2644 s to 1125 s and is the difference between converging and not. The
@@ -456,12 +468,67 @@ and not both.
   been new information.
 - **Composing the analytic preconditioner with a second whitening.** Refused by
   the brief and by two prior measurements (MCLMC's `diagonal_preconditioning`,
-  and low-rank + precond at D = 74, 472 divergences).
+  and low-rank + precond at D = 74, 433 divergences).
 - **A catalog cell at uncapped sampling depth.** Attempted and abandoned on cost:
   an N = 8 cell at 100 warmup + 100 draws did not finish in 30 minutes at depth
   10, which is consistent with `2026-08-30_gpu_catalog_throughput.md` Finding 3
   ("catalog `mcmc_nuts` did not complete a single cell"). Finding 6 is the reason
   this matters and the reason a fixed engine is the prerequisite for measuring it.
+- **A dense mass matrix.** Every config in this sweep passes
+  `dense_mass_matrix=False` (`benchmark_notebook_sampler.py:791, 817, 862,
+  1005`); the harness has a `--dense` flag and it was never passed. So the dense
+  arm is **absent from this campaign, not measured and rejected**, and the "32x"
+  headline is scoped to the five diagonal configs in the table. This is a gap,
+  not a judgement: `_resolve_dense_mass_matrix` switches the auto-policy to
+  diagonal at exactly D >= 8 -- where three of the four fixtures here sit -- so
+  the default path never reaches it and neither did the sweep.
+
+  It has since been measured on the same six seeds, on `ctl-dpl`, on branch
+  `feat/laplace-metric-nuts`: dense window adaptation
+  (`is_mass_matrix_diagonal=False`), 300 warmup on one chain from an L-BFGS MAP,
+  4 chains x 150 draws, `target_accept_rate=0.8`. Gradients are the comparable
+  column; the walls were taken under nine concurrent fits.
+
+  | seed | grads total | g/draw | min ESS (worst param) | split R-hat | div | uniq | grads/ESS |
+  |---|---|---|---|---|---|---|---|
+  | 7 | 94,512 | 34.0 | 82.8 (alpha) | 1.056 | 28 | 0.966 | **246** |
+  | 8 | 137,409 | 74.5 | 19.4 (tau_gyr) | 1.306 | 23 | 0.990 | 2304 |
+  | 9 | 89,910 | 45.2 | 60.9 (beta) | 1.045 | 13 | 0.995 | 445 |
+  | 10 | 113,340 | 3.2 | 3.0 (logzsol) | 3.513 | 411 | **0.089** | undefined |
+  | 11 | 339,117 | 328.6 | 100.3 (tau_diff) | 1.029 | 5 | 1.000 | 1966 |
+  | 12 | 115,562 | 45.2 | 136.2 (age) | 1.013 | 8 | 0.993 | 199 |
+
+  **Zero of six clear max split-R-hat < 1.01 with min ESS >= 100.** The 246 that
+  first made this arm interesting is the *best* seed, not a characteristic one:
+  the median is ~1000 and the seed-to-seed spread is the same 7-10x this report
+  measures for the diagonal metric, which is Finding 3 reappearing under a
+  different metric rather than being escaped by one.
+
+  Two results are worth more than the headline number:
+
+  **Seed 10 froze, and only under the dense adaptation.** Unique fraction
+  **0.089** against 411 divergences and R-hat 3.513 -- the #1999 signature, which
+  the library would now raise `DeadFitError` on. The diagonal control on the same
+  seed is bad but alive (ESS 9.8, R-hat 1.21, 150 divergences, unique 0.61). So
+  seed 10 is hard for every metric, and the dense adaptation is what turned hard
+  into dead. The `unique_frac` column is what caught it; divergences alone would
+  have read as merely bad, and this report's Finding on health signals is the
+  reason that column was requested.
+
+  **The warmup cap does not compose with the dense metric.** On the dense arm
+  `wcap=5` cuts adaptation 51.8 s -> 5.9 s, but gradients per draw go 34 -> 67
+  and min ESS 83 -> 50 at R-hat 1.11 -- a net **~10%** in gradients-to-ESS-100,
+  against the **3.2x** the same cap is worth on the diagonal metric in this
+  table. The obvious extrapolation -- that the campaign's best lever would carry
+  over to the best metric and land near 20 s -- is therefore refuted by
+  measurement, not merely unproven.
+
+  Where this leaves the arm: **3.4x fewer gradients per effective sample than the
+  diagonal metric where it works**, at 1.10-1.88 GB peak RSS (well under the 20+
+  GB `dense_basis` spike the auto-policy cites as its reason), converging on none
+  of six seeds and freezing one. That is a candidate change to the D >= 8 default
+  **with a memory column attached**, not a route to 20 s.
+
 - **float32.** Out of scope; `2026-08-30_gpu_catalog_throughput.md` measured
   float64 at 3.6x the float32 gradient at batch 2048 and ~1.25x below batch 128,
   so at these widths precision is not where the 32x lives.

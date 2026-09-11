@@ -336,6 +336,10 @@ class TestMidIRUV:
     def test_grad_finite(self):
         grad_val = jax.grad(lambda x: prior_midir_uv(x, 1.0e44))(45.0)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_disagrees_with_direct_luminosity_comparison(self):
         """D7(c) regression: equal L_mir/L_uv is NOT this prior's peak."""

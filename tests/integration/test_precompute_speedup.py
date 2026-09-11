@@ -157,6 +157,10 @@ class TestGradientCleanliness:
             assert bool(jnp.isfinite(grads[name])), (
                 f"Gradient for {name} is not finite: {float(grads[name])}"
             )
+            assert jnp.any(grads[name] != 0.0), (
+                "`grads[name]` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
     def test_autodiff_matches_finite_differences(self, ssp_data, sdss_filters, smooth_spec):
         """Autodiff gradients match finite differences to 4+ digits."""
@@ -224,6 +228,17 @@ class TestGradientCleanliness:
                 p[name] = val
             if "psd_xi" in params_unbounded:
                 p["psd_xi"] = params_unbounded["psd_xi"]
+                # ``StellarSEDComponent`` reads ``sfh_field_xi``, not ``psd_xi``;
+                # ``inference/loss_functions.py`` attaches BOTH for exactly this
+                # reason and carries a comment saying so. Attaching only
+                # ``psd_xi`` here meant the latent field never reached the model:
+                # measured, ``grads["psd_xi"]`` summed to exactly 0.0 and
+                # ``grads["sfh_field_psd_sigma"]`` was bit-identical for
+                # ``xi = 0`` and ``xi ~ N(0, 1)`` (36.78049294936069 both times) —
+                # a "stochastic gradients" test in which the stochastic field was
+                # inert. The finite-only assertion on the array branch below could
+                # not see it, because an identically zero array is finite.
+                p["sfh_field_xi"] = params_unbounded["psd_xi"]
             predicted = model.predict_photometry(p)
             return jnp.sum(((data - predicted) / noise) ** 2)
 
@@ -231,9 +246,45 @@ class TestGradientCleanliness:
         init["psd_xi"] = jnp.zeros(spec.n_grid)
         _, grads = jax.value_and_grad(loss_fn)(init)
 
+        # The PSD timescale only *colors* the latent field, so at xi = 0 there is
+        # nothing to color and its gradient is exactly zero by construction. Every
+        # other parameter must move the loss even from the origin.
+        inert_at_zero_field = {"sfh_field_psd_tau_myr"}
+
         for name in grads:
             g = grads[name]
             if g.ndim == 0:
+                # grad-assert: finite-only — `sfh_field_psd_tau_myr` is the PSD
+                # correlation time, which enters only as the shape applied to the
+                # latent field; with xi identically zero the field is zero for any
+                # timescale, so d/dtau is exactly -0.0 here. Its non-zero half is
+                # asserted below at xi ~ N(0, 1), where it measures 4.32.
                 assert bool(jnp.isfinite(g)), f"{name}: grad not finite"
+                if name in inert_at_zero_field:
+                    continue
+                assert jnp.any(g != 0.0), (
+                    f"`grads[{name!r}]` is identically zero — finite is not enough, "
+                    "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+                )
             else:
                 assert bool(jnp.all(jnp.isfinite(g))), f"{name}: some grads not finite"
+                assert jnp.any(g != 0.0), (
+                    f"`grads[{name!r}]` is identically zero across all "
+                    f"{g.shape[0]} entries. For `psd_xi` that means the latent field "
+                    "is not reaching the model at all — finite is not enough (#2100)."
+                )
+
+        # The timescale is not inert in general, only at the zero field. Off the
+        # origin it must carry real signal, which is what rules out a PSD whose
+        # correlation time never reaches the SFH.
+        init_live = dict(init)
+        init_live["psd_xi"] = jax.random.normal(jax.random.PRNGKey(7), (spec.n_grid,))
+        _, grads_live = jax.value_and_grad(loss_fn)(init_live)
+        g_tau = grads_live["sfh_field_psd_tau_myr"]
+        assert bool(jnp.isfinite(g_tau)), (
+            f"non-finite psd_tau_myr gradient at xi ~ N(0,1): {g_tau}"
+        )
+        assert jnp.any(g_tau != 0.0), (
+            "`sfh_field_psd_tau_myr` has an exactly zero gradient even at a non-zero "
+            "latent field, so the PSD correlation time never reaches the SFH (#2100)."
+        )
