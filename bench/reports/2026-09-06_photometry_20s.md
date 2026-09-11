@@ -9,6 +9,17 @@ only other row that converges on all six seeds is `05` + `nuts wcap=5+precond`
 at **2.87 M gradients and 1125 s** (56x). Eighteen of the twenty rows measured
 do not converge on all six seeds at all, and their projections are lower bounds.
 
+**Scope, added after publication.** Every row here uses a **diagonal** mass
+matrix: all five configs pass `dense_mass_matrix=False`, and the harness's
+`--dense` flag was never passed. The dense arm is therefore *absent from this
+campaign, not measured and rejected*, and the 32x figure is the cheapest of the
+**diagonal** configurations, not of all of them. A parallel single-seed
+measurement puts dense window adaptation at 246 sampling gradients per effective
+sample against this table's best of 842. See *What was NOT measured* for what
+that does and does not establish; it is not enough to overturn the verdict on
+one seed under a different protocol, and it is enough that this report should
+not have implied the space was exhausted.
+
 **The two levers the brief nominated both work, and neither is close to enough.**
 The warmup tree-depth cap is the larger one: on `05` it takes the shipped call
 from >=2644 s to 1125 s and is the difference between converging and not. The
@@ -456,12 +467,32 @@ and not both.
   been new information.
 - **Composing the analytic preconditioner with a second whitening.** Refused by
   the brief and by two prior measurements (MCLMC's `diagonal_preconditioning`,
-  and low-rank + precond at D = 74, 472 divergences).
+  and low-rank + precond at D = 74, 433 divergences).
 - **A catalog cell at uncapped sampling depth.** Attempted and abandoned on cost:
   an N = 8 cell at 100 warmup + 100 draws did not finish in 30 minutes at depth
   10, which is consistent with `2026-08-30_gpu_catalog_throughput.md` Finding 3
   ("catalog `mcmc_nuts` did not complete a single cell"). Finding 6 is the reason
   this matters and the reason a fixed engine is the prerequisite for measuring it.
+- **A dense mass matrix.** Every config in this sweep passes
+  `dense_mass_matrix=False` (`benchmark_notebook_sampler.py:791, 817, 862,
+  1005`); the harness has a `--dense` flag and it was never passed. So the dense
+  arm is **absent from this campaign, not measured and rejected**, and the "32x"
+  headline is scoped to the five diagonal configs in the table. This is a gap,
+  not a judgement: `_resolve_dense_mass_matrix` switches the auto-policy to
+  diagonal at exactly D >= 8 -- where three of the four fixtures here sit -- so
+  the default path never reaches it and neither did the sweep.
+
+  A parallel measurement on `ctl-dpl` seed 7 (branch `feat/laplace-metric-nuts`)
+  reports plain dense window adaptation at **246 sampling gradients per effective
+  sample against the 842 that is the best row in this table**, computed the same
+  way, at 1.10-1.88 GB peak RSS -- far below the 20+ GB `dense_basis` warmup
+  spike the auto-policy's docstring cites as its reason. That is a single seed
+  under a different protocol (8 chains, `target_accept_rate=0.8` against this
+  harness's 0.85, L-BFGS MAP against this harness's Adam) and is **not** quoted
+  here as a result. It is recorded because it is the one arm that could move the
+  headline and this report did not run it. A six-seed like-for-like sweep is the
+  work that would settle it.
+
 - **float32.** Out of scope; `2026-08-30_gpu_catalog_throughput.md` measured
   float64 at 3.6x the float32 gradient at batch 2048 and ~1.25x below batch 128,
   so at these widths precision is not where the 32x lives.
