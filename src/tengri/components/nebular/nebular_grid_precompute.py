@@ -748,7 +748,13 @@ def precompute_nebular_grid(
         rest_all = None
 
     # Sanity: the vmapped first node must reproduce the eager reference forward.
-    if not bool(jnp.allclose(line_all[0], ref_line, rtol=1e-5, atol=0.0)):
+    # The tolerance follows the working dtype: 1e-5 is the historical float64
+    # bar and sits above float32's accumulated rounding on CPU, but a CUDA
+    # float32 build differs from the eager forward by up to 1.2e-5 (measured,
+    # reduction order), so float32 gets 256 ulp (3.1e-5). A vmap/tracer
+    # regression is orders of magnitude away from either.
+    parity_rtol = max(1e-5, 256.0 * float(jnp.finfo(line_all.dtype).eps))
+    if not bool(jnp.allclose(line_all[0], ref_line, rtol=parity_rtol, atol=0.0)):
         raise RuntimeError(
             "nebular fast grid: vmapped build disagrees with the eager reference "
             "forward at the first node: a tracer/vmap regression, not a rounding gap."

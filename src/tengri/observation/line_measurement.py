@@ -280,14 +280,18 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
 #: window mean it multiplies (~6e28) and the flux that comes out (~1e-16) are both
 #: comfortably in range. Every one of the offending decades sits in ``L_sun``'s
 #: binary exponent (112), so stripping it leaves the arithmetic at the mass's own
-#: scale and :func:`jax.numpy.ldexp` puts it back at the end.
+#: scale and one multiplication by ``2.0**112`` puts it back at the end.
 #:
 #: The split is **bit-exact in float64**: scaling by a power of two is exact and
-#: commutes with rounding, so ``ldexp(fl(m*x), k) == fl(2**k*m*x)`` for every
+#: commutes with rounding, so ``2**k * fl(m*x) == fl(2**k*m*x)`` for every
 #: intermediate below. That is the same property that makes
 #: :data:`~tengri.utils.scale.DEFAULT_COTANGENT_BOOST` safe to divide back out, and
-#: it is why this repair moves no float64 result.
+#: it is why this repair moves no float64 result. The scaling is a plain multiply
+#: by the exactly-representable float ``_LSUN_POW2``, not :func:`jax.numpy.ldexp`:
+#: XLA's CUDA lowering of ``ldexp`` is off by one ULP in float64 (measured on an
+#: RTX 3060, jaxlib 0.11.0), while the multiply is exact on every backend.
 _LSUN_MANTISSA, _LSUN_EXP2 = math.frexp(L_SUN)
+_LSUN_POW2: float = math.ldexp(1.0, _LSUN_EXP2)
 
 
 def measure_line_fluxes_from_window_lut(
@@ -329,14 +333,14 @@ def measure_line_fluxes_from_window_lut(
     """
     wint_age = jnp.einsum("ma,maw->aw", joint_weights, precomp.window_integrals)
     # ``L_sun`` is carried as a binary exponent, not as a factor: the
-    # product runs at the mass's own scale (~1e-5) and ``ldexp`` restores the
-    # ~1e28 erg/s/Hz window mean in one exact step. Spelling this as
+    # product runs at the mass's own scale (~1e-5) and the power-of-two multiply
+    # restores the ~1e28 erg/s/Hz window mean in one exact step. Spelling this as
     # ``(total_mass * L_sun) * ...`` was ``inf * finite`` in float32, and the
     # ``feat - cont`` below then read ``inf - inf`` -> ``nan`` on every line (#1859).
     scale = total_mass * _LSUN_MANTISSA
-    window_means = jnp.ldexp(
-        scale * jnp.sum(transmission * wint_age, axis=0) / precomp.window_norms, _LSUN_EXP2
-    )
+    window_means = (
+        scale * jnp.sum(transmission * wint_age, axis=0) / precomp.window_norms
+    ) * _LSUN_POW2
     centers = precomp.window_centers
     out = []
     for _name, b, r, f, lam_c, width in precomp.line_slots:
