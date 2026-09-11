@@ -1391,7 +1391,8 @@ number below is a measurement, and the per-PR evidence is in each PR body.
 
 Related, from the Mac session that ran the Apple-GPU arm: #2287 (SKIRTOR negative-stride
 views), #2290 (#2271: 75 module-scope tables become host arrays converted at use, so
-`import tengri` allocates nothing on a device), #2304 (#2293, below).
+`import tengri` allocates nothing on a device), #2298 (#2295: the four `trapezoid`-over-reversed
+sites), #2300 (a stale parity reference read as a device defect); and #2304 (#2293, below).
 
 ### Acceptance, measured (CPU: Ryzen 5900X; GPU: RTX 3060, jaxlib 0.11.0)
 
@@ -1414,14 +1415,22 @@ views), #2290 (#2271: 75 module-scope tables become host arrays converted at use
 - `benchmark_float32_mps_parity.py`, six photometry seams, CPU float32 arm: forward ≤ 1.1e-5,
   gradient ≤ 4.1e-3, MAP optimum 2e-7..4.5e-5, all PASS. The Mac's CPU-float32 arm reproduces
   these to the digit, so the numbers are float32 arithmetic, not platform.
-- **Apple GPU via `jax-mps` 0.10.10** (M4 Pro, jax 0.10.2), with `JAX_ENABLE_X64=0` **and**
-  `MLX_DISABLE_COMPILE=1`: forward ≤ 3e-5 and MAP optimum ≤ 4.3e-5 on all six seams; the
-  gradient gate is met on five and missed by 6 % (1.06e-2) on panchromatic, a reduction-order
-  effect also seen on the #2269 line tests. Without `MLX_DISABLE_COMPILE=1` the torus SED is
-  silently wrong (×0.10 at 100 µm): an MLX-compile defect where a reversed array times a
-  broadcast scalar keeps element 0 and zeros the rest (upstream jax-mps#232), which tengri trips
-  in `polar_dust.py`'s `trapezoid(l_nu[::-1], nu[::-1])`; the three other `trapezoid`-over-reversed
-  sites are listed in #2295. The workaround costs nothing: the workload is dispatch-bound.
+- **Apple GPU via `jax-mps` 0.10.10** (M4 Pro, jax 0.10.2, `JAX_ENABLE_X64=0`), measured by the
+  Mac session: MPS agrees with the same box's CPU-float32 arm to 1.15e-5 in photometry on every
+  seam, forward/gradient, eager/jit. Against the committed float64 reference, five of six seams
+  pass the gates (forward ≤ 1.2e-5, gradient ≤ 6.2e-3, MAP optimum ≤ 5.5e-5); the sixth,
+  panchromatic, read 3.3e-3 / 0.67 and was bisected to the *reference* predating #2260 (shock
+  lines moved onto the diffuse screen, a deliberate physics change that moves Herschel-250 most
+  and the `tau_diff` gradient with it) — identical on CPU float64, so not a device effect
+  (#2300). The 6/6 answer waits on a reference regenerated at a settled main; the sweep gains a
+  `--self-check` that refuses a stale reference (#2300).
+  Two MLX-compile findings on the way: the SKIRTOR grid handed negative-stride views to the
+  device (#2287), and under default MLX compilation a reversed array times a broadcast scalar
+  keeps element 0 and zeros the rest (upstream jax-mps#232), which tengri tripped in
+  `polar_dust.py`'s `trapezoid(l_nu[::-1], nu[::-1])` (torus SED ×0.10 at 100 µm). #2298
+  rewrites that site and the three others of the same shape as negated descending-grid
+  integrals (float64 bit-for-bit), and the recipe keeps `MLX_DISABLE_COMPILE=1` while the
+  upstream defect is open — at no cost, the workload being dispatch-bound.
 
 ### The acceptance criterion, restated
 
@@ -1429,8 +1438,9 @@ views), #2290 (#2271: 75 module-scope tables become host arrays converted at use
 > end-to-end on CPU and CUDA (measured above), the default photometry + emission-line fit
 > converges in pure float32 to the float64 optimum (parameter vector ≤ 1e-2, measured 1e-5),
 > and Apple GPU via `jax-mps` (`JAX_ENABLE_X64=0`, `MLX_DISABLE_COMPILE=1`) passes
-> `bench/scripts/benchmark_float32_mps_parity.py` (measured: 5/6 seams at the gates,
-> panchromatic gradient 6 % over).
+> `bench/scripts/benchmark_float32_mps_parity.py` (measured: 5/6 seams at the gates against
+> the current reference, the sixth blocked on the reference itself, #2300; MPS matches CPU
+> float32 to 1.15e-5 on all six).
 
 Apple's `jax-metal` (0.1.1, 2024-10-08, jaxlib ≥ 0.4.34) is not viable against JAX 0.11 and is
 retired from the criterion — "Metal" in the section headings above is historical. The pytest
