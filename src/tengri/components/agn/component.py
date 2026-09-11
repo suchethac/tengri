@@ -379,15 +379,23 @@ class AGNSEDComponent(TemplateThreading):
         #
         # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
         # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
-        # formed in LOG space (from the float32-safe ``log_L_ir``), never as
-        # inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
+        # formed in LOG space (from the float32-safe ``log_L_absorbed``), never
+        # as inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
         # torus_frac), with the log branch still finite so its unused-branch
         # gradient cannot leak (#1206).
         agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
         # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
         _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
         agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
-        _log_L_absorbed = state.derived.get("log_L_ir")
+        # ``log_L_absorbed``, not ``log_L_ir``: this coupling wants the ABSORBED
+        # stellar+nebular energy the dust screen actually intercepted, not the
+        # re-emitted IR budget, which ``dust_eta_balance`` (and a declared
+        # ``dust_log_L_ir`` override) can scale away from it (#1837/
+        # #2187-series split). The ``log_L_ir`` fallback below covers a chain
+        # built before the split published the new key.
+        _log_L_absorbed = state.derived.get("log_L_absorbed")
+        if _log_L_absorbed is None:
+            _log_L_absorbed = state.derived.get("log_L_ir")
         if _log_L_absorbed is None:
             _log_L_absorbed = jnp.log10(
                 jnp.maximum(jnp.asarray(state.derived.get("L_absorbed", 0.0)), 1e-30)

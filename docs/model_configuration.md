@@ -309,6 +309,7 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - `'spinning_dust'` — Include small spinning dust grains (default: auto from type).
 - `'f_cnm'` — Cold neutral medium fraction (parametrization-dependent).
 - `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`), or `Uniform(...)` to leave it free.
+- `'log_L_ir'` — Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright; leaving it undeclared keeps energy balance. Because it makes `eta_balance` inert, declaring both (with `eta_balance` free or fixed ≠ 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard; an explicit `FREE` on it is refused (declare a real prior instead).
 
 **Minimal example:**
 ```python
