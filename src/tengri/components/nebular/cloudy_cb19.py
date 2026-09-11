@@ -46,8 +46,14 @@ HbFrac and matter-bounded nebulae
 ----------------------------------
 HbFrac = L_Hβ(matter-bounded) / L_Hβ(radiation-bounded).
 HbFrac = 1.0 → radiation-bounded (default); HbFrac < 1 → matter-bounded,
-with ionizing photon escape fraction ≈ 1 − HbFrac. The HbFrac axis is treated
-as discrete (nearest-neighbor snap at init time via ``hbfrac`` argument).
+with ionizing photon escape fraction ≈ 1 − HbFrac. HbFrac is a genuine
+interpolation axis (#2213): the shipped grid carries exactly two nodes
+(``[0.0, 1.0]``), so linear-in-HbFrac -- the same ``map_coordinates`` scheme
+the other five continuous axes use -- is the only interpolant the data
+supports. ``neb_hbfrac`` is a runtime keyword on
+:meth:`CB19Backend.predict_nebular_line_luminosities` /
+:meth:`CB19Backend.predict_nebular_sed`, mirroring ``neb_log_nH`` / ``neb_co``
+/ ``neb_dno``, not a load-time selector.
 
 Comparison with BEAGLE (Gutkin+2016)
 -------------------------------------
@@ -170,7 +176,7 @@ from tengri.components.nebular._shared import (
     render_nebular_lines,
     sanitize_qh_table,
 )
-from tengri.config.exceptions import ParameterError, TengriIOError, warn_measured
+from tengri.config.exceptions import ParameterError, TengriIOError
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -314,26 +320,28 @@ def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) ->
 
 
 class CB19GridData(NamedTuple):
-    """Pre-loaded CB_19 grid for a fixed (sed_type, imf, mup, hbfrac) combination.
+    """Pre-loaded CB_19 grid for a fixed (sed_type, imf, mup) combination.
 
     All line ratios are stored in log10 space (log10(ratio + floor)) for
-    interpolation accuracy. The Hβ axis is already collapsed to a single
-    HbFrac slice at load time.
+    interpolation accuracy. Both HbFrac slices are retained (#2213): HbFrac is
+    a genuine interpolation axis, not collapsed at load time.
 
-    Axes of ``line_ratios``: (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines).
+    Axes of ``line_ratios``:
+    (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines).
     """
 
-    # 6 continuous interpolation axes
+    # 7 continuous interpolation axes
     log_OH_grid: jnp.ndarray  # (N_OH,) log10(O/H)_total
     log_age_grid: jnp.ndarray  # (N_age,) log10(age/yr)
     log_U_grid: jnp.ndarray  # (N_U,)  log10(U)
     log_nH_grid: jnp.ndarray  # (N_nH,) log10(n_H / cm⁻³)
     log_CO_grid: jnp.ndarray  # (N_CO,) log10(C/O)
     dNO_grid: jnp.ndarray  # (N_dNO,) ΔN/O
+    hbfrac_grid: jnp.ndarray  # (N_HbFrac,) L_Hβ(matter-bounded)/L_Hβ(radiation-bounded)
 
     # Line data (last axis of line_ratios)
     line_wavelengths: jnp.ndarray  # (N_lines,) Å vacuum
-    log_line_ratios: jnp.ndarray  # (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)
+    log_line_ratios: jnp.ndarray  # (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)
     log_hb_per_qh: float  # log10(_HB_PER_QH_LSUN) for fast scaling
 
 
@@ -347,12 +355,16 @@ def load_cb19_grid(
     sed_type: str = "SSP",
     imf: str = "Kroupa01",
     mup: float = 100.0,
-    hbfrac: float = 1.0,
 ) -> CB19GridData:
-    """Load a CB_19 grid slice from the HDF5 template file.
+    """Load the CB_19 grid from the HDF5 template file.
 
-    Selects the HbFrac slice nearest to ``hbfrac`` and returns a
-    ``CB19GridData`` with 6 continuous interpolation axes.
+    Returns a ``CB19GridData`` with 7 continuous interpolation axes, including
+    both HbFrac nodes (#2213): the loader no longer snaps HbFrac to a single
+    slice at load time, so a caller that wants a fixed HbFrac collapses it
+    itself (:meth:`CB19Backend.predict_nebular_line_luminosities` interpolates
+    it at runtime; :meth:`CB19Backend.preintegrate_for_photometry` and
+    :func:`tengri.components.nebular.cb19_precompute.precompute` collapse it
+    to a caller-supplied value).
 
     Line ratios are converted from linear (L_line/L_Hβ) to log10 space.
     The Hβ→L/Q_H conversion constant ``_HB_PER_QH_LSUN`` is stored as
@@ -372,15 +384,12 @@ def load_cb19_grid(
         Initial mass function. "Kroupa01" = standard Kroupa (2001).
     mup : {100.0, 300.0}
         Upper stellar mass limit (M_sun).
-    hbfrac : float
-        HbFrac value (snapped to nearest grid point). HbFrac=1.0 = radiation-bounded.
-        Ionizing photon escape fraction ≈ 1 − HbFrac.
 
     Returns
     -------
     CB19GridData
-        Pre-loaded grid with 6 continuous interpolation axes
-        (log_OH, log_age, log_U, log_nH, log_CO, dNO) and line data.
+        Pre-loaded grid with 7 continuous interpolation axes
+        (log_OH, log_age, log_U, log_nH, log_CO, dNO, HbFrac) and line data.
 
     Raises
     ------
@@ -434,31 +443,18 @@ def load_cb19_grid(
         log_nH = jnp.array(ax["log_nH"][:], dtype=jnp.float32)
         log_CO = jnp.array(ax["log_CO"][:], dtype=jnp.float32)
         dNO = jnp.array(ax["dNO"][:], dtype=jnp.float32)
-        hbfrac_grid = np.array(ax["HbFrac"][:])
+        hbfrac_grid = jnp.array(ax["HbFrac"][:], dtype=jnp.float32)
 
         age_key = "log_age_yr_ssp" if sed_type == "SSP" else "log_age_yr_csf"
         log_age = jnp.array(ax[age_key][:], dtype=jnp.float32)
 
         line_wavelengths = jnp.array(f["line_wavelengths_aa"][:], dtype=jnp.float32)
 
-        # Select nearest HbFrac slice
-        i_hb = int(np.argmin(np.abs(hbfrac_grid - hbfrac)))
-        if abs(hbfrac_grid[i_hb] - hbfrac) > 0.15:
-            warn_measured(
-                f"Requested hbfrac={hbfrac} snapped to nearest grid value "
-                f"{hbfrac_grid[i_hb]:.2f} (gap={abs(hbfrac_grid[i_hb] - hbfrac):.2f}). "
-                "Available HbFrac values: " + str(hbfrac_grid.tolist()),
-                UserWarning,
-                stacklevel=2,
-                requested_hbfrac=float(hbfrac),
-                snapped_hbfrac=float(hbfrac_grid[i_hb]),
-                snap_gap=float(abs(hbfrac_grid[i_hb] - hbfrac)),
-            )
-
-        # Load line_ratios: (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)
-        # Collapse HbFrac axis → (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)
+        # Load line_ratios: (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines).
+        # Both HbFrac nodes are retained (#2213); it is a genuine interpolation
+        # axis now, not collapsed at load time.
         grp = f[group_key]
-        ratios = np.array(grp["line_ratios"][:, :, :, :, :, :, i_hb, :], dtype=np.float32)
+        ratios = np.array(grp["line_ratios"][:], dtype=np.float32)
 
     # Refuse a degenerate/placeholder grid (all ratios identical), which would
     # otherwise give every line the same luminosity and leave every grid-axis
@@ -475,6 +471,7 @@ def load_cb19_grid(
         log_nH_grid=log_nH,
         log_CO_grid=log_CO,
         dNO_grid=dNO,
+        hbfrac_grid=hbfrac_grid,
         line_wavelengths=line_wavelengths,
         log_line_ratios=jnp.array(log_ratios),
         log_hb_per_qh=float(np.log10(_HB_PER_QH_LSUN)),
@@ -484,18 +481,23 @@ def load_cb19_grid(
 #: Which CB_19 interpolation axis each user-facing parameter indexes.
 #:
 #: Keyed by the axis position in ``log_line_ratios``
-#: ``(N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)``. Axis 1 (age) is absent
-#: because the SSP grid indexes it, not a fitted parameter, and the trailing
-#: line axis is not an interpolation axis at all. ``neb_dig_delta_logU`` sits
-#: with ``neb_logU`` because the DIG regime enters the *same* ``log_U`` axis as
-#: an offset (``NebularSEDComponent.apply``), so it is inert on exactly the
-#: grids ``neb_logU`` is inert on.
+#: ``(N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)``. Axis 1 (age)
+#: is absent because the SSP grid indexes it, not a fitted parameter, and the
+#: trailing line axis is not an interpolation axis at all. ``neb_dig_delta_logU``
+#: sits with ``neb_logU`` because the DIG regime enters the *same* ``log_U``
+#: axis as an offset (``NebularSEDComponent.apply``), so it is inert on
+#: exactly the grids ``neb_logU`` is inert on. ``neb_hbfrac`` (axis 6, #2213)
+#: joins the other three CB19-only axes: the shipped grid is flat along it too
+#: (measured, both HbFrac nodes bit-identical -- see #2198), so
+#: :func:`check_cb19_free_params` refuses it there exactly as it already
+#: refuses ``neb_log_nH`` / ``neb_co`` / ``neb_dno``.
 _CB19_AXIS_PARAMS: dict[int, tuple[str, tuple[str, ...]]] = {
     0: ("log_OH", ("neb_logZ_gas",)),
     2: ("log_U", ("neb_logU", "neb_dig_delta_logU")),
     3: ("log_nH", ("neb_log_nH",)),
     4: ("log_CO", ("neb_co",)),
     5: ("dNO", ("neb_dno",)),
+    6: ("HbFrac", ("neb_hbfrac",)),
 }
 
 #: Spread in ``log10(ratio)`` at or below which an axis carries no variation.
@@ -581,6 +583,13 @@ def check_cb19_free_params(
     along ``log_U`` and ``log_OH`` only: ``neb_logU`` and ``neb_logZ_gas``
     moved the photometry by 1.7e-01 and 2.4e-01 relative while
     ``neb_log_nH``, ``neb_co`` and ``neb_dno`` stayed at exactly 0.0 (#2181).
+    Wiring ``neb_hbfrac`` as a genuine axis (#2213) does not exempt it from
+    this guard: the shipped ``data/cb19_templates.h5`` carries the same
+    placeholder gap along HbFrac as it does along the other three -- both
+    nodes are bit-identical (max\\|diff\\| = 0.0 across every OH/age/U/nH/CO/dNO
+    combination, measured directly on the packaged file) -- so
+    ``neb_hbfrac`` is refused here too until a grid with real HbFrac variation
+    is supplied.
     """
     flat = cb19_flat_axis_params(grid)
     offenders = sorted(name for name in set(free_params) if name in flat)
@@ -625,20 +634,25 @@ def _frac_idx(val: float, grid: jnp.ndarray) -> jnp.ndarray:
     return (idx + frac).astype(jnp.float32)
 
 
-def _interp_6d(
+def _interp_7d(
     data: jnp.ndarray,
     grids: tuple[jnp.ndarray, ...],
     vals: tuple[float, ...],
 ) -> jnp.ndarray:
-    """6D linear interpolation over (OH, age, U, nH, CO, dNO) returning all lines.
+    """7D linear interpolation over (OH, age, U, nH, CO, dNO, HbFrac), all lines.
+
+    HbFrac (#2213) is a genuine axis here like its five siblings: it happens
+    to carry only two nodes in the shipped grid (``[0.0, 1.0]``), so
+    ``order=1`` ``map_coordinates`` reduces to the exact linear blend of the
+    two end-member slices -- the only interpolant a 2-node axis supports.
 
     Parameters
     ----------
-    data : array, shape (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)
+    data : array, shape (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)
         Log-space grid values.
-    grids : 6-tuple of 1-D arrays
-        Axis values for each of the 6 continuous dimensions.
-    vals : 6-tuple of floats
+    grids : 7-tuple of 1-D arrays
+        Axis values for each of the 7 continuous dimensions.
+    vals : 7-tuple of floats
         Query point in the same order as grids.
 
     Returns
@@ -656,12 +670,12 @@ def _interp_6d(
     data_f64 = data.astype(jnp.float64)
 
     # vmap over the lines axis (last): each call to map_coordinates handles one line
-    # over the 6D continuous axes.
+    # over the 7D continuous axes.
     data_lines_first = jnp.moveaxis(data_f64, -1, 0)  # (N_lines, N_OH, ...)
 
-    def _interp_one(d6: jnp.ndarray) -> jnp.ndarray:
-        """Interpolate a single line over 6D continuous grid axes."""
-        return jax.scipy.ndimage.map_coordinates(d6, coords, order=1, mode="nearest")
+    def _interp_one(d7: jnp.ndarray) -> jnp.ndarray:
+        """Interpolate a single line over 7D continuous grid axes."""
+        return jax.scipy.ndimage.map_coordinates(d7, coords, order=1, mode="nearest")
 
     return jax.vmap(_interp_one)(data_lines_first)  # (N_lines,)
 
@@ -735,8 +749,15 @@ class CB19Backend:
         Upper stellar mass limit in M_sun.
     hbfrac : float
         HbFrac = L_Hβ(matter-bounded)/L_Hβ(radiation-bounded). 1.0 = fully
-        radiation-bounded (default). Snapped to nearest grid point at init.
-        Ionizing photon escape fraction ≈ 1 − hbfrac.
+        radiation-bounded (default). Ionizing photon escape fraction
+        ≈ 1 − hbfrac. Since #2213, HbFrac is a genuine interpolation axis
+        (both grid nodes are retained by :func:`load_cb19_grid`): this
+        constructor value is the *fallback* used by
+        :meth:`predict_nebular_line_luminosities` /
+        :meth:`predict_nebular_sed` when their own ``neb_hbfrac`` keyword is
+        left at ``None`` (the runtime path -- ``SEDModel.build`` --
+        threads ``neb_hbfrac`` from ``params`` instead and never leaves it
+        at ``None``).
     grid_path : str or Path, optional
         Path to ``cb19_templates.h5``. ``None`` (the default) resolves
         ``data/cb19_templates.h5`` at call time.
@@ -790,7 +811,6 @@ class CB19Backend:
             sed_type=sed_type,
             imf=imf,
             mup=mup,
-            hbfrac=hbfrac,
         )
 
         # log10(L_Hβ/Q_H in Lsun·s/photon): scalar used in all predictions
@@ -829,11 +849,12 @@ class CB19Backend:
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
+        neb_hbfrac: float = 1.0,
     ) -> None:
         """Preintegrate CB19 lines through filters; expose CLOUDY-shaped surface.
 
-        CB19 has six continuous interpolation axes (log_OH, log_age, log_U,
-        log_nH, log_CO, dNO). The hybrid kernel's nebular preint branch
+        CB19 has seven continuous interpolation axes (log_OH, log_age, log_U,
+        log_nH, log_CO, dNO, HbFrac). The hybrid kernel's nebular preint branch
         (``_kernels/hybrid.py``) only knows how to interpolate the
         CLOUDY-shaped 3-axis surface ``(log_met_abs, log_age_yr, log_U)``.
         We bridge by:
@@ -841,9 +862,9 @@ class CB19Backend:
         1. Adding ``log_hb_per_qh`` to ``log_line_ratios`` so the grid is in
            log10(L_line/Q_H) [Lsun·s/photon]: the same units the kernel
            feeds through ``10**log_lum × Q_H``.
-        2. Triweight-collapsing axes 3 (log_nH), 4 (log_CO), 5 (dNO) at the
-           caller-supplied default values (defaults: HII region, near-solar
-           C/O, ΔN/O = 0).
+        2. Triweight-collapsing axes 3 (log_nH), 4 (log_CO), 5 (dNO), 6
+           (HbFrac, #2213) at the caller-supplied default values (defaults:
+           HII region, near-solar C/O, ΔN/O = 0, radiation-bounded).
         3. Relabeling axis 0 from log10(O/H) on the CLOUDY c17.01 scale to
            absolute log10(Z) by subtracting ``_LOG_OH_OFFSET`` so the
            kernel's ``_gas_z`` (absolute log10(Z)) lands on the correct
@@ -881,6 +902,9 @@ class CB19Backend:
             (≈ solar) [log10].
         neb_dno : float, keyword-only
             Default ΔN/O offset for the dNO axis collapse. Default 0.0.
+        neb_hbfrac : float, keyword-only
+            Default HbFrac to collapse the HbFrac axis on (#2213). CB19 grid
+            range [0, 1]. Default 1.0 (radiation-bounded) [dimensionless].
 
         Notes
         -----
@@ -894,15 +918,17 @@ class CB19Backend:
         # 1. Lift line ratios into log10(L_line/Q_H) [Lsun·s/photon].
         log_lum_per_qh = jnp.asarray(grid.log_line_ratios) + grid.log_hb_per_qh
 
-        # 2. Collapse axes 3 (log_nH), 4 (log_CO), 5 (dNO) to defaults.
-        # Iterate from the highest axis index down so earlier indices stay valid.
+        # 2. Collapse axes 3 (log_nH), 4 (log_CO), 5 (dNO), 6 (HbFrac, #2213)
+        # to defaults. Iterate from the highest axis index down so earlier
+        # indices stay valid.
         extra_axes = (
             jnp.asarray(grid.log_nH_grid),
             jnp.asarray(grid.log_CO_grid),
             jnp.asarray(grid.dNO_grid),
+            jnp.asarray(grid.hbfrac_grid),
         )
-        extra_vals = (neb_log_nH, neb_co, neb_dno)
-        for axis_idx in (5, 4, 3):
+        extra_vals = (neb_log_nH, neb_co, neb_dno, neb_hbfrac)
+        for axis_idx in (6, 5, 4, 3):
             ax = extra_axes[axis_idx - 3]
             val = extra_vals[axis_idx - 3]
             scatter = 0.5 * float(ax[1] - ax[0])
@@ -1055,15 +1081,17 @@ class CB19Backend:
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
+        neb_hbfrac: float | None = None,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        r"""Compute emission line luminosities via 6D interpolation over the CB_19 grid.
+        r"""Compute emission line luminosities via 7D interpolation over the CB_19 grid.
 
         **Hβ conversion and k-factor**: CB_19 stores L_line/L_Hβ (dimensionless).
         This method converts to absolute L_line (Lsun) using::
 
-            L_line = Σ_i  w_i · Q_H(Z, age_i) · ratio(Z_gas, age_i, logU, nH, CO, dNO)
+            L_line = Σ_i  w_i · Q_H(Z, age_i) ·
+                         ratio(Z_gas, age_i, logU, nH, CO, dNO, HbFrac)
                          · (L_Hβ/Q_H) · k(f_esc, f_dust)
 
         where L_Hβ/Q_H = 4.78×10⁻¹³ / 3.828×10³³ Lsun s/photon (Case B,
@@ -1109,6 +1137,14 @@ class CB19Backend:
         neb_dno : float
             ΔN/O offset (log10) from default N/O scaling [log10]. Grid range:
             [−0.25, 0.25]. Default 0.0.
+        neb_hbfrac : float or None
+            HbFrac = L_Hβ(matter-bounded)/L_Hβ(radiation-bounded)
+            [dimensionless]. Grid range: [0, 1]; the shipped grid carries
+            exactly the two end-member nodes (#2213). ``None`` (the default)
+            falls back to ``self.hbfrac`` (itself 1.0 = radiation-bounded
+            unless the backend was constructed otherwise); the runtime path
+            (``SEDModel.build``) always passes an explicit value from
+            ``params``.
         template_data : CB19GridData, optional
             Pre-loaded grid threaded as a JIT argument instead of read from
             ``self.grid`` under the trace, where it bakes 0.665 MB of
@@ -1127,7 +1163,7 @@ class CB19Backend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc,
-        neb_fdust, neb_log_nH, neb_co, neb_dno parameters.
+        neb_fdust, neb_log_nH, neb_co, neb_dno, neb_hbfrac parameters.
 
         References
         ----------
@@ -1139,6 +1175,8 @@ class CB19Backend:
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
+        if neb_hbfrac is None:
+            neb_hbfrac = self.hbfrac
 
         # Convert absolute log10(Z) → log10(O/H) on CLOUDY scale
         log_oh = neb_logZ_gas + _LOG_OH_OFFSET
@@ -1152,13 +1190,14 @@ class CB19Backend:
         # was an XLA ``Constant`` on every compile (#1694). Same idiom as
         # ``CloudyGridBackend`` and ``CueBackend``.
         grid = template_data if template_data is not None else self.grid
-        grids_6d = (
+        grids_7d = (
             grid.log_OH_grid,
             grid.log_age_grid,
             grid.log_U_grid,
             grid.log_nH_grid,
             grid.log_CO_grid,
             grid.dNO_grid,
+            grid.hbfrac_grid,
         )
 
         # Only young SSP bins (age < 100 Myr) produce ionizing photons
@@ -1177,10 +1216,10 @@ class CB19Backend:
         ) -> jnp.ndarray:
             """Compute weighted line luminosity contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
-            log_ratios_i = _interp_6d(
+            log_ratios_i = _interp_7d(
                 grid.log_line_ratios,
-                grids_6d,
-                (log_oh, log_age_i, neb_logU, neb_log_nH, neb_co, neb_dno),
+                grids_7d,
+                (log_oh, log_age_i, neb_logU, neb_log_nH, neb_co, neb_dno, neb_hbfrac),
             )
             # Convert: ratio → L_line/Q_H → L_line.
             #
@@ -1272,6 +1311,7 @@ class CB19Backend:
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
+        neb_hbfrac: float | None = None,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
@@ -1329,6 +1369,10 @@ class CB19Backend:
         neb_dno : float
             ΔN/O offset from default N/O scaling [log10]. Grid range [−0.25, 0.25].
             Default 0.0.
+        neb_hbfrac : float or None
+            HbFrac = L_Hβ(matter-bounded)/L_Hβ(radiation-bounded)
+            [dimensionless]. Grid range [0, 1] (#2213). ``None`` falls back to
+            ``self.hbfrac`` (see :meth:`predict_nebular_line_luminosities`).
         line_sigma_aa : float
             Gaussian line width (σ) for line profiles [Å]. 0 = nearest-pixel
             delta function. Default 0.0.
@@ -1360,7 +1404,7 @@ class CB19Backend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc,
-        neb_fdust, neb_log_nH, neb_co, neb_dno parameters.
+        neb_fdust, neb_log_nH, neb_co, neb_dno, neb_hbfrac parameters.
 
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
@@ -1375,6 +1419,7 @@ class CB19Backend:
             neb_log_nH=neb_log_nH,
             neb_co=neb_co,
             neb_dno=neb_dno,
+            neb_hbfrac=neb_hbfrac,
             # Forward it. This method is the OTHER door into the line
             # luminosities, and leaving it unforwarded left the grid baked even
             # after the callee learned to thread: of the four calls a single

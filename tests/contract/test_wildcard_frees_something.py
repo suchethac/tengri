@@ -897,8 +897,11 @@ def test_neb_logZ_gas_frees_under_every_shipped_backend(neb_type):
     narrowness keeps it off the broad-except ratchet.
     """
     with warnings.catch_warnings():
-        # cb19 also declares neb_hbfrac (no free_prior, #2213), so its
-        # wildcard is a partial free and warns; irrelevant to this assertion.
+        # cb19's neb_hbfrac gained a free_prior in #2213, so every param in
+        # the group now declares one and ``all_params: FREE`` is a full free
+        # with no partial-free warning. Kept defensive (any warning here is
+        # irrelevant to this assertion) rather than tightened to assert
+        # silence, since that is not what this test is about.
         warnings.simplefilter("ignore")
         try:
             spec = tengri.parse_groups(

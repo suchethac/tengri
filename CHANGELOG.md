@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `neb_hbfrac` (CB_19's HbFrac axis, matter- vs radiation-bounded escape
+  proxy) now declares `free_prior=Uniform(0.0, 1.0, default=1.0)`, so
+  `neb={'type': 'cb19', 'all_params': FREE}` and `neb={'type': 'cb19',
+  'hbfrac': FREE}` both free it instead of leaving it silently pinned.
+  Dropped from `tools/check_param_free_priors.py`'s `REFUSED` ledger
+  (freeable 90 -> 91, pinned 25 -> 24; it left the `inert` ground). The
+  shipped `data/cb19_templates.h5` carries no real variation along this
+  axis (measured: its two HbFrac nodes are bit-identical), the same
+  placeholder gap #2181 already found for `neb_log_nH` / `neb_co` /
+  `neb_dno` (#2198 tracks the pending 3MdB erratum) -- `neb_hbfrac` joins
+  those three: declared and freeable, refused loudly by
+  `check_cb19_free_params` against the current shipped grid rather than
+  silently inert (#2213).
+
 - `met_logzsol_scatter` (the lognormal MDF width, in dex) now declares a
   `free_prior` of `Uniform(0.02, 0.4)`, so `met={'all_params': FREE}` (delta
   mode) and `met={'logzsol_scatter': FREE}` both work instead of refusing.
@@ -103,6 +117,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `neb_hbfrac` was silently inert at any value: declared as a CB_19
+  parameter, but `CB19Backend.__init__`'s `hbfrac` constructor argument was
+  never threaded from `params`, and `load_cb19_grid` collapsed the HbFrac
+  axis to a single slice at load time regardless. `load_cb19_grid` now
+  retains both HbFrac nodes; `predict_nebular_line_luminosities` /
+  `predict_nebular_sed` interpolate `neb_hbfrac` at runtime via the same
+  `map_coordinates` scheme as `neb_log_nH` / `neb_co` / `neb_dno` (linear
+  over the grid's two nodes -- the only interpolant they support); and
+  `_BACKEND_OPTIONAL_PARAMS` threads it from `params` exactly like those
+  three siblings. `cb19_precompute.precompute` (the `WavePrecomp` adapter for
+  `neb={'type': 'cb19'}`) keeps HbFrac a discrete, load-time-style choice for
+  that surface, selecting the nearest retained node itself immediately after
+  loading (#2213).
 - `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
   stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
   legacy `predict_sed_quantities` bridge, and the AGN CIGALE fracAGN torus

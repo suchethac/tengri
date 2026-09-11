@@ -78,8 +78,12 @@ _HYDROGEN_INDICES: tuple[int, ...] = (0, 3, 4, 8)
 
 #: Grid shape ``(N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)``.
 #: ``n_age >= 11`` and ``n_oh, n_u, n_nh = 7, 6, 4`` are asserted by the CB_19
-#: contract tests; ``HbFrac = [0.0, 1.0]`` makes ``hbfrac=1.0`` snap exactly
-#: and ``hbfrac=0.42`` snap with a gap wide enough to warn.
+#: contract tests. ``HbFrac = [0.0, 1.0]`` is the shipped grid's two-node
+#: axis: since #2213 it is a genuine interpolation axis at runtime, and
+#: :func:`write_synthetic_cb19_grid` gives it real variation like the other
+#: five (below); :func:`~tengri.components.nebular.cb19_precompute.precompute`
+#: still snaps it to the nearest node as a discrete, load-time-style choice
+#: for that adapter.
 _SHAPE = (7, 11, 6, 4, 3, 3, 2, 10)
 
 
@@ -128,11 +132,12 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
 
     Notes
     -----
-    Each of the five parameter-indexed axes (``log_OH``, ``log_U``,
-    ``log_nH``, ``log_CO``, ``dNO``) carries a smooth monotone factor on the
-    metal lines, so sweeping the parameter that indexes it moves the prediction
-    and a finite-difference gradient is comparable to the analytic one. The age
-    axis is left flat: the SSP grid indexes it, not a fitted parameter.
+    Each of the six parameter-indexed axes (``log_OH``, ``log_U``,
+    ``log_nH``, ``log_CO``, ``dNO``, ``HbFrac``) carries a smooth monotone
+    factor on the metal lines, so sweeping the parameter that indexes it moves
+    the prediction and a finite-difference gradient is comparable to the
+    analytic one. The age axis is left flat: the SSP grid indexes it, not a
+    fitted parameter.
 
     The four hydrogen recombination lines (:data:`_HYDROGEN_INDICES`) carry no
     axis factor and keep their Case B ratios at every node, which is both how
@@ -159,6 +164,7 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
         (3, axes["log_nH"], 0.20),
         (4, axes["log_CO"], 0.40),
         (5, axes["dNO"], 0.60),
+        (6, axes["HbFrac"], 0.25),
     ):
         factor = 10.0 ** (slope * (values - values.mean()))
         shape = [1] * ratios.ndim
