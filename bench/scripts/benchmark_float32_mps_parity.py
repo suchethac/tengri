@@ -16,8 +16,8 @@ never allocates anything at module scope that would care about ``jax_enable_x64`
 the whole point being that this file itself imports cleanly under
 ``JAX_ENABLE_X64=0`` with nothing baked into float64 before the check below runs.
 
-Two modes
----------
+Three modes
+-----------
 ``--write-reference PATH``
     Runs the six seams in float64 on CPU and writes a JSON reference: per seam, the
     noiseless photometry vector at a fixed truth, the chi-squared gradient vector at
@@ -47,6 +47,20 @@ Default (float32 parity sweep)
     the same error source under a name that reads as "the fit disagrees," when the fit
     (the parameter vector) does not. The parameter vector is the scientific quantity a
     fit is for; it is what is gated.
+
+``--self-check PATH``
+    The reference is correct for the tree it was written on and nothing else. Every
+    physics merge after it moves some seam, and the float32 sweep then reports a FAIL
+    that has nothing to do with float32 or the device (#2300: #2260 moved the
+    ``panchromatic`` seam's float64 photometry by 3.3e-3 in Herschel-250 and its
+    ``tau_diff`` gradient by 67%; the FAIL was identical on CPU-float64, CPU-float32
+    and MPS). This mode rebuilds every seam in float64 on CPU at the file's own truth
+    and reports the per-seam drift of photometry and gradient against the file. Exit
+    code 1 above ``_TOL_SELF_CHECK``: the file is stale, regenerate it. Run it before
+    trusting any FAIL from the float32 sweep on a tree newer than the reference. The
+    float32 sweep itself cannot do this (it runs with x64 off, on a device that may
+    have no float64), so it prints a warning banner instead when the reference's tree
+    SHA is not the current tree and ``src/tengri`` has commits since it.
 
 Seams
 -----
@@ -81,9 +95,11 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import subprocess
 import sys
 import time
 import warnings
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -96,6 +112,13 @@ _TOL_FORWARD = 3e-3
 _TOL_GRAD = 1e-2
 _TOL_LOSS = 1e-4
 _TOL_PARAM = 1e-2
+#: ``--self-check`` bar: float64 on this tree against the file's float64. Same
+#: arithmetic, same truth, so the only sources of drift are a physics change (what the
+#: check exists to catch: #2260 was 3.3e-3) and summation-order noise across JAX/XLA
+#: versions, measured at 1e-15..1e-11 on the six seams.
+_TOL_SELF_CHECK = 1e-9
+
+_REPO = Path(__file__).resolve().parents[2]
 
 _BANDS = ["sdss_g", "sdss_r", "wise_w1", "herschel_250"]
 _SSP = "data/fsps_prsc_miles_chabrier.h5"
@@ -116,7 +139,8 @@ _MAX_MAP_RESTARTS = 5
 def _refuse_wrong_precision(write_reference: bool) -> None:
     """Exit with the one-line environment fix if ``jax_enable_x64`` is set wrong.
 
-    Reference generation needs float64; the parity sweep refuses float64 outright,
+    ``write_reference`` here means "needs float64": reference generation and
+    ``--self-check`` both do. The parity sweep refuses float64 outright,
     because setting ``JAX_ENABLE_X64`` after ``import jax`` is too late -- constants
     allocated during import are already on the device (``notebooks/apple_mps.py``
     Rule 2). This check runs before any tengri import, so it is the first thing that
@@ -125,8 +149,8 @@ def _refuse_wrong_precision(write_reference: bool) -> None:
     x64 = bool(jax.config.jax_enable_x64)
     if write_reference and not x64:
         sys.exit(
-            "--write-reference needs float64. Fix: JAX_ENABLE_X64=1 before Python "
-            "starts, e.g. `JAX_ENABLE_X64=1 python bench/scripts/"
+            "--write-reference and --self-check need float64. Fix: JAX_ENABLE_X64=1 "
+            "before Python starts, e.g. `JAX_ENABLE_X64=1 python bench/scripts/"
             "benchmark_float32_mps_parity.py --write-reference ...`."
         )
     if not write_reference and x64:
@@ -135,6 +159,81 @@ def _refuse_wrong_precision(write_reference: bool) -> None:
             "Fix: JAX_ENABLE_X64=0 before Python starts (setting it after import is "
             "too late -- notebooks/apple_mps.py Rule 2)."
         )
+
+
+def _git(*args: str) -> str | None:
+    """``git <args>`` in the repository, or ``None`` when git cannot answer."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(_REPO), *args], capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _tree_sha() -> str | None:
+    """The tree's HEAD SHA, suffixed ``-dirty`` when the working tree has changes."""
+    sha = _git("rev-parse", "HEAD")
+    if sha is None:
+        return None
+    dirty = _git("status", "--porcelain", "--untracked-files=no")
+    return sha + ("-dirty" if dirty else "")
+
+
+def _src_commits_since(ref_sha: str) -> int | None:
+    """How many commits touching ``src/tengri`` HEAD carries past ``ref_sha``.
+
+    ``None`` when git cannot say (a shallow clone, an unknown SHA): that is not zero.
+    """
+    out = _git("rev-list", "--count", f"{ref_sha}..HEAD", "--", "src/tengri")
+    return int(out) if out is not None and out.isdigit() else None
+
+
+def reference_staleness(ref_sha: str | None, src_commits_since: int | None) -> str | None:
+    """A warning banner when the reference may not describe this tree, else ``None``.
+
+    The float32 sweep cannot measure staleness itself (x64 off, possibly no float64
+    device), so it can only correlate: a reference written on another tree with
+    ``src/tengri`` commits in between *may* be stale, and the measurement is
+    ``--self-check`` on CPU. Warn-only on purpose: a reference from a sibling branch is
+    a legitimate thing to compare against during review.
+    """
+    remedy = (
+        "measure before trusting a FAIL: JAX_ENABLE_X64=1 JAX_PLATFORMS=cpu python "
+        "bench/scripts/benchmark_float32_mps_parity.py --self-check <reference>"
+    )
+    if ref_sha is None:
+        return f"REFERENCE HAS NO tree_sha (written before #2300); {remedy}"
+    if src_commits_since is None:
+        return f"CANNOT COUNT src commits since reference {ref_sha[:9]} (shallow clone?); {remedy}"
+    if src_commits_since == 0:
+        return None
+    return (
+        f"REFERENCE MAY BE STALE: {src_commits_since} commit(s) touch src/tengri since "
+        f"{ref_sha[:9]}; {remedy}"
+    )
+
+
+def self_check_drift(ref_rows: dict, here_rows: dict) -> dict[str, float]:
+    """Per-seam max relative deviation of float64 rows recomputed now from the file's.
+
+    Photometry and gradient together, so a physics change that moves only a derivative
+    (a screen swap on a free parameter) is caught. A seam the file holds but
+    ``here_rows`` does not is ``nan``: unmeasured is not clean.
+    """
+    drift = {}
+    for name, ref in ref_rows.items():
+        if not ref.get("built", False):
+            continue
+        here = here_rows.get(name)
+        if here is None:
+            drift[name] = float("nan")
+            continue
+        drift[name] = max(
+            _rel(here["photometry"], ref["photometry"]), _rel(here["grad"], ref["grad"])
+        )
+    return drift
 
 
 def _seam_groups(DEFAULT, Fixed, Uniform):
@@ -263,7 +362,17 @@ def _map_loss(ForwardModel, model, obs, flux, noise, truth, free_names, dtype, n
 
 
 def _run_seam(
-    name, kwargs, ssp, obs, z, n_steps, write_reference, ref_row, stage="full", checkpoint_row=None
+    name,
+    kwargs,
+    ssp,
+    obs,
+    z,
+    n_steps,
+    write_reference,
+    ref_row,
+    stage="full",
+    checkpoint_row=None,
+    dtype=None,
 ):
     """Build one seam, then compute (or check) its forward/gradient/MAP-loss triple.
 
@@ -285,7 +394,10 @@ def _run_seam(
     """
     from tengri import DEFAULT, Fixed, ForwardModel, SEDModel, Uniform
 
-    dtype = jnp.float64 if write_reference else jnp.float32
+    # ``dtype`` overrides the mode's default: ``--self-check`` runs the parity path in
+    # float64 so the file's own arithmetic is compared against itself (#2300).
+    if dtype is None:
+        dtype = jnp.float64 if write_reference else jnp.float32
     do_grad = stage in ("full", "grad")
     do_map = stage in ("full", "map")
 
@@ -390,7 +502,16 @@ def _run_seam(
         rel_grad = checkpoint_row["rel_grad"]
 
     if not do_map:
-        return {"seam": name, "built": True, "rel_forward": rel_fwd, "rel_grad": rel_grad}
+        return {
+            "seam": name,
+            "built": True,
+            "rel_forward": rel_fwd,
+            "rel_grad": rel_grad,
+            # the recomputed values themselves, so ``--self-check`` can report drift
+            # per seam from real rows rather than only the two relative numbers
+            "photometry": photometry_here.tolist(),
+            "grad": grad_here,
+        }
 
     # Informational only -- see the module docstring's "Why the loss column has no
     # bar" note. Not part of ``passed``.
@@ -423,10 +544,69 @@ def _load_ssp(path):
     return load_ssp_data(path)
 
 
+def _self_check(ref, groups, ssp, obs, args, banner) -> int:
+    """``--self-check``: the parity path in float64 against the file's own float64.
+
+    Every seam the file holds is rebuilt on this tree at the file's truth and scored
+    against the file's mock, exactly as the float32 sweep does but in the reference's
+    own dtype, so the only thing that can differ is the physics of the tree. Drift is
+    the max over photometry and gradient (``self_check_drift``). Exit 1 above
+    ``_TOL_SELF_CHECK`` or for a seam this tree could not rebuild: an unmeasured seam is
+    not a clean one.
+    """
+    here = {}
+    for name, kwargs in groups.items():
+        t0 = time.time()
+        ref_row = ref["seams"].get(name)
+        if ref_row is None or not ref_row.get("built", False):
+            print(f"{name:14s} SKIP  (reference: {(ref_row or {}).get('skip_reason', 'no row')})")
+            continue
+        rec = _run_seam(
+            name, kwargs, ssp, obs, args.z, args.n_steps, False, ref_row, "grad", dtype=jnp.float64
+        )
+        jax.clear_caches()
+        gc.collect()
+        if not rec.get("built", False):
+            dt = time.time() - t0
+            print(f"{name:14s} FAIL  cannot rebuild: {rec.get('skip_reason')}  ({dt:.1f}s)")
+            continue
+        here[name] = rec
+        print(
+            f"{name:14s} fwd drift={rec['rel_forward']:.2e}  grad drift={rec['rel_grad']:.2e}  "
+            f"({time.time() - t0:.1f}s)"
+        )
+    drift = self_check_drift({k: v for k, v in ref["seams"].items() if k in groups}, here)
+    stale = {k: d for k, d in drift.items() if not (d < _TOL_SELF_CHECK)}
+    print()
+    print(
+        f"reference tree_sha: {(ref.get('meta') or {}).get('tree_sha')}   this tree: {_tree_sha()}"
+    )
+    if banner:
+        print(f"note: {banner}")
+    if stale:
+        print(
+            f"STALE: {len(stale)} seam(s) drift above {_TOL_SELF_CHECK:g} in float64 -- "
+            + ", ".join(f"{k}={d:.2e}" for k, d in stale.items())
+            + ". The reference does not describe this tree; regenerate it "
+            "(--write-reference) before reading any float32 FAIL on these seams (#2300)."
+        )
+        return 1
+    print(f"OK: {len(drift)} seam(s) within {_TOL_SELF_CHECK:g} of the reference in float64.")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--write-reference", default=None, help="write a float64 reference JSON here")
     ap.add_argument("--reference", default=None, help="float64 reference JSON to check against")
+    ap.add_argument(
+        "--self-check",
+        default=None,
+        metavar="PATH",
+        help="float64 on CPU: rebuild every seam at this reference's own truth and report "
+        "the per-seam drift of photometry and gradient against the file; exit 1 above "
+        f"{_TOL_SELF_CHECK:g} (the reference is stale, regenerate it). See #2300",
+    )
     ap.add_argument("--ssp", default=_SSP)
     ap.add_argument("--bands", nargs="+", default=_BANDS)
     ap.add_argument("--z", type=float, default=_Z)
@@ -458,19 +638,26 @@ def main() -> int:
     args = ap.parse_args()
 
     write_reference = args.write_reference is not None
-    if not write_reference and args.reference is None:
-        ap.error("pass --write-reference PATH or --reference PATH")
+    self_check = args.self_check is not None
+    if self_check and (write_reference or args.reference is not None):
+        ap.error("--self-check PATH stands alone (it is its own reference)")
+    if not write_reference and not self_check and args.reference is None:
+        ap.error("pass --write-reference PATH, --reference PATH, or --self-check PATH")
     if not write_reference and args.stage != "full" and args.checkpoint is None:
         ap.error("--stage grad/map for the parity sweep needs --checkpoint PATH")
 
-    _refuse_wrong_precision(write_reference)
+    _refuse_wrong_precision(write_reference or self_check)
 
     warnings.filterwarnings("ignore")
 
-    dtype_label = "float64" if write_reference else "float32"
+    dtype_label = "float64" if (write_reference or self_check) else "float32"
     meta = {
-        "mode": "write-reference" if write_reference else "parity-sweep",
+        "mode": "write-reference"
+        if write_reference
+        else ("self-check" if self_check else "parity-sweep"),
         "dtype": dtype_label,
+        # The tree the file describes (#2300). ``reference_staleness`` reads it back.
+        "tree_sha": _tree_sha(),
         "jax": jax.__version__,
         "jaxlib": jaxlib.__version__,
         "backend": jax.default_backend(),
@@ -490,9 +677,17 @@ def main() -> int:
     print(json.dumps(meta, indent=2), flush=True)
 
     ref = None
+    banner = None
     if not write_reference:
-        with open(args.reference) as fh:
+        with open(args.self_check if self_check else args.reference) as fh:
             ref = json.load(fh)
+        ref_sha = (ref.get("meta") or {}).get("tree_sha")
+        ref_sha_plain = ref_sha.replace("-dirty", "") if ref_sha else None
+        banner = reference_staleness(
+            ref_sha, _src_commits_since(ref_sha_plain) if ref_sha_plain else None
+        )
+        if banner and not self_check:
+            print(f"WARNING: {banner}", flush=True)
 
     ssp = _load_ssp(args.ssp)
     obs = _make_observation(args.bands)
@@ -505,6 +700,9 @@ def main() -> int:
         if unknown:
             ap.error(f"unknown seam(s) {sorted(unknown)}; choices are {list(groups)}")
         groups = {k: v for k, v in groups.items() if k in args.seams}
+
+    if self_check:
+        return _self_check(ref, groups, ssp, obs, args, banner)
 
     def _load_seams(path):
         try:
@@ -646,6 +844,10 @@ def main() -> int:
         "data-minus-model at this SNR), already bounded by the fwd/grad columns."
     )
     print(f"device: {meta['devices']}  jax {meta['jax']}  jaxlib {meta['jaxlib']}")
+    if banner:
+        # Repeated under the table on purpose: the load-time copy has scrolled away by
+        # now, and a FAIL read without it is #2300 again.
+        print(f"WARNING: {banner}")
     return 1 if any_fail else 0
 
 
