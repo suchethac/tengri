@@ -66,6 +66,10 @@ class TestAttenuationFloatEqualitySafe:
 
         g_jax = float(jax.grad(_sum)(0.3))
         g_fd = fd_grad(_sum, 0.3)
+        assert np.isfinite(g_jax), (
+            f"non-finite d k / d z at z=0.3: {g_jax!r}. `nan != 0.0` is True, so the "
+            "non-zero check below cannot see a NaN - this is the #2178 shape."
+        )
         assert g_jax != 0.0, "redshift has an exactly-zero gradient inside the table"
         np.testing.assert_allclose(
             g_jax,
