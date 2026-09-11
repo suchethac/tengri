@@ -4094,13 +4094,6 @@ def _luminosity_weighted_metallicity_fn(state, params):
 # ─ Phase 1B: Ionizing group ─
 
 
-def _q_h_fn(state, params):
-    """Ionizing photon production rate [photons/s]."""
-    derived = state.derived
-    nan_scalar = jnp.asarray(jnp.nan)
-    return jnp.asarray(derived.get("nion", nan_scalar))
-
-
 def _log_q_h_fn(state, params):
     """log10 ionizing photon production rate [dex re photons/s]: float32-safe."""
     derived = state.derived
@@ -4272,16 +4265,17 @@ _SED_PROPERTIES = {
 }
 
 _IONIZING_PROPERTIES = {
-    "q_h": Property(
-        units="photons/s",
-        group="ionizing",
-        doc="Ionizing photon production rate",
-        fn=_q_h_fn,
-    ),
+    # ``q_h`` (linear photons/s, ~1e56) is retired with no alias (#1206 §C): it
+    # overflows float32 at every physical ionizing rate, including zero SFR.
+    # ``log_q_h`` is the sole surviving form; ``pred.q_h`` and
+    # ``predict_properties(..., names=("q_h",))`` raise ``KeyError`` naming it.
     "log_q_h": Property(
         units="dex",
         group="ionizing",
-        doc="log10(ionizing photon production rate / (photons/s)): float32-safe form of q_h",
+        doc=(
+            "log10(ionizing photon production rate / (photons/s)). "
+            "`q_h [photons/s] = 10**log_q_h`."
+        ),
         fn=_log_q_h_fn,
     ),
     "xi_ion": Property(

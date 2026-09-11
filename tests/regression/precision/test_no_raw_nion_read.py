@@ -5,32 +5,29 @@ This test walks the src/tengri/ tree and enforces that the RUNTIME use of
 `derived["nion"]` patterns appears ONLY in the documented allow-list, and
 that all allow-listed files still contain their expected patterns.
 
-Allowed exceptions (Tier B deferred — linear q_h / erg/s paths):
-- components/stellar/component.py — _q_h_fn linear q_h property (photons/s ~1e56)
-- forward/component_factory.py — state_to_ionizing_quantities.q_h linear surface
-- components/nebular/nebular_grid_precompute.py — build-path _nion_of_state (f64 build)
+**ALLOW is now empty (#1206 §C).** The Tier B item 3 migration (retire linear
+``q_h``) has landed everywhere this guard once carved out an exception:
 
-``forward/sed_model.py`` was on this list and is not any more: its fast-line path
-took the linear ``nion`` (~1e53, ``inf`` in float32) only to feed an erg/s line
-reconstruct that then overflowed too, which was the whole of why a float32 Cue line
-fit could not run. It now reads ``log_nion`` and stays in the exponent, so the
-Tier B item 3 migration has landed for that file and its entry is removed rather
-than kept green by widening the pattern.
+- ``components/stellar/component.py`` — the linear ``_q_h_fn`` / ``Property("q_h")``
+  is removed with no alias; ``log_q_h`` is the sole surviving form.
+- ``forward/component_factory.py`` — ``state_to_ionizing_quantities`` no longer
+  reads ``derived["nion"]`` at all; its ``IonizingQuantities`` NamedTuple dropped
+  the ``q_h`` field.
+- ``components/nebular/nebular_grid_precompute.py`` — ``_log_nion_of_state``'s
+  fallback to ``jnp.log10(state.derived["nion"])`` (for a hypothetical state
+  carrying only the linear publish) is removed: ``log_nion`` is published in the
+  same ``apply()`` call as ``nion`` on every real model, so the branch was
+  unreachable and was this guard's last allow-listed site.
 
-``components/nebular/line_precompute.py`` is also removed: the module is dormant
-(no caller in ``src/``, on no model path, per its own docstring warning), but it
-carried the same class of overflow and is the same two-line edit as the grid
-builder above -- ``_nion_of_state`` is now ``_log_nion_of_state``, and its one
-call site combines the ``-log10 Q_H`` offset with the distance divisor through
-:func:`~tengri.utils.scale.apply_log10_scale` rather than dividing by a
-materialized ``nion``.
-
-Each entry will be removed when its corresponding Tier B item (2 or 3) migration lands
-(see issue #1206).
+``forward/sed_model.py`` and ``components/nebular/line_precompute.py`` were
+removed from this list earlier, by the #1206 line-flux float32 fix: see git
+history for that rationale.
 
 The test is a two-way gate: NEW unauthorized sites are rejected, and STALE
 allow-list entries (files that no longer contain the pattern) are flagged as
-needing removal.
+needing removal. An empty ALLOW makes the second half vacuous by construction,
+but the check stays: a future Tier-B-shaped exception should re-populate it
+explicitly, not silently widen the pattern.
 
 See issue #1206.
 """
@@ -45,12 +42,9 @@ pytestmark = pytest.mark.contract
 SRC = pathlib.Path("src/tengri")
 
 # Controller-authorized allow-list: each file mapped to its rationale.
-# When a file is converted (Tier B item 2/3 migration), remove its entry and rationale.
-ALLOW = {
-    "components/stellar/component.py": "Tier B item 3 — _q_h_fn linear q_h property (~1e56)",
-    "forward/component_factory.py": "Tier B item 3 — state_to_ionizing_quantities.q_h linear",
-    "components/nebular/nebular_grid_precompute.py": "Tier B item 2/3 — build _nion_of_state",
-}
+# Empty (#1206 §C): every previously-deferred site has migrated. Re-populate
+# with a documented rationale if a new one is ever genuinely needed.
+ALLOW: dict[str, str] = {}
 
 # Match raw nion-reader patterns: derived["nion"] or derived.get("nion"
 PATTERN = re.compile(r'derived\s*\[\s*"nion"\s*\]|derived\.get\(\s*"nion"')

@@ -207,8 +207,25 @@ def _grammar_hint(component_name: str) -> str:
     return hint + "."
 
 
+#: Properties retired with no alias (pre-v1.0 breaking changes, #1206 §C), mapped
+#: to their one-line translation. A retired name is not a misspelling and is not
+#: in :data:`PROPERTY_REGISTRY`, so without this the generic path would either
+#: report it as merely "unknown" or rely on ``difflib`` happening to suggest the
+#: replacement -- neither names the unit conversion a caller needs to migrate.
+_RETIRED_PROPERTIES: dict[str, str] = {
+    "q_h": (
+        "'q_h' was retired with no alias (#1206): it returned photons/s "
+        "(~1e56), which overflows float32 at every physical ionizing rate. "
+        "Use 'log_q_h' (log10(photons/s)) instead; the linear value is "
+        "10**log_q_h."
+    ),
+}
+
+
 def _diagnose(name: str, known: list[str]) -> str:
     """One property's diagnosis, without the shared list of what *is* available."""
+    if name in _RETIRED_PROPERTIES:
+        return _RETIRED_PROPERTIES[name]
     if name in PROPERTY_REGISTRY:
         components = sorted({e.component_name for e in PROPERTY_REGISTRY[name]})
         owner = " or ".join(repr(c) for c in components)

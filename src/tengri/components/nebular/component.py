@@ -1084,8 +1084,8 @@ def _line_lums_for_ratios(derived):
     before and after, that number means "no emission", not a measurement.
 
     This deliberately does not serve :func:`_line_luminosity_helper`, which
-    returns *absolute* line luminosities in erg/s: those are genuinely outside
-    float32 range and need the breaking unit change tracked in #1206 §3.
+    returns *absolute* line luminosities in Lsun (#1206 §A) via its own
+    log-to-Lsun conversion, not this peak-relative one.
     """
     from tengri.utils.scale import pow10
 
@@ -1108,12 +1108,17 @@ def _line_lums_for_ratios(derived):
 
 
 def _line_luminosity_helper(state, params, line_key):
-    """Extract one line luminosity from the catalog, dust-reddened if available.
+    """Extract one line luminosity [Lsun], dust-reddened if available.
 
-    Prefers ``line_lums_attenuated``: published by the dust component, which
-    reddens the catalog with the same screen it applies to the nebular
-    continuum (#1867). Falls back to the intrinsic ``line_lums`` when no dust
-    component ran, which is the correct answer there.
+    **Breaking, no alias (#1206 §A).** Returns :math:`L_\\odot`, not erg/s: an
+    optical line is ~1e40-1e42 erg/s, past float32's 3.4e38 ceiling, so the
+    linear erg/s value was ``inf`` at exactly the precision this property
+    exists to serve. Reads the log10 catalog through
+    :func:`_log_line_luminosity_helper` (dust-reddened when a dust component
+    published one, exactly as before -- see that function's docstring) and
+    converts with one ``pow10(log_x - LOG10_L_SUN)``, never materializing the
+    erg/s intermediate. ``log_halpha`` and its ten siblings stay in dex re
+    erg/s and are unaffected: ``log_halpha == log10(halpha * L_sun)``.
 
     This one lookup is what makes BOTH public line surfaces observed:
     ``pred.lines.*`` and ``predict_properties(names=("halpha", ...))`` route
@@ -1123,77 +1128,64 @@ def _line_luminosity_helper(state, params, line_key):
     fixed only the interactive path and left the fit surface wrong.
     """
     from tengri.utils.scale import pow10
-    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+    from tengri.utils.sed_quantities import LOG10_L_SUN
 
-    derived = state.derived
-    nan_scalar = jnp.asarray(jnp.nan)
-
-    if "line_waves" not in derived or "line_lums" not in derived:
-        return nan_scalar
-
-    line_waves = jnp.asarray(derived["line_waves"])
-    log_atten = derived.get("log_line_lums_attenuated")
-    # ``pow10`` of the reddened log catalog rather than a linear
-    # ``line_lums_attenuated``: dust publishes only the log form, because the
-    # linear array is ``inf`` in float32 at ~1e41 erg/s. These 11 properties are
-    # absolute erg/s by contract (#1206 §3), so the exponentiation happens here,
-    # at the one surface that has to return the linear value.
-    line_lums = jnp.asarray(derived["line_lums"]) if log_atten is None else pow10(log_atten)
-    return extract_line_luminosity(line_waves, line_lums, KEY_LINES[line_key])
+    log_lum_erg_s = _log_line_luminosity_helper(state, params, line_key)
+    return pow10(log_lum_erg_s - LOG10_L_SUN)
 
 
 def _lya_fn(state, params):
-    """Lyman alpha line luminosity [erg/s]."""
+    """Lyman alpha line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "lya")
 
 
 def _civ_1549_fn(state, params):
-    """CIV 1549 line luminosity [erg/s]."""
+    """CIV 1549 line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "civ_1549")
 
 
 def _oii_fn(state, params):
-    """OII line luminosity [erg/s]."""
+    """OII line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "oii")
 
 
 def _hbeta_fn(state, params):
-    """Hβ line luminosity [erg/s]."""
+    """Hβ line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "hbeta")
 
 
 def _oiii_4959_fn(state, params):
-    """OIII 4959 line luminosity [erg/s]."""
+    """OIII 4959 line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "oiii_4959")
 
 
 def _oiii_5007_fn(state, params):
-    """OIII 5007 line luminosity [erg/s]."""
+    """OIII 5007 line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "oiii_5007")
 
 
 def _nii_6548_fn(state, params):
-    """NII 6548 line luminosity [erg/s]."""
+    """NII 6548 line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "nii_6548")
 
 
 def _halpha_fn(state, params):
-    """Hα line luminosity [erg/s]."""
+    """Hα line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "halpha")
 
 
 def _nii_6584_fn(state, params):
-    """NII 6584 line luminosity [erg/s]."""
+    """NII 6584 line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "nii_6584")
 
 
 def _sii_6717_fn(state, params):
-    """SII 6717 line luminosity [erg/s]."""
+    """SII 6717 line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "sii_6717")
 
 
 def _sii_6731_fn(state, params):
-    """SII 6731 line luminosity [erg/s]."""
+    """SII 6731 line luminosity [Lsun]."""
     return _line_luminosity_helper(state, params, "sii_6731")
 
 
@@ -1312,67 +1304,67 @@ from tengri.forward.properties import Property, register_properties
 
 _LINES_PROPERTIES = {
     "lya": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="Lyman alpha line luminosity",
         fn=_lya_fn,
     ),
     "civ_1549": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="CIV 1549 line luminosity",
         fn=_civ_1549_fn,
     ),
     "oii": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="OII line luminosity",
         fn=_oii_fn,
     ),
     "hbeta": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="Hβ line luminosity",
         fn=_hbeta_fn,
     ),
     "oiii_4959": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="OIII 4959 line luminosity",
         fn=_oiii_4959_fn,
     ),
     "oiii_5007": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="OIII 5007 line luminosity",
         fn=_oiii_5007_fn,
     ),
     "nii_6548": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="NII 6548 line luminosity",
         fn=_nii_6548_fn,
     ),
     "halpha": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="Hα line luminosity",
         fn=_halpha_fn,
     ),
     "nii_6584": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="NII 6584 line luminosity",
         fn=_nii_6584_fn,
     ),
     "sii_6717": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="SII 6717 line luminosity",
         fn=_sii_6717_fn,
     ),
     "sii_6731": Property(
-        units="erg/s",
+        units="Lsun",
         group="lines",
         doc="SII 6731 line luminosity",
         fn=_sii_6731_fn,
@@ -1459,24 +1451,46 @@ def _make_log_line_fn(line_key):
         return _log_line_luminosity_helper(state, params, _key)
 
     _fn.__name__ = f"_log_{line_key}_fn"
-    _fn.__doc__ = f"log10 of the {line_key} line luminosity [dex re erg/s]."
+    _fn.__doc__ = (
+        f"log10 of the {line_key} line luminosity [dex re erg/s]. "
+        f"`log_{line_key} = log10({line_key} * L_sun)`."
+    )
     return _fn
 
 
-#: Log companions for every line property carried in erg/s, derived from the census
-#: rather than hand-listed: a line whose linear form overflows float32 and gains a
-#: companion later would otherwise be added here by memory. ``bpt_nii``, ``o32`` and
-#: the other ratio/diagnostic properties are deliberately excluded: they are already
+#: The eleven line-luminosity names, explicit rather than a ``prop.units ==
+#: "erg/s"`` census (#1206 §A): the linear properties moved to ``units="Lsun"``,
+#: so that census would silently stop matching anything the day this list
+#: stopped being hand-kept. Every name here has a linear sibling in
+#: ``_LINES_PROPERTIES`` above; ``bpt_nii``, ``o32`` and the other
+#: ratio/diagnostic properties are deliberately excluded: they are already
 #: dimensionless or in dex and are float32-representable as they stand.
+_LOG_LINE_NAMES = (
+    "lya",
+    "civ_1549",
+    "oii",
+    "hbeta",
+    "oiii_4959",
+    "oiii_5007",
+    "nii_6548",
+    "halpha",
+    "nii_6584",
+    "sii_6717",
+    "sii_6731",
+)
+
 _LOG_LINE_PROPERTIES = {
     f"log_{name}": Property(
         units="dex",
         group="lines",
-        doc=f"log10 of {prop.doc.lower()} [dex re erg/s]; float32-safe form of `{name}`",
+        doc=(
+            f"log10 of {_LINES_PROPERTIES[name].doc.lower()} [dex re erg/s]; "
+            f"float32-safe form of `{name}`. `log_{name} = "
+            f"log10({name} * L_sun)`."
+        ),
         fn=_make_log_line_fn(name),
     )
-    for name, prop in _LINES_PROPERTIES.items()
-    if prop.units == "erg/s"
+    for name in _LOG_LINE_NAMES
 }
 
 _LINES_PROPERTIES.update(_LOG_LINE_PROPERTIES)

@@ -269,7 +269,9 @@ def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
 # ── Q_H computation ───────────────────────────────────────────────
 
 
-def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
+def _log_qh_from_lacc(
+    l_acc_erg: float | None = None, alpha_pl: float = -1.7, *, log10_l_acc_erg: float | None = None
+) -> float:
     """Estimate log10(Q_H) from accretion luminosity and EUV slope.
 
     For f_nu ~ nu^{alpha_pl}, the ionizing photon rate is:
@@ -288,15 +290,29 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
 
     Parameters
     ----------
-    l_acc_erg : float
-        Accretion luminosity [erg s^-1].
+    l_acc_erg : float, optional
+        Accretion luminosity [erg s^-1]. Ignored when ``log10_l_acc_erg`` is
+        given.
     alpha_pl : float
         EUV power-law slope (f_nu ~ nu^alpha_pl) [dimensionless].
+    log10_l_acc_erg : float, optional
+        ``log10(l_acc_erg / (erg/s))``, keyword-only. When given, computes
+        ``log10(Q_H) = log10(f_ion) + log10_l_acc_erg - log10(<h*nu>)``
+        without ever forming the linear accretion luminosity, the
+        float32-safe path (#1206 §C): a real AGN has ``l_acc_erg`` ~
+        1e44-1e46, already past float32's 3.4e38 ceiling on its own, so
+        ``l_ion = f_ion * l_acc_erg`` was ``inf`` before ``mean_hnu`` ever
+        divided it. Default ``None`` uses the linear ``l_acc_erg``.
 
     Returns
     -------
     float
         log10(Q_H) ionizing photon rate [log10(photons s^-1)].
+
+    Raises
+    ------
+    ValueError
+        If both ``l_acc_erg`` and ``log10_l_acc_erg`` are ``None``.
 
     References
     ----------
@@ -310,6 +326,8 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     """
+    if l_acc_erg is None and log10_l_acc_erg is None:
+        raise ValueError("Pass either l_acc_erg or log10_l_acc_erg.")
     # Frequency limits for ionizing radiation
     nu_lyman = _NU_LYMAN  # 912 A
     # Upper limit: use 1 A (hard X-ray cutoff)
@@ -342,10 +360,17 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
     # Ensure physical: at least 1 Rydberg
     mean_hnu = jnp.maximum(mean_hnu, _RYDBERG_ERG)
 
-    l_ion = f_ion * l_acc_erg
-    q_h = l_ion / mean_hnu
+    if log10_l_acc_erg is None:
+        l_ion = f_ion * l_acc_erg
+        q_h = l_ion / mean_hnu
+        return jnp.log10(jnp.maximum(q_h, 1.0))
 
-    return jnp.log10(jnp.maximum(q_h, 1.0))
+    # log10(Q_H) = log10(f_ion) + log10(l_acc_erg) - log10(<h*nu>), never
+    # forming the linear l_ion (#1206 §C).
+    log10_q_h = (
+        jnp.log10(f_ion) + jnp.asarray(log10_l_acc_erg) - jnp.log10(mean_hnu)
+    )
+    return jnp.maximum(log10_q_h, 0.0)
 
 
 # ── Backend: Cue emulator ─────────────────────────────────────────
@@ -353,7 +378,7 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
 
 def agn_nlr_cue(
     cue_backend,
-    l_acc_erg: float,
+    l_acc_erg: float | None = None,
     covering_fraction: float = 0.1,
     neb_logU: float = -3.0,
     # Differs from the declared gas_logn default (2.0) on purpose: that
@@ -367,6 +392,8 @@ def agn_nlr_cue(
     alpha_pl: float = -1.7,
     ionspec_params: dict | None = None,
     template_data=None,
+    *,
+    log10_l_acc_erg: float | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute AGN NLR emission using the Cue neural-network emulator.
 
@@ -378,8 +405,9 @@ def agn_nlr_cue(
     ----------
     cue_backend : CueBackend
         Initialized Cue emulator backend with loaded weights.
-    l_acc_erg : float
-        AGN accretion luminosity [erg s^-1].
+    l_acc_erg : float, optional
+        AGN accretion luminosity [erg s^-1]. Ignored when
+        ``log10_l_acc_erg`` is given.
     covering_fraction : float
         NLR covering fraction (0 to 1). Default 0.1 [dimensionless].
     neb_logU : float
@@ -398,6 +426,11 @@ def agn_nlr_cue(
     ionspec_params : dict or None
         Explicit Cue ionizing spectrum parameters (overrides alpha_pl).
         Keys: ``ionspec_index1..4``, ``ionspec_logLratio1..3`` [dimensionless].
+    log10_l_acc_erg : float, optional
+        ``log10(l_acc_erg / (erg/s))``, keyword-only. When given, Q_H is
+        derived without ever forming the linear accretion luminosity (#1206
+        §C): a real AGN has ``l_acc_erg`` ~ 1e44-1e46, already past float32's
+        3.4e38 ceiling. Default ``None`` uses the linear ``l_acc_erg``.
 
     Returns
     -------
@@ -430,7 +463,7 @@ def agn_nlr_cue(
     if ionspec_params is None:
         ionspec_params = agn_ionspec_from_alpha_pl(alpha_pl)
 
-    log_qh = _log_qh_from_lacc(l_acc_erg, alpha_pl)
+    log_qh = _log_qh_from_lacc(l_acc_erg, alpha_pl, log10_l_acc_erg=log10_l_acc_erg)
 
     line_wav, line_lum = cue_backend.predict_nebular_line_luminosities(
         template_data=template_data,

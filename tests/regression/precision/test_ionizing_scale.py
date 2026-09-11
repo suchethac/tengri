@@ -23,10 +23,13 @@ TIER B STEP 1 DELIVERED (pure-float32, jax.enable_x64(False)) — the log_nion c
     The log_nion reparametrization makes log_q_h (= log10 Q_H) and the nebular continuum
     rest_sed() (L_nu ~1e29, float32-representable) finite and float64-accurate. This is the
     usable pure-float32 ionizing diagnostic the contract provides.
-  - test C2 (test_linear_observables_pure_float32_cue_only): XFAIL(strict) — #1206 item 3.
-    The linear q_h property (~1e56 photons/s) and the erg/s line_lums (~1e41, hence
-    balmer_decrement) still exceed float32 max. Returning them in L_sun/log10 is a breaking
-    unit change (#1206 item 3), not yet done. log_q_h is the finite replacement.
+  - test C2 (test_linear_observables_pure_float32_cue_only): un-xfailed, #1206 §C
+    DELIVERED. The linear ``q_h`` property (~1e56 photons/s, past float32's 3.4e38
+    ceiling at every physical rate) is retired with no alias rather than repaired:
+    there is no in-range linear form. ``log_q_h`` is the sole surviving,
+    float32-finite replacement; accessing ``q_h`` now raises. ``balmer_decrement``
+    (line ratios via the peak-relative ``log_line_lums`` catalog, #1837) was
+    already finite in float32.
 """
 
 import jax
@@ -294,21 +297,17 @@ def test_log_q_h_pure_float32_cue_only(ssp_bare):
     assert_allclose(log_q_h_32, log_q_h_64, atol=5e-3)  # dex
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Tier B item 3 (breaking unit change, not yet done): the linear q_h property "
-        "(~1e56 photons/s) and the erg/s line_lums (~1e41, hence balmer_decrement) exceed "
-        "float32 max. The log_nion contract (#1206 step 1) gives a finite log_q_h instead — "
-        "see test_log_q_h_pure_float32_cue_only. Returning these in L_sun/log10 is #1206 item 3."
-    ),
-    strict=True,
-)
 def test_linear_observables_pure_float32_cue_only(ssp_bare):
-    """(C2) The linear-erg/s observables that Tier B item 3 must still fix.
+    """(C2) Tier B item 3, delivered: the new contract in pure float32.
 
-    In pure float32 the linear ``q_h`` overflows to inf and ``balmer_decrement``
-    (a ratio of erg/s ``line_lums`` ~1e41) is nan. This test is expected to fail
-    until item 3 rescales these to L_sun/log10; if it ever XPASSES, promote it.
+    Un-xfailed (#1206 §C): the linear ``q_h`` property (~1e56 photons/s,
+    past float32's 3.4e38 ceiling at every physical ionizing rate) is
+    retired with no alias, not repaired -- there is no in-range linear form
+    to make finite. ``log_q_h`` is its sole surviving replacement and is
+    finite in pure float32; accessing the retired ``q_h`` raises rather than
+    returning ``inf``. ``balmer_decrement`` (a ratio of the peak-relative
+    ``log_line_lums`` catalog, #1837) was already finite in float32 and
+    stays so.
     """
     from .conftest import build_minimal_cue_model
 
@@ -316,12 +315,14 @@ def test_linear_observables_pure_float32_cue_only(ssp_bare):
         m32 = build_minimal_cue_model(ssp_bare, "float32")
         p = dict(m32.spec.sample(jax.random.PRNGKey(0)))
         pred32 = m32.predict(p)
-        q_h_32 = float(pred32.properties["q_h"])
+        log_q_h_32 = float(pred32.properties["log_q_h"])
         dec_32 = float(pred32.properties["balmer_decrement"])
+        with pytest.raises(KeyError, match="log_q_h"):
+            _ = pred32.properties["q_h"]
 
-    assert np.isfinite(q_h_32), f"linear q_h overflows float32: {q_h_32}"
-    assert np.any(q_h_32 != 0.0), (
-        "`q_h_32` is identically zero — finite is not enough, "
+    assert np.isfinite(log_q_h_32), f"log_q_h non-finite in pure float32: {log_q_h_32}"
+    assert np.any(log_q_h_32 != 0.0), (
+        "`log_q_h_32` is identically zero — finite is not enough, "
         "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     assert np.isfinite(dec_32), f"balmer_decrement is nan in float32: {dec_32}"
