@@ -133,11 +133,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   symptom, and the `spec/*/auto_*` symptom with it — see the next entry
   (#2178, #2100).
 
-- The audit that came with `tools/check_gradient_assertions.py`: **277 test
-  sites** across 139 files asserted half the finite-AND-non-zero rule and now
-  assert both. 246 were the #2100 shape (finite, never non-zero) and 31 the
+- The audit that came with `tools/check_gradient_assertions.py`: **279 test
+  sites** across 140 files asserted half the finite-AND-non-zero rule and now
+  assert both. 248 were the #2100 shape (finite, never non-zero) and 31 the
   #2178 shape (non-zero, never finite). No assertion was weakened to make the
-  guard pass. 19 of the 277 carry the documented escape hatch
+  guard pass. 19 of the 279 carry the documented escape hatch
   (`# grad-assert: finite-only — <reason>`): they evaluate at a point where the
   derivative is zero for a reason. Some construct a degenerate input on purpose
   — a zeroed window, an empty band, zero ionizing flux, an exact `log10_add`
@@ -165,10 +165,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   gradient summed to exactly 0.0 and `sfh_field_psd_sigma`'s was bit-identical
   for a zero field and a random one. A finite-only check cannot see that, because
   an identically zero array is finite. (Counts are what the guard reports when run over the upstream
-  tree at the merge base: 277 across 139 files at `850be10bc`, against 274
-  across 136 at the previous merge base `87b650e7f` — a delta of exactly the
-  three sites `main` added since. An earlier revision of this entry said
-  276/137, which was not one of those measurements.)
+  tree at the merge base: 279 across 140 files at `6cc1a8b25`, against 277
+  across 139 at the previous merge base `850be10bc` — a delta of exactly the
+  two sites `main` added since, both in `test_float32_scale_seam_sweep.py`,
+  where the swept *forward* was pinned finite but never non-zero. An earlier
+  revision of this entry said 276/137, which was not one of those
+  measurements.)
   Two of the repaired sites are the historical bugs themselves:
   `test_inference_grad_float32.py` (still finite-only on `main`, which is how
   #2100 stayed invisible) and the `!= 0.0` seam checks in
