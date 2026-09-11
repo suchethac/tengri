@@ -31,8 +31,7 @@ below, computed on ``origin/main`` at commit ``18cf9fb9ec73e5b2010b278f21b7c4734
 .. code-block:: bash
 
     PYTHONPATH=src taskset -c 0-3 env JAX_PLATFORMS=cpu \
-        /home/suchetha/Projects/tengri/.venv/bin/python /tmp/f1206_ab_probe.py \
-        /tmp/f1206_ab_main.npz
+        .venv/bin/python /tmp/f1206_ab_probe.py /tmp/f1206_ab_main.npz
 
 hardcoded to 12 significant digits. A cross-tree float64 A/B of 8 representative
 line-channel arrays (this pair plus the discrete catalog, the fast nebular grid, the
