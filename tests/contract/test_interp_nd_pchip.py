@@ -60,7 +60,27 @@ def test_no_overshoot_on_step():
 
 @pytest.mark.gradient
 def test_gradient_finite_and_continuous():
-    """jax.grad through the interpolant is finite across and at cell boundaries."""
+    """jax.grad through the interpolant is finite across and at cell boundaries,
+    and carries real slope everywhere the data is not turning.
+
+    ``y`` turns at both interior nodes — ``1 -> 4 -> 2`` is a local maximum at
+    x=1 and ``4 -> 2 -> 5`` a local minimum at x=2 — and Fritsch-Carlson pins
+    the node derivative to **exactly zero** at a local extremum. That is the
+    shape-preserving rule itself, the same property ``test_no_overshoot_on_step``
+    above relies on, so the non-zero half is not a claim at those two nodes:
+    demanding it would demand the overshoot PCHIP exists to prevent. Measured
+    across the sweep:
+
+        xq=0.0    2.75        xq=1.999  -0.011988
+        xq=0.5    3.125       xq=2.0     0.0   <- local min, pinned
+        xq=1.0    0.0   <- local max, pinned
+                              xq=2.5     3.125
+                              xq=3.0     2.75
+
+    Finiteness is claimed at every point; non-zero is claimed at the five that
+    are not turning points, which is what rules out an interpolant that has gone
+    flat where the data has not (#2100).
+    """
     x = jnp.asarray([0.0, 1.0, 2.0, 3.0])
     y = jnp.asarray([1.0, 4.0, 2.0, 5.0])
 
@@ -70,9 +90,12 @@ def test_gradient_finite_and_continuous():
     g = jax.jit(jax.grad(f))
     for xq in (0.0, 0.5, 1.0, 1.999, 2.0, 2.5, 3.0):
         assert jnp.isfinite(g(xq)), f"non-finite gradient at xq={xq}"
+    for xq in (0.0, 0.5, 1.999, 2.5, 3.0):
         assert jnp.any(g(xq) != 0.0), (
-            "`g(xq)` is identically zero — finite is not enough, "
-            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            f"`g({xq})` is identically zero at a point where y is not turning, so "
+            "the interpolant has gone flat where the data has not — finite is not "
+            "enough, a value that has collapsed to zero is as unusable as a NaN "
+            "one (#2100)"
         )
 
 
