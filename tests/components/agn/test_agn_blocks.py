@@ -196,24 +196,33 @@ def test_smc_prevot_block_matches_redden_disc():
 # ──────────────────────────────────────────────────────────────────────
 
 
+#: L5100 shared by both GRAHSP pipelines below, one spelling per path
+#: (#1206 §D): the composable blocks read the log-native
+#: ``agn_grahsp_log_l5100`` (breaking, no alias), while the monolithic
+#: ``compute_grahsp_sed`` -- a separate, independent implementation with its
+#: own ``declared_parameters()`` -- is out of scope for that rename and still
+#: takes the linear ``agn_grahsp_l5100``. Both name the SAME physical value:
+#: ``10**_GRAHSP_LOG_L5100 == _GRAHSP_L5100``.
+_GRAHSP_LOG_L5100 = 44.0
+_GRAHSP_L5100 = 1.0e44
+
+
 def _grahsp_params():
     """Single-source GRAHSP parameter set used by both pipelines.
 
-    ``agn_grahsp_l5100`` is **explicit** here. Without it, the two paths
-    use different conventions:
+    L5100 is **explicit** (added by each call site below, one spelling per
+    path). Without it, the two paths use different conventions:
 
     - ``compute_grahsp_sed`` (monolithic): rescales l5100 so the total
       AGN-side bolometric integral matches ``10**agn_log_lbol * L_sun``.
     - ``composable_agn_l_nu`` (block runner): each block self-normalizes
       from its own params, with no post-hoc bolometric coupling.
 
-    Setting ``agn_grahsp_l5100`` directly bypasses both the monolithic
-    rescale and the composable disc auto-norm, so the two paths agree
-    bit-for-bit.
+    Setting l5100 directly bypasses both the monolithic rescale and the
+    composable disc auto-norm, so the two paths agree bit-for-bit.
     """
     return dict(
         agn_log_lbol=44.5,
-        agn_grahsp_l5100=1.0e44,
         agn_grahsp_uvslope=0.0,
         agn_grahsp_plslope=-1.7,
         agn_grahsp_plbendloc_nm=100.0,
@@ -251,14 +260,16 @@ def test_all_grahsp_recipe_matches_compute_grahsp_sed():
         agn_feii_block="grahsp",
         agn_torus_block="grahsp",
         agn_attenuation_block="grahsp_biatten",
+        agn_grahsp_log_l5100=_GRAHSP_LOG_L5100,
         **p,
     )
-    out_monolithic = compute_grahsp_sed(wave_aa, **p)
+    out_monolithic = compute_grahsp_sed(wave_aa, agn_grahsp_l5100=_GRAHSP_L5100, **p)
 
     # Both paths exercise the same physics. The runner derives l5100_disc
     # via ``jnp.interp(5100Å, wave, L_λ_disc) × 5100`` from the disc grid;
     # the monolithic path uses the analytic l5100 directly. With explicit
-    # ``agn_grahsp_l5100`` they agree to grid-interpolation precision.
+    # l5100 (same physical value, one spelling per path) they agree to
+    # grid-interpolation precision.
     np.testing.assert_allclose(
         np.asarray(out_composable),
         np.asarray(out_monolithic),
@@ -279,7 +290,7 @@ def test_mix_grahsp_disc_with_simple_torus():
         agn_torus_block="two_temperature",
         agn_attenuation_block="smc_prevot",
         agn_log_lbol=45.0,
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
         agn_T_hot=1200.0,
         agn_T_warm=300.0,
         agn_frac_hot=0.3,
@@ -303,7 +314,7 @@ def test_disc_only_recipe_is_pure_continuum():
         agn_feii_block="none",
         agn_torus_block="none",
         agn_attenuation_block="none",
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
     )
     # Should be smooth (no line spikes) and positive across the disc's
     # physical range. The disc reads zero below the alpha_ox corona's blue
@@ -325,7 +336,7 @@ def test_runner_jit_compatible():
     wave_aa = jnp.logspace(2, 6, 200)
 
     @jax.jit
-    def fwd(l5100, ebv):
+    def fwd(log_l5100, ebv):
         return composable_agn_l_nu(
             wave_aa,
             agn_log_lbol=44.5,
@@ -335,11 +346,11 @@ def test_runner_jit_compatible():
             agn_feii_block="grahsp",
             agn_torus_block="grahsp",
             agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_l5100=l5100,
+            agn_grahsp_log_l5100=log_l5100,
             agn_grahsp_ebv=ebv,
         )
 
-    out = fwd(jnp.array(1.0e44), jnp.array(0.1))
+    out = fwd(jnp.array(44.0), jnp.array(0.1))
     chex.assert_equal_shape([out, wave_aa])
     chex.assert_tree_all_finite(out)
 
@@ -415,7 +426,7 @@ def test_resolve_via_agn_models_registry():
         agn_feii_block="none",
         agn_torus_block="grahsp",
         agn_attenuation_block="none",
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
     )
     out_registry = fn_via_registry(wave_aa, agn_log_lbol=44.5, **p)
     out_direct = composable_agn_l_nu(wave_aa, agn_log_lbol=44.5, **p)

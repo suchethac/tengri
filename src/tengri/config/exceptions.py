@@ -331,12 +331,6 @@ class DeadGradientParameterWarning(UserWarning):
     configuration, the forward model is correct either way, and a gradient-free
     sampler can still fit it. Filter this category if you are sampling without
     gradients.
-
-    See Also
-    --------
-    tengri.components.agn.component.Float32UnsafeAGNWarning
-        The same discipline for a block that is numerically unsafe rather than
-        gradient-dead.
     """
 
 
