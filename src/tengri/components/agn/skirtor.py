@@ -929,12 +929,26 @@ def skirtor_disc_dust_ratio(
         # No native grid to normalize on, so the native pair degrades to the
         # caller's grid and its own unit-integral shape: the ratios are 1.0,
         # so nothing downstream is scaled by a number this fallback invented.
+        #
+        # Degenerate case: the disc integrates to zero on the caller's grid (a
+        # disc block whose support lies entirely outside it, or a zeroed disc).
+        # There is no shape to unit-normalize, so the documented value is a
+        # zero shape -- the polar reference is then zero rather than the ~1e30
+        # spike a 1e-30 floor would have produced. The denominator is selected
+        # before the divide, not floored: both branches of a jnp.where are
+        # differentiated and division's VJP carries -num/den**2, so a floored
+        # denominator squares to 0.0 in float32 and poisons the live branch.
+        _faceon_integral = jnp.trapezoid(disc_lambda_unreddened, wave)
+        _faceon_live = _faceon_integral > 0.0
         return SkirtorDiscTie(
             R=jnp.asarray(1.0),
             incl_ratio=jnp.ones_like(wave),
             R_faceon=jnp.asarray(1.0),
-            faceon_shape_native=disc_lambda_unreddened
-            / jnp.maximum(jnp.trapezoid(disc_lambda_unreddened, wave), 1e-30),
+            faceon_shape_native=jnp.where(
+                _faceon_live,
+                disc_lambda_unreddened / jnp.where(_faceon_live, _faceon_integral, 1.0),
+                0.0,
+            ),
             wave_native=jnp.asarray(wave),
         )
     disk_jax, dust_jax, wave_grid, axes, norm_jax = _as_disc_dust_grid(raw)

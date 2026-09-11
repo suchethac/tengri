@@ -391,6 +391,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
+- **`grad` of an AGN prediction is finite at `agn_polar_ebv = 0`, the registry
+  default.** The AGN dust-budget split shares one budget between the torus and
+  the polar graybody as `share = polar / (torus + polar)` and then rescales the
+  graybody by `budget * share / polar`. At zero polar reddening the screen
+  absorbs nothing, so both quotients are `0/0`; both denominators were floored
+  at `1e-300`, which gives the right forward value and a **NaN cotangent**,
+  because division's VJP carries `-num/den**2` and `1e-300` squares to zero.
+  Measured, `d(polar + torus)/d(agn_polar_ebv)` at `agn_polar_ebv = 0`: `nan`
+  before, `6.743538e+33` (torus `'none'`) and `4.134017e+33` (torus
+  `'skirtor'`) after. Away from the degenerate point nothing moves
+  (`2.192167e+33` at `E(B-V) = 0.1`, both forms). Any gradient-based fit that
+  started the polar screen at its default took a NaN on step one. Each
+  denominator is now selected with the live predicate before the divide, and
+  each degenerate answer is stated: share 0 (the torus keeps the whole budget)
+  and a rescale factor of 1.0 (the zero re-emission stays zero).
+
+  The same rewrite fixes a smaller one beside it: when the raw SKIRTOR
+  disk/dust grid is absent, the face-on disc's unit-area shape was normalized
+  by `jnp.maximum(integral, 1e-30)`, so a disc fainter than that floor came
+  back scaled by `integral / 1e-30` rather than to unit area — measured
+  9.9e-06 instead of 1.0.
+
 - **A model wavelength grid that truncates the polar dust's absorbed-power
   reference is now refused at build time instead of shifting the torus/polar
   split silently.** Under `agn_norm='cigale_joint'` with `torus='skirtor'` and

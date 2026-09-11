@@ -1034,12 +1034,36 @@ agn_torus_block, agn_attenuation_block : str
         if _agn_norm in ("cigale_joint", "conserving"):
             _agn_dust_budget = jnp.abs(jnp.trapezoid(L_lambda_torus * _conv, _nu))
             _polar_power = jnp.abs(jnp.trapezoid(L_nu_reemit, _nu))
-            _share = _polar_power / jnp.maximum(_agn_dust_budget + _polar_power, 1e-300)
+            # Degenerate case: BOTH budgets are zero -- no torus emission and
+            # no polar re-emission on this grid (agn_polar_ebv = 0 with a
+            # torus block that contributes nothing here) -- so there is no
+            # budget to split. Documented value: share 0, i.e. the torus
+            # keeps the whole (zero) budget and the split is a no-op.
+            #
+            # The denominator is SELECTED before the divide rather than
+            # floored. An outer jnp.where does not protect the reverse pass:
+            # both branches are differentiated, and division's VJP carries
+            # -num/den**2, so a floored denominator squares to exactly 0.0 in
+            # float32 and feeds 0 * inf = NaN back into the surviving branch.
+            _dust_total = _agn_dust_budget + _polar_power
+            _dust_total_live = _dust_total > 0.0
+            _share = jnp.where(
+                _dust_total_live,
+                _polar_power / jnp.where(_dust_total_live, _dust_total, 1.0),
+                0.0,
+            )
             _torus_factor = 1.0 - _share
             # Renormalize the graybody from its own absorbed power to the
             # budget share, so torus + polar integrates to _agn_dust_budget.
-            L_nu_reemit = L_nu_reemit * (
-                _agn_dust_budget * _share / jnp.maximum(_polar_power, 1e-300)
+            # Degenerate case: no polar power at all -- then ``L_nu_reemit``
+            # is identically zero and ``_share`` is zero with it, so the
+            # rescale is 0/0. Documented value: factor 1.0, which leaves the
+            # zero re-emission exactly zero.
+            _polar_live = _polar_power > 0.0
+            L_nu_reemit = L_nu_reemit * jnp.where(
+                _polar_live,
+                _agn_dust_budget * _share / jnp.where(_polar_live, _polar_power, 1.0),
+                1.0,
             )
         else:
             _torus_factor = 1.0

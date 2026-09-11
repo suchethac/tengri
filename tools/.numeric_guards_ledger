@@ -12,8 +12,7 @@ src/tengri/components/agn/adaf.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/feii.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/masking.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/blocks/runner.py | jnp.clip with floor 0.0 < 1e-20 -> 1
-src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
-src/tengri/components/agn/blocks/torus.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
+src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
 src/tengri/components/agn/blocks/torus_screen.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/torus_screen.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/torus_screen.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
@@ -29,6 +28,7 @@ src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-100 < 1e-20
 src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/agn/fracagn.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/fracagn.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/agn/kd18_agnfitter.py | jnp.clip with floor 0.0 < 1e-20 -> 5
 src/tengri/components/agn/kd_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 7
 src/tengri/components/agn/kd_precompute.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/agn/kd_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3

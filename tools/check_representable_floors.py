@@ -124,9 +124,20 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #: first and normalized on the evaluation grid through a ``jnp.where``-selected
 #: division, so the floored denominator is gone rather than moved.
 #:
+#: 45 -> 43 with the AGN validation round: the R59 AGN dust-budget split in
+#: ``components/agn/blocks/runner.py`` divided twice through
+#: ``jnp.maximum(..., 1e-300)`` -- once for the polar share and once for the
+#: graybody rescale -- and both denominators are now selected with a
+#: ``jnp.where`` on the live predicate before the divide. That is exactly the
+#: failure this bound exists for: the forward value was a clean ``0/1e-300 ==
+#: 0.0`` at ``agn_polar_ebv = 0`` while ``grad`` of the AGN dust total with
+#: respect to it came back ``nan``, measured on both a ``'none'`` and a
+#: ``'skirtor'`` torus. It is finite (6.743538e+33 / 4.134017e+33) now, and
+#: unchanged away from the degenerate point.
+#:
 #: Do NOT raise this to make a red run green. A rise means a new site was added,
 #: which is the thing this exists to prevent.
-_PINNED_DENOMINATORS = 45
+_PINNED_DENOMINATORS = 43
 
 
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:

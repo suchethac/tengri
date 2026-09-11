@@ -313,3 +313,118 @@ class TestPolarDustSharesTheAgnDustBudget:
             share = integ["polar"] / (integ["polar"] + integ["torus"])
             assert 0.0 < share < 1.0, f"agn_polar_ebv={ebv}: share={share}"
             assert integ["torus"] > 0.0, f"agn_polar_ebv={ebv}: torus driven to zero"
+
+
+class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
+    """The R59 budget split has a defined answer when there is no budget.
+
+    ``runner.compose_l_nu`` partitions the AGN dust budget between the torus
+    and the polar graybody as ``share = polar / (torus + polar)``, then
+    rescales the graybody by ``budget * share / polar``. Both quotients are
+    ``0/0`` at ``agn_polar_ebv = 0``, where the screen absorbs nothing:
+    ``polar`` is exactly zero, and with ``torus='none'`` the sum is zero too.
+
+    The documented answers are ``share = 0`` -- the torus keeps the whole
+    budget -- and a rescale factor of ``1.0``, which leaves the zero
+    re-emission zero. They are reached by SELECTING each denominator before
+    the divide rather than flooring it at ``1e-300``. The forward value is
+    the same either way (``0 / 1e-300`` is also 0), which is exactly why the
+    floored form survived: the failure is in the REVERSE pass. Division's VJP
+    carries ``-num/den**2``, so a ``1e-300`` denominator squares to ``1e-600``
+    -- zero in float64 -- and the cotangent comes back ``nan``. Measured on
+    this file's probe, ``grad`` of ``sum(polar) + sum(torus)`` with respect to
+    ``agn_polar_ebv`` at ``ebv = 0``:
+
+    ============  ==================  ==================
+    torus block   floored denominator selected denominator
+    ============  ==================  ==================
+    ``none``      ``nan``             ``6.743538e+33``
+    ``skirtor``   ``nan``             ``4.134017e+33``
+    ============  ==================  ==================
+
+    Away from the degenerate point nothing moves: at ``ebv = 0.1`` both forms
+    give ``2.192167e+33``. A fit that starts a sampler at zero polar
+    reddening -- the registry default -- took a NaN gradient on step one.
+    """
+
+    _EBV_DEGENERATE = 0.0
+    _EBV_LIVE = 0.1
+
+    @staticmethod
+    def _compose(ebv, torus_block):
+        from tengri.components.agn.blocks.runner import compose_l_nu
+
+        return compose_l_nu(
+            _WAVE,
+            12.0,
+            agn_disc_block="powerlaw",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block=torus_block,
+            agn_attenuation_block="polar_dust",
+            agn_norm="cigale_joint",
+            agn_polar_ebv=ebv,
+            agn_polar_oa=40.0,
+            return_components=True,
+        )
+
+    @classmethod
+    def _dust_total(cls, ebv, torus_block):
+        _sed, comps = cls._compose(ebv, torus_block)
+        return jnp.sum(jnp.asarray(comps["polar"])) + jnp.sum(jnp.asarray(comps["torus"]))
+
+    @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
+    def test_gradient_is_finite_where_the_budget_is_degenerate(self, torus_block):
+        """The 0/0 at ``agn_polar_ebv = 0`` must not return a NaN cotangent."""
+        import jax
+
+        grad = float(
+            jax.grad(lambda e: self._dust_total(e, torus_block))(jnp.asarray(self._EBV_DEGENERATE))
+        )
+        assert np.isfinite(grad), (
+            f"torus={torus_block!r}: d(polar + torus)/d(agn_polar_ebv) is {grad} at "
+            "agn_polar_ebv=0, where the polar power is exactly zero. The R59 share "
+            "must select its denominator, not floor it: a floored 1e-300 squares to "
+            "zero in the division's VJP and the cotangent comes back nan."
+        )
+
+    @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
+    def test_the_live_gradient_is_unchanged_by_the_selection(self, torus_block):
+        """Away from the degenerate point the split must behave exactly as before.
+
+        Without this, a rewrite that simply zeroed the derivative everywhere
+        would pass the test above.
+        """
+        import jax
+
+        grad = float(
+            jax.grad(lambda e: self._dust_total(e, torus_block))(jnp.asarray(self._EBV_LIVE))
+        )
+        assert np.isfinite(grad)
+        if torus_block == "skirtor":
+            assert grad == pytest.approx(2.192167e33, rel=1e-5, abs=0.0), (
+                "the live E(B-V) gradient moved; the selection must only change the "
+                f"degenerate point, got {grad:.6e}"
+            )
+
+    @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
+    def test_zero_polar_power_leaves_the_forward_components_defined(self, torus_block):
+        """share = 0 at E(B-V) = 0: no graybody, and the torus keeps the budget."""
+        _sed, comps = self._compose(jnp.asarray(self._EBV_DEGENERATE), torus_block)
+        polar = np.asarray(comps["polar"])
+        torus = np.asarray(comps["torus"])
+        assert np.all(np.isfinite(polar)) and np.all(np.isfinite(torus))
+        assert np.all(polar == 0.0), (
+            f"torus={torus_block!r}: E(B-V)=0 absorbs nothing, so the polar graybody "
+            "must be exactly zero"
+        )
+        if torus_block == "skirtor":
+            assert np.any(torus > 0.0), (
+                "share must be 0 here, so the torus keeps the whole AGN dust budget "
+                "rather than being scaled away"
+            )
+        else:
+            assert np.all(torus == 0.0), (
+                "torus='none' emits nothing, so the empty budget stays empty"
+            )

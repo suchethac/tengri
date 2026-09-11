@@ -83,3 +83,53 @@ def test_skirtor_disc_dust_ratio_grad_finite(param, at_node):
     assert np.isfinite(g), (
         f"NaN/Inf gradient of skirtor_disc_dust_ratio w.r.t. {param} (at_node={at_node})"
     )
+
+
+class TestNoGridFallbackReturnsAUnitShape:
+    """The no-grid fallback normalizes by the integral it measured, not a floor.
+
+    When the raw SKIRTOR disk/dust grid is absent, ``skirtor_disc_dust_ratio``
+    degrades to the caller's own grid and returns the disc renormalized to
+    unit area as ``faceon_shape_native`` -- the array the polar dust's
+    absorbed-power proxy integrates against. That renormalization used to
+    divide by ``jnp.maximum(int, 1e-30)``. The floor is not inert: a disc
+    whose integral falls below ``1e-30`` (a faint AGN, or simply a disc whose
+    support barely overlaps the caller's grid) came back scaled by
+    ``int / 1e-30`` instead of to unit area, so the polar reference silently
+    lost the same factor. The denominator is now SELECTED -- zero integral
+    gives a zero shape, anything positive is divided by itself -- which is
+    also what keeps division's ``-num/den**2`` VJP off a squared floor.
+    """
+
+    @staticmethod
+    def _tie(monkeypatch, disc_scale):
+        import tengri.components.agn.skirtor as sk
+
+        monkeypatch.setattr(sk, "_load_raw_disk_dust_grid", lambda *a, **k: None)
+        wave = jnp.linspace(1000.0, 100000.0, 512)
+        disc = jnp.full_like(wave, disc_scale)
+        ext = jnp.ones_like(wave)
+        return wave, sk.skirtor_disc_dust_ratio(wave, disc, ext, agn_cos_inc=0.6)
+
+    def test_a_faint_disc_still_gets_a_unit_area_shape(self, monkeypatch):
+        """Integral ~1e-35, well under the retired 1e-30 floor."""
+        wave, tie = self._tie(monkeypatch, 1.0e-40)
+        area = float(jnp.trapezoid(tie.faceon_shape_native, wave))
+        assert area == pytest.approx(1.0, rel=1e-10, abs=0.0), (
+            "the no-grid fallback must renormalize by the integral it measured; a "
+            f"1e-30 floor leaves the shape scaled by int/1e-30 instead. area={area:.6e}"
+        )
+
+    def test_an_ordinary_disc_is_unchanged(self, monkeypatch):
+        """The control: above the retired floor nothing about this moves."""
+        wave, tie = self._tie(monkeypatch, 1.0)
+        area = float(jnp.trapezoid(tie.faceon_shape_native, wave))
+        assert area == pytest.approx(1.0, rel=1e-10, abs=0.0)
+
+    def test_a_dead_disc_gives_a_zero_shape_not_a_spike(self, monkeypatch):
+        """The documented degenerate value: nothing to normalize, so nothing."""
+        _wave, tie = self._tie(monkeypatch, 0.0)
+        shape = np.asarray(tie.faceon_shape_native)
+        assert np.all(np.isfinite(shape)) and np.all(shape == 0.0), (
+            f"a disc that integrates to zero has no shape to normalize; got {shape[:4]}"
+        )

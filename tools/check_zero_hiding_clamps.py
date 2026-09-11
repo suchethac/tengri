@@ -137,7 +137,22 @@ from collections.abc import Sequence
 #: the second kind (a template that resamples to nothing on the grid emits
 #: nothing), selected rather than clamped, so it is not a clamped
 #: denominator and leaves this inventory.
-EXPECTED_SITES = 95
+#: 95 -> 93 with the AGN validation round: the R59 AGN dust-budget split in
+#: ``components/agn/blocks/runner.py`` stopped clamping its two denominators.
+#: ``share = polar / jnp.maximum(torus + polar, 1e-300)`` and the graybody
+#: rescale ``budget * share / jnp.maximum(polar, 1e-300)`` are both ``0/0`` at
+#: ``agn_polar_ebv = 0``, where the screen absorbs nothing; they now select the
+#: denominator before dividing and state the degenerate answers -- share 0 (the
+#: torus keeps the whole budget) and a rescale factor of 1.0 (the zero
+#: re-emission stays zero). Third kind, and it was not only about a plausible
+#: zero: the floored form returned the right forward value and a NaN gradient,
+#: because division's VJP squares the denominator. A separate, smaller one went
+#: with it -- ``components/agn/skirtor.py``'s no-grid fallback renormalized the
+#: face-on disc by ``jnp.maximum(int, 1e-30)``, which left any disc fainter than
+#: that floor scaled by ``int / 1e-30`` rather than to unit area (measured
+#: 9.9e-06 instead of 1.0). Both are retirements, not hoists: the clamps are
+#: gone from the source.
+EXPECTED_SITES = 93
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

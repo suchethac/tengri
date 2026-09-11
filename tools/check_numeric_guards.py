@@ -225,6 +225,11 @@ def save_ledger(ledger: dict[tuple[str, str], int]) -> None:
         "# Ledger of safe numeric guard patterns (auto-generated)",
         "# Format: path | pattern -> count",
         "# Keyed on (file path, pattern description) for drift-proofness (#2050).",
+        # Carried by the writer, not hand-added to the artifact: this line was
+        # in the committed ledger and the first --regen after it silently
+        # dropped it.
+        "# Blind spot: same-bucket swap (remove + add in one commit) ships "
+        "unadjudicated; code review catches it.",
     ]
     for (path, pattern), count in sorted(ledger.items()):
         lines.append(f"{path} | {pattern} -> {count}")
@@ -279,8 +284,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         save_ledger(live_counts)
         total_sites = sum(live_counts.values())
         print(
-            f"Regenerated ledger with {len(live_counts)} bucket(s), "
-            f"{total_sites} total site(s)",
+            f"Regenerated ledger with {len(live_counts)} bucket(s), {total_sites} total site(s)",
             file=sys.stderr,
         )
         return 0
@@ -308,20 +312,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Report findings
     if new_offenders:
-        print(
-            "FAILED: new unsafe numeric pattern site(s) found:", file=sys.stderr
-        )
+        print("FAILED: new unsafe numeric pattern site(s) found:", file=sys.stderr)
         for filepath, pattern, _count, lines in sorted(new_offenders):
             print(f"  {filepath}: {pattern}", file=sys.stderr)
-            print(f"    Ledger: {ledger_counts.get((filepath, pattern), 0)}, "
-                  f"Live: {live_counts[(filepath, pattern)]}", file=sys.stderr)
+            print(
+                f"    Ledger: {ledger_counts.get((filepath, pattern), 0)}, "
+                f"Live: {live_counts[(filepath, pattern)]}",
+                file=sys.stderr,
+            )
             print(f"    Line(s): {', '.join(map(str, lines))}", file=sys.stderr)
         print("\nRun with --regen to update the ledger", file=sys.stderr)
 
     if stale_entries:
-        print(
-            "FAILED: site(s) removed — ratchet down the ledger:", file=sys.stderr
-        )
+        print("FAILED: site(s) removed — ratchet down the ledger:", file=sys.stderr)
         for filepath, pattern, ledger_count, live_count in sorted(stale_entries):
             print(f"  {filepath}: {pattern}", file=sys.stderr)
             print(f"    Ledger: {ledger_count}, Live: {live_count}", file=sys.stderr)
