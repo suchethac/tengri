@@ -683,8 +683,15 @@ def test_agn_black_hole_mass_kubota_done_forward_is_finite_in_float32(ssp_bare, 
     assert np.all(np.isfinite(rest_sed32)), (
         f"kubota_done rest_sed is non-finite in float32 at agn_log_mbh={agn_log_mbh}"
     )
+    assert np.any(rest_sed32 != 0.0), (
+        f"kubota_done rest_sed is identically zero in float32 at agn_log_mbh={agn_log_mbh}: "
+        "a flushed-to-zero disc would be finite and still wrong"
+    )
     assert np.all(np.isfinite(phot32)), (
         f"kubota_done photometry is non-finite in float32 at agn_log_mbh={agn_log_mbh}"
+    )
+    assert np.any(phot32 != 0.0), (
+        f"kubota_done photometry is identically zero in float32 at agn_log_mbh={agn_log_mbh}"
     )
     np.testing.assert_allclose(
         rest_sed32,
