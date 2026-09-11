@@ -49,6 +49,7 @@ References
 import jax.numpy as jnp
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
+from tengri.utils.scale import representable_denominator
 
 # ── Physical constants ────────────────────────────────────────────
 
@@ -277,7 +278,7 @@ def compute_nlr_sed_richardson2014(
     flux_sum = jnp.sum(_RICHARDSON_FLUXES)
 
     # Luminosity per unit flux (normalized to Hbeta)
-    l_per_flux = l_lines_total / jnp.maximum(flux_sum, 1e-30)
+    l_per_flux = l_lines_total / jnp.maximum(flux_sum, representable_denominator(1e-30))
 
     # Sum Gaussian profiles for each line
     def _single_line(line_data):

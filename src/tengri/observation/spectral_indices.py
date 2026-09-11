@@ -32,6 +32,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
+from tengri.utils.scale import representable_denominator
 
 # ── Index definition ──────────────────────────────────────────────
 
@@ -406,7 +407,7 @@ def _break_from_means(f_blue: jnp.ndarray, f_red: jnp.ndarray) -> jnp.ndarray:
     reconstructed SED) and :func:`measure_indices_from_windows` (means from the
     window LUT).
     """
-    return f_red / jnp.maximum(f_blue, 1e-30)
+    return f_red / jnp.maximum(f_blue, representable_denominator(1e-30))
 
 
 def _ew_from_means(
@@ -421,7 +422,11 @@ def _ew_from_means(
     ``mag`` variant) is single-sourced.
     """
     cont_flux = jnp.mean(jnp.asarray(cont_means))
-    ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
+    ew = (
+        feat_width
+        * (cont_flux - feat_flux)
+        / jnp.maximum(cont_flux, representable_denominator(1e-30))
+    )
     if units == "mag":
         return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
     return ew
@@ -465,8 +470,10 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
     sy = jnp.sum(w * log_fnu)
     sxx = jnp.sum(w * log_wave**2)
     sxy = jnp.sum(w * log_wave * log_fnu)
-    denom = sxx - sx**2 / jnp.maximum(sw, 1e-30)
-    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, 1e-30)) / jnp.maximum(denom, 1e-30)
+    denom = sxx - sx**2 / jnp.maximum(sw, representable_denominator(1e-30))
+    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, representable_denominator(1e-30))) / jnp.maximum(
+        denom, representable_denominator(1e-30)
+    )
     return slope_fnu - 2.0
 
 

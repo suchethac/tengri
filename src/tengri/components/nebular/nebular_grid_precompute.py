@@ -49,7 +49,7 @@ from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.utils.grid_interp import interp_nd_pchip
-from tengri.utils.scale import apply_log10_scale, pow10
+from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
@@ -624,7 +624,7 @@ def precompute_nebular_grid(
         for i, name in enumerate(axis_names):
             p[name] = row[i]
         state = model.predict_state(p)
-        inv_qh = 1.0 / jnp.maximum(_nion_of_state(state), 1e-30)
+        inv_qh = 1.0 / jnp.maximum(_nion_of_state(state), representable_denominator(1e-30))
         # intrinsic (redden=False) observed flux -> luminosity per Q_H
         flux = model.predict_line_fluxes(
             p, target_wavelengths=wavelengths, redden=False, state=state

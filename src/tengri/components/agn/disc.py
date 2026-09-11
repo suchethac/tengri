@@ -73,7 +73,11 @@ from tengri.utils.physics_constants import (
     SIGMA_SB as _SIGMA_SB,
     SIGMA_T as _SIGMA_T,
 )
-from tengri.utils.scale import pow10 as _pow10, representable_floor as _representable_floor
+from tengri.utils.scale import (
+    pow10 as _pow10,
+    representable_denominator as _representable_denominator,
+    representable_floor as _representable_floor,
+)
 
 # log10 of the cgs constants that make the Shakura-Sunyaev disc's bolometric /
 # Eddington / accretion-rate intermediates overflow float32 (#1206). At a
@@ -1396,7 +1400,7 @@ def _compute_zone_luminosities(
             * jnp.maximum(agn_cos_inc, 0.01)
         )
     l_bol_unnorm = l_bol_outer + l_bol_warm + l_hot_erg
-    scale = l_bol_erg / jnp.maximum(l_bol_unnorm, 1e-100)
+    scale = l_bol_erg / jnp.maximum(l_bol_unnorm, _representable_denominator(1e-100))
 
     return l_nu_total, scale
 
@@ -1450,7 +1454,9 @@ def beloborodov_gamma_hot(
        MNRAS, 480, 1247 (2018). arXiv:1804.00171.
        https://doi.org/10.1093/mnras/sty1890
     """
-    ratio = jnp.clip(l_diss_hot / jnp.maximum(l_seed, 1e-30), 1e-3, 1e3)
+    ratio = jnp.clip(
+        l_diss_hot / jnp.maximum(l_seed, _representable_denominator(1e-30)), 1e-3, 1e3
+    )
     gamma = (7.0 / 3.0) * ratio ** (-0.1)  # K&D 2018 Eq. 6
     return jnp.clip(gamma, 1.4, 3.0)
 

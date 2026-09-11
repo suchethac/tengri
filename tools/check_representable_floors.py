@@ -67,7 +67,15 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # resampled first and normalized on the evaluation grid through a
 # ``jnp.where``-selected division. A deletion, not a migration, so the site
 # leaves both this count and ``_PINNED_DENOMINATORS`` below.
-_PINNED = 39
+# 39 -> 26: a side effect of the #1860 denominator round below. 13 of the 39
+# sub-subnormal literals here were ALSO derivative-unsafe denominators (1e-60/
+# 1e-100/1e-300, each <= the 1.4e-45 subnormal floor this rule checks), and
+# wrapping them in ``representable_denominator`` moved the literal from a bare
+# ``ast.Constant`` guard argument to a ``Call``, so this rule's pattern match
+# (which only sees a literal argument) no longer sees them either. The
+# underlying guards did not disappear, only the source shape their old
+# ``ast.Constant`` matched; every one is still a live, now doubly-safe floor.
+_PINNED = 26
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
@@ -124,9 +132,29 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #: first and normalized on the evaluation grid through a ``jnp.where``-selected
 #: division, so the floored denominator is gone rather than moved.
 #:
+#: 45 -> 3 (#1860, this round): every site in ``components/`` (AGN blocks/blr/
+#: disc/kd_precompute/nlr/qsogen/skirtor/skirtor_model, 15; nebular _shared/
+#: line_precompute/nebular_grid_precompute, 4; stellar component.py/sfh/
+#: sps, 11; xray, 1), ``observation/spectral_indices.py`` (5) and
+#: ``utils/grid_interp.py`` + ``utils/wavelength.py`` (6) now calls
+#: ``representable_denominator``. The reachability check the earlier note
+#: asked for: the 6 ``utils/`` sites are eager numpy build-time precompute
+#: (``PreintegratedGrid``/``subband_quadrature``/``make_union_grid``, each
+#: docstringed "JIT-compatible: no"), so no JAX VJP ever passes through them,
+#: but the fix is free and keeps the census clean.
+#:
+#: The 3 left pinned are ``inference/posterior.py``'s ``bpt_nii_oiii`` (736,
+#: 741) and ``agn_fraction`` (1020): post-hoc diagnostics over an already-
+#: completed fit's stored posterior draws (``self.samples`` / ``self.
+#: eline_fluxes``), read for reporting/plotting after ``model.fit`` returns.
+#: Nothing differentiates a ``Posterior`` method, so #1860's failure mode (a
+#: VJP dividing by zero) cannot occur there; they are not a backlog, and
+#: raising the floor would risk moving the deliberately-chosen ``1e-30``/
+#: ``1e-300`` display literals for no reachable benefit.
+#:
 #: Do NOT raise this to make a red run green. A rise means a new site was added,
 #: which is the thing this exists to prevent.
-_PINNED_DENOMINATORS = 45
+_PINNED_DENOMINATORS = 3
 
 
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:

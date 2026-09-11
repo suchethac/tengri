@@ -43,6 +43,7 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
 )
 from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG, L_SUN
+from tengri.utils.scale import representable_denominator
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
@@ -1174,7 +1175,7 @@ def kubota_done_disc_preintegrated(
     # full-wavelength code's trapezoid integral, to numerical precision).
     l_bol_unnorm = outer_bol + warm_bol + l_hot_erg
     l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_lum_ratio
-    scale = l_bol_requested / jnp.maximum(l_bol_unnorm, 1e-100)
+    scale = l_bol_requested / jnp.maximum(l_bol_unnorm, representable_denominator(1e-100))
 
     total_phot = outer_phot + warm_phot + hot_phot
     return total_phot * scale

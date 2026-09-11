@@ -20,7 +20,7 @@ from tengri.components.nebular._constants import (
     _LYMAN_LIMIT,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
-from tengri.utils.scale import pow10
+from tengri.utils.scale import pow10, representable_denominator
 
 #: ``log10`` of the two constants deferred out of the Q_H integrand (#1568).
 #: Python floats, evaluated once at import in float64, so they enter the graph
@@ -1035,13 +1035,16 @@ def compute_analytic_nebular_continuum(
     alpha_b = _ALPHA_B_T4 * (temperature / 1.0e4) ** _ALPHA_B_SLOPE
 
     # n_e · n_p · V = Q_H / α_B
-    q_over_alpha = q_h / jnp.maximum(alpha_b, 1.0e-40)
+    q_over_alpha = q_h / jnp.maximum(alpha_b, representable_denominator(1.0e-40))
 
     # ─── Free-free ───────────────────────────────────────────────────────────
     # Osterbrock & Ferland (2006), eq 4.16
     x = _H_PLANCK * nu / (_K_BOLTZ * temperature)  # dimensionless hν/kT
     # Gaunt factor: Draine (2011) eq 10.9 approximation; clip to ≥ 1
-    g_ff = jnp.maximum(1.0, jnp.sqrt(3.0) / jnp.pi * jnp.log(2.0 / jnp.maximum(x, 1e-30)))
+    g_ff = jnp.maximum(
+        1.0,
+        jnp.sqrt(3.0) / jnp.pi * jnp.log(2.0 / jnp.maximum(x, representable_denominator(1e-30))),
+    )
     gamma_ff = _FF_COEFF * temperature ** (-0.5) * g_ff * jnp.exp(-x)
     L_ff = q_over_alpha * gamma_ff  # erg/s/Hz
 

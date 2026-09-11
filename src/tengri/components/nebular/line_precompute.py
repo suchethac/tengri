@@ -45,7 +45,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.stellar.reference_history import reference_history_params
-from tengri.utils.scale import apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, representable_denominator
 
 #: Nebular ionization parameters that MUST be fixed for the table to be valid:
 #: they change ``line_per_qh`` (line ratios), so a free one would make the
@@ -188,7 +188,7 @@ def precompute_line_per_qh(
         nion = _nion_of_state(model.predict_state(p))
         # observed flux → line luminosity, without materializing the ~1e57 divisor
         lum = apply_log10_scale(jnp.asarray(flux), log10_ref_divisor)
-        rows.append(lum / jnp.maximum(nion, 1e-30))
+        rows.append(lum / jnp.maximum(nion, representable_denominator(1e-30)))
     return LinePerQHTable(
         met_grid=met_grid,
         line_per_qh=jnp.stack(rows),  # (n_met, n_lines): luminosity per Q_H
