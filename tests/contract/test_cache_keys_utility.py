@@ -143,18 +143,29 @@ class TestBakedCallables:
         assert baked(myfunc) == baked(myfunc)
 
     def test_bound_method_includes_class_qualname(self):
-        """a bound method includes the class qualname."""
+        """a bound method includes the class qualname AND the baked instance.
+
+        The instance is part of the key (two objects with different state must
+        not share a compiled program), so it is keyed through the instance's own
+        rules: here a custom ``__repr__``. An instance of a type with no
+        ``cache_key``/``__repr__`` of its own raises ``TypeError`` by name
+        instead of keying by address (see ``test_cache_keys_callables.py``).
+        """
 
         class MyClass:
+            def __repr__(self) -> str:
+                return "MyClass()"
+
             def method(self):
                 pass
 
         obj = MyClass()
         result = baked(obj.method)
-        # Should contain ("callable", "<something>MyClass.method>")
         assert isinstance(result, tuple)
         assert result[0] == "callable"
         assert "MyClass" in result[1]
+        assert result[2] == ("repr", type(obj).__qualname__, "MyClass()")
+        assert baked(MyClass().method) == result
 
     def test_lambda_bakes(self):
         """lambda functions are baked as callables."""
