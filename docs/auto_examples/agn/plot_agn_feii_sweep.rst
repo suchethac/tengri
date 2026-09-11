@@ -44,7 +44,7 @@ References
    in active galactic nuclei," ApJ 641, 689–709 (2006).
    arXiv:astro-ph/0601042.
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-144
+.. GENERATED FROM PYTHON SOURCE LINES 28-147
 
 
 
@@ -101,11 +101,14 @@ References
         dust_attenuation=DUST,
         agn={
             "type": "composable",
-            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "disc": {
+                "type": "multicolor",
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "log_ledd": -1.0,
+            },
             "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT), "agn_blr_cf": 0.1},
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.0,
-            "log_ledd": -1.0,
             "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.05),
@@ -175,6 +178,11 @@ References
 
     fig.tight_layout()
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.758 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_feii_sweep.py:

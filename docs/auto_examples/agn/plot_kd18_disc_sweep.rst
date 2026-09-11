@@ -40,7 +40,7 @@ References
    variability," MNRAS, 480, 1247 (2018). doi:10.1093/mnras/sty1890.
    arXiv:1804.00171. bibcode:2018MNRAS.480.1247K.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-138
+.. GENERATED FROM PYTHON SOURCE LINES 24-142
 
 
 
@@ -54,24 +54,24 @@ References
 
  .. code-block:: none
 
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
-    /tengri/src/tengri/parameters/groups.py:1162: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
-      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    /tengri/src/tengri/parameters/groups.py:1272: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
 
 
 
@@ -141,11 +141,14 @@ References
                 sfh=SFH,
                 dust_attenuation=DUST,
                 agn={
-                    "disc": {"type": "kubota_done", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                    "disc": {
+                        "type": "kubota_done",
+                        "all_params": tengri.Fixed(tengri.DEFAULT),
+                        "log_mbh": log_mbh,
+                        "log_ledd": log_ledd,
+                    },
                     "all_params": tengri.Fixed(tengri.DEFAULT),
                     "log_lbol": log_lbol,
-                    "log_mbh": log_mbh,
-                    "log_ledd": log_ledd,
                     "lum_ratio": 1.0,
                 },
                 redshift=tengri.Fixed(0.05),
@@ -201,7 +204,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.939 seconds)
+   **Total running time of the script:** (0 minutes 2.745 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_kd18_disc_sweep.py:

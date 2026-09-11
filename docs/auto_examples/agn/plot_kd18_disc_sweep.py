@@ -80,11 +80,14 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
             sfh=SFH,
             dust_attenuation=DUST,
             agn={
-                "disc": {"type": "kubota_done", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "disc": {
+                    "type": "kubota_done",
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
+                    "log_mbh": log_mbh,
+                    "log_ledd": log_ledd,
+                },
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_lbol": log_lbol,
-                "log_mbh": log_mbh,
-                "log_ledd": log_ledd,
                 "lum_ratio": 1.0,
             },
             redshift=tengri.Fixed(0.05),

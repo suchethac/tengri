@@ -53,9 +53,12 @@ model = tengri.SEDModel.build(
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_lbol": 12.5,
         "lum_ratio": 1.0,
-        "log_mbh": 8.5,
-        "a_spin": tengri.Uniform(0.0, 0.998),
-        "disc": {"type": "kubota_done", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "disc": {
+            "type": "kubota_done",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "log_mbh": 8.5,
+            "a_spin": tengri.Uniform(0.0, 0.998),
+        },
     },
     redshift=tengri.Fixed(0.0),
 )
