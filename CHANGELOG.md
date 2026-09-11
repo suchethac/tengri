@@ -103,6 +103,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
+  believing it the base of the `Tracer*ConversionError` family. On jax
+  0.11.1 that belief is false: `TracerArrayConversionError` (raised by
+  `np.asarray` on a tracer) and `TracerIntegerConversionError` (raised by
+  `operator.index` on a tracer) are siblings of `ConcretizationTypeError`
+  under `JAXTypeError`, not subclasses, so a mapped function that inspects
+  its input with `np.asarray` raised through the handler instead of
+  falling back to the eager per-draw loop. The handler now catches the
+  whole family explicitly (#2264).
 - `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
   stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
   legacy `predict_sed_quantities` bridge, and the AGN CIGALE fracAGN torus
