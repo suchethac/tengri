@@ -99,11 +99,14 @@ def _display_path(path: str | os.PathLike) -> str:
     >>> _ = (tmp / "data").mkdir()
     >>> cwd = Path.cwd()
     >>> os.chdir(tmp)
-    >>> _display_path(tmp / "data" / "ssp.h5") == os.path.join("data", "ssp.h5")
+    >>> try:
+    ...     result = _display_path(tmp / "data" / "ssp.h5") == os.path.join("data", "ssp.h5")
+    ... finally:
+    ...     os.chdir(cwd)
+    >>> result
     True
     >>> _display_path(Path("/somewhere/else/ssp.h5"))
     'ssp.h5'
-    >>> os.chdir(cwd)
     """
     p = Path(path)
     try:
