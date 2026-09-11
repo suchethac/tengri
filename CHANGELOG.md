@@ -98,6 +98,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   tightens from `rtol=2e-4` to `rtol=1e-10` now that both paths agree on the
   identical wavelength.
 
+- A headline line property (`civ_1549`, from `KEY_LINES`) now warns instead of
+  returning a silent NaN when the currently selected nebular catalog carries
+  no entry within tolerance of its target wavelength; the warning names the
+  property, the backend, the nearest catalog line and its offset in
+  Angstrom, and the remedy (`neb={'type': 'cue', 'full_catalog': True}` when
+  the backend is cue and on the legacy subset). Generalizes across every
+  line-catalog backend (#2239).
+
+- The #2239 warning seam's static catalog accessor
+  (`_published_line_wavelengths_static`) now applies tengri's vacuum-wavelength
+  contract (`nebular_line_waves_to_vacuum`, hoisted into
+  `components/nebular/_shared.py` and shared with
+  `NebularSEDComponent.apply`) before comparing against a `KEY_LINES` target,
+  instead of comparing the backend's raw, sometimes-air catalog directly; the
+  mismatch reached up to 2.70 Angstrom against the 5 Angstrom match tolerance
+  (measured on cue's upstream, air-frame `.npy`), close enough to risk a false
+  warning or a missed one for lines not already covered by the #2239
+  regression test. `predict_photometry`, `rest_sed` and every already-tested
+  headline line are unaffected (#2239).
+
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
   ``@renamed_kwarg`` wraps the function before ``@register_dust_law`` stores it
@@ -629,6 +649,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   explicit-law rule.
 
 ### Changed
+
+- Cue's default line catalog is now the full ~138-line set instead of the
+  128-line CLOUDY/FSPS-matched subset (`cue_full_catalog` defaults to
+  `True`); pass `neb={'type': 'cue', 'full_catalog': False}` (or
+  `Parameters(cue_full_catalog=False)`) to keep the legacy subset for
+  cross-code comparisons. Reverses the 2026-05 `#303` back-compat default.
+  `predict_photometry`, `rest_sed` and every other headline line are
+  bit-identical either way: only the discrete line catalog and `civ_1549`
+  change (#2239).
 
 - `SEDModel.compile_signature()` is derived from a policy ledger over every model attribute (`tengri.forward._signature_policy`) with the nested `cache_key()` of the observation, parameters and SSP grid, memoized on the instance and invalidated by the two structural mutators; four structural attributes the hand-written list never keyed (`lgmet_scatter`, the GP field kernel, `lsf_n_bins`, `igm_patchy`) now are, and an attribute nobody classifies fails a contract test instead of shipping a wrong number (#2163).
 - The four inference-side hand-written cache keys are now policy-derived too (#2163 E.5): `Fitter._engine_cache_key()` and `_data_fingerprint()` share a pair of complementary ledgers (`tengri.inference._engine_policy.ENGINE_POLICY`/`FINGERPRINT_POLICY`) over every `Fitter` attribute — engine `shape` rows are exactly the fingerprint's `content` rows — instead of two independently hand-maintained field lists that had never been checked against each other or against the live attribute set; the engine key gains a `_user_likelihood` row a custom Likelihood previously had no representation in at all, and `_line_flux_override`'s row is now the strictly more complete `LineFluxData.cache_key()` (per-line upper/lower-limit flags, not merely "any limit mask present"). Every MCMC backend's adaptation cache (`nuts`/`hmc`/`dynamic_hmc`/`chees`/`ghmc`/`mclmc`/`adjusted_mclmc`/`first_order`) now builds its tuning tuple through one `adaptation_method_key()` helper that binds the runner's own signature and drops a written exclusion ledger (`_ADAPT_IRRELEVANT`: `context`, `key`, `init_from`, `n_burnin`, `n_samples`, `n_chains`, `chain_method`, `verbose`), instead of a hand-picked tuple every backend maintained separately. `PreconditionedProblem.cache_key` is now a small policy ledger (`strength` content, everything else excluded — the wrapped closure and the per-galaxy starting position cannot be keyed without either aliasing two different whitening bases together or defeating cross-galaxy adaptation sharing) rather than a hand-picked `("whiten", strength)` tuple.
