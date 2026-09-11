@@ -160,13 +160,17 @@ n_samples = 500   # Posterior samples after burn-in
 
 
 [inference.map]
-# optimizer: "adam" | "adamw" | "sgd" (optax, iterative)
-#          | "lbfgs" | "bfgs" (jaxopt, quasi-Newton)
-# Quasi-Newton solvers (lbfgs, bfgs) converge in ~10-50 steps for D ≲ 20.
-optimizer     = "adam"
-n_steps       = 500    # max optimisation steps (optax) or max iterations (jaxopt)
-learning_rate = 0.02   # optax learning rate (ignored by jaxopt solvers)
-tol           = 1e-5   # gradient norm convergence tolerance (jaxopt solvers)
+# optimizer: "lbfgs" (default, alias "lbfgs_scipy") | "adam" | "adamw" | "sgd"
+# "lbfgs" is quasi-Newton: scipy L-BFGS-B on the single-start path
+# (n_restarts=1, the default), jax.scipy.optimize's BFGS vmapped over
+# restarts when n_restarts>1. Converges in ~10-50 iterations for D ≲ 20 and
+# reliably reaches a converged optimum, unlike a fixed-step optax budget
+# (measured: 8-restart/800-step Adam left a D=8 mock at nlp 6.33, not
+# converged; single-start L-BFGS-B reached 6.0008 in under a second).
+optimizer     = "lbfgs"
+n_steps       = 500    # maxiter (quasi-Newton) or max optimisation steps (optax)
+learning_rate = 0.02   # optax learning rate (ignored by quasi-Newton solvers)
+tol           = 1e-5   # gradient norm convergence tolerance (quasi-Newton solvers)
 
 
 [inference.evidence]

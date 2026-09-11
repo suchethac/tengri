@@ -3347,7 +3347,7 @@ class Fitter:
 
             **Point Estimation & Approximations**
 
-            - ``"map"``: MAP optimization (Adam by default)
+            - ``"map"``: MAP optimization (L-BFGS by default; Adam/AdamW/SGD selectable)
             - ``"laplace"``: Laplace approximation (Gaussian posterior at MAP)
             - ``"pathfinder"``: L-BFGS trajectory + sequence of Gaussians (Zhang+2022)
 
@@ -3894,7 +3894,7 @@ class Fitter:
     # warm-start paths (native VI, ``_sample_utils``) call it directly.
 
     def _run_map(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to MAP optimization via gradient descent (Adam by default)."""
+        """Dispatch to MAP optimization (L-BFGS by default; see ``run_map``)."""
         from tengri.inference.backends.map_dispatch import run_map
 
         return run_map(self, key=key, **kwargs)
@@ -4944,12 +4944,12 @@ class Fitter:
 
         Requirements: same model (precomp set), same data shape per galaxy.
         """
-        from tengri.inference.backends.map_dispatch import _JAXOPT_SOLVERS
+        from tengri.inference.backends.map_dispatch import _SCIPY_OPTIMIZERS
         from tengri.inference.posterior import Posterior
 
         n_steps = kwargs.get("n_steps", 1000)
         learning_rate = kwargs.get("learning_rate", 0.02)
-        optimizer = kwargs.get("optimizer", "adam")
+        optimizer = kwargs.get("optimizer", "lbfgs")
         print_every = kwargs.get("print_every", 200)
 
         n_gal = len(batch)
@@ -4971,17 +4971,30 @@ class Fitter:
 
         loss_fn = self._get_or_build_loss_fn()
 
-        # ── jaxopt quasi-Newton / line-search path ──
-        if isinstance(optimizer, str) and optimizer in _JAXOPT_SOLVERS:
-            from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
+        # ── quasi-Newton path: JAX BFGS, vmapped over galaxies ──
+        # scipy's L-BFGS-B (the single-galaxy default, see run_map) is not
+        # JAX-traceable and so cannot be vmapped across a batch; jax.scipy.optimize's
+        # BFGS is pure JAX and fills that role here, on the flattened parameter
+        # vector (jaxopt.LBFGS would also vmap, but needs an optional dependency
+        # this default must not require -- jax.scipy ships with jax itself).
+        if isinstance(optimizer, str) and optimizer in _SCIPY_OPTIMIZERS:
+            from jax.flatten_util import ravel_pytree
+            from jax.scipy.optimize import minimize as jax_minimize
 
             tol = kwargs.get("tol", 1e-5)
-            solver, opt_name = _build_jaxopt_solver(
-                optimizer,
-                loss_fn,
-                maxiter=n_steps,
-                tol=tol,
-            )
+            opt_name = "L-BFGS"
+
+            flat0_template, unravel_fn = ravel_pytree(jax.tree.map(lambda x: x[0], params_batch))
+            n_dim = flat0_template.shape[0]
+            flat_batch = jax.vmap(lambda p: ravel_pytree(p)[0])(params_batch)
+
+            def _optimize_one(flat0, data_args_i):
+                def fun(flat):
+                    return loss_fn(unravel_fn(flat), data_args_i)
+
+                return jax_minimize(
+                    fun, flat0, method="BFGS", tol=tol, options={"maxiter": n_steps}
+                )
 
             if verbose:
                 logger.info(
@@ -4992,10 +5005,10 @@ class Fitter:
                 )
 
             run_kernel = self._memo_batch_map_kernel(
-                ("jaxopt", optimizer, int(n_steps), float(tol)),
-                lambda: jax.jit(jax.vmap(solver.run)),
+                ("jax_bfgs", optimizer, int(n_steps), float(tol), int(n_dim)),
+                lambda: jax.jit(jax.vmap(_optimize_one)),
             )
-            batch_result = run_kernel(params_batch, batch_data_args)
+            batch_result = run_kernel(flat_batch, batch_data_args)
 
             t_total = time.time() - t0
             if verbose:
@@ -5008,7 +5021,7 @@ class Fitter:
 
             results = []
             for g_idx in range(n_gal):
-                params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], batch_result.params)
+                params_i = unravel_fn(batch_result.x[g_idx])
                 bounded_i = self._to_physical(params_i)
                 result_i = Posterior(
                     samples=None,
@@ -5016,10 +5029,11 @@ class Fitter:
                     method=f"map ({opt_name})",
                     wall_time_s=t_total,
                     diagnostics={
-                        "loss": float(batch_result.state.value[g_idx]),
-                        "n_steps": int(batch_result.state.iter_num[g_idx]),
+                        "loss": float(batch_result.fun[g_idx]),
+                        "n_steps": int(batch_result.nit[g_idx]),
                         "optimizer": opt_name,
-                        "converged": bool(batch_result.state.error[g_idx] < tol),
+                        "backend": "jax_bfgs_vmap",
+                        "converged": bool(batch_result.success[g_idx]),
                     },
                     _model=self.model,
                     _fitter=self,

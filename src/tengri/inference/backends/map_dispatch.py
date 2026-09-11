@@ -16,6 +16,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
+from jax.scipy.optimize import minimize as _jax_minimize
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
@@ -273,6 +274,43 @@ def _run_map_scipy(
     # Flatten params to 1D array for scipy
     init_flat, unravel_fn = ravel_pytree(init_params)
 
+    # Zero free parameters (every parameter Fixed): scipy's L-BFGS-B refuses to
+    # call the objective on an empty x0 -- confirmed by direct test, it returns
+    # a placeholder ``OptimizeResult(fun=0.0, nit=0)`` no matter what the
+    # objective would report, silently discarding the real loss (#lbfgs-default).
+    # Evaluate the (single, fixed) point directly instead of asking scipy to
+    # "optimize" nothing. jax.scipy.optimize.minimize does not share this bug
+    # (verified: it returns the true value), so only this scipy path needs it.
+    if init_flat.size == 0:
+        t0 = time.time()
+        final_loss_val, grad_val = grad_fn(init_params, data_args)
+        jax.block_until_ready((final_loss_val, grad_val))
+        wall_time = time.time() - t0
+        _reject_nonfinite_map(init_params)
+        best_params_physical = context.to_physical(init_params)
+        final_loss = float(final_loss_val)
+        if verbose:
+            print(
+                f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
+                f"0 free parameters (nothing to optimize), loss={final_loss:.6f}"
+            )
+        return Posterior(
+            samples=None,
+            params=best_params_physical,
+            method=f"MAP ({opt_name})",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_steps": 0,
+                "n_evals": 1,
+                "final_loss": final_loss,
+                "optimizer": opt_name,
+                "converged": True,
+                "grad_norm": 0.0,
+            },
+            loss_history=jnp.asarray([final_loss]),
+            _model=context.model,
+        )
+
     # Warmup: ensure grad_fn is compiled before timing
     _warmup = grad_fn(init_params, data_args)
     jax.block_until_ready(_warmup)
@@ -499,6 +537,116 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
     )
 
 
+def _run_map_multistart_qn(context, *, key, n_restarts, n_steps, tol, optimizer, verbose):
+    """Run ``n_restarts`` independent JAX BFGS optimizations via vmap; keep the best.
+
+    The quasi-Newton sibling of :func:`_run_map_multistart`. scipy's L-BFGS-B
+    (:func:`_run_map_scipy`, the ``n_restarts=1`` path) is not JAX-traceable, so
+    it cannot be vmapped over restarts; this function instead uses
+    :func:`jax.scipy.optimize.minimize` (``method="BFGS"``), which is pure JAX
+    and therefore vmappable, at the cost of BFGS's :math:`O(D^2)` dense inverse
+    Hessian versus L-BFGS-B's limited-memory one -- acceptable here since a
+    single restart still runs on the flat parameter vector, whose dimension is
+    the model's free-parameter count, not the data size. Requires no optional
+    dependency (``jax.scipy`` ships with ``jax`` itself), unlike a jaxopt- or
+    optax-based alternative.
+
+    Each restart starts from its own prior-sampled init (``key`` split
+    ``n_restarts`` ways); the restart with the lowest **finite** final loss
+    wins, via :func:`_best_finite_restart` -- a restart that reports
+    ``success=False`` but a finite ``fun`` still competes on ``fun``, since
+    BFGS's own convergence flag is conservative (e.g. line-search stalling
+    near the optimum) and not a reliable finite/non-finite signal on its own.
+    Returns a MAP :class:`~tengri.inference.posterior.Posterior` identical in
+    shape to :func:`_run_map_multistart`, except ``loss_history`` is a single
+    value: JAX BFGS runs inside ``jax.vmap(jax.jit(...))`` with no Python-level
+    callback, so no per-iteration trace is available (matching
+    :func:`_run_map_scipy`'s non-verbose behavior).
+    """
+    from tengri.inference.posterior import Posterior
+
+    loss_fn = context.neg_log_posterior_fn
+    data_args = context.data_args
+    keys = jax.random.split(key, n_restarts)
+    inits = jax.vmap(lambda k: context.initial_params(k, init_from=None))(keys)
+
+    def _optimize_one(p0, d_args):
+        flat0, unravel_fn = ravel_pytree(p0)
+
+        def fun(flat):
+            return loss_fn(unravel_fn(flat), d_args)
+
+        result = _jax_minimize(fun, flat0, method="BFGS", tol=tol, options={"maxiter": n_steps})
+        return unravel_fn(result.x), result.fun, result.success, result.nit
+
+    def _build_restarts():
+        return jax.jit(
+            lambda batched_inits, d_args: jax.vmap(_optimize_one, in_axes=(0, None))(
+                batched_inits, d_args
+            )
+        )
+
+    # Memoize like ``_run_map_multistart`` (see its comment): a non-string
+    # optimizer cannot reach this function (the ``run_map`` gate below only
+    # routes strings in ``_SCIPY_OPTIMIZERS`` here), so the memo is always safe
+    # to use when a fitter is available.
+    _fitter = getattr(context, "fitter", None)
+    if _fitter is not None and hasattr(_fitter, "_memo_batch_kernel"):
+        _run_restarts = _fitter._memo_batch_kernel(
+            "_map_multistart_qn_kernel_cache",
+            (
+                "map_multistart_qn",
+                _fitter.compile_signature(),
+                optimizer,
+                int(n_steps),
+                float(tol),
+                int(n_restarts),
+            ),
+            _build_restarts,
+        )
+    else:
+        _run_restarts = _build_restarts()
+
+    t0 = time.time()
+    params_b, fun_b, success_b, nit_b = _run_restarts(inits, data_args)
+    jax.block_until_ready(fun_b)
+    final_losses = fun_b
+    best = _best_finite_restart(final_losses)
+    best_params = jax.tree.map(lambda x: x[best], params_b)
+    _reject_nonfinite_map(best_params)
+    wall_time = time.time() - t0
+    final_loss = float(final_losses[best])
+    opt_name = "L-BFGS"
+
+    if verbose:
+        n_diverged = int(np.sum(~np.isfinite(np.asarray(final_losses, dtype=float))))
+        finite_losses = np.asarray(final_losses, dtype=float)
+        worst = float(np.max(finite_losses[np.isfinite(finite_losses)]))
+        diverged_note = f"; {n_diverged} diverged" if n_diverged else ""
+        print(
+            f"  MAP ({opt_name} x{n_restarts} restarts, JAX BFGS) complete in "
+            f"{wall_time:.1f}s, best loss={final_loss:.4f} "
+            f"(restart {best}; worst finite={worst:.1f}{diverged_note})"
+        )
+
+    return Posterior(
+        samples=None,
+        params=context.to_physical(best_params),
+        method=f"MAP ({opt_name}, {n_restarts} restarts)",
+        wall_time_s=wall_time,
+        diagnostics={
+            "n_steps": int(nit_b[best]),
+            "final_loss": final_loss,
+            "optimizer": opt_name,
+            "backend": "jax_bfgs_vmap",
+            "n_restarts": int(n_restarts),
+            "converged": bool(success_b[best]),
+        },
+        loss_history=jnp.asarray([final_loss]),
+        _model=context.model,
+    )
+
+
 def run_map(
     context,
     *,
@@ -506,7 +654,7 @@ def run_map(
     init_from=None,
     n_steps=500,
     learning_rate=0.02,
-    optimizer="adam",
+    optimizer="lbfgs",
     n_restarts=1,
     early_stopping=True,
     patience=100,
@@ -516,33 +664,82 @@ def run_map(
     verbose_steps=False,
     print_every=200,
 ):
-    """MAP optimization via gradient descent or quasi-Newton solvers.
+    """MAP optimization via quasi-Newton solvers or gradient descent.
 
     Parameters
     ----------
     n_steps : int
-        Maximum number of optimization steps.
+        Maximum number of optimization steps. Quasi-Newton (``optimizer``
+        one of ``_SCIPY_OPTIMIZERS``): passed through as ``maxiter`` --
+        scipy's ``options={"maxiter": n_steps}`` on the single-start
+        (``n_restarts=1``) path, ``jax.scipy.optimize.minimize``'s
+        ``options={"maxiter": n_steps}`` on the vmapped multi-start
+        (``n_restarts>1``) path. Optax (``"adam"``/``"sgd"``/``"adamw"``/a
+        custom optax optimizer): the number of gradient steps actually taken,
+        subject to early stopping.
     learning_rate : float
-        Learning rate (optax optimizers only; ignored for quasi-Newton).
+        Optax step size. Ignored for quasi-Newton solvers, which have no
+        learning rate (BFGS/L-BFGS-B choose their own step via line search).
     optimizer : str or optax optimizer
+        ``"lbfgs"`` (default, alias ``"lbfgs_scipy"``): quasi-Newton MAP.
+        **Two different implementations share this name, chosen by
+        ``n_restarts``, because scipy is not JAX-traceable and so cannot be
+        vmapped**: ``n_restarts=1`` (or an explicit ``init_from``) runs
+        scipy's L-BFGS-B (:func:`_run_map_scipy`) with a Wolfe line search and
+        zero JAX compilation for the optimizer itself; ``n_restarts>1`` runs
+        ``jax.scipy.optimize.minimize(method="BFGS")`` for every restart
+        inside one ``jax.vmap`` (:func:`_run_map_multistart_qn`), so the
+        restarts execute as a single compiled kernel instead of a Python
+        loop. Both converge to the same optimum on a smooth posterior;
+        neither needs an optional dependency (``jax.scipy`` ships with
+        ``jax``, scipy ships transitively via ``jax``'s own dependencies).
         Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax
-        optimizer.  ``"lbfgs"`` (or ``"lbfgs_scipy"``) uses scipy
-        L-BFGS-B with Wolfe line search, reliable convergence, zero
-        JAX compilation for the optimizer itself.
+        optimizer -- first-order, vmappable at any ``n_restarts``
+        (:func:`_run_map_multistart`), but converges less reliably to a true
+        optimum than either L-BFGS path (see module Notes).
+    n_restarts : int
+        Number of independent prior-sampled starts to run and keep the
+        best-loss result. ``1`` (default) for quasi-Newton uses the faster
+        single-start scipy path; ``>1`` switches quasi-Newton to the vmapped
+        JAX BFGS path (see ``optimizer`` above). Ignored (treated as ``1``)
+        when ``init_from`` is given: an explicit start is always honored
+        as-is, never multiplied into restarts.
     early_stopping : bool
-        Stop if loss doesn't improve (optax only; quasi-Newton uses ``tol``).
+        Stop if loss doesn't improve (optax only). Quasi-Newton solvers use
+        their own convergence test (``tol`` below) and always run to
+        convergence or ``n_steps``, whichever comes first.
     patience : int
-        Steps to wait for improvement before stopping (optax only).
+        Steps to wait for improvement before stopping (optax only; ignored
+        for quasi-Newton).
     rtol : float
-        Relative tolerance for early stopping (optax only).
+        Relative tolerance for early stopping (optax only; ignored for
+        quasi-Newton).
     tol : float
-        Gradient norm tolerance for convergence (quasi-Newton solvers).
+        Gradient norm tolerance for convergence (quasi-Newton only): scipy's
+        ``gtol`` on the single-start path, ``jax.scipy.optimize.minimize``'s
+        ``tol`` on the vmapped multi-start path. Ignored for optax, which has
+        no analogous stopping criterion (see ``rtol``/``patience`` instead).
     verbose : bool
         Print progress summary.
     verbose_steps : bool
-        Print per-step loss (quasi-Newton only).
+        Print per-step loss (single-start quasi-Newton only; no effect on
+        optax or the vmapped multi-start quasi-Newton path, neither of which
+        supports a Python-level per-step callback).
     print_every : int
-        Print interval.
+        Print interval (optax and single-start quasi-Newton verbose_steps).
+
+    Notes
+    -----
+    Why ``"lbfgs"`` is the default: on the ctl-dpl mock recovery fixture
+    (D=8, 14 bands), Adam with the population default (``n_restarts=8``,
+    ``n_steps=800``) reached a negative log posterior of 6.33 and had not
+    converged (a 300-step single run reached 7.88, a 100-step run 115);
+    single-start scipy L-BFGS-B reached 6.0008 from one start in under a
+    second. On a second fixture the Adam point had a *negative* Hessian
+    eigenvalue -- not a minimum. Every downstream consumer of a MAP point
+    (NUTS/HMC warm-start via ``_maybe_map_init``, the Laplace approximation,
+    preconditioning metrics) is better served by a converged optimum than by
+    a fixed gradient-step budget that may or may not have reached one.
     """
     from tengri.inference.posterior import Posterior
 
@@ -553,20 +750,36 @@ def run_map(
     loss_fn = context.neg_log_posterior_fn
     data_args = context.data_args
 
-    # ── multi-start ADAM (vmap'd restarts, keep the lowest-loss) ──
-    # Under the standardized prior an N(0,1) latent maps to a genuinely uniform
-    # physical prior, so a single random init can land in a poor basin and a
-    # single ADAM run stalls there. Running ``n_restarts`` independent inits
-    # (seeded from splits of ``key``) in parallel via ``jax.vmap`` and keeping
-    # the best-loss restart recovers robustness while staying fully JAX-native
-    # (jittable, vmappable, scales to high-D). Only for the optax path and only
-    # when no explicit ``init_from`` is given (an explicit start is honored).
-    if (
-        n_restarts > 1
-        and init_from is None
-        and isinstance(optimizer, str)
-        and optimizer not in _SCIPY_OPTIMIZERS
-    ):
+    # Multi-start (n_restarts > 1, no explicit init_from): route to whichever
+    # vmapped restart implementation matches the optimizer family. An explicit
+    # ``init_from`` is always honored as a single start, never multiplied.
+    if n_restarts > 1 and init_from is None and isinstance(optimizer, str):
+        if optimizer in _SCIPY_OPTIMIZERS:
+            # ── multi-start JAX BFGS (vmap'd restarts, keep the lowest-loss) ──
+            # scipy's L-BFGS-B is not JAX-traceable, so it cannot be vmapped over
+            # restarts the way the optax path below is; jax.scipy.optimize's BFGS
+            # is pure JAX and fills that role. See _run_map_multistart_qn and the
+            # ``optimizer`` docstring entry above.
+            return _publish_map_init_cache(
+                context,
+                _run_map_multistart_qn(
+                    context,
+                    key=key,
+                    n_restarts=n_restarts,
+                    n_steps=n_steps,
+                    tol=tol,
+                    optimizer=optimizer,
+                    verbose=verbose,
+                ),
+            )
+        # ── multi-start ADAM (vmap'd restarts, keep the lowest-loss) ──
+        # Under the standardized prior an N(0,1) latent maps to a genuinely uniform
+        # physical prior, so a single random init can land in a poor basin and a
+        # single ADAM run stalls there. Running ``n_restarts`` independent inits
+        # (seeded from splits of ``key``) in parallel via ``jax.vmap`` and keeping
+        # the best-loss restart recovers robustness while staying fully JAX-native
+        # (jittable, vmappable, scales to high-D). Only for the optax path and only
+        # when no explicit ``init_from`` is given (an explicit start is honored).
         return _publish_map_init_cache(
             context,
             _run_map_multistart(
@@ -732,7 +945,16 @@ def build_vectorized_map_solver(
     learning_rate : float, optional
         Adam learning rate (default 0.03).
     optimizer : str, optional
-        ``"adam"`` (default), ``"adamw"``, or ``"sgd"``.
+        ``"adam"`` (default), ``"adamw"``, or ``"sgd"`` -- optax only, unlike
+        :func:`run_map`. This solver builds its optimizer via
+        :func:`_build_optax_optimizer`, which has no quasi-Newton entry, so
+        ``"lbfgs"`` raises ``ValueError`` here rather than silently falling
+        back to a different family. Left as ``"adam"`` deliberately: this is
+        a short (``n_steps`` as low as 80), scan-based per-galaxy *warm start*
+        for hierarchical/population fitting's own posterior, not a converged
+        MAP fit in its own right, so it is scoped like
+        :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_map_init`
+        (also an ADAM-only warm start) rather than like :func:`run_map`.
 
     Returns
     -------

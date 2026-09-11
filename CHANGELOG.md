@@ -412,6 +412,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **MAP defaults to L-BFGS, not Adam** (behavioral change). `run_map`'s
+  `optimizer=` default is now `"lbfgs"` (alias `"lbfgs_scipy"`), and every
+  internal MAP seed that does not pass an explicit `optimizer=`
+  (`_maybe_map_init`'s NUTS/HMC/VI warm start, `run_laplace`, `run_pathfinder`,
+  the vmapped batch-MAP path in `Fitter._fit_batch_vmap_map`) picks it up.
+  Measured on a D=8, 14-band mock recovery fixture: the population default
+  (Adam, 8 restarts × 800 steps) reached a negative log posterior of 6.33 and
+  had not converged (a 300-step single run reached 7.88, a 100-step run 115),
+  while a single scipy L-BFGS-B start reached 6.0008 in well under a second;
+  on a second fixture the Hessian at the Adam point carried a negative
+  eigenvalue, i.e. was not even a local minimum. Every downstream consumer of
+  a MAP point — sampler warm starts, the Laplace approximation, preconditioning
+  metrics — is better served by a converged optimum than by a fixed
+  gradient-step budget that may or may not have reached one. Two
+  implementations share the `"lbfgs"` name because scipy is not JAX-traceable
+  and so cannot be vmapped: the single-start path (`n_restarts=1`, the
+  default) runs scipy's L-BFGS-B; the multi-start and vmapped-batch paths
+  (`n_restarts>1`, or `Fitter.fit_batch(method="map")`) run
+  `jax.scipy.optimize.minimize(method="BFGS")` instead, which is pure JAX and
+  therefore vmappable — and, like scipy, needs no optional dependency
+  (`jax.scipy` ships with `jax` itself, unlike `optax`/`jaxopt`). `"adam"`,
+  `"adamw"`, `"sgd"`, and pre-built optax optimizers remain fully supported by
+  name.
 - Dust attenuation laws are explicit and required (#1989). A dust attenuation group
   spells its law as either `law` (one law, both screens) or, on `two_component` only,
   both `law_bc` and `law_diff` together — never one half of the pair, and never

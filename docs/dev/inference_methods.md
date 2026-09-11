@@ -817,16 +817,33 @@ warning is issued when `spec.stochastic` is True.
 ### 6.10 map
 
 ```python
-result = fitter.run("map", n_steps=1500, optimizer="adam", learning_rate=0.02)
+result = fitter.run("map", n_steps=500)
 ```
 
-**MAP** (Maximum A Posteriori) point estimate via gradient descent. No posterior samples.
+**MAP** (Maximum A Posteriori) point estimate via quasi-Newton optimization or gradient
+descent. No posterior samples.
 
-**Optimizers**: `"adam"` (default), `"adamw"`, `"sgd"`, or any pre-built optax optimizer.
+**Optimizers**: `"lbfgs"` (default, alias `"lbfgs_scipy"`) is quasi-Newton and reaches a
+converged optimum reliably where a fixed-step gradient-descent budget may not. Two
+implementations share the name because scipy is not JAX-traceable and so cannot be
+vmapped: `n_restarts=1` (the default) runs scipy's L-BFGS-B with a Wolfe line search and
+zero JAX compilation for the optimizer itself; `n_restarts>1` runs
+`jax.scipy.optimize.minimize(method="BFGS")` for every restart inside one `jax.vmap`, so
+the restarts execute as a single compiled kernel. Neither needs an optional dependency.
+`"adam"`, `"adamw"`, `"sgd"`, or any pre-built optax optimizer remain available —
+first-order, vmappable at any `n_restarts`, but converge less reliably to a true optimum
+(measured on a D=8, 14-band mock: 8 restarts × 800 Adam steps reached a negative log
+posterior of 6.33, not converged, against 6.0008 for a single L-BFGS-B start in
+under a second; a Hessian at the Adam point can carry a negative eigenvalue, i.e. not
+even a local minimum).
 
 **Features**:
-- Early stopping: halts when loss doesn't improve by `rtol` over `patience` steps
-- Returns `loss_history` for convergence diagnostics
+- `n_steps` is `maxiter` for the quasi-Newton solvers; for optax it is the (early-stoppable)
+  gradient-step budget. `learning_rate`, `early_stopping`, `patience`, `rtol` apply to optax
+  only. `tol` is the quasi-Newton gradient-norm convergence tolerance.
+- Returns `loss_history` for convergence diagnostics — the full per-step trace for optax,
+  a single final value for the quasi-Newton solvers (no per-iteration trace is available
+  without a Python callback, which neither the scipy nor the vmapped JAX path supports).
 
 **Use case**: Initialization for MCMC or VI methods. A quick MAP run provides a good
 starting point that dramatically improves convergence:
@@ -1042,7 +1059,7 @@ All benchmarks on MacBook Pro M-series, CPU (`JAX_PLATFORMS=cpu`).
 
 | Method | D=7 (smooth) | D=137 (stochastic) | Notes |
 |--------|-------------|-------------------|-------|
-| `map` (1000 steps) | ~3s | ~5s | Adam optimizer |
+| `map` (1000 steps) | ~3s | ~5s | Default optimizer at time of measurement (Adam); default is now `"lbfgs"`, typically faster (see 6.10) |
 | `vi_nifty` (10 iter) | ~12s | ~30s | NIFTy exact math |
 | `vi_nifty` full logging (10 iter) | ~18s | ~45s | Full NIFTy with logging |
 | `vi` (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run | First call only |
