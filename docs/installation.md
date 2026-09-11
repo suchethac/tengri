@@ -49,9 +49,11 @@ pip install -e ".[all]"
 [JAX's CUDA notes](https://jax.readthedocs.io/en/latest/installation.html#gpu-support)
 to match the driver and CUDA versions on the host.
 
-**Apple Silicon.** `jax-metal` is experimental and produces numerical
-discrepancies on the stochastic SFH path. Set `JAX_PLATFORMS=cpu` for
-any fit you intend to trust.
+**Apple Silicon.** Apple's own `jax-metal` (0.1.1, 2024-10) is not viable
+against this JAX version. The supported path is the community `jax-mps`
+plugin (MLX-backed, float32 only) -- see `notebooks/apple_mps.py` for setup
+and `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy
+check. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust without it.
 
 On every backend, `import tengri` enables 64-bit precision globally
 (`jax_enable_x64`): squared luminosity distances overflow float32

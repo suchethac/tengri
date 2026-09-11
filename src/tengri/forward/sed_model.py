@@ -81,6 +81,7 @@ from tengri.config.exceptions import (
     TengriIOError,
     warn_measured,
 )
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 from tengri.forward.sed_model_types import (
@@ -6953,11 +6954,14 @@ class SEDModel:
                 missing_property_message(*sorted(unknown), available=self._property_catalog)
             )
 
-        # A 'lines' property on a backend with no per-line catalog is NaN. Say
+        # A 'lines' property on a backend with no per-line catalog (or one
+        # that doesn't carry this specific headline line, #2239) is NaN. Say
         # so here too: pred.lines.* has warned since #361 but this surface --
         # the documented jit/vmap one -- returned the same NaN in silence.
         # Only when the caller asked by name; `names=None` means "everything
-        # the model has" and would warn on every default call.
+        # the model has" and would warn on every default call. Reads only
+        # static (never-traced) backend state, so this is safe to call before
+        # `state` exists and safe under `jax.jit`/`jax.vmap` (#2239).
         if names is not None:
             from tengri.forward.properties import warn_if_lines_are_unavailable
 
@@ -9127,7 +9131,9 @@ class SEDModel:
             field_centering=float(getattr(self.spec, "field_centering", 1.0)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
-            cue_full_catalog=bool(getattr(self.spec, "cue_full_catalog", False)),
+            cue_full_catalog=bool(
+                getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+            ),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),

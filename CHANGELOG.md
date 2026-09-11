@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `bench/scripts/benchmark_float32_mps_parity.py` -- a self-contained pure-float32
+  parity sweep for the Apple GPU (#1206). Apple's own `jax-metal` last released 0.1.1
+  on 2024-10-08 and pins `jax == jaxlib >= 0.4.34`, not viable against tengri's JAX
+  0.11; the community `jax-mps` plugin (MLX-backed) is the path that works, but it has
+  no float64 at all. This script writes a float64 reference on CPU
+  (`--write-reference`) for six progressive model seams (`stellar_dust`, `+dust IR`,
+  `+Cue`, `+AGN`, `+radio+xray`, `panchromatic`) and, in its default mode, checks a
+  float32 rebuild against it -- max relative forward error, gradient error, and a
+  *converged* MAP fit's optimum parameter-vector deviation, PASS/FAIL at
+  3e-3 / 1e-2 / 1e-2. The MAP fit itself uses L-BFGS to genuine convergence
+  (`init_from` pinned to the shared truth; restarted from a stall rather than given a
+  bigger iteration cap, since scipy's line search can abandon a call well short of
+  its budget), with a non-zero exit if `--write-reference` cannot converge every seam,
+  so an unconverged reference can never be committed. The MAP-loss deviation is
+  reported as an informational column, not gated: at a converged optimum the loss is
+  stationary, so a parameter agreement of 1e-6 implies a loss agreement of order
+  1e-12 from that channel alone, and the ~1e-4 gap actually seen is float32's own
+  chi-squared evaluation (cancellation in `data - model` at SNR 30) -- already bounded
+  by the forward and gradient columns. Runnable on CPU, CUDA, or a Mac under the
+  `jax-mps` venv; refuses to run with `jax_enable_x64=True` and prints the one-line
+  environment fix instead. `docs/internal/getting_started/gpu.md` gains an "Apple GPU
+  via jax-mps" section replacing the old Metal note, with a shorter mirror in
+  `docs/performance/index.md`, `README.md`, and `docs/installation.md`.
+
 - `dust_log_L_ir` (`log10(L_IR/Lsun)`): a total dust IR budget override.
   Declaring it -- `Fixed` or any free prior, via `dust_emission={'log_L_ir':
   ...}` -- replaces the energy-balance IR budget (`log_L_ir =
@@ -218,6 +242,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
 ### Changed
+
+- `import tengri` raises the default matmul precision to `"highest"` at
+  import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
+  set or the live config already holds a value; `tengri.utils.devices.setup_jax`
+  mirrors it. On Ampere+, XLA otherwise lowers float32 matmuls to TF32
+  (measured 4.5% error on Fisher-matrix parameter error bars); the knob only
+  affects float32 matmuls, so this is a no-op for a float64 session and for
+  CPU (no TF32 path), and measured zero speed cost. Being unconditional also
+  covers a float32 arm entered later through a bare
+  `with jax.enable_x64(False): ...` while the process default stays x64-on --
+  exactly the pattern `test_fisher_float32.py`'s own float32 arm uses. An
+  explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
+
+- Cue's default line catalog is now the full ~138-line set instead of the
+  128-line CLOUDY/FSPS-matched subset (`cue_full_catalog` defaults to
+  `True`); pass `neb={'type': 'cue', 'full_catalog': False}` (or
+  `Parameters(cue_full_catalog=False)`) to keep the legacy subset for
+  cross-code comparisons. Reverses the 2026-05 `#303` back-compat default.
+  `predict_photometry`, `rest_sed` and every other headline line are
+  bit-identical either way: only the discrete line catalog and `civ_1549`
+  change (#2239).
 
 - The shock SED's default dust screen flips from the unconditional
   birth-cloud form (`tau_bc·k_bc + tau_diff·k_diff`) to diffuse-only
@@ -498,6 +543,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   explicit-law rule.
 
 ### Fixed
+
+- `marginalize_emission_lines` no longer crashes float32 geoVI on CUDA. Its
+  `(n_lines, n_lines)` normal-equation GEMM (`g.T @ g`, degenerate at the
+  handful of emission lines this is ever called with) hit "GEMM is not
+  supported by cublasLt and legacy cublas fallback is removed" under JAX
+  0.11 whenever the operands arrived float64-valued and were traced under
+  x64 disabled. Replaced with an explicit broadcast-multiply-sum, which
+  never lowers to a GEMM; float64 CPU output is bit-identical to the matmul
+  it replaced (rtol 1e-12) (#2023).
+
+- A headline line property (`civ_1549`, from `KEY_LINES`) now warns instead of
+  returning a silent NaN when the currently selected nebular catalog carries
+  no entry within tolerance of its target wavelength; the warning names the
+  property, the backend, the nearest catalog line and its offset in
+  Angstrom, and the remedy (`neb={'type': 'cue', 'full_catalog': True}` when
+  the backend is cue and on the legacy subset). Generalizes across every
+  line-catalog backend (#2239).
+
+- The #2239 warning seam's static catalog accessor
+  (`_published_line_wavelengths_static`) now applies tengri's vacuum-wavelength
+  contract (`nebular_line_waves_to_vacuum`, hoisted into
+  `components/nebular/_shared.py` and shared with
+  `NebularSEDComponent.apply`) before comparing against a `KEY_LINES` target,
+  instead of comparing the backend's raw, sometimes-air catalog directly; the
+  mismatch reached up to 2.70 Angstrom against the 5 Angstrom match tolerance
+  (measured on cue's upstream, air-frame `.npy`), close enough to risk a false
+  warning or a missed one for lines not already covered by the #2239
+  regression test. `predict_photometry`, `rest_sed` and every already-tested
+  headline line are unaffected (#2239).
 
 - `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
   stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the

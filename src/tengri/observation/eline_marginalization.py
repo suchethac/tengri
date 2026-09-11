@@ -335,12 +335,28 @@ def marginalize_emission_lines(
     made every one of ``ln_L_marg``, ``a_hat`` and ``a_cov``, and the
     gradient, ``NaN``, contradicting the promise above. Identical in float64.
 
+    **CUDA GEMM lowering (#2023)**: :math:`\tilde G^\mathsf{T} \tilde G` used to
+    be spelled as a matmul (``g_whitened.T @ g_whitened``). At the
+    :math:`(n_{\rm lines}, n_{\rm lines})` shape this function is ever called
+    with -- a handful of emission lines -- that GEMM is one cuBLASLt refuses
+    under JAX 0.11, which removed the legacy cuBLAS fallback that used to
+    absorb it: ``INTERNAL: GEMM is not supported by cublasLt and legacy cublas
+    fallback is removed``. Reproduces whenever the operands arrive
+    float64-valued and get traced under x64 disabled (the implicit truncation
+    a float32 tengri session performs); a matmul built fresh from genuinely
+    float32 operands of the identical shape does not trip it. So this is an
+    XLA/cuBLASLt lowering gap tied to that truncation, not a precision bug --
+    ``jax.lax.Precision.HIGHEST`` does not help. Spelled instead as an
+    explicit broadcast-multiply-sum, which never lowers to a GEMM at all and
+    is bit-identical to the matmul it replaced (float64 CPU, rtol 1e-12).
+
     """
     n_lines = design_matrix.shape[1]
 
     g_whitened = whiten(design_matrix, noise[:, None])
     r_whitened = whiten(residual, noise)
-    gt_ninv_g = g_whitened.T @ g_whitened
+    # Broadcast-multiply-sum, not a matmul: see "CUDA GEMM lowering (#2023)" above.
+    gt_ninv_g = jnp.sum(g_whitened[:, :, None] * g_whitened[:, None, :], axis=0)
     gt_ninv_r = g_whitened.T @ r_whitened
 
     # Flat prior (~uninformative) when prior_variance is omitted.

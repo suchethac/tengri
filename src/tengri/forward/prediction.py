@@ -308,8 +308,9 @@ class EmissionLines(NamedTuple):
     nebular model is active. For doublets ([O II], C IV) the headline
     fields sum both components.
 
-    The full ~271-line Cue catalog (and equivalent grids for CloudyGrid)
-    is exposed via :attr:`all_waves` / :attr:`all_lums` so users can read
+    The full ~138-line Cue catalog (and the generally smaller equivalent
+    grids for CloudyGrid, CB19 and MAPPINGS) is exposed via :attr:`all_waves`
+    / :attr:`all_lums` so users can read
     species the headline NamedTuple does not name explicitly (HeII 1640,
     HeI 10830, NIII] 1750, [O III] 4363, etc.). See :meth:`get` for the
     nearest-wavelength accessor.

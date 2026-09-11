@@ -57,6 +57,7 @@ from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.component import StellarSEDComponentConfig
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.protocols.component import SEDComponent
 
 __all__ = [
@@ -334,10 +335,13 @@ def build_components(
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
-    # When ``True`` and ``nebular_backend == "cue"``, the orchestrator
-    # asks the Cue backend for the full ~271-species line catalog
-    # instead of the default 128 CLOUDY/FSPS subset. See #303.
-    cue_full_catalog: bool = False,
+    # When ``True`` (the default since #2239) and ``nebular_backend == "cue"``,
+    # the orchestrator asks the Cue backend for the full ~138-species line
+    # catalog; ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched
+    # subset (the sole default before #2239, added by #303). This default is
+    # a defensive fallback for direct callers of this function; the grammar
+    # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
+    cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT,
     # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
     # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.
@@ -1284,7 +1288,8 @@ def state_to_emission_lines(state: Any):
     Cue or CloudyGrid) and extracts the 11 headline survey-diagnostic
     lines via the legacy nearest-wavelength matcher
     :func:`tengri.utils.sed_quantities.extract_line_luminosity`. The full
-    backend catalog (typically ~138–271 species) is also exposed via
+    backend catalog (~138 species for Cue; the CLOUDY/CB19/MAPPINGS grids
+    carry far fewer) is also exposed via
     ``all_waves`` / ``all_lums`` for downstream lookups of species the
     headline NamedTuple does not name explicitly (HeII 1640, HeI 10830,
     [O III] 4363, ...).
