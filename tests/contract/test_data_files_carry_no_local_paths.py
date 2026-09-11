@@ -39,14 +39,21 @@ def _tracked_data_files() -> list[pathlib.Path]:
     Tracked rather than globbed: an untracked file a contributor happens to
     have locally is not shipped and is not this contract's business, and a
     gitignored grid must not fail a clean checkout's test run.
+
+    Skipped only when ``_REPO`` is not a git checkout at all (no ``.git``
+    entry); once ``git`` runs, a non-zero exit is not this helper's to
+    swallow -- it can mean a corrupt index or a broken repository, which is a
+    real defect this contract must fail on, not silently skip.
     """
+    if not (_REPO / ".git").exists():
+        pytest.skip(f"{_REPO} is not a git checkout")
     try:
         out = subprocess.run(
             ["git", "-C", str(_REPO), "ls-files", "-z", "data"],
             capture_output=True,
             check=True,
         ).stdout
-    except (OSError, subprocess.CalledProcessError) as exc:  # pragma: no cover
+    except OSError as exc:
         pytest.skip(f"git ls-files unavailable: {exc}")
     names = [n for n in out.decode().split("\0") if n]
     return [_REPO / n for n in names if (_REPO / n).is_file()]
