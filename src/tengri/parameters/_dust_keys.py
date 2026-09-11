@@ -3,6 +3,7 @@
 
 This module is the single home of the dust attenuation grammar vocabulary:
 SCREENS ('bc', 'diff', 'neb'), OVERRIDE_STEMS (the four law parameter stems),
+SCREEN_CHOICES/SCREEN_SOURCES (the per-source screen-selector grammar, #2234),
 and utilities to convert between spellings and validate them.
 
 The grammar accepts two spellings for each parameter:
@@ -15,15 +16,193 @@ the dict. This central vocabulary prevents the three hand-lists (structural keys
 _resolve_value locals, and grammar normalization) from drifting apart.
 
 Tests pin this vocabulary against TWO_COMPONENT_OVERRIDE_KEYS.
+
+Separately, SCREEN_SOURCES ('nebular', 'shock', 'agn') names the emission
+sources that pick a dust screen independently of the stars, and
+:func:`resolve_screen_choices` is the one validator both the grammar
+(``dust_attenuation={'nebular_screen': ...}``) and the flat surface
+(``Parameters(dust_nebular_screen=...)``) call, so a request refused on one
+surface is refused on the other for the same reason.
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping
 
 DUST_PREFIX = "dust_"
 SCREENS: tuple[str, ...] = ("bc", "diff", "neb")
 SCREEN_LABEL = {"bc": "birth-cloud", "diff": "diffuse-ISM", "neb": "nebular birth-cloud"}
 # The only home of this list (beyond tests); every other hand-list derives here.
 OVERRIDE_STEMS: tuple[str, ...] = ("slope", "bump_strength", "delta", "Rv")
+
+# ── Per-source dust-screen choice (#2234 replacement) ──────────────────
+#
+# Each non-stellar emission source (nebular continuum + line catalog, shock,
+# AGN) picks which of the two-component screens attenuates it: the transmission
+# the youngest stars get (``"birth_cloud"``: f_obscuration floor +
+# exp(-(tau_bc*k_bc + tau_diff*k_diff))), the transmission the oldest stars get
+# (``"diffuse"``: same floor, tau_diff*k_diff only), or no attenuation at all
+# (``"none"``, resolved once at build time, never re-evaluated at predict).
+#
+# ``SCREEN_SOURCES`` and ``screen_keys()`` are the single home of "which
+# sources have a screen choice" and "what the grammar/flat key is called for
+# each": every other list (``_GROUP_STRUCTURAL_KEYS``, the flat-kwarg pops in
+# ``Parameters._init_dust_config``, the grammar round-trip table) derives from
+# them instead of hand-listing the three names again.
+SCREEN_CHOICES: tuple[str, ...] = ("birth_cloud", "diffuse", "none")
+#: User-facing synonyms that normalize onto a canonical choice before any
+#: validation runs. ``"off"`` mirrors the ``dust_model``/group-``type``
+#: convention (``'none'``/``'off'`` both disable a block) so a caller does not
+#: have to remember two different spellings of "nothing" across the grammar.
+SCREEN_SYNONYMS: dict[str, str] = {"off": "none"}
+#: The three sources with a configurable screen. Order matches the tuple
+#: ``screen_keys()`` returns and the per-source default in
+#: :data:`_SCREEN_DEFAULTS`.
+SCREEN_SOURCES: tuple[str, ...] = ("nebular", "shock", "agn")
+#: Per-source default, read by both the grammar translator and the flat-kwarg
+#: resolver so the two surfaces cannot drift. ``agn`` defaults to (and today
+#: must stay) ``"none"``: the AGN component runs after dust in the pipeline
+#: and carries its own polar-dust screen (see ``resolve_screen_choices``).
+_SCREEN_DEFAULTS: dict[str, str] = {
+    "nebular": "birth_cloud",
+    "shock": "diffuse",
+    "agn": "none",
+}
+
+
+def screen_keys() -> tuple[str, ...]:
+    """Grammar/flat key name for each entry in :data:`SCREEN_SOURCES`.
+
+    Returns
+    -------
+    tuple of str
+        ``("nebular_screen", "shock_screen", "agn_screen")``. The flat-kwarg
+        spelling prepends :data:`DUST_PREFIX` (``"dust_nebular_screen"``, ...);
+        the grammar spelling is exactly this.
+    """
+    return tuple(f"{source}_screen" for source in SCREEN_SOURCES)
+
+
+def normalize_screen_choice(value: str, *, key: str) -> str:
+    """Normalize one dust-screen selector to a canonical :data:`SCREEN_CHOICES` value.
+
+    Parameters
+    ----------
+    value : str
+        The user-supplied choice: one of :data:`SCREEN_CHOICES`, or a key of
+        :data:`SCREEN_SYNONYMS` (``"off"``).
+    key : str
+        The key name to name in the error message (e.g. ``"nebular_screen"``
+        or ``"dust_shock_screen"``), so the raised error points at exactly
+        what the caller wrote.
+
+    Returns
+    -------
+    str
+        One of :data:`SCREEN_CHOICES`.
+
+    Raises
+    ------
+    ParameterError
+        If ``value`` is not a recognized choice or synonym. Names ``key``
+        and the three choices.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    resolved = SCREEN_SYNONYMS.get(value, value)
+    if resolved not in SCREEN_CHOICES:
+        raise ParameterError(
+            f"{key}={value!r} is not a valid dust-screen choice. Choose one of "
+            f"{SCREEN_CHOICES!r}, or 'off' (a synonym for 'none')."
+        )
+    return resolved
+
+
+def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surface: str) -> dict:
+    """Validate the nebular_screen / shock_screen / agn_screen triad (#2234).
+
+    THE single validator for both surfaces (mirrors :func:`validate_shape_requests`):
+    the grammar (``tengri.parameters.groups._translate_dust_attenuation``) and the
+    flat ``Parameters(...)`` constructor (:meth:`Parameters._init_dust_config`) both
+    call this, so a request refused on one surface is refused on the other with the
+    same reasoning.
+
+    Sources absent from ``raw`` (value ``None``, i.e. the caller did not name that
+    key) are left OUT of the returned dict entirely -- filling in the per-source
+    default (:data:`_SCREEN_DEFAULTS`) is the caller's job. This function only
+    tightens the story for a choice somebody actually asked for; it never invents a
+    value and then rejects it as though the user had written it (that would make
+    every dust-free/single-screen/WG00 model unbuildable, since a default sits in
+    ``raw`` on every call otherwise).
+
+    Parameters
+    ----------
+    raw : mapping
+        ``{source: value_or_None}`` for zero or more of :data:`SCREEN_SOURCES`.
+        A source not present in ``raw`` is treated the same as ``None``.
+    dust_model : str
+        The resolved dust attenuation model: ``"two_component"``,
+        ``"single_component"``, ``"wg00"``, or ``"off"``.
+    surface : str
+        ``"grammar"`` (bare key, e.g. ``"nebular_screen"``) or ``"flat"``
+        (prefixed key, e.g. ``"dust_nebular_screen"``) -- selects the spelling
+        used in error messages.
+
+    Returns
+    -------
+    dict
+        ``{source: resolved_choice}``, one of :data:`SCREEN_CHOICES`, for
+        every source the caller actually named. Sources not named are absent
+        from the result.
+
+    Raises
+    ------
+    ParameterError
+        On an unrecognized value (see :func:`normalize_screen_choice`); on
+        ``agn_screen`` resolving to anything but ``"none"`` (today the AGN
+        component runs after dust and carries its own polar-dust screen, so
+        galaxy screening of AGN light is not yet wired); on a two-screen-only
+        key given ANY explicit value when ``dust_model in ("wg00", "off")``
+        (there are no birth-cloud/diffuse screens to choose between); on a
+        value other than ``"none"``/``"off"`` or the source's own default when
+        ``dust_model == "single_component"`` (one screen, so there is no
+        birth-cloud/diffuse distinction to select).
+    """
+    resolved: dict[str, str] = {}
+    for source in SCREEN_SOURCES:
+        if raw.get(source) is None:
+            continue
+        default = _SCREEN_DEFAULTS[source]
+        grammar_key = f"{source}_screen"
+        display_key = grammar_key if surface == "grammar" else f"{DUST_PREFIX}{grammar_key}"
+        choice = normalize_screen_choice(raw[source], key=display_key)
+
+        from tengri.config.exceptions import ParameterError
+
+        if source == "agn" and choice != "none":
+            raise ParameterError(
+                f"{display_key}={raw[source]!r}: galaxy screening of AGN light lands "
+                f"in the next change; today the AGN component runs after dust and "
+                f"carries its own polar-dust screen. Leave {display_key!r} unset, or "
+                f"set it to 'none'."
+            )
+        if dust_model in ("wg00", "off"):
+            raise ParameterError(
+                f"{display_key!r} is a two-component-only dust_attenuation key (it "
+                f"chooses between the birth-cloud and diffuse-ISM screens), and "
+                f"dust_model={dust_model!r} has no such screens, so writing it here "
+                f"would be silently ignored. Drop {display_key!r}, or select the "
+                f"two-component dust model."
+            )
+        if dust_model == "single_component" and choice not in ("none", default):
+            raise ParameterError(
+                f"{display_key}={raw[source]!r} is not valid with a single-screen "
+                f"dust model: single screen, no birth-cloud/diffuse distinction "
+                f"exists. Use 'none' (skip attenuating this source), or drop "
+                f"{display_key!r} to keep the default ({default!r})."
+            )
+        resolved[source] = choice
+    return resolved
 
 
 def short_to_full(stem: str) -> str:

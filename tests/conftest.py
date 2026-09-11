@@ -357,6 +357,10 @@ def fully_skipped_test_files(
 #   - tests/contract/test_build_resolver_sedmodelcomponent.py: BC03 SSP not shipped
 #   - tests/contract/test_phase4d_c_agn_threading.py: bare-stellar SSP not shipped
 #   - tests/contract/test_synthesizer_nlr_grammar.py: optional Synthesizer grids
+#   - tests/inference/test_evi_integration.py: every test gates on the
+#     broken-tier native_vi_linear backend (#1287); dormant until repaired
+#   - tests/inference/test_nss_parity.py: optional handley-lab/blackjax
+#     fork, not installed on CI
 # ─────────────────────────────────────────────────────────────────────
 
 _SKIP_GUARD_ALLOWLIST: set[str] = {
@@ -366,6 +370,8 @@ _SKIP_GUARD_ALLOWLIST: set[str] = {
     "tests/contract/test_build_resolver_sedmodelcomponent.py",
     "tests/contract/test_phase4d_c_agn_threading.py",
     "tests/contract/test_synthesizer_nlr_grammar.py",
+    "tests/inference/test_evi_integration.py",
+    "tests/inference/test_nss_parity.py",
 }
 
 _EXCLUDED_TREES = ("tests/integration/", "tests/crossval/")
