@@ -325,6 +325,13 @@ def _build_chain(ssp, with_cue):
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.3,
         },
+        # A metallicity ramp, so the mass- and luminosity-weighted metallicities
+        # are genuine weighted means and not identically 0.0 (#2293): with the
+        # default fixed solar ``met_logzsol`` the history is constant, the mean
+        # is exactly zero, and the "collapsed to zero" check below was passing
+        # on CPU only through one float32 ULP of rounding noise (1.2e-7) that
+        # CUDA's reduction order happens not to leave.
+        met={"type": "ramp", "logzsol_0": -1.0, "logzsol_final": 0.0},
         redshift=Fixed(0.1),
         approx=None,
     )
@@ -366,8 +373,12 @@ def test_property_finite_in_float32(property_arms, prop):
         f"{prop} is {got!r} in float32 though float64 gives {ref:.6e}, "
         f"which is well inside float32 range (#1837)"
     )
-    assert np.any(got != 0.0), (
-        "`got` is identically zero — finite is not enough, "
-        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    # A zero is a collapse only where float64 says the value is not zero: a
+    # property that is exactly 0.0 in float64 (a log10(Z/Zsun) at solar) may
+    # be exactly 0.0 in float32 too, and on CUDA it is (#2293).
+    assert ref == 0.0 or np.any(got != 0.0), (
+        f"`got` is identically zero where float64 gives {ref:.6e} — finite is "
+        "not enough, a value that has collapsed to zero is as unusable as a NaN "
+        "one (#2100)"
     )
     np.testing.assert_allclose(got, ref, rtol=2e-3, atol=1e-6)
