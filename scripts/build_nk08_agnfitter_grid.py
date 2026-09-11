@@ -77,6 +77,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from _agnfitter_download import archive_relpath
 
 _SAFE_CLASSES: frozenset[tuple[str, str]] = frozenset(
     {
@@ -171,13 +172,15 @@ def build(
     input_pickle: Path,
     output_h5: Path,
     n_wave: int = 4096,
-    source_label: str = "AGNfitter-rX_v0.1/models/TORUS/NK0_mean_1p.pickle",
+    source_label: str = archive_relpath("models/TORUS/NK0_mean_1p.pickle"),
 ) -> None:
     """Read NK0_mean_1p.pickle and emit tengri's ``nenkova_agnfitter_torus_grid.h5``.
 
     ``source_label`` is the provenance string written to the ``source_pickle``
     attribute: the path inside the pinned upstream archive, not wherever this
-    machine holds the file.
+    machine holds the file. Derived from ``_agnfitter_download.AGNFITTER_REF``
+    via :func:`_agnfitter_download.archive_relpath` so a future ref bump
+    cannot leave this default stale.
     """
     d = _safe_load(input_pickle)
 
@@ -243,7 +246,7 @@ def _cli() -> None:
         "instead of reading --input. No AGNfitter install needed.",
     )
     args = p.parse_args()
-    from _agnfitter_download import archive_relpath, resolve
+    from _agnfitter_download import resolve
 
     repo_relpath = "models/TORUS/NK0_mean_1p.pickle"
     input_pickle = resolve(args.input, repo_relpath, download=args.download)

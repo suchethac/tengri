@@ -74,6 +74,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from _agnfitter_download import archive_relpath
 from _grid_native_sampling import native_wavelength_grid, place_on_grid
 
 _C_AA_PER_S = 2.99792458e18  # speed of light [Å·Hz]
@@ -107,13 +108,15 @@ def _table_to_lnu(fits_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 def build(
     input_dir: Path,
     output_h5: Path,
-    source_label: str = "AGNfitter-rX_v0.1/models/STARBURST",
+    source_label: str = archive_relpath("models/STARBURST"),
 ) -> None:
     """Read the S17 dust + PAH FITS and emit ``schreiber2018_templates.h5``.
 
     ``source_label`` is the provenance string written to the ``source_dir``
     attribute: the directory inside the pinned upstream archive, not wherever
-    this machine holds it.
+    this machine holds it. Derived from ``_agnfitter_download.AGNFITTER_REF``
+    via :func:`_agnfitter_download.archive_relpath` so a future ref bump
+    cannot leave this default stale.
     """
     dust_path = input_dir / "s17_lowvsg_dust.fits"
     pah_path = input_dir / "s17_lowvsg_pah.fits"
