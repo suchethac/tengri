@@ -35,6 +35,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import importlib.metadata
+import inspect
 import warnings
 
 import jax
@@ -43,6 +44,7 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 from packaging.requirements import Requirement
 
+from tengri._cache_keys import baked
 from tengri.config.exceptions import BackendError, DeadFitError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
@@ -2967,6 +2969,94 @@ def _get_flat_logdensity(fitter, init_params):
     logdensity_flat, unravel_fn = cache[cache_key]
     init_flat, _ = ravel_pytree(init_params)
     return logdensity_flat, unravel_fn, init_flat, fitter._data_args
+
+
+#: Runner-signature parameters that never change what warmup tunes. Every
+#: reason here is the backends' own pre-existing rationale (nuts.py, hmc.py,
+#: dynamic_hmc.py, chees.py, ghmc.py, mclmc.py, first_order.py all carried a
+#: version of this comment inline, next to a hand-built tuning tuple);
+#: :func:`adaptation_method_key` is the one place it is written down.
+_ADAPT_IRRELEVANT: dict[str, str] = {
+    "context": "the inference target, not a tuning knob -- already gates the cache "
+    "lookup through _adaptation_cache_key's own (engine key, fingerprint) pair",
+    "key": "a PRNG key advances the chain; it does not change the tuned step size or metric",
+    "init_from": "a starting point does not change the tuned step size or metric; "
+    "over-keying costs a re-warmup of up to ~20 min",
+    "n_burnin": "post-warmup draws discarded Python-side; does not change what is tuned",
+    "n_samples": "post-warmup draw count; does not change what is tuned",
+    "n_chains": "chain count; the same adaptation seeds every chain",
+    "chain_method": "sampling batching strategy (vmap/sequential); does not change what is tuned",
+    "verbose": "logging only",
+    "progress": "progress-reporting only",
+    "progress_bar": "progress-reporting only",
+    "callback": "callback hook only",
+}
+
+
+def adaptation_method_key(
+    backend_name: str,
+    fn,
+    bound_kwargs: dict,
+    *,
+    exclude: dict[str, str] = _ADAPT_IRRELEVANT,
+) -> tuple:
+    """Return a hashable method-key fragment for one sampler's adaptation cache.
+
+    Binds ``bound_kwargs`` against ``fn``'s own signature (the runner
+    function each backend defines, e.g. ``run_nuts``), applies its
+    defaults, drops every excluded name, and bakes the rest. Replaces a
+    hand-built tuple (``tuning = (n_warmup, target_accept_rate, ...)``) that
+    had to be remembered and extended by name every time a new tunable
+    knob was added to a runner's signature -- exactly the #2163 bug class:
+    a knob nobody added to the hand tuple goes silently inert the moment a
+    cached adaptation already exists for that model (see
+    ``_adaptation_cache_key``'s docstring for the measured consequence, a
+    500/1000/1500 warmup sweep that returned byte-identical diagnostics).
+
+    Parameters
+    ----------
+    backend_name : str
+        Backend name, carried through into the returned tuple so the
+        per-backend adaptation cache namespace stays visible in the key
+        (mirrors each backend's own ``adapt_key = ("name", ...)`` literal).
+    fn : callable
+        The runner function whose signature defines what is tunable
+        (``run_nuts``, ``run_hmc``, ...).
+    bound_kwargs : dict
+        The values the runner actually received for (a subset of) its own
+        parameters. Missing parameters are filled from ``fn``'s defaults.
+    exclude : dict[str, str], optional
+        Ledger of parameter names to drop, mapping name -> reason.
+        Default :data:`_ADAPT_IRRELEVANT`.
+
+    Returns
+    -------
+    tuple
+        ``(backend_name, kept)`` where ``kept`` is a tuple of
+        ``(name, baked_value)`` pairs, sorted by name, for every bound
+        parameter not in ``exclude``.
+
+    Notes
+    -----
+    Parameters resolved from a raw signature value to something ELSE before
+    they change the sampled geometry (``dense_mass_matrix=None`` resolving to
+    an auto-policy boolean via the model dimension, ``n_ensemble="auto"``
+    resolving via ``n_chains``, ``precondition=...`` resolving through
+    :func:`~tengri.inference.preconditioning.prepare_preconditioning` to a
+    ``Preconditioning`` whose ``cache_key`` also depends on the metric
+    estimate) are NOT fully captured by binding the raw kwarg alone. Each
+    backend that has such a value keeps it as an extra tuple entry
+    alongside this function's return, per its own call site -- this
+    function only replaces the hand-built tuple of DIRECTLY tunable knobs.
+    """
+    bound = inspect.signature(fn).bind_partial(**bound_kwargs)
+    bound.apply_defaults()
+    kept = tuple(
+        sorted(
+            (name, baked(value)) for name, value in bound.arguments.items() if name not in exclude
+        )
+    )
+    return (backend_name, kept)
 
 
 def _adaptation_cache_key(fitter, method_key):
