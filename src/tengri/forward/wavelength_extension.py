@@ -35,6 +35,7 @@ from collections.abc import Iterable
 import numpy as np
 
 from tengri._data_setup import find_data_str
+from tengri.utils.host_array import host_array
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ _ANALYTIC_DUST_EMISSION = frozenset(
         "energy_balance_split",
     }
 )
-_ANALYTIC_DUST_WAVE_AA = np.geomspace(1.0e4, 1.0e8, 512)
+_ANALYTIC_DUST_WAVE_AA = host_array(np.geomspace(1.0e4, 1.0e8, 512))
 # Bookkeeping pseudo-model with no emission of its own, stays grid-less.
 _GRIDLESS_DUST_EMISSION = frozenset({"energy_balance_split"})
 
@@ -207,7 +208,7 @@ def native_wave_dust_emission(name: str | None) -> np.ndarray | None:
     if name is None or name in _GRIDLESS_DUST_EMISSION:
         return None
     if name in _ANALYTIC_DUST_EMISSION:
-        return _ANALYTIC_DUST_WAVE_AA
+        return np.asarray(_ANALYTIC_DUST_WAVE_AA)
     candidates = _DUST_EMISSION_TEMPLATES.get(name)
     if candidates is None:
         logger.debug("No native-grid declaration for dust emission %r", name)

@@ -28,13 +28,14 @@ from tengri.observation.eline_catalog import (
     CLOUDY_LINE_NAMES,  # noqa: F401, re-exported for convenience
     CLOUDY_LINE_WAVELENGTHS,
 )
+from tengri.utils.host_array import device_table, host_array
 
 # ── CLOUDY reference line ratios (relative to Hbeta = 1.0) ────────
 
 # Line ratios relative to Hbeta at solar metallicity, logU = -3.
 # Source: standard CLOUDY HII region models (Byler+2017, Levesque+2010).
 # [OII] 3726+3729 total ~2.50; split with 3729/3726 ~ 1.3 (n_e ~ 100 cm^-3).
-_CLOUDY_SOLAR_LOGU3 = jnp.array(
+_CLOUDY_SOLAR_LOGU3 = host_array(
     [
         1.09,  # [OII] 3726 / Hbeta  (2.50 / 2.30)
         1.41,  # [OII] 3729 / Hbeta  (2.50 * 1.3 / 2.30)
@@ -53,7 +54,7 @@ _CLOUDY_SOLAR_LOGU3 = jnp.array(
 
 # Line ratios at sub-solar metallicity (0.2 Zsun), logU = -3.
 # Metal lines are weaker, Balmer ratios unchanged (Case B).
-_CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
+_CLOUDY_SUBSOLAR_LOGU3 = host_array(
     [
         0.52,  # [OII] 3726, lower at low Z  (1.20 / 2.30)
         0.68,  # [OII] 3729, lower at low Z  (1.20 * 1.3 / 2.30)
@@ -72,7 +73,7 @@ _CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
 
 # Line ratios at solar metallicity, logU = -2 (higher ionization).
 # [OIII] is stronger, [NII]/[SII] weaker relative to logU=-3.
-_CLOUDY_SOLAR_LOGU2 = jnp.array(
+_CLOUDY_SOLAR_LOGU2 = host_array(
     [
         0.65,  # [OII] 3726, lower at high U  (1.50 / 2.30)
         0.85,  # [OII] 3729, lower at high U  (1.50 * 1.3 / 2.30)
@@ -94,7 +95,7 @@ _CLOUDY_SOLAR_LOGU2 = jnp.array(
 # At low Z + high U: less metal cooling → hotter HII region → stronger [OIII];
 # [NII]/[SII] very weak; [OII] suppressed by both high U (ionized to [OIII])
 # and low Z. Values derived from Byler+2017 CLOUDY trends.
-_CLOUDY_SUBSOLAR_LOGU2 = jnp.array(
+_CLOUDY_SUBSOLAR_LOGU2 = host_array(
     [
         0.25,  # [OII] 3726, strongly suppressed (low Z + high U)
         0.32,  # [OII] 3729, strongly suppressed (low Z + high U)
@@ -168,10 +169,10 @@ def cloudy_line_priors(
     u_frac = jnp.clip((neb_logU - (-3.0)) / ((-2.0) - (-3.0)), 0.0, 1.0)
 
     prior_means = (
-        (1.0 - z_frac) * (1.0 - u_frac) * _CLOUDY_SUBSOLAR_LOGU3
-        + z_frac * (1.0 - u_frac) * _CLOUDY_SOLAR_LOGU3
-        + (1.0 - z_frac) * u_frac * _CLOUDY_SUBSOLAR_LOGU2
-        + z_frac * u_frac * _CLOUDY_SOLAR_LOGU2
+        (1.0 - z_frac) * (1.0 - u_frac) * device_table(_CLOUDY_SUBSOLAR_LOGU3)
+        + z_frac * (1.0 - u_frac) * device_table(_CLOUDY_SOLAR_LOGU3)
+        + (1.0 - z_frac) * u_frac * device_table(_CLOUDY_SUBSOLAR_LOGU2)
+        + z_frac * u_frac * device_table(_CLOUDY_SOLAR_LOGU2)
     )
 
     # Convert dex scatter to linear-space sigma: sigma = mean * (10^width - 1)

@@ -48,7 +48,7 @@ from tengri.components.agn._nthcomp import nthcomp_lnu_interp
 
 pytestmark = pytest.mark.gradient
 
-_NU = jnp.asarray(np.logspace(14.5, 18.5, 400))
+_NU = np.logspace(14.5, 18.5, 400)
 _KTE = 0.2
 _KTBB = 0.05
 

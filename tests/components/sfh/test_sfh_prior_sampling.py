@@ -29,6 +29,22 @@ def test_curves_are_finite_and_non_negative() -> None:
     assert jnp.all(curves >= -1e-12)
 
 
+def test_default_age_grid_is_the_helper_grid() -> None:
+    """``DEFAULT_AGE_GRID_YR`` is a host-side twin of ``make_log_age_grid`` (#2271).
+
+    #1402 made ``make_log_age_grid`` the single definition of the log-age grid
+    because a second copy can desync without any test failing; the host-side
+    constant is that second copy, so this pins it to the helper at float64
+    rounding. The device build is the same 256 nodes over the same bounds.
+    """
+    from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
+    from tengri.utils.grid import DEFAULT_N_GRID
+
+    with jax.enable_x64(True):
+        helper = 10.0 ** make_log_age_grid(n_grid=DEFAULT_N_GRID)
+    chex.assert_trees_all_close(jnp.asarray(DEFAULT_AGE_GRID_YR), helper, rtol=1e-14, atol=0.0)
+
+
 def test_deterministic_given_key() -> None:
     _, c1 = sample_sfh_prior("dpl", jax.random.PRNGKey(7), n=5)
     _, c2 = sample_sfh_prior("dpl", jax.random.PRNGKey(7), n=5)
