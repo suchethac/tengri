@@ -23,6 +23,12 @@ def setup_jax(
 ):
     """Configure JAX for the current platform. Call once at startup.
 
+    Also raises ``jax_default_matmul_precision`` to ``"highest"``, unless
+    ``JAX_DEFAULT_MATMUL_PRECISION`` is already set or the live config already
+    holds a value, so float32 matmuls do not silently lower to TF32 on
+    Ampere+ (#2022). Unconditional on ``enable_x64``: the knob only affects
+    float32 matmuls, so it is a no-op for a float64 session.
+
     Parameters
     ----------
     platform : str, optional
@@ -77,6 +83,21 @@ def setup_jax(
     import jax
 
     jax.config.update("jax_enable_x64", enable_x64)
+
+    # Mirror tengri/__init__.py's import-time default (#2022): on Ampere+, XLA
+    # lowers float32 matmuls to TF32 unless told otherwise, at a measured 4.5%
+    # cost on Fisher-matrix parameter error bars, and zero cost elsewhere.
+    # Unconditional on ``enable_x64`` too -- this knob only affects float32
+    # matmuls, so it changes nothing for a float64 session and also covers a
+    # later ad hoc ``with jax.enable_x64(False): ...`` -- and on backend: CPU
+    # has no TF32 path, so this is a no-op there. Respects the user in both
+    # directions: an explicit JAX_DEFAULT_MATMUL_PRECISION in the environment
+    # wins, and so does a value already written to the live config.
+    if (
+        "JAX_DEFAULT_MATMUL_PRECISION" not in os.environ
+        and jax.config.jax_default_matmul_precision is None
+    ):
+        jax.config.update("jax_default_matmul_precision", "highest")
 
 
 def device_info() -> dict:

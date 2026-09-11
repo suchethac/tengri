@@ -262,7 +262,10 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
   - On `'wg00'` (Willis & Graves 2000 screen): use structural keys like `'dust_curve'`, `'geometry'`, `'structure'` instead of a law name.
 - `'law_bc'` — Birth-cloud attenuation law (two-component only). Required with `'law_diff'` when not using shared `'law'`.
 - `'law_diff'` — Diffuse dust attenuation law (two-component only). Required with `'law_bc'` when not using shared `'law'`.
-- `'law_neb'` — Nebular dust law (reddens only birth-cloud continuum).
+- `'law_neb'` — Nebular dust law (the curve for the nebular channel; which screen that channel passes through is `'nebular_screen'`).
+- `'nebular_screen'` — Which dust screen the nebular continuum, the line catalog and the fast-nebular fallback pass through: `'birth_cloud'` (default: the young-star screen, birth cloud + diffuse), `'diffuse'` (the old-star screen) or `'none'` (`'off'` is a synonym). Two-component only; `'single_component'` accepts only `'none'`.
+- `'shock_screen'` — Which screen the shock SED passes through; same values; default `'diffuse'` (AGN-outflow shocks sit outside the birth clouds).
+- `'agn_screen'` — Galaxy screen on AGN light; `'none'` (default) is the only accepted value today, since the AGN component runs after dust and carries its own polar-dust screen.
 - `'dust_curve'` — WG00 dust curve selector (only for `type='wg00'`).
 - `'geometry'` — WG00 geometry ('slab', 'sphere', etc.) (only for `type='wg00'`).
 - `'structure'` — WG00 structure ('clumpy', 'homogeneous', etc.) (only for `type='wg00'`).
@@ -291,6 +294,7 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 
 **Gotchas:**
 - Dust attenuation and dust emission are **two separate peer groups**, not nested. The retired `dust={'attenuation': {...}, 'emission': {...}}` form raises.
+- Each emission source passes through the screen its selector names (`'nebular_screen'`, `'shock_screen'`, `'agn_screen'`); the absorbed nebular and shock power joins the dust energy balance under those screens.
 - Two-component law-pairing rule: if you name one of `'law_bc'`/`'law_diff'`, you must name both (or use a shared `'law'` for both).
 - Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'` — the per-screen spellings raise there, because a single screen has no second screen to name and the value would never reach a curve.
 - **A shape key must be one the selected law reads.** Each law declares exactly the parameters it uses, so `'slope'` under `'noll09'` raises and names `'delta'`, the parameter that law does read; `'Rv'` under `'calzetti'` raises, because that curve is fitted at R_V = 4.05; `'slope'` under `'vw07_bc'` / `'vw07_diff'` raises, because those are the Charlot & Fall birth-cloud and diffuse slopes, not knobs (use `'power_law'` for a free slope). The same rule applies per screen: with `'law_bc': 'power_law', 'law_diff': 'noll09'`, `'slope_bc'` is accepted and `'slope_diff'` is not — and a lone `'slope_bc'` is then complete, because there is no partner to give.
@@ -305,6 +309,7 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - `'spinning_dust'` — Include small spinning dust grains (default: auto from type).
 - `'f_cnm'` — Cold neutral medium fraction (parametrization-dependent).
 - `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`), or `Uniform(...)` to leave it free.
+- `'log_L_ir'` — Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright; leaving it undeclared keeps energy balance. Because it makes `eta_balance` inert, declaring both (with `eta_balance` free or fixed ≠ 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard; an explicit `FREE` on it is refused (declare a real prior instead).
 
 **Minimal example:**
 ```python
@@ -321,7 +326,7 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 **Structural keys:**
 - `'type'` — Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
 - `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'full_catalog'` — Line catalog scope: bool, default backend-dependent.
+- `'full_catalog'` — `cue` only: bool, default `True` (#2239), publishes the full ~138-line Cue-trained catalog; `False` narrows to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
 - `'grid'` — For CLOUDY: grid specification (dict with keys like `'logz'`, `'logU'`, etc.).
 
 **Minimal example:**

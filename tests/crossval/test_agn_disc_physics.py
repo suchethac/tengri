@@ -89,9 +89,9 @@ class TestEddingtonLuminosity:
 
     def test_eddington_10e8_msun(self):
         """L_Edd(10^8 Msun) ≈ 1.26 × 10^46 erg/s (textbook value)."""
-        from tengri.components.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _log10_eddington_luminosity
 
-        l_edd = float(_eddington_luminosity(8.0))
+        l_edd = 10.0 ** float(_log10_eddington_luminosity(8.0))
         expected = 1.26e46
         assert abs(l_edd / expected - 1.0) < 0.02, (
             f"L_Edd(10^8 Msun) should be ~1.26e46 erg/s, got {l_edd:.3e}"
@@ -99,10 +99,10 @@ class TestEddingtonLuminosity:
 
     def test_eddington_scales_linearly_with_mass(self):
         """L_Edd ∝ M_BH: doubling mass doubles Eddington luminosity."""
-        from tengri.components.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _log10_eddington_luminosity
 
-        l7 = float(_eddington_luminosity(7.0))
-        l8 = float(_eddington_luminosity(8.0))
+        l7 = 10.0 ** float(_log10_eddington_luminosity(7.0))
+        l8 = 10.0 ** float(_log10_eddington_luminosity(8.0))
         ratio = l8 / l7
         assert abs(ratio - 10.0) < 0.1, f"L_Edd ratio should be 10.0, got {ratio}"
 

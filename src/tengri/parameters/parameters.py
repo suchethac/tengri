@@ -61,6 +61,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
     resolve_sfh_type,
@@ -72,6 +73,8 @@ from tengri.parameters._builders import (
 )
 from tengri.parameters._dust_keys import (
     OVERRIDE_STEMS,
+    SCREEN_SOURCES,
+    resolve_screen_choices,
     short_to_full,
     validate_shape_requests,
 )
@@ -83,7 +86,19 @@ from tengri.parameters.priors import (
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
 
-__all__ = ["SETTINGS_KEYS", "Parameters"]
+__all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
+
+# CUE_FULL_CATALOG_DEFAULT (#2239) is declared in tengri.config.settings (a
+# leaf module: stdlib imports only) and re-exported here, so existing
+# ``from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT`` call
+# sites (e.g. parameters/groups.py) keep working unchanged. See that
+# module's docstring for the full rationale, including why every other
+# consumer (component.py, component_factory.py, cue.py, sed_model.py) now
+# imports it from tengri.config.settings directly at module level rather
+# than from here: this module sits at the end of a long import chain
+# (_builders -> observation -> components -> ... -> forward ->
+# component_factory -> components.nebular.component) that made a
+# module-level import of this name FROM HERE a real import cycle.
 
 
 def _stable_param_seed(name: str) -> int:
@@ -208,6 +223,17 @@ class Parameters:
         like the youngest stars (bagpipes/FSPS/CIGALE).  Set it to give
         HII-region emission its own birth-cloud curve while still sharing the
         diffuse ISM screen (``dust_law_diff``) with the stars.
+    dust_nebular_screen : str
+        Which screen attenuates the nebular continuum, the line catalog, and
+        the fast-nebular fallback grid (#2234).  One of ``"birth_cloud"``
+        (default), ``"diffuse"``, ``"none"``/``"off"``.
+    dust_shock_screen : str
+        Which screen attenuates the MAPPINGS V shock SED.  One of
+        ``"birth_cloud"``, ``"diffuse"`` (default), ``"none"``/``"off"``.
+    dust_agn_screen : str
+        Which screen attenuates AGN light.  ``"none"`` (default, and today
+        the only accepted value): the AGN component runs after dust and
+        carries its own polar-dust screen.
 
     **Dust Emission Settings**
 
@@ -795,11 +821,16 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
-        # When True, the Cue orchestrator path publishes the full
-        # ~271-species line catalog instead of the default 128
-        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
-        # read via ``pred.lines.get(wavelength)``. See #303.
-        self.cue_full_catalog = kwargs.pop("cue_full_catalog", False)
+        # See CUE_FULL_CATALOG_DEFAULT (imported above, declared in
+        # tengri.config.settings): the one declaration every other spelling
+        # of this default reads or derives from. ``True`` publishes the
+        # full ~138-species Cue-trained line
+        # catalog via ``state.derived["line_waves"/"line_lums"]``, so HeII
+        # 1640, C IV 1549, etc. can be read via ``pred.lines.get(wavelength)``.
+        # ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched subset
+        # (the sole default before #2239, added by #303), kept for cross-code
+        # comparisons.
+        self.cue_full_catalog = kwargs.pop("cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
@@ -952,6 +983,26 @@ class Parameters:
         # the youngest stars (default). Set it to give HII-region emission its
         # own birth-cloud curve while still sharing the diffuse ISM screen.
         self.dust_law_neb = law_neb_explicit
+
+        # Per-source dust-screen choice (#2234 replacement): which screen
+        # attenuates the nebular continuum + line catalog, the shock SED, and
+        # (validated to stay 'none' today) AGN light. One validator for both
+        # surfaces: a grammar `dust_attenuation={'nebular_screen': ...}` build
+        # and this flat-kwarg build are refused for the same reason.
+        # `resolve_screen_choices` returns an entry ONLY for a source the
+        # caller actually named, so an untouched model keeps the per-source
+        # default (see `_SCREEN_DEFAULTS`) without that default ever being
+        # validated as though it were an explicit (and possibly refused)
+        # request.
+        _screen_given = {
+            source: kwargs.pop(f"dust_{source}_screen", None) for source in SCREEN_SOURCES
+        }
+        _screen_choices = resolve_screen_choices(
+            _screen_given, dust_model=self.dust_model, surface="flat"
+        )
+        self.dust_nebular_screen = _screen_choices.get("nebular", "birth_cloud")
+        self.dust_shock_screen = _screen_choices.get("shock", "diffuse")
+        self.dust_agn_screen = _screen_choices.get("agn", "none")
 
         # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...,
         # 'neb': {...}}. Empty -> both stellar components share the global
@@ -1242,6 +1293,23 @@ class Parameters:
             "be the LARGER number. The names read backwards on purpose (they are "
             "chronological, the axis is lookback), which is exactly why this is easy "
             "to invert by accident",
+        ),
+        (
+            "sfh_dpl_lookback_age_gyr",
+            "sfh_dpl_lookback_end_gyr",
+            "star formation cannot stop before it starts: 'age_gyr' is the lookback "
+            "to the OLDER truncation (SF onset) and 'end_gyr' the lookback to the "
+            "YOUNGER truncation (SF cessation), so age_gyr must be the LARGER "
+            "number, same convention as sfh_const_start_gyr/sfh_const_end_gyr "
+            "(#2247)",
+        ),
+        (
+            "sfh_trunc_exp_age_gyr",
+            "sfh_trunc_exp_end_gyr",
+            "star formation cannot stop before it starts: 'age_gyr' is the lookback "
+            "time of formation (SF onset) and 'end_gyr' the lookback at which SF "
+            "ceases, so age_gyr must be the LARGER number, same convention as "
+            "sfh_const_start_gyr/sfh_const_end_gyr (#2247)",
         ),
     )
 
@@ -2286,6 +2354,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_law_bc": content("birth cloud dust law determines parameters"),
     "dust_law_diff": content("diffuse dust law determines parameters"),
     "dust_law_neb": content("nebular dust law determines parameters"),
+    "dust_nebular_screen": content("which screen the nebular light passes through (#2234)"),
+    "dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
+    "dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),

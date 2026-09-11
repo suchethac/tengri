@@ -112,14 +112,17 @@ from tengri.config.exceptions import (
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters._dust_keys import (
     OVERRIDE_STEMS,
+    SCREEN_SOURCES,
     SCREENS,
     full_to_short,
     normalize_dust_group_keys,
     per_screen_keys,
+    resolve_screen_choices,
+    screen_keys,
     short_to_full,
     validate_shape_requests,
 )
-from tengri.parameters.parameters import Parameters
+from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
 from tengri.parameters.sentinels import (
     DEFAULT,
@@ -3060,8 +3063,31 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     configuration and law selections. Preserves the law validation rules
     from PR #1984: law XOR (law_bc AND law_diff); single_component takes
     only law; wg00 takes none.
+
+    Also resolves and validates ``nebular_screen`` / ``shock_screen`` /
+    ``agn_screen`` (#2234 replacement) via
+    ``tengri.parameters._dust_keys.resolve_screen_choices``, the same
+    validator :meth:`Parameters._init_dust_config` calls for the flat
+    surface.
     """
     dust_type = dust_atten_dict.get("type", "two_component")
+
+    # Per-source dust-screen choice (#2234 replacement): resolved and
+    # validated BEFORE any early return below, so every dust type (including
+    # 'off'/'wg00', which return early just below/further down) applies the
+    # same refusal rules as 'two_component'. One validator for both surfaces
+    # (mirrors _init_dust_config's flat-kwarg call to the same function):
+    # only 'two_component' ever reads the resolved values (component_factory
+    # passes them into DustSEDComponentConfig), but the validation itself is
+    # not conditioned on reaching that point.
+    _screen_given = {source: dust_atten_dict.get(f"{source}_screen") for source in SCREEN_SOURCES}
+    _screen_choices = resolve_screen_choices(
+        _screen_given,
+        dust_model=("off" if dust_type in ("none", "off") else dust_type),
+        surface="grammar",
+    )
+    for _source, _choice in _screen_choices.items():
+        result[f"dust_{_source}_screen"] = _choice
 
     # 'none'/'off' disable the dust block entirely; parity with neb/agn/radio/
     # xray/igm/shock, all of which accept type='none' (and the generic grammar
@@ -3608,11 +3634,14 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular_ssp"] = True
     elif neb_type == "cue":
         result["nebular_cue"] = True
-        # #303: opt into the full Cue catalog (~271 species) instead
-        # of the default 128 CLOUDY/FSPS subset so users can read
-        # HeII 1640, HeI 10830, etc. via pred.lines.get(wavelength).
-        if neb_dict.get("full_catalog", False):
-            result["cue_full_catalog"] = True
+        # cue's default catalog is the full ~138-line set (#2239); pass only
+        # an explicit override, mirroring the mappings model/density below:
+        # constructor defaults (``Parameters.__init__``) are the single
+        # source of truth. ``full_catalog: False`` narrows to the legacy
+        # 128-line CLOUDY/FSPS-matched subset (the default before #2239,
+        # added by #303) for cross-code comparisons.
+        if "full_catalog" in neb_dict:
+            result["cue_full_catalog"] = bool(neb_dict["full_catalog"])
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -4159,10 +4188,28 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # Include LyC in the dust energy-balance integral (FSPS/Prospector
             # parity) vs the canonical LyC-masked L_absorbed (#922/#961).
             "eb_include_lyc",
+            # Per-source dust-screen choice (#2234 replacement):
+            # nebular_screen / shock_screen / agn_screen. Derived from
+            # screen_keys() in _dust_keys.py -- the single home of this list
+            # -- rather than hand-listed here.
+            *screen_keys(),
         }
     ),
     "dust_emission": frozenset(
-        {"type", "*", "all_params", "spinning_dust", "f_cnm", "eta_balance"}
+        {
+            "type",
+            "*",
+            "all_params",
+            "spinning_dust",
+            "f_cnm",
+            "eta_balance",
+            # Total dust IR budget override (dust_log_L_ir <-> 'log_L_ir'):
+            # a group-level knob read by the attenuation component, not by any
+            # one emission engine's predict(), so (like 'eta_balance') it must
+            # be accepted whichever type is selected rather than scoped to one
+            # engine's own wildcard.
+            "log_L_ir",
+        }
     ),
     "neb": frozenset({"type", "*", "all_params", "full_catalog", "grid"}),
     "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
@@ -4279,6 +4326,15 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("dust_curve", "dust_wg00_curve", "mw", only_types=("wg00",)),
         _Structural("geometry", "dust_wg00_geometry", "shell", only_types=("wg00",)),
         _Structural("structure", "dust_wg00_structure", "homogeneous", only_types=("wg00",)),
+        # Per-source dust-screen choice (#2234 replacement). Two-component
+        # only: resolve_screen_choices refuses the keys outright on wg00/off,
+        # and constrains single_component to a no-op value, so only a
+        # two_component spec's non-default value is ever worth emitting.
+        _Structural(
+            "nebular_screen", "dust_nebular_screen", "birth_cloud", only_types=("two_component",)
+        ),
+        _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
+        _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
         # Per-component law-parameter overrides (slope/bump_strength/delta/Rv x
         # bc/diff/neb), the Lyman flags and the law keys are emitted by
         # _add_structural_settings / _emit_declared_structural, not by this table.
@@ -4293,10 +4349,13 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
         # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
         # so it has no attribute for this table to target; it is covered by the
-        # test's hand_written allowlist instead.
+        # test's hand_written allowlist instead. log_L_ir (dust_log_L_ir) is the
+        # same case (#2187-series total-IR-budget override).
     ),
     "neb": (
-        _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),
+        _Structural(
+            "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
+        ),
         _Structural(
             "grid",
             "cloudy_grid_path",

@@ -44,6 +44,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
+
 __all__ = [
     "PROPERTY_REGISTRY",
     "Property",
@@ -294,6 +296,208 @@ def line_property_names() -> frozenset[str]:
     )
 
 
+def _headline_line_target_waves(name: str):
+    """The :data:`~tengri.utils.sed_quantities.KEY_LINES` wavelengths a line
+    property depends on, if any.
+
+    Parameters
+    ----------
+    name : str
+        A property name from the ``lines`` group.
+
+    Returns
+    -------
+    tuple of float or None
+        Rest-frame target wavelengths [Angstrom], read from ``KEY_LINES``
+        under ``name`` itself or, for a log companion, under ``name`` with
+        its ``log_`` prefix stripped. ``None`` for a property this check does
+        not cover -- a ratio diagnostic (``bpt_nii``, ``o32``, ...) combines
+        several ``KEY_LINES`` entries rather than owning one wavelength, so
+        it is left to the coarser catalog-publishes-nothing check above.
+    """
+    from tengri.utils.sed_quantities import KEY_LINES
+
+    key = name[4:] if name.startswith("log_") else name
+    return KEY_LINES.get(key)
+
+
+def _published_line_wavelengths_static(model, backend):
+    """The catalog wavelengths ``backend`` publishes, read from a source that
+    can never be a JAX tracer.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model being queried; only used to resolve ``cue_full_catalog``
+        for :class:`~tengri.components.nebular.cue.CueBackend`, since that
+        backend's catalog choice is per-call, not stored on the backend.
+    backend : object
+        The active nebular backend.
+
+    Returns
+    -------
+    ndarray or None
+        Rest-frame vacuum wavelengths [Angstrom], plain ``numpy`` -- the
+        same array :class:`~tengri.components.nebular.component.NebularSEDComponent`
+        publishes to ``state.derived["line_waves"]``, bit-for-bit (measured:
+        ``assert_allclose(rtol=1e-12, atol=0.0)`` over both the default and
+        the legacy-subset cue catalog, see the #2239 regression test). ``None``
+        when no static source is known for this backend (skip, rather than
+        guess).
+
+    Notes
+    -----
+    **Trace-safe by construction, not by widening an exception clause.**
+    Every attribute read here (``CueBackend.published_line_wavelengths``;
+    each grid backend's ``grid.line_wavelengths``) is loaded once at backend
+    construction from a weights/grid file and is never a function of any
+    traced parameter. That alone is not sufficient, though: any
+    ``jax.numpy`` primitive invoked while *some* ``jax.jit`` trace is active
+    anywhere on the call stack returns a tracer regardless of whether its
+    own operands are literal or closed-over constants -- unlike this
+    function's data, tracing is a property of the ambient call context, not
+    of an individual value's provenance (an earlier version of this seam
+    got this backwards: it called
+    ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``
+    with its default ``xp=jax.numpy``, which raised
+    ``TracerArrayConversionError`` whenever a caller wrapped
+    ``model.predict_properties`` itself in ``jax.jit``, even though ``raw``
+    was always a concrete numpy array).
+    This function instead calls that conversion with ``xp=numpy`` explicitly,
+    which never invokes a JAX primitive at all, so the result stays concrete
+    regardless of any ``jax.jit``/``jax.vmap`` trace active around this call.
+    That is a stronger guarantee than "catch the right tracer-conversion
+    exception": no such exception can be raised here, so this method needs
+    (and has) no ``try``/``except``.
+
+    Generalizes across catalog-publishing backends by dispatch on what each
+    one already exposes, rather than one shared attribute path: cue's
+    subset selection is per-call state (:meth:`CueBackend.published_line_wavelengths`
+    resolves it the same way :meth:`CueBackend._forward_lines` does, sharing
+    its index arrays rather than recomputing the selection); CloudyGrid,
+    CB19 and both MAPPINGS backends carry no subset concept at all, so their
+    already-existing ``grid.line_wavelengths`` is read directly. Either way
+    the raw catalog is each backend's native frame (air, for cue's upstream
+    ``.npy`` -- see
+    ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``),
+    not yet the vacuum frame ``state.derived["line_waves"]`` holds; this
+    function applies the exact same conversion
+    :class:`~tengri.components.nebular.component.NebularSEDComponent` applies
+    before publishing (#2239's I5: comparing an unconverted catalog against
+    a vacuum ``KEY_LINES`` target shrank every optical headline line's
+    margin from the true ~0.1 A to ~1.9 A against the 5 A tolerance, close
+    enough to risk a false warning or a missed one).
+    """
+    import numpy as np
+
+    from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
+
+    if hasattr(backend, "published_line_wavelengths"):
+        cloudyfsps_only = not bool(
+            getattr(getattr(model, "spec", None), "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+        )
+        raw = backend.published_line_wavelengths(cloudyfsps_only=cloudyfsps_only)
+    else:
+        grid = getattr(backend, "grid", None)
+        raw = getattr(grid, "line_wavelengths", None)
+        if raw is None:
+            return None
+    return np.asarray(nebular_line_waves_to_vacuum(raw, xp=np))
+
+
+def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
+    """Warn when a requested headline line has no catalog match within tolerance.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model being queried; passed through to
+        :func:`_published_line_wavelengths_static` and used to read
+        ``model.spec.cue_full_catalog`` for the remedy text.
+    backend : object
+        The active nebular backend. Already confirmed (by the caller) to
+        publish a per-line catalog at all -- this checks whether it carries
+        the *specific* requested line.
+    requested : set of str
+        Property names from the ``lines`` group the caller asked for.
+
+    Notes
+    -----
+    **JIT/vmap-safe unconditionally**: reads only
+    :func:`_published_line_wavelengths_static`, never ``state``, so this
+    function cannot see a JAX tracer no matter what transform surrounds the
+    caller. If a backend has no known static source, the helper returns
+    ``None`` and this is a no-op for that backend (documented there, not
+    guessed here).
+
+    The tolerance check (``min over targets of nearest distance > TOL``) is
+    exactly :func:`~tengri.utils.sed_quantities.extract_line_luminosity`'s
+    ``any_match`` false condition (``sed_quantities._LINE_MATCH_TOL_AA``,
+    the same ``<=`` on both sides), so this warns exactly when (and only
+    when) that NaN is about to happen -- true only because
+    :func:`_published_line_wavelengths_static` returns the vacuum-frame
+    array ``extract_line_luminosity`` actually compares against (#2239's I5:
+    comparing the backend's native, sometimes-air frame against a vacuum
+    ``KEY_LINES`` target moved every optical headline line's margin from
+    ~0.1 A to ~1.9 A against the 5 A tolerance, close enough to risk a
+    false warning or a missed one). An empty published catalog (size 0)
+    is the same shape as "no catalog line within tolerance" for every
+    requested name, so it takes the same warning rather than passing
+    through silently.
+    """
+    import warnings
+
+    import numpy as np
+
+    from tengri.config.exceptions import warn_measured
+    from tengri.utils.sed_quantities import _LINE_MATCH_TOL_AA
+
+    line_waves = _published_line_wavelengths_static(model, backend)
+    if line_waves is None:
+        return
+
+    backend_name = type(backend).__name__
+    is_cue_subset = backend_name == "CueBackend" and not bool(
+        getattr(getattr(model, "spec", None), "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+    )
+    remedy = (
+        "Rebuild the model with neb={'type': 'cue', 'full_catalog': True} "
+        "to reach the full catalog."
+        if is_cue_subset
+        else "Select a different nebular backend or grid that carries this line."
+    )
+
+    for name in sorted(requested):
+        target_waves = _headline_line_target_waves(name)
+        if target_waves is None:
+            continue
+        if line_waves.size == 0:
+            warnings.warn(
+                f"{name!r}: the {backend_name!r} catalog is empty (no lines "
+                f"published), so {name!r} will be NaN. {remedy} See #2239.",
+                UserWarning,
+                stacklevel=4,
+            )
+            continue
+        offsets = [float(np.min(np.abs(line_waves - tw))) for tw in target_waves]
+        best_offset = min(offsets)
+        if best_offset <= _LINE_MATCH_TOL_AA:
+            continue
+        nearest_target = target_waves[offsets.index(best_offset)]
+        nearest_line_aa = float(line_waves[int(np.argmin(np.abs(line_waves - nearest_target)))])
+        warn_measured(
+            f"{name!r} has no catalog line within {_LINE_MATCH_TOL_AA:.0f} "
+            f"Angstrom of its target wavelength on this {backend_name!r} "
+            f"catalog (nearest catalog line {nearest_line_aa:.2f} Å, "
+            f"{best_offset:.1f} Å away), so {name!r} will be NaN. "
+            f"{remedy} See #2239.",
+            UserWarning,
+            stacklevel=4,
+            nearest_catalog_line_aa=nearest_line_aa,
+            offset_aa=best_offset,
+        )
+
+
 def warn_if_lines_are_unavailable(model, names) -> None:
     """Warn when a requested line property can only come back NaN.
 
@@ -313,6 +517,15 @@ def warn_if_lines_are_unavailable(model, names) -> None:
     jit/vmap surface for derived quantities, returned the same NaN in silence.
     One helper, called by all three, is what keeps them from drifting again.
 
+    A backend can publish *a* catalog and still not carry *this* line --
+    cue's legacy 128-line subset has no C IV entry (#2239). That is a
+    narrower, per-line question than "does this backend publish lines at
+    all", so it is checked separately, by
+    :func:`_warn_if_headline_line_uncovered`, which reads only static
+    (never-traced) backend state -- see
+    :func:`_published_line_wavelengths_static` -- so it is always safe to
+    call, including at trace time under ``jax.jit``/``jax.vmap``.
+
     Fires at trace time under ``jax.jit``, like the accessor's warning.
     """
     import warnings
@@ -321,16 +534,17 @@ def warn_if_lines_are_unavailable(model, names) -> None:
     if not requested:
         return
     backend = getattr(model, "_nebular_backend", None)
-    if backend is not None and hasattr(backend, "predict_nebular_line_luminosities"):
+    if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
+        backend_name = type(backend).__name__ if backend is not None else "None"
+        warnings.warn(
+            f"Nebular backend {backend_name!r} does not publish a per-line "
+            f"luminosity catalog, so {sorted(requested)[:4]} and the other "
+            f"'lines' properties will be NaN. To get discrete line luminosities, "
+            f"rebuild the model with neb={{'type': 'cue'}}, 'cloudy', or 'cb19' "
+            f"(each requires a compatible SSP and any backing grid; see "
+            f"tengri.list_nebular_backends() for details). See #361.",
+            UserWarning,
+            stacklevel=3,
+        )
         return
-    backend_name = type(backend).__name__ if backend is not None else "None"
-    warnings.warn(
-        f"Nebular backend {backend_name!r} does not publish a per-line "
-        f"luminosity catalog, so {sorted(requested)[:4]} and the other "
-        f"'lines' properties will be NaN. To get discrete line luminosities, "
-        f"rebuild the model with neb={{'type': 'cue'}}, 'cloudy', or 'cb19' "
-        f"(each requires a compatible SSP and any backing grid; see "
-        f"tengri.list_nebular_backends() for details). See #361.",
-        UserWarning,
-        stacklevel=3,
-    )
+    _warn_if_headline_line_uncovered(model, backend, requested)

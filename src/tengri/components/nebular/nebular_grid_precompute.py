@@ -346,6 +346,28 @@ def _log_nion_of_state(state) -> jnp.ndarray:
     return logsumexp(log_nion * ln10) / ln10
 
 
+def _log_nion_of_state(state) -> jnp.ndarray:
+    """log10 Q_H [dex re photons/s], never materializing the ~1e53 linear value.
+
+    Q_H overflows float32 (max 3.4e38), so the stellar component publishes
+    ``log_nion`` alongside ``nion`` for exactly this reason. Falls back to the
+    log of the linear publish for a state that carries only the latter.
+    """
+    log_nion = state.derived.get("log_nion")
+    if log_nion is None:
+        return jnp.log10(_nion_of_state(state))
+    log_nion = jnp.asarray(log_nion)
+    if not jnp.ndim(log_nion):
+        return log_nion
+    # ``_nion_of_state`` sums a multi-component Q_H; the log-domain sum is
+    # logsumexp, not ``log10(sum(10**x))``, whose intermediate is the overflow
+    # this helper exists to avoid.
+    from jax.scipy.special import logsumexp
+
+    ln10 = jnp.log(jnp.asarray(10.0, dtype=log_nion.dtype))
+    return logsumexp(log_nion * ln10) / ln10
+
+
 def _refuse_tabulated_metallicity(model):
     """Refuse a tabulated metallicity, whose LUT axis cannot exist (#1718).
 
@@ -748,7 +770,13 @@ def precompute_nebular_grid(
         rest_all = None
 
     # Sanity: the vmapped first node must reproduce the eager reference forward.
-    if not bool(jnp.allclose(line_all[0], ref_line, rtol=1e-5, atol=0.0)):
+    # The tolerance follows the working dtype: 1e-5 is the historical float64
+    # bar and sits above float32's accumulated rounding on CPU, but a CUDA
+    # float32 build differs from the eager forward by up to 1.2e-5 (measured,
+    # reduction order), so float32 gets 256 ulp (3.1e-5). A vmap/tracer
+    # regression is orders of magnitude away from either.
+    parity_rtol = max(1e-5, 256.0 * float(jnp.finfo(line_all.dtype).eps))
+    if not bool(jnp.allclose(line_all[0], ref_line, rtol=parity_rtol, atol=0.0)):
         raise RuntimeError(
             "nebular fast grid: vmapped build disagrees with the eager reference "
             "forward at the first node: a tracer/vmap regression, not a rounding gap."

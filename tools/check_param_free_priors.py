@@ -113,6 +113,12 @@ REFUSED: dict[str, tuple[str, str]] = {
     # what made them declarable, which is the general remedy this ground was
     # pointing at (same shape as the "inert" scoping fix noted above).
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
+    "dust_log_L_ir": (
+        "target-dependent",
+        "absolute (log) luminosity; no galaxy-independent interval -- declaring "
+        "it at all is itself the energy-balance opt-out (#2187-series), so a "
+        "wildcard must never reach it and silently decouple the IR budget",
+    ),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
         "not-continuous",
@@ -120,20 +126,22 @@ REFUSED: dict[str, tuple[str, str]] = {
     ),
     "noise_dof": ("not-continuous", "0 is a sentinel selecting the Gaussian likelihood"),
     "dla_z": ("not-continuous", "0 is a sentinel meaning 'use the source redshift'"),
-    "sfh_const_end_gyr": ("not-continuous", "ordering constraint with sfh_const_start_gyr"),
+    "sfh_const_end_gyr": (
+        "not-continuous",
+        "ordering constraint with sfh_const_start_gyr; codified in "
+        "Parameters._ORDERED_PAIRS (#2247)",
+    ),
     "sfh_dpl_lookback_end_gyr": (
         "not-continuous",
-        "ordering constraint with sfh_dpl_lookback_age_gyr; overlapping supports are refused",
+        "ordering constraint with sfh_dpl_lookback_age_gyr; overlapping supports are "
+        "refused; codified in Parameters._ORDERED_PAIRS (#2247)",
     ),
     "sfh_trunc_exp_end_gyr": (
         "not-continuous",
-        "ordering constraint with sfh_trunc_exp_age_gyr; overlapping supports are refused",
+        "ordering constraint with sfh_trunc_exp_age_gyr; overlapping supports are "
+        "refused; codified in Parameters._ORDERED_PAIRS (#2247)",
     ),
     # ── explicit-only: real freedom, but not one a default fit can constrain ──
-    "met_logzsol_scatter": (
-        "explicit-only",
-        "MDF second moment; declaring one added it to 6 of 10 shipped recipes",
-    ),
     "dust_frac_agn": (
         "explicit-only",
         "real range [0, 0.99); the QSO-carrying grid ships (dale2014_cigale, "
@@ -144,11 +152,13 @@ REFUSED: dict[str, tuple[str, str]] = {
     ),
     "dust_f_obscuration": (
         "explicit-only",
-        "achromatic transmission floor, only partially/regime-dependently "
-        "degenerate with tau_diff (unverified in-repo -- the old claim "
-        "overstated it); withheld because every in-repo wildcard call site "
-        "means {tau_bc, tau_diff}; explicit Uniform(0.0, 0.5) works (worked "
-        "example in parameters.py)",
+        "achromatic transmission floor: persistently high directional "
+        "degeneracy with dust_tau_diff (cos -0.92 to -0.97 thin/fiducial/"
+        "thick) whose Fisher conditioning worsens toward dustier screens "
+        "(cond# ~20 -> 61 -> 650 at 5% flux errors on a 14-band UV-MIR "
+        "baseline; measured 2026-09-11, issue #2246); withheld because "
+        "every in-repo wildcard call site means {tau_bc, tau_diff}; "
+        "explicit Uniform(0.0, 0.5) works (worked example in parameters.py)",
     ),
     # ── no-evidence: revisit these first ──
     "agn_grahsp_a_bc": (

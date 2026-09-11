@@ -129,11 +129,18 @@ The `DIG` backend mixes HII-region emission at ionization parameter $\log U_{\rm
 
 The `Shock` backend adds emission lines from radiative shocks using the MAPPINGS V 3MdBs grid (Sutherland and Dopita 2017; Alarie and Morisset 2019). Shock emission is relevant for galaxies with AGN-driven outflows, post-starburst superwinds, and mergers, where fast shocks ($v_s \gtrsim 150$ km s$^{-1}$) produce extreme optical line ratios above the maximum-starburst demarcation on BPT diagrams (Kewley et al. 2001; Kewley et al. 2019).
 
-The 3MdBs grid spans $v_s \in [100, 1000]$ km s$^{-1}$, eight magnetic field strengths, five abundance patterns, and six pre-shock densities (Allen et al. 2008; Alarie and Morisset 2019). Shock velocity is interpolated continuously (differentiable); discrete parameters are snapped to the nearest grid point. The absolute scale is set by the shock fraction of total H$\alpha$; all other line luminosities follow from the MAPPINGS V ratios. Shock emission receives only diffuse ISM attenuation (not the birth-cloud term): $$L_{\rm shock}^{\rm att}(\lambda) = L_{\rm shock}(\lambda)\;
-    \exp\!\bigl(-\tau_{\rm diff}\,k_{\rm diff}(\lambda)\bigr).
+The 3MdBs grid spans $v_s \in [100, 1000]$ km s$^{-1}$, eight magnetic field strengths, five abundance patterns, and six pre-shock densities (Allen et al. 2008; Alarie and Morisset 2019). Shock velocity is interpolated continuously (differentiable); discrete parameters are snapped to the nearest grid point. The absolute scale is set by the shock fraction of total H$\alpha$; all other line luminosities follow from the MAPPINGS V ratios.
 
-$$ (eq-shock-attenuation)
- Table {ref}`1 <tab-shock-params>` lists the registered parameters.
+Shock emission is attenuated by whichever of the two-component dust screens the `dust_attenuation` group's `shock_screen` selector names, mirroring the equivalent choice for the nebular continuum and line catalog (`nebular_screen`). The selector accepts three values:
+
+- `"diffuse"` (**default**): the diffuse-ISM screen only,
+  $$L_{\rm shock}^{\rm att}(\lambda) = L_{\rm shock}(\lambda)\;
+  \exp\!\bigl(-\tau_{\rm diff}\,k_{\rm diff}(\lambda)\bigr).$$ (eq-shock-attenuation)
+  Shocked gas from an AGN-driven outflow (`shock={'norm': 'lhalpha', ...}`) is not, in general, still confined to the compact star-forming birth cloud the young-star screen models, so the diffuse-only form is the default for every shock normalization, including the star-formation-coupled one (`norm='frac'`).
+- `"birth_cloud"`: both screens, $\exp\!\bigl(-(\tau_{\rm bc}\,k_{\rm bc}(\lambda) + \tau_{\rm diff}\,k_{\rm diff}(\lambda))\bigr)$ -- the same young-limit transmission the youngest stars and the nebular continuum receive by default. Appropriate when the shock is known to be embedded in the star-forming birth cloud (e.g. `norm='frac'` in a compact starburst).
+- `"none"` (synonym `"off"`): unattenuated, resolved once at build time.
+
+Table {ref}`1 <tab-shock-params>` lists the registered parameters.
 
 (tab-shock-params)=
 

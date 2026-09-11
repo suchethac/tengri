@@ -28,6 +28,125 @@ from tengri.utils.scale import apply_log10_scale, pow10
 _LOG10_LSUN_ERG = float(_math.log10(_LSUN_ERG))
 _LOG10_H_PLANCK = float(_math.log10(_H_PLANCK))
 
+# ── Vacuum wavelength contract ─────────────────────────────────────
+
+#: Balmer air/vacuum pairs [Angstrom] used to vote on whether a published
+#: catalog is air or vacuum. Vacuum and air wavelengths differ by
+#: ~1.3-1.8 A in the optical, so a multi-line consensus is robust to a
+#: single near-coincidence or floating-point noise around any one probe
+#: value. Halpha 6564.61 v / 6562.80 a, Hbeta 4862.68 v / 4861.33 a,
+#: Hgamma 4341.68 v / 4340.47 a.
+_BALMER_AIR_VAC: tuple[tuple[float, float], ...] = (
+    (6562.80, 6564.61),
+    (4861.33, 4862.68),
+    (4340.47, 4341.68),
+)
+
+
+def nebular_line_waves_to_vacuum(line_waves, *, xp=jnp):
+    r"""Apply tengri's vacuum-wavelength contract to a nebular line catalog.
+
+    Parameters
+    ----------
+    line_waves : array_like, shape (n_lines,)
+        Rest-frame line wavelengths [Angstrom], as published by a
+        photoionization backend (Cue, CloudyGrid, CB19 or MAPPINGS).
+    xp : module, optional
+        Array namespace to compute with: ``jax.numpy`` (default) or
+        ``numpy``. Both expose the same primitives this function needs
+        (``asarray``, ``argmin``, ``abs``, ``where``, arithmetic, and the
+        bitwise ``&``/``~`` this function uses for boolean masks), so the
+        formula is written once; the caller picks the module. See the
+        **Trace-safety** note below for why the choice matters and is not
+        merely stylistic.
+
+    Returns
+    -------
+    ndarray, shape (n_lines,)
+        Rest-frame vacuum wavelengths [Angstrom]. Unchanged if the catalog
+        already looks like vacuum.
+
+    Notes
+    -----
+    CLAUDE.md contract: vacuum wavelengths throughout. Upstream Cue
+    (yi-jia-li/cue) ships TWO disagreeing files: ``lineList_wav.npy`` (what
+    the network is keyed against: **air** in optical, CLOUDY-default
+    convention) and ``cue_emlines_info.dat`` (newer parallel metadata:
+    vacuum, but in a *different ordering* that does not match the network
+    indices). The Li+2024 paper Section 2 states vacuum intent but the
+    ``.npy`` never got regenerated. CloudyGrid, CB19 and MAPPINGS catalogs
+    are checked by the same Balmer-series vote rather than assumed vacuum,
+    since a mis-declared upstream grid is exactly the failure mode this
+    contract exists for.
+
+    Idempotency: the Balmer-series vote (:data:`_BALMER_AIR_VAC`) means a
+    catalog that already reports vacuum wavelengths is detected as such and
+    passed through unchanged; applying this twice is a no-op.
+
+    **Trace-safety, and why ``xp`` exists**: this is the ONE implementation
+    of the formula -- both :class:`NebularSEDComponent.apply` (publishing
+    ``state.derived["line_waves"]``) and
+    ``tengri.forward.properties._published_line_wavelengths_static``
+    (the #2239 warning seam's static, never-traced accessor) call it rather
+    than each keeping its own copy of the Edlén coefficients. But the two
+    callers need opposite guarantees from the *array library*, not just the
+    math: the component's ``line_waves`` can genuinely be a JAX tracer
+    (threaded through ``template_data`` under a jitted sampler), so it must
+    call with ``xp=jax.numpy`` (the default) to stay traceable. The seam's
+    ``line_waves`` is always a concrete, closed-over backend constant, never
+    derived from ``params`` -- but *any* ``jax.numpy`` primitive invoked
+    while some enclosing ``jax.jit`` trace is active (e.g. because the user
+    wrapped ``model.predict_properties`` in ``jax.jit``) is swept into that
+    trace and returns a tracer regardless of its own operands being
+    constant; only ``numpy`` primitives are exempt, because JAX's tracing
+    only intercepts JAX's own primitive dispatch. So the seam must call with
+    ``xp=numpy`` to stay concrete under an ambient trace it does not control
+    and did not create.
+
+    .. math::
+        \sigma = 10^4 / \lambda_{\rm air}
+
+        n = 1 + 6.4328 \times 10^{-5}
+              + \frac{2.94981 \times 10^{-2}}{146 - \sigma^2}
+              + \frac{2.5540 \times 10^{-4}}{41 - \sigma^2}
+
+        \lambda_{\rm vac} = n \, \lambda_{\rm air}
+
+    Edlen (1953) formula for standard air (15 C, 760 mmHg), applied only
+    within its 2000-10000 Angstrom validity window; the same conversion
+    :func:`tengri.utils.conversions.air_to_vacuum` implements (that
+    numpy-only function does not include the Balmer-vote gate or the
+    optical-window mask, so it is not called here directly; the coefficients
+    agree).
+
+    References
+    ----------
+    .. [1] Edlen, B. (1953), "The Dispersion of Standard Air",
+        J. Opt. Soc. Am., 43(5), 339.
+    .. [2] Li, Y.-J. et al. (2024), "Cue: A Fast and Flexible Photoionization
+        Emulator for Modeling Nebular Emission Powered by Almost Any
+        Ionizing Source", ApJ, 986, 9. arXiv:2405.04598.
+        https://doi.org/10.3847/1538-4357/adcab4
+    """
+    line_waves = xp.asarray(line_waves)
+    air_votes = xp.asarray(0.0)
+    vac_votes = xp.asarray(0.0)
+    for air_w, vac_w in _BALMER_AIR_VAC:
+        mid = 0.5 * (air_w + vac_w)
+        probe = line_waves[xp.argmin(xp.abs(line_waves - mid))]
+        in_band = (probe > air_w - 1.0) & (probe < vac_w + 1.0)
+        is_air = xp.abs(probe - air_w) < xp.abs(probe - vac_w)
+        air_votes = air_votes + xp.where(in_band & is_air, 1.0, 0.0)
+        vac_votes = vac_votes + xp.where(in_band & ~is_air, 1.0, 0.0)
+    looks_air = (air_votes >= 2.0) & (air_votes > vac_votes)
+    # Edlen (1953) air->vacuum.
+    sigma = 1e4 / line_waves
+    n_refr = 1.0 + 6.4328e-5 + 2.94981e-2 / (146.0 - sigma**2) + 2.5540e-4 / (41.0 - sigma**2)
+    in_optical = (line_waves >= 2000.0) & (line_waves <= 1.0e4)
+    converted = xp.where(in_optical, line_waves * n_refr, line_waves)
+    return xp.where(looks_air, converted, line_waves)
+
+
 # ── Line placement ────────────────────────────────────────────────
 
 

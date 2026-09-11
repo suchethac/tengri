@@ -7,10 +7,24 @@ Regression test for #1434: shock dust attenuation was inconsistent between paths
 - Precomp path (predict_via_precomp): applied a_diff·a_bc
 - Measurement: 37.7% photometric disagreement at tau_bc=2/z=1 on FSPS SSP + SDSS gri
 
-Fix (#1434): Unified the seam at two_component.py lines 819-820. Both paths now
-apply the same dust attenuation (young-limit screen: tau_bc·k_bc + tau_diff·k_diff).
-Dust component publishes shock_phot_lnu_attenuated_precomp; precomp path reads it.
-Exact path applies attenuation in two_component.apply(), step 2b.
+Fix (#1434): Unified the seam at two_component.py lines 819-820. Both paths apply
+the SAME dust attenuation -- both derive from ``sed_shock_attenuated``, computed
+once in ``DustSEDComponent.apply()`` step 2d and reused by both the exact SED
+sum and the precomp band-projection, so they cannot drift relative to each
+other regardless of which screen is selected.
+
+#2234 (a replacement) made the screen a per-source choice
+(``dust_attenuation={'shock_screen': ...}``) and changed the DEFAULT from the
+unconditional young-limit form (``tau_bc·k_bc + tau_diff·k_diff``, this test's
+original fixture) to diffuse-only (``tau_diff·k_diff``): an AGN-outflow shock is
+not, in general, still inside the birth cloud the young-star screen models.
+Measured on this fixture (tau_bc=2, tau_diff=1, z=0.5, SDSS gri): the exact-vs-
+precomp gap is unaffected by the default flip (both screens agree to well
+under this test's 5% bound), but the shock contribution to photometry itself
+grows by roughly 8x-33x band to band, because dropping the tau_bc·k_bc term
+removes the dominant attenuation factor. Dust component publishes
+shock_phot_lnu_attenuated_precomp; precomp path reads it. Exact path applies
+attenuation in two_component.apply(), step 2d.
 """
 
 import numpy as np
@@ -32,7 +46,13 @@ class TestShockAttenuationEquivalence:
         (delta = phot_with_shock - phot_without_shock) within the precomp
         dust-channel accuracy (stellar sub-band quadrature floor ~0.6%).
 
-        Measured pre-fix disagreement: 37.7% at tau_bc=2/z=1. Post-fix: <5%.
+        Measured pre-#1434-fix disagreement: 37.7% at tau_bc=2/z=1. Both
+        paths derive from the same ``sed_shock_attenuated`` value regardless
+        of which ``shock_screen`` choice is active (#2234), so re-measuring on
+        this exact fixture today gives agreement to float precision
+        (~1e-12) under BOTH the new default (``"diffuse"``) and the old one
+        (``"birth_cloud"``) -- the 5% bound below is generous headroom, not
+        a tight measurement.
 
         Precondition: shock contribution > noise floor (non-vacuity check—
         verifies shock is resolved and contributes measurably to photometry).
@@ -122,8 +142,10 @@ class TestShockAttenuationEquivalence:
         # Assert: both paths measure the same shock effect within dust-channel accuracy.
         # Measured stellar sub-band floor: ~0.6% on FSPS through SDSS gri.
         # Bound set at 5% to account for shock's line-dominated spectrum (worse
-        # than stellar continuum under band-averaging). Pre-fix: 37.7% disagreement.
-        # Post-fix: ~3.6%, dominated by filter-level sampling of shock lines.
+        # than stellar continuum under band-averaging). Pre-#1434-fix: 37.7%
+        # disagreement. Post-fix, re-measured under the #2234 diffuse-only default:
+        # ~1.7e-12 (float precision) on this fixture -- both screen choices give
+        # the same near-exact agreement since both paths share one computed value.
         rel_error = np.abs(
             (delta_exact - delta_precomp) / np.maximum(np.abs(delta_exact), noise_floor)
         )

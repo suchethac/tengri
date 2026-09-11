@@ -97,6 +97,32 @@ def test_priors_and_the_wildcard_work_in_the_met_group():
     assert {"met_logzsol_0", "met_logzsol_final"} <= set(freed)
 
 
+def test_delta_wildcard_frees_the_scatter_with_its_declared_interval():
+    """#2245: met_logzsol_scatter carries a free_prior; the delta wildcard reaches it.
+
+    Bounds are read off the resolved distribution, not hardcoded to a
+    constant equal to the declaration: reverting the free_prior back to
+    ``None`` makes ``met_logzsol_scatter`` drop out of ``free_params``
+    entirely, which fails the membership assertion below.
+    """
+    spec = _parse(met={"type": "delta", "all_params": FREE})
+    assert "met_logzsol_scatter" in spec.free_params
+    lo, hi = spec.get_distribution("met_logzsol_scatter").bounds
+    assert (lo, hi) == pytest.approx((0.02, 0.4))
+
+
+def test_explicit_scatter_free_resolves_to_the_declared_prior():
+    """A per-parameter ``FREE`` on ``logzsol_scatter`` must resolve, not refuse.
+
+    Before #2245 this raised ``ParameterError`` (no declared free prior);
+    reverting the declaration restores that raise, which fails this test.
+    """
+    spec = _parse(met={"type": "delta", "logzsol_scatter": FREE})
+    assert "met_logzsol_scatter" in spec.free_params
+    lo, hi = spec.get_distribution("met_logzsol_scatter").bounds
+    assert (lo, hi) == pytest.approx((0.02, 0.4))
+
+
 def test_an_unknown_mode_names_the_valid_ones():
     with pytest.raises(ValueError, match="Unknown metallicity mode") as exc:
         _parse(met={"type": "tabel"})

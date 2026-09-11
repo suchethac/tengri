@@ -2668,7 +2668,7 @@ class StellarSEDComponent:
                     cosmic_age_gyr=t_obs_val,
                 )
 
-        # Lognormal metallicity-distribution-function width (Carnall+2018 §3.2,
+        # Lognormal metallicity-distribution-function width (Carnall+2018 §3.1.2,
         # #506): DSPS's ``*_lognormal_mdf`` / ``*_met_table`` kernels already
         # spread the SSP weights as a Gaussian in log10(Z) of this width about
         # the (per-age) mean metallicity. It is fittable via the optional public
@@ -3854,13 +3854,15 @@ def _l_tir_fn(state, params):
 def _l_dust_absorbed_fn(state, params):
     """Dust-absorbed luminosity [Lsun].
 
-    Prefers the ``log_L_ir`` companion: the linear ``L_absorbed`` is ~3.6e43
-    erg/s and is ``inf`` in float32, while this answer (~9.5e9 Lsun) is
-    comfortably representable there (#1837).
+    Prefers the ``log_L_absorbed`` companion: the linear ``L_absorbed`` is
+    ~3.6e43 erg/s and is ``inf`` in float32, while this answer (~9.5e9 Lsun)
+    is comfortably representable there (#1837). ``log_L_absorbed``, not
+    ``log_L_ir``: the two agree only when ``dust_eta_balance == 1`` and no
+    ``dust_log_L_ir`` override is declared (#1837/#2187-series split).
     """
     from tengri.utils.sed_quantities import derived_luminosity_lsun
 
-    return derived_luminosity_lsun(state.derived, "L_absorbed", "log_L_ir")
+    return derived_luminosity_lsun(state.derived, "L_absorbed", "log_L_absorbed")
 
 
 def _irx_fn(state, params):

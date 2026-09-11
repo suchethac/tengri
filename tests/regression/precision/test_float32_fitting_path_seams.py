@@ -1649,10 +1649,10 @@ def test_the_mass_scale_power_of_two_split_is_exact_in_float64():
     pass on a split that was merely close, which is the claim this test exists to
     refuse.
     """
-    from tengri.observation.line_measurement import _LSUN_EXP2, _LSUN_MANTISSA
+    from tengri.observation.line_measurement import _LSUN_EXP2, _LSUN_MANTISSA, _LSUN_POW2
     from tengri.utils.physics_constants import L_SUN
 
-    assert math.ldexp(_LSUN_MANTISSA, _LSUN_EXP2) == L_SUN, (
+    assert _LSUN_MANTISSA * _LSUN_POW2 == L_SUN, (
         f"the split does not reconstruct L_sun: "
         f"ldexp({_LSUN_MANTISSA!r}, {_LSUN_EXP2}) != {L_SUN!r} ({_where()})"
     )
@@ -1662,8 +1662,11 @@ def test_the_mass_scale_power_of_two_split_is_exact_in_float64():
         # overflowed rather than only on the constant.
         masses = jnp.asarray(np.logspace(4.0, 13.0, 37))
         means = jnp.asarray(np.logspace(-22.0, -10.0, 37))
-        direct = np.asarray((masses * L_SUN) * means)
-        split = np.asarray(jnp.ldexp((masses * _LSUN_MANTISSA) * means, _LSUN_EXP2))
+        # The reference product is formed on the host, in IEEE order, so the equality
+        # below is a statement about the split rather than about the backend's
+        # fusion of the reference. The split runs on the device, as the LUT does.
+        direct = (np.asarray(masses) * L_SUN) * np.asarray(means)
+        split = np.asarray(((masses * _LSUN_MANTISSA) * means) * _LSUN_POW2)
         assert direct.dtype == np.float64, f"this check did not run in float64 ({_where()})"
         assert np.array_equal(direct, split), (
             f"the power-of-two split is not bit-exact in float64: "

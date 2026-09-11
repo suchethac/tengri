@@ -129,6 +129,9 @@ the forward model, and listed oldest first within each group.
   (2023), [arXiv:2112.06830](https://arxiv.org/abs/2112.06830).
 - ProGeny — stellar population spectra generator. Robotham & Bellstedt
   (2025), [arXiv:2410.17697](https://arxiv.org/abs/2410.17697).
+- APOGEE Milky Way disk metallicity distribution functions — the measured
+  MDF widths sourcing the `met_logzsol_scatter` prior interval. Hayden et
+  al. (2015), [arXiv:1503.02110](https://arxiv.org/abs/1503.02110).
 
 ### Initial mass functions
 

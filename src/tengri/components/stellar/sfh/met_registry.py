@@ -156,7 +156,7 @@ _register(
             ),
             "met_logzsol_scatter": MetParamDef(
                 "Lognormal metallicity scatter sigma [dex]; Gaussian-in-log10(Z) "
-                "MDF width about the mean (Carnall+2018 §3.2). sigma -> 0 recovers "
+                "MDF width about the mean (Carnall+2018 §3.1.2). sigma -> 0 recovers "
                 "a single-Z (delta) population.",
                 _always_true,
                 "",
@@ -167,20 +167,49 @@ _register(
                 # it (e.g. ``Uniform(0.0, 0.5)``) to fit the MDF width like
                 # Bagpipes' ``lognorm`` chemical-enrichment mode.
                 Fixed(0.1),
-                # Deliberately NO free_prior (#887), and note what the comment
-                # above is actually saying: "*Free it* ... like Bagpipes'
-                # lognorm mode" is an instruction to the caller, mirroring a
-                # mode Bagpipes gates behind an explicit opt-in. It is not a
-                # request that the wildcard reach it.
+                # free_prior (#887 retired, #2245): [0.02, 0.4] dex brackets the
+                # MW-disc MDF widths Hayden+2015 [1]_ Table 1 measures across its
+                # R x |z| bins (sigma[Fe/H] = 0.17-0.32 dex; solar annulus
+                # midplane 0.20 dex), with headroom on both sides of the
+                # registry default Fixed(0.1) above. The lower bound is
+                # strictly > 0 deliberately: the ``bound_check`` above is
+                # ``_always_true`` (enforces nothing) and DSPS's triweight
+                # kernel divides by sigma, so a wildcard-freed 0.0 would raise
+                # downstream rather than degenerate gracefully. Hearin+2023 and
+                # Carnall+2018 [2]_ stay cited elsewhere for the *mechanism*
+                # only -- neither paper contains an empirically grounded MDF
+                # width, so neither sources this interval.
                 #
-                # Measured: declaring one added this parameter to 6 of the 10
-                # shipped recipes, because ``met_*`` routes into the ``sfh``
-                # group and every recipe frees that block. It is the second
-                # moment of the MDF -- broadband photometry constrains the mean
-                # metallicity weakly and its width barely at all -- so that is a
-                # near-unconstrained dimension in every default fit, returning
-                # the prior and costing warmup. The mean (``met_logzsol``) is
-                # already free; the width stays explicit.
+                # Recipe-pin protocol (#2245): declaring a free_prior activates
+                # ``met_logzsol_scatter`` under any wildcard that reaches it
+                # (e.g. ``met={'all_params': FREE}``). Measured against all ten
+                # shipped recipes, before vs. after this declaration
+                # (``sorted(parse_groups(**recipe()).free_params)``): all ten
+                # are byte-identical -- zero pins needed. Every recipe already
+                # gives metallicity an explicit, non-wildcard disposition: the
+                # six that pass an explicit ``met={'logzsol': FREE, ...}``
+                # block name only ``logzsol``, and an unlisted sibling in a
+                # per-param dict with no ``all_params``/``other_params`` key
+                # stays at its registry ``Fixed`` default regardless of
+                # free_prior; the other four route metallicity through the
+                # ``sfh`` group's own wildcard (no explicit ``met=`` block),
+                # which every one of them already pins at
+                # ``other_params: Fixed(DEFAULT)``. This supersedes an earlier
+                # count of "6 of 10" recorded before ``met`` became its own
+                # top-level group (parallel to ``sfh``) -- that number no
+                # longer reproduces against the current grammar.
+                #
+                # References
+                # ----------
+                # .. [1] M. R. Hayden, J. Bovy, J. A. Holtzman, et al., "Chemical
+                #    Cartography with APOGEE: Metallicity Distribution Functions
+                #    and the Chemical Structure of the Milky Way Disk," ApJ,
+                #    808, 132 (2015). arXiv:1503.02110.
+                #    doi:10.1088/0004-637X/808/2/132.
+                # .. [2] A. C. Carnall et al., "Inferring the star formation
+                #    histories of massive quiescent galaxies with BAGPIPES,"
+                #    MNRAS, 480, 4379 (2018), §3.1.2.
+                Uniform(0.02, 0.4, "Metallicity scatter width", units="dex", default=0.1),
             ),
         },
         settings={},
