@@ -68,7 +68,7 @@ mirror the JAX-cache knobs. The pytest suite disables it globally in
 `tests/conftest.py` (hermeticity); its contract tests opt back in.
 
 `TENGRI_HOST_DEVICES=<n>` gets CPU users extra JAX devices without knowing the
-XLA flag spelling: `tengri/__init__.py` reads it before its own `import jax`
+XLA flag spelling: `src/tengri/__init__.py` reads it before its own `import jax`
 and appends `--xla_force_host_platform_device_count=<n>` to `XLA_FLAGS` (a
 no-op if `XLA_FLAGS` already requests a host device count). This is what lets
 `run_nuts(..., chain_parallel="pmap")` (and `run_dynamic_hmc`, and `run_hmc`'s

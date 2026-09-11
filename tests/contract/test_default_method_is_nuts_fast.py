@@ -17,6 +17,8 @@ from tengri.inference._backend_registry import DEFAULT_METHOD, get_backend
 from tengri.inference.fitter import _CANONICAL_METHODS, _MANY_EVAL_SAMPLERS, resolve_method
 from tengri.parameters.defaults import get_inference_defaults
 
+pytestmark = pytest.mark.contract
+
 
 def test_default_method_is_the_fast_nuts_recipe():
     assert DEFAULT_METHOD == "mcmc_nuts_fast"
