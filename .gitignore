@@ -258,6 +258,14 @@ _galrun/
 # Vendored test fixtures. Small, deterministic, and committed on purpose; the
 # blanket *.npz / *.h5 rules above are aimed at generated arrays, not at these.
 !tests/fixtures/**
+# The blanket re-inclusion above also un-ignores the root __pycache__/ and
+# *.py[cod] rules for anything under this tree, so a compiled cache from
+# importing a fixture module directly (e.g. `pytest
+# tests/fixtures/assertion_holes/holes.py`) shows up as a permanently
+# untracked directory instead of being ignored like every other cache in the
+# repo. Re-ignore both, at any depth under the fixtures tree.
+tests/fixtures/**/__pycache__/
+tests/fixtures/**/*.py[cod]
 
 # scratch logs from local recovery runs
 *_run.log
