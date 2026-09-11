@@ -196,22 +196,13 @@ def test_smc_prevot_block_matches_redden_disc():
 # ──────────────────────────────────────────────────────────────────────
 
 
-#: L5100 shared by both GRAHSP pipelines below, one spelling per path
-#: (#1206 §D): the composable blocks read the log-native
-#: ``agn_grahsp_log_l5100`` (breaking, no alias), while the monolithic
-#: ``compute_grahsp_sed`` -- a separate, independent implementation with its
-#: own ``declared_parameters()`` -- is out of scope for that rename and still
-#: takes the linear ``agn_grahsp_l5100``. Both name the SAME physical value:
-#: ``10**_GRAHSP_LOG_L5100 == _GRAHSP_L5100``.
-_GRAHSP_LOG_L5100 = 44.0
-_GRAHSP_L5100 = 1.0e44
-
-
 def _grahsp_params():
     """Single-source GRAHSP parameter set used by both pipelines.
 
-    L5100 is **explicit** (added by each call site below, one spelling per
-    path). Without it, the two paths use different conventions:
+    L5100 is **explicit** (``agn_grahsp_log_l5100``, shared by both call
+    sites below -- #1206 §D renamed it in both the composable blocks and
+    ``compute_grahsp_sed`` in lockstep, so one spelling now covers both
+    paths). Without it, the two paths use different conventions:
 
     - ``compute_grahsp_sed`` (monolithic): rescales l5100 so the total
       AGN-side bolometric integral matches ``10**agn_log_lbol * L_sun``.
@@ -223,6 +214,7 @@ def _grahsp_params():
     """
     return dict(
         agn_log_lbol=44.5,
+        agn_grahsp_log_l5100=44.0,
         agn_grahsp_uvslope=0.0,
         agn_grahsp_plslope=-1.7,
         agn_grahsp_plbendloc_nm=100.0,
@@ -260,10 +252,9 @@ def test_all_grahsp_recipe_matches_compute_grahsp_sed():
         agn_feii_block="grahsp",
         agn_torus_block="grahsp",
         agn_attenuation_block="grahsp_biatten",
-        agn_grahsp_log_l5100=_GRAHSP_LOG_L5100,
         **p,
     )
-    out_monolithic = compute_grahsp_sed(wave_aa, agn_grahsp_l5100=_GRAHSP_L5100, **p)
+    out_monolithic = compute_grahsp_sed(wave_aa, **p)
 
     # Both paths exercise the same physics. The runner derives l5100_disc
     # via ``jnp.interp(5100Å, wave, L_λ_disc) × 5100`` from the disc grid;
@@ -276,6 +267,30 @@ def test_all_grahsp_recipe_matches_compute_grahsp_sed():
         rtol=1e-3,
         atol=0.0,
     )
+
+
+def test_compute_grahsp_sed_rejects_retired_l5100_name():
+    """#1206 §D: ``agn_grahsp_l5100`` (linear) must not be silently absorbed
+    by ``compute_grahsp_sed``'s ``**_kwargs``. Passing it must raise, with
+    the error message carrying the ``log10(...)`` translation to the new
+    ``agn_grahsp_log_l5100`` name -- not fall through to the auto-normalize
+    default, which is exactly the silent-failure class
+    ``tests/integration/test_grahsp_resolution.py`` documents.
+    """
+    from tengri.components.agn.grahsp import compute_grahsp_sed
+
+    wave_aa = jnp.logspace(2, 6, 400)
+    with pytest.raises((TypeError, ValueError), match="agn_grahsp_log_l5100"):
+        compute_grahsp_sed(wave_aa, agn_log_lbol=44.5, agn_grahsp_l5100=1.0e44)
+
+
+def test_compute_grahsp_sed_rejects_unknown_grahsp_kwarg():
+    """A typo'd ``agn_grahsp_*`` name must raise, not be silently dropped."""
+    from tengri.components.agn.grahsp import compute_grahsp_sed
+
+    wave_aa = jnp.logspace(2, 6, 400)
+    with pytest.raises((TypeError, ValueError), match="agn_grahsp_DOES_NOT_EXIST"):
+        compute_grahsp_sed(wave_aa, agn_log_lbol=44.5, agn_grahsp_DOES_NOT_EXIST=1.0)
 
 
 def test_mix_grahsp_disc_with_simple_torus():
