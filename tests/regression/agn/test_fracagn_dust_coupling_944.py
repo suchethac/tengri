@@ -260,39 +260,39 @@ class TestFracAGNDustCoupling944:
             redshift=Fixed(0.1),
         )
 
-    @pytest.mark.parametrize("norm_mode", ("cigale_joint", "conserving"))
-    def test_dust_present_fracagn_joint_norm_modes(
-        self, synthetic_ssp_wide, synthetic_tophat_obs, norm_mode
-    ):
-        """Dust present + fracAGN works under both JOINT norm modes.
+    def test_dust_present_fracagn_cigale_joint(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """Dust present + fracAGN works under the one policy that admits it.
 
         This test used to sweep ``('cigale_joint', 'independent')``, to check
-        that #944's coupling did not break either path. Ruling R65 removed the
-        second: ``'independent'`` puts the disc on ``10**agn_log_lbol`` while
-        fracAGN puts the torus on ``L_absorbed x f/(1-f)``, so their ratio
-        reports the stellar mass (measured: ``int(disc)/int(torus)`` runs
-        5.00e+10 at ``log M* = 0`` to 5.00e-02 at 12) and ``SEDModel.build``
-        now refuses the pair -- see
-        ``test_independent_norm_with_active_fracagn_is_refused`` below and
-        ``tests/contract/test_agn_norm_ir_frac_coherence.py``. The sweep keeps
-        two entries so this stays a sweep and not a single case:
-        ``'conserving'`` is the other policy that admits the pair.
+        that #944's coupling did not break either path. Ruling R65 removed
+        ``'independent'`` and ruling R67 removed ``'conserving'``: both put
+        the disc back on ``10**agn_log_lbol`` while fracAGN puts the torus on
+        ``L_absorbed x f/(1-f)``, so ``int(disc)/int(torus)`` scales as
+        ``1/M*`` (measured: 5.00e+10 at ``log M* = 0`` down to 5.00e-02 --
+        exactly 0.00e+00 under ``'conserving'`` -- at 12) and
+        ``SEDModel.build`` refuses both pairs. The two removed arms are pinned
+        as refusals in ``test_non_joint_norm_with_active_fracagn_is_refused``
+        below; the full sweep lives in
+        ``tests/contract/test_agn_norm_ir_frac_coherence.py``. #944's own
+        subject -- fracAGN needs a dust component -- is untouched by either
+        ruling.
         """
         import jax
 
-        model = self._build_with_norm(synthetic_ssp_wide, synthetic_tophat_obs, norm_mode)
+        model = self._build_with_norm(synthetic_ssp_wide, synthetic_tophat_obs, "cigale_joint")
         params = model.spec.sample(jax.random.PRNGKey(0))
         pred = model.predict(params)
-        assert pred is not None, f"Prediction failed for norm_mode={norm_mode}"
+        assert pred is not None, "Prediction failed for norm_mode='cigale_joint'"
 
-    def test_independent_norm_with_active_fracagn_is_refused(
-        self, synthetic_ssp_wide, synthetic_tophat_obs
+    @pytest.mark.parametrize("norm_mode", ("independent", "conserving"))
+    def test_non_joint_norm_with_active_fracagn_is_refused(
+        self, synthetic_ssp_wide, synthetic_tophat_obs, norm_mode
     ):
-        """The arm R65 removed from the sweep above, pinned as a refusal.
+        """The two arms R65 and R67 removed from the sweep above, as refusals.
 
-        Recorded here rather than deleted: this exact build used to be
-        asserted to succeed, and #944's own subject (fracAGN needs a dust
-        component) is untouched by the change.
+        Recorded here rather than deleted: both builds used to be asserted to
+        succeed, and #944's own subject (fracAGN needs a dust component) is
+        untouched by the change.
         """
-        with pytest.raises(ConfigError, match=r"agn_norm='independent'"):
-            self._build_with_norm(synthetic_ssp_wide, synthetic_tophat_obs, "independent")
+        with pytest.raises(ConfigError, match=rf"agn_norm='{norm_mode}'"):
+            self._build_with_norm(synthetic_ssp_wide, synthetic_tophat_obs, norm_mode)

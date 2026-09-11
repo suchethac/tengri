@@ -1584,7 +1584,7 @@ class TestAgnLogLbolFracAgnConflict:
 
     The ``norm='independent'`` row stays live and R55 still does not refuse
     it -- but that build is refused one guard over, by R65
-    (``_validate_independent_norm_without_fracagn``), because disc and torus
+    (``_validate_fracagn_requires_cigale_joint``), because disc and torus
     then sit on unrelated luminosity scales. R55's message no longer offers it
     as a way out.
 
@@ -1702,7 +1702,7 @@ class TestAgnLogLbolFracAgnConflict:
         measured live 2.51e5 relative across the prior with
         ``agn_ir_frac=0.3`` active, the table row above, and that is why R55
         does not refuse it. It is now refused one guard over, by R65
-        (``_validate_independent_norm_without_fracagn``), for a different
+        (``_validate_fracagn_requires_cigale_joint``), for a different
         reason: the disc is then on ``agn_log_lbol`` while the torus follows
         ``L_absorbed x f/(1 - f)``, so ``int(disc)/int(torus)`` reports the
         stellar mass (measured 5.00e+10 at ``log M* = 0`` down to 5.00e-02 at

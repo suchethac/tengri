@@ -177,14 +177,18 @@ def test_wildcard_never_frees_torus_frac_when_fracagn_active(ssp, obs, torus_typ
         "type": "composable",
         "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "torus": {"type": torus_type, "all_params": FREE},
-        "agn_log_lbol": Fixed(12.0),
-        # 'conserving', not 'independent': R65 refuses 'independent' beside an
-        # active fracAGN (disc and torus would sit on unrelated luminosity
-        # scales). The narrowing this test measures is a property of an active
-        # fracAGN alone -- AGNSEDComponent.apply() overrides agn_torus_frac
-        # "regardless of agn_norm" -- so any policy that admits the pair
-        # exercises it.
-        "norm": "conserving",
+        # 'cigale_joint', the one policy that admits an active fracAGN: R65
+        # refuses 'independent' beside it and R67 refuses 'conserving' too
+        # (under both, disc and torus sit on unrelated luminosity scales and
+        # int(disc)/int(torus) scales as 1/M*). The narrowing this test
+        # measures is a property of an active fracAGN alone --
+        # AGNSEDComponent.apply() overrides agn_torus_frac "regardless of
+        # agn_norm" -- so the surviving policy exercises it. agn_log_lbol is
+        # left at its registry default rather than pinned to 12.0 because
+        # under 'cigale_joint' + skirtor the coupling derives the AGN power
+        # and R55 refuses a value it would discard.
+        "all_params": Fixed(DEFAULT),
+        "norm": "cigale_joint",
         "ir_frac": Fixed(0.5),
     }
     with warnings.catch_warnings():
@@ -281,11 +285,15 @@ def _build_with_placement(
         "type": "composable",
         "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "torus": torus,
-        "agn_log_lbol": Fixed(12.0),
-        # Every placement below makes fracAGN active, and R65 refuses
-        # 'independent' beside an active fracAGN; 'conserving' admits the pair
-        # and the override this file measures is agn_norm-independent.
-        "norm": "conserving",
+        # Every placement below makes fracAGN active. R65 refuses
+        # 'independent' beside an active fracAGN and R67 refuses 'conserving'
+        # as well, so 'cigale_joint' is the policy that admits the pair; the
+        # override this file measures is agn_norm-independent. agn_log_lbol
+        # stays at its registry default: under 'cigale_joint' + skirtor the
+        # coupling sets the AGN power and R55 refuses a pinned value it would
+        # discard.
+        "all_params": Fixed(DEFAULT),
+        "norm": "cigale_joint",
     }
     if location == "<top>":
         agn[key] = Fixed(0.5)

@@ -431,28 +431,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   91 Å – 1e8 Å SSP grid to 10 Å – 1e8 Å — so the refusal is a ratchet on that
   union rather than something callers will meet, and its message says so.
 
-- **`agn={'norm': 'independent'}` beside an active `agn_ir_frac` now raises
-  `ConfigError` at build time instead of silently producing an AGN whose
-  disc/torus ratio reports the stellar mass.** fracAGN is the CIGALE
-  `skirtor2016` coupling: it derives the AGN power from the dust-absorbed
-  stellar luminosity, `L_absorbed * f/(1 - f)`, and every `agn_norm` policy
-  routes the torus through that derived power. `'independent'`, by its own
-  contract, does not route the disc through it — the disc stays on
-  `10**agn_log_lbol`. Measured (composable `disc='schartmann2005'` +
-  `torus='skirtor'`, `dust_emission='dale2014_cigale'`), sweeping only the
-  stellar mass and reading `int(sed_agn_disc)/int(sed_agn_torus)`: `5.00e+10`
-  at `log M* = 0` down to `5.00e-02` at `log M* = 12` — twelve orders of
-  magnitude, exactly `1/M*`. The same sweep holds `2.838156` at every mass
-  under `'cigale_joint'` and `2.001533` under `'independent'` with no fracAGN,
-  so the pathology is the *pair*, and only the pair is refused. Nothing
-  raised or warned before, and the four sub-block SEDs still summed to
-  `sed_agn` exactly, so the accounting looked intact.
+- **`agn={'norm': 'independent'}` and `agn={'norm': 'conserving'}` beside an
+  active `agn_ir_frac` now raise `ConfigError` at build time instead of
+  silently producing an AGN whose disc/torus ratio reports the stellar mass.**
+  fracAGN is the CIGALE `skirtor2016` coupling: it derives the AGN power from
+  the dust-absorbed stellar luminosity, `L_absorbed * f/(1 - f)`, and every
+  `agn_norm` policy routes the torus through that derived power — measured,
+  the torus integral is identical to six digits under all three policies
+  (`7.626100e+42` at `log M* = 10`). Only `'cigale_joint'` routes the *disc*
+  through it as well, via the SKIRTOR template ratio `R`. The other two put
+  the disc back on `10**agn_log_lbol`: verbatim under `'independent'`,
+  debited by `(1 - agn_torus_frac)` under `'conserving'`. Measured (composable
+  `disc='schartmann2005'` + `torus='skirtor'`,
+  `dust_emission='dale2014_cigale'`), sweeping only the stellar mass and
+  reading `int(sed_agn_disc)/int(sed_agn_torus)`:
+
+  | `log M*` | `independent` | `conserving` | `cigale_joint` |
+  |---|---|---|---|
+  | 0.0 | 5.004902e+10 | 5.004902e+10 | 2.838156 |
+  | 7.0 | 5.004902e+03 | 5.003901e+03 | 2.838156 |
+  | 10.0 | 5.004902e+00 | 4.004135e+00 | 2.838156 |
+  | 12.0 | 5.004902e-02 | 0.000000e+00 | 2.838156 |
+
+  Twelve orders of magnitude in both refused columns — the ratio scales as
+  `1/M*` — and constant in the legal one. `'conserving'` is the worse of the
+  two: at `log M* = 12` the derived `agn_torus_frac` clips to 1 and the disc
+  is debited to exactly zero. Without fracAGN both policies are coherent
+  (`'independent'` holds `2.001533` at every mass), so the pathology is the
+  *pair*, and only the pair is refused. Nothing raised or warned before, and
+  the four sub-block SEDs still summed to `sed_agn` exactly, so the accounting
+  looked intact.
 
   An explicit `agn_ir_frac=Fixed(0.0)` states "no coupling" and stays legal —
-  it is one of the three remedies the refusal names. The #2069/R55
-  `agn_log_lbol` refusal previously offered "set `agn_norm='independent'`" as
-  a way out; that advice named this configuration, so it has been corrected
-  to say `agn_ir_frac=0.0` (which then lets `'independent'` put the disc on
+  it is one of the two remedies the refusal names, the other being
+  `agn={'norm': 'cigale_joint'}`. The #2069/R55 `agn_log_lbol` refusal
+  previously offered "set `agn_norm='independent'`" as a way out; that advice
+  named this configuration, so it has been corrected to say
+  `agn_ir_frac=0.0` (which then lets `'independent'` put the disc on
   `agn_log_lbol`) and to state that switching policy while keeping fracAGN
   active is refused separately.
 
