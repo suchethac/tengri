@@ -22,6 +22,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_nuts_kernel,
     _nuts_chain_scan,
     _nuts_warmup_only,
+    _resolve_chain_parallel,
     _set_cached_adaptation,
     _stabilize_dense_mass_step,
     _vmap_chains,
@@ -117,14 +118,31 @@ def _warn_if_tree_depth_saturated(stats: dict) -> None:
     )
 
 
-def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bool:
-    """Resolve the ``dense_mass_matrix=None`` auto-policy (#319).
+def _spec_uses_dense_basis(spec) -> bool:
+    """True when ``spec.mean_sfh_type`` includes ``'dense_basis'``."""
+    mean_sfh_type = getattr(spec, "mean_sfh_type", None)
+    if mean_sfh_type is None:
+        return False
+    types_iter = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
+    return any("dense_basis" in str(t) for t in types_iter)
 
-    The auto-policy switches to diagonal at D >= 8 to dodge the
-    documented 20+ GB warmup spike on photometry fits with
-    ``mean_sfh_type="dense_basis"``. Below D = 8 the dense matrix
-    converges faster on tengri's typical age-dust-metallicity
-    posteriors and peaks at ~3-6 GB.
+
+def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int, spec=None) -> bool:
+    """Resolve the ``dense_mass_matrix=None`` auto-policy (#319, revised 2026-09-11).
+
+    Dense at ``n_dim <= 12`` unless ``spec``'s SFH is ``dense_basis``, in which
+    case diagonal regardless of ``n_dim``. Above ``n_dim = 12`` always diagonal.
+
+    Measured on ``ctl-dpl`` (D=8 photometry, 14 bands, a DPL SFH -- not
+    ``dense_basis``): the dense window adaptation peaks at 1.1-1.9 GB RSS and
+    costs 3.4x fewer gradients per effective sample than diagonal (dense 34
+    g/draw, ESS 83; diagonal 550 g/draw, ESS 113; six-seed sweep). The earlier
+    D < 8 cutoff was conservative for exactly this reason: it treated D=8-12
+    DPL/parametric fits as if they carried the same risk as the documented
+    22.78 GB ``dense_basis`` spike, which is a property of ``dense_basis``'s
+    per-sample derived-quantity publishing, not of dimensionality alone. A
+    ``dense_basis`` SFH still gets diagonal at any D in this range, unchanged
+    from before.
 
     Pulled out of :func:`run_nuts` so the heuristic is unit-testable
     without spinning up a full NUTS warmup.
@@ -135,6 +153,10 @@ def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bo
         ``None`` (auto), ``True`` (force dense), or ``False`` (force diagonal).
     n_dim : int
         Number of free parameters in the model.
+    spec : Parameters or None, optional
+        The fit's parameter spec, consulted only for the ``dense_basis``
+        exception. ``None`` (no spec available) is treated as "not
+        ``dense_basis``", i.e. the plain ``n_dim <= 12`` rule applies.
 
     Returns
     -------
@@ -142,9 +164,11 @@ def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bo
         Effective ``dense_mass_matrix`` value to pass to the warmup
         kernel. Explicit ``True`` / ``False`` round-trip unchanged.
     """
-    if dense_mass_matrix is None:
-        return n_dim < 8
-    return dense_mass_matrix
+    if dense_mass_matrix is not None:
+        return dense_mass_matrix
+    if n_dim > 12:
+        return False
+    return not _spec_uses_dense_basis(spec)
 
 
 #: Largest sampled dimension at which a dense mass matrix is actually allocated.
@@ -169,6 +193,7 @@ def resolve_dense_mass_gate(
     *,
     method: str,
     verbose: bool = True,
+    spec=None,
 ) -> bool:
     """Resolve the mass-matrix policy AND the high-D cap, in one place.
 
@@ -179,7 +204,10 @@ def resolve_dense_mass_gate(
     applied the auto-policy without the cap at all, under a comment saying it
     used "the same policy the single-galaxy samplers use". A fix or a message
     applied to one of them reached one of them, which is the failure mode this
-    codebase has hit repeatedly. This is the single seam.
+    codebase has hit repeatedly. This is the single seam. HMC and dynamic HMC
+    both call this function rather than a copy of the policy, so the
+    ``dense_basis`` exception below applies to all three samplers identically
+    once each call site threads its own ``spec`` through.
 
     Parameters
     ----------
@@ -196,6 +224,10 @@ def resolve_dense_mass_gate(
         Whether to log the routine (auto-policy) downgrade. The warning for an
         *explicit* request that could not be honored is emitted regardless:
         losing a setting the caller chose is not a verbosity question.
+    spec : Parameters or None, optional
+        Forwarded to :func:`_resolve_dense_mass_matrix` for the
+        ``dense_basis`` exception. ``None`` disables that exception (plain
+        ``n_dim <= 12`` rule).
 
     Returns
     -------
@@ -209,7 +241,7 @@ def resolve_dense_mass_gate(
         is proceeding on a diagonal metric instead. Carries ``n_dim`` and
         ``max_dim`` as measurements.
     """
-    resolved = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim)
+    resolved = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim, spec=spec)
     if not resolved or n_dim <= DENSE_MASS_MAX_DIM:
         return resolved
     from tengri.config.exceptions import warn_measured
@@ -251,6 +283,15 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
 
     Pulled out of :func:`run_nuts` so the heuristic is unit-testable
     without spinning up a full NUTS warmup.
+
+    **Not gated on ``dense_basis`` itself** -- deliberately unlike
+    :func:`_resolve_dense_mass_matrix`'s auto-policy. Since the D<=12
+    auto-policy now defaults to dense for non-``dense_basis`` specs too
+    (measured 1.1-1.9 GB there, not 20+ GB), this fires on every such
+    default D=8-12 fit, not only on an explicit override; the message's
+    "can peak at" framing is calibrated to the ``dense_basis`` case named in
+    ``heavy_sfh_hint`` below and stays a plausible-worst-case caution rather
+    than a per-call measurement for the common case.
     """
     if not (dense_mass_matrix and n_dim >= 8):
         return
@@ -259,15 +300,12 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
         # higher up in run_nuts already.
         return
     heavy_sfh_hint = ""
-    mean_sfh_type = getattr(spec, "mean_sfh_type", None)
-    if mean_sfh_type is not None:
-        types_iter = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
-        if any("dense_basis" in str(t) for t in types_iter):
-            heavy_sfh_hint = (
-                " (your mean_sfh_type includes 'dense_basis', which "
-                "amplifies this, peak was 22.78 GB on a D=8 fit in "
-                "the original report)"
-            )
+    if _spec_uses_dense_basis(spec):
+        heavy_sfh_hint = (
+            " (your mean_sfh_type includes 'dense_basis', which "
+            "amplifies this, peak was 22.78 GB on a D=8 fit in "
+            "the original report)"
+        )
     warnings.warn(
         # The `mcmc_hmc` recommendation is sound only because HMC now shares
         # this same auto-policy. While HMC defaulted to `dense_mass_matrix=True`
@@ -299,6 +337,7 @@ def run_nuts(
     max_num_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
     warmup_max_num_doublings: int | None = None,
     dense_mass_matrix: bool | None = None,
+    chain_parallel: str = "auto",
     pathfinder_warmstart=False,
     precondition: bool | float | None = None,
     verbose=True,
@@ -347,14 +386,13 @@ def run_nuts(
         ``check_convergence()`` reports unconverged parameters.
     n_chains : int, default 1
         Number of independent NUTS chains to run in parallel via
-        ``jax.vmap`` over chain seeds. Each chain shares the cached
-        warmup adaptation (so this is only honored on the second
-        ``run_nuts(...)`` call against the same model, the first call
-        populates the cache). Final posterior has ``n_chains * n_samples``
-        total samples. Wall ≈ one chain's worth up to the arithmetic
-        ceiling (CPU SIMD; GPU/TPU scales further). Initial chain
-        positions are MAP + small Gaussian jitter so the chains
-        explore independent neighborhoods.
+        ``jax.vmap`` or ``jax.pmap`` over chain seeds (see ``chain_parallel``).
+        Each chain shares the cached warmup adaptation (so this is only
+        honored on the second ``run_nuts(...)`` call against the same model,
+        the first call populates the cache). Final posterior has
+        ``n_chains * n_samples`` total samples. Initial chain positions are
+        MAP + small Gaussian jitter so the chains explore independent
+        neighborhoods.
     target_accept_rate : float
         Target acceptance rate for step size adaptation. 0.85 is
         slightly more conservative than the Stan default (0.8),
@@ -425,14 +463,41 @@ def run_nuts(
         parameter correlations (e.g. age-dust-metallicity) and
         dramatically reduces divergences.
 
-        Default ``None`` auto-picks based on dimensionality:
+        Default ``None`` auto-picks based on dimensionality and SFH type
+        (:func:`_resolve_dense_mass_matrix`):
 
-        - **D < 8**: dense (warmup peak ~3-6 GB; correlations matter).
-        - **D >= 8**: diagonal (avoids the 20+ GB warmup spike at D=8
-          with `dense_basis` SFH reported in issue #319).
+        - **D <= 12, non-``dense_basis`` SFH**: dense. Measured on
+          ``ctl-dpl`` (D=8 photometry, 14 bands, DPL SFH): the dense window
+          adaptation uses 1.1-1.9 GB RSS and costs 3.4x fewer gradients per
+          effective sample than diagonal (dense 34 g/draw, ESS 83; diagonal
+          550 g/draw, ESS 113; six-seed sweep).
+        - **D > 12, any SFH**: diagonal.
+        - **Any D, ``mean_sfh_type="dense_basis"``**: diagonal, regardless
+          of D. ``dense_basis``'s per-sample derived-quantity publishing is
+          the actual driver of the historical 20+ GB warmup spike at D=8
+          (issue #319, 22.78 GB peak), not dimensionality on its own, so
+          this is the one case the D<=12 rule above does not cover.
 
         Pass ``True`` or ``False`` explicitly to override. Explicit
         ``True`` at D >= 8 emits a memory warning but is honored.
+    chain_parallel : {"auto", "vmap", "pmap"}, default "auto"
+        How ``n_chains > 1`` chains are dispatched (single-chain fits ignore
+        this). ``"vmap"`` SIMD-batches the chains into one device's kernel
+        (this sampler's original behavior). ``"pmap"`` runs one chain per
+        JAX device via ``jax.pmap``, and raises ``ValueError`` if fewer than
+        ``n_chains`` devices are visible -- set the ``TENGRI_HOST_DEVICES``
+        environment variable (read by ``tengri`` before the first
+        ``import jax``) to get extra CPU devices without knowing the
+        underlying ``XLA_FLAGS`` spelling. ``"auto"`` (default) picks
+        ``"pmap"`` when at least ``n_chains`` devices of the platform in use
+        are visible, else ``"vmap"``.
+
+        Measured on ``ctl-dpl`` (D=8, 4 chains) with
+        ``TENGRI_HOST_DEVICES=4``: the sampling phase drops 19.5s -> 3.5s;
+        warmup (always single-chain) is unaffected. Per-chain adaptation was
+        measured worse (inflated R-hat from per-chain metrics) and is not
+        offered here -- only the sampling phase is parallelized this way.
+        The resolved choice is recorded in ``posterior.diagnostics["chain_parallel"]``.
     pathfinder_warmstart : bool, default False
         Use ``blackjax.pathfinder_adaptation`` (L-BFGS mode-finding +
         Hessian-derived inverse mass matrix + short step-size refinement)
@@ -547,12 +612,12 @@ def run_nuts(
             problem.whitened_condition,
         )
 
-    # Resolve auto-policy (default since #319). Explicit True/False
-    # from the caller is honored as-is.
+    # Resolve auto-policy (default since #319, dense_basis-aware since
+    # 2026-09-11). Explicit True/False from the caller is honored as-is.
     user_passed_explicit = dense_mass_matrix is not None
-    dense_mass_matrix = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim)
+    dense_mass_matrix = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim, spec=context.spec)
     if verbose and not user_passed_explicit:
-        policy = "dense (D<8)" if dense_mass_matrix else "diagonal (D>=8, #319)"
+        policy = "dense (D<=12, non-dense_basis)" if dense_mass_matrix else "diagonal"
         logger.info("NUTS auto-mass-matrix: %s", policy)
 
     if verbose:
@@ -586,7 +651,7 @@ def run_nuts(
     # so what reaches here is an effective request; passing it back through the
     # resolver is idempotent and keeps the cap and its message in one place.
     use_dense = resolve_dense_mass_gate(
-        dense_mass_matrix, n_dim, method="mcmc_nuts", verbose=verbose
+        dense_mass_matrix, n_dim, method="mcmc_nuts", verbose=verbose, spec=context.spec
     )
 
     # ``precondition`` changes the sampled geometry, so a cached step size and mass
@@ -740,6 +805,12 @@ def run_nuts(
     # ── Sampling: one path, whether the adaptation was just tuned or reused. ──
     key, chain_key = jax.random.split(key)
     if n_chains > 1:
+        # Resolved once here (rather than left to _vmap_chains) so an
+        # unsatisfiable explicit "pmap" raises before the chain scan compiles,
+        # and so the choice actually taken is available for the diagnostics
+        # dict below.
+        use_pmap = _resolve_chain_parallel(chain_parallel, n_chains)
+        chain_parallel_effective = "pmap" if use_pmap else "vmap"
 
         def _init(p):
             return blackjax.mcmc.nuts.init(p, ld_1arg)
@@ -764,10 +835,12 @@ def run_nuts(
                 n_chains=n_chains,
                 n_iter=n_burnin + n_samples,
                 n_burnin=n_burnin,
+                chain_parallel=chain_parallel_effective,
             )
             jax.block_until_ready(positions)
         _multichain_burnin_done = True
     else:
+        chain_parallel_effective = "n/a (n_chains=1)"
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
@@ -845,6 +918,7 @@ def run_nuts(
             "n_burnin": n_burnin,
             "n_samples": n_samples,
             "n_chains": n_chains,
+            "chain_parallel": chain_parallel_effective,
             "n_divergent": n_divergent,
             "dense_mass_step_backoffs": dense_mass_backoffs,
             **warmup_record,

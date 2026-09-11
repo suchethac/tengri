@@ -1179,6 +1179,24 @@ class Fitter:
         Compile modes are passed to ``compile(modes=...)`` and determine which
         inference engines are pre-JIT-compiled before the first ``run()`` call.
         See ``compile()`` docstring for valid mode names.
+    profile_mass : bool or "auto", optional
+        Analytically marginalize the total-stellar-mass amplitude (the free
+        parameter named ``*_log_total_mass``) instead of sampling it, so
+        inference runs on the remaining ``D - 1`` parameters and the mass is
+        drawn from its exact conditional posterior afterward (or set to its
+        conditional mode for ``method="map"``). Requires photometry-only data
+        with a Gaussian likelihood, exactly one free ``*_log_total_mass``
+        parameter with a bounded-support prior, and photometry that is
+        numerically linear in that parameter; see
+        :func:`tengri.inference.mass_profile.configure_profile_mass` for the
+        full guard list and the marginalization math. Default ``"auto"``:
+        engages only when every guard passes, otherwise falls back to
+        ordinary sampling with one ``logging.INFO`` line naming the reason.
+        ``True`` raises ``ValueError`` naming the first failed guard instead
+        of falling back; ``False`` disables profiling unconditionally. The
+        resolved choice and reason are always recorded in
+        ``Posterior.diagnostics["profile_mass_resolved"]`` /
+        ``["profile_mass_reason"]``.
 
     Returns
     -------
@@ -1274,6 +1292,7 @@ class Fitter:
         cache=None,
         approx="auto",
         params_override=None,
+        profile_mass: bool | str = "auto",
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -1418,6 +1437,15 @@ class Fitter:
         # fitting. See tests/inference/test_eline_fitting.py::TestFittedMode.
         if getattr(self, "_eline_amp_priors", None):
             self.spec = self.spec.merge_observation_params(**self._eline_amp_priors)
+
+        # ── Mass profiling (analytic marginalization) ────────────────
+        # Fixes the mass parameter at a placeholder in ``self.spec`` when
+        # engaged, so every free-parameter accounting below sees D-1
+        # parameters with no special-casing. See ``mass_profile`` module
+        # docstring for the guards and the math.
+        from tengri.inference.mass_profile import configure_profile_mass
+
+        configure_profile_mass(self, profile_mass, params_override)
 
         # ── Parameters ─────────────────────────────────────────────
         self._free_names = self.spec.free_params
@@ -2791,8 +2819,15 @@ class Fitter:
         """Build a differentiable loss function.
 
         See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
-        Returns ``loss_fn(params_unbounded, data_args) -> scalar``.
+        Returns ``loss_fn(params_unbounded, data_args) -> scalar``. Under
+        ``profile_mass``, delegates to
+        ``mass_profile.build_profiled_loss_fn`` instead, see that module
+        for the marginalization math.
         """
+        if getattr(self, "_profile_mass", False):
+            from tengri.inference.mass_profile import build_profiled_loss_fn
+
+            return build_profiled_loss_fn(self)
         return build_loss_fn(self)
 
     def _get_or_build_loss_fn(self) -> Callable:
@@ -2834,7 +2869,17 @@ class Fitter:
         return build_logprior_fn(self)
 
     def _build_loglikelihood_fn(self) -> Callable:
-        """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
+        """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``.
+
+        Under ``profile_mass``, delegates to
+        ``mass_profile.build_profiled_loglikelihood_fn`` so nested sampling
+        (``backends/evidence.py``, the one caller of this method) scores the
+        same profiled marginal likelihood every other backend does.
+        """
+        if getattr(self, "_profile_mass", False):
+            from tengri.inference.mass_profile import build_profiled_loglikelihood_fn
+
+            return build_profiled_loglikelihood_fn(self)
         return build_loglikelihood_fn(self)
 
     def _get_or_build_loglikelihood_fn(self) -> Callable:
@@ -2852,8 +2897,18 @@ class Fitter:
     def _build_loglikelihood_unbounded_fn(self) -> Callable:
         """Build unbounded-space log-likelihood.
 
-        See ``loss_functions.build_loglikelihood_unbounded_fn``.
+        See ``loss_functions.build_loglikelihood_unbounded_fn``. Under
+        ``profile_mass``, delegates to
+        ``mass_profile.build_profiled_loglikelihood_unbounded_fn`` so a
+        backend that reads the prior and likelihood separately from
+        ``InferenceContext`` (tempered SMC's annealing path, importance-
+        weighted HMC) sees the same profiled posterior ``mcmc_nuts``/``map``
+        do, rather than the mass fixed at its placeholder.
         """
+        if getattr(self, "_profile_mass", False):
+            from tengri.inference.mass_profile import build_profiled_loglikelihood_unbounded_fn
+
+            return build_profiled_loglikelihood_unbounded_fn(self)
         return build_loglikelihood_unbounded_fn(self)
 
     def _get_or_build_loglikelihood_unbounded_fn(self) -> Callable:
@@ -3803,7 +3858,18 @@ class Fitter:
 
         context = InferenceContext(fitter=self)
         target = self if entry.legacy_fitter else context
-        result = entry.runner(target, key=key, init_from=init_from, **kwargs)
+        from tengri.inference.mass_profile import (
+            finalize_profile_mass,
+            suppress_placeholder_dead_fit_warning,
+        )
+
+        with suppress_placeholder_dead_fit_warning(self):
+            result = entry.runner(target, key=key, init_from=init_from, **kwargs)
+
+        # Every backend returns here: the one seam to record the resolved
+        # profile_mass choice and (when engaged) reinsert the marginalized
+        # mass, regardless of which registered runner produced ``result``.
+        result = finalize_profile_mass(self, result, key=key)
 
         # Attach back-reference so Posterior.refine() works
         with contextlib.suppress(AttributeError):

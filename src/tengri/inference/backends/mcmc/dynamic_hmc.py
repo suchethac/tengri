@@ -18,6 +18,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
     _hmc_warmup_only,
+    _resolve_chain_parallel,
     _set_cached_adaptation,
     _vmap_chains,
     final_window_divergence_frac,
@@ -54,6 +55,7 @@ def run_dynamic_hmc(
     n_chains=1,
     target_accept_rate=0.85,
     dense_mass_matrix=True,
+    chain_parallel: str = "auto",
     precondition: bool | float | None = None,
     verbose=True,
 ):
@@ -75,6 +77,12 @@ def run_dynamic_hmc(
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
+    chain_parallel : {"auto", "vmap", "pmap"}, default "auto"
+        How ``n_chains > 1`` chains are dispatched; see
+        :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
+        rationale and the measured ``vmap`` vs ``pmap`` numbers. ``"pmap"``
+        raises ``ValueError`` when fewer than ``n_chains`` JAX devices are
+        visible (set ``TENGRI_HOST_DEVICES`` to get more on CPU).
     precondition : bool, float or None, default None
         Sample in metric-whitened coordinates, mapping draws back afterwards.
         A linear change of variables, so the posterior is unchanged. **Opt-in**
@@ -122,7 +130,11 @@ def run_dynamic_hmc(
     from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
 
     use_dense = resolve_dense_mass_gate(
-        dense_mass_matrix, n_dim, method="mcmc_dynamic_hmc", verbose=verbose
+        dense_mass_matrix,
+        n_dim,
+        method="mcmc_dynamic_hmc",
+        verbose=verbose,
+        spec=getattr(fitter, "spec", None),
     )
 
     if verbose:
@@ -232,6 +244,8 @@ def run_dynamic_hmc(
     # ── Sampling: one path, whether the adaptation was just tuned or reused. ──
     key, chain_key = jax.random.split(key)
     if n_chains > 1:
+        use_pmap = _resolve_chain_parallel(chain_parallel, n_chains)
+        chain_parallel_effective = "pmap" if use_pmap else "vmap"
 
         def _init(p, init_key):
             return blackjax.mcmc.dynamic_hmc.init(p, ld_1arg, init_key)
@@ -254,9 +268,11 @@ def run_dynamic_hmc(
             n_chains=n_chains,
             n_iter=n_burnin + n_samples,
             n_burnin=n_burnin,
+            chain_parallel=chain_parallel_effective,
         )
         _multichain_burnin_done = True
     else:
+        chain_parallel_effective = "n/a (n_chains=1)"
         state = blackjax.mcmc.dynamic_hmc.init(init_flat, ld_1arg, dhmc_init_key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         positions, divergent = _dynamic_hmc_chain_scan(
@@ -318,6 +334,7 @@ def run_dynamic_hmc(
             "n_burnin": n_burnin,
             "n_samples": n_samples,
             "n_chains": n_chains,
+            "chain_parallel": chain_parallel_effective,
             "n_divergent": n_divergent,
             **warmup_record,
             "step_size": float(parameters["step_size"]),

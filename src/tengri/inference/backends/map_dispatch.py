@@ -316,7 +316,14 @@ def _run_map_scipy(
     jax.block_until_ready(_warmup)
 
     n_evals = [0]
-    losses = []
+    # Per-iteration objective value, so ``Posterior.loss_history`` is a real
+    # curve rather than the single final number scipy's OptimizeResult
+    # reports. ``losses[0]`` is seeded with the value at the initial point
+    # (scipy's ``callback`` only fires *after* each completed iteration, so
+    # without this the curve would start one step late); every entry after
+    # that is one `callback(xk)` call, i.e. one iterate. D is small here
+    # (single-galaxy MAP), so the extra loss_fn eval per iteration is cheap.
+    losses = [float(loss_fn(init_params, data_args))]
 
     def objective(flat_params_np):
         """Objective and gradient for scipy optimizer: (loss, grad_flat)."""
@@ -326,15 +333,13 @@ def _run_map_scipy(
         n_evals[0] += 1
         return float(val), np.asarray(flat_grad, dtype=np.float64)
 
-    callback = None
-    if verbose_steps:
-
-        def callback(xk):
-            """Print loss every print_every iterations."""
-            params = unravel_fn(jnp.asarray(xk))
-            loss_val = float(loss_fn(params, data_args))
-            losses.append(loss_val)
-            step = len(losses)
+    def callback(xk):
+        """Record (and, if requested, print) the loss at each iterate."""
+        params = unravel_fn(jnp.asarray(xk))
+        loss_val = float(loss_fn(params, data_args))
+        losses.append(loss_val)
+        if verbose_steps:
+            step = len(losses) - 1
             if step % print_every == 0:
                 print(f"    step {step}: loss={loss_val:.6f}")
 
@@ -365,7 +370,10 @@ def _run_map_scipy(
 
     grad_norm = float(jnp.linalg.norm(jnp.asarray(result.jac)))
 
-    loss_hist = jnp.asarray(losses) if losses else jnp.asarray([final_loss])
+    # ``losses`` always has at least the seeded initial-point value (above),
+    # even when scipy converges in zero iterations and ``callback`` never
+    # fires, so no ``if losses else`` fallback is needed here.
+    loss_hist = jnp.asarray(losses)
 
     return Posterior(
         samples=None,
@@ -558,10 +566,11 @@ def _run_map_multistart_qn(context, *, key, n_restarts, n_steps, tol, optimizer,
     BFGS's own convergence flag is conservative (e.g. line-search stalling
     near the optimum) and not a reliable finite/non-finite signal on its own.
     Returns a MAP :class:`~tengri.inference.posterior.Posterior` identical in
-    shape to :func:`_run_map_multistart`, except ``loss_history`` is a single
-    value: JAX BFGS runs inside ``jax.vmap(jax.jit(...))`` with no Python-level
-    callback, so no per-iteration trace is available (matching
-    :func:`_run_map_scipy`'s non-verbose behavior).
+    shape to :func:`_run_map_multistart`, except ``loss_history`` is just
+    ``[initial, final]`` for the winning restart: JAX BFGS runs inside
+    ``jax.vmap(jax.jit(...))`` with no Python-level callback, so no
+    per-iteration trace is available (unlike :func:`_run_map_scipy`, which
+    records one value per scipy iteration via ``callback=``).
     """
     from tengri.inference.posterior import Posterior
 
@@ -616,6 +625,13 @@ def _run_map_multistart_qn(context, *, key, n_restarts, n_steps, tol, optimizer,
     _reject_nonfinite_map(best_params)
     wall_time = time.time() - t0
     final_loss = float(final_losses[best])
+    # No per-iteration trace: ``jax.scipy.optimize.minimize`` runs inside
+    # ``jax.vmap(jax.jit(...))`` with no Python-level callback (see the
+    # docstring). ``[initial, final]`` at least distinguishes "did the winning
+    # restart improve" from ``_run_map_scipy``'s single-value fallback, at the
+    # cost of one extra (cheap, D-sized) loss_fn eval on the winning restart's
+    # own starting point.
+    initial_loss = float(loss_fn(jax.tree.map(lambda x: x[best], inits), data_args))
     opt_name = "L-BFGS"
 
     if verbose:
@@ -642,7 +658,7 @@ def _run_map_multistart_qn(context, *, key, n_restarts, n_steps, tol, optimizer,
             "n_restarts": int(n_restarts),
             "converged": bool(success_b[best]),
         },
-        loss_history=jnp.asarray([final_loss]),
+        loss_history=jnp.asarray([initial_loss, final_loss]),
         _model=context.model,
     )
 

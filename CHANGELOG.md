@@ -231,6 +231,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `run_nuts`/`run_dynamic_hmc` (and, via the same `_vmap_chains` seam,
+  `mcmc_hmc`'s existing `chain_method="parallel"`) accept
+  `chain_parallel: {"auto", "vmap", "pmap"}`, default `"auto"`. `"pmap"` maps
+  `n_chains` chains one-per-device via `jax.pmap` instead of SIMD-batching
+  them onto one device with `jax.vmap`, and raises `ValueError` (naming
+  `TENGRI_HOST_DEVICES`) if fewer than `n_chains` devices are visible;
+  `"auto"` picks `"pmap"` when enough devices of the platform in use are
+  visible and `n_chains > 1`, else falls back to `"vmap"`. Warmup stays
+  single-chain either way; per-chain adaptation was measured worse (inflated
+  R-hat from per-chain metrics) and is not offered. Measured on `ctl-dpl`
+  (D=8, 4 chains) with 4 forced host CPU devices: the sampling phase drops
+  19.5s -> 3.5s. The resolved choice is recorded in
+  `posterior.diagnostics["chain_parallel"]`. New env hook
+  `TENGRI_HOST_DEVICES=<n>` (read by `tengri/__init__.py` before the first
+  `import jax`) appends `--xla_force_host_platform_device_count=<n>` to
+  `XLA_FLAGS` so CPU users can get extra JAX devices without knowing the XLA
+  flag spelling; a no-op if `XLA_FLAGS` already requests a host device count.
+  See `docs/dev/inference_methods.md` and the JAX section of `CLAUDE.md`.
+
+- `Fitter`/`ForwardModel.fit(..., profile_mass=...)` analytically marginalizes
+  the total-stellar-mass amplitude (the free `*_log_total_mass` parameter)
+  instead of sampling it: inference runs on the remaining `D - 1` parameters,
+  and the mass is drawn from its exact conditional posterior afterward (or set
+  to its conditional mode for `method="map"`). Exact for a photometry-only
+  Gaussian likelihood linear in the mass (Sivia & Skilling 2006, Sec. 3.2);
+  guarded at construction (no spectroscopy, no emission-line or calibration
+  marginalization, no variable-noise model, no censored data, exactly one free
+  `*_log_total_mass` with a bounded prior, and a numerical linearity check that
+  catches e.g. an unmasked AGN continuum). Default `"auto"` engages it only
+  when every guard passes, falling back to ordinary sampling otherwise;
+  `True`/`False` force it on/off (`True` raises `ValueError` naming the first
+  failed guard). Measured on a D=8, 14-band mock: Hessian condition number
+  3.7e4 -> 1.2e3, worst-of-six-seeds NUTS wall 227 s -> 40 s. See
+  `tengri.inference.mass_profile` and `docs/dev/inference_methods.md`
+  ("Profiling the mass").
+
 - `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
   SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
   `free_prior` and are dropped from `tools/check_param_free_priors.py`'s
@@ -412,6 +448,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **NUTS/HMC/dynamic-HMC `dense_mass_matrix=None` auto-policy is dense at
+  D <= 12, not D < 8** (behavioral change, #319 revision). The D < 8 cliff
+  generalized a `mean_sfh_type="dense_basis"` finding (22.78 GB warmup peak
+  at D=8) to every SFH. Measured on `ctl-dpl` (D=8 photometry, 14 bands, a
+  non-`dense_basis` DPL SFH): the dense window adaptation uses 1.1-1.9 GB
+  RSS and costs 3.4x fewer gradients per effective sample than diagonal
+  (dense 34 g/draw, ESS 83; diagonal 550 g/draw, ESS 113; six-seed sweep).
+  `_resolve_dense_mass_matrix` now returns dense for `n_dim <= 12` *unless*
+  the spec's SFH is `dense_basis` (diagonal at any D in that case — it is
+  `dense_basis`'s per-sample derived-quantity publishing, not dimensionality
+  on its own, that drives the historical spike), and diagonal above D = 12
+  regardless of SFH. `HMC`/`dynamic HMC`/`CatalogFitter`/`fit_batch` all
+  route through the shared `resolve_dense_mass_gate`, so the revision applies
+  uniformly; the `DENSE_MASS_MAX_DIM=30` cap and explicit `True`/`False`
+  overrides are unchanged. A fit at D=8-12 that pinned a diagonal-metric
+  posterior mean or wall-time to a tight tolerance may need updating; pass
+  `dense_mass_matrix=False` to keep the previous diagonal behavior exactly.
+
 - **MAP defaults to L-BFGS, not Adam** (behavioral change). `run_map`'s
   `optimizer=` default is now `"lbfgs"` (alias `"lbfgs_scipy"`), and every
   internal MAP seed that does not pass an explicit `optimizer=`
@@ -435,6 +489,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`jax.scipy` ships with `jax` itself, unlike `optax`/`jaxopt`). `"adam"`,
   `"adamw"`, `"sgd"`, and pre-built optax optimizers remain fully supported by
   name.
+- **`profile_mass` defaults to `"auto"`, not off** (behavioral change). Every
+  `Fitter`/`ForwardModel.fit` call that qualifies (see the Added entry above)
+  now analytically marginalizes the mass by default; a fit that does not
+  qualify falls back to ordinary sampling unchanged. Because the mass
+  amplitude is exactly integrable, sample-based backends recover the same
+  posterior for every other parameter (an amplitude marginalized exactly
+  cannot shift the marginal of the rest); `method="map"` can shift by a small
+  amount instead, since the joint MAP and the profiled-marginal MAP are not
+  identical estimators — an existing test or notebook that pins a MAP value or
+  a posterior mean to a tight tolerance on a qualifying photometry fit may
+  need to widen it, or pass `profile_mass=False` to keep the previous
+  behavior exactly.
 - Dust attenuation laws are explicit and required (#1989). A dust attenuation group
   spells its law as either `law` (one law, both screens) or, on `two_component` only,
   both `law_bc` and `law_diff` together — never one half of the pair, and never
