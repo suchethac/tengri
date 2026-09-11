@@ -93,12 +93,12 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 # ── Attenuation curves ────────────────────────────────────────────
 
 
-@renamed_kwarg("n_slope", "dust_slope")
 @register_dust_law(
     "power_law",
     citation="Charlot & Fall 2000 (ApJ 539, 718)",
     short_doc="Generic power-law attenuation",
 )
+@renamed_kwarg("n_slope", "dust_slope")
 def power_law(
     wavelength: jnp.ndarray,
     dust_slope: float = -0.7,
@@ -1422,12 +1422,12 @@ def narayanan_z(
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 
-@renamed_kwarg("n_slope", "dust_slope")
 @register_dust_law(
     "conroy2010",
     citation="Conroy et al. 2010 (ApJ 708, 58)",
     short_doc="Conroy+10 mixed MW + power-law (FSPS default)",
 )
+@renamed_kwarg("n_slope", "dust_slope")
 def conroy2010(
     wavelength: jnp.ndarray,
     dust_Rv: float = 3.1,
