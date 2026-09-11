@@ -19,6 +19,8 @@ from typing import NamedTuple
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
+from tengri.utils.host_array import device_table, host_array
+
 # ── Feature table ─────────────────────────────────────────────────
 
 
@@ -76,10 +78,10 @@ SMITH2007_PAH_FEATURES: tuple[PAHFeature, ...] = (
 N_PAH_FEATURES: int = len(SMITH2007_PAH_FEATURES)
 
 # Pre-packed JAX arrays (module-level, JIT-compatible).
-_CENTERS_UM = jnp.array([f.wave_um for f in SMITH2007_PAH_FEATURES])
-_GAMMAS = jnp.array([f.gamma for f in SMITH2007_PAH_FEATURES])
+_CENTERS_UM = host_array([f.wave_um for f in SMITH2007_PAH_FEATURES])
+_GAMMAS = host_array([f.gamma for f in SMITH2007_PAH_FEATURES])
 _FWHMS_UM = _CENTERS_UM * _GAMMAS  # absolute FWHM in microns
-_DEFAULT_STRENGTHS = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])
+_DEFAULT_STRENGTHS = host_array([f.strength for f in SMITH2007_PAH_FEATURES])
 
 
 # ── Core profile functions ────────────────────────────────────────
@@ -157,12 +159,12 @@ def compute_pah_template(
 
     """
     lam = jnp.asarray(wave_um)
-    s = _DEFAULT_STRENGTHS if strengths is None else jnp.asarray(strengths)
+    s = device_table(_DEFAULT_STRENGTHS) if strengths is None else jnp.asarray(strengths)
 
     # Vectorized broadcast: (n_wave, 1) × (1, n_feat)
     lam2d = lam[:, None]
-    lam0 = _CENTERS_UM[None, :]
-    g_over_l0 = (_FWHMS_UM / _CENTERS_UM)[None, :]  # (1, n_feat)
+    lam0 = device_table(_CENTERS_UM)[None, :]
+    g_over_l0 = (device_table(_FWHMS_UM) / device_table(_CENTERS_UM))[None, :]  # (1, n_feat)
     x = lam2d / lam0 - lam0 / lam2d
     profiles = s[None, :] * g_over_l0**2 / (x**2 + g_over_l0**2)
     return jnp.sum(profiles, axis=1)
@@ -231,8 +233,8 @@ def decompose_pah(
 
     # Build design matrix A: shape (n_wave, n_feat)
     lam2d = lam[:, None]
-    lam0 = _CENTERS_UM[None, :]
-    gamma = _GAMMAS[None, :]
+    lam0 = device_table(_CENTERS_UM)[None, :]
+    gamma = device_table(_GAMMAS)[None, :]
     x = lam2d / lam0 - lam0 / lam2d
     A = gamma**2 / (x**2 + gamma**2)  # (n_wave, n_feat), peak=1
 

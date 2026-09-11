@@ -9,6 +9,7 @@ Tests for migrate-nebular-phot and Cue nion fallback to log_nion:
 
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 
 import jax
@@ -40,8 +41,15 @@ pytestmark = pytest.mark.regression_bug
 
 _BARE = "data/fsps_prsc_miles_chabrier.h5"
 _LINES = ("Halpha", "Hbeta", "OIII_5007", "NII_6584", "SII_6717")
-_LINE_DATA = LineFluxData.from_dict({n: (1e-16, 1e-17) for n in _LINES})
-_LW = _LINE_DATA.wavelengths
+
+
+@functools.lru_cache(maxsize=1)
+def _line_data() -> LineFluxData:
+    """Built on first use, not at import: a module-scope LineFluxData holds device
+    arrays whose dtype is fixed at collection time (#2271)."""
+    return LineFluxData.from_dict({n: (1e-16, 1e-17) for n in _LINES})
+
+
 Z = 0.15
 _BANDS = ["galex_fuv", "galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1", "wise_w2"]
 
@@ -58,7 +66,9 @@ def _model(neb, sfh_wild=FREE):
 
     _require()
     ssp = load_ssp_data(_BARE)
-    obs = Observation(photometry=Photometry.from_names(["des_g", "des_r"]), line_fluxes=_LINE_DATA)
+    obs = Observation(
+        photometry=Photometry.from_names(["des_g", "des_r"]), line_fluxes=_line_data()
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -77,7 +87,7 @@ def _wave_model(neb, sfh_wild=FREE):
 
     _require()
     ssp = load_ssp_data(_BARE)
-    obs = Observation(photometry=Photometry.from_names(_BANDS), line_fluxes=_LINE_DATA)
+    obs = Observation(photometry=Photometry.from_names(_BANDS), line_fluxes=_line_data())
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -124,7 +134,7 @@ def test_reconstruct_nebular_phot_f64_parity_log_vs_linear():
         {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
         sfh_wild=Fixed(DEFAULT),
     )
-    table = precompute_nebular_grid(m, _LW, n_grid=14)
+    table = precompute_nebular_grid(m, _line_data().wavelengths, n_grid=14)
     assert table.log_phot_per_qh is not None, "photometry channel missing"
 
     worst_rel_err = 0.0
@@ -172,7 +182,7 @@ def test_reconstruct_nebular_phot_pure_f32_finiteness():
     )
 
     # Build table at f64
-    table_f64 = precompute_nebular_grid(m, _LW, n_grid=14)
+    table_f64 = precompute_nebular_grid(m, _line_data().wavelengths, n_grid=14)
     assert table_f64.log_phot_per_qh is not None
 
     # Cast to f32 inside enable_x64(False) context

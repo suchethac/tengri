@@ -46,20 +46,21 @@ from tengri.components.nebular._shared import render_nebular_lines as _place_lin
 
 # Physical constants
 from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
 # ── Legacy hardcoded fallback: Allen+2008 Table 5 (solar, n=1 cm⁻³)
 
 # 8-point velocity grid [km/s]
-_FALLBACK_V = jnp.array([100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0])
+_FALLBACK_V = host_array([100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0])
 
 # Line ratios relative to Hβ (Table 5)
-_FALLBACK_R_OII = jnp.array([3.5, 5.2, 4.8, 3.1, 2.4, 1.9, 1.2, 0.8])
-_FALLBACK_R_OIII = jnp.array([0.3, 1.5, 4.2, 5.8, 6.1, 5.5, 3.8, 2.5])
-_FALLBACK_R_OI = jnp.array([0.8, 1.2, 0.9, 0.5, 0.3, 0.2, 0.15, 0.1])
-_FALLBACK_R_NII = jnp.array([2.5, 3.8, 3.2, 2.1, 1.6, 1.3, 0.9, 0.6])
-_FALLBACK_R_SII = jnp.array([2.8, 4.5, 3.5, 2.0, 1.4, 1.0, 0.6, 0.4])
-_FALLBACK_R_HA = jnp.array([3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7])
+_FALLBACK_R_OII = host_array([3.5, 5.2, 4.8, 3.1, 2.4, 1.9, 1.2, 0.8])
+_FALLBACK_R_OIII = host_array([0.3, 1.5, 4.2, 5.8, 6.1, 5.5, 3.8, 2.5])
+_FALLBACK_R_OI = host_array([0.8, 1.2, 0.9, 0.5, 0.3, 0.2, 0.15, 0.1])
+_FALLBACK_R_NII = host_array([2.5, 3.8, 3.2, 2.1, 1.6, 1.3, 0.9, 0.6])
+_FALLBACK_R_SII = host_array([2.8, 4.5, 3.5, 2.0, 1.4, 1.0, 0.6, 0.4])
+_FALLBACK_R_HA = host_array([3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7])
 
 # Doublet splitting (atomic physics, independent of shock model)
 _OIII_DOUBLET_RATIO = 2.98  # 5007 / 4959
@@ -79,7 +80,7 @@ _FALLBACK_LINE_NAMES = [
     "SII_6716A",
     "SII_6731A",
 ]
-_FALLBACK_LINE_WAVES = jnp.array(
+_FALLBACK_LINE_WAVES = host_array(
     [
         3726.0,
         3729.0,
@@ -640,18 +641,20 @@ def shock_line_ratios(
 
     # ── Fallback path: hardcoded Allen+2008 Table 5 ───────────────
     v_clip = jnp.clip(shock_velocity, 100.0, 1000.0)
-    r_oiii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OIII)
-    r_nii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_NII)
-    r_sii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_SII)
+    r_oiii = jnp.interp(v_clip, device_table(_FALLBACK_V), device_table(_FALLBACK_R_OIII))
+    r_nii = jnp.interp(v_clip, device_table(_FALLBACK_V), device_table(_FALLBACK_R_NII))
+    r_sii = jnp.interp(v_clip, device_table(_FALLBACK_V), device_table(_FALLBACK_R_SII))
 
     return {
-        "OII_3726A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OII) / 2.0,
-        "OII_3729A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OII) / 2.0,
+        "OII_3726A": jnp.interp(v_clip, device_table(_FALLBACK_V), device_table(_FALLBACK_R_OII))
+        / 2.0,
+        "OII_3729A": jnp.interp(v_clip, device_table(_FALLBACK_V), device_table(_FALLBACK_R_OII))
+        / 2.0,
         "Hb_4861A": jnp.array(1.0),
         "O3_4959A": r_oiii / _OIII_DOUBLET_RATIO,
         "O3_5007A": r_oiii,
-        "OI_6300A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OI),
-        "HA_6563A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_HA),
+        "OI_6300A": jnp.interp(v_clip, device_table(_FALLBACK_V), device_table(_FALLBACK_R_OI)),
+        "HA_6563A": jnp.interp(v_clip, device_table(_FALLBACK_V), device_table(_FALLBACK_R_HA)),
         "NII_6548A": r_nii / _NII_DOUBLET_RATIO,
         "NII_6583A": r_nii,
         "SII_6716A": r_sii / 2.0,
@@ -692,7 +695,7 @@ def _shock_line_arrays(
         line_waves = grids["mappings5"]["line_wavelengths_aa"]
         line_names = grids["mappings5"]["line_names"]
     else:
-        line_waves = _FALLBACK_LINE_WAVES
+        line_waves = device_table(_FALLBACK_LINE_WAVES)
         line_names = _FALLBACK_LINE_NAMES
 
     # Halpha key in PyNeb format

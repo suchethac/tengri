@@ -20,15 +20,23 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
 from tengri.parameters.priors import Distribution
+from tengri.utils.grid import DEFAULT_LOG_AGE_MAX, DEFAULT_LOG_AGE_MIN, DEFAULT_N_GRID
+from tengri.utils.host_array import host_array
 
 __all__ = ["DEFAULT_AGE_GRID_YR", "sample_sfh_prior"]
 
 
-DEFAULT_AGE_GRID_YR: jnp.ndarray = 10.0 ** make_log_age_grid(n_grid=256)
+# Host-side twin of ``10.0 ** make_log_age_grid(n_grid=DEFAULT_N_GRID)`` (#2271):
+# a module-scope jnp array is a device buffer whose dtype is fixed at import,
+# which a float64-less backend cannot even allocate. A numpy grid is converted at
+# the op, in the working dtype. Pinned equal to the helper by test_sfh_prior_sampling.
+DEFAULT_AGE_GRID_YR: np.ndarray = host_array(
+    10.0 ** np.linspace(DEFAULT_LOG_AGE_MIN, DEFAULT_LOG_AGE_MAX, DEFAULT_N_GRID)
+)
 
 
 def _spec_for(name: str):
