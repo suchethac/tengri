@@ -482,7 +482,14 @@ def suppress_placeholder_dead_fit_warning(fitter: Fitter):
 # ── The exact chi^2(M) quadratic and its marginal integral ──────────────────
 
 
-def _profile_stats(model, mass_name: str, phys: dict, data: jnp.ndarray, noise: jnp.ndarray):
+def _profile_stats(
+    model,
+    mass_name: str,
+    phys: dict,
+    data: jnp.ndarray,
+    noise: jnp.ndarray,
+    presence: jnp.ndarray | None = None,
+):
     """``(A, M*, chi2_min)`` of ``chi2(M) = chi2_min + A * (M - M*)**2``.
 
     Exact whenever photometry is linear in ``M = 10**phys[mass_name]``, i.e.
@@ -521,6 +528,12 @@ def _profile_stats(model, mass_name: str, phys: dict, data: jnp.ndarray, noise: 
     # the same reverse-mode scale the rest of tengri's chi^2 gradients get.
     snr_pred = pred / noise
     snr_d = data / noise
+    if presence is not None:
+        # The same rule as ``likelihoods.gaussian``: an absent band (presence 0)
+        # contributes exactly zero to every sum and to its gradient, so the
+        # mass marginal never sees a band the ordinary likelihood does not.
+        snr_pred = presence * snr_pred
+        snr_d = presence * snr_d
     sum_pred2 = jnp.sum(snr_pred**2)
     sum_data_pred = jnp.sum(snr_d * snr_pred)
     A = sum_pred2 / placeholder_mass**2
@@ -616,7 +629,12 @@ def build_profiled_loss_fn(fitter: Fitter):
             params = {**params, "redshift": data_args["redshift"]}
 
         A, mstar, chi2_min = _profile_stats(
-            model, mass_name, params, data_args["data"], data_args["noise"]
+            model,
+            mass_name,
+            params,
+            data_args["data"],
+            data_args["noise"],
+            presence=data_args.get("presence"),
         )
         loglik = -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
 
@@ -663,7 +681,12 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
         A, mstar, chi2_min = _profile_stats(
-            model, mass_name, params, data_args["data"], data_args["noise"]
+            model,
+            mass_name,
+            params,
+            data_args["data"],
+            data_args["noise"],
+            presence=data_args.get("presence"),
         )
         return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
 
@@ -697,7 +720,12 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
         A, mstar, chi2_min = _profile_stats(
-            model, mass_name, params, data_args["data"], data_args["noise"]
+            model,
+            mass_name,
+            params,
+            data_args["data"],
+            data_args["noise"],
+            presence=data_args.get("presence"),
         )
         return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
 
@@ -749,13 +777,14 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     ell_lo, ell_hi = fitter._profile_mass_bounds
     model = fitter.model
     data, noise = fitter.data, fitter.noise
+    presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
     fixed_values = fitter._fixed_values
 
     if posterior.samples is not None:
 
         def stats_one(sample_dict):
             phys = {**fixed_values, **sample_dict}
-            return _profile_stats(model, mass_name, phys, data, noise)
+            return _profile_stats(model, mass_name, phys, data, noise, presence=presence)
 
         samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
         A_all, mstar_all, _ = jax.vmap(stats_one)(samples_no_mass)
@@ -771,7 +800,7 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
     else:
         phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
-        _, mstar, _ = _profile_stats(model, mass_name, phys, data, noise)
+        _, mstar, _ = _profile_stats(model, mass_name, phys, data, noise, presence=presence)
         posterior.params = {**posterior.params, mass_name: jnp.log10(mstar)}
 
     return posterior
