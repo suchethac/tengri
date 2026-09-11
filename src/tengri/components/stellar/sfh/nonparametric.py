@@ -50,8 +50,10 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.host_array import device_table, host_array
+
 # Default bin edges in Gyr (8 edges = 7 bins), log-spaced from 30 Myr to 13.7 Gyr.
-DEFAULT_BIN_EDGES_GYR = jnp.array([0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7])
+DEFAULT_BIN_EDGES_GYR = host_array([0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7])
 DEFAULT_N_BINS = 7
 
 
@@ -145,7 +147,7 @@ def continuity(
     :func:`continuity_prior_logp`) to penalize sharp jumps.
     """
     if bin_edges_gyr is None:
-        bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
+        bin_edges_gyr = device_table(DEFAULT_BIN_EDGES_GYR)
 
     n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
@@ -430,7 +432,7 @@ def dirichlet(
        https://doi.org/10.3847/1538-4365/abef67
     """
     if bin_edges_gyr is None:
-        bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
+        bin_edges_gyr = device_table(DEFAULT_BIN_EDGES_GYR)
 
     n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
@@ -654,7 +656,7 @@ def psb_continuity(
     (256,)
     """
     if bin_edges_gyr is None:
-        bin_edges_gyr = DEFAULT_BIN_EDGES_GYR[2:]  # [0.3, 1.0, 3.0, 6.0, 13.7]
+        bin_edges_gyr = device_table(DEFAULT_BIN_EDGES_GYR)[2:]  # [0.3, 1.0, 3.0, 6.0, 13.7]
 
     n_fixed_bins = bin_edges_gyr.shape[0] - 1
 
@@ -832,7 +834,7 @@ def psb_continuity_flex(
 # Anchor bin edges [t_young_end_gyr, t_old_start_gyr, t_max_gyr].
 # ContinuityFlex anchor defaults:
 #   young bin [0, 10^7.5 yr] = [0, 31.6 Myr], old bin [10^9.7, 10^10.136 yr] = [5.01, 13.7 Gyr].
-CFLEX_DEFAULT_ANCHOR_GYR = np.array([0.0316, 5.012, 13.7])
+CFLEX_DEFAULT_ANCHOR_GYR = host_array([0.0316, 5.012, 13.7])
 
 
 def continuity_flex(
@@ -935,7 +937,7 @@ def continuity_flex(
     (256,)
     """
     if bin_edges_gyr is None:
-        bin_edges_gyr = CFLEX_DEFAULT_ANCHOR_GYR
+        bin_edges_gyr = np.asarray(CFLEX_DEFAULT_ANCHOR_GYR)  # host: float() below
 
     t_young_end_yr = float(bin_edges_gyr[0]) * 1e9
     t_old_start_yr = float(bin_edges_gyr[1]) * 1e9
@@ -1008,7 +1010,7 @@ def _continuity_flex_edges_yr(sfh_kwargs: dict, bin_edges_gyr=None) -> jnp.ndarr
     interior edges depend on the ``flex_*`` ratio kwargs).
     """
     if bin_edges_gyr is None:
-        bin_edges_gyr = CFLEX_DEFAULT_ANCHOR_GYR
+        bin_edges_gyr = np.asarray(CFLEX_DEFAULT_ANCHOR_GYR)  # host: float() below
     t_young_end_yr = float(bin_edges_gyr[0]) * 1e9
     t_old_start_yr = float(bin_edges_gyr[1]) * 1e9
     t_max_yr = float(bin_edges_gyr[2]) * 1e9
@@ -1058,7 +1060,7 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
     if fn is psb_continuity_flex:
         return _psb_flex_edges_yr(sfh_kwargs)
     if fn is continuity or fn is dirichlet:
-        return DEFAULT_BIN_EDGES_GYR * 1e9
+        return device_table(DEFAULT_BIN_EDGES_GYR) * 1e9
     return None
 
 

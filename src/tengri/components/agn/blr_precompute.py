@@ -45,6 +45,7 @@ from tengri.components.agn.blr import (
     _BLR_LINE_STRENGTHS,
     _BLR_LINE_WAVELENGTHS,
 )
+from tengri.utils.host_array import host_array
 
 # The Fe II pseudo-continuum used to be a small set of discrete Gaussian
 # groups (``_FE2_GROUPS``) suitable for delta-function preintegration. It
@@ -52,7 +53,7 @@ from tengri.components.agn.blr import (
 # Green 92) which is applied at runtime and is not preintegrable as
 # discrete deltas. The precompute path now only handles the discrete BLR
 # emission lines; Fe II flows through the runtime template path.
-_FE2_GROUPS = np.empty((0, 3), dtype=np.float64)
+_FE2_GROUPS = host_array(np.empty((0, 3), dtype=np.float64))
 
 # Axis parameters: BLR Gaussian composer has NO grid axes; all parameters are
 # runtime. This tuple is empty; precompute returns only the filter table.

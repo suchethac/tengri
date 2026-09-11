@@ -45,17 +45,20 @@ References
 
 """
 
+import math
+
 import jax
 import jax.numpy as jnp
 
 from tengri.utils.grid_interp import pchip_interp_1d
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.scale import representable_denominator
 
 # Maximum age of the universe in years: hardcoded, not fittable.
 AGEMAX_YR = 14e9
 
 # Precomputed constant for erfc-based CDF: 1/sqrt(2).
-_INV_SQRT2 = 1.0 / jnp.sqrt(2.0)
+_INV_SQRT2 = host_array(1.0 / math.sqrt(2.0))  # 0-d, see #2271
 
 
 # ── Shared helpers ────────────────────────────────────────────────
@@ -343,7 +346,7 @@ def truncated_skewnormal(
     # Using jax.lax.erfc directly avoids scipy.stats dispatch overhead,
     # producing a simpler XLA graph (~6x faster CDF inside fused kernels).
     x = (age - peak_lbt) / (width * trunc)
-    trunc_factor = 0.5 * jax.lax.erfc(x * _INV_SQRT2)
+    trunc_factor = 0.5 * jax.lax.erfc(x * device_table(_INV_SQRT2))
     shape = jnp.maximum(kernel * trunc_factor, 0.0)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
@@ -1690,10 +1693,10 @@ def periodic(
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
-_BUAT08_VELOCITIES = jnp.array(
+_BUAT08_VELOCITIES = host_array(
     [40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 150.0, 220.0, 290.0, 360.0]
 )
-_BUAT08_A = jnp.array([4.73, 5.28, 5.77, 6.21, 6.62, 6.99, 7.34, 8.74, 10.01, 10.82, 11.35])
+_BUAT08_A = host_array([4.73, 5.28, 5.77, 6.21, 6.62, 6.99, 7.34, 8.74, 10.01, 10.82, 11.35])
 
 
 def sfh2exp(
@@ -1808,8 +1811,8 @@ def sfh2exp(
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
-_BUAT08_B = jnp.array([-0.11, 0.029, 0.16, 0.29, 0.41, 0.51, 0.61, 0.98, 1.25, 1.36, 1.37])
-_BUAT08_C = jnp.array([0.79, 0.68, 0.57, 0.46, 0.36, 0.27, 0.18, -0.20, -0.55, -0.74, -0.85])
+_BUAT08_B = host_array([-0.11, 0.029, 0.16, 0.29, 0.41, 0.51, 0.61, 0.98, 1.25, 1.36, 1.37])
+_BUAT08_C = host_array([0.79, 0.68, 0.57, 0.46, 0.36, 0.27, 0.18, -0.20, -0.55, -0.74, -0.85])
 
 
 def buat08(
@@ -1884,9 +1887,9 @@ def buat08(
     """
     v = jnp.clip(velocity_km_s, 40.0, 360.0)
 
-    a = jnp.interp(v, _BUAT08_VELOCITIES, _BUAT08_A)
-    b = jnp.interp(v, _BUAT08_VELOCITIES, _BUAT08_B)
-    c = jnp.interp(v, _BUAT08_VELOCITIES, _BUAT08_C)
+    a = jnp.interp(v, device_table(_BUAT08_VELOCITIES), device_table(_BUAT08_A))
+    b = jnp.interp(v, device_table(_BUAT08_VELOCITIES), device_table(_BUAT08_B))
+    c = jnp.interp(v, device_table(_BUAT08_VELOCITIES), device_table(_BUAT08_C))
 
     t_gyr = jnp.maximum(t_lookback / 1e9, 1e-9)
     log_sfr = a + b * jnp.log10(t_gyr) + c * jnp.sqrt(t_gyr) - 9.0
@@ -2173,7 +2176,7 @@ def snorm_trunc_burst(
     age = _clamp_age(t_lookback)
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
     x = (age - peak_lbt) / (width * trunc)
-    trunc_factor = 0.5 * jax.lax.erfc(x * _INV_SQRT2)
+    trunc_factor = 0.5 * jax.lax.erfc(x * device_table(_INV_SQRT2))
     smooth_shape = jnp.maximum(kernel * trunc_factor, 0.0)
     # Cell-averaged window so ``burst_age`` has a gradient (#1374); the burst
     # amplitude is a constant, so this is exactly the old step where the

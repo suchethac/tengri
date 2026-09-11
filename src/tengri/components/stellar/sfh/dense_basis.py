@@ -27,14 +27,17 @@ All functions are pure JAX and JIT-compatible.
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.scale import representable_denominator
 
 # ── Constants ─────────────────────────────────────────────────────
 
-_SQRT3 = jnp.sqrt(3.0)
+_SQRT3 = host_array(math.sqrt(3.0))  # 0-d, see #2271
 _LENGTH_SCALE_FLOOR = 1e-10
 
 # GP interpolation resolution (matching dense_basis default: 1000 points)
@@ -82,7 +85,7 @@ def matern32_kernel(
     Matches ``george.kernels.Matern32Kernel(metric=ℓ²)``.
     """
     r = jnp.abs(x1[:, None] - x2[None, :])
-    sqrt3_r_l = _SQRT3 * r / jnp.maximum(length_scale, _LENGTH_SCALE_FLOOR)
+    sqrt3_r_l = device_table(_SQRT3) * r / jnp.maximum(length_scale, _LENGTH_SCALE_FLOOR)
     return variance * (1.0 + sqrt3_r_l) * jnp.exp(-sqrt3_r_l)
 
 

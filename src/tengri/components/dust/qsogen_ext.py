@@ -31,6 +31,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
+from tengri.utils.host_array import device_table, host_array
+
 __all__ = ["QSOGEN_EXT_R", "qsogen_quasar_extinction"]
 
 #: qsogen's default total-to-selective ratio ``R = A_V/E(B-V)``
@@ -53,9 +55,7 @@ def _load_curve() -> tuple[np.ndarray, np.ndarray]:
     return wave_aa[order], excess[order]
 
 
-_WAVE_AA, _EXCESS = _load_curve()
-_WAVE_JNP = jnp.asarray(_WAVE_AA)
-_EXCESS_JNP = jnp.asarray(_EXCESS)
+_WAVE_AA, _EXCESS = (host_array(x) for x in _load_curve())
 _WAVE_MIN = float(_WAVE_AA[0])
 _WAVE_MAX = float(_WAVE_AA[-1])
 
@@ -90,7 +90,7 @@ def qsogen_quasar_extinction(wavelength: Array, R: float = QSOGEN_EXT_R) -> Arra
     :math:`E(B-V)`.
     """
     wave = jnp.asarray(wavelength)
-    excess = jnp.interp(wave, _WAVE_JNP, _EXCESS_JNP)
+    excess = jnp.interp(wave, device_table(_WAVE_AA), device_table(_EXCESS))
     a_over_ebv = excess + R
     in_domain = (wave >= _WAVE_MIN) & (wave <= _WAVE_MAX)
     return jnp.where(in_domain, a_over_ebv, 0.0)

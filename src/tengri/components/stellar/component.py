@@ -34,6 +34,7 @@ import jax.numpy as jnp
 
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
+from tengri.utils.host_array import device_table, host_array
 
 
 class SFHBeforeBigBangWarning(UserWarning):
@@ -108,7 +109,7 @@ from tengri.utils.scale import _not_computable, log10_magnitude, pow10, represen
 # ``"bins_continuity"``: log-spaced from 1 Myr to 13.7 Gyr,
 # 7 edges → 6 bins, matching ``MET_REGISTRY``'s
 # ``_N_MET_BINS_DEFAULT``.
-_DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
+_DEFAULT_MET_BIN_EDGES_LOG_YR = host_array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 
 #: Accepted ``age_kernel`` values: how the SFH is integrated onto the SSP age
 #: grid. See :class:`StellarSEDComponentConfig` for the accuracy/cost tradeoff.
@@ -2467,7 +2468,7 @@ class StellarSEDComponent:
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
-                else _DEFAULT_MET_BIN_EDGES_LOG_YR
+                else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
             metallicities_abs = (
                 jnp.stack([jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)])
@@ -2491,7 +2492,7 @@ class StellarSEDComponent:
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
-                else _DEFAULT_MET_BIN_EDGES_LOG_YR
+                else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
             log_z_base_abs = jnp.asarray(params["met_logzsol_base"]) + LOG10_ZSUN
             d_log_z = jnp.stack(

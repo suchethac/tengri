@@ -41,6 +41,7 @@ from collections.abc import Callable
 import h5py
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._nthcomp import (
     _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
@@ -62,6 +63,7 @@ from tengri.components.agn._phys import (
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
@@ -926,7 +928,7 @@ def _warm_comptonization_lnu(
 # The bare power-law nu^(1-Gamma) diverges at low frequencies for Gamma > 1;
 # a fixed lower bound removes this ambiguity.  2000 log-spaced points match
 # RELAGN's resolution.
-_CORONA_NU_GRID = jnp.geomspace(2.418e13, 2.418e21, 2000)
+_CORONA_NU_GRID = host_array(np.geomspace(2.418e13, 2.418e21, 2000))
 
 
 def _hot_corona_lnu(
@@ -1019,8 +1021,8 @@ def _hot_corona_lnu(
 
     shape = _comp_shape(nu)
     # Normalize on the fixed internal grid (grid-independent).
-    shape_norm = _comp_shape(_CORONA_NU_GRID)
-    integral = jnp.trapezoid(shape_norm, _CORONA_NU_GRID)
+    shape_norm = _comp_shape(device_table(_CORONA_NU_GRID))
+    integral = jnp.trapezoid(shape_norm, device_table(_CORONA_NU_GRID))
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     return l_hot_erg * shape / integral_safe

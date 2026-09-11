@@ -40,6 +40,7 @@ import numpy as np
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
 from tengri.utils.grid_interp import resample_template
+from tengri.utils.host_array import device_table, host_array
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
@@ -56,7 +57,7 @@ from tengri.utils.scale import representable_denominator
 # Relative strengths are normalized to H-beta = 1.0 by dividing the VB01
 # "Rel. Flux" column (F/F_Lyα) by the H-beta flux value (8.649).
 # Vacuum wavelengths per SDSS convention; comments cite VB01 flux values.
-_BLR_LINES = jnp.array(
+_BLR_LINES = host_array(
     [
         # Lyman series
         [1025.72, 1.1112],  # Lyβ (1033.03 obs, VB01 rel flux 9.615)
@@ -90,8 +91,8 @@ _BLR_LINES = jnp.array(
 )
 # Total of 23 lines (Si IV and O IV] split from VB01 Table 2 blend at 1398.33 Å)
 
-_BLR_LINE_WAVELENGTHS = _BLR_LINES[:, 0]
-_BLR_LINE_STRENGTHS = _BLR_LINES[:, 1]
+_BLR_LINE_WAVELENGTHS = host_array(_BLR_LINES[:, 0])
+_BLR_LINE_STRENGTHS = host_array(_BLR_LINES[:, 1])
 
 # Default BLR line FWHM [km/s]
 _BLR_FWHM_KMS = 5000.0
@@ -152,7 +153,9 @@ def _load_fe2_templates():
 
 # Load Fe II templates at module import time (avoid I/O in JIT-compiled functions)
 try:
-    _FE2_UV_WAVE, _FE2_UV_FLUX, _FE2_OPT_WAVE, _FE2_OPT_FLUX = _load_fe2_templates()
+    _FE2_UV_WAVE, _FE2_UV_FLUX, _FE2_OPT_WAVE, _FE2_OPT_FLUX = (
+        host_array(x) for x in _load_fe2_templates()
+    )
 except FileNotFoundError:
     # Fallback: set to None and raise at runtime if Fe II is requested
     _FE2_UV_WAVE = None
@@ -209,17 +212,17 @@ def _fe2_pseudo_continuum(
     - Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109 (optical Fe II)
 
     """
-    if _FE2_UV_WAVE is None or _FE2_OPT_WAVE is None:
+    if device_table(_FE2_UV_WAVE) is None or device_table(_FE2_OPT_WAVE) is None:
         raise RuntimeError(
             "Fe II templates not loaded. Check that fe_uv_pyqsofit.txt and "
             "fe_optical_pyqsofit.txt exist in src/tengri/data/agn_fe2/."
         )
 
     # Convert NumPy arrays to JAX (one-time cost at function call)
-    uv_wave = jnp.asarray(_FE2_UV_WAVE, dtype=jnp.float64)
-    uv_flux = jnp.asarray(_FE2_UV_FLUX, dtype=jnp.float64)
-    opt_wave = jnp.asarray(_FE2_OPT_WAVE, dtype=jnp.float64)
-    opt_flux = jnp.asarray(_FE2_OPT_FLUX, dtype=jnp.float64)
+    uv_wave = jnp.asarray(device_table(_FE2_UV_WAVE), dtype=jnp.float64)
+    uv_flux = jnp.asarray(device_table(_FE2_UV_FLUX), dtype=jnp.float64)
+    opt_wave = jnp.asarray(device_table(_FE2_OPT_WAVE), dtype=jnp.float64)
+    opt_flux = jnp.asarray(device_table(_FE2_OPT_FLUX), dtype=jnp.float64)
 
     # Interpolate UV and optical templates onto the common wavelength grid
     # Use linear interpolation; extrapolate with zeros outside the range
@@ -315,7 +318,7 @@ def _blr_l_hbeta(
     luminosity in the same units as compute_blr_sed.
     """
     hbeta_strength = 1.0000  # H-beta (4862.68 Å, VB01 rel flux 8.649)
-    strength_sum = jnp.sum(_BLR_LINE_STRENGTHS)
+    strength_sum = jnp.sum(device_table(_BLR_LINE_STRENGTHS))
     l_intercepted = covering_fraction * l_disc_bol_erg
     l_lines_total = line_efficiency * l_intercepted
     l_hbeta = (
@@ -416,8 +419,8 @@ def compute_blr_sed(
 
     from jax import vmap
 
-    line_spectra = vmap(_single_line)(_BLR_LINES)
-    strength_sum = jnp.sum(_BLR_LINE_STRENGTHS)
+    line_spectra = vmap(_single_line)(device_table(_BLR_LINES))
+    strength_sum = jnp.sum(device_table(_BLR_LINE_STRENGTHS))
     l_nu_blr = jnp.sum(line_spectra, axis=0) / jnp.maximum(
         strength_sum, representable_denominator(1e-30)
     )
