@@ -1275,7 +1275,11 @@ def _check_polar_reference_grid_extent(
         "this narrow means that contribution is not arriving; check that "
         "data/skirtor_templates_v3.h5 is present and registered. Or, if "
         "you do not want the polar dust tied to the SKIRTOR reference, "
-        "select a different agn_norm or a different torus block."
+        "select a different agn_norm or a different torus block. This "
+        "check runs at composition time on the block selection alone, so "
+        "it also fires when agn_ir_frac is currently Fixed(0.0) and none "
+        "of the tied outputs reach the SED -- agn_ir_frac can be freed to "
+        "a nonzero value at fit time, which is what the check is guarding."
     )
 
 

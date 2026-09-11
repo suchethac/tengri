@@ -158,6 +158,29 @@ class TestPolarDustRefusesATruncatingGrid:
         assert "100 A" in msg, f"the refusal does not report the grid it got: {msg}"
         assert "10.20%" in msg, "the refusal must report what the truncation costs"
 
+    def test_the_refusal_names_the_agn_ir_frac_zero_case(
+        self, synthetic_ssp_wide, union_loses_the_skirtor_axis
+    ):
+        """The refusal fires even where the tie's outputs never reach the SED.
+
+        The check runs at composition time on the block selection alone --
+        it cannot see that ``agn_ir_frac`` is Fixed(0.0), so it refuses this
+        build too. The message must say so, or a reader hitting this with
+        ``agn_ir_frac=0`` has no way to know the refusal is (defensibly)
+        unconditional on the fraction's current value.
+        """
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError) as exc:
+            _build(synthetic_ssp_wide, ir_frac=0.0)
+        msg = str(exc.value)
+        assert "agn_ir_frac" in msg and "Fixed(0.0)" in msg, (
+            f"the refusal does not name the agn_ir_frac=0 case: {msg}"
+        )
+        assert "composition time" in msg, (
+            f"the refusal does not say the check runs at composition time: {msg}"
+        )
+
     def test_the_covering_default_build_is_untouched(self, synthetic_ssp_wide):
         """The control: unpatched, the union covers and nothing is refused."""
         model = _build(synthetic_ssp_wide)
