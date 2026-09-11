@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   so a shape parameter merged into a flat spec is live. The twelve per-screen
   grammar keys derive from one constant (`tengri.parameters._dust_keys`), and
   `check_dust_law_kwargs.py` checks law keyword spelling at every call site in
-  `src/`, `tests/`, `bench/`, `examples/` and `analysis/`.
+  `src/`, `tests/`, `bench/`, `examples/` and `analysis/`. Test, bench and analysis call sites that pinned `dust_slope` beside a law that never reads it drop the dead kwarg (`power_law` keeps its registry default of -0.7), and one engine-cache test that varied `dust_Rv` now does so under `cardelli`.
 
 - LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
 

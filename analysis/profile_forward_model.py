@@ -197,7 +197,6 @@ spec_cal = ParamSpec(
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
-    dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
     dust_law_bc="calzetti",
     dust_law_diff="calzetti",
