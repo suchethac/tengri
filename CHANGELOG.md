@@ -10,17 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
   continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
-  ``dig.py`` -- ``mix_dig_emission`` for the continuum, the new
-  ``mix_dig_line_luminosities`` for lines -- instead of each carrying its own
-  copy of the ``(1 - f) * HII + f * DIG`` mixing arithmetic. Backend kwargs
-  (e.g. Cue's resolved ionizing population) now reach both the HII and DIG
-  evaluations from one frozen dict, and the inline snapshot-before-mutation
-  copy that let #2195 ship behind twenty green unit tests of the unused
-  ``mix_dig_emission`` is gone. Output is bit-identical to the prior inline
-  arithmetic: measured max absolute difference 0.0 across ``predict_photometry``,
-  ``rest_sed()`` and line luminosities, both the cue and cb19 backends, at
-  ``neb_dig_frac`` in ``{0.0, 0.3, 0.9, 1.0}``. ``mix_dig_line_luminosities`` is
-  exported from ``tengri.components.nebular`` (#2221).
+  ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``
+  for lines -- instead of each carrying its own copy of the
+  ``(1 - f) * HII + f * DIG`` mixing arithmetic. Backend kwargs (e.g. Cue's
+  resolved ionizing population) now reach both the HII and DIG evaluations
+  from one frozen dict, and the inline snapshot-before-mutation copy that let
+  #2195 ship behind twenty green unit tests of the unused ``mix_dig_emission``
+  is gone. Output is bit-identical to the prior inline arithmetic: measured
+  max absolute difference 0.0 across ``predict_photometry``, ``rest_sed()``
+  and line luminosities, both the cue and cb19 backends, at ``neb_dig_frac``
+  in ``{0.0, 0.3, 0.9, 1.0}`` (#2221).
 
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
@@ -344,6 +343,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- ``mix_dig_line_luminosities`` (``tengri.components.nebular.dig``), exported
+  from ``tengri.components.nebular``: the line-luminosity counterpart of
+  ``mix_dig_emission``, sharing its DIG mixing core. It calls
+  ``predict_nebular_line_luminosities`` (instead of ``predict_nebular_sed``),
+  keeps the HII call's ``line_waves``, and mixes only the luminosities (#2221).
 - `Observation` and its nested data classes, `Parameters` and `SSPData` expose `cache_key()`, each derived from a written policy ledger over every attribute (`tengri._cache_keys`), so a later structural signature can delegate instead of reaching into their fields (#2163).
 - `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
   SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
