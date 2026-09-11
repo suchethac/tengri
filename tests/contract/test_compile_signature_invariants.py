@@ -101,9 +101,15 @@ class TestCompileSignatureInvariants:
         # and the same set of fixed parameter NAMES while disagreeing on
         # which of those names resolved "live" (read dynamically by the
         # attenuation law) vs not (the law's own published default stands),
-        # and without this entry they collided on one compiled kernel.
-        assert len(model_sig) == 68, (
-            f"model_sig field count changed from 68 to {len(model_sig)}. "
+        # and without this entry they collided on one compiled kernel. Was
+        # 68 before #2234 (a replacement) added dust_nebular_screen_sig /
+        # dust_shock_screen_sig / dust_agn_screen_sig: the per-source
+        # dust-screen choice changes the baked tau assembly inside
+        # DustSEDComponent.apply (birth_cloud vs diffuse vs identity) but not
+        # the graph shape, so two models differing only in a screen choice
+        # would otherwise collide on one compiled kernel too.
+        assert len(model_sig) == 71, (
+            f"model_sig field count changed from 71 to {len(model_sig)}. "
             "If intentional, update this assertion and the ledger in "
             "SEDModel.compile_signature."
         )
