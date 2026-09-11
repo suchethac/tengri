@@ -731,6 +731,15 @@ agn_torus_block, agn_attenuation_block : str
             agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
             agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
             agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
+            # R70: the grid's third geometry axis. Left out, the tie
+            # interpolated the SKIRTOR templates at the signature default
+            # R = 20 while the torus block honored the model's value, so
+            # int(polar)/int(torus) came out bit-identical (2.605153276 at
+            # i=80) across R = 10, 20 and 30. Since R64 put norm(0)/norm(i)
+            # into R_faceon that also picked the wrong normalization: the
+            # factor is R-dependent (2.896205 / 3.172626 / 3.338009 at i=80
+            # for R = 10 / 20 / 30, a 15% spread).
+            agn_radius_ratio=params.get("agn_radius_ratio", 20.0),
             agn_cos_inc=_cos_inc,
         )
         _disc_R = _disc_tie.R

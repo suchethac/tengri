@@ -362,7 +362,7 @@ class TestStoredInclinationNormIsApplied:
     )
 
     @staticmethod
-    def _tie(cos_inc: float, wave=None):
+    def _tie(cos_inc: float, wave=None, *, radius_ratio: float | None = None):
         from tengri.components.agn.blocks import resolve_agn_block
         from tengri.components.agn.skirtor import (
             _load_raw_disk_dust_grid,
@@ -375,21 +375,27 @@ class TestStoredInclinationNormIsApplied:
         disc = jnp.asarray(
             resolve_agn_block("disc", "schartmann2005")(wave, agn_log_lbol=12.0, templates=None)
         )
+        fiducial = dict(TestStoredInclinationNormIsApplied._FIDUCIAL)
+        if radius_ratio is not None:
+            fiducial["agn_radius_ratio"] = radius_ratio
         return skirtor_disc_dust_ratio(
             wave,
             disc,
             jnp.ones_like(wave),
             agn_cos_inc=cos_inc,
-            **TestStoredInclinationNormIsApplied._FIDUCIAL,
+            **fiducial,
         )
 
     @staticmethod
-    def _file_derivation(i_deg: int) -> tuple[float, float, float, float]:
+    def _file_derivation(i_deg: int, r: float = 20.0) -> tuple[float, float, float, float]:
         """``(int_disk0, int_dust_i, norm0/norm_i, R_faceon)`` from the h5 file.
 
         Read straight out of ``skirtor_templates_v3.h5`` with ``h5py`` at the
         fiducial's exact node indices, so the expectation is the FILE's own
         content and not an echo of the code under test.
+
+        ``r`` selects the ``radius_ratio`` node (the grid carries 10, 20, 30);
+        it defaults to the fiducial's 20 so every existing caller is unmoved.
         """
         h5py = pytest.importorskip("h5py")
         from tengri.components.agn.skirtor import _find_skirtor_grid
@@ -411,7 +417,7 @@ class TestStoredInclinationNormIsApplied:
                 int(np.argmin(np.abs(axes["p"] - 1.0))),
                 int(np.argmin(np.abs(axes["q"] - 1.0))),
                 int(np.argmin(np.abs(axes["oa"] - 40.0))),
-                int(np.argmin(np.abs(axes["R"] - 20.0))),
+                int(np.argmin(np.abs(axes["R"] - r))),
             )
             cos_i = float(np.cos(np.deg2rad(i_deg)))
             j_i = int(np.argmin(np.abs(axes["cos_inc"] - cos_i)))
@@ -623,4 +629,109 @@ class TestStoredInclinationNormIsApplied:
         assert int((dust_peak <= 1e-90).sum()) == 0, (
             "some cells carry the 1e-99 filler dust spectrum while declaring "
             "norm > 0: the two coverage markers disagree"
+        )
+
+
+class TestRadiusRatioReachesTheDiscTie:
+    """``agn_radius_ratio`` must reach ``skirtor_disc_dust_ratio`` (R70).
+
+    The SKIRTOR grid's third geometry axis is the outer/inner radius ratio
+    ``R`` (nodes 10, 20, 30). The torus block has always honored the model's
+    value; the ``cigale_joint`` disc tie was handed ``agn_tau_skirtor``,
+    ``agn_p_skirtor``, ``agn_q_skirtor``, ``agn_oa_skirtor`` and
+    ``agn_cos_inc`` and **not** ``agn_radius_ratio``, so it silently used the
+    signature default of 20 whatever the model said.
+
+    Measured through ``compose_l_nu`` at i=80, ``agn_ir_frac=0.3``,
+    ``agn_polar_ebv=0.3``: ``int(polar)/int(torus)`` was ``2.605153276`` at
+    ``agn_radius_ratio`` 10, 20 **and** 30 -- bit-identical, the tie blind to
+    the axis. Calling ``skirtor_disc_dust_ratio`` directly with the same three
+    values gave ``R_faceon`` = 13.918067422 / 14.037649390 / 12.640880432, so
+    the tie itself was never the problem.
+
+    That matters more since R64 put ``norm(0)/norm(i)`` into ``R_faceon``:
+    the factor is R-dependent (2.896205 / 3.172626 / 3.338009 at i=80 for
+    R = 10 / 20 / 30, a 15% spread), so a fit that pinned or freed
+    ``agn_radius_ratio`` away from 20 got a polar reference off by up to that
+    much at edge-on sightlines. The fiducial is R=20, so no shipped number
+    moves.
+    """
+
+    _R_NODES: ClassVar[tuple[float, ...]] = (10.0, 20.0, 30.0)
+    _I_DEG = 80
+
+    @staticmethod
+    def _polar_over_torus(radius_ratio: float) -> float:
+        from tengri.components.agn.blocks.runner import compose_l_nu
+        from tengri.components.agn.skirtor import _load_raw_disk_dust_grid
+        from tengri.utils.physics_constants import C_AA
+
+        if _load_raw_disk_dust_grid() is None:
+            pytest.skip("raw SKIRTOR disk/dust grid not available")
+        nu = C_AA / _COVERING_GRID
+        order = jnp.argsort(nu)
+        fiducial = dict(_JOINT_FIDUCIAL)
+        fiducial["agn_polar_ebv"] = 0.3
+        _sed, comps = compose_l_nu(
+            _COVERING_GRID,
+            12.0,
+            agn_ir_frac=0.3,
+            agn_torus_frac=0.5,
+            agn_radius_ratio=radius_ratio,
+            agn_cos_inc=float(np.cos(np.deg2rad(TestRadiusRatioReachesTheDiscTie._I_DEG))),
+            return_components=True,
+            **fiducial,
+        )
+        integ = {
+            key: float(jnp.abs(jnp.trapezoid(jnp.asarray(comps[key])[order], nu[order])))
+            for key in ("polar", "torus")
+        }
+        return integ["polar"] / integ["torus"]
+
+    def test_the_polar_torus_ratio_moves_with_the_radius_ratio(self):
+        """Three grid nodes, three different answers -- never one repeated."""
+        values = {r: self._polar_over_torus(r) for r in self._R_NODES}
+        distinct = {f"{v:.12e}" for v in values.values()}
+        assert len(distinct) == len(values), (
+            "int(polar)/int(torus) is bit-identical across agn_radius_ratio "
+            f"{list(values)}: {values}. The cigale_joint disc tie is not being "
+            "handed agn_radius_ratio, so it interpolates the SKIRTOR grid at the "
+            "signature default R=20 whatever the model says."
+        )
+
+    @pytest.mark.parametrize("radius_ratio", (10.0, 20.0, 30.0))
+    def test_r_faceon_equals_the_files_own_derivation_at_each_radius_node(self, radius_ratio):
+        """``R_faceon = int_disk0 x norm(0)/norm(i) / int_dust(i)`` at each R node.
+
+        The expectation is read out of ``skirtor_templates_v3.h5`` at that R's
+        own node index, so it is the file's content rather than an echo of the
+        code under test.
+        """
+        _d0, _di, _ratio, expected = TestStoredInclinationNormIsApplied._file_derivation(
+            self._I_DEG, radius_ratio
+        )
+        got = float(
+            TestStoredInclinationNormIsApplied._tie(
+                float(np.cos(np.deg2rad(self._I_DEG))), radius_ratio=radius_ratio
+            ).R_faceon
+        )
+        assert got == pytest.approx(expected, rel=1e-6, abs=0.0), (
+            f"R_faceon(i={self._I_DEG}, R={radius_ratio:g}) = {got:.9f} but the "
+            f"vendored grid's own content gives {expected:.9f}."
+        )
+
+    @pytest.mark.parametrize("radius_ratio", (10.0, 20.0, 30.0))
+    def test_the_stored_norm_factor_is_radius_dependent(self, radius_ratio):
+        """``norm(0)/norm(80)`` at each R node, read from the file.
+
+        This is why forwarding the axis matters after R64: the factor
+        ``R_faceon`` now carries is itself a function of R.
+        """
+        expected = {10.0: 2.896205, 20.0: 3.172626, 30.0: 3.338009}[radius_ratio]
+        _d0, _di, ratio, _r = TestStoredInclinationNormIsApplied._file_derivation(
+            self._I_DEG, radius_ratio
+        )
+        assert ratio == pytest.approx(expected, rel=1e-5, abs=0.0), (
+            f"the file's norm(0)/norm(80) at R={radius_ratio:g} is {ratio:.6f}, not "
+            f"the measured {expected:.6f}"
         )

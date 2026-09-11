@@ -391,6 +391,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
+- **`agn_radius_ratio` now reaches the `cigale_joint` disc tie, which used the
+  SKIRTOR grid's R = 20 node whatever the model asked for.** The torus block
+  always honored the value; `compose_l_nu` forwarded `agn_tau_skirtor`,
+  `agn_p_skirtor`, `agn_q_skirtor`, `agn_oa_skirtor` and `agn_cos_inc` to
+  `skirtor_disc_dust_ratio` and not the radius ratio. Measured at i=80 with
+  `agn_ir_frac=0.3` and `agn_polar_ebv=0.3`, `int(polar)/int(torus)` was
+  `2.605153276` at `agn_radius_ratio` 10, 20 **and** 30 — bit-identical. It is
+  now `2.582960860` / `2.605153276` / `2.345936285`. Since the stored
+  inclination normalization went into `R_faceon`, the missing axis also picked
+  the wrong `norm(0)/norm(i)`: that factor is R-dependent (2.896205 /
+  3.172626 / 3.338009 at i=80 for R = 10 / 20 / 30, a 15% spread), so a fit
+  that pinned or freed `agn_radius_ratio` away from 20 got a polar reference
+  off by up to that much at edge-on sightlines. The fiducial is R = 20, so no
+  shipped number moves.
+
 - **`grad` of an AGN prediction is finite at `agn_polar_ebv = 0`, the registry
   default.** The AGN dust-budget split shares one budget between the torus and
   the polar graybody as `share = polar / (torus + polar)` and then rescales the
