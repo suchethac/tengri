@@ -51,7 +51,7 @@ Cue differs in the following ways:
   bursts, AGN power-laws) without being pre-committed to a specific SSP library.
   The conversion to Cue parameters for AGN inputs is in ``agn_nebular.py``.
 
-- **~271 emission lines** vs 18 lines in the Gutkin+2016 HII grid used by BEAGLE.
+- **~138 emission lines** vs 18 lines in the Gutkin+2016 HII grid used by BEAGLE.
   This enables cross-matching with JWST NIRSpec line maps and rest-UV diagnostics
   (e.g. CIII]1909, CIV1548, HeII1640) that are absent in the BEAGLE grids.
 
@@ -1301,8 +1301,13 @@ class CueBackend:
         self,
         p: dict,
         # Bare-call default; every production call site passes this
-        # explicitly (#2239: the resolved default is now False -- return the
-        # full catalog -- kept in sync with predict_nebular_line_luminosities).
+        # explicitly. Mirrors ``not CUE_FULL_CATALOG_DEFAULT``
+        # (``parameters/parameters.py``, #2239) as a literal rather than an
+        # import: ``parameters.parameters`` transitively imports this module
+        # (via ``_builders`` -> ``observation`` -> ``components`` ->
+        # ``components.nebular``), so importing it here at module level
+        # would close a circular import. Keep this in sync with
+        # ``predict_nebular_line_luminosities``'s own default below.
         cloudyfsps_only=False,
         neb_fesc=0.0,
         neb_fesc_lya=0.0,

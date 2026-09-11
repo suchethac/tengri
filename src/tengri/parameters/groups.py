@@ -119,7 +119,7 @@ from tengri.parameters._dust_keys import (
     short_to_full,
     validate_shape_requests,
 )
-from tengri.parameters.parameters import Parameters
+from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
 from tengri.parameters.sentinels import (
     DEFAULT,
@@ -4299,7 +4299,9 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # test's hand_written allowlist instead.
     ),
     "neb": (
-        _Structural("full_catalog", "cue_full_catalog", True, only_types=("cue",)),
+        _Structural(
+            "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
+        ),
         _Structural(
             "grid",
             "cloudy_grid_path",

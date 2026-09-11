@@ -119,13 +119,17 @@ CASES = [
         "clumpy",
     ),
     (
+        # False, not True: True is the default since #2239, so pinning it
+        # here would compare default == default and test nothing (a case a
+        # mutation deleting the grammar forwarding entirely cannot catch).
+        # False is the meaningful, now-explicit opt-out.
         "neb.full_catalog",
         dict(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-            neb={"type": "cue", "all_params": Fixed(DEFAULT), "full_catalog": True},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "full_catalog": False},
         ),
         "cue_full_catalog",
-        True,
+        False,
     ),
     (
         "shock.norm",

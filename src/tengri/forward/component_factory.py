@@ -340,6 +340,11 @@ def build_components(
     # subset (the sole default before #2239, added by #303). This default is
     # a defensive fallback for direct callers of this function; the grammar
     # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
+    # Literal, not an import of CUE_FULL_CATALOG_DEFAULT
+    # (parameters/parameters.py): that module transitively imports this one
+    # (via _builders -> observation -> components -> agn.blocks ->
+    # forward.precompute -> forward -> this file), so a module-level import
+    # here closes a circular import. Keep this in sync by hand.
     cue_full_catalog: bool = True,
     # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
@@ -1220,7 +1225,8 @@ def state_to_emission_lines(state: Any):
     Cue or CloudyGrid) and extracts the 11 headline survey-diagnostic
     lines via the legacy nearest-wavelength matcher
     :func:`tengri.utils.sed_quantities.extract_line_luminosity`. The full
-    backend catalog (typically ~138–271 species) is also exposed via
+    backend catalog (~138 species for Cue; the CLOUDY/CB19/MAPPINGS grids
+    carry far fewer) is also exposed via
     ``all_waves`` / ``all_lums`` for downstream lookups of species the
     headline NamedTuple does not name explicitly (HeII 1640, HeI 10830,
     [O III] 4363, ...).

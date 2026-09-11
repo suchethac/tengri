@@ -8281,6 +8281,13 @@ class SEDModel:
                 getattr(self, "_dust_law_neb", None),
             )
 
+        # Lazy import (not module level): tengri.parameters.parameters
+        # transitively imports this module (via _builders -> observation ->
+        # components -> ... -> forward), so importing CUE_FULL_CATALOG_DEFAULT
+        # at module level here closes a circular import. Safe here: this
+        # method body only runs once the package has finished loading.
+        from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT
+
         chain = build_components(
             ssp_data=self.ssp_data,
             dust_live_shape_params=dust_live_shape_params,
@@ -8294,7 +8301,9 @@ class SEDModel:
             field_centering=float(getattr(self.spec, "field_centering", 1.0)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
-            cue_full_catalog=bool(getattr(self.spec, "cue_full_catalog", False)),
+            cue_full_catalog=bool(
+                getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+            ),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),
