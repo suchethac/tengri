@@ -122,7 +122,7 @@ from tengri.parameters._dust_keys import (
     short_to_full,
     validate_shape_requests,
 )
-from tengri.parameters.parameters import Parameters
+from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
 from tengri.parameters.sentinels import (
     DEFAULT,
@@ -3634,11 +3634,14 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular_ssp"] = True
     elif neb_type == "cue":
         result["nebular_cue"] = True
-        # #303: opt into the full Cue catalog (~271 species) instead
-        # of the default 128 CLOUDY/FSPS subset so users can read
-        # HeII 1640, HeI 10830, etc. via pred.lines.get(wavelength).
-        if neb_dict.get("full_catalog", False):
-            result["cue_full_catalog"] = True
+        # cue's default catalog is the full ~138-line set (#2239); pass only
+        # an explicit override, mirroring the mappings model/density below:
+        # constructor defaults (``Parameters.__init__``) are the single
+        # source of truth. ``full_catalog: False`` narrows to the legacy
+        # 128-line CLOUDY/FSPS-matched subset (the default before #2239,
+        # added by #303) for cross-code comparisons.
+        if "full_catalog" in neb_dict:
+            result["cue_full_catalog"] = bool(neb_dict["full_catalog"])
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -4215,7 +4218,20 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     "dust_emission": frozenset(
-        {"type", "*", "all_params", "spinning_dust", "f_cnm", "eta_balance"}
+        {
+            "type",
+            "*",
+            "all_params",
+            "spinning_dust",
+            "f_cnm",
+            "eta_balance",
+            # Total dust IR budget override (dust_log_L_ir <-> 'log_L_ir'):
+            # a group-level knob read by the attenuation component, not by any
+            # one emission engine's predict(), so (like 'eta_balance') it must
+            # be accepted whichever type is selected rather than scoped to one
+            # engine's own wildcard.
+            "log_L_ir",
+        }
     ),
     # "grid" is NOT here (#2220 follow-up): it is legal only for the neb
     # types that read it ("cloudy", "cb19", "mappings", "mappings_agn"),
@@ -4390,10 +4406,13 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
         # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
         # so it has no attribute for this table to target; it is covered by the
-        # test's hand_written allowlist instead.
+        # test's hand_written allowlist instead. log_L_ir (dust_log_L_ir) is the
+        # same case (#2187-series total-IR-budget override).
     ),
     "neb": (
-        _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),
+        _Structural(
+            "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
+        ),
         _Structural(
             "grid",
             "cloudy_grid_path",

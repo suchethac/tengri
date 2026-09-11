@@ -119,13 +119,17 @@ CASES = [
         "clumpy",
     ),
     (
+        # False, not True: True is the default since #2239, so pinning it
+        # here would compare default == default and test nothing (a case a
+        # mutation deleting the grammar forwarding entirely cannot catch).
+        # False is the meaningful, now-explicit opt-out.
         "neb.full_catalog",
         dict(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-            neb={"type": "cue", "all_params": Fixed(DEFAULT), "full_catalog": True},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "full_catalog": False},
         ),
         "cue_full_catalog",
-        True,
+        False,
     ),
     (
         "shock.norm",
@@ -284,6 +288,9 @@ def test_every_structural_key_has_a_roundtrip_rule():
         # a PARAMETER (dust_eta_balance) reachable as a dust_emission grammar key,
         # emitted by the parameter walk rather than by a structural rule
         "eta_balance",
+        # Same case: a PARAMETER (dust_log_L_ir), the total dust IR budget
+        # override (#2187-series), reachable as a dust_emission grammar key.
+        "log_L_ir",
     } | {
         f"{stem}_{comp}"
         for stem in ("slope", "bump_strength", "delta", "Rv")

@@ -159,8 +159,11 @@ tracks which scripts are due for a re-run.
   runs at ~0.12 FLOP/byte, so the card is waiting on memory and dispatch, not
   arithmetic. Note also that consumer GeForce cards run float64 at 1/64 rate, which
   puts this GPU *below* this CPU on dense float64 arithmetic.
-- JAX Metal (Apple GPU) is experimental and causes test failures. CPU is the
-  reference platform. Set `JAX_PLATFORMS=cpu` explicitly.
+- Apple's own `jax-metal` (0.1.1, 2024-10) is not viable against this JAX version;
+  CPU is the reference platform here. Set `JAX_PLATFORMS=cpu` explicitly. For the Apple
+  GPU, the community `jax-mps` plugin is the supported path -- see
+  `notebooks/apple_mps.py` for the install recipe and measured throughput, and
+  `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check.
 - **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS
   warmup with `dense_mass_matrix=True` peaks 3–6× steady state; can hit 20+ GB on D
   ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass_matrix=False`.

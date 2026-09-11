@@ -257,7 +257,8 @@ for i, (law_name, label) in enumerate(DUST_LAW_LABELS.items()):
         met_logzsol=Fixed(-0.3),
         dust_tau_bc=Fixed(0.5),
         dust_tau_diff=Fixed(0.7),
-        dust_slope=Fixed(-0.7),
+        # No dust_slope here: dust_law_diff alone (no dust_law_bc) makes both
+        # screens inherit law_name, and none of the swept laws reads dust_slope.
         dust_law_diff=law_name,  # <-- the categorical sweep
         redshift=Fixed(0.0),
     )

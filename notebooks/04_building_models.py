@@ -235,6 +235,10 @@ print()
 
 # %% [markdown]
 # ### Dust: two-component attenuation + nested emission
+#
+# The two-component group also decides which screen each emission source
+# passes through: `nebular_screen` (default birth cloud), `shock_screen`
+# (default diffuse), and `agn_screen` (default none).
 
 # %%
 print("Dust Model Tour")
@@ -540,7 +544,8 @@ print()
 # emission. The shock bucket defaults to all fixed; to free parameters, use
 # explicit priors (e.g. `shock={'frac': Uniform(0, 1)}`). The `all_params: FREE`
 # wildcard is deliberately refused for shock — it is not a silent no-op but a
-# guard against misconfiguration.
+# guard against misconfiguration. Shock light passes the diffuse dust screen
+# by default (`dust_attenuation`'s `shock_screen`).
 
 # %%
 print("Shock Emission Tour")

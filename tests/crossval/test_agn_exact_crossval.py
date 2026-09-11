@@ -82,9 +82,9 @@ class TestEddingtonExact:
     @pytest.mark.parametrize("log_mbh", [6.0, 7.0, 8.0, 9.0, 10.0])
     def test_eddington_matches_astropy(self, log_mbh):
         """Must match to 0.5% (difference from constant precision)."""
-        from tengri.components.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _log10_eddington_luminosity
 
-        tengri_l = float(_eddington_luminosity(log_mbh))
+        tengri_l = 10.0 ** float(_log10_eddington_luminosity(log_mbh))
         ref_l = _eddington_luminosity_reference(log_mbh)
         np.testing.assert_allclose(
             tengri_l,
