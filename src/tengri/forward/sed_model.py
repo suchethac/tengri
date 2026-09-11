@@ -1368,7 +1368,9 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
     from tengri.components.stellar.reference_history import reference_history_params
 
     ref_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    ref_z = ref_params.get("redshift", 0.0)
+    # A Fixed redshift is legitimately absent from the sampled params; the accessor
+    # returns the fixed value and never a silent 0.0 (10 pc) default.
+    ref_z = model._get_redshift(ref_params)
     ref_params = {**reference_history_params(model, redshift=ref_z), **ref_params}
     catalog_waves = model.predict_state(ref_params).derived.get("line_waves")
     if catalog_waves is None:
