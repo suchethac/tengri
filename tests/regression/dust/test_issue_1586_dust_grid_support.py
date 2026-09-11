@@ -46,7 +46,7 @@ from tengri.components.grid_support import (
 )
 from tengri.config.exceptions import AdvisoryWarning, GridSupportWarning
 from tengri.parameters import FREE, parse_groups
-from tengri.parameters.priors import Uniform
+from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.regression_bug
 
@@ -296,21 +296,18 @@ def test_a_narrowed_prior_still_round_trips_through_to_groups():
     ``to_groups`` collapses the narrowed parameter back into the wildcard by
     comparing provenance tags exactly. Tagging it ``wildcard_free_grid``
     would have failed that comparison, emitting ``lgU`` as an explicit
-    override and quietly changing the emitted grammar.
+    override and quietly changing the emitted grammar. The subject of this test
+    is unchanged: ``lgU`` must not surface as an explicit override.
 
     The emission convention is: wildcard as sole directive -> ``all_params``;
-    explicit entries alongside it -> ``other_params``, written last. Astrodust
-    emits the *sole directive* form, so ``all_params`` is what to expect here.
-
-    It emitted ``other_params`` until ``dust_eta_balance`` joined every IR
-    engine's freeable set (it is read by the attenuator, not by any engine's
-    own ``predict``, so scoping it to the selected engine's declarations left
-    it reachable by no wildcard at all). Before that it was the one
-    block-scoped-inactive Fixed parameter in this group, and it surfaced as an
-    explicit ``eta_balance`` entry, which is what made the wildcard the
-    ``other_params`` form. Now it collapses into the wildcard like every other
-    freed parameter and no explicit entry remains. The subject of this test is
-    unchanged: ``lgU`` must not surface as an explicit override.
+    explicit entries alongside it -> ``other_params``, written last. With
+    ``dust_log_L_ir`` as a declared policy switch that the wildcard must not
+    free, it surfaces as an explicit Fixed entry, making the wildcard take the
+    ``other_params`` form. ``dust_eta_balance`` collapsed into the wildcard
+    when it joined every IR engine's freeable set (it is read by the
+    attenuator, not by any engine's own ``predict``, so scoping it to the
+    selected engine's declarations left it reachable by no wildcard at all),
+    and it no longer appears as an explicit entry.
     """
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
@@ -323,13 +320,24 @@ def test_a_narrowed_prior_still_round_trips_through_to_groups():
     )
     # After the split, dust_emission is now a separate top-level group
     emitted = spec.to_groups()["dust_emission"]
-    assert emitted["all_params"] is FREE
-    assert list(emitted.keys())[-1] == "all_params"
-    assert "other_params" not in emitted, (
-        "the wildcard is the sole directive here, so the convention emits "
-        "'all_params'; 'other_params' would mean an explicit entry survived"
+    assert emitted["other_params"] is FREE, (
+        "the wildcard is not the sole directive; an explicit entry surfaced"
+    )
+    assert list(emitted.keys())[-1] == "other_params", (
+        "the wildcard must be written last when not the sole directive"
+    )
+    assert "all_params" not in emitted, (
+        "when an explicit entry surfaces, the wildcard form is 'other_params'"
     )
     assert "lgU" not in emitted, "narrowed param must collapse into the wildcard"
+    assert "eta_balance" not in emitted, (
+        "dust_eta_balance is in every IR engine's freeable set and collapses into the wildcard"
+    )
+    assert isinstance(emitted["log_L_ir"], Fixed), (
+        "dust_log_L_ir is a declared policy switch the wildcard must not "
+        "free; it is the explicit Fixed entry that makes the wildcard take "
+        "the 'other_params' form"
+    )
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", GridSupportWarning)
