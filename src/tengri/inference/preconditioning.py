@@ -54,6 +54,8 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
+
 __all__ = [
     "DEFAULT_WHITENING_STRENGTH",
     "MAX_METRIC_CONDITION",
@@ -797,7 +799,9 @@ class PreconditionedProblem:
         Returns
         -------
         tuple
-            ``("whiten", strength)``, distinct for every strength and for off.
+            Distinct for every strength and for off; equal for two instances
+            built at the same strength, however many times ``prepare_preconditioning``
+            was called to build them.
 
         Notes
         -----
@@ -805,8 +809,19 @@ class PreconditionedProblem:
         one basis is meaningless in another, and the failure is silent: a stale step
         size is a finite float that samples happily and badly. Keying on a bare
         ``enabled`` boolean let two fits at different strengths share one (#1442).
+
+        Delegates to :data:`_PRECONDITIONED_PROBLEM_CACHE_KEY_POLICY` rather than
+        ``tengri._cache_keys.frozen_dataclass_key`` on this whole dataclass
+        (#2163 E.5): ``logdensity`` is a closure whose qualname is identical
+        across every strength (``baked()`` cannot see what it captured, so
+        keying on it would alias two different bases under one key -- worse
+        than useless), and ``init_flat`` is a per-galaxy starting position that
+        the data-fingerprint half of ``_adaptation_cache_key`` already
+        separates; re-keying it here would defeat sharing one tuned adaptation
+        across a catalog at the SAME strength. Only ``strength`` is content;
+        everything else is diagnostic or redundant with it.
         """
-        return ("whiten", self.strength)
+        return derive_key(self, _PRECONDITIONED_PROBLEM_CACHE_KEY_POLICY)
 
     def restore(self, positions: jnp.ndarray) -> jnp.ndarray:
         """Map sampled draws back to the standardized latent space.
@@ -836,6 +851,39 @@ class PreconditionedProblem:
         if self.preconditioner is None:
             return positions
         return positions @ self.preconditioner.matrix.T
+
+
+#: The policy ledger behind :meth:`PreconditionedProblem.cache_key` (#2163 E.5).
+#: ``strength`` is the only field that should ever change what a cached
+#: adaptation means; every other field is either a diagnostic (reported for
+#: humans, not compared) or would defeat cross-galaxy adaptation sharing if
+#: keyed (see the ``cache_key`` docstring for the two specific hazards).
+_PRECONDITIONED_PROBLEM_CACHE_KEY_POLICY: KeyPolicy = {
+    "strength": content(
+        "the whitening exponent actually applied, or None when disabled; distinct "
+        "for every strength and for off -- the #1442 fix"
+    ),
+    "logdensity": exclude(
+        "a closure: baked() keys a callable by qualname, which is IDENTICAL across "
+        "every strength (it cannot see what the closure captured), so keying on it "
+        "would alias two different bases under one key rather than merely miss a hit"
+    ),
+    "init_flat": exclude(
+        "the starting position, not the basis; a per-galaxy MAP seed would key an "
+        "adaptation cache meant to be shared across galaxies at the SAME strength -- "
+        "the data-fingerprint half of _adaptation_cache_key already separates galaxies"
+    ),
+    "enabled": exclude(
+        "redundant with strength: enabled is False iff strength is None. Keying on "
+        "this bare boolean instead of strength was #1442's bug"
+    ),
+    "preconditioner": exclude(
+        "the linear map itself, determined by strength and the metric estimate at "
+        "the expansion point; not itself a cache dimension beyond strength"
+    ),
+    "metric_condition": exclude("diagnostic only: the raw metric's condition number"),
+    "whitened_condition": exclude("diagnostic only: the post-whitening condition number"),
+}
 
 
 def prepare_preconditioning(

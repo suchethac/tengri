@@ -53,6 +53,18 @@ All three modes support the clumpy-screen geometry of Lower et al. (2022), in wh
 $$ (eq-dust-transmission)
  Setting $f_{\rm obs} = 0$ recovers the standard uniform screen geometry.
 
+### Per-Source Screen Choice
+
+The two-component framework's birth-cloud and diffuse-ISM screens attenuate the stars directly; three other keys on the `dust_attenuation` group pick which of those two screens (or neither) attenuates a non-stellar emission source, using the same clumpy-geometry transmission above:
+
+| Key | Default | Governs |
+|:---|:---|:---|
+| `nebular_screen` | `"birth_cloud"` | The nebular continuum, the discrete line catalog, and the fast-nebular fallback grid |
+| `shock_screen` | `"diffuse"` | The MAPPINGS V shock SED ({ref}`app-shock-details`) |
+| `agn_screen` | `"none"` (today the only accepted value) | AGN light |
+
+Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or the synonym `"off"`. `agn_screen` stays `"none"` because AGN light runs after dust in the pipeline (stellar, nebular, shock, dust, AGN, radio, X-ray, IGM) and carries its own polar-dust screen, matching the convention (e.g. CIGALE) that AGN light is never attenuated by the galaxy's own dust; galaxy screening of AGN light is a later change. `single_component` dust has no birth-cloud/diffuse distinction, so it accepts only `"none"`/`"off"` or a source's own default; `wg00` and dust-off models refuse these keys outright.
+
 (app-dust-curves)=
 
 ## Attenuation Curve Library

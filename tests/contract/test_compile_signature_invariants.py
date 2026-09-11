@@ -3,8 +3,13 @@
 
 Ensures that:
 1. memory_mode changes do not affect compile_signature (no spurious recompile)
-2. The field count is pinned to catch accidental additions
-3. _engine_cache_key and compile_signature agree on the JIT-invariant fields
+2. Different memory_mode settings reuse the same cached engine
+
+The former field-count ratchet (2) and the tautological ``engine_key ==
+fitter_sig`` check (3) are retired (#2163 E.5): ``Fitter._engine_cache_key()``
+is now policy-derived (``tengri.inference._engine_policy.ENGINE_POLICY``),
+and its own completeness tests live in
+``tests/contract/test_inference_cache_keys.py``.
 
 Also covers SEDModel.compile_signature()'s own policy-ledger rewrite (#2163
 E.3): completeness of tengri.forward._signature_policy.SIGNATURE_POLICY over
@@ -101,96 +106,24 @@ class TestCompileSignatureInvariants:
 
         assert sig_fast == sig_low, "compile_signature must be identical regardless of memory_mode"
 
-    def test_compile_signature_field_count_pinned(self, mock_ssp_data, photometry, spec_dpl):
-        """Pin the field count of Fitter._engine_cache_key to catch accidental additions.
-
-        If this test fails, it means _engine_cache_key() was changed. Verify
-        the change is intentional (affects HLO), then update this assertion.
-
-        The model_sig half (``SEDModel.compile_signature()``) no longer has a
-        length ratchet here (#2163): it is now derived from the policy
-        ledger in ``tengri.forward._signature_policy``, over every model
-        attribute, and ``test_sed_model_policy_complete`` in this file is
-        the completeness guard for THAT half -- a hand-counted length pin on
-        a policy-derived tuple would just be the same "forgot to add a
-        field" hazard the ledger exists to close, moved into a test.
-        """
-        model = SEDModel(spec_dpl, mock_ssp_data, observation=photometry)
-        data = jnp.ones(3)
-        noise = jnp.ones(3) * 0.1
-
-        fitter = Fitter(model, data, noise, data_type="photometry")
-        sig = fitter.compile_signature()
-
-        # sig is a tuple of (model_sig, fitter_sig)
-        _model_sig, fitter_sig = sig
-
-        # fitter_sig should have exactly 10 fields:
-        # 1. data_type
-        # 2. stochastic
-        # 3. n_grid
-        # 4. len(data)
-        # 5. sorted free names
-        # 6. has_noise_model
-        # 7. _eline_marginalize
-        # 8. _eline_fitted
-        # 9. _calibration_marginalize
-        # 10. _eline_prior_type
-        # (memory_mode was removed; it was the 11th)
-        # 11. line_flux_key (wavelengths + limit-mask presence)
-        # 12. line_ratios present
-        # 13. spectral_indices present
-        # 14. data_mask present
-        # (11-14 added 2026-07: observation feature channels are baked into
-        # the loss closure, so they must key the engine/loss cache — else a
-        # joint phot+lines Fitter reuses a photometry-only compiled loss.)
-        # 15. params_override key (#1329): the per-fit fixed-value override is
-        # baked into the loss closure via fitter._fixed_values, so two fits
-        # differing only by override must compile distinct losses — else fit #2
-        # silently reuses fit #1's baked redshift. None when no override.
-        # 16. free-parameter prior identity: _primals_to_params calls
-        # dist.unstandardize(xi), which reads the distribution's Python floats
-        # at trace time, so the priors are baked constants. Without this entry
-        # two models differing only in a prior's bounds share one engine and
-        # fit #2's latent is decoded through fit #1's interval — a shift of
-        # order the prior width (measured 1.53 dex on log_total_mass). Free
-        # NAMES (field 5) do not cover it: changing Uniform(9.6, 11.1) to
-        # Uniform(7, 13) alters no name, shape, dtype or control flow. See
-        # tests/regression/bug/test_prior_bounds_key_the_engine_cache.py.
-        # 17. spec fixed VALUES (#1972 instance 2): _primals_to_params also
-        # bakes fitter._fixed_values, so two models differing only in a fixed
-        # scalar shared one engine — measured -0.18 dex on mass via dust_slope.
-        # 18. mirror map (#1972 instance 3): spec.resolve_mirrors bakes
-        # target -> source, so two specs sharing every name and prior but tying
-        # to different sources silently tied to the same one.
-        assert len(fitter_sig) == 18, (
-            f"fitter_sig field count changed from 18 to {len(fitter_sig)}. "
-            "If intentional, update this assertion and the docstring."
-        )
-
-    def test_engine_cache_key_matches_compile_signature_fields(
-        self, mock_ssp_data, photometry, spec_dpl
-    ):
-        """Verify _engine_cache_key() and compile_signature() agree on JIT-invariant fields.
-
-        Both methods should use the same fields (in the same order) to ensure that
-        smart-lean's cache key logic remains correct. _engine_cache_key is the
-        source of truth for which fields affect the compiled HLO; compile_signature
-        wraps it with the model signature.
-        """
-        model = SEDModel(spec_dpl, mock_ssp_data, observation=photometry)
-        data = jnp.ones(3)
-        noise = jnp.ones(3) * 0.1
-
-        fitter = Fitter(model, data, noise, data_type="photometry")
-
-        engine_key = fitter._engine_cache_key()
-        _, fitter_sig = fitter.compile_signature()
-
-        # _engine_cache_key returns the fitter_sig component (no model_sig prefix)
-        assert engine_key == fitter_sig, (
-            "engine_key and fitter_sig must be identical; smart-lean relies on this"
-        )
+    # ``test_compile_signature_field_count_pinned`` (a hand-counted
+    # ``len(fitter_sig) == 18`` ratchet) and ``test_engine_cache_key_matches_
+    # compile_signature_fields`` (``engine_key == fitter_sig``) are RETIRED
+    # (#2163 E.5): ``_engine_cache_key()`` is now derived from the
+    # ``tengri.inference._engine_policy.ENGINE_POLICY`` ledger over every
+    # Fitter attribute, the same policy-derived design ``test_sed_model_
+    # policy_complete`` below already applies to the model half. A
+    # hand-counted length pin on a policy-derived tuple is exactly the
+    # "forgot to add a field" hazard the ledger exists to close, moved into
+    # a test; ``engine_key == fitter_sig`` was tautological by construction
+    # (``compile_signature()`` builds ``fitter_sig`` by calling
+    # ``_engine_cache_key()`` directly) and asserted nothing beyond "this
+    # method returns what it returns". Both become
+    # ``test_engine_policy_complete`` / ``test_fingerprint_policy_complete`` /
+    # ``test_engine_and_fingerprint_ledgers_partition_fitter_attributes`` in
+    # ``tests/contract/test_inference_cache_keys.py``, which assert
+    # completeness (every Fitter attribute classified) over five
+    # representative Fitters instead of counting positions in one tuple.
 
     def test_different_memory_modes_reuse_same_engine(self, mock_ssp_data, photometry, spec_dpl):
         """Verify that different memory_mode settings would use the same cached engine.
