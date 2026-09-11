@@ -86,7 +86,7 @@ The `[all]` extra pulls in the optimizer and sampler backends (`optax`, `blackja
 
 - **CPU**: default, no extra setup.
 - **CUDA**: `pip install -e ".[gpu]"`, then follow [JAX's CUDA notes](https://jax.readthedocs.io/en/latest/installation.html#gpu-support).
-- **Apple Silicon**: `jax-metal` is experimental and produces numerical discrepancies on the stochastic SFH path. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust.
+- **Apple Silicon**: Apple's own `jax-metal` (0.1.1, 2024-10) is not viable against this JAX version. The supported path is the community `jax-mps` plugin (MLX-backed, float32 only) -- see `notebooks/apple_mps.py` for setup and `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust without it.
 
 ### Verify your install
 

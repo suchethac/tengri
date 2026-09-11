@@ -51,7 +51,7 @@ Cue differs in the following ways:
   bursts, AGN power-laws) without being pre-committed to a specific SSP library.
   The conversion to Cue parameters for AGN inputs is in ``agn_nebular.py``.
 
-- **~271 emission lines** vs 18 lines in the Gutkin+2016 HII grid used by BEAGLE.
+- **~138 emission lines** vs 18 lines in the Gutkin+2016 HII grid used by BEAGLE.
   This enables cross-matching with JWST NIRSpec line maps and rest-UV diagnostics
   (e.g. CIII]1909, CIV1548, HeII1640) that are absent in the BEAGLE grids.
 
@@ -115,6 +115,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import render_nebular_lines
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.utils.host_array import device_table, host_array
 
 # ── Physical constants ────────────────────────────────────────────
@@ -1307,7 +1308,10 @@ class CueBackend:
     def _forward_lines(
         self,
         p: dict,
-        cloudyfsps_only=True,
+        # Bare-call default; every production call site passes this
+        # explicitly. Matches ``predict_nebular_line_luminosities``'s own
+        # default below.
+        cloudyfsps_only=not CUE_FULL_CATALOG_DEFAULT,
         neb_fesc=0.0,
         neb_fesc_lya=0.0,
         neb_fdust=0.0,
@@ -1364,6 +1368,62 @@ class CueBackend:
             old_idx = weights.line_old_idx
             return wav[old_idx], lum[old_idx]
         return wav, lum
+
+    def published_line_wavelengths(
+        self, *, cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT
+    ) -> np.ndarray:
+        """The catalog wavelengths this backend would publish, without a forward pass.
+
+        Parameters
+        ----------
+        cloudyfsps_only : bool, optional
+            Select the legacy 128-line CLOUDY/FSPS-matched subset instead of
+            the full ~138-line catalog. Default ``not CUE_FULL_CATALOG_DEFAULT``
+            (#2239) -- the full catalog. Every production caller passes this
+            explicitly.
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            Rest-frame wavelengths [Angstrom], plain ``numpy``, in this
+            backend's **native** frame -- air, for cue's upstream ``.npy``
+            (see the vacuum-contract comment in
+            ``components/nebular/component.py``) -- the same frame
+            :meth:`_forward_lines` / :meth:`predict_nebular_line_luminosities`
+            return. **Not** the vacuum frame ``state.derived["line_waves"]``
+            holds: callers that need to compare against a vacuum target
+            (e.g. the #2239 warning seam) must apply
+            ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``
+            themselves, exactly as
+            :class:`~tengri.components.nebular.component.NebularSEDComponent`
+            does before publishing.
+
+        Notes
+        -----
+        **Trace-safe by construction, not by exception handling**: every
+        array read here (``weights.nn_line_wav``, ``weights.batched_sort_idx``,
+        ``weights.line_old_idx``) is plain ``numpy``, loaded once from the
+        weights file and never a function of any traced parameter, so this
+        method never touches a JAX tracer regardless of whether the caller
+        sits inside ``jax.jit``/``jax.vmap``. It exists so
+        :func:`~tengri.forward.properties.warn_if_lines_are_unavailable` can
+        answer "which lines does this backend publish" without running (or
+        even having) a ``ForwardState``.
+
+        Reuses the exact index arrays :meth:`_forward_lines` indexes with
+        (``batched_sort_idx`` for the runtime sort order, ``line_old_idx``
+        for the subset) rather than the raw ``weights.sorted_line_wav`` npz
+        field, which can disagree with the runtime order (see
+        ``scripts/convert_cue_weights.py`` and #2181) -- the runtime order is
+        authoritative, so this method must derive it the same way
+        :func:`predict_all_lines` does, not read a second, possibly-stale
+        copy.
+        """
+        weights = self.weights
+        wav_sorted = np.asarray(weights.nn_line_wav)[np.asarray(weights.batched_sort_idx)]
+        if cloudyfsps_only:
+            return wav_sorted[np.asarray(weights.line_old_idx)]
+        return wav_sorted
 
     def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""
@@ -1570,7 +1630,7 @@ class CueBackend:
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         neb_fdust: float = 0.0,
-        cloudyfsps_only: bool = True,
+        cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT,
         # Cue-specific overrides (bypass SSP-derived params)
         gas_logu: float | None = None,
         gas_logn: float = 2.0,
@@ -1617,7 +1677,10 @@ class CueBackend:
         neb_fdust : float
             Dust-absorption fraction of ionizing photons in HII regions [0, 1].
         cloudyfsps_only : bool
-            If True, return 128 CLOUDY/FSPS-matched lines.
+            If True, return only the 128 legacy CLOUDY/FSPS-matched lines
+            (kept for cross-code comparisons). Default
+            ``not CUE_FULL_CATALOG_DEFAULT`` (#2239): returns the full
+            ~138-line Cue-trained catalog.
         gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
             Cue gas params (low-level). Override high-level derivation.
         gas_logqion : float or None
