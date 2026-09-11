@@ -268,9 +268,14 @@ silent float64 fallback), and a seam that cannot be built in float32 today is sk
 with a printed reason rather than failing the sweep.
 
 Measured 2026-09-12 on an M4 Pro (jax 0.10.2, `jax-mps` 0.10.10) under the three rules
-above, against the float64 CPU reference `float32_parity_reference_18cf9fb9e.json`; the
-last column is the same float32 sweep on the Mac's CPU (`JAX_PLATFORMS=cpu`, 6 of 6
-PASS), which separates what float32 costs from what the GPU backend adds:
+above, on a tree based on `f6c36d9d3`, against the float64 CPU reference
+`float32_parity_reference_18cf9fb9e.json`; the last column is the same float32 sweep on
+the Mac's CPU (`JAX_PLATFORMS=cpu`, 6 of 6 PASS), which separates what float32 costs
+from what the GPU backend adds. That reference predates #2260 (shock lines moved to the
+diffuse screen), which shifted the `panchromatic` seam's float64 answer by 3.3e-3 in
+Herschel-250 and its `tau_diff` gradient by 67%: on any later tree the `panchromatic`
+row reads FAIL on `fwd` against this file on every device, CPU-float64 included (#2300).
+Regenerate the reference (`--write-reference`) before re-measuring that row.
 
 | seam | fwd | grad | param | status | CPU-f32 grad |
 |---|---|---|---|---|---|
