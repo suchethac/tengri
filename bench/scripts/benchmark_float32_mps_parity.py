@@ -21,15 +21,17 @@ Two modes
 ``--write-reference PATH``
     Runs the six seams in float64 on CPU and writes a JSON reference: per seam, the
     noiseless photometry vector at a fixed truth, the chi-squared gradient vector at
-    that truth, the MAP loss after a fixed number of Adam steps from a fixed seed, and
-    the mock flux/noise the truth was scored against -- stored explicitly so the
-    float32 arm fits the **same numbers** rather than regenerating its own mock (float32
-    and float64 RNG draws differ; see ``docs/dev/`` boundary notes on this).
+    that truth, a *converged* MAP fit's final loss and optimum (L-BFGS, ``init_from``
+    pinned to that same truth, run to convergence or a 200-iteration cap), and the
+    mock flux/noise the truth was scored against -- stored explicitly so the float32
+    arm fits the **same numbers** rather than regenerating its own mock (float32 and
+    float64 RNG draws differ; see ``docs/dev/`` boundary notes on this).
 
 Default (float32 parity sweep)
     Loads ``--reference PATH``, rebuilds each seam in float32, and reports per seam the
-    max relative forward error, max relative gradient error, and the relative MAP-loss
-    deviation, against PASS/FAIL thresholds. Exit code 1 if any seam FAILs.
+    max relative forward error, gradient error, MAP-loss deviation, and MAP-optimum
+    parameter-vector deviation, against PASS/FAIL thresholds. Exit code 1 if any seam
+    FAILs.
 
 Seams
 -----
@@ -77,6 +79,7 @@ import numpy as np
 _TOL_FORWARD = 3e-3
 _TOL_GRAD = 1e-2
 _TOL_LOSS = 1e-4
+_TOL_PARAM = 1e-2
 
 _BANDS = ["sdss_g", "sdss_r", "wise_w1", "herschel_250"]
 _SSP = "data/fsps_prsc_miles_chabrier.h5"
@@ -85,7 +88,9 @@ _SNR = 30.0
 _TRUTH_SEED = 0
 _NOISE_SEED = 1
 _MAP_SEED = 2
-_N_STEPS = 20
+#: L-BFGS iteration cap (``scipy.optimize.minimize`` ``maxiter``) -- not a fixed
+#: few-step trajectory. See ``_map_loss``.
+_N_STEPS = 200
 
 
 def _refuse_wrong_precision(write_reference: bool) -> None:
@@ -165,19 +170,33 @@ def _rel(a, b):
     return float(np.max(np.abs(a - b) / np.maximum(np.abs(b), 1e-300)))
 
 
-def _map_loss(ForwardModel, model, obs, flux, noise, truth, dtype, n_steps):
-    """MAP loss after ``n_steps`` Adam steps, starting from the shared truth point.
+def _map_loss(ForwardModel, model, obs, flux, noise, truth, free_names, dtype, n_steps):
+    """A *converged* MAP fit's final loss and optimum, starting from the shared truth.
 
-    ``init_from`` pins both precision arms to the *same physical* starting point.
-    Without it, ``Fitter``'s own random init draws from ``jax.random`` at a dtype that
-    tracks ``jax_enable_x64``, and a float32 draw is not bit-identical to a float64 one
-    from the same key -- measured, that alone was enough to send a 5-step Adam
-    trajectory to a final loss differing by ~15%, dwarfing the ~1e-3 the gradient
-    itself disagrees by. Pinning the start collapses that back to ~1e-4.
+    Uses ``optimizer="lbfgs"`` -- scipy's L-BFGS-B, the same quasi-Newton path
+    ``docs/dev/float32-tier-b-boundary.md`` measured MAP parity against float64 on
+    (its own convergence tolerance ``gtol``, default ``tol=1e-5``, zero JAX compilation
+    for the optimizer itself; only the loss+grad evaluation is JIT-compiled). ``n_steps``
+    is a ``maxiter`` cap, not a fixed trajectory length: the fit runs to convergence or
+    to the cap, whichever comes first, and ``diagnostics["converged"]`` says which.
+
+    An early version of this ran a fixed few Adam steps instead, which tests an
+    *unconverged intermediate* -- float32 rounding compounds along the step sequence,
+    so the comparison is dominated by trajectory divergence rather than the model's own
+    float32 accuracy. It also inherited a real bug: ``init_from`` still matters here
+    (see its docstring note below), because without it ``Fitter``'s own random init
+    draws from ``jax.random`` at a dtype that tracks ``jax_enable_x64``, and a float32
+    draw is not bit-identical to a float64 one from the same key -- that alone sent an
+    unconverged 5-step trajectory to a final loss differing by ~15%.
+
+    Returns ``(final_loss, params_vector, converged)``; ``params_vector`` is
+    ``posterior.params`` read off in ``free_names`` order, physical space.
     """
     from tengri import Posterior
 
     forward = ForwardModel.build(sed=model, observation=obs)
+    # Pins both precision arms to the same physical starting point, not merely the
+    # same PRNGKey (see the module note above on why that is not the same thing).
     init_from = Posterior(
         samples=None,
         params={k: jnp.asarray(v, dtype=dtype) for k, v in truth.items()},
@@ -195,12 +214,13 @@ def _map_loss(ForwardModel, model, obs, flux, noise, truth, dtype, n_steps):
         init_from=init_from,
         key=jax.random.PRNGKey(_MAP_SEED),
         n_steps=n_steps,
-        n_restarts=1,
-        optimizer="adam",
-        early_stopping=False,
+        optimizer="lbfgs",
         verbose=False,
     )
-    return float(np.asarray(posterior.loss_history)[-1])
+    final_loss = float(np.asarray(posterior.loss_history)[-1])
+    params_vector = [float(np.asarray(posterior.params[k])) for k in free_names]
+    converged = bool(posterior.diagnostics.get("converged", False))
+    return final_loss, params_vector, converged
 
 
 def _run_seam(
@@ -211,7 +231,8 @@ def _run_seam(
     Returns a dict record. ``write_reference=True`` computes everything fresh in
     float64; ``write_reference=False`` rebuilds in float32 and compares against
     ``ref_row`` (which must carry ``truth``, ``mock_flux``, ``mock_noise``,
-    ``photometry``, ``grad``, ``free_names``, ``map_loss``).
+    ``photometry``, ``grad``, ``free_names``, ``map_loss``, ``map_params``,
+    ``map_converged``).
 
     ``stage`` splits the two expensive compiles (the gradient, and the MAP fit) across
     separate invocations for a seam heavy enough that both together risk a wall-clock
@@ -261,7 +282,7 @@ def _run_seam(
         mock_flux = np.asarray(ref_row["mock_flux"], dtype=np.float64)
         mock_noise = np.asarray(ref_row["mock_noise"], dtype=np.float64)
 
-    photometry_here = grad_here = map_loss_here = None
+    photometry_here = grad_here = map_loss_here = map_params_here = map_converged_here = None
     try:
         if do_grad:
             fixed_extra = {k: v for k, v in truth.items() if k not in free_names}
@@ -282,8 +303,8 @@ def _run_seam(
             photometry_here = np.asarray(pred_here, dtype=np.float64)
             grad_here = [float(np.asarray(g)) for g in grad_vals]
         if do_map:
-            map_loss_here = _map_loss(
-                ForwardModel, model, obs, mock_flux, mock_noise, truth, dtype, n_steps
+            map_loss_here, map_params_here, map_converged_here = _map_loss(
+                ForwardModel, model, obs, mock_flux, mock_noise, truth, free_names, dtype, n_steps
             )
     except Exception as exc:
         if write_reference:
@@ -309,8 +330,12 @@ def _run_seam(
         }
         if map_loss_here is not None:
             rec["map_loss"] = map_loss_here
+            rec["map_params"] = map_params_here
+            rec["map_converged"] = map_converged_here
         elif ref_row is not None and "map_loss" in ref_row:
             rec["map_loss"] = ref_row["map_loss"]
+            rec["map_params"] = ref_row["map_params"]
+            rec["map_converged"] = ref_row["map_converged"]
         else:
             rec["partial"] = True  # no map_loss yet; a later ``--stage map`` fills it in
         return rec
@@ -327,13 +352,22 @@ def _run_seam(
 
     ref_loss = float(ref_row["map_loss"])
     rel_loss = abs(map_loss_here - ref_loss) / max(abs(ref_loss), 1e-300)
-    passed = rel_fwd < _TOL_FORWARD and rel_grad < _TOL_GRAD and rel_loss < _TOL_LOSS
+    rel_param = _rel(map_params_here, ref_row["map_params"])
+    passed = (
+        rel_fwd < _TOL_FORWARD
+        and rel_grad < _TOL_GRAD
+        and rel_loss < _TOL_LOSS
+        and rel_param < _TOL_PARAM
+    )
     return {
         "seam": name,
         "built": True,
         "rel_forward": rel_fwd,
         "rel_grad": rel_grad,
         "rel_loss": rel_loss,
+        "rel_param": rel_param,
+        "map_converged": map_converged_here,
+        "map_converged_ref": bool(ref_row["map_converged"]),
         "passed": passed,
     }
 
@@ -407,7 +441,12 @@ def main() -> int:
         "n_steps": args.n_steps,
         "bands": args.bands,
         "ssp": args.ssp,
-        "tolerances": {"forward": _TOL_FORWARD, "grad": _TOL_GRAD, "loss": _TOL_LOSS},
+        "tolerances": {
+            "forward": _TOL_FORWARD,
+            "grad": _TOL_GRAD,
+            "loss": _TOL_LOSS,
+            "param": _TOL_PARAM,
+        },
     }
     print(json.dumps(meta, indent=2), flush=True)
 
@@ -492,7 +531,8 @@ def main() -> int:
             status = "PASS" if rec["passed"] else "FAIL"
             print(
                 f"{name:14s} {status}  fwd={rec['rel_forward']:.2e}  "
-                f"grad={rec['rel_grad']:.2e}  loss={rec['rel_loss']:.2e}  ({dt:.1f}s)"
+                f"grad={rec['rel_grad']:.2e}  loss={rec['rel_loss']:.2e}  "
+                f"param={rec['rel_param']:.2e}  ({dt:.1f}s)"
             )
 
     if write_reference:
@@ -516,26 +556,31 @@ def main() -> int:
         report_rows = rows
 
     print()
-    header = f"{'seam':14s} {'fwd':>10s} {'grad':>10s} {'loss':>10s}  status"
+    header = f"{'seam':14s} {'fwd':>10s} {'grad':>10s} {'loss':>10s} {'param':>10s}  status"
     print(header)
     print("-" * len(header))
     any_fail = False
     for rec in report_rows:
         if not rec.get("built", False):
-            print(f"{rec['seam']:14s} {'--':>10s} {'--':>10s} {'--':>10s}  SKIP")
+            print(f"{rec['seam']:14s} {'--':>10s} {'--':>10s} {'--':>10s} {'--':>10s}  SKIP")
             continue
         if "error" in rec:
-            print(f"{rec['seam']:14s} {'--':>10s} {'--':>10s} {'--':>10s}  FAIL ({rec['error']})")
+            print(
+                f"{rec['seam']:14s} {'--':>10s} {'--':>10s} {'--':>10s} {'--':>10s}  "
+                f"FAIL ({rec['error']})"
+            )
             any_fail = True
             continue
         if "passed" not in rec:
-            print(f"{rec['seam']:14s} {'--':>10s} {'--':>10s} {'--':>10s}  PENDING")
+            print(f"{rec['seam']:14s} {'--':>10s} {'--':>10s} {'--':>10s} {'--':>10s}  PENDING")
             continue
         status = "PASS" if rec["passed"] else "FAIL"
         any_fail = any_fail or not rec["passed"]
+        both_converged = rec.get("map_converged") and rec.get("map_converged_ref")
+        conv = "" if both_converged else "  (unconverged)"
         print(
             f"{rec['seam']:14s} {rec['rel_forward']:10.2e} {rec['rel_grad']:10.2e} "
-            f"{rec['rel_loss']:10.2e}  {status}"
+            f"{rec['rel_loss']:10.2e} {rec['rel_param']:10.2e}  {status}{conv}"
         )
 
     print()

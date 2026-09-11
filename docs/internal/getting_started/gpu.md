@@ -217,7 +217,9 @@ Apple hardware before #1206. `bench/scripts/benchmark_float32_mps_parity.py` clo
 that gap: it writes a float64 reference on CPU (`--write-reference`), then, run on the
 Mac under the `jax-mps` venv above, checks six model seams (`stellar_dust`, `+dust IR`,
 `+Cue`, `+AGN`, `+radio+xray`, `panchromatic`) in pure float32 against it -- max relative
-forward error, gradient error, and MAP-loss deviation, PASS/FAIL at 3e-3 / 1e-2 / 1e-4:
+forward error, gradient error, a *converged* MAP fit's loss deviation (L-BFGS,
+`init_from` pinned to the shared truth, run to convergence or a 200-iteration cap), and
+its optimum's parameter-vector deviation, PASS/FAIL at 3e-3 / 1e-2 / 1e-4 / 1e-2:
 
 ```bash
 JAX_ENABLE_X64=0 JAX_PLATFORMS=mps python bench/scripts/benchmark_float32_mps_parity.py \
