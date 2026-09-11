@@ -31,6 +31,14 @@ normalization to zero.
 This test pins the exact discs (regression guard) and ``xfail``\ s the rest
 (progress tracker: fixing one turns its ``xfail`` into an unexpected pass). It is
 the enforced record of "checked every AGN disc component".
+
+Coverage note: every build here carries no ``agn_ir_frac`` (fracAGN), so
+``compose_l_nu`` selects the ``_disc_debited`` branch of the disc luminosity
+(the plain ``agn_log_lbol``-normalized shape) for the value this file
+verdicts; the ``agn_power x R`` SKIRTOR-R-tie branch -- active only under a
+non-zero fracAGN with ``cigale_joint`` -- is still traced on every build here
+but never the selected branch, so a float32 fault confined to it would not
+surface in this inventory.
 """
 
 import jax
