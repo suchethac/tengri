@@ -338,6 +338,29 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 1]",
         free_prior=Uniform(0.0, 1.0, "MBB fraction of L_dust", default=1.0),
     ),
+    ParamDeclaration(
+        "dust_log_L_ir",
+        Fixed(10.0),
+        "Total dust IR budget log10(L_IR/Lsun) (API-level log-solar, the "
+        "agn_log_lbol convention). DECLARING this parameter AT ALL -- Fixed "
+        "or any free prior -- REPLACES the energy-balance IR budget "
+        "(log_L_ir = log_L_absorbed + log10(dust_eta_balance)) with this "
+        "value outright: it is not read unless the caller's build provenance "
+        "shows it was requested. Leaving it undeclared keeps strict/relaxed "
+        "energy balance exactly as before. Radio's FIR-radio-correlation "
+        "amplitudes (radio_sfr_mode='bell2003'/'delvecchio2021'/'molnar2021') "
+        "follow L_ir too, so declaring this is not a dust-only knob -- it also "
+        "moves the radio SED.",
+        lambda lo, hi: lo >= 0 and hi <= 16,
+        "must be in [0, 16]",
+        units="dex",
+        # Deliberately NO free_prior, same reasoning as dust_L_agn_ir just
+        # above: an absolute (log) luminosity has no galaxy-independent
+        # interval, and declaring this parameter at all is itself the
+        # energy-balance opt-out, so a blanket wildcard must never reach it
+        # and silently decouple the IR budget from the absorbed energy. Free
+        # it explicitly against your own luminosity scale.
+    ),
 )
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (

@@ -4193,7 +4193,20 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     "dust_emission": frozenset(
-        {"type", "*", "all_params", "spinning_dust", "f_cnm", "eta_balance"}
+        {
+            "type",
+            "*",
+            "all_params",
+            "spinning_dust",
+            "f_cnm",
+            "eta_balance",
+            # Total dust IR budget override (dust_log_L_ir <-> 'log_L_ir'):
+            # a group-level knob read by the attenuation component, not by any
+            # one emission engine's predict(), so (like 'eta_balance') it must
+            # be accepted whichever type is selected rather than scoped to one
+            # engine's own wildcard.
+            "log_L_ir",
+        }
     ),
     "neb": frozenset({"type", "*", "all_params", "full_catalog", "grid"}),
     "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
@@ -4333,7 +4346,8 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
         # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
         # so it has no attribute for this table to target; it is covered by the
-        # test's hand_written allowlist instead.
+        # test's hand_written allowlist instead. log_L_ir (dust_log_L_ir) is the
+        # same case (#2187-series total-IR-budget override).
     ),
     "neb": (
         _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),
