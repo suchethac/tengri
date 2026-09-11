@@ -406,5 +406,66 @@ class TestComposablePrecomputeChoosesACoveringGrid:
         assert "grid_phot" in out and out["grid_phot"].shape[0] == 2
 
 
+class TestNodeCoincidenceSlackIsHonestAboutFloat32:
+    """The node-coincidence slack must absorb a float32 rounding step, exactly.
+
+    ``_check_polar_reference_grid_extent`` treats an endpoint within a small
+    relative slack of the requirement as coincident, because
+    ``resample_template`` zero-fills strictly outside the caller's span and
+    an endpoint exactly on the requirement loses nothing. The slack has to be
+    at least float32 machine epsilon (``2**-23``), the largest relative
+    distance a float32 value can land from its true neighbor after a
+    canonicalization round-trip -- a tighter slack refuses a grid whose
+    endpoint is off by only one float32 ulp, and a much looser one would
+    silently accept a genuinely truncated grid.
+    """
+
+    def _required_extent(self):
+        from tengri.forward.sed_model import _polar_reference_required_extent_aa
+
+        required = _polar_reference_required_extent_aa("skirtor")
+        if required is None:
+            pytest.skip("raw SKIRTOR disk/dust grid not available")
+        return required
+
+    def test_an_endpoint_one_float32_ulp_off_is_accepted(self):
+        from tengri.forward.sed_model import _check_polar_reference_grid_extent
+
+        lo_req, hi_req = self._required_extent()
+        # Round-trip each endpoint through float32, then step one ulp toward
+        # the interior -- the worst case the slack has to absorb.
+        lo32 = np.float32(lo_req)
+        hi32 = np.float32(hi_req)
+        lo_perturbed = float(np.nextafter(lo32, np.float32(np.inf)))
+        hi_perturbed = float(np.nextafter(hi32, np.float32(-np.inf)))
+        assert lo_perturbed > lo_req and hi_perturbed < hi_req, (
+            "probe setup failed: the perturbation did not narrow the grid"
+        )
+        wave = np.geomspace(lo_perturbed, hi_perturbed, 500)
+        _check_polar_reference_grid_extent(
+            wave,
+            attenuation_block="polar_dust",
+            agn_norm="cigale_joint",
+            torus_block="skirtor",
+        )  # must not raise
+
+    def test_an_endpoint_far_beyond_the_tolerance_is_still_refused(self):
+        from tengri.config.exceptions import ConfigError
+        from tengri.forward.sed_model import _check_polar_reference_grid_extent
+
+        lo_req, hi_req = self._required_extent()
+        # 1e-4 relative is ~1000x float32 epsilon (1.19e-7) -- far beyond any
+        # float32 canonicalization step, so this must still be refused.
+        lo_far = lo_req * (1.0 + 1.0e-4)
+        wave = np.geomspace(lo_far, hi_req, 500)
+        with pytest.raises(ConfigError, match=r"polar"):
+            _check_polar_reference_grid_extent(
+                wave,
+                attenuation_block="polar_dust",
+                agn_norm="cigale_joint",
+                torus_block="skirtor",
+            )
+
+
 class _StopPrecompute(Exception):
     """Sentinel: stop ``precompute`` once the grid it chose has been seen."""

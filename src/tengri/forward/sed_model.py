@@ -1161,6 +1161,12 @@ def _polar_reference_required_extent_aa(torus_block: str | None) -> tuple[float,
     return float(axis.min()), float(axis.max())
 
 
+# The node-coincidence slack in _check_polar_reference_grid_extent, below:
+# float32 machine epsilon, the largest relative distance a float32 value can
+# sit from its true neighbor (see that function's inline comment).
+_FLOAT32_NODE_COINCIDENCE_SLACK = float(np.finfo(np.float32).eps)
+
+
 def _check_polar_reference_grid_extent(
     rest_wavelength,
     *,
@@ -1235,9 +1241,15 @@ def _check_polar_reference_grid_extent(
     lo_got, hi_got = float(wave.min()), float(wave.max())
     # Node coincidence is enough: resample_template zero-fills strictly
     # outside the caller's span, so an endpoint exactly on the requirement
-    # loses nothing. A 1e-9 relative slack absorbs the float32 grid
-    # canonicalization, which can move an endpoint in the last bit.
-    if lo_got <= lo_req * (1.0 + 1e-9) and hi_got >= hi_req * (1.0 - 1e-9):
+    # loses nothing. The slack is float32 machine epsilon (2**-23 ~=
+    # 1.1920929e-7): that is the largest relative gap a single float32
+    # value can sit from its true neighbor (largest at the bottom of a
+    # binade, where ulp(x)/x = eps exactly), so it absorbs one float32
+    # grid-canonicalization rounding step in either direction without
+    # widening enough to accept a genuinely truncated grid.
+    if lo_got <= lo_req * (1.0 + _FLOAT32_NODE_COINCIDENCE_SLACK) and hi_got >= hi_req * (
+        1.0 - _FLOAT32_NODE_COINCIDENCE_SLACK
+    ):
         return
 
     from tengri.config.exceptions import ConfigError
