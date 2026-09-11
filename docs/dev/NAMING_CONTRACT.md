@@ -3,7 +3,7 @@
 > **Authority:** This is the single source of truth for naming conventions.
 > All new code, renames, and refactors MUST comply. Referenced by CLAUDE.md.
 >
-> **Last updated:** 2026-06-24
+> **Last updated:** 2026-09-11
 > **Current version:** v0.1-dev
 > **Derived from:** `docs/dev/sessions/2026-04-03-api-naming-design.md`, `docs/dev/REFACTOR.md`
 
@@ -304,6 +304,49 @@ Do **not** reach for `_get_dl_cm` as "the obvious helper": it short-circuits to 
 | `posterior.derived["stellar_mass"]` | the old `Posterior` accessor | **deprecated** → `posterior.properties[...]` |
 
 An audit that greps for `.derived` and "migrates" every hit will rewrite the physics accessors in the reproduction notebooks. Grep for `posterior.derived` / `\.derived\[` on a `Posterior`, never bare `.derived`.
+
+---
+
+## 4c. Unit standards for published properties and free parameters
+
+Delivered by #1206 (§A–D): the breaking unit change that moved eleven line-luminosity
+properties, three X-ray luminosities, and the GRAHSP `l5100` free parameter off erg/s and
+retired the linear `q_h`, because a value of ~1e40–1e56 in those units is `inf` in float32
+(max 3.4028e38) *as a bare number*, before any physics runs — no amount of intermediate
+rearrangement (`apply_log10_scale`, peak-factoring, …) can make an intrinsically
+out-of-range final value representable. The rule these fixes converged on:
+
+- **Luminosities are published in `Lsun`** (solar luminosities, ~3.828e33 erg/s), not erg/s.
+  A luminosity that is representable in `Lsun` for every physical source in tengri's domain
+  (stellar, nebular, AGN) but not in erg/s is the common case, not an edge case — see
+  `l_bol`, `l_tir`, `l_dust_absorbed`, and (since #1206) `halpha` and its ten siblings,
+  `l_x_xrb`, `l_x_agn`, `l_x_total`.
+- **Rates and other quantities with no float32-safe linear form are published as `log_*`,
+  in dex, with no linear sibling.** `q_h` (ionizing photon rate, ~1e53–1e56 photons/s) is
+  the model: every physical value overflows float32 in *any* unit choice on the linear
+  side, so `log_q_h` is the only form and the linear property is retired with no alias
+  rather than converted. A property in this category never gets a same-named `Lsun` (or
+  other-unit) companion "for completeness" — that would reintroduce exactly the
+  unrepresentable value the `log_*` form exists to avoid.
+- **`erg/s/Hz` is reserved for spectral density** (`L_nu`, the SED itself) — never for an
+  integrated luminosity. The Jacobian to the frequency domain (`L_nu ~ L_lambda * lambda^2
+  / c`) is what keeps SED arrays representable even for luminous AGN whose `L_lambda` is
+  not; publishing an integrated quantity in `erg/s`/`erg/s/Angstrom` instead reintroduces
+  the same overflow the Jacobian was avoiding.
+- **A property carried in `Lsun` (or any non-erg/s unit) keeps a `log_<name>` companion in
+  dex re erg/s when the erg/s form is still physically meaningful** (it usually is, for
+  luminosities): `log_halpha == log10(halpha * L_sun)`, not `log10(halpha)`. The companion
+  exists for callers that want the exponent directly (float32-safe by construction) without
+  reconstructing it from the `Lsun` value and a conversion constant.
+- **A free parameter with the same overflow shape follows the same rule**: `agn_grahsp_l5100`
+  (`LogUniform(1e42, 1e47)`, erg/s) became `agn_grahsp_log_l5100` (`Uniform(42.0, 47.0)`,
+  dex) rather than a `Lsun`-valued `LogUniform`, because the *parameter value itself* — not
+  merely a downstream derived quantity — is `inf` in float32 before it reaches any physics
+  kernel; a linear prior over a range spanning float32's ceiling is unfittable in float32 by
+  construction, regardless of the unit it is denominated in.
+
+Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
+and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one.
 
 ---
 

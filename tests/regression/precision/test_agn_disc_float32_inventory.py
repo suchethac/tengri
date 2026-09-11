@@ -227,7 +227,6 @@ def test_disc_float32_pending(ssp_bare, disc):
     assert ok, f"disc '{disc}' still float32-broken: {detail}"
 
 
-
 # ``test_grid_class_disc_warns_in_float32`` and
 # ``test_float32_safe_disc_does_not_warn`` are removed (#1206 §D):
 # ``_GRID_CLASS_XFAIL`` is empty (``grahsp_sbpl`` fixed, the last member),

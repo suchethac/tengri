@@ -560,6 +560,7 @@ class XRaySEDComponent(TemplateThreading):
 # Xray group property registration (Phase 1B)
 # ─────────────────────────────────────────────────────────────────────
 
+
 def _l_x_xrb_fn(state, params):
     """X-ray luminosity from X-ray binaries [Lsun].
 
@@ -656,8 +657,7 @@ _XRAY_PROPERTIES = {
     "l_x_xrb": Property(
         units="Lsun",
         group="xray",
-        doc="X-ray luminosity from X-ray binaries. `l_x_xrb = 10**(log_l_x_xrb - "
-        "log10(L_sun))`",
+        doc="X-ray luminosity from X-ray binaries. `l_x_xrb = 10**(log_l_x_xrb - log10(L_sun))`",
         fn=_l_x_xrb_fn,
     ),
     "l_x_agn": Property(
@@ -669,8 +669,7 @@ _XRAY_PROPERTIES = {
     "l_x_total": Property(
         units="Lsun",
         group="xray",
-        doc="Total X-ray luminosity (XRB + AGN). `l_x_total = 10**(log_l_x_total - "
-        "log10(L_sun))`",
+        doc="Total X-ray luminosity (XRB + AGN). `l_x_total = 10**(log_l_x_total - log10(L_sun))`",
         fn=_l_x_total_fn,
     ),
     # Float32-safe companions (#1534). The HMXB coefficient alone is 2.6e39, past

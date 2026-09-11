@@ -254,9 +254,7 @@ class TestAnalyticNebularContinuumLog10QH:
         log10_q_h = 50.0  # log10(_Q_H_REF), same reference rate as the file default
 
         via_linear = compute_analytic_nebular_continuum(wave, _Q_H_REF, log_z_abs=-1.848)
-        via_log = compute_analytic_nebular_continuum(
-            wave, log_z_abs=-1.848, log10_q_h=log10_q_h
-        )
+        via_log = compute_analytic_nebular_continuum(wave, log_z_abs=-1.848, log10_q_h=log10_q_h)
         np.testing.assert_allclose(
             np.asarray(via_log), np.asarray(via_linear), rtol=1e-12, atol=0.0
         )

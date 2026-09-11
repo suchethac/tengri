@@ -3036,7 +3036,10 @@ class Prediction:
 
     @property
     def log_q_h(self):
-        """log10 ionizing photon production rate [dex re s⁻¹]. Same as ``pred.ionizing.log_q_h``."""
+        """log10 ionizing photon production rate [dex re s⁻¹].
+
+        Same as ``pred.ionizing.log_q_h``.
+        """
         return self.ionizing.log_q_h
 
     @property

@@ -43,7 +43,7 @@ enforced by ``tools/check_param_prefixes.py``.
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, LogUniform, Uniform
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import ParamDeclaration, declared_default
 
 PARAMS: tuple[ParamDeclaration, ...] = (

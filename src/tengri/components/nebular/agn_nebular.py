@@ -367,9 +367,7 @@ def _log_qh_from_lacc(
 
     # log10(Q_H) = log10(f_ion) + log10(l_acc_erg) - log10(<h*nu>), never
     # forming the linear l_ion (#1206 §C).
-    log10_q_h = (
-        jnp.log10(f_ion) + jnp.asarray(log10_l_acc_erg) - jnp.log10(mean_hnu)
-    )
+    log10_q_h = jnp.log10(f_ion) + jnp.asarray(log10_l_acc_erg) - jnp.log10(mean_hnu)
     return jnp.maximum(log10_q_h, 0.0)
 
 

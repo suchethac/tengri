@@ -540,6 +540,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- The eleven line-luminosity properties (`halpha`, `hbeta`, `lya`, `oii`, `oiii_4959`,
+  `oiii_5007`, `nii_6548`, `nii_6584`, `sii_6717`, `sii_6731`, `civ_1549`) and the three
+  X-ray luminosities (`l_x_xrb`, `l_x_agn`, `l_x_total`) now return `Lsun`, not `erg/s`
+  (#1206). **Breaking, with no alias** — a value of ~1e40-1e45 erg/s is `inf` in float32
+  (max 3.4028e38) as a bare number, before any physics runs; `halpha` now Lsun: multiply by
+  `3.828e33` for erg/s. The `log_<name>` / `log_l_x_*` companions are unchanged, still dex
+  re erg/s (`log_halpha == log10(halpha * L_sun)`); `log_l_x_agn` and `log_l_x_total` are
+  fixed alongside the unit change (previously `nan` in float32: they read the linear
+  `L_agn_bol` and took its `log10`; they now read the `log_L_agn_bol` companion the AGN
+  component already publishes). `IonizingQuantities.q_h` (the `state_to_ionizing_quantities`
+  bridge) and `XRayQuantities` are updated to match. `NAMING_CONTRACT.md` §4c documents the
+  unit-standard rule (luminosities in Lsun, unbounded rates as `log_*` in dex).
+- The linear ionizing photon rate `q_h` is retired, with no alias (#1206). Every physical
+  ionizing rate is ~1e53-1e56 photons/s, past float32's ceiling in any linear unit — there
+  is no float32-safe form to keep, unlike the line/X-ray luminosities above. `log_q_h`
+  (dex re photons/s) is the sole surviving property; `q_h` → `10**log_q_h`. `pred.q_h`,
+  `pred.ionizing.q_h` and `predict_properties(names=("q_h",))` now raise `KeyError` naming
+  `log_q_h`. `IonizingQuantities` drops the `q_h` field.
+- The GRAHSP AGN disc normalization `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, erg/s) is
+  renamed `agn_grahsp_log_l5100` (`Uniform(42.0, 47.0)`, dex), with no alias (#1206). The
+  linear parameter *value itself* is `inf` in float32 before any kernel runs; translate with
+  `agn_grahsp_log_l5100 = log10(agn_grahsp_l5100)`. The composable `grahsp_sbpl` disc block
+  is now float32-exact (previously the last disc in
+  `tests/regression/precision/test_agn_disc_float32_inventory.py` that was not); the
+  `Float32UnsafeAGNWarning` escape hatch it used is removed as unused.
 - `SEDModel.compile_signature()` is derived from a policy ledger over every model attribute (`tengri.forward._signature_policy`) with the nested `cache_key()` of the observation, parameters and SSP grid, memoized on the instance and invalidated by the two structural mutators; four structural attributes the hand-written list never keyed (`lgmet_scatter`, the GP field kernel, `lsf_n_bins`, `igm_patchy`) now are, and an attribute nobody classifies fails a contract test instead of shipping a wrong number (#2163).
 - The on-disk WavePrecomp z-table and IGM subband caches are keyed by every field of a frozen request dataclass (`ZTableRequest`, `SubbandRequest`) instead of a hand-written field list, with one version constant per cache (both bumped, so existing tables recompute once) and the cosmology the integrand uses folded in as the #2145 tripwire; the ionizing-spectrum table gains a version constant (#2163).
 - Dust attenuation laws are explicit and required (#1989). A dust attenuation group

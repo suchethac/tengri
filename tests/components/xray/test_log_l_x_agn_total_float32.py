@@ -85,6 +85,4 @@ def test_log_l_x_agn_and_total_pure_float32_finite_and_tracks_float64(ssp_bare):
             "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
         )
         rel = abs(v32 - v64) / max(abs(v64), 1e-12)
-        assert rel <= 3e-3, (
-            f"{name}: pure-f32 {v32} vs float64 {v64} — rel {rel:.2e} exceeds 3e-3"
-        )
+        assert rel <= 3e-3, f"{name}: pure-f32 {v32} vs float64 {v64} — rel {rel:.2e} exceeds 3e-3"
