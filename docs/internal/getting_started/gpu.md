@@ -192,18 +192,65 @@ float32 geoVI with marginalized emission lines used to fail outright on CUDA
 Fixed by replacing that one contraction with an explicit broadcast-multiply-sum,
 which never lowers to a GEMM.
 
-## Apple Metal (experimental — not supported for benchmarks)
+## Apple GPU via jax-mps
 
-JAX-Metal is incomplete: several primitives silently fall back to CPU,
-and test failures on Metal do not reproduce on CPU. Use **CPU** instead:
+Apple's own `jax-metal` last released 0.1.1 on 2024-10-08 and pins `jax == jaxlib >=
+0.4.34`, which is not viable against tengri's JAX 0.11. The path that works instead is
+the community [`jax-mps`](https://github.com/tillahoffmann/jax-mps) plugin, built on
+MLX. Full walkthrough with measured throughput: `notebooks/apple_mps.py`.
+
+**Use a separate environment.** `jax-mps` pins a JAX version tengri's main environment
+does not use, so build it apart from the working install
+(`notebooks/apple_mps.py:66-79`):
 
 ```bash
-JAX_PLATFORMS=cpu python -m tengri.bench
+python3.12 -m venv ~/.venvs/tengri-mps
+source ~/.venvs/tengri-mps/bin/activate
+pip install "jax>=0.10,<0.11" "jaxlib>=0.10,<0.11" "jax-mps==0.10.10"
+pip install -e /path/to/tengri
 ```
 
-If `python -m tengri.bench` reports `default device: METAL` and
-1-galaxy timing is much slower than the [Performance table](../performance/index.md),
-the silent CPU fallback is the cause. Force CPU as above.
+| you have | you need |
+|---|---|
+| Python 3.12 | `jax-mps` 0.10.10 → **jax 0.10.x** |
+| jax 0.9.x | `jax-mps` 0.9.9 → **Python 3.13** (cp313-only wheel) |
+
+Two rules govern everything else on this backend:
+
+1. **MPS has no float64, at all.** Not "slower" -- absent. A float64 array does not
+   downcast; it raises `MLX does not support float64 (F64)`.
+2. **Select float32 in the environment, before Python starts.** Setting it after
+   `import tengri` is too late -- constants allocated during import are already on the
+   device:
+
+   ```bash
+   export JAX_ENABLE_X64=0
+   export JAX_PLATFORMS=mps
+   ```
+
+### Accuracy: the parity sweep
+
+`notebooks/apple_mps.py` measures throughput only -- no accuracy check had been run on
+Apple hardware before #1206. `bench/scripts/benchmark_float32_mps_parity.py` closes
+that gap: it writes a float64 reference on CPU (`--write-reference`), then, run on the
+Mac under the `jax-mps` venv above, checks six model seams (`stellar_dust`, `+dust IR`,
+`+Cue`, `+AGN`, `+radio+xray`, `panchromatic`) in pure float32 against it -- max relative
+forward error, gradient error, and a *converged* MAP fit's optimum parameter-vector
+deviation, PASS/FAIL at 3e-3 / 1e-2 / 1e-2. The MAP fit uses L-BFGS to genuine
+convergence (`init_from` pinned to the shared truth, restarted from a stall rather than
+given a bigger iteration cap), and the reference generator refuses to write a file where
+any seam did not converge. The MAP-loss deviation prints as an informational column
+only -- at a converged optimum the loss is stationary, so it is the parameter vector,
+not the loss value, that is the scientific quantity gated:
+
+```bash
+JAX_ENABLE_X64=0 JAX_PLATFORMS=mps python bench/scripts/benchmark_float32_mps_parity.py \
+    --reference bench/results/float32_parity_reference_<sha>.json
+```
+
+It refuses to run with `jax_enable_x64=True` (a one-line fix is printed instead of a
+silent float64 fallback), and a seam that cannot be built in float32 today is skipped
+with a printed reason rather than failing the sweep.
 
 ## TPU
 
