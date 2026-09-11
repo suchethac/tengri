@@ -688,6 +688,12 @@ def test_gradient_wrt_a_free_redshift_reaches_the_law(screen, uv_ssp, uv_obs):
         grad_curve = float(jax.grad(curve_ratio)(jnp.asarray(2.0, dtype=jnp.float64)))
 
     assert np.isfinite(grad_photometry), f"{screen}: non-finite photometry gradient in z"
+    assert grad_photometry != 0.0, (
+        f"{screen}: d[sum photometry]/dz is exactly zero. The fixture's photometry is "
+        "O(1e-16), but the gradient is ~-0.48 of it per unit z, so an exact zero here "
+        "does not mean 'small' - it means the redshift never reached the fit table and "
+        "the likelihood is flat in z (#2199)."
+    )
     assert np.isfinite(grad_curve), f"{screen}: non-finite curve gradient in z"
     assert grad_curve != 0.0, (
         f"{screen}: d[A(1500)/A(5500)]/dz is exactly zero through narayanan_z. The "

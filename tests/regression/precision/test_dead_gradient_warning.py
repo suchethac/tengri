@@ -106,9 +106,17 @@ def test_kte_tangent_is_supplied_and_correct():
     central = float((total(x + h) - total(x - h)) / (2 * h))
 
     assert central != 0.0, "setup: the reference is zero, so it cannot judge the tangent"
+    assert np.all(np.isfinite(central)), (
+        "`central` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
     assert float(tangent) != 0.0, (
         "d/d(kTe) is exactly zero — the nthcomp custom_jvp has stopped supplying "
         "the kTe tangent, which makes agn_kt_warm unfittable again (#1822)"
+    )
+    assert np.all(np.isfinite(float(tangent))), (
+        "`float(tangent)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
     )
     rel = abs(float(tangent) - central) / abs(central)
     assert rel < 0.05, f"d/d(kTe) = {float(tangent):.5e} vs central {central:.5e} ({rel:.1%})"
@@ -131,6 +139,10 @@ def test_forward_and_reverse_agree_on_the_kernel():
     _, fwd = jax.jvp(total, (x,), (jnp.asarray(1.0),))
     rev = jax.grad(total)(x)
     assert jnp.isfinite(rev), f"reverse-mode d/d(kTe) is {rev}"
+    assert jnp.any(rev != 0.0), (
+        "`rev` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     np.testing.assert_allclose(float(rev), float(fwd), rtol=1e-10)
 
 
@@ -162,6 +174,10 @@ def test_reverse_mode_survives_a_realistic_ring_luminosity(param):
         f"reverse-mode d/d({param}) through kubota_done_disc is {grad}. The nthcomp "
         "kernel is forcing a float32 output again, so the ~1e66 cotangent from the "
         "ring luminosity overflows float32's 3.4e38 ceiling (#1822)."
+    )
+    assert jnp.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     _, fwd = jax.jvp(total, (x,), (jnp.asarray(1.0),))
     np.testing.assert_allclose(float(grad), float(fwd), rtol=1e-8)

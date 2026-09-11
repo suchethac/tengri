@@ -128,19 +128,21 @@ def test_narayanan_tau_prior_flat_form_builds(z):
 
 @pytest.mark.parametrize("z", _REDSHIFTS)
 def test_narayanan_tau_prior_group_form_builds(z):
-    """Two-component group: ``dust_tau_bc`` stays Fixed at its declared
-    default, only ``dust_tau_diff`` is freed by the helper.
+    """Two-component group: ``dust_tau_bc`` is pinned at its declared default
+    explicitly, only ``dust_tau_diff`` is freed by the helper.
 
-    Trap: the completeness guard for the two-component ``tau_bc``/``tau_diff``
-    pair recognizes only the short stems (``tau_bc``, ``tau_diff``), so this
-    must pass the helper's own full-name key (``dust_tau_diff=``), not mix it
-    with a short-stem ``tau_bc=``.
+    A two-screen model must name both screens: since the grammar normalizes
+    every spelling before the completeness check, a lone ``dust_tau_diff`` is
+    refused exactly like a lone ``tau_diff`` (the full spelling used to slip
+    past a stem-only check). The caller states what happens to ``tau_bc``:
+    ``Fixed(DEFAULT)`` pins it, ``FREE`` would fit it.
     """
     spec = parse_groups(
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
+            "tau_bc": Fixed(DEFAULT),
             **narayanan_tau_prior(z),
         },
         redshift=Fixed(z),
@@ -185,7 +187,22 @@ def test_bump_unstandardize_deep_negative_tail_stays_nonnegative():
 def test_bump_log_prob_grad_at_mu_is_finite(z):
     dist = narayanan_prior(z)["dust_bump_strength"]
     grad = jax.grad(lambda x: dist.log_prob(x))(jnp.asarray(dist.mu))
+    # grad-assert: finite-only — mu IS the mode. log_prob is -0.5*((x-mu)/sigma)**2
+    # minus an x-independent normalizer, so d/dx at x=mu is exactly zero by symmetry
+    # (measured: -0.0 at every z in _REDSHIFTS). Demanding non-zero here would assert
+    # the density is not stationary at its own peak. The claim under test is that the
+    # _truncated normalizer stays differentiable, i.e. finite rather than NaN.
     assert jnp.isfinite(grad)
+    # The derivative is live away from the mode, which is what rules out a
+    # constant log_prob passing the finiteness check above.
+    off_mode = jax.grad(lambda x: dist.log_prob(x))(jnp.asarray(dist.mu + 0.1))
+    assert jnp.isfinite(off_mode), (
+        f"z={z}: non-finite bump log_prob gradient 0.1 beyond mu: {off_mode!r}."
+    )
+    assert off_mode != 0.0, (
+        f"z={z}: log_prob is flat 0.1 beyond mu, so the bump prior carries no "
+        "gradient information anywhere and the sampler cannot see its own mode."
+    )
 
 
 # ── 10k-sample negativity check: dust_tau_diff only ───────────────────────

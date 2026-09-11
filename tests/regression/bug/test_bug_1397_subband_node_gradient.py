@@ -92,6 +92,10 @@ def test_lut_photometry_gradient_is_finite_across_the_width_prior(lut_model, wid
         f"d(photometry)/d(width) is {grad} at width={width_gyr} Gyr, inside the "
         "tsnorm prior Uniform(0.2, 5.0)"
     )
+    assert np.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_the_value_was_never_the_problem(lut_model):

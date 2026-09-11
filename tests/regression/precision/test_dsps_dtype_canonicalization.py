@@ -77,6 +77,10 @@ def test_no_mixed_dtype_scatter_in_pure_float32(ssp_bare, case):
         ]
 
     assert jnp.all(jnp.isfinite(phot)), "float32 photometry must stay finite"
+    assert jnp.any(phot != 0.0), (
+        "`phot` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert not scatter, (
         f"{len(scatter)} mixed-dtype scatter FutureWarning(s) on the {case!r} SFH path — "
         "a DSPS call site is being handed a cached float64 grid alongside float32 "

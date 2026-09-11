@@ -68,12 +68,20 @@ def test_weighted_age_is_invariant_under_rescaling_the_weights(scale):
     """
     reference = float(compute_luminosity_weighted_age(_weights(1.0), _flux(), _AGES, _WAVE))
     assert np.isfinite(reference), "setup: the unit-scale reference is already NaN"
+    assert np.any(reference != 0.0), (
+        "`reference` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     got = float(compute_luminosity_weighted_age(_weights(scale), _flux(), _AGES, _WAVE))
     assert np.isfinite(got), (
         f"weights rescaled by {scale:.0e} returned NaN while the identical galaxy at "
         "unit scale returns a finite age — the emptiness guard is anchored to a "
         "magnitude whose units have since changed"
+    )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     assert abs(got - reference) / reference < 1e-9, (
         f"weighted age moved from {reference:.6e} to {got:.6e} under a pure rescaling"
@@ -88,11 +96,19 @@ def test_weighted_metallicity_is_invariant_under_rescaling_the_weights(scale):
         compute_luminosity_weighted_metallicity(_weights(1.0), _flux(), _AGES, _WAVE, **kwargs)
     )
     assert np.isfinite(reference), "setup: the unit-scale reference is already NaN"
+    assert np.any(reference != 0.0), (
+        "`reference` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     got = float(
         compute_luminosity_weighted_metallicity(_weights(scale), _flux(), _AGES, _WAVE, **kwargs)
     )
     assert np.isfinite(got), f"weights rescaled by {scale:.0e} returned NaN"
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert abs(got - reference) < 1e-9, (
         f"weighted metallicity moved from {reference:.6e} to {got:.6e} under a pure rescaling"
     )

@@ -99,6 +99,10 @@ def test_neg_log_posterior_gradient_is_finite_in_pure_float32(synthetic_ssp_wide
                 f"grad(nlp) is non-finite at draw {i} in pure float32 — a reverse-pass "
                 "overflow in the stellar mass scaling or the sub-band node ratio"
             )
+            assert any(np.any(v != 0.0) for v in leaves), (
+                f"grad(nlp) is identically ZERO at draw {i} in pure float32 — this is the "
+                "#2100 defect, and the finite check above cannot see it: zero is finite"
+            )
 
 
 def test_float32_inference_gradient_is_grad_finite_where_it_was_nan(synthetic_ssp_wide):
@@ -122,4 +126,8 @@ def test_float32_inference_gradient_is_grad_finite_where_it_was_nan(synthetic_ss
     assert all(np.all(np.isfinite(np.asarray(v))) for v in jax.tree_util.tree_leaves(g)), (
         "grad(nlp) non-finite in pure float32 — the stellar mass-scale or "
         "sub-band node-ratio custom_vjp is not neutralizing its overflow"
+    )
+    assert any(np.any(np.asarray(v) != 0.0) for v in jax.tree_util.tree_leaves(g)), (
+        "grad(nlp) is identically ZERO in pure float32 — the point that once NaN'd now "
+        "carries no gradient at all, which is the #2100 defect rather than a repair"
     )

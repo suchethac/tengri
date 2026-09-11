@@ -37,13 +37,13 @@ class TestDefaultsUnchanged:
     """No bc/diff overlay -> identical to the shared-``law_params`` behavior."""
 
     def test_shared_n_slope_default(self) -> None:
-        ref = two_component_dust(_WAVE, _YOUNG, tau_v1=1.0, tau_v2=0.3, n_slope=-0.7)
+        ref = two_component_dust(_WAVE, _YOUNG, tau_v1=1.0, tau_v2=0.3, dust_slope=-0.7)
         new = two_component_dust(
             _WAVE,
             _YOUNG,
             tau_v1=1.0,
             tau_v2=0.3,
-            n_slope=-0.7,
+            dust_slope=-0.7,
             bc_params=None,
             diff_params=None,
         )
@@ -63,8 +63,8 @@ class TestIndependentSlopes:
             tau_v2=0.0,
             law_bc="power_law",
             law_diff="power_law",
-            bc_params={"n_slope": -1.0},
-            diff_params={"n_slope": -0.7},
+            bc_params={"dust_slope": -1.0},
+            diff_params={"dust_slope": -0.7},
         )
         tau = _tau_from_trans(trans)[0]  # single age row
         # Expected birth-cloud optical depth: tau_v1 * (lambda/5500)^-1.0,
@@ -81,8 +81,8 @@ class TestIndependentSlopes:
             tau_v2=1.0,
             law_bc="power_law",
             law_diff="power_law",
-            bc_params={"n_slope": -1.0},
-            diff_params={"n_slope": -0.7},
+            bc_params={"dust_slope": -1.0},
+            diff_params={"dust_slope": -0.7},
         )
         tau = _tau_from_trans(trans)[0]
         k_expected = (np.asarray(_WAVE) / V_BAND_ANGSTROM) ** -0.7
@@ -104,7 +104,7 @@ class TestIndependentSlopes:
             jnp.array([1.0e4]),
             tau_v1=tau_bc,
             tau_v2=0.0,
-            bc_params={"n_slope": -1.0},
+            bc_params={"dust_slope": -1.0},
         )
         a_tengri = -2.5 * np.log10(np.asarray(trans_fixed)[0, 0])
         np.testing.assert_allclose(a_tengri, a_fsps, rtol=3e-3)

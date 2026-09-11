@@ -47,6 +47,12 @@ from pathlib import Path as _Path
 
 from tengri.utils.physics_constants import L_SUN as _LSUN
 
+#: Version constant for ionizing-spectrum precomputation table.
+#: Bump when the curve-fit algorithm, the table layout, or field set changes.
+#: One version constant per cache (disk + in-memory) to ensure a stale entry
+#: cannot be reused after an algorithm change.
+_IONSPEC_CACHE_VERSION = 1
+
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
 
@@ -91,6 +97,7 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
     """
     flux = np.ascontiguousarray(np.asarray(ssp_flux))
     return (
+        _IONSPEC_CACHE_VERSION,
         tuple(flux.shape),
         str(flux.dtype),
         bytes(np.asarray(ssp_wave).tobytes()),
@@ -100,12 +107,18 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
 
 
 def _fingerprint_hash(key: tuple) -> str:
-    """SHA-256 of the fingerprint, hex-encoded, for use as a disk filename."""
+    """SHA-256 of the fingerprint, hex-encoded, for use as a disk filename.
+
+    Includes the version in the digest so that cache invalidation is automatic
+    when the algorithm or table format changes; old entries are simply
+    unaddressable under the new hash.
+    """
     h = _hashlib.sha256()
-    h.update(repr(key[:2]).encode())  # shape + dtype
-    h.update(key[2])  # raw wave bytes
-    h.update(key[3])  # raw lgmet bytes
-    h.update(key[4].encode())  # flux content digest: without it, see _ssp_fingerprint
+    h.update(repr(key[0]).encode())  # version
+    h.update(repr(key[1:3]).encode())  # shape + dtype
+    h.update(key[3])  # raw wave bytes
+    h.update(key[4])  # raw lgmet bytes
+    h.update(key[5].encode())  # flux content digest: without it, see _ssp_fingerprint
     return h.hexdigest()
 
 

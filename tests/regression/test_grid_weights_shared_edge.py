@@ -121,3 +121,7 @@ def test_gradients_flow_and_are_finite():
     g = jax.grad(lambda x: jnp.sum(compute_grid_weights(x, grid) ** 2))(jnp.asarray(-1.2))
 
     assert bool(jnp.isfinite(g)), "non-finite gradient through the grid weights"
+    assert jnp.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )

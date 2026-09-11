@@ -229,6 +229,10 @@ class TestInterpolateMetAlpha:
                     alpha_fe=afe,
                 )
                 assert jnp.all(jnp.isfinite(result)), f"Non-finite at lz={lz}, afe={afe}"
+                assert jnp.any(result != 0.0), (
+                    "`result` is identically zero — finite is not enough, "
+                    "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+                )
 
     def test_clamping_at_bounds(self, alpha_ssp_grid):
         """Values outside grid must clamp to boundary (extrapolation = nearest).

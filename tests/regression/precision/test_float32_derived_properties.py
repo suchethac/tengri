@@ -83,6 +83,10 @@ def test_lnu_to_absolute_ab_mag_finite_in_float32(lnu):
         out = lnu_to_absolute_ab_mag(jnp.asarray(lnu, dtype=jnp.float32))
         assert np.asarray(out).dtype == np.float32
         assert np.isfinite(out), f"M_UV non-finite in float32 for L_nu={lnu:.3e}"
+        assert np.any(out != 0.0), (
+            "`out` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 #: Absolute tolerance for a float64 magnitude compared against the pre-fix
@@ -112,6 +116,10 @@ def test_fnu_to_ab_mag_finite_in_float32(fnu):
     with jax.enable_x64(False):
         out = fnu_to_ab_mag(jnp.asarray(fnu, dtype=jnp.float32))
         assert np.isfinite(out), f"AB mag non-finite in float32 for f_nu={fnu:.3e}"
+        assert np.any(out != 0.0), (
+            "`out` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 @pytest.mark.parametrize("fnu", [3.631e-20, 1e-28, 8.007146e27])
@@ -127,6 +135,10 @@ def test_ab_mag_to_fnu_finite_in_float32(mag):
     with jax.enable_x64(False):
         out = ab_mag_to_fnu(jnp.asarray(mag, dtype=jnp.float32))
         assert np.isfinite(out), f"f_nu non-finite in float32 for m_AB={mag}"
+        assert np.any(out != 0.0), (
+            "`out` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 @pytest.mark.parametrize("mag", [0.0, 25.0, -118.35])
@@ -141,6 +153,10 @@ def test_absolute_ab_mag_to_lnu_finite_in_float32(mag):
     with jax.enable_x64(False):
         out = absolute_ab_mag_to_lnu(jnp.asarray(mag, dtype=jnp.float32))
         assert np.isfinite(out), f"L_nu non-finite in float32 for M_AB={mag}"
+        assert np.any(out != 0.0), (
+            "`out` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 @pytest.mark.parametrize("mag", [-16.8, 0.0, 5.0])
@@ -212,6 +228,10 @@ def test_irx_finite_in_float32_and_matches_float64():
         )
     )
     assert np.isfinite(ref)
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     with jax.enable_x64(False):
         s32 = jnp.asarray(np.asarray(sed), dtype=jnp.float32)
@@ -220,6 +240,10 @@ def test_irx_finite_in_float32_and_matches_float64():
             compute_l_tir(s32, w32), log_l_uv_erg=compute_log_uv_luminosity_1600(s32, w32)
         )
         assert np.isfinite(got), "IRX non-finite in float32"
+        assert np.any(got != 0.0), (
+            "`got` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(np.float64(got), ref, rtol=1e-3)
 
 
@@ -341,5 +365,9 @@ def test_property_finite_in_float32(property_arms, prop):
     assert np.isfinite(got), (
         f"{prop} is {got!r} in float32 though float64 gives {ref:.6e}, "
         f"which is well inside float32 range (#1837)"
+    )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     np.testing.assert_allclose(got, ref, rtol=2e-3, atol=1e-6)

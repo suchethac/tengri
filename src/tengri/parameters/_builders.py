@@ -228,8 +228,6 @@ def _build_param_registry(
     mean_sfh_type,
     nebular=False,
     dust_model="two_component",
-    dust_law_bc="power_law",
-    dust_law_diff=None,
     dust_emission=None,
     agn_model=None,
     radio=False,
@@ -255,10 +253,6 @@ def _build_param_registry(
     dust_model : str
         Dust geometry model: ``"two_component"`` (Charlot & Fall) or
         ``"single_component"`` (uniform screen).
-    dust_law_bc : str
-        Birth cloud dust law name. Non-power-law laws may add extra parameters.
-    dust_law_diff : str or None
-        Diffuse ISM dust law. None = same as bc.
     evolving_metallicity : bool
         If True, replace met_logzsol with met_logzsol_0 and met_logzsol_final.
     chem_evol : bool

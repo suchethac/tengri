@@ -37,7 +37,7 @@ from tengri import FREE, Uniform, parse_groups
 
 pytestmark = pytest.mark.contract
 
-#: Per-screen stem -> a law that reads it. ``conroy2010`` reads ``n_slope`` and
+#: Per-screen stem -> a law that reads it. ``conroy2010`` reads ``dust_slope`` and
 #: ``dust_Rv``; ``noll09`` reads ``dust_delta`` and ``dust_bump_strength``.
 PAIR_STEM_LAWS = {
     "tau": "calzetti",

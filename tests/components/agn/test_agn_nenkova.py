@@ -245,6 +245,10 @@ def test_public_nenkova_torus_is_jit_safe(wavelength) -> None:
         lambda tau: jnp.sum(nenkova_torus(wavelength, agn_log_lbol=10.42, agn_tau=tau)), 50.0
     )
     assert jnp.isfinite(g)
+    assert jnp.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────

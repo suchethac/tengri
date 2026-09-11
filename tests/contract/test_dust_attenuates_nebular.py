@@ -79,7 +79,7 @@ def test_nebular_continuum_is_attenuated():
     neb_in_total = np.asarray(out.sed_intrinsic - stellar_att)
 
     # Expected young-limit transmission (both screens, weight -> 1).
-    k_bc = np.asarray(resolve_dust_law("power_law")(_WAVE, n_slope=-0.7))
+    k_bc = np.asarray(resolve_dust_law("power_law")(_WAVE, dust_slope=-0.7))
     tau = 1.0 * k_bc + 0.5 * k_bc
     t_neb = np.exp(-tau)
     expected = np.asarray(sed_neb) * t_neb

@@ -100,6 +100,10 @@ class TestTwoStepMetallicity:
 
         g = assert_grad_matches_fd(loss, 1.0)
         assert jnp.isfinite(g)
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_output_shape(self, ssp_lg_age_gyr):
         result = two_step_metallicity(ssp_lg_age_gyr, -3.0, -1.5, 1.0)

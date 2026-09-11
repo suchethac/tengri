@@ -144,6 +144,10 @@ class TestDifferentiability:
         chex.assert_tree_all_finite(grads)
         for i, g in enumerate(grads.ravel()):
             assert float(g) != 0.0, f"data[{i}]: no gradient reaches the histogram"
+            assert jnp.all(jnp.isfinite(float(g))), (
+                "`float(g)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+                "and a NaN satisfies a non-zero assertion (#2178)"
+            )
 
     def test_grad_through_weighted_ndhist(self):
         """Uses sum-of-squares: a bare sum is position-invariant by construction.
@@ -165,6 +169,10 @@ class TestDifferentiability:
         chex.assert_tree_all_finite(grads_y)
         for i, g in enumerate(grads_data.ravel()):
             assert float(g) != 0.0, f"data[{i}]: weighted histogram is detached"
+            assert jnp.all(jnp.isfinite(float(g))), (
+                "`float(g)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+                "and a NaN satisfies a non-zero assertion (#2178)"
+            )
         for i, g in enumerate(grads_y.ravel()):
             assert float(g) != 0.0, f"y[{i}]: weights are detached"
 
@@ -179,6 +187,10 @@ class TestDifferentiability:
         chex.assert_tree_all_finite(grads)
         for i, g in enumerate(grads.ravel()):
             assert float(g) != 0.0, f"sigma[{i}]: scatter has no gradient"
+            assert jnp.all(jnp.isfinite(float(g))), (
+                "`float(g)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+                "and a NaN satisfies a non-zero assertion (#2178)"
+            )
 
     @pytest.mark.parametrize("n_sigma", [3.0, 4.0])
     def test_gradient_vanishes_outside_the_kernel_support(self, n_sigma):

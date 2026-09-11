@@ -104,8 +104,9 @@ inherit the scope. The last rule is a naming heuristic and only widens scope.
 **Why only zero-overlap is flagged**: narrowing or widening a prior is ordinary
 modelling. A range sharing no point with the declaration cannot be.
 
-**Other groups**: short forms in SFH, dust, radio, etc. are not resolved. The
-scope pass here answers "is this dict an agn block"; resolving those groups
+**Other groups**: short forms in SFH, radio, etc. are not resolved. Dust is
+resolved through :func:`_dust_prior_sites` and :mod:`tengri.parameters._dust_keys`.
+The scope pass here answers "is this dict an agn block"; resolving other groups
 needs the prefix as well, and a group's prefix is not its name -- ``sfh``'s
 ``alpha`` is ``sfh_dpl_alpha``, carrying the *type*. That wants the grammar's
 own resolution rather than a second copy of it. These sites are skipped; every
@@ -147,6 +148,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from tengri.parameters._dust_keys import per_screen_keys, short_to_full
 from tengri.parameters.registry import registry
 
 #: Distributions whose first two positional arguments are ``(lo, hi)``. Only
@@ -386,6 +388,130 @@ def _agn_prior_sites(tree: ast.AST):
                 yield full_name, value
 
 
+def _dust_scoped_dicts(tree: ast.AST) -> set[int]:
+    """ids of dict literals that are a ``dust_attenuation=`` block, or nested inside one.
+
+    Three spellings reach the same place, so all three are recognized:
+    the ``dust_attenuation={...}`` keyword, the ``{'dust_attenuation': {...}}``
+    fragment that gets splatted into a call, and a module- or function-level
+    ``DUST_CFG = {...}`` constant later passed as ``dust_attenuation=DUST_CFG``.
+
+    Nested dicts inherit the scope. That keeps ``dust_attenuation={'law': 'calzetti', ...}``
+    resolvable: sub-blocks are still the dust_attenuation group.
+    """
+    scoped: set[int] = set()
+
+    def mark(d: ast.Dict) -> None:
+        if id(d) in scoped:
+            return
+        scoped.add(id(d))
+        for v in d.values:
+            if isinstance(v, ast.Dict):
+                mark(v)
+
+    # Names bound to a dict literal anywhere in the file, so `dust_attenuation=NAME`
+    # can be followed. Assignment order does not matter -- both passes see the tree.
+    dict_bindings: dict[str, ast.Dict] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    dict_bindings[target.id] = node.value
+
+    # A dict literal whose binding NAME says dust. This is a naming heuristic,
+    # for case-table shapes that reach the builder through multiple hops.
+    for name, node in dict_bindings.items():
+        if "dust" in name.lower():
+            mark(node)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if kw.arg != "dust_attenuation":
+                    continue
+                if isinstance(kw.value, ast.Dict):
+                    mark(kw.value)
+                elif isinstance(kw.value, ast.Name) and kw.value.id in dict_bindings:
+                    mark(dict_bindings[kw.value.id])
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values, strict=False):
+                if (
+                    isinstance(key, ast.Constant)
+                    and key.value == "dust_attenuation"
+                    and isinstance(value, ast.Dict)
+                ):
+                    mark(value)
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            # Config built by mutation: `cfg["dust_attenuation"] = {...}`.
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.slice, ast.Constant)
+                    and target.slice.value == "dust_attenuation"
+                ):
+                    mark(node.value)
+
+    return scoped
+
+
+def _dust_prior_sites(tree: ast.AST):
+    """Yield ``(dust_param_name, prior_call)`` for short-form names in dust_attenuation dicts.
+
+    Resolves short-form names (e.g., 'tau_bc', 'slope') to full dust parameter names
+    (e.g., 'dust_tau_bc', 'dust_slope') by checking if they resolve in the live registry.
+
+    Resolution is **scoped** to dicts :func:`_dust_scoped_dicts` identifies as a
+    ``dust_attenuation=`` block. Per-screen keys (slope_bc, Rv_diff, etc.) carry
+    static floats, not priors, so they fall out naturally.
+    """
+    scoped = _dust_scoped_dicts(tree)
+    # Structural and per-screen keys that are never prior parameters
+    _STRUCTURAL_KEYS = {
+        "type",
+        "law",
+        "law_bc",
+        "law_diff",
+        "law_neb",
+        "all_params",
+        "other_params",
+    }
+    # Per-screen parameter keys (static floats, not priors)
+    _PER_SCREEN_KEYS = per_screen_keys()
+
+    def _is_structural_key(key: str) -> bool:
+        """True if key is structural or per-screen (non-parameter)."""
+        return key in _STRUCTURAL_KEYS or key in _PER_SCREEN_KEYS
+
+    def _try_resolve_dust_param(short_name: str) -> str | None:
+        """Try to resolve short name to dust_<short_name> if registered."""
+        candidate = short_to_full(short_name)
+        if registry().get(candidate) is not None:
+            return candidate
+        return None
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict) or id(node) not in scoped:
+            continue
+
+        # For each dict, check all keys whose values are prior Calls
+        for key, value in zip(node.keys, node.values, strict=False):
+            if not (
+                isinstance(key, ast.Constant)
+                and isinstance(key.value, str)
+                and isinstance(value, ast.Call)
+            ):
+                continue
+
+            short_name = key.value
+            if _is_structural_key(short_name):
+                continue
+
+            # Try to resolve as a dust parameter in the live registry
+            full_name = _try_resolve_dust_param(short_name)
+            if full_name is not None:
+                yield full_name, value
+
+
 def _violates(declared: tuple[float, float], support: tuple[float, float]) -> bool:
     """True when the two intervals share no point."""
     lo, hi = declared
@@ -425,6 +551,21 @@ def main() -> int:
 
         # Check short-form names in nested AGN dicts (e.g., log_lbol inside agn={...})
         for param, call in _agn_prior_sites(tree):
+            support = _support(param)
+            if support is None:
+                continue
+            declared = _declared_range(call)
+            if declared is None:
+                continue
+            checked += 1
+            if (rel, param) in ALLOWLIST:
+                continue
+            if _violates(declared, support):
+                violations.append((rel, call.lineno, param, declared, support))
+
+        # Check short-form names in nested dust_attenuation dicts
+        # (e.g., tau_bc inside dust_attenuation={...})
+        for param, call in _dust_prior_sites(tree):
             support = _support(param)
             if support is None:
                 continue
