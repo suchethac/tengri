@@ -126,9 +126,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `log10_add` cancellation, the Hessian-vector product of a linear scaling, a
   kernel evaluated outside its band, a prior's log-density differentiated at
   its own mode — so zero is the correct answer there and only the finite half
-  is a claim. (Counts re-measured against the merge base `850be10bc`; an
-  earlier revision of this entry said 276/137, measured against an older
-  `main`.)
+  is a claim. (Counts are what the guard reports when run over the upstream
+  tree at the merge base: 277 across 139 files at `850be10bc`, against 274
+  across 136 at the previous merge base `87b650e7f` — a delta of exactly the
+  three sites `main` added since. An earlier revision of this entry said
+  276/137, which was not one of those measurements.)
   Two of the repaired sites are the historical bugs themselves:
   `test_inference_grad_float32.py` (still finite-only on `main`, which is how
   #2100 stayed invisible) and the `!= 0.0` seam checks in
