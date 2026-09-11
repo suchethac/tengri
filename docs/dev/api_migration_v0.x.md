@@ -1254,6 +1254,67 @@ derivation.
 
 ---
 
+## SF-onset lookbacks gain a redshift-aware `free_prior` (2026-09)
+
+**Non-breaking; a build-time dimensionality change for anyone using
+`all_params: FREE` on these three parameters.** `sfh_exp_start_gyr`,
+`sfh_dexp_start_gyr` and `sfh_const_start_gyr` (the SF-onset lookback for the
+`exp`, `dexp` and `const` SFH models) were REFUSED in
+`tools/check_param_free_priors.py` under the `target-dependent` ground: the
+admissible ceiling is the age of the universe at the source redshift, which a
+static registry declaration cannot know, so `'all_params': FREE` always left
+them silently pinned at their `Fixed` default.
+
+They now declare a static `free_prior` ceiling of today's cosmic age
+(`_AGE_UNIV_GYR`, z=0 — the widest value that is ever correct, mirroring the
+`default=_AGE_UNIV_GYR` convention already used on `sfh_dpl_age_gyr` and
+friends), and `parameters/groups.py`'s new `_narrow_free_priors_to_z` narrows
+that declared range to `age_at_z(z)` at parse time, whenever the build's
+`redshift` prior has a knowable floor. `sfh_const_start_gyr`'s floor is 0.01
+(not 0): its `bound_check` requires `lo > 0`, and `Parameters._validate_orderings`
+separately requires it to exceed `sfh_const_end_gyr`'s `Fixed(0.0)` ceiling.
+
+| old                                                                                                                          | new                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sfh={'type': 'dexp', 'all_params': FREE}` — `sfh_dexp_start_gyr` silently pinned at `Fixed(0.0)`, no warning, no free dimension | `sfh_dexp_start_gyr` genuinely frees, `Uniform(0.0, age_at_z(z))` — e.g. `[0, 8.6]` Gyr at `redshift=Fixed(0.5)`, `[0, 13.1]` Gyr at `redshift=Fixed(0.05)` |
+| A user's own explicit `sfh={'start_gyr': Uniform(0, 5)}` — unaffected then, unaffected now                                     | Still untouched: only a declaration-sourced free prior (`user_free`/`wildcard_free` provenance) is ever narrowed, never an explicit user `Uniform`          |
+| A free `redshift=Uniform(0, 20)` — the onset stayed at the static `_AGE_UNIV_GYR` ceiling regardless                            | Narrows against the redshift prior's own **floor** (z=0 here), so the cap is unchanged — a free redshift with a z=0 floor can promise nothing tighter        |
+
+**Deliberately no `_MIN_RETAINED_FRACTION` floor here** (contrast the
+template-grid narrowing above): at z=6 the cap retains only ~6.5% of the
+declared 13.81 Gyr range, and for a cosmological ceiling that narrowing IS the
+physics, not a tidy-up of an incidentally dead tail — declining to narrow
+because the retained fraction looks small would reintroduce exactly the
+zero-star-formation draws (and the resulting zero-flux, zero-gradient galaxy;
+see `test_bug_1031_dense_basis_composite`) this change exists to prevent.
+
+**Catalogs with a per-galaxy redshift refuse this combination outright.**
+`parse_groups` narrows against the build's *one* `redshift` value (a
+placeholder `Fixed(z0)` when a `catalog_z_range` is in play); a catalog whose
+rows span many redshifts cannot be represented by that single cap.
+`tengri.Catalog` raises at construction when `redshift_col` is given and any
+z-narrowed onset parameter is free, naming the parameter and the redshift the
+cap was computed against; the fix is an explicit onset prior valid across the
+whole catalog, e.g. `sfh={'start_gyr': Uniform(lo, hi)}`.
+
+**Recipe impact, measured before/after across all ten shipped recipes**
+(`sorted(parse_groups(**recipes.<name>()).free_params)`, diffed): nine are
+unaffected — none of `star_forming_photometry`, `high_z`, `photoz`,
+`agn_panchromatic`, `composable_agn`, `stochastic_sfh_jwst`,
+`mock_recovery_minimal`, `dust_demo` or `unified_agn` uses a `start_gyr`-onset
+SFH with the wildcard live over it. `quiescent_z0` does —
+`sfh=builders.sfh.dexp(all_params=FREE)` at `redshift=Fixed(0.05)` — and gains
+one free dimension it did not have before: `sfh_dexp_start_gyr`, now
+`Uniform(0.0, 13.11)` (≈ `age_at_z(0.05)`). This is the intended effect of
+the fix, not a regression: the recipe's own docstring already advertises
+"SFH: Delayed-exponential (dexp) **with all parameters free**," and
+`sfh_dexp_start_gyr` was the one parameter that claim didn't cover. The
+frozen free-parameter contract in `tests/contract/test_recipes.py`
+(`RECIPE_FREE_PARAMS["quiescent_z0"]`) is updated to include it, per that
+test's own "regenerate a line only for a deliberate recipe change" rule.
+
+---
+
 ## `from_config(dust=)` renamed to `dust_attenuation_law=` (2026-09-09, #2021)
 
 `SEDModel.from_config` / `build_model_from_config` named only the birth-cloud

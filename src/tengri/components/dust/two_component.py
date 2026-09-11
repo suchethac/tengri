@@ -514,6 +514,134 @@ class DustSEDComponent(TemplateThreading):
             lyman_cutoff_aa=self.config.lyman_cutoff_aa,
         )  # (n_age, n_wave), in [0, 1]
 
+    def _line_transmission(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        line_wave: jnp.ndarray,
+        neb_law: str,
+        neb_bc_params: Mapping[str, jnp.ndarray],
+        diff_law_kw: Mapping[str, jnp.ndarray],
+    ) -> jnp.ndarray:
+        r"""Birth-cloud + diffuse transmission at discrete line wavelengths.
+
+        Pure evaluation from already-resolved law-kwarg dicts: no second
+        ``resolve_bc_diff_law_params`` call. :meth:`apply` (§2c) and
+        :meth:`attenuate_line_catalog` both call this with ``neb_bc_params`` /
+        ``diff_law_kw`` bound the same way ``apply()``'s §2b nebular-continuum
+        screen binds them, so the line and nebular-continuum channels are
+        always on the identical curve.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives ``dust_tau_bc`` / ``dust_tau_diff`` (required) and
+            optionally ``dust_f_obscuration``.
+        line_wave : ndarray, shape (n_lines,)
+            Rest-frame line wavelengths [Å].
+        neb_law : str
+            Registry key for the nebular birth-cloud law (``config.law_neb or
+            config.law_bc``).
+        neb_bc_params : mapping
+            Birth-cloud law kwargs, narrowed to what ``neb_law`` declares.
+        diff_law_kw : mapping
+            Diffuse-ISM law kwargs, narrowed to what ``config.law_diff``
+            declares.
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            Transmission in ``[0, 1]``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives plus a
+        build-time registry lookup (``neb_law`` / ``config.law_diff`` are
+        static Python strings, never traced).
+        """
+        from tengri.components.dust.attenuation import (
+            apply_lyman_cutoff as _lyman_clip,
+            resolve_dust_law as _resolve_law,
+        )
+
+        k_bc = _lyman_clip(
+            _resolve_law(neb_law)(line_wave, **neb_bc_params),
+            line_wave,
+            self.config.lyman_cutoff_aa,
+        )
+        k_diff = _lyman_clip(
+            _resolve_law(self.config.law_diff)(line_wave, **diff_law_kw),
+            line_wave,
+            self.config.lyman_cutoff_aa,
+        )
+        tau = (
+            jnp.asarray(params["dust_tau_bc"]) * k_bc
+            + jnp.asarray(params["dust_tau_diff"]) * k_diff
+        )
+        f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
+        return f_obsc + (1.0 - f_obsc) * jnp.exp(-tau)
+
+    def attenuate_line_catalog(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        line_wave: jnp.ndarray,
+        log_line_lums: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """THE single source of the two-component line screen (#1867, #2223).
+
+        Resolves the same birth-cloud/diffuse law parameters :meth:`apply`
+        resolves for its §2b/§2c blocks (same ``resolve_bc_diff_law_params``
+        call, including ``redshift``), so a caller with no
+        :class:`~tengri.protocols.component.ForwardState` (the no-state
+        fallback in ``SEDModel._attenuate_line_catalog``, used when
+        ``dust_model`` is off/wg00 or on the #950 ``enable_fast_nebular()``
+        grid path) gets exactly the law kwargs, per-screen overrides, Lyman
+        clip and ``dust_f_obscuration`` the live forward pass would have
+        given it. There is no second implementation of this screen to drift.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives ``dust_tau_bc`` / ``dust_tau_diff`` (required), the
+            shared ``dust_*`` shape parameters, the bare ``redshift``, and
+            optionally ``dust_f_obscuration``.
+        line_wave : ndarray, shape (n_lines,)
+            Rest-frame line wavelengths [Å].
+        log_line_lums : ndarray, shape (n_lines,)
+            log10 of the INTRINSIC line luminosities [dex, erg/s]. The log
+            form, never the linear one: line luminosities (~1e40-1e43 erg/s)
+            overflow float32 (#1534/#1837).
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            log10 of the ATTENUATED line luminosities [dex, erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: yes, pure ``jnp`` plus build-time registry lookups.
+        """
+        bc_law_params, diff_law_params = resolve_bc_diff_law_params(
+            params,
+            dict(self.config.bc_law_overrides),
+            dict(self.config.diff_law_overrides),
+            self.config.live_shape_params,
+            bc_law=self.config.law_bc,
+            diff_law=self.config.law_diff,
+            redshift=params.get("redshift"),
+        )
+        neb_law = self.config.law_neb or self.config.law_bc
+        neb_bc_params = {
+            k: jnp.asarray(v)
+            for k, v in select_law_kwargs(
+                neb_law, {**bc_law_params, **dict(self.config.neb_law_overrides)}
+            ).items()
+        }
+        diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
+        transmission = self._line_transmission(
+            params, jnp.asarray(line_wave), neb_law, neb_bc_params, diff_law_kw
+        )
+        return jnp.asarray(log_line_lums) + log10_magnitude(transmission)
+
     def apply(
         self,
         state: ForwardState,
@@ -636,9 +764,9 @@ class DustSEDComponent(TemplateThreading):
         # CloudyGrid) publish a separate ``sed_nebular`` and, via this
         # component's ``optional_inputs``, run *before* dust; their continuum is
         # reddened here with the young-limit transmission (sigmoid weight -> 1,
-        # i.e. both screens), matching the emission-LINE treatment
-        # (``attenuate_emission`` mode "bc"). BakedIn nebular is already inside
-        # ``lnu_age`` (attenuated above) and publishes zeros here -> no-op.
+        # i.e. both screens), matching the emission-LINE treatment in §2c
+        # (``_line_transmission``, both screens). BakedIn nebular is already
+        # inside ``lnu_age`` (attenuated above) and publishes zeros here -> no-op.
         from tengri.components.dust.attenuation import (
             apply_lyman_cutoff as _lyman_clip,
             resolve_dust_law as _resolve_law,
@@ -684,13 +812,16 @@ class DustSEDComponent(TemplateThreading):
         _f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
         sed_neb_attenuated = sed_neb * (_f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_neb))
 
-        # ── 2c. Emission-line catalog attenuation (#1867) ──────────────────
+        # ── 2c. Emission-line catalog attenuation (#1867, #2223) ───────────
         # The discrete line catalog gets the SAME screen as the nebular
         # continuum in 2b, evaluated at the line wavelengths: same law, same
         # resolved parameters, same Lyman clip, same covering-fraction form.
         # Reusing `neb_law` / `neb_bc_params` / `diff_law_kw` rather than
         # re-deriving them is the point: a second derivation is a second
-        # thing that can disagree, which is #1858.
+        # thing that can disagree, which is #1858. `_line_transmission` is
+        # THE evaluation this block and `attenuate_line_catalog` (the no-state
+        # entry point) both call, so a caller with no `ForwardState` gets
+        # exactly this formula too (#2223).
         #
         # Publishing it here rather than leaving each consumer to remember is
         # what #1867 was: `Prediction._ensure_lines` reddened into a cache key
@@ -721,24 +852,12 @@ class DustSEDComponent(TemplateThreading):
         log_line_lums_attenuated = None
         if _line_waves is not None and _log_line_lums is not None:
             line_wave = jnp.asarray(_line_waves)
-            k_bc_line = _lyman_clip(
-                _resolve_law(neb_law)(line_wave, **neb_bc_params),
-                line_wave,
-                self.config.lyman_cutoff_aa,
-            )
-            k_diff_line = _lyman_clip(
-                _resolve_law(self.config.law_diff)(line_wave, **diff_law_kw),
-                line_wave,
-                self.config.lyman_cutoff_aa,
-            )
-            tau_line = (
-                jnp.asarray(params["dust_tau_bc"]) * k_bc_line
-                + jnp.asarray(params["dust_tau_diff"]) * k_diff_line
-            )
             # Transmission is O(1) and dimensionless, so its log10 is
             # representable in float32 for any tau. A fully opaque screen gives
             # -inf, the catalog's existing "genuinely dark line" sentinel.
-            transmission = _f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_line)
+            transmission = self._line_transmission(
+                params, line_wave, neb_law, neb_bc_params, diff_law_kw
+            )
             log_line_lums_attenuated = jnp.asarray(_log_line_lums) + log10_magnitude(transmission)
 
         # ── 3. Energy balance: ∫ (L_nu_intrinsic - L_nu_attenuated) dν ──

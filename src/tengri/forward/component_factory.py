@@ -1248,13 +1248,14 @@ def state_to_emission_lines(state: Any):
     headline NamedTuple does not name explicitly (HeII 1640, HeI 10830,
     [O III] 4363, ...).
 
-    Dust attenuation: the published luminosities already include the
-    attenuation regime selected by the SEDModel's ``_neb_dust_mode``
-    when ``predict_emission_lines`` routes through
-    :meth:`SEDModel.predict_emission_lines`. Direct callers of this
-    helper see the *intrinsic* line luminosities, apply
-    :func:`tengri.forward.emission_helpers.attenuate_emission` (or call
-    via ``model.predict_emission_lines``) for the observed values.
+    Dust attenuation: this helper returns the *intrinsic* line luminosities;
+    it does not attenuate them. ``SEDModel.predict_emission_lines`` applies
+    the dust screen afterward, via ``SEDModel._attenuate_line_catalog`` (which
+    dispatches to the configured dust component's own
+    ``attenuate_line_catalog``, #2223) when the chain published no
+    already-attenuated catalog. Direct callers of this helper wanting
+    observed values should go through ``model.predict_emission_lines``
+    rather than reddening ``all_lums`` by hand.
 
     Returns
     -------

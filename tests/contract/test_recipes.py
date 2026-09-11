@@ -112,6 +112,11 @@ RECIPE_FREE_PARAMS = {
         "dust_tau_diff",
         "met_logzsol",
         "sfh_dexp_log_total_mass",
+        # sfh_dexp_start_gyr joined the free set once the SF-onset lookback
+        # gained a redshift-aware free_prior: 'all_params: FREE' now genuinely
+        # frees it (capped at age_at_z(0.05) ~ 13.11 Gyr), where it used to
+        # stay silently pinned at Fixed(0.0) for lack of any declared range.
+        "sfh_dexp_start_gyr",
         "sfh_dexp_tau_gyr",
     ],
     "agn_panchromatic": [

@@ -4833,6 +4833,16 @@ class SEDModel:
         ``jax.enable_x64(False)``, which switched off every dtype-keyed float32
         path downstream and produced NaN gradients with nothing raised (#1392).
         See ``build_precision`` below.
+
+        ``dust_live_shape_params_sig`` (#2231): the sorted set of dust
+        attenuation shape parameter names (``dust_slope``/``dust_delta``/
+        ``dust_Rv``/``dust_bump_strength``) :meth:`_requested_law_shape_params`
+        resolved as "live" for this build. Two models can share a law and the
+        same set of fixed parameter NAMES (already covered by
+        ``spec_fixed_id``) while disagreeing on which of those names are live
+        vs read the law's own published default -- without this entry they
+        collide on one compiled closure and the second model silently
+        inherits the first's live/not-live decision.
         """
         # SSP grid shapes (n_met, n_age, n_wave)
         ssp_flux_shape = tuple(self.ssp_data.ssp_flux.shape)
@@ -4950,6 +4960,42 @@ class SEDModel:
         # LyC-in-energy-balance (FSPS parity, #961) rescales L_IR without
         # changing the graph shape -> must enter the signature (color-leak).
         dust_eb_include_lyc_sig = bool(getattr(self, "_dust_eb_include_lyc", False))
+
+        # Requested dust attenuation shape parameters (#2231's newly-exposed
+        # color-leak). Whether a shape parameter (dust_slope / dust_delta /
+        # dust_Rv / dust_bump_strength) is "live" is a build-time Python
+        # branch inside ``DustAttenuationSEDComponent`` / ``DustSEDComponent``
+        # (see :meth:`_requested_law_shape_params`): live means apply() reads
+        # the value from ``fixed_values`` at call time, not-live means
+        # precompute() bakes a cached ``k(lambda)`` from the law's own
+        # published default and apply() never looks at the value again. That
+        # decision changes what the compiled closure DOES with a fixed
+        # parameter of the same NAME (``spec_fixed_id`` below already keys
+        # the set of fixed names, not their liveness), so two models sharing
+        # a law and the same fixed names but different live-shape-parameter
+        # sets must not share a compiled kernel -- the second would silently
+        # inherit the first's live/not-live branch and its baked curve. Names
+        # only, sorted for a deterministic hash; the underlying VALUES ride
+        # the ``fixed_values`` runtime JIT input like every other fixed
+        # parameter, same rationale as ``spec_fixed_id``.
+        #
+        # Before #2231 a flat ``Parameters(...)`` spec's shape parameters
+        # were unconditionally not-live, so this axis was always identical
+        # across flat models and the gap below was unreachable from that
+        # surface; #2231 lets a flat spec become live, which is what exposes
+        # the collision this entry closes.
+        if dust_model == "single_component":
+            dust_live_shape_params_sig = tuple(sorted(self._requested_law_shape_params()))
+        else:
+            dust_live_shape_params_sig = tuple(
+                sorted(
+                    self._requested_law_shape_params(
+                        getattr(self, "_dust_law_bc", None),
+                        getattr(self, "_dust_law_diff", None),
+                        getattr(self, "_dust_law_neb", None),
+                    )
+                )
+            )
 
         # Nebular backend (by class name)
         nebular_backend_name = (
@@ -5295,6 +5341,7 @@ class SEDModel:
             dust_lyman_cutoff_sig,
             dust_lyc_absorb_all_sig,
             dust_eb_include_lyc_sig,
+            dust_live_shape_params_sig,
             astrodust_spinning_dust,
             astrodust_f_cnm,
             nebular_backend_name,
@@ -5809,31 +5856,40 @@ class SEDModel:
         backend = getattr(self, "_nebular_backend", None)
         return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
 
-    def _attenuate_line_catalog(self, params, line_waves, line_lums):
-        """Dust-redden a discrete nebular line catalog at its wavelengths.
-
-        THE single source of nebular-line reddening (Charlot & Fall 2000 birth-
-        cloud + diffuse), used by :meth:`predict_line_fluxes` AND the interactive
-        ``model.predict(params).lines`` catalog, so no public line path is
-        silently intrinsic while carrying an "observed" contract. Backends publish
-        INTRINSIC ``line_lums``; this applies the same operator the continuum
-        nebular SED gets. JIT-safe (pure ``jnp`` via ``attenuate_emission``).
+    def _line_dust_component(self):
+        """The chain's dust component (``name`` "dust"/"dust_attenuation"), or
+        ``None`` for dust off/wg00 (neither declares ``attenuate_line_catalog``).
         """
-        from tengri.forward.emission_helpers import attenuate_emission
+        chain = getattr(self, "_cached_component_chain", None) or self._build_component_chain()
+        for component in chain:
+            if getattr(component, "name", None) in ("dust", "dust_attenuation"):
+                return component
+        return None
 
-        _is_single = self._dust_model == "single_component"
-        return attenuate_emission(
-            line_lums,
-            line_waves,
-            self._neb_dust_mode,
-            jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0))),
-            jnp.asarray(params.get("dust_tau_diff", 0.0)),
-            self._dust_law_bc_fn,
-            self._dust_law_bc_fn if _is_single else self._dust_law_diff_fn,
-            neb_bc_fn=self._neb_dust_law_bc_fn,
-            dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+    def _attenuate_line_catalog(self, params, line_waves, line_lums):
+        """Dust-redden a line catalog with no :class:`ForwardState` (#2223).
+
+        THE no-state fallback for :meth:`predict_line_fluxes` (dust
+        off/wg00, or the #950 ``enable_fast_nebular()`` grid path) and the
+        deprecated :meth:`predict_emission_lines`. Dispatches to
+        :meth:`_line_dust_component`'s own ``attenuate_line_catalog`` -- the
+        SAME method the live forward pass calls for its continuum -- so this
+        path cannot thread a different ``dust_delta``/``dust_Rv``/``redshift``/
+        per-screen override than the live one. ``line_lums`` is INTRINSIC and
+        LINEAR [erg/s]; returns it unchanged when dust is off/wg00. JIT-safe
+        (pure ``jnp`` once the static component lookup completes); the linear
+        contract can itself overflow float32 at typical line luminosities, a
+        pre-existing caveat (#1206 §3), not introduced here.
+        """
+        component = self._line_dust_component()
+        if component is None:
+            return line_lums
+        from tengri.utils.scale import log10_magnitude, pow10
+
+        log_atten = component.attenuate_line_catalog(
+            params, jnp.asarray(line_waves), log10_magnitude(jnp.asarray(line_lums))
         )
+        return pow10(log_atten)
 
     def predict_line_fluxes(
         self, params, target_wavelengths=None, tolerance_aa=5.0, *, redden=True, state=None
@@ -5987,16 +6043,22 @@ class SEDModel:
         # surfaces are on ONE screen. "Single-sourced" is what the previous
         # comment here claimed; it was not, and the two differed.
         #
-        # `_attenuate_line_catalog` routes through
-        # `emission_helpers.attenuate_emission`, whose signature names only
-        # `dust_slope` and `dust_bump_strength`, it cannot thread `dust_delta`
-        # or `dust_Rv` at all, and forces the bump to the spec's Fixed(0.0)
-        # over any law's own default (#1858). Measured on the Balmer decrement,
-        # property surface against this one: `calzetti` (which reads no shape
-        # parameter) agreed to 4e-15, while `narayanan_z` (bump 1.0, delta -0.2)
-        # disagreed by 1.1e-3 rising to 2.5e-3. The law that cannot see the
-        # defect agreeing to machine precision is what identifies the shape
-        # parameters as the whole of it.
+        # Before #2223, `_attenuate_line_catalog` routed through
+        # `emission_helpers.attenuate_emission`, whose signature named only
+        # `dust_slope` and `dust_bump_strength`: it could not thread `dust_delta`
+        # or `dust_Rv` at all, and forced the bump to the spec's Fixed(0.0)
+        # over any law's own default (#1858). This published-catalog route
+        # exists because of that gap: it reads the catalog the live dust
+        # component already reddened correctly, rather than re-deriving it
+        # through the broken fallback. Pre-#2223 measurement on the Balmer
+        # decrement, property surface against this one: `calzetti` (which
+        # reads no shape parameter) agreed to 4e-15, while `narayanan_z`
+        # (bump 1.0, delta -0.2) disagreed by 1.1e-3 rising to 2.5e-3. The law
+        # that could not see the defect agreeing to machine precision is what
+        # identified the shape parameters as the whole of it. Since #2223 the
+        # fallback dispatches to the dust component's own
+        # `attenuate_line_catalog`, so this route and the fallback below now
+        # agree by construction.
         #
         # The fallback keeps `redden=True` meaningful for a chain that publishes
         # no attenuated catalog, no dust component, or a backend with no
@@ -7711,10 +7773,15 @@ class SEDModel:
 
         Notes
         -----
-        Dust attenuation is applied to the line luminosities in the
-        attenuation regime selected by ``_neb_dust_mode`` (default
-        ``"bc"``, birth-cloud + diffuse, Charlot & Fall 2000 [1]_).
-        The line-attenuated values match the continuum treatment in
+        Dust attenuation is applied to the line luminosities through the
+        configured dust component (birth-cloud + diffuse, Charlot & Fall
+        2000 [1]_, for ``two_component``; the single screen for
+        ``single_component``; unattenuated for ``off``/``wg00``), the same
+        dispatch :meth:`_attenuate_line_catalog` uses (#2223). ``_neb_dust_mode``
+        / ``neb_dust_law_bc`` are unused config left over from an older,
+        mode-selectable nebular screen that nothing in the grammar sets
+        anymore; the live path always applies the birth-cloud + diffuse
+        treatment. The line-attenuated values match the continuum treatment in
         :meth:`predict_rest_sed`, so Balmer decrement, BPT, and other
         line-ratio diagnostics behave correctly under a dust sweep
         (regression: issue #313).
@@ -7751,7 +7818,6 @@ class SEDModel:
                 "line wavelength range yourself."
             )
         from tengri.forward import state_to_emission_lines
-        from tengri.forward.emission_helpers import attenuate_emission
 
         state = self.predict_state(params)
         lines = state_to_emission_lines(state)
@@ -7772,28 +7838,11 @@ class SEDModel:
 
             atten_lums = pow10(jnp.asarray(_log_atten))
         else:
-            # Fallback for a chain that published no attenuated catalog. Charlot
-            # & Fall 2000: lines from young populations (HII regions) experience
-            # BC + diffuse; single-component dust applies the BC law twice
-            # (degenerate fallback).
-            tau_bc = jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0)))
-            tau_diff = jnp.asarray(params.get("dust_tau_diff", 0.0))
-            dust_kw = dict(
-                dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-                dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
-            )
-            _is_single = self._dust_model == "single_component"
-            atten_lums = attenuate_emission(
-                lines.all_lums,
-                lines.all_waves,
-                self._neb_dust_mode,
-                tau_bc,
-                tau_diff,
-                self._dust_law_bc_fn,
-                self._dust_law_diff_fn if not _is_single else self._dust_law_bc_fn,
-                neb_bc_fn=self._neb_dust_law_bc_fn,
-                **dust_kw,
-            )
+            # Fallback for a chain that published no attenuated catalog
+            # (dust off/wg00): the SAME no-state screen `predict_line_fluxes`
+            # falls back to (#2223), so this deprecated surface cannot drift
+            # from its replacement even off that published-catalog fast path.
+            atten_lums = self._attenuate_line_catalog(params, lines.all_waves, lines.all_lums)
 
         # Re-extract the headline scalars from the attenuated catalog
         # so EmissionLines.halpha / .hbeta / etc. reflect dust.
@@ -9004,11 +9053,23 @@ class SEDModel:
         "did somebody ask for this ``dust_*`` value, or should the law's own
         published default stand?", and ``redshift`` has no per-law default to
         stand: a law that names it in its signature reads the model's redshift
-        or reads nothing. Where that bypass is load-bearing is the flat
-        ``Parameters(...)`` escape hatch, whose specs carry no
-        ``_group_provenance`` at all, so every name there reads as
-        ``registry_default``; :meth:`SEDModel.build` requires a redshift and
-        always records it as a request, so on that path the two branches agree.
+        or reads nothing. :meth:`SEDModel.build` requires a redshift and always
+        records it as a request; the flat ``Parameters(...)`` escape hatch
+        records it in ``_flat_provenance`` (below) since #2231 and carried no
+        provenance at all before that -- the bypass keeps the two branches in
+        agreement on every path.
+
+        Two provenance sources, read in priority order. A grammar-built spec
+        (``parse_groups`` / ``SEDModel.build``) carries ``spec._group_provenance``,
+        a name -> tag map covering every parameter, including the untouched ones
+        (``"registry_default"``). A flat ``Parameters(...)`` spec carries no such
+        map, but since #2231 it carries ``spec._flat_provenance`` instead: a
+        narrower map recording only the parameters the caller actually named in
+        the constructor call, tagged ``"user_prior"``/``"user_fixed"``. A name
+        absent from ``_flat_provenance`` was never passed, so it falls through
+        to ``"registry_default"`` below exactly as before -- a flat spec that
+        never mentions a shape parameter still gets the law's own published
+        default, bit-identical to pre-#2231.
         """
         from tengri.parameters.groups import _law_shape_params
 
@@ -9025,7 +9086,10 @@ class SEDModel:
                 continue
         if not reads:
             return frozenset()
-        provenance = getattr(self.spec, "_group_provenance", None) or {}
+        provenance = getattr(self.spec, "_group_provenance", None)
+        if provenance is None:
+            provenance = getattr(self.spec, "_flat_provenance", None)
+        provenance = provenance or {}
         return frozenset(
             name
             for name in reads

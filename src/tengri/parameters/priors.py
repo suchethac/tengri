@@ -271,6 +271,27 @@ class Distribution:
     #: fixed-fallback default, none of which ``unstandardize`` reads.
     _JIT_IRRELEVANT_ATTRS: frozenset[str] = frozenset({"description", "units", "_default"})
 
+    #: The support the family has BEFORE any user bound: a bound equal to it is
+    #: not a truncation. LogNormal overrides this with (0.0, inf).
+    _NATURAL_SUPPORT: tuple[float, float] = (float("-inf"), float("inf"))
+
+    def _is_truncated(self) -> bool:
+        """True when a user bound is strictly inside the natural support.
+
+        Structural, not derived from CDF values: erf and friends underflow to
+        exactly 0.0/1.0 once a bound sits beyond ~8.3 sigma, so a CDF-based test
+        reads a far bound as absent and unstandardize/sample fall back to the
+        untruncated map and can return values outside [lo, hi] (#2226, #2233).
+
+        Returns
+        -------
+        bool
+            True if the distribution is truncated (user bound strictly inside
+            natural support), False otherwise.
+        """
+        nat_lo, nat_hi = self._NATURAL_SUPPORT
+        return self._lo > nat_lo or self._hi < nat_hi
+
     def jit_cache_key(self) -> tuple:
         """Return a hashable identity for keying compiled artefacts.
 
@@ -625,7 +646,8 @@ class Gaussian(Distribution):
         # Φ((lo−μ)/σ), Φ((hi−μ)/σ) and the mass Z = Φ(β) − Φ(α) in [lo, hi].
         self._cdf_lo = _norm_cdf_float((self._lo - self._mu) / self._sigma)
         self._cdf_hi = _norm_cdf_float((self._hi - self._mu) / self._sigma)
-        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
+        # Structural rule shared by all bounded families; see Distribution._is_truncated.
+        self._truncated = self._is_truncated()
         self.description = description
         self.units = units
         self._register_default(default)
@@ -1084,6 +1106,8 @@ class LogNormal(Distribution):
     >>> print(f"log p(1e8): {log_prob:.4f}")
     """
 
+    _NATURAL_SUPPORT: tuple[float, float] = (0.0, float("inf"))
+
     def __init__(
         self,
         mu: float = 0.0,
@@ -1108,7 +1132,8 @@ class LogNormal(Distribution):
         log_hi = math.log(self._hi) if math.isfinite(self._hi) else float("inf")
         self._cdf_lo = _norm_cdf_float((log_lo - self._mu) / self._sigma)
         self._cdf_hi = _norm_cdf_float((log_hi - self._mu) / self._sigma)
-        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
+        # Structural rule shared by all bounded families; see Distribution._is_truncated.
+        self._truncated = self._is_truncated()
         self._register_default(default)
 
     @property
@@ -1358,7 +1383,8 @@ class StudentT(Distribution):
         # Truncation constants in t-CDF space (Python floats).
         self._pcdf_lo = self._t_cdf_float((self._lo - self._mu) / self._sigma)
         self._pcdf_hi = self._t_cdf_float((self._hi - self._mu) / self._sigma)
-        self._truncated = self._pcdf_lo > 0.0 or self._pcdf_hi < 1.0
+        # Structural rule shared by all bounded families; see Distribution._is_truncated.
+        self._truncated = self._is_truncated()
         # Normalization: ln Γ((ν+1)/2) − ln Γ(ν/2) − ½ln(νπ) − ln σ − ln Z.
         self._log_norm = (
             math.lgamma((self._df + 1.0) / 2.0)
@@ -1617,7 +1643,8 @@ class Laplace(Distribution):
         self.units = units
         self._cdf_lo = _laplace_cdf_float(self._lo, self._mu, self._b)
         self._cdf_hi = _laplace_cdf_float(self._hi, self._mu, self._b)
-        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
+        # Structural rule shared by all bounded families; see Distribution._is_truncated.
+        self._truncated = self._is_truncated()
         self._register_default(default)
 
     @property

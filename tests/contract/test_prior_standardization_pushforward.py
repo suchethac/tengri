@@ -107,6 +107,16 @@ CASES = [
         ),
         id="laplace-truncated",
     ),
+    pytest.param(
+        LogNormal(5.0, 0.3, lo=1e-3),
+        lambda x: st.lognorm.cdf(x, 0.3, scale=np.exp(5.0)),
+        id="lognormal-deep-tail-bound",
+    ),
+    pytest.param(
+        Laplace(0.0, 1.0, lo=-800.0),
+        lambda x: st.laplace.cdf(x, 0.0, 1.0),
+        id="laplace-deep-tail-bound",
+    ),
 ]
 
 

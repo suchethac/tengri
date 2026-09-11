@@ -9,7 +9,16 @@ the curve with redshift, opposite the paper's own Section 5.1. They are now the
 published median curves, through the same fitted table
 ``narayanan_z`` interpolates, so this file pins the *direction* the paper states
 plus agreement with that single source, and no longer a formula.
+
+Moved here from ``tests/components/sfh/`` (misfiled -- both priors are dust
+parameters) and extended with two bounds assertions when #2226 truncated
+``dust_bump_strength`` and ``dust_tau_diff`` at zero to match their own
+``bound_check``; see ``tests/regression/bug/test_bug_2226_narayanan_prior_bounds.py``
+for the full regression coverage (build-time, log_prob, sampling, gradient,
+normalization, and the free-prior ceiling).
 """
+
+import math
 
 import numpy as np
 import pytest
@@ -92,6 +101,12 @@ class TestNarayananPrior:
         assert isinstance(priors["dust_delta"], Gaussian)
         assert isinstance(priors["dust_bump_strength"], Gaussian)
 
+    def test_bump_strength_is_truncated_at_zero(self):
+        """``dust_bump_strength`` declares a ``lo >= 0`` bound_check; the
+        returned Gaussian must carry that bound (#2226)."""
+        for z in (0.0, 2.0, 6.0):
+            assert narayanan_prior(z)["dust_bump_strength"].bounds == (0.0, math.inf)
+
     def test_returns_dict_with_expected_keys(self):
         """Should return exactly dust_delta and dust_bump_strength."""
         priors = narayanan_prior(z=2.0)
@@ -123,6 +138,12 @@ class TestNarayananTauPrior:
         priors = narayanan_tau_prior(z=0.0)
         assert set(priors.keys()) == {"dust_tau_diff"}
         assert isinstance(priors["dust_tau_diff"], Gaussian)
+
+    def test_tau_diff_is_truncated_at_zero(self):
+        """``dust_tau_diff`` declares a ``lo >= 0`` bound_check; the returned
+        Gaussian must carry that bound (#2226)."""
+        for z in (0.0, 2.0, 6.0):
+            assert narayanan_tau_prior(z)["dust_tau_diff"].bounds == (0.0, math.inf)
 
     def test_default_mstar(self):
         """Default log_mstar=10.0 at z=0: tau_mean = 0.5 * 1.0 * 1.0 = 0.5."""
