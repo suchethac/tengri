@@ -214,6 +214,16 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: single-screen config spells its default ``frozenset()`` for the same
     #: reason in reverse: passing nothing is *its* historical behavior.
     live_shape_params: frozenset[str] | None = None
+    #: Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget
+    #: override, #2187-series), resolved from spec provenance by
+    #: ``SEDModel._requested_dust_log_L_ir`` and frozen here the same way
+    #: :attr:`live_shape_params` is (#1808/#1833). ``True`` makes :meth:`apply`
+    #: replace ``log_L_ir = log_L_absorbed + log10(dust_eta_balance)`` outright
+    #: with ``params["dust_log_L_ir"] + LOG10_L_SUN``; ``False`` (default,
+    #: including a component built directly with no spec to ask) keeps
+    #: strict/relaxed energy balance exactly as before. A static Python bool,
+    #: not a traced value, so both branches stay JIT-clean.
+    log_l_ir_requested: bool = False
 
 
 @dataclass(frozen=True)
@@ -273,9 +283,13 @@ class DustSEDComponent(TemplateThreading):
 
         Publishes:
 
-        - L_ir: total absorbed UV/optical/NIR luminosity (erg/s), enabling
-          downstream dust emission components to re-radiate.
-        - L_absorbed: alias for L_ir (deprecated, use L_ir).
+        - L_ir: the dust IR budget (erg/s) downstream emission components
+          re-radiate: under strict/relaxed energy balance this equals
+          ``L_absorbed * dust_eta_balance``; a declared ``dust_log_L_ir``
+          (#2187-series) replaces it outright.
+        - L_absorbed: the ABSORBED UV/optical/NIR luminosity (erg/s) --
+          formerly documented as an alias for L_ir, which was true only
+          while ``dust_eta_balance == 1`` and no override existed.
         - sed_dust_attenuated: stellar SED after two-component attenuation.
         - sed_nebular: re-published after dust reddening (same name as nebular,
           not declared to avoid duplicate-publisher conflict; consumed by
@@ -283,12 +297,33 @@ class DustSEDComponent(TemplateThreading):
 
         """
         return (
-            DerivedKey("L_ir", "erg/s", "Total absorbed UV/optical/NIR luminosity"),
-            DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (deprecated)"),
+            DerivedKey(
+                "L_ir",
+                "erg/s",
+                "Dust IR budget: L_absorbed * dust_eta_balance unless a "
+                "dust_log_L_ir override is declared (#2187-series)",
+            ),
+            DerivedKey(
+                "L_absorbed",
+                "erg/s",
+                "Absorbed UV/optical/NIR luminosity; equals L_ir only under "
+                "strict energy balance (eta == 1, no dust_log_L_ir override)",
+            ),
             DerivedKey(
                 "log_L_ir",
                 "dex",
                 "log10(L_ir / (erg/s)); the float32-safe form of L_ir",
+            ),
+            DerivedKey(
+                "log_L_absorbed",
+                "dex",
+                "log10(L_absorbed / (erg/s)); the ABSORBED stellar+nebular energy "
+                "budget, independent of dust_eta_balance and of any declared "
+                "dust_log_L_ir override. log_L_ir = log_L_absorbed + "
+                "log10(dust_eta_balance) under strict/relaxed energy balance, or "
+                "is replaced outright by a declared dust_log_L_ir; log_L_absorbed "
+                "itself never moves. Use this key (not log_L_ir) to read the "
+                "absorbed energy (#1837/#2187-series split).",
             ),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
             DerivedKey(
@@ -932,17 +967,31 @@ class DustSEDComponent(TemplateThreading):
         from tengri.forward.energy_balance import warn_if_corrupt
 
         warn_if_corrupt(log_L_absorbed, component="two_component")
-        eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
-        # ``eta_balance`` relaxes energy balance multiplicatively, so it is a
-        # log offset. A non-positive factor means no re-emitted energy at all,
-        # which is -inf in log space (and exactly 0.0 back in linear space):
-        # matching the ``jnp.maximum(..., 0.0)`` clip of the linear form.
-        eta_positive = eta_balance > 0
-        log_L_ir = jnp.where(
-            eta_positive,
-            log_L_absorbed + jnp.log10(jnp.where(eta_positive, eta_balance, 1.0)),
-            -jnp.inf,
-        )
+        if self.config.log_l_ir_requested:
+            # Total dust IR budget override (#2187-series): declaring
+            # ``dust_log_L_ir`` at all replaces the energy-balance ``log_L_ir``
+            # outright. This is a STATIC branch (``self.config.log_l_ir_requested``
+            # is a build-time Python bool, frozen from spec provenance -- see
+            # ``SEDModel._requested_dust_log_L_ir``), so both branches stay
+            # JIT-clean; only the traced VALUE of ``dust_log_L_ir`` is fittable.
+            # ``dust_eta_balance`` is inert here by construction -- ``SEDModel``
+            # raises at build time if it is freed or user-Fixed away from 1.0
+            # alongside a declared override (see ``_validate_dust_log_l_ir_override``).
+            from tengri.utils.sed_quantities import LOG10_L_SUN
+
+            log_L_ir = jnp.asarray(params["dust_log_L_ir"]) + LOG10_L_SUN
+        else:
+            eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
+            # ``eta_balance`` relaxes energy balance multiplicatively, so it is a
+            # log offset. A non-positive factor means no re-emitted energy at all,
+            # which is -inf in log space (and exactly 0.0 back in linear space):
+            # matching the ``jnp.maximum(..., 0.0)`` clip of the linear form.
+            eta_positive = eta_balance > 0
+            log_L_ir = jnp.where(
+                eta_positive,
+                log_L_absorbed + jnp.log10(jnp.where(eta_positive, eta_balance, 1.0)),
+                -jnp.inf,
+            )
         L_absorbed = pow10(log_L_absorbed)
         L_ir = pow10(log_L_ir)
 
@@ -998,6 +1047,7 @@ class DustSEDComponent(TemplateThreading):
             L_ir=L_ir,
             L_absorbed=L_absorbed,
             log_L_ir=log_L_ir,
+            log_L_absorbed=log_L_absorbed,
             sed_dust_attenuated=sed_attenuated,
             # Re-publish the nebular continuum as its dust-reddened (observed)
             # form, consistent with ``sed_dust_attenuated`` being the observed

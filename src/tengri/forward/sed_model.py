@@ -1883,6 +1883,7 @@ class SEDModel:
 
         # ── Dust (attenuation + emission) ─────────────────────────
         param_map_deltas.append(self._init_dust(spec))
+        self._validate_dust_log_l_ir_override(spec)
 
         # ── IGM + DLA ─────────────────────────────────────────────
         self._init_igm(spec)
@@ -3622,6 +3623,68 @@ class SEDModel:
                     envelope_hi=hi,
                     stacklevel=3,
                 )
+
+    def _validate_dust_log_l_ir_override(self, spec) -> None:
+        """Raise when a declared ``dust_log_L_ir`` coexists with a live ``dust_eta_balance``.
+
+        Declaring ``dust_log_L_ir`` (Fixed or free) replaces the
+        energy-balance IR budget outright (#2187-series): the publish branch
+        in every dust-attenuation component (see
+        :meth:`_requested_dust_log_L_ir`) never reads ``dust_eta_balance``
+        once the override is active, so a freed or non-unity
+        ``dust_eta_balance`` alongside it is silently inert -- exactly the
+        kind of dead free direction #369/#1482 warn is a correctness bug, not
+        a style nit. Catch it here, at construction, where
+        ``dust_eta_balance``'s distribution is a concrete Python object and
+        raising :class:`ParameterError` is legal; the JIT'd predict path
+        cannot raise on a traced value (mirrors
+        :meth:`_validate_shock_coverage`, #2065).
+
+        Parameters
+        ----------
+        spec : Parameters
+            The (already parsed) parameter spec; read only for the
+            ``dust_eta_balance`` distribution.
+
+        Raises
+        ------
+        ParameterError
+            ``dust_eta_balance`` is free, or ``Fixed`` at a value other than
+            1.0, while ``dust_log_L_ir`` is declared. An explicit
+            ``Fixed(1.0)`` passes: it states, redundantly but harmlessly, the
+            one value that would have been inert under the override anyway.
+        """
+        if not self._requested_dust_log_L_ir():
+            return
+
+        distributions = getattr(spec, "_distributions", {})
+        eta_dist = distributions.get("dust_eta_balance")
+        if eta_dist is None:
+            return
+
+        if eta_dist.is_fixed:
+            eta_value = float(eta_dist.value)
+            if abs(eta_value - 1.0) <= 1e-12:
+                return
+            raise ParameterError(
+                f"dust_eta_balance is Fixed({eta_value!r}) alongside a declared "
+                "dust_log_L_ir override. dust_log_L_ir replaces the "
+                "energy-balance IR budget outright, so dust_eta_balance is "
+                "inert -- Fixed(1.0) is the only value that agrees with that. "
+                "Either drop dust_eta_balance (or set it to Fixed(1.0)), or "
+                "drop dust_log_L_ir and let dust_eta_balance relax energy "
+                "balance instead."
+            )
+
+        raise ParameterError(
+            "dust_eta_balance carries a free prior alongside a declared "
+            "dust_log_L_ir override. dust_log_L_ir replaces the "
+            "energy-balance IR budget outright, so freeing dust_eta_balance "
+            "explores a direction with no effect on any predicted quantity. "
+            "Either fix dust_eta_balance (to Fixed(1.0), the only value that "
+            "agrees with the override), or drop dust_log_L_ir and free "
+            "dust_eta_balance to relax energy balance instead."
+        )
 
     @staticmethod
     def _calibration_param_map(observation):
@@ -7835,10 +7898,24 @@ class SEDModel:
             "dust_T_cold",
             "dust_beta_warm",
             "dust_beta_cold",
+            # Total dust IR budget override (#2187-series). Freeing it does not
+            # change the ABSORBED integral this LUT caches (log_L_absorbed is a
+            # function of tau_bc/tau_diff alone, never of dust_log_L_ir): the
+            # override only changes how the attenuation component turns that
+            # absorbed value into log_L_ir downstream, at apply() time, outside
+            # this LUT entirely.
+            "dust_log_L_ir",
         }
     )
     #: dust attenuation params that may be free (tau axes + linear eta scaling).
-    _EB_ATTEN_FREE_OK = frozenset({"dust_tau_bc", "dust_tau_diff", "dust_eta_balance"})
+    #: ``dust_log_L_ir`` belongs here too, not in ``_EB_EMISSION_PARAMS`` alone:
+    #: like ``dust_eta_balance`` it only rescales the overall ``L_ir`` amplitude
+    #: fed to the (fixed-shape) emission template, so a build-time per-filter
+    #: response ``R`` computed at one ``L_ir`` and reused for any other (the
+    #: homogeneity check in ``_dust_emission_band_response``) stays valid.
+    _EB_ATTEN_FREE_OK = frozenset(
+        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir"}
+    )
 
     def _ztable_data_for_jit(self):
         """Collect z-table data for JIT threading (stellar component only).
@@ -8308,6 +8385,42 @@ class SEDModel:
             in self._REQUESTED_PROVENANCE
         )
 
+    def _requested_dust_log_L_ir(self) -> bool:
+        """Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget override).
+
+        Returns
+        -------
+        bool
+            ``True`` when ``dust_log_L_ir`` carries build-time provenance
+            saying somebody asked for it (Fixed, a free prior, or freed by an
+            ``all_params`` wildcard -- though the wildcard never reaches it in
+            practice, since it declares no ``free_prior``, see the
+            ``dust_log_L_ir`` entry in ``components/dust/_params.py``).
+            ``False`` when the
+            parameter was never mentioned, in which case it falls through to
+            ``"registry_default"`` and this returns ``False``: energy balance
+            holds exactly as before.
+
+        Notes
+        -----
+        **JIT-compatible**: no, build-time provenance lookup, the same shape
+        as :meth:`_requested_law_shape_params` (#1808/#1833) but answering for
+        a single flat parameter rather than a per-law shape-parameter set.
+        Declaring ``dust_log_L_ir`` AT ALL -- independent of its value -- is
+        itself the energy-balance opt-out (#2187-series): the publish branch
+        this feeds must be a static Python bool baked into the component
+        config, never a runtime/traced check, so both branches stay JIT-clean
+        and the traced *value* of ``dust_log_L_ir`` remains fittable.
+        """
+        provenance = getattr(self.spec, "_group_provenance", None)
+        if provenance is None:
+            provenance = getattr(self.spec, "_flat_provenance", None)
+        provenance = provenance or {}
+        return (
+            str(provenance.get("dust_log_L_ir", "registry_default")).removesuffix("_grid")
+            in self._REQUESTED_PROVENANCE
+        )
+
     def _build_chain_configs(self):
         """Construct the raw, un-precomputed :class:`SEDComponent` chain.
 
@@ -8442,6 +8555,7 @@ class SEDModel:
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
             dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
             dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
+            dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             astrodust_spinning_dust=bool(getattr(self, "_astrodust_spinning_dust", False)),
             astrodust_f_cnm=float(getattr(self, "_astrodust_f_cnm", 0.28)),

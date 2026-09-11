@@ -6,7 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `dust_log_L_ir` (`log10(L_IR/Lsun)`): a total dust IR budget override.
+  Declaring it -- `Fixed` or any free prior, via `dust_emission={'log_L_ir':
+  ...}` -- replaces the energy-balance IR budget (`log_L_ir =
+  log_L_absorbed + log10(dust_eta_balance)`) outright; leaving it undeclared
+  keeps strict/relaxed energy balance exactly as before. Declares no
+  `free_prior` (an absolute luminosity has no galaxy-independent interval),
+  so `dust_emission={'all_params': FREE}` never frees it. `dust_eta_balance`
+  is inert once the override is declared, and `SEDModel` now raises
+  `ParameterError` at construction if it is free or `Fixed` at a value other
+  than 1.0 alongside a declared `dust_log_L_ir`. Radio's FIR-radio-correlation
+  amplitude follows the override too (#2187-series).
+
 ### Fixed
+
+- `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
+  stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
+  legacy `predict_sed_quantities` bridge, and the AGN CIGALE fracAGN torus
+  coupling), which was only silently correct at `dust_eta_balance == 1`.
+  Every dust-attenuation publisher now also publishes a `log_L_absorbed` /
+  `L_absorbed` companion pair invariant under `dust_eta_balance`, and the
+  three readers are repointed to it -- a relaxed `dust_eta_balance` no
+  longer leaks into the absorbed-energy reading (#2187-series).
 
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
