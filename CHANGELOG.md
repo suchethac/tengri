@@ -391,6 +391,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
+- **The composable AGN precompute's default wavelength grid is derived from
+  the blocks it is about to evaluate, instead of a hard-coded
+  `np.logspace(2.0, 6.0, 1500)` that truncated them.** Under `polar_dust` +
+  `agn_norm='cigale_joint'` + `torus='skirtor'` the polar dust's
+  absorbed-power reference is built on the SKIRTOR templates' native
+  10 Å – 1e8 Å axis, and that grid covered neither end: measured with
+  `disc='skirtor'` at i=30 and `agn_ir_frac=0.3`, `int(polar)/int(torus)` came
+  out `0.286324800` on it against `0.264046724` on a covering grid, **+8.44%**.
+  The build-time grid guard could not see it — that grid is chosen inside
+  `blocks/composable_precompute.precompute` and never becomes the model's rest
+  wavelength. The default now unions the legacy 100 Å – 1e6 Å span with
+  whatever native support the recipe's own blocks declare, read through the
+  same function the guard uses, and samples it at the legacy points-per-decade
+  with a floor of 1500 points (10 Å – 1e8 Å in 2625 points for that recipe;
+  the legacy grid unchanged where there is no tie). It reproduces the covering
+  grid's share to 1e-6. A `wave_rest` the caller passes is checked by the
+  guard itself and raises the same `ConfigError`.
+
 - **`agn_radius_ratio` now reaches the `cigale_joint` disc tie, which used the
   SKIRTOR grid's R = 20 node whatever the model asked for.** The torus block
   always honored the value; `compose_l_nu` forwarded `agn_tau_skirtor`,

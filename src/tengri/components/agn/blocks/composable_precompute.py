@@ -138,6 +138,67 @@ def _evaluate_recipe_on_grid(
     return spectra.reshape(*grid_shape, wave_rest.size)
 
 
+#: The historical hard-coded default grid for :func:`precompute`: 100 A to
+#: 1e6 A in 1500 log-spaced points. Kept only as the density reference --
+#: :func:`default_wave_rest` reproduces its points-per-decade so a widened
+#: grid is not also a coarser one.
+_LEGACY_DEFAULT_LOG10_LO = 2.0
+_LEGACY_DEFAULT_LOG10_HI = 6.0
+_LEGACY_DEFAULT_N = 1500
+
+
+def default_wave_rest(recipe: Recipe, agn_norm: str = "cigale_joint") -> np.ndarray:
+    """Rest-frame grid a recipe's own blocks need, at the legacy density.
+
+    The hard-coded ``np.logspace(2.0, 6.0, 1500)`` this replaces covered
+    neither end of the SKIRTOR templates' native 10 A - 1e8 A axis, which is
+    where ``skirtor_disc_dust_ratio`` builds the polar dust's absorbed-power
+    reference. Measured (``disc='skirtor'``, ``torus='skirtor'``,
+    ``polar_dust``, i=30, ``agn_ir_frac=0.3``), ``int(polar)/int(torus)`` came
+    out 0.286324800 on that grid against 0.264046724 on a covering one --
+    **+8.44%**, and invisible to the build-time guard because this grid is
+    chosen inside the helper and never becomes the model's rest wavelength.
+
+    The range is now derived from the same declared native support the guard
+    requires (:func:`~tengri.forward.sed_model._polar_reference_required_extent_aa`),
+    unioned with the legacy span so no existing caller loses coverage, and
+    sampled at the legacy points-per-decade (374.75) with a floor of 1500
+    points.
+
+    Parameters
+    ----------
+    recipe : Recipe
+        The block selectors this precompute will evaluate.
+    agn_norm : str, optional
+        Cross-block normalization policy, since the tie that sets the
+        requirement is only active under ``'cigale_joint'``.
+
+    Returns
+    -------
+    ndarray
+        Log-spaced rest-frame wavelength grid [A].
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- build-time only.
+    """
+    from tengri.forward.sed_model import _polar_reference_required_extent_aa
+
+    lo10, hi10 = _LEGACY_DEFAULT_LOG10_LO, _LEGACY_DEFAULT_LOG10_HI
+    if (
+        recipe.agn_attenuation_block == "polar_dust"
+        and str(agn_norm or "cigale_joint") == "cigale_joint"
+    ):
+        required = _polar_reference_required_extent_aa(recipe.agn_torus_block)
+        if required is not None:
+            lo10 = min(lo10, float(np.log10(required[0])))
+            hi10 = max(hi10, float(np.log10(required[1])))
+
+    per_decade = (_LEGACY_DEFAULT_N - 1) / (_LEGACY_DEFAULT_LOG10_HI - _LEGACY_DEFAULT_LOG10_LO)
+    n = max(_LEGACY_DEFAULT_N, int(np.ceil(per_decade * (hi10 - lo10))) + 1)
+    return np.logspace(lo10, hi10, n, dtype=np.float64)
+
+
 def precompute(
     filter_waves: list,
     filter_trans: list,
@@ -174,7 +235,12 @@ def precompute(
         registry defaults baked into each block.
     wave_rest : ndarray, optional
         Rest-frame wavelength grid the spectra are evaluated on. Default:
-        ``np.logspace(2.0, 6.0, 1500)`` (100 Å to 1e6 Å, log-spaced).
+        :func:`default_wave_rest` for this recipe -- the legacy 100 Å - 1e6 Å
+        span unioned with whatever native support the recipe's own blocks
+        declare, at the legacy points-per-decade. A grid passed here is
+        checked by the same rule that guards a model's rest-wavelength grid
+        (R66) and raises the same
+        :class:`~tengri.config.exceptions.ConfigError`.
     agn_log_lbol_default : float, optional
         Default ``agn_log_lbol`` when not in ``fixed_values`` or
         ``axis_grids``. Defaults to the declared
@@ -199,10 +265,27 @@ def precompute(
             "axis_grids={'agn_log_lbol': np.linspace(43, 47, 5)} or similar."
         )
 
+    # Imported here, not at module scope: ``forward.sed_model`` imports the
+    # parameter-translation layer, which imports this package.
+    from tengri.forward.sed_model import _check_polar_reference_grid_extent
+
+    _agn_norm = str(dict(fixed_values or {}).get("agn_norm", "cigale_joint") or "cigale_joint")
     if wave_rest is None:
-        wave_rest = np.logspace(2.0, 6.0, 1500, dtype=np.float64)
+        wave_rest = default_wave_rest(recipe, _agn_norm)
     else:
         wave_rest = np.asarray(wave_rest, dtype=np.float64)
+    # A grid the caller chose gets the same refusal the model build gives, for
+    # the same reason and with the same message: under polar_dust + the
+    # cigale_joint SKIRTOR tie, a grid short of the templates' native axis has
+    # the disc zero-filled over the difference and renormalized on what is
+    # left. The derived default above already covers it; this is for the
+    # caller who overrides it.
+    _check_polar_reference_grid_extent(
+        wave_rest,
+        attenuation_block=recipe.agn_attenuation_block,
+        agn_norm=_agn_norm,
+        torus_block=recipe.agn_torus_block,
+    )
 
     spectra = _evaluate_recipe_on_grid(
         wave_rest, recipe, axis_grids, fixed_values, agn_log_lbol_default
