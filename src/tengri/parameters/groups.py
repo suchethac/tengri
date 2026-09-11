@@ -4134,13 +4134,14 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 # Exception: for 'neb', this base set is NOT the full displayed/suggested set
 # (#2220 I2). 'grid' is deliberately absent here -- it is legal only for the
 # types that read it (cloudy, cb19, mappings, mappings_agn), enforced via
-# neb_type_specific_keys in _validate_user_keys -- but the did-you-mean
-# suggestion and the "Valid structural keys" list in _check_dict_keys must
-# still show 'grid' for those four types. The suggestion already reads the
-# type-aware union: _check_dict_keys's suggestion_pool is built from
-# `allowed`, which the 'neb' call site already unions with
-# neb_type_specific_keys, independent of this table. Only the displayed
-# "Valid structural keys" list needed a separate fix -- it read this table
+# _NEB_TYPE_SPECIFIC_KEYS (defined below) in _validate_user_keys -- but the
+# did-you-mean suggestion and the "Valid structural keys" list in
+# _check_dict_keys must still show 'grid' for those four types. The
+# suggestion already reads the type-aware union: _check_dict_keys's
+# suggestion_pool is built from `allowed`, which the 'neb' call site already
+# unions with the resolved type's _NEB_TYPE_SPECIFIC_KEYS entry, independent
+# of this table. Only the displayed "Valid structural keys" list needed a
+# separate fix -- it read this table
 # directly -- so 'neb' passes the same union explicitly as
 # _check_dict_keys's displayed_structural_keys for that list; every other
 # group still reads this table alone for both.
@@ -4187,9 +4188,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     ),
     # "grid" is NOT here (#2220 follow-up): it is legal only for the neb
     # types that read it ("cloudy", "cb19", "mappings", "mappings_agn"),
-    # added per-type via neb_type_specific_keys in _validate_user_keys so a
-    # type that never reads it (cue, ssp, none) raises instead of silently
-    # dropping the path.
+    # added per-type via _NEB_TYPE_SPECIFIC_KEYS (defined below this table) in
+    # _validate_user_keys so a type that never reads it (cue, ssp, none)
+    # raises instead of silently dropping the path.
     "neb": frozenset({"type", "*", "all_params", "full_catalog"}),
     "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
@@ -4222,6 +4223,36 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
 _GROUP_STRUCTURAL_KEYS = {
     group: (keys | {WILDCARD_ALIAS_OTHER} if WILDCARD_ALIAS in keys else keys)
     for group, keys in _GROUP_STRUCTURAL_KEYS.items()
+}
+
+#: Structural keys legal on top of a group's base ``_GROUP_STRUCTURAL_KEYS``
+#: set, keyed by that group's resolved ``type`` (#2220 follow-up). Today only
+#: ``neb`` has any: ``grid`` used to be legal for every neb type via the base
+#: set, so ``neb={'type': 'cue', 'grid': p}`` / ``{'type': 'ssp', ...}``
+#: accepted the key and silently dropped it -- only ``cloudy``, ``cb19``,
+#: ``mappings`` and ``mappings_agn`` read it in ``_translate_neb``. A type
+#: absent from this table (or a group other than ``neb``) contributes no
+#: extra keys; ``.get(type, frozenset())`` is the read pattern everywhere
+#: this is consulted.
+#:
+#: The single source of truth for three consumers that must never drift
+#: apart again: ``_validate_user_keys`` (acceptance and the explicit refusal
+#: for types outside a key's set), ``_check_dict_keys``'s
+#: ``displayed_structural_keys`` (the did-you-mean suggestion pool and the
+#: "Valid structural keys" list, per resolved type), and
+#: ``tools/check_doc_grammar_keys.py`` (the in-code key census the docs are
+#: checked against -- the guard's own code union is
+#: ``_GROUP_STRUCTURAL_KEYS[group] | union(_NEB_TYPE_SPECIFIC_KEYS.values())``
+#: for ``group == "neb"``, since the doc describes ``grid`` once for the
+#: whole ``neb`` domain, not per type).
+_NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
+    "cloudy": frozenset({"grid"}),
+    "cb19": frozenset({"grid"}),
+    # "mappings" (stellar): grid plus its own model/density/warning knobs.
+    "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
+    # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
+    # has no model axis).
+    "mappings_agn": frozenset({"density", "ionizing_source_warning", "grid"}),
 }
 
 
@@ -4830,27 +4861,30 @@ def _validate_user_keys(
             param_names = param_names | _OPTIONAL_NEB_PARAM_NAMES
 
         # Type-specific structural keys: different neb types accept different
-        # structural keys in the neb group. "grid" (#2220 follow-up) used to
-        # be legal for every type via the base _GROUP_STRUCTURAL_KEYS["neb"]
-        # set, so neb={'type': 'cue', 'grid': p} / {'type': 'ssp', ...}
-        # accepted the key and silently dropped it -- only "cloudy", "cb19",
-        # "mappings" and "mappings_agn" read it in _translate_neb. It is legal
-        # only for those four types now, and the check just below refuses it
-        # by name for every other type. For "mappings" (stellar), also allow
-        # {model, density, ionizing_source_warning}. For "mappings_agn" (AGN),
-        # also allow {density, ionizing_source_warning} but NOT model (5D AGN
-        # grid has no model axis).
+        # structural keys in the neb group, read from the single shared table
+        # _NEB_TYPE_SPECIFIC_KEYS (also consulted by _check_dict_keys's
+        # displayed_structural_keys and by tools/check_doc_grammar_keys.py).
+        # "grid" (#2220 follow-up) used to be legal for every type via the
+        # base _GROUP_STRUCTURAL_KEYS["neb"] set, so neb={'type': 'cue',
+        # 'grid': p} / {'type': 'ssp', ...} accepted the key and silently
+        # dropped it -- only "cloudy", "cb19", "mappings" and "mappings_agn"
+        # read it in _translate_neb. It is legal only for those four types
+        # now, and the check just below refuses it by name for every other
+        # type.
         neb_type_specific_keys = frozenset()
         if top_key == "neb":
             neb_type = top_val.get("type")
-            if neb_type in ("cloudy", "cb19"):
-                neb_type_specific_keys = frozenset({"grid"})
-            elif neb_type == "mappings":
-                neb_type_specific_keys = frozenset(
-                    {"model", "density", "ionizing_source_warning", "grid"}
-                )
-            elif neb_type == "mappings_agn":
-                neb_type_specific_keys = frozenset({"density", "ionizing_source_warning", "grid"})
+            # isinstance guard, not just a hashability worry: a non-string
+            # type (e.g. a dict, if a user mistypes the sfh-style composed
+            # form here) must fall through to frozenset() exactly as the old
+            # if/elif chain did, not raise TypeError out of a dict .get()
+            # before _translate_neb ever gets a chance to name the real
+            # problem.
+            neb_type_specific_keys = (
+                _NEB_TYPE_SPECIFIC_KEYS.get(neb_type, frozenset())
+                if isinstance(neb_type, str)
+                else frozenset()
+            )
 
             if "grid" in top_val and "grid" not in neb_type_specific_keys:
                 raise ValueError(

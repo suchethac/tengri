@@ -3,7 +3,11 @@
 
 Ensures that:
 1. Every structural key documented in docs/model_configuration.md exists
-   in tengri.parameters.groups._GROUP_STRUCTURAL_KEYS.
+   in tengri.parameters.groups._GROUP_STRUCTURAL_KEYS -- unioned, for the
+   'neb' domain, with every entry of _NEB_TYPE_SPECIFIC_KEYS (#2220 follow-
+   up): keys such as 'grid' are legal only for specific neb types and so are
+   absent from the base set, but are still documented once for the whole
+   domain, not per type.
 2. Every user-facing structural key appears somewhere in the documentation.
 
 The internal '*' wildcard is refused as user input; the grammar accepts two
@@ -150,16 +154,34 @@ def _get_code_keys() -> dict[str, set[str]]:
     -------
     dict[str, set[str]]
         Mapping of domain name to set of structural keys (with '*' and, where
-        applicable, 'other_params' included).
+        applicable, 'other_params' included). For ``neb``, this is the base
+        set unioned with every entry of ``_NEB_TYPE_SPECIFIC_KEYS`` (#2220
+        follow-up): keys like ``grid`` are legal only for specific neb types
+        (``cloudy``, ``cb19``, ``mappings``, ``mappings_agn``) and so are
+        deliberately absent from the base ``_GROUP_STRUCTURAL_KEYS["neb"]``
+        set -- the type-conditional refusal for the other types lives in
+        ``_validate_user_keys``, not in that set. The docs describe such a
+        key once for the whole ``neb`` domain, not per type, so the in-code
+        census this guard compares against must be the same union, read from
+        the same table the validator and the error-message display use, not
+        a copy of it.
     """
     try:
-        from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS
+        from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS, _NEB_TYPE_SPECIFIC_KEYS
     except ImportError:
         print("Error: Could not import _GROUP_STRUCTURAL_KEYS from tengri", file=sys.stderr)
         return {}
 
     # Top-level groups only (no '.' in the name)
-    return {group: set(keys) for group, keys in _GROUP_STRUCTURAL_KEYS.items() if "." not in group}
+    code_keys = {
+        group: set(keys) for group, keys in _GROUP_STRUCTURAL_KEYS.items() if "." not in group
+    }
+
+    if "neb" in code_keys:
+        for extra in _NEB_TYPE_SPECIFIC_KEYS.values():
+            code_keys["neb"] |= extra
+
+    return code_keys
 
 
 def _check_consistency(
