@@ -65,6 +65,16 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
     dust_curve: str = "mw"
     geometry: str = "shell"
     structure: str = "homogeneous"
+    #: Whether the caller declared ``dust_log_L_ir`` (total dust IR budget
+    #: override, #2187-series), resolved from spec provenance by
+    #: ``SEDModel._requested_dust_log_L_ir`` and frozen here the same way the
+    #: two-component/single-component screens carry it. ``True`` makes
+    #: :meth:`WG00AttenuationSEDComponent.apply` replace ``log_L_ir =
+    #: log_L_absorbed`` outright with ``params["dust_log_L_ir"] + LOG10_L_SUN``;
+    #: ``False`` (default, including a component built directly with no spec
+    #: to ask) keeps energy balance unchanged. A static Python bool, not a
+    #: traced value.
+    log_l_ir_requested: bool = False
 
 
 @dataclass(frozen=True)
@@ -134,9 +144,23 @@ class WG00AttenuationSEDComponent(TemplateThreading):
     def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys published by the WG00 screen."""
         return (
-            DerivedKey("L_ir", "erg/s", "Integrated dust-absorbed luminosity"),
-            DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (energy balance)"),
+            DerivedKey(
+                "L_ir",
+                "erg/s",
+                "Dust IR budget: L_absorbed unless a dust_log_L_ir override "
+                "is declared (#2187-series)",
+            ),
+            DerivedKey("L_absorbed", "erg/s", "The ABSORBED luminosity (energy balance)"),
             DerivedKey("log_L_ir", "dex", "log10(L_ir / (erg/s)); float32-safe form"),
+            DerivedKey(
+                "log_L_absorbed",
+                "dex",
+                "log10(L_absorbed / (erg/s)); the ABSORBED energy budget, "
+                "independent of any declared dust_log_L_ir override (#1837/"
+                "#2187-series split). The WG00 screen applies no dust_eta_balance "
+                "scaling, so log_L_absorbed == log_L_ir unless an override is "
+                "declared.",
+            ),
             DerivedKey("dust_attenuation_factor", "", "exp(-A(lambda; tau_v)) on pipeline grid"),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
         )
@@ -252,17 +276,31 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
         nu = C_AA / state.wave
         # Log-space integral: ~1e43 erg/s is outside float32 (#1206).
-        log_l_ir, _ = bolometric_absorbed_log10(
+        log_l_absorbed, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave
         )
-        warn_if_corrupt(log_l_ir, component="wg00")
+        warn_if_corrupt(log_l_absorbed, component="wg00")
+        if self.config.log_l_ir_requested:
+            # Total dust IR budget override (#2187-series): a STATIC branch
+            # (see ``WG00AttenuationSEDComponentConfig.log_l_ir_requested``),
+            # so both branches stay JIT-clean; only the traced value of
+            # ``dust_log_L_ir`` is fittable. This screen applies no
+            # ``dust_eta_balance`` scaling of its own, so the override is the
+            # only way ``log_L_ir`` departs from ``log_L_absorbed`` here.
+            from tengri.utils.sed_quantities import LOG10_L_SUN
+
+            log_l_ir = jnp.asarray(params["dust_log_L_ir"]) + LOG10_L_SUN
+        else:
+            log_l_ir = log_l_absorbed
         l_ir = pow10(log_l_ir)
+        l_absorbed = pow10(log_l_absorbed)
 
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             L_ir=l_ir,
-            L_absorbed=l_ir,
+            L_absorbed=l_absorbed,
             log_L_ir=log_l_ir,
+            log_L_absorbed=log_l_absorbed,
             sed_dust_attenuated=attenuated,
         )
         return state.with_(

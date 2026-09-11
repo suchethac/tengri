@@ -101,8 +101,18 @@ def _ascending_axes(result: dict) -> dict:
     Returns
     -------
     dict
-        A new dict with ascending axes and every cube flipped to match.
-        Returned unchanged when all axes already ascend.
+        A new dict with ascending axes and every cube flipped to match, each
+        a C-contiguous array. Returned unchanged when all axes already ascend.
+
+    Notes
+    -----
+    ``np.flip`` and ``[::-1]`` return *views* with a negative stride. XLA's
+    CPU client copies such a host buffer silently; jax-mps refuses it
+    (``Negative byte stride (-544) at dim 5 not supported``, then a misleading
+    ``Failed to create Metal buffer. GPU memory may be exhausted``), which
+    failed every torus seam of the #1206 float32 parity sweep on Apple GPU in
+    1.5 s. The flipped arrays are therefore made contiguous here, once, at the
+    single point where the file is read.
     """
     import numpy as np
 
@@ -113,7 +123,7 @@ def _ascending_axes(result: dict) -> dict:
 
     out = dict(result)
     for i in descending:
-        axes[i] = axes[i][::-1]
+        axes[i] = np.ascontiguousarray(axes[i][::-1])
     # The parameter axes are the leading dimensions of every cube (trailing
     # dimension is wavelength), so axis index i is the same in both.
     for key in ("total", "disk", "dust"):
@@ -121,7 +131,7 @@ def _ascending_axes(result: dict) -> dict:
             cube = np.asarray(out[key])
             for i in descending:
                 cube = np.flip(cube, axis=i)
-            out[key] = cube
+            out[key] = np.ascontiguousarray(cube)
     out["axes"] = tuple(axes)
     return out
 
