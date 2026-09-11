@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
+
 - The no-state emission-line dust screen (`SEDModel._attenuate_line_catalog`,
   used when `dust_model` is `off`/`wg00` and by the #950
   `enable_fast_nebular()` grid path) built its own law kwargs from exactly
