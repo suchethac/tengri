@@ -347,6 +347,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   moved nothing. `agn_alpha_ion` is retired; writing it (or `alpha_ion`) in
   any group raises a loud legacy-key error naming `agn_nlr_alpha_pl` and the
   placement that works (#2214).
+- **`'off'` is now accepted as a synonym for `'none'` across every group with
+  an off switch, not just three of them.** `dust_attenuation`, `dust_emission`
+  and `agn` already normalized `'off'` onto `'none'`; `neb`, `shock`,
+  `radio`'s `sf` and `agn` sub-blocks, `xray` and `igm` raised `Unknown type
+  'off'` for the identical request spelled the other way. A single shared
+  helper, `_normalize_off_switch` (`parameters/groups.py`), is now the one
+  place the off-switch vocabulary is defined; every one of the eight groups'
+  translators calls it immediately after reading its raw `type` value, before
+  any type-menu validation.
 
 ### Deprecated
 

@@ -3214,6 +3214,42 @@ def _reject_per_screen_keys_no_law_reads(
     )
 
 
+#: Spellings a user may write to switch a group off. ``'none'`` is the
+#: canonical form every group's own type menu declares; ``'off'`` is the one
+#: accepted synonym.
+_OFF_SWITCH_SPELLINGS = frozenset({"none", "off"})
+
+
+def _normalize_off_switch(type_value: str | None) -> str | None:
+    """Canonicalize an off-switch spelling onto the group's own ``'none'``.
+
+    This is the one place the off-switch vocabulary is defined. Every group
+    that carries an off switch -- ``dust_attenuation``, ``dust_emission``,
+    ``agn``, ``neb``, ``shock``, ``radio``'s ``sf``/``agn`` sub-blocks,
+    ``xray`` and ``igm`` -- calls this immediately after reading its raw
+    ``type`` value, before any type-menu validation or off-switch branching.
+    A new off spelling (or a new group joining the family) is one edit here,
+    not one per translator.
+
+    Parameters
+    ----------
+    type_value : str or None
+        The raw ``type`` value read from a group dict (or sub-block dict).
+        ``None`` passes through unchanged: a group that defaults its type to
+        ``None`` (``dust_emission``) still spells "off" as the absence of a
+        type, which this helper does not touch.
+
+    Returns
+    -------
+    str or None
+        ``'none'`` if ``type_value`` is any accepted off spelling; otherwise
+        ``type_value`` unchanged.
+    """
+    if type_value in _OFF_SWITCH_SPELLINGS:
+        return "none"
+    return type_value
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -3223,14 +3259,14 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     from PR #1984: law XOR (law_bc AND law_diff); single_component takes
     only law; wg00 takes none.
     """
-    dust_type = dust_atten_dict.get("type", "two_component")
+    dust_type = _normalize_off_switch(dust_atten_dict.get("type", "two_component"))
 
-    # 'none'/'off' disable the dust block entirely; parity with neb/agn/radio/
-    # xray/igm/shock, all of which accept type='none' (and the generic grammar
-    # error even promises it). The forward model reads dust_model=='off' as
-    # use_dust=False, so normalize both spellings onto that sentinel and skip
-    # law parsing (there is nothing to attenuate).
-    if dust_type in ("none", "off"):
+    # 'none' (its 'off' synonym normalized above by _normalize_off_switch)
+    # disables the dust block entirely; parity with neb/agn/radio/xray/igm/
+    # shock, all of which accept the same off switch. The forward model reads
+    # dust_model=='off' as use_dust=False, so skip law parsing (there is
+    # nothing to attenuate).
+    if dust_type == "none":
         result["dust_model"] = "off"
         return
 
@@ -3700,10 +3736,10 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
     Handles IR re-emission model selection and associated structural
     configuration (e.g., astrodust spinning dust and f_cnm).
     """
-    emission_type = dust_emis_dict.get("type")
-    if emission_type in ("none", "off"):
+    emission_type = _normalize_off_switch(dust_emis_dict.get("type"))
+    if emission_type == "none":
         # Explicitly disable IR re-emission, for parity with the group-level
-        # 'none'. Leave result['dust_emission'] unset (its off default).
+        # off switch. Leave result['dust_emission'] unset (its off default).
         emission_type = None
     if emission_type is not None:
         # Dust IR emission types are engine names (modified_blackbody, dale2014,
@@ -3744,7 +3780,7 @@ _NEBULAR_TYPE_HINTS = {
 
 def _translate_neb(neb_dict: dict, result: dict) -> None:
     """Translate neb group to nebular settings."""
-    neb_type = neb_dict.get("type", "none")
+    neb_type = _normalize_off_switch(neb_dict.get("type", "none"))
 
     # Validate type
     valid_neb = _valid_nebular_types()
@@ -3828,7 +3864,7 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
     ``log_density``, ``b_over_sqrt_n``) resolve to the ``shock_*`` bucket
     params in :func:`parse_groups`.
     """
-    shock_type = shock_dict.get("type", "mappings")
+    shock_type = _normalize_off_switch(shock_dict.get("type", "mappings"))
     valid_shock = _VALID_SHOCK_TYPES
     if shock_type not in valid_shock:
         suggestions = difflib.get_close_matches(shock_type, valid_shock, n=2, cutoff=0.6)
@@ -3873,7 +3909,7 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     today. That is also why it survived -- a latent default is invisible until
     someone relies on it.
     """
-    igm_type = igm_dict.get("type", "inoue14")
+    igm_type = _normalize_off_switch(igm_dict.get("type", "inoue14"))
 
     # Validate type
     valid_igm = _valid_igm_types()
@@ -4042,7 +4078,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     if has_sf_block:
         sf_dict = radio_dict["sf"]
         if isinstance(sf_dict, dict):
-            sf_variant = sf_dict.get("type", "bell2003")
+            sf_variant = _normalize_off_switch(sf_dict.get("type", "bell2003"))
             from tengri.components.radio.component import SF_RADIO_MODELS
 
             valid_sf = frozenset(SF_RADIO_MODELS)
@@ -4056,7 +4092,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     if has_agn_block:
         agn_dict = radio_dict["agn"]
         if isinstance(agn_dict, dict):
-            agn_variant = agn_dict.get("type", "powerlaw")
+            agn_variant = _normalize_off_switch(agn_dict.get("type", "powerlaw"))
             from tengri.components.radio.component import AGN_RADIO_MODELS
 
             valid_agn = frozenset(AGN_RADIO_MODELS)
@@ -4252,7 +4288,7 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
 
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
-    xray_type = xray_dict.get("type", "none")
+    xray_type = _normalize_off_switch(xray_dict.get("type", "none"))
 
     # Validate type
     valid_xray = _valid_xray_types()
@@ -5639,17 +5675,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # Previously this key was silently dropped and the model collapsed to
     # composable-with-all-none-blocks, which emits identically zero: a
     # silent-failure footgun (closes #417 second case).
-    top_type = agn_dict.get("type")
-    # R51 (#2214): 'off' is the same off-switch synonym both dust groups
-    # already accept (_translate_dust_attenuation's and
-    # _translate_dust_emission's own ``in ("none", "off")`` checks) -- agn was
-    # the one group in the "neb, shock, radio, xray, igm, dust_attenuation,
-    # dust_emission" off-switch family (R42's own comment lists them) that
-    # took 'none' only. Normalize right here, before the R37 validator and the
-    # R42 'none' branch below, so both spellings are indistinguishable from
-    # this point on -- the way R42 unified 'none' onto the shared sentinel.
-    if top_type == "off":
-        top_type = "none"
+    # R51 (#2214) / R81: normalize the 'off' synonym before anything else
+    # reads it, via the one shared helper every off-switch group calls
+    # (_normalize_off_switch) -- so both spellings are indistinguishable from
+    # this point on, ahead of the R37 validator and the R42 'none' branch
+    # below.
+    top_type = _normalize_off_switch(agn_dict.get("type"))
     if top_type is not None and top_type != "composable":
         # R37: validate the name HERE, before anything else reads it. It used
         # to be forwarded to ``agn_model`` unchecked, "validated lazily by
