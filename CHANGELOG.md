@@ -120,17 +120,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   sites** across 139 files asserted half the finite-AND-non-zero rule and now
   assert both. 246 were the #2100 shape (finite, never non-zero) and 31 the
   #2178 shape (non-zero, never finite). No assertion was weakened to make the
-  guard pass. 18 of the 277 carry the documented escape hatch
+  guard pass. 19 of the 277 carry the documented escape hatch
   (`# grad-assert: finite-only — <reason>`): they evaluate at a point where the
   derivative is zero for a reason. Some construct a degenerate input on purpose
   — a zeroed window, an empty band, zero ionizing flux, an exact `log10_add`
   cancellation, the Hessian-vector product of a linear scaling, a kernel
-  evaluated outside its band. Others sit on a genuine stationary point: a
-  prior's log-density differentiated at its own mode, a Student-t NLL
-  differentiated at `sigma`'s own maximum-likelihood point. Either way zero is
-  the correct answer there and only the finite half is a claim — and where the
-  surrounding test's real claim was that a gradient *flows*, that claim is now
-  stated a step away from the stationary point, where it can actually fail. (Counts are what the guard reports when run over the upstream
+  evaluated outside its band. Others sit on a genuine stationary point or an
+  inert direction: a prior's log-density differentiated at its own mode, a
+  Student-t NLL differentiated at `sigma`'s own maximum-likelihood point, a GP
+  field's PSD *correlation time* at an identically zero field (the timescale
+  only colors the field, so with no field there is nothing to color). Either way
+  zero is the correct answer there and only the finite half is a claim — and
+  where the surrounding test's real claim was that a gradient *flows*, that
+  claim is now stated a step away from the zero, where it can actually fail.
+
+- Two further tests turned out to be measuring nothing, both found by the
+  non-zero half of the rule and neither a gradient defect in `src/`:
+  `test_forward_model_end_to_end_jit` took its model from a fixture that fixes
+  *every* parameter, so `params` was `{}` — `all(... for g in grads.values())`
+  is vacuously True over an empty dict, and the test promised "finite
+  gradients" in its own docstring while taking none. It now builds a model with
+  two free dust optical depths and asserts the precondition that a free
+  parameter exists. `test_stochastic_gradients_finite` hand-rolled a loss that
+  attached only `psd_xi`, but `StellarSEDComponent` reads `sfh_field_xi` —
+  the exact trap `inference/loss_functions.py` attaches both keys to avoid, and
+  says so in a comment. The latent field never reached the model: `psd_xi`'s own
+  gradient summed to exactly 0.0 and `sfh_field_psd_sigma`'s was bit-identical
+  for a zero field and a random one. A finite-only check cannot see that, because
+  an identically zero array is finite. (Counts are what the guard reports when run over the upstream
   tree at the merge base: 277 across 139 files at `850be10bc`, against 274
   across 136 at the previous merge base `87b650e7f` — a delta of exactly the
   three sites `main` added since. An earlier revision of this entry said
