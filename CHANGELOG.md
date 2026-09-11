@@ -116,6 +116,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and line luminosities, both the cue and cb19 backends, at ``neb_dig_frac``
   in ``{0.0, 0.3, 0.9, 1.0}`` (#2221).
 
+- ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
+  ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
+  types' own ``grid`` keys already did, and the path now round-trips through
+  ``spec.to_groups()`` instead of silently reverting to the packaged default
+  on re-parse. Before, the cb19 branch of the grammar never read the key and
+  the path vanished without an error, so the only route to a non-default
+  grid was the module default. ``grid`` is refused by name on every ``neb``
+  type that never reads it (``cue``, ``ssp``, ``none``) instead of being
+  silently accepted and dropped; the three cb19 refusal messages now name
+  the key (#2220).
+
 - `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
   stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
   legacy `predict_sed_quantities` bridge, and the AGN CIGALE fracAGN torus
