@@ -462,3 +462,278 @@ def test_the_float64_arm_is_finite_and_nonzero_too(swept):
             "zeros is as undefined as one of two nans -- which is the whole reason "
             "#2178's own fix pinned `predict_line_fluxes` non-zero beside finite."
         )
+
+
+# --------------------------------------------------------------------------------------
+# #2210: black-hole mass / Eddington luminosity, on the disc where it was measured
+# --------------------------------------------------------------------------------------
+#
+# This seam is not swept through ``_SWEEPS`` above: the fix (``_gravitational_radius``
+# regrouped onto one precomputed ``G*M_sun/c^2`` constant, ``_eddington_luminosity``
+# replaced by the log-domain ``_log10_eddington_luminosity``) removes the
+# ``M_sun * 10**agn_log_mbh`` pattern from the enumeration entirely -- measured by
+# ``tools/check_float32_scale_seams.py``, which no longer reports
+# ``tengri.components.agn.disc:_gravitational_radius`` or
+# ``:_eddington_luminosity`` as seams at all, over-range or not. There is therefore no
+# live ``agn_black_hole_mass`` family for
+# :func:`test_every_over_range_seam_family_has_a_behavioral_sweep` to require a
+# ``_SWEEPS`` entry for. What is worth pinning directly is the disc the issue measured
+# the defect on: the kubota_done 3-zone model, across the whole declared
+# ``agn_log_mbh`` prior, in both directions -- float32 finite and close to float64, and
+# float64 itself unchanged by the regrouping.
+
+_AGN_MBH_DUST = {
+    "type": "two_component",
+    "law": "calzetti",
+    "all_params": Fixed(DEFAULT),
+    "tau_diff": 0.3,
+    "tau_bc": 0.0,
+}
+
+#: Reference float64 values (12 significant figures) captured from the untouched tree
+#: at 18cf9fb9ec73e5b2010b278f21b7c473431ae800 -- the commit this fix branched from,
+#: before ``_gravitational_radius``/``_eddington_luminosity`` were touched -- using
+#: :func:`_agn_black_hole_mass_predict` with ``sfh_delayed_log_total_mass=10.0``.
+#: Guards float64 stability of the #2210 regrouping through the full disc
+#: (rtol <= 1e-12, measured bit-identical on the sums; see
+#: :func:`test_agn_black_hole_mass_float64_is_unchanged_by_the_2210_regrouping`).
+_REF_F64_AGN_BLACK_HOLE_MASS = {
+    6.0: {
+        "rest_sed_sum": 1.5567108723215032e32,
+        "rest_sed_0": 2.13928510526382e23,
+        "rest_sed_mid": 3.0584496168417697e28,
+        "rest_sed_last": 1.6518574342734654e22,
+        "photometry": (1.0982345241672783e-27, 1.4382622369479747e-27, 1.807820803508424e-27),
+    },
+    8.0: {
+        "rest_sed_sum": 1.5910971925855103e32,
+        "rest_sed_0": 2.593910492485124e24,
+        "rest_sed_mid": 3.139371687421333e28,
+        "rest_sed_last": 1.6518574342734654e22,
+        "photometry": (1.12905628594757e-27, 1.4397541648311466e-27, 1.8082665383708552e-27),
+    },
+    10.0: {
+        "rest_sed_sum": 1.6060295014018923e32,
+        "rest_sed_0": 1.986604143513034e24,
+        "rest_sed_mid": 3.167091400040441e28,
+        "rest_sed_last": 1.6518574342734654e22,
+        "photometry": (1.1384218241776793e-27, 1.4461308552311584e-27, 1.8099429437899817e-27),
+    },
+}
+
+
+def _agn_black_hole_mass_model(ssp):
+    """Composable AGN, kubota_done disc + SKIRTOR torus -- the disc #2210 was measured on."""
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(
+            photometry=Photometry.from_names(["sdss_r", "wise_w3", "wise_w4"])
+        ),
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": Uniform(9.0, 11.0),
+            "tau_gyr": 1.0,
+            "age_gyr": 5.0,
+        },
+        dust_attenuation=_AGN_MBH_DUST,
+        agn={
+            "type": "composable",
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+            "norm": "cigale_joint",
+            "log_lbol": Fixed(11.0),
+            "fracAGN": 0.1,
+        },
+        redshift=Fixed(0.1),
+    )
+
+
+def _agn_black_hole_mass_predict(ssp, agn_log_mbh, dtype):
+    """``(rest_sed, photometry)`` of the #2210 model at one ``agn_log_mbh``, one dtype."""
+    with jax.enable_x64(dtype is jnp.float64):
+        model = _agn_black_hole_mass_model(ssp)
+        p = {
+            "sfh_delayed_log_total_mass": jnp.asarray(10.0, dtype=dtype),
+            "agn_log_mbh": jnp.asarray(agn_log_mbh, dtype=dtype),
+        }
+        pred = model.predict(p)
+        rest_sed = np.asarray(pred.rest_sed())
+        phot = np.asarray(pred.photometry())
+    return rest_sed, phot
+
+
+_F64_REFERENCE_CHILD = """
+import json, sys
+import jax, jax.numpy as jnp, numpy as np
+import tengri
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+mbh = float(sys.argv[1])
+ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=Observation(photometry=Photometry.from_names(["sdss_r", "wise_w3", "wise_w4"])),
+    sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0),
+         "tau_gyr": 1.0, "age_gyr": 5.0},
+    dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT),
+                      "tau_diff": 0.3, "tau_bc": 0.0},
+    agn={"type": "composable", "all_params": Fixed(DEFAULT),
+         "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
+         "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+         "norm": "cigale_joint", "log_lbol": Fixed(11.0), "fracAGN": 0.1},
+    redshift=Fixed(0.1),
+)
+p = {"sfh_delayed_log_total_mass": jnp.asarray(10.0), "agn_log_mbh": jnp.asarray(mbh)}
+pred = model.predict(p)
+rest_sed = np.asarray(pred.rest_sed())
+mid = len(rest_sed) // 2
+print(json.dumps({
+    "tengri_file": tengri.__file__,
+    "x64": bool(jax.config.jax_enable_x64),
+    "rest_sed_sum": float(np.sum(rest_sed)),
+    "rest_sed_0": float(rest_sed[0]),
+    "rest_sed_mid": float(rest_sed[mid]),
+    "rest_sed_last": float(rest_sed[-1]),
+    "photometry": [float(x) for x in np.asarray(pred.photometry())],
+}))
+"""
+
+
+def _f64_reference_in_fresh_process(agn_log_mbh: float) -> dict:
+    """The #2210 model's float64 forward, evaluated in a process that has never run float32.
+
+    A float32 forward leaves a precision-blind cache behind that shifts a later
+    float64 forward of this model by ~1.4e-9 (measured on origin/main 18cf9fb9e,
+    2026-09-11; same class as #1392/#2024, filed separately). Every earlier test
+    in this module runs float32, so an in-process float64 reference is not a
+    measurement of the regrouping. The child imports tengri from the tree under
+    test, and says so, because the venv's editable install points at the main
+    checkout (a subprocess probe that forgets ``PYTHONPATH`` measures the wrong
+    tree and reports it clean).
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+
+    import tengri
+
+    src = str(Path(tengri.__file__).resolve().parents[1])
+    env = dict(os.environ)
+    env["PYTHONPATH"] = src + os.pathsep + env.get("PYTHONPATH", "")
+    env["JAX_PLATFORMS"] = "cpu"
+    env.pop("JAX_ENABLE_X64", None)
+    out = subprocess.run(
+        [sys.executable, "-c", _F64_REFERENCE_CHILD, str(agn_log_mbh)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(Path(src).parent),
+    )
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    assert got["x64"] is True
+    assert Path(got["tengri_file"]).resolve() == Path(tengri.__file__).resolve(), (
+        f"child imported tengri from {got['tengri_file']}, parent from {tengri.__file__}"
+    )
+    return got
+
+
+@pytest.mark.parametrize("agn_log_mbh", [6.0, 8.0, 10.0])
+def test_agn_black_hole_mass_float64_is_unchanged_by_the_2210_regrouping(agn_log_mbh):
+    """float64 is unchanged (rtol <= 1e-12) across the #2210 regrouping.
+
+    Reference values captured from the untouched tree at
+    18cf9fb9ec73e5b2010b278f21b7c473431ae800, the commit this fix branched
+    from, at full float64 precision (17 significant digits), in a fresh process.
+
+    Measured on jaxlib 0.11.0 / CPU: the summed ``rest_sed`` and every
+    photometry band are **bit-identical** between that commit and this branch
+    at all three swept masses; individual pixels move by at most 2.8e-15 (one
+    or two ULP), the ordinary cost of regrouping ``G M_sun / c^2`` and
+    ``log10 L_Edd``. The 1e-12 bar leaves room for a different jaxlib's kernel
+    ordering. Unrelated to this regrouping, ``_r_hot_bisect`` at ``mbh=6`` sits
+    next to the ``_nt_l_diss_analytic`` cancellation and flips one bracket step
+    for a ~1e-9 relative kick to ``l_hot_target``; the regrouping's own
+    perturbation there is 2.4e-14, five orders below that threshold.
+    """
+    ref = _REF_F64_AGN_BLACK_HOLE_MASS[agn_log_mbh]
+    got = _f64_reference_in_fresh_process(agn_log_mbh)
+    for key in ("rest_sed_sum", "rest_sed_0", "rest_sed_mid", "rest_sed_last", "photometry"):
+        np.testing.assert_allclose(got[key], ref[key], rtol=1e-12, err_msg=key)
+
+
+@pytest.mark.parametrize("agn_log_mbh", [6.0, 8.0, 10.0])
+def test_agn_black_hole_mass_kubota_done_forward_is_finite_in_float32(ssp_bare, agn_log_mbh):
+    """#2210: the kubota_done disc forward stays finite across the declared prior.
+
+    ``M_sun * 10**agn_log_mbh`` was past float32's range at every point of the
+    declared ``Uniform(6, 10)`` prior -- there was no in-range corner of it --
+    which made the forward ``nan`` at ``agn_log_mbh=6`` under jaxlib 0.11.1 (the
+    installed 0.11.0 is finite by accident, the same graph-versus-kernel split
+    as #2178). Swept at both prior endpoints and the center, not a single-point
+    regression guard.
+    """
+    rest_sed32, phot32 = _agn_black_hole_mass_predict(ssp_bare, agn_log_mbh, jnp.float32)
+    rest_sed64, phot64 = _agn_black_hole_mass_predict(ssp_bare, agn_log_mbh, jnp.float64)
+
+    assert np.all(np.isfinite(rest_sed32)), (
+        f"kubota_done rest_sed is non-finite in float32 at agn_log_mbh={agn_log_mbh}"
+    )
+    assert np.any(rest_sed32 != 0.0), (
+        f"kubota_done rest_sed is identically zero in float32 at agn_log_mbh={agn_log_mbh}: "
+        "a flushed-to-zero disc would be finite and still wrong"
+    )
+    assert np.all(np.isfinite(phot32)), (
+        f"kubota_done photometry is non-finite in float32 at agn_log_mbh={agn_log_mbh}"
+    )
+    assert np.any(phot32 != 0.0), (
+        f"kubota_done photometry is identically zero in float32 at agn_log_mbh={agn_log_mbh}"
+    )
+    np.testing.assert_allclose(
+        rest_sed32,
+        rest_sed64,
+        rtol=3e-3,
+        err_msg=f"kubota_done rest_sed float32 vs float64 at agn_log_mbh={agn_log_mbh}",
+    )
+    np.testing.assert_allclose(
+        phot32,
+        phot64,
+        rtol=3e-3,
+        err_msg=f"kubota_done photometry float32 vs float64 at agn_log_mbh={agn_log_mbh}",
+    )
+
+
+@pytest.mark.parametrize("agn_log_mbh", [6.0, 8.0, 10.0])
+def test_agn_black_hole_mass_primitives_match_the_pre_2210_formula(agn_log_mbh):
+    """The #2210 regrouping does not change the two primitives it touches.
+
+    Recomputes the PRE-fix formulas inline (rather than depending on a
+    hardcoded number that would go stale the next time a constant changes)
+    and compares them to the current ``_gravitational_radius`` /
+    ``_log10_eddington_luminosity`` at rtol <= 1e-12. This is "the usual
+    per-seam array_equal check on the consumers" #2210 itself asked for on
+    the ``_gravitational_radius`` regrouping, applied at the point where the
+    regrouping actually happens rather than after a 40-iteration bisection
+    and a radial integration have had a chance to amplify a ULP-level change
+    (see :func:`test_agn_black_hole_mass_float64_is_unchanged_by_the_2210_regrouping`
+    above for that measurement).
+    """
+    from tengri.components.agn._phys import C_LIGHT
+    from tengri.components.agn.disc import _gravitational_radius, _log10_eddington_luminosity
+    from tengri.utils.physics_constants import G_GRAV, M_PROTON, M_SUN, SIGMA_T
+
+    with jax.enable_x64(True):
+        log_mbh = jnp.asarray(agn_log_mbh, dtype=jnp.float64)
+
+        r_g_pre_fix = G_GRAV * 10.0**agn_log_mbh * M_SUN / C_LIGHT**2
+        r_g_now = float(_gravitational_radius(log_mbh))
+        np.testing.assert_allclose(r_g_now, r_g_pre_fix, rtol=1e-12)
+
+        m_bh_g = 10.0**agn_log_mbh * M_SUN
+        l_edd_pre_fix = 4.0 * np.pi * G_GRAV * m_bh_g * M_PROTON * C_LIGHT / SIGMA_T
+        l_edd_now = 10.0 ** float(_log10_eddington_luminosity(log_mbh))
+        np.testing.assert_allclose(l_edd_now, l_edd_pre_fix, rtol=1e-12)
