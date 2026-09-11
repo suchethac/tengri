@@ -75,6 +75,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   re-emission pool receives. A source whose screen choice is `"none"` is
   unattenuated and so contributes exactly zero to the integral, with no
   separate on/off branch needed.
+- `import tengri` raises the default matmul precision to `"highest"` at
+  import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
+  set or the live config already holds a value; `tengri.utils.devices.setup_jax`
+  mirrors it. On Ampere+, XLA otherwise lowers float32 matmuls to TF32
+  (measured 4.5% error on Fisher-matrix parameter error bars); the knob only
+  affects float32 matmuls, so this is a no-op for a float64 session and for
+  CPU (no TF32 path), and measured zero speed cost. Being unconditional also
+  covers a float32 arm entered later through a bare
+  `with jax.enable_x64(False): ...` while the process default stays x64-on --
+  exactly the pattern `test_fisher_float32.py`'s own float32 arm uses. An
+  explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
 
 ### Fixed
 
@@ -97,6 +108,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   apart. `tests/regression/bug/test_bug_2223_line_screen_kwargs.py::test_fallback_is_actually_exercised_by_fast_nebular`
   tightens from `rtol=2e-4` to `rtol=1e-10` now that both paths agree on the
   identical wavelength.
+- `marginalize_emission_lines` no longer crashes float32 geoVI on CUDA. Its
+  `(n_lines, n_lines)` normal-equation GEMM (`g.T @ g`, degenerate at the
+  handful of emission lines this is ever called with) hit "GEMM is not
+  supported by cublasLt and legacy cublas fallback is removed" under JAX
+  0.11 whenever the operands arrived float64-valued and were traced under
+  x64 disabled. Replaced with an explicit broadcast-multiply-sum, which
+  never lowers to a GEMM; float64 CPU output is bit-identical to the matmul
+  it replaced (rtol 1e-12) (#2023).
 
 - A headline line property (`civ_1549`, from `KEY_LINES`) now warns instead of
   returning a silent NaN when the currently selected nebular catalog carries

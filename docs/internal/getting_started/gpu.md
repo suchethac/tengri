@@ -150,29 +150,47 @@ catalog fit on an accelerator today, `mcmc_hmc` is the only one of the two
 vectorized backends that completes — with the convergence caveat above.
 ```
 
-## float32 on CUDA: set the matmul precision
+## float32 on CUDA: the matmul precision is set automatically
 
-If you run with `JAX_ENABLE_X64=0`, also set:
+`import tengri` raises the default matmul precision to `"highest"` at import,
+unconditionally — regardless of whether the session ends up float32 or
+float64 — unless `JAX_DEFAULT_MATMUL_PRECISION` is already set, or the live
+JAX config already holds a value. `setup_jax` (`tengri.utils.devices`) mirrors
+it. Override with the environment variable before import:
 
 ```bash
-export JAX_DEFAULT_MATMUL_PRECISION=highest
+export JAX_DEFAULT_MATMUL_PRECISION=default  # or any other value; your choice wins
 ```
 
 On Ampere and later, XLA lowers float32 matmuls to TF32 (10-bit mantissa) by
-default. tengri's own float32 Fisher-matrix test fails on CUDA without this — a
-4.5% error on parameter error bars — and passes with it. `NVIDIA_TF32_OVERRIDE=0`
+default. tengri's own float32 Fisher-matrix test failed on CUDA without the
+`"highest"` setting — a 4.5% error on parameter error bars. `NVIDIA_TF32_OVERRIDE=0`
 alone does **not** fix it: XLA chooses its own algorithm, so the JAX-level knob is
 the one that binds. It costs no measurable speed, since float32's advantage here is
 halved memory traffic rather than tensor cores.
 
-Two float32 caveats on CUDA beyond that:
+The setting is unconditional on purpose: `jax_default_matmul_precision` only
+governs how *float32* matmuls lower (TF32 is a float32-adjacent format), so
+raising it is a no-op for a float64 session — nothing to trade away by doing
+it every time. That also means it protects a float32 arm entered later
+through a bare `with jax.enable_x64(False): ...`, with the process default
+left at x64-on, which an x64-state-gated version would miss. The Fisher-matrix
+test's own float32 arm uses exactly that pattern
+(`tests/regression/precision/test_fisher_float32.py`), and now passes on CUDA
+with no `JAX_ENABLE_X64` set in the environment at all.
+
+One float32 caveat on CUDA beyond that:
 
 - `jax.grad` of a raw observable (e.g. `sum(predict_photometry)`) returns
   **identically zero** in float32, on any device. Fits are unaffected — the
   likelihood standardizes by sigma before squaring — but do not differentiate raw
   fluxes in float32.
-- float32 geoVI with marginalized emission lines does not run: cuBLASLt refuses the
-  GEMM and JAX 0.11 removed the legacy fallback.
+
+float32 geoVI with marginalized emission lines used to fail outright on CUDA
+(`marginalize_emission_lines` built a degenerate `(n_lines, n_lines)` GEMM via
+`g.T @ g` that cuBLASLt refused, with no legacy fallback under JAX 0.11) (#2023).
+Fixed by replacing that one contraction with an explicit broadcast-multiply-sum,
+which never lowers to a GEMM.
 
 ## Apple Metal (experimental — not supported for benchmarks)
 
