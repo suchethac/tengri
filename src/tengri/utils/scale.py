@@ -12,12 +12,14 @@ See issue #1186.
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
 import numpy
 
 LN10 = 2.302585092994046
-LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
+LOG10_4PI = math.log10(4.0 * math.pi)  # ~1.09921
 
 
 def representable_floor(value: float) -> float:

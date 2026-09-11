@@ -223,6 +223,14 @@ jobs:
       # passed a dict where an Observation belongs, and `except Exception`
       # relabelled the TypeError "Could not create minimal model". Stdlib-only.
       - run: python tools/check_test_skip_handlers.py
+      # A module-scope numeric table reaches JAX only through device_table()
+      # (#2271). A jnp array at module scope is a device buffer whose dtype is
+      # fixed at import (jax-mps cannot even import the package); a plain numpy
+      # table reused across traces under a different x64 state comes back with
+      # the dtype of its FIRST conversion (JAX memoizes by object identity), so
+      # the conversion has to happen at the use with an explicit dtype. The
+      # runtime half is the census in tests/regression/precision. Stdlib-only.
+      - run: python tools/check_host_tables.py
       # The verification protocol is where README sends anyone asking what is
       # safe to use for science, and its Test File column IS the evidence. It
       # cited eight crossval tests; all eight were absent, every row read

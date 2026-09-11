@@ -41,6 +41,7 @@ read directly from ``params`` as an independent free parameter.
 
 from __future__ import annotations
 
+import math
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -65,7 +66,7 @@ from tengri.utils.physics_constants import L_SUN
 
 #: log10 of the solar luminosity [dex], for folding the AGN bolometric scale
 #: into log space (float32 safety, #1206). L_SUN ~3.828e33 erg/s.
-_LOG10_L_SUN: float = float(jnp.log10(L_SUN))
+_LOG10_L_SUN: float = math.log10(L_SUN)
 
 #: Reference AGN ``agn_log_lbol`` (= log10(L_bol/L_sun)) at which every block is
 #: evaluated for the float32 factoring (#1206). Chosen so L_bol = 1e10 erg/s: low

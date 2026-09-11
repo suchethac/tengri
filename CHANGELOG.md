@@ -255,6 +255,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
 ### Changed
+- `dust_eta_balance`'s declared free prior is a linear `Gaussian(1.0, 0.2)`
+  truncated at 0 (was `LogNormal(0, 0.2)` on log eta);
+  `builders.dust.emission.relaxed_energy_balance(sigma=)` takes the linear
+  sigma.
 
 - `import tengri` raises the default matmul precision to `"highest"` at
   import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
