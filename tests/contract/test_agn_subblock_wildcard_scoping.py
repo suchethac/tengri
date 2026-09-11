@@ -74,8 +74,6 @@ exactly once per category that declares a ``_Q2_REFERENCE`` entry.
 
 from __future__ import annotations
 
-import warnings
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -298,42 +296,20 @@ def _maybe_skip_grid_gated(category: str, block_type: str, exc: Exception):
 #: _agn_active_param_set, or any AGN scope mechanism -- so the ONLY
 #: empty-scope cases here are genuinely parameter-free variants (a type
 #: whose every declared param is shared/masking, not owned by this
-#: sub-block). Every empty-scope assertion in this module goes through
-#: :func:`_expect_empty_scope`, so adopting the new regime was one line
-#: here, not N call sites. The warning branch below is retained only as the
-#: record of what the assertion used to be; it is no longer reachable.
-_EMPTY_SCOPE_ESCALATED = True
-
-
-def _expect_empty_scope(build_fn, *, category: str, block_type: str):
-    """Build via ``build_fn()`` under whichever empty-scope regime is
-    currently active (see :data:`_EMPTY_SCOPE_ESCALATED`), asserting the
-    loud, non-silent signal each regime specifies. Also narrows a
-    Synthesizer-grid-gated build failure to a skip, same as
+#: sub-block).
+def _expect_empty_scope(build_fn, *, category: str, block_type: str) -> None:
+    """Build via ``build_fn()`` and assert the loud, non-silent zero-scope
+    signal: ``all_params: FREE`` covering zero of this type's own declared
+    parameters raises ``ParameterError`` ("covers no parameters"). Also
+    narrows a Synthesizer-grid-gated build failure to a skip, same as
     :func:`_maybe_skip_grid_gated`."""
-    if _EMPTY_SCOPE_ESCALATED:
-        from tengri.config.exceptions import ParameterError
+    from tengri.config.exceptions import ParameterError
 
-        try:
-            with pytest.raises(ParameterError, match=r"covers no parameters"):
-                build_fn()
-        except (TengriIOError, FileNotFoundError) as exc:
-            _maybe_skip_grid_gated(category, block_type, exc)
-        return None
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        try:
-            model = build_fn()
-        except (TengriIOError, FileNotFoundError) as exc:
-            _maybe_skip_grid_gated(category, block_type, exc)
-    loud = [w for w in caught if "Wildcard" in w.category.__name__]
-    assert loud, (
-        f"{category}/{block_type}: 'all_params': FREE covers zero of this "
-        f"type's own declared parameters, but no WildcardNoOpWarning fired "
-        f"-- a silent no-op wildcard."
-    )
-    return model
+    try:
+        with pytest.raises(ParameterError, match=r"covers no parameters"):
+            build_fn()
+    except (TengriIOError, FileNotFoundError) as exc:
+        _maybe_skip_grid_gated(category, block_type, exc)
 
 
 def _build_selection(category: str, block_type: str) -> dict[str, str]:
