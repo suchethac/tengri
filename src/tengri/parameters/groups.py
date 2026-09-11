@@ -3249,8 +3249,12 @@ def _normalize_off_switch(type_value: str | None) -> str | None:
     ``agn``, ``neb``, ``shock``, ``radio``'s ``sf``/``agn`` sub-blocks,
     ``xray`` and ``igm`` -- calls this immediately after reading its raw
     ``type`` value, before any type-menu validation or off-switch branching.
-    A new off spelling (or a new group joining the family) is one edit here,
-    not one per translator.
+    The three per-source dust-screen selectors (``nebular_screen`` /
+    ``shock_screen`` / ``agn_screen``, #2234) are values rather than group
+    types but carry the same off switch, and both surfaces pass each raw
+    selector through here before ``_dust_keys.resolve_screen_choices``
+    validates it. A new off spelling (or a new group joining the family) is
+    one edit here, not one per translator.
 
     Parameters
     ----------

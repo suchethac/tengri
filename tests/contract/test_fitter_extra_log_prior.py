@@ -258,3 +258,39 @@ def test_extra_log_prior_does_not_leak_across_fitters_sharing_a_model(synthetic_
     loss_plain = float(plain._get_or_build_loss_fn()(params_unbounded, plain._data_args))
     loss_hooked = float(hooked._get_or_build_loss_fn()(params_unbounded, hooked._data_args))
     assert loss_plain != loss_hooked
+
+
+def test_extra_log_prior_is_an_engine_ledger_row(synthetic_ssp):
+    """The hook is keyed by ``ENGINE_POLICY``, as a ``content`` row (#2163 E.5).
+
+    The hand-written key tuple that carried ``self._extra_log_prior`` by
+    identity is gone; under the ledger the row is what separates the engines
+    of two Fitters sharing one Model that differ only in the hook. Pinned at
+    the key level (not only through the loss values above): ``None`` vs a
+    hook differ, two Fitters handed the SAME function agree, and the entry is
+    ``baked()``'s module-qualified name, never an address. Two distinct
+    closures returned by one factory therefore share a key (same qualified
+    name), which the identity keying did not do; distinct hooks should be
+    distinct functions.
+    """
+    from tengri.inference._engine_policy import ENGINE_POLICY, FINGERPRINT_POLICY
+
+    model, _obs = _build_model(synthetic_ssp)
+    data = jnp.ones(len(_PHOT.filters))
+    noise = 0.1 * jnp.ones_like(data)
+    plain = Fitter(model, data, noise, data_type="photometry")
+    hooked = Fitter(model, data, noise, data_type="photometry", extra_log_prior=_extra_term)
+    hooked_again = Fitter(model, data, noise, data_type="photometry", extra_log_prior=_extra_term)
+
+    assert ENGINE_POLICY["_extra_log_prior"][0] == "content"
+    assert FINGERPRINT_POLICY["_extra_log_prior"][0] == "exclude"
+
+    assert plain._engine_cache_key() != hooked._engine_cache_key()
+    assert hooked._engine_cache_key() == hooked_again._engine_cache_key()
+
+    entries = dict(hooked._engine_cache_key()[2])
+    assert entries["_extra_log_prior"] == (
+        "callable",
+        f"{_extra_term.__module__}.{_extra_term.__qualname__}",
+    )
+    assert dict(plain._engine_cache_key()[2])["_extra_log_prior"] is None
