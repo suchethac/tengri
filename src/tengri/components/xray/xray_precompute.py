@@ -62,6 +62,7 @@ from tengri.forward.precompute.templates import (
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import PreintegratedGrid
+from tengri.utils.host_array import device_table, host_array
 
 AXIS_PARAMS_XRB = ("xray_gamma_hmxb", "xray_gamma_lmxb")
 AXIS_PARAMS_CORONA = ("xray_gamma_agn", "xray_delta_alpha_ox")
@@ -75,7 +76,7 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 
 # Standard rest-frame wavelength grid covering 0.01–100 keV plus an optical tail.
 # 0.01 keV ≈ 124 Å; 100 keV ≈ 0.124 Å.
-_WAVE_REST = np.logspace(-1.0, 4.0, 1024, dtype=np.float64)  # 0.1 to 1e4 Å
+_WAVE_REST = host_array(np.logspace(-1.0, 4.0, 1024, dtype=np.float64))  # 0.1 to 1e4 Å
 
 # Reference scales chosen to keep the L-linear runtime rescaling well-conditioned.
 _SFR_REF = 1.0  # Msun/yr
@@ -98,7 +99,7 @@ def _build_grid_xrb(
         for j, gl in enumerate(gamma_l_grid):
             templates[i, j] = np.asarray(
                 _xray_xrb(
-                    jnp.asarray(_WAVE_REST),
+                    device_table(_WAVE_REST),
                     sfr=_SFR_REF,
                     stellar_mass=_MSTAR_REF,
                     gamma_hmxb=float(gh),
@@ -107,7 +108,7 @@ def _build_grid_xrb(
             )
     return precompute_template_photometry(
         templates=templates,
-        wave_rest=_WAVE_REST,
+        wave_rest=np.asarray(_WAVE_REST),
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(gamma_h_grid, gamma_l_grid),
@@ -143,7 +144,7 @@ def _build_grid_corona(
         for j, daox in enumerate(delta_alpha_ox_axis):
             templates[i, j] = np.asarray(
                 _xray_corona(
-                    jnp.asarray(_WAVE_REST),
+                    device_table(_WAVE_REST),
                     l_2500_30deg_erg_hz=L_2500_REF,
                     gamma=float(g),
                     delta_alpha_ox=float(daox),
@@ -157,7 +158,7 @@ def _build_grid_corona(
             )
     return precompute_template_photometry(
         templates=templates,
-        wave_rest=_WAVE_REST,
+        wave_rest=np.asarray(_WAVE_REST),
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(gamma_grid, delta_alpha_ox_axis),
@@ -182,7 +183,7 @@ def _build_grid_corona_lopez24(
         for j, ai in enumerate(alpha_irx_grid):
             templates[i, j] = np.asarray(
                 _xray_corona_lopez24(
-                    jnp.asarray(_WAVE_REST),
+                    device_table(_WAVE_REST),
                     l_12um_erg_hz=_L12_REF,
                     gamma=float(g),
                     alpha_irx=float(ai),
@@ -191,7 +192,7 @@ def _build_grid_corona_lopez24(
             )
     return precompute_template_photometry(
         templates=templates,
-        wave_rest=_WAVE_REST,
+        wave_rest=np.asarray(_WAVE_REST),
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(gamma_grid, alpha_irx_grid),

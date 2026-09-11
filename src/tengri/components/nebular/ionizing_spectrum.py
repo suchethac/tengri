@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _C_AA, _H_PLANCK
+from tengri.utils.host_array import host_array
 
 # numpy < 2.0 compat: numpy 2.0 removed `trapz`; numpy >= 1.26 provides `trapezoid`.
 # Guarded import avoids the eager `np.trapz` lookup that crashes on numpy >= 2.0.
@@ -391,7 +392,7 @@ HEI_EDGE = 1e8 / 198310.66637  # 504.26 A
 HI_LIMIT = 911.76  # Lyman limit (physical: 911.7633 A)
 
 # Segment boundaries: [1, HeII, OII, HeI, HI]
-SEGMENT_EDGES = np.array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
+SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
 
 # Cue-emulator TRAINING-GRID bounds, used to clip the auto-derived (SSP-fit)
 # ionspec coefficients so the Cue neural emulator is never evaluated outside the

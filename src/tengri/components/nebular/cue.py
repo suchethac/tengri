@@ -101,6 +101,7 @@ All functions are JIT-compatible and differentiable through JAX.
 
 """
 
+import math
 import os
 import warnings
 from typing import Any, ClassVar, NamedTuple
@@ -114,6 +115,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import render_nebular_lines
+from tengri.utils.host_array import device_table, host_array
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
@@ -122,9 +124,14 @@ from tengri.utils.physics_constants import (
 )
 from tengri.utils.scale import LN10, pow10, representable_exponent
 
-_LOG_LSUN = jnp.log10(_LSUN_ERG)
-_LOG_4PI = jnp.log10(4.0 * jnp.pi)
-_LOG_C = jnp.log10(_C_CGS)
+# 0-d host tables, not Python floats: the pre-#2271 constants were 0-d jnp arrays,
+# strongly typed, and a float32 intermediate meeting one was promoted to the
+# process dtype. A weak Python float would leave that intermediate float32 and
+# move the float64 answer (measured: 3e-6 dex on log_line_lums). device_table()
+# at the use restores the strongly typed device scalar.
+_LOG_LSUN = host_array(math.log10(_LSUN_ERG))
+_LOG_4PI = host_array(math.log10(4.0 * math.pi))
+_LOG_C = host_array(math.log10(_C_CGS))
 
 # Maximum SSP age contributing to nebular emission. Re-exported from
 # ionizing_spectrum.MAX_NEB_LOG_AGE so the precompute (which lives there)
@@ -626,7 +633,7 @@ def _logq_from_logu(
     (approximately the Stromgren radius for typical HII regions).
 
     """
-    return gas_logu + _LOG_4PI + 2.0 * log_R + gas_logn + _LOG_C
+    return gas_logu + device_table(_LOG_4PI) + 2.0 * log_R + gas_logn + device_table(_LOG_C)
 
 
 def _prepare_nn_params(
@@ -786,7 +793,7 @@ def predict_all_lines(
     # signal of an upstream bug. ±100 (the original) was wide enough that the
     # +51-dex `gas_logq = logU` bug fixed in #477 produced near-physical
     # silently-wrong output rather than blatantly-saturated output.
-    exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
+    exponent = log_lum_sorted - gas_logq + gas_logqion - device_table(_LOG_LSUN)
     # Double-where guard to prevent NaN/inf propagation through 10.0**clip VJP in f32 (#1719)
     finite = jnp.isfinite(exponent)
     exponent_safe = jnp.where(finite, jnp.clip(exponent, -50.0, representable_exponent(50.0)), 0.0)
@@ -862,7 +869,7 @@ def predict_continuum(
     # converted to erg/s/Hz at predict_nebular_sed return. Clip tightened
     # from ±100 to ±50 dex in this revision; see predict_all_lines for the
     # full rationale (#477 follow-up).
-    exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
+    exponent = log_spec_sorted - gas_logq + gas_logqion - device_table(_LOG_LSUN)
     # Double-where guard to prevent NaN/inf propagation through 10.0**clip VJP in f32 (#1719)
     finite = jnp.isfinite(exponent)
     exponent_safe = jnp.where(finite, jnp.clip(exponent, -50.0, representable_exponent(50.0)), 0.0)
