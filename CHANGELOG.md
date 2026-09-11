@@ -8,6 +8,92 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
+
+- The no-state emission-line dust screen (`SEDModel._attenuate_line_catalog`,
+  used when `dust_model` is `off`/`wg00` and by the #950
+  `enable_fast_nebular()` grid path) built its own law kwargs from exactly
+  `dust_slope` and `dust_bump_strength` via `emission_helpers.attenuate_emission`,
+  so `dust_delta` (kriek_conroy, salim, noll09, salim_sbl18, tea), `dust_Rv`
+  (cardelli, conroy2010) and `redshift` (narayanan_z) reached the CONTINUUM
+  screen but not the LINE screen, and per-screen overrides
+  (`slope_bc`/`slope_diff`) and `dust_f_obscuration` reached neither the
+  Lyman clip nor the covering fraction on the line side at all. It now
+  dispatches to the dust component's own `attenuate_line_catalog`
+  (`DustSEDComponent` / `DustAttenuationSEDComponent`), the same method the
+  live forward pass calls for its continuum, so there is exactly one
+  implementation of the two-component line screen. `attenuate_emission` is
+  removed; it had no public callers left (#2223).
+
+- `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
+  had two consequences. The #1999 post-adaptation stability probe had nowhere to
+  run, leaving the one dense-capable metric path reachable above the D=30 cap
+  with no step-size remediation; and chain 0 sampled inside the warmup program
+  while chains 1..n-1 ran the separate `_hmc_chain_scan`, so a multi-chain fit
+  ran two structurally different compiled programs over one adaptation — the
+  shape that made NUTS irreproducible under a pinned key before its own split.
+  The fused scan is replaced by `_hmc_low_rank_warmup_only` plus the shared
+  chain scan; the probe and the dead-warmup refusal (#2088) are wired in, and
+  `dense_mass_step_backoffs` / `warmup_divergence_frac` join the diagnostics.
+  Measured on a D=74 posterior, the probe declines on all 12 rows and returns a
+  bit-identical adapted step size, so this is insurance rather than repair
+  (`bench/reports/2026-09-06_low_rank_metric_d74.md`, Finding 6).
+
+- A flat `Parameters(...)` spec that freed or pinned a dust attenuation shape
+  parameter (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) had
+  the forward model never read it: `SEDModel._requested_law_shape_params`
+  decides which shape parameters are "live" from `spec._group_provenance`,
+  the richer map `parse_groups` attaches after construction, and a flat spec
+  never gets one, so every name resolved to `"registry_default"` and the
+  attenuation law silently evaluated its own published default no matter
+  what the flat spec declared — the parameter still appeared in
+  `free_params` and sampled a posterior that was exactly its prior.
+  `Parameters.__init__` now records a `_flat_provenance` map (distinct from
+  `_group_provenance`, so `parse_groups`, `translate.py`'s
+  `legacy_flat_spec` gate, and the flat-form `summary()` are all unaffected)
+  for every parameter the constructor call actually named, by presence in
+  the call rather than by comparing against a default — an explicit value
+  equal to a law's own published default (e.g. `dust_bump_strength=Fixed(1.0)`,
+  KC13's own value) is still a request. Measured: `dust_bump_strength`
+  0.0 -> 3.3 on `single_component` `kriek_conroy`, `galex_nuv` relative
+  change 0.00% -> 17.04%, matching the equivalent `parse_groups` build to
+  `rtol=1e-10` (#2231).
+
+- `SEDModel.compile_signature()` did not key on which dust attenuation shape
+  parameters (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) a
+  build resolved "live", so two structurally-identical models that disagreed
+  only on liveness collided on one compiled, closure-captured prediction
+  kernel — whichever was built (and called) first silently decided the
+  live/not-live branch for both. Before the #2231 fix above this axis was
+  unreachable from a flat `Parameters(...)` spec (its shape parameters were
+  always not-live), so the collision could not fire from that surface; that
+  fix is exactly what exposes it, since a flat spec can now resolve a shape
+  parameter live. `compile_signature()` now includes the sorted set of live
+  shape-parameter names (`dust_live_shape_params_sig`), same rationale as the
+  existing `dust_law_overrides_sig` / `dust_lyman_cutoff_sig` color-leak
+  entries. Measured end to end: a not-live `kriek_conroy` build followed by a
+  live one with `dust_bump_strength` overridden to 3.3 via the same
+  `params` dict previously reported identical `galex_nuv` photometry
+  (0.00% difference, the not-live kernel silently reused); with the fix the
+  two differ by 12.06% (#2231).
+
+- The dense mass-matrix cap is one seam, and crossing it is no longer silent.
+  `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
+  behaviors: `mcmc_nuts` logged the downgrade at INFO and only when
+  `verbose=True`, `mcmc_hmc` applied it silently, `mcmc_dynamic_hmc` applied it
+  silently from a signature that *defaults* to `dense_mass_matrix=True`,
+  `CatalogFitter` applied the auto-policy without the cap at all — under a
+  comment claiming it used "the same policy the single-galaxy samplers use" —
+  and `fit_batch`, which shares one adaptation across a whole batch, applied it
+  silently too. So an explicit `dense_mass_matrix=True` on a wide problem got a
+  diagonal metric, or an O(D^2) allocation, depending only on which entry point
+  the caller used, and in most cases with no way to find out. All six now route
+  through `resolve_dense_mass_gate`, which honors the request where it can and
+  raises a `UserWarning` carrying `n_dim` and `max_dim` where it cannot. The
+  warning fires regardless of `verbose`: losing the sampler's most consequential
+  setting is not a verbosity question. Nothing about which metric is *chosen*
+  changes — every existing fit gets the same mass matrix it got before.
+
 - `_mass_scale_lnu`'s forward product went `nan` in float32 on the
   `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
   with **byte-identical optimized HLO**, so the graph did not change and the
@@ -111,7 +197,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   restores them, so a reload without `model=` no longer re-creates the false
   positive; files written before this load unchanged (#2087).
 
+- Flat `Parameters(dust_model="single_component", dust_law_diff=...)` silently
+  discarded `dust_law_diff` and built `power_law` on the one attenuation
+  screen; a disagreeing `(dust_law_bc, dust_law_diff)` pair silently kept
+  `dust_law_bc` and dropped the other, so the model built was not the one
+  requested and nothing said so. Both shapes now raise `ValueError` naming
+  `dust_law_bc` as the single-screen spelling; the working shapes are
+  unaffected -- `dust_law_bc` alone still inherits into `dust_law_diff`, and
+  an already-equal pair (what the grammar path writes for
+  `single_component`) still builds. `two_component`/`wg00`/`off` inheritance
+  (#1989) is unchanged in both directions (#2224).
+
+- `SEDModel.from_config(dust=...)` named only the birth-cloud screen
+  (`spec_kwargs["dust_law_bc"] = dust`); the diffuse-ISM screen's law was
+  filled in only because the model happens to stay `dust_model="two_component"`
+  and the low-level inheritance of #1989 backfilled `dust_law_diff` from
+  `dust_law_bc` -- an accident of a default `from_config` never set on
+  purpose, not an explicit choice. `from_config` now resolves both screens
+  explicitly through the same resolver #2224 introduced
+  (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
+  not inherited (#2021).
+
+- `narayanan_prior(z)` and `narayanan_tau_prior(z, log_mstar)` centered
+  unbounded `Gaussian` priors on `dust_bump_strength` and `dust_tau_diff`,
+  both of which declare a `lo >= 0` `bound_check` — so the docstrings' own
+  Examples raised `ValueError: ... bounds (-inf, inf) violate physical
+  constraint: must be >= 0` at `Parameters` construction. Both Gaussians now
+  truncate at zero (`lo=0.0`); `dust_delta`, which has no such constraint
+  and whose fitted means straddle zero, stays unbounded. That fix exposed a
+  second, independent defect in `Gaussian`: `_truncated` was derived from
+  `self._cdf_lo > 0.0`, and for a bound more than ~8 sigma from the mean
+  `erf` underflows to exactly 0.0, so `_truncated` read `False` and
+  `unstandardize`/`sample` silently fell back to the untruncated affine map
+  — inert for a `lo=0.0` bound 6.6–12 sigma away from these two priors'
+  means. `_truncated` now reads the bound directly
+  (`self._lo > -inf or self._hi < inf`); behavior-preserving for every other
+  caller (every other bounded `Gaussian` in the tree already has at least one
+  bound within a few sigma, where the CDF does not underflow, so
+  `_truncated` already read `True` before this fix; every unbounded
+  `Gaussian` is untouched). Finally, `dust_bump_strength`'s declared
+  `free_prior` widened from `Uniform(0.0, 2.0)` to `Uniform(0.0, 4.0)`, since
+  the old ceiling
+  could not reach the Narayanan et al. (2018) MUFASA-fitted bump multipliers
+  (up to 3.634 at z=4) that `narayanan_prior` itself now centers on (#2226).
+
 ### Added
+
+- `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
+  SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
+  `free_prior` and are dropped from `tools/check_param_free_priors.py`'s
+  REFUSED ledger. A static ceiling of today's cosmic age is narrowed to
+  `age_at_z(z)` at parse time (`parameters/groups.py`'s new
+  `_narrow_free_priors_to_z`) whenever the build's redshift is knowable, so
+  `'all_params': FREE` genuinely frees these onsets instead of silently
+  leaving them pinned. A catalog with a per-galaxy redshift refuses the
+  combination outright (the cap is only valid for one redshift). See
+  `docs/dev/api_migration_v0.x.md` for the full migration note, including the
+  one shipped recipe (`quiescent_z0`) whose free-parameter count changes.
 
 - `bench/scripts/probe_block_metric_structure.py` — scores a candidate
   mass-matrix structure against the analytic metric without running a sampler.
@@ -292,6 +434,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     and its depth is `tau_v`, not `tau_bc`/`tau_diff`.
   The low-level `Parameters(dust_law_bc=…)` kwargs path is unchanged and still
   inherits `dust_law_diff` from `dust_law_bc`.
+- `SEDModel.from_config`'s dust parameter docstring stated a MODEL name
+  (`"charlot_fall"`) and LAW names (`"calzetti"`, `"kl04"`, …) as though they
+  were the same kind of thing. It now states plainly that one law is applied
+  explicitly to BOTH attenuation screens (birth cloud + diffuse ISM), and that
+  `"charlot_fall"` (the default) is an alias for `"power_law"` on both
+  screens — the classic Charlot & Fall (2000) model — not a law-registry name
+  in its own right (#2021). `suggest_parameters`'s `dust_law_bc` default is
+  aligned from a stale hardcoded `"power_law"` to `None`, and its resolved
+  `(dust_law_bc, dust_law_diff)` pair now goes through the same
+  `resolve_dust_screen_laws` rule `Parameters()` itself uses, so the printed
+  cheatsheet cannot describe a configuration `Parameters()` would refuse
+  (#2224).
 - **Example gallery curated and refocused**: Pruned 283 → 121 gallery
   scripts across 17 sections; removed inference/fit-comparison examples (they
   belong in notebooks), dissolved `inference`, `workflows`, `multiwavelength`,
@@ -396,6 +550,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Padova, BaSTI) with nebular baked into the SSP LUT — so the full render
   stays fast (~0.7 ms/eval, vs ~2 ms for the Cue emulator, which timed out
   the render at 7 galaxies).
+
+### Deprecated
+
+- `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
+  renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to
+  `dust_attenuation_law`, but emits a `DeprecationWarning`; passing both with
+  disagreeing values raises `ValueError`. `dust=` will be removed in a later
+  release (#2021).
 
 ## [0.1.0] - 2026-05-22
 

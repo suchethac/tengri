@@ -565,6 +565,39 @@ def test_sfh_dpl_wildcard_free_does_not_get_the_no_op_warning():
     assert any(p.startswith("sfh_") for p in freed)
 
 
+# ── Regression: dust_bump_strength's ceiling widened for Narayanan+2018 ────
+#
+# ``dust_bump_strength``'s ``free_prior`` was ``Uniform(0.0, 2.0)``, which
+# cannot reach the MUFASA-fitted bump multipliers Narayanan, Conroy, Davé,
+# Johnson & Popping (2018, ApJ 869, 70) publish (up to 3.634 at z=4,
+# ``_NARAYANAN_BUMP_STRENGTH`` in ``components/dust/attenuation.py``) -- so a
+# ``kriek_conroy`` fit with ``dust_bump_strength: FREE`` could not sample what
+# the paper finds. The ceiling is now ``Uniform(0.0, 4.0)`` (#2226).
+# Mutation-checked: reverting the ceiling to 2.0 fails this test.
+
+
+def test_dust_bump_strength_frees_at_the_widened_ceiling():
+    """``dust_attenuation={'law': 'kriek_conroy', 'all_params': FREE}`` must
+    free ``dust_bump_strength`` at exactly ``Uniform(0.0, 4.0)``."""
+    with warnings.catch_warnings():
+        # Since #2207 a dust wildcard also emits a partial-free warning
+        # (dust_f_obscuration stays stuck under kriek_conroy); irrelevant to
+        # this assertion, which pins the freed bound only.
+        warnings.simplefilter("ignore")
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "kriek_conroy",
+                "tau_v": 1.0,
+                "all_params": FREE,
+            },
+            redshift=Fixed(0.1),
+        )
+    assert "dust_bump_strength" in spec.free_params
+    assert spec.get_distribution("dust_bump_strength") == Uniform(0.0, 4.0)
+
+
 # ── Regression: the zero-declaration seeding used to be a hand census ─
 #
 # #2187: ``met`` was the one group with a hand-written zero-declaration seed
@@ -827,3 +860,71 @@ class TestBurstSfrFreesUnderWildcard2187:
         ).get_distribution("sfh_snorm_burst_burst_sfr")
         assert not dist.is_fixed
         assert dist.bounds == (0.0, 10.0)
+
+
+# ── Regression: neb_logZ_gas and the radio DPL slopes now free ────────
+#
+# Three PARAMS-tuple members carried a ``Fixed`` default with no
+# ``free_prior`` and no recorded ground: ``neb_logZ_gas``, ``radio_alpha_thin``,
+# ``radio_alpha_thick``. ``all_params: FREE`` silently pinned them under
+# every shipped backend/model. All three now declare a ``free_prior``:
+#
+# * ``neb_logZ_gas``: ``Uniform(-1.30, 0.20)`` -- the intersection of Cue's,
+#   the shipped CloudyGrid files', and CB19's measured support in public
+#   log10(Z/Zsun) units (see the declaration in
+#   ``components/nebular/_params.py`` for the full derivation). The ``neb``
+#   group wildcard is not backend-scoped, so the same range applies whether
+#   the selected backend is ``cue``, ``cloudy``, or ``cb19``.
+# * ``radio_alpha_thin`` / ``radio_alpha_thick``: Table 1 of
+#   Martinez-Ramirez+2024 (A&A 688, A46), ``Uniform(-1.0, 1.0)`` and
+#   ``Uniform(-1.0, 0.0)`` respectively. Only routed under
+#   ``radio={'agn': {'type': 'dpl'}}`` (:data:`_RADIO_AGN_PARAMS_BY_MODEL`).
+
+
+@pytest.mark.parametrize("neb_type", ["cue", "cloudy", "cb19"])
+def test_neb_logZ_gas_frees_under_every_shipped_backend(neb_type):
+    """``neb_logZ_gas`` must free at the same declared range under cue,
+    cloudy, and cb19 alike -- the wildcard is not backend-scoped.
+
+    Data-gated for cloudy: its structural translation resolves the grid file
+    during ``parse_groups`` (not at build time), so a checkout without
+    ``data/cloudy_grid_*.h5`` raises here and must skip -- CI proved this by
+    failing where a local run passed only because the data-path ancestor walk
+    found another checkout's grids. Same narrow-``ValueError`` idiom as
+    ``test_build_resolver_sedmodelcomponent.py``; ``except ImportError``-class
+    narrowness keeps it off the broad-except ratchet.
+    """
+    with warnings.catch_warnings():
+        # cb19 also declares neb_hbfrac (no free_prior, #2213), so its
+        # wildcard is a partial free and warns; irrelevant to this assertion.
+        warnings.simplefilter("ignore")
+        try:
+            spec = tengri.parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                neb={"type": neb_type, "all_params": FREE},
+                redshift=Fixed(0.1),
+            )
+        except ValueError as exc:
+            if "grid" in str(exc).lower():
+                pytest.skip(f"{neb_type} grid not on disk: {exc}")
+            raise
+    assert "neb_logZ_gas" in spec.free_params
+    assert spec.get_distribution("neb_logZ_gas") == Uniform(-1.30, 0.20)
+
+
+def test_radio_dpl_slopes_free_at_the_martinez_ramirez_table_1_ranges():
+    """``radio={'agn': {'type': 'dpl', 'all_params': FREE}}`` frees both slopes."""
+    with warnings.catch_warnings():
+        # The top-level 'radio' group states no disposition of its own here,
+        # which only concerns the SF-side params (radio_alpha_sf, etc.);
+        # irrelevant to this assertion.
+        warnings.simplefilter("ignore")
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            radio={"agn": {"type": "dpl", "all_params": FREE}},
+            redshift=Fixed(0.1),
+        )
+    assert "radio_alpha_thin" in spec.free_params
+    assert "radio_alpha_thick" in spec.free_params
+    assert spec.get_distribution("radio_alpha_thin") == Uniform(-1.0, 1.0)
+    assert spec.get_distribution("radio_alpha_thick") == Uniform(-1.0, 0.0)

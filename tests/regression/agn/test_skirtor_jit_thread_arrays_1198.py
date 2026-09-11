@@ -42,7 +42,10 @@ _skirtor = pytest.importorskip("tengri.components.agn.skirtor")
 # Skip only if the committed SKIRTOR grid is genuinely absent.
 try:
     _GRID = _skirtor._load_skirtor_default_grid()
-except Exception as exc:  # pragma: no cover - environment without the grid
+except (FileNotFoundError, OSError) as exc:  # pragma: no cover - grid absent
+    # Narrowed from `except Exception`: at module scope this skip takes the
+    # whole file, so a changed loader signature or a broken import would have
+    # reported as "grid not available" for every test here at once.
     pytest.skip(f"SKIRTOR grid not available: {exc}", allow_module_level=True)
 
 _WAVE = jnp.geomspace(1.0e3, 1.0e7, 400)

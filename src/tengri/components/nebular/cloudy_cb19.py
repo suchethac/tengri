@@ -255,7 +255,13 @@ def _reject_degenerate_line_ratios(ratios: np.ndarray, filepath: Path) -> None:
             "leaves every CB_19 grid parameter (neb_logU, neb_logZ_gas, "
             "neb_log_nH, neb_co, neb_dno) unable to move the prediction at all "
             "(#2181). Fix (one of):\n"
-            "  1. Build the real grid:  python scripts/download_cb19_templates.py\n"
+            "  1. Supply your own grid: place a CB_19 HDF5 file with real "
+            "variation at data/cb19_templates.h5 (or under $TENGRI_DATA_DIR), "
+            "matching the layout in docs/internal/advanced/cb19_grid.md. As "
+            "of 2026-09 the upstream 3MdB CB_19 table (ref='CB_19') is "
+            "unpopulated pending the 3MdB team's own corrected grid and "
+            "erratum, so there is currently no download route that can "
+            "build this file for you.\n"
             "  2. Use a nebular backend whose shipped data varies: "
             "neb={'type': 'cue'}, neb={'type': 'cloudy', 'grid': <path>}, or "
             "neb={'type': 'ssp'} with a wNE SSP grid."
@@ -354,8 +360,10 @@ def load_cb19_grid(
     Parameters
     ----------
     filepath : str or Path, optional
-        Path to ``cb19_templates.h5`` (built by ``scripts/download_cb19_templates.py``).
-        ``None`` (the default) resolves the packaged location at call time.
+        Path to ``cb19_templates.h5``, supplied externally (as of 2026-09 the
+        upstream 3MdB CB_19 table is unpopulated pending an erratum, #2198;
+        see ``docs/internal/advanced/cb19_grid.md``). ``None`` (the default)
+        resolves the packaged location at call time.
     sed_type : {"SSP", "CSF"}
         Ionizing SED type. "SSP" = single stellar population (use for line-weighted
         CSP sums); "CSF" = constant star formation.
@@ -376,8 +384,9 @@ def load_cb19_grid(
     Raises
     ------
     FileNotFoundError
-        If the HDF5 file is not found. Run ``scripts/download_cb19_templates.py``
-        to build it.
+        If the HDF5 file is not found. The grid must be supplied externally
+        (``scripts/download_cb19_templates.py`` cannot currently build one,
+        #2198).
     KeyError
         If the requested (sed_type, imf, mup) combination is not in the file.
     CB19DegenerateGridError
@@ -396,7 +405,16 @@ def load_cb19_grid(
     if not filepath.exists():
         raise FileNotFoundError(
             f"CB_19 template file not found: {filepath}\n"
-            "Build it with:  python scripts/download_cb19_templates.py"
+            "Supply your own grid: place a CB_19 HDF5 file with real "
+            "variation at this path (or under $TENGRI_DATA_DIR), matching "
+            "the layout in docs/internal/advanced/cb19_grid.md. As of "
+            "2026-09 the upstream 3MdB CB_19 table (ref='CB_19') is "
+            "unpopulated pending the 3MdB team's own corrected grid and "
+            "erratum, so there is currently no download route that can "
+            "build this file for you. Or use a nebular backend whose "
+            "shipped data varies: neb={'type': 'cue'}, "
+            "neb={'type': 'cloudy', 'grid': <path>}, or neb={'type': 'ssp'} "
+            "with a wNE SSP grid."
         )
 
     group_key = f"grids/{sed_type}/{imf}/mu{int(mup)}"
@@ -574,9 +592,13 @@ def check_cb19_free_params(
         "those axes: every value in the prior gives a bit-identical SED, so a "
         "fit would explore them and report a posterior that is only the prior. "
         "Fix (one of):\n"
-        "  1. Regenerate the grid, which the flat placeholder is standing in "
-        "for:\n"
-        "     python scripts/download_cb19_templates.py\n"
+        "  1. Supply your own grid with real variation along these axes: "
+        "place a CB_19 HDF5 file at data/cb19_templates.h5 (or under "
+        "$TENGRI_DATA_DIR), matching the layout in "
+        "docs/internal/advanced/cb19_grid.md. As of 2026-09 the upstream "
+        "3MdB CB_19 table (ref='CB_19') is unpopulated pending the 3MdB "
+        "team's own corrected grid and erratum, so there is currently no "
+        "download route that can build this file for you.\n"
         "  2. Pin them instead of fitting them, e.g. "
         "neb={'type': 'cb19', 'logU': Fixed(-3.0)}.\n"
         "  3. Use a backend whose shipped grid varies: neb={'type': 'cue'}, "

@@ -184,9 +184,18 @@ def test_state_to_sed_quantities_jit_compatible(state):
 # ── Emission-lines bridge ────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def state_with_cue(ssp):
-    """A chain with Cue nebular backend so line catalog is published."""
+def _build_cue_state(ssp, *, cue_full_catalog: bool):
+    """Run Stellar + Cue-nebular chain, with the requested catalog scope.
+
+    ``cue_full_catalog=False`` (the ``NebularSEDComponentConfig`` default)
+    selects Cue's legacy 128-line CLOUDY/FSPS-matched subset
+    (``weights.line_old_idx``); ``True`` selects the full ~271-species
+    Cue-trained catalog. C IV (``civ_1549``) is Cue-only and is not one of
+    the 128 legacy indices, so it is absent under ``False`` and present
+    under ``True`` -- the split :func:`state_with_cue` /
+    :func:`state_with_cue_full_catalog` fixtures below exist to pin both
+    sides of that (#2192, #2236).
+    """
     from tengri.components.nebular.component import (
         NebularSEDComponent,
         NebularSEDComponentConfig,
@@ -200,7 +209,10 @@ def state_with_cue(ssp):
     cue = CueBackend(weights_path=str(cue_path), ssp_data=ssp)
     chain = [
         StellarSEDComponent(ssp_data=ssp),
-        NebularSEDComponent(config=NebularSEDComponentConfig(backend="cue"), backend=cue),
+        NebularSEDComponent(
+            config=NebularSEDComponentConfig(backend="cue", cue_full_catalog=cue_full_catalog),
+            backend=cue,
+        ),
     ]
     state0 = ForwardState(wave=ssp.ssp_wave)
     params = {
@@ -229,6 +241,26 @@ def state_with_cue(ssp):
     return run_components(chain, state0, params)
 
 
+@pytest.fixture(scope="module")
+def state_with_cue(ssp):
+    """Cue nebular backend, default 128-line legacy CLOUDY/FSPS subset.
+
+    C IV (``civ_1549``) is Cue-only and not one of the 128 legacy indices,
+    so it is absent from this catalog by construction (#2192, #2236).
+    """
+    return _build_cue_state(ssp, cue_full_catalog=False)
+
+
+@pytest.fixture(scope="module")
+def state_with_cue_full_catalog(ssp):
+    """Cue nebular backend, ``cue_full_catalog=True`` (the ~271-species menu).
+
+    C IV (``civ_1549``) is present here, unlike :func:`state_with_cue`'s
+    128-line legacy subset (#2192, #2236).
+    """
+    return _build_cue_state(ssp, cue_full_catalog=True)
+
+
 def test_emission_lines_published_by_cue(state_with_cue):
     """Cue backend should populate state.derived line catalog."""
     assert "line_waves" in state_with_cue.derived
@@ -237,15 +269,48 @@ def test_emission_lines_published_by_cue(state_with_cue):
     assert state_with_cue.derived["line_waves"].shape[0] > 50
 
 
-def test_state_to_emission_lines_all_finite(state_with_cue):
-    """All 11 headline bridge-extracted lines should be finite for Cue.
+def test_state_to_emission_lines_headlines_finite_except_civ_on_legacy_subset(state_with_cue):
+    """10 of 11 headline lines are finite on Cue's default 128-line subset.
 
-    ``all_waves``/``all_lums`` are arrays (skipped here — see
+    ``civ_1549`` is the one exception: C IV is a Cue-only line, absent from
+    the legacy 128-index CLOUDY/FSPS subset ``state_with_cue`` builds
+    (:func:`_build_cue_state`), so no catalog entry lies within the 5 A
+    match tolerance (``_LINE_MATCH_TOL_AA`` in
+    ``tengri.utils.sed_quantities``) and ``extract_line_luminosity``
+    returns NaN -- the intended #2192 answer for a genuinely absent line,
+    not a lookup bug. This test used to assert all 11 finite: that was
+    stale from before #2192 (81d27d39f) made the lookup honest -- an
+    unconditional nearest-neighbor previously matched both C IV components
+    to HeII 1640 (~90-92 A away) and summed it twice, finite but wrong.
+    ``tests/regression/bug/test_bug_1889_lineproperties_parity.py`` already
+    pins the corrected NaN answer for this same default-config case (#2236).
+    ``all_waves``/``all_lums`` are arrays (skipped here; see
     ``test_state_to_emission_lines_publishes_full_catalog``).
     """
     from tengri.forward import state_to_emission_lines
 
     lines = state_to_emission_lines(state_with_cue)
+    scalar_fields = [f for f in lines._fields if f not in ("all_waves", "all_lums")]
+    nans = [f for f in scalar_fields if not bool(jnp.isfinite(getattr(lines, f)))]
+    assert nans == ["civ_1549"], (
+        f"Expected only civ_1549 NaN on Cue's default 128-line subset, got: {nans}"
+    )
+
+
+def test_state_to_emission_lines_all_headlines_finite_on_full_catalog(
+    state_with_cue_full_catalog,
+):
+    """All 11 headline lines are finite when Cue exposes its full catalog.
+
+    ``cue_full_catalog=True`` selects the ~271-species Cue-trained menu,
+    which carries C IV (``sorted_line_wav[9]=1548.19``,
+    ``[10]=1550.77`` A vacuum) within the 5 A match tolerance, so
+    ``civ_1549`` -- the one line NaN under the default 128-line subset
+    (see the sibling test above) -- is finite here too (#2236).
+    """
+    from tengri.forward import state_to_emission_lines
+
+    lines = state_to_emission_lines(state_with_cue_full_catalog)
     scalar_fields = [f for f in lines._fields if f not in ("all_waves", "all_lums")]
     nans = [f for f in scalar_fields if not bool(jnp.isfinite(getattr(lines, f)))]
     assert nans == [], f"Lines with NaN: {nans}"

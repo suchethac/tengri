@@ -16,9 +16,10 @@ three are the same *shape* of call rather than the same physics:
   ``params.get("dust_slope", -0.7)``, so a spectroscopic fit reddened its pixels
   with a different curve from the model it was fitting (#1856, fixed in
   ``db75b3fa6``);
-- ``emission_helpers.attenuate_emission`` has no ``dust_delta`` or ``dust_Rv``
-  parameter at all, so lines and continuum sit on different curves whenever
-  either is free (#1858).
+- ``emission_helpers.attenuate_emission`` had no ``dust_delta`` or ``dust_Rv``
+  parameter at all, so lines and continuum sat on different curves whenever
+  either was free (#1858, fixed in #2223 by deleting the function and routing
+  its one caller through the dust component's own ``attenuate_line_catalog``).
 
 A survey of the law-evaluation call sites sorts on that shape and not on
 anything semantic: **every site that splats a resolved parameter dict is
@@ -55,10 +56,10 @@ the law declares (``select_law_kwargs``) and refuse a key no law in play reads
 (``reject_unread_law_kwargs``), and a parameter offered to a law that cannot use
 it is a ``TypeError`` at the boundary rather than a flat posterior.
 
-Rule 2 is not hypothetical. ``attenuate_emission`` splats honestly and is still
-wrong, because the dict it splats is built from a signature that has no
-``dust_delta`` or ``dust_Rv`` to offer (#1858). Rule 1 catches that only at its
-callers; rule 2 catches it where it lives.
+Rule 2 was not hypothetical. ``attenuate_emission`` splatted honestly and was
+still wrong, because the dict it splatted was built from a signature that had
+no ``dust_delta`` or ``dust_Rv`` to offer (#1858). Rule 1 catches that only at
+its callers; rule 2 catches it where it lives.
 
 Dependencies: standard library only. The ``lint`` job installs ruff and nothing
 else, so this must not import ``yaml`` or ``tengri``. AST rather than grep: a
@@ -134,25 +135,12 @@ ALLOWLIST: dict[str, str] = {
         "physical meaning. There is no resolved galaxy-law dict to splat, and "
         "splatting one would be wrong"
     ),
-    "forward/sed_model.py::attenuate_emission": (
-        "#1858, OPEN — `attenuate_emission` has no `dust_delta`/`dust_Rv` "
-        "parameter, so the caller cannot splat even if it wanted to. Fixing the "
-        "signature is the issue; remove this entry with it"
-    ),
 }
 
 # Hand-built parameter dicts that are then splatted. Splatting a dict you filled
 # in by hand is the same defect wearing the correct shape, so the kwargs check
-# above cannot see it; this is where #1858 actually lives.
-DICT_ALLOWLIST: dict[str, str] = {
-    "forward/emission_helpers.py": (
-        "#1858, OPEN — `attenuate_emission` builds `dust_kw` from its own two "
-        "parameters and splats that. The splat is honest; the SIGNATURE is "
-        "partial, so `dust_delta`/`dust_Rv` cannot be threaded at all. This is "
-        "the defect's real location; its callers in `sed_model.py` are the "
-        "symptom. Remove this entry with the signature fix"
-    ),
-}
+# above cannot see it; this is where #1858 actually lived.
+DICT_ALLOWLIST: dict[str, str] = {}
 
 
 def relpath(path: Path) -> str:

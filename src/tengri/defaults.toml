@@ -16,8 +16,12 @@
 # auto-swaps to dense_basis_pure (no SFR constraint points).
 sfh = "dense_basis"
 
-# Dust attenuation shorthand: "charlot_fall" | "calzetti" | "smc" | ...
-dust = "charlot_fall"
+# Dust attenuation law, applied to BOTH attenuation screens (birth cloud +
+# diffuse ISM) of the default two-component model:
+# "charlot_fall" | "calzetti" | "smc" | ...
+# "charlot_fall" is an alias for "power_law" on both screens -- the classic
+# Charlot & Fall (2000) model -- not a law-registry name in its own right.
+dust_attenuation_law = "charlot_fall"
 
 # Nebular emission backend: "" (off) | "baked_in" | "cloudy" | "cue"
 nebular = ""

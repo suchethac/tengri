@@ -194,28 +194,27 @@ class TestCompileCacheWithFitter:
     """Integration tests: CompileCache with Fitter instances."""
 
     @pytest.fixture
-    def minimal_model_and_data(self):
-        """Create a minimal SEDModel and data for testing."""
+    def minimal_model_and_data(self, synthetic_ssp, simple_observation):
+        """A minimal SEDModel and data for testing.
+
+        No try/except. This fixture used to wrap its setup in
+        ``except Exception: pytest.skip("Could not create minimal model")`` --
+        and the build inside raised, because ``observation=`` was a plain dict
+        and ``ssp_data=`` a bare string. Every test below therefore skipped,
+        under a message that reads as a missing fixture. Build failures fail.
+        """
         import jax.numpy as jnp
 
         from tengri import SEDModel, recipes
 
-        # Use a minimal recipe to avoid long compile times
-        try:
-            ssp_data = "FSPS_Bp"  # minimal SSP
-        except Exception:
-            pytest.skip("SSP data not available")
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=simple_observation,
+            **recipes.mock_recovery_minimal(),
+        )
 
-        try:
-            obs = {"photometry": {"filters": ["u_sdss", "g_sdss"]}}
-            model = SEDModel.build(
-                ssp_data=ssp_data, observation=obs, **recipes.star_forming_photometry()
-            )
-        except Exception as e:
-            pytest.skip(f"Could not create minimal model: {e}")
-
-        data = jnp.array([1.0, 2.0])
-        noise = jnp.array([0.1, 0.1])
+        data = jnp.array([1.0, 2.0, 3.0])
+        noise = jnp.array([0.1, 0.1, 0.1])
         return model, data, noise
 
     def test_fitter_accepts_cache_parameter(self, minimal_model_and_data):
@@ -263,28 +262,31 @@ class TestCatalogFitterCache:
     """Test that CatalogFitter threads a single cache through all galaxies."""
 
     @pytest.fixture
-    def minimal_catalog_setup(self):
-        """Create minimal model and catalog for testing."""
+    def minimal_catalog_setup(self, synthetic_ssp, simple_observation):
+        """A minimal model and catalog for testing.
+
+        Same repair as :meth:`minimal_model_and_data` above -- the skip-on-any-
+        exception handler hid a dict passed where an ``Observation`` belongs.
+        """
         import jax.numpy as jnp
 
         from tengri import SEDModel, recipes
 
-        try:
-            ssp_data = "FSPS_Bp"
-        except Exception:
-            pytest.skip("SSP data not available")
-
-        try:
-            obs = {"photometry": {"filters": ["u_sdss", "g_sdss"]}}
-            model = SEDModel.build(
-                ssp_data=ssp_data, observation=obs, **recipes.star_forming_photometry()
-            )
-        except Exception as e:
-            pytest.skip(f"Could not create minimal model: {e}")
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=simple_observation,
+            **recipes.mock_recovery_minimal(),
+        )
 
         galaxies = [
-            {"flux_obs": jnp.array([1.0, 2.0]), "noise": jnp.array([0.1, 0.1])},
-            {"flux_obs": jnp.array([1.5, 2.5]), "noise": jnp.array([0.1, 0.1])},
+            {
+                "flux_obs": jnp.array([1.0, 2.0, 3.0]),
+                "noise": jnp.array([0.1, 0.1, 0.1]),
+            },
+            {
+                "flux_obs": jnp.array([1.5, 2.5, 3.5]),
+                "noise": jnp.array([0.1, 0.1, 0.1]),
+            },
         ]
         return model, galaxies
 

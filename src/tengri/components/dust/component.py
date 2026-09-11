@@ -260,6 +260,50 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         return _bound
 
+    def attenuate_line_catalog(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        line_wave: jnp.ndarray,
+        log_line_lums: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """THE single source of the single-screen line attenuation (#1867, #2223).
+
+        Reuses :meth:`_curve`, evaluated at the line wavelengths, never the
+        cached ``k_lambda`` (bound to the pipeline wave grid, not the line
+        wavelengths). A caller with no
+        :class:`~tengri.protocols.component.ForwardState` (the no-state
+        fallback in ``SEDModel._attenuate_line_catalog``, used when
+        ``dust_model`` is off/wg00 or on the #950 ``enable_fast_nebular()``
+        grid path) gets exactly the shape parameters :meth:`apply` would have
+        given it, since both call this same method.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives ``dust_tau_v`` (required) plus the bare ``redshift``,
+            which :meth:`_curve` forwards to a law that declares it.
+        line_wave : ndarray, shape (n_lines,)
+            Rest-frame line wavelengths [Å].
+        log_line_lums : ndarray, shape (n_lines,)
+            log10 of the INTRINSIC line luminosities [dex, erg/s]. The log
+            form, never the linear one, which overflows float32 at typical
+            line luminosities (#1534/#1837).
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            log10 of the ATTENUATED line luminosities [dex, erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: yes, pure ``jnp`` plus a build-time registry
+        lookup inside :meth:`_curve`.
+        """
+        curve = self._curve(params)
+        tau_v = jnp.asarray(params["dust_tau_v"])
+        log10_e = 1.0 / jnp.log(10.0)
+        return jnp.asarray(log_line_lums) - tau_v * curve(jnp.asarray(line_wave)) * log10_e
+
     def precompute(
         self,
         ssp_data: Any | None = None,
@@ -322,7 +366,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
             ``None`` this method is a no-op (returns the input
             unchanged).
         params : mapping
-            Receives ``dust_*`` keys plus ``redshift`` (unused here).
+            Receives ``dust_*`` keys plus the bare ``redshift``, which
+            :meth:`_curve` forwards to a law that declares it (``narayanan_z``
+            is the one that does, #2199) and withholds from every law that does
+            not.
 
         Returns
         -------
@@ -383,24 +430,21 @@ class DustAttenuationSEDComponent(TemplateThreading):
         )
 
         # Discrete emission-line catalog, reddened with this component's single
-        # screen (#1867). The two-component component does the same in its §2c;
-        # omitting it here would leave every single-screen model reading
-        # INTRINSIC line luminosities from `pred.lines.*` and
+        # screen (#1867, #2223). The two-component component does the same in
+        # its §2c; omitting it here would leave every single-screen model
+        # reading INTRINSIC line luminosities from `pred.lines.*` and
         # `predict_properties`, which is the half-fix #1867 warns about.
         #
-        # `curve(line_wave)`, never the cached `k_lambda`: that array is bound
-        # to `state.wave` and means nothing at line wavelengths.
-        #
-        # Reads and publishes the LOG companion, never the linear `line_lums`,
-        # which is `inf` in float32 at ~1e41 erg/s (#1534/#1837). `-tau*k` is a
-        # log-domain quantity already; converting to dex is one division.
+        # `attenuate_line_catalog` re-evaluates `_curve(params)` at the line
+        # wavelengths, never the cached `k_lambda`: that array is bound to
+        # `state.wave` and means nothing at line wavelengths. It is also the
+        # SAME method the no-state fallback (`SEDModel._attenuate_line_catalog`)
+        # calls, so there is one implementation of this screen (#2223).
         _line_waves = state.derived.get("line_waves")
         _log_line_lums = state.derived.get("log_line_lums")
         if _line_waves is not None and _log_line_lums is not None:
-            line_wave = jnp.asarray(_line_waves)
-            log10_e = 1.0 / jnp.log(10.0)
-            derived_overrides["log_line_lums_attenuated"] = (
-                jnp.asarray(_log_line_lums) - tau_v * curve(line_wave) * log10_e
+            derived_overrides["log_line_lums_attenuated"] = self.attenuate_line_catalog(
+                params, _line_waves, _log_line_lums
             )
 
         filter_eff = state.derived.get("filter_eff_waves")

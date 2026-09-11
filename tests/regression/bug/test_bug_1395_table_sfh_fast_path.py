@@ -65,15 +65,21 @@ def test_table_sfh_is_seen_by_the_fast_path_guard():
 
 
 def test_guard_still_covers_the_nonparametric_families():
-    """The #1395 rename must not drop the four SFHs the guard already caught (#950)."""
+    """The #1395 rename must not drop the SFHs the guard already caught (#950).
+
+    ``psb_continuity_flex`` joined them with #2184: it wraps ``psb_continuity``
+    and is equally binned, but the map is keyed on the function object, so a
+    wrapper is a different key and was reaching the fast path unguarded.
+    """
     from tengri.components.stellar.sfh.nonparametric import (
         continuity,
         continuity_flex,
         dirichlet,
         psb_continuity,
+        psb_continuity_flex,
     )
 
-    for fn in (continuity, continuity_flex, dirichlet, psb_continuity):
+    for fn in (continuity, continuity_flex, dirichlet, psb_continuity, psb_continuity_flex):
         assert fn in C._FAST_PATH_UNSUPPORTED_SFH_FNS, f"{fn.__name__} fell out of the guard"
 
 

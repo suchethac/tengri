@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Free-parameter declarations owned by the nebular component.
+r"""Free-parameter declarations owned by the nebular component.
 
 Each tuple in this module is the canonical source for one legacy
 bucket in ``tengri.parameters._builders``:
@@ -33,6 +33,46 @@ with ``Uniform`` priors + physical defaults: the divergence #887 removed.
 The flat-builder still registers these Cue params only when the user provides
 them explicitly (an opt-in policy on the ``Parameters`` path, unchanged); the
 canonical prior/default is used when a param IS registered.
+
+Diffuse ionized gas: one pair, not two knobs (#2195)
+----------------------------------------------------
+``neb_dig_frac`` and ``neb_dig_delta_logU`` describe a two-regime nebula, and
+the offset is inert **by construction** whenever the fraction is zero:
+
+.. math::
+
+    L(\lambda) = (1 - f_{\mathrm{DIG}}) \, L_{\mathrm{HII}}(\lambda, \log U)
+        + f_{\mathrm{DIG}} \, L_{\mathrm{DIG}}(\lambda, \log U + \Delta \log U)
+
+where :math:`L` is the nebular luminosity [erg/s/Hz], :math:`f_{\mathrm{DIG}}`
+is ``neb_dig_frac`` [dimensionless, in 0 to 1], :math:`\log U` is ``neb_logU``
+[dex] and :math:`\Delta \log U` is ``neb_dig_delta_logU`` [dex, negative]. At
+:math:`f_{\mathrm{DIG}} = 0`, which is ``neb_dig_frac``'s declared default, the
+second term vanishes and no value of :math:`\Delta \log U` changes the
+prediction. Freeing the offset alone therefore hands a fit a parameter the
+likelihood cannot see; free ``neb_dig_frac`` alongside it, or pin the fraction
+at a non-zero value.
+
+That degenerate corner is why an inertness measurement on
+``neb_dig_delta_logU`` has to say which ``neb_dig_frac`` it held. An exact 0.0
+at the default is the identity above. A near-zero response at a **non-zero**
+fraction is a defect, and was one: #2195 measured 1.46e-6 relative photometry
+change at ``neb_dig_frac = 0.3`` against a 1.76e-2 in-model control, because
+the DIG branch reached the Cue backend without the ionizing population.
+
+The two-regime picture and the fractions it is calibrated against are from
+Haffner et al. [1]_ and Tacchella et al. [2]_; the same references, with the
+full physical description, are on
+:func:`~tengri.components.nebular.dig.mix_dig_emission`.
+
+References
+----------
+.. [1] L. M. Haffner et al., "The warm ionized medium in spiral galaxies,"
+   Rev. Mod. Phys., 81, 969 (2009).
+   https://doi.org/10.1103/RevModPhys.81.969
+.. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
+   formation, time variability, and the diffuse ionized gas," MNRAS, 513,
+   2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
 """
 
 from __future__ import annotations
@@ -51,20 +91,30 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "neb_logZ_gas",
-        Fixed(-0.3),  # will be overridden to match met_logzsol if not set
+        Fixed(-0.3),  # grammar always supplies this default (met inheritance is dead code)
         "Gas-phase metallicity log10(Z_gas/Zsun)",
-        # Deliberately NO free_prior, for the same reason as ``neb_xid`` (which
-        # lives in ``parameters/_builders.py::_AGN_EXTRAS``):
-        # its admissible range is the selected nebular backend's grid, and those
-        # differ (Cue, the Cloudy grids and the baked-in SSP tables do not share
-        # an extent). The ``neb`` group wildcard is not backend-scoped the way
-        # ``dust.emission`` is since #1482, so one declared range would be right
-        # for one backend and clipped or unreachable for the others.
+        # The interval is the intersection of every shipped backend's measured
+        # support in public log10(Z/Zsun) units: Cue's training design
+        # back-solved from the NN normalization constants gives [-2.20, 0.50];
+        # the four shipped CloudyGrid files' lines axes are [-1.30, 0.30] with
+        # continuum axes [-1.98, 0.20] (mist/pdva/prsc) and [-1.30, 0.30]
+        # (bpass), so worst-case [-1.30, 0.20] -- the binding constraint;
+        # CB19's log_OH axis maps to [-1.99, 0.49]. Deliberately conservative:
+        # Cue and CB19 have real headroom a single static prior forfeits, and
+        # ``free_prior`` is strictly one static Distribution per name (a
+        # variant-keyed range would be new mechanism). An explicit user prior
+        # still overrides.
         #
-        # It is also tied: absent an explicit setting it tracks ``met_logzsol``,
-        # so freeing it silently decouples gas-phase from stellar metallicity
-        # and adds a near-degenerate dimension. Free it explicitly when you mean
-        # to fit that decoupling, with a range drawn from your backend's grid.
+        # Stellar and gas-phase metallicity are separate knobs: the
+        # backend-level ``if neb_logZ_gas is None: ... = log_z`` inheritance
+        # is dead code on the build path, because the grammar always supplies
+        # this declared default. Freeing gas-phase Z simply adds an
+        # independent dimension beside ``met_logzsol`` -- an ordinary
+        # modeling choice, near-degenerate with it only to the extent the
+        # data cannot separate lines from continuum.
+        free_prior=Uniform(
+            -1.30, 0.20, "Gas-phase metallicity", units="log10(Z/Zsun)", default=-0.3
+        ),
     ),
     ParamDeclaration(
         "neb_fesc",
@@ -101,6 +151,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "neb_dig_delta_logU",
         Fixed(-1.0),
+        # Inert while neb_dig_frac is 0, its default: the module docstring above
+        # carries the mixing formula and the #2195 measurement. This string is
+        # the menu column rendered in docs/spine, so it stays as it is.
         "DIG ionization parameter offset (dex, negative)",
         lambda lo, hi: lo >= -4 and hi <= 0,
         "must be in [-4, 0]",

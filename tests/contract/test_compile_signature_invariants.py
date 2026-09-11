@@ -96,9 +96,14 @@ class TestCompileSignatureInvariants:
         # shipped. Was 64 before #1973 added ssp_flux_id (grid CONTENT, not
         # just shape/lgmet). Was 65 before #2068 added filter_wave_id and
         # spec_wave_id (issue #2068: photometry/spectrum closures bake
-        # filter/spectroscopy wavelengths into their kernels).
-        assert len(model_sig) == 67, (
-            f"model_sig field count changed from 67 to {len(model_sig)}. "
+        # filter/spectroscopy wavelengths into their kernels). Was 67 before
+        # #2231 added dust_live_shape_params_sig: two models can share a law
+        # and the same set of fixed parameter NAMES while disagreeing on
+        # which of those names resolved "live" (read dynamically by the
+        # attenuation law) vs not (the law's own published default stands),
+        # and without this entry they collided on one compiled kernel.
+        assert len(model_sig) == 68, (
+            f"model_sig field count changed from 68 to {len(model_sig)}. "
             "If intentional, update this assertion and the ledger in "
             "SEDModel.compile_signature."
         )

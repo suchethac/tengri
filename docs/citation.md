@@ -197,6 +197,9 @@ the forward model, and listed oldest first within each group.
   [arXiv:1504.02782](https://arxiv.org/abs/1504.02782).
 - Modified-Calzetti attenuation with variable slope, the DSPS default.
   Salim et al. (2018), [arXiv:1804.05850](https://arxiv.org/abs/1804.05850).
+- Redshift-dependent median attenuation curves from MUFASA radiative
+  transfer, tengri's `narayanan_z` law. Narayanan et al. (2018),
+  [arXiv:1805.06905](https://arxiv.org/abs/1805.06905).
 
 ### Dust emission
 
