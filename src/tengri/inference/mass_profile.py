@@ -314,6 +314,13 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
     if profile_mass not in (True, False, "auto"):
         raise ValueError(f"profile_mass must be True, False, or 'auto'; got {profile_mass!r}")
 
+    # Every profiling attribute exists on every Fitter, engaged or not, so the
+    # cache-key ledgers (``_engine_policy``) see one attribute set per Fitter.
+    fitter._profile_mass_name = None
+    fitter._profile_mass_prior = None
+    fitter._profile_mass_bounds = None
+    fitter._profile_mass_original_spec = None
+
     if profile_mass is False:
         fitter._profile_mass = False
         fitter._profile_mass_resolved = False
