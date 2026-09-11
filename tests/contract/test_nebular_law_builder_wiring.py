@@ -56,7 +56,7 @@ def test_law_neb_round_trips_through_to_groups(synthetic_ssp_wide, synthetic_top
     # Re-build from the round-tripped groups: the nebular law survives.
     m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
     assert m2.spec.dust_law_neb == "conroy2010"
-    assert m2.spec.dust_law_overrides.get("neb", {}).get("n_slope") == pytest.approx(-1.3)
+    assert m2.spec.dust_law_overrides.get("neb", {}).get("dust_slope") == pytest.approx(-1.3)
 
 
 def test_law_neb_changes_compile_signature(synthetic_ssp_wide, synthetic_tophat_obs):

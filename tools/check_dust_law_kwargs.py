@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
 """CI guard: dust-law shape parameters reach a law by splat, never by hand, and
 no law declares a ``**kwargs`` catch-all.
 
@@ -42,6 +43,14 @@ A third rule, added with #2185:
 
 3. no ``@register_dust_law`` function may declare ``**kwargs``.
 
+A fourth rule, added with #2339 to catch cross-validation mismatches:
+
+2b. no subscript-assigned dict may carry one as a key (a hand-built dict that
+   is then splatted: ``d = {}; d["dust_slope"] = ...`` is the same defect as
+   rule 2);
+4. every law call site across src/, tests/, bench/, examples/, analysis/ must
+   use correct parameter spellings.
+
 Every law used to. That catch-all is what made a wrong splat survivable and
 therefore invisible: ``def calzetti(wavelength, **_kwargs)`` *accepts*
 ``dust_Rv`` while fixing R_V = 4.05 in the polynomial, so the grammar declared
@@ -60,6 +69,12 @@ Rule 2 was not hypothetical. ``attenuate_emission`` splatted honestly and was
 still wrong, because the dict it splatted was built from a signature that had
 no ``dust_delta`` or ``dust_Rv`` to offer (#1858). Rule 1 catches that only at
 its callers; rule 2 catches it where it lives.
+
+Rule 4 was added when the 2026-09 nightly crossval red showed a test calling
+``cardelli(..., Rv=)`` and ``power_law(..., n=)`` — parameter spellings no law
+declared. Rules 1-3 walk src/ only; a test calling a law with the wrong spelling
+stayed silent. Rule 4 walks all trees that could call laws. A call asserted to
+raise (inside ``pytest.raises(...)``) tests the law's refusal and is excluded.
 
 Dependencies: standard library only. The ``lint`` job installs ruff and nothing
 else, so this must not import ``yaml`` or ``tengri``. AST rather than grep: a
@@ -87,7 +102,6 @@ SRC = REPO_ROOT / "src" / "tengri"
 # keyword is the hand-binding this guard exists to catch.
 SHAPE_KWARGS = frozenset(
     {
-        "n_slope",
         "dust_slope",
         "dust_bump_strength",
         "dust_delta",
@@ -141,6 +155,19 @@ ALLOWLIST: dict[str, str] = {
 # in by hand is the same defect wearing the correct shape, so the kwargs check
 # above cannot see it; this is where #1858 actually lived.
 DICT_ALLOWLIST: dict[str, str] = {}
+
+# Individual law call sites (rule 4: spelling) that deliberately use deprecated
+# or alternative spellings. Each needs a written reason and an expiration date.
+#
+# Format: "<relpath>::<callee>::<keyword>" -> reason
+SPELLING_ALLOWLIST: dict[str, str] = {
+    "tests/contract/test_dust_slope_kwarg_alias.py::power_law::n_slope": (
+        "the alias test calls the deprecated spelling on purpose; expires with the alias in v1.0"
+    ),
+    "tests/contract/test_dust_slope_kwarg_alias.py::conroy2010::n_slope": (
+        "the alias test calls the deprecated spelling on purpose; expires with the alias in v1.0"
+    ),
+}
 
 
 def relpath(path: Path) -> str:
@@ -225,6 +252,149 @@ def scan_dict_literals(path: Path) -> list[tuple[int, set[str]]]:
     return found
 
 
+def scan_subscript_assignments(path: Path) -> list[tuple[int, str]]:
+    """Subscript-assigned dict keys in one file that are shape parameters.
+
+    Rule 2b: detect d["dust_slope"] = ... patterns (hand-built dicts splatted).
+    Returns list of (lineno, key) tuples for each violation.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return []
+
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        # Check if target is a subscript: d["key"] = value
+        if not isinstance(node.targets[0], ast.Subscript):
+            continue
+        subscript = node.targets[0]
+        # Only look at string constant subscripts
+        if not isinstance(subscript.slice, ast.Constant):
+            continue
+        if not isinstance(subscript.slice.value, str):
+            continue
+        key = subscript.slice.value
+        if key in SHAPE_KWARGS:
+            found.append((node.lineno, key))
+    return found
+
+
+def build_law_params(attenuation_path: Path) -> dict[str, set[str]]:
+    """Build table of law names -> parameter names from attenuation.py.
+
+    Walks @register_dust_law functions and extracts their explicit parameters.
+    Also includes public wrappers that accept **law_params.
+    """
+    law_params: dict[str, set[str]] = {}
+
+    try:
+        tree = ast.parse(attenuation_path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return {}
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+
+        # Check if this is a @register_dust_law function
+        registered = any(
+            callee_name(dec) == "register_dust_law"
+            for dec in node.decorator_list
+            if isinstance(dec, ast.Call)
+        )
+        if registered:
+            # Extract parameter names from the function signature
+            params = set()
+            for arg in node.args.args:
+                params.add(arg.arg)
+            # Exclude 'self' if present
+            params.discard("self")
+            law_params[node.name] = params
+
+    # Also check for public wrapper functions with **law_params catch-all
+    # These accept any law parameter via the catch-all
+    wrapper_names = {
+        "two_component_dust",
+        "two_component_dust_separable",
+        "single_component_dust",
+    }
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if node.name not in wrapper_names:
+            continue
+        # Extract explicit parameters (excluding **law_params splat)
+        params = set()
+        for arg in node.args.args:
+            params.add(arg.arg)
+        # Add SHAPE_KWARGS as these are accepted via **law_params
+        params.update(SHAPE_KWARGS)
+        params.discard("self")
+        law_params[node.name] = params
+
+    return law_params
+
+
+def _is_inside_raises(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    """Check if a node is inside a pytest.raises(...) or .raises(...) context."""
+    current = node
+    while current in parents:
+        current = parents[current]
+        if isinstance(current, ast.With):
+            # Check if this With statement has a raises() call
+            for item in current.items:
+                if isinstance(item.context_expr, ast.Call):
+                    ctx_callee = callee_name(item.context_expr)
+                    if ctx_callee == "raises" or ctx_callee.endswith(".raises"):
+                        return True
+    return False
+
+
+def scan_call_spellings(path: Path, law_params: dict[str, set[str]]) -> list[tuple[int, str, str]]:
+    """Rule 4: check law call sites for correct parameter spellings.
+
+    Excludes calls inside pytest.raises(...) blocks (negative tests).
+    Returns list of (lineno, callee_name, bad_keyword) for each violation.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return []
+
+    # Build parent map for all nodes
+    parents: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = callee_name(node)
+        if name not in law_params:
+            continue
+
+        # Skip calls inside pytest.raises(...) blocks
+        if _is_inside_raises(node, parents):
+            continue
+
+        # Check each explicit keyword argument
+        accepted = law_params[name]
+        for kw in node.keywords:
+            # Skip **kwargs splats
+            if kw.arg is None:
+                continue
+            if kw.arg not in accepted:
+                found.append((node.lineno, name, kw.arg))
+
+    return found
+
+
 def main() -> int:
     if not SRC.is_dir():
         print(f"ERROR: cannot read {SRC}", file=sys.stderr)
@@ -233,6 +403,7 @@ def main() -> int:
     violations: list[str] = []
     seen_allowlist: set[str] = set()
 
+    # Rule 1: hand-bound law call kwargs
     for path in sorted(SRC.rglob("*.py")):
         rel = relpath(path)
         if rel in EXEMPT_FILES:
@@ -250,7 +421,8 @@ def main() -> int:
                 "      added later reaches this site too."
             )
 
-    # Rule 3 scans every file, EXEMPT_FILES included: `attenuation.py` is exempt
+    # Rule 3: law definitions must not have **kwargs catch-all
+    # Scans every file, EXEMPT_FILES included: `attenuation.py` is exempt
     # from the hand-binding rule precisely because it defines the laws, which is
     # the one place this rule has to look.
     for path in sorted(SRC.rglob("*.py")):
@@ -265,6 +437,7 @@ def main() -> int:
                 "      the catch-all; callers narrow with `select_law_kwargs`."
             )
 
+    # Rule 2: dict literals with shape parameters
     seen_dicts: set[str] = set()
     for path in sorted(SRC.rglob("*.py")):
         rel = relpath(path)
@@ -285,16 +458,82 @@ def main() -> int:
                 "      evaluating a law with them."
             )
 
+    # Rule 2b: subscript-assigned dicts with shape parameters
+    seen_subscript_dicts: set[str] = set()
+    for path in sorted(SRC.rglob("*.py")):
+        rel = relpath(path)
+        if rel in EXEMPT_FILES or rel in DECLARATION_FILES:
+            continue
+        for lineno, key in scan_subscript_assignments(path):
+            if rel in DICT_ALLOWLIST:
+                seen_subscript_dicts.add(rel)
+                continue
+            violations.append(
+                f'{rel}:{lineno}  d["{key}"] = ...\n'
+                "      A hand-built law-parameter dict via subscript assignment.\n"
+                "      Splatting a dict you filled in by hand wears the right shape\n"
+                "      and carries the wrong contents. Get it from\n"
+                "      `resolve_bc_diff_law_params`, or add this file to\n"
+                "      DECLARATION_FILES if it enumerates parameters rather than\n"
+                "      evaluating a law with them."
+            )
+
+    # Rule 4: law call sites must use correct parameter spellings
+    # Build law_params table from attenuation.py
+    attenuation_path = SRC / "components" / "dust" / "attenuation.py"
+    law_params = build_law_params(attenuation_path)
+
+    # Walk src/, tests/, bench/, examples/, analysis/ for call sites
+    repo_root = SRC.parent.parent
+    search_roots = [
+        repo_root / "src",
+        repo_root / "tests",
+        repo_root / "bench",
+        repo_root / "examples",
+        repo_root / "analysis",
+    ]
+    seen_spellings: set[str] = set()
+
+    for root in search_roots:
+        if not root.exists():
+            continue
+        # Make rel paths relative to repo_root for allowlisting
+        for path in sorted(root.rglob("*.py")):
+            try:
+                rel = path.relative_to(repo_root).as_posix()
+            except ValueError:
+                continue
+
+            for lineno, callee, bad_kw in scan_call_spellings(path, law_params):
+                key = f"{rel}::{callee}::{bad_kw}"
+                if key in SPELLING_ALLOWLIST:
+                    seen_spellings.add(key)
+                    continue
+                violations.append(
+                    f"{rel}:{lineno}  {callee}(..., {bad_kw}=...)\n"
+                    f"      Unknown parameter '{bad_kw}' for law '{callee}'.\n"
+                    "      Check the law's signature for the correct spelling,\n"
+                    "      or add an allowlist entry if this is an intentional\n"
+                    "      deprecated-spelling test."
+                )
+
+    # Stale allowlist checks
     for key in sorted(set(ALLOWLIST) - seen_allowlist):
         violations.append(
             f"stale allowlist entry `{key}` in {Path(__file__).name}: the site is\n"
             "      gone. Drop the entry so the next real one is not hidden behind it."
         )
 
-    for key in sorted(set(DICT_ALLOWLIST) - seen_dicts):
+    for key in sorted(set(DICT_ALLOWLIST) - (seen_dicts | seen_subscript_dicts)):
         violations.append(
             f"stale DICT_ALLOWLIST entry `{key}` in {Path(__file__).name}: the\n"
             "      hand-built dict is gone. Drop the entry."
+        )
+
+    for key in sorted(set(SPELLING_ALLOWLIST) - seen_spellings):
+        violations.append(
+            f"stale SPELLING_ALLOWLIST entry `{key}` in {Path(__file__).name}: the\n"
+            "      call site is gone or the spelling has been fixed. Drop the entry."
         )
 
     for key in sorted(DECLARATION_FILES):
@@ -308,18 +547,21 @@ def main() -> int:
             )
 
     if violations:
-        print("Dust-law shape parameters bound by hand:\n", file=sys.stderr)
+        print("Dust-law shape parameters bound by hand or misspelled:\n", file=sys.stderr)
         for violation in violations:
             print(f"  - {violation}\n", file=sys.stderr)
         return 1
 
     n_exempt = len(EXEMPT_FILES) + len(DECLARATION_FILES)
     n_dicts = len(DICT_ALLOWLIST)
+    n_spellings = len(SPELLING_ALLOWLIST)
     print(
         f"OK: every dust-law evaluation takes its parameters from a resolved dict, "
-        f"and no registered law declares a **kwargs catch-all "
+        f"and no registered law declares a **kwargs catch-all, and all law call "
+        f"sites use correct parameter spellings "
         f"({len(ALLOWLIST)} call sites and {n_dicts} hand-built "
-        f"dict{'' if n_dicts == 1 else 's'} allowlisted, {n_exempt} files exempt)."
+        f"dict{'' if n_dicts == 1 else 's'} and {n_spellings} deprecated-spelling "
+        f"allowlisted, {n_exempt} files exempt)."
     )
     return 0
 

@@ -218,7 +218,7 @@ class TestConroy2010:
     def test_ir_dominated_by_power_law(self, ir_wavelength):
         """IR region should approximate the power-law curve."""
         k_c10 = conroy2010(ir_wavelength)
-        k_pl = power_law(ir_wavelength, n_slope=-0.7)
+        k_pl = power_law(ir_wavelength, dust_slope=-0.7)
         # In IR, blend ~ 1, so conroy2010 ~ power_law (modulo normalization)
         corr = jnp.corrcoef(k_c10, k_pl)[0, 1]
         assert float(corr) > 0.99
@@ -246,10 +246,10 @@ class TestConroy2010:
         assert_allclose(k_eager, k_jit, rtol=1e-12)
 
     def test_gradient_compatible(self, wavelength):
-        """conroy2010 gradients match central FD w.r.t. Rv and n_slope."""
+        """conroy2010 gradients match central FD w.r.t. Rv and dust_slope."""
 
         def loss(rv, n):
-            return jnp.sum(conroy2010(wavelength, dust_Rv=rv, n_slope=n))
+            return jnp.sum(conroy2010(wavelength, dust_Rv=rv, dust_slope=n))
 
         g_rv, g_n = jax.grad(loss, argnums=(0, 1))(3.1, -0.7)
 
@@ -269,7 +269,7 @@ class TestConroy2010:
             float(g_n),
             fd_grad(f_n, -0.7),
             rtol=1e-3,
-            err_msg="conroy2010: FD check ∂(∑k)/∂n_slope",
+            err_msg="conroy2010: FD check ∂(∑k)/∂dust_slope",
         )
 
     def test_uv_bump_present(self):

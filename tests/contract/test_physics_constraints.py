@@ -327,7 +327,7 @@ class TestDustAttenuationAnalyticValues:
 
         n = -0.7
         for lam in [1500.0, 2800.0, 5500.0, 10000.0]:
-            k = float(power_law(jnp.array([lam]), n_slope=n)[0])
+            k = float(power_law(jnp.array([lam]), dust_slope=n)[0])
             expected = (lam / 5500.0) ** n
             np.testing.assert_allclose(
                 k, expected, rtol=1e-10, err_msg=f"Power-law k({lam}) mismatch"

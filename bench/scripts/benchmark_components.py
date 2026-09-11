@@ -47,7 +47,7 @@ def main():
     ages = jnp.array([1e6, 1e7, 1e8, 1e9, 1e10])
     bench(
         lambda: two_component_dust(
-            wave, ages, 1.0, 0.3, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+            wave, ages, 1.0, 0.3, law_bc="power_law", law_diff="power_law", dust_slope=-0.7
         ),
         "two_component_dust power_law (5994 wave, 5 ages)",
     )

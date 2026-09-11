@@ -162,7 +162,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: hashable tuple of ``(law_kwarg, value)`` pairs so the frozen config stays
     #: usable as a static JIT key. Empty -> both components share the global
     #: ``dust_slope`` / ``dust_bump_strength`` / ``dust_delta`` / ``dust_Rv``.
-    #: e.g. ``bc_law_overrides=(("n_slope", -1.0),)`` for the FSPS birth cloud.
+    #: e.g. ``bc_law_overrides=(("dust_slope", -1.0),)`` for the FSPS birth cloud.
     bc_law_overrides: tuple[tuple[str, float], ...] = ()
     diff_law_overrides: tuple[tuple[str, float], ...] = ()
     #: Per-parameter overrides for the **nebular** birth-cloud screen, same
@@ -1020,7 +1020,7 @@ class DustSEDComponent(TemplateThreading):
             tau_bc = jnp.asarray(params["dust_tau_bc"])
             tau_diff = jnp.asarray(params["dust_tau_diff"])
             # The SAME resolved law parameters as the full-grid screen above,
-            # splatted whole. This site used to thread `n_slope` alone:
+            # splatted whole. This site used to thread `dust_slope` alone:
             # "matching its existing surface": which silently dropped
             # dust_bump_strength / dust_delta / dust_Rv, so the per-filter
             # attenuation LUT evaluated a *different curve* from the screen in
@@ -1147,13 +1147,13 @@ class DustSEDComponent(TemplateThreading):
             # the curve steepens (GALEX FUV +45 % at z=0.05, +215 % at z=1).
             #
             # The law is evaluated live on the (n_age, n_filter, K) node grid, not
-            # baked into a table, so ``n_slope`` (and any other shape parameter)
+            # baked into a table, so ``dust_slope`` (and any other shape parameter)
             # stays FREE. Measured cheaper than pre-baking it: the baked form has
             # to stream two extra tensors, while this one is compute-bound and XLA
             # fuses it into the contraction.
             #
             # "Any other shape parameter" was aspirational until #1833: every
-            # evaluation in this block passed ``n_slope=`` alone, so a free
+            # evaluation in this block passed ``dust_slope=`` alone, so a free
             # ``dust_delta`` / ``dust_bump_strength`` / ``dust_Rv`` moved the
             # full-grid screen and not the LUT the fit actually reads. They all
             # splat the resolved dicts now, which is what makes the claim true.
@@ -1232,7 +1232,7 @@ class DustSEDComponent(TemplateThreading):
             tau_bc = jnp.asarray(params["dust_tau_bc"])
             tau_diff = jnp.asarray(params["dust_tau_diff"])
             # Same binding as the full-grid screen and the photometry LUT. This
-            # block used to build its own ``n_slope`` from
+            # block used to build its own ``dust_slope`` from
             # ``params.get("dust_slope", -0.7)`` and pass nothing else, so a
             # spectroscopic fit reddened its pixels with a different curve from
             # the one attenuating the model it was fitting -- the #1833 defect
