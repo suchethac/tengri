@@ -156,13 +156,15 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "``custom_jvp`` carries the same barrier on ``primal_out`` and on both "
         "tangent terms, so neither pass ever forms the scalar alone. The two "
         "``sed_model`` sites and ``StellarSEDComponent.apply`` compute the scale at "
-        "working precision on the derived/line path, outside any fitted gradient.",
+        "working precision on the derived/line path, outside any fitted gradient. "
+        "``measure_line_fluxes`` left this family with the float32 line-channel fix "
+        "(#1206): its ``total_mass * L_sun`` became an ``ldexp`` power-of-two split, "
+        "so the seam no longer exists there.",
         (
             "tengri.components.stellar.component:_mass_scale_lnu",
             "tengri.components.stellar.component:_mass_scale_lnu_jvp",
             "tengri.components.stellar.component:StellarSEDComponent.apply",
             "tengri.forward.sed_model:SEDModel._feature_fast_indices",
-            "tengri.forward.sed_model:SEDModel.measure_line_fluxes",
         ),
     ),
     "agn_bolometric_renorm": (
