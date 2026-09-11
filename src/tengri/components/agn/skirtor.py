@@ -919,7 +919,47 @@ def skirtor_disc_dust_ratio(
     dust-only, inclination-averaged libraries with no such normalization and
     do not reach this function.
 
+    **The polar reference's remaining 2.9% is the SMC extinction curve.**
+    Writing the polar share as ``x/(1 + x)`` with
+    ``x = g(oa) . R_faceon . J``, where ``J = int(disc.(1 - e^-tau)) /
+    int(disc)`` is the disc-shape-weighted absorbed fraction, the CIGALE
+    comparison factors into ``R_faceon``'s own per-inclination quadrature
+    times a constant **1.029181**, identical at i = 0, 30, 60 and 80. The
+    cone factor ``g(40 deg) = 0.261007`` is common to both sides, so the
+    constant is in ``J`` -- and ``J`` differs only through the extinction
+    curve the polar screen applies.
+
+    Measured at the fiducial (``disc='schartmann2005'``, ``E(B-V) = 0.03``,
+    on the native grid): ``J`` = 0.216524061 with tengri's SMC curve against
+    0.222615502 with CIGALE's, a factor **1.028133** -- so the SMC curve
+    accounts for 2.81 of the 2.92 percentage points and leaves 0.102%.
+    Decomposed by decade, 71.8% of the difference comes from 100 - 1000 A,
+    14.7% from 1 - 10 um and 7.5% from 1000 - 3000 A.
+
+    The two curves are two different published SMC parameterizations, not an
+    error on either side. tengri's is Pei (1992, ApJ 395, 130) Table 4 SMC
+    Bar, the six-component generalized Drude sum, normalized to
+    ``k(5500 A) = 1`` and scaled by that table's own ``R_V = 2.93``;
+    ``components.dust.attenuation.smc`` reproduces the paper's ``xi(lambda)``
+    to a constant factor of 1.03445291 at every wavelength, the factor being
+    exactly that normalization choice (Pei's analytic sum by itself implies
+    ``A(V)/E(B-V) = 2.5806``). CIGALE's ``skirtor2016.k_ext`` instead uses the
+    SMC power law ``k = 1.39 (lambda/um)^-1.2`` (Bongiorno et al. 2012, in the
+    Prevot et al. 1984 family), which implies ``A(V)/E(B-V) = 2.848``, and
+    below 100 nm swaps in a tabulated curve rescaled to match at that
+    boundary -- which is why the EUV decade carries most of the difference.
+    Per-wavelength ``k_CIGALE/k_tengri``: 1.0759 (912 A), 0.9897 (1216),
+    1.0235 (2000), 0.9961 (3000), 0.9721 (5500), 1.2073 (1e4), 2.4317 (3e4),
+    0.1073 (1e5).
+
     **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien+2019).
+
+    References
+    ----------
+    - Stalevski et al. 2016, MNRAS, 458, 2288 (SKIRTOR)
+    - Pei 1992, ApJ, 395, 130 (the SMC Bar extinction curve tengri applies)
+    - Prevot et al. 1984, A&A, 132, 389 (the SMC power-law family)
+    - Bongiorno et al. 2012, MNRAS, 427, 3103 (the ``1.39 lambda^-1.2`` form)
     """
     # ``_template`` carries the disk/dust grid as a traced argument when the
     # forward model threaded it; loading it here instead bakes ~20 MB of

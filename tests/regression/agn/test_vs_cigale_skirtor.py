@@ -735,3 +735,123 @@ class TestRadiusRatioReachesTheDiscTie:
             f"the file's norm(0)/norm(80) at R={radius_ratio:g} is {ratio:.6f}, not "
             f"the measured {expected:.6f}"
         )
+
+
+class TestTheResidualPolarShareConstantIsTheSmcCurve:
+    """R72: the isolated 2.9182% in ``g.J`` is the SMC extinction curve.
+
+    After the stored inclination normalization landed, the tengri/pcigale
+    polar-share comparison factored exactly into ``R_faceon``'s own
+    per-inclination quadrature times a constant ``1.029181``, identical at
+    i = 0, 30, 60 and 80. ``g(40 deg) = 0.261007`` is common to both sides, so
+    the constant sits in ``J = int(disc.(1 - e^-tau)) / int(disc)`` -- the
+    disc-shape-weighted absorbed fraction, which depends on the disc shape
+    (the same analytic one on both sides) and on the extinction curve (not).
+
+    Substituting pcigale's own ``k_ext`` for tengri's on the same disc and the
+    same native grid takes ``J`` from 0.216524061 to 0.222615502, a factor
+    **1.028133** -- so the curve accounts for 2.81 of the 2.92 percentage
+    points and leaves 0.102%. The two curves are two different published SMC
+    parameterizations: Pei (1992) Table 4's six-component Drude sum with that
+    table's ``R_V = 2.93`` on tengri's side, the ``1.39 (lambda/um)^-1.2``
+    power law (Bongiorno et al. 2012, Prevot et al. 1984 family, implied
+    ``A(V)/E(B-V) = 2.848``) on pcigale's, with a tabulated replacement below
+    100 nm. Neither disagrees with its own source, so nothing is changed here
+    and this pins the decomposition instead.
+    """
+
+    _EBV = 0.03
+    _CONSTANT = 1.029181
+
+    @staticmethod
+    def _curves_and_shape():
+        pcigale_skirtor = pytest.importorskip("pcigale.sed_modules.skirtor2016")
+        from tengri.components.agn.blocks import resolve_agn_block
+        from tengri.components.agn.skirtor import (
+            _as_disc_dust_grid,
+            _load_raw_disk_dust_grid,
+        )
+        from tengri.components.dust.attenuation import smc as tengri_smc
+
+        raw = _load_raw_disk_dust_grid()
+        if raw is None:
+            pytest.skip("raw SKIRTOR disk/dust grid not available")
+        _disk, _dust, wave_grid, _axes, _norm = _as_disc_dust_grid(raw)
+        wl = np.asarray(wave_grid)
+        shape = np.asarray(
+            resolve_agn_block("disc", "schartmann2005")(
+                jnp.asarray(wl), agn_log_lbol=12.0, templates=None
+            )
+        )
+        k_cigale = np.asarray(pcigale_skirtor.k_ext(wl / 10.0, 0))
+        # tengri applies A = k . R_V . E(B-V) with Pei 1992 Table 4's R_V.
+        k_tengri = 2.93 * np.asarray(tengri_smc(jnp.asarray(wl)))
+        return wl, shape, k_cigale, k_tengri
+
+    @classmethod
+    def _j(cls, wl, shape, k):
+        tau = 0.921 * cls._EBV * k
+        return float(np.trapezoid(shape * (1.0 - np.exp(-tau)), wl) / np.trapezoid(shape, wl))
+
+    def test_substituting_the_cigale_curve_collapses_the_constant(self):
+        """The whole claim, as one number."""
+        wl, shape, k_cigale, k_tengri = self._curves_and_shape()
+        j_tengri = self._j(wl, shape, k_tengri)
+        j_cigale = self._j(wl, shape, k_cigale)
+        ratio = j_cigale / j_tengri
+        assert j_tengri == pytest.approx(0.216524061, rel=1e-6, abs=0.0)
+        assert j_cigale == pytest.approx(0.222615502, rel=1e-6, abs=0.0)
+        assert ratio == pytest.approx(1.028133, rel=1e-5, abs=0.0), (
+            f"J_cigale/J_tengri = {ratio:.9f}, not the measured 1.028133"
+        )
+        residual = self._CONSTANT / ratio
+        assert residual == pytest.approx(1.0, abs=1.5e-3), (
+            f"substituting pcigale's SMC curve leaves {residual - 1.0:+.6f} of the "
+            f"{self._CONSTANT - 1.0:+.6f} constant unexplained, more than the "
+            "0.102% measured -- something other than the extinction curve has moved."
+        )
+
+    def test_the_two_curves_are_different_published_parameterizations(self):
+        """Named, so a later change to either side cannot pass silently.
+
+        tengri's ``smc`` is Pei (1992) Table 4's Drude sum, normalized to
+        ``k(V) = 1`` and scaled by that table's ``R_V = 2.93``; pcigale's
+        ``k_ext(law=0)`` is ``1.39 (lambda/um)^-1.2``.
+        """
+        from tengri.components.dust.attenuation import smc as tengri_smc
+
+        wl, _shape, k_cigale, _k_tengri = self._curves_and_shape()
+        # At V exactly, not at the native grid's nearest node (5754 A).
+        k_v = 2.93 * float(tengri_smc(jnp.asarray([5500.0]))[0])
+        assert k_v == pytest.approx(2.93, rel=1e-9, abs=0.0), (
+            "tengri's polar screen must put A(V)/E(B-V) at Pei 1992 Table 4's "
+            f"R_V = 2.93; got {k_v:.9f}"
+        )
+        # Above 100 nm pcigale's curve IS the closed-form power law, exactly.
+        above = wl > 1000.0
+        closed = 1.39 * (wl[above] / 1.0e4) ** -1.2
+        assert np.allclose(k_cigale[above], closed, rtol=1e-12, atol=0.0), (
+            "pcigale's SMC law above 100 nm is no longer 1.39 (lambda/um)^-1.2"
+        )
+
+    def test_the_euv_decade_carries_the_difference(self):
+        """Where it comes from: 100 - 1000 A, and a real mechanism.
+
+        Below 100 nm pcigale abandons the power law for a tabulated curve
+        rescaled to match at the boundary; tengri has Pei's FUV Drude term
+        there. That decade carries 71.8% of the whole difference in ``J``.
+        """
+        wl, shape, k_cigale, k_tengri = self._curves_and_shape()
+        total = self._j(wl, shape, k_cigale) - self._j(wl, shape, k_tengri)
+        band = (wl >= 100.0) & (wl <= 1000.0)
+        denom = np.trapezoid(shape, wl)
+
+        def _partial(k):
+            tau = 0.921 * self._EBV * k
+            return float(np.trapezoid((shape * (1.0 - np.exp(-tau)))[band], wl[band]) / denom)
+
+        contribution = (_partial(k_cigale) - _partial(k_tengri)) / total
+        assert contribution == pytest.approx(0.7179, abs=5e-3), (
+            f"the 100 - 1000 A decade contributes {contribution:.4f} of the J "
+            "difference, not the measured 0.7179"
+        )
