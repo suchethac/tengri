@@ -110,11 +110,12 @@
 # hazard — that warning is expected here, not a problem.
 #
 # **Rule 3 — turn MLX kernel fusion off** (`MLX_DISABLE_COMPILE=1`). With it on,
-# the SKIRTOR torus forward graph compiles to a wrong answer under `jax.jit`
-# (x1.02 at 3 um to x0.10 at 100 um against the same graph eager, on CPU, or with
-# fusion off); with it off the #1206 parity sweep passes 5 of 6 seams, and every
-# seam ran faster. Details and the measured table:
-# `docs/internal/getting_started/gpu.md`.
+# a reversed array combined with a broadcast scalar is silently wrong on MPS
+# (`y[::-1] * 2.0` keeps its first element and zeros the rest;
+# [jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)). tengri hits
+# it in the SKIRTOR polar-dust integral, which puts the torus far-infrared 10x low;
+# with fusion off the #1206 parity sweep passes 5 of 6 seams, and every seam ran
+# faster. Details and the measured table: `docs/internal/getting_started/gpu.md`.
 #
 # Optional, and worth setting: `JAX_MPS_ASYNC_DISPATCH=1`. Measured, it cut cold
 # compile from 8.1 s to 0.60 s. It changes warm time very little.

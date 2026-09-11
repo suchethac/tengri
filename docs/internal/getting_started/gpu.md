@@ -222,15 +222,19 @@ Three rules govern everything else on this backend:
 2. **Select float32 in the environment, before Python starts.** Setting it after
    `import tengri` is too late -- constants allocated during import are already on the
    device.
-3. **Turn MLX kernel fusion off.** With it on, the full SKIRTOR torus forward graph
-   compiles to a wrong answer under `jax.jit`: photometry off by wavelength-dependent
-   factors from x1.02 at 3 um to x0.10 at 100 um against the same graph run eagerly
-   (`jax.disable_jit()`), on CPU, or with fusion off, while every stage of that graph
-   isolated on its own agrees to 6e-4. The defect is in the MLX backend, not tengri
-   (reproducer: the sweep's `+AGN` seam, jit versus `disable_jit`). Fusion off costs
-   nothing here -- the sweep is dispatch-bound, and in the one sweep measured each way
-   every seam ran faster without it (10-40 s versus 13-64 s per seam).
-   `JAX_MPS_NO_OPTIMIZE=1` does **not** cure it.
+3. **Turn MLX kernel fusion off.** With it on, a reversed array combined with a
+   broadcast scalar is silently wrong on MPS: `y[::-1] * 2.0` returns the right first
+   element and zeros after it, for `jnp.flip` / `lax.rev` / any negative step, float32
+   and int32, under `jax.jit` and eagerly
+   ([tillahoffmann/jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)).
+   tengri hits it in the SKIRTOR polar-dust luminosity, a trapezoid over a reversed
+   frequency grid, which comes out as `0.0`: the torus loses its far-infrared graybody
+   and its normalization redistributes the deficit, so photometry is off by
+   wavelength-dependent factors from x1.02 at 3 um to x0.10 at 100 um while every
+   other seam agrees with CPU. Fusion off costs nothing here -- the sweep is
+   dispatch-bound, and in the one sweep measured each way every seam ran faster
+   without it (10-40 s versus 13-64 s per seam). `JAX_MPS_NO_OPTIMIZE=1` does
+   **not** cure it.
 
    ```bash
    export JAX_ENABLE_X64=0
