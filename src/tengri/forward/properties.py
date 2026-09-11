@@ -397,6 +397,7 @@ def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
 
     import numpy as np
 
+    from tengri.config.exceptions import warn_measured
     from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT
     from tengri.utils.sed_quantities import _LINE_MATCH_TOL_AA
 
@@ -433,7 +434,7 @@ def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
             continue
         nearest_target = target_waves[offsets.index(best_offset)]
         nearest_line_aa = float(line_waves[int(np.argmin(np.abs(line_waves - nearest_target)))])
-        warnings.warn(
+        warn_measured(
             f"{name!r} has no catalog line within {_LINE_MATCH_TOL_AA:.0f} "
             f"Angstrom of its target wavelength on this {backend_name!r} "
             f"catalog (nearest catalog line {nearest_line_aa:.2f} Å, "
@@ -441,6 +442,8 @@ def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
             f"{remedy} See #2239.",
             UserWarning,
             stacklevel=4,
+            nearest_catalog_line_aa=nearest_line_aa,
+            offset_aa=best_offset,
         )
 
 
