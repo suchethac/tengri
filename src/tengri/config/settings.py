@@ -25,6 +25,32 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+#: Cue's default line catalog (#2239): the full ~138-line Cue-trained set,
+#: not the legacy 128-line CLOUDY/FSPS-matched subset. The one declaration;
+#: every other spelling reads this constant rather than repeating the
+#: literal: ``NebularSEDComponentConfig.cue_full_catalog``
+#: (``components/nebular/component.py``), ``build_components``'s
+#: ``cue_full_catalog`` kwarg default (``forward/component_factory.py``),
+#: the ``SEDModel`` build path's ``getattr`` fallback
+#: (``forward/sed_model.py``), the warning seam's remedy-selection fallback
+#: (``forward/properties.py``), the structural round-trip default
+#: (``parameters/groups.py``), ``Parameters._init_nebular_config``
+#: (``parameters/parameters.py``, re-exported from here), and
+#: ``CueBackend``'s ``cloudyfsps_only`` defaults, which read
+#: ``not CUE_FULL_CATALOG_DEFAULT`` (``components/nebular/cue.py``).
+#:
+#: Declared in this leaf module (imports only stdlib) rather than in
+#: ``parameters/parameters.py`` so every consumer above can import it as a
+#: normal module-level name: ``parameters.parameters`` sits at the end of a
+#: long import chain (``_builders`` -> ``observation`` -> ``components`` ->
+#: ``agn.blocks.composable_precompute`` -> ``forward.precompute.templates``
+#: -> ``forward/__init__`` -> ``forward.component_factory`` ->
+#: ``components.nebular.component``), so a module-level import of it from
+#: ``parameters.parameters`` in ``component.py``/``component_factory.py``/
+#: ``cue.py``/``sed_model.py`` is a real import cycle (verified: ``import
+#: tengri`` fails). This module has no such chain to be part of.
+CUE_FULL_CATALOG_DEFAULT: bool = True
+
 
 def _validate_enum(value: Any, valid: Iterable, where: str) -> None:
     """Raise ``ValueError`` if ``value`` is outside ``valid``.

@@ -40,7 +40,7 @@ References:
 - Marino et al. 2013, ApJ, 768, 171 (N2 metallicity diagnostic)
 - Pettini & Pagel 2004, MNRAS, 348, L59 (O3N2 diagnostic)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-132
+.. GENERATED FROM PYTHON SOURCE LINES 25-131
 
 
 
@@ -50,8 +50,25 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:308: RuntimeWarning: invalid value encountered in scalar divide
+      log_Q_pred = b - _LOG_H + np.log10(np.abs((x_max_alpha - x_min_alpha) / alpha))
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:320: RuntimeWarning: invalid value encountered in scalar divide
+      term_Q = b + np.log10(np.abs(denom / alpha)) - log_Q - _LOG_H
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:322: RuntimeWarning: divide by zero encountered in scalar divide
+      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:322: RuntimeWarning: invalid value encountered in scalar subtract
+      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -101,7 +118,7 @@ References:
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     z_grid = np.linspace(-1.5, 0.4, 18)
-    o3, n2_ha, hb, oii, ne3, sii, o3_o2, r23 = [np.empty_like(z_grid) for _ in range(8)]
+    o3, n2_ha, hb, oii, sii, o3_o2, r23 = [np.empty_like(z_grid) for _ in range(7)]
 
     for i, z in enumerate(z_grid):
         p = {**baseline, "neb_logZ_gas": jnp.float64(z)}
@@ -110,7 +127,6 @@ References:
         n2_ha[i] = float(L.nii_6584 / L.halpha)
         hb[i] = float(L.hbeta)
         oii[i] = float(L.oii)
-        ne3[i] = float(L.civ_1549)  # use CIV as alt high-ion probe
         sii[i] = float(L.sii_6717 + L.sii_6731)
         o3_o2[i] = float(L.oiii_5007 / L.oii)
         # R23 = ([O II] + [O III]) / H-beta (Pagel+1979, Kewley+2002)
@@ -162,6 +178,11 @@ References:
         ax.set_xlabel(r"$12 + \log(\mathrm{O/H})$")
 
     plt.savefig("plot_strong_line_metallicity_diagnostics.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 10.248 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

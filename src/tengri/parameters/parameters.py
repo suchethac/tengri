@@ -61,6 +61,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
     resolve_sfh_type,
@@ -85,7 +86,19 @@ from tengri.parameters.priors import (
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
 
-__all__ = ["SETTINGS_KEYS", "Parameters"]
+__all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
+
+# CUE_FULL_CATALOG_DEFAULT (#2239) is declared in tengri.config.settings (a
+# leaf module: stdlib imports only) and re-exported here, so existing
+# ``from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT`` call
+# sites (e.g. parameters/groups.py) keep working unchanged. See that
+# module's docstring for the full rationale, including why every other
+# consumer (component.py, component_factory.py, cue.py, sed_model.py) now
+# imports it from tengri.config.settings directly at module level rather
+# than from here: this module sits at the end of a long import chain
+# (_builders -> observation -> components -> ... -> forward ->
+# component_factory -> components.nebular.component) that made a
+# module-level import of this name FROM HERE a real import cycle.
 
 
 def _stable_param_seed(name: str) -> int:
@@ -808,11 +821,16 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
-        # When True, the Cue orchestrator path publishes the full
-        # ~271-species line catalog instead of the default 128
-        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
-        # read via ``pred.lines.get(wavelength)``. See #303.
-        self.cue_full_catalog = kwargs.pop("cue_full_catalog", False)
+        # See CUE_FULL_CATALOG_DEFAULT (imported above, declared in
+        # tengri.config.settings): the one declaration every other spelling
+        # of this default reads or derives from. ``True`` publishes the
+        # full ~138-species Cue-trained line
+        # catalog via ``state.derived["line_waves"/"line_lums"]``, so HeII
+        # 1640, C IV 1549, etc. can be read via ``pred.lines.get(wavelength)``.
+        # ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched subset
+        # (the sole default before #2239, added by #303), kept for cross-code
+        # comparisons.
+        self.cue_full_catalog = kwargs.pop("cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
