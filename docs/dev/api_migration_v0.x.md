@@ -1372,6 +1372,27 @@ full diagnosis (case (c): why the B axis stays inert) and
 
 ---
 
+## Law keyword `n_slope` renamed to `dust_slope` (2026-09-11)
+
+The attenuation-law keyword `n_slope` on `power_law` and `conroy2010` is renamed
+`dust_slope` to align law-function keywords with registry names (`dust_slope`,
+`dust_Rv`, `dust_delta`, …) and grammar stems (`slope`, `Rv`, `delta`, …). This
+three-vocabulary mismatch — old function arg, new registry name, new grammar
+stem — has been resolved to one rule: law keyword = `dust_` + grammar stem.
+
+| Old spelling                         | New spelling                        | Status (v0.x)                              |
+| ------------------------------------ | ----------------------------------- | ------------------------------------------ |
+| `power_law(wave, n_slope=-0.7)`     | `power_law(wave, dust_slope=-0.7)` | `n_slope=` still works: deprecated alias, warns, forwards |
+| `(("n_slope", -1.0),)` overrides     | `(("dust_slope", -1.0),)` overrides | Dicts use `dust_slope` only               |
+| `conroy2010(wave, n_slope=-0.7, dust_Rv=3.1)` | `conroy2010(wave, dust_slope=-0.7, dust_Rv=3.1)` | `n_slope=` still works: deprecated alias, warns, forwards |
+
+The registry callables, `law_kwarg_names()`, and per-screen override dicts
+(`dust_law_overrides`, `bc_law_overrides`, `neb_law_overrides`) use `dust_slope`
+only. Grammar spellings (`slope`, `slope_bc`, `slope_diff`, …) are unchanged.
+`n_slope=` will be removed in v1.0.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

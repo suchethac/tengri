@@ -171,9 +171,9 @@ than a component:
 from tengri.components.dust.attenuation import register_dust_law
 
 @register_dust_law("my_powerlaw")
-def my_powerlaw_dust(wavelength, n_slope=-0.7, **kwargs):
+def my_powerlaw_dust(wavelength, dust_slope=-0.7, **kwargs):
     """Power-law attenuation curve, normalized at 5500 Å."""
-    return (wavelength / 5500.0) ** n_slope
+    return (wavelength / 5500.0) ** dust_slope
 ```
 
 Import it before `SEDModel.build()`, then select it as a **law**, not a type:

@@ -79,6 +79,7 @@ def test_mass_weighted_age_gradient_is_finite_in_float32(degenerate):
         w = w if degenerate else w.at[:].set(jnp.linspace(0.1, 1.0, 8))
         g = jax.grad(lambda ww: jnp.sum(compute_mass_weighted_age(ww, ages)))(w)
         assert np.asarray(g).dtype == np.float32
+        # grad-assert: finite-only — zero weights here; a zero age gradient is correct
         assert np.all(np.isfinite(np.asarray(g))), (
             f"mass-weighted-age gradient non-finite in float32 (degenerate={degenerate})"
         )
@@ -93,6 +94,7 @@ def test_mean_flux_in_band_gradient_is_finite_in_float32(empty_band):
         # An empty band is the state whose denominator the floor guards.
         lo, hi = (1.0e9, 2.0e9) if empty_band else (3000.0, 4000.0)
         g = jax.grad(lambda s: jnp.sum(_mean_flux_in_band(s, wave, lo, hi)))(sed)
+        # grad-assert: finite-only — empty band here; a zero gradient is correct
         assert np.all(np.isfinite(np.asarray(g))), (
             f"_mean_flux_in_band gradient non-finite in float32 (empty_band={empty_band})"
         )
@@ -109,6 +111,10 @@ def test_break_indices_gradients_are_finite_in_float32(flat):
             assert np.all(np.isfinite(np.asarray(g))), (
                 f"{fn.__name__} gradient non-finite in float32 (flat={flat})"
             )
+            assert np.any(np.asarray(g) != 0.0), (
+                "`np.asarray(g)` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
 
 @pytest.mark.parametrize("flat", [False, True])
@@ -119,6 +125,7 @@ def test_uv_slope_beta_gradient_is_finite_in_float32(flat):
     with jax.enable_x64(False):
         sed, wave = _sed_and_wave(flat=flat)
         g = jax.grad(lambda s: jnp.sum(jnp.nan_to_num(compute_uv_slope_beta(s, wave))))(sed)
+        # grad-assert: finite-only — zeroed window here; a zero slope gradient is correct
         assert np.all(np.isfinite(np.asarray(g))), (
             f"uv_slope_beta gradient non-finite in float32 (flat={flat})"
         )

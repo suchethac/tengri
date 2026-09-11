@@ -69,14 +69,14 @@ class TestAttenuationParameterSensitivity:
         assert max_diff > 0.1, f"dust_Rv is IGNORED — max change is only {max_diff:.4f}"
 
     def test_power_law_slope_not_ignored(self):
-        """Verify n_slope actually changes the power law."""
+        """Verify dust_slope actually changes the power law."""
         from tengri.components.dust.attenuation import power_law
 
         wave = jnp.geomspace(1000.0, 20000.0, 200)
-        k03 = power_law(wave, n_slope=-0.3)
-        k13 = power_law(wave, n_slope=-1.3)
+        k03 = power_law(wave, dust_slope=-0.3)
+        k13 = power_law(wave, dust_slope=-1.3)
         max_diff = float(jnp.max(jnp.abs(k03 - k13)))
-        assert max_diff > 0.3, f"n_slope is IGNORED — max change is only {max_diff:.4f}"
+        assert max_diff > 0.3, f"dust_slope is IGNORED — max change is only {max_diff:.4f}"
 
     def test_li08_all_four_params_matter(self):
         """Li08 has 4 coefficients — ALL must affect the output."""

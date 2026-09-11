@@ -369,7 +369,9 @@ class TestFullNameSpelling:
             )
 
     def test_full_name_of_a_foreign_attenuation_parameter_is_rejected(self):
-        with pytest.raises(ParameterError, match="'dust_Rv'"):
+        # Full spellings normalize to short stem before validation, so message
+        # names 'Rv'.
+        with pytest.raises(ParameterError, match="'Rv'"):
             build_groups(
                 dust_attenuation={
                     "type": "two_component",

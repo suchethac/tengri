@@ -492,6 +492,14 @@ def test_window_lut_survives_joint_then_standalone_trace(real_ssp_only):
     gi = jax.jit(jax.grad(_idx))(fp)
     assert all(np.all(np.isfinite(np.asarray(v))) for v in gl.values())
     assert all(np.all(np.isfinite(np.asarray(v))) for v in gi.values())
+    assert any(np.any(np.asarray(v) != 0.0) for v in gl.values()), (
+        "the standalone line gradient is identically zero — finite is not enough, a "
+        "detached window LUT is as unusable as a NaN one (#2100)"
+    )
+    assert any(np.any(np.asarray(v) != 0.0) for v in gi.values()), (
+        "the standalone index gradient is identically zero — finite is not enough, a "
+        "detached window LUT is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_predict_spectral_indices_fast_fills_slope_from_exact(real_ssp_only):

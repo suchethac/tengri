@@ -24,6 +24,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import dtypes as jax_dtypes
 
+from tengri._cache_keys import KeyPolicy, baked, content
+
 
 def canonical_dsps_kwargs(**kwargs):
     """Cast every float operand of a DSPS kernel call to one working dtype.
@@ -182,6 +184,21 @@ class SSPData(NamedTuple):
     # signal. Metadata only: never a JIT leaf.
     nebular: str = "unknown"
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this SSPData instance.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from all nine fields of the NamedTuple.
+
+        Notes
+        -----
+        All fields are keyed by content since they define the SSP library
+        identity (see _SSP_CACHE_KEY_POLICY).
+        """
+        return ("SSPData", tuple((name, baked(getattr(self, name))) for name in self._fields))
+
 
 def _sspdata_flatten(s):
     # ``imf``/``source``/``nebular`` are metadata, not JIT leaves: keep
@@ -203,6 +220,19 @@ def _sspdata_unflatten(aux, children):
 
 
 jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
+
+
+_SSP_CACHE_KEY_POLICY: KeyPolicy = {
+    "ssp_wave": content("wavelength grid defines the flux resolution"),
+    "ssp_flux": content("flux templates define the stellar populations"),
+    "ssp_lg_age_gyr": content("age grid defines the SFH discretization"),
+    "ssp_lgmet": content("metallicity grid defines the Z discretization"),
+    "ssp_mass_remaining": content("stellar mass fractions define mass normalization"),
+    "ssp_alpha_fe": content("alpha enhancement grid defines the stellar templates"),
+    "imf": content("initial mass function affects stellar population synthesis"),
+    "source": content("source/library identity affects stellar templates"),
+    "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
+}
 
 
 #: Content digests keyed by ``id(ssp_flux)``, each entry validated by a

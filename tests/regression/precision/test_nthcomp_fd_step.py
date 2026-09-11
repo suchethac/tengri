@@ -71,6 +71,10 @@ def test_rule_tangent_matches_a_converged_central_difference(gamma):
     reference = _central(gamma)
 
     assert reference != 0.0, f"setup: central difference is zero at gamma={gamma}"
+    assert np.all(np.isfinite(reference)), (
+        "`reference` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
     rel = abs(float(tangent) - reference) / abs(reference)
     assert rel < 0.05, (
         f"gamma={gamma}: rule tangent {float(tangent):.5e} vs converged central "
@@ -112,6 +116,10 @@ def test_the_old_step_really_was_in_the_cancellation_floor(gamma):
     base = _total(gamma)
     reference = _central(gamma)
     assert reference != 0.0, f"setup: central difference is zero at gamma={gamma}"
+    assert np.all(np.isfinite(reference)), (
+        "`reference` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
 
     ulp = float(np.spacing(np.float32(float(base))))
     expected_change = abs(reference) * h

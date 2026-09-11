@@ -321,7 +321,13 @@ class TestGrammarProvenanceUnchanged:
         """The grammar-only attribute must stay absent on a flat spec: several
         consumers (translate.py's ``legacy_flat_spec`` gate, summary()'s
         Source-column toggle) key on its mere presence, not its content."""
-        spec = Parameters(mean_sfh_type="dpl", redshift=Fixed(0.1), dust_bump_strength=Fixed(2.0))
+        spec = Parameters(
+            mean_sfh_type="dpl",
+            redshift=Fixed(0.1),
+            dust_model="two_component",
+            dust_law_bc="kriek_conroy",
+            dust_bump_strength=Fixed(2.0),
+        )
         assert not hasattr(spec, "_group_provenance")
         assert spec._flat_provenance.get("dust_bump_strength") == "user_fixed"
 

@@ -267,4 +267,8 @@ def test_jit_and_grad_survive_the_rescale():
     # Flux no longer depends on the width, so this gradient is now ~0 by design.
     g = float(jax.grad(total)(100.0))
     assert np.isfinite(g)
+    assert np.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert abs(g) / _LUMS.sum() < 1e-9

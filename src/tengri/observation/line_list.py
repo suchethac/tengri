@@ -29,6 +29,8 @@ from collections.abc import Sequence
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._cache_keys import KeyPolicy, content, derive_key
+
 # ── Doublet ratio constants (primary / secondary) ─────────────────
 # key: (primary_name, secondary_name), value: flux ratio primary/secondary
 
@@ -137,6 +139,20 @@ class DoubletConstraint:
     secondary_idx: int
     ratio: float
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this doublet constraint.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from primary/secondary indices and flux ratio.
+
+        Notes
+        -----
+        All fields are included by content as they define the amplitude relationship.
+        """
+        return derive_key(self, _DOUBLET_CONSTRAINT_CACHE_KEY_POLICY)
+
 
 @dataclasses.dataclass(frozen=True)
 class LineList:
@@ -237,6 +253,21 @@ class LineList:
     is_broad_candidate: tuple[bool, ...]
     is_strong: tuple[bool, ...]
     plot_group: tuple[str, ...]
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this line catalog.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from all catalog fields.
+
+        Notes
+        -----
+        All fields are included by content as they define the catalog structure
+        and amplitude relationships.
+        """
+        return derive_key(self, _LINE_LIST_CACHE_KEY_POLICY)
 
     # ── Properties ────────────────────────────────────────────────
 
@@ -750,6 +781,24 @@ class LineList:
             is_strong=tuple(t[5] for t in lines),
             plot_group=tuple(t[6] for t in lines),
         )
+
+
+_DOUBLET_CONSTRAINT_CACHE_KEY_POLICY: KeyPolicy = {
+    "primary_idx": content("primary line index determines the constraint"),
+    "secondary_idx": content("secondary line index determines the constraint"),
+    "ratio": content("flux ratio defines the amplitude relationship"),
+}
+
+_LINE_LIST_CACHE_KEY_POLICY: KeyPolicy = {
+    "names": content("line names identify the catalog"),
+    "wavelengths": content("wavelengths determine line identity and ordering"),
+    "species": content("species codes identify the atomic species"),
+    "doublets": content("doublet constraints define amplitude relationships"),
+    "is_balmer": content("Balmer flags determine line classification"),
+    "is_broad_candidate": content("broad candidate flags determine line classification"),
+    "is_strong": content("strong detection flags determine line classification"),
+    "plot_group": content("plot group labels determine visualization grouping"),
+}
 
 
 # ── Private helpers for CLOUDY parsing ────────────────────────────

@@ -12,6 +12,14 @@ import dataclasses
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import (
+    KeyPolicy,
+    array_key,
+    content,
+    derive_key,
+    exclude,
+    shape,
+)
 from tengri.parameters.priors import Distribution, Gaussian
 
 
@@ -285,6 +293,35 @@ class Spectroscopy:
 
         """
         return self._cov_inv
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this spectroscopy configuration.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from configuration attributes.
+
+        Notes
+        -----
+        Covariance matrix shape is keyed by content only (grid size fixes the likelihood).
+        Covariance values move the key since two same-shaped matrices with different
+        values must not share a compiled kernel.
+        """
+        resolution_matrix_key = None
+        if self.resolution_matrix is not None:
+            # BandedMatrix has offsets and data; the spectrum projector closes over
+            # both, so two matrices with the same shape but different values must not
+            # share a kernel. Key the offsets and the data array by its full content.
+            offsets = self.resolution_matrix.offsets
+            data = self.resolution_matrix.data
+            resolution_matrix_key = (array_key(offsets), array_key(data))
+
+        tail = ()
+        if resolution_matrix_key is not None:
+            tail = (("resolution_matrix", resolution_matrix_key),)
+
+        return derive_key(self, _SPECTROSCOPY_CACHE_KEY_POLICY, tail=tail)
 
     @property
     def has_lsf(self) -> bool:
@@ -796,6 +833,31 @@ class Spectroscopy:
         if self.has_covariance:
             parts.append("cov_matrix")
         return ", ".join(parts)
+
+
+_SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {
+    "wave_obs": content("wavelength grid is baked into the resampling program"),
+    "resolution": content("spectral resolution affects LSF convolution"),
+    "sigma_lib_kms": content("SSP library dispersion affects LSF deconvolution"),
+    "lsf_n_bins": content("number of bins in LSF approximation affects accuracy"),
+    "calibration_order": content("calibration polynomial order adds free parameters"),
+    "resample": content("resample mode (point vs conserving) changes the integral"),
+    "eline_prior_sigma": content("emission line prior width affects marginalization"),
+    "eline_mode": content("emission line fitting mode changes the likelihood"),
+    "eline_catalog": content("emission line catalog determines which lines to fit"),
+    "eline_prior_type": content(
+        "emission line prior type (flat vs cloudy) affects marginalization"
+    ),
+    "eline_prior_width_dex": content("emission line prior width in dex affects marginalization"),
+    "eline_fix_doublets": content("doublet ratio constraints affect the likelihood"),
+    "eline_broad": content("broad component option affects line fitting model"),
+    "eline_broad_fwhm_min_kms": content("minimum broad FWHM affects the fit model"),
+    "covariance": shape(
+        "per-galaxy data: only its shape fixes the program; values are a runtime input"
+    ),
+    "resolution_matrix": exclude("keyed through the tail with full data content"),
+    "_cov_inv": exclude("precomputed inverse of covariance, derived in __post_init__"),
+}
 
 
 # ── Wavelength grid builder ──────────────────────────────────────

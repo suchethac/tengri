@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
+  ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
+  ``@renamed_kwarg`` wraps the function before ``@register_dust_law`` stores it
+  in the registry; the registry callable and ``list_laws()`` result now accept
+  the alias with a DeprecationWarning instead of raising TypeError. Per-dict
+  strictness is unchanged: ``select_law_kwargs`` and ``reject_unread_law_kwargs``
+  still reject ``n_slope`` (only the callable wrapper accepts it) (#2257).
+
+- The flat `Parameters(...)` form refuses a dust shape parameter or a
+  `dust_law_overrides` entry that the resolved attenuation law never reads, and
+  an override screen other than `bc`/`diff`/`neb`, through the same validator
+  the `SEDModel.build` grammar uses; before, `Parameters(dust_law_bc="calzetti",
+  dust_Rv=Fixed(4.0))` built and `dust_Rv` silently never reached the model.
+  Registry defaults on omission are unchanged. Inside `dust_attenuation={...}`
+  the full registry spellings (`dust_tau_bc`, `dust_law_bc`) are normalized to
+  the grammar stems before any check runs, so `tau_bc` plus `dust_tau_diff` no
+  longer trips a false completeness error and two spellings of one key raise;
+  conversely a lone `dust_tau_diff` in a two-component group is now refused
+  exactly like a lone `tau_diff` (the full spelling used to bypass the check),
+  so pin or free `tau_bc` explicitly next to `**narayanan_tau_prior(z)`.
+  `with_params()` and `merge_observation_params()` carry a fresh provenance map,
+  so a shape parameter merged into a flat spec is live. The twelve per-screen
+  grammar keys derive from one constant (`tengri.parameters._dust_keys`), and
+  `check_dust_law_kwargs.py` checks law keyword spelling at every call site in
+  `src/`, `tests/`, `bench/`, `examples/` and `analysis/`. Test, bench and analysis call sites that pinned `dust_slope` beside a law that never reads it drop the dead kwarg (`power_law` keeps its registry default of -0.7), and one engine-cache test that varied `dust_Rv` now does so under `cardelli`.
+
 - LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
 
 - The no-state emission-line dust screen (`SEDModel._attenuate_line_catalog`,
@@ -112,10 +138,116 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   HLO for every fit. Note the assertion hole that hid this: the seam checks
   asserted gradients were non-zero, and `nan != 0.0` is `True` — the mirror of
   #2100's hole, where `isfinite` admitted zero. This closes the float32
-  symptom only; the separate float64 non-finiteness on six `spec/*/auto_*`
-  seams is not established as the same defect and #2178 stays open for it
+  symptom, and the `spec/*/auto_*` symptom with it — see the next entry
   (#2178, #2100).
 
+- The audit that came with `tools/check_gradient_assertions.py`: **279 test
+  sites** across 140 files asserted half the finite-AND-non-zero rule and now
+  assert both. 248 were the #2100 shape (finite, never non-zero) and 31 the
+  #2178 shape (non-zero, never finite). No assertion was weakened to make the
+  guard pass. 19 of the 279 carry the documented escape hatch
+  (`# grad-assert: finite-only — <reason>`): they evaluate at a point where the
+  derivative is zero for a reason. Some construct a degenerate input on purpose
+  — a zeroed window, an empty band, zero ionizing flux, an exact `log10_add`
+  cancellation, the Hessian-vector product of a linear scaling, a kernel
+  evaluated outside its band. Others sit on a genuine stationary point or an
+  inert direction: a prior's log-density differentiated at its own mode, a
+  Student-t NLL differentiated at `sigma`'s own maximum-likelihood point, a GP
+  field's PSD *correlation time* at an identically zero field (the timescale
+  only colors the field, so with no field there is nothing to color). Either way
+  zero is the correct answer there and only the finite half is a claim — and
+  where the surrounding test's real claim was that a gradient *flows*, that
+  claim is now stated a step away from the zero, where it can actually fail.
+
+- Two further tests turned out to be measuring nothing, both found by the
+  non-zero half of the rule and neither a gradient defect in `src/`:
+  `test_forward_model_end_to_end_jit` took its model from a fixture that fixes
+  *every* parameter, so `params` was `{}` — `all(... for g in grads.values())`
+  is vacuously True over an empty dict, and the test promised "finite
+  gradients" in its own docstring while taking none. It now builds a model with
+  two free dust optical depths and asserts the precondition that a free
+  parameter exists. `test_stochastic_gradients_finite` hand-rolled a loss that
+  attached only `psd_xi`, but `StellarSEDComponent` reads `sfh_field_xi` —
+  the exact trap `inference/loss_functions.py` attaches both keys to avoid, and
+  says so in a comment. The latent field never reached the model: `psd_xi`'s own
+  gradient summed to exactly 0.0 and `sfh_field_psd_sigma`'s was bit-identical
+  for a zero field and a random one. A finite-only check cannot see that, because
+  an identically zero array is finite. (Counts are what the guard reports when run over the upstream
+  tree at the merge base: 279 across 140 files at `6cc1a8b25`, against 277
+  across 139 at the previous merge base `850be10bc` — a delta of exactly the
+  two sites `main` added since, both in `test_float32_scale_seam_sweep.py`,
+  where the swept *forward* was pinned finite but never non-zero. An earlier
+  revision of this entry said 276/137, which was not one of those
+  measurements.)
+  Two of the repaired sites are the historical bugs themselves:
+  `test_inference_grad_float32.py` (still finite-only on `main`, which is how
+  #2100 stayed invisible) and the `!= 0.0` seam checks in
+  `test_float32_fitting_path_seams.py`.
+
+  The count is **disjoint from #2171's sweep**: re-measured against `main`
+  *after* that landed, this guard still reports the same 272 sites it reported
+  before, because #2171 repaired a different defect (an assertion wrapped in a
+  guard derived from its own subject, which declines to run) while this one
+  repairs a predicate that runs and admits the undecided state. Complementary,
+  not duplicative.
+
+- `test_met_table_grad_wrt_lgmet` was **vacuous**, and the guard found it. It
+  differentiated the total CSP mass with respect to `lgmet_table` and asserted
+  only `isfinite`. The metallicity table chooses which SSP template each age bin
+  draws from; it does not move mass between bins, so the total is *exactly*
+  invariant and the gradient is identically zero — as is the finite-difference
+  reference it was compared against, so the check compared 0 with 0. Measured:
+  `total_mass` is `7942282347.242821693420` at `lgmet`, at `lgmet+0.5`, at
+  `lgmet+2.0` and at `lgmet-2.0`, the same digits to the last one. The
+  conservation is now the claim, stated positively, and a second assertion
+  differentiates the *metallicity weights*, which the table does steer
+  (measured `max|grad| = 25.7`, all 20 entries non-zero), so the test measures a
+  gradient rather than a conservation law twice.
+
+- `TestCmbContrastFactorBounds::test_gradient_safety_float64` was **vacuous**,
+  and the guard found it. It differentiated `cmb_contrast_factor` at
+  `T_eff = 25 K, z = 10` and asserted only `isfinite`. The z = 10 CMB floor is
+  `2.725 x 11 = 29.98 K`, so at 25 K the factor is clamped to exactly zero at
+  all 601 wavelengths and the gradient is `-0.0` — finite, and measuring
+  nothing. Measured 2026-09-06: `sum = 0.0, grad = -0.0` there, against
+  `grad = 2.6` at `T_eff = 50 K` on the same grid. The sub-CMB point is now
+  pinned *as* zero (which is the correct physics) and a live point above the
+  floor is pinned finite AND non-zero, so the test measures a gradient again.
+
+- The `optimization_barrier` that PR #2194 put on `_mass_scale_lnu`'s primal
+  costs neither memory nor time, measured rather than assumed. On the
+  `spec/lut` seam at a realistic `(n_age, n_wave) = (93, 4096)`, four
+  interleaved before/after repetitions on an otherwise idle box (1-minute load
+  average stamped per run, 0.46 to 3.6): XLA's own compiled-memory analysis is
+  **byte-identical** in both arms — `temp` 1.558 MB (forward) and 4.701 MB
+  (forward+gradient) in float32, 3.115 MB and 9.396 MB in float64, with
+  `output`, `argument` and `alias` zero throughout — and peak process RSS is
+  2481.5 MB without the barrier against 2495.2 MB with it, a 0.55 % difference
+  dominated by the SSP load and the model build rather than the kernel. Forward
+  wall time is 1.040 ms against 1.034 ms; forward+gradient is 3.083 ms against
+  3.095 ms, a 0.4 % difference inside a per-arm spread of 22 %. The premise that
+  the barrier forces an extra `(n_age, n_wave)` materialization does **not**
+  hold: the einsum already produces that array as its own output and the barrier
+  sits on a scalar multiply of it, which XLA does in place. No approach is
+  switched, and the docstring's note that folding `L_sun` into the einsum
+  operand "does not survive" the SSP-as-`Parameter` path is left standing
+  un-relitigated — a standalone reproducer at the seam's shape does not
+  reproduce the defect at all, so it cannot adjudicate that note either way
+  (#2178, #2194).
+
+- **Symptom 2 of #2178 was the same defect, not a second one.** The float64
+  spectroscopy forward was reported non-finite on six `spec/*/auto_*` seams (CI
+  run 33958554553), and `_skip_if_lut_forward_is_broken` (#2143) was left in
+  place until that could be answered. Reproduced under jaxlib 0.11.1: the
+  float64 arm builds, fits and differentiates cleanly, and the `ValueError`
+  from `_check_channel_scales` — carrying that run's own
+  `max |data| = 1.618e-27` and `2.751e-29`, to the digit — comes from the
+  **float32** arm the same module-scoped fixture builds next. Six errors is two
+  seams times three tests. One defect at one threshold, attributed to the wrong
+  arm. With the forward grouping stated in the graph the guard fires on **no**
+  seam, so it is deleted rather than widened, and
+  `tests/regression/precision/test_float32_fitting_path_seams.py` runs
+  41 passed / 0 skipped / 6 xfailed on jaxlib 0.11.1 (#2178, #2143).
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
@@ -198,6 +330,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `Observation` and its nested data classes, `Parameters` and `SSPData` expose `cache_key()`, each derived from a written policy ledger over every attribute (`tengri._cache_keys`), so a later structural signature can delegate instead of reaching into their fields (#2163).
 - `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
   SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
   `free_prior` and are dropped from `tools/check_param_free_priors.py`'s
@@ -221,6 +354,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   are dominated by a rank-`k` correction to a diagonal on every fixture and every
   storage budget tested, so the feature was declined rather than built. Numbers
   and the reasoning in `bench/reports/2026-09-06_block_metric_structure.md`.
+
+- `tools/check_gradient_assertions.py`, wired into the `lint` job — a guard on
+  the "undecided treated as good" assertion class. A gradient has three states,
+  not two, and a predicate written against the *bad* state is satisfied for free
+  by the *undecided* one. Both halves have already shipped: #2100 pinned the
+  float32 seam gradients `isfinite`, and a gradient of exactly **zero is
+  finite**, so the identically-zero `sum(predict_photometry)` gradient passed on
+  CPU and GPU alike and the coverage meant to catch it structurally could not.
+  #2178 is the mirror — the seam checks pinned the gradient `!= 0.0`, `nan !=
+  0.0` is `True`, so a NaN satisfied a non-zero assertion, XPASSed a strict
+  xfail as a repaired underflow, and shipped a float32 NaN on the default
+  spectroscopy path. The rule is the conjunction: **finite AND non-zero,
+  asserted together**, never either alone. Scope is gradients everywhere under
+  `tests/`, plus every array under test in `tests/regression/precision/`, where
+  a forward that has collapsed to zero fails the float32 question exactly as a
+  NaN does. AST-based, with taint tracked through assignment so
+  `leaves = [np.asarray(v) for v in tree_leaves(g)]` is still `g` — deliberately
+  not a regex over source text, which 5d08a293e removed from this repository on
+  purpose (#2108) and which could not tell `x > 0` on a gradient from
+  `rel_err < 1e-5` on a residual. A lower bound (`max(abs(g)) > 0`) settles both
+  halves on its own, because NaN fails every ordered comparison; a value pinned
+  *as* zero or *as* NaN is the subject rather than the accident and is not asked
+  for a partner. The narrow escape hatch is
+  `# grad-assert: finite-only — <reason>` / `# grad-assert: nonzero-only —
+  <reason>`, and a marker carrying no reason is itself a CI failure. The guard
+  is verified against history, not intuition:
+  `tests/fixtures/assertion_holes/historical.py` transcribes both pre-fix
+  assertions verbatim and `tests/contract/test_gradient_assertion_guard.py`
+  pins that the guard fires on each (#2100, #2178).
+- `tools/check_float32_scale_seams.py` — enumerates the float32 **scale seams**
+  themselves rather than sampling a representative model. A scale seam is a site
+  where a large physical constant or unit conversion multiplies a
+  parameter-derived quantity; four bugs have now come out of that one shape
+  (#1388, #1439, #2100, #2178) and each was fixed where it was found. The check
+  parses `src/tengri` (AST, and evaluated constants — not a grep over source
+  text, per #2108), and for each seam asks how large the product can get inside
+  the range the parameter **declares in the registry**, never a range copied
+  from a grid axis (45741f4cd). 52 seams; 46 of them exceed float32's range
+  within their own declared prior, in 4 families — `L_sun * 10**agn_log_lbol`
+  (38 sites), `L_sun * 10**log_total_mass` (5), `M_sun * 10**agn_log_mbh` (2)
+  and the Lehmer LMXB mass term (1). Three families carry a recorded grouping
+  that keeps them safe; the fourth is filed as an open defect (#2210), because
+  recording a live defect as "handled" is worse than not recording it. Anything
+  new is an error, and a registration whose seam is gone is also an error, so
+  the inventory cannot rot. Runs in the `smoke` job, beside
+  `check_float32_representable_constants.py`, which is where the checks that
+  need tengri installed live — `lint` installs only ruff.
+
+- `tests/regression/precision/test_float32_scale_seam_sweep.py` — sweeps each
+  enumerated seam family across its parameter's whole declared prior in float32
+  and requires the gradient to be finite **and** non-zero at every point (`nan
+  != 0.0` is `True`, and zero is finite, so neither half is coverage alone). The
+  inventory is read from the tool rather than written down twice: the module
+  fails if the enumeration grows a family it does not sweep, which is what makes
+  the recorded reason a measurement instead of the only evidence. The sweep
+  refuted the first draft's reading of the black-hole-mass family as safe
+  (#2210): `M_sun * 10**agn_log_mbh` is 1.99e39 at the *bottom* of its declared
+  prior, and the float32 forward of a `kubota_done` disc is `nan` there under
+  jaxlib 0.11.1 while finite under 0.11.0.
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
@@ -348,6 +540,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- `SEDModel.compile_signature()` is derived from a policy ledger over every model attribute (`tengri.forward._signature_policy`) with the nested `cache_key()` of the observation, parameters and SSP grid, memoized on the instance and invalidated by the two structural mutators; four structural attributes the hand-written list never keyed (`lgmet_scatter`, the GP field kernel, `lsf_n_bins`, `igm_patchy`) now are, and an attribute nobody classifies fails a contract test instead of shipping a wrong number (#2163).
+- The on-disk WavePrecomp z-table and IGM subband caches are keyed by every field of a frozen request dataclass (`ZTableRequest`, `SubbandRequest`) instead of a hand-written field list, with one version constant per cache (both bumped, so existing tables recompute once) and the cosmology the integrand uses folded in as the #2145 tripwire; the ionizing-spectrum table gains a version constant (#2163).
 - Dust attenuation laws are explicit and required (#1989). A dust attenuation group
   spells its law as either `law` (one law, both screens) or, on `two_component` only,
   both `law_bc` and `law_diff` together — never one half of the pair, and never
@@ -478,6 +672,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   the render at 7 galaxies).
 
 ### Deprecated
+
+- Attenuation-law keyword `n_slope` is renamed `dust_slope` on `power_law` and
+  `conroy2010`, so the law keyword equals the registry name (`dust_slope`) and the
+  grammar stem (`slope`) for every shape parameter. `n_slope=` still works on the
+  public law functions with a DeprecationWarning; the registry callables, the
+  law-kwarg resolver and the per-screen override dicts (`dust_law_overrides`,
+  `bc_law_overrides`, `neb_law_overrides`) use `dust_slope` only.
 
 - `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
   renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to

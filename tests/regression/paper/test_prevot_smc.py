@@ -124,6 +124,10 @@ class TestPrevotSMCFunction:
         grad_fd = fd_grad(f_scalar, 5500.0, eps=1.0)
         # Check that gradients are finite and close to FD estimate
         assert np.isfinite(grad_jax), "Gradient should be finite"
+        assert np.any(grad_jax != 0.0), (
+            "`grad_jax` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(grad_jax, grad_fd, rtol=0.05)
 
     def test_vectorization(self):

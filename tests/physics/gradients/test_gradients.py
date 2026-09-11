@@ -159,7 +159,15 @@ class TestGradientCorrectness:
                 )
             )(1.0)
             assert jnp.isfinite(g_alpha), f"dpl ∂/∂alpha non-finite at age={age:.3e}"
+            assert jnp.any(g_alpha != 0.0), (
+                "`g_alpha` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
             assert jnp.isfinite(g_beta), f"dpl ∂/∂beta non-finite at age={age:.3e}"
+            assert jnp.any(g_beta != 0.0), (
+                "`g_beta` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
     def test_2_dust_attenuation_gradient(self) -> None:
         """Test 2: Dust attenuation gradient wrt tau_bc (birth cloud optical depth).
@@ -355,7 +363,7 @@ class TestGradientThroughPipeline:
                 tau_v2,
                 law_bc="power_law",
                 law_diff="power_law",
-                n_slope=dust_n,
+                dust_slope=dust_n,
             )
             # Simulate CSP: sum over ages, then sum over wavelengths
             return jnp.sum(atten)
@@ -365,7 +373,7 @@ class TestGradientThroughPipeline:
         # Test tau_v1 gradient
         def pipeline_tau_v1(tau_v1):
             atten = two_component_dust(
-                wave, ages, tau_v1, 0.3, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+                wave, ages, tau_v1, 0.3, law_bc="power_law", law_diff="power_law", dust_slope=-0.7
             )
             return jnp.sum(atten)
 
@@ -383,7 +391,7 @@ class TestGradientThroughPipeline:
         # Test tau_v2 gradient
         def pipeline_tau_v2(tau_v2):
             atten = two_component_dust(
-                wave, ages, 0.5, tau_v2, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+                wave, ages, 0.5, tau_v2, law_bc="power_law", law_diff="power_law", dust_slope=-0.7
             )
             return jnp.sum(atten)
 
@@ -401,7 +409,7 @@ class TestGradientThroughPipeline:
         # Test dust_n gradient
         def pipeline_dust_n(dust_n):
             atten = two_component_dust(
-                wave, ages, 0.5, 0.3, law_bc="power_law", law_diff="power_law", n_slope=dust_n
+                wave, ages, 0.5, 0.3, law_bc="power_law", law_diff="power_law", dust_slope=dust_n
             )
             return jnp.sum(atten)
 

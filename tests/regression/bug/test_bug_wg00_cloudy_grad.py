@@ -40,6 +40,10 @@ class TestWG00CloudyGradient:
             err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
         )
         assert g_jax != 0.0, "gradient is zero near tau_v=0 (disconnected)"
+        assert np.all(np.isfinite(g_jax)), (
+            "`g_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     def test_gradient_finite_at_large_tau(self):
         """Gradient at large tau agrees with FD (wg00_cloudy)."""

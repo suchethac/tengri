@@ -7,7 +7,7 @@ Bug classes covered:
 ``attenuate_emission``, this module's dust-attenuation helper for emission
 components, was removed in #2223 (no public callers; the no-state line-screen
 fallback now dispatches to the dust component's own
-``attenuate_line_catalog``, so its old ``{n_slope, dust_bump_strength}`` kwarg
+``attenuate_line_catalog``, so its old ``{dust_slope, dust_bump_strength}`` kwarg
 dict -- which could not thread ``dust_delta``/``dust_Rv``/``redshift`` -- is
 gone). The classes this file used to run through that function covered:
 

@@ -100,6 +100,10 @@ class TestLinearPreconditioner:
         g = jax.jit(jax.grad(wrapped))(jnp.ones(6), 0.0)
         assert g.shape == (6,)
         assert bool(jnp.all(jnp.isfinite(g)))
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_identity_metric_is_a_no_op(self):
         """An already-white posterior must not be perturbed."""
@@ -318,6 +322,10 @@ class TestGradients:
         for k in keys:
             g = jax.grad(wrapped)(jax.random.normal(k, (6,)) * radius, 0.0)
             assert bool(jnp.all(jnp.isfinite(g))), f"non-finite gradient at radius {radius}"
+            assert jnp.any(g != 0.0), (
+                "`g` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
     def test_gradient_descent_converges_where_the_raw_coordinates_stall(self):
         """ "Can we at least optimize?" — yes, and that is exactly what whitening buys.

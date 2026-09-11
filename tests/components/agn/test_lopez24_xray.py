@@ -170,6 +170,10 @@ class TestLopez24Corona:
 
         grad = assert_grad_matches_fd(loss, 0.3)
         assert jnp.isfinite(grad)
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         # L_X = νLν / 10**α_IRX decreases with α_IRX -> negative gradient.
         assert grad < 0.0
 

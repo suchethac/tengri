@@ -104,6 +104,10 @@ class TestConstantThenExponentialSFH:
 
         grad_val = assert_grad_matches_fd(scalar_fn, 10.0)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 # ── Registry tests ────────────────────────────────────────────────

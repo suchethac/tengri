@@ -6,7 +6,7 @@ is reorganized toward the structure described in
 ``docs/dev/api_migration_v0.x.md``. Every entry here MUST have a matching
 row in that migration document.
 
-The three patterns provided:
+The four patterns provided:
 
 - :func:`deprecated_alias`: wraps a callable so calling it emits one
   ``DeprecationWarning`` and then forwards to the new implementation.
@@ -14,10 +14,13 @@ The three patterns provided:
   ``__getattr__`` (PEP 562). Use this when the old name is a class or
   constant rather than a function.
 - :func:`resolve_renamed_flag`: for a boolean *keyword argument* that was
-  renamed. The other two replace a whole symbol; this one lets a single
+  renamed. The first two replace a whole symbol; this one lets a single
   parameter change spelling without breaking the call.
+- :func:`renamed_kwarg`: a decorator for a non-boolean keyword argument that
+  was renamed; the old spelling is forwarded with a warning and the wrapped
+  signature reports only the new name.
 
-All three helpers are intentionally tiny; deprecation should never become
+All four helpers are intentionally tiny; deprecation should never become
 infrastructure.
 """
 
@@ -32,6 +35,7 @@ __all__ = [
     "UNSET",
     "deprecated_alias",
     "deprecated_attribute",
+    "renamed_kwarg",
     "resolve_renamed_flag",
 ]
 
@@ -222,3 +226,84 @@ def deprecated_attribute(
         stacklevel=3,
     )
     return value
+
+
+def renamed_kwarg(old: str, new: str, *, drop_version: str = "1.0") -> Callable[[F], F]:
+    """Decorator accepting a renamed keyword argument under its old name.
+
+    Wraps a function to accept *old* as a deprecated alias for *new*.
+    Both keywords cannot be passed together; if only *old* is passed,
+    it is renamed to *new* with a DeprecationWarning. The wrapped function's
+    ``inspect.signature`` reports the *new* name only (via ``functools.wraps``
+    and ``__wrapped__``).
+
+    Parameters
+    ----------
+    old : str
+        The deprecated keyword name.
+    new : str
+        The current keyword name.
+    drop_version : str, optional
+        Version in which the old keyword will be removed. Default ``"1.0"``.
+
+    Returns
+    -------
+    callable
+        A decorator that wraps a function to accept *old* with a
+        DeprecationWarning.
+
+    Raises
+    ------
+    TypeError
+        If both *old* and *new* are passed in the same call.
+
+    Notes
+    -----
+    Use as a decorator on a function after (below) the registry decorator::
+
+        @register_dust_law("power_law", ...)
+        @renamed_kwarg("n_slope", "dust_slope")
+        def power_law(wavelength, dust_slope: float = -0.7): ...
+
+    Python applies decorators bottom-up, so ``@renamed_kwarg`` wraps the
+    raw function first, then ``@register_dust_law`` stores the wrapped version
+    in the registry. This way both the module-level attribute and the registry
+    callable accept the *old* parameter name with a DeprecationWarning.
+
+    Examples
+    --------
+    >>> @renamed_kwarg("n_slope", "dust_slope")
+    ... def scaled(wavelength, dust_slope=-0.7):
+    ...     return wavelength * dust_slope
+    >>> scaled(2.0, dust_slope=-0.5)  # current name: no warning
+    -1.0
+    >>> import warnings
+    >>> with warnings.catch_warnings(record=True) as w:
+    ...     warnings.simplefilter("always")
+    ...     value = scaled(2.0, n_slope=-0.5)  # old name: forwarded with a warning
+    >>> value
+    -1.0
+    >>> issubclass(w[0].category, DeprecationWarning), "n_slope" in str(w[0].message)
+    (True, True)
+    """
+
+    def decorator(fn: F) -> F:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Check if both old and new are present
+            if old in kwargs and new in kwargs:
+                raise TypeError(f"{fn.__name__}() got both {old!r} (deprecated) and {new!r}")
+            # If only old is present, rename it and emit warning
+            if old in kwargs:
+                warnings.warn(
+                    f"`{fn.__name__}({old}=...)` is deprecated and will be removed in "
+                    f"tengri v{drop_version}; use `{new}=` instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                kwargs[new] = kwargs.pop(old)
+            return fn(*args, **kwargs)
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorator

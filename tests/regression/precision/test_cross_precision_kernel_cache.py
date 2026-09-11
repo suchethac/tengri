@@ -193,6 +193,10 @@ def test_float64_gradient_does_not_poison_a_later_float32_gradient(ssp_bare, sha
         "float64 kernel, whose wave grid is float64, which switches off every "
         "dtype-keyed float32 gate downstream (#1392)"
     )
+    assert np.any(served != 0.0), (
+        "`served` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     np.testing.assert_array_equal(
         served,
         own,

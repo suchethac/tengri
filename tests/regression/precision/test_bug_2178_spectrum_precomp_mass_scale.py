@@ -109,6 +109,13 @@ def test_setup_the_scalar_product_really_is_out_of_float32_range():
     with np.errstate(over="ignore"):
         product = m * lsun
     assert np.isfinite(m) and np.isfinite(lsun), "the operands must themselves be in range"
+    # Non-zero as well as finite: a zero operand would make the product a finite 0.0,
+    # which is the #2100 shape — the overflow precondition below would fail for the
+    # wrong reason and every assertion in this module would be vacuous.
+    assert np.any(m != 0.0) and np.any(lsun != 0.0), (
+        f"an operand is zero (total_mass={m}, L_sun={lsun}), so the product cannot "
+        f"overflow and this module tests nothing"
+    )
     assert not np.isfinite(product), (
         f"total_mass * L_sun = {product} is representable in float32, so the reassociation "
         f"#2178 is about would be harmless and every assertion below is vacuous. "
@@ -119,6 +126,10 @@ def test_setup_the_scalar_product_really_is_out_of_float32_range():
     assert np.isfinite(np.float32(reference)), (
         f"the scaled result {reference:.4e} is itself out of float32 range, so this is an "
         f"honest overflow rather than the grouping defect #2178 describes"
+    )
+    assert np.any(reference != 0.0), (
+        f"the scaled result is {reference:.4e} — a zero reference is finite and would make "
+        f"the representability claim above vacuous (#2100)"
     )
 
 

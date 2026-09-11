@@ -241,15 +241,17 @@ def test_band_factor_key_changes_with_backend(monkeypatch):
 
 
 def test_schema_version_bumps_prevent_collisions():
-    """Version bumps (schema=2→3, v1→v2) prevent old cache entries from colliding.
+    """Version constants pin the current schema so an accidental change is loud.
 
-    The schema change strings in the key ensure that a pre-fix entry (with the
-    old version) cannot collide with a post-fix entry (with the new version).
+    Each bump is deliberate and moves this pin with it: 2→3 for both caches when
+    the request dataclasses replaced the hand-written keys (#2163).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 2, (
-        "ztable version not bumped; old cache entries may collide"
+    assert pc._ZTABLE_CACHE_VERSION == 3, (
+        "ztable version moved; bump it only with a schema change and update this pin"
     )
-    assert sc._CACHE_VERSION == 2, "subband version not bumped; old cache entries may collide"
+    assert sc._CACHE_VERSION == 3, (
+        "subband version moved; bump it only with a schema change and update this pin"
+    )
 
 
 def test_cache_key_determinism():
