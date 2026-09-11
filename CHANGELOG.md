@@ -16,7 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Registry defaults on omission are unchanged. Inside `dust_attenuation={...}`
   the full registry spellings (`dust_tau_bc`, `dust_law_bc`) are normalized to
   the grammar stems before any check runs, so `tau_bc` plus `dust_tau_diff` no
-  longer trips a false completeness error and two spellings of one key raise.
+  longer trips a false completeness error and two spellings of one key raise;
+  conversely a lone `dust_tau_diff` in a two-component group is now refused
+  exactly like a lone `tau_diff` (the full spelling used to bypass the check),
+  so pin or free `tau_bc` explicitly next to `**narayanan_tau_prior(z)`.
   `with_params()` and `merge_observation_params()` carry a fresh provenance map,
   so a shape parameter merged into a flat spec is live. The twelve per-screen
   grammar keys derive from one constant (`tengri.parameters._dust_keys`), and
