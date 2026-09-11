@@ -104,6 +104,7 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -357,7 +358,7 @@ def _get_fallback_sites(tree: ast.Module, declared: set[str], prefix: str | None
         )
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scope",
@@ -367,7 +368,7 @@ def main() -> int:
     parser.add_argument(
         "--list", action="store_true", help="Print every site with its OK/FAIL verdict."
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     scope = Path(args.scope)
     if not scope.is_absolute():
