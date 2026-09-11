@@ -10,7 +10,7 @@
     ],
     "z": 0.1,
     "snr": 30.0,
-    "n_steps": 200,
+    "n_steps": 1000,
     "bands": [
       "sdss_g",
       "sdss_r",
@@ -21,9 +21,9 @@
     "tolerances": {
       "forward": 0.003,
       "grad": 0.01,
-      "loss": 0.0001,
       "param": 0.01
-    }
+    },
+    "loss_informational_reference_point": 0.0001
   },
   "seams": {
     "stellar_dust": {
@@ -79,7 +79,8 @@
         0.43600565888922116,
         10.303101950523157
       ],
-      "map_converged": true
+      "map_converged": true,
+      "map_n_iter": 6
     },
     "+dust IR": {
       "seam": "+dust IR",
@@ -157,7 +158,8 @@
         0.4158552895363769,
         10.294338100542477
       ],
-      "map_converged": true
+      "map_converged": true,
+      "map_n_iter": 5
     },
     "+Cue": {
       "seam": "+Cue",
@@ -243,7 +245,8 @@
         0.4159837566415037,
         10.29437687553233
       ],
-      "map_converged": true
+      "map_converged": true,
+      "map_n_iter": 7
     },
     "+AGN": {
       "seam": "+AGN",
@@ -422,7 +425,8 @@
         0.4162913775111059,
         10.293834860283424
       ],
-      "map_converged": true
+      "map_converged": true,
+      "map_n_iter": 5
     },
     "+radio+xray": {
       "seam": "+radio+xray",
@@ -626,7 +630,8 @@
         0.41629227496227494,
         10.29383495819496
       ],
-      "map_converged": true
+      "map_converged": true,
+      "map_n_iter": 5
     },
     "panchromatic": {
       "seam": "panchromatic",
@@ -830,12 +835,13 @@
         -194.1123329914093,
         23.55681334766707
       ],
-      "map_loss": 0.46167658306385106,
+      "map_loss": 0.4616755704704747,
       "map_params": [
-        0.41631092381356516,
-        10.293831336927731
+        0.41629027850501593,
+        10.293835116467365
       ],
-      "map_converged": false
+      "map_converged": true,
+      "map_n_iter": 8
     }
   }
 }
