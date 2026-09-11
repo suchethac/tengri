@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `met_logzsol_scatter` (the lognormal MDF width, in dex) now declares a
+  `free_prior` of `Uniform(0.02, 0.4)`, so `met={'all_params': FREE}` (delta
+  mode) and `met={'logzsol_scatter': FREE}` both work instead of refusing.
+  The interval brackets the Milky Way disk MDF widths measured by
+  Hayden et al. 2015 (sigma[Fe/H] = 0.17-0.32 dex across the disk) and the
+  registry default `Fixed(0.1)`. All ten shipped recipes' free parameter
+  sets are unchanged (#2245).
+- The star-formation ordering constraint "SF cannot stop before it starts"
+  is now enforced for the `dpl_lookback` and `trunc_exp` SFH types:
+  `sfh_*_age_gyr` (onset lookback) must exceed `sfh_*_end_gyr` (cessation
+  lookback), raising `ValueError` at build time on inversion, exactly like
+  the existing `sfh_const_start_gyr`/`sfh_const_end_gyr` pair. Previously
+  these two constraints were stated only in prose and an inverted pair
+  built without complaint (#2247, phase 1).
 - `dust_log_L_ir` (`log10(L_IR/Lsun)`): a total dust IR budget override.
   Declaring it -- `Fixed` or any free prior, via `dust_emission={'log_L_ir':
   ...}` -- replaces the energy-balance IR budget (`log_L_ir =

@@ -720,8 +720,9 @@ class TestZeroDeclarationWildcardsRaise2187:
 # cannot know whether the loaded SSP grid even carries an alpha-enhanced
 # axis), so it stays a clean no-free-prior repro. ``met={'type': 'delta'}``
 # takes over as the mixed-group repro: ``met_logzsol`` is already free by
-# registry default while ``met_alpha_fe`` and ``met_logzsol_scatter`` are
-# not, so its wildcard is a genuine partial free.
+# registry default and ``met_logzsol_scatter`` gained a declared
+# ``free_prior`` in #2245, while ``met_alpha_fe`` alone stays without one,
+# so its wildcard is still a genuine partial free (2 of 3).
 
 
 class TestExplicitPerParamFreeMustBeHonoredOrRefused2187:
@@ -741,9 +742,10 @@ class TestExplicitPerParamFreeMustBeHonoredOrRefused2187:
         """The wildcard must never trip the new per-parameter error.
 
         ``met={'type': 'delta'}`` mixes params with and without a declared
-        free prior (``met_logzsol`` is free by default; ``met_alpha_fe`` and
-        ``met_logzsol_scatter`` are not), so its wildcard is the pre-existing
-        partial-free outcome (#1474), not the new per-parameter refusal.
+        free prior (``met_logzsol`` and, since #2245, ``met_logzsol_scatter``
+        are free by default; ``met_alpha_fe`` alone is not), so its wildcard
+        is still the pre-existing partial-free outcome (#1474), not the new
+        per-parameter refusal.
         """
         with pytest.warns(WildcardPartialFreeWarning, match=r"group 'met'"):
             freed = _free(
