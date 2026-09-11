@@ -33,7 +33,7 @@ class MilkyWayForegroundScreen(ScreenComponent):
     rv   = Fixed(3.1, "MW R_V",           units="")
 
     def transmission(self, p, wave_obs):
-        k_lambda = cardelli(wave_obs, r_v=p["rv"])
+        k_lambda = cardelli(wave_obs, dust_Rv=p["rv"])
         a_v      = p["rv"] * p["ebmv"]
         return jnp.exp(-a_v * k_lambda / 1.086)
 

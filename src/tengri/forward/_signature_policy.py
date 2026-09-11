@@ -129,6 +129,12 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_dust_law_neb": content("nebular dust law name (None -> inherits bc)"),
     "_dust_law_bc_fn": content("birth-cloud dust law function, kept by qualified name"),
     "_dust_law_diff_fn": content("diffuse dust law function, kept by qualified name"),
+    "_dust_nebular_screen": content(
+        "which screen the nebular continuum and line catalog pass through (#2234); also "
+        "carried by the retained DustSEDComponentConfig"
+    ),
+    "_dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
+    "_dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
     "_dust_law_overrides": content("per-component dust law parameter overrides"),
     "_dust_lyman_cutoff_aa": content("Lyman-limit clip wavelength changes the FUV curve"),
     "_dust_lyc_absorb_all": content("young-only vs absorb-all stellar LyC changes the chain"),
@@ -138,10 +144,6 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_wg00_dust_curve": content("WG00 dust curve selector (dust_type=3 only)"),
     "_wg00_geometry": content("WG00 geometry selector (dust_type=3 only)"),
     "_wg00_structure": content("WG00 structure selector (dust_type=3 only)"),
-    "_neb_dust_mode": content("nebular dust screen mode; PR-D replaces this row, content for now"),
-    "_neb_dust_law_bc_fn": content(
-        "nebular birth-cloud dust law function; PR-D replaces this row, content for now"
-    ),
     # ── Nebular ────────────────────────────────────────────────────────
     "_nebular_backend": content("backend instance; delegates to its own cache_key() ledger"),
     "_nebular_model": content("nebular mode string, used for wavelength-extension routing"),
