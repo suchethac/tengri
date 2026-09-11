@@ -1320,7 +1320,12 @@ _LINES_PROPERTIES = {
     "civ_1549": Property(
         units="erg/s",
         group="lines",
-        doc="CIV 1549 line luminosity",
+        doc=(
+            "CIV 1549 line luminosity. On cue's legacy 128-line subset "
+            "(full_catalog=false) no catalog line falls within tolerance of "
+            "this wavelength, so the value is not a number, with a warning "
+            "(#2239)."
+        ),
         fn=_civ_1549_fn,
     ),
     "oii": Property(

@@ -1771,11 +1771,14 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
             from tengri.forward.properties import missing_property_message
 
             raise KeyError(missing_property_message(name, available=catalog))
-        from tengri.forward.properties import warn_if_lines_are_unavailable
-
-        warn_if_lines_are_unavailable(pred._model, (name,))
         entry = catalog[name]
         state = pred._ensure_state()
+        from tengri.forward.properties import warn_if_lines_are_unavailable
+
+        # State is computed first (it is needed for the return value anyway)
+        # so the per-line coverage check below can read the published
+        # ``line_waves`` instead of only the coarser "no catalog at all" one.
+        warn_if_lines_are_unavailable(pred._model, (name,), state=state)
         return entry.fn(state, pred._params)
 
     def __contains__(self, name: str) -> bool:

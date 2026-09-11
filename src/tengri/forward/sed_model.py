@@ -6168,16 +6168,6 @@ class SEDModel:
                 missing_property_message(*sorted(unknown), available=self._property_catalog)
             )
 
-        # A 'lines' property on a backend with no per-line catalog is NaN. Say
-        # so here too: pred.lines.* has warned since #361 but this surface --
-        # the documented jit/vmap one -- returned the same NaN in silence.
-        # Only when the caller asked by name; `names=None` means "everything
-        # the model has" and would warn on every default call.
-        if names is not None:
-            from tengri.forward.properties import warn_if_lines_are_unavailable
-
-            warn_if_lines_are_unavailable(self, names_to_compute)
-
         # main carries a ``_refuse_on_fast_nebular`` guard on this line (#1665).
         # It is deliberately NOT taken here, for the reason recorded in full at
         # ``predict_photometry``: #1673 fixed the cause rather than the symptom,
@@ -6195,6 +6185,19 @@ class SEDModel:
         state = self.predict_state(
             params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
         )
+
+        # A 'lines' property on a backend with no per-line catalog (or one
+        # that doesn't carry this specific headline line, #2239) is NaN. Say
+        # so here too: pred.lines.* has warned since #361 but this surface --
+        # the documented jit/vmap one -- returned the same NaN in silence.
+        # Only when the caller asked by name; `names=None` means "everything
+        # the model has" and would warn on every default call. State is
+        # computed above (needed for the values below regardless), so this
+        # can pass it through for the per-line coverage check.
+        if names is not None:
+            from tengri.forward.properties import warn_if_lines_are_unavailable
+
+            warn_if_lines_are_unavailable(self, names_to_compute, state=state)
 
         # Evaluate each property
         result = {}

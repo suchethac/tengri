@@ -22,50 +22,6 @@
    "name": "LineProperties"
   }
  ],
- "L.civ_1549": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.forward.prediction",
-   "module_short": "tengri.forward.prediction",
-   "name": "LineProperties.civ_1549"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "LineProperties.civ_1549"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "LineProperties.civ_1549"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.forward.prediction",
-   "module_short": "tengri.forward.prediction",
-   "name": "_CachedBase.civ_1549"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "_CachedBase.civ_1549"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "_CachedBase.civ_1549"
-  }
- ],
  "L.halpha": [
   {
    "is_class": false,
@@ -1952,15 +1908,6 @@
   }
  ],
  "n2_ha": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "ne3": [
   {
    "is_class": false,
    "is_explicit": false,
