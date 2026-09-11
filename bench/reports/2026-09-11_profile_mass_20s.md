@@ -291,10 +291,18 @@ suite:
 | | 12 | *not obtained: the process was SIGTERMed externally on two attempts* | | | | |
 
 **Every fit on the two non-degenerate fixtures is under 20 s, 11 of 12 at ESS
-≥ 100, R-hat 1.009-1.043.** `ctl-dpl` seed 11 misfired on this realization
-(243 divergences) after reaching ESS 125 at 300 warmup in Finding 4, which is
-the realization noise the strict bar has to absorb: a 1200-draw run on these
-posteriors is a posterior with R-hat ~1.02-1.04, not yet 1.01. Divergences of
+≥ 100, R-hat 1.009-1.043.** The one exception is a single unhealthy lane and
+should be read as such: **`ctl-dpl` seed 11 is the row with ESS 9, R-hat
+1.199 *and* 243 divergences (20 % of draws)** — the three columns name the
+same fit, while its unique fraction of 1.000 says the chain moved freely and
+was rejecting a fifth of its proposals. The same galaxy at 300 warmup steps
+(Finding 4) gave ESS 125, R-hat 1.030 and **3** divergences, so this is a bad
+150-step adaptation realization (a step size tuned in a short final window),
+not a property of the galaxy or of the method; every other `ctl-dpl` seed is
+at ESS 107-263. It is the realization noise the strict bar has to absorb: a
+1200-draw run on these posteriors is a posterior with R-hat ~1.02-1.04, not
+yet 1.01, and a warmup of 150 steps buys its 4 s at the price of an
+occasional lane like this one. Divergences of
 40-120 per 1200 draws on `ctl-jwst` are carried, not explained. The tsnorm
 family remains unmixed on `skew`/`width` whatever the mass does.
 
