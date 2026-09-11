@@ -85,18 +85,13 @@ REFUSED: dict[str, tuple[str, str]] = {
         "declared but never wired -- constructor-only argument; HbFrac axis "
         "collapsed at grid load (#2213)",
     ),
-    "shock_log_density": (
-        "inert",
-        "triweight interpolation is differentiable (gradient FD-verified; the "
-        "old 'snapped, zero gradient' claim described a pre-refactor "
-        "mechanism); blocked by #2065 -- grid ~10% populated, upper range "
-        "returns an exact-zero spectrum silently",
-    ),
     "shock_b_over_sqrt_n": (
         "inert",
-        "not snapped -- flat off-node because the triweight bandwidth is "
-        "mis-set for the 7-decade irregular axis (#2066); index_space_interp "
-        "fix precedented elsewhere in-repo",
+        "real gradient since the index-space fix but ~18% autodiff-vs-FD "
+        "smoothness mismatch on the 2D-coupled sparse grid (case (c), "
+        "docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md); a "
+        "family-aware interpolant (#2066) is the prerequisite for a default "
+        "free prior; explicit priors work today",
     ),
     # ── fixed-by-physics: real range, but not a per-object freedom ──
     "radio_alpha_ff": ("fixed-by-physics", "optically-thin bremsstrahlung is -0.1 analytically"),
@@ -118,6 +113,12 @@ REFUSED: dict[str, tuple[str, str]] = {
     # what made them declarable, which is the general remedy this ground was
     # pointing at (same shape as the "inert" scoping fix noted above).
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
+    "dust_log_L_ir": (
+        "target-dependent",
+        "absolute (log) luminosity; no galaxy-independent interval -- declaring "
+        "it at all is itself the energy-balance opt-out (#2187-series), so a "
+        "wildcard must never reach it and silently decouple the IR budget",
+    ),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
         "not-continuous",

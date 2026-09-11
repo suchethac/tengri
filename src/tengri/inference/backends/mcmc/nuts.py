@@ -25,6 +25,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _stabilize_dense_mass_step,
     _vmap_chains,
+    adaptation_method_key,
     final_window_divergence_frac,
     refuse_dead_sampling,
     refuse_dead_warmup,
@@ -622,13 +623,33 @@ def run_nuts(
     warmup_max_doublings = int(
         max_num_doublings if warmup_max_num_doublings is None else warmup_max_num_doublings
     )
-    tuning = (
-        int(n_warmup),
-        float(target_accept_rate),
-        int(max_num_doublings),
-        warmup_max_doublings,
+    # Every knob adaptation_method_key binds is a REAL parameter of run_nuts's
+    # own signature (n_warmup, n_burnin, n_samples, n_chains, target_accept_rate,
+    # max_num_doublings, warmup_max_num_doublings, dense_mass_matrix,
+    # pathfinder_warmstart, precondition, verbose); _ADAPT_IRRELEVANT drops the
+    # ones that do not change what warmup tunes. ``use_dense`` and
+    # ``problem.cache_key`` are resolved values, not raw call kwargs
+    # (dense_mass_matrix=None resolves differently depending on n_dim; the
+    # preconditioning problem folds in the metric estimate), so both stay as
+    # explicit extra entries alongside the policy-driven tuple.
+    tuning = adaptation_method_key(
+        "nuts",
+        run_nuts,
+        dict(
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            n_chains=n_chains,
+            target_accept_rate=target_accept_rate,
+            max_num_doublings=max_num_doublings,
+            warmup_max_num_doublings=warmup_max_num_doublings,
+            dense_mass_matrix=dense_mass_matrix,
+            pathfinder_warmstart=pathfinder_warmstart,
+            precondition=precondition,
+            verbose=verbose,
+        ),
     )
-    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), tuning, problem.cache_key)
+    adapt_key = ("nuts", not use_dense, problem.cache_key, tuning)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Advance the key identically on both branches. Whether a cached adaptation

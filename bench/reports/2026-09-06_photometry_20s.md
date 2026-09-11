@@ -9,6 +9,32 @@ only other row that converges on all six seeds is `05` + `nuts wcap=5+precond`
 at **2.87 M gradients and 1125 s** (56x). Eighteen of the twenty rows measured
 do not converge on all six seeds at all, and their projections are lower bounds.
 
+**Superseded on the headline, 2026-09-11.** The 32x figure below is correct for
+what it measures -- the five **diagonal**-metric configurations in this table,
+at the sampler level, with the mass amplitude **sampled**. It has since been
+overtaken by a change to the model rather than to the sampler: photometry is
+exactly linear in stellar mass, so with a Gaussian likelihood chi^2(M) is
+quadratic and M can be **integrated out analytically** (48-node quadrature over
+the prior, no extra forward calls), the remaining D-1 parameters sampled, and M
+drawn conditionally afterwards. On `ctl-dpl` that drops the Hessian condition
+number 3.7e4 -> 1.2e3.
+
+Measured on the same fixture and seeds, with a dense metric and chains pmapped
+over four CPU devices: **twelve of twelve fits on the two non-degenerate
+fixtures finish under 20 s**, against the 635 s worst-seed row that is the best
+in this table -- and the frozen-lane failure mode is gone, unique fraction 1.000
+everywhere. What is *not* yet cleared is this report's convergence bar: **one of
+the twelve** reaches max split-R-hat < 1.01 with min ESS >= 100 in 1200 draws,
+though 11 of 12 reach ESS >= 100. The shipped library path also carries ~12 s of
+overhead the harness does not, so a user measures ~28 s where the harness
+measures ~15.6 s.
+
+So the honest restatement is: **20 s is reachable, the binding constraint was
+the parameterization and not the sampler, and a converged posterior at that
+budget is not yet demonstrated.** Findings 3 and 6 below -- that the galaxy sets
+the cost and that warmup dominates it -- are unaffected and are cited in the
+newer work. See `bench/reports/2026-09-11_profile_mass_20s.md` and PR #2281.
+
 **Scope, added after publication.** Every row here uses a **diagonal** mass
 matrix: all five configs pass `dense_mass_matrix=False`, and the harness's
 `--dense` flag was never passed. The dense arm is therefore *absent from this

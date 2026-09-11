@@ -97,10 +97,10 @@ def _matched_log_lbol(log_mbh: float, log_edd: float) -> float:
     float
         log_lbol = log10(L_bol / L_sun) that produces the desired lambda_Edd.
     """
-    from tengri.components.agn.disc import _eddington_luminosity
+    from tengri.components.agn.disc import _log10_eddington_luminosity
     from tengri.utils.physics_constants import L_SUN
 
-    l_edd_erg = float(_eddington_luminosity(log_mbh))
+    l_edd_erg = 10.0 ** float(_log10_eddington_luminosity(log_mbh))
     # lambda_Edd = L_bol / L_Edd, so L_bol = 10^log_edd * L_Edd
     # Then log_lbol = log10(L_bol / L_sun) = log_edd + log10(L_Edd / L_sun)
     return log_edd + np.log10(l_edd_erg / L_SUN)

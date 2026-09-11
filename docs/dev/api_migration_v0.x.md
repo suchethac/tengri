@@ -1336,6 +1336,42 @@ removal in a later release.
 
 ---
 
+## `shock_log_density` frees under the wildcard; out-of-coverage shock builds now raise/warn (2026-09-10, #2065)
+
+**Breaking for `shock={'all_params': FREE}` users** (in the #2187 sense: it
+was previously-silent physics, now surfaced). `shock_log_density` was the
+last continuous knob in the `shock` group with no declared `free_prior`;
+`all_params: FREE` left it pinned at `Fixed(0.0)` with only a
+`WildcardPartialFreeWarning` naming it as stuck. It now declares
+`free_prior=Uniform(-2.0, 3.0)` -- the measured MAPPINGS V solar-abundance
+populated envelope (every density node has at least one populated B-field
+cell; see the per-abundance table on the `SHOCK_PARAMS` declaration in
+`_params.py`) -- so `shock={'all_params': FREE}` now frees it alongside
+`shock_frac`/`shock_log_lhalpha` and `shock_velocity`. `shock_b_over_sqrt_n`
+is unaffected and stays pinned (case (c), #2066: a real but ~18%
+autodiff-vs-FD-mismatched gradient on the 2-D-coupled sparse B axis --
+explicit priors work today, a default free prior needs a family-aware
+interpolant first).
+
+The second half is a genuine new refusal, not just a freeing change: a shock
+build whose `shock_log_density` / `shock_b_over_sqrt_n` (`Fixed` value, or
+free-prior support) has no populated grid support now raises `ParameterError`
+at construction, or warns naming the exact dead fraction on a partial
+free-prior overlap -- instead of silently compiling a model that predicts an
+exactly-zero shock spectrum with no signal that anything is wrong.
+
+| old                                                                                                          | new                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `shock={'all_params': FREE}` — froze `shock_log_density` at `Fixed(0.0)`, named as stuck in the partial-free warning | Frees `shock_log_density` at `Uniform(-2.0, 3.0)`; `shock_b_over_sqrt_n` is the only one still named as stuck |
+| `shock={'abundance': 'lmc', 'log_density': 2.9}` (or any Fixed/free value with no grid support for the selected abundance) — built silently, predicted an exactly-zero shock spectrum at every call | Raises `ParameterError` at `SEDModel.build`, naming the value, the abundance, and the populated range; a free prior with partial overlap warns with the measured dead fraction instead |
+
+See `docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md` for the
+full diagnosis (case (c): why the B axis stays inert) and
+`tests/regression/bug/test_bug_2065_shock_silent_zero.py` /
+`tests/contract/test_shock_group_free_priors.py` for the contract.
+
+---
+
 ## Law keyword `n_slope` renamed to `dust_slope` (2026-09-11)
 
 The attenuation-law keyword `n_slope` on `power_law` and `conroy2010` is renamed
@@ -1354,6 +1390,83 @@ The registry callables, `law_kwarg_names()`, and per-screen override dicts
 (`dust_law_overrides`, `bc_law_overrides`, `neb_law_overrides`) use `dust_slope`
 only. Grammar spellings (`slope`, `slope_bc`, `slope_diff`, …) are unchanged.
 `n_slope=` will be removed in v1.0.
+
+---
+
+## `dust_log_L_ir` — total dust IR budget override (2026-09-11, #2187-series)
+
+A new parameter, `dust_log_L_ir` (`log10(L_IR/Lsun)`, API-level log-solar per
+the `agn_log_lbol` convention), lets a build state the total dust IR budget
+directly instead of deriving it from energy balance. **Declaring it at all —
+`Fixed` or any free prior — is itself the opt-out**: the publish branch in
+every dust-attenuation component (`two_component`, `single_component`,
+`wg00`) replaces `log_L_ir = log_L_absorbed + log10(dust_eta_balance)`
+outright with `dust_log_L_ir + LOG10_L_SUN`. Leaving it undeclared keeps
+strict/relaxed energy balance exactly as before — bit-identical, not merely
+close. Grammar: `dust_emission={'log_L_ir': Fixed(11.0)}` (short key, same
+pattern as `eta_balance` -> `dust_eta_balance`), accepted for every emission
+engine (it is a group-level knob, not any one engine's own parameter). It
+declares no `free_prior` — an absolute luminosity has no galaxy-independent
+interval, and a wildcard reaching it would silently decouple the IR budget
+from the absorbed energy — so `dust_emission={'all_params': FREE}` never
+frees it; free it explicitly.
+
+**`dust_eta_balance` is inert once the override is declared**, and `SEDModel`
+now raises `ParameterError` at construction if it is free, or `Fixed` at a
+value other than 1.0, alongside a declared `dust_log_L_ir` — the two
+parameters would otherwise silently disagree about who sets the IR budget.
+An explicit `Fixed(1.0)` passes (it states, redundantly but harmlessly, the
+one value that was always going to be inert).
+
+**Radio follows the override, not just dust**: the FIR-radio-correlation
+synchrotron amplitude (`radio_sfr_mode='bell2003'`/`'delvecchio2021'`/
+`'molnar2021'`) reads the published `L_ir`/`log_L_ir`, so declaring
+`dust_log_L_ir` moves the radio SED too. This is not a dust-only knob.
+
+### Behavior fix bundled with this feature: `log_L_absorbed` split from `log_L_ir`
+
+`log_L_ir` used to do two jobs: the re-emitted IR budget (`log_L_absorbed +
+log10(eta)`) and, for three readers, a stand-in for the ABSORBED
+stellar+nebular energy the dust screen actually intercepted. That
+conflation was only silently correct while `dust_eta_balance == 1` (the
+universal default up to now) — under a relaxed `dust_eta_balance` those
+three readers were already returning the absorbed energy scaled by eta, a
+pre-existing bug this change fixes as a side effect of giving the override
+somewhere unambiguous to land. Every dust-attenuation publisher now also
+publishes a `log_L_absorbed` / `L_absorbed` companion pair that never moves
+with `dust_eta_balance` or a declared `dust_log_L_ir`, and the three readers
+— `pred.l_dust_absorbed`, the legacy `predict_sed_quantities` bridge in
+`component_factory.py`, and the AGN CIGALE fracAGN torus coupling
+(`agn_ir_frac > 0`) — were repointed to it.
+
+| old                                                                                                   | new                                                                                                    |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Energy balance only: `log_L_ir = log_L_absorbed + log10(dust_eta_balance)`, always                     | Declaring `dust_log_L_ir` replaces `log_L_ir` outright; undeclared is bit-identical to the old formula   |
+| `pred.l_dust_absorbed` (and two internal readers) read `log_L_ir` — scaled silently by a relaxed eta     | Read the new `log_L_absorbed` key — invariant under `dust_eta_balance` and under the override            |
+| `dust_eta_balance` free/non-unity had no interaction with an IR-budget override (none existed)          | Raises `ParameterError` at build if free/non-unity alongside a declared `dust_log_L_ir`                  |
+
+See `tests/regression/bug/test_dust_log_l_absorbed_split.py` (the behavior
+fix) and `tests/contract/test_dust_log_l_ir_override.py` (the feature) for
+the pinned contracts, and `tools/check_param_free_priors.py`'s `REFUSED`
+ledger for the "declaring it at all is the opt-out" reasoning recorded once.
+
+**Known limitation, not introduced here**: `bosa`'s dust-IR template shape
+is selected from the *L_ir value it is fed* (`log_ltir` in
+`dust_emission_precompute.py`), which already tracked whichever budget the
+attenuation component published (eta-scaled or, now, the override) — the
+wiring itself needed no change. A separate, pre-existing, unrelated defect
+was found while probing this: `EmissionComponent.factors_l_ir` defaults to
+`True` and BOSA does not override it, so `apply()`'s L_ir-factoring
+shortcut evaluates BOSA's `predict()` at `L_ir = 1` (a fixed, non-physical
+grid corner) and rescales linearly — which measurably freezes BOSA's
+emitted shape regardless of the galaxy's true absorbed luminosity (verified:
+identical normalized `sed_dust_ir` shape across a 1000x `L_ir` range). This
+predates the override and is orthogonal to it; fixing it is a physics change
+with its own blast radius and is out of scope here — filed for follow-up
+rather than folded in. `dh02_ce01`'s known grid-axis limitation (its shape
+is pinned to the `log10(L_IR/Lsun) = 10` template regardless of the true
+`L_ir`, documented on the component) is likewise untouched: both are
+pre-existing, and repointing either is a physics change with a moved number.
 
 ---
 
