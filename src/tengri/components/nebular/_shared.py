@@ -905,9 +905,9 @@ _A_2S: float = 8.226
 #: ``_H_PLANCK * alpha_eff_2s(T) / _A_2S`` are themselves ~1e-40 -- past
 #: float32's smallest normal (1.18e-38) and flushed to exactly 0.0 by the
 #: platform's flush-to-subnormal behavior -- independent of Q_H, so peak-
-#: factoring the *shape* array alone (as :func:`~tengri.utils.scale.
-#: apply_log10_scale` does) cannot recover it: the array it would normalize is
-#: already zero before Q_H enters. The ``log10_q_h`` path below instead keeps
+#: factoring the *shape* array alone (as
+#: :func:`~tengri.utils.scale.apply_log10_scale` does) cannot recover it: the
+#: array it would normalize is already zero before Q_H enters. The ``log10_q_h`` path below instead keeps
 #: every physics constant in the SAME log10 offset as ``Q_H/alpha_B`` and
 #: multiplies it, once, onto an O(1) shape function (#1206 §C).
 #: Reuses the module-level ``_LOG10_H_PLANCK`` (defined above from the

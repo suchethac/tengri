@@ -255,7 +255,9 @@ def precompute(
         _would_collapse |= {
             name
             for name in axis_names
-            if name not in _param_fixed and name not in _free_names and name in (fixed_values or {})
+            if name not in _param_fixed
+            and name not in _free_names
+            and name in (fixed_values or {})
         }
     _transformed_axes = tuple(
         name

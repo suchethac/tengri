@@ -36,7 +36,7 @@ from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
 from tengri.utils.physics_constants import L_SUN as LSUN_ERG
-from tengri.utils.scale import apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, representable_floor
 
 __all__: list[str] = []  # blocks are registered via decorators; no public API
 
@@ -126,7 +126,7 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
         log_l5100 = (
             jnp.asarray(agn_log_lbol)
             + _LOG10_LSUN_ERG
-            - jnp.log10(jnp.maximum(l_bol_unit, 1e-300))
+            - jnp.log10(jnp.maximum(l_bol_unit, representable_floor(1e-300)))
         )
     else:
         # ``agn_log_lbol`` here may be the runner's SAFE REFERENCE value
