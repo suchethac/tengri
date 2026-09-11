@@ -57,6 +57,7 @@ from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.component import StellarSEDComponentConfig
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.protocols.component import SEDComponent
 
 __all__ = [
@@ -340,12 +341,7 @@ def build_components(
     # subset (the sole default before #2239, added by #303). This default is
     # a defensive fallback for direct callers of this function; the grammar
     # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
-    # Literal, not an import of CUE_FULL_CATALOG_DEFAULT
-    # (parameters/parameters.py): that module transitively imports this one
-    # (via _builders -> observation -> components -> agn.blocks ->
-    # forward.precompute -> forward -> this file), so a module-level import
-    # here closes a circular import. Keep this in sync by hand.
-    cue_full_catalog: bool = True,
+    cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT,
     # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
     # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.

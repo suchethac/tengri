@@ -61,6 +61,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
     resolve_sfh_type,
@@ -85,19 +86,17 @@ from tengri.parameters.sentinels import WILDCARD_ALIAS
 
 __all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
 
-#: Cue's default line catalog (#2239): the full ~138-line Cue-trained set,
-#: not the legacy 128-line CLOUDY/FSPS-matched subset. The one declaration;
-#: every other spelling reads this constant rather than repeating the
-#: literal: ``NebularSEDComponentConfig.cue_full_catalog``
-#: (``components/nebular/component.py``), ``build_components``'s
-#: ``cue_full_catalog`` kwarg default (``forward/component_factory.py``),
-#: the ``SEDModel`` build path's ``getattr`` fallback
-#: (``forward/sed_model.py``), the warning seam's remedy-selection fallback
-#: (``forward/properties.py``), the structural round-trip default
-#: (``parameters/groups.py``), and ``CueBackend``'s ``cloudyfsps_only``
-#: defaults, which read ``not CUE_FULL_CATALOG_DEFAULT``
-#: (``components/nebular/cue.py``).
-CUE_FULL_CATALOG_DEFAULT: bool = True
+# CUE_FULL_CATALOG_DEFAULT (#2239) is declared in tengri.config.settings (a
+# leaf module: stdlib imports only) and re-exported here, so existing
+# ``from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT`` call
+# sites (e.g. parameters/groups.py) keep working unchanged. See that
+# module's docstring for the full rationale, including why every other
+# consumer (component.py, component_factory.py, cue.py, sed_model.py) now
+# imports it from tengri.config.settings directly at module level rather
+# than from here: this module sits at the end of a long import chain
+# (_builders -> observation -> components -> ... -> forward ->
+# component_factory -> components.nebular.component) that made a
+# module-level import of this name FROM HERE a real import cycle.
 
 
 def _stable_param_seed(name: str) -> int:
@@ -809,9 +808,10 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
-        # See CUE_FULL_CATALOG_DEFAULT (module level, above): the one
-        # declaration every other spelling of this default reads or derives
-        # from. ``True`` publishes the full ~138-species Cue-trained line
+        # See CUE_FULL_CATALOG_DEFAULT (imported above, declared in
+        # tengri.config.settings): the one declaration every other spelling
+        # of this default reads or derives from. ``True`` publishes the
+        # full ~138-species Cue-trained line
         # catalog via ``state.derived["line_waves"/"line_lums"]``, so HeII
         # 1640, C IV 1549, etc. can be read via ``pred.lines.get(wavelength)``.
         # ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched subset

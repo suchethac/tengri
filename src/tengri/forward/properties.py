@@ -44,6 +44,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
+
 __all__ = [
     "PROPERTY_REGISTRY",
     "Property",
@@ -318,9 +320,13 @@ def _published_line_wavelengths_static(model, backend):
     Returns
     -------
     ndarray or None
-        Rest-frame vacuum wavelengths [Angstrom], plain ``numpy``, or
-        ``None`` when no static source is known for this backend (skip,
-        rather than guess).
+        Rest-frame vacuum wavelengths [Angstrom], plain ``numpy`` -- the
+        same array :class:`~tengri.components.nebular.component.NebularSEDComponent`
+        publishes to ``state.derived["line_waves"]``, bit-for-bit (measured:
+        ``assert_allclose(rtol=1e-12, atol=0.0)`` over both the default and
+        the legacy-subset cue catalog, see the #2239 regression test). ``None``
+        when no static source is known for this backend (skip, rather than
+        guess).
 
     Notes
     -----
@@ -328,9 +334,21 @@ def _published_line_wavelengths_static(model, backend):
     Every attribute read here (``CueBackend.published_line_wavelengths``;
     each grid backend's ``grid.line_wavelengths``) is loaded once at backend
     construction from a weights/grid file and is never a function of any
-    traced parameter -- ``jax.jit``/``jax.vmap`` only turn *function
-    arguments* (and values derived from them) into abstract tracers, and
-    these values are closed-over backend state, not derived from ``params``.
+    traced parameter. That alone is not sufficient, though: any
+    ``jax.numpy`` primitive invoked while *some* ``jax.jit`` trace is active
+    anywhere on the call stack returns a tracer regardless of whether its
+    own operands are literal or closed-over constants -- unlike this
+    function's data, tracing is a property of the ambient call context, not
+    of an individual value's provenance (an earlier version of this seam
+    got this backwards: it called
+    ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``
+    with its default ``xp=jax.numpy``, which raised
+    ``TracerArrayConversionError`` whenever a caller wrapped
+    ``model.predict_properties`` itself in ``jax.jit``, even though ``raw``
+    was always a concrete numpy array).
+    This function instead calls that conversion with ``xp=numpy`` explicitly,
+    which never invokes a JAX primitive at all, so the result stays concrete
+    regardless of any ``jax.jit``/``jax.vmap`` trace active around this call.
     That is a stronger guarantee than "catch the right tracer-conversion
     exception": no such exception can be raised here, so this method needs
     (and has) no ``try``/``except``.
@@ -341,22 +359,33 @@ def _published_line_wavelengths_static(model, backend):
     resolves it the same way :meth:`CueBackend._forward_lines` does, sharing
     its index arrays rather than recomputing the selection); CloudyGrid,
     CB19 and both MAPPINGS backends carry no subset concept at all, so their
-    already-existing ``grid.line_wavelengths`` is read directly.
+    already-existing ``grid.line_wavelengths`` is read directly. Either way
+    the raw catalog is each backend's native frame (air, for cue's upstream
+    ``.npy`` -- see
+    ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``),
+    not yet the vacuum frame ``state.derived["line_waves"]`` holds; this
+    function applies the exact same conversion
+    :class:`~tengri.components.nebular.component.NebularSEDComponent` applies
+    before publishing (#2239's I5: comparing an unconverted catalog against
+    a vacuum ``KEY_LINES`` target shrank every optical headline line's
+    margin from the true ~0.1 A to ~1.9 A against the 5 A tolerance, close
+    enough to risk a false warning or a missed one).
     """
     import numpy as np
 
-    from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT
+    from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 
     if hasattr(backend, "published_line_wavelengths"):
         cloudyfsps_only = not bool(
             getattr(getattr(model, "spec", None), "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
         )
-        return np.asarray(backend.published_line_wavelengths(cloudyfsps_only=cloudyfsps_only))
-    grid = getattr(backend, "grid", None)
-    line_waves = getattr(grid, "line_wavelengths", None)
-    if line_waves is None:
-        return None
-    return np.asarray(line_waves)
+        raw = backend.published_line_wavelengths(cloudyfsps_only=cloudyfsps_only)
+    else:
+        grid = getattr(backend, "grid", None)
+        raw = getattr(grid, "line_wavelengths", None)
+        if raw is None:
+            return None
+    return np.asarray(nebular_line_waves_to_vacuum(raw, xp=np))
 
 
 def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
@@ -388,7 +417,13 @@ def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
     exactly :func:`~tengri.utils.sed_quantities.extract_line_luminosity`'s
     ``any_match`` false condition (``sed_quantities._LINE_MATCH_TOL_AA``,
     the same ``<=`` on both sides), so this warns exactly when (and only
-    when) that NaN is about to happen. An empty published catalog (size 0)
+    when) that NaN is about to happen -- true only because
+    :func:`_published_line_wavelengths_static` returns the vacuum-frame
+    array ``extract_line_luminosity`` actually compares against (#2239's I5:
+    comparing the backend's native, sometimes-air frame against a vacuum
+    ``KEY_LINES`` target moved every optical headline line's margin from
+    ~0.1 A to ~1.9 A against the 5 A tolerance, close enough to risk a
+    false warning or a missed one). An empty published catalog (size 0)
     is the same shape as "no catalog line within tolerance" for every
     requested name, so it takes the same warning rather than passing
     through silently.
@@ -398,7 +433,6 @@ def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
     import numpy as np
 
     from tengri.config.exceptions import warn_measured
-    from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT
     from tengri.utils.sed_quantities import _LINE_MATCH_TOL_AA
 
     line_waves = _published_line_wavelengths_static(model, backend)

@@ -114,6 +114,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import render_nebular_lines
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
@@ -1301,14 +1302,9 @@ class CueBackend:
         self,
         p: dict,
         # Bare-call default; every production call site passes this
-        # explicitly. Mirrors ``not CUE_FULL_CATALOG_DEFAULT``
-        # (``parameters/parameters.py``, #2239) as a literal rather than an
-        # import: ``parameters.parameters`` transitively imports this module
-        # (via ``_builders`` -> ``observation`` -> ``components`` ->
-        # ``components.nebular``), so importing it here at module level
-        # would close a circular import. Keep this in sync with
-        # ``predict_nebular_line_luminosities``'s own default below.
-        cloudyfsps_only=False,
+        # explicitly. Matches ``predict_nebular_line_luminosities``'s own
+        # default below.
+        cloudyfsps_only=not CUE_FULL_CATALOG_DEFAULT,
         neb_fesc=0.0,
         neb_fesc_lya=0.0,
         neb_fdust=0.0,
@@ -1366,23 +1362,34 @@ class CueBackend:
             return wav[old_idx], lum[old_idx]
         return wav, lum
 
-    def published_line_wavelengths(self, *, cloudyfsps_only: bool = False) -> np.ndarray:
+    def published_line_wavelengths(
+        self, *, cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT
+    ) -> np.ndarray:
         """The catalog wavelengths this backend would publish, without a forward pass.
 
         Parameters
         ----------
         cloudyfsps_only : bool, optional
             Select the legacy 128-line CLOUDY/FSPS-matched subset instead of
-            the full ~138-line catalog. Default ``False`` (the full catalog),
-            mirroring ``not CUE_FULL_CATALOG_DEFAULT`` in
-            ``parameters/parameters.py`` (#2239) as a literal, not an import
-            -- see the comment on :meth:`_forward_lines`'s own default for
-            why. Every production caller passes this explicitly.
+            the full ~138-line catalog. Default ``not CUE_FULL_CATALOG_DEFAULT``
+            (#2239) -- the full catalog. Every production caller passes this
+            explicitly.
 
         Returns
         -------
         ndarray, shape (n_lines,)
-            Rest-frame vacuum wavelengths [Angstrom], plain ``numpy``.
+            Rest-frame wavelengths [Angstrom], plain ``numpy``, in this
+            backend's **native** frame -- air, for cue's upstream ``.npy``
+            (see the vacuum-contract comment in
+            ``components/nebular/component.py``) -- the same frame
+            :meth:`_forward_lines` / :meth:`predict_nebular_line_luminosities`
+            return. **Not** the vacuum frame ``state.derived["line_waves"]``
+            holds: callers that need to compare against a vacuum target
+            (e.g. the #2239 warning seam) must apply
+            ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``
+            themselves, exactly as
+            :class:`~tengri.components.nebular.component.NebularSEDComponent`
+            does before publishing.
 
         Notes
         -----
@@ -1616,7 +1623,7 @@ class CueBackend:
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         neb_fdust: float = 0.0,
-        cloudyfsps_only: bool = False,
+        cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT,
         # Cue-specific overrides (bypass SSP-derived params)
         gas_logu: float | None = None,
         gas_logn: float = 2.0,
@@ -1664,8 +1671,9 @@ class CueBackend:
             Dust-absorption fraction of ionizing photons in HII regions [0, 1].
         cloudyfsps_only : bool
             If True, return only the 128 legacy CLOUDY/FSPS-matched lines
-            (kept for cross-code comparisons). Default False (#2239):
-            returns the full ~138-line Cue-trained catalog.
+            (kept for cross-code comparisons). Default
+            ``not CUE_FULL_CATALOG_DEFAULT`` (#2239): returns the full
+            ~138-line Cue-trained catalog.
         gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
             Cue gas params (low-level). Override high-level derivation.
         gas_logqion : float or None

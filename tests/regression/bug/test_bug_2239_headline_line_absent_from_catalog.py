@@ -162,7 +162,12 @@ def test_halpha_does_not_warn_on_the_legacy_subset(_cue_fixture_available):
 
 @requires_cue_weights
 def test_predict_properties_is_jit_safe_for_line_properties(_cue_fixture_available):
-    """``jax.jit(predict_properties(names=(...)))`` must not raise, either catalog."""
+    """``jax.jit(predict_properties(names=(...)))`` must not raise, either catalog.
+
+    No blanket ignore: exactly one of the four (full_catalog, name) cases is
+    expected to warn (civ_1549 on the legacy subset); the other three must
+    stay silent, asserted explicitly rather than swallowed.
+    """
     for full_catalog in (None, False):
         model = _build(full_catalog=full_catalog)
         params = dict(model.spec.get_fixed_values())
@@ -170,11 +175,20 @@ def test_predict_properties_is_jit_safe_for_line_properties(_cue_fixture_availab
 
             @jax.jit
             def _compute(p, _model=model, _name=name):
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    return _model.predict_properties(p, names=(_name,))[_name]
+                return _model.predict_properties(p, names=(_name,))[_name]
 
-            value = float(_compute(params))
+            expect_warning = full_catalog is False and name == "civ_1549"
+            if expect_warning:
+                with pytest.warns(UserWarning, match=r"'civ_1549'.*full_catalog"):
+                    value = float(_compute(params))
+            else:
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    value = float(_compute(params))
+                assert not caught, (
+                    f"{name!r} under full_catalog={full_catalog} warned "
+                    f"unexpectedly under jit: {caught}"
+                )
             if name == "halpha":
                 assert np.isfinite(value), (
                     f"halpha under full_catalog={full_catalog} should be finite "
@@ -187,17 +201,25 @@ def test_predict_properties_is_jit_safe_for_line_properties(_cue_fixture_availab
 
 @requires_cue_weights
 def test_predict_properties_is_vmap_safe_for_a_line_property(_cue_fixture_available):
-    """``jax.vmap`` and the repository's ``vmap_chunked`` must not raise."""
+    """``jax.vmap`` and the repository's ``vmap_chunked`` must not raise.
+
+    No warning filter: measured, this body raises none (the default catalog
+    carries ``halpha`` regardless of the subset choice), so a blanket ignore
+    would silence nothing today and hide a future regression -- e.g. if
+    ``vmap_chunked``'s own jittability probe ever falls back to its eager
+    loop, which warns (``utils/batching.py``).
+    """
     model = _build(full_catalog=None)
     params_batch = model.spec.sample_batch(jax.random.PRNGKey(0), n=4)
 
     def _single(p):
         return model.predict_properties(p, names=("halpha",))["halpha"]
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         vmapped = jax.vmap(_single)(params_batch)
         chunked = vmap_chunked(_single, chunk_size=4)(params_batch)
+    assert not caught, f"halpha under vmap/vmap_chunked warned unexpectedly: {caught}"
 
     assert vmapped.shape == (4,)
     assert np.all(np.isfinite(np.asarray(vmapped)))
@@ -218,3 +240,37 @@ def test_civ_1549_warns_at_trace_time_under_jit_on_the_legacy_subset(_cue_fixtur
     with pytest.warns(UserWarning, match=r"'civ_1549'.*full_catalog"):
         value = float(_compute(params))
     assert np.isnan(value), f"civ_1549 should be NaN on the legacy subset, got {value}"
+
+
+@requires_cue_weights
+def test_published_line_wavelengths_matches_state_derived_line_waves(_cue_fixture_available):
+    """I5: the seam's static catalog must equal the array the component publishes.
+
+    ``NebularSEDComponent.apply`` applies tengri's vacuum-wavelength contract
+    (``nebular_line_waves_to_vacuum``) to the backend's raw catalog before
+    publishing ``state.derived["line_waves"]``; cue's raw catalog is air.
+    ``_published_line_wavelengths_static`` must apply the exact same
+    conversion, not compare against the pre-conversion array -- otherwise
+    the seam's NaN decision (made against the vacuum array) and its own
+    tolerance check (made against whatever this function returns) can
+    disagree. RED before this fix: up to 2.70 Angstrom off, 70 of 138
+    entries on the default catalog differing by more than 0.5 Angstrom.
+    """
+    from tengri.forward.properties import _published_line_wavelengths_static
+
+    for full_catalog in (None, False):
+        model = _build(full_catalog=full_catalog)
+        params = dict(model.spec.get_fixed_values())
+        state = model.predict_state(params)
+        published = np.asarray(state.derived["line_waves"])
+        static = _published_line_wavelengths_static(model, model._nebular_backend)
+        np.testing.assert_allclose(
+            static,
+            published,
+            rtol=1e-12,
+            atol=0.0,
+            err_msg=(
+                f"_published_line_wavelengths_static (full_catalog={full_catalog}) "
+                f"diverges from the published state.derived['line_waves']"
+            ),
+        )

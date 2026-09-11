@@ -80,6 +80,7 @@ from tengri.config.exceptions import (
     TengriIOError,
     warn_measured,
 )
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 from tengri.forward.sed_model_types import (
@@ -8280,13 +8281,6 @@ class SEDModel:
                 getattr(self, "_dust_law_diff", None),
                 getattr(self, "_dust_law_neb", None),
             )
-
-        # Lazy import (not module level): tengri.parameters.parameters
-        # transitively imports this module (via _builders -> observation ->
-        # components -> ... -> forward), so importing CUE_FULL_CATALOG_DEFAULT
-        # at module level here closes a circular import. Safe here: this
-        # method body only runs once the package has finished loading.
-        from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT
 
         chain = build_components(
             ssp_data=self.ssp_data,

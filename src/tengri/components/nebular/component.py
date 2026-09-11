@@ -27,8 +27,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.template_threading import TemplateThreading
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -145,12 +147,7 @@ class NebularSEDComponentConfig(SEDComponentConfig):
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
-    # Literal, not an import of CUE_FULL_CATALOG_DEFAULT
-    # (parameters/parameters.py): parameters.parameters transitively imports
-    # this module (via _builders -> observation -> components ->
-    # components.nebular), so a module-level import here closes a circular
-    # import. Keep this in sync with the declaration by hand.
-    cue_full_catalog: bool = True
+    cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -804,65 +801,28 @@ class NebularSEDComponent(TemplateThreading):
                         )
                         _f = jnp.asarray(_dig_frac)
                         line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
-                # CLAUDE.md contract: vacuum wavelengths throughout.
+                # CLAUDE.md contract: vacuum wavelengths throughout. See
+                # ``nebular_line_waves_to_vacuum`` (components/nebular/_shared.py)
+                # for the upstream-Cue rationale and the Balmer-vote /
+                # Edlén (1953) mechanism; this is the ONE implementation,
+                # also called by the #2239 warning seam's static accessor
+                # (``forward/properties.py::_published_line_wavelengths_static``)
+                # so the two never compare air against vacuum.
                 #
-                # Upstream Cue (yi-jia-li/cue) ships TWO disagreeing files:
-                # ``lineList_wav.npy`` (what the network is keyed against:
-                # **air** in optical, CLOUDY-default convention) and
-                # ``cue_emlines_info.dat`` (newer parallel metadata:
-                # vacuum, but in a *different ordering* that does not
-                # match the network indices). The Li+2024 paper §2 states
-                # vacuum intent but the .npy never got regenerated.
-                #
-                # ``data/cue_weights.npz`` is built from the .npy because
-                # network indexing requires it. We translate at this
-                # boundary so internal indexing stays upstream-faithful
-                # while user-facing labels honor tengri's vacuum contract.
-                #
-                # Idempotency: probe the Balmer series. Vacuum and air
-                # wavelengths differ by ~1.3-1.8 Å in the optical, so a
-                # multi-line consensus is robust to a single near-coincidence
-                # or floating-point noise around any one probe value.
-                # Hα 6564.61 v / 6562.80 a, Hβ 4862.68 v / 4861.33 a,
-                # Hγ 4341.68 v / 4340.47 a.
+                # Trace-safe: under a jitted sampler (NUTS/HMC loss),
+                # ``line_waves`` arrives as a Tracer via the threaded
+                # ``template_data``, so numpy conversion / boolean indexing /
+                # Python branches raise: and the guard below used to swallow
+                # that, silently dropping the line catalog from
+                # ``state.derived`` (joint phot+lines fits then fail with a
+                # misleading "backend did not publish" error). This call
+                # relies on ``nebular_line_waves_to_vacuum``'s default
+                # ``xp=jax.numpy`` for exactly that reason -- unlike the
+                # #2239 seam's accessor (which passes ``xp=numpy`` because
+                # its input is always concrete), this ``line_waves`` can be
+                # a genuine tracer and must stay one.
                 if self.config.backend in ("cue", "cloudy_grid", "cb19", "mappings"):
-                    # Trace-safe implementation: under a jitted sampler
-                    # (NUTS/HMC loss), ``line_waves`` arrives as a Tracer
-                    # via the threaded ``template_data``, so numpy
-                    # conversion / boolean indexing / Python branches
-                    # raise: and the guard below used to swallow that,
-                    # silently dropping the line catalog from
-                    # ``state.derived`` (joint phot+lines fits then fail
-                    # with a misleading "backend did not publish" error).
-                    line_waves = jnp.asarray(line_waves)
-                    _BALMER_AIR_VAC = (
-                        (6562.80, 6564.61),
-                        (4861.33, 4862.68),
-                        (4340.47, 4341.68),
-                    )
-                    air_votes = jnp.asarray(0.0)
-                    vac_votes = jnp.asarray(0.0)
-                    for air_w, vac_w in _BALMER_AIR_VAC:
-                        mid = 0.5 * (air_w + vac_w)
-                        probe = line_waves[jnp.argmin(jnp.abs(line_waves - mid))]
-                        in_band = (probe > air_w - 1.0) & (probe < vac_w + 1.0)
-                        is_air = jnp.abs(probe - air_w) < jnp.abs(probe - vac_w)
-                        air_votes = air_votes + jnp.where(in_band & is_air, 1.0, 0.0)
-                        vac_votes = vac_votes + jnp.where(in_band & ~is_air, 1.0, 0.0)
-                    looks_air = (air_votes >= 2.0) & (air_votes > vac_votes)
-                    # Edlén (1953) air→vacuum, jnp inline (mirror of
-                    # ``tengri.utils.conversions.air_to_vacuum``, which is
-                    # numpy-only and not traceable).
-                    sigma = 1e4 / line_waves
-                    n_refr = (
-                        1.0
-                        + 6.4328e-5
-                        + 2.94981e-2 / (146.0 - sigma**2)
-                        + 2.5540e-4 / (41.0 - sigma**2)
-                    )
-                    in_optical = (line_waves >= 2000.0) & (line_waves <= 1.0e4)
-                    converted = jnp.where(in_optical, line_waves * n_refr, line_waves)
-                    line_waves = jnp.where(looks_air, converted, line_waves)
+                    line_waves = nebular_line_waves_to_vacuum(line_waves)
 
                 # THE unit seam (#1559). Every backend returns [Lsun]; the
                 # published ``line_lums`` DerivedKey is [erg/s], and
