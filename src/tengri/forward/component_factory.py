@@ -57,6 +57,7 @@ from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.component import StellarSEDComponentConfig
+from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.protocols.component import SEDComponent
 
 __all__ = [
@@ -334,10 +335,13 @@ def build_components(
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
-    # When ``True`` and ``nebular_backend == "cue"``, the orchestrator
-    # asks the Cue backend for the full ~271-species line catalog
-    # instead of the default 128 CLOUDY/FSPS subset. See #303.
-    cue_full_catalog: bool = False,
+    # When ``True`` (the default since #2239) and ``nebular_backend == "cue"``,
+    # the orchestrator asks the Cue backend for the full ~138-species line
+    # catalog; ``False`` narrows to the legacy 128-line CLOUDY/FSPS-matched
+    # subset (the sole default before #2239, added by #303). This default is
+    # a defensive fallback for direct callers of this function; the grammar
+    # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
+    cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT,
     # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
     # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.
@@ -395,6 +399,15 @@ def build_components(
     # (#1833). The single screen treats both alike, passing nothing is its
     # historical behavior.
     dust_live_shape_params: frozenset[str] | None = None,
+    # Total dust IR budget override (#2187-series): whether the caller
+    # declared ``dust_log_L_ir`` (Fixed or free), resolved from spec
+    # provenance by ``SEDModel._requested_dust_log_L_ir``. When True the
+    # attenuation component's ``apply()`` replaces the energy-balance
+    # ``log_L_ir = log_L_absorbed + log10(dust_eta_balance)`` outright with
+    # ``dust_log_L_ir + LOG10_L_SUN``; ``log_L_absorbed`` (the absorbed
+    # budget) is unaffected either way. False (default) is today's strict/
+    # relaxed energy balance, unchanged.
+    dust_log_l_ir_requested: bool = False,
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -548,12 +561,14 @@ def build_components(
                 dust_curve=wg00_dust_curve,
                 geometry=wg00_geometry,
                 structure=wg00_structure,
+                log_l_ir_requested=dust_log_l_ir_requested,
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
             atten_config = DustAttenuationSEDComponentConfig(
                 law=dust_law_bc,
                 live_shape_params=frozenset(dust_live_shape_params or ()),
+                log_l_ir_requested=dust_log_l_ir_requested,
             )
         else:
             atten_type = "two_component"
@@ -576,6 +591,7 @@ def build_components(
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
                 lyc_absorb_all=dust_lyc_absorb_all,
                 eb_include_lyc=dust_eb_include_lyc,
+                log_l_ir_requested=dust_log_l_ir_requested,
             )
 
         components.append(
@@ -948,12 +964,15 @@ def state_to_sed_quantities(state: Any):
 
     # Dust-absorbed luminosity from the orchestrator's energy-balance
     # bookkeeping, exact match for legacy ``compute_l_dust_absorbed``.
-    # Reads the ``log_L_ir`` companion when the chain publishes it: the linear
-    # ``L_absorbed`` is ~3.6e43 erg/s and is ``inf`` in float32, while the
-    # answer here (~9.5e9 Lsun) is representable, and the attenuator computes
-    # the log form first anyway (#1837).
+    # Reads the ``log_L_absorbed`` companion when the chain publishes it: the
+    # linear ``L_absorbed`` is ~3.6e43 erg/s and is ``inf`` in float32, while
+    # the answer here (~9.5e9 Lsun) is representable, and the attenuator
+    # computes the log form first anyway (#1837). ``log_L_absorbed``, not
+    # ``log_L_ir``: the two agree only when ``dust_eta_balance == 1`` and no
+    # ``dust_log_L_ir`` override is declared -- reading ``log_L_ir`` here
+    # silently scaled this ABSORBED quantity by eta (#1837/#2187-series split).
     derived = state.derived
-    l_dust_absorbed = derived_luminosity_lsun(derived, "L_absorbed", "log_L_ir")
+    l_dust_absorbed = derived_luminosity_lsun(derived, "L_absorbed", "log_L_absorbed")
     # L_TIR uses the legacy semantics (integration of the SED over the
     # 8–1000 μm window) for parity with ``predict_sed_quantities``,
     # not the orchestrator's energy-balance ``L_ir`` derived key;
@@ -1243,7 +1262,8 @@ def state_to_emission_lines(state: Any):
     Cue or CloudyGrid) and extracts the 11 headline survey-diagnostic
     lines via the legacy nearest-wavelength matcher
     :func:`tengri.utils.sed_quantities.extract_line_luminosity`. The full
-    backend catalog (typically ~138–271 species) is also exposed via
+    backend catalog (~138 species for Cue; the CLOUDY/CB19/MAPPINGS grids
+    carry far fewer) is also exposed via
     ``all_waves`` / ``all_lums`` for downstream lookups of species the
     headline NamedTuple does not name explicitly (HeII 1640, HeI 10830,
     [O III] 4363, ...).

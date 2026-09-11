@@ -303,6 +303,46 @@ class TestGroupSharedKnobs:
                 }
             )
 
+    @pytest.mark.parametrize(
+        "emission_type", ["casey2012", "dale2014", "draine_li2007", "themis", "pah_drude"]
+    )
+    def test_log_l_ir_accepted_on_every_engine(self, emission_type):
+        """``log_L_ir`` (total dust IR budget override) is a group-level knob too."""
+        spec = build_groups(
+            dust_emission={
+                "type": emission_type,
+                "all_params": WILDCARD,
+                "log_L_ir": Fixed(11.0),
+            }
+        )
+        assert spec is not None
+        assert spec.get_fixed_values()["dust_log_L_ir"] == 11.0
+
+    def test_full_name_spelling_of_the_log_l_ir_knob(self):
+        spec = build_groups(
+            dust_emission={
+                "type": "casey2012",
+                "all_params": WILDCARD,
+                "dust_log_L_ir": Fixed(11.0),
+            }
+        )
+        assert spec is not None
+
+    def test_log_l_ir_wildcard_never_frees_it(self):
+        """``all_params: FREE`` must not free ``dust_log_L_ir`` -- it has no free_prior."""
+        spec = build_groups(dust_emission={"type": "dale2014", "all_params": FREE})
+        assert "dust_log_L_ir" not in spec.free_params
+
+    def test_log_l_ir_free_without_explicit_prior_raises(self):
+        with pytest.raises(ParameterError, match="dust_log_L_ir"):
+            build_groups(
+                dust_emission={
+                    "type": "dale2014",
+                    "all_params": WILDCARD,
+                    "log_L_ir": FREE,
+                }
+            )
+
 
 class TestAliasTypes:
     """Grammar aliases resolve to their canonical class before the check."""
