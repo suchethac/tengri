@@ -517,6 +517,58 @@ def _dig_extended_logU_range(own_lo, own_hi, delta_bounds):
     return lo, hi
 
 
+def _dig_logU_axis_extension(spec, user_range):
+    r"""Resolve whether ``neb_logU`` needs a DIG-extended axis, and its range.
+
+    Single entry point for both the axis-selection decision (does
+    ``neb_logU`` join ``axis_names``?) and the range that axis is built over,
+    so the two cannot disagree (#2222 review I2, I3).
+
+    The "own" (HII) range is ``user_range`` when the caller supplied one for
+    ``neb_logU`` via ``ranges=`` -- the ruling is that a user-supplied range
+    is the HII support, and the DIG image is derived from it exactly like the
+    prior-derived case, rather than bypassing the extension (review I2,
+    measured 5.4e-2 worst-case relative error, above this module's own 3e-2
+    ceiling, when an explicit ``ranges={'neb_logU': (lo, hi)}`` was taken
+    verbatim) -- else :func:`_own_logU_support`.
+
+    A **degenerate** extension (``ext_lo == ext_hi``, e.g. ``neb_logU`` Fixed
+    with ``neb_dig_delta_logU`` Fixed at exactly 0.0: the HII and DIG query
+    points then coincide) means DIG mixing is arithmetically the HII term at
+    every possible query, so no axis is needed -- an all-identical axis is
+    otherwise silently a divide-by-zero for
+    :func:`~tengri.utils.grid_interp.interp_nd_pchip`'s PCHIP slopes, which
+    returned NaN with no warning before this fix (review I3). Before #2222
+    this combination was refused outright (``DIGNotOnNebularGridError``); it
+    needs no refusal now because it needs no axis.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter specification.
+    user_range : tuple of float or None
+        Caller-supplied ``(lo, hi)`` for ``neb_logU`` (``ranges.get("neb_logU")``),
+        or ``None`` to use the spec's own support.
+
+    Returns
+    -------
+    needs_axis : bool
+        Whether ``neb_logU`` should join ``axis_names``.
+    own_lo, own_hi : float
+        The "own" (HII) range used as the extension's base -- ``user_range``
+        if given, else :func:`_own_logU_support`. [log10(U)]
+    ext_lo, ext_hi : float
+        The DIG-extended range. Equal to ``(own_lo, own_hi)`` when
+        ``needs_axis`` is ``False``. [log10(U)]
+    """
+    if not _dig_may_be_active(spec):
+        own_lo, own_hi = user_range if user_range is not None else _own_logU_support(spec)
+        return False, own_lo, own_hi, own_lo, own_hi
+    own_lo, own_hi = user_range if user_range is not None else _own_logU_support(spec)
+    ext_lo, ext_hi = _dig_extended_logU_range(own_lo, own_hi, _dig_delta_logU_support(spec))
+    return ext_lo != ext_hi, own_lo, own_hi, ext_lo, ext_hi
+
+
 def _preserve_spacing_n(base_n, own_lo, own_hi, ext_lo, ext_hi):
     """Node count for an extended ``neb_logU`` axis that keeps the original spacing.
 
@@ -666,12 +718,26 @@ def precompute_nebular_grid(
 
     spec = model.spec
     free = set(spec.free_params)
-    dig_active = _dig_may_be_active(spec)
-    # neb_logU joins the axes whenever DIG mixing could be active (#2222),
-    # even when it is itself Fixed: the DIG lookup always needs a second
-    # query point (neb_logU + neb_dig_delta_logU) distinct from the HII one.
-    axis_names = tuple(p for p in _CANDIDATE_AXES if p in free or (dig_active and p == "neb_logU"))
     ranges = ranges or {}
+    # neb_logU joins the axes whenever DIG mixing could be active (#2222) AND
+    # the resulting extension is non-degenerate (#2222 review I3): the DIG
+    # lookup needs a second query point (neb_logU + neb_dig_delta_logU)
+    # distinct from the HII one, but if that second point coincides with the
+    # first (neb_logU Fixed, neb_dig_delta_logU Fixed at exactly 0.0), DIG
+    # mixing is arithmetically the HII term and no axis is needed. The
+    # extension itself honors a user-supplied ranges['neb_logU'] as the HII
+    # support to extend from, not only the spec's own (review I2), computed
+    # once here and reused unchanged in the per-axis loop below.
+    (
+        dig_logU_needs_axis,
+        dig_logU_own_lo,
+        dig_logU_own_hi,
+        dig_logU_ext_lo,
+        dig_logU_ext_hi,
+    ) = _dig_logU_axis_extension(spec, ranges.get("neb_logU"))
+    axis_names = tuple(
+        p for p in _CANDIDATE_AXES if p in free or (dig_logU_needs_axis and p == "neb_logU")
+    )
 
     _refuse_tabulated_metallicity(model)
 
@@ -742,16 +808,18 @@ def precompute_nebular_grid(
 
     axes, axis_kinds = [], []
     for name in axis_names:
-        if name in ranges:
+        if name == "neb_logU" and dig_logU_needs_axis:
+            # Extend to cover the DIG-shifted query point (never clip, never
+            # refuse: #2222) -- on top of a user-supplied ranges['neb_logU']
+            # too (review I2), and preserve the node spacing neb_logU would
+            # have had absent DIG so neb_dig_frac=0 parity does not degrade.
+            # dig_logU_ext_lo/hi/own_lo/own_hi are computed once, above, by
+            # _dig_logU_axis_extension, which already folded in ranges.
+            lo, hi = dig_logU_ext_lo, dig_logU_ext_hi
+            n_points = _preserve_spacing_n(_axis_n(name), dig_logU_own_lo, dig_logU_own_hi, lo, hi)
+        elif name in ranges:
             lo, hi = ranges[name]
             n_points = _axis_n(name)
-        elif name == "neb_logU" and dig_active:
-            # Extend to cover the DIG-shifted query point (never clip, never
-            # refuse: #2222), and preserve the node spacing neb_logU would
-            # have had absent DIG so neb_dig_frac=0 parity does not degrade.
-            own_lo, own_hi = _own_logU_support(spec)
-            lo, hi = _dig_extended_logU_range(own_lo, own_hi, _dig_delta_logU_support(spec))
-            n_points = _preserve_spacing_n(_axis_n(name), own_lo, own_hi, lo, hi)
         else:
             lo, hi = _axis_range(spec, name)
             n_points = _axis_n(name)

@@ -611,10 +611,15 @@ class NebularSEDComponent(TemplateThreading):
         _neb_logZ_gas = params.get("neb_logZ_gas")
         if _neb_logZ_gas is not None:
             _neb_logZ_gas = jnp.asarray(_neb_logZ_gas) + LOG10_ZSUN
+        # NEB_LOGU_DEFAULT: read from the declaration (#2222 review M3), not
+        # repeated as a literal, so this and NEB_LOGU_DEFAULT's own
+        # "cannot drift apart" docstring claim both stay true.
+        from tengri.components.nebular.nebular_grid_precompute import NEB_LOGU_DEFAULT
+
         common_kwargs = {
             "ssp_wave": state.wave,
             "log_z": log_z,
-            "neb_logU": jnp.asarray(params.get("neb_logU", -3.0)),
+            "neb_logU": jnp.asarray(params.get("neb_logU", NEB_LOGU_DEFAULT)),
             "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),

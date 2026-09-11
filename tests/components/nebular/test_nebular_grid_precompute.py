@@ -647,8 +647,142 @@ def test_dig_extends_logU_axis_and_includes_fixed_logU():
     )
 
 
+def test_grid_line_fluxes_match_full_params_dict_when_keys_are_omitted():
+    r"""Omitting a Fixed key from params must not change grid-path line fluxes.
+
+    #2222 review I1. ``neb_logU`` Fixed(-2.0), ``neb_dig_frac`` Fixed(0.3),
+    ``neb_dig_delta_logU`` Fixed(-1.0), served through
+    :meth:`~tengri.SEDModel.enable_fast_nebular`. Before the fix, dropping
+    any of the three keys from the params dict substituted a registry-default
+    literal for the model's own Fixed value in
+    ``SEDModel.predict_line_fluxes``'s grid branch -- measured 9.323e-1
+    (``neb_logU`` dropped) / 3.996e-1 (``neb_dig_frac`` dropped) worst-case
+    relative error, silently, because the exact path's own
+    ``full_params = {**fixed_values, **params}`` merge (``predict_state``)
+    makes the identical dict *correct* there. The fix reads the same merged
+    dict on the grid path (``self.spec.get_fixed_values()``), so a dict
+    omitting any Fixed key is bit-identical to the full dict.
+    """
+    neb = {
+        "type": "cue",
+        "all_params": Fixed(DEFAULT),
+        "logU": Fixed(-2.0),
+        "dig_frac": Fixed(0.3),
+        "dig_delta_logU": Fixed(-1.0),
+    }
+    m = _model(neb, sfh_wild=Fixed(DEFAULT))
+    m.enable_fast_nebular(_LW, n_grid=14)
+
+    full_p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    full_lums = np.asarray(m.predict_line_fluxes(full_p, target_wavelengths=_LW, redden=False))
+    for drop in ("neb_logU", "neb_dig_frac", "neb_dig_delta_logU"):
+        stripped = {k: v for k, v in full_p.items() if k != drop}
+        lums = np.asarray(m.predict_line_fluxes(stripped, target_wavelengths=_LW, redden=False))
+        np.testing.assert_allclose(
+            lums,
+            full_lums,
+            rtol=1e-12,
+            atol=0.0,
+            err_msg=f"dropping {drop!r} from params changed the grid-path line fluxes",
+        )
+
+    exact_m = _model(neb, sfh_wild=Fixed(DEFAULT))
+    exact_lums = np.asarray(
+        exact_m.predict_line_fluxes(full_p, target_wavelengths=_LW, redden=False)
+    )
+    rel = _worst_rel(full_lums, exact_lums)
+    assert rel < 3e-2, f"grid vs exact line fluxes off by {rel:.2e}"
+
+
+def test_explicit_ranges_still_extends_for_dig_and_parity_holds():
+    r"""An explicit ``ranges['neb_logU']`` must not bypass the DIG extension.
+
+    #2222 review I2. ``ranges={'neb_logU': (-4, -1)}`` is the prior support
+    -- the documented default and the natural thing to write before DIG is
+    armed. Before the fix this bypassed the extension entirely and
+    ``interp_nd_pchip`` clipped the DIG query silently: measured 5.399e-2
+    worst-case relative line-flux error, above this module's own 3e-2 parity
+    ceiling. The fix applies the same Minkowski-sum extension on top of a
+    user-supplied range that it applies on top of the prior support, so the
+    built axis low end is still -5.0 and parity still holds.
+    """
+    neb = {
+        "type": "cue",
+        "all_params": Fixed(DEFAULT),
+        "logU": Uniform(-4.0, -1.0),
+        "dig_frac": Fixed(0.3),
+        "dig_delta_logU": Fixed(-1.0),
+    }
+    m = _wave_model(neb, sfh_wild=Fixed(DEFAULT))
+    table = precompute_nebular_grid(m, _LW, n_grid=14, ranges={"neb_logU": (-4.0, -1.0)})
+    ax = np.asarray(table.axes[table.axis_names.index("neb_logU")])
+    assert ax.min() == pytest.approx(-5.0, abs=1e-6), f"axis min {ax.min()} != -5.0"
+
+    worst_phot, worst_line = _dig_parity(m, table, n_seeds=6, seed0=1100)
+    assert worst_phot < 3e-2, f"DIG-mixed photometry (explicit ranges=) off by {worst_phot:.2e}"
+    assert worst_line < 3e-2, f"DIG-mixed line (explicit ranges=) off by {worst_line:.2e}"
+
+
+def test_degenerate_dig_extension_drops_the_axis_and_matches_hii():
+    r"""``neb_logU`` Fixed + ``neb_dig_delta_logU`` Fixed(0.0) needs no axis.
+
+    #2222 review I3; the grid twin of
+    ``test_bug_2195_...::test_pure_dig_with_no_offset_is_the_hii_solution``.
+    Before the fix, the Minkowski-sum extension collapsed to a single point
+    (``own_lo == own_hi == v``, ``delta_lo == delta_hi == 0.0``: the HII and
+    DIG query points coincide), giving an all-identical axis and a **NaN**
+    reconstruction from ``interp_nd_pchip``'s degenerate PCHIP slopes, with
+    no error raised, where #2195 used to raise ``DIGNotOnNebularGridError``.
+    ``neb_dig_frac = 1.0`` (pure DIG) with ``delta = 0.0`` means the DIG term
+    equals the HII term everywhere, so the correct reconstruction is exactly
+    the pure-HII solution.
+    """
+    m = _model(
+        {
+            "type": "cue",
+            "all_params": Fixed(DEFAULT),
+            "logU": Fixed(-3.0),
+            "dig_frac": Fixed(1.0),
+            "dig_delta_logU": Fixed(0.0),
+        },
+        sfh_wild=Fixed(DEFAULT),
+    )
+    table = precompute_nebular_grid(m, _LW, n_grid=6)
+    assert "neb_logU" not in table.axis_names, (
+        "a degenerate DIG extension must drop neb_logU from the axes, not "
+        f"build an all-identical one: {table.axis_names}"
+    )
+
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    nion = _nion(m, p)
+    recon = np.asarray(reconstruct_nebular_line_lums(nion, p, table))
+    assert np.all(np.isfinite(recon)), f"reconstruction is not finite: {recon}"
+
+    m_hii = _model(
+        {
+            "type": "cue",
+            "all_params": Fixed(DEFAULT),
+            "logU": Fixed(-3.0),
+            "dig_frac": Fixed(0.0),
+        },
+        sfh_wild=Fixed(DEFAULT),
+    )
+    exact_hii = np.asarray(m_hii.predict_line_fluxes(p, target_wavelengths=_LW, redden=False))
+    recon_flux = np.asarray(apply_log10_scale(recon, -_log10_four_pi_dl2(Z)))
+    rel = _worst_rel(recon_flux, exact_hii)
+    assert rel < 1e-10, f"degenerate-DIG reconstruction vs pure HII off by {rel:.2e}"
+
+
 def test_dig_grid_reconstruction_is_jittable_and_gradient_safe():
-    """jit + grad through the two-lookup mix, w.r.t. both DIG parameters (#2222)."""
+    """jit + grad through the two-lookup mix, w.r.t. both DIG parameters (#2222).
+
+    Finite is not enough: a clipped or otherwise inert parameter gives a
+    gradient of exactly zero, which is finite -- and a DIG parameter the
+    likelihood cannot see is #2195's disease (#2100 gradient-assertion
+    convention). Both gradients are asserted nonzero too (measured
+    ``d/d(delta) = 5.71e-17`` at ``delta = -1.0``, ``frac = 0.3`` -- small in
+    absolute terms but 2.0e-2 relative, review M6).
+    """
     m = _model(
         {
             "type": "cue",
@@ -678,6 +812,10 @@ def test_dig_grid_reconstruction_is_jittable_and_gradient_safe():
     val = jax.jit(total_delta)(jnp.asarray(-1.0))
     g = jax.jit(jax.grad(total_delta))(jnp.asarray(-1.0))
     assert np.isfinite(float(val)) and np.isfinite(float(g))
+    assert float(g) != 0.0, (
+        "d/d(neb_dig_delta_logU) is identically zero -- finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     def total_frac(frac):
         return jnp.sum(
@@ -694,6 +832,10 @@ def test_dig_grid_reconstruction_is_jittable_and_gradient_safe():
     val2 = jax.jit(total_frac)(jnp.asarray(0.3))
     g2 = jax.jit(jax.grad(total_frac))(jnp.asarray(0.3))
     assert np.isfinite(float(val2)) and np.isfinite(float(g2))
+    assert float(g2) != 0.0, (
+        "d/d(neb_dig_frac) is identically zero -- finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_zero_frac_calls_interpolator_once_per_channel(monkeypatch):
@@ -713,8 +855,8 @@ def test_zero_frac_calls_interpolator_once_per_channel(monkeypatch):
     photometry + 2 target lines: ``predict_photometry`` makes 4 interpolator
     calls (2 channels x 2 lookups) and ``predict_line_fluxes`` makes 2 (1
     channel x 2 lookups) -- twice what this test demonstrates is possible.
-    Not fixed here (tracked as its own issue, alongside #2221's identical gap
-    for the exact path); this test only proves the mixing function's own
+    Not fixed here -- tracked as #2262, alongside #2221's identical gap for
+    the exact path; this test only proves the mixing function's own
     short-circuit contract.
     """
     import tengri.components.nebular.nebular_grid_precompute as ngp

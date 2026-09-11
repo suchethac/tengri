@@ -372,23 +372,36 @@ def mix_dig_grid_reconstruction(
     extended to cover both query points, so both are always resolvable
     against ``table`` without clipping.
 
+    .. math::
+
+        R_{\mathrm{total}} = (1 - f_{\mathrm{DIG}}) \,
+            \mathrm{reconstruct}(A, \log U) +
+            f_{\mathrm{DIG}} \, \mathrm{reconstruct}(A, \log U + \Delta \log U)
+
+    where :math:`\mathrm{reconstruct}` is ``reconstruct``, :math:`A` is
+    ``amplitude``, :math:`f_{\mathrm{DIG}}` is ``neb_dig_frac``
+    [dimensionless, in 0 to 1], and :math:`\Delta \log U` is
+    ``neb_dig_delta_logU`` [dex].
+
     Parameters
     ----------
     reconstruct : callable
-        ``reconstruct(amplitude, point, table) -> array``. One of
+        ``reconstruct(amplitude, point, table) -> ndarray``. One of
         :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_phot`,
-        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_restband`,
-        or
-        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_line_lums`.
-    amplitude : float or array
+        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_restband`
+        (both ``ndarray, shape (n_filter,)``), or
+        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_line_lums`
+        (``ndarray, shape (n_lines,)``).
+    amplitude : float or array_like, shape ()
         The Q_H-derived amplitude ``reconstruct`` expects: ``log_nion`` [dex
         re photons/s] for the photometry / rest-band channels, linear
         ``nion`` [photons/s] for the line-luminosity channel.
     point : Mapping
         Interpolation point: ``point[name]`` for every ``name`` in
         ``table.axis_names``, including ``neb_logU`` whenever that is one of
-        them. A ``point`` with no ``"neb_logU"`` key is fine when
-        ``"neb_logU"`` is not a table axis (DIG necessarily inactive then).
+        them. A ``point`` with no ``"neb_logU"`` key is fine only when
+        ``"neb_logU"`` is not a table axis (DIG necessarily inactive then);
+        when it is an axis, a missing ``"neb_logU"`` raises.
     table : NebularGridTable
         The grid to interpolate
         (:func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`).
@@ -399,10 +412,21 @@ def mix_dig_grid_reconstruction(
 
     Returns
     -------
-    array
+    ndarray, shape (n_filter,) or (n_lines,)
         Whatever ``reconstruct`` returns: the HII-only reconstruction when
         ``neb_dig_frac`` short-circuits, else the linear mix
         ``(1 - f) * hii + f * dig``.
+
+    Raises
+    ------
+    KeyError
+        If ``"neb_logU"`` is one of ``table.axis_names`` but ``point`` does
+        not carry it: every axis the table was built over must have a
+        matching entry in the query point (#2222 review I1). A caller must
+        merge the model's Fixed values in first (mirrors ``predict_state``'s
+        ``full_params = {**fixed_values, **params}``) rather than rely on a
+        registry-default placeholder, which would substitute the wrong value
+        for a model whose Fixed pin differs from the default.
 
     Notes
     -----
@@ -422,16 +446,27 @@ def mix_dig_grid_reconstruction(
        formation, time variability, and the diffuse ionized gas," MNRAS, 513,
        2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
     """
-    # ``point.get(..., 0.0)``, not ``point["neb_logU"]``: DIG mixing is
-    # unconditionally wired into every use_grid call site, including tables
-    # built with DIG inactive (neb_dig_frac Fixed at its declared 0.0), whose
-    # axes may not include "neb_logU" at all (e.g. only met_logzsol free).
-    # ``reconstruct`` reads only ``point[name] for name in table.axis_names``,
-    # so a "neb_logU" key that names no axis is inert regardless of its
-    # value; the 0.0 placeholder is never read in that case. When
-    # "neb_logU" IS an axis, the caller (component.py / sed_model.py) always
-    # supplies it, so the placeholder never masks a real value.
-    neb_logU = jnp.asarray(point.get("neb_logU", 0.0))
+    # A presence check keyed on table.axis_names, not a placeholder sentinel
+    # (#2222 review I1): when "neb_logU" IS an axis, every caller must supply
+    # it (a Fixed value that is absent silently substituted a wrong default
+    # before this fix -- 9.3e-1 measured relative error). When it is NOT an
+    # axis, no value is read downstream (reconstruct() only reads
+    # point[name] for name in table.axis_names), so the shift is skipped
+    # rather than requiring a value nothing will use.
+    if "neb_logU" in table.axis_names:
+        if "neb_logU" not in point:
+            raise KeyError(
+                "mix_dig_grid_reconstruction: 'neb_logU' is one of "
+                "table.axis_names but is missing from `point` "
+                f"(point keys: {sorted(point)!r}). Every axis name in "
+                "table.axis_names must have a matching entry in `point` -- "
+                "merge the model's Fixed values in first (e.g. "
+                "{**self.spec.get_fixed_values(), **params}), do not rely on "
+                "a registry-default placeholder."
+            )
+        neb_logU = jnp.asarray(point["neb_logU"])
+    else:
+        neb_logU = jnp.asarray(0.0)
 
     def _evaluate(logU):
         query = dict(point)
