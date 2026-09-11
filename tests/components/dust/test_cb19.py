@@ -743,18 +743,29 @@ class TestSEDModelInitNebularDispatch:
 
 # ── neb_hbfrac wiring (#2213) ──────────────────────────────────────
 #
-# The shipped ``data/cb19_templates.h5`` is not usable for a "hbfrac moves the
-# prediction" assertion: measured directly (scratch probe), its two HbFrac
-# nodes are bit-identical (max|diff| = 0.0 across every OH/age/U/nH/CO/dNO
-# combination) -- the same placeholder gap #2181 found for neb_log_nH / neb_co
-# / neb_dno, tracked pending the #2198 3MdB erratum. A live/materially-differs
-# test against that file would be false on correctly-wired code (the
-# routing-fix trap: bit-identical "distinguishing" content passes for any
-# implementation). The tests below therefore split the claim in two:
-# wiring-is-live is proven on a synthetic grid engineered to vary along
-# HbFrac (``write_synthetic_cb19_grid``, which #2213 also gave a genuine
-# HbFrac factor -- it previously left that axis flat too); the refusal on the
-# actual shipped file is proven directly, extending #2181's own coverage.
+# The shipped ``data/cb19_templates.h5`` is not usable for any content-fact
+# assertion here: measured directly (scratch probe) on the real, tracked-
+# elsewhere file, its two HbFrac nodes are bit-identical (max|diff| = 0.0
+# across every OH/age/U/nH/CO/dNO combination) -- the same placeholder gap
+# #2181 found for neb_log_nH / neb_co / neb_dno, tracked pending the #2198
+# 3MdB erratum. But ``data/cb19_templates.h5`` is untracked, and on a machine
+# without it (every CI runner) ``tests/conftest.py``'s ``pytest_configure``
+# writes its own synthetic stand-in at that exact path
+# (``_create_cb19_fixture_if_missing``) -- so "what the shipped path
+# contains" is machine-dependent, not a fixed fact a test can assert (the
+# same problem ``usable_cb19_grid_path``/``_cb19_grid_is_degenerate`` in
+# ``tests/conftest.py`` exist to name generally). Every test below that
+# depends on the grid's *content* is therefore hermetic: it writes its own
+# synthetic grid via ``write_synthetic_cb19_grid`` (varying HbFrac by default
+# since #2213, or ``vary_hbfrac=False`` for the one test that wants it flat)
+# rather than reading ``data/cb19_templates.h5``, so the assertion holds
+# regardless of what any given machine happens to have on disk at that path.
+# The one exception,
+# ``test_hbfrac_default_matches_pre_fix_behavior_on_shipped_grid``, reads the
+# default path deliberately: its claim (the default-resolved call is
+# bit-identical to the explicit ``neb_hbfrac=1.0`` call) holds for *any* grid
+# content, so it is unaffected by which file -- real or CI-synthetic -- sits
+# at that path.
 class TestHbFracWiring:
     @pytest.fixture
     def synthetic_backend(self, tmp_path, synthetic_ssp_wide):
@@ -836,29 +847,47 @@ class TestHbFracWiring:
             "radiation-bounded (1.0) value it falls back to",
         )
 
-    @_SKIP_NO_H5
     @pytest.mark.regression_bug
-    def test_check_cb19_free_params_refuses_hbfrac_on_shipped_grid(self, cb19_module):
-        """``check_cb19_free_params`` refuses ``neb_hbfrac`` on the real grid.
+    def test_check_cb19_free_params_refuses_hbfrac_on_a_flat_grid(self, cb19_module, tmp_path):
+        """``check_cb19_free_params`` refuses ``neb_hbfrac`` when its axis is flat.
 
-        Extends #2181's own coverage: the shipped grid is flat along HbFrac
-        (measured -- see module note above), exactly the condition that guard
-        exists to catch, the same way it already catches ``neb_log_nH`` /
-        ``neb_co`` / ``neb_dno`` there. A silent no-op is not acceptable for a
-        parameter whose whole point is that it now has a runtime consumer.
+        The pinned contract (#2181, extended to HbFrac by #2213): the
+        flat-axis guard (``cb19_flat_axis_params`` / ``check_cb19_free_params``)
+        *covers* the HbFrac axis, exactly as it already covers ``neb_log_nH``
+        / ``neb_co`` / ``neb_dno``. This is a claim about the guard's
+        coverage, not about what ``data/cb19_templates.h5`` happens to
+        contain on any given machine -- see the ``#2198``/``#2181`` prose in
+        this module's docstring and the ``neb_hbfrac`` declaration comment
+        (``components/nebular/_params.py``) for that separate,
+        machine-dependent fact.
+
+        Deliberately hermetic: builds its own grid with
+        ``write_synthetic_cb19_grid(..., vary_hbfrac=False)`` rather than
+        reading the shipped path. ``data/cb19_templates.h5`` is untracked
+        (#2198) and CI writes its own synthetic stand-in there at collection
+        time (``tests/conftest.py``'s ``_create_cb19_fixture_if_missing``);
+        since #2213 gave that stand-in real HbFrac variation (to support the
+        *other* tests in this class), a version of this test reading the
+        shipped path passes or fails depending on which grid a given machine
+        happens to have on disk -- exactly the trap
+        ``usable_cb19_grid_path``/``_cb19_grid_is_degenerate`` in
+        ``tests/conftest.py`` exist to name for the general case. It must
+        not be gated on ``data/cb19_templates.h5`` existing, and must not
+        skip when the loaded grid turns out non-flat: either would skip
+        exactly when it would otherwise catch a regression.
         """
         from tengri.config.exceptions import ParameterError
+        from tests._cb19_grid import write_synthetic_cb19_grid
 
-        grid = cb19_module.load_cb19_grid()
+        grid_path = write_synthetic_cb19_grid(tmp_path / "cb19_templates.h5", vary_hbfrac=False)
+        grid = cb19_module.load_cb19_grid(filepath=grid_path)
         flat = cb19_module.cb19_flat_axis_params(grid)
         assert "neb_hbfrac" in flat, (
-            "the shipped grid's HbFrac axis is flat; cb19_flat_axis_params "
-            "should report neb_hbfrac"
+            "cb19_flat_axis_params did not report neb_hbfrac on a grid whose "
+            "HbFrac axis was deliberately written flat"
         )
         with pytest.raises(ParameterError, match="neb_hbfrac"):
-            cb19_module.check_cb19_free_params(
-                grid, {"neb_hbfrac"}, grid_path="data/cb19_templates.h5"
-            )
+            cb19_module.check_cb19_free_params(grid, {"neb_hbfrac"}, grid_path=grid_path)
 
     @pytest.mark.contract
     def test_hbfrac_midpoint_is_mean_of_endpoints(self, cb19_module, synthetic_backend):

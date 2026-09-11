@@ -117,13 +117,28 @@ def _write(path: Path, ratios: np.ndarray) -> None:
         grp.create_dataset("line_ratios", data=ratios.astype(np.float32))
 
 
-def write_synthetic_cb19_grid(path: str | Path) -> Path:
+def write_synthetic_cb19_grid(path: str | Path, *, vary_hbfrac: bool = True) -> Path:
     """Write a CB_19 grid that varies along every interpolation axis.
 
     Parameters
     ----------
     path : str or Path
         Destination HDF5 file; parent directories are created.
+    vary_hbfrac : bool, optional
+        Whether the HbFrac axis (slab position 6) carries the same smooth
+        factor as the other five parameter-indexed axes. Default True. Set
+        False to write a grid whose HbFrac axis is flat while every other
+        axis still varies: for tests of the #2181 flat-axis guard
+        (:func:`~tengri.components.nebular.cloudy_cb19.cb19_flat_axis_params`
+        / :func:`~tengri.components.nebular.cloudy_cb19.check_cb19_free_params`)
+        specifically on HbFrac, which must not depend on whatever
+        ``data/cb19_templates.h5`` happens to hold on the machine running the
+        test: that file is untracked (#2198), CI writes its own synthetic
+        stand-in there at collection time
+        (``tests/conftest.py``'s ``_create_cb19_fixture_if_missing``), and
+        with ``vary_hbfrac`` defaulting True that stand-in is *not* flat along
+        HbFrac -- see ``usable_cb19_grid_path`` in ``tests/conftest.py`` for
+        the same machine-dependence problem in the general case.
 
     Returns
     -------
@@ -132,12 +147,12 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
 
     Notes
     -----
-    Each of the six parameter-indexed axes (``log_OH``, ``log_U``,
-    ``log_nH``, ``log_CO``, ``dNO``, ``HbFrac``) carries a smooth monotone
-    factor on the metal lines, so sweeping the parameter that indexes it moves
-    the prediction and a finite-difference gradient is comparable to the
-    analytic one. The age axis is left flat: the SSP grid indexes it, not a
-    fitted parameter.
+    Each of the parameter-indexed axes (``log_OH``, ``log_U``, ``log_nH``,
+    ``log_CO``, ``dNO``, and -- when ``vary_hbfrac`` -- ``HbFrac``) carries a
+    smooth monotone factor on the metal lines, so sweeping the parameter that
+    indexes it moves the prediction and a finite-difference gradient is
+    comparable to the analytic one. The age axis is left flat: the SSP grid
+    indexes it, not a fitted parameter.
 
     The four hydrogen recombination lines (:data:`_HYDROGEN_INDICES`) carry no
     axis factor and keep their Case B ratios at every node, which is both how
@@ -158,14 +173,17 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
     varies[list(_HYDROGEN_INDICES)] = False
 
     # (axis position in the slab, node values, dex per unit of that axis).
-    for axis, values, slope in (
+    factor_axes = [
         (0, axes["log_OH_total"], 0.30),
         (2, axes["log_U"], 0.50),
         (3, axes["log_nH"], 0.20),
         (4, axes["log_CO"], 0.40),
         (5, axes["dNO"], 0.60),
-        (6, axes["HbFrac"], 0.25),
-    ):
+    ]
+    if vary_hbfrac:
+        factor_axes.append((6, axes["HbFrac"], 0.25))
+
+    for axis, values, slope in factor_axes:
         factor = 10.0 ** (slope * (values - values.mean()))
         shape = [1] * ratios.ndim
         shape[axis] = values.size
