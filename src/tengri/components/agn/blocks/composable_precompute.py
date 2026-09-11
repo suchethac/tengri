@@ -160,10 +160,10 @@ def default_wave_rest(recipe: Recipe, agn_norm: str = "cigale_joint") -> np.ndar
     chosen inside the helper and never becomes the model's rest wavelength.
 
     The range is now derived from the same declared native support the guard
-    requires (:func:`~tengri.forward.sed_model._polar_reference_required_extent_aa`),
-    unioned with the legacy span so no existing caller loses coverage, and
-    sampled at the legacy points-per-decade (374.75) with a floor of 1500
-    points.
+    requires -- through ``forward.sed_model._polar_reference_required_extent_aa``,
+    the function that reads the requirement off the template axis -- unioned
+    with the legacy span so no existing caller loses coverage, and sampled at
+    the legacy points-per-decade (374.75) with a floor of 1500 points.
 
     Parameters
     ----------
