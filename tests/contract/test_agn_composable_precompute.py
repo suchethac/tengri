@@ -152,6 +152,30 @@ def test_precompute_requires_axis_params():
         )
 
 
+def test_precompute_rejects_a_non_cigale_joint_agn_norm_in_fixed_values():
+    """agn_norm cannot travel the jax.jit-wrapped evaluation path (Item 6).
+
+    ``_evaluate_recipe_on_grid``'s inner ``_one_point`` unpacks
+    ``fixed_values`` into TRACED keyword arguments, so a string ``agn_norm``
+    could never reach ``composable_agn_l_nu`` -- the evaluation can only ever
+    run under its own internal default, ``'cigale_joint'``. ``precompute()``
+    must say so explicitly rather than silently choosing a wave grid and
+    grid-extent refusal for a policy it can never apply.
+    """
+    fw, ft = _toy_filter()
+    recipe = Recipe.from_selectors(disc="powerlaw", axis_params=("agn_log_lbol",))
+    with pytest.raises(ValueError, match="cigale_joint"):
+        composable_precompute.precompute(
+            filter_waves=[fw],
+            filter_trans=[ft],
+            redshift=0.0,
+            parameters=None,
+            recipe=recipe,
+            axis_grids={"agn_log_lbol": np.linspace(43.0, 46.0, 3)},
+            fixed_values={"agn_norm": "independent"},
+        )
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Auto-collapse via Parameters
 # ──────────────────────────────────────────────────────────────────────

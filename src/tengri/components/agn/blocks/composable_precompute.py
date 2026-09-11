@@ -270,6 +270,30 @@ def precompute(
     from tengri.forward.sed_model import _check_polar_reference_grid_extent
 
     _agn_norm = str(dict(fixed_values or {}).get("agn_norm", "cigale_joint") or "cigale_joint")
+    # _agn_norm is used below only to choose the wave-grid extent (R71) and
+    # the grid-extent refusal message (R66) -- both Python-level, composition
+    # -time calls. The spectra themselves are evaluated by
+    # _evaluate_recipe_on_grid's jax.jit-wrapped _one_point(**call_params),
+    # where fixed_values (this same Mapping) is unpacked into TRACED keyword
+    # arguments: a string value there cannot survive tracing (JAX has no
+    # array representation for a Python str), so composable_agn_l_nu /
+    # compose_l_nu can only ever run under their own internal default,
+    # 'cigale_joint' (params.get("agn_norm", "cigale_joint") in
+    # blocks.runner.compose_l_nu). A caller setting fixed_values['agn_norm']
+    # to anything else would silently get a wave grid and refusal chosen for
+    # a policy the evaluation can never apply -- assert the assumption
+    # explicitly instead of letting that happen by accident.
+    if _agn_norm != "cigale_joint":
+        raise ValueError(
+            f"composable_precompute.precompute: fixed_values['agn_norm'] is "
+            f"{_agn_norm!r}, but the evaluated recipe can only ever run under "
+            "'cigale_joint' -- _evaluate_recipe_on_grid's inner call is "
+            "jax.jit-wrapped with fixed_values passed through as traced "
+            "keyword arguments, so a different agn_norm string could not "
+            "reach composable_agn_l_nu even if this check did not catch it "
+            "first. Omit 'agn_norm' from fixed_values (the default) or set "
+            "it to 'cigale_joint' explicitly."
+        )
     if wave_rest is None:
         wave_rest = default_wave_rest(recipe, _agn_norm)
     else:
