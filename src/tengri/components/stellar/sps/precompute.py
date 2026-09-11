@@ -30,12 +30,15 @@ Usage:
     flux = fast_photometry_ztable(weights, ztable, z, dust_params)
 """
 
+import dataclasses
 from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_digest
+from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import preintegrate_grid, subband_quadrature
 from tengri.utils.physics_constants import TEN_PC_CM
@@ -621,9 +624,45 @@ class PhotometricZTable(NamedTuple):
     ssp_subband_phot_igm_table: jnp.ndarray | None = None
 
 
+@dataclasses.dataclass(frozen=True)
+class ZTableRequest:
+    """Request dataclass for z-table precomputation, keyed by every field.
+
+    All fields are hashable (tuples, arrays via array_key, scalars, strings).
+    Each field represents a dimension of the precomputation: the z-table
+    and its row vectors (flux scales, effective wavelengths, IGM transmission)
+    are defined uniquely by these inputs.
+    """
+
+    #: Schema version: bump when the table structure changes
+    version: int
+    #: Array key for SSP wavelength grid
+    ssp_wave: tuple
+    #: Array key for SSP flux grid (n_met, n_age, n_wave)
+    ssp_flux: tuple
+    #: Tuple of (wave_key, trans_key) per filter, in order
+    filters: tuple
+    #: Array key for redshift grid
+    z_grid: tuple
+    #: Whether to apply IGM absorption
+    apply_igm: bool
+    #: Whether to apply Taylor expansion correction
+    taylor_correction: bool
+    #: Filter convolution convention (str)
+    convention: str
+    #: Number of sub-band quadrature nodes
+    n_subbands: int
+    #: Cosmology parameters (baked DEFAULT_COSMO or equivalent)
+    cosmology: tuple
+    #: Whether JAX X64 mode is enabled
+    x64: bool
+    #: JAX backend name
+    backend: str
+
+
 # Bump when the quadrature or table layout changes: invalidates every
 # cached z-table built by an older algorithm.
-_ZTABLE_CACHE_VERSION = 2
+_ZTABLE_CACHE_VERSION = 3
 
 
 def _ztable_cache_dir():
@@ -659,44 +698,35 @@ def _ztable_cache_key(
     Contamination without these: float32 session writes an entry, float64
     session reads it (~1e-7 relative error silently poisoning precision
     benchmarks/parity tests that share a cache dir between arms).
+
+    The key is built from a frozen ZTableRequest dataclass, ensuring every
+    input dimension is represented: omitting a field cannot be a silent bug
+    because the dataclass has every field explicitly listed and type-annotated.
     """
-    import hashlib
-
-    import jax
-
-    h = hashlib.sha256()
-    h.update(f"v{_ZTABLE_CACHE_VERSION}".encode())
-    for arr in (ssp_data.ssp_wave, ssp_data.ssp_flux):
-        a = np.ascontiguousarray(np.asarray(arr))
-        h.update(repr((a.shape, a.dtype.str)).encode())
-        h.update(a)
-    for fw, ft in zip(filter_waves, filter_trans):
-        for arr in (fw, ft):
-            a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
-            h.update(a)
-    h.update(np.ascontiguousarray(np.asarray(z_grid, dtype=np.float64)))
-    # n_subbands changes the table's CONTENT, so it must change the hash. Without
-    # it a cached K=0 table is reused for a K=5 model and the quadrature silently
-    # no-ops -- persistently, across processes (#1122).
-    # The PAYLOAD SCHEMA is part of the key, not just the payload's inputs. #1859
-    # renamed ``flux_scale_table`` -> ``log10_flux_scale_table`` and changed what
-    # the numbers mean; without a version bump a warm cache would either KeyError
-    # or, worse, hand a linear table to a consumer expecting logs. Bump this
-    # whenever the npz field set or the meaning of a field changes.
-    h.update(
-        repr(
-            (
-                bool(apply_igm),
-                bool(taylor_correction),
-                str(convention),
-                int(n_subbands),
-                "schema=3",
-                bool(jax.config.jax_enable_x64),
-                jax.default_backend(),
-            )
-        ).encode()
+    # Convert filter arrays to array_key tuples
+    filters_keyed = tuple(
+        (array_key(fw), array_key(ft)) for fw, ft in zip(filter_waves, filter_trans)
     )
-    return h.hexdigest()
+
+    # cosmology is a hardcoded module default on this path today (#2145);
+    # this row is the tripwire: the day a per-model cosmology is threaded
+    # through, it must reach this request
+    req = ZTableRequest(
+        version=_ZTABLE_CACHE_VERSION,
+        ssp_wave=array_key(ssp_data.ssp_wave),
+        ssp_flux=array_key(ssp_data.ssp_flux),
+        filters=filters_keyed,
+        z_grid=array_key(z_grid),
+        apply_igm=bool(apply_igm),
+        taylor_correction=bool(taylor_correction),
+        convention=str(convention),
+        n_subbands=int(n_subbands),
+        cosmology=baked(DEFAULT_COSMO),
+        x64=bool(jax.config.jax_enable_x64),
+        backend=jax.default_backend(),
+    )
+
+    return stable_digest(repr(frozen_dataclass_key(req)).encode())
 
 
 def precompute_photometry_ztable(

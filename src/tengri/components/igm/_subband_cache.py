@@ -16,8 +16,10 @@ Key completeness
 ----------------
 A cross-process cache whose key omits an input returns wrong physics silently
 and persistently; that is exactly how #1122 happened, and the z-table's own
-key carries a comment about it. So the key here is derived from a closed
-reading of what the computation consumes rather than from what seemed likely.
+key carries a comment about it. So the key here is every field of a frozen
+request dataclass (``SubbandRequest``, ``SubbandBandRequest``): a new input is
+a new field, and the perturbation test derives its population from
+``dataclasses.fields``, so a field that does not move the digest is caught.
 
 ``subband_node_transmission`` reads exactly three things on its cacheable path:
 
@@ -37,21 +39,67 @@ the table layout changes; bump it in the same commit as any such change.
 
 from __future__ import annotations
 
-import hashlib
+import dataclasses
 import os
 from pathlib import Path
 
 import numpy as np
 
+from tengri._cache_keys import array_key, frozen_dataclass_key, stable_digest
+
 __all__ = ["cache_dir", "cache_key", "clear_memo", "load", "memo_get", "memo_put", "store"]
 
 #: Bump when the stored table's meaning changes (transmission formula, node
 #: layout, dtype convention). Entries keyed with an older version are ignored.
-_CACHE_VERSION = 2
+_CACHE_VERSION = 3
 
 #: In-process memo. The on-disk layer alone still costs an npz read per build,
 #: and #1453 measured repeat builds *within* one process re-paying in full.
 _MEMO: dict[str, np.ndarray] = {}
+
+
+@dataclasses.dataclass(frozen=True)
+class SubbandRequest:
+    """Request dataclass for sub-band IGM transmission table, keyed by every field.
+
+    All fields are hashable (tuples, arrays via array_key, scalars, strings).
+    Each field represents a dimension of the transmission table computation.
+    """
+
+    #: Schema version: bump when the table structure changes
+    version: int
+    #: Array key for rest-frame sub-band node wavelengths
+    waves_rest: tuple
+    #: Array key for redshift grid
+    z_grid: tuple
+    #: IGM transmission law name ("inoue", "madau", etc.)
+    igm_model: str
+    #: Whether patchy reionization is modeled (currently unused on this path)
+    igm_patchy: bool
+    #: Whether DLAs are included (currently unused on this path)
+    use_dla: bool
+    #: Whether JAX X64 mode is enabled
+    x64: bool
+    #: JAX backend name
+    backend: str
+
+
+@dataclasses.dataclass(frozen=True)
+class SubbandBandRequest(SubbandRequest):
+    """Extended request for band-factor (filter-averaged) transmission table.
+
+    Inherits all SubbandRequest fields and adds filter and convolution convention.
+
+    The band path carries ``igm_patchy`` and ``use_dla`` at their constant
+    ``False``: the precomputable path is disabled when either is set
+    (``IGMSEDComponent.precompute``), so they are kept at their constants rather
+    than dropped from the key.
+    """
+
+    #: Tuple of (wave_key, trans_key) per filter, in order
+    filters: tuple
+    #: Filter convolution convention (str)
+    convention: str
 
 
 def cache_dir() -> Path | None:
@@ -76,6 +124,10 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
     session reads it (~1e-7 relative error silently poisoning precision
     benchmarks/parity tests that share a cache dir between arms). Issue #2024.
 
+    The key is built from a frozen SubbandRequest dataclass, ensuring every
+    input dimension is represented: omitting a field cannot be a silent bug
+    because the dataclass has every field explicitly listed and type-annotated.
+
     Parameters
     ----------
     waves_rest : array_like
@@ -98,26 +150,18 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
     """
     import jax
 
-    h = hashlib.sha256()
-    h.update(f"v{_CACHE_VERSION}".encode())
-    for arr in (waves_rest, z_grid):
-        a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
-        # Shape and dtype go in alongside the bytes: identical bytes under a
-        # different shape are a different table.
-        h.update(repr((a.shape, a.dtype.str)).encode())
-        h.update(a.tobytes())
-    h.update(
-        repr(
-            (
-                str(igm_model),
-                bool(igm_patchy),
-                bool(use_dla),
-                bool(jax.config.jax_enable_x64),
-                jax.default_backend(),
-            )
-        ).encode()
+    req = SubbandRequest(
+        version=_CACHE_VERSION,
+        waves_rest=array_key(waves_rest),
+        z_grid=array_key(z_grid),
+        igm_model=str(igm_model),
+        igm_patchy=bool(igm_patchy),
+        use_dla=bool(use_dla),
+        x64=bool(jax.config.jax_enable_x64),
+        backend=jax.default_backend(),
     )
-    return h.hexdigest()
+
+    return stable_digest(repr(frozen_dataclass_key(req)).encode())
 
 
 def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, convention) -> str:
@@ -136,6 +180,9 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     Contamination without these: float32 session writes an entry, float64
     session reads it (~1e-7 relative error silently poisoning precision
     benchmarks/parity tests that share a cache dir between arms). Issue #2024.
+
+    The key is built from a frozen SubbandBandRequest dataclass, ensuring every
+    input dimension is represented: omitting a field cannot be a silent bug.
 
     Parameters
     ----------
@@ -159,29 +206,25 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     """
     import jax
 
-    h = hashlib.sha256()
-    h.update(f"bf-v{_CACHE_VERSION}".encode())
-    for arr in (wave_rest, z_grid):
-        a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
-        h.update(repr((a.shape, a.dtype.str)).encode())
-        h.update(a.tobytes())
-    h.update(repr(len(filter_waves)).encode())
-    for fw, ft in zip(filter_waves, filter_trans):
-        for arr in (fw, ft):
-            a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
-            h.update(repr((a.shape, a.dtype.str)).encode())
-            h.update(a.tobytes())
-    h.update(
-        repr(
-            (
-                str(igm_model),
-                str(convention),
-                bool(jax.config.jax_enable_x64),
-                jax.default_backend(),
-            )
-        ).encode()
+    # Convert filter arrays to array_key tuples
+    filters_keyed = tuple(
+        (array_key(fw), array_key(ft)) for fw, ft in zip(filter_waves, filter_trans)
     )
-    return h.hexdigest()
+
+    req = SubbandBandRequest(
+        version=_CACHE_VERSION,
+        waves_rest=array_key(wave_rest),
+        z_grid=array_key(z_grid),
+        igm_model=str(igm_model),
+        igm_patchy=False,
+        use_dla=False,
+        filters=filters_keyed,
+        convention=str(convention),
+        x64=bool(jax.config.jax_enable_x64),
+        backend=jax.default_backend(),
+    )
+
+    return stable_digest(repr(frozen_dataclass_key(req)).encode())
 
 
 def _enabled() -> bool:
