@@ -386,6 +386,26 @@ posterior = forward.fit(
 )
 ```
 
+## Finding 9 — the library path reproduces the posterior and carries ~12 s of overhead the harness does not
+
+`forward.fit(data, method="mcmc_nuts", n_chains=4, n_warmup=150, n_samples=300,
+target_accept_rate=0.8)` with `TENGRI_HOST_DEVICES=4` and nothing else set,
+`ctl-dpl` seed 7, a fresh model per call so the adaptation cache is cold (it
+lives on the model and a second call on the same model skips warmup):
+profiling auto-enabled ("every guard passed"), `chain_parallel: pmap`, dense
+metric by policy, all eight parameters at **ESS 118-821, max split R-hat
+1.022**, mass 11.961 ± 0.036 against truth 11.973 — the harness's posterior.
+Wall: **28.1 s** at `n_burnin=0` (31 s with the default 100 burn-in draws):
+warmup 12.4 s, sampling 10.6 s, MAP init plus finalization ~5 s, against the
+harness's 8.2 + 6.1 + 1.4 = 15.6 s for the same gradients. The harness
+measures the algorithm; the library adds the `_stabilize_dense_mass_step`
+probe, a multistart MAP seed, a heavier per-draw scan and posterior
+finalization. Removing that ~12 s is a profiling pass on `run_nuts`, not a
+sampler question, and is the next step to make the recipe's number the
+library's number. Model build (`SEDModel.build` + precompute-table load) is
+**25-27 s** per fresh model on this box and is outside the agreed budget; a
+notebook that rebuilds the model per galaxy pays it every time.
+
 ## Caveats
 
 1. **Walls are contended** except the idle series in Finding 5; gradients are
