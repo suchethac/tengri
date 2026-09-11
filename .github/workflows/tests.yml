@@ -688,6 +688,15 @@ jobs:
       - run: python tools/check_doc_grammar_keys.py
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # A different question, one step earlier (#2241): not "is a signature
+      # default inside its declared prior's support" but "is a signature
+      # default, or a .get(name, literal) fallback, a bare numeral at all for
+      # a name a declaration already owns". Equality with the declaration
+      # cannot catch a pair that has already drifted (dust_T/dust_beta_ir did,
+      # unnoticed, before this guard existed, #2261), so this checks
+      # structure, not value. Scoped to the dust emission tree; stdlib-only,
+      # so it needs no venv beyond the interpreter, unlike its sibling above.
+      - run: python tools/check_literal_param_defaults.py
       # The redshift-specific instance of the same rule: a numeric default on
       # params.get('redshift', …) is unreachable in live paths and silences the
       # one condition worth hearing about — #1432.

@@ -10,6 +10,12 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    ANALYTIC_BETA_IR_DEFAULT,
+    CASEY_T_K_DEFAULT,
+    DEFAULT_DUST_ALPHA_MIR,
+    DEFAULT_DUST_LAMBDA_0_UM,
+)
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 from tengri.parameters.resolve import require_redshift
@@ -32,8 +38,9 @@ class Casey2012IRSEDComponent(EmissionComponent):
 
     Casey (2012) Eqs. 1-2, with the turnover λ_c(α, T) from Eqs. 11-12
     and the power-law amplitude tied to the graybody at λ_c (#1004). The
-    opacity pivot λ_0 is the ``lambda_0_um`` parameter (default 200 µm,
-    Casey 2012; Synthesizer ``Casey12(lam_0=...)``).
+    opacity pivot λ_0 is the ``lambda_0_um`` parameter (default read from
+    the declaration, #2241; today 200 µm, Casey 2012; Synthesizer
+    ``Casey12(lam_0=...)``).
 
     When ``optically_thin=True`` (static knob), the graybody uses its
     small-opacity limit (λ_0/λ)^β ν³/(exp(hν/kT) - 1); the mid-IR power
@@ -63,11 +70,18 @@ class Casey2012IRSEDComponent(EmissionComponent):
 
     name: str = "casey2012"
 
-    # Free parameters (user-facing names, prefix-stripped)
-    T = Fixed(35.0)
-    beta_ir = Fixed(1.8)
-    alpha_mir = Fixed(2.0)
-    lambda_0_um = Fixed(200.0)
+    # Free parameters (user-facing names, prefix-stripped). ``T``/``beta_ir``
+    # read the same module constants as the closure's own signature defaults
+    # (#2241), so the two cannot drift from each other; see
+    # ``tengri.components.dust._params`` for why they are not derived from
+    # that table's own ``dust_T``/``dust_beta_ir`` entries (#2261).
+    # ``alpha_mir``/``lambda_0_um`` read the same ``declared_default(PARAMS,
+    # ...)`` constants the closure's signature reads, for the same reason
+    # (#2241): a bare literal here would be a second, independent copy.
+    T = Fixed(CASEY_T_K_DEFAULT)
+    beta_ir = Fixed(ANALYTIC_BETA_IR_DEFAULT)
+    alpha_mir = Fixed(DEFAULT_DUST_ALPHA_MIR)
+    lambda_0_um = Fixed(DEFAULT_DUST_LAMBDA_0_UM)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "casey2012",

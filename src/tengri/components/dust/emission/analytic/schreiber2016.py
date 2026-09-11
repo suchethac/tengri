@@ -10,6 +10,7 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import DEFAULT_DUST_F_PAH, SCHREIBER_T_K_DEFAULT
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 from tengri.parameters.resolve import require_redshift
@@ -81,8 +82,15 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
 
     # Free parameters (user-facing names, prefix-stripped). Canonical (#849):
     # ``dust_T`` + ``dust_f_pah`` (the old ``dust_fpah`` spelling is an alias).
-    T = Fixed(30.0)
-    f_pah = Fixed(0.05)
+    # ``T`` reads the same module constant as the closure's own signature
+    # default (#2241), so the two cannot drift from each other; see
+    # ``tengri.components.dust._params`` for why it is not derived from that
+    # table's own ``dust_T`` entry (#2261). ``f_pah`` reads the same
+    # ``declared_default(PARAMS, ...)`` constant the closure's signature
+    # reads, for the same reason (#2241): a bare literal here would be a
+    # second, independent copy.
+    T = Fixed(SCHREIBER_T_K_DEFAULT)
+    f_pah = Fixed(DEFAULT_DUST_F_PAH)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "schreiber2016",

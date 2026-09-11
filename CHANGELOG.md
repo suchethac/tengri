@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
+  ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
+  signature defaults from the declared parameter table
+  (``declared_default(PARAMS, ...)``) or a shared named constant instead of
+  repeating the value as a bare literal; no default value changes (a
+  zero-diff probe over every closure at only-defaults confirms bit-identical
+  output before/after). ``EnergyBalanceSplitIRSEDComponent.predict`` now
+  subscripts ``p["f_cold"]`` and five siblings instead of falling back to a
+  stale ``.get(name, literal)`` default, so a hand-built params dict missing
+  a key raises ``KeyError`` naming it rather than silently substituting the
+  literal. A new stdlib-only guard, ``tools/check_literal_param_defaults.py``,
+  scans ``src/tengri/components/dust/emission/`` for a bare numeral standing
+  in for a name a ``ParamDeclaration`` or component class attribute already
+  owns, and is wired into the same CI job as ``check_param_defaults.py``.
+  ``dust_T``/``dust_beta_ir`` disagree between the shared
+  ``components/dust/_params.py`` table and every analytic template's own
+  default; that disagreement is left as-is and tracked separately (#2261)
+  (#2241).
+
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
   ``@renamed_kwarg`` wraps the function before ``@register_dust_law`` stores it
