@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
+  ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
+  ``@renamed_kwarg`` wraps the function before ``@register_dust_law`` stores it
+  in the registry; the registry callable and ``list_laws()`` result now accept
+  the alias with a DeprecationWarning instead of raising TypeError. Per-dict
+  strictness is unchanged: ``select_law_kwargs`` and ``reject_unread_law_kwargs``
+  still reject ``n_slope`` (only the callable wrapper accepts it) (#2257).
+
 - The flat `Parameters(...)` form refuses a dust shape parameter or a
   `dust_law_overrides` entry that the resolved attenuation law never reads, and
   an override screen other than `bc`/`diff`/`neb`, through the same validator
