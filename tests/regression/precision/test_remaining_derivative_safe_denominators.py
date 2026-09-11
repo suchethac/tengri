@@ -482,7 +482,7 @@ def test_nebular_continuum_gaunt_factor_gradient_finite_at_long_wavelength():
 
         def f(wave_hi):
             wave_aa = jnp.linspace(3000.0, wave_hi, 64, dtype=jnp.float32)
-            return jnp.sum(compute_analytic_nebular_continuum(wave_aa, 1.0e10, 0.0))
+            return jnp.sum(compute_analytic_nebular_continuum(wave_aa, 1.0e10, log_z_abs=0.0))
 
         g = jax.grad(f)(jnp.asarray(1.0e9, dtype=jnp.float32))
         assert g.dtype == jnp.float32
@@ -509,7 +509,11 @@ def test_nebular_continuum_case_b_recombination_gradient_finite_at_high_temperat
         wave_aa = jnp.linspace(1000.0, 3000.0, 32, dtype=jnp.float32)
 
         def f(temperature):
-            return jnp.sum(compute_analytic_nebular_continuum(wave_aa, 1.0e10, 0.0, temperature))
+            return jnp.sum(
+                compute_analytic_nebular_continuum(
+                    wave_aa, 1.0e10, log_z_abs=0.0, temperature=temperature
+                )
+            )
 
         g = jax.grad(f)(jnp.asarray(3.0e8, dtype=jnp.float32))
         assert g.dtype == jnp.float32
