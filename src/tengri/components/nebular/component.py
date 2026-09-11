@@ -1424,7 +1424,7 @@ def _make_log_line_fn(line_key):
     _fn.__name__ = f"_log_{line_key}_fn"
     _fn.__doc__ = (
         f"log10 of the {line_key} line luminosity [dex re erg/s]. "
-        f"`log_{line_key} = log10({line_key} * L_sun)`."
+        f"`log_{line_key} = log10({line_key}) + log10(L_sun)`."
     )
     return _fn
 
@@ -1457,7 +1457,7 @@ _LOG_LINE_PROPERTIES = {
         doc=(
             f"log10 of {_LINES_PROPERTIES[name].doc.lower()} [dex re erg/s]; "
             f"float32-safe form of `{name}`. `log_{name} = "
-            f"log10({name} * L_sun)`."
+            f"log10({name}) + log10(L_sun)`."
         ),
         fn=_make_log_line_fn(name),
     )

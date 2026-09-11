@@ -21,21 +21,21 @@
 | `l_x_agn` | Lsun | xray | xray | X-ray luminosity from AGN. `l_x_agn = 10**(log_l_x_agn - log10(L_sun))` |
 | `l_x_total` | Lsun | xray | xray | Total X-ray luminosity (XRB + AGN). `l_x_total = 10**(log_l_x_total - log10(L_sun))` |
 | `l_x_xrb` | Lsun | xray | xray | X-ray luminosity from X-ray binaries. `l_x_xrb = 10**(log_l_x_xrb - log10(L_sun))` |
-| `log_civ_1549` | dex | lines | nebular | log10 of civ 1549 line luminosity, nan with a warning on cue's legacy 128-line subset (full_catalog=false), where no catalog line falls within tolerance of this wavelength (#2239) [dex re erg/s]; float32-safe form of `civ_1549`. `log_civ_1549 = log10(civ_1549 * L_sun)`. |
-| `log_halpha` | dex | lines | nebular | log10 of hα line luminosity [dex re erg/s]; float32-safe form of `halpha`. `log_halpha = log10(halpha * L_sun)`. |
-| `log_hbeta` | dex | lines | nebular | log10 of hβ line luminosity [dex re erg/s]; float32-safe form of `hbeta`. `log_hbeta = log10(hbeta * L_sun)`. |
+| `log_civ_1549` | dex | lines | nebular | log10 of civ 1549 line luminosity, nan with a warning on cue's legacy 128-line subset (full_catalog=false), where no catalog line falls within tolerance of this wavelength (#2239) [dex re erg/s]; float32-safe form of `civ_1549`. `log_civ_1549 = log10(civ_1549) + log10(L_sun)`. |
+| `log_halpha` | dex | lines | nebular | log10 of hα line luminosity [dex re erg/s]; float32-safe form of `halpha`. `log_halpha = log10(halpha) + log10(L_sun)`. |
+| `log_hbeta` | dex | lines | nebular | log10 of hβ line luminosity [dex re erg/s]; float32-safe form of `hbeta`. `log_hbeta = log10(hbeta) + log10(L_sun)`. |
 | `log_l_x_agn` | dex | xray | xray | log10 X-ray luminosity from AGN [dex re erg/s]; float32-safe form of `l_x_agn`. -inf when no AGN is present, where the linear form is 0.0 |
 | `log_l_x_total` | dex | xray | xray | log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]; float32-safe form of `l_x_total` |
 | `log_l_x_xrb` | dex | xray | xray | log10 X-ray luminosity from X-ray binaries [dex re erg/s]; float32-safe form of `l_x_xrb` |
-| `log_lya` | dex | lines | nebular | log10 of lyman alpha line luminosity [dex re erg/s]; float32-safe form of `lya`. `log_lya = log10(lya * L_sun)`. |
-| `log_nii_6548` | dex | lines | nebular | log10 of nii 6548 line luminosity [dex re erg/s]; float32-safe form of `nii_6548`. `log_nii_6548 = log10(nii_6548 * L_sun)`. |
-| `log_nii_6584` | dex | lines | nebular | log10 of nii 6584 line luminosity [dex re erg/s]; float32-safe form of `nii_6584`. `log_nii_6584 = log10(nii_6584 * L_sun)`. |
-| `log_oii` | dex | lines | nebular | log10 of oii line luminosity [dex re erg/s]; float32-safe form of `oii`. `log_oii = log10(oii * L_sun)`. |
-| `log_oiii_4959` | dex | lines | nebular | log10 of oiii 4959 line luminosity [dex re erg/s]; float32-safe form of `oiii_4959`. `log_oiii_4959 = log10(oiii_4959 * L_sun)`. |
-| `log_oiii_5007` | dex | lines | nebular | log10 of oiii 5007 line luminosity [dex re erg/s]; float32-safe form of `oiii_5007`. `log_oiii_5007 = log10(oiii_5007 * L_sun)`. |
+| `log_lya` | dex | lines | nebular | log10 of lyman alpha line luminosity [dex re erg/s]; float32-safe form of `lya`. `log_lya = log10(lya) + log10(L_sun)`. |
+| `log_nii_6548` | dex | lines | nebular | log10 of nii 6548 line luminosity [dex re erg/s]; float32-safe form of `nii_6548`. `log_nii_6548 = log10(nii_6548) + log10(L_sun)`. |
+| `log_nii_6584` | dex | lines | nebular | log10 of nii 6584 line luminosity [dex re erg/s]; float32-safe form of `nii_6584`. `log_nii_6584 = log10(nii_6584) + log10(L_sun)`. |
+| `log_oii` | dex | lines | nebular | log10 of oii line luminosity [dex re erg/s]; float32-safe form of `oii`. `log_oii = log10(oii) + log10(L_sun)`. |
+| `log_oiii_4959` | dex | lines | nebular | log10 of oiii 4959 line luminosity [dex re erg/s]; float32-safe form of `oiii_4959`. `log_oiii_4959 = log10(oiii_4959) + log10(L_sun)`. |
+| `log_oiii_5007` | dex | lines | nebular | log10 of oiii 5007 line luminosity [dex re erg/s]; float32-safe form of `oiii_5007`. `log_oiii_5007 = log10(oiii_5007) + log10(L_sun)`. |
 | `log_q_h` | dex | ionizing | stellar | log10(ionizing photon production rate / (photons/s)). `q_h [photons/s] = 10**log_q_h`. |
-| `log_sii_6717` | dex | lines | nebular | log10 of sii 6717 line luminosity [dex re erg/s]; float32-safe form of `sii_6717`. `log_sii_6717 = log10(sii_6717 * L_sun)`. |
-| `log_sii_6731` | dex | lines | nebular | log10 of sii 6731 line luminosity [dex re erg/s]; float32-safe form of `sii_6731`. `log_sii_6731 = log10(sii_6731 * L_sun)`. |
+| `log_sii_6717` | dex | lines | nebular | log10 of sii 6717 line luminosity [dex re erg/s]; float32-safe form of `sii_6717`. `log_sii_6717 = log10(sii_6717) + log10(L_sun)`. |
+| `log_sii_6731` | dex | lines | nebular | log10 of sii 6731 line luminosity [dex re erg/s]; float32-safe form of `sii_6731`. `log_sii_6731 = log10(sii_6731) + log10(L_sun)`. |
 | `luminosity_weighted_age_gyr` | Gyr | sfh | stellar | Luminosity-weighted mean age of stellar population |
 | `luminosity_weighted_metallicity` | dex | sfh | stellar | Luminosity-weighted mean metallicity (log10 Z/Zsun) |
 | `lya` | Lsun | lines | nebular | Lyman alpha line luminosity |
