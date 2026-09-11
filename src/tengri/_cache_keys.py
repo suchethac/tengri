@@ -9,7 +9,9 @@ reported so a test can fail on it.
 
 Three cache key modes:
 - ``"content"``: hash the attribute's full value (scalars, arrays, nested structures)
-- ``"shape"``: hash only shape and dtype (for arrays); a non-array raises TypeError
+- ``"shape"``: hash only shape and dtype (for arrays); ``None`` keys as ``None``
+  (an optional array attribute that is legitimately absent, e.g.
+  ``Spectroscopy.covariance``); any other non-array raises TypeError
 - ``"exclude"``: omit the attribute from the key
 
 Assumptions:
@@ -20,6 +22,7 @@ Assumptions:
 
 import contextlib
 import dataclasses
+import enum
 import hashlib
 import types
 import weakref
@@ -214,8 +217,9 @@ def baked(value) -> Hashable:
     7. Dataclass instances → frozen_dataclass_key(value)
     8. Callables (function, method, class) → ("callable", "module.qualname")
     9. Array-like (has shape and dtype) → array_key(value) or raises on tracer
-    10. Objects with custom __repr__ → ("repr", type_qualname, repr(value))
-    11. Otherwise → TypeError
+    10. Enum members → ("enum", type_qualname, member_name)
+    11. Objects with custom __repr__ → ("repr", type_qualname, repr(value))
+    12. Otherwise → TypeError
     """
     # Phase 1: Scalars unchanged
     if value is None or isinstance(value, (bool, int, float, str, bytes)):
@@ -273,11 +277,15 @@ def baked(value) -> Hashable:
                 ) from None
         return array_key(value)
 
-    # Phase 7: Custom __repr__
+    # Phase 7: Enum members
+    if isinstance(value, enum.Enum):
+        return ("enum", type(value).__qualname__, value.name)
+
+    # Phase 8: Custom __repr__
     if type(value).__repr__ is not object.__repr__:
         return ("repr", type(value).__qualname__, repr(value))
 
-    # Phase 8: Unrecognized
+    # Phase 9: Unrecognized
     raise TypeError(
         f"cannot bake {type(value).__qualname__}: "
         f"define cache_key() on it or exclude the attribute in the policy"
@@ -391,7 +399,12 @@ def derive_key(
     Notes
     -----
     Attributes classified as "content" are baked (full value hashing).
-    Attributes classified as "shape" are reduced to ("shape", shape_tuple, dtype_str).
+    Attributes classified as "shape" are reduced to ("shape", shape_tuple, dtype_str),
+    except ``None``, which stays ``None``: a "shape"-mode attribute is not
+    guaranteed to be an array on every instance (e.g. ``Spectroscopy.covariance``
+    defaults to ``None``, meaning "no covariance supplied", not "an array of
+    unknown shape"), and ``None`` can never collide with a real ``("shape", ...)``
+    tuple.
     Attributes not in the policy are classified as "content" by default.
     Excluded attributes are omitted.
     """
@@ -405,13 +418,16 @@ def derive_key(
         if mode == "content":
             keyed = baked(attr_value)
         elif mode == "shape":
-            if not (hasattr(attr_value, "shape") and hasattr(attr_value, "dtype")):
+            if attr_value is None:
+                keyed = None
+            elif not (hasattr(attr_value, "shape") and hasattr(attr_value, "dtype")):
                 raise TypeError(
                     f"attribute {name!r} has mode 'shape' "
                     f"but is not array-like (type: {type(attr_value).__qualname__})"
                 )
-            arr = np.asarray(attr_value)
-            keyed = ("shape", tuple(arr.shape), str(arr.dtype))
+            else:
+                arr = np.asarray(attr_value)
+                keyed = ("shape", tuple(arr.shape), str(arr.dtype))
         # exclude is filtered out by classify
 
         entries.append((name, keyed))

@@ -16,6 +16,7 @@ import dataclasses
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise_model import NoiseModel
@@ -242,6 +243,21 @@ class Observation:
                 "Observation requires at least one of photometry, spectroscopy, "
                 "line_fluxes, line_ratios, or spectral_indices."
             )
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this observation configuration.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from nested observation configurations.
+
+        Notes
+        -----
+        All fields are included by content; nested objects delegate to their
+        own cache_key() methods, and None stays None.
+        """
+        return derive_key(self, _OBSERVATION_CACHE_KEY_POLICY)
 
     @property
     def can_do_photometry(self) -> bool:
@@ -1627,3 +1643,16 @@ class Observation:
             lines.append(f"  Auto params: {', '.join(sorted(obs_params.keys()))}")
 
         return "\n".join(lines)
+
+
+_OBSERVATION_CACHE_KEY_POLICY: KeyPolicy = {
+    "photometry": content("photometric filter set defines the observed bandpasses"),
+    "spectroscopy": content(
+        "spectroscopic instrument configuration defines the wavelength grid and resolution"
+    ),
+    "noise": content("noise model configuration affects likelihood calculation"),
+    "line_fluxes": content("observed emission line fluxes contribute to the likelihood"),
+    "spectral_indices": content("observed spectral indices contribute to the likelihood"),
+    "line_ratios": content("observed line ratios contribute to the likelihood"),
+    "lines": content("emission line catalog defines which lines can be fit"),
+}

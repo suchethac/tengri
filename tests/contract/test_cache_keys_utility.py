@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 import dataclasses
+import enum
 import types
 
 import jax
@@ -164,6 +165,47 @@ class TestBakedCallables:
         result = baked(lam)
         assert isinstance(result, tuple)
         assert result[0] == "callable"
+
+
+class TestBakedEnums:
+    """Test baked() on Enum members."""
+
+    def test_enum_member_returns_enum_tag(self):
+        """an Enum member returns ("enum", <qualname>, "<member name>")."""
+
+        class Color(enum.Enum):
+            RED = 1
+            BLUE = 2
+
+        result = baked(Color.RED)
+        assert isinstance(result, tuple)
+        assert result[0] == "enum"
+        # result[1] should contain the class qualname
+        assert "Color" in result[1]
+        # result[2] should be the member name
+        assert result[2] == "RED"
+
+    def test_different_enum_members_give_different_keys(self):
+        """two different members of the same Enum bake differently."""
+
+        class Color(enum.Enum):
+            RED = 1
+            BLUE = 2
+
+        key_red = baked(Color.RED)
+        key_blue = baked(Color.BLUE)
+        assert key_red != key_blue
+
+    def test_same_enum_member_twice_equal(self):
+        """the same Enum member twice bakes equal."""
+
+        class Color(enum.Enum):
+            RED = 1
+            BLUE = 2
+
+        key1 = baked(Color.RED)
+        key2 = baked(Color.RED)
+        assert key1 == key2
 
 
 class TestBakedDelegation:

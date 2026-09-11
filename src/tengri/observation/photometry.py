@@ -13,12 +13,12 @@ import functools
 import jax
 import jax.numpy as jnp
 
-from tengri.parameters.resolve import require_redshift
-from tengri.units import fnu_to_ab_mag, lnu_to_fnu
-
 # FilterConvention + the bandpass weight live in a leaf module so the exact
 # kernel here and the build-time preintegration (utils.grid_interp) share one
 # definition without a circular import. Re-exported here for back-compat.
+from tengri._cache_keys import KeyPolicy, content, derive_key
+from tengri.parameters.resolve import require_redshift
+from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 from tengri.utils.filter_convention import (
     FilterConvention,
     filter_weight as _filter_weight,
@@ -85,6 +85,27 @@ class FilterCurve:
     wave: jnp.ndarray = dataclasses.field(hash=False)
     trans: jnp.ndarray = dataclasses.field(hash=False)
     name: str = ""
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key for this filter curve.
+
+        Returns
+        -------
+        tuple
+            Cache key derived from wave, trans, and name.
+
+        Notes
+        -----
+        All attributes are included by content.
+        """
+        return derive_key(self, _FILTER_CURVE_CACHE_KEY_POLICY)
+
+
+_FILTER_CURVE_CACHE_KEY_POLICY: KeyPolicy = {
+    "wave": content("wavelength array is part of the filter definition"),
+    "trans": content("transmission curve is part of the filter definition"),
+    "name": content("filter name identifies the filter"),
+}
 
 
 def _filter_integral_union(
