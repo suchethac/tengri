@@ -503,7 +503,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     -------
     list of SEDComponent
         Topologically ordered. For the canonical pipeline (stellar,
-        nebular, AGN, dust, radio, X-ray, IGM), this reproduces the
+        nebular, shock, dust, AGN, radio, X-ray, IGM), this reproduces the
         hand-coded order byte-for-byte, the snapshot test in
         :mod:`tests.integration.test_derived_contract_snapshots` is the
         regression guarantee.

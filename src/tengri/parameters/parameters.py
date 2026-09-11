@@ -73,6 +73,8 @@ from tengri.parameters._builders import (
 )
 from tengri.parameters._dust_keys import (
     OVERRIDE_STEMS,
+    SCREEN_SOURCES,
+    resolve_screen_choices,
     short_to_full,
     validate_shape_requests,
 )
@@ -221,6 +223,17 @@ class Parameters:
         like the youngest stars (bagpipes/FSPS/CIGALE).  Set it to give
         HII-region emission its own birth-cloud curve while still sharing the
         diffuse ISM screen (``dust_law_diff``) with the stars.
+    dust_nebular_screen : str
+        Which screen attenuates the nebular continuum, the line catalog, and
+        the fast-nebular fallback grid (#2234).  One of ``"birth_cloud"``
+        (default), ``"diffuse"``, ``"none"``/``"off"``.
+    dust_shock_screen : str
+        Which screen attenuates the MAPPINGS V shock SED.  One of
+        ``"birth_cloud"``, ``"diffuse"`` (default), ``"none"``/``"off"``.
+    dust_agn_screen : str
+        Which screen attenuates AGN light.  ``"none"`` (default, and today
+        the only accepted value): the AGN component runs after dust and
+        carries its own polar-dust screen.
 
     **Dust Emission Settings**
 
@@ -970,6 +983,26 @@ class Parameters:
         # the youngest stars (default). Set it to give HII-region emission its
         # own birth-cloud curve while still sharing the diffuse ISM screen.
         self.dust_law_neb = law_neb_explicit
+
+        # Per-source dust-screen choice (#2234 replacement): which screen
+        # attenuates the nebular continuum + line catalog, the shock SED, and
+        # (validated to stay 'none' today) AGN light. One validator for both
+        # surfaces: a grammar `dust_attenuation={'nebular_screen': ...}` build
+        # and this flat-kwarg build are refused for the same reason.
+        # `resolve_screen_choices` returns an entry ONLY for a source the
+        # caller actually named, so an untouched model keeps the per-source
+        # default (see `_SCREEN_DEFAULTS`) without that default ever being
+        # validated as though it were an explicit (and possibly refused)
+        # request.
+        _screen_given = {
+            source: kwargs.pop(f"dust_{source}_screen", None) for source in SCREEN_SOURCES
+        }
+        _screen_choices = resolve_screen_choices(
+            _screen_given, dust_model=self.dust_model, surface="flat"
+        )
+        self.dust_nebular_screen = _screen_choices.get("nebular", "birth_cloud")
+        self.dust_shock_screen = _screen_choices.get("shock", "diffuse")
+        self.dust_agn_screen = _screen_choices.get("agn", "none")
 
         # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...,
         # 'neb': {...}}. Empty -> both stellar components share the global
@@ -2304,6 +2337,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_law_bc": content("birth cloud dust law determines parameters"),
     "dust_law_diff": content("diffuse dust law determines parameters"),
     "dust_law_neb": content("nebular dust law determines parameters"),
+    "dust_nebular_screen": content("which screen the nebular light passes through (#2234)"),
+    "dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
+    "dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),

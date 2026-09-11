@@ -24,6 +24,7 @@ from dataclasses import KW_ONLY, dataclass
 
 import jax.numpy as jnp
 
+from tengri._cache_keys import KeyPolicy, content, derive_key, exclude, shape
 from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
 from tengri.inference.likelihoods.protocol import resolve_channel_data
 from tengri.observation.calibration import (
@@ -124,6 +125,28 @@ class CalibrationMarginalizedLikelihood:
     def declared_parameters(self):
         return []
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``fnu_obs``/``fnu_err`` by shape, the rest by content.
+
+        See :meth:`~tengri.inference.likelihoods.protocol.GaussianLikelihood.cache_key`
+        for the rationale.
+        """
+        return derive_key(self, _CALIBRATION_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_CALIBRATION_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "fnu_obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "fnu_err": shape("per-galaxy data; program shape depends on length, not values"),
+    "wavelength": content("wavelength grid is baked into the Chebyshev basis"),
+    "n_poly": content("polynomial order changes the design matrix shape"),
+    "prior_sigma": content("calibration prior width is baked into the marginal likelihood"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "fnu_obs_key": content("data_args routing key changes which traced input is read"),
+    "fnu_err_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Emission-line amplitudes, analytic marginalization
@@ -223,6 +246,38 @@ class ELineMarginalizedLikelihood:
     def declared_parameters(self):
         return []
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``fnu_obs``/``fnu_err`` by shape, the rest by content.
+
+        ``design_matrix_builder`` is excluded: a closure's qualname is
+        identical regardless of what it captured (``baked()`` cannot see
+        inside it), and its content -- which lines, wavelengths, doublet
+        constraints -- is already keyed content on ``Fitter`` via every
+        ``_eline_*`` row in ``ENGINE_POLICY``. Keying it directly would
+        either raise (no ``cache_key``/dataclass/custom ``__repr__``) or,
+        worse, alias two different design matrices under one key.
+        """
+        return derive_key(self, _ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "fnu_obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "fnu_err": shape("per-galaxy data; program shape depends on length, not values"),
+    "design_matrix": content("static per-line shape; a per-model structural input"),
+    "design_matrix_builder": exclude(
+        "a closure: content already covered by the Fitter's _eline_* ENGINE_POLICY "
+        "rows (names/wavelengths/constraint matrix); keying the closure itself would "
+        "alias two different design matrices under one key (baked() cannot see what "
+        "it captured)"
+    ),
+    "prior_variance": content("per-line amplitude prior variance is baked into the marginal"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "fnu_obs_key": content("data_args routing key changes which traced input is read"),
+    "fnu_err_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Emission-line amplitudes, Cloudy-prior marginalization
@@ -307,6 +362,33 @@ class CloudyELineMarginalizedLikelihood:
     def declared_parameters(self):
         return []
 
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``fnu_obs``/``fnu_err`` by shape, the rest by content.
+
+        See :meth:`ELineMarginalizedLikelihood.cache_key` for why
+        ``design_matrix_builder`` is excluded.
+        """
+        return derive_key(self, _CLOUDY_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_CLOUDY_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "fnu_obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "fnu_err": shape("per-galaxy data; program shape depends on length, not values"),
+    "design_matrix_builder": exclude(
+        "a closure; see ELineMarginalizedLikelihood's row for the full reason"
+    ),
+    "line_wavelengths": content(
+        "redundant with _eline_wavelengths (already content in ENGINE_POLICY), kept "
+        "content here too for defense in depth: cheap and harmless"
+    ),
+    "prior_width_dex": content("Cloudy prior width in dex is baked into the marginal"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "fnu_obs_key": content("data_args routing key changes which traced input is read"),
+    "fnu_err_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Emission-line amplitudes, explicit free-parameter fitting
@@ -371,6 +453,32 @@ class ELineFittedLikelihood:
 
     def declared_parameters(self):
         return list(self.amplitude_names)
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``fnu_obs``/``fnu_err`` by shape, the rest by content.
+
+        See :meth:`ELineMarginalizedLikelihood.cache_key` for why
+        ``design_matrix_builder`` is excluded.
+        """
+        return derive_key(self, _ELINE_FITTED_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_ELINE_FITTED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "fnu_obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "fnu_err": shape("per-galaxy data; program shape depends on length, not values"),
+    "design_matrix_builder": exclude(
+        "a closure; see ELineMarginalizedLikelihood's row for the full reason"
+    ),
+    "amplitude_names": content(
+        "which latent parameters carry the line amplitudes determines the unravel "
+        "structure; redundant with _eline_amplitude_names, kept content here too"
+    ),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "fnu_obs_key": content("data_args routing key changes which traced input is read"),
+    "fnu_err_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -507,3 +615,35 @@ class CalibrationELineMarginalizedLikelihood:
 
     def declared_parameters(self):
         return []
+
+    def cache_key(self) -> tuple:
+        """Return a hashable cache key: ``fnu_obs``/``fnu_err`` by shape, the rest by content.
+
+        See :meth:`ELineMarginalizedLikelihood.cache_key` for why
+        ``design_matrix_builder`` is excluded.
+        """
+        return derive_key(self, _CALIBRATION_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY)
+
+
+_CALIBRATION_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
+    "fnu_obs": shape("per-galaxy data; program shape depends on length, not values"),
+    "fnu_err": shape("per-galaxy data; program shape depends on length, not values"),
+    "wavelength": content("wavelength grid is baked into the Chebyshev basis"),
+    "design_matrix_builder": exclude(
+        "a closure; see ELineMarginalizedLikelihood's row for the full reason"
+    ),
+    "n_poly": content("calibration polynomial order changes the design matrix shape"),
+    "prior_sigma": content("calibration prior width is baked into the marginal likelihood"),
+    "eline_prior_type": content("flat vs Cloudy line-amplitude prior changes the likelihood"),
+    "eline_prior_sigma": content("flat-prior per-line sigma is baked into the marginal"),
+    "eline_line_wavelengths": content(
+        "redundant with _eline_wavelengths (already content in ENGINE_POLICY), kept "
+        "content here too for defense in depth: cheap and harmless"
+    ),
+    "eline_prior_width_dex": content("Cloudy prior width in dex is baked into the marginal"),
+    "channel": content("which prediction-dict key to read determines the graph"),
+    "name": content("diagnostic identifier, cheap and harmless to key"),
+    "fnu_obs_key": content("data_args routing key changes which traced input is read"),
+    "fnu_err_key": content("data_args routing key changes which traced input is read"),
+    "data_slice": content("channel slice changes which part of the traced input is read"),
+}

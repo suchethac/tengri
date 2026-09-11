@@ -76,6 +76,7 @@ from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
+    ParameterError,
     ParameterMapError,
     TengriIOError,
     warn_measured,
@@ -1323,6 +1324,69 @@ _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "ds
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
 
+def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
+    r"""Snap each target wavelength within ``tol_aa`` of a catalog line to it.
+
+    :meth:`SEDModel.enable_fast_nebular`'s reconstruction serves photometry
+    and line fluxes at exactly ``target_wavelengths``, as given by the
+    caller; the exact path (:meth:`SEDModel._attenuate_line_catalog` and the
+    no-state fallback it dispatches to) instead reads the TRUE backend
+    catalog wavelength from ``state.derived["line_waves"]``. A caller who
+    asks for a line at a wavelength merely close to (not identical to) the
+    true catalog value -- a rounded literature value, an air/vacuum slip --
+    therefore builds the fast grid at one wavelength and has the exact path
+    answer at another: two different points on the dust attenuation curve
+    (#2235). Snapping onto the catalog BOTH paths ultimately read closes
+    that residual to float precision.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model :meth:`~SEDModel.enable_fast_nebular` is configuring. Used
+        for ONE eager reference forward pass to read the true catalog
+        (``state.derived["line_waves"]``), built the same way
+        :func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`
+        builds its own reference point.
+    target_wavelengths : array_like, shape (n_lines,)
+        Rest-frame vacuum target line wavelengths [Angstrom], as given by
+        the caller.
+    tol_aa : float, optional
+        Snap tolerance [Angstrom]. Default 0.5.
+
+    Returns
+    -------
+    ndarray, shape (n_lines,)
+        ``target_wavelengths``, with each entry within ``tol_aa`` of a
+        catalog line replaced by that line's exact catalog wavelength.
+        Unchanged if the active backend publishes no ``line_waves``.
+
+    Notes
+    -----
+    **JIT-compatible**: no; eager, build-time only, like the grid build it
+    feeds. The one extra reference forward pass is negligible next to the
+    ``n_grid ** n_free_axes`` evaluations :func:`precompute_nebular_grid`
+    performs immediately afterward.
+    """
+    from tengri.components.stellar.reference_history import reference_history_params
+
+    ref_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    # A Fixed redshift is legitimately absent from the sampled params; the accessor
+    # returns the fixed value and never a silent 0.0 (10 pc) default.
+    ref_z = model._get_redshift(ref_params)
+    ref_params = {**reference_history_params(model, redshift=ref_z), **ref_params}
+    catalog_waves = model.predict_state(ref_params).derived.get("line_waves")
+    if catalog_waves is None:
+        return jnp.asarray(target_wavelengths)
+
+    target_wavelengths = jnp.asarray(target_wavelengths)
+    catalog_waves = jnp.asarray(catalog_waves)
+    diffs = jnp.abs(target_wavelengths[:, None] - catalog_waves[None, :])
+    nearest_idx = jnp.argmin(diffs, axis=1)
+    nearest_val = catalog_waves[nearest_idx]
+    nearest_dist = jnp.min(diffs, axis=1)
+    return jnp.where(nearest_dist <= tol_aa, nearest_val, target_wavelengths)
+
+
 @functools.cache
 def _init_keywords(cls: type) -> frozenset[str]:
     """The keywords ``cls.__init__`` accepts, everything else is grammar input.
@@ -1895,6 +1959,7 @@ class SEDModel:
 
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
+        self._validate_shock_coverage(spec)
 
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
@@ -2890,6 +2955,13 @@ class SEDModel:
         # diffuse ISM screen; consumed by ``DustSEDComponent`` via
         # ``build_components``.
         self._dust_law_neb = getattr(spec, "dust_law_neb", None)
+        # Per-source dust-screen choice (#2234 replacement): which
+        # screen attenuates the nebular continuum + line catalog, the shock
+        # SED, and (validated by `Parameters`/`parse_groups` to stay "none")
+        # AGN light. Consumed by `DustSEDComponent` via `build_components`.
+        self._dust_nebular_screen = getattr(spec, "dust_nebular_screen", "birth_cloud")
+        self._dust_shock_screen = getattr(spec, "dust_shock_screen", "diffuse")
+        self._dust_agn_screen = getattr(spec, "dust_agn_screen", "none")
         # Per-component law-parameter overrides ({'bc': {...}, 'diff': {...},
         # 'neb': {...}}), set by the builder when the user supplies
         # slope_bc / delta_diff / slope_neb / etc.
@@ -2916,22 +2988,11 @@ class SEDModel:
                 self._dust_law_diff_fn = self._dust_law_bc_fn
             else:
                 self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
-
-            self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
-            _neb_bc_law_name = self._dust_law_neb or getattr(spec, "neb_dust_law_bc", None)
-            if _neb_bc_law_name is not None:
-                from tengri.components.dust.attenuation import resolve_dust_law as _rdl
-
-                self._neb_dust_law_bc_fn = _rdl(_neb_bc_law_name)
-            else:
-                self._neb_dust_law_bc_fn = self._dust_law_bc_fn
         else:
             # Placeholder functions for off/wg00 (never used, but kept for
             # attribute consistency).
             self._dust_law_bc_fn = None
             self._dust_law_diff_fn = None
-            self._neb_dust_law_bc_fn = None
-            self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
 
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         # Astrodust+PAH configuration: now always exists as a structural setting.
@@ -3488,6 +3549,139 @@ class SEDModel:
         self._shock_component = getattr(spec, "shock_component", "combined")
 
         return delta
+
+    def _validate_shock_coverage(self, spec) -> None:
+        """Raise/warn when a shock density/B-field value has no grid support.
+
+        A shock build whose ``shock_log_density`` / ``shock_b_over_sqrt_n``
+        value sits in unpopulated MAPPINGS V grid territory predicts an
+        exactly-zero shock spectrum with no error (#2065): the ratio grid is
+        zero-filled at unpopulated (density, B) cells, so the model compiles
+        and runs, it just never contributes shock line flux. Catch this here,
+        at construction, where ``shock_abundance`` is a concrete Python string
+        and raising ``ParameterError`` is legal; the JIT'd predict path
+        cannot raise on a traced value.
+
+        Uses :func:`tengri.components.nebular.shock.population_envelope`, a
+        cheap numpy-only summary of the sparse grid's per-axis coverage (see
+        its docstring for exactly what it does and does not catch: it is not
+        aware of the 2-D coupling between density and B, so a value inside
+        the envelope on one axis can still fall in a locally-unpopulated
+        pocket -- case (c), #2066).
+
+        Parameters
+        ----------
+        spec : Parameters
+            The (already parsed) parameter spec; read only for the
+            ``shock_log_density`` / ``shock_b_over_sqrt_n`` distributions.
+
+        Raises
+        ------
+        ParameterError
+            A ``Fixed`` value lands outside the populated envelope, a free
+            prior's support lies entirely outside it, or the selected
+            (abundance, component) has no populated cells at all.
+
+        Warns
+        -----
+        UserWarning
+            A free prior's support only partially overlaps the populated
+            envelope: usable, but the sampler wastes the dead fraction of its
+            prior mass.
+        """
+        if not self._uses_shock:
+            return
+
+        from tengri.components.nebular.shock import population_envelope
+
+        envelope = population_envelope(self._shock_abundance, self._shock_component)
+        if envelope is None:
+            return  # data/mappings_templates.h5 absent; fallback path has no sparsity to guard
+        dens_lo, dens_hi, b_lo, b_hi = envelope
+
+        where = (
+            f"shock_abundance={self._shock_abundance!r}, shock_component={self._shock_component!r}"
+        )
+        distributions = getattr(spec, "_distributions", {})
+        for name, (lo, hi) in (
+            ("shock_log_density", (dens_lo, dens_hi)),
+            ("shock_b_over_sqrt_n", (b_lo, b_hi)),
+        ):
+            dist = distributions.get(name)
+            if dist is None:
+                continue
+
+            if np.isnan(lo):
+                raise ParameterError(
+                    f"{name} builds a shock component for {where}, which has "
+                    "NO populated MAPPINGS V grid cells at all: every build "
+                    "predicts an exactly-zero shock spectrum (#2065). Choose "
+                    "a different shock_abundance / shock_component, or "
+                    "disable the group (shock={'type': 'none'})."
+                )
+
+            if dist.is_fixed:
+                val = float(dist.value)
+                if not (lo <= val <= hi):
+                    raise ParameterError(
+                        f"{name}={val:.4g} lands outside the populated "
+                        f"MAPPINGS V range [{lo:.4g}, {hi:.4g}] for {where}: "
+                        "this build predicts an exactly-zero shock spectrum "
+                        "with no error (#2065). Set it within the populated "
+                        "range, or pick a different shock_abundance."
+                    )
+                continue
+
+            p_lo, p_hi = float(dist.lo), float(dist.hi)
+            if lo == hi:
+                # Degenerate (single-node) envelope, e.g. the four non-solar
+                # shipped abundances (data only at log_density=0.0): an
+                # interval-vs-interval overlap WIDTH against a point is
+                # always zero, which would read as "entirely outside" even
+                # when the prior does contain that one populated value.
+                # Judge by containment of the point instead.
+                if not (p_lo <= lo <= p_hi):
+                    raise ParameterError(
+                        f"{name}'s free prior [{p_lo:.4g}, {p_hi:.4g}] does "
+                        f"not contain the single populated MAPPINGS V value "
+                        f"({lo:.4g}) for {where}: every draw predicts an "
+                        "exactly-zero shock spectrum (#2065). Include that "
+                        "value in the prior, or pick a different "
+                        "shock_abundance."
+                    )
+                # Only one exact value in a continuous prior works: almost
+                # all of its mass is dead, but not raise-worthy (the point
+                # is reachable, and the smoothing kernel gives partial
+                # credit near it).
+                dead_frac = 1.0
+            else:
+                overlap = max(0.0, min(p_hi, hi) - max(p_lo, lo))
+                width = p_hi - p_lo
+                if overlap <= 0.0:
+                    raise ParameterError(
+                        f"{name}'s free prior [{p_lo:.4g}, {p_hi:.4g}] lies "
+                        f"entirely outside the populated MAPPINGS V range "
+                        f"[{lo:.4g}, {hi:.4g}] for {where}: every draw predicts "
+                        "an exactly-zero shock spectrum (#2065). Narrow the "
+                        "prior to overlap the populated range, or pick a "
+                        "different shock_abundance."
+                    )
+                dead_frac = 1.0 - overlap / width
+            if dead_frac > 1e-9:
+                warn_measured(
+                    f"{name}'s free prior [{p_lo:.4g}, {p_hi:.4g}] extends "
+                    f"{dead_frac:.0%} outside the populated MAPPINGS V range "
+                    f"[{lo:.4g}, {hi:.4g}] for {where}. Draws in the dead "
+                    "region predict an exactly-zero shock spectrum (#2065); "
+                    "the fit is usable but the sampler wastes that fraction "
+                    "of its prior mass.",
+                    dead_fraction=dead_frac,
+                    prior_lo=p_lo,
+                    prior_hi=p_hi,
+                    envelope_lo=lo,
+                    envelope_hi=hi,
+                    stacklevel=3,
+                )
 
     @staticmethod
     def _calibration_param_map(observation):
@@ -5327,6 +5521,16 @@ class SEDModel:
             )
 
         target_wavelengths = jnp.asarray(target_wavelengths)
+        # Snap each target within 0.5 A of a true backend catalog line to
+        # that line's exact wavelength (#2235): the fast grid built
+        # below serves ``target_wavelengths`` verbatim, while the exact path
+        # (``_attenuate_line_catalog`` / the no-state fallback) reads the
+        # TRUE catalog wavelength from ``state.derived["line_waves"]``. A
+        # caller who asks for a line at a wavelength merely close to (not
+        # exactly) the catalog value therefore built the grid and queried it
+        # at two different points on the dust attenuation curve. See
+        # ``_snap_to_nebular_catalog``.
+        target_wavelengths = _snap_to_nebular_catalog(self, target_wavelengths)
         table = precompute_nebular_grid(self, target_wavelengths, n_grid=n_grid, ranges=ranges)
         self._nebular_grid_table = table
         # Rebuild the chain from scratch (exact, no grid) and swap in the
@@ -6851,17 +7055,18 @@ class SEDModel:
         Notes
         -----
         Dust attenuation is applied to the line luminosities through the
-        configured dust component (birth-cloud + diffuse, Charlot & Fall
-        2000 [1]_, for ``two_component``; the single screen for
-        ``single_component``; unattenuated for ``off``/``wg00``), the same
-        dispatch :meth:`_attenuate_line_catalog` uses (#2223). ``_neb_dust_mode``
-        / ``neb_dust_law_bc`` are unused config left over from an older,
-        mode-selectable nebular screen that nothing in the grammar sets
-        anymore; the live path always applies the birth-cloud + diffuse
-        treatment. The line-attenuated values match the continuum treatment in
-        :meth:`predict_rest_sed`, so Balmer decrement, BPT, and other
-        line-ratio diagnostics behave correctly under a dust sweep
-        (regression: issue #313).
+        configured dust component (the ``nebular_screen`` choice -- default
+        ``"birth_cloud"``, Charlot & Fall 2000 [1]_ -- for ``two_component``;
+        the single screen for ``single_component``; unattenuated for
+        ``off``/``wg00``), the same dispatch :meth:`_attenuate_line_catalog`
+        uses (#2223). The mode-selectable nebular screen this docstring used
+        to describe as dead config (``_neb_dust_mode`` / ``neb_dust_law_bc``,
+        write-only since #923/#2230) is live again as explicit config (#2234,
+        #2234): see ``dust_attenuation={'nebular_screen': ...}`` /
+        ``Parameters(dust_nebular_screen=...)``. The line-attenuated values
+        match the continuum treatment in :meth:`predict_rest_sed`, so Balmer
+        decrement, BPT, and other line-ratio diagnostics behave correctly
+        under a dust sweep (regression: issue #313).
 
         References
         ----------
@@ -8309,6 +8514,9 @@ class SEDModel:
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),
+            dust_nebular_screen=getattr(self, "_dust_nebular_screen", "birth_cloud"),
+            dust_shock_screen=getattr(self, "_dust_shock_screen", "diffuse"),
+            dust_agn_screen=getattr(self, "_dust_agn_screen", "none"),
             dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
             dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
