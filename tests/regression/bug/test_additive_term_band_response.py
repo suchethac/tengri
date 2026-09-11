@@ -90,12 +90,19 @@ MAX_EMITTER_FLOPS = 500_000
 #: first pass at this measured "radio contributes nothing" and nearly concluded the
 #: support could be truncated. A probe that omits the component under test confirms
 #: whatever you already believed.
+#:
+#: ``log_lbol`` is the luminosity this fixture states, and it is the one the
+#: AGN is built at: this dict used to carry ``fracAGN: Fixed(0.3)`` as well,
+#: which under ``cigale_joint`` derives the AGN power from the dust-absorbed
+#: stellar luminosity and discards the stated 45.5 (R55 refuses that pair).
+#: With the coupling dropped the disc sits on ``10**45.5`` exactly as written,
+#: and the radio jet and X-ray corona are lit off that same value.
 AGN = {
     "type": "composable",
     "torus": {"type": "skirtor"},
     "all_params": Fixed(DEFAULT),
+    "norm": "cigale_joint",
     "log_lbol": Fixed(45.5),
-    "fracAGN": Fixed(0.3),
 }
 
 #: Non-default shape knobs per emitter, plus the free-parameter prior used to force the

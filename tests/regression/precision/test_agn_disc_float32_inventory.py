@@ -112,8 +112,13 @@ def _sed_agn(ssp, disc, dtype):
             "disc": {"type": disc, "all_params": Fixed(DEFAULT)},
             "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
+            # The float32 verdict below is measured AT this luminosity, so it
+            # has to be the one the forward uses. This build used to carry
+            # ``fracAGN: 0.1`` too, which derives the AGN power from the
+            # dust-absorbed stellar luminosity and discards the stated 11.0
+            # (R55 refuses that pair); the inventory was then silently
+            # measuring each disc at the fracAGN-derived scale instead.
             "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
-            "fracAGN": 0.1,
         },
         redshift=Fixed(0.1),
     )
