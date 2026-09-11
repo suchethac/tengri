@@ -110,7 +110,7 @@ class TestSingleComponentGrammarEqualPairStillBuilds:
 
 
 class TestTwoComponentInheritanceUnchanged:
-    """#1989: the low-level two_component/off/wg00 inheritance is untouched."""
+    """The flat-Parameters path for two_component: inheritance rules from #1989."""
 
     def test_bc_only_inherits_into_diff(self):
         spec = Parameters(
@@ -148,6 +148,49 @@ class TestTwoComponentInheritanceUnchanged:
         )
         assert spec.dust_law_bc == "calzetti"
         assert spec.dust_law_diff == "power_law"
+
+
+class TestResolverInheritanceAllTwoScreenModels:
+    """Direct tests on resolve_dust_screen_laws for two_component/wg00/off models.
+
+    Covers the inheritance rules from #1989 across all two-screen dust models:
+    ``dust_model`` in ``("two_component", "wg00", "off")``.
+    """
+
+    @pytest.mark.parametrize(
+        ("dust_model", "law_bc", "law_diff", "expected_bc", "expected_diff"),
+        [
+            # Both None -> default to power_law for both
+            ("two_component", None, None, "power_law", "power_law"),
+            ("wg00", None, None, "power_law", "power_law"),
+            ("off", None, None, "power_law", "power_law"),
+            # bc only -> inherit into diff
+            ("two_component", "calzetti", None, "calzetti", "calzetti"),
+            ("wg00", "calzetti", None, "calzetti", "calzetti"),
+            ("off", "calzetti", None, "calzetti", "calzetti"),
+            # diff only -> inherit into bc
+            ("two_component", None, "smc", "smc", "smc"),
+            ("wg00", None, "smc", "smc", "smc"),
+            ("off", None, "smc", "smc", "smc"),
+            # Both given -> pass through unmodified
+            ("two_component", "calzetti", "smc", "calzetti", "smc"),
+            ("wg00", "calzetti", "smc", "calzetti", "smc"),
+            ("off", "calzetti", "smc", "calzetti", "smc"),
+        ],
+    )
+    def test_resolver_inheritance_all_models(
+        self, dust_model, law_bc, law_diff, expected_bc, expected_diff
+    ):
+        """resolve_dust_screen_laws applies inheritance rules to two-screen models."""
+        from tengri.parameters._dust_laws import resolve_dust_screen_laws
+
+        resolved_bc, resolved_diff = resolve_dust_screen_laws(dust_model, law_bc, law_diff)
+        assert resolved_bc == expected_bc, (
+            f"{dust_model}: law_bc={law_bc}, law_diff={law_diff} "
+            f"-> got ({resolved_bc!r}, {resolved_diff!r}), "
+            f"expected ({expected_bc!r}, {expected_diff!r})"
+        )
+        assert resolved_diff == expected_diff
 
     def test_neither_given_defaults_to_power_law_both(self):
         spec = Parameters(

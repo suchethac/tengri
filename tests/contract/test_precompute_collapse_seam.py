@@ -75,7 +75,13 @@ def _grid(n_axes: int = 2, *, phot_grid_dims: int | None = None) -> Preintegrate
 
 def test_fixed_axis_is_collapsed_and_free_axis_is_not():
     """The core contract: a Fixed parameter's axis is interpolated away."""
-    spec = Parameters(**{AX1: Uniform(-1.0, 1.0)})
+    # conroy2010 (bc) reads dust_Rv and kriek_conroy (diff) reads dust_delta:
+    # both axis names are live, so the flat form accepts them; collapse is subject.
+    spec = Parameters(
+        dust_law_bc="conroy2010",
+        dust_law_diff="kriek_conroy",
+        **{AX1: Uniform(-1.0, 1.0)},
+    )
     assert AX0 in spec.get_fixed_values(), "fixture assumes dust_Rv is Fixed by default"
     assert AX1 in spec.free_params, "fixture assumes dust_delta was made free"
 
@@ -91,7 +97,11 @@ def test_fixed_axis_is_collapsed_and_free_axis_is_not():
 
 def test_nothing_collapses_when_every_axis_is_free():
     """All-free axes are an ordinary configuration, not a defect: stay silent."""
-    spec = Parameters(**{AX0: Uniform(2.0, 4.0), AX1: Uniform(-1.0, 1.0)})
+    spec = Parameters(
+        dust_law_bc="conroy2010",
+        dust_law_diff="kriek_conroy",
+        **{AX0: Uniform(2.0, 4.0), AX1: Uniform(-1.0, 1.0)},
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeadPrecomputeAxisWarning)
         out, remaining, collapsed = collapse_fixed_axes(_grid(), (AX0, AX1), spec)

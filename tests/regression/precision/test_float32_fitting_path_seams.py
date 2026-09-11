@@ -34,6 +34,16 @@ configuration wearing three labels"*). A model built with ``approx=None`` is the
 pinned below, and which means the exact-projector rows are the ones that were missing,
 not the LUT rows.
 
+**The ``spec/*/auto_*`` skip is gone, and it is gone because it fires on nothing.**
+CI run 33958554553 reported the *float64* forward non-finite on six of these seams and
+``_skip_if_lut_forward_is_broken`` (#2143) was added rather than guessed at. Reproduced
+under jaxlib 0.11.1 in PR #2178's follow-up: the float64 arm is finite, and the
+``ValueError`` — carrying that run's own ``max |data| = 1.618e-27`` and ``2.751e-29`` —
+comes from the **float32** arm. It was one defect at one threshold, attributed to the
+wrong arm: ``_mass_scale_lnu``'s forward product going ``inf`` and then ``nan``. With
+the grouping stated in the graph this file runs 41 passed / 0 skipped / 6 xfailed on
+jaxlib 0.11.1, so the guard is deleted rather than widened.
+
 **The reference is float64 autodiff, not same-precision finite differences.** With
 chi-squared ~1e4 a float32 central difference subtracts two nearly-equal ~1e4 numbers and
 its own noise floor reaches 17 %, larger than the error being looked for. The float64
@@ -982,85 +992,6 @@ def _channel_gradients(
         return out
 
 
-def _env() -> str:
-    """Everything about this environment that could change a float32 verdict."""
-    return (
-        f"backend={jax.default_backend()} devices={[str(d) for d in jax.devices()]} "
-        f"jax={jax.__version__} x64={jax.config.jax_enable_x64} "
-        f"matmul={jax.config.jax_default_matmul_precision}"
-    )
-
-
-def _lut_forward_finite(ssp, channel, model, zspec, line_data=None):
-    """``(is_finite, approx_state)`` for this channel's LUT forward at **float64**.
-
-    A precision comparison is a statement about two numbers. If the *float64* forward
-    under the LUT is already non-finite in this environment then there is no number to
-    compare against, and any float32-vs-float64 verdict taken here would be measuring
-    a NaN rather than a rounding error. This asks the question directly and answers it
-    from the **returned array**, which is the same standard #1840 imposes on precision:
-    read the array, never a flag, a version or a platform string.
-
-    Measured 2026-09-05: finite on this box (jax 0.11.0, Ryzen 9 5900X, CPU) and
-    **non-finite on the GitHub runner** (jax 0.11.1, ubuntu-24.04, also CPU) — see
-    run 33958554553, where ``spec/*/auto_*`` raised ``Max |prediction| = nan`` from
-    ``_check_channel_scales`` (#1495) on six seams and ``spec/lut`` returned
-    ``[nan nan]`` from the boosted unweighted gradient.
-    """
-    with jax.enable_x64(True):
-        sed = _channel_build(ssp, channel, model, "lut", zspec, line_data)
-        truth = {
-            n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
-            for n in sed.spec.free_params
-        }
-        arr = np.asarray(
-            sed.predict_spectrum(truth) if channel == "spec" else sed.predict_photometry(truth)
-        )
-        if not bool(np.all(np.isfinite(arr))):
-            return False, str(getattr(sed, "approx", None))
-
-    # Both arms, not only the reference. A float32 forward that is NaN here leaves the
-    # comparison just as undefined as a NaN float64 one, and the failure is the same
-    # environment-dependent LUT defect seen from the other side: measured finite on the
-    # 2026-09-05 reference box and non-finite on the GitHub runner (jax 0.11.1), where
-    # ``spec/lut`` returns ``[nan nan]`` from the boosted unweighted gradient while the
-    # float64 forward on the same seam stays finite.
-    with jax.enable_x64(False):
-        sed32 = _channel_build(ssp, channel, model, "lut", zspec, line_data)
-        truth32 = {
-            n: float(sed32.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
-            for n in sed32.spec.free_params
-        }
-        arr32 = np.asarray(
-            sed32.predict_spectrum(truth32)
-            if channel == "spec"
-            else sed32.predict_photometry(truth32)
-        )
-        return bool(np.all(np.isfinite(arr32))), str(getattr(sed32, "approx", None))
-
-
-def _skip_if_lut_forward_is_broken(ssp, channel, model, zspec, line_data=None):
-    """Refuse to take a precision verdict on a projector that is already NaN here.
-
-    This is **not** a relaxation of any bar. The float32-vs-float64 comparison is
-    simply undefined when the float64 arm is NaN, and reporting it as agreement or
-    disagreement would be a false statement either way. The skip is loud and names the
-    environment, so an environment where the LUT is broken is visible as a broken LUT
-    rather than as a passing precision test.
-    """
-    finite, approx_state = _lut_forward_finite(ssp, channel, model, zspec, line_data)
-    if not finite:
-        pytest.skip(
-            f"the {channel} LUT forward is NON-FINITE at float64 in this environment "
-            f"({approx_state}, {_env()}), so there is no float64 reference to compare "
-            f"float32 against on this seam. This is an environment-dependent defect in "
-            f"the LUT itself, not a precision result: the same forward is finite on the "
-            f"2026-09-05 reference box (jax 0.11.0, CPU) and non-finite on the GitHub "
-            f"runner (jax 0.11.1, CPU). See Finding 8 of "
-            f"bench/reports/2026-09-05_float32_spectroscopy_lines.md."
-        )
-
-
 #: ``channel/model/path``. Deliberately narrow: ``bakedin`` and ``stellar_dust`` build in
 #: seconds, and the Cue seams that would widen it are the ones the module cannot fit at
 #: all in float32 (see ``test_the_discrete_line_catalog_operator_survives_float32``).
@@ -1102,11 +1033,6 @@ def channel_measured(ssp_bare, request):
         ssp = load_ssp_data(_CHANNEL_SSP[model])
 
     flux, noise, line_data = _channel_mock(ssp, channel, model, zfac(), _SNR)
-
-    # Before measuring precision, check that this environment can produce a float64
-    # reference at all on the LUT arms. See _skip_if_lut_forward_is_broken.
-    if fit_approx == "auto":
-        _skip_if_lut_forward_is_broken(ssp, channel, model, zfac(), line_data)
 
     # Same reason as the photometry fixture above: this module builds many distinct
     # compiled programs in one process and XLA's CPU backend segfaults without this.
@@ -1351,9 +1277,6 @@ def unweighted(ssp_bare, request):
     """
     channel, kind = request.param.split("/")
     from tengri.utils.scale import loss_scaled_grad
-
-    if kind == "lut":
-        _skip_if_lut_forward_is_broken(ssp_bare, channel, "stellar_dust", Fixed(0.1))
 
     out = {}
     for x64, dtype, tag in ((True, jnp.float64, "f64"), (False, jnp.float32, "f32")):

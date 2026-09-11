@@ -302,8 +302,8 @@ class TestTheLawsRefuseWhatTheyCannotRead:
         """Wild et al. (2007) give n = -1.3 / -0.7 as fitted constants."""
         from tengri.components.dust.laws._registry import resolve_dust_law
 
-        with pytest.raises(TypeError, match="n_slope"):
-            resolve_dust_law(law)(jnp.asarray([5500.0]), n_slope=-1.0)
+        with pytest.raises(TypeError, match="dust_slope"):
+            resolve_dust_law(law)(jnp.asarray([5500.0]), dust_slope=-1.0)
 
 
 class TestMixedLawScreensStillWork:

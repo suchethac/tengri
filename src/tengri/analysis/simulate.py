@@ -196,7 +196,7 @@ def sed_from_sfh(
         # ``dust_slope`` is this function's own defaulted argument, so it is
         # offered to every law -- and most laws have no slope to set. Narrow to
         # what the selected law declares (#2185): a slope-free law such as
-        # ``calzetti`` would otherwise be handed an ``n_slope`` it cannot use,
+        # ``calzetti`` would otherwise be handed an ``dust_slope`` it cannot use,
         # which was silently discarded before the laws dropped their ``**kwargs``
         # and is a loud ``ValueError`` now. Keys the caller passed in
         # ``dust_kwargs`` are NOT narrowed: those are explicit, and a law that
@@ -208,7 +208,7 @@ def sed_from_sfh(
         # dict splatted into an evaluation. What that rule guards against is a
         # dict carrying "whatever its author remembered"; here the selected law
         # decides what survives, which is the property the rule wants.
-        law_kw = select_law_kwargs(dust_law, dict(n_slope=dust_slope))
+        law_kw = select_law_kwargs(dust_law, dict(dust_slope=dust_slope))
         dust_atten = two_component_dust(
             ssp_data.ssp_wave,
             ssp_ages_yr,
