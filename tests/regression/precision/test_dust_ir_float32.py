@@ -61,8 +61,8 @@ TEMPLATE_MODELS = (
     # hides its defect; the guard now reaches it.
     #
     # Measured on the PAHspec grid, not assumed — and the grid is built
-    # locally rather than shipped (104 MB, uncommitted), so both spellings
-    # carry :data:`~tests._data_skip.requires_pahspec` below: without it the
+    # locally rather than shipped (104 MB, uncommitted), so this spelling
+    # carries :data:`~tests._data_skip.requires_pahspec` below: without it the
     # component publishes no ``sed_dust_ir`` at all and every assertion here
     # raises ``KeyError`` on a runner that has no copy. float64 peak
     # 5.5166e+30 (float32-representable), ``sed_dust_ir`` 100% finite in pure
@@ -72,11 +72,15 @@ TEMPLATE_MODELS = (
     # 1001-point PAHspec grid, not the L_ir seam: energy balance holds to
     # 8.7e-06 in float64 either way.
     #
-    # Both spellings are exercised — the grammar name and the registry key its
-    # alias resolves to, which must behave identically (measured: identical to
-    # every digit above).
+    # Only the public grammar spelling is exercised here. ``draine2021_pah``
+    # is the alias key; ``draine2021_pah_ir`` is the internal registry key it
+    # resolves to, and Ruling R82/R84 (commit 8963b591f) correctly stopped
+    # ``SEDModel.build``'s ``dust_emission`` grammar from accepting that
+    # internal spelling directly, so parametrizing on it here would now raise
+    # before measuring anything. Both spellings used to be run and measured
+    # identical to every digit above; the registry key is exercised for free
+    # through the alias, so dropping the duplicate id costs no coverage.
     "draine2021_pah",
-    "draine2021_pah_ir",
     # Analytic Planck closures, float32-clean since the nu**3 intermediate was
     # removed from planck_bnu (#1206).
     "mbb",
@@ -117,13 +121,17 @@ ENERGY_BALANCED_MODELS = TEMPLATE_MODELS
 NOT_YET_FLOAT32: dict[str, str] = {}
 
 #: Names in :data:`TEMPLATE_MODELS` that are grammar spellings resolved to some
-#: *other* registry key — through the loader cache (``dl07``, ``dl14``, ``mbb``)
-#: or through ``_EMISSION_TYPE_ALIASES`` (``draine2021_pah`` ->
-#: ``draine2021_pah_ir``) — so they never appear in the forward registry under
-#: the name written here. Measuring them is still worthwhile — they are what a
-#: user typing that name gets — but they must not be mistaken for missing
-#: registrations by the completeness guard below.
-LEGACY_ALIASES = frozenset({"dl07", "dl14", "mbb", "draine2021_pah"})
+#: *other* registry key through the loader cache (``dl07``, ``dl14``, ``mbb``)
+#: rather than a real ``_REGISTRY`` entry of their own, so they never appear in
+#: the forward registry under the name written here. Measuring them is still
+#: worthwhile — they are what a user typing that name gets — but they must not
+#: be mistaken for missing registrations by the completeness guard below.
+#: ``draine2021_pah`` needs no entry here even though it is also an alias
+#: (-> ``draine2021_pah_ir`` via ``_EMISSION_TYPE_ALIASES``): the guard below
+#: translates the registered ``draine2021_pah_ir`` key to this public spelling
+#: via :func:`tests._dust_emission_names.dust_ir_registry_to_public` before
+#: comparing, so it is a match rather than a ghost.
+LEGACY_ALIASES = frozenset({"dl07", "dl14", "mbb"})
 
 
 def _params(names):
@@ -362,11 +370,23 @@ def test_emission_inventory_is_complete():
 
     Two-way, like the flux-scale guard: a name that leaves the registry must
     also leave the lists, so they cannot accumulate ghosts.
+
+    Compares under the PUBLIC ``dust_emission.type`` spelling (Ruling
+    R82/R84): a registered key reachable only through its alias
+    (``draine2021_pah_ir`` -> ``draine2021_pah``) is translated via
+    :func:`tests._dust_emission_names.dust_ir_registry_to_public` before the
+    diff, so the guard checks the name a caller can actually build, not the
+    internal key ``SEDModel.build`` now refuses.
     """
+    from tests._dust_emission_names import dust_ir_registry_to_public
+
     registered = _registered_emission_names()
     accounted = set(TEMPLATE_MODELS) | set(NOT_YET_FLOAT32) | set(BUILDING_BLOCKS)
 
-    unaccounted = sorted(registered - accounted)
+    public_of = dust_ir_registry_to_public()
+    registered_public = {public_of.get(name, name) for name in registered}
+
+    unaccounted = sorted(registered_public - accounted)
     assert not unaccounted, (
         f"selectable emission components covered by no list: {unaccounted}. Measure each "
         "in pure float32, then add it to TEMPLATE_MODELS (clean), NOT_YET_FLOAT32 "
@@ -375,7 +395,7 @@ def test_emission_inventory_is_complete():
         "overstates what float32 delivers, in the direction nobody checks."
     )
 
-    ghosts = sorted(accounted - registered - LEGACY_ALIASES)
+    ghosts = sorted(accounted - registered_public - LEGACY_ALIASES)
     assert not ghosts, (
         f"listed but no longer a registered component: {ghosts} — drop them from the "
         "inventory, or add them to LEGACY_ALIASES if they are old spellings that still "
