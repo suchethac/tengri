@@ -346,28 +346,6 @@ def _log_nion_of_state(state) -> jnp.ndarray:
     return logsumexp(log_nion * ln10) / ln10
 
 
-def _log_nion_of_state(state) -> jnp.ndarray:
-    """log10 Q_H [dex re photons/s], never materializing the ~1e53 linear value.
-
-    Q_H overflows float32 (max 3.4e38), so the stellar component publishes
-    ``log_nion`` alongside ``nion`` for exactly this reason. Falls back to the
-    log of the linear publish for a state that carries only the latter.
-    """
-    log_nion = state.derived.get("log_nion")
-    if log_nion is None:
-        return jnp.log10(_nion_of_state(state))
-    log_nion = jnp.asarray(log_nion)
-    if not jnp.ndim(log_nion):
-        return log_nion
-    # ``_nion_of_state`` sums a multi-component Q_H; the log-domain sum is
-    # logsumexp, not ``log10(sum(10**x))``, whose intermediate is the overflow
-    # this helper exists to avoid.
-    from jax.scipy.special import logsumexp
-
-    ln10 = jnp.log(jnp.asarray(10.0, dtype=log_nion.dtype))
-    return logsumexp(log_nion * ln10) / ln10
-
-
 def _refuse_tabulated_metallicity(model):
     """Refuse a tabulated metallicity, whose LUT axis cannot exist (#1718).
 

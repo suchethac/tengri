@@ -54,7 +54,6 @@ seam, so a verdict is never taken from an unvalidated instrument.
 from __future__ import annotations
 
 import gc
-import math
 
 import jax
 import jax.numpy as jnp
