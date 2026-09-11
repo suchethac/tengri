@@ -1221,7 +1221,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   carries, so the build has no AGN component and its photometry is bit-identical
   to the omitted-`agn` build's. Writing a sub-block beside the off switch
   (`agn={'type': 'none', 'disc': {...}}`) is refused rather than silently
-  dropped.
+  dropped (#2186).
 - `tools/check_param_grid_extent.py` had no `GRID_EXTENT_SOURCES` entries for
   any of the five Feltre+2016 NLR grid axes (`agn_nlr_xi_d`,
   `agn_nlr_alpha_pl`, `agn_nlr_logU`, `agn_nlr_logZ`, `agn_nlr_logn`), so a
