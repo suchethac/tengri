@@ -780,9 +780,9 @@ _AV_BC = _A_ISM * (1.0 - _MU) / _MU  # CIGALE ModCF00Att._init_code
 _cf00_c = _A_ISM * C.attenuation_curve(
     "dustatt_modified_CF00", wave_law, delta=-0.7
 ) + _AV_BC * C.attenuation_curve("dustatt_modified_CF00", wave_law, delta=-1.3)
-_cf00_t = _A_ISM * np.asarray(_tengri_laws["power_law"](wave_law, n_slope=-0.7)) + _AV_BC * np.asarray(
-    _tengri_laws["power_law"](wave_law, n_slope=-1.3)
-)
+_cf00_t = _A_ISM * np.asarray(
+    _tengri_laws["power_law"](wave_law, dust_slope=-0.7)
+) + _AV_BC * np.asarray(_tengri_laws["power_law"](wave_law, dust_slope=-1.3))
 
 _law_pairs = [
     (
