@@ -308,8 +308,9 @@ class EmissionLines(NamedTuple):
     nebular model is active. For doublets ([O II], C IV) the headline
     fields sum both components.
 
-    The full ~271-line Cue catalog (and equivalent grids for CloudyGrid)
-    is exposed via :attr:`all_waves` / :attr:`all_lums` so users can read
+    The full ~138-line Cue catalog (and the generally smaller equivalent
+    grids for CloudyGrid, CB19 and MAPPINGS) is exposed via :attr:`all_waves`
+    / :attr:`all_lums` so users can read
     species the headline NamedTuple does not name explicitly (HeII 1640,
     HeI 10830, NIII] 1750, [O III] 4363, etc.). See :meth:`get` for the
     nearest-wavelength accessor.
@@ -1771,14 +1772,11 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
             from tengri.forward.properties import missing_property_message
 
             raise KeyError(missing_property_message(name, available=catalog))
-        entry = catalog[name]
-        state = pred._ensure_state()
         from tengri.forward.properties import warn_if_lines_are_unavailable
 
-        # State is computed first (it is needed for the return value anyway)
-        # so the per-line coverage check below can read the published
-        # ``line_waves`` instead of only the coarser "no catalog at all" one.
-        warn_if_lines_are_unavailable(pred._model, (name,), state=state)
+        warn_if_lines_are_unavailable(pred._model, (name,))
+        entry = catalog[name]
+        state = pred._ensure_state()
         return entry.fn(state, pred._params)
 
     def __contains__(self, name: str) -> bool:

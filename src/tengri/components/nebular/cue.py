@@ -1361,6 +1361,51 @@ class CueBackend:
             return wav[old_idx], lum[old_idx]
         return wav, lum
 
+    def published_line_wavelengths(self, *, cloudyfsps_only: bool = False) -> np.ndarray:
+        """The catalog wavelengths this backend would publish, without a forward pass.
+
+        Parameters
+        ----------
+        cloudyfsps_only : bool, optional
+            Select the legacy 128-line CLOUDY/FSPS-matched subset instead of
+            the full ~138-line catalog. Default ``False`` (the full catalog),
+            mirroring ``not CUE_FULL_CATALOG_DEFAULT`` in
+            ``parameters/parameters.py`` (#2239) as a literal, not an import
+            -- see the comment on :meth:`_forward_lines`'s own default for
+            why. Every production caller passes this explicitly.
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            Rest-frame vacuum wavelengths [Angstrom], plain ``numpy``.
+
+        Notes
+        -----
+        **Trace-safe by construction, not by exception handling**: every
+        array read here (``weights.nn_line_wav``, ``weights.batched_sort_idx``,
+        ``weights.line_old_idx``) is plain ``numpy``, loaded once from the
+        weights file and never a function of any traced parameter, so this
+        method never touches a JAX tracer regardless of whether the caller
+        sits inside ``jax.jit``/``jax.vmap``. It exists so
+        :func:`~tengri.forward.properties.warn_if_lines_are_unavailable` can
+        answer "which lines does this backend publish" without running (or
+        even having) a ``ForwardState``.
+
+        Reuses the exact index arrays :meth:`_forward_lines` indexes with
+        (``batched_sort_idx`` for the runtime sort order, ``line_old_idx``
+        for the subset) rather than the raw ``weights.sorted_line_wav`` npz
+        field, which can disagree with the runtime order (see
+        ``scripts/convert_cue_weights.py`` and #2181) -- the runtime order is
+        authoritative, so this method must derive it the same way
+        :func:`predict_all_lines` does, not read a second, possibly-stale
+        copy.
+        """
+        weights = self.weights
+        wav_sorted = np.asarray(weights.nn_line_wav)[np.asarray(weights.batched_sort_idx)]
+        if cloudyfsps_only:
+            return wav_sorted[np.asarray(weights.line_old_idx)]
+        return wav_sorted
+
     def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""
         weights = template_data if template_data is not None else self.weights

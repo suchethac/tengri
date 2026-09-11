@@ -32,10 +32,12 @@ from __future__ import annotations
 
 import warnings
 
+import jax
 import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+from tengri.utils.batching import vmap_chunked
 from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
 
 pytestmark = pytest.mark.regression_bug
@@ -115,10 +117,13 @@ def test_published_catalog_size_tracks_full_catalog(_cue_fixture_available):
     params_default = dict(default_model.spec.get_fixed_values())
     params_subset = dict(subset_model.spec.get_fixed_values())
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        n_default = int(default_model.predict(params_default).lines.all_waves.size)
-        n_subset = int(subset_model.predict(params_subset).lines.all_waves.size)
+    # No warning filter here, deliberately: reading ``.lines.all_waves`` does
+    # not route through the per-line warning seam at all (that seam fires
+    # only from ``PropertyCatalog.__getitem__`` / ``predict_properties``, on
+    # a named property, not on the raw catalog array), so this builds and
+    # reads with zero warnings on both models -- measured.
+    n_default = int(default_model.predict(params_default).lines.all_waves.size)
+    n_subset = int(subset_model.predict(params_subset).lines.all_waves.size)
 
     assert n_default == _N_FULL_CATALOG, (
         f"default cue catalog carries {n_default} lines, expected {_N_FULL_CATALOG}"
@@ -138,3 +143,78 @@ def test_halpha_does_not_warn_on_the_legacy_subset(_cue_fixture_available):
         value = float(model.predict(params).properties["halpha"])
     assert not caught, f"halpha should not warn on the legacy subset: {caught}"
     assert np.isfinite(value) and value > 0.0, f"halpha should be finite, got {value}"
+
+
+# ── C1 regression: the seam must be jit/vmap-safe (review round) ──────────
+#
+# The first version of the seam read ``state.derived["line_waves"]`` inside
+# ``jax.jit``/``jax.vmap``, guarded only by
+# ``except jax.errors.ConcretizationTypeError``. Under jax 0.11.1 that never
+# catches ``jax.errors.TracerArrayConversionError`` -- a *sibling* under
+# ``JAXTypeError``, not a subclass -- so every line property raised under
+# jit, including ``predict_properties`` (NAMING_CONTRACT's "the ONE jit/vmap
+# surface for derived quantities") and ``Posterior.properties[...]`` (which
+# uses ``vmap_chunked``). The fix reads the published catalog wavelengths
+# from static (never-traced) backend state instead of ``state`` at all
+# (``CueBackend.published_line_wavelengths`` / ``grid.line_wavelengths``),
+# so the seam cannot see a tracer and needs no ``try``/``except``.
+
+
+@requires_cue_weights
+def test_predict_properties_is_jit_safe_for_line_properties(_cue_fixture_available):
+    """``jax.jit(predict_properties(names=(...)))`` must not raise, either catalog."""
+    for full_catalog in (None, False):
+        model = _build(full_catalog=full_catalog)
+        params = dict(model.spec.get_fixed_values())
+        for name in ("halpha", "civ_1549"):
+
+            @jax.jit
+            def _compute(p, _model=model, _name=name):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    return _model.predict_properties(p, names=(_name,))[_name]
+
+            value = float(_compute(params))
+            if name == "halpha":
+                assert np.isfinite(value), (
+                    f"halpha under full_catalog={full_catalog} should be finite "
+                    f"under jit, got {value}"
+                )
+            # civ_1549 under the legacy subset is legitimately NaN -- the
+            # point of this test is that the call above does not raise, not
+            # that the value is finite in every case.
+
+
+@requires_cue_weights
+def test_predict_properties_is_vmap_safe_for_a_line_property(_cue_fixture_available):
+    """``jax.vmap`` and the repository's ``vmap_chunked`` must not raise."""
+    model = _build(full_catalog=None)
+    params_batch = model.spec.sample_batch(jax.random.PRNGKey(0), n=4)
+
+    def _single(p):
+        return model.predict_properties(p, names=("halpha",))["halpha"]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        vmapped = jax.vmap(_single)(params_batch)
+        chunked = vmap_chunked(_single, chunk_size=4)(params_batch)
+
+    assert vmapped.shape == (4,)
+    assert np.all(np.isfinite(np.asarray(vmapped)))
+    assert chunked.shape == (4,)
+    assert np.all(np.isfinite(np.asarray(chunked)))
+
+
+@requires_cue_weights
+def test_civ_1549_warns_at_trace_time_under_jit_on_the_legacy_subset(_cue_fixture_available):
+    """The warning still fires under ``jax.jit``, at trace (compile) time."""
+    model = _build(full_catalog=False)
+    params = dict(model.spec.get_fixed_values())
+
+    @jax.jit
+    def _compute(p):
+        return model.predict_properties(p, names=("civ_1549",))["civ_1549"]
+
+    with pytest.warns(UserWarning, match=r"'civ_1549'.*full_catalog"):
+        value = float(_compute(params))
+    assert np.isnan(value), f"civ_1549 should be NaN on the legacy subset, got {value}"

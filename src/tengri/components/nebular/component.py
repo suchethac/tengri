@@ -145,6 +145,11 @@ class NebularSEDComponentConfig(SEDComponentConfig):
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
+    # Literal, not an import of CUE_FULL_CATALOG_DEFAULT
+    # (parameters/parameters.py): parameters.parameters transitively imports
+    # this module (via _builders -> observation -> components ->
+    # components.nebular), so a module-level import here closes a circular
+    # import. Keep this in sync with the declaration by hand.
     cue_full_catalog: bool = True
 
 
@@ -1323,10 +1328,9 @@ _LINES_PROPERTIES = {
         units="erg/s",
         group="lines",
         doc=(
-            "CIV 1549 line luminosity. On cue's legacy 128-line subset "
-            "(full_catalog=false) no catalog line falls within tolerance of "
-            "this wavelength, so the value is not a number, with a warning "
-            "(#2239)."
+            "CIV 1549 line luminosity, NaN with a warning on cue's legacy "
+            "128-line subset (full_catalog=false), where no catalog line "
+            "falls within tolerance of this wavelength (#2239)"
         ),
         fn=_civ_1549_fn,
     ),
