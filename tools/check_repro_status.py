@@ -233,20 +233,13 @@ def main() -> int:
 
     # Report findings
     if not violations and not notebooks_without_status:
-        print(
-            "reproduction status: all notebooks have valid status assertions ✓"
-        )
+        print("reproduction status: all notebooks have valid status assertions ✓")
         return 0
 
     if violations:
-        print(
-            f"FAIL: {len(violations)} status assertion(s) violate the protocol:\n"
-        )
+        print(f"FAIL: {len(violations)} status assertion(s) violate the protocol:\n")
         for nb_path, cell_idx, component, status_str, reason in violations:
-            print(
-                f"  {nb_path.name}:{cell_idx}  {component}  {status_str}  "
-                f"({reason})"
-            )
+            print(f"  {nb_path.name}:{cell_idx}  {component}  {status_str}  ({reason})")
         print()
 
     if notebooks_without_status:
@@ -267,9 +260,7 @@ def main() -> int:
         return 1
 
     # Non-strict mode with unaudited notebooks
-    print(
-        "(warn-only; pass --strict to require status assertions in all notebooks)"
-    )
+    print("(warn-only; pass --strict to require status assertions in all notebooks)")
     return 0
 
 

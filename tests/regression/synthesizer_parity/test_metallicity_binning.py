@@ -242,8 +242,20 @@ def test_interpolate_metallicity_gradient_continuity(ssp_data):
 
     # All gradients should be finite
     assert jnp.isfinite(grad_before), "Gradient is NaN/Inf before grid point"
+    assert jnp.any(grad_before != 0.0), (
+        "`grad_before` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert jnp.isfinite(grad_at), "Gradient is NaN/Inf at grid point"
+    assert jnp.any(grad_at != 0.0), (
+        "`grad_at` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert jnp.isfinite(grad_after), "Gradient is NaN/Inf after grid point"
+    assert jnp.any(grad_after != 0.0), (
+        "`grad_after` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     # Gradients should not jump discontinuously
     # (Allow >50% variation due to piecewise-linear nature, but not 100x)

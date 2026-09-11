@@ -130,6 +130,10 @@ def test_inv_noise_std_is_finite_in_float32():
         f"inv_noise_std is {f32[0]:.3e} in float32 — it was computed as "
         "sqrt(1/sigma**2), whose intermediate is inf"
     )
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     np.testing.assert_allclose(f32, f64, rtol=1e-6)
 
 
@@ -206,6 +210,10 @@ def test_metric_vec_is_finite_in_float32():
         f"restructured metric_vec still has {np.sum(~np.isfinite(new))} non-finite "
         "entries in float32"
     )
+    assert np.any(new != 0.0), (
+        "`new` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     np.testing.assert_allclose(new, f64, rtol=2e-5)
 
 
@@ -229,6 +237,10 @@ def test_metric_vec_survives_jit_constant_folding():
     assert np.all(np.isfinite(got)), (
         "metric_vec is non-finite under jit but finite eagerly — XLA "
         "re-associated the double division into 1/sigma**2"
+    )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 
@@ -370,6 +382,10 @@ def test_marginalize_emission_lines_is_finite_in_float32():
         "marginalize_emission_lines are non-finite in float32 — n_inv = 1/sigma**2 "
         "is inf, so G^T N^-1 G is inf/NaN and the whole solve collapses"
     )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_marginalize_emission_lines_gradient_is_finite_in_float32():
@@ -385,6 +401,10 @@ def test_marginalize_emission_lines_gradient_is_finite_in_float32():
     assert np.all(np.isfinite(got)), (
         "d ln_L_marg / d residual is non-finite in float32, contradicting the "
         "documented 'Gradient-safe: yes'"
+    )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 

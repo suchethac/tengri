@@ -242,6 +242,10 @@ def test_fast_joint_objective_jit_and_grad_safe():
     grad = jax.jit(jax.grad(obj))(fp)
     assert np.isfinite(float(val))
     assert all(np.all(np.isfinite(np.asarray(g))) for g in grad.values())
+    assert any(np.any(np.asarray(g) != 0.0) for g in grad.values()), (
+        "the fast joint objective's gradient is identically zero — finite is not enough, "
+        "a detached objective is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_fast_line_fluxes_jit_safe_without_state():
@@ -265,6 +269,10 @@ def test_fast_line_fluxes_jit_safe_without_state():
 
     g = jax.jit(jax.grad(line_sum))(fp)
     assert all(np.all(np.isfinite(np.asarray(v))) for v in g.values())
+    assert any(np.any(np.asarray(v) != 0.0) for v in g.values()), (
+        "the standalone line-flux gradient is identically zero — finite is not enough, a "
+        "detached line channel is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_nion_decoupling_is_bit_exact_with_full_sed():

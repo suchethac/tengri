@@ -39,6 +39,10 @@ class TestBesselK2:
 
         g = assert_grad_matches_fd(lambda t: _bessel_k2e(t), 3.0)
         assert np.isfinite(float(g))
+        assert np.any(float(g) != 0.0), (
+            "`float(g)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestGTheta:

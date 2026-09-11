@@ -427,6 +427,10 @@ class TestBuat08:
 
         g_auto = float(jax.grad(f_v)(220.0))
         assert jnp.isfinite(g_auto)
+        assert jnp.any(g_auto != 0.0), (
+            "`g_auto` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_energy_conservation(self):
         """Integrated mass is positive and finite."""

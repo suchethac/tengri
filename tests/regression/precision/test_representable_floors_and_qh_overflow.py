@@ -76,6 +76,10 @@ def test_uv_slope_survives_a_zeroed_bin_in_float32():
     sed[10:14] = 0.0
 
     assert np.isfinite(_beta(sed, wave, x64=True)), "float64 was always finite here"
+    assert np.any(_beta(sed, wave, x64=True) != 0.0), (
+        "`_beta(sed, wave, x64=True)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(_beta(sed, wave, x64=False)), (
         "float32 UV slope is non-finite — the 1e-50 floor is inert at this precision"
     )
@@ -129,6 +133,10 @@ def test_qh_float64_is_unchanged(ssp_bare):
     with jax.enable_x64(True):
         qh = _compute_qh_grid(jnp.asarray(ssp_bare.ssp_wave), jnp.asarray(ssp_bare.ssp_flux))
         assert jnp.all(jnp.isfinite(qh)), "float64 Q_H must be finite for any sane SSP"
+        assert jnp.any(qh != 0.0), (
+            "`qh` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         out = sanitize_qh_table(qh, backend_name="CloudyGridBackend")
         assert jnp.array_equal(out, qh), "float64 Q_H table must pass through untouched"
 
