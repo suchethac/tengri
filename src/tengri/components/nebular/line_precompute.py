@@ -45,7 +45,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.stellar.reference_history import reference_history_params
-from tengri.utils.scale import apply_log10_scale, representable_denominator
+from tengri.utils.scale import apply_log10_scale
 
 #: Nebular ionization parameters that MUST be fixed for the table to be valid:
 #: they change ``line_per_qh`` (line ratios), so a free one would make the
@@ -78,10 +78,22 @@ class LinePerQHTable:
     wavelengths: jnp.ndarray = dataclasses.field()
 
 
-def _nion_of_state(state) -> jnp.ndarray:
-    """Total ionizing photon rate published by the stellar component."""
-    nion = state.derived["nion"]
-    return jnp.sum(nion) if jnp.ndim(nion) else nion
+def _log_nion_of_state(state) -> jnp.ndarray:
+    """log10 of the ionizing photon rate published by the stellar component.
+
+    Never materializes the linear ``nion`` (~1e53 photons/s, past float32's
+    3.4e38 ceiling, #1206): reads the stellar component's ``log_nion`` publish
+    directly and reduces a multi-component rate with ``logsumexp`` rather than
+    ``log10(sum(10**x))``, whose intermediate is the overflow this exists to
+    avoid.
+    """
+    log_nion = jnp.asarray(state.derived["log_nion"])
+    if not log_nion.ndim:
+        return log_nion
+    from jax.scipy.special import logsumexp
+
+    ln10 = jnp.log(jnp.asarray(10.0, dtype=log_nion.dtype))
+    return logsumexp(log_nion * ln10) / ln10
 
 
 def _log10_four_pi_dl2(redshift) -> jnp.ndarray:
@@ -185,10 +197,15 @@ def precompute_line_per_qh(
         # the reference SFH *and* the reference dust. Dust reddening (which now
         # defaults on in predict_line_fluxes) is applied downstream, not baked in.
         flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths, redden=False)
-        nion = _nion_of_state(model.predict_state(p))
-        # observed flux → line luminosity, without materializing the ~1e57 divisor
-        lum = apply_log10_scale(jnp.asarray(flux), log10_ref_divisor)
-        rows.append(lum / jnp.maximum(nion, representable_denominator(1e-30)))
+        # Q_H is ~1e53 photons/s, so the LINEAR ``nion`` is ``inf`` in float32 and
+        # a division by it silently flushes to 0 rather than raising (#1206). Take
+        # the reciprocal as a log offset instead: ``jnp.maximum(..., -30.0)``
+        # reproduces the old ``jnp.maximum(nion, 1e-30)`` floor in log space
+        # (``log10(1e-30) == -30``).
+        neg_log_qh = -jnp.maximum(_log_nion_of_state(model.predict_state(p)), -30.0)
+        # observed flux → line luminosity per Q_H, without materializing either
+        # the ~1e57 distance divisor or the ~1e53 ionizing rate.
+        rows.append(apply_log10_scale(jnp.asarray(flux), log10_ref_divisor + neg_log_qh))
     return LinePerQHTable(
         met_grid=met_grid,
         line_per_qh=jnp.stack(rows),  # (n_met, n_lines): luminosity per Q_H

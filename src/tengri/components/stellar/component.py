@@ -2670,7 +2670,7 @@ class StellarSEDComponent:
                     cosmic_age_gyr=t_obs_val,
                 )
 
-        # Lognormal metallicity-distribution-function width (Carnall+2018 §3.2,
+        # Lognormal metallicity-distribution-function width (Carnall+2018 §3.1.2,
         # #506): DSPS's ``*_lognormal_mdf`` / ``*_met_table`` kernels already
         # spread the SSP weights as a Gaussian in log10(Z) of this width about
         # the (per-age) mean metallicity. It is fittable via the optional public

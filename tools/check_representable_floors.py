@@ -132,13 +132,18 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #: first and normalized on the evaluation grid through a ``jnp.where``-selected
 #: division, so the floored denominator is gone rather than moved.
 #:
-#: 45 -> 3 (#1860, this round): every site in ``components/`` (AGN blocks/blr/
-#: disc/kd_precompute/nlr/qsogen/skirtor/skirtor_model, 15; nebular _shared/
-#: line_precompute/nebular_grid_precompute, 4; stellar component.py/sfh/
-#: sps, 11; xray, 1), ``observation/spectral_indices.py`` (5) and
+#: 45 -> 3 (#1860 and the float32 line-channel fix, #1206, landing together):
+#: every site in ``components/`` (AGN blocks/blr/disc/kd_precompute/nlr/qsogen/
+#: skirtor/skirtor_model, 15; nebular ``_shared.py``, 2; stellar component.py/
+#: sfh/sps, 11; xray, 1), ``observation/spectral_indices.py`` (5) and
 #: ``utils/grid_interp.py`` + ``utils/wavelength.py`` (6) now calls
-#: ``representable_denominator``. The reachability check the earlier note
-#: asked for: the 6 ``utils/`` sites are eager numpy build-time precompute
+#: ``representable_denominator``. The two nebular ``1.0 / jnp.maximum(nion,
+#: 1e-30)`` sites (``nebular_grid_precompute.py`` and the dormant
+#: ``line_precompute.py``) are gone rather than re-floored: Q_H is ~1e53, so in
+#: float32 the clamped denominator was ``inf`` and the quotient exactly 0.0; the
+#: reciprocal is now a ``-log10 Q_H`` offset applied via ``apply_log10_scale``
+#: and there is no denominator. The reachability check the earlier note asked
+#: for: the 6 ``utils/`` sites are eager numpy build-time precompute
 #: (``PreintegratedGrid``/``subband_quadrature``/``make_union_grid``, each
 #: docstringed "JIT-compatible: no"), so no JAX VJP ever passes through them,
 #: but the fix is free and keeps the census clean.
