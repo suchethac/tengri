@@ -417,6 +417,11 @@ def test_skirtor_radius_ratio_polar_t_polar_beta_live_on_class_path(class_compon
             return _integral(p)
 
         g = float(jax.grad(_obj)(_CLASS_PARAMS[name]))
+        assert np.isfinite(g), (
+            f"SKIRTORTorus.predict(): d(sum|sed|)/d({name}) is {g}. `nan != 0.0` "
+            "is True, so the liveness assertion below cannot see a non-finite "
+            "gradient (#2178)."
+        )
         assert g != 0.0, f"SKIRTORTorus.predict(): {name} has zero gradient (dead parameter)"
 
 
@@ -464,6 +469,11 @@ def test_skirtor_radius_ratio_live_on_composable_path(ssp):
 
     v0 = jnp.asarray(p["agn_radius_ratio"])
     g = float(jax.grad(lambda v: _obj({**p, "agn_radius_ratio": v}))(v0))
+    assert np.isfinite(g), (
+        f"composable skirtor_torus_block: d(sum|sed|)/d(agn_radius_ratio) is {g}. "
+        "`nan != 0.0` is True, so the liveness assertion below cannot see a "
+        "non-finite gradient (#2178)."
+    )
     assert g != 0.0, "composable skirtor_torus_block: agn_radius_ratio has zero gradient"
 
 

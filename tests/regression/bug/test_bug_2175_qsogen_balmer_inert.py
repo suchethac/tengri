@@ -236,4 +236,8 @@ def test_qsogen_balmer_wildcard_frees_and_grad_is_live(synthetic_ssp_wide, near_
         return jnp.log(jnp.sum(model.predict_photometry(p)) + 1e-300)
 
     grad = float(jax.grad(objective)(jnp.asarray(params["agn_bcnorm"])))
+    assert np.isfinite(grad), (
+        f"d(log sum photometry)/d(agn_bcnorm) is {grad}. `nan != 0.0` is True, so "
+        "the liveness assertion below cannot see a non-finite gradient (#2178)."
+    )
     assert grad != 0.0, "agn_bcnorm was freed but is dead (grad=0 on predict_photometry) (#2175)."

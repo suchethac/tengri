@@ -224,6 +224,10 @@ class TestStellarMass:
     def test_grad_finite(self):
         grad_val = jax.grad(prior_stellar_mass)(6.0)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestAGNFraction:
@@ -243,6 +247,10 @@ class TestAGNFraction:
 
         grad_val = jax.grad(f)(1.0e-25)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_jit_compiles(self):
         got = jax.jit(prior_agn_fraction)(1.0e-25, 1.0e-25, 1.0e-30, 1.0, 2.0)
@@ -266,6 +274,10 @@ class TestLowAGNFraction:
 
         grad_val = jax.grad(f)(1.0e-25)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestIRSynFraction:
@@ -275,6 +287,10 @@ class TestIRSynFraction:
 
         grad_val = jax.grad(f)(1.0e-25)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestUVXrays:
@@ -289,6 +305,10 @@ class TestUVXrays:
     def test_grad_finite(self):
         grad_val = jax.grad(lambda x: prior_uv_xrays(x, 28.0))(30.0)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestIRXrays:
@@ -302,6 +322,10 @@ class TestIRXrays:
     def test_grad_finite(self):
         grad_val = jax.grad(lambda x: prior_ir_xrays(x, 1.0e41))(23.0)
         assert jnp.isfinite(grad_val)
+        assert jnp.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestMidIRUV:

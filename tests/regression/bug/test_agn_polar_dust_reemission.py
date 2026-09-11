@@ -340,6 +340,10 @@ class TestPolarDustGradients:
 
     def test_temperature_gradient_nonzero(self):
         g = self._objective("agn_polar_T", 100.0)
+        assert np.isfinite(g), (
+            f"d(sum(sed))/d(agn_polar_T) is {g}. `nan != 0.0` is True, so the "
+            "liveness assertion below cannot see a non-finite gradient (#2178)."
+        )
         assert g != 0.0, "d(sum(sed))/d(agn_polar_T) is exactly zero."
 
     def test_opening_angle_gradient_nonzero(self):
@@ -347,10 +351,18 @@ class TestPolarDustGradients:
         # sigmoid mask is unsaturated there, so its gradient w.r.t. oa is
         # resolvably nonzero.
         g = self._objective("agn_polar_oa", 45.0)
+        assert np.isfinite(g), (
+            f"d(sum(sed))/d(agn_polar_oa) is {g}. `nan != 0.0` is True, so the "
+            "liveness assertion below cannot see a non-finite gradient (#2178)."
+        )
         assert g != 0.0, "d(sum(sed))/d(agn_polar_oa) is exactly zero."
 
     def test_beta_gradient_nonzero(self):
         g = self._objective("agn_polar_beta", 1.6)
+        assert np.isfinite(g), (
+            f"d(sum(sed))/d(agn_polar_beta) is {g}. `nan != 0.0` is True, so the "
+            "liveness assertion below cannot see a non-finite gradient (#2178)."
+        )
         assert g != 0.0, "d(sum(sed))/d(agn_polar_beta) is exactly zero."
 
 

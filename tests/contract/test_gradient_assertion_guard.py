@@ -10,7 +10,7 @@ and #2178 shipped a float32 NaN past a non-zero-only check (``nan != 0.0`` is
 
 A guard whose evidence is its own unit tests is worth very little. The mutation
 corpus under ``tests/fixtures/assertion_holes/`` therefore carries one function
-per hole shape, and ``historical.py`` there transcribes the two shipped
+per hole shape, and ``historical.py`` there carries the two shipped
 assertions **verbatim** as they stood before their fixes. If a future edit stops
 the guard firing on those two, the guard has regressed regardless of what
 anything else here says.

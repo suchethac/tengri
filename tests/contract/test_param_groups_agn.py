@@ -629,6 +629,11 @@ class TestAGNEbvMigration:
             return jnp.log(jnp.sum(model.predict_photometry(pd)) + 1e-300)
 
         grad = float(jax.grad(obj)(v0))
+        assert jnp.isfinite(grad), (
+            f"d(log sum photometry)/d(agn_attenuation_ebv) is {grad}. `nan != 0.0` "
+            "is True, so the liveness assertion below cannot see a non-finite "
+            "gradient on its own (#2178)."
+        )
         assert grad != 0.0, "agn_attenuation_ebv is dead -- the D1 fix regressed"
 
 

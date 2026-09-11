@@ -149,6 +149,11 @@ def test_polar_dust_knobs_all_live_when_atten_is_polar_dust():
         ("agn_polar_oa", 45.0),
     ):
         g = _grad(key, value)
+        assert np.isfinite(g), (
+            f"{key}: d(sum(sed))/d({key}) is {g} with atten='polar_dust'. "
+            "`nan != 0.0` is True, so the liveness assertion below cannot see a "
+            "non-finite gradient (#2178)."
+        )
         assert g != 0.0, f"{key} has zero gradient with atten='polar_dust' selected."
 
 

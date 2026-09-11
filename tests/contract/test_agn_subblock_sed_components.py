@@ -388,6 +388,14 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
             "must select its denominator, not floor it: a floored 1e-300 squares to "
             "zero in the division's VJP and the cotangent comes back nan."
         )
+        assert grad != 0.0, (
+            f"torus={torus_block!r}: the cotangent at agn_polar_ebv=0 came back "
+            f"{grad}. Finite is not the whole claim -- a rewrite that zeroed the "
+            "derivative everywhere would satisfy the assertion above while leaving "
+            "the sampler exactly as stuck as the nan did. The class docstring pins "
+            "the selected-denominator answers: 6.743538e+33 (torus='none') and "
+            "4.134017e+33 (torus='skirtor')."
+        )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
     def test_the_live_gradient_is_unchanged_by_the_selection(self, torus_block):
@@ -401,6 +409,12 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
         grad = float(
             jax.grad(lambda e: self._dust_total(e, torus_block))(jnp.asarray(self._EBV_LIVE))
         )
+        # grad-assert: finite-only — with torus='none' there is nothing to share
+        # the AGN dust budget with, so the polar graybody is rescaled to the whole
+        # (conserved) budget and the INTEGRATED total is E(B-V)-independent: the
+        # derivative here is exactly 0.0 by construction, not a dead direction.
+        # The torus='skirtor' arm, where E(B-V) does move the split, has its
+        # non-zero value pinned exactly on the next line.
         assert np.isfinite(grad)
         if torus_block == "skirtor":
             assert grad == pytest.approx(2.192167e33, rel=1e-5, abs=0.0), (

@@ -253,4 +253,8 @@ def test_composable_wiring_differs_from_sibling_and_gradients_live(synthetic_ssp
     for name in ("agn_oa_nenkova", "agn_torus_frac"):
         v0 = jnp.asarray(p0[name])
         g = float(jax.grad(lambda v, name=name: obj({**p0, name: v}))(v0))
+        assert jnp.isfinite(g), (
+            f"{name}: gradient of band flux is {g} -- `nan != 0.0` is True, so "
+            "the liveness assertion below cannot see a non-finite gradient (#2178)"
+        )
         assert g != 0.0, f"{name}: gradient of band flux is exactly zero"
