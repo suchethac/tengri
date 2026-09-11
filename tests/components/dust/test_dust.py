@@ -23,9 +23,9 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-def _charlot_fall_hard(wavelength, age_grid, tau_v1, tau_v2, n_slope=-0.7, t_birth=1e7):
+def _charlot_fall_hard(wavelength, age_grid, tau_v1, tau_v2, dust_slope=-0.7, t_birth=1e7):
     """Step-function variant (for comparison/testing)."""
-    wave_ratio = (wavelength / 5500.0) ** n_slope
+    wave_ratio = (wavelength / 5500.0) ** dust_slope
     tau_young = (tau_v1 + tau_v2) * wave_ratio
     tau_old = tau_v2 * wave_ratio
     is_young = age_grid[:, None] < t_birth
@@ -79,7 +79,7 @@ class TestCharlotFall:
     def test_bluer_wavelengths_more_attenuated(self, age_grid):
         """Blue light is more attenuated than red (for n < 0)."""
         wave = jnp.array([3000.0, 5500.0, 10000.0])
-        atten = two_component_dust(wave, age_grid, 0.5, 0.3, n_slope=-0.7, **_CF_KWARGS)
+        atten = two_component_dust(wave, age_grid, 0.5, 0.3, dust_slope=-0.7, **_CF_KWARGS)
         # Average over ages: blue should be more attenuated
         mean_per_wave = jnp.mean(atten, axis=0)
         assert float(mean_per_wave[0]) < float(mean_per_wave[2])
@@ -88,7 +88,7 @@ class TestCharlotFall:
         """At 5500 A, tau_lambda = tau_v for old stars (diffuse only)."""
         wave = jnp.array([5500.0])
         tau_v2 = 0.5
-        atten = two_component_dust(wave, age_grid, 0.0, tau_v2, n_slope=-0.7, **_CF_KWARGS)
+        atten = two_component_dust(wave, age_grid, 0.0, tau_v2, dust_slope=-0.7, **_CF_KWARGS)
         # For old stars, tau_lambda = tau_v2 * (5500/5500)^n = tau_v2
         old_atten = float(atten[-1, 0])
         expected = float(jnp.exp(-tau_v2))

@@ -4941,7 +4941,7 @@ class SEDModel:
         # model's nebular reddening into another (color-leak).
         dust_law_neb_name = str(getattr(self, "_dust_law_neb", None) or "inherit_bc")
         # Per-component law-parameter overrides change the baked-in chain
-        # constants (e.g. birth-cloud n_slope) but not its graph shape, so two
+        # constants (e.g. birth-cloud dust_slope) but not its graph shape, so two
         # models that differ only here MUST get distinct signatures or the
         # kernel cache leaks one's attenuation into the other (color-leak).
         _ovr = getattr(self, "_dust_law_overrides", None) or {}

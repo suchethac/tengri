@@ -191,7 +191,7 @@ def law_kwarg_names(law: str | Callable) -> frozenset[str]:
     Returns
     -------
     frozenset of str
-        Law-function keyword names (``n_slope``, ``dust_delta``, ...). Empty
+        Law-function keyword names (``dust_slope``, ``dust_delta``, ...). Empty
         for a curve that reads only wavelength (``calzetti``, ``smc``, the
         grain-model tables).
 
@@ -296,7 +296,7 @@ def reject_unread_law_kwargs(law_params: Mapping, laws: tuple, context: str) -> 
 # wavelengths positionally and get k(lambda) at tau_V=1.
 _HEADLINE_LAWS: dict[str, tuple[str, dict]] = {
     "Calzetti+2000": ("calzetti", {}),
-    "Charlot & Fall (slope=-0.7)": ("power_law", {"n_slope": -0.7}),
+    "Charlot & Fall (slope=-0.7)": ("power_law", {"dust_slope": -0.7}),
     "Cardelli+1989 (MW, Rv=3.1)": ("cardelli", {"dust_Rv": 3.1}),
     "SMC (Gordon+2003)": ("smc", {}),
     "Kriek & Conroy 2013": ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0}),

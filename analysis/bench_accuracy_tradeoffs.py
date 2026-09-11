@@ -59,7 +59,6 @@ def _make_smooth_spec(*, redshift=0.1, dust_tau_bc=1.0, dust_law_bc="power_law")
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_bc=Fixed(dust_tau_bc),
         dust_tau_diff=Fixed(0.3),
-        dust_slope=Fixed(-0.7),
         redshift=Fixed(redshift),
         dust_law_bc=dust_law_bc,
         dust_law_diff=dust_law_bc,

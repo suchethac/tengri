@@ -159,7 +159,7 @@ def _time_exact_steps(model: Model, params: dict, n: int = N_STEADY) -> dict:
             model.ssp_ages_yr,
             p["tau_bc"],
             p["tau_diff"],
-            n_slope=p["dust_slope"],
+            dust_slope=p["dust_slope"],
         ),
         n=n,
         warmup=1,

@@ -14,7 +14,7 @@ left (``SEDModel._attenuate_line_catalog`` and the deprecated
 ``predict_emission_lines`` fallback now dispatch to the dust component itself,
 :class:`~tengri.components.dust.two_component.DustSEDComponent` /
 :class:`~tengri.components.dust.component.DustAttenuationSEDComponent`), and
-its own hand-built ``{n_slope, dust_bump_strength}`` kwarg dict could not
+its own hand-built ``{dust_slope, dust_bump_strength}`` kwarg dict could not
 thread ``dust_delta``, ``dust_Rv``, ``redshift`` or a per-screen override to a
 law that reads them (#1858).
 """

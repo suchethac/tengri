@@ -147,13 +147,13 @@ class TestFastDustAgreement:
 
     def test_exact_agreement_photometry(self, age_grid, filter_wavelengths, dust_age_weights):
         """Fast and original agree exactly for photometric wavelengths."""
-        tau_v1, tau_v2, n_slope = 0.5, 0.3, -0.7
+        tau_v1, tau_v2, dust_slope = 0.5, 0.3, -0.7
         result_original = two_component_dust(
             filter_wavelengths,
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         result_fast = two_component_dust_fast(
@@ -161,20 +161,20 @@ class TestFastDustAgreement:
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)
 
     def test_exact_agreement_spectroscopy(self, age_grid, spectral_wavelengths, dust_age_weights):
         """Fast and original agree exactly for spectroscopic wavelengths."""
-        tau_v1, tau_v2, n_slope = 1.0, 0.5, -0.7
+        tau_v1, tau_v2, dust_slope = 1.0, 0.5, -0.7
         result_original = two_component_dust(
             spectral_wavelengths,
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         result_fast = two_component_dust_fast(
@@ -182,13 +182,13 @@ class TestFastDustAgreement:
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)
 
     @pytest.mark.parametrize(
-        "tau_v1,tau_v2,n_slope",
+        "tau_v1,tau_v2,dust_slope",
         [
             (0.0, 0.0, -0.7),  # no dust
             (3.0, 1.5, -0.7),  # heavy dust
@@ -204,7 +204,7 @@ class TestFastDustAgreement:
         dust_age_weights,
         tau_v1,
         tau_v2,
-        n_slope,
+        dust_slope,
     ):
         """Agreement holds across diverse dust parameter combinations."""
         result_original = two_component_dust(
@@ -212,7 +212,7 @@ class TestFastDustAgreement:
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         result_fast = two_component_dust_fast(
@@ -220,7 +220,7 @@ class TestFastDustAgreement:
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
-            n_slope=n_slope,
+            dust_slope=dust_slope,
             **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)

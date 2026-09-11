@@ -87,7 +87,11 @@ def _share_a_closure(fa, fb):
     [
         ({"dust_slope": -0.7}, {"dust_slope": 0.4}, "dust_slope (measured -0.18 dex)"),
         ({"met_logzsol": 0.0}, {"met_logzsol": -1.0}, "met_logzsol"),
-        ({"dust_Rv": 3.1}, {"dust_Rv": 5.5}, "dust_Rv"),
+        (
+            {"dust_law_bc": "cardelli", "dust_Rv": 3.1},
+            {"dust_law_bc": "cardelli", "dust_Rv": 5.5},
+            "dust_Rv (under cardelli)",
+        ),
     ],
 )
 def test_spec_fixed_values_key_the_engine_cache(ssp, obs, left, right, why):

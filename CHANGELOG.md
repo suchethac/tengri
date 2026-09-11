@@ -315,6 +315,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Deprecated
 
+- Attenuation-law keyword `n_slope` is renamed `dust_slope` on `power_law` and
+  `conroy2010`, so the law keyword equals the registry name (`dust_slope`) and the
+  grammar stem (`slope`) for every shape parameter. `n_slope=` still works on the
+  public law functions with a DeprecationWarning; the registry callables, the
+  law-kwarg resolver and the per-screen override dicts (`dust_law_overrides`,
+  `bc_law_overrides`, `neb_law_overrides`) use `dust_slope` only.
+
 - `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
   renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to
   `dust_attenuation_law`, but emits a `DeprecationWarning`; passing both with
@@ -380,6 +387,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   explicit-law rule.
 
 ### Fixed
+
+- The flat `Parameters(...)` form refuses a dust shape parameter or a
+  `dust_law_overrides` entry that the resolved attenuation law never reads, and
+  an override screen other than `bc`/`diff`/`neb`, through the same validator
+  the `SEDModel.build` grammar uses; before, `Parameters(dust_law_bc="calzetti",
+  dust_Rv=Fixed(4.0))` built and `dust_Rv` silently never reached the model.
+  Registry defaults on omission are unchanged. Inside `dust_attenuation={...}`
+  the full registry spellings (`dust_tau_bc`, `dust_law_bc`) are normalized to
+  the grammar stems before any check runs, so `tau_bc` plus `dust_tau_diff` no
+  longer trips a false completeness error and two spellings of one key raise;
+  conversely a lone `dust_tau_diff` in a two-component group is now refused
+  exactly like a lone `tau_diff` (the full spelling used to bypass the check),
+  so pin or free `tau_bc` explicitly next to `**narayanan_tau_prior(z)`.
+  `with_params()` and `merge_observation_params()` carry a fresh provenance map,
+  so a shape parameter merged into a flat spec is live. The twelve per-screen
+  grammar keys derive from one constant (`tengri.parameters._dust_keys`), and
+  `check_dust_law_kwargs.py` checks law keyword spelling at every call site in
+  `src/`, `tests/`, `bench/`, `examples/` and `analysis/`. Test, bench and analysis call sites that pinned `dust_slope` beside a law that never reads it drop the dead kwarg (`power_law` keeps its registry default of -0.7), and one engine-cache test that varied `dust_Rv` now does so under `cardelli`.
 
 - LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
 
