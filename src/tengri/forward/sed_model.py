@@ -3050,7 +3050,13 @@ class SEDModel:
             from tengri.components.nebular import CB19Backend
             from tengri.components.nebular.cloudy_cb19 import check_cb19_free_params
 
-            self._nebular_backend = CB19Backend(ssp_data=ssp_data)
+            # Build kwargs from non-None user-supplied values only (#2220),
+            # mirroring the ``mappings`` branch below: constructor defaults
+            # are the single source of truth when ``grid`` was not given.
+            kwargs = {"ssp_data": ssp_data}
+            if spec.nebular_cb19_grid_path is not None:
+                kwargs["grid_path"] = spec.nebular_cb19_grid_path
+            self._nebular_backend = CB19Backend(**kwargs)
             # #2181: the grid's own axes decide which nebular parameters can
             # move the prediction. On the flat placeholder grid all five are
             # constant, so a fit explores them against a likelihood that is

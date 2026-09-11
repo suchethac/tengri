@@ -794,6 +794,10 @@ class Parameters:
         nebular = kwargs.pop("nebular", False)
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
+        # #2220: explicit cb19 grid, mirroring nebular_mappings_grid_path /
+        # nebular_mappings_agn_grid_path below. None resolves the packaged
+        # default at CB19Backend construction time.
+        self.nebular_cb19_grid_path = kwargs.pop("nebular_cb19_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
         # When True, the Cue orchestrator path publishes the full
         # ~271-species line catalog instead of the default 128
@@ -2307,6 +2311,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "met_mode": content("metallicity mode determines parameters"),
     "neb_ionization": content("nebular ionization source determines parameters"),
     "nebular": content("nebular emission backend determines parameters"),
+    "nebular_cb19_grid_path": content("cb19 grid path determines available parameters"),
     "nebular_mappings_agn_density": content("MAPPINGS AGN density determines parameters"),
     "nebular_mappings_agn_grid_path": content("MAPPINGS AGN grid path determines parameters"),
     "nebular_mappings_agn_ionizing_source_warning": content(

@@ -3622,6 +3622,13 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
             result["cloudy_grid_path"] = str(neb_dict["grid"])
     elif neb_type == "cb19":
         result["nebular"] = "cb19"
+        # Optional explicit grid; without it CB19Backend resolves the packaged
+        # data/cb19_templates.h5 (or $TENGRI_DATA_DIR) at construction time.
+        # #2220: this branch used to drop ``grid`` silently -- the key was
+        # already a legal structural key for every neb variant, but only
+        # cloudy/mappings/mappings_agn read it.
+        if "grid" in neb_dict:
+            result["nebular_cb19_grid_path"] = str(neb_dict["grid"])
     elif neb_type == "mappings":
         result["nebular"] = "mappings"
         # Pass only what the user explicitly wrote; constructor defaults are the
@@ -4123,6 +4130,21 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 # typo suggestions and displayed key lists in error messages; 'other_params'
 # (added below, not in the literal table) serves the same two purposes for its
 # exact synonym. Removing any of the three breaks a different consumer.
+#
+# Exception: for 'neb', this base set is NOT the full displayed/suggested set
+# (#2220 I2). 'grid' is deliberately absent here -- it is legal only for the
+# types that read it (cloudy, cb19, mappings, mappings_agn), enforced via
+# _NEB_TYPE_SPECIFIC_KEYS (defined below) in _validate_user_keys -- but the
+# did-you-mean suggestion and the "Valid structural keys" list in
+# _check_dict_keys must still show 'grid' for those four types. The
+# suggestion already reads the type-aware union: _check_dict_keys's
+# suggestion_pool is built from `allowed`, which the 'neb' call site already
+# unions with the resolved type's _NEB_TYPE_SPECIFIC_KEYS entry, independent
+# of this table. Only the displayed "Valid structural keys" list needed a
+# separate fix -- it read this table
+# directly -- so 'neb' passes the same union explicitly as
+# _check_dict_keys's displayed_structural_keys for that list; every other
+# group still reads this table alone for both.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset(
         {"type", "*", "all_params", "bin_edges_gyr", "age_kernel", "field_centering"}
@@ -4164,7 +4186,12 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "dust_emission": frozenset(
         {"type", "*", "all_params", "spinning_dust", "f_cnm", "eta_balance"}
     ),
-    "neb": frozenset({"type", "*", "all_params", "full_catalog", "grid"}),
+    # "grid" is NOT here (#2220 follow-up): it is legal only for the neb
+    # types that read it ("cloudy", "cb19", "mappings", "mappings_agn"),
+    # added per-type via _NEB_TYPE_SPECIFIC_KEYS (defined below this table) in
+    # _validate_user_keys so a type that never reads it (cue, ssp, none)
+    # raises instead of silently dropping the path.
+    "neb": frozenset({"type", "*", "all_params", "full_catalog"}),
     "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
@@ -4196,6 +4223,36 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
 _GROUP_STRUCTURAL_KEYS = {
     group: (keys | {WILDCARD_ALIAS_OTHER} if WILDCARD_ALIAS in keys else keys)
     for group, keys in _GROUP_STRUCTURAL_KEYS.items()
+}
+
+#: Structural keys legal on top of a group's base ``_GROUP_STRUCTURAL_KEYS``
+#: set, keyed by that group's resolved ``type`` (#2220 follow-up). Today only
+#: ``neb`` has any: ``grid`` used to be legal for every neb type via the base
+#: set, so ``neb={'type': 'cue', 'grid': p}`` / ``{'type': 'ssp', ...}``
+#: accepted the key and silently dropped it -- only ``cloudy``, ``cb19``,
+#: ``mappings`` and ``mappings_agn`` read it in ``_translate_neb``. A type
+#: absent from this table (or a group other than ``neb``) contributes no
+#: extra keys; ``.get(type, frozenset())`` is the read pattern everywhere
+#: this is consulted.
+#:
+#: The single source of truth for three consumers that must never drift
+#: apart again: ``_validate_user_keys`` (acceptance and the explicit refusal
+#: for types outside a key's set), ``_check_dict_keys``'s
+#: ``displayed_structural_keys`` (the did-you-mean suggestion pool and the
+#: "Valid structural keys" list, per resolved type), and
+#: ``tools/check_doc_grammar_keys.py`` (the in-code key census the docs are
+#: checked against -- the guard's own code union is
+#: ``_GROUP_STRUCTURAL_KEYS[group] | union(_NEB_TYPE_SPECIFIC_KEYS.values())``
+#: for ``group == "neb"``, since the doc describes ``grid`` once for the
+#: whole ``neb`` domain, not per type).
+_NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
+    "cloudy": frozenset({"grid"}),
+    "cb19": frozenset({"grid"}),
+    # "mappings" (stellar): grid plus its own model/density/warning knobs.
+    "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
+    # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
+    # has no model axis).
+    "mappings_agn": frozenset({"density", "ionizing_source_warning", "grid"}),
 }
 
 
@@ -4307,6 +4364,14 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
             # absolute path into a portable grammar dict, so compare against it.
             resolved_default=lambda spec: spec._default_cloudy_grid(),
         ),
+        # #2220 follow-up: unlike cloudy_grid_path, nebular_cb19_grid_path is
+        # never backfilled with a resolved default in _init_nebular_config --
+        # it stays None until the user sets it -- so a plain default
+        # comparison is enough; no resolved_default lambda needed. Without
+        # this entry, spec.to_groups() dropped the key the grammar route
+        # (#2220) had just wired in: parse_groups(**spec.to_groups()) reverted
+        # a cb19 model to the packaged default grid with no error.
+        _Structural("grid", "nebular_cb19_grid_path", None, only_types=("cb19",)),
     ),
     "shock": (
         _Structural("norm", "shock_norm", "frac"),
@@ -4795,21 +4860,39 @@ def _validate_user_keys(
         if top_key == "neb" and top_val.get("type") == "cue":
             param_names = param_names | _OPTIONAL_NEB_PARAM_NAMES
 
-        # Type-specific structural keys for MAPPINGS backends: different neb
-        # types accept different structural keys in the neb group. For
-        # "mappings" (stellar), allow {model, density, ionizing_source_warning,
-        # grid}. For "mappings_agn" (AGN), allow {density,
-        # ionizing_source_warning, grid} but NOT model (5D AGN grid has no
-        # model axis).
+        # Type-specific structural keys: different neb types accept different
+        # structural keys in the neb group, read from the single shared table
+        # _NEB_TYPE_SPECIFIC_KEYS (also consulted by _check_dict_keys's
+        # displayed_structural_keys and by tools/check_doc_grammar_keys.py).
+        # "grid" (#2220 follow-up) used to be legal for every type via the
+        # base _GROUP_STRUCTURAL_KEYS["neb"] set, so neb={'type': 'cue',
+        # 'grid': p} / {'type': 'ssp', ...} accepted the key and silently
+        # dropped it -- only "cloudy", "cb19", "mappings" and "mappings_agn"
+        # read it in _translate_neb. It is legal only for those four types
+        # now, and the check just below refuses it by name for every other
+        # type.
         neb_type_specific_keys = frozenset()
         if top_key == "neb":
             neb_type = top_val.get("type")
-            if neb_type == "mappings":
-                neb_type_specific_keys = frozenset(
-                    {"model", "density", "ionizing_source_warning", "grid"}
+            # isinstance guard, not just a hashability worry: a non-string
+            # type (e.g. a dict, if a user mistypes the sfh-style composed
+            # form here) must fall through to frozenset() exactly as the old
+            # if/elif chain did, not raise TypeError out of a dict .get()
+            # before _translate_neb ever gets a chance to name the real
+            # problem.
+            neb_type_specific_keys = (
+                _NEB_TYPE_SPECIFIC_KEYS.get(neb_type, frozenset())
+                if isinstance(neb_type, str)
+                else frozenset()
+            )
+
+            if "grid" in top_val and "grid" not in neb_type_specific_keys:
+                raise ValueError(
+                    f"Unknown key 'grid' in group 'neb': type {neb_type!r} does not "
+                    "read a grid file, so the key would be silently ignored. "
+                    "'grid' is only accepted when type is one of 'cloudy', 'cb19', "
+                    "'mappings', 'mappings_agn'."
                 )
-            elif neb_type == "mappings_agn":
-                neb_type_specific_keys = frozenset({"density", "ionizing_source_warning", "grid"})
 
         # A group whose parameter partition spans several structural variants
         # accepts only the keys the variant it selected actually reads. Derived
@@ -4832,7 +4915,19 @@ def _validate_user_keys(
                 param_names = accepted
 
         _check_dict_keys(
-            top_key, top_val, group_allowed | param_names | neb_type_specific_keys, param_partition
+            top_key,
+            top_val,
+            group_allowed | param_names | neb_type_specific_keys,
+            param_partition,
+            # neb's displayed list must show the resolved type's actual
+            # structural keys (e.g. cb19/cloudy/mappings/mappings_agn include
+            # 'grid', cue/ssp/none do not), not just the base set 'grid' was
+            # deliberately removed from (#2220 I2). Every other group's base
+            # set is still its full displayed set, so None (the default)
+            # keeps their behavior unchanged.
+            displayed_structural_keys=(
+                group_allowed | neb_type_specific_keys if top_key == "neb" else None
+            ),
         )
 
         # Recurse into sub-block dicts.
@@ -4886,8 +4981,25 @@ def _check_dict_keys(
     user_dict: dict,
     allowed: set,
     param_partition: dict[str, str],
+    *,
+    displayed_structural_keys: set[str] | None = None,
 ) -> None:
-    """Raise ``ValueError`` on any unrecognized key in ``user_dict``."""
+    """Raise ``ValueError`` on any unrecognized key in ``user_dict``.
+
+    Parameters
+    ----------
+    displayed_structural_keys : set of str, optional
+        The structural (non-parameter) keys to print in the "Valid structural
+        keys for this group are" list, when they differ from
+        :data:`_GROUP_STRUCTURAL_KEYS`'s base set for ``group`` -- i.e. when
+        the caller has already unioned in keys that are legal only for the
+        resolved ``type`` (``neb``'s ``grid``, #2220 follow-up). Governs only
+        that displayed list, not the did-you-mean suggestion: ``allowed``
+        already carries any such type-specific keys into ``suggestion_pool``
+        below, independent of this parameter. ``None`` (every caller but the
+        top-level ``neb`` one) keeps the base set, unchanged from before this
+        parameter existed.
+    """
     for key in user_dict:
         if key in allowed:
             continue
@@ -4938,13 +5050,16 @@ def _check_dict_keys(
         suggestions = [s for s in suggestions if s != WILDCARD_KEY]
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         # Display user-facing keys only (exclude internal WILDCARD_KEY '*').
-        displayed_keys = sorted(
-            {
-                k
-                for k in _GROUP_STRUCTURAL_KEYS.get(group, frozenset({"type"}))
-                if k != WILDCARD_KEY
-            }
+        # Base set by default; a caller with type-specific structural keys
+        # (currently only the top-level 'neb' dispatch) passes the resolved
+        # type's actual union instead, so this list agrees with both the
+        # validation above and the did-you-mean suggestion (#2220 I2).
+        structural_source = (
+            _GROUP_STRUCTURAL_KEYS.get(group, frozenset({"type"}))
+            if displayed_structural_keys is None
+            else displayed_structural_keys
         )
+        displayed_keys = sorted({k for k in structural_source if k != WILDCARD_KEY})
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{suggest_str} "
             f"Valid structural keys for this group are: "
