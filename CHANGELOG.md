@@ -391,6 +391,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
+- **`download_ssp` and `download_template` no longer print an absolute path.**
+  `SSP file already exists at {filepath}; skipping download.` and its three
+  siblings interpolated the full path, and a rendered notebook captures those
+  lines verbatim — so running a reproduction notebook from anywhere but the
+  repository root wrote the machine's own directory into
+  `docs/reproduction/*.ipynb`, four leaks across three renders, and a fresh one
+  on every re-render. Every such message now goes through one helper,
+  `_display_path`, which shows the path relative to the working directory when
+  the file is under it and the file's name alone otherwise. Never absolute.
+
 - **The composable AGN precompute's default wavelength grid is derived from
   the blocks it is about to evaluate, instead of a hard-coded
   `np.logspace(2.0, 6.0, 1500)` that truncated them.** Under `polar_dust` +

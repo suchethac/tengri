@@ -61,6 +61,57 @@ def _env_data_dir() -> Path | None:
     return None
 
 
+def _display_path(path: str | os.PathLike) -> str:
+    """Render a path for a user-facing message, without naming the machine.
+
+    Every ``_display`` line in this module that says where a file is goes
+    through here. The absolute form is never shown: a rendered notebook
+    captures these lines verbatim, so a download run from anywhere but the
+    repository root wrote a contributor's absolute path into
+    ``docs/reproduction/*.ipynb`` (R73, and ``tools/check_no_local_paths.py``
+    in the lint job). The information a reader wants is which file, and where
+    it is relative to where they are standing.
+
+    Parameters
+    ----------
+    path : path-like
+        The file or directory the message is about.
+
+    Returns
+    -------
+    str
+        The path relative to the current working directory when it lies under
+        it, otherwise the final component alone. Never absolute.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- I/O helper.
+
+    Both sides are resolved before comparing, so a symlinked working directory
+    (macOS ``/tmp`` -> ``/private/tmp``) still reads as "under" it. If either
+    resolution fails, or the file is elsewhere, the name alone is the answer.
+
+    Examples
+    --------
+    >>> import os, tempfile
+    >>> from pathlib import Path
+    >>> tmp = Path(tempfile.mkdtemp())
+    >>> _ = (tmp / "data").mkdir()
+    >>> cwd = Path.cwd()
+    >>> os.chdir(tmp)
+    >>> _display_path(tmp / "data" / "ssp.h5") == os.path.join("data", "ssp.h5")
+    True
+    >>> _display_path(Path("/somewhere/else/ssp.h5"))
+    'ssp.h5'
+    >>> os.chdir(cwd)
+    """
+    p = Path(path)
+    try:
+        return str(p.resolve().relative_to(Path.cwd().resolve()))
+    except (ValueError, OSError):
+        return p.name
+
+
 def data_dirs() -> list[Path]:
     """Every directory tengri looks in for data files, most specific first.
 
@@ -653,7 +704,7 @@ def download_ssp(
     if filepath.exists() and filepath.stat().st_size > 0 and not force:
         from tengri._display import _display
 
-        _display(f"SSP file already exists at {filepath}; skipping download.")
+        _display(f"SSP file already exists at {_display_path(filepath)}; skipping download.")
         return filepath
 
     # Download with progress
@@ -680,7 +731,7 @@ def download_ssp(
 
     from tengri._display import _display
 
-    _display(f"Downloaded SSP to {filepath}")
+    _display(f"Downloaded SSP to {_display_path(filepath)}")
     return filepath
 
 
@@ -733,7 +784,7 @@ def download_template(
     if filepath.exists() and filepath.stat().st_size > 0 and not force:
         from tengri._display import _display
 
-        _display(f"Template already exists at {filepath}; skipping download.")
+        _display(f"Template already exists at {_display_path(filepath)}; skipping download.")
         return filepath
 
     url = TEMPLATE_BASE_URL + filename
@@ -752,7 +803,7 @@ def download_template(
     partial_filepath.replace(filepath)
     from tengri._display import _display
 
-    _display(f"Downloaded template to {filepath}")
+    _display(f"Downloaded template to {_display_path(filepath)}")
     return filepath
 
 
