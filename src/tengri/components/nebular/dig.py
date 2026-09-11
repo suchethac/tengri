@@ -36,6 +36,8 @@ backend forward, for the ``FeaturePrecomp`` fast path (#2222).
 
 import jax.numpy as jnp
 
+from tengri.utils.scale import log10_add
+
 
 def _mix_dig_backend_evaluations(evaluate, combine, neb_logU, neb_dig_frac, neb_dig_delta_logU):
     """Evaluate a backend at the HII and (if needed) DIG ionization parameters.
@@ -87,6 +89,44 @@ def _linear_mix(hii, dig, frac):
         DIG mass fraction. [dimensionless, in [0, 1]]
     """
     return (1.0 - frac) * hii + frac * dig
+
+
+def _log10_weighted_mix(log_hii, log_dig, frac):
+    r"""Float32-safe log-domain analog of :func:`_linear_mix` (#2222, #2269).
+
+    ``log10((1 - frac) * 10**log_hii + frac * 10**log_dig)``, computed with
+    :func:`~tengri.utils.scale.log10_add` so neither term is exponentiated at
+    its own magnitude. This is the mixing step
+    :func:`reconstruct_nebular_line_log_lums
+    <tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_line_log_lums>`
+    needs: that function's single-lookup form already carries a line
+    luminosity (~1e40 erg/s) as an exponent rather than a value so it never
+    overflows float32 (#1859); a linear ``(1 - f) * hii + f * dig`` mix of two
+    such lookups would reintroduce exactly the overflow the log carrier
+    exists to avoid, so the mix itself has to stay in log space too.
+
+    Parameters
+    ----------
+    log_hii, log_dig : array_like
+        log10 magnitudes of the HII and DIG evaluations [dex], same shape.
+    frac : float
+        DIG mass fraction. [dimensionless, in [0, 1]]
+
+    Returns
+    -------
+    ndarray
+        log10 of the mixed magnitude [dex].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes -- ``log10_add`` is a base-10
+    ``logsumexp``.
+    """
+    frac = jnp.asarray(frac)
+    return log10_add(
+        jnp.log10(1.0 - frac) + jnp.asarray(log_hii),
+        jnp.log10(frac) + jnp.asarray(log_dig),
+    )
 
 
 def mix_dig_emission(
@@ -355,7 +395,7 @@ def mix_dig_line_luminosities(
 
 
 def mix_dig_grid_reconstruction(
-    reconstruct, amplitude, point, table, neb_dig_frac, neb_dig_delta_logU
+    reconstruct, amplitude, point, table, neb_dig_frac, neb_dig_delta_logU, *, log_domain=False
 ):
     r"""Mix two per-Q_H grid reconstructions (HII + DIG) at a shifted ``neb_logU`` (#2222).
 
@@ -389,13 +429,17 @@ def mix_dig_grid_reconstruction(
         ``reconstruct(amplitude, point, table) -> ndarray``. One of
         :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_phot`,
         :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_restband`
-        (both ``ndarray, shape (n_filter,)``), or
+        (both ``ndarray, shape (n_filter,)``, linear L_nu -- pass with
+        ``log_domain=False``), or
+        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_line_log_lums`
+        (``ndarray, shape (n_lines,)``, log10 erg/s -- pass with
+        ``log_domain=True``). The plain linear
         :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_line_lums`
-        (``ndarray, shape (n_lines,)``).
+        is float32-unsafe by construction (its own docstring) and should not
+        be mixed here; use the log form instead.
     amplitude : float or array_like, shape ()
-        The Q_H-derived amplitude ``reconstruct`` expects: ``log_nion`` [dex
-        re photons/s] for the photometry / rest-band channels, linear
-        ``nion`` [photons/s] for the line-luminosity channel.
+        The Q_H-derived amplitude every ``reconstruct`` variant above expects:
+        ``log_nion`` [dex re photons/s].
     point : Mapping
         Interpolation point: ``point[name]`` for every ``name`` in
         ``table.axis_names``, including ``neb_logU`` whenever that is one of
@@ -409,13 +453,23 @@ def mix_dig_grid_reconstruction(
         DIG mass fraction. [dimensionless, in [0, 1]]
     neb_dig_delta_logU : float
         Offset in ionization parameter for DIG (negative). [dex]
+    log_domain : bool, optional
+        ``False`` (default) mixes ``reconstruct``'s return value linearly
+        (:func:`_linear_mix`) -- correct for the photometry / rest-band
+        channels, whose linear L_nu never leaves float32 range. ``True``
+        mixes it as a log10 magnitude (:func:`_log10_weighted_mix`) --
+        required for
+        :func:`~tengri.components.nebular.nebular_grid_precompute.reconstruct_nebular_line_log_lums`,
+        whose linear form (~1e40 erg/s) overflows float32 (#2269): mixing the
+        log10 values directly, rather than exponentiating each to mix and
+        re-logging, keeps every intermediate in range.
 
     Returns
     -------
     ndarray, shape (n_filter,) or (n_lines,)
         Whatever ``reconstruct`` returns: the HII-only reconstruction when
-        ``neb_dig_frac`` short-circuits, else the linear mix
-        ``(1 - f) * hii + f * dig``.
+        ``neb_dig_frac`` short-circuits, else the mix (linear or log10
+        magnitude, per ``log_domain``) of ``(1 - f) * hii + f * dig``.
 
     Raises
     ------
@@ -431,11 +485,11 @@ def mix_dig_grid_reconstruction(
     Notes
     -----
     **JIT-compatible**: yes -- node-exact PCHIP interpolation (inside
-    ``reconstruct``) plus a linear mix, both pure ``jnp`` operations. Same
-    short-circuit contract as :func:`mix_dig_emission`: a Python-literal
-    ``neb_dig_frac == 0.0`` skips the second interpolation entirely (one
-    ``reconstruct`` call, the pre-DIG cost); a traced ``neb_dig_frac`` runs
-    both.
+    ``reconstruct``) plus a linear or log10-domain mix (per ``log_domain``),
+    both pure ``jnp`` operations. Same short-circuit contract as
+    :func:`mix_dig_emission`: a Python-literal ``neb_dig_frac == 0.0`` skips
+    the second interpolation entirely (one ``reconstruct`` call, the pre-DIG
+    cost); a traced ``neb_dig_frac`` runs both.
 
     References
     ----------
@@ -474,6 +528,8 @@ def mix_dig_grid_reconstruction(
         return reconstruct(amplitude, query, table)
 
     def _combine(hii_result, dig_result, frac):
+        if log_domain:
+            return _log10_weighted_mix(hii_result, dig_result, frac)
         return _linear_mix(hii_result, dig_result, frac)
 
     return _mix_dig_backend_evaluations(
