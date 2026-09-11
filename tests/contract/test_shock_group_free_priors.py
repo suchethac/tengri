@@ -18,6 +18,8 @@ import tengri
 from tengri import FREE, Fixed, Uniform
 from tengri.config.exceptions import WildcardPartialFreeWarning
 
+pytestmark = pytest.mark.contract
+
 
 def _free_shock(**shock_kwargs):
     """``shock={..., 'all_params': FREE}`` on an otherwise-minimal spec."""
