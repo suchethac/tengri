@@ -512,9 +512,9 @@ class TestEddingtonPhysics:
 
         For M = 10^8 Msun: L_Edd = 1.26 × 10^46 erg/s.
         """
-        from tengri.components.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _log10_eddington_luminosity
 
-        l_edd = float(_eddington_luminosity(8.0))
+        l_edd = 10.0 ** float(_log10_eddington_luminosity(8.0))
         expected = 1.26e38 * 1e8  # 1.26e46 erg/s
         np.testing.assert_allclose(l_edd, expected, rtol=0.02)
 

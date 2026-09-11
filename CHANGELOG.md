@@ -6,7 +6,136 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `dust_log_L_ir` (`log10(L_IR/Lsun)`): a total dust IR budget override.
+  Declaring it -- `Fixed` or any free prior, via `dust_emission={'log_L_ir':
+  ...}` -- replaces the energy-balance IR budget (`log_L_ir =
+  log_L_absorbed + log10(dust_eta_balance)`) outright; leaving it undeclared
+  keeps strict/relaxed energy balance exactly as before. Declares no
+  `free_prior` (an absolute luminosity has no galaxy-independent interval),
+  so `dust_emission={'all_params': FREE}` never frees it. `dust_eta_balance`
+  is inert once the override is declared, and `SEDModel` now raises
+  `ParameterError` at construction if it is free or `Fixed` at a value other
+  than 1.0 alongside a declared `dust_log_L_ir`. Radio's FIR-radio-correlation
+  amplitude follows the override too (#2187-series).
+- Each non-stellar emission source now picks its own dust screen: the
+  `dust_attenuation` group gains `nebular_screen` (governs the nebular
+  continuum, the line catalog, and the fast-nebular fallback grid; default
+  `"birth_cloud"`), `shock_screen` (governs the MAPPINGS V shock SED; default
+  `"diffuse"`), and `agn_screen` (default, and today the only accepted value,
+  `"none"` — the AGN component runs after dust and carries its own
+  polar-dust screen). Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or
+  the synonym `"off"`; flat spellings `dust_nebular_screen` /
+  `dust_shock_screen` / `dust_agn_screen` mirror `dust_law_bc` /
+  `dust_law_neb`. One validator
+  (`tengri.parameters._dust_keys.resolve_screen_choices`) backs both
+  surfaces: an unknown value names the three choices; `agn_screen` other
+  than `none`/`off` is refused with the deferral reason above;
+  `single_component` dust refuses any value other than `none`/`off` or the
+  source's own default (a single screen has no birth-cloud/diffuse
+  distinction); `wg00`/`off` dust refuse the keys outright, like the other
+  two-screen-only keys. Every attenuation site (the nebular continuum, the
+  discrete line catalog, and the shock SED) routes through ONE helper,
+  `DustSEDComponent._screen_transmission`, so there is exactly one
+  implementation of the screen formula. Closes #2234 by replacement: a
+  configurable nebular screen (`neb_dust` modes `bc`/`diff`/`neb`/`none`)
+  existed in 2026-04 and died with #923/#2230, leaving `_neb_dust_mode` /
+  `_neb_dust_law_bc_fn` in `sed_model.py` as write-only remains (now
+  deleted); the choice is restored as explicit, validated config rather than
+  the old ungated mode string. Also closes #2235 by making the
+  `docs/model_reference/nebular.md` prose ("shock receives only diffuse ISM
+  attenuation") and the code agree — the code previously attenuated shock
+  unconditionally with the birth-cloud form — and by snapping (see Fixed,
+  below).
+
+### Changed
+
+- The shock SED's default dust screen flips from the unconditional
+  birth-cloud form (`tau_bc·k_bc + tau_diff·k_diff`) to diffuse-only
+  (`tau_diff·k_diff`): an AGN-outflow shock is not, in general, still
+  confined to the compact star-forming birth cloud the young-star screen
+  models, and the diffuse-only default now applies to every shock
+  normalization (`norm='frac'` and `norm='lhalpha'` alike). This is a
+  numeric change: on the `test_shock_attenuation_equivalence.py` fixture
+  (τ_bc=2, τ_diff=1, z=0.5, Calzetti, SDSS *gri*) the shock's photometric
+  contribution grows by roughly 8×-33× band to band, because dropping the
+  `tau_bc·k_bc` term removes the dominant attenuation factor. The
+  exact-vs-precomp agreement is unaffected by the flip (both screens agree
+  to float precision on that fixture, and the `test_precomp_channel_drift.py`
+  gap moves from 6.343e-04 to 6.289e-04 on its own fixture) because both
+  paths read the one `sed_shock_attenuated` value regardless of which screen
+  is selected. Set `dust_attenuation={'shock_screen': 'birth_cloud'}` to keep
+  the old default.
+- The dust energy-balance integral (`L_absorbed`, and so `L_ir`) now counts
+  the shock SED's absorbed power under its own `shock_screen` choice; before,
+  the shock SED was attenuated (once #1434 unified the exact and precomp
+  paths) but its absorbed power was never added to the integral — a
+  pre-existing gap between what the screens remove and what the IR
+  re-emission pool receives. A source whose screen choice is `"none"` is
+  unattenuated and so contributes exactly zero to the integral, with no
+  separate on/off branch needed.
+- `import tengri` raises the default matmul precision to `"highest"` at
+  import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
+  set or the live config already holds a value; `tengri.utils.devices.setup_jax`
+  mirrors it. On Ampere+, XLA otherwise lowers float32 matmuls to TF32
+  (measured 4.5% error on Fisher-matrix parameter error bars); the knob only
+  affects float32 matmuls, so this is a no-op for a float64 session and for
+  CPU (no TF32 path), and measured zero speed cost. Being unconditional also
+  covers a float32 arm entered later through a bare
+  `with jax.enable_x64(False): ...` while the process default stays x64-on --
+  exactly the pattern `test_fisher_float32.py`'s own float32 arm uses. An
+  explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
+
 ### Fixed
+
+- `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
+  stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
+  legacy `predict_sed_quantities` bridge, and the AGN CIGALE fracAGN torus
+  coupling), which was only silently correct at `dust_eta_balance == 1`.
+  Every dust-attenuation publisher now also publishes a `log_L_absorbed` /
+  `L_absorbed` companion pair invariant under `dust_eta_balance`, and the
+  three readers are repointed to it -- a relaxed `dust_eta_balance` no
+  longer leaks into the absorbed-energy reading (#2187-series).
+- `SEDModel.enable_fast_nebular` now snaps each requested target wavelength
+  within 0.5 Å of a true backend catalog line (read from
+  `state.derived["line_waves"]` via one reference forward pass) to that
+  line's exact wavelength, before building the per-Q_H grid. Previously the
+  fast grid tabulated exactly the caller's (possibly imprecise, e.g. a
+  rounded literature value or an air/vacuum slip) request, while the exact
+  path evaluated the dust screen at the backend's true, nearest-matched line
+  wavelength — two different points on the attenuation curve, up to ~0.1 Å
+  apart. `tests/regression/bug/test_bug_2223_line_screen_kwargs.py::test_fallback_is_actually_exercised_by_fast_nebular`
+  tightens from `rtol=2e-4` to `rtol=1e-10` now that both paths agree on the
+  identical wavelength.
+- `marginalize_emission_lines` no longer crashes float32 geoVI on CUDA. Its
+  `(n_lines, n_lines)` normal-equation GEMM (`g.T @ g`, degenerate at the
+  handful of emission lines this is ever called with) hit "GEMM is not
+  supported by cublasLt and legacy cublas fallback is removed" under JAX
+  0.11 whenever the operands arrived float64-valued and were traced under
+  x64 disabled. Replaced with an explicit broadcast-multiply-sum, which
+  never lowers to a GEMM; float64 CPU output is bit-identical to the matmul
+  it replaced (rtol 1e-12) (#2023).
+
+- A headline line property (`civ_1549`, from `KEY_LINES`) now warns instead of
+  returning a silent NaN when the currently selected nebular catalog carries
+  no entry within tolerance of its target wavelength; the warning names the
+  property, the backend, the nearest catalog line and its offset in
+  Angstrom, and the remedy (`neb={'type': 'cue', 'full_catalog': True}` when
+  the backend is cue and on the legacy subset). Generalizes across every
+  line-catalog backend (#2239).
+
+- The #2239 warning seam's static catalog accessor
+  (`_published_line_wavelengths_static`) now applies tengri's vacuum-wavelength
+  contract (`nebular_line_waves_to_vacuum`, hoisted into
+  `components/nebular/_shared.py` and shared with
+  `NebularSEDComponent.apply`) before comparing against a `KEY_LINES` target,
+  instead of comparing the backend's raw, sometimes-air catalog directly; the
+  mismatch reached up to 2.70 Angstrom against the 5 Angstrom match tolerance
+  (measured on cue's upstream, air-frame `.npy`), close enough to risk a false
+  warning or a missed one for lines not already covered by the #2239
+  regression test. `predict_photometry`, `rest_sed` and every already-tested
+  headline line are unaffected (#2239).
 
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
@@ -365,6 +494,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   3.7e4 -> 1.2e3, worst-of-six-seeds NUTS wall 227 s -> 40 s. See
   `tengri.inference.mass_profile` and `docs/dev/inference_methods.md`
   ("Profiling the mass").
+- `bench/scripts/benchmark_float32_mps_parity.py` -- a self-contained pure-float32
+  parity sweep for the Apple GPU (#1206). Apple's own `jax-metal` last released 0.1.1
+  on 2024-10-08 and pins `jax == jaxlib >= 0.4.34`, not viable against tengri's JAX
+  0.11; the community `jax-mps` plugin (MLX-backed) is the path that works, but it has
+  no float64 at all. This script writes a float64 reference on CPU
+  (`--write-reference`) for six progressive model seams (`stellar_dust`, `+dust IR`,
+  `+Cue`, `+AGN`, `+radio+xray`, `panchromatic`) and, in its default mode, checks a
+  float32 rebuild against it -- max relative forward error, gradient error, and a
+  *converged* MAP fit's optimum parameter-vector deviation, PASS/FAIL at
+  3e-3 / 1e-2 / 1e-2. The MAP fit itself uses L-BFGS to genuine convergence
+  (`init_from` pinned to the shared truth; restarted from a stall rather than given a
+  bigger iteration cap, since scipy's line search can abandon a call well short of
+  its budget), with a non-zero exit if `--write-reference` cannot converge every seam,
+  so an unconverged reference can never be committed. The MAP-loss deviation is
+  reported as an informational column, not gated: at a converged optimum the loss is
+  stationary, so a parameter agreement of 1e-6 implies a loss agreement of order
+  1e-12 from that channel alone, and the ~1e-4 gap actually seen is float32's own
+  chi-squared evaluation (cancellation in `data - model` at SNR 30) -- already bounded
+  by the forward and gradient columns. Runnable on CPU, CUDA, or a Mac under the
+  `jax-mps` venv; refuses to run with `jax_enable_x64=True` and prints the one-line
+  environment fix instead. `docs/internal/getting_started/gpu.md` gains an "Apple GPU
+  via jax-mps" section replacing the old Metal note, with a shorter mirror in
+  `docs/performance/index.md`, `README.md`, and `docs/installation.md`.
 
 - `Observation` and its nested data classes, `Parameters` and `SSPData` expose `cache_key()`, each derived from a written policy ledger over every attribute (`tengri._cache_keys`), so a later structural signature can delegate instead of reaching into their fields (#2163).
 - `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
@@ -643,7 +795,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   a posterior mean to a tight tolerance on a qualifying photometry fit may
   need to widen it, or pass `profile_mass=False` to keep the previous
   behavior exactly.
+- Cue's default line catalog is now the full ~138-line set instead of the
+  128-line CLOUDY/FSPS-matched subset (`cue_full_catalog` defaults to
+  `True`); pass `neb={'type': 'cue', 'full_catalog': False}` (or
+  `Parameters(cue_full_catalog=False)`) to keep the legacy subset for
+  cross-code comparisons. Reverses the 2026-05 `#303` back-compat default.
+  `predict_photometry`, `rest_sed` and every other headline line are
+  bit-identical either way: only the discrete line catalog and `civ_1549`
+  change (#2239).
+
 - `SEDModel.compile_signature()` is derived from a policy ledger over every model attribute (`tengri.forward._signature_policy`) with the nested `cache_key()` of the observation, parameters and SSP grid, memoized on the instance and invalidated by the two structural mutators; four structural attributes the hand-written list never keyed (`lgmet_scatter`, the GP field kernel, `lsf_n_bins`, `igm_patchy`) now are, and an attribute nobody classifies fails a contract test instead of shipping a wrong number (#2163).
+- The four inference-side hand-written cache keys are now policy-derived too (#2163 E.5): `Fitter._engine_cache_key()` and `_data_fingerprint()` share a pair of complementary ledgers (`tengri.inference._engine_policy.ENGINE_POLICY`/`FINGERPRINT_POLICY`) over every `Fitter` attribute — engine `shape` rows are exactly the fingerprint's `content` rows — instead of two independently hand-maintained field lists that had never been checked against each other or against the live attribute set; the engine key gains a `_user_likelihood` row a custom Likelihood previously had no representation in at all, and `_line_flux_override`'s row is now the strictly more complete `LineFluxData.cache_key()` (per-line upper/lower-limit flags, not merely "any limit mask present"). Every MCMC backend's adaptation cache (`nuts`/`hmc`/`dynamic_hmc`/`chees`/`ghmc`/`mclmc`/`adjusted_mclmc`/`first_order`) now builds its tuning tuple through one `adaptation_method_key()` helper that binds the runner's own signature and drops a written exclusion ledger (`_ADAPT_IRRELEVANT`: `context`, `key`, `init_from`, `n_burnin`, `n_samples`, `n_chains`, `chain_method`, `verbose`), instead of a hand-picked tuple every backend maintained separately. `PreconditionedProblem.cache_key` is now a small policy ledger (`strength` content, everything else excluded — the wrapped closure and the per-galaxy starting position cannot be keyed without either aliasing two different whitening bases together or defeating cross-galaxy adaptation sharing) rather than a hand-picked `("whiten", strength)` tuple.
 - The on-disk WavePrecomp z-table and IGM subband caches are keyed by every field of a frozen request dataclass (`ZTableRequest`, `SubbandRequest`) instead of a hand-written field list, with one version constant per cache (both bumped, so existing tables recompute once) and the cosmology the integrand uses folded in as the #2145 tripwire; the ionizing-spectrum table gains a version constant (#2163).
 - Dust attenuation laws are explicit and required (#1989). A dust attenuation group
   spells its law as either `law` (one law, both screens) or, on `two_component` only,

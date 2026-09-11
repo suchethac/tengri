@@ -84,6 +84,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
     _set_cached_adaptation,
+    adaptation_method_key,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -225,8 +226,24 @@ def run_first_order(
 
     # ``problem.cache_key`` folds the whitening basis in: a step size tuned in
     # one basis is a finite float that samples happily and badly in another.
-    tuning = (int(n_warmup), float(target_accept_rate), proposal)
-    adapt_key = ("first_order", tuning, problem.cache_key)
+    # adaptation_method_key binds every other real run_first_order parameter
+    # that produces the adaptation (n_warmup, target_accept_rate, proposal);
+    # _ADAPT_IRRELEVANT drops the ones that do not.
+    tuning = adaptation_method_key(
+        "first_order",
+        run_first_order,
+        dict(
+            proposal=proposal,
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            n_chains=n_chains,
+            target_accept_rate=target_accept_rate,
+            precondition=precondition,
+            verbose=verbose,
+        ),
+    )
+    adapt_key = ("first_order", problem.cache_key, tuning)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches advance the key identically -- cache presence is invisible

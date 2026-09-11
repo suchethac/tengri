@@ -166,6 +166,62 @@ class TestNewDustAttenuationEmission:
         assert "dust_eta_balance" not in params.free_params
         assert params.get_fixed_values()["dust_eta_balance"] == 1.0
 
+    def test_dust_emission_log_l_ir_free(self):
+        """dust_emission log_L_ir can be made free via the group (dust IR budget override)."""
+        params = parse_groups(
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "tau_bc": 0.5,
+                "tau_diff": 1.0,
+            },
+            dust_emission={"type": "dale2014", "log_L_ir": Uniform(9.0, 12.0)},
+            ssp_data=None,
+            redshift=Fixed(0.1),
+        )
+        assert "dust_log_L_ir" in params.free_params
+        dist = params.get_distribution("dust_log_L_ir")
+        assert dist.bounds == (9.0, 12.0)
+
+    def test_dust_emission_log_l_ir_fixed(self):
+        """dust_emission log_L_ir can be pinned to a specific budget via the group."""
+        params = parse_groups(
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "tau_bc": 0.5,
+                "tau_diff": 1.0,
+            },
+            dust_emission={"type": "dale2014", "log_L_ir": Fixed(11.0)},
+            ssp_data=None,
+            redshift=Fixed(0.1),
+        )
+        assert "dust_log_L_ir" not in params.free_params
+        assert params.get_fixed_values()["dust_log_L_ir"] == 11.0
+
+    def test_dust_emission_absent_log_l_ir_leaves_energy_balance_undeclared(self):
+        """With dust_emission given but no log_L_ir, the override is not requested.
+
+        ``dust_log_L_ir`` still carries its registry default (Fixed(10.0)) in
+        the fixed-values table -- every declared parameter does -- but it is
+        never *read*: energy balance holds exactly as before. This is a
+        provenance question, not a value question (verified in the SEDModel
+        contract tests: an undeclared ``dust_log_L_ir`` never reaches the
+        publish branch regardless of what its registry default happens to be).
+        """
+        params = parse_groups(
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "tau_bc": 0.5,
+                "tau_diff": 1.0,
+            },
+            dust_emission={"type": "dale2014"},
+            ssp_data=None,
+            redshift=Fixed(0.1),
+        )
+        assert "dust_log_L_ir" not in params.free_params
+
 
 class TestOldDustRetirement:
     """Test that old dust= syntax raises with helpful messages."""
