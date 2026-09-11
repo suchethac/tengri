@@ -26,6 +26,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
     _set_cached_adaptation,
     _vmap_chains,
+    adaptation_method_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -388,10 +389,23 @@ def run_mclmc(
         integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
     )
 
-    # n_warmup belongs in the key: it *produces* the adaptation, so leaving it
-    # out makes the knob silently inert on a model that already holds an entry.
-    # So does the EEVPD target, for the same reason.
-    adapt_key = ("mclmc", int(n_warmup), float(desired_energy_var))
+    # adaptation_method_key binds every real run_mclmc parameter that produces
+    # the adaptation (n_warmup, desired_energy_var); leaving one out is what
+    # makes a knob silently inert on a model that already holds an entry.
+    adapt_key = (
+        "mclmc",
+        adaptation_method_key(
+            "mclmc",
+            run_mclmc,
+            dict(
+                n_warmup=n_warmup,
+                n_samples=n_samples,
+                n_chains=n_chains,
+                desired_energy_var=desired_energy_var,
+                verbose=verbose,
+            ),
+        ),
+    )
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically, cache presence is
@@ -591,7 +605,20 @@ def run_adjusted_mclmc(
     )
 
     # See run_mclmc: the settings that produce the adaptation must be in the key.
-    adapt_key = ("adjusted_mclmc", int(n_warmup), float(target_accept_rate))
+    adapt_key = (
+        "adjusted_mclmc",
+        adaptation_method_key(
+            "adjusted_mclmc",
+            run_adjusted_mclmc,
+            dict(
+                n_warmup=n_warmup,
+                n_samples=n_samples,
+                n_chains=n_chains,
+                target_accept_rate=target_accept_rate,
+                verbose=verbose,
+            ),
+        ),
+    )
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically, see run_mclmc above.

@@ -61,6 +61,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
     _resolve_chees_ensemble,
     _set_cached_adaptation,
+    adaptation_method_key,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -307,23 +308,36 @@ def run_chees(
 
     t0 = time.time()
 
-    # Every knob that *produces* the adaptation belongs in the key -- leaving one
-    # out makes it silently inert on a model that already holds an entry, which
-    # is the failure ``_adaptation_cache_key``'s docstring records. Namespaced to
-    # "chees" rather than borrowing "hmc": the tuple key would otherwise collide
-    # with a step size adapted for a different kernel.
-    tuning = (
-        int(n_warmup),
-        int(ensemble_size),
-        float(ensemble_jitter),
-        float(jitter_amount),
-        float(target_accept_rate),
-        int(max_leapfrog_steps),
-        float(learning_rate),
-        mass_matrix_estimation,
-        None if chain_jitter is None else float(chain_jitter),
+    # Every knob adaptation_method_key binds is a real run_chees parameter;
+    # _ADAPT_IRRELEVANT drops the ones that do not change what adaptation
+    # tunes. ``ensemble_size`` is RESOLVED from n_ensemble ("auto" or an int)
+    # together with n_chains, so it is not itself a call kwarg and stays as an
+    # explicit extra entry, alongside ``problem.cache_key`` -- see nuts.py for
+    # the full rationale. Namespaced to "chees" rather than borrowing "hmc":
+    # the tuple key would otherwise collide with a step size adapted for a
+    # different kernel.
+    tuning = adaptation_method_key(
+        "chees",
+        run_chees,
+        dict(
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            n_chains=n_chains,
+            n_ensemble=n_ensemble,
+            ensemble_jitter=ensemble_jitter,
+            chain_jitter=chain_jitter,
+            jitter_amount=jitter_amount,
+            target_accept_rate=target_accept_rate,
+            max_leapfrog_steps=max_leapfrog_steps,
+            learning_rate=learning_rate,
+            mass_matrix_estimation=mass_matrix_estimation,
+            dense_mass_matrix=dense_mass_matrix,
+            precondition=precondition,
+            verbose=verbose,
+        ),
     )
-    adapt_key = ("chees", tuning, problem.cache_key)
+    adapt_key = ("chees", ensemble_size, problem.cache_key, tuning)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically: cache presence is invisible
