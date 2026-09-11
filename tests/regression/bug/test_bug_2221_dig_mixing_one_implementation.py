@@ -29,25 +29,18 @@ This test pins two things the refactor (routing all four sites through
 
 **Why every comparison below reuses ONE model instance, varied only via
 override dicts (never three separately-built models with different Fixed
-values)**: Cue is a neural-network backend, and two independently-built
-``SEDModel``s -- even ones stating "the same" ``neb_logU`` -- are two
-independently JIT-compiled XLA graphs of different shape (a ``dig_frac=0``
-build elides the DIG backend call entirely; a ``dig_frac=0.3`` build keeps
-both). Measured directly: building ``dig_frac=0`` at ``neb_logU=-2.5`` and at
-``-3.5`` as separate models and mixing their ``predict_photometry`` output
-7:3 against a THIRD, separately-built ``dig_frac=0.3`` model at ``neb_logU
-=-2.5`` disagreed by up to 0.6% -- not the arithmetic identity failing, but
-ordinary XLA fusion/kernel-selection non-determinism across differently
-shaped compiled graphs, the same class of effect
-``docs/dev/...`` numeric-reproducibility notes describe for NN forward
-passes. Building ONE model with ``neb_dig_frac``, ``neb_logU`` and
-``neb_dig_delta_logU`` all ``FREE`` and varying them via ``jnp.asarray(...)``
-override dicts keeps every evaluation inside the SAME compiled
-``predict_photometry`` graph (traced input values, not distinct constants
-baked into distinct graphs); measured this way the identity holds to
-9.4e-15 relative -- machine precision, confirming the 0.6% above was a
-compiled-graph artifact of the *comparison*, not evidence about the mixing
-arithmetic.
+values)**: measured both ways, and they agree to the last measured digit.
+Three separately-built ``Fixed``-valued models (``dig_frac=0`` at
+``neb_logU=-2.5``, ``dig_frac=0`` at ``-3.5``, and ``dig_frac=0.3`` at
+``-2.5``) satisfy the mixing identity to ``5.902e-15`` relative
+(photometry) and ``1.829e-14`` relative (line luminosities); one ``FREE``
+model varied via ``jnp.asarray(...)`` override dicts gives the identical
+``5.902e-15`` / ``1.829e-14``. A ``FREE`` model evaluated at a given
+``(neb_dig_frac, neb_logU)`` is also bit-identical (``rel = 0.0``) to a
+separately-built ``Fixed`` model at the same values: there is no
+Fixed-versus-FREE seam in the cue backend or the grammar. The one-model
+construction below is kept only because it is one ``SEDModel.build`` call
+instead of three, not because separate builds disagree.
 
 Mutation-check for this test (recorded in the #2221 commit body, not
 committed as code): dropping ``cue_population`` from the DIG evaluation on

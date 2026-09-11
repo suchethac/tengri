@@ -74,6 +74,21 @@ def _mix_dig_backend_evaluations(evaluate, combine, neb_logU, neb_dig_frac, neb_
     return combine(hii_result, dig_result, neb_dig_frac)
 
 
+def _linear_mix(hii, dig, frac):
+    """Linear mass-fraction mix: ``(1.0 - frac) * hii + frac * dig``.
+
+    Parameters
+    ----------
+    hii : array_like
+        HII-region value(s).
+    dig : array_like
+        DIG value(s), same shape as ``hii``.
+    frac : float
+        DIG mass fraction. [dimensionless, in [0, 1]]
+    """
+    return (1.0 - frac) * hii + frac * dig
+
+
 def mix_dig_emission(
     nebular_backend,
     ssp_wave: jnp.ndarray,
@@ -181,8 +196,9 @@ def mix_dig_emission(
     .. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
        formation, time variability, and the diffuse ionized gas," MNRAS, 513,
        2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
-    .. [3] S. P. Reynolds, "Supernova Remnants as Cosmic Ray Sources," ApJ,
-       282, 191 (1984). https://doi.org/10.1086/162189
+    .. [3] R. J. Reynolds, "A Measurement of the Hydrogen Recombination Rate
+       in the Diffuse Interstellar Medium," ApJ, 282, 191 (1984).
+       https://doi.org/10.1086/162190
 
     """
     common_kw = dict(
@@ -201,7 +217,7 @@ def mix_dig_emission(
         return nebular_backend.predict_nebular_sed(neb_logU=logU, **common_kw)
 
     def _combine(neb_hii, neb_dig, frac):
-        return (1.0 - frac) * neb_hii + frac * neb_dig
+        return _linear_mix(neb_hii, neb_dig, frac)
 
     return _mix_dig_backend_evaluations(
         _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU
@@ -308,8 +324,9 @@ def mix_dig_line_luminosities(
     .. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
        formation, time variability, and the diffuse ionized gas," MNRAS, 513,
        2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
-    .. [3] S. P. Reynolds, "Supernova Remnants as Cosmic Ray Sources," ApJ,
-       282, 191 (1984). https://doi.org/10.1086/162189
+    .. [3] R. J. Reynolds, "A Measurement of the Hydrogen Recombination Rate
+       in the Diffuse Interstellar Medium," ApJ, 282, 191 (1984).
+       https://doi.org/10.1086/162190
 
     """
     common_kw = dict(
@@ -330,7 +347,7 @@ def mix_dig_line_luminosities(
     def _combine(hii_result, dig_result, frac):
         line_waves, line_lums_hii = hii_result
         _, line_lums_dig = dig_result
-        return line_waves, (1.0 - frac) * line_lums_hii + frac * line_lums_dig
+        return line_waves, _linear_mix(line_lums_hii, line_lums_dig, frac)
 
     return _mix_dig_backend_evaluations(
         _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU
@@ -422,7 +439,7 @@ def mix_dig_grid_reconstruction(
         return reconstruct(amplitude, query, table)
 
     def _combine(hii_result, dig_result, frac):
-        return (1.0 - frac) * hii_result + frac * dig_result
+        return _linear_mix(hii_result, dig_result, frac)
 
     return _mix_dig_backend_evaluations(
         _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU
