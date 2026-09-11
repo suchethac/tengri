@@ -28,7 +28,11 @@ import numpy as np
 
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular.baked_in import BakedInBackend
-from tengri.components.nebular.dig import mix_dig_emission, mix_dig_line_luminosities
+from tengri.components.nebular.dig import (
+    mix_dig_emission,
+    mix_dig_grid_reconstruction,
+    mix_dig_line_luminosities,
+)
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
@@ -462,7 +466,7 @@ class NebularSEDComponent(TemplateThreading):
             )
         raise NotImplementedError(f"NebularSEDComponent unknown backend {self.config.backend!r}.")
 
-    def _grid_interp_point(self, grid, params, state):
+    def _grid_interp_point(self, grid, params, state, *, neb_logU=None):
         """Assemble the ionization interp point for :attr:`grid_table`.
 
         ``neb_logU`` / ``neb_logZ_gas`` are in the (prefix-sliced) ``params`` this
@@ -471,6 +475,30 @@ class NebularSEDComponent(TemplateThreading):
         and converted back to relative ``log10(Z/Zsun)``: the units the grid axis
         was built in. Returns a dict keyed by ``grid.axis_names`` for
         :func:`reconstruct_nebular_phot`.
+
+        ``neb_logU`` may join ``grid.axis_names`` purely because DIG mixing
+        could be active (#2222), even when it is itself Fixed, and a Fixed
+        value is not guaranteed present in ``params``. Pass the caller's own
+        already-defaulted value (``common_kwargs["neb_logU"]`` in
+        :meth:`apply`) via the ``neb_logU`` keyword so the HII query point
+        matches what the exact path would use, instead of re-deriving the
+        same default here.
+
+        Parameters
+        ----------
+        grid : NebularGridTable
+            The attached per-Q_H grid.
+        params : Mapping
+            Prefix-sliced parameter dict this component sees.
+        state : ForwardState
+            Current pipeline state (for the stellar-published metallicity
+            history).
+        neb_logU : float or None, keyword-only, optional
+            Already-defaulted ``neb_logU`` value; used verbatim instead of
+            ``params["neb_logU"]`` when ``"neb_logU"`` is one of
+            ``grid.axis_names``. ``None`` (default) falls back to
+            ``params[name]``, which is correct whenever ``neb_logU`` is free
+            (hence always present).
         """
         point = {}
         for name in grid.axis_names:
@@ -479,6 +507,8 @@ class NebularSEDComponent(TemplateThreading):
 
                 log_z_hist = state.derived.get("log_metallicity_history")
                 point[name] = jnp.asarray(log_z_hist)[0] - LOG10_ZSUN
+            elif name == "neb_logU" and neb_logU is not None:
+                point[name] = jnp.asarray(neb_logU)
             else:
                 point[name] = jnp.asarray(params[name])
         return point
@@ -581,10 +611,15 @@ class NebularSEDComponent(TemplateThreading):
         _neb_logZ_gas = params.get("neb_logZ_gas")
         if _neb_logZ_gas is not None:
             _neb_logZ_gas = jnp.asarray(_neb_logZ_gas) + LOG10_ZSUN
+        # NEB_LOGU_DEFAULT: read from the declaration (#2222 review M3), not
+        # repeated as a literal, so this and NEB_LOGU_DEFAULT's own
+        # "cannot drift apart" docstring claim both stay true.
+        from tengri.components.nebular.nebular_grid_precompute import NEB_LOGU_DEFAULT
+
         common_kwargs = {
             "ssp_wave": state.wave,
             "log_z": log_z,
-            "neb_logU": jnp.asarray(params.get("neb_logU", -3.0)),
+            "neb_logU": jnp.asarray(params.get("neb_logU", NEB_LOGU_DEFAULT)),
             "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
@@ -908,16 +943,34 @@ class NebularSEDComponent(TemplateThreading):
             )
 
             log_nion = state.derived["log_nion"]
-            interp_point = self._grid_interp_point(grid, params, state)
-            derived_overrides["nebular_phot_lnu_precomp"] = reconstruct_nebular_phot(
-                log_nion, interp_point, grid
+            interp_point = self._grid_interp_point(
+                grid, params, state, neb_logU=common_kwargs["neb_logU"]
+            )
+            # DIG mixing (#2222): two lookups against this same table (HII at
+            # interp_point["neb_logU"], DIG at neb_logU + neb_dig_delta_logU),
+            # mixed by neb_dig_frac -- the grid-path counterpart of the exact
+            # path's mix_dig_emission/mix_dig_line_luminosities calls above.
+            # Costs nothing extra when neb_dig_frac is a Python 0.0: the
+            # short-circuit lives in dig.py's _mix_dig_backend_evaluations.
+            derived_overrides["nebular_phot_lnu_precomp"] = mix_dig_grid_reconstruction(
+                reconstruct_nebular_phot,
+                log_nion,
+                interp_point,
+                grid,
+                neb_dig_frac=_dig_frac,
+                neb_dig_delta_logU=_dig_delta_logU,
             )
             # The rest-frame twin, from the same interpolation point (#1665).
             # The exact path emits these two together; emitting only the first
             # left every rest-frame consumer summing a band with the nebular
             # emission missing: 13/13 spectral indices wrong, worst +1733 %.
-            derived_overrides["nebular_restband_lnu_precomp"] = reconstruct_nebular_restband(
-                log_nion, interp_point, grid
+            derived_overrides["nebular_restband_lnu_precomp"] = mix_dig_grid_reconstruction(
+                reconstruct_nebular_restband,
+                log_nion,
+                interp_point,
+                grid,
+                neb_dig_frac=_dig_frac,
+                neb_dig_delta_logU=_dig_delta_logU,
             )
         elif (
             self._state is not None

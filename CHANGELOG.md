@@ -414,6 +414,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- The per-Q_H nebular grid (`enable_fast_nebular` / `approx=FeaturePrecomp()`)
+  now serves DIG mixing instead of refusing it: `neb_logU` joins the grid axes
+  whenever `neb_dig_frac` could be active (free, or fixed non-zero), even when
+  `neb_logU` is itself Fixed, and its range extends (never clips, never
+  refuses) to cover the DIG-shifted query point `neb_logU + neb_dig_delta_logU`.
+  Reconstruction mixes two lookups against the same table via the new
+  `mix_dig_grid_reconstruction` (`dig.py`), sharing the one mixing core
+  `mix_dig_emission` / `mix_dig_line_luminosities` already use. Measured
+  worst-case relative error over 10 seeds against the exact path: 1.17e-3
+  (photometry) / 1.41e-3 (lines) at `neb_dig_frac = 0.3` with the axis extended,
+  versus 1.72e-3 / 2.04e-3 at `neb_dig_frac = 0` on the same fixture -- both
+  well inside the repository's 3e-2 parity ceiling (#2222).
 - ``mix_dig_line_luminosities`` (``tengri.components.nebular.dig``), exported
   from ``tengri.components.nebular``: the line-luminosity counterpart of
   ``mix_dig_emission``, sharing its DIG mixing core. It calls
@@ -580,6 +592,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
+- `DIGNotOnNebularGridError` and the refusal it backed
+  (`nebular_grid_precompute._refuse_active_dig_mixing`). Building the per-Q_H
+  nebular grid with an active `neb_dig_frac` no longer raises: the grid now
+  reconstructs DIG mixing via two lookups instead (see `### Added`, #2222).
 - The `stellar` build group (#1720). Metallicity is now configured through
   `met`, parallel to `sfh`: `stellar={'met_mode': 'table'}` becomes
   `met={'type': 'table'}`, and `stellar={'met_logzsol': …}` becomes
