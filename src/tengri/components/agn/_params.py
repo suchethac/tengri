@@ -638,8 +638,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_grahsp_plbendwidth",
-        Uniform(0.1, 10.0, default=1.0),
-        "GRAHSP BBB bend width Lambda [dex] (paper plbendwidth). Typical 0.1-10.",
+        Uniform(0.01, 100.0, default=1.0),
+        "GRAHSP BBB bend width Lambda (dimensionless; paper plbendwidth). Larger "
+        "Lambda smooths the bend; shape deviation from a pure power law falls as "
+        "~1/Lambda -- 129% (Lambda=1), 12% (10), 1.1% (100) over 50-1000 nm rest "
+        "frame. Both bounds sit where the shape stops changing: inert above ~100, "
+        "saturated to a hard break below ~0.005 (and underflowing by 0.003). "
+        "Brown+2019 Table 4 tabulates W_bend in dex, so Lambda = 10**W_bend; two "
+        "of its three fits (0.020, 0.010) fell below the old 0.1 floor, which cost "
+        "up to 5.7% in shape. Upstream declares Lambda in nm, which it is not (it "
+        "divides a log ratio), and defaults to 10.0 -- the old upper bound (#2159).",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),

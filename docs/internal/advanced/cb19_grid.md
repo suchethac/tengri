@@ -42,14 +42,16 @@ no permissively licensed repackaging of this exact product is known to
 exist, so tengri does not ship one.
 
 **What this means today.** `neb={'type': 'cb19'}` still works against a
-grid you supply yourself: place a real CB_19 HDF5 file with genuine
-variation at `data/cb19_templates.h5` (or under `$TENGRI_DATA_DIR`) --
-`SEDModel.build`'s `neb` grammar has no `grid` key for `cb19` (unlike
-`cloudy`, `mappings`, and `mappings_agn`), so the resolved default path is
-the only route through the build API; `CB19Backend(grid_path=...)` accepts
-an explicit path directly if you construct the backend yourself. Until 3MdB
-republishes the grid, `scripts/download_cb19_templates.py` cannot populate
-that file, and the alternatives are `neb={'type': 'cue'}`,
+grid you supply yourself: point at it directly with
+`neb={'type': 'cb19', 'grid': <path>}` (#2220; lowers to
+`nebular_cb19_grid_path`, the same route `cloudy`, `mappings`, and
+`mappings_agn` already use for their own `grid` keys), or place a real
+CB_19 HDF5 file with genuine variation at `data/cb19_templates.h5` (or
+under `$TENGRI_DATA_DIR`) so the default resolves it without naming a
+path at all; `CB19Backend(grid_path=...)` also accepts an explicit path
+directly if you construct the backend yourself. Until 3MdB republishes
+the grid, `scripts/download_cb19_templates.py` cannot populate that
+file, and the alternatives are `neb={'type': 'cue'}`,
 `neb={'type': 'cloudy', 'grid': <path>}`, or `neb={'type': 'ssp'}` with a
 wNE SSP grid.
 
