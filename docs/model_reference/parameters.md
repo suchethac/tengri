@@ -32,13 +32,18 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | `met_alpha_fe_old` | $[\alpha/\mathrm{Fe}]_{\rm old}$ | Uniform | $[0.0, 0.6]$ | dex | Alpha enhancement at old ages (time-evolving mode) |
 | `met_alpha_fe_young` | $[\alpha/\mathrm{Fe}]_{\rm young}$ | Fixed(0) | $[-0.2, 0.4]$ | dex | Alpha enhancement at young ages (typically fixed at 0) |
 | *Dust Attenuation* |  |  |  |  |  |
-| `dust_tau_bc` | $\tau_{\rm BC}$ | Uniform | $[0, 4]$ | --- | Birth cloud optical depth |
-| `dust_tau_ism` | $\tau_{\rm ISM}$ | Uniform | $[0, 4]$ | --- | Diffuse ISM optical depth |
-| `dust_n_bc` | $n_{\rm BC}$ | Uniform | $[-2, 0.5]$ | --- | Birth cloud slope |
-| `dust_n_ism` | $n_{\rm ISM}$ | Uniform | $[-2, 0.5]$ | --- | ISM slope |
-| `dust_delta` | $\delta$ | Uniform | $[-1, 0.4]$ | --- | Power-law modification |
-| `dust_Eb` | $E_b$ | Uniform | $[0, 6]$ | --- | UV bump strength |
-| `dust_f_obscuration` | $f_{\rm obs}$ | Uniform | $[0, 1]$ | --- | Clumpy geometry fraction |
+| `dust_tau_bc` | $\tau_{\rm BC}$ | Uniform | $[0, 4]$ | --- | Birth-cloud V-band optical depth (default 1.0) |
+| `dust_tau_diff` | $\tau_{\rm diff}$ | Uniform | $[0, 3]$ | --- | Diffuse-ISM V-band optical depth (default 0.3) |
+| `dust_slope` | $n$ | Fixed(-0.7) | --- | --- | Power-law attenuation slope (Charlot-Fall convention) |
+| `dust_bump_strength` | $E_b$ | Fixed(0) | --- | --- | 2175 Å UV bump strength (Kriek & Conroy 2013) |
+| `dust_delta` | $\delta$ | Fixed(0) | --- | --- | Attenuation-curve slope deviation (Kriek & Conroy) |
+| `dust_Rv` | $R_V$ | Fixed(3.1) | --- | --- | Cardelli total-to-selective extinction |
+| `dust_f_obscuration` | $f_{\rm obs}$ | Fixed(0) | $[0, 1]$ | --- | Clumpy geometry fraction (Lower 2022) |
+| `dust_eta_balance` | $\eta$ | Fixed(1) | --- | --- | Energy-balance relaxation factor ($L_{\rm IR} = \eta L_{\rm absorbed}$) |
+| *Dust Screen Selectors* |  |  |  |  |  |
+| `dust_nebular_screen` | --- | `"birth_cloud"` | 3 choices | --- | Screen for the nebular continuum + line catalog |
+| `dust_shock_screen` | --- | `"diffuse"` | 3 choices | --- | Screen for the MAPPINGS V shock SED |
+| `dust_agn_screen` | --- | `"none"` | 3 choices | --- | Screen for AGN light (today only `"none"` is accepted) |
 | *AGN Core Parameters* |  |  |  |  |  |
 | `agn_frac` | $f_{\rm AGN}$ | Fixed(0) | $[0, 1]$ | --- | AGN bolometric luminosity fraction |
 | `agn_log_lbol` | $\log L_{\rm bol}$ | Fixed(10) | $[40, 48]$ | $\log({\rm erg\,s}^{-1})$ | AGN bolometric luminosity (direct) |
