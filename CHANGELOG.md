@@ -120,13 +120,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   sites** across 139 files asserted half the finite-AND-non-zero rule and now
   assert both. 246 were the #2100 shape (finite, never non-zero) and 31 the
   #2178 shape (non-zero, never finite). No assertion was weakened to make the
-  guard pass. 17 of the 277 carry the documented escape hatch
-  (`# grad-assert: finite-only — <reason>`): they construct a degenerate input
-  on purpose — a zeroed window, an empty band, zero ionizing flux, an exact
-  `log10_add` cancellation, the Hessian-vector product of a linear scaling, a
-  kernel evaluated outside its band, a prior's log-density differentiated at
-  its own mode — so zero is the correct answer there and only the finite half
-  is a claim. (Counts are what the guard reports when run over the upstream
+  guard pass. 18 of the 277 carry the documented escape hatch
+  (`# grad-assert: finite-only — <reason>`): they evaluate at a point where the
+  derivative is zero for a reason. Some construct a degenerate input on purpose
+  — a zeroed window, an empty band, zero ionizing flux, an exact `log10_add`
+  cancellation, the Hessian-vector product of a linear scaling, a kernel
+  evaluated outside its band. Others sit on a genuine stationary point: a
+  prior's log-density differentiated at its own mode, a Student-t NLL
+  differentiated at `sigma`'s own maximum-likelihood point. Either way zero is
+  the correct answer there and only the finite half is a claim — and where the
+  surrounding test's real claim was that a gradient *flows*, that claim is now
+  stated a step away from the stationary point, where it can actually fail. (Counts are what the guard reports when run over the upstream
   tree at the merge base: 277 across 139 files at `850be10bc`, against 274
   across 136 at the previous merge base `87b650e7f` — a delta of exactly the
   three sites `main` added since. An earlier revision of this entry said
