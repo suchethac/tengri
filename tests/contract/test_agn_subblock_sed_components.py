@@ -442,3 +442,80 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
             assert np.all(torus == 0.0), (
                 "torus='none' emits nothing, so the empty budget stays empty"
             )
+
+
+class TestAgnDustBudgetSplitKeepsANanBudgetVisible:
+    """A NaN budget must not disappear from the ``torus`` sub-component's view.
+
+    ``NaN > 0.0`` is False, so the same not-live branch that gives the true
+    zero/zero degenerate case its defined ``share = 0`` answer (the class
+    above) would, without a further check, also catch a genuinely NaN budget
+    -- e.g. ``agn_polar_ebv`` itself NaN -- and silently narrow it to a
+    finite share. The SED and the ``polar`` sub-component would still carry
+    the NaN (``L_nu_reemit`` is elementwise NaN from the reemission call
+    itself), but a caller inspecting ``comps["torus"]`` alone would see a
+    finite number derived from an undefined share. The fix keeps the NaN
+    visible there too, without touching the selected-denominator gradient at
+    the true (finite) degenerate point pinned above.
+    """
+
+    @staticmethod
+    def _compose(ebv, torus_block):
+        from tengri.components.agn.blocks.runner import compose_l_nu
+
+        return compose_l_nu(
+            _WAVE,
+            12.0,
+            agn_disc_block="powerlaw",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block=torus_block,
+            agn_attenuation_block="polar_dust",
+            agn_norm="cigale_joint",
+            agn_polar_ebv=ebv,
+            agn_polar_oa=40.0,
+            return_components=True,
+        )
+
+    @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
+    def test_a_nan_budget_leaves_the_torus_component_nan(self, torus_block):
+        sed, comps = self._compose(jnp.asarray(jnp.nan), torus_block)
+        sed = np.asarray(sed)
+        polar = np.asarray(comps["polar"])
+        torus = np.asarray(comps["torus"])
+        assert np.any(np.isnan(sed)), "probe setup failed: the SED is not NaN"
+        assert np.any(np.isnan(polar)), "probe setup failed: the polar view is not NaN"
+        assert np.any(np.isnan(torus)), (
+            f"torus={torus_block!r}: comps['torus'] came back finite for a NaN AGN "
+            "dust budget. The denominator is selected (not floored) so that "
+            "NaN > 0.0 is False routes here just like the true zero/zero case -- "
+            "that path must still read the budget as undefined (NaN), not as the "
+            "documented share=0 answer, or a caller inspecting comps['torus'] "
+            "alone sees a finite number derived from an undefined share."
+        )
+
+    @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
+    def test_the_degenerate_point_gradient_pin_is_unaffected(self, torus_block):
+        """The NaN-visibility fix must not touch the finite selected-denominator
+        gradient at the true (non-NaN) zero/zero degenerate point.
+
+        Duplicates the assertion in
+        ``TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty.
+        test_gradient_is_finite_where_the_budget_is_degenerate`` deliberately:
+        that class's own docstring pins the exact values this reads.
+        """
+        import jax
+
+        def _dust_total(ebv):
+            _sed, comps = self._compose(ebv, torus_block)
+            return jnp.sum(jnp.asarray(comps["polar"])) + jnp.sum(jnp.asarray(comps["torus"]))
+
+        grad = float(jax.grad(_dust_total)(jnp.asarray(0.0)))
+        assert np.isfinite(grad) and grad != 0.0
+        pinned = 6.743538e33 if torus_block == "none" else 4.134017e33
+        assert grad == pytest.approx(pinned, rel=1e-5, abs=0.0), (
+            f"torus={torus_block!r}: the degenerate-point gradient moved to {grad:.6e} "
+            f"(pinned {pinned:.6e}) -- the NaN-visibility fix must change only the "
+            "NaN-input forward value, not this selected-denominator gradient."
+        )

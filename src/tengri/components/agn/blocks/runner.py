@@ -1054,12 +1054,25 @@ agn_torus_block, agn_attenuation_block : str
             # both branches are differentiated, and division's VJP carries
             # -num/den**2, so a floored denominator squares to exactly 0.0 in
             # float32 and feeds 0 * inf = NaN back into the surviving branch.
+            #
+            # A NaN budget (e.g. agn_polar_ebv itself NaN) also lands in the
+            # not-live branch, because NaN > 0.0 is False -- so without a
+            # further check the documented "share 0" answer would silently
+            # narrow the NaN budget to a finite share, and the torus
+            # sub-component would come back clean while the SED and the
+            # polar component still carry the NaN. The extra jnp.isnan
+            # selection keeps that view honest: it is a boolean select on a
+            # non-differentiable predicate (isnan, like the `> 0.0` above,
+            # carries no gradient), so it changes only the forward value at
+            # a NaN input and leaves the true (finite) zero/zero degenerate
+            # case, and its selected-denominator gradient, untouched.
             _dust_total = _agn_dust_budget + _polar_power
             _dust_total_live = _dust_total > 0.0
+            _dust_total_is_nan = jnp.isnan(_dust_total)
             _share = jnp.where(
                 _dust_total_live,
                 _polar_power / jnp.where(_dust_total_live, _dust_total, 1.0),
-                0.0,
+                jnp.where(_dust_total_is_nan, jnp.nan, 0.0),
             )
             _torus_factor = 1.0 - _share
             # Renormalize the graybody from its own absorbed power to the
