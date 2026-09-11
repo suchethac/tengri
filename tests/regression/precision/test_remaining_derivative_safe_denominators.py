@@ -76,6 +76,8 @@ def _assert_f64_floor_moves_but_stays_safe(literal):
     with jax.enable_x64(True):
         raised = representable_denominator(literal)
         assert raised > literal
+        # grad-assert: finite-only — not a gradient: this checks that the raised
+        # floor's 1/floor**2 (the VJP's denominator) is representable in float64.
         assert np.isfinite(np.float64(1.0) / (raised * raised))
 
 
@@ -109,6 +111,10 @@ def test_age_weights_cic_gradient_finite_for_a_degenerate_sfh():
         g = jax.grad(f)(sfr0)
         assert g.dtype == jnp.float32
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_moves_but_stays_safe(1e-300)
 
@@ -138,6 +144,10 @@ def test_joint_weights_cic_met_table_gradient_finite_for_a_degenerate_sfh():
         g = jax.grad(f)(sfr0)
         assert g.dtype == jnp.float32
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_moves_but_stays_safe(1e-300)
 
@@ -169,6 +179,10 @@ def test_cic_parcels_f_lin_gradient_finite_for_a_degenerate_ssp_grid():
         g = jax.grad(f)(sfr0)
         assert g.dtype == jnp.float32
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -192,6 +206,10 @@ def test_renormalize_to_mass_gradient_finite_for_an_all_zero_shape():
         g = jax.grad(f)(shape0)
         assert g.dtype == jnp.float32
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -229,6 +247,10 @@ def test_sfh2exp_gradient_finite_for_a_near_zero_duration_burst():
         g = jax.grad(f)(jnp.asarray(1.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.isfinite(g), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_moves_but_stays_safe(1e-300)
 
@@ -262,6 +284,10 @@ def test_dense_basis_gradient_finite_when_the_recent_sfr_window_covers_everythin
         age_universe_yr0 = jnp.asarray(_DECOUPLE_SFR_TIME_GYR * 1e9 * 0.5, dtype=jnp.float32)
         g = jax.grad(f)(age_universe_yr0)
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — at this degenerate input the floor binds (or the
+        # where-mask selects its constant branch), so d/dx max(x, floor) is exactly
+        # zero by construction (measured); the claim is that the VJP's 1/floor**2 is
+        # representable, i.e. no NaN, not that the gradient is non-zero.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-30)
@@ -276,6 +302,10 @@ def test_break_from_means_gradient_finite_for_a_zero_blue_continuum():
             lambda f_blue: _break_from_means(f_blue, jnp.asarray(1.0, dtype=jnp.float32))
         )(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — at this degenerate input the floor binds (or the
+        # where-mask selects its constant branch), so d/dx max(x, floor) is exactly
+        # zero by construction (measured); the claim is that the VJP's 1/floor**2 is
+        # representable, i.e. no NaN, not that the gradient is non-zero.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-30)
@@ -303,6 +333,10 @@ def test_ew_from_means_gradient_finite_for_a_zero_continuum():
         g = jax.grad(f)(jnp.zeros(2, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -334,6 +368,10 @@ def test_measure_slope_gradient_finite_for_a_window_outside_the_grid():
         flux0 = jnp.full(64, 1.0e-6, dtype=jnp.float32)
         g = jax.grad(f)(flux0)
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — at this degenerate input the floor binds (or the
+        # where-mask selects its constant branch), so d/dx max(x, floor) is exactly
+        # zero by construction (measured); the claim is that the VJP's 1/floor**2 is
+        # representable, i.e. no NaN, not that the gradient is non-zero.
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-30)
@@ -357,6 +395,10 @@ def test_beloborodov_gamma_hot_gradient_finite_for_zero_seed_luminosity():
             lambda l_seed: beloborodov_gamma_hot(jnp.asarray(1.0e10, dtype=jnp.float32), l_seed)
         )(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — at this degenerate input the floor binds (or the
+        # where-mask selects its constant branch), so d/dx max(x, floor) is exactly
+        # zero by construction (measured); the claim is that the VJP's 1/floor**2 is
+        # representable, i.e. no NaN, not that the gradient is non-zero.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-30)
@@ -385,6 +427,10 @@ def test_broken_powerlaw_continuum_gradient_finite_at_an_extreme_slope():
         g = jax.grad(f)(jnp.asarray(5.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.isfinite(g), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -409,6 +455,10 @@ def test_hot_dust_blackbody_gradient_finite_for_a_cold_anchor_temperature():
 
         g = jax.grad(f)(jnp.asarray(5.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — at this degenerate input the floor binds (or the
+        # where-mask selects its constant branch), so d/dx max(x, floor) is exactly
+        # zero by construction (measured); the claim is that the VJP's 1/floor**2 is
+        # representable, i.e. no NaN, not that the gradient is non-zero.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-60)
@@ -436,6 +486,10 @@ def test_nebular_continuum_gaunt_factor_gradient_finite_at_long_wavelength():
         g = jax.grad(f)(jnp.asarray(1.0e9, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.isfinite(g), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -459,6 +513,10 @@ def test_nebular_continuum_case_b_recombination_gradient_finite_at_high_temperat
         g = jax.grad(f)(jnp.asarray(3.0e8, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.isfinite(g), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-40)
 
@@ -492,6 +550,10 @@ def test_torus_faceon_disc_normalization_mechanism():
         g = jax.grad(quotient)(jnp.zeros(200, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -513,6 +575,10 @@ def test_torus_rescale_mechanism():
         g = jax.grad(quotient)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.isfinite(g), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -536,6 +602,10 @@ def test_skirtor_shape_normalization_mechanism():
         g = jax.grad(quotient)(jnp.zeros(200, dtype=jnp.float32))
         assert g.dtype == jnp.float32
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
+        assert np.any(np.asarray(g) != 0.0), (
+            f"identically zero grad: {g}: finite is not enough, a severed gradient"
+            " path is as unusable as a NaN one (#2100)"
+        )
 
     _assert_f64_floor_unchanged(1e-30)
 
@@ -545,7 +615,7 @@ def test_skirtor_bolometric_rescale_mechanism():
 
     Guarded line: ``spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), floor))``.
     ``bolo`` is the trapezoid bolometric integral of the interpolated
-    template; a zero (or fully-negative-cancelling) spectrum makes it zero.
+    template; a zero (or fully-negative-canceling) spectrum makes it zero.
     ``l_scale`` is kept at O(1) (a dimensionless template rescale factor at
     this stage, not yet the raw bolometric luminosity), matching how
     ``skirtor.py`` actually forms it (``l_scale = 10**agn_log_lbol * L_SUN *
@@ -559,6 +629,10 @@ def test_skirtor_bolometric_rescale_mechanism():
 
         g = jax.grad(quotient)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — at this degenerate input the floor binds (or the
+        # where-mask selects its constant branch), so d/dx max(x, floor) is exactly
+        # zero by construction (measured); the claim is that the VJP's 1/floor**2 is
+        # representable, i.e. no NaN, not that the gradient is non-zero.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-100)
@@ -588,6 +662,9 @@ def test_skirtor_disc_dust_ratio_mechanism():
 
         g = jax.grad(masked_ratio)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
         # Neuter check: the pre-#1860 floor (representable_floor, value-safe
@@ -630,6 +707,9 @@ def test_skirtor_model_retilt_mechanism():
 
         g = jax.grad(quotient)(jnp.zeros(100, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-100)
@@ -666,6 +746,9 @@ def test_disc_zone_luminosity_rescale_mechanism():
 
         g = jax.grad(quotient)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-100)
@@ -690,6 +773,9 @@ def test_kd_precompute_bolometric_rescale_mechanism():
 
         g = jax.grad(quotient)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-100)
@@ -719,6 +805,9 @@ def test_xray_stellar_age_mechanism():
 
         g = jax.grad(masked_age)(jnp.zeros(10, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.all(np.isfinite(np.asarray(g))), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-30)
@@ -745,6 +834,9 @@ def test_line_per_qh_normalization_mechanism():
 
         g = jax.grad(quotient)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-30)
@@ -765,6 +857,9 @@ def test_nebular_grid_precompute_inverse_qh_mechanism():
 
         g = jax.grad(inv_qh)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.isfinite(g), f"non-finite grad: {g}"
 
     _assert_f64_floor_unchanged(1e-30)
@@ -793,6 +888,9 @@ def test_component_inline_normalization_mechanism(lineno):
 
         g = jax.grad(quotient)(jnp.asarray(0.0, dtype=jnp.float32))
         assert g.dtype == jnp.float32
+        # grad-assert: finite-only — the input sits below the floor, so the floor binds
+        # and d/dx max(x, floor) is exactly zero by construction; the claim under test
+        # is that the VJP's 1/floor**2 term is representable (no NaN), not its size.
         assert np.isfinite(g), f"non-finite grad at line {lineno}: {g}"
 
     _assert_f64_floor_moves_but_stays_safe(1e-300)
