@@ -52,6 +52,7 @@ from tengri.components.dust.attenuation import (
 )
 from tengri.components.dust.laws._registry import select_law_kwargs
 from tengri.components.template_threading import TemplateThreading
+from tengri.parameters._dust_keys import SCREEN_CHOICES
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     DerivedKey,
@@ -113,6 +114,98 @@ def _young_indicator(
     return jax.nn.sigmoid(-(log_t - jnp.log10(t_birth_yr)) / transition_width_dex)
 
 
+def _screen_transmission(
+    choice: str,
+    *,
+    k_bc: jnp.ndarray,
+    k_diff: jnp.ndarray,
+    tau_bc: jnp.ndarray,
+    tau_diff: jnp.ndarray,
+    f_obsc: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Dust-screen transmission for one emission source's configured choice.
+
+    THE single evaluation of the ``nebular_screen`` / ``shock_screen`` /
+    ``agn_screen`` grammar (#2234 replacement): every attenuation site in
+    this module (the nebular continuum, the discrete line catalog via
+    :meth:`DustSEDComponent._line_transmission`, and the shock SED) routes
+    through this instead of writing its own
+    ``f_obsc + (1 - f_obsc) * exp(-tau)`` formula. The fast-nebular fallback
+    and the FeaturePrecomp photometry path reuse the already-attenuated
+    ``sed_neb_attenuated`` / ``sed_shock_attenuated`` this produces, rather
+    than re-deriving it, so there is exactly one place this formula is
+    written.
+
+    .. math::
+
+        T_{\rm birth\_cloud} = f_{\rm obsc} + (1 - f_{\rm obsc})
+            \exp\!\left[-(\tau_{\rm bc} k_{\rm bc} + \tau_{\rm diff} k_{\rm diff})\right]
+
+        T_{\rm diffuse} = f_{\rm obsc} + (1 - f_{\rm obsc})
+            \exp\!\left(-\tau_{\rm diff} k_{\rm diff}\right)
+
+        T_{\rm none} = 1
+
+    ``choice`` is a static Python string (one of
+    ``tengri.parameters._dust_keys.SCREEN_CHOICES``), read off a frozen
+    component config, never a traced value: the branch below is resolved once
+    at trace-build time, so a ``"none"`` source never evaluates ``exp`` at
+    predict time, matching the #2234 contract ("resolved at BUILD time, never at
+    predict").
+
+    Parameters
+    ----------
+    choice : str
+        One of ``"birth_cloud"``, ``"diffuse"``, ``"none"``.
+    k_bc : ndarray
+        Birth-cloud attenuation-law curve [dimensionless], evaluated at the
+        same wavelengths (or line positions) as ``k_diff``. Unused (and may
+        be a placeholder) when ``choice != "birth_cloud"``.
+    k_diff : ndarray
+        Diffuse-ISM attenuation-law curve [dimensionless], same shape as
+        ``k_bc``.
+    tau_bc : ndarray
+        Birth-cloud V-band optical depth [dimensionless].
+    tau_diff : ndarray
+        Diffuse-ISM V-band optical depth [dimensionless].
+    f_obsc : ndarray
+        Clumpy-geometry obscuration floor, ``dust_f_obscuration``
+        [dimensionless, in [0, 1]].
+
+    Returns
+    -------
+    ndarray
+        Transmission in ``[0, 1]``, broadcast shape of ``k_bc`` / ``k_diff``.
+
+    Raises
+    ------
+    ValueError
+        If ``choice`` is not one of :data:`SCREEN_CHOICES`. Structural
+        (build-time) validation upstream (``normalize_screen_choice``,
+        ``resolve_screen_choices``) means a live model can never reach this;
+        it exists so a component built directly with a typo fails loudly
+        rather than silently applying an unattenuated (or doubly-attenuated)
+        screen.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``choice`` must be a static (non-traced) Python
+    string, never a JAX array.
+    """
+    if choice == "none":
+        return jnp.ones_like(jnp.asarray(k_diff))
+    if choice == "birth_cloud":
+        tau = jnp.asarray(tau_bc) * jnp.asarray(k_bc) + jnp.asarray(tau_diff) * jnp.asarray(k_diff)
+    elif choice == "diffuse":
+        tau = jnp.asarray(tau_diff) * jnp.asarray(k_diff)
+    else:
+        raise ValueError(
+            f"_screen_transmission: choice must be one of {SCREEN_CHOICES!r}, got {choice!r}."
+        )
+    f_obsc = jnp.asarray(f_obsc)
+    return f_obsc + (1.0 - f_obsc) * jnp.exp(-tau)
+
+
 @dataclass(frozen=True, kw_only=True)
 class DustSEDComponentConfig(SEDComponentConfig):
     """Frozen knobs for :class:`DustSEDComponent`.
@@ -143,6 +236,26 @@ class DustSEDComponentConfig(SEDComponentConfig):
         Default 1e7 (10 Myr) per Charlot & Fall (2000).
     transition_width_dex : float
         Sigmoid width (dex) for the BC→diffuse age transition.
+    nebular_screen : str
+        Which screen attenuates the nebular continuum, the discrete line
+        catalog, and the fast-nebular fallback grid (#2234): ``"birth_cloud"``
+        (default; Charlot & Fall 2000, bagpipes/FSPS/CIGALE behavior),
+        ``"diffuse"``, or ``"none"``. One of
+        ``tengri.parameters._dust_keys.SCREEN_CHOICES``.
+    shock_screen : str
+        Which screen attenuates the MAPPINGS V shock SED (#851, #1434):
+        ``"birth_cloud"``, ``"diffuse"`` (default -- shocked gas from an
+        AGN-driven outflow is not, in general, still inside the star-forming
+        birth cloud the young-star screen models), or ``"none"``. One of
+        ``tengri.parameters._dust_keys.SCREEN_CHOICES``.
+    agn_screen : str
+        Which screen attenuates AGN light. ``"none"`` (default, and today the
+        only accepted value -- see ``resolve_screen_choices``): the AGN
+        component runs after dust in the pipeline (stellar, nebular, shock,
+        dust, AGN, radio, X-ray, IGM) and carries its own polar-dust screen,
+        matching the CIGALE convention that AGN light is never attenuated by
+        the galaxy's own dust. Galaxy screening of AGN light is a later
+        change.
     """
 
     # Defaults are a low-level construction convenience only (component
@@ -158,6 +271,15 @@ class DustSEDComponentConfig(SEDComponentConfig):
     law_neb: str | None = None
     t_birth_yr: float = 1e7
     transition_width_dex: float = 0.3
+    #: Per-source dust-screen choice (#2234 replacement). Defaults match
+    #: the pre-#2234 behavior for ``nebular_screen`` (young-limit screen,
+    #: unconditional) and are a NEW default for ``shock_screen`` (previously
+    #: unconditionally birth_cloud too; now diffuse-only, #1434 re-baseline).
+    #: ``agn_screen`` is validated (``resolve_screen_choices``) to stay
+    #: ``"none"``: no call site in :meth:`apply` reads it yet.
+    nebular_screen: str = "birth_cloud"
+    shock_screen: str = "diffuse"
+    agn_screen: str = "none"
     #: Per-component law-parameter overrides (birth cloud / diffuse ISM), as a
     #: hashable tuple of ``(law_kwarg, value)`` pairs so the frozen config stays
     #: usable as a static JIT key. Empty -> both components share the global
@@ -522,14 +644,16 @@ class DustSEDComponent(TemplateThreading):
         neb_bc_params: Mapping[str, jnp.ndarray],
         diff_law_kw: Mapping[str, jnp.ndarray],
     ) -> jnp.ndarray:
-        r"""Birth-cloud + diffuse transmission at discrete line wavelengths.
+        r"""``self.config.nebular_screen`` transmission at discrete line wavelengths.
 
         Pure evaluation from already-resolved law-kwarg dicts: no second
         ``resolve_bc_diff_law_params`` call. :meth:`apply` (§2c) and
         :meth:`attenuate_line_catalog` both call this with ``neb_bc_params`` /
         ``diff_law_kw`` bound the same way ``apply()``'s §2b nebular-continuum
-        screen binds them, so the line and nebular-continuum channels are
-        always on the identical curve.
+        screen binds them, and both route through :func:`_screen_transmission`
+        with the SAME ``self.config.nebular_screen`` choice, so the line and
+        nebular-continuum channels are always on the identical curve (#2234:
+        ``nebular_screen`` governs both).
 
         Parameters
         ----------
@@ -573,12 +697,14 @@ class DustSEDComponent(TemplateThreading):
             line_wave,
             self.config.lyman_cutoff_aa,
         )
-        tau = (
-            jnp.asarray(params["dust_tau_bc"]) * k_bc
-            + jnp.asarray(params["dust_tau_diff"]) * k_diff
+        return _screen_transmission(
+            self.config.nebular_screen,
+            k_bc=k_bc,
+            k_diff=k_diff,
+            tau_bc=jnp.asarray(params["dust_tau_bc"]),
+            tau_diff=jnp.asarray(params["dust_tau_diff"]),
+            f_obsc=jnp.asarray(params.get("dust_f_obscuration", 0.0)),
         )
-        f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
-        return f_obsc + (1.0 - f_obsc) * jnp.exp(-tau)
 
     def attenuate_line_catalog(
         self,
@@ -805,12 +931,24 @@ class DustSEDComponent(TemplateThreading):
         # below 912 Å is treated consistently when the cutoff is enabled.
         k_bc_neb = _lyman_clip(k_bc_neb, wave, self.config.lyman_cutoff_aa)
         k_diff_neb = _lyman_clip(k_diff_neb, wave, self.config.lyman_cutoff_aa)
-        tau_neb = (
-            jnp.asarray(params["dust_tau_bc"]) * k_bc_neb
-            + jnp.asarray(params["dust_tau_diff"]) * k_diff_neb
-        )
+        # Bound once, shared with the shock block (§2d) and the energy-balance
+        # step (§3) below: the same ``dust_tau_bc``/``dust_tau_diff``/
+        # ``dust_f_obscuration`` values, never re-read from ``params``.
+        _tau_bc = jnp.asarray(params["dust_tau_bc"])
+        _tau_diff = jnp.asarray(params["dust_tau_diff"])
         _f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
-        sed_neb_attenuated = sed_neb * (_f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_neb))
+        # #2234: nebular_screen picks which of the two screens (or neither)
+        # reddens the continuum; the pre-#2234 behavior (unconditional
+        # birth-cloud + diffuse) is the default, so an untouched model is
+        # bit-identical to before.
+        sed_neb_attenuated = sed_neb * _screen_transmission(
+            self.config.nebular_screen,
+            k_bc=k_bc_neb,
+            k_diff=k_diff_neb,
+            tau_bc=_tau_bc,
+            tau_diff=_tau_diff,
+            f_obsc=_f_obsc,
+        )
 
         # ── 2c. Emission-line catalog attenuation (#1867, #2223) ───────────
         # The discrete line catalog gets the SAME screen as the nebular
@@ -860,6 +998,36 @@ class DustSEDComponent(TemplateThreading):
             )
             log_line_lums_attenuated = jnp.asarray(_log_line_lums) + log10_magnitude(transmission)
 
+        # ── 2d. Shock SED attenuation (#851, #1434) ────────────────────────
+        # Computed here, BEFORE the energy-balance integral (§3), so the
+        # absorbed shock power can enter that integral: pre-#2234 this block
+        # ran after §3 (as part of §4's SED assembly), which is exactly why
+        # the shock term was never counted in ``L_absorbed`` (a pre-existing
+        # gap this PR closes -- see §3 below).
+        #
+        # #2234: ``shock_screen`` picks which screen reddens the shock SED.
+        # Shocked gas sits behind a dust column whether the shock is
+        # star-formation related (``norm='frac'``) or AGN-outflow related
+        # (``norm='lhalpha'``), but an AGN-driven outflow shock is not, in
+        # general, still inside the compact birth cloud the young-star screen
+        # models: ``"diffuse"`` is the new default (#1434 re-baseline; it was
+        # unconditionally the birth-cloud form before). Gate on
+        # ``sed_shock_unatt`` (the intrinsic form), not ``sed_shock`` (which
+        # falls back to zeros_like if intrinsic was absent), so nothing is
+        # published below unless ShockNebular actually emitted something.
+        sed_shock_unatt = state.derived.get("sed_shock")
+        sed_shock = (
+            jnp.zeros_like(wave) if sed_shock_unatt is None else jnp.asarray(sed_shock_unatt)
+        )
+        sed_shock_attenuated = sed_shock * _screen_transmission(
+            self.config.shock_screen,
+            k_bc=k_bc_neb,
+            k_diff=k_diff_neb,
+            tau_bc=_tau_bc,
+            tau_diff=_tau_diff,
+            f_obsc=_f_obsc,
+        )
+
         # ── 3. Energy balance: ∫ (L_nu_intrinsic - L_nu_attenuated) dν ──
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
         # negative signed area; abs() recovers the positive erg/s.
@@ -875,9 +1043,19 @@ class DustSEDComponent(TemplateThreading):
         # value, only the dust energy-balance integral excludes those
         # photons.
         nu = C_AA / wave
-        # Stellar + nebular absorbed light both feed the dust IR re-emission
-        # pool (energy balance): the nebular continuum reddened in step 2b is
-        # absorbed by the same grains.
+        # Stellar + nebular + shock absorbed light all feed the dust IR
+        # re-emission pool (energy balance): the nebular continuum (§2b) and
+        # the shock SED (§2d) reddened above are absorbed by the same grains.
+        # Before this PR the shock term was omitted here entirely (#1434 left
+        # the shock SED's absorbed power out of L_absorbed even though the
+        # shock SED was itself attenuated) -- a pre-existing energy-balance
+        # gap, not a behavior this PR is choosing to change: a source that is
+        # attenuated but never counted as absorbed leaks energy out of the
+        # SED with no compensating IR re-emission. A source whose
+        # ``*_screen`` choice is ``"none"`` is unattenuated
+        # (``sed_*_attenuated == sed_*`` bit-for-bit, see
+        # :func:`_screen_transmission`), so it contributes exactly zero to
+        # this integral automatically: no separate on/off branch is needed.
         eb_lut = None
         if isinstance(template_data, dict):
             _dir = template_data.get("dust_ir")
@@ -913,18 +1091,26 @@ class DustSEDComponent(TemplateThreading):
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
             )
+            # Nebular + shock combined into ONE integral (rather than two
+            # log10_add terms) so no intermediate sign has to be invented for
+            # a partial sum: bolometric_absorbed_log10 already returns the
+            # sign of ITS integral, exactly like the stellar term does.
             log_neb, sign_neb = bolometric_absorbed_log10(
-                sed_neb, sed_neb_attenuated, nu, wave=wave, lyman_cutoff_aa=_eb_cutoff
+                sed_neb + sed_shock,
+                sed_neb_attenuated + sed_shock_attenuated,
+                nu,
+                wave=wave,
+                lyman_cutoff_aa=_eb_cutoff,
             )
-            # Signed log-space sum: reproduces abs(stellar + nebular) exactly,
-            # including the case where the two terms carry opposite signs.
+            # Signed log-space sum: reproduces abs(stellar + neb + shock)
+            # exactly, including the case where the terms carry opposite signs.
             log_L_absorbed = log10_add(log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb)
         else:
             from tengri.forward.energy_balance import bolometric_absorbed_log10
 
             log_L_absorbed, _ = bolometric_absorbed_log10(
-                sed_intrinsic_stellar + sed_neb,
-                sed_attenuated + sed_neb_attenuated,
+                sed_intrinsic_stellar + sed_neb + sed_shock,
+                sed_attenuated + sed_neb_attenuated + sed_shock_attenuated,
                 nu,
                 wave=wave,
                 lyman_cutoff_aa=_eb_cutoff,
@@ -965,26 +1151,11 @@ class DustSEDComponent(TemplateThreading):
         else:
             non_stellar_pre_dust = state.sed_intrinsic - sed_intrinsic_stellar
         # The nebular continuum (sed_neb) is part of non_stellar_pre_dust but is
-        # reddened by HII-region dust (step 2b). Shock is also reddened the same way
-        # (#1434): shock sits behind the dust screen alongside the nebular continuum.
-        # AGN/radio/xray stay unattenuated by stellar dust. Swap the bare nebular and
-        # shock for their attenuated forms.
-        sed_shock_unatt = state.derived.get("sed_shock")
-        sed_shock = (
-            jnp.zeros_like(wave) if sed_shock_unatt is None else jnp.asarray(sed_shock_unatt)
-        )
-        # Shock gets the same young-limit screen as nebular (#1434: #927 physics):
-        # shocked gas sits behind the dust column whether the shock is star-formation
-        # related (norm='frac') or AGN-outflow related (norm='lhalpha'). For AGN-outflow
-        # shocks the screen geometry is an approximation: MAPPINGS traces often originate
-        # in unobscured outflows: but a single published dust path is more maintainable
-        # than per-mode branches that can diverge. Measure to assess the approximation.
-        tau_shock = (
-            jnp.asarray(params["dust_tau_bc"]) * k_bc_neb
-            + jnp.asarray(params["dust_tau_diff"]) * k_diff_neb
-        )
-        sed_shock_attenuated = sed_shock * (_f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_shock))
-
+        # reddened per its ``nebular_screen`` choice (§2b). Shock (§2d) is reddened
+        # per its own ``shock_screen`` choice, independently (#2234). AGN/radio/xray
+        # stay unattenuated by stellar dust (``agn_screen`` is validated to stay
+        # ``"none"`` today -- see ``resolve_screen_choices``). Swap the bare nebular
+        # and shock for their already-computed attenuated forms (§2b, §2d).
         non_stellar_other = non_stellar_pre_dust - sed_neb - sed_shock
         sed_total = non_stellar_other + sed_neb_attenuated + sed_shock_attenuated + sed_attenuated
 

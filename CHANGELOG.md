@@ -6,7 +6,78 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Each non-stellar emission source now picks its own dust screen: the
+  `dust_attenuation` group gains `nebular_screen` (governs the nebular
+  continuum, the line catalog, and the fast-nebular fallback grid; default
+  `"birth_cloud"`), `shock_screen` (governs the MAPPINGS V shock SED; default
+  `"diffuse"`), and `agn_screen` (default, and today the only accepted value,
+  `"none"` — the AGN component runs after dust and carries its own
+  polar-dust screen). Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or
+  the synonym `"off"`; flat spellings `dust_nebular_screen` /
+  `dust_shock_screen` / `dust_agn_screen` mirror `dust_law_bc` /
+  `dust_law_neb`. One validator
+  (`tengri.parameters._dust_keys.resolve_screen_choices`) backs both
+  surfaces: an unknown value names the three choices; `agn_screen` other
+  than `none`/`off` is refused with the deferral reason above;
+  `single_component` dust refuses any value other than `none`/`off` or the
+  source's own default (a single screen has no birth-cloud/diffuse
+  distinction); `wg00`/`off` dust refuse the keys outright, like the other
+  two-screen-only keys. Every attenuation site (the nebular continuum, the
+  discrete line catalog, and the shock SED) routes through ONE helper,
+  `DustSEDComponent._screen_transmission`, so there is exactly one
+  implementation of the screen formula. Closes #2234 by replacement: a
+  configurable nebular screen (`neb_dust` modes `bc`/`diff`/`neb`/`none`)
+  existed in 2026-04 and died with #923/#2230, leaving `_neb_dust_mode` /
+  `_neb_dust_law_bc_fn` in `sed_model.py` as write-only remains (now
+  deleted); the choice is restored as explicit, validated config rather than
+  the old ungated mode string. Also closes #2235 by making the
+  `docs/model_reference/nebular.md` prose ("shock receives only diffuse ISM
+  attenuation") and the code agree — the code previously attenuated shock
+  unconditionally with the birth-cloud form — and by snapping (see Fixed,
+  below).
+
+### Changed
+
+- The shock SED's default dust screen flips from the unconditional
+  birth-cloud form (`tau_bc·k_bc + tau_diff·k_diff`) to diffuse-only
+  (`tau_diff·k_diff`): an AGN-outflow shock is not, in general, still
+  confined to the compact star-forming birth cloud the young-star screen
+  models, and the diffuse-only default now applies to every shock
+  normalization (`norm='frac'` and `norm='lhalpha'` alike). This is a
+  numeric change: on the `test_shock_attenuation_equivalence.py` fixture
+  (τ_bc=2, τ_diff=1, z=0.5, Calzetti, SDSS *gri*) the shock's photometric
+  contribution grows by roughly 8×-33× band to band, because dropping the
+  `tau_bc·k_bc` term removes the dominant attenuation factor. The
+  exact-vs-precomp agreement is unaffected by the flip (both screens agree
+  to float precision on that fixture, and the `test_precomp_channel_drift.py`
+  gap moves from 6.343e-04 to 6.289e-04 on its own fixture) because both
+  paths read the one `sed_shock_attenuated` value regardless of which screen
+  is selected. Set `dust_attenuation={'shock_screen': 'birth_cloud'}` to keep
+  the old default.
+- The dust energy-balance integral (`L_absorbed`, and so `L_ir`) now counts
+  the shock SED's absorbed power under its own `shock_screen` choice; before,
+  the shock SED was attenuated (once #1434 unified the exact and precomp
+  paths) but its absorbed power was never added to the integral — a
+  pre-existing gap between what the screens remove and what the IR
+  re-emission pool receives. A source whose screen choice is `"none"` is
+  unattenuated and so contributes exactly zero to the integral, with no
+  separate on/off branch needed.
+
 ### Fixed
+
+- `SEDModel.enable_fast_nebular` now snaps each requested target wavelength
+  within 0.5 Å of a true backend catalog line (read from
+  `state.derived["line_waves"]` via one reference forward pass) to that
+  line's exact wavelength, before building the per-Q_H grid. Previously the
+  fast grid tabulated exactly the caller's (possibly imprecise, e.g. a
+  rounded literature value or an air/vacuum slip) request, while the exact
+  path evaluated the dust screen at the backend's true, nearest-matched line
+  wavelength — two different points on the attenuation curve, up to ~0.1 Å
+  apart. `tests/regression/bug/test_bug_2223_line_screen_kwargs.py::test_fallback_is_actually_exercised_by_fast_nebular`
+  tightens from `rtol=2e-4` to `rtol=1e-10` now that both paths agree on the
+  identical wavelength.
 
 - The ``n_slope`` deprecated alias for ``dust_slope`` now survives registration in
   ``DUST_LAWS``. Swapped decorator order on ``power_law`` and ``conroy2010`` so
