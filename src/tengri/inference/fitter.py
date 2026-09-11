@@ -64,7 +64,9 @@ import numpy as np
 logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
+from tengri._cache_keys import derive_key
 from tengri.config.exceptions import ParameterError
+from tengri.inference._engine_policy import ENGINE_POLICY, ENGINE_VERSION
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.jit_engine import build_jit_engine
@@ -2334,123 +2336,61 @@ class Fitter:
         """Return a hashable key identifying the JIT engine shape.
 
         Two Fitters sharing the same Model will reuse the same compiled
-        engine if their cache keys match (same data_type, stochastic
-        flag, latent dimension, data length, free parameter names, noise
-        model presence, and observation feature channels).
+        engine if their cache keys match. Derived from every Fitter
+        attribute under ``tengri.inference._engine_policy.ENGINE_POLICY``
+        (see that module's docstring for the full rule and rationale) plus
+        a tail of entries the policy cannot express as a plain per-attribute
+        row: the ``_data_args`` key SET (structure; its values are
+        ``tengri.inference._sample_utils._data_fingerprint``'s job),
+        the redshift-filtered fixed values and per-fit override (#1972
+        instance 2, #1329), the free-parameter prior identity (#1972,
+        ``_free_prior_key``), and the fixed/free mirror map (#1972 instance
+        3, ``_mirror_key``).
 
-        The feature-channel entries (line fluxes / line ratios / spectral
-        indices / censoring mask) are load-bearing: the loss closure bakes
-        ``has_line_fluxes`` etc. in at build time, so two Fitters that
-        differ only in these channels produce *different* loss functions.
-        Without them in the key, a joint phot+lines fit silently reuses a
-        photometry-only engine and drops the line term from the
-        likelihood (or crashes with a missing ``line_flux_waves`` key,
-        depending on build order).
+        Notes
+        -----
+        This key is deliberately silent about the model's own structure
+        (component chain, SSP grid, Observation schema): every cache keyed
+        by this method is namespaced per ``model`` object already (see
+        ``_engine_policy.ENGINE_POLICY``'s module docstring), and
+        :meth:`compile_signature` additionally pairs
+        ``model.compile_signature()`` alongside this key for callers that
+        mix engines across models.
         """
-        from tengri.observation.noise import has_noise_model
-
-        obs = getattr(self.model, "observation", None)
-        line_flux_cfg = self._resolved_line_fluxes()
-        line_flux_key = (
+        tail = (
             (
-                tuple(round(float(w), 6) for w in np.asarray(line_flux_cfg.wavelengths)),
-                # Limit-mask PRESENCE selects Censored vs Gaussian adapters
-                # (structure); the mask VALUES ride through data_args.
-                getattr(line_flux_cfg, "limit_mask", None) is not None,
-            )
-            if line_flux_cfg is not None
-            else None
-        )
-        line_ratio_cfg = getattr(obs, "line_ratios", None) if obs is not None else None
-        index_cfg = getattr(obs, "spectral_indices", None) if obs is not None else None
-
-        return (
-            self.data_type,
-            self.spec.stochastic,
-            self.spec.n_grid if self.spec.stochastic else 0,
-            len(self.data),
-            tuple(sorted(self._free_names)),
-            has_noise_model(self.spec),
-            self._eline_marginalize,
-            self._eline_fitted,
-            self._calibration_marginalize,
-            self._eline_prior_type,
-            line_flux_key,
-            line_ratio_cfg is not None,
-            index_cfg is not None,
-            self.data_mask is not None,
-            # Per-fit params override (#1329): the loss closure bakes
-            # ``fitter._fixed_values``, which now carries the override, so two
-            # fits differing only by override MUST get distinct loss functions,
-            # exactly like the feature channels above. Without this, fit #2
-            # silently reuses fit #1's baked override.
-            #
-            # EXCEPT a runtime-routed redshift (#1316): it rides ``data_args``
-            # as a traced input, so distinct z legitimately share one program.
-            # Note a routed-z-only override yields ``()``, distinct from the
-            # no-override ``None``, a plain fit (no data_args redshift) never
-            # shares a closure whose baked z differs from its spec.
-            (
-                tuple(
-                    sorted(
-                        (k, round(float(v), 8))
-                        for k, v in self._params_override.items()
-                        if not (k == "redshift" and self._runtime_redshift is not None)
-                    )
-                )
-                if self._params_override
-                else None
+                "data_arg_names",
+                tuple(sorted(self._data_args)),
             ),
-            # Free-parameter PRIOR identity. ``_build_signal_response`` threads
-            # only data/noise through ``data_args``; the priors stay baked,
-            # because ``_primals_to_params`` calls ``dist.unstandardize(xi)``
-            # and that reads the distribution's Python floats at trace time
-            # (``Uniform``: ``lo + (hi - lo) * Phi(xi)``). Baked is fine, but
-            # only if keyed. Without this entry two models differing solely in a
-            # prior's bounds share one engine, and fit #2's latent is decoded
-            # through fit #1's interval: a shift of order the prior width, which
-            # on ``log_total_mass`` reads as a mass deviation of order dex.
-            # Exactly the ``params_override`` hazard above, one layer over.
-            # Free NAMES (field 5) cannot stand in for this: editing
-            # ``Uniform(9.6, 11.1)`` to ``Uniform(7, 13)`` changes no name, no
-            # shape, no dtype and no control flow.
-            self._free_prior_key(),
-            # Spec fixed values (#1972 instance 2). ``_primals_to_params`` also
-            # bakes ``fitter._fixed_values``, so two models differing only in a
-            # fixed scalar share one engine and fit #2 runs fit #1's physics,
-            # measured -0.18 dex on mass for ``dust_slope`` -0.7 -> 0.4.
-            #
-            # ``SEDModel.compile_signature`` dropped these on 2026-05-20 on the
-            # grounds that they "are threaded as a runtime JIT input"; that is
-            # true of the forward observables path and false of this closure, so
-            # do not take that comment as cover for removing this entry.
-            #
-            # Keying rather than threading is deliberate:
-            # ``get_or_build_signal_response`` returns a *stable function
-            # object* because JAX's trace cache is keyed by function identity,
-            # so partial-applying fixed values per fit would re-trace the whole
-            # physics stack per galaxy, the cost that cache exists to avoid.
-            # The keying is free for catalogs: these are per-MODEL values and a
-            # catalog uses one model, with per-galaxy variation flowing through
-            # ``_params_override`` (keyed above) or a runtime-routed redshift.
-            self._fixed_value_key(),
-            # Mirror map (#1972 instance 3). ``_primals_to_params`` calls
-            # ``spec.resolve_mirrors``, baking target -> source. Two specs can
-            # share every free name, every fixed name and every prior while
-            # tying the same target to a DIFFERENT source; without this entry
-            # the second silently ties to the first's source.
-            self._mirror_key(),
-            # Extra log-prior hook identity (#[task-7], RULING R10). The
-            # engine cache is keyed on the MODEL object, so two Fitters
-            # sharing a Model -- the documented, encouraged pattern -- would
-            # otherwise silently share whichever ``build_loss_fn`` closure
-            # compiled first regardless of ``extra_log_prior``: a plain
-            # Fitter constructed after a hooked one would run the HOOKED
-            # objective (or vice versa), never raising. Functions are
-            # hashable by identity by default, which is exactly the wanted
-            # semantics: the SAME callable object -> cache hit; a different
-            # callable (or None vs. not-None) -> cache miss, safely rebuilt.
-            self._extra_log_prior,
+            ("fixed_values", self._fixed_value_key()),
+            ("params_override", self._params_override_key()),
+            ("priors", self._free_prior_key()),
+            ("mirrors", self._mirror_key()),
+        )
+        return derive_key(self, ENGINE_POLICY, version=ENGINE_VERSION, tail=tail)
+
+    def _params_override_key(self) -> tuple | None:
+        """Return the per-fit params override, minus a runtime-routed redshift.
+
+        Per-fit params override (#1329): the loss closure bakes
+        ``fitter._fixed_values``, which carries the override, so two fits
+        differing only by override MUST get distinct loss functions.
+        Without this, fit #2 silently reuses fit #1's baked override.
+
+        EXCEPT a runtime-routed redshift (#1316): it rides ``data_args`` as
+        a traced input, so distinct z legitimately share one program. Note
+        a routed-z-only override yields ``()``, distinct from the
+        no-override ``None``: a plain fit (no data_args redshift) never
+        shares a closure whose baked z differs from its spec.
+        """
+        if not self._params_override:
+            return None
+        return tuple(
+            sorted(
+                (k, round(float(v), 8))
+                for k, v in self._params_override.items()
+                if not (k == "redshift" and self._runtime_redshift is not None)
+            )
         )
 
     def _free_prior_key(self) -> tuple:

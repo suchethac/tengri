@@ -384,23 +384,26 @@ def test_fallback_is_actually_exercised_by_fast_nebular(ssp_bare, observation, m
     fast_transmission = fast_atten / fast_intr
 
     # Precise check: the fallback's dust transmission against the resolved-law
-    # oracle, AT THE GRID'S OWN WAVELENGTHS (``enable_fast_nebular`` tabulates
-    # exactly the ``target_wavelengths`` it was given -- it does not re-snap
-    # them to the backend's own catalog line, e.g. Cue's Hbeta sits at
-    # 4862.678 A, ~0.03 A off HBETA_AA). This is the same rtol=1e-10 parity the
-    # other tests in this file assert, run through the actual production
-    # call chain (enable_fast_nebular + predict_line_fluxes) instead of a
-    # direct _attenuate_line_catalog call.
-    resolved = _resolved_transmission(model, params, target_wavelengths)
+    # oracle, AT THE GRID'S OWN (now-snapped, #2235) TABULATED WAVELENGTHS.
+    # Before #2235, ``enable_fast_nebular`` tabulated exactly the raw
+    # ``target_wavelengths`` it was given -- it did not snap them to the
+    # backend's own catalog line (e.g. Cue's Hbeta sits at 4862.678 A, ~0.03 A
+    # off HBETA_AA) -- so the oracle could be evaluated at that same raw value.
+    # #2235 snaps each target within 0.5 A of a true catalog line to that line's
+    # exact wavelength, so the grid's actual tabulated wavelength (read off
+    # ``model._nebular_grid_table``) is what the oracle must match now, not
+    # the caller's original (pre-snap) request. This is the same rtol=1e-10
+    # parity the other tests in this file assert, run through the actual
+    # production call chain (enable_fast_nebular + predict_line_fluxes)
+    # instead of a direct _attenuate_line_catalog call.
+    grid_wave = jnp.asarray(model._nebular_grid_table.wavelengths)
+    resolved = _resolved_transmission(model, params, grid_wave)
     np.testing.assert_allclose(fast_transmission, resolved, rtol=1e-10, atol=0.0)
 
-    # Looser, informational check against the exact forward path requested by
-    # the #2223 test plan: it evaluates the SAME dust screen at the backend's
-    # true (nearest-matched) line wavelength, ~0.03-0.1 A off the fast grid's
-    # tabulated wavelength above, so a real (not a bug) difference of a few
-    # 1e-5 in transmission is expected from k(lambda)'s slope alone -- nothing
-    # to do with #2223's kwarg threading, which the tight check above already
-    # isolates.
+    # #2235 closes the ~1e-5 residual this check used to tolerate at
+    # rtol=2e-4: the fast grid and the exact forward path now attenuate (and
+    # report) the IDENTICAL snapped catalog wavelength -- not two wavelengths
+    # 0.03-0.1 A apart -- so they agree to float precision.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         state = model.predict_state(params)
@@ -415,4 +418,4 @@ def test_fallback_is_actually_exercised_by_fast_nebular(ssp_bare, observation, m
         )
     )
     exact_transmission = exact_atten / exact_intr
-    np.testing.assert_allclose(fast_transmission, exact_transmission, rtol=2e-4, atol=0.0)
+    np.testing.assert_allclose(fast_transmission, exact_transmission, rtol=1e-10, atol=0.0)

@@ -384,6 +384,14 @@ jobs:
       # configuration errors in two_component/single_component blocks. File-level
       # allowlist for docs explaining the migration. Stdlib-only, no tengri import.
       - run: python tools/check_dust_group_grammar.py
+      # #2234 regenerated the dust rows in docs/model_reference/parameters.md
+      # from the registry while adding the nebular_screen/shock_screen/agn_screen
+      # selectors, and found several pre-existing identifiers that had drifted
+      # from the live registry with nothing to catch it (a #369-era rename left
+      # behind, retired short spellings, a case mismatch). Reads ParamDeclaration/
+      # ParamDef string literals via a plain AST parse. Stdlib-only, no tengri
+      # import, same venv as the two guards above.
+      - run: python tools/check_doc_param_names.py
       # `x / jnp.maximum(d, floor)` returns a plausible finite zero when the
       # numerator is also zero — #1395 shipped that way. The class cannot be
       # swept mechanically (some of these floors are legitimate), so this pins

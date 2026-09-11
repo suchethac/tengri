@@ -44,10 +44,22 @@ paths applied different dust screens. The root cause:
 * Precomp path: applied ``a_diff·a_bc`` multiplication at ``λ_eff``.
 
 This symmetric gap of factor-~40 was a physics decision, not a coding defect: shocked gas
-plausibly sits behind dust. The fix (#1434): unified both paths to apply the
-young-limit dust screen (``tau_bc·k_bc + tau_diff·k_diff``) consistently. Now both
-paths agree to **0.06%** — measured via band-integrated projection (``sed_shock_attenuated``
-through ``project_additive_onto_photometry``), which is more exact than λ_eff screening.
+plausibly sits behind dust. The fix (#1434): unified both paths to apply one
+consistent dust screen -- measured via band-integrated projection
+(``sed_shock_attenuated`` through ``project_additive_onto_photometry``), which is
+more exact than λ_eff screening. Now both paths agree to **0.06%**.
+
+**#2234 (#2234 replacement, later)** made the screen a per-source choice
+(``dust_attenuation={'shock_screen': ...}``) and changed the DEFAULT from the
+young-limit form this measurement used (``tau_bc·k_bc + tau_diff·k_diff``) to
+diffuse-only (``tau_diff·k_diff``): an AGN-outflow shock is not, in general,
+still inside the birth cloud the young-star screen models. Re-measured on the
+same three ``(tau_diff, tau_bc, z)`` cases below: the gap is unaffected by
+the default flip (0.02854%, 0.06289%, 0.07826% under the new default vs
+0.02871%, 0.06343%, 0.07830% under the old one) -- both screen choices route
+through the identical ``sed_shock_attenuated`` value on both paths, so which
+screen is selected does not change how well they agree, only how much shock
+flux survives.
 """
 
 import numpy as np
@@ -65,6 +77,9 @@ _SINGLE_COMPONENT_NEBULAR_BOUND = 5e-3
 #: dust screen. Pre-fix: 37.7% worst case (tau_bc=2, z=1). Post-fix: 6.3e-04 measured.
 #: Bound set at 2e-03 (3× measurement) to allow filter/grid drift; the right way to
 #: improve is sub-band LUT for shock lines (like stellar quadrature #1122).
+#: Re-measured under #2234's diffuse-only shock_screen default: 6.289e-04 (was
+#: 6.343e-04 under the old birth_cloud default) -- unchanged to within the
+#: measurement's own noise, so the bound stands unmodified.
 _SHOCK_BOUND = 2e-3
 
 
@@ -237,7 +252,9 @@ def test_shock_is_still_the_worst_channel(ssp_data_fsps):
 
     assert shock < 10 * nebular, (
         f"shock ({shock:.3e}) regressed past nebular ({nebular:.3e}). #1434 unified "
-        f"shock dust attenuation (both paths apply tau_bc·k_bc + tau_diff·k_diff); "
+        f"shock dust attenuation (both paths read the one ``sed_shock_attenuated`` "
+        f"value for whichever ``shock_screen`` choice is configured -- diffuse-only "
+        f"by default since #2234); "
         f"if this assertion fails, shock may have reverted to partial/no attenuation."
     )
     assert nebular < 3 * max(stellar, 1e-9), (

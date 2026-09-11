@@ -1336,6 +1336,42 @@ removal in a later release.
 
 ---
 
+## `shock_log_density` frees under the wildcard; out-of-coverage shock builds now raise/warn (2026-09-10, #2065)
+
+**Breaking for `shock={'all_params': FREE}` users** (in the #2187 sense: it
+was previously-silent physics, now surfaced). `shock_log_density` was the
+last continuous knob in the `shock` group with no declared `free_prior`;
+`all_params: FREE` left it pinned at `Fixed(0.0)` with only a
+`WildcardPartialFreeWarning` naming it as stuck. It now declares
+`free_prior=Uniform(-2.0, 3.0)` -- the measured MAPPINGS V solar-abundance
+populated envelope (every density node has at least one populated B-field
+cell; see the per-abundance table on the `SHOCK_PARAMS` declaration in
+`_params.py`) -- so `shock={'all_params': FREE}` now frees it alongside
+`shock_frac`/`shock_log_lhalpha` and `shock_velocity`. `shock_b_over_sqrt_n`
+is unaffected and stays pinned (case (c), #2066: a real but ~18%
+autodiff-vs-FD-mismatched gradient on the 2-D-coupled sparse B axis --
+explicit priors work today, a default free prior needs a family-aware
+interpolant first).
+
+The second half is a genuine new refusal, not just a freeing change: a shock
+build whose `shock_log_density` / `shock_b_over_sqrt_n` (`Fixed` value, or
+free-prior support) has no populated grid support now raises `ParameterError`
+at construction, or warns naming the exact dead fraction on a partial
+free-prior overlap -- instead of silently compiling a model that predicts an
+exactly-zero shock spectrum with no signal that anything is wrong.
+
+| old                                                                                                          | new                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `shock={'all_params': FREE}` — froze `shock_log_density` at `Fixed(0.0)`, named as stuck in the partial-free warning | Frees `shock_log_density` at `Uniform(-2.0, 3.0)`; `shock_b_over_sqrt_n` is the only one still named as stuck |
+| `shock={'abundance': 'lmc', 'log_density': 2.9}` (or any Fixed/free value with no grid support for the selected abundance) — built silently, predicted an exactly-zero shock spectrum at every call | Raises `ParameterError` at `SEDModel.build`, naming the value, the abundance, and the populated range; a free prior with partial overlap warns with the measured dead fraction instead |
+
+See `docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md` for the
+full diagnosis (case (c): why the B axis stays inert) and
+`tests/regression/bug/test_bug_2065_shock_silent_zero.py` /
+`tests/contract/test_shock_group_free_priors.py` for the contract.
+
+---
+
 ## Law keyword `n_slope` renamed to `dust_slope` (2026-09-11)
 
 The attenuation-law keyword `n_slope` on `power_law` and `conroy2010` is renamed

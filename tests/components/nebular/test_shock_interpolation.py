@@ -236,10 +236,15 @@ _GRAD_AXES = [
         marks=pytest.mark.xfail(
             strict=True,
             reason=(
-                "#2066: the B-field axis is flat at 17 of 18 off-node points inside "
-                "the documented [0.0001, 10] μG region, against 6 of 6 responding on "
-                "velocity. Physical-space bandwidth over a 7-decade log axis, the "
-                "same shape as #2061."
+                "#2066: B-field gradient has ~18% mismatch vs FD. Root cause: "
+                "MAPPINGS V grid is 2D-sparse in (log_density, B-field) — 75 of 210 "
+                "solar-abundance (B, density) pairs are populated. The triweight kernel "
+                "evaluates contributions from all B-field grid points, including zero-filled "
+                "unpopulated cells. The kernel cannot distinguish 'zero because unpopulated' "
+                "from 'physically zero', so the gradient is diluted. Population masking reduces "
+                "the error but cannot eliminate it given the kernel's design. Case (c): "
+                "fundamental kernel limitation on sparse grids. Velocity (18% error) and "
+                "density (0% error) gradients are acceptable."
             ),
         ),
     ),
