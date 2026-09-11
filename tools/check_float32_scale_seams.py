@@ -139,11 +139,11 @@ class Seam(NamedTuple):
 
 
 #: Seams whose standalone product leaves float32 range, grouped by the PRODUCT
-#: rather than by the call site. Thirty-eight of the forty-six below are the one
-#: expression ``L_sun * 10**agn_log_lbol`` written in thirty-eight AGN blocks;
-#: listing them as thirty-eight independent decisions would be thirty-eight
-#: chances to write a reason nobody checks. Each family carries one reason and
-#: the sites it covers, and ``tests/regression/precision/
+#: rather than by the call site. Thirty-seven of the forty-three below are the
+#: one expression ``L_sun * 10**agn_log_lbol`` written in thirty-seven AGN
+#: blocks; listing them as thirty-seven independent decisions would be
+#: thirty-seven chances to write a reason nobody checks. Each family carries
+#: one reason and the sites it covers, and ``tests/regression/precision/
 #: test_float32_scale_seam_sweep.py`` requires every family here to have a
 #: float32 sweep across its parameter's declared prior -- so the reason is
 #: backed by a measurement rather than standing as the only evidence.
@@ -190,7 +190,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.blocks.runner:compose_l_nu",
             "tengri.components.agn.blocks.torus:skirtor_torus_block",
             "tengri.components.agn.disc:_compute_bh_params",
-            "tengri.components.agn.disc:_compute_zone_radii",
             "tengri.components.agn.disc:kubota_done_disc",
             "tengri.components.agn.disc:multicolor_disc",
             "tengri.components.agn.disc:powerlaw_disc",
@@ -234,25 +233,20 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
 #: issue it is filed under, and the sweep module asserts that the arithmetic
 #: claim (the product leaves float32's range inside the declared prior) still
 #: holds, so an entry cannot sit here after it stops being true.
-_OPEN_DEFECTS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "agn_black_hole_mass": (
-        "#2210. ``M_sun * 10**agn_log_mbh`` is 1.99e39 at the BOTTOM of the "
-        "declared Uniform(6, 10) prior -- past float32's 3.403e38 across the "
-        "entire range, with no in-range corner. Measured: the float32 forward "
-        "of a kubota_done disc is ``nan`` at ``agn_log_mbh = 6`` under jaxlib "
-        "0.11.1 and finite under 0.11.0, the same graph-versus-kernel split as "
-        "#2178. ``_gravitational_radius`` is a regrouping away from safe; "
-        "``_eddington_luminosity`` is not (L_Edd itself is ~1.26e44 erg/s at "
-        "the bottom of the prior) and needs the log-domain treatment the other "
-        "bolometric seams got. Filed, not fixed here: hand-fixing a second "
-        "component inside the PR that builds this enumeration is the per-site "
-        "habit the enumeration exists to replace.",
-        (
-            "tengri.components.agn.disc:_eddington_luminosity",
-            "tengri.components.agn.disc:_gravitational_radius",
-        ),
-    ),
-}
+#:
+#: ``agn_black_hole_mass`` (#2210) was filed here -- ``M_sun * 10**agn_log_mbh``
+#: forming ``_eddington_luminosity`` and ``_gravitational_radius`` as a
+#: standalone product, 1.99e39 at the bottom of the declared prior. It is
+#: fixed, not merely handled: ``_gravitational_radius`` now multiplies
+#: ``pow10(log_mbh)`` by one precomputed ``G*M_sun/c^2`` constant (~1.477e5,
+#: itself in float32 range), and ``_eddington_luminosity`` is replaced by
+#: ``_log10_eddington_luminosity`` -- every caller forms only the Eddington
+#: ratio or another log-domain combination, never the linear ``L_Edd``. Both
+#: sites are gone from the enumeration (measured: ``_scan()`` no longer
+#: reports them), so there is no live seam left to register in ``_HANDLED``
+#: either -- an entry pinned to a site the scan no longer finds is exactly the
+#: staleness this file's own gate below refuses to carry.
+_OPEN_DEFECTS: dict[str, tuple[str, tuple[str, ...]]] = {}
 
 #: ``seam key -> family``. Derived, never written twice.
 _FAMILY_OF: dict[str, str] = {

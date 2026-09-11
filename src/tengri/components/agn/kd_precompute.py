@@ -25,6 +25,7 @@ References
 from __future__ import annotations
 
 import dataclasses
+import math
 from pathlib import Path
 
 import jax
@@ -43,10 +44,14 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
 )
 from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG, L_SUN
-from tengri.utils.scale import representable_denominator
+from tengri.utils.scale import pow10 as _pow10, representable_denominator
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
+#: log10(L_sun) [dex]; ``l_bol_erg = pow10(agn_log_lbol + _LOG10_LSUN)`` avoids
+#: re-deriving it at every call site.
+_LOG10_LSUN: float = math.log10(L_SUN)
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -751,7 +756,7 @@ def _compute_bh_and_radii(
     agn_log_lbol: float,
     agn_f_hard: float,
     agn_r_warm_ratio: float,
-    l_edd: jnp.ndarray,
+    log10_l_edd: jnp.ndarray,
     r_isco_cm: jnp.ndarray,
     _G_GRAV: float,
     _MSUN_G: float,
@@ -776,8 +781,8 @@ def _compute_bh_and_radii(
         Fractional hard X-ray luminosity [0, 0.5].
     agn_r_warm_ratio : float
         Warm-to-hot radius ratio [1.1, 10].
-    l_edd : ndarray
-        Eddington luminosity [erg/s].
+    log10_l_edd : ndarray
+        log10 Eddington luminosity. [log10(erg/s)]
     r_isco_cm : ndarray
         ISCO radius [cm].
     _G_GRAV : float
@@ -807,8 +812,11 @@ def _compute_bh_and_radii(
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
     # E fix (#846): derive the Eddington ratio from L_bol (mirrors the runtime
     # kubota_done_disc; keeps this preintegration path bit-consistent with it).
+    # L_Edd (#2210) is formed via a single ``pow10`` of the log10 value rather
+    # than as a standalone linear constant, so the removed
+    # ``_eddington_luminosity`` product never reappears here.
     l_bol_erg = 10.0**agn_log_lbol * L_SUN
-    l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)
+    l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN - log10_l_edd), 1e-10, 1.0)
     mdot = l_bol_erg / (eta * _C_LIGHT**2)
 
     t_in = (
@@ -822,7 +830,7 @@ def _compute_bh_and_radii(
 
     # Zone radii
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_target = f_hard_safe * l_edd
+    l_hot_target = f_hard_safe * _pow10(log10_l_edd)
     r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
 
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
@@ -1074,10 +1082,10 @@ def kubota_done_disc_preintegrated(
        https://doi.org/10.1093/mnras/sty1890
     """
     from tengri.components.agn.disc import (
-        _eddington_luminosity,
         _gravitational_radius,
         _isco_radius,
         _l_seed_geometric,
+        _log10_eddington_luminosity,
         beloborodov_gamma_hot,
     )
     from tengri.utils.physics_constants import (
@@ -1091,7 +1099,9 @@ def kubota_done_disc_preintegrated(
     r_g = _gravitational_radius(agn_log_mbh)
     r_isco_rg = _isco_radius(agn_a_spin)
     r_isco_cm = r_isco_rg * r_g
-    l_edd = _eddington_luminosity(agn_log_mbh)
+    # L_Edd (#2210) carried in log space: the linear form is ~1.26e44 erg/s at
+    # the bottom of the declared agn_log_mbh prior, past float32's 3.403e38.
+    log10_l_edd = _log10_eddington_luminosity(agn_log_mbh)
     # E fix (#846): L_bol is the knob; Eddington ratio derived (see runtime path).
     l_bol_erg = 10.0**agn_log_lbol * L_SUN
 
@@ -1101,7 +1111,7 @@ def kubota_done_disc_preintegrated(
         agn_log_lbol,
         agn_f_hard,
         agn_r_warm_ratio,
-        l_edd,
+        log10_l_edd,
         r_isco_cm,
         _G_GRAV,
         _MSUN_G,
@@ -1137,7 +1147,7 @@ def kubota_done_disc_preintegrated(
 
     # ── Zone 3: Hot corona ──
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
+    l_hot_erg = jnp.minimum(f_hard_safe * _pow10(log10_l_edd), l_bol_erg * 0.5)
 
     # Self-consistent Gamma (same as full-wavelength path)
     l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)

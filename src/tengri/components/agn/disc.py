@@ -109,6 +109,11 @@ _4PI_SIGMA_SB_OVER_LSUN: float = float(4.0 * math.pi * _SIGMA_SB) / float(_LSUN_
 _2PI_SIGMA_SB_OVER_LSUN: float = float(2.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
 # L_sun / c^2; mdot [g/s] = _LSUN_OVER_C2 * 10**log_lbol / eta (avoids l_bol_erg).
 _LSUN_OVER_C2: float = float(_LSUN_ERG) / float(_C_LIGHT) ** 2
+# R_g = G*M_bh/c^2 = _GRAV_RADIUS_PER_MSUN * 10**log_mbh [cm] (#2210): folding
+# G*M_sun/c^2 into one ~1.477e5 constant keeps the product inside float32 range
+# across the whole declared agn_log_mbh prior, unlike forming M_bh in grams
+# (``10**log_mbh * M_sun``) as a standalone ~1e39-1e43 intermediate first.
+_GRAV_RADIUS_PER_MSUN: float = _G_GRAV * _MSUN_G / _C_LIGHT**2
 
 # ── Model 1: Simple power-law disc + UV cutoff ────────────────────
 
@@ -245,15 +250,26 @@ def _isco_radius(a_spin: float) -> float:
     return 3.0 + z2 - jnp.sqrt(sqrt_arg)
 
 
-def _eddington_luminosity(log_mbh: float) -> float:
-    r"""Eddington luminosity :math:`L_{\rm Edd} = 4\pi G M_{\rm BH} m_p c / \sigma_T` [erg/s]."""
-    m_bh_g = 10.0**log_mbh * _MSUN_G
-    return 4.0 * jnp.pi * _G_GRAV * m_bh_g * _M_PROTON * _C_LIGHT / _SIGMA_T
+def _log10_eddington_luminosity(log_mbh: float) -> float:
+    r"""log10 Eddington luminosity, :math:`\log_{10} L_{\rm Edd}` [log10(erg/s)].
+
+    Carried in log space (#2210): the linear form is ~1.26e44 erg/s at the
+    bottom of the declared ``agn_log_mbh`` prior, past float32's 3.403e38
+    ceiling. Callers form only the Eddington ratio or other log-domain
+    combinations; the linear :math:`L_{\rm Edd}` is never materialized.
+    """
+    return _LOG10_L_EDD_1MSUN + log_mbh
 
 
 def _gravitational_radius(log_mbh: float) -> float:
-    r"""Gravitational radius :math:`R_g = GM/c^2` [cm]."""
-    return _G_GRAV * 10.0**log_mbh * _MSUN_G / _C_LIGHT**2
+    r"""Gravitational radius :math:`R_g = GM/c^2` [cm].
+
+    Regrouped (#2210) so the precomputed :math:`GM_\odot/c^2`
+    (``_GRAV_RADIUS_PER_MSUN``, ~1.477e5, in float32 range) multiplies
+    :math:`10^{\log_{10} M_{\rm BH}}`, rather than forming :math:`M_{\rm BH}`
+    in grams as a standalone ~1e39-1e43 intermediate first.
+    """
+    return _GRAV_RADIUS_PER_MSUN * _pow10(log_mbh)
 
 
 def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float) -> float:
@@ -719,7 +735,7 @@ def multicolor_disc(
         # numerator never materialize (float32 max 3.4e38). The RESULTS
         # (lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K) are all representable.
         _log_l_bol_erg = _log_lbol_shape + _LOG10_LSUN_ERG
-        _log_l_edd = _LOG10_L_EDD_1MSUN + agn_log_mbh
+        _log_l_edd = _log10_eddington_luminosity(agn_log_mbh)
         l_edd_ratio = jnp.clip(_pow10(_log_l_bol_erg - _log_l_edd), 1e-10, 1.0)
         _log_mdot = _log_l_bol_erg - jnp.log10(eta) - 2.0 * _LOG10_C_LIGHT
         mdot = _pow10(_log_mdot)  # [g s^-1]
@@ -734,8 +750,10 @@ def multicolor_disc(
         t_in = _pow10(0.25 * _log_t_in4)  # [K]
     else:
         l_bol_erg = 10.0**_log_lbol_shape * _LSUN_ERG
-        l_edd = _eddington_luminosity(agn_log_mbh)
-        l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)  # derived: lambda_Edd
+        _log_l_edd = _log10_eddington_luminosity(agn_log_mbh)
+        # derived: lambda_Edd, formed in log space so L_Edd (~1e46 erg/s) never
+        # stands alone (#2210).
+        l_edd_ratio = jnp.clip(_pow10(_log_lbol_shape + _LOG10_LSUN_ERG - _log_l_edd), 1e-10, 1.0)
         mdot = l_bol_erg / (eta * _C_LIGHT**2)  # [g s^-1]
         # Inner temperature: T_in = (3 * G * M * Mdot / (8*pi*sigma_SB * r_in^3))^(1/4)
         t_in = (
@@ -1032,13 +1050,13 @@ def _compute_bh_params(
     Returns
     -------
     tuple
-        (r_g, r_isco_rg, r_isco_cm, eta, l_edd, mdot) where:
+        (r_g, r_isco_rg, r_isco_cm, eta, log10_l_edd, mdot) where:
 
         - r_g : Gravitational radius [cm]
         - r_isco_rg : ISCO radius in units of r_g [dimensionless]
         - r_isco_cm : ISCO radius [cm]
         - eta : Radiative efficiency (Novikov-Thorne) [dimensionless, 0–0.42]
-        - l_edd : Eddington luminosity [erg s^-1]
+        - log10_l_edd : log10 Eddington luminosity [log10(erg s^-1)]
         - mdot : Mass accretion rate [g s^-1]
 
     Notes
@@ -1047,6 +1065,12 @@ def _compute_bh_params(
 
     The radiative efficiency follows the Novikov-Thorne formula for thin discs
     around Kerr black holes (Novikov & Thorne 1973, Kerr metric).
+
+    ``log10_l_edd`` is returned in log space, not as the linear Eddington
+    luminosity (#2210): the linear form is ~1.26e44 erg/s at the bottom of the
+    declared ``agn_log_mbh`` prior, past float32's 3.403e38 ceiling everywhere
+    in that prior, whether or not ``float32`` is set here -- the caller decides
+    what to form from it.
 
     References
     ----------
@@ -1059,7 +1083,7 @@ def _compute_bh_params(
 
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
 
-    l_edd = _eddington_luminosity(agn_log_mbh)
+    log10_l_edd = _log10_eddington_luminosity(agn_log_mbh)
     # E fix (#846): derive the accretion rate from the requested L_bol
     # (agn_log_lbol) instead of the now-derived Eddington ratio, so the zone
     # structure (T_in, radii) is self-consistent with L_bol. lambda_Edd is
@@ -1069,13 +1093,11 @@ def _compute_bh_params(
         # mdot ~1e24 g/s is representable. Fold L_sun/c^2 (a pre-divided
         # constant ~4e12) so only ``10**log_lbol`` (~1e11) is materialized.
         mdot = _LSUN_OVER_C2 * 10.0**agn_log_lbol / eta
-        # l_edd (~1e46 erg/s) stays out-of-range here; downstream float32
-        # branches recompute it in L_sun units from agn_log_mbh.
     else:
         l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
         mdot = l_bol_erg / (eta * _C_LIGHT**2)
 
-    return r_g, r_isco_rg, r_isco_cm, eta, l_edd, mdot
+    return r_g, r_isco_rg, r_isco_cm, eta, log10_l_edd, mdot
 
 
 def _compute_zone_radii(
@@ -1087,7 +1109,7 @@ def _compute_zone_radii(
     agn_log_lbol: float,
     agn_f_hard: float,
     agn_r_warm_ratio: float,
-    l_edd: float,
+    log10_l_edd: float,
     float32: bool = False,
 ) -> tuple:
     """Compute self-consistent zone radii: R_hot, R_warm, and R_out.
@@ -1116,8 +1138,8 @@ def _compute_zone_radii(
         Fraction of Eddington luminosity in the hot corona. [dimensionless, 0–0.5]
     agn_r_warm_ratio : float
         Radius ratio R_warm / R_hot. [dimensionless, ≥ 1.1]
-    l_edd : float
-        Eddington luminosity [erg s^-1].
+    log10_l_edd : float
+        log10 Eddington luminosity. [log10(erg s^-1)]
 
     Returns
     -------
@@ -1146,20 +1168,24 @@ def _compute_zone_radii(
        Accretion Disks of Quasars," MNRAS, 238, 897 (1989).
     """
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    # Float32 (#1206): l_edd ~1e46 erg/s overflows, but the zone structure needs
-    # only the ratio l_hot_target/l0 (in the bisection) and lambda_Edd = L_bol /
-    # L_Edd. Work L_Edd in L_sun (linear in M_BH) so both stay representable.
+    # Float32 (#1206, #2210): L_Edd ~1e46 erg/s overflows, but the zone structure
+    # needs only the ratio l_hot_target/l0 (in the bisection) and lambda_Edd =
+    # L_bol / L_Edd. Work L_Edd in L_sun (linear in M_BH) so both stay
+    # representable.
     if float32:
         l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
         l_hot_target = f_hard_safe * l_edd_lsun  # L_sun
         r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, float32=True)
         l_edd_ratio = jnp.clip(10.0**agn_log_lbol / l_edd_lsun, 1e-10, 1.0)
     else:
-        l_hot_target = f_hard_safe * l_edd
+        # L_Edd (#2210) is formed via a single ``pow10`` of the log10 value
+        # rather than as a standalone linear constant, so the removed
+        # ``_eddington_luminosity`` product never reappears here.
+        l_hot_target = f_hard_safe * _pow10(log10_l_edd)
         r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
         # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
         # agn_log_lbol (not the now-derived agn_log_ledd).
-        l_edd_ratio = jnp.clip(10.0**agn_log_lbol * _LSUN_ERG / l_edd, 1e-10, 1.0)
+        l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN_ERG - log10_l_edd), 1e-10, 1.0)
 
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
@@ -1186,7 +1212,7 @@ def _compute_zone_luminosities(
     agn_gamma_hard: float,
     agn_kt_hot: float,
     agn_f_hard: float,
-    l_edd: float,
+    log10_l_edd: float,
     l_bol_erg: float,
     agn_self_consistent_gamma: bool,
     float32: bool = False,
@@ -1229,8 +1255,8 @@ def _compute_zone_luminosities(
         Electron temperature in hot corona [keV].
     agn_f_hard : float
         Fraction of Eddington luminosity in corona [dimensionless, 0–0.5].
-    l_edd : float
-        Eddington luminosity [erg s^-1].
+    log10_l_edd : float
+        log10 Eddington luminosity. [log10(erg s^-1)]
     l_bol_erg : float
         Requested bolometric luminosity [erg s^-1].
     agn_self_consistent_gamma : bool
@@ -1328,7 +1354,7 @@ def _compute_zone_luminosities(
         l_hot_erg = jnp.minimum(f_hard_safe * _l_edd_lsun, 10.0**agn_log_lbol_shape * 0.5)
         l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, float32=True)
     else:
-        l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
+        l_hot_erg = jnp.minimum(f_hard_safe * _pow10(log10_l_edd), l_bol_erg * 0.5)
         l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
 
     kt_hot_erg = agn_kt_hot * _KEV_TO_ERG
@@ -1701,7 +1727,7 @@ def kubota_done_disc(
     # downstream (#1206).
     _lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
 
-    r_g, r_isco_rg, r_isco_cm, _eta, l_edd, mdot = _compute_bh_params(
+    r_g, r_isco_rg, r_isco_cm, _eta, log10_l_edd, mdot = _compute_bh_params(
         agn_log_mbh, _lbol_shape, agn_a_spin, float32=_f32
     )
 
@@ -1737,7 +1763,7 @@ def kubota_done_disc(
         _lbol_shape,
         agn_f_hard,
         agn_r_warm_ratio,
-        l_edd,
+        log10_l_edd,
         float32=_f32,
     )
 
@@ -1762,7 +1788,7 @@ def kubota_done_disc(
         agn_gamma_hard,
         agn_kt_hot,
         agn_f_hard,
-        l_edd,
+        log10_l_edd,
         l_bol_requested,
         agn_self_consistent_gamma,
         float32=_f32,
