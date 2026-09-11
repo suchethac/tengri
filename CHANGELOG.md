@@ -557,6 +557,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
+  ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
+  types' own ``grid`` keys already did, and the path now round-trips through
+  ``spec.to_groups()`` instead of silently reverting to the packaged default
+  on re-parse. Before, the cb19 branch of the grammar never read the key and
+  the path vanished without an error, so the only route to a non-default
+  grid was the module default. ``grid`` is refused by name on every ``neb``
+  type that never reads it (``cue``, ``ssp``, ``none``) instead of being
+  silently accepted and dropped; the three cb19 refusal messages now name
+  the key (#2220).
+
 - `marginalize_emission_lines` no longer crashes float32 geoVI on CUDA. Its
   `(n_lines, n_lines)` normal-equation GEMM (`g.T @ g`, degenerate at the
   handful of emission lines this is ever called with) hit "GEMM is not

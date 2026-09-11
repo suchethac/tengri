@@ -124,7 +124,20 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #: first and normalized on the evaluation grid through a ``jnp.where``-selected
 #: division, so the floored denominator is gone rather than moved.
 #:
-#: 45 -> 43 with the AGN validation round: the R59 AGN dust-budget split in
+#: 45 -> 44 with the float32 line-channel fix: ``nebular_grid_precompute``'s
+#: ``1.0 / jnp.maximum(nion, 1e-30)`` is gone, not re-floored. Q_H is ~1e53, so
+#: in float32 the clamped denominator was ``inf`` and the quotient exactly 0.0;
+#: the reciprocal is now a ``-log10 Q_H`` offset and there is no denominator.
+#: This is the "migrated, so lower the pin" case the check below asks for.
+#:
+#: 44 -> 43 closing the same class in the dormant ``line_precompute.py`` (#1206):
+#: its own ``rows.append(lum / jnp.maximum(nion, 1e-30))`` is the identical
+#: pattern, one file over, left unconverted when the grid builder above was
+#: fixed. ``_log_nion_of_state`` (mirroring the grid builder's helper of the
+#: same name) plus a ``-log10 Q_H`` offset applied via ``apply_log10_scale``
+#: retires it the same way.
+#:
+#: 43 -> 41 with the AGN validation round: the R59 AGN dust-budget split in
 #: ``components/agn/blocks/runner.py`` divided twice through
 #: ``jnp.maximum(..., 1e-300)`` -- once for the polar share and once for the
 #: graybody rescale -- and both denominators are now selected with a
@@ -137,7 +150,7 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #:
 #: Do NOT raise this to make a red run green. A rise means a new site was added,
 #: which is the thing this exists to prevent.
-_PINNED_DENOMINATORS = 43
+_PINNED_DENOMINATORS = 41
 
 
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:

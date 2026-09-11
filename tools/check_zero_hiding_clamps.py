@@ -137,7 +137,30 @@ from collections.abc import Sequence
 #: the second kind (a template that resamples to nothing on the grid emits
 #: nothing), selected rather than clamped, so it is not a clamped
 #: denominator and leaves this inventory.
-#: 95 -> 93 with the AGN validation round: the R59 AGN dust-budget split in
+#:
+#: 95 -> 94 with the float32 line-channel fix. The retired site is
+#: ``nebular_grid_precompute``'s ``inv_qh = 1.0 / jnp.maximum(nion, 1e-30)``.
+#: Like the #1860 pair above this is a genuine retirement rather than a hoist:
+#: the reciprocal existed only to be used as a divisor, and it is now applied as
+#: a ``-log10 Q_H`` offset, so there is no denominator left to clamp.
+#:
+#: The clamp was not the defect but it was hiding one. Q_H is ~1e53 photons/s,
+#: so in float32 ``nion`` is ``inf``, ``jnp.maximum(inf, 1e-30)`` is ``inf``, and
+#: the reciprocal is exactly 0.0 — a clamp that fires on the wrong end of the
+#: range and returns a plausible zero. Downstream that made ``inf * 0`` -> NaN on
+#: the line column and silently flushed the photometry and rest-band per-Q_H
+#: columns to zero (~1e-53 is below float32's smallest subnormal anyway). The
+#: count falling is a consequence of carrying the exponent instead, not the goal.
+#:
+#: 94 -> 93 finishing the same migration in the dormant ``line_precompute.py``
+#: (#1206): the identical ``lum / jnp.maximum(nion, 1e-30)`` pattern, one file
+#: over from the grid builder above, converted to the same ``-log10 Q_H``
+#: offset via ``apply_log10_scale``. No caller in ``src/`` reaches this module
+#: (per its own docstring warning), but the pattern is the same defect and the
+#: fix is the same shape, so it is retired alongside its sibling rather than
+#: left as the one site the migration skipped.
+#:
+#: 93 -> 91 with the AGN validation round: the R59 AGN dust-budget split in
 #: ``components/agn/blocks/runner.py`` stopped clamping its two denominators.
 #: ``share = polar / jnp.maximum(torus + polar, 1e-300)`` and the graybody
 #: rescale ``budget * share / jnp.maximum(polar, 1e-300)`` are both ``0/0`` at
@@ -152,7 +175,7 @@ from collections.abc import Sequence
 #: that floor scaled by ``int / 1e-30`` rather than to unit area (measured
 #: 9.9e-06 instead of 1.0). Both are retirements, not hoists: the clamps are
 #: gone from the source.
-EXPECTED_SITES = 93
+EXPECTED_SITES = 91
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

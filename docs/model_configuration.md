@@ -327,7 +327,10 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 - `'type'` — Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
 - `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'full_catalog'` — `cue` only: bool, default `True` (#2239), publishes the full ~138-line Cue-trained catalog; `False` narrows to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
-- `'grid'` — For CLOUDY: grid specification (dict with keys like `'logz'`, `'logU'`, etc.).
+- `'grid'` — Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
+- `'model'` — MAPPINGS V stellar model (`'mappings'` type only): `'sb99'` (Starburst99) or `'bpass'` (BPASS v2.2).
+- `'density'` — MAPPINGS V density structure (`'mappings'`/`'mappings_agn'`): `'cpr'` (isobaric, recommended) or `'cdn'` (isochoric).
+- `'ionizing_source_warning'` — MAPPINGS V ionizing-source warning control (`'mappings'`/`'mappings_agn'`): `'raise'`, `'warn'`, or `'suppress'`.
 
 **Minimal example:**
 ```python
