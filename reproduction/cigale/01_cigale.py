@@ -1684,6 +1684,15 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # only way a FIR residual can be attributed: at 100 µm all three overlap and
 # a band ratio cannot say which one carries it.
 #
+# **The polar component is disc-shaped by construction.** Both codes set its
+# luminosity from `g(oa) × ∫ disc(1 − e^−τ_polar) dλ` — the disc's own spectrum
+# seen through the polar screen — so it moves with the disc's UV shape even at
+# fixed `oa`, `agn_polar_ebv`, T and β, and it is not a component either code
+# can be expected to reproduce independently of which disc is selected. §9c and
+# §9b print each code's polar share of its own AGN dust budget beside the
+# component ratios: pcigale's share moves between its two disc types, and
+# tengri's moves with it.
+#
 # The torus IR uses the same templates and reproduces at all inclinations:
 # at i = 30° both sides peak at ~6–9 μm, and edge-on viewing pushes the dust
 # peak out to ~30 μm.
@@ -1696,8 +1705,11 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # (η = 0.789 at i = 30°). `agn_power` itself is not a free input here — with
 # `agn_ir_frac` set it is derived from `L_absorbed × f/(1−f)`, exactly as
 # CIGALE derives it from `fracAGN`, so §6's energy anchor enters the AGN
-# normalization too. The legacy scaling (`'norm':'independent'`) is available
-# for users who want the disc decoupled from the absorbed-energy budget.
+# normalization too. That coupling exists only under `'cigale_joint'`:
+# `norm='independent'` decouples the disc from the absorbed-energy budget and
+# is for builds that set no `agn_ir_frac`. Writing `'independent'` or
+# `'conserving'` beside an active `agn_ir_frac` states two normalizations at
+# once, and the build refuses it rather than silently dropping one.
 #
 # **Verification Status:** CROSSVAL — SKIRTOR torus (mean 3-param)
 
@@ -1987,13 +1999,26 @@ def _disc_shape_dev(sed_c, state_t, lo=1000.0, hi=5000.0):
 
 
 def _print_agn_report(header, sed_c, state_t):
-    """Print the emergent-disc shape deviation and the three component ratios."""
+    """Print the disc-shape deviation, the three component ratios and the polar share.
+
+    The polar share -- polar / (polar + torus), each code against its own
+    budget -- is what makes the polar component's disc dependence visible: it
+    is a property of one code, not a comparison between them, so §9 and §9b
+    printing different values for the *same* code is the disc moving it.
+    """
     print(header)
     _dev, _n = _disc_shape_dev(sed_c, state_t)
     print(f"  disc shape, 1000–5000 Å, normalized at 2500 Å: max |Δ| = {_dev * 100:.2f}% ({_n} pts)")
+    _pairs = {_tk: _agn_component_pair(sed_c, state_t, _ck, _tk) for _, _ck, _tk in _AGN_COMPONENTS}
     for _name, _ck, _tk in _AGN_COMPONENTS:
-        _bc, _bt = _agn_component_pair(sed_c, state_t, _ck, _tk)
+        _bc, _bt = _pairs[_tk]
         print(f"  {_name}: CIGALE {_bc:.4e}, tengri {_bt:.4e} erg/s → {_bt / _bc:.4f}×")
+    _tor_c, _tor_t = _pairs["sed_agn_torus"]
+    _pol_c, _pol_t = _pairs["sed_agn_polar"]
+    print(
+        f"  polar share polar/(polar+torus): CIGALE {_pol_c / (_pol_c + _tor_c):.4f}, "
+        f"tengri {_pol_t / (_pol_t + _tor_t):.4f}"
+    )
 
 
 _print_agn_report(
@@ -2020,10 +2045,12 @@ plt.show()
 # **What the disc-shape number contains.** Both codes publish the disc *after*
 # the polar-dust screen, so the deviation printed below is the analytic disc
 # shape and the two codes' SMC screens together — it is an upper bound on the
-# disc difference, not a measurement of it. The disc-dependent part is the
-# difference between this section's number and §9's: the two are printed under
-# the same definition, on the same grid, with the same screen, so whatever
-# they share is the screen and the gap between them is the disc.
+# disc difference, not a measurement of it. The screen does not cancel by
+# comparing this section with §9: the same SMC law integrated against a
+# different disc spectrum is a different factor, which is why the polar share
+# printed here differs from §9's on *both* sides. What is left in the polar
+# residual once the disc shape is accounted for is the two codes' SMC screens
+# and their quadrature of the SKIRTOR face-on reference.
 
 # %%
 sed_skirtor0 = C.run_chain(
@@ -2893,12 +2920,16 @@ plt.show()
 #   integrated luminosities rather than as band medians of their sum, so a FIR
 #   residual can be attributed to a component instead of to a wavelength — at
 #   100 µm all three overlap. Under the `cigale_joint` normalization the torus
-#   lands 6–8 % above CIGALE's and the polar graybody 13–20 % below it, while
-#   the disc is 2.8 % high with the Schartmann shape (§9) and 7 % low with the
-#   SKIRTOR one (§9b). The emergent disc *shape* differs by 4.7 % and 6.0 %
-#   respectively, most of which is the two codes' polar SMC screens rather
-#   than the disc: it is common to both pairings, and only the gap between
-#   them is the disc.
+#   lands 5.2 % (§9) and 7.5 % (§9b) above CIGALE's and the polar graybody
+#   11.3 % and 17.6 % below it, while the disc is 2.8 % high with the
+#   Schartmann shape and 7.2 % low with the SKIRTOR one. The emergent disc
+#   *shape* differs by 4.70 % and 5.95 %, the analytic disc and the two codes'
+#   polar SMC screens together. The polar component is disc-shaped by
+#   construction — each code builds it from its own disc seen through that
+#   screen — so neither the screen's contribution nor the polar share is
+#   common to the two pairings: pcigale's own share of its AGN dust budget
+#   moves 0.2098 → 0.2307 between its two disc types, and tengri's 0.1830 →
+#   0.1868 with it.
 # * **§10 X-ray.** Matched to 4 decimal places on disc L_2500, then a
 #   fraction of a percent at 2 keV, and the Yang+2022 inclination tilt is the
 #   same function on both sides across i = 0–80°.
