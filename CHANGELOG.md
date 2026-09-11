@@ -330,6 +330,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `bench/scripts/benchmark_float32_mps_parity.py` -- a self-contained pure-float32
+  parity sweep for the Apple GPU (#1206). Apple's own `jax-metal` last released 0.1.1
+  on 2024-10-08 and pins `jax == jaxlib >= 0.4.34`, not viable against tengri's JAX
+  0.11; the community `jax-mps` plugin (MLX-backed) is the path that works, but it has
+  no float64 at all. This script writes a float64 reference on CPU
+  (`--write-reference`) for six progressive model seams (`stellar_dust`, `+dust IR`,
+  `+Cue`, `+AGN`, `+radio+xray`, `panchromatic`) and, in its default mode, checks a
+  float32 rebuild against it -- max relative forward error, gradient error, and
+  MAP-loss deviation, PASS/FAIL at 3e-3 / 1e-2 / 1e-4 -- runnable on CPU, CUDA, or a
+  Mac under the `jax-mps` venv. It refuses to run with `jax_enable_x64=True` and
+  prints the one-line environment fix instead. `docs/internal/getting_started/gpu.md`
+  gains an "Apple GPU via jax-mps" section replacing the old Metal note, with a
+  shorter mirror in `docs/performance/index.md`, `README.md`, and
+  `docs/installation.md`.
+
 - `Observation` and its nested data classes, `Parameters` and `SSPData` expose `cache_key()`, each derived from a written policy ledger over every attribute (`tengri._cache_keys`), so a later structural signature can delegate instead of reaching into their fields (#2163).
 - `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
   SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
