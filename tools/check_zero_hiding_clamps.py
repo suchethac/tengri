@@ -151,7 +151,15 @@ from collections.abc import Sequence
 #: the line column and silently flushed the photometry and rest-band per-Q_H
 #: columns to zero (~1e-53 is below float32's smallest subnormal anyway). The
 #: count falling is a consequence of carrying the exponent instead, not the goal.
-EXPECTED_SITES = 94
+#:
+#: 94 -> 93 finishing the same migration in the dormant ``line_precompute.py``
+#: (#1206): the identical ``lum / jnp.maximum(nion, 1e-30)`` pattern, one file
+#: over from the grid builder above, converted to the same ``-log10 Q_H``
+#: offset via ``apply_log10_scale``. No caller in ``src/`` reaches this module
+#: (per its own docstring warning), but the pattern is the same defect and the
+#: fix is the same shape, so it is retired alongside its sibling rather than
+#: left as the one site the migration skipped.
+EXPECTED_SITES = 93
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
