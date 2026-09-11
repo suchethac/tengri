@@ -5626,13 +5626,14 @@ class SEDModel:
         # discrete line-catalog publish, so a Cue model would otherwise fall
         # through to the backend message below and be told to "use Cue" -- advice
         # the user has already taken, naming a cause that is not theirs.
+        from tengri.utils.scale import pow10
 
         if state is None:
             state = self.predict_state(params)
-        if "line_waves" not in state.derived or "line_lums" not in state.derived:
+        if "line_waves" not in state.derived or "log_line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete line "
-                "catalog ('line_waves'/'line_lums'). Use Cue or CloudyGrid; "
+                "catalog ('line_waves'/'log_line_lums'). Use Cue or CloudyGrid; "
                 "BakedIn bakes lines into the SSP and cannot report ratios."
             )
         all_waves = jnp.asarray(state.derived["line_waves"])
@@ -5647,13 +5648,15 @@ class SEDModel:
         # ``_attenuate_line_catalog`` keeps this on the same screen as the
         # ``balmer_decrement`` / ``bpt_nii`` properties, which is the agreement
         # #1867 exists to establish.
+        #
+        # Reads the log10 catalog throughout (#1206): a strong optical line is
+        # ~1e40 erg/s, ``inf`` in float32, and a ratio of two such ``inf``
+        # values is ``nan`` even though the ratio itself is O(1) -- the same
+        # class of overflow ``predict_line_fluxes`` had.
         _log_atten = state.derived.get("log_line_lums_attenuated")
-        if _log_atten is None:
-            all_lums = jnp.asarray(state.derived["line_lums"])
-        else:
-            from tengri.utils.scale import pow10
-
-            all_lums = pow10(jnp.asarray(_log_atten))
+        log_all_lums = jnp.asarray(
+            _log_atten if _log_atten is not None else state.derived["log_line_lums"]
+        )
         dl_cm = self._get_dl_cm(params)
         # ``line_lums`` are erg/s (DerivedKey contract), same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
@@ -5664,7 +5667,7 @@ class SEDModel:
             targets = jnp.asarray(targets)
             deltas = jnp.abs(all_waves[None, :] - targets[:, None])
             idx = jnp.argmin(deltas, axis=1)
-            return apply_log10_scale(all_lums[idx], log10_scale)
+            return pow10(log_all_lums[idx] + log10_scale)
 
         num_flux = _match(line_ratio_data.numerator_waves)
         den_flux = _match(line_ratio_data.denominator_waves)

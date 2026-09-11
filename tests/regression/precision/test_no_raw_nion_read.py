@@ -8,7 +8,6 @@ that all allow-listed files still contain their expected patterns.
 Allowed exceptions (Tier B deferred — linear q_h / erg/s paths):
 - components/stellar/component.py — _q_h_fn linear q_h property (photons/s ~1e56)
 - forward/component_factory.py — state_to_ionizing_quantities.q_h linear surface
-- components/nebular/line_precompute.py — build-path _nion_of_state (erg/s + 4pi dL^2)
 - components/nebular/nebular_grid_precompute.py — build-path _nion_of_state (f64 build)
 
 ``forward/sed_model.py`` was on this list and is not any more: its fast-line path
@@ -17,6 +16,14 @@ reconstruct that then overflowed too, which was the whole of why a float32 Cue l
 fit could not run. It now reads ``log_nion`` and stays in the exponent, so the
 Tier B item 3 migration has landed for that file and its entry is removed rather
 than kept green by widening the pattern.
+
+``components/nebular/line_precompute.py`` is also removed: the module is dormant
+(no caller in ``src/``, on no model path, per its own docstring warning), but it
+carried the same class of overflow and is the same two-line edit as the grid
+builder above -- ``_nion_of_state`` is now ``_log_nion_of_state``, and its one
+call site combines the ``-log10 Q_H`` offset with the distance divisor through
+:func:`~tengri.utils.scale.apply_log10_scale` rather than dividing by a
+materialized ``nion``.
 
 Each entry will be removed when its corresponding Tier B item (2 or 3) migration lands
 (see issue #1206).
@@ -42,7 +49,6 @@ SRC = pathlib.Path("src/tengri")
 ALLOW = {
     "components/stellar/component.py": "Tier B item 3 — _q_h_fn linear q_h property (~1e56)",
     "forward/component_factory.py": "Tier B item 3 — state_to_ionizing_quantities.q_h linear",
-    "components/nebular/line_precompute.py": "Tier B item 2/3 — build-path _nion_of_state (erg/s)",
     "components/nebular/nebular_grid_precompute.py": "Tier B item 2/3 — build _nion_of_state",
 }
 
