@@ -1540,7 +1540,7 @@ m_skirtor_sweep = SEDModel.build(
     },
     agn={
         "type": "skirtor_stalevski",
-        "agn_log_lbol": Uniform(40.0, 50.0, default=45.0),
+        "agn_log_lbol": Uniform(9.0, 13.0, default=11.4),
         "agn_cos_inc": Uniform(0.0, 1.0, default=0.866),
         "agn_oa_skirtor": Uniform(10.0, 80.0, default=40.0),
         "agn_tau_skirtor": Uniform(0.1, 11.0, default=1.0),
@@ -1630,7 +1630,7 @@ m_fritz = SEDModel.build(
             "agn_fritz_beta": Uniform(-1.0, 0.0, default=-0.5),
             "agn_torus_frac": Fixed(1.0),  # full bolometric to the template, matching ProSpect
         },
-        "agn_log_lbol": Uniform(40.0, 50.0, default=45.0),
+        "agn_log_lbol": Uniform(9.0, 13.0, default=11.4),
         "all_params": Fixed(DEFAULT),
     },
     neb=NEB_FIDUCIAL,

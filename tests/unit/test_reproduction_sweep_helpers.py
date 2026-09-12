@@ -378,9 +378,7 @@ def test_filter_rows_native_preserves_a_narrow_line_on_a_coarse_grid():
     # Demonstrate the aliasing problem: when you interpolate L_fine to coarse grid
     # and band-average, you lose the line information
     L_fine_interp_to_coarse = np.interp(w_coarse, w_fine, L_fine)
-    band_via_interp = band_average(
-        w_coarse, L_fine_interp_to_coarse, fw, ft, weight="photon"
-    )
+    band_via_interp = band_average(w_coarse, L_fine_interp_to_coarse, fw, ft, weight="photon")
     band_coarse_ref = band_average(w_coarse, L_coarse, fw, ft, weight="photon")
 
     # Band-average on fine grid (correct result)
@@ -401,9 +399,9 @@ def test_filter_rows_native_preserves_a_narrow_line_on_a_coarse_grid():
             # Aliasing error: the interpolated ratio should be significantly smaller
             # than the true ratio
             aliasing_underestimation = (ratio_true - ratio_via_interp) / ratio_true
-            assert (
-                aliasing_underestimation > 0.10
-            ), f"Expected >10% underestimation, got {aliasing_underestimation:.1%}"
+            assert aliasing_underestimation > 0.10, (
+                f"Expected >10% underestimation, got {aliasing_underestimation:.1%}"
+            )
 
     # Now test filter_rows_native: should preserve the line and give correct ratio
     rows_native = filter_rows_native(
