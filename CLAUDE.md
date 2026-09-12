@@ -107,7 +107,7 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 - Numpydoc docstrings, snake_case, line length 99
 - Immutable arrays (`.at[].set()`)
 - Units: **years** (time), **Angstrom** (wavelength), **Msun/yr** (SFR), **erg/s/Hz** (SED luminosity L_nu)
-- 64-bit precision: `jax.config.update("jax_enable_x64", True)`
+- 64-bit precision: `jax.config.update("jax_enable_x64", True)` at `import tengri`; **pure float32 is a supported mode** (`JAX_ENABLE_X64=0` before Python starts, #1206), so new code must not form an erg/s-scale linear intermediate (`total_mass * L_sun`, `4 pi d_L^2`, `10**log_nion`, ...): carry it as a log10 offset through `utils/scale.py` (`apply_log10_scale`, `pow10`, `log10_four_pi_dl2`, `representable_floor` / `representable_denominator`), and publish luminosities in `Lsun` or as `log_*` (NAMING_CONTRACT §4c). Tests measure float32 against float64 inside the test (`with jax.enable_x64(False)`); **never set `JAX_ENABLE_X64=0` for pytest** — `tests/conftest.py` forces x64 on and the env var makes the float64 reference arms run in float32
 - Greek letters (sigma, xi, theta) allowed in docstrings/comments
 - **Voice rules** (defensive code, narration, single-use helpers): see [`docs/dev/style-and-voice.md`](docs/dev/style-and-voice.md)
 

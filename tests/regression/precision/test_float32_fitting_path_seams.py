@@ -1500,9 +1500,11 @@ def test_the_feature_precomp_line_path_survives_float32(ssp_bare):
     ``stellar_mass_scale = total_mass * L_sun`` ~ 4e43, which is ``inf`` in float32
     on its own while the ~6e28 window mean it multiplies and the ~1e-16 flux it
     produces are both in range. ``feat_mean - cont_mean`` was then ``inf - inf``.
-    ``L_sun`` is now carried as an exact power-of-two exponent and restored with
-    ``ldexp``, which is **bit-identical in float64** — 30 of 30 forward values in the
-    cross-tree A/B, `array_equal`, not a tolerance.
+    ``L_sun`` is now carried as an exact power-of-two split and restored by
+    multiplying with the exactly representable ``2**112`` (``_LSUN_POW2``), which is
+    **bit-identical in float64** — 30 of 30 forward values in the cross-tree A/B,
+    `array_equal`, not a tolerance. (Not ``jnp.ldexp``: XLA's CUDA lowering of it is
+    one ULP off in float64, measured on an RTX 3060 with jaxlib 0.11.0, #1206.)
     """
     # PR #2104's hazard, met again: this module accumulates a large number of
     # distinct compiled programs, and XLA's CPU backend dies part-way through the
@@ -1646,10 +1648,10 @@ def test_the_mass_scale_power_of_two_split_is_exact_in_float64():
     ``measure_line_fluxes(approx=True)`` overflowed on ``total_mass * L_sun`` ~4e43,
     not on anything physical: the window mean (~6e28) and the flux (~1e-16) are both
     inside float32. The repair carries ``L_sun``'s binary exponent (112) rather than its value
-    and restores them with ``ldexp``.
+    and restores them by multiplying with ``2**112``, exactly representable in both dtypes.
 
     That is safe **because scaling by a power of two is exact and commutes with
-    rounding**, so ``ldexp(fl(m*x), k)`` and ``fl(2**k * m * x)`` are the same
+    rounding**, so ``fl(m*x) * 2**k`` and ``fl(2**k * m * x)`` are the same
     float64 — the identical property that lets :data:`DEFAULT_COTANGENT_BOOST` be
     divided back out without perturbing a float64 result. Asserted with
     ``array_equal`` over a wide mass range, not with a tolerance: a tolerance would
@@ -1661,7 +1663,7 @@ def test_the_mass_scale_power_of_two_split_is_exact_in_float64():
 
     assert _LSUN_MANTISSA * _LSUN_POW2 == L_SUN, (
         f"the split does not reconstruct L_sun: "
-        f"ldexp({_LSUN_MANTISSA!r}, {_LSUN_EXP2}) != {L_SUN!r} ({_where()})"
+        f"{_LSUN_MANTISSA!r} * 2**{_LSUN_EXP2} != {L_SUN!r} ({_where()})"
     )
     with jax.enable_x64(True):
         # Formed stellar masses from a dwarf to a BCG, and the window means the LUT
@@ -1687,11 +1689,10 @@ def test_the_mass_scale_power_of_two_split_is_exact_in_float64():
             f"total_mass * L_sun no longer overflows float32 — this test's premise is "
             f"gone and the repair it guards may be unnecessary ({_where()})"
         )
-        got = jnp.ldexp(
+        got = (
             (m32 * jnp.asarray(_LSUN_MANTISSA, dtype=jnp.float32))
-            * jnp.asarray(1.6e-15, dtype=jnp.float32),
-            _LSUN_EXP2,
-        )
+            * jnp.asarray(1.6e-15, dtype=jnp.float32)
+        ) * jnp.asarray(_LSUN_POW2, dtype=jnp.float32)
         assert got.dtype == jnp.float32, f"not float32: {got.dtype} ({_where()})"
         assert np.isfinite(np.asarray(got)) and got != 0.0, (
             f"the split is not finite and non-zero in float32: {got} ({_where()})"

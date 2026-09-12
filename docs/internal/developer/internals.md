@@ -117,7 +117,12 @@ on the first call. Subsequent calls reuse the compiled XLA graph.
 roughly 1.5x speed with less than 0.1% error". The knob is retired: it casts
 nothing, returns bit-identical results to float64, and still enters the compile
 signature, so passing it costs an extra compile and buys nothing (#1433). For
-float32 today, run under `jax.enable_x64(False)`.
+float32 today, run pure float32: `JAX_ENABLE_X64=0` in the environment before
+Python starts (a process-wide `jax.enable_x64(False)` after `import tengri` is
+too late for tables allocated at import on an accelerator). The full model and
+the default fit are measured against float64 in
+`docs/dev/float32-tier-b-boundary.md`; the memory win is ~2x galaxies per GiB
+on the batched fitting path, not a faster clock.
 
 **Precomputed dust age weights.** The sigmoid of `log10(age)` used for
 birth-cloud vs diffuse dust is computed once at `Model.__init__`, not per
