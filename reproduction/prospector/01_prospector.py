@@ -59,10 +59,11 @@ from pathlib import Path
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
+from reproduction import _validation as V
 from reproduction.prospector._drivers import prospector_driver as P, units as U
 
 import tengri
-from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, load_ssp_data
 from tengri.utils.physics_constants import LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
@@ -106,6 +107,14 @@ GAMMA_FIDUCIAL = 0.05
 # absolute formed mass. To compare absolute L_ν the FSPS side is scaled
 # by MASS_SCALE so both panels show a 10^10 M⊙ galaxy.
 MASS_SCALE = 10.0**LOG_MASS_FIDUCIAL
+
+# Nebular emission fiducial: Cue at solar metallicity, logU = −2, f_esc = 0.
+NEB_FIDUCIAL = {
+    "type": "cue",
+    "neb_logU": Fixed(-2.0),
+    "neb_logZ_gas": Fixed(0.0),
+    "all_params": Fixed(DEFAULT),
+}
 
 # nbclient kernels don't bind ``__file__`` (the kernel's resources path
 # is the notebook directory instead), so fall back to the CWD.
@@ -256,7 +265,9 @@ _m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
+    n_grid=4096,  # dense lookback grid: the table compares the SFH form, not the 256-point diagnostic grid
 )
 _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
@@ -283,7 +294,127 @@ ax_l.plot(t_p_cosmic_gyr, sfr_p, "C0-", linewidth=2.0, label=rf"$\tau$ = {TAU_GY
 ax_l.legend(fontsize=9)
 ax_r.plot(t_t_cosmic_gyr, _sfr_history, "C1-", linewidth=2.0)
 fig.tight_layout()
-save_fig("prospector_02_sfh_delayed.png")
+
+
+# %% [markdown]
+# ## §2 cont'd — FSPS sfh = 1, 4, constant; τ × age
+#
+# FSPS `sfh=1` is the declining-τ model, `SFR(T) ∝ exp(-T/τ)`, peaking at
+# formation and declining to the present; tengri's `declining_exp {tau_gyr,
+# age_gyr}` is the same shape, proportional to FSPS's `sfr_avg` closed form
+# to floating-point precision at every τ. `sfh=1` with `const=1.0` is a
+# constant SFR over `[0, age]`, matched by tengri's `const`. The `sfh=4` grid
+# extends the delayed-τ case above: `τ ∈ {0.3, 3} × age ∈ {1, 10} Gyr` with
+# `delayed`.
+#
+# FSPS `sfh=5` (Simha) adds a linear tail after truncation; tengri has no
+# matching parametric SFH, so it is left out rather than forced through an
+# approximate substitute.
+
+# %%
+FSH_FIDUCIAL_AGE = AGE_GYR_FIDUCIAL
+
+_p1_cases = []
+
+
+def _p1_case(label, *, sfh_p, tau_p, tage_p, const_p, sfh_t):
+    """One FSH-family case: FSPS ``sfr_avg`` (or the analytic constant) vs tengri."""
+    t_lb_yr = np.linspace(1e6, tage_p * 1e9, 200)  # floor at 1 Myr: log-axis plotting
+    if sfh_p is None:  # pure constant SFR, both sides trivial/analytic
+        sfr_p = np.full_like(t_lb_yr, 1.0 / (tage_p * 1e9))
+    else:
+        sfr_p = P.sfh_sfr_avg(sfh=sfh_p, tau=tau_p, tage=tage_p, const=const_p, t_lookback_yr=t_lb_yr, dt_gyr=0.001)  # 1 Myr window: sfr_avg is a trailing mean; the table compares the instantaneous form
+    m = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh=sfh_t,
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+        n_grid=4096,
+    )
+    st = m.predict_state({})
+    lbt_t = np.asarray(st.derived["sfh_grid_lbt_yr"])
+    sfr_t = np.asarray(st.derived["sfr_history"])
+    order = np.argsort(lbt_t)
+    lbt_t, sfr_t = lbt_t[order], sfr_t[order]
+    mass_p = float(np.trapezoid(sfr_p, t_lb_yr))
+    mass_t = float(np.trapezoid(sfr_t, lbt_t))
+    sfr_t_on_ref = np.interp(t_lb_yr, lbt_t, sfr_t, left=0.0, right=0.0)
+    _assert_comparable(sfr_p, sfr_t_on_ref, name=f"§2 cont'd {label}")
+    _p1_cases.append((label, t_lb_yr, sfr_p, lbt_t, sfr_t))
+    print(f"    {label:<18} ∫SFR dt: FSPS {mass_p:.3f} M⊙, tengri {mass_t:.3f} M⊙")
+
+
+print("§2 cont'd mass-conservation check (target 1.000 M⊙ each side):")
+for tau in (0.3, 1.0, 3.0):
+    _p1_case(
+        f"sfh=1 τ={tau:g}",
+        sfh_p=1,
+        tau_p=tau,
+        tage_p=FSH_FIDUCIAL_AGE,
+        const_p=0.0,
+        sfh_t={
+            "type": "declining_exp",
+            "tau_gyr": Fixed(tau),
+            "age_gyr": Fixed(FSH_FIDUCIAL_AGE),
+            "log_total_mass": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+    )
+_p1_case(
+    "sfh=1 const=1",
+    sfh_p=None,
+    tau_p=1.0,
+    tage_p=FSH_FIDUCIAL_AGE,
+    const_p=1.0,
+    sfh_t={
+        "type": "const",
+        "start_gyr": Fixed(FSH_FIDUCIAL_AGE),
+        "end_gyr": Fixed(0.0),
+        "log_total_mass": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+)
+for tau, age in ((0.3, 1.0), (0.3, 10.0), (3.0, 1.0), (3.0, 10.0)):
+    _p1_case(
+        f"sfh=4 τ={tau:g} age={age:g}",
+        sfh_p=4,
+        tau_p=tau,
+        tage_p=age,
+        const_p=0.0,
+        sfh_t={
+            "type": "delayed",
+            "tau_gyr": Fixed(tau),
+            "age_gyr": Fixed(age),
+            "log_total_mass": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+    )
+
+fig, (ax, ax_r), _p1_ratios = V.sweep_fig(
+    _p1_cases,
+    ref_label="FSPS",
+    title="§2 cont'd — FSPS sfh families vs tengri SFH shapes",
+    x_of_wave=lambda w: w / 1e9,
+    xlabel="lookback time [Gyr]",
+    ylabel=r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]",
+    xlim=(1e-3, 13.7),
+    ratio_ylim=(0.5, 1.5),
+)
+save_fig("prospector_02cont_sfh_families.png")
+
+_p1_rows = []
+for label, t_lb, sfr_p, lbt_t, sfr_t in _p1_cases:
+    lo, hi = 0.02 * t_lb.max(), 0.95 * t_lb.max()
+    _p1_rows.extend(V.window_rows([(label, t_lb, sfr_p, lbt_t, sfr_t)], lo=lo, hi=hi, rel_to="peak"))
+V.print_window_table(_p1_rows, ref_name="FSPS", title="§2 cont'd — SFR(t) over 2–95 % of the age; deviation as % of peak SFR", x_unit="Gyr", x_scale=1e-9)
 
 
 # %% [markdown]
@@ -343,6 +474,7 @@ def _tengri_nonparam(sfh_dict, params=None):
             "tau_diff": Fixed(0.0),
             "all_params": Fixed(DEFAULT),
         },
+        neb=NEB_FIDUCIAL,
         redshift=Fixed(0.0),
     )
     return model, model.predict_state(params if params is not None else {})
@@ -683,6 +815,7 @@ _m_field = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 
@@ -727,7 +860,7 @@ save_fig("prospector_02e_sfh_ift_field.png")
 # IAU constant (0.29%; rescaled at SSP load, #969).
 
 # %%
-w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0)
+w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0, add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0)
 L_p = L_p * MASS_SCALE  # FSPS is per 1 M⊙ formed → scale to the 10^10 M⊙ galaxy
 
 m_stellar = SEDModel.build(
@@ -747,6 +880,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -792,6 +926,63 @@ print(
     f"median {np.median(_ratios):.3f}, P5 {np.percentile(_ratios, 5):.3f}, "
     f"P95 {np.percentile(_ratios, 95):.3f}"
 )
+
+
+# %% [markdown]
+# ### §3b logzsol sweep
+#
+# The same dust-free stellar SED across `logzsol ∈ {-1.0, -0.5, 0, +0.2}`,
+# tengri built once with `met_logzsol` free and evaluated at each value.
+
+# %%
+_m_met_grid = SEDModel.build(
+    ssp_data=ssp,
+    met={"logzsol": Uniform(-1.0, 0.3, default=0.0), "all_params": Fixed(DEFAULT)},
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+        "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+
+_p3b_cases = []
+print("§3b logzsol sweep UV-to-NIR band ratios (tengri/FSPS):")
+for logzsol in (-1.0, -0.5, 0.0, 0.2):
+    w_p3b, L_p3b = P.csp_lnu(
+        logzsol=logzsol, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0,
+        add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0
+    )
+    L_p3b = L_p3b * MASS_SCALE
+    st3b = _m_met_grid.predict_state({"met_logzsol": logzsol})
+    L_t3b = np.asarray(st3b.sed_intrinsic)
+    w_t3b = np.asarray(st3b.wave)
+    label = f"logzsol={logzsol:g}"
+    _assert_comparable(L_p3b, L_t3b, name=f"§3b {label}")
+    _p3b_cases.append((label, w_p3b, L_p3b, w_t3b, L_t3b))
+    L_t3b_on_p = U.regrid(w_t3b, L_t3b, w_p3b)
+    rows = V.filter_rows(w_p3b, L_t3b_on_p, L_p3b, filters=V.UV_TO_NIR)
+    V.print_filter_table(rows, ref_name="FSPS", title=f"§3b {label}", compact=True)
+
+fig, (ax, ax_r), _p3b_ratios = V.sweep_fig(
+    _p3b_cases,
+    ref_label="FSPS",
+    title="§3b — Stellar SED vs logzsol",
+    x_of_wave=lambda w: w / 1e4,
+    xlim=(0.1, 2.5),
+    ratio_ylim=(0.5, 1.5),
+)
+save_fig("prospector_03b_met_logzsol.png")
 
 
 # %% [markdown]
@@ -876,7 +1067,115 @@ for sedpy_name, tengri_law, label in _law_pairs:
 ax_l.legend(fontsize=10)
 ax_r.legend(fontsize=10)
 fig.tight_layout()
-save_fig("prospector_04_dust_attenuation.png")
+
+
+# %% [markdown]
+# ### §4b Every FSPS dust_type, plus slope and R_V
+#
+# Every FSPS `dust_type` against its tengri law, normalized `A(λ)/A_V`.
+# `dust_type=0` sweeps the power-law slope; `dust_type=1` sweeps `mwr` (R_V)
+# against both `cardelli` and `conroy2010` (the FSPS-parity mix); `dust_type=4`
+# sweeps the Kriek & Conroy slope `δ`. `dust_type` 3, 5, 6 (WG00, SMC, Reddy15)
+# have no free shape parameter in this comparison and appear as single points.
+# `dust_type=1/3/5/6` curves come from `-2.5 log10(L(A_V{=}1)/L(A_V{=}0))` on a
+# 1 Gyr SSP (WG00 ignores `dust2`, so its own `wgp1/wgp2` grid index sets the
+# curve directly); `dust_type=0/4` use the closed-form laws directly.
+
+# %%
+_wave4b = np.logspace(np.log10(1000.0), np.log10(25000.0), 1500)
+
+
+def _fsps_attenuation_from_ssp(dust_type, av=1.0, **dust_kwargs):
+    """A(λ) [mag] = -2.5 log10(L(dust on)/L(no dust)) on a 1 Gyr SSP.
+
+    ``av`` defaults to 1 mag (setting FSPS ``dust2``) for every dust_type
+    except 3 (WG00), which ignores ``dust2`` entirely and reads its optical
+    depth from ``wgp1`` alone. Restricted to 900-30000 Å: the analytic dust
+    laws below are calibrated over the UV-NIR, and tengri's SSP grid extends
+    the wavelength axis far into the extreme-UV/X-ray, where an extrapolated
+    curve can diverge and swamp a `.max()`-based comparison.
+    """
+    w0, L0 = P.csp_lnu(sfh=0, tage=1.0, av=0.0, dust_type=2)
+    w1, L1 = P.csp_lnu(sfh=0, tage=1.0, av=av, dust_type=dust_type, **dust_kwargs)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        A = -2.5 * np.log10(L1 / L0)
+    A = np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0)
+    m = (w0 >= 900.0) & (w0 <= 30000.0)
+    return w0[m], A[m]
+
+
+_p2_cases = []
+_p2_notes = []
+
+# dust_type=0 (power law): sedpy's alpha is the negative of FSPS's dust_index.
+for idx in (-0.7, -1.0):
+    _, A_p = P.attenuation_curve("powerlaw", wave_aa=_wave4b, av=1.0, alpha=-idx)
+    A_t = np.asarray(_tengri_laws["power_law"](_wave4b, dust_slope=idx))
+    _p2_cases.append((f"type=0 idx={idx:g}", _wave4b, A_p, _wave4b, A_t))
+
+# dust_type=1 (MW CCM89 + mwr): read off a 1 Gyr SSP; compare cardelli vs
+# conroy2010 at the same R_V and report whichever tracks FSPS more closely.
+for rv in (2.5, 3.1, 4.0):
+    w_p1, A_p1 = _fsps_attenuation_from_ssp(1, mwr=rv)
+    A_card = np.asarray(_tengri_laws["cardelli"](w_p1, dust_Rv=rv))
+    A_con = np.asarray(_tengri_laws["conroy2010"](w_p1, dust_Rv=rv))
+    m = (w_p1 > 1216) & (w_p1 < 9000)
+    d_card = float(np.median(np.abs(A_card[m] / A_p1[m] - 1.0)))
+    d_con = float(np.median(np.abs(A_con[m] / A_p1[m] - 1.0)))
+    best_name, A_best = ("conroy2010", A_con) if d_con < d_card else ("cardelli", A_card)
+    _p2_notes.append(
+        f"type=1 R_V={rv:g}: median |ratio-1| cardelli {d_card:.3f}, "
+        f"conroy2010 {d_con:.3f} -> {best_name} closer"
+    )
+    _p2_cases.append((f"type=1 R_V={rv:g} ({best_name})", w_p1, A_p1, w_p1, A_best))
+
+# dust_type=3 (WG00): FSPS default wgp1=1 (tau_V=0.25), wgp2=1 (MW+dusty).
+from tengri.components.dust.wg00 import _find_wg00_grid, create_wg00_from_grid
+
+_wg00_fn = create_wg00_from_grid(
+    _find_wg00_grid(), dust_curve="mw", geometry="dusty", structure="homogeneous"
+)
+w_p3, A_p3 = _fsps_attenuation_from_ssp(3, wgp1=1, wgp2=1)
+A_t3 = 1.086 * np.asarray(_wg00_fn(w_p3, 0.25))  # A(lambda)=1.086*tau; wgp1=1 -> tau_V=0.25
+_p2_cases.append(("type=3 wg00 mw/dusty", w_p3, A_p3, w_p3, A_t3))
+
+# dust_type=4 (Kriek & Conroy): exact FSPS formula on both sides.
+for delta in (-0.3, 0.0, 0.3):
+    A_p4 = P.fsps_kriek_conroy_curve(_wave4b, dust_index=delta)
+    A_t4 = np.asarray(_tengri_laws["kriek_conroy"](_wave4b, dust_delta=delta))
+    _p2_cases.append((f"type=4 δ={delta:g}", _wave4b, A_p4, _wave4b, A_t4))
+
+# dust_type=5 (SMC) and dust_type=6 (Reddy15): no free shape parameter.
+w_p5, A_p5 = _fsps_attenuation_from_ssp(5)
+A_t5 = np.asarray(_tengri_laws["smc"](w_p5))
+_p2_cases.append(("type=5 smc", w_p5, A_p5, w_p5, A_t5))
+
+w_p6, A_p6 = _fsps_attenuation_from_ssp(6)
+A_t6 = np.asarray(_tengri_laws["reddy15"](w_p6))
+_p2_cases.append(("type=6 reddy15", w_p6, A_p6, w_p6, A_t6))
+
+for label, w_ref, A_ref, w_t, A_t in _p2_cases:
+    _assert_comparable(A_ref, A_t, name=f"§4b {label}")
+
+fig, (ax, ax_r), _p2_ratios = V.sweep_fig(
+    _p2_cases,
+    ref_label="FSPS",
+    title="§4b — Every FSPS dust_type vs its tengri law",
+    xlabel=r"wavelength [$\mu$m]",
+    ylabel=r"$A_\lambda / A_V$",
+    x_of_wave=lambda w: w / 1e4,
+    xlim=(0.1, 2.5),
+    ratio_ylim=(0.5, 1.5),
+    logy=True,
+)
+save_fig("prospector_04b_dust_types.png")
+
+for note in _p2_notes:
+    print("§4b " + note)
+_p2_rows = V.window_rows(_p2_cases, lo=1216.0, hi=3000.0)
+V.print_window_table(_p2_rows, ref_name="FSPS", title="§4b — A(λ)/A_V, 1216-3000 Å")
+_p2_rows_nir = V.window_rows(_p2_cases, lo=3000.0, hi=10000.0)
+V.print_window_table(_p2_rows_nir, ref_name="FSPS", title="§4b — A(λ)/A_V, 3000-10000 Å")
 
 
 # %% [markdown]
@@ -897,8 +1196,8 @@ save_fig("prospector_04_dust_attenuation.png")
 TAU_DIFF = AV_FIDUCIAL / 1.086  # full single screen on the diffuse (all-age) component
 TAU_BC = 0.0  # birth-cloud term off — matches FSPS dust1 = 0
 
-w_p_nd, L_p_nd = P.csp_lnu(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, av=0.0)
-w_p_d, L_p_d = P.csp_lnu(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, av=AV_FIDUCIAL, dust_type=2)
+w_p_nd, L_p_nd = P.csp_lnu(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, av=0.0, add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0)
+w_p_d, L_p_d = P.csp_lnu(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, av=AV_FIDUCIAL, dust_type=2, add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0)
 L_p_nd = L_p_nd * MASS_SCALE
 L_p_d = L_p_d * MASS_SCALE
 
@@ -921,6 +1220,7 @@ m_d = SEDModel.build(
         "tau_diff": Fixed(TAU_DIFF),
         "all_params": Fixed(DEFAULT),
     },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
@@ -944,7 +1244,111 @@ for ax in (ax_l1, ax_r1, ax_l2, ax_r2):
     ax.set_ylim(_ymax * 1e-6, _ymax * 2)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("prospector_05_dust_applied.png")
+
+
+# %% [markdown]
+# ### §5b A_V and birth cloud
+#
+# Single-screen Calzetti at `A_V ∈ {0.3, 1, 3}` (`dust_type=2`, `dust1=0`), then
+# a birth-cloud split at fixed diffuse depth: `dust_type=0`, `dust2=0.3`
+# (`dust_index=-0.7`), with `dust1 ∈ {0.3, 1.0}` (`dust1_index=-1.0`) reddening
+# only the youngest stars. tengri matches with two power-law screens,
+# `law_diff="power_law", slope_diff=-0.7, tau_diff=dust2/1.086` fixed, and
+# `law_bc="power_law", slope_bc=-1.0, tau_bc=dust1/1.086` swept.
+
+# %%
+_p3_cases = []
+
+
+def _p3_case(
+    label,
+    *,
+    av_p,
+    dust_type_p,
+    dust_kwargs_p,
+    tau_bc_t,
+    tau_diff_t,
+    law_bc_t,
+    law_diff_t,
+    slope_bc_t=None,
+    slope_diff_t=None,
+):
+    w_p, L_p = P.csp_lnu(
+        tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, av=av_p, dust_type=dust_type_p, **dust_kwargs_p,
+        add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0
+    )
+    L_p = L_p * MASS_SCALE
+    _dust_atten = {
+        "type": "two_component",
+        "law_bc": law_bc_t,
+        "law_diff": law_diff_t,
+        "tau_bc": Fixed(tau_bc_t),
+        "tau_diff": Fixed(tau_diff_t),
+        "all_params": Fixed(DEFAULT),
+    }
+    if slope_bc_t is not None:
+        _dust_atten["slope_bc"] = slope_bc_t
+    if slope_diff_t is not None:
+        _dust_atten["slope_diff"] = slope_diff_t
+    m = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation=_dust_atten,
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+    st = m.predict_state({})
+    L_t = np.asarray(st.derived["sed_dust_attenuated"])
+    _assert_comparable(L_p, L_t, name=f"§5b {label}")
+    _p3_cases.append((label, w_p, L_p, np.asarray(st.wave), L_t))
+    L_t_on_p = U.regrid(np.asarray(st.wave), L_t, w_p)
+    rows = V.filter_rows(w_p, L_t_on_p, L_p, filters=V.UV_TO_NIR)
+    V.print_filter_table(rows, ref_name="FSPS", title=f"§5b {label}", compact=True)
+
+
+print("§5b UV-to-NIR band ratios (tengri/FSPS):")
+for av in (0.3, 1.0, 3.0):
+    _p3_case(
+        f"A_V={av:g} Calzetti",
+        av_p=av,
+        dust_type_p=2,
+        dust_kwargs_p={},
+        tau_bc_t=0.0,
+        tau_diff_t=av / 1.086,
+        law_bc_t="calzetti",
+        law_diff_t="calzetti",
+    )
+DUST2_BC_FIDUCIAL = 0.3
+for dust1 in (0.3, 1.0):
+    _p3_case(
+        f"dust1={dust1:g} birth cloud",
+        av_p=DUST2_BC_FIDUCIAL * 1.086,
+        dust_type_p=0,
+        dust_kwargs_p={"dust_index": -0.7, "dust1": dust1, "dust1_index": -1.0},
+        tau_bc_t=dust1 / 1.086,
+        tau_diff_t=DUST2_BC_FIDUCIAL / 1.086,
+        law_bc_t="power_law",
+        law_diff_t="power_law",
+        slope_bc_t=-1.0,
+        slope_diff_t=-0.7,
+    )
+
+fig, (ax, ax_r), _p3_ratios = V.sweep_fig(
+    _p3_cases,
+    ref_label="FSPS",
+    title="§5b — A_V and birth-cloud dust sweep",
+    x_of_wave=lambda w: w / 1e4,
+    xlim=(0.1, 3.0),
+    ratio_ylim=(0.5, 1.5),
+)
+save_fig("prospector_05b_dust_av_bc.png")
 
 
 # %% [markdown]
@@ -982,6 +1386,9 @@ w_p_ir, L_p_ir = P.csp_lnu(
     duste_qpah=QPAH_FIDUCIAL,
     duste_umin=UMIN_FIDUCIAL,
     duste_gamma=GAMMA_FIDUCIAL,
+    add_neb_emission=True,
+    gas_logu=-2.0,
+    gas_logz=0.0,
 )
 L_p_ir = L_p_ir * MASS_SCALE
 
@@ -1010,6 +1417,7 @@ m_ir = SEDModel.build(
         "gamma_dl": Fixed(GAMMA_FIDUCIAL),
         "all_params": Fixed(DEFAULT),
     },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -1046,7 +1454,6 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(1e24, 1e32)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("prospector_06_dust_ir.png")
 
 # Far-IR peak location, a robust scalar diagnostic.
 _p_fir = w_p_ir[(w_p_ir > 1e5) & (w_p_ir < 1e7)]
@@ -1088,6 +1495,7 @@ m_ir_fsps = SEDModel.build(
         "gamma_dl": Fixed(GAMMA_FIDUCIAL),
         "all_params": Fixed(DEFAULT),
     },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 s_ir_fsps = m_ir_fsps.predict_state({})
@@ -1101,6 +1509,86 @@ print(
     f"{_fir_ratio:.3f} (canonical LyC-masked) → "
     f"{_fir_ratio_fsps:.3f} with eb_include_lyc=True (FSPS parity)"
 )
+
+
+# %% [markdown]
+# ### §6b DL07 grid
+#
+# Four points across the Draine & Li (2007) grid, `(q_PAH, U_min, γ)` from
+# diffuse-ISM-like to warm-and-PAH-rich; the second point is the §6 fiducial.
+# Same Calzetti stellar continuum and canonical (LyC-masked) energy balance as
+# §6, with `dust_emission={'type': 'draine_li2007', qpah, umin, gamma_dl}`
+# swept on the tengri side.
+
+# %%
+_p4_grid = [(0.47, 0.1, 0.01), (2.5, 1.0, 0.05), (2.5, 5.0, 0.3), (4.58, 25.0, 0.5)]
+_p4_cases = []
+
+print("§6b DL07 grid broadband ratios (tengri/FSPS):")
+for qpah, umin, gamma in _p4_grid:
+    w_p4, L_p4 = P.csp_lnu(
+        tau=TAU_GYR_FIDUCIAL,
+        tage=AGE_GYR_FIDUCIAL,
+        av=AV_FIDUCIAL,
+        dust_type=2,
+        add_dust_emission=True,
+        duste_qpah=qpah,
+        duste_umin=umin,
+        duste_gamma=gamma,
+        add_neb_emission=True,
+        gas_logu=-2.0,
+        gas_logz=0.0,
+    )
+    L_p4 = L_p4 * MASS_SCALE
+    m4 = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(TAU_BC),
+            "tau_diff": Fixed(TAU_DIFF),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={
+            "type": "draine_li2007",
+            "qpah": Fixed(qpah),
+            "umin": Fixed(umin),
+            "gamma_dl": Fixed(gamma),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+    s4 = m4.predict_state({})
+    w_t4 = np.asarray(s4.wave)
+    L_t4 = np.asarray(s4.derived["sed_dust_attenuated"]) + np.asarray(s4.derived["sed_dust_ir"])
+    label = f"qpah={qpah:g} umin={umin:g} γ={gamma:g}"
+    _assert_comparable(L_p4, L_t4, name=f"§6b {label}")
+    _p4_cases.append((label, w_p4, L_p4, w_t4, L_t4))
+    # tengri's dust-emission grid gains extra far-IR wavelength points beyond
+    # FSPS' native SSP grid, so filter_rows needs both sides on w_p4 first.
+    L_t4_on_p = U.regrid(w_t4, L_t4, w_p4)
+    rows = V.filter_rows(w_p4, L_t4_on_p, L_p4, filters=V.BROAD_FILTERS)
+    V.print_filter_table(rows, ref_name="FSPS", title=f"§6b {label}", compact=True)
+
+fig, (ax, ax_r), _p4_ratios = V.sweep_fig(
+    _p4_cases,
+    ref_label="FSPS",
+    title="§6b — DL07 (q_PAH, U_min, γ) grid",
+    x_of_wave=lambda w: w / 1e4,
+    xlim=(1.0, 1e3),
+    ratio_ylim=(0.5, 1.5),
+)
+save_fig("prospector_06b_dust_ir_grid.png")
 
 
 # %% [markdown]
@@ -1259,7 +1747,93 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
     if _lp > 0:
         print(f"    {_name} {_c:.0f} Å: FSPS {_lp:.2e}, tengri {_lt:.2e} erg/s → {_lt / _lp:.2f}×")
 fig.tight_layout()
-save_fig("prospector_08_nebular.png")
+
+
+# %% [markdown]
+# ### §8b gas_logU × gas_logZ
+#
+# The 10 Myr constant-SFR nebular-only spectrum (as above) over
+# `logU ∈ {-3, -2, -1} × gas_logZ ∈ {-0.5, 0, 0.3}`, nine points. tengri builds
+# once with `neb_logU` and `neb_logZ_gas` free and evaluates each point;
+# ratios are continuum-subtracted line luminosities normalized to Hβ, so a
+# Cue-vs-Byler+2017 normalization offset cancels and only the ionization/
+# metallicity pattern remains.
+
+# %%
+_m_neb_grid = SEDModel.build(
+    ssp_data=ssp,
+    met=MET_FIDUCIAL,
+    sfh={
+        "type": "const",
+        "start_gyr": Fixed(NEB_AGE),
+        "end_gyr": Fixed(0.0),
+        "log_total_mass": Fixed(9.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Uniform(-4.0, -1.0, default=-2.0),
+        "neb_logZ_gas": Uniform(-1.0, 0.3, default=0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    redshift=Fixed(0.0),
+)
+_NEB_LINES = [(6563.0, "Hα"), (5007.0, "[O III]"), (3727.0, "[O II]"), (4861.0, "Hβ")]
+
+print("§8b line ratios normalized to Hβ (tengri Cue vs FSPS Byler+2017):")
+print(f"  {'logU':>6} {'logZ':>6}   {'Hα/Hβ FSPS':>11} {'tengri':>8}   "
+      f"{'[OIII]/Hβ FSPS':>15} {'tengri':>8}   {'[OII]/Hβ FSPS':>14} {'tengri':>8}")
+for logu in (-3.0, -2.0, -1.0):
+    for logz in (-0.5, 0.0, 0.3):
+        w_p8, L_p8 = P.isolate(
+            dict(sfh=1, const=1.0, tage=NEB_AGE, add_neb_emission=True, gas_logu=logu, gas_logz=logz),
+            dict(sfh=1, const=1.0, tage=NEB_AGE),
+        )
+        L_p8 = np.clip(L_p8, 0.0, None) * 10.0**9.0
+        st8 = _m_neb_grid.predict_state({"neb_logU": logu, "neb_logZ_gas": logz})
+        L_t8 = np.asarray(st8.derived["sed_nebular"])
+        w_t8 = np.asarray(st8.wave)
+        _assert_comparable(L_p8, L_t8, name=f"§8b logU={logu:g} logZ={logz:g}")
+        lp = {name: U.line_lum(w_p8, L_p8, c) for c, name in _NEB_LINES}
+        lt = {name: U.line_lum(w_t8, L_t8, c) for c, name in _NEB_LINES}
+        if lp["Hβ"] <= 0 or lt["Hβ"] <= 0:
+            continue
+        r_p_ha, r_t_ha = lp["Hα"] / lp["Hβ"], lt["Hα"] / lt["Hβ"]
+        r_p_o3, r_t_o3 = lp["[O III]"] / lp["Hβ"], lt["[O III]"] / lt["Hβ"]
+        r_p_o2, r_t_o2 = lp["[O II]"] / lp["Hβ"], lt["[O II]"] / lt["Hβ"]
+        print(
+            f"  {logu:>6.1f} {logz:>6.1f}   {r_p_ha:>11.3f} {r_t_ha:>8.3f}   "
+            f"{r_p_o3:>15.3f} {r_t_o3:>8.3f}   {r_p_o2:>14.3f} {r_t_o2:>8.3f}"
+        )
+
+fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
+U.panel(
+    ax_l,
+    ax_r,
+    label_l="Prospector  Byler+2017 (logU=-2, logZ=0)",
+    label_r="tengri  Cue (logU=-2, logZ=0)",
+)
+_st8_fid = _m_neb_grid.predict_state({"neb_logU": -2.0, "neb_logZ_gas": 0.0})
+_w_p8_fid, _L_p8_fid = P.isolate(
+    dict(sfh=1, const=1.0, tage=NEB_AGE, add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0),
+    dict(sfh=1, const=1.0, tage=NEB_AGE),
+)
+_L_p8_fid = np.clip(_L_p8_fid, 0.0, None) * 10.0**9.0
+ax_l.plot(_w_p8_fid, _L_p8_fid, "C0-", linewidth=1.0)
+ax_r.plot(_st8_fid.wave, np.asarray(_st8_fid.derived["sed_nebular"]), "C1-", linewidth=1.0)
+for ax in (ax_l, ax_r):
+    ax.set_xlim(900, 7000)
+    ax.set_xscale("linear")
+    ax.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("prospector_08b_neb_logu_logz.png")
 
 
 # %% [markdown]
@@ -1289,9 +1863,12 @@ AGN_TAU = 30.0
 # FSPS torus isolated as (fagn on) − (fagn off), and its bolometric.
 w_p_agn, L_p_agn = P.isolate(
     dict(
-        tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, add_agn_dust=True, fagn=FAGN, agn_tau=AGN_TAU
+        tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, add_agn_dust=True, fagn=FAGN, agn_tau=AGN_TAU,
+        add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0
     ),
-    dict(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL),
+    dict(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL,
+        add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0
+    ),
 )
 L_p_agn = np.clip(L_p_agn, 0.0, None)
 # Bolometric of the FSPS torus per 1 M⊙ formed [erg/s], integrated over ν,
@@ -1329,6 +1906,7 @@ m_agn = SEDModel.build(
         "agn_log_lbol": Fixed(_agn_log_lbol),
         "all_params": Fixed(DEFAULT),
     },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
@@ -1349,12 +1927,84 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(_peak_agn * 1e-3, _peak_agn * 3)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("prospector_09_agn_nenkova.png")
 
 _peak_p_agn = w_p_agn[(w_p_agn > 1e4)][np.argmax(L_p_agn[(w_p_agn > 1e4)])]
 _w_t_agn = np.asarray(s_agn.wave)
 _peak_t_agn = _w_t_agn[(_w_t_agn > 1e4)][np.argmax(L_t_agn[(_w_t_agn > 1e4)])]
 print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t_agn / 1e4:.1f} µm")
+
+
+# %% [markdown]
+# ### §9b agn_tau sweep
+#
+# The Nenkova torus optical depth across `agn_tau ∈ {5, 10, 30, 80, 150}` at
+# fixed `f_AGN = 0.5`, both sides isolated the same way as above (AGN on
+# minus AGN off), tengri built once with `agn_tau` free and evaluated at each
+# value. Mid-IR peak wavelength prints alongside the broadband ratios. The
+# peak location tracks FSPS at every `agn_tau`; the bolometric normalization
+# is the outlier — tengri's torus carries close to half of the `agn_log_lbol`
+# it is given, a factor-of-two gap independent of `agn_tau`, unlike the §9
+# fiducial's peak-only check above.
+
+# %%
+_m_agn_grid = SEDModel.build(
+    ssp_data=ssp,
+    met=MET_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+        "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    agn={
+        "type": "composable",
+        "disc": {"type": "none"},
+        "torus": {"type": "nenkova", "agn_tau": Uniform(5.0, 150.0, default=30.0), "all_params": Fixed(DEFAULT)},
+        "agn_log_lbol": Fixed(_agn_log_lbol),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+
+_p9_cases = []
+print("§9b agn_tau sweep broadband ratios (tengri/FSPS):")
+for tau_agn in (5.0, 10.0, 30.0, 80.0, 150.0):
+    w_p9, L_p9 = P.isolate(
+        dict(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, add_agn_dust=True, fagn=FAGN, agn_tau=tau_agn),
+        dict(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL),
+    )
+    L_p9 = np.clip(L_p9, 0.0, None) * MASS_SCALE
+    st9 = _m_agn_grid.predict_state({"agn_tau": tau_agn})
+    L_t9 = np.asarray(st9.derived["sed_agn"])
+    w_t9 = np.asarray(st9.wave)
+    label = f"agn_tau={tau_agn:g}"
+    _assert_comparable(L_p9, L_t9, name=f"§9b {label}")
+    _p9_cases.append((label, w_p9, L_p9, w_t9, L_t9))
+    peak_p9 = w_p9[(w_p9 > 1e4)][np.argmax(L_p9[(w_p9 > 1e4)])]
+    peak_t9 = w_t9[(w_t9 > 1e4)][np.argmax(L_t9[(w_t9 > 1e4)])]
+    L_t9_on_p = U.regrid(w_t9, L_t9, w_p9)
+    rows = V.filter_rows(w_p9, L_t9_on_p, L_p9, filters=V.IR_BANDS)
+    V.print_filter_table(rows, ref_name="FSPS", title=f"§9b {label}", compact=True)
+    print(f"    mid-IR peak: FSPS {peak_p9 / 1e4:.1f} µm, tengri {peak_t9 / 1e4:.1f} µm")
+
+fig, (ax, ax_r), _p9_ratios = V.sweep_fig(
+    _p9_cases,
+    ref_label="FSPS",
+    title="§9b — Nenkova torus agn_tau sweep",
+    x_of_wave=lambda w: w / 1e4,
+    xlim=(1.0, 1e3),
+    ratio_ylim=(0.5, 1.5),
+)
+save_fig("prospector_09b_agn_tau.png")
 
 
 # %% [markdown]
@@ -1390,7 +2040,6 @@ ax.set_title(f"Madau (1995) IGM transmission at z = {Z_IGM:g}")
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("prospector_12_igm_madau.png")
 
 # Quantify agreement over the Lyman-α forest window.
 _win = (w_p_igm >= 950) & (w_p_igm <= 1216)
@@ -1399,6 +2048,39 @@ print(
     f"§12 Madau IGM at z={Z_IGM:g} (950–1216 Å): "
     f"max |Δ| = {_igm_diff.max():.3e}, median |Δ| = {np.median(_igm_diff):.3e}"
 )
+
+
+# %% [markdown]
+# ### §12b z sweep
+#
+# The same Madau (1995) comparison across `z ∈ {2, 3, 4, 6}`: FSPS's
+# `add_igm_absorption` against tengri's `igm_transmission_madau`, both on the
+# rest-frame grid of a young backlight SSP.
+
+# %%
+_p12_cases = []
+for z in (2.0, 3.0, 4.0, 6.0):
+    w_p12, T_p12 = P.igm_transmission(zred=z, age_gyr=0.05)
+    wave_obs12 = w_p12 * (1.0 + z)
+    T_t12 = np.asarray(igm_transmission_madau(wave_obs12, np.asarray(z)))
+    _assert_comparable(T_p12, T_t12, name=f"§12b z={z:g}")
+    _p12_cases.append((f"z={z:g}", w_p12, T_p12, w_p12, T_t12))
+
+fig, (ax, ax_r), _p12_ratios = V.sweep_fig(
+    _p12_cases,
+    ref_label="FSPS",
+    title="§12b — Madau IGM transmission vs redshift",
+    xlabel=r"rest-frame $\lambda$ [Å]",
+    ylabel=r"$T(\lambda, z)$",
+    x_of_wave=None,
+    xlim=(700, 1300),
+    ratio_ylim=(0.5, 1.5),
+    logy=False,
+)
+save_fig("prospector_12b_igm_z.png")
+
+_p12_rows = V.window_rows(_p12_cases, lo=850.0, hi=1210.0, rel_to="peak", peak=1.0)
+V.print_window_table(_p12_rows, ref_name="FSPS", title="§12b — T(λ), 850-1210 Å; deviation as % of unit transmission")
 
 
 # %% [markdown]
@@ -1496,6 +2178,21 @@ plt.show()
 
 # %% [markdown]
 # ## Summary
+#
+# The sweep sections above extend each single-point comparison across the
+# parameter combinations FSPS exposes; the worst tengri/FSPS ratio in each
+# block sets the residual floor for that physics.
+#
+# | Block | § | Cases | Worst tengri/FSPS | Where |
+# |---|---|---|---|---|
+# | SFH families | §2 cont'd | 8 | 17.3 % of peak | SFR(t), 2–95 % of age (sfh=4 τ=0.3, age=1) |
+# | logzsol | §3b | 4 | 0.996× | UV-to-NIR bands |
+# | Dust types | §4b | 11 | 1.21× (WG00) | A(λ)/A_V, 1216-10000 Å |
+# | A_V + birth cloud | §5b | 5 | 0.78× (birth cloud) | UV-to-NIR bands |
+# | DL07 grid | §6b | 4 | 0.89× | broadband, 3.4-863 µm |
+# | gas_logU × gas_logZ | §8b | 9 | 0.45× ([O III]/Hβ) | line ratios to Hβ |
+# | agn_tau | §9b | 5 | 0.45× (bolometric norm.) | mid/far-IR bands |
+# | IGM z sweep | §12b | 4 | 1.035× | T(λ), 850-1216 Å |
 #
 # At matched parameters, FSPS-via-Prospector and tengri agree wherever they
 # evaluate the same mathematics: the SSP grid, the SFH shape, the attenuation
