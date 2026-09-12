@@ -131,10 +131,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   rides along: an explicit `frac_agn` key beside plain `dale2014` — previously
   accepted and silently ignored — now raises `ParameterError` naming the
   variant that reads it, via the grammar's standard unknown-key check
-  (#2244, #721).
+  (#2244, #721). The same warning now also covers `energy_balance_split`, whose
+  `dust_L_agn_ir` slot adds AGN-heated IR beside an active composable AGN torus
+  (#2251).
 
 ### Fixed
 
+- The energy-balance-split closure's docstring tagged its luminosity arguments
+  `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
+  supplies both in `erg/s` (component_factory.py:346). The docstring is now
+  unit-agnostic ("as passed"), with a note that both arguments must share the
+  same units, and the `dust_L_agn_ir` parameter declaration now explicitly
+  states `units="erg/s"` (#2251).
 - Four AGN sites integrated over the descending frequency grid by reversing
   both trapezoid operands (``polar_dust.py``'s anisotropic polar luminosity,
   ``adaf.py``'s float32 and float64 normalization integrals, ``unified.py``'s

@@ -213,11 +213,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_L_agn_ir",
         Fixed(0.0),
         "Additional AGN-heated IR luminosity added on top of the energy-balance "
-        "budget by the ``energy_balance_split`` model (same units as L_absorbed; "
-        ">= 0). Non-zero values intentionally exceed strict stellar energy "
+        "budget by the ``energy_balance_split`` model (erg/s; >= 0). "
+        "Non-zero values intentionally exceed strict stellar energy "
         "balance: the AGN supplies the extra IR.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        units="erg/s",
         # Deliberately NO free_prior. Unlike every other entry here this is an
         # absolute luminosity in the same units as L_absorbed, not a shape or a
         # fraction, so its plausible range is set by the source being fitted and

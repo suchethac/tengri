@@ -24,8 +24,12 @@ from tengri.parameters import parse_groups
 pytestmark = pytest.mark.contract
 
 
-def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
-    """Build a spec with a chosen dust emission + (optional) composable AGN."""
+def _spec(dust_param_value, agn_fracagn, *, emission="dale2014", with_agn=True):
+    """Build a spec with a chosen dust emission + (optional) composable AGN.
+
+    For dale2014/dale2014_cigale, dust_param_value is used as frac_agn.
+    For energy_balance_split, dust_param_value is used as L_agn_ir.
+    """
     groups = dict(
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -34,10 +38,14 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
             "type": "two_component",
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": emission, "frac_agn": dust_frac_agn}
-        if emission in ("dale2014", "dale2014_cigale")
-        else {"type": emission},
     )
+    if emission in ("dale2014", "dale2014_cigale"):
+        groups["dust_emission"] = {"type": emission, "frac_agn": dust_param_value}
+    elif emission == "energy_balance_split":
+        groups["dust_emission"] = {"type": emission, "L_agn_ir": dust_param_value}
+    else:
+        groups["dust_emission"] = {"type": emission}
+
     if with_agn:
         groups["agn"] = {
             "type": "composable",
@@ -109,6 +117,30 @@ class TestDoubleCountGuardFires:
         # Only dale2014_cigale carries the embedded quasar template.
         # Plain dale2014 lacks it; other engines don't have the parameter at all.
         assert not _fires(_spec(Fixed(0.0), Fixed(0.5), emission="casey2012"))
+
+    def test_ebs_both_fixed_positive_warns(self):
+        # energy_balance_split uses dust_L_agn_ir (not frac_agn).
+        assert _fires(_spec(Fixed(1.0e43), Fixed(0.5), emission="energy_balance_split"))
+
+    def test_ebs_both_free_warns(self):
+        # A free dust_L_agn_ir counts as active even if the prior is large.
+        assert _fires(
+            _spec(Uniform(0.0, 1e45), Uniform(0.01, 0.99), emission="energy_balance_split")
+        )
+
+    def test_ebs_dust_l_agn_ir_zero_no_warn(self):
+        # Zero on the dust_L_agn_ir side prevents double-count.
+        assert not _fires(_spec(Fixed(0.0), Fixed(0.5), emission="energy_balance_split"))
+
+    def test_ebs_agn_fracagn_zero_no_warn(self):
+        # Zero on the AGN side prevents double-count.
+        assert not _fires(_spec(Fixed(1.0e43), Fixed(0.0), emission="energy_balance_split"))
+
+    def test_ebs_no_agn_no_warn(self):
+        # energy_balance_split with dust_L_agn_ir alone (no composable AGN) is legitimate.
+        assert not _fires(
+            _spec(Fixed(1.0e43), Fixed(0.0), emission="energy_balance_split", with_agn=False)
+        )
 
 
 @pytest.mark.unit
