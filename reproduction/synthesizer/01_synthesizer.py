@@ -252,6 +252,7 @@ _m_sfh = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
+    n_grid=4096,  # dense lookback grid: the table compares the SFH form, not the 256-point diagnostic grid
 )
 _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
@@ -296,6 +297,7 @@ def _sfh_model(sfh_dict):
         },
         neb=NEB_FIDUCIAL,
         redshift=Fixed(0.0),
+        n_grid=4096,
     )
 
 
@@ -2258,7 +2260,7 @@ plt.show()
 #
 # | Block | § | Cases | Worst tengri/Synthesizer | Where |
 # |---|---|---|---|---|
-# | Parametric SFH | §2b | 7 | 36.9 % of peak (LogNormal tail, different functional form) | SFR(t) window |
+# | Parametric SFH | §2b | 7 | 37.0 % of peak (LogNormal tail, different functional form) | SFR(t) window |
 # | Attenuation laws | §4b | 9 | 2.04x (MWN18 vs the z-evolving narayanan_z at z=0) | A(λ)/A_V window |
 # | DL07/DL14 grid | §6b | 6 | 1.23x median (qpah=2.5%, Umin=5) | IR_BANDS |
 # | Analytic emitters | §6b | 6 | 170x at WISE W1 (mbb's β_ir vs an unmodified blackbody) | IR_BANDS |
