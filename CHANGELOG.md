@@ -800,7 +800,23 @@
 ### Fixed
 
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
-
+- ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
+  from standing in for declared parameter defaults) had two blind spots, both
+  fixed: it was scoped to ``dust/emission/`` only, and it never saw negative
+  or explicit-positive defaults at all -- ``ast.parse`` renders ``-3.0`` as
+  ``UnaryOp(USub, Constant)``, which the bare ``ast.Constant`` gate skipped.
+  The no-argument run now covers every swept tree (``dust/emission``,
+  ``radio``, ``stellar``, ``igm``; the rest join as #2297's rulings land),
+  and all closure defaults in radio, stellar, and igm read their values
+  through ``declared_default(...)`` or a shared named module constant rather
+  than repeating them as bare numerals. Zero-diff probes over radio and
+  stellar confirm bit-identical output. One real slip surfaced by the sweep:
+  igm's two ``dla_log_n_hi`` fallbacks said 20.0 where the declaration says
+  20.3 (``DEFAULT_DLA_LOG_N_HI``, which both sites now read). That changes
+  DIRECT calls that omit the argument with ``use_dla=True`` -- measured max
+  relative difference up to ~1.0 at z=2.0 in the damped wings, smaller at
+  other redshifts -- and changes nothing on the grammar path, which always
+  supplied 20.3. Part of #2265.
 - The energy-balance-split closure's docstring tagged its luminosity arguments
   `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
   supplies both in `erg/s` (component_factory.py:346). The docstring is now
