@@ -545,7 +545,9 @@ class Parameters:
                 f"and cannot be used together. Choose one of:\n"
                 f"  - agn_norm='independent' (each block on its own scale)\n"
                 f"  - agn_norm='conserving' (energy-conserving joint scaling)\n"
-                f"  - dust_agn_screen='none' (unscreened AGN)"
+                f"  - dust_agn_screen='none' (unscreened AGN)\n"
+                f"A screened AGN cannot use fracAGN (agn_ir_frac), which requires "
+                f"agn_norm='cigale_joint': drop the screen or the coupling."
             )
         # Block-recipe validation (typo hard-error + suspicious-combo warnings)
         # is deferred until after the parameter distributions are built, so the
