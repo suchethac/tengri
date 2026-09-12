@@ -154,13 +154,13 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # %% [markdown]
 # ## Fit
 #
-# The default sampler runs four NUTS chains in parallel and marginalizes stellar mass analytically, so it never has to be drawn. The posterior took about 19 s on this machine.
+# The no-argument default is tuned for a 15-20 s posterior; this notebook asks for stricter convergence with 300 warmup steps and 600 draws per chain, about 30 s on this machine. The sampler runs four NUTS chains in parallel and marginalizes the stellar mass analytically, so it never has to be drawn.
 
 # %%
 map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
 
 t = time.perf_counter()
-posterior = forward.fit(flux_obs, noise, key=key_fit)
+posterior = forward.fit(flux_obs, noise, key=key_fit, n_warmup=300, n_samples=600)
 wall_mcmc = time.perf_counter() - t
 print(f"  NUTS fast posterior wall: {wall_mcmc:6.2f} s")
 posterior.summary()
@@ -171,7 +171,7 @@ posterior.summary()
 # Before any science: did the chains converge? Split-R̂ should be < 1.01,
 # effective sample size (ESS) a healthy fraction of the draws, and
 # divergences few. Anything failing here means the credible intervals are not
-# trustworthy.
+# trustworthy. A divergence count of a few percent means the integrator could not follow part of the posterior; read the widths of the worst-R̂ parameters as approximate. It also means the tails are under-explored, so quote medians and 68% intervals and do not lean on the extreme quantiles.
 
 # %%
 rhat = posterior.rhat()
