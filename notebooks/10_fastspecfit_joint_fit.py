@@ -361,7 +361,7 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # so the mass matrix must be dense and fixed-trajectory HMC is more efficient
 # than NUTS. We run four sequential chains (each reuses one compiled kernel,
 # keeping memory at one chain's footprint) for 3000 warmup and 1000 samples,
-# achieving R-hat ≈ 1.04 with ~3 divergences. That is short of the R-hat < 1.01 you would want before quoting an interval in a paper, so treat this sector's widths as approximate. Truth lands inside the 68%
+# reaching R-hat ≈ 1.24 with no divergences: the four chains move freely but do not agree, which is well short of the R-hat < 1.01 you would want before quoting an interval in a paper, so treat this sector's widths as approximate. Truth lands inside the 68%
 # interval for 5 of 6 parameters.
 
 # %%
