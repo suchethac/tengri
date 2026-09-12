@@ -190,7 +190,10 @@ def fitter_after_a_map_multistart_run() -> Fitter:
     data = jnp.array([1.2, 0.8, 0.5, 0.9])
     noise = jnp.array([0.1, 0.08, 0.06, 0.07])
     fitter = Fitter(model, data, noise, data_type="photometry", compile_modes=None)
+    # Both multistart memos: the default optimizer (lbfgs) attaches
+    # ``_map_multistart_qn_kernel_cache``; Adam attaches the optax sibling.
     fitter.run("map", n_restarts=2, n_steps=5, verbose=False)
+    fitter.run("map", n_restarts=2, n_steps=5, optimizer="adam", verbose=False)
     return fitter
 
 

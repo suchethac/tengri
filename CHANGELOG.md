@@ -1,6 +1,26 @@
 ## [Unreleased]
 
 ### Added
+- `run_nuts`/`run_dynamic_hmc` (and, via the same `_vmap_chains` seam,
+  `mcmc_hmc`'s existing `chain_method="parallel"`) accept
+  `chain_parallel: {"auto", "vmap", "pmap"}`, default `"auto"`. `"pmap"` maps
+  `n_chains` chains one-per-device via `jax.pmap` instead of SIMD-batching
+  them onto one device with `jax.vmap`, and raises `ValueError` (naming
+  `TENGRI_HOST_DEVICES`) if fewer than `n_chains` devices are visible;
+  `"auto"` picks `"pmap"` when enough devices of the platform in use are
+  visible and `n_chains > 1`, else falls back to `"vmap"`. Warmup stays
+  single-chain either way; per-chain adaptation was measured worse (inflated
+  R-hat from per-chain metrics) and is not offered. Measured on `ctl-dpl`
+  (D=8, 4 chains) with 4 forced host CPU devices: the sampling phase drops
+  19.5s -> 3.5s. The resolved choice is recorded in
+  `posterior.diagnostics["chain_parallel"]`. New env hook
+  `TENGRI_HOST_DEVICES=<n>` (read by `tengri/__init__.py` before the first
+  `import jax`) appends `--xla_force_host_platform_device_count=<n>` to
+  `XLA_FLAGS` so CPU users can get extra JAX devices without knowing the XLA
+  flag spelling; a no-op if `XLA_FLAGS` already requests a host device count.
+  See `docs/dev/inference_methods.md` and the JAX section of `CLAUDE.md`.
+
+- `Fitter`/`ForwardModel.fit(..., profile_mass=...)` analytically marginalizes
 - The per-Q_H nebular grid (`enable_fast_nebular` / `approx=FeaturePrecomp()`)
   now serves DIG mixing instead of refusing it: `neb_logU` joins the grid axes
   whenever `neb_dig_frac` could be active (free, or fixed non-zero), even when
@@ -267,6 +287,62 @@
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
 ### Changed
+- **The default inference method is `mcmc_nuts_fast`** (was `vi`): four NUTS
+  chains, 150 warmup steps, no separate burn-in, 300 draws, target acceptance
+  0.8, on the mass-profiled posterior with the dense metric and, when the CPU
+  is exposed as devices (`TENGRI_HOST_DEVICES`), pmapped chains. Measured at
+  9.5-17.2 s per galaxy on eight logical cores across twelve `ctl-dpl` /
+  `ctl-jwst` seeds with min ESS >= 100 on eleven
+  (`bench/reports/2026-09-11_profile_mass_20s.md`). `forward.fit(data)`,
+  `Fitter.run()` and `fit_batch` all share it; `fit_batch` runs it one galaxy
+  at a time (the vmapped shared-adaptation engine is measured to freeze
+  lanes). `method="vi"` is unchanged and still selectable. The new method is
+  canonical (`mcmc_nuts_fast`), primary tier, and every setting is
+  overridable; its draw budget lives in `defaults.toml`
+  `[inference.mcmc_nuts_fast]`.
+
+- **NUTS/HMC/dynamic-HMC `dense_mass_matrix=None` auto-policy is dense at
+  D <= 12, not D < 8** (behavioral change, #319 revision). The D < 8 cliff
+  generalized a `mean_sfh_type="dense_basis"` finding (22.78 GB warmup peak
+  at D=8) to every SFH. Measured on `ctl-dpl` (D=8 photometry, 14 bands, a
+  non-`dense_basis` DPL SFH): the dense window adaptation uses 1.1-1.9 GB
+  RSS and costs 3.4x fewer gradients per effective sample than diagonal
+  (dense 34 g/draw, ESS 83; diagonal 550 g/draw, ESS 113; six-seed sweep).
+  `_resolve_dense_mass_matrix` now returns dense for `n_dim <= 12` *unless*
+  the spec's SFH is `dense_basis` (diagonal at any D in that case — it is
+  `dense_basis`'s per-sample derived-quantity publishing, not dimensionality
+  on its own, that drives the historical spike), and diagonal above D = 12
+  regardless of SFH. `HMC`/`dynamic HMC`/`CatalogFitter`/`fit_batch` all
+  route through the shared `resolve_dense_mass_gate`, so the revision applies
+  uniformly; the `DENSE_MASS_MAX_DIM=30` cap and explicit `True`/`False`
+  overrides are unchanged. A fit at D=8-12 that pinned a diagonal-metric
+  posterior mean or wall-time to a tight tolerance may need updating; pass
+  `dense_mass_matrix=False` to keep the previous diagonal behavior exactly.
+
+- **MAP defaults to L-BFGS, not Adam** (behavioral change). `run_map`'s
+  `optimizer=` default is now `"lbfgs"` (alias `"lbfgs_scipy"`), and every
+  internal MAP seed that does not pass an explicit `optimizer=`
+  (`_maybe_map_init`'s NUTS/HMC/VI warm start, `run_laplace`, `run_pathfinder`,
+  the vmapped batch-MAP path in `Fitter._fit_batch_vmap_map`) picks it up.
+  Measured on a D=8, 14-band mock recovery fixture: the population default
+  (Adam, 8 restarts × 800 steps) reached a negative log posterior of 6.33 and
+  had not converged (a 300-step single run reached 7.88, a 100-step run 115),
+  while a single scipy L-BFGS-B start reached 6.0008 in well under a second;
+  on a second fixture the Hessian at the Adam point carried a negative
+  eigenvalue, i.e. was not even a local minimum. Every downstream consumer of
+  a MAP point — sampler warm starts, the Laplace approximation, preconditioning
+  metrics — is better served by a converged optimum than by a fixed
+  gradient-step budget that may or may not have reached one. Two
+  implementations share the `"lbfgs"` name because scipy is not JAX-traceable
+  and so cannot be vmapped: the single-start path (`n_restarts=1`, the
+  default) runs scipy's L-BFGS-B; the multi-start and vmapped-batch paths
+  (`n_restarts>1`, or `Fitter.fit_batch(method="map")`) run
+  `jax.scipy.optimize.minimize(method="BFGS")` instead, which is pure JAX and
+  therefore vmappable — and, like scipy, needs no optional dependency
+  (`jax.scipy` ships with `jax` itself, unlike `optax`/`jaxopt`). `"adam"`,
+  `"adamw"`, `"sgd"`, and pre-built optax optimizers remain fully supported by
+  name.
+- **`profile_mass` defaults to `"auto"`, not off** (behavioral change). Every
 - `dust_eta_balance`'s declared free prior is a linear `Gaussian(1.0, 0.2)`
   truncated at 0 (was `LogNormal(0, 0.2)` on log eta);
   `builders.dust.emission.relaxed_energy_balance(sigma=)` takes the linear

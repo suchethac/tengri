@@ -289,7 +289,9 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
         noise = np.asarray(mock.noise, dtype=np.float64)
 
     with jax.enable_x64(False):
-        ctx = InferenceContext.from_target(Fitter(_model(), jnp.asarray(flux), jnp.asarray(noise)))
+        ctx = InferenceContext.from_target(
+            Fitter(_model(), jnp.asarray(flux), jnp.asarray(noise), profile_mass=False)
+        )
         da = ctx.data_args
         for i in range(3):
             p = ctx.initial_params(jax.random.fold_in(jax.random.PRNGKey(0), i))

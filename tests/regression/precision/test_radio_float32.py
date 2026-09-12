@@ -153,7 +153,9 @@ def test_neg_log_posterior_gradient_finite_with_radio_in_float32(ssp_bare):
 
     with jax.enable_x64(False):
         model = _model(ssp_bare, radio)
-        ctx = InferenceContext.from_target(Fitter(model, jnp.asarray(flux), jnp.asarray(noise)))
+        ctx = InferenceContext.from_target(
+            Fitter(model, jnp.asarray(flux), jnp.asarray(noise), profile_mass=False)
+        )
         da = ctx.data_args
         p = ctx.initial_params(jax.random.PRNGKey(3))
         g = jax.grad(lambda q: ctx.neg_log_posterior_fn(q, da))(p)
