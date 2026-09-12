@@ -12,6 +12,7 @@ measures arithmetic, so the objective is pinned explicitly on both arms.
 
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import jax.numpy as jnp
 import pytest
@@ -22,13 +23,15 @@ _SCRIPTS = Path(__file__).resolve().parents[2] / "bench" / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from benchmark_float32_mps_parity import _map_loss  # noqa: E402
+from benchmark_float32_mps_parity import _map_loss
+
+_OPTIMUM = {"dust_tau_diff": jnp.asarray(0.3), "sfh_delayed_log_total_mass": jnp.asarray(10.0)}
 
 
 class _Fit:
     """Stands in for ``ForwardModel``: records every ``fit`` kwarg, converges at once."""
 
-    calls: list[dict] = []
+    calls: ClassVar[list[dict]] = []
 
     @classmethod
     def build(cls, *, sed, observation):
@@ -40,7 +43,7 @@ class _Fit:
         type(self).calls.append(kwargs)
         return Posterior(
             samples=None,
-            params={"dust_tau_diff": jnp.asarray(0.3), "sfh_delayed_log_total_mass": jnp.asarray(10.0)},
+            params=dict(_OPTIMUM),
             method="MAP (stub)",
             wall_time_s=0.0,
             diagnostics={"n_steps": 2, "converged": True},

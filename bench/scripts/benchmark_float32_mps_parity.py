@@ -608,6 +608,13 @@ def _self_check(ref, groups, ssp, obs, args, banner) -> int:
             dt = time.time() - t0
             print(f"{name:14s} FAIL  cannot rebuild: {rec.get('skip_reason')}  ({dt:.1f}s)")
             continue
+        if "error" in rec:
+            # Built, but the evaluation raised: the usual cause is a truth key the tree
+            # no longer declares (#2291 renamed agn_grahsp_l5100). Unmeasured, so it
+            # counts toward exit 1 below via the missing ``here`` row.
+            dt = time.time() - t0
+            print(f"{name:14s} FAIL  cannot measure: {rec['error']}  ({dt:.1f}s)")
+            continue
         here[name] = rec
         print(
             f"{name:14s} fwd drift={rec['rel_forward']:.2e}  grad drift={rec['rel_grad']:.2e}  "

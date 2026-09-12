@@ -95,3 +95,34 @@ def test_a_seam_the_file_has_but_this_tree_did_not_rebuild_is_reported_not_skipp
     drift = self_check_drift(_rows(), here)
     assert np.isnan(drift["panchromatic"]), "an unmeasured seam must not read as clean"
     assert drift["stellar_dust"] == 0.0
+
+
+def test_self_check_reports_a_seam_whose_evaluation_raised_and_exits_1(monkeypatch, capsys):
+    """An old file's truth can name parameters the tree no longer declares (#2291 renamed
+    ``agn_grahsp_l5100``): the seam builds, the evaluation raises, and ``_run_seam``
+    returns ``{"built": True, "error": ...}``. The self-check must count that seam as
+    unmeasured (exit 1) and say why, not crash on a record without ``rel_forward``."""
+    import types
+
+    import benchmark_float32_mps_parity as sweep
+
+    def fake_run_seam(name, kwargs, ssp, obs, z, n_steps, write_ref, ref_row, stage, dtype=None):
+        if name == "+AGN":
+            return {"seam": name, "built": True, "error": "ParameterError: Unrecognized names"}
+        return dict(row, rel_forward=0.0, rel_grad=0.0)
+
+    monkeypatch.setattr(sweep, "_run_seam", fake_run_seam)
+    monkeypatch.setattr(sweep.jax, "clear_caches", lambda: None)
+    monkeypatch.setattr(sweep, "_tree_sha", lambda: "deadbeef")
+    monkeypatch.setattr(sweep, "_src_tree", lambda: "cafebabe")
+    row = {"built": True, "photometry": [1.0, 2.0], "grad": [0.5, 0.25]}
+    ref = {"meta": {}, "seams": {"+Cue": dict(row), "+AGN": dict(row)}}
+    groups = {"+Cue": {}, "+AGN": {}}
+    args = types.SimpleNamespace(z=0.1, n_steps=10)
+
+    rc = sweep._self_check(ref, groups, None, None, args, None)
+
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "+AGN" in out and "Unrecognized names" in out
+    assert "STALE" in out

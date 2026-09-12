@@ -333,6 +333,26 @@ views, whose negative strides `jax-mps` refuses at `device_put` with a misleadin
 (with the grid fixed and fusion on, all three torus seams FAIL at fwd=2.16e-02,
 grad=3.38e+00).
 
+Re-measured 2026-09-12 on the same machine against
+`float32_parity_reference_f2b4b1843.json`, on `f2b4b1843`'s `src/tengri` (#2298 in, so
+no reversed trapezoid remains on the model path) with MLX fusion **on**
+(`MLX_DISABLE_COMPILE` unset), once on `jax-mps` 0.10.10 and once on the 0.10.11 CI
+wheel (MLX 0.32.0, which carries the upstream fix for jax-mps#232): six of six on both,
+with fwd and grad identical to the digit between the two builds, and the loss column
+between 1e-5 and 4e-4 on every seam now that both arms optimize the same objective.
+The CPU-float32 control is six of six as well. So on a current tree rule 3 is belt and
+braces for tengri's own code; it still protects user code that reverses an array
+beside a broadcast scalar on 0.10.10.
+
+| seam | fwd | grad | param | status | CPU-f32 grad |
+|---|---|---|---|---|---|
+| `stellar_dust` | 1.08e-05 | 5.91e-03 | 1.42e-05 | PASS | 1.64e-04 |
+| `+dust IR` | 1.22e-05 | 2.10e-03 | 1.17e-05 | PASS | 5.92e-04 |
+| `+Cue` | 1.18e-05 | 2.56e-03 | 1.06e-05 | PASS | 2.77e-04 |
+| `+AGN` | 9.81e-06 | 3.38e-03 | 4.86e-05 | PASS | 1.39e-03 |
+| `+radio+xray` | 1.17e-05 | 4.10e-03 | 5.03e-05 | PASS | 1.44e-04 |
+| `panchromatic` | 9.46e-06 | 3.84e-03 | 5.62e-05 | PASS | 3.54e-04 |
+
 ## TPU
 
 Untested but expected to work: tengri uses no TPU-incompatible
