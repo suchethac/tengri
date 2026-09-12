@@ -25,7 +25,7 @@
 # The closed-form blocks — the SFH shapes, the mass-mapped metallicity
 # history, the attenuation curves, the IGM — match ProSpect to a fraction
 # of a percent. Every model on this page carries nebular emission — ProSpect
-# through `SFHfunc(emission = TRUE)`, whose `emissionLines` takes its ionization
+# through `SFHfunc(emission = TRUE)`, whose `emissionLines` (lines only; ProSpect has no nebular continuum) takes its ionization
 # parameter from `Z2q(Z)` (Orsi 2014; q = 1.4 × 10⁷ cm s⁻¹ at Z = 0.02,
 # logU = −3.32), and tengri through Cue at that same logU and Z_gas; §8 also
 # compares the line ratios at logU = −2. Residuals in every section include the
@@ -637,7 +637,9 @@ print(
 # The fiducial skew-normal SFH convolved with the BC03 library at solar
 # metallicity, nebular emission enabled on both sides, no dust, both scaled to 10^10 M⊙ formed.
 # Band-integrated ratios compare the continuum; pointwise ratios would measure emission-line widths,
-# which differ between Cue and ProSpect's photoionization grid.
+# which differ between Cue and ProSpect's photoionization grid. The u band (1.326×) and NUV carry
+# the nebular continuum — the Balmer jump and two-photon emission — which Cue includes and
+# ProSpect's `emissionLines` does not.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL — Photometry projection
@@ -699,9 +701,8 @@ for ax in (ax_l, ax_r):
 fig.tight_layout()
 save_fig("prospect_r_03_stellar_sed.png")
 
-_t_on_p3 = U.regrid(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), w_p3)
-_rows3 = V.filter_rows(w_p3, _t_on_p3, L_p3, filters=V.UV_TO_NIR)
-V.print_filter_table(_rows3, ref_name="ProSpect", title="§3 stellar SED, UV-to-NIR bands", compact=True)
+_rows3 = V.filter_rows_native(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), w_p3, L_p3, filters=V.UV_TO_NIR)
+V.print_filter_table(_rows3, ref_name="ProSpect", title="§3 stellar SED, UV-to-NIR bands", compact=False)
 
 
 # %% [markdown]
@@ -942,8 +943,7 @@ fig.tight_layout()
 save_fig("prospect_r_05cont_dust_applied_sweep.png")
 
 for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dust_applied:
-    _L_t_on_ref = U.regrid(_w_t, _L_t, _w_ref)
-    _rows = V.filter_rows(_w_ref, _L_t_on_ref, _L_ref, filters=V.UV_TO_NIR)
+    _rows = V.filter_rows_native(_w_t, _L_t, _w_ref, _L_ref, filters=V.UV_TO_NIR)
     V.print_filter_table(_rows, ref_name="ProSpect", title=f"§5 cont'd — {_label}", compact=True)
 
 
@@ -1095,8 +1095,7 @@ fig.tight_layout()
 save_fig("prospect_r_06cont_dale_alpha.png")
 
 for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dale:
-    _L_t_on_ref = U.regrid(_w_t, _L_t, _w_ref)
-    _rows = V.filter_rows(_w_ref, _L_t_on_ref, _L_ref, filters=V.IR_BANDS)
+    _rows = V.filter_rows_native(_w_t, _L_t, _w_ref, _L_ref, filters=V.IR_BANDS)
     V.print_filter_table(_rows, ref_name="ProSpect", title=f"§6 cont'd — {_label}", compact=True)
 
 
@@ -1933,6 +1932,7 @@ plt.show()
 # | Block | § | Cases | Worst tengri/ProSpect | Where |
 # |---|---|---|---|---|
 # | SFH families | §2 cont'd | 7 (dtau, snorm_burst, snorm_trunc) | 1.00–1.75× median | window, 2-99%/2-80% of age |
+# | Stellar SED | §3 | 1 (single point) | u band 1.326× | UV-to-NIR bands |
 # | Attenuation curves | §5 cont'd | 6 (pow, Eb) | 0.90–1.07× median | A(λ)/A_V, 1216-3000 Å |
 # | Attenuation applied | §5 cont'd | 6 (τ_screen×τ_birth) | 0.99–1.00× median (bands to 0.66×) | UV_TO_NIR bands |
 # | Dust IR | §6 cont'd | 4 (α) | 0.74–0.79× median | IR_BANDS |
