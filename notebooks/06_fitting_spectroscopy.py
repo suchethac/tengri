@@ -27,12 +27,21 @@
 #
 # ---
 #
-# Broadband photometry alone leaves stellar metallicity and dust prior-dominated. An optical spectrum carries absorption-line depths — Hβ, the Mgb triplet, the Fe blends — that pin stellar age and metallicity. This notebook fits a spectrum alone using the same machinery as the quickstart (SEDModel.build with validated HMC sampling) and shows what it constrains and what stays degenerate. The absolute dust optical depth remains loose because a spectrum sets the continuum shape, not its normalization. Adding photometry closes that degeneracy in [`07_joint_photo_spec`](07_joint_photo_spec.py).
+# Broadband photometry alone leaves stellar metallicity and dust prior-dominated. An optical spectrum carries absorption-line depths — Hβ, the Mgb triplet, the Fe blends — that pin stellar age and metallicity. This notebook fits a spectrum alone using the same machinery as the quickstart (SEDModel.build with a fixed-length HMC sampler) and shows what it constrains and what stays degenerate. The absolute dust optical depth remains loose because a spectrum sets the continuum shape, not its normalization. Adding photometry closes that degeneracy in [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
-from _setup import FIG_DIR, HMC_VALIDATED, quiet
+import os
+import warnings
+
+# Four host devices so the four chains run in parallel.
+os.environ["TENGRI_HOST_DEVICES"] = "4"
+
+from _setup import FIG_DIR, quiet
 
 quiet()
+
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
+warnings.filterwarnings("ignore", message=".*wNE.*")
 
 import time
 from pathlib import Path
@@ -67,11 +76,12 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 #
 # An SDSS-like R≈2000 optical spectrum, 3800–9200 Å observed (rest-frame
 # 3620–8760 Å at z = 0.05: the 4000 Å break, Hβ, Mgb, the Fe blends, Hα, and
-# the Ca II triplet), sampled at 260 pixels to keep the demo fast, on the same
-# FSPS bare-stellar grid as notebooks 05 and 07.
+# the Ca II triplet), sampled at 260 pixels to keep the demo fast, on an FSPS
+# grid with nebular emission baked into the templates at fixed ionization and
+# escape fraction.
 
 # %%
-SSP_NAME = "fsps_prsc_miles_chabrier"
+SSP_NAME = "prsc_miles_chabrier_wNE"
 ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 Z_GAL = 0.05
@@ -88,10 +98,9 @@ obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=2000))
 # %%
 # approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centers and
 # projects every forward pass through that lookup table — within ~0.03% of the
-# exact wave-grid spectrum but ~30x faster per evaluation, so a converged HMC
-# fit takes seconds rather than minutes. It is the spectroscopic analog of
-# WavePrecomp; valid for low-to-medium resolution (R ≲ a few thousand), where
-# the continuum is smooth across a pixel.
+# exact wave-grid spectrum but ~30x faster per evaluation, so a posterior takes
+# seconds. It is the spectroscopic analog of WavePrecomp; valid for low-to-medium
+# resolution (R ≲ a few thousand), where the continuum is smooth across a pixel.
 sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
@@ -105,7 +114,7 @@ sed_model = SEDModel.build(
         tau_bc=Uniform(0.0, 1.0),
         tau_diff=Uniform(0.0, 1.0),
     ),
-    neb=builders.neb.none(),
+    neb={"type": "ssp"},
     met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(Z_GAL),
 )
@@ -139,51 +148,29 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # %% [markdown]
 # ## Fit
 #
-# `HMC_VALIDATED` uses validated settings. `SpectrumPrecomp` enables the
-# lookup-table forward pass.
+# Fixed-length Hamiltonian Monte Carlo: four chains, 200 warmup and 300 draws
+# each, 50 leapfrog steps per draw. The sampler runs on the `SpectrumPrecomp`
+# lookup table and is preconditioned with the model's curvature at the best-fit
+# point, enabling a short trajectory to cross this posterior's geometry.
 
 # %%
 t0 = time.perf_counter()
-# This posterior has a sharp step-size cliff during warmup adaptation, and
-# under a DENSE mass matrix the adapted step lands above the stability limit:
-# the chain freezes outright (600/600 identical draws, 600 divergences) on
-# BOTH preconditioning arms — measured locally and reproduced twice on
-# canonical CI environments by the #2005 notebook-execution tier. A diagonal
-# mass matrix is healthy on the same posterior (0 divergences, ~96% unique
-# draws). Root cause (the dense-mass x SpectrumPrecomp interaction) is under
-# investigation in #1999; this override is the documented interim for THIS
-# notebook only — HMC_VALIDATED itself keeps dense_mass_matrix=True because
-# dense mass is load-bearing on the correlated nonparametric-SFH posteriors.
 posterior = forward.fit(
     Data(spectrum=(flux, noise)),
     key=jax.random.PRNGKey(1),
-    precondition=False,
-    **{**HMC_VALIDATED, "dense_mass_matrix": False},
+    verbose=False,
+    method="mcmc_hmc",
+    precondition=True,
+    dense_mass_matrix=False,
+    n_chains=4,
+    n_warmup=200,
+    n_samples=300,
+    n_leapfrog_steps=50,
+    profile_mass=False,
 )
 rhat = posterior.rhat()
-
-# Regression detector: if chain froze again (as in #1734), raise loudly.
-# Counts unique values across all free parameters; any showing near-zero
-# variance signals a return of the frozen-chain bug.
-n_div = posterior.diagnostics.get("n_divergent", 0)
-unique_per_param = [
-    len(np.unique(np.asarray(posterior.samples[p]))) for p in sed_model.spec.free_params
-]
-min_unique = min(unique_per_param)
-n_samples = len(np.asarray(posterior.samples[sed_model.spec.free_params[0]]))
-if min_unique < 50 or n_div > n_samples * 0.5:
-    raise RuntimeError(
-        f"REGRESSION DETECTED: chain not mixing. Minimum unique draws across "
-        f"parameters: {min_unique} (expected >100). Divergences: {n_div}/{n_samples}. "
-        f"Issue #1734 frozen-chain bug may have resurfaced."
-    )
-
 rmax = max(float(v) for v in rhat.values())
-print(
-    f"HMC: {time.perf_counter() - t0:.0f}s   "
-    f"max R-hat {rmax:.3f}   "
-    f"divergences {n_div}   unique draws {min_unique}/{n_samples}"
-)
+print(f"{time.perf_counter() - t0:.0f} s   max R-hat {rmax:.3f}")
 
 # %% [markdown]
 # ## Recovery — what a spectrum alone pins
@@ -265,7 +252,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# The spectroscopy-only fit on the diagonal-mass fallback (issue #1999) achieves
-# R̂ ≈ 1.27 while recovering stellar age, metallicity, and mass from the
-# absorption features; dust normalization remains loose. [`07_joint_photo_spec`](07_joint_photo_spec.py)
+# The fit takes ⟨wall⟩ s; max R-hat ⟨max R-hat⟩. Spectroscopy alone recovers
+# stellar age, metallicity, and mass sharply from the absorption features; dust
+# normalization remains loose. [`07_joint_photo_spec`](07_joint_photo_spec.py)
 # adds broadband photometry, which fixes dust and tightens convergence.

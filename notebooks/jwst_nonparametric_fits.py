@@ -235,7 +235,8 @@ plt.show()
 #
 # A MAP fit gives the point estimate. The default fit then runs four NUTS
 # chains, each 150 warmup plus 300 draws, with the stellar mass integrated out
-# analytically and a dense metric, which crosses the correlated bin ratios.
+# analytically, a diagonal metric and a target acceptance of 0.9: on these
+# correlated bin ratios the dense metric returns far fewer effective samples.
 #
 # The parameter `tau_bc` is pinned at 0 here because the NIRCam photometry
 # cannot separate it from the diffuse dust screen; it is part of the posterior
@@ -251,7 +252,7 @@ map_logm = float(map_post.params[MASS_KEY])
 print(f"MAP: {map_wall:.1f} s, log total mass = {map_logm:.2f} (truth {truth[MASS_KEY]:.2f})")
 
 t0 = time.perf_counter()
-posterior = forward.fit(flux_obs, noise, key=jax.random.PRNGKey(2), verbose=False)
+posterior = forward.fit(flux_obs, noise, key=jax.random.PRNGKey(2), verbose=False, dense_mass_matrix=False, target_accept_rate=0.9)
 nuts_wall = time.perf_counter() - t0
 
 ess = posterior.effective_sample_size()

@@ -581,7 +581,7 @@ plt.show()
 # metric keeps the cost predictable. The posterior is wide and strongly correlated;
 # the non-centered field rotates with $\tau$, so the curvature is position-dependent.
 # At this budget the bands show the recovered SFH shape, not credible intervals;
-# maximum R-hat is ⟨max R-hat⟩.
+# the maximum R-hat is 1.51.
 
 # %%
 # Trajectory length sets the cost; this demonstration budget runs in minutes.

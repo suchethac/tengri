@@ -24,11 +24,17 @@
 
 # %%
 import os
+import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 os.environ["TENGRI_HOST_DEVICES"] = "4"  # enable parallel chain execution on 4 devices
 
-import warnings
+from _setup import quiet
+
+quiet()
+
+# The wNE grid states that its nebular emission is baked in; that is the intent here.
+warnings.filterwarnings("ignore", message=".*wNE.*")
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band

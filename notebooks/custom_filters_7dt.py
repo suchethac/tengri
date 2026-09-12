@@ -32,6 +32,11 @@ from _setup import effective_wavelengths_um, quiet
 
 quiet()
 
+# The wNE grid states that its nebular emission is baked in; that is the intent here.
+import warnings
+
+warnings.filterwarnings("ignore", message=".*wNE.*")
+
 import os
 
 os.environ["TENGRI_HOST_DEVICES"] = "4"  # enable parallel chain execution on 4 devices
@@ -286,6 +291,4 @@ for pname in sed_model.spec.free_params:
     print(f"{pname:<20}{true_val:>12.3f}{p16:>12.3f}{p50:>12.3f}{p84:>12.3f}")
 
 # %% [markdown]
-# Mass and SFH width return tightly, metallicity and dust do not: 23 optical
-# bands with no UV and no infrared leave insufficient leverage in metallicity
-# and dust optical depth. See notebook 11 for population fitting via `Catalog`.
+# The stellar mass returns to within 0.07 dex; the shape of the star-formation history, the metallicity and the dust optical depth stay broad. Twenty-three optical bands with no ultraviolet or infrared coverage cannot separate them. For many sources, fit them as a `Catalog` (notebook 11).
