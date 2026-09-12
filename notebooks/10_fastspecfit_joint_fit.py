@@ -120,11 +120,13 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # are free — a real catalog spans the metallicity–ionization plane, so a
 # fixed-condition baked-in grid cannot follow it.
 #
-# We build the model three times with the *same* physics and free parameters,
-# changing only `approx=`: the **exact** wave-grid path, **`WavePrecomp` alone**
-# (photometry LUT, Cue still evaluated every step), and the **fast**
-# `(WavePrecomp, FeaturePrecomp)` path that adds the per-Q_H nebular grid. The
-# line wavelengths for the feature grid default to those in the observation.
+# We build one model and time its fit on three paths: the **exact** wave grid,
+# **`WavePrecomp` alone** (photometry lookup table, Cue still evaluated every
+# step), and the **fast** `(WavePrecomp, FeaturePrecomp)` pair that adds the
+# per-Q_H nebular grid. Build-time `approx=` sets the path `predict_*` uses;
+# `fit()` chooses its own path and defaults to `"auto"`, which picks the fast
+# tables, so the comparison passes `approx=` to `fit` directly. The line
+# wavelengths for the feature grid default to those in the observation.
 
 
 # %%
@@ -230,49 +232,39 @@ print(
 # ## Measure the fit time: exact vs WavePrecomp vs fast
 #
 # MAP fit (200 L-BFGS-B iterations, the default optimizer) on photometry + line
-# likelihood, timed on all three paths.
-# `WavePrecomp` is the photometry lookup — SSP × filter table replacing full integration
-# with table look-up. `FeaturePrecomp` adds a per-Q_H nebular grid. The line channel
-# already keeps nebular work off the per-gradient path, so on a line-flux fit the
-# fast path has little left to remove. Read **compiled step** (`post.wall_time_s`):
-# the optimization loop after JIT compile. That is the only column where `approx=`
-# matters; the wall time is per-call compile, not the fit.
+# likelihood, timed on three fit paths. `WavePrecomp` is the photometry lookup —
+# an SSP × filter table replacing the full integration. `FeaturePrecomp` adds the
+# per-Q_H nebular grid, so the line fluxes come from a table instead of a
+# full-wavelength SED rebuilt on every likelihood evaluation. The path is chosen
+# by `fit(approx=...)`: the default `"auto"` picks the fast tables, `None` forces
+# the exact wave grid, and an explicit config means what it says. Read
+# **compiled step** (`post.wall_time_s`), the optimization loop after JIT
+# compile — the only column where the path matters; `fit() wall` is per-call
+# compile, not the fit.
 
 # %%
-model_exact = build(line_data, approx=None)
-model_wave = build(line_data, approx=WavePrecomp())
 model_fast = build(line_data, approx=(WavePrecomp(), FeaturePrecomp()))
 print(f"Free parameters ({model_fast.spec.n_free}): {', '.join(model_fast.spec.free_params)}")
+assert model_fast.observation.line_fluxes is not None, "line likelihood not active"
 
 MAP_KW = dict(method="map", key=jax.random.PRNGKey(1), n_steps=200)
 N_REPS = 3
 
-# The fourth entry is model_exact a second time: the A/A control. It gets its own
-# ForwardModel so it is built exactly like the arms it calibrates.
+# One forward model; the arms differ only in the path the fit runs on. The
+# fourth arm repeats the first: the A/A control, whose ratio to the first arm
+# is the measurement's own noise floor.
+fwd = ForwardModel.build(sed=model_fast)
 ARMS = [
-    ("exact (approx=None)", model_exact),
-    ("WavePrecomp only", model_wave),
-    ("fast (Wave+Feature)", model_fast),
-    ("exact again (A/A)", model_exact),
+    ("exact", None),
+    ("WavePrecomp only", WavePrecomp()),
+    ("fast (Wave+Feature)", (WavePrecomp(), FeaturePrecomp())),
+    ("exact again (A/A)", None),
 ]
-for _label, _m in ARMS:
-    # The line likelihood is active because the Observation carries line_fluxes;
-    # the data passed here is photometry, and the observation says so, so there
-    # is no channel to declare.
-    assert _m.observation.line_fluxes is not None, "line likelihood not active"
-built = [(label, ForwardModel.build(sed=model)) for label, model in ARMS]
 
-# Round-robin AND rotated. Interleaving alone is not enough: whichever arm runs
-# first in a pass pays the first-touch costs, and if the order never changes that
-# penalty lands on the same arm every rep and survives the min. Rotating by one
-# each pass moves every arm through a different slot, so no arm is structurally
-# first.
-# Verify what the fit actually runs: `Fitter(approx="auto")` re-resolves the
-# build-time `approx=`, so three models built three ways may not be three fit
-# configurations. Print the actual resolution to be certain.
-print("resolved fit-time precompute (what approx= actually buys a FIT):")
-for _label, _fwd in built:
-    _st = Fitter(_fwd, flux_phot, n_phot).model.approx
+# What each arm actually runs, read off the fitter rather than assumed.
+print("resolved fit-time precompute:")
+for _label, _pol in ARMS:
+    _st = Fitter(fwd, flux_phot, n_phot, approx=_pol).model.approx
     _tags = [
         _n
         for _n, _on in (
@@ -284,49 +276,40 @@ for _label, _fwd in built:
     ]
     print(f"  {_label:<22} -> {', '.join(_tags) or 'exact (no LUT)'}")
 
-loops: dict[str, list[float]] = {label: [] for label, _ in built}
-walls: dict[str, list[float]] = {label: [] for label, _ in built}
-posts: dict[str, object] = {}
+# Round-robin and rotated: whichever arm runs first in a pass pays the
+# first-touch costs, so rotating the order moves every arm through every slot.
+loops: dict[str, list[float]] = {label: [] for label, _ in ARMS}
+walls: dict[str, list[float]] = {label: [] for label, _ in ARMS}
 print(f"MAP fit (photometry + 10 lines), {N_REPS} rotated reps, min reported:")
 for rep in range(N_REPS):
-    cut = rep % len(built)
-    for label, fwd in built[cut:] + built[:cut]:
+    cut = rep % len(ARMS)
+    for label, pol in ARMS[cut:] + ARMS[:cut]:
         t0 = time.perf_counter()
-        # Each fit re-traces, so every rep pays its own compile; `wall_time_s`
-        # measures the optimization loop after compile.
-        post = fwd.fit(flux_phot, n_phot, **MAP_KW)
+        post = fwd.fit(flux_phot, n_phot, approx=pol, **MAP_KW)
         walls[label].append(time.perf_counter() - t0)
         loops[label].append(post.wall_time_s)
-        posts[label] = post
 
 loop = {label: min(v) for label, v in loops.items()}
 wall = {label: min(v) for label, v in walls.items()}
-for label, _ in built:
+for label, _ in ARMS:
     spread = max(loops[label]) / min(loops[label])
     print(
         f"  {label:22s} fit() wall {wall[label]:5.2f}s   "
         f"compiled step {loop[label]:5.2f}s   (rep spread {spread:4.1f}x)"
     )
 
-L_E, L_W, L_F, L_AA = (label for label, _ in built)
-post_exact, post_wave, post_fast = posts[L_E], posts[L_W], posts[L_F]
+L_E, L_W, L_F, L_AA = (label for label, _ in ARMS)
 loop_e, loop_w, loop_f, loop_aa = loop[L_E], loop[L_W], loop[L_F], loop[L_AA]
 warm_e, warm_w, warm_f = wall[L_E], wall[L_W], wall[L_F]
 
-# The control is the same model twice, so any departure from 1.0x is measurement
-# noise. Orient it as >= 1 so it compares directly against the arm ratios.
+# The control is the same fit twice, so its departure from 1.0x is measurement
+# noise. An effect counts only when its excess over 1.0 is at least twice the
+# control's, so a real gap and a noise gap cannot print the same verdict.
 r_aa = max(loop_e, loop_aa) / min(loop_e, loop_aa)
 r_fast = loop_e / loop_f
-
-# A bare `r_fast > r_aa` is too weak: both are noisy estimates, so an effect can
-# "clear" the floor by a hair and print the self-contradicting verdict
-# "1.1x clears the 1.1x noise floor". Compare *excesses over unity* instead and
-# demand a factor of two, so an effect must be twice the control's own departure
-# from 1.0 before it counts. Two decimals throughout — at one, a real gap and a
-# noise gap render identically.
 RESOLVE_MARGIN = 2.0
 resolved = (r_fast - 1.0) > RESOLVE_MARGIN * (r_aa - 1.0)
-print(f"\n  A/A control (same model, twice): {r_aa:5.2f}x  <- the noise floor")
+print(f"\n  A/A control (same fit, twice): {r_aa:5.2f}x  <- the noise floor")
 print(
     f"  compiled-step ratio exact -> fast: {r_fast:5.2f}x   "
     f"(fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms)"
@@ -334,23 +317,11 @@ print(
 print("  attributed, one knob at a time:")
 print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop_w:6.2f}x")
 print(f"    + FeaturePrecomp   {loop_w:6.3f}s -> {loop_f:6.3f}s   {loop_w / loop_f:6.2f}x")
-if not resolved:
-    print(
-        f"  -> NOT resolved: excess over 1.0 is {r_fast - 1.0:.2f} against a control"
-        f" excess of {r_aa - 1.0:.2f};"
-    )
-    print(f"     the rule needs {RESOLVE_MARGIN:.0f}x that, so on this fit the two opt-ins buy")
-    print("     nothing measurable -- and the resolution table above says why it is")
-    print("     STRUCTURAL, not statistical: fit() resolves approx='auto', which tops up")
-    print("     the build-time choice, so all three arms run the SAME configuration.")
-    print("     These arms differ in what they PREDICT with, not in what they FIT with.")
-    print("     Fit to photometry ALONE and FeaturePrecomp is worth ~7x against a 1.23x")
-    print("     floor -- that gap was #1596 (fixed), and #1683 for the build-time form.")
-else:
-    print(
-        f"  -> resolved: excess {r_fast - 1.0:.2f} is more than {RESOLVE_MARGIN:.0f}x"
-        f" the control excess {r_aa - 1.0:.2f}."
-    )
+verdict = "resolves" if resolved else "does not resolve"
+print(
+    f"  -> exact -> fast {verdict} against the noise floor "
+    f"(excess {r_fast - 1.0:.2f} vs {RESOLVE_MARGIN:.0f}x the control excess {r_aa - 1.0:.2f})."
+)
 print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile.")
 
 # %% [markdown]
@@ -643,7 +614,7 @@ plt.show()
 # This is the interactive cost for fitting a single galaxy.
 # **`compiled step`** (`post.wall_time_s`): optimization loop time after compile.
 # This is the per-galaxy compute that a catalog pays after amortizing the compile via `fit_batch`.
-# It is the only metric where an `approx=` choice affects performance.
+# It is the only metric where the fit path affects performance.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
@@ -652,15 +623,12 @@ print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
 print(f"{'MAP, WavePrecomp only':<34}{warm_w:>10.2f} s{loop_w:>12.2f} s")
 print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
 print(f"{'A/A control (exact, again)':<34}{'':>10}  {loop_aa:>12.2f} s")
-print(f"\nNoise floor (A/A, same model twice): {r_aa:.2f}x. Compiled-step ratio:")
+print(f"\nNoise floor (A/A, same fit twice): {r_aa:.2f}x. Compiled-step ratio:")
 print(f"{loop_e / loop_f:.2f}x overall — {loop_e / loop_w:.2f}x from WavePrecomp, a further")
 print(
-    f"{loop_w / loop_f:.2f}x from FeaturePrecomp. "
-    + (
-        "None of these resolve against the control."
-        if not resolved
-        else "The overall ratio resolves against the control."
-    )
+    f"{loop_w / loop_f:.2f}x from FeaturePrecomp; the overall ratio "
+    + ("resolves" if resolved else "does not resolve")
+    + " against the control."
 )
 print(f"The fit() wall (~{warm_f:.1f}s) is per-call JIT")
 print("compile, not the fit — a catalog amortizes it once with fit_batch and pays only the")
@@ -677,10 +645,10 @@ print(
 # - Use `predict_line_fluxes` for pure, deblended, absorption-corrected emission
 #   (Gaussian on continuum-subtracted spectrum) matching `FastSpecFit.LINE_FLUX`.
 #   Window integrals are different: they carry stellar absorption and mis-deblend [N II].
-# - Build-time `WavePrecomp` and `FeaturePrecomp` are lookup tables; their win at catalog
-#   scale (batched `fit_batch`) is real and separate — the build is shared across galaxies.
-#   A line-channel observation already keeps nebular work off the per-gradient path, so
-#   on this fit the fast path buys little.
+# - `WavePrecomp` and `FeaturePrecomp` are lookup tables, and `fit()` runs on them by
+#   default. On this fit they make the compiled step ~4x faster than the exact wave
+#   grid, most of it from the photometry table; at catalog scale (batched `fit_batch`)
+#   the one-time build is shared across galaxies as well.
 # - Stellar mass and SFR are well constrained. Metallicity / dust / gas conditions
 #   degenerate along the age–dust–metallicity ridge; the posterior width is the honest
 #   statement of that. Tighter constraints need a full spectrum, auroral line, or UV slope.

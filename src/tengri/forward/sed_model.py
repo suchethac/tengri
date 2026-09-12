@@ -660,12 +660,15 @@ class FeaturePrecomp:
        evaluation. Measured on a 10-parameter Cue model with free ``neb_logU``
        / ``neb_logZ_gas``, against an A/A control whose noise floor was 1.23x:
        a photometry-only fit's compiled MAP step goes 0.645 s to 0.093 s
-       (**7x**) on adding this. With a line channel present the same model
-       already sits near 0.16 s and neither opt-in resolves at all.
-       :class:`WavePrecomp` alone does not resolve either (1.07x, under the
-       floor). Measure before assuming either way, and quote a ratio only
+       (**7x**) on adding this to :class:`WavePrecomp`. With a line channel
+       the same model's fit runs ~4x faster than the exact wave grid on the
+       pair, ~3.5x of it from :class:`WavePrecomp` alone (notebook
+       ``10_fastspecfit_joint_fit``, compiled MAP step, fit-time ``approx=``
+       varied). Earlier readings of "no gain with lines" timed arms that
+       ``fit()`` had already resolved to one configuration; see the trap
+       below. Measure before assuming either way, and quote a ratio only
        against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
-       the full grid.
+       the grid.
 
        That a photometry-only fit was *slower* than the same fit with an extra
        data channel was a defect, not a property of the method, #1596, fixed:
