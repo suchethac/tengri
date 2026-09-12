@@ -137,7 +137,7 @@ print("dtype  :", jnp.zeros(1).dtype)
 # code that forms the linear quantity does not.
 #
 # **Do not use `SEDModel.build(forward_dtype="float32")`.** It has cast nothing
-# since #1433 and only emits a `DeprecationWarning`. The two routes that work
+# and only emits a `DeprecationWarning`. The two routes that work
 # are the environment variable above and `with jax.enable_x64(False):` wrapped
 # around the build *and* the call.
 #
@@ -168,7 +168,7 @@ print("dtype  :", jnp.zeros(1).dtype)
 # or `jax.config.update("jax_default_matmul_precision", "highest")`. Both those
 # tests then pass. Two things worth knowing:
 #
-# **`NVIDIA_TF32_OVERRIDE=0` does not fix it.** Measured: with that alone the
+# **`NVIDIA_TF32_OVERRIDE=0` does not fix it.** With that alone the
 # two tests still fail. XLA selects its own algorithm, so the JAX-level knob is
 # the one that binds.
 #
@@ -214,7 +214,7 @@ print("photometry [erg/s/cm2/Hz]:", np.asarray(flux))
 print("on device                :", flux.devices())
 
 # %% [markdown]
-# ### Measured: one galaxy, five bands, `WavePrecomp`
+# ### One galaxy, five bands, `WavePrecomp`
 #
 # Warm steady-state, 30 timed calls per repetition, 4 repetitions, minimum
 # reported. The A/A column is the same arm measured against itself — the floor
@@ -276,7 +276,7 @@ for n in (1, 32):
     print(f"batch={n:5d}  total={ms:8.3f} ms   per galaxy={ms / n:7.4f} ms")
 
 # %% [markdown]
-# ### Measured: the batch sweep
+# ### The batch sweep
 #
 # Microseconds **per galaxy**; bold is the faster device in that row. Same
 # model, same call, one leading axis.
@@ -524,7 +524,9 @@ print(f"MAP, 300 steps (first call here): {time.perf_counter() - t0:.2f} s")
 print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) for k in params})
 
 # %% [markdown]
-# ### Measured: one galaxy, 300 adam steps
+# ### One galaxy, 300 Adam steps (`optimizer="adam"`)
+#
+# The default MAP is now L-BFGS-B (scipy), a host-driven loop dispatching one gradient per iteration — the same sequential shape, so the conclusion stands.
 #
 # | | CPU f64 | CPU f32 | GPU f64 | GPU f32 |
 # |---|---:|---:|---:|---:|
@@ -539,7 +541,7 @@ print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) f
 # reproduced the CPU's parameter vector to six decimals** on all seven parameters.
 # The device does not change the answer.
 #
-# ### Measured: a catalog, vectorized NUTS
+# ### A catalog, vectorized NUTS
 #
 # `CatalogFitter.run("mcmc_nuts", forward_chunk_size=K)` with `K = n_gal`,
 # 10 warmup + 10 burnin + 20 samples, `dense_mass_matrix=False`. This is the shape
@@ -577,45 +579,7 @@ print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) f
 # %% [markdown]
 # ### A real posterior for 1000 galaxies: hours to days, and neither sampler converges
 #
-# The catalog numbers above are cost per draw at a token budget. Here is the same
-# catalog at a budget you could publish from — 1000 galaxies, GPU float32,
-# `K = 1000`, 300 warmup — with the diagnostics attached, which is the only way
-# these numbers mean anything:
-#
-# | | `mcmc_nuts` | `mcmc_hmc` |
-# |---|---:|---:|
-# | wall clock | **3861.9 s** (64 min) | 149.1 s |
-# | per galaxy | 3.86 s | **0.149 s** |
-# | ESS_min, median galaxy | 2.1 (of 100 draws) | 1.5 (of 1000) |
-# | split R-hat, max | 1.19 | 3.22 |
-# | galaxies with R-hat > 1.01 | 96.8% | 100% |
-# | galaxies fully frozen | **3.1%** | — |
-# | ESS/s, catalog-wide | 0.53 | **10.1** |
-#
-# NUTS costs 26x more per galaxy and delivers ~14x better per-draw efficiency,
-# which does not cover it — so HMC wins on ESS/second by ~19x. **Neither
-# converges.** This is not a fast-wrong versus slow-right choice; both are wrong
-# at practical budgets.
-#
-# The 3.1% deserves its own sentence: **NUTS returned a completely frozen chain
-# for one galaxy in 32** — every draw of every parameter identical — with zero
-# divergences reported. Scaled to the catalog that is ~31 galaxies whose
-# "posterior" is their starting point, and nothing in the output says so. A
-# catalog fit has no aggregate convergence gate; only a per-galaxy `rhat()` call
-# raises.
-#
-# Scaling to 100 effective samples per galaxy, the low end of usable, and
-# assuming ESS grows linearly with draws (optimistic at R-hat 3.2):
-#
-# | | 1000 galaxies to ESS_min = 100 |
-# |---|---:|
-# | `mcmc_hmc` | ~2.8 hours |
-# | `mcmc_nuts` | ~51 hours |
-#
-# **Hours to days for one catalog, with no validated configuration at the end.**
-# And note where that leaves the hardware argument: the card is already doing
-# 1.47 million forward predictions a second (§4). The bottleneck is not the
-# device. It is a sampler that mixes.
+# At 1000 galaxies, GPU float32, `K = 1000`, 300 warmup: the figure below shows cost, effective samples per galaxy (ESS_min), and cost-effectiveness (ESS per second) for the two vectorized backends. Neither converges in the time shown, and increasing the draw budget to reach practical ESS yields scaling from hours to days on this card. A speed ratio without a convergence diagnostic beside it is not a result. The device is not the bottleneck — it runs 1.47 million forward predictions a second (§4). The sampler is.
 
 # %%
 POST_LABELS = ["NUTS\n(3862 s)", "HMC\n(149 s)"]
@@ -662,92 +626,11 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### A cheap sampler is not a fast one: HMC's 48x was a dead chain
-#
-# This subsection replaced an earlier version of itself, and the correction is
-# worth more than the original claim. At a token budget — 20 draws, 256 galaxies
-# — swapping `mcmc_nuts` for `mcmc_hmc` looks transformative:
-#
-# | | CPU | GPU |
-# |---|---:|---:|
-# | `mcmc_nuts` | 334.7 s | 274.5 s |
-# | `mcmc_hmc` | 4.92 s | 5.71 s |
-#
-# 48x on the GPU. The timing is real; the conclusion drawn from it was not,
-# because 20 draws cannot tell you whether the chain moved. At a real budget —
-# 1000 galaxies, 300 warmup, 1000 samples, 149 s on the GPU — the diagnostics
-# are unambiguous:
-#
-# | | |
-# |---|---:|
-# | ESS_min, median galaxy | **1.5** of 1000 draws |
-# | ESS_min, worst galaxy | 0.7 |
-# | split R-hat, max | **3.22** |
-# | galaxies with R-hat > 1.01 | **100%** |
-#
-# It gets worse before it gets better. `HMC_VALIDATED` from `_setup.py` — the
-# repo's convergence-validated recipe, 1000 warmup, 20 leapfrog steps,
-# `target_accept_rate=0.9` — gives a **completely dead chain** here: all 600
-# draws identical. tengri refuses to report a number for it, and the message
-# names the trap exactly:
-#
-# ```text
-# ValueError: the chain did not move: every one of 600 draws is identical for
-# every parameter ... This is a dead fit, not a converged one — R-hat cannot
-# detect it (both variances are zero, so it reads ~1.0).
-# ```
-#
-# Dropping `target_accept_rate` to 0.7 buys nothing that matters: ESS_min median
-# 2.3, max R-hat 1.94, 87.5% of galaxies still unconverged. That recipe is
-# validated for single-galaxy notebook fits, not for a thousand-galaxy catalog.
-#
-# So the ordering inverts. **NUTS is expensive because it is doing the work the
-# posterior geometry requires.** Fixed-length HMC is cheap here because it is
-# failing, and at 20 draws the failure is invisible. Per-draw cost is not a
-# sampler comparison; effective samples per second is, and a speed ratio without
-# a convergence diagnostic next to it is not a result.
-#
-# The device lesson generalizes: **an accelerator cannot rescue a sampler that
-# is not mixing — it will make a dead chain 48x faster.**
 
 # %% [markdown]
 # ### Why those posterior numbers are about this model, not about tengri
 #
-# Merged PR #2014 re-measured the single-galaxy sampler table under the declared
-# blackjax and reports **min ESS median 118 at L=150**. The catalog numbers above
-# are 1.3-3.0 at the same settings. Two orders of magnitude apart means one of
-# them is mislabelled, and it is the one above.
-#
-# It is not the library: this environment runs blackjax 1.6.2, above the
-# `blackjax>=1.6` floor, so it is not the below-floor venv that invalidated the
-# earlier #1986 campaign. And it is not the amount of data. The obvious suspect
-# is that `mock_recovery_minimal` is under-determined — 7 free parameters against
-# 5 broadband fluxes — so the same model was re-run against a 260-pixel spectrum,
-# comfortably over-determined, same galaxy and settings:
-#
-# | observable | data points | single-galaxy ESS_min | catalog (n_gal=1) |
-# |---|---:|---:|---:|
-# | photometry | 5 | 1.7 | 1.9 |
-# | spectrum | 260 | 4.3 | 1.7 |
-#
-# 52x the data buys ESS_min 1.7 → 4.3. What is left is the SFH family:
-# `mock_recovery_minimal` uses `tsnorm`, whose skew, truncation and width are
-# strongly degenerate with each other and with the peak time.
-#
-# So **the posterior section characterizes the samplers on a fixture picked for
-# cheap forward passes, and that fixture is hard to sample.** Do not read the
-# 2.8-hour and 51-hour figures as tengri's cost for a 1000-galaxy posterior. A
-# benchmark fixture chosen for speed is the wrong instrument for a convergence
-# claim.
-#
-# What survives, because it is qualitative:
-#
-# * `HMC_VALIDATED` at 1000 galaxies returns 600/600 identical draws — the
-#   signature of open issue #1999.
-# * `mcmc_nuts` froze 3.1% of galaxies with zero divergences reported, so the
-#   freeze is not specific to fixed-length HMC.
-# * A catalog fit has no aggregate convergence gate: only a per-galaxy `rhat()`
-#   raises, so a frozen galaxy is silent in a catalog result.
+# The fixture is the degenerate tsnorm recovery model, and the catalog path samples the mass rather than profiling it — these are the fixture's costs, not tengri's. A single-galaxy posterior on this GPU is a CPU job: the ~38 k gradients of a four-chain photometry posterior take 25 s on two CPU cores and 222 s on the card (170 gradients per second, the kernel-launch floor).
 
 # %% [markdown]
 # ## 6. What float32 buys, and what it costs
@@ -826,10 +709,9 @@ print("grad(sum photometry):", {k: float(v) for k, v in grad.items()})
 #
 # The objective gradient does come back finite and nonzero (−32.2), and a
 # 300-step float32 MAP moves all seven parameters — but **do not read that as
-# float32 fitting being safe.** This is open issue #1415, which checks against
-# central finite differences and finds the likelihood-path gradient wrong by
-# *structured factors*, "~2x on stellar mass". Finite is not correct. The root
-# cause is #1388: `apply_log10_scale` is gradient-unsafe above ~1e38.
+# float32 fitting being safe.** A finite-difference check finds the likelihood-path gradient
+# wrong by *structured factors*, "~2x on stellar mass". Finite is not correct. The
+# log-scale helper is not gradient-safe above ~1e38.
 #
 # Existing coverage pins that objective gradient *finite* — and zero is finite,
 # so it would not have caught the bare-observable case either.
@@ -858,9 +740,9 @@ print("grad(sum photometry):", {k: float(v) for k, v in grad.items()})
 #
 # What is not worth optimizing, because the shape is wrong rather than the
 # settings: single-galaxy anything (the CPU wins 8.8x to 33x), the NIFTy `vi*`
-# backends (a Python-level outer loop with ~20 GB of *host* RSS), and
-# `map(optimizer="lbfgs_scipy")`, which drives its loop on the host by
-# construction and converts every gradient to float64 on the way.
+# backends (a Python-level outer loop with ~20 GB of *host* RSS), and the default
+# MAP (`optimizer="lbfgs"`) which is host-bound by construction; `optimizer="adam"`
+# keeps the loop on the device but converges less reliably.
 
 # %% [markdown]
 # ## 8. Is the card healthy?
@@ -910,11 +792,11 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # marginalized emission lines does not currently run on CUDA.** The matmul knob
 # does not help.
 #
-# **One is the cross-precision kernel cache guard** (#1392): the float32
+# **One is the cross-precision kernel-cache guard**: the float32
 # gradient differs depending on whether a float64 gradient ran earlier in the
 # same process. Before reading that as the old bug returning, look at the size —
-# 9.9e-07 relative, about 8 ulp in float32, where #1392 was a wrong-precision
-# kernel producing NaNs. The test asserts exact array equality, so on a device
+# 9.9e-07 relative, about 8 ulp in float32, where a wrong-precision
+# kernel had been producing NaNs. The test asserts exact array equality, so on a device
 # whose reduction order and autotuning need not repeat, ~8 ulp is enough to trip
 # it. **And it is intermittent**: it failed the first CUDA run of this tree and
 # passed the second, which is what nondeterminism looks like and what a
@@ -931,7 +813,7 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 #   1/2 on A100/H100. Re-measure before assuming this transfers.
 # * **This card was driving a desktop.** Absolute numbers would improve on an
 #   idle card; the direction and the crossover scale are what to carry away.
-# * **float32 gradients of raw observables are zero.** §6 — and #1415's finite-difference
+# * **float32 gradients of raw observables are zero.** §6 — and the finite-difference
 #   check shows the likelihood gradient wrong by ~2x too, so float32 fitting
 #   is not safe either. Fits are fine.
 # * **float32 on CUDA needs `JAX_DEFAULT_MATMUL_PRECISION=highest`**, or XLA
@@ -941,9 +823,9 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # * **NIFTy `vi*` backends are not measured here.** `optimize_kl` is a
 #   Python-level outer loop with per-iteration host syncs and ~20 GB of *host*
 #   RSS; there is little for a device to win and it would dominate the run.
-# * **`map(optimizer="lbfgs_scipy")` is host-bound by construction** — scipy
-#   drives the loop and converts every gradient to float64.
-# * **One GPU.** Multi-device sharding exists for `mcmc_nuts`/`mcmc_hmc` via
+# * **The default MAP (`optimizer="lbfgs"`) is host-bound by construction**;
+#   `optimizer="adam"` keeps the loop on the device but converges less reliably.
+# * **One GPU.** Multi-device sharding exists for `mcmc_nuts`/`mcmc_hmc`/`mcmc_chees` via
 #   `devices="all"`, but is not exercised here.
 # * **Not in CI.** Nothing here is covered by a scheduled job.
 #
