@@ -215,17 +215,31 @@ pip install -e /path/to/tengri
 | Python 3.12 | `jax-mps` 0.10.10 → **jax 0.10.x** |
 | jax 0.9.x | `jax-mps` 0.9.9 → **Python 3.13** (cp313-only wheel) |
 
-Two rules govern everything else on this backend:
+Three rules govern everything else on this backend:
 
 1. **MPS has no float64, at all.** Not "slower" -- absent. A float64 array does not
    downcast; it raises `MLX does not support float64 (F64)`.
 2. **Select float32 in the environment, before Python starts.** Setting it after
    `import tengri` is too late -- constants allocated during import are already on the
-   device:
+   device.
+3. **Turn MLX kernel fusion off.** With it on, a reversed array combined with a
+   broadcast scalar is silently wrong on MPS: `y[::-1] * 2.0` returns the right first
+   element and zeros after it, for `jnp.flip` / `lax.rev` / any negative step, float32
+   and int32, under `jax.jit` and eagerly
+   ([tillahoffmann/jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)).
+   tengri hits it in the SKIRTOR polar-dust luminosity, a trapezoid over a reversed
+   frequency grid, which comes out as `0.0`: the torus loses its far-infrared graybody
+   and its normalization redistributes the deficit, so photometry is off by
+   wavelength-dependent factors from x1.02 at 3 um to x0.10 at 100 um while every
+   other seam agrees with CPU. Fusion off costs nothing here -- the sweep is
+   dispatch-bound, and in the one sweep measured each way every seam ran faster
+   without it (10-40 s versus 13-64 s per seam). `JAX_MPS_NO_OPTIMIZE=1` does
+   **not** cure it.
 
    ```bash
    export JAX_ENABLE_X64=0
    export JAX_PLATFORMS=mps
+   export MLX_DISABLE_COMPILE=1
    ```
 
 ### Accuracy: the parity sweep
@@ -244,13 +258,43 @@ only -- at a converged optimum the loss is stationary, so it is the parameter ve
 not the loss value, that is the scientific quantity gated:
 
 ```bash
-JAX_ENABLE_X64=0 JAX_PLATFORMS=mps python bench/scripts/benchmark_float32_mps_parity.py \
+JAX_ENABLE_X64=0 JAX_PLATFORMS=mps MLX_DISABLE_COMPILE=1 \
+    python bench/scripts/benchmark_float32_mps_parity.py \
     --reference bench/results/float32_parity_reference_<sha>.json
 ```
 
 It refuses to run with `jax_enable_x64=True` (a one-line fix is printed instead of a
 silent float64 fallback), and a seam that cannot be built in float32 today is skipped
 with a printed reason rather than failing the sweep.
+
+Measured 2026-09-12 on an M4 Pro (jax 0.10.2, `jax-mps` 0.10.10) under the three rules
+above, on a tree based on `f6c36d9d3`, against the float64 CPU reference
+`float32_parity_reference_18cf9fb9e.json`; the last column is the same float32 sweep on
+the Mac's CPU (`JAX_PLATFORMS=cpu`, 6 of 6 PASS), which separates what float32 costs
+from what the GPU backend adds. That reference predates #2260 (shock lines moved to the
+diffuse screen), which shifted the `panchromatic` seam's float64 answer by 3.3e-3 in
+Herschel-250 and its `tau_diff` gradient by 67%: on any later tree the `panchromatic`
+row reads FAIL on `fwd` against this file on every device, CPU-float64 included (#2300).
+Regenerate the reference (`--write-reference`) before re-measuring that row.
+
+| seam | fwd | grad | param | status | CPU-f32 grad |
+|---|---|---|---|---|---|
+| `stellar_dust` | 1.08e-05 | 5.91e-03 | 1.42e-05 | PASS | 1.64e-04 |
+| `+dust IR` | 1.08e-05 | 4.04e-03 | 2.66e-07 | PASS | 5.92e-04 |
+| `+Cue` | 9.76e-06 | 5.83e-03 | 2.53e-05 | PASS | 1.58e-03 |
+| `+AGN` | 1.19e-05 | 5.31e-03 | 4.27e-05 | PASS | 4.08e-03 |
+| `+radio+xray` | 1.05e-05 | 6.19e-03 | 3.64e-06 | PASS | 5.41e-04 |
+| `panchromatic` | 2.98e-05 | 1.06e-02 | 1.63e-05 | FAIL (grad) | 2.98e-04 |
+
+Five of six. Every forward and parameter column is well inside its gate; the
+`panchromatic` gradient sits 6% over the 1e-2 gate, and the same float32 graph on the
+Mac's CPU gives 2.98e-04, so the excess is the backend's arithmetic, not float32
+itself. Two things had to be true for the three torus seams to be measurable at all:
+the SKIRTOR grid must be C-contiguous (#2287 -- the loader used to hold flipped-axis
+views, whose negative strides `jax-mps` refuses at `device_put` with a misleading
+"Failed to create Metal buffer. GPU memory may be exhausted"), and rule 3 must hold
+(with the grid fixed and fusion on, all three torus seams FAIL at fwd=2.16e-02,
+grad=3.38e+00).
 
 ## TPU
 

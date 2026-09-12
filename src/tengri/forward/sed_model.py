@@ -720,7 +720,11 @@ class FeaturePrecomp:
         (default) takes them from ``Observation.line_fluxes``.
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds (Cue only). Defaults to each
-        free parameter's prior support.
+        free parameter's prior support. ``ranges['neb_logU']`` is the HII
+        support, not necessarily the final axis: whenever DIG mixing could be
+        active it is still extended to cover the DIG-shifted query point,
+        never clipped and never bypassed by supplying a range explicitly
+        (#2222 review I2).
 
     Notes
     -----
@@ -746,13 +750,23 @@ class FeaturePrecomp:
     *not* allowed for spectral indices, where a break is a flux **ratio** and a
     smooth additive offset does not cancel.
 
-    **What it refuses.** The grid tabulates a single photoionization regime, so
-    DIG mixing has no place in it: a build with ``neb_dig_frac`` free or fixed
-    non-zero raises
-    :class:`~tengri.config.exceptions.DIGNotOnNebularGridError` rather than
-    reconstructing the HII term alone and leaving both DIG parameters inert
-    (#2195). Pin ``neb_dig_frac`` at 0, its declared default, or keep the exact
-    path for the nebular channel.
+    **DIG mixing (#2222).** Served from this same table by two lookups --
+    HII at ``neb_logU``, DIG at ``neb_logU + neb_dig_delta_logU`` -- mixed by
+    ``neb_dig_frac``:
+    :func:`~tengri.components.nebular.dig.mix_dig_grid_reconstruction`.
+    ``neb_logU`` joins the grid axes, and its range extends to cover the
+    shifted query -- even a range given explicitly via ``ranges=`` (review
+    I2) -- whenever ``neb_dig_frac`` is free or fixed non-zero, even when
+    ``neb_logU`` is itself Fixed, UNLESS the extension is degenerate
+    (``neb_logU`` Fixed and ``neb_dig_delta_logU`` Fixed at exactly 0.0: the
+    HII and DIG query points then coincide, DIG mixing is arithmetically the
+    HII term, and no axis is built at all -- review I3). Measured worst-case
+    relative error over 10 seeds against the exact path: 1.17e-3
+    (photometry) / 1.41e-3 (lines) at ``neb_dig_frac = 0.3``, versus 1.72e-3 /
+    2.04e-3 at ``neb_dig_frac = 0`` on the same fixture -- DIG mixing costs no
+    accuracy relative to the table's own baseline. Before #2222 a build with
+    ``neb_dig_frac`` free or fixed non-zero raised ``ValueError`` here rather
+    than reconstructing it; that refusal is gone.
 
     **JIT-compatible**: the resulting line prediction is JIT- and gradient-safe;
     the one-time build is eager.
@@ -5350,6 +5364,25 @@ class SEDModel:
             # (from the passed state when available, else the SED-free
             # ``compute_nion``); the grid supplies ``L_line / Q_H``. The shared
             # redden + target-match + cosmology tail below is unchanged.
+            #
+            # DIG mixing (#2222): two lookups against this same table (HII at
+            # neb_logU, DIG at neb_logU + neb_dig_delta_logU), mixed by
+            # neb_dig_frac via mix_dig_grid_reconstruction. neb_logU joins
+            # grid.axis_names whenever DIG mixing could be active, even when
+            # it is itself Fixed, so a caller's ``params`` may omit it (a
+            # Fixed value is not guaranteed present in a hand-built dict).
+            #
+            # Merge the spec's Fixed values in exactly the way the exact path
+            # does (``predict_state``'s ``full_params = {**fixed_values,
+            # **params}``; the same one-line idiom is used verbatim elsewhere
+            # in this file, e.g. ``predict_photometry_components``). A
+            # registry-default fallback for an omitted key is NOT equivalent:
+            # a dict missing a Fixed key is correct on the exact path (it
+            # merges the spec's own value) and was silently wrong here for
+            # any model whose Fixed pin differs from the default -- measured
+            # 9.3e-1 (neb_logU) / 4.0e-1 (neb_dig_frac) relative error on the
+            # returned line fluxes (review I1, #2222).
+            from tengri.components.nebular.dig import mix_dig_grid_reconstruction
             from tengri.components.nebular.nebular_grid_precompute import (
                 _log_nion_of_state,
                 reconstruct_nebular_line_log_lums,
@@ -5365,7 +5398,26 @@ class SEDModel:
                 log_nion = self._compute_log_nion(params)
                 log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
             all_waves = jnp.asarray(grid.wavelengths)
-            log_all_lums = reconstruct_nebular_line_log_lums(log_nion, params, grid)
+            # Both lookups (HII and DIG) go through the log10 form: the
+            # linear sibling ``reconstruct_nebular_line_lums`` is ~1e40
+            # erg/s, out of float32 range (#2269), and mixing two such linear
+            # lookups would reintroduce exactly that overflow.
+            # `log_domain=True` keeps the mix itself in log10 space
+            # (`_log10_weighted_mix`) rather than exponentiating each lookup
+            # to mix and re-logging. ``full_params["neb_dig_frac"]`` is a
+            # JAX array here (never a Python literal), so the zero-fraction
+            # short-circuit never fires on this path -- both lookups always
+            # run, even at the declared ``Fixed(0.0)`` default (#2262).
+            full_params = {**self.spec.get_fixed_values(), **params}
+            log_all_lums = mix_dig_grid_reconstruction(
+                reconstruct_nebular_line_log_lums,
+                log_nion,
+                full_params,
+                grid,
+                neb_dig_frac=full_params["neb_dig_frac"],
+                neb_dig_delta_logU=full_params["neb_dig_delta_logU"],
+                log_domain=True,
+            )
         else:
             # ``state`` may be supplied by a caller that has already run the
             # forward (e.g. the joint loss deriving line fluxes + ratios +
@@ -5542,7 +5594,10 @@ class SEDModel:
 
         Both are **SED-free in** :math:`Q_H` (the stellar-published ``nion``). The
         grid axes are whichever of ``met_logzsol`` / ``neb_logU`` /
-        ``neb_logZ_gas`` are FREE; fixed ionization params are baked.
+        ``neb_logZ_gas`` are FREE, PLUS ``neb_logU`` whenever DIG mixing could
+        be active (``neb_dig_frac`` free, or fixed non-zero, with a
+        non-degenerate DIG-shifted image -- #2222), even when ``neb_logU``
+        itself is Fixed; every other fixed ionization param is baked.
 
         Parameters
         ----------
@@ -5557,7 +5612,14 @@ class SEDModel:
             axes.
         ranges : dict, optional
             Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
-            param's prior support).
+            param's prior support). ``ranges['neb_logU']`` is treated as the
+            HII support, not the final axis: whenever DIG mixing could be
+            active it is still extended to cover the DIG-shifted query point
+            (never clipped, never bypassed) -- passing the prior support
+            verbatim here no longer disarms the extension (#2222 review I2;
+            before this fix an explicit range silently clipped the DIG
+            lookup, measured 5.4e-2, above this module's 3e-2 parity
+            ceiling).
 
         Returns
         -------
@@ -5568,12 +5630,6 @@ class SEDModel:
         ------
         ValueError
             If no Q_H-linear nebular backend (Cue) is configured.
-        DIGNotOnNebularGridError
-            If DIG mixing is active (``neb_dig_frac`` free, or fixed non-zero).
-            The grid has no DIG axis and no second photoionization regime to
-            mix, so it would answer with the HII term alone and leave both DIG
-            parameters inert (#2195). Reachable on dusty builds too: dust
-            disarms the grid for photometry, not for the line channel.
 
         Notes
         -----

@@ -29,6 +29,11 @@ import numpy as np
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
+from tengri.components.nebular.dig import (
+    mix_dig_emission,
+    mix_dig_grid_reconstruction,
+    mix_dig_line_luminosities,
+)
 from tengri.components.template_threading import TemplateThreading
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters.priors import Fixed, Uniform
@@ -465,7 +470,7 @@ class NebularSEDComponent(TemplateThreading):
             )
         raise NotImplementedError(f"NebularSEDComponent unknown backend {self.config.backend!r}.")
 
-    def _grid_interp_point(self, grid, params, state):
+    def _grid_interp_point(self, grid, params, state, *, neb_logU=None):
         """Assemble the ionization interp point for :attr:`grid_table`.
 
         ``neb_logU`` / ``neb_logZ_gas`` are in the (prefix-sliced) ``params`` this
@@ -474,6 +479,30 @@ class NebularSEDComponent(TemplateThreading):
         and converted back to relative ``log10(Z/Zsun)``: the units the grid axis
         was built in. Returns a dict keyed by ``grid.axis_names`` for
         :func:`reconstruct_nebular_phot`.
+
+        ``neb_logU`` may join ``grid.axis_names`` purely because DIG mixing
+        could be active (#2222), even when it is itself Fixed, and a Fixed
+        value is not guaranteed present in ``params``. Pass the caller's own
+        already-defaulted value (``common_kwargs["neb_logU"]`` in
+        :meth:`apply`) via the ``neb_logU`` keyword so the HII query point
+        matches what the exact path would use, instead of re-deriving the
+        same default here.
+
+        Parameters
+        ----------
+        grid : NebularGridTable
+            The attached per-Q_H grid.
+        params : Mapping
+            Prefix-sliced parameter dict this component sees.
+        state : ForwardState
+            Current pipeline state (for the stellar-published metallicity
+            history).
+        neb_logU : float or None, keyword-only, optional
+            Already-defaulted ``neb_logU`` value; used verbatim instead of
+            ``params["neb_logU"]`` when ``"neb_logU"`` is one of
+            ``grid.axis_names``. ``None`` (default) falls back to
+            ``params[name]``, which is correct whenever ``neb_logU`` is free
+            (hence always present).
         """
         point = {}
         for name in grid.axis_names:
@@ -482,6 +511,8 @@ class NebularSEDComponent(TemplateThreading):
 
                 log_z_hist = state.derived.get("log_metallicity_history")
                 point[name] = jnp.asarray(log_z_hist)[0] - LOG10_ZSUN
+            elif name == "neb_logU" and neb_logU is not None:
+                point[name] = jnp.asarray(neb_logU)
             else:
                 point[name] = jnp.asarray(params[name])
         return point
@@ -584,10 +615,15 @@ class NebularSEDComponent(TemplateThreading):
         _neb_logZ_gas = params.get("neb_logZ_gas")
         if _neb_logZ_gas is not None:
             _neb_logZ_gas = jnp.asarray(_neb_logZ_gas) + LOG10_ZSUN
+        # NEB_LOGU_DEFAULT: read from the declaration (#2222 review M3), not
+        # repeated as a literal, so this and NEB_LOGU_DEFAULT's own
+        # "cannot drift apart" docstring claim both stay true.
+        from tengri.components.nebular.nebular_grid_precompute import NEB_LOGU_DEFAULT
+
         common_kwargs = {
             "ssp_wave": state.wave,
             "log_z": log_z,
-            "neb_logU": jnp.asarray(params.get("neb_logU", -3.0)),
+            "neb_logU": jnp.asarray(params.get("neb_logU", NEB_LOGU_DEFAULT)),
             "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
@@ -603,28 +639,21 @@ class NebularSEDComponent(TemplateThreading):
         for _name in _backend_accepted_params(type(self.backend)):
             if _name in params:
                 common_kwargs[_name] = jnp.asarray(params[_name])
-        # ── Diffuse-ionized-gas (DIG) mixing (issue #259) ─────────────
+        # ── Diffuse-ionized-gas (DIG) mixing (issue #259, #2221) ───────
         # The DIG component is a second photoionization regime with a
         # lower ionization parameter (log U_DIG = log U_HII + Δlog U,
-        # where Δlog U < 0). Linear mass-fraction mix of the two
-        # backend evaluations. Python-literal short-circuit on
-        # ``dig_frac == 0`` keeps the no-DIG cost at one backend call.
-        # Tracked values always pay two calls under JIT.
+        # where Δlog U < 0). ``mix_dig_emission`` / ``mix_dig_line_luminosities``
+        # (dig.py) own the linear mass-fraction mix and its zero-fraction
+        # short-circuit: each builds ONE frozen keyword dict and reuses it for
+        # the HII and DIG backend calls, so any kwarg resolved by a backend
+        # branch below (e.g. ``cue_population``) reaches both evaluations
+        # identically by construction, rather than by a snapshot-then-comment
+        # convention. That structural guarantee is what #2195 needed: before
+        # it, a snapshot taken here (~80 lines above the cue branch) missed
+        # ``cue_population``, and the DIG call fell back to Cue's
+        # population-independent defaults.
         _dig_frac = params.get("neb_dig_frac", 0.0)
         _dig_delta_logU = params.get("neb_dig_delta_logU", -1.0)
-        _dig_frac_is_zero = isinstance(_dig_frac, (int, float)) and float(_dig_frac) == 0.0
-        _dig_kwargs = None  # built on demand only when needed
-        if not _dig_frac_is_zero:
-            # THE SNAPSHOT IS TAKEN HERE, ~80 lines above its first use. Any key
-            # a backend branch below adds to ``common_kwargs`` is therefore
-            # absent from this copy and must be handed to the DIG calls
-            # explicitly, or the DIG regime silently evaluates something the HII
-            # regime did not. That is exactly how #2195 happened: the cue branch
-            # resolved the ionizing population into ``common_kwargs`` after this
-            # line, so the DIG call fell back to Cue's population-independent
-            # defaults. See ``cue_population`` in the cue branch.
-            _dig_kwargs = dict(common_kwargs)
-            _dig_kwargs["neb_logU"] = common_kwargs["neb_logU"] + jnp.asarray(_dig_delta_logU)
 
         # FAST path (#950): with a per-Q_H grid attached, the nebular photometry
         # (this apply) and the emission lines (predict_line_fluxes) reconstruct
@@ -691,17 +720,6 @@ class NebularSEDComponent(TemplateThreading):
             # ``predict_line_fluxes`` parity. Fall back to the explicit
             # ``gas_logqion`` shortcut only if upstream did not publish
             # ``age_weights`` (e.g. a chain without StellarSEDComponent).
-            #
-            # ``cue_population`` is kept as its own dict and passed to BOTH
-            # branches explicitly, the way the cloudy_grid branch below already
-            # passes ``ssp_weights`` / ``ssp_log_ages_yr`` (#2195). Folding it
-            # into ``common_kwargs`` alone is what the DIG branch could not see:
-            # ``_dig_kwargs`` is snapshotted well above this line, so the DIG
-            # call reached Cue with no population, fell back to
-            # ``default_gas_logqion = 49.1`` and the hard-coded young-starburst
-            # ``ionspec_*``, and mixed in a component whose normalization and
-            # ionizing-spectrum shape belonged to no galaxy. Line ratios cancel
-            # that; broadband photometry and absolute line luminosities do not.
             age_weights = state.derived.get("age_weights")
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
             cue_population: dict = {}
@@ -714,19 +732,27 @@ class NebularSEDComponent(TemplateThreading):
                 log_nion = state.derived.get("log_nion")
                 if log_nion is not None:
                     cue_population["gas_logqion"] = jnp.maximum(log_nion, 0.0)
-            common_kwargs.update(cue_population)
-            nebular_sed = self.backend.predict_nebular_sed(
-                **common_kwargs, **cue_extras, template_data=template_data
+            # One frozen dict, folding the resolved population in immutably
+            # (``common_kwargs`` itself is never mutated): ``mix_dig_emission``
+            # and ``mix_dig_line_luminosities`` (site below) both reuse this
+            # same dict for their HII and DIG evaluations, which is the
+            # structural fix for #2195 (see the DIG-mixing comment above).
+            # ``ssp_weights`` / ``ssp_log_ages_yr`` default to ``None`` (Cue's
+            # own low-level-path default) so the ``gas_logqion`` branch above
+            # does not leave them unset for ``mix_dig_emission``'s signature,
+            # which names them explicitly.
+            cue_call_kwargs = dict(common_kwargs)
+            cue_call_kwargs.setdefault("ssp_weights", None)
+            cue_call_kwargs.setdefault("ssp_log_ages_yr", None)
+            cue_call_kwargs.update(cue_population)
+            nebular_sed = mix_dig_emission(
+                self.backend,
+                neb_dig_frac=_dig_frac,
+                neb_dig_delta_logU=_dig_delta_logU,
+                **cue_call_kwargs,
+                **cue_extras,
+                template_data=template_data,
             )
-            if _dig_kwargs is not None:
-                nebular_sed_dig = self.backend.predict_nebular_sed(
-                    **_dig_kwargs,
-                    **cue_population,
-                    **cue_extras,
-                    template_data=template_data,
-                )
-                _f = jnp.asarray(_dig_frac)
-                nebular_sed = (1.0 - _f) * nebular_sed + _f * nebular_sed_dig
         else:  # cloudy_grid, cb19, mappings
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
             age_weights = state.derived.get("age_weights")
@@ -739,21 +765,15 @@ class NebularSEDComponent(TemplateThreading):
                 )
             ssp_log_ages_yr = jnp.log10(jnp.asarray(ssp_ages_yr))
             ssp_weights = jnp.asarray(age_weights)
-            nebular_sed = self.backend.predict_nebular_sed(
+            nebular_sed = mix_dig_emission(
+                self.backend,
                 ssp_weights=ssp_weights,
                 ssp_log_ages_yr=ssp_log_ages_yr,
                 template_data=template_data,
+                neb_dig_frac=_dig_frac,
+                neb_dig_delta_logU=_dig_delta_logU,
                 **common_kwargs,
             )
-            if _dig_kwargs is not None:
-                nebular_sed_dig = self.backend.predict_nebular_sed(
-                    ssp_weights=ssp_weights,
-                    ssp_log_ages_yr=ssp_log_ages_yr,
-                    template_data=template_data,
-                    **_dig_kwargs,
-                )
-                _f = jnp.asarray(_dig_frac)
-                nebular_sed = (1.0 - _f) * nebular_sed + _f * nebular_sed_dig
 
         # Publish the discrete line catalog (``line_waves`` /
         # ``line_lums``) when the backend supports it. This is what the
@@ -768,39 +788,25 @@ class NebularSEDComponent(TemplateThreading):
                     # users can read HeII 1640, HeI 10830, [OIII] 4363,
                     # etc. via pred.lines.get(wavelength).
                     cue_cloudyfsps_only = not self.config.cue_full_catalog
-                    line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
-                        **common_kwargs,
+                    line_waves, line_lums = mix_dig_line_luminosities(
+                        self.backend,
+                        neb_dig_frac=_dig_frac,
+                        neb_dig_delta_logU=_dig_delta_logU,
+                        **cue_call_kwargs,
                         **cue_extras,
                         template_data=template_data,
                         cloudyfsps_only=cue_cloudyfsps_only,
                     )
-                    if _dig_kwargs is not None:
-                        # ``cue_population`` explicitly, as above (#2195).
-                        _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
-                            **_dig_kwargs,
-                            **cue_population,
-                            **cue_extras,
-                            template_data=template_data,
-                            cloudyfsps_only=cue_cloudyfsps_only,
-                        )
-                        _f = jnp.asarray(_dig_frac)
-                        line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
                 else:  # cloudy_grid, cb19, mappings
-                    line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
+                    line_waves, line_lums = mix_dig_line_luminosities(
+                        self.backend,
                         ssp_weights=ssp_weights,
                         ssp_log_ages_yr=ssp_log_ages_yr,
                         template_data=template_data,
+                        neb_dig_frac=_dig_frac,
+                        neb_dig_delta_logU=_dig_delta_logU,
                         **common_kwargs,
                     )
-                    if _dig_kwargs is not None:
-                        _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
-                            ssp_weights=ssp_weights,
-                            ssp_log_ages_yr=ssp_log_ages_yr,
-                            template_data=template_data,
-                            **_dig_kwargs,
-                        )
-                        _f = jnp.asarray(_dig_frac)
-                        line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
                 # CLAUDE.md contract: vacuum wavelengths throughout. See
                 # ``nebular_line_waves_to_vacuum`` (components/nebular/_shared.py)
                 # for the upstream-Cue rationale and the Balmer-vote /
@@ -904,16 +910,34 @@ class NebularSEDComponent(TemplateThreading):
             )
 
             log_nion = state.derived["log_nion"]
-            interp_point = self._grid_interp_point(grid, params, state)
-            derived_overrides["nebular_phot_lnu_precomp"] = reconstruct_nebular_phot(
-                log_nion, interp_point, grid
+            interp_point = self._grid_interp_point(
+                grid, params, state, neb_logU=common_kwargs["neb_logU"]
+            )
+            # DIG mixing (#2222): two lookups against this same table (HII at
+            # interp_point["neb_logU"], DIG at neb_logU + neb_dig_delta_logU),
+            # mixed by neb_dig_frac -- the grid-path counterpart of the exact
+            # path's mix_dig_emission/mix_dig_line_luminosities calls above.
+            # Costs nothing extra when neb_dig_frac is a Python 0.0: the
+            # short-circuit lives in dig.py's _mix_dig_backend_evaluations.
+            derived_overrides["nebular_phot_lnu_precomp"] = mix_dig_grid_reconstruction(
+                reconstruct_nebular_phot,
+                log_nion,
+                interp_point,
+                grid,
+                neb_dig_frac=_dig_frac,
+                neb_dig_delta_logU=_dig_delta_logU,
             )
             # The rest-frame twin, from the same interpolation point (#1665).
             # The exact path emits these two together; emitting only the first
             # left every rest-frame consumer summing a band with the nebular
             # emission missing: 13/13 spectral indices wrong, worst +1733 %.
-            derived_overrides["nebular_restband_lnu_precomp"] = reconstruct_nebular_restband(
-                log_nion, interp_point, grid
+            derived_overrides["nebular_restband_lnu_precomp"] = mix_dig_grid_reconstruction(
+                reconstruct_nebular_restband,
+                log_nion,
+                interp_point,
+                grid,
+                neb_dig_frac=_dig_frac,
+                neb_dig_delta_logU=_dig_delta_logU,
             )
         elif (
             self._state is not None

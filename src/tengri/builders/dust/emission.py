@@ -53,9 +53,10 @@ _EMISSION_PREFIXES = (
     "dust_lgU",
     "dust_log_",
     # Energy-balance relaxation factor (η): L_IR = η · L_absorbed. Default
-    # Fixed(1.0) = strict balance; free it (e.g. eta_balance=LogNormal(0, 0.2))
-    # to fit galaxies whose UV/optical and FIR are spatially decoupled and so
-    # violate strict energy balance (high-z sources). See ``_params.py``.
+    # Fixed(1.0) = strict balance; free it (e.g.
+    # eta_balance=Gaussian(1.0, 0.2, lo=0.0)) to fit galaxies whose
+    # UV/optical and FIR are spatially decoupled and so violate strict
+    # energy balance (high-z sources). See ``_params.py``.
     "dust_eta_balance",
     # Two-temperature ``energy_balance_split`` knobs: warm/cold split with an
     # optional AGN-IR term. Threaded through ``two_component`` so the model is
@@ -119,12 +120,13 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
 
     Returns a ``dust_emission`` group dict that frees the energy-balance factor
     ``dust_eta_balance`` (``L_IR = eta * L_absorbed``) under a soft
-    ``LogNormal(mu=0, sigma)`` prior centered on strict balance (median
-    ``eta = 1``). Use it for galaxies whose UV/optical and FIR are spatially
-    decoupled and so violate strict energy balance (e.g. high-z sources): the
-    way AGNfitter offers an *optional* energy-balance prior, in contrast to
-    CIGALE/MAGPHYS which enforce it. The IR template shape stays fixed; only the
-    overall IR luminosity is allowed to float around the absorbed energy.
+    ``Gaussian(mu=1, sigma)`` prior centered on strict balance (mean
+    ``eta = 1``), truncated at 0 since eta < 0 is unphysical. Use it for
+    galaxies whose UV/optical and FIR are spatially decoupled and so violate
+    strict energy balance (e.g. high-z sources): the way AGNfitter offers an
+    *optional* energy-balance prior, in contrast to CIGALE/MAGPHYS which
+    enforce it. The IR template shape stays fixed; only the overall IR
+    luminosity is allowed to float around the absorbed energy.
 
     Parameters
     ----------
@@ -132,14 +134,16 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
         Emission model variant carrying the IR shape (default ``'dale2014'``).
         Any name in :func:`available` works.
     sigma : float
-        Standard deviation (in natural-log space) of the ``LogNormal`` prior on
-        ``eta``. ``0.2`` allows ~+/-20% deviation; widen for looser balance.
+        Linear standard deviation of ``eta`` about its mean of 1 (not
+        natural-log space). ``0.2`` allows ~+/-20% deviation; widen for
+        looser balance.
 
     Returns
     -------
     dict
         A ``dust_emission`` group dict, e.g. ``{'type': 'dale2014',
-        'eta_balance': LogNormal(mu=0.0, sigma=0.2), 'other_params': Fixed(DEFAULT)}``.
+        'eta_balance': Gaussian(mu=1.0, sigma=0.2, lo=0.0),
+        'other_params': Fixed(DEFAULT)}``.
 
     Examples
     --------
@@ -155,14 +159,14 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     ...     dust_emission=builders.dust.emission.relaxed_energy_balance(),
     ... )
     """
-    from tengri.parameters.priors import Fixed, LogNormal
+    from tengri.parameters.priors import Fixed, Gaussian
     from tengri.parameters.sentinels import DEFAULT
 
     if model not in _FACTORIES:
         raise ValueError(f"Unknown dust emission model {model!r}. Available: {available()}")
     return {
         "type": model,
-        "eta_balance": LogNormal(mu=0.0, sigma=sigma),
+        "eta_balance": Gaussian(mu=1.0, sigma=sigma, lo=0.0),
         # Per-param entry above means this wildcard is spelled/positioned as
         # 'other_params', LAST (the emission convention).
         WILDCARD_ALIAS_OTHER: Fixed(DEFAULT),
