@@ -781,6 +781,20 @@
 
 ### Fixed
 
+- `finalize_profile_mass` reinserts the marginalized mass through one `jax.jit`
+  program cached on the model per engine key (draws, keys, data, noise and
+  presence traced), instead of an eager `jax.vmap` over every draw that
+  dispatched each forward prediction op-by-op and re-traced per fit: 1.2 s ->
+  0.4 s warm and 5.5 s -> 2.0 s cold on 1200 draws of a 14-band model, and no
+  `(n_draws, n_pixels)` spike on spectroscopy models. With it, `forward.fit(data)`
+  pays what the bench harness pays per gradient on every phase; `run_nuts` now
+  reports `n_grad_adapt` / `n_grad_sample` / `n_grad_total` so the comparison is
+  made in gradients. `benchmark_laplace_nuts_20s.py` builds its context with
+  `profile_mass=False` again (its own marginalization needs the full-D
+  context; under the `"auto"` default every `--profile-mass` row died), and
+  `test_nuts_split_warmup_keeps_sampling_quality` asks for 400 draws (the
+  profiled fixed-key realization sat on its 1.1 R-hat bar at 200)
+  (`bench/reports/2026-09-12_library_path_parity.md`).
 - The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
   ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
   signature defaults from the declared parameter table
