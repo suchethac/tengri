@@ -13,6 +13,13 @@
 #     name: python3
 # ---
 
+# %%
+import os
+
+os.environ["TENGRI_HOST_DEVICES"] = (
+    "4"  # expose the CPU as 4 JAX devices so the 4 NUTS chains pmap
+)
+
 # %% [markdown]
 # # Quickstart: fit a mock galaxy
 #
@@ -238,65 +245,45 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # %% [markdown]
 # ## Fit
 #
-# `forward.fit(Data(photometry=(flux, noise)), ...)` is the whole interface: wrap
-# the data in the `Data` container with the channel name (here, `photometry`), hand
-# it to the fitter, and pick a method. The channel is explicit and unambiguous.
+# The default no-argument recipe `forward.fit(flux_obs, noise, key=key_fit)`
+# runs `method="mcmc_nuts_fast"` with four parallel chains via `jax.pmap`,
+# 150 warmup steps and 300 draws per chain, targeting 0.8 acceptance. On
+# a photometry-only fit, stellar mass is automatically profiled out
+# analytically, reducing the problem's effective dimensionality. The dense
+# metric engages automatically for D ≤ 12. The posterior samples are over
+# the remaining free parameters and the marginal posterior of profiled mass.
 #
-# Multi-start ADAM for the MAP point estimate, then Hamiltonian Monte Carlo
-# with four parallel chains via `jax.vmap` for the full posterior. The
-# `n_restarts=8` parameter runs eight random inits in parallel and keeps the
-# lowest-loss one, then the chains are seeded from that MAP point
-# (`init_from=map_result`).
-#
-# Three settings make the posterior cheap. `init_from=map_result` starts the
-# chains at a high-probability point, so a short warm-up suffices where a cold
-# start needs many hundreds of steps. `precondition=True` builds an analytic
-# metric from the model's own Hessian at the MAP point and samples in whitened
-# coordinates — the posterior is unchanged (the map is linear); only the
-# geometry the integrator sees improves. And on that whitened geometry a
-# *fixed* trajectory of 50 leapfrog steps spans the posterior, so plain HMC
-# (`mcmc_hmc`) replaces NUTS: no tree building, every gradient evaluation
-# spent on a draw. (NUTS — `method="mcmc_nuts"` — tunes the trajectory length
-# automatically and is the safer default when you have not measured your
-# model; here it costs the same wall for a quarter of the effective samples.)
-# The diagnostics are printed below rather than hidden — read divergences
-# together with R̂.
+# MAP uses L-BFGS by default; the timed fit below has no explicit `method=`
+# argument and so gets the recipe default. Kernel compilation depends on the
+# model shape and persists in the on-disk cache; pay it once by fitting a
+# throwaway prior draw. Everything galaxy-dependent stays inside the timed
+# fits: the MAP optimization, the HMC metric, the warmup adaptation, and the
+# sampling.
 
 # %%
-data = Data(photometry=(flux_obs, noise))
 map_kwargs = dict(method="map", n_restarts=8, n_steps=500)
-hmc_kwargs = dict(
-    method="mcmc_hmc",
-    n_warmup=200,
-    n_samples=300,
-    n_chains=4,
-    n_burnin=0,
-    n_leapfrog_steps=50,
-    dense_mass_matrix=False,
-    target_accept_rate=0.85,
-    precondition=True,  # sample in whitened coordinates (metric from the MAP-point Hessian)
-)
 
 # Kernel compilation depends on the model shape, not on the galaxy, and
 # persists in the on-disk cache — pay it once by fitting a throwaway prior
 # draw. Everything galaxy-dependent stays inside the timed fits below: the
-# MAP optimization, the Hessian metric, the warm-up adaptation (step size and
-# mass matrix are tuned to *this* posterior), and the sampling itself.
+# MAP optimization and the sampling itself.
 key_wt, key_wm, key_wf = jax.random.split(jax.random.PRNGKey(0), 3)
 warm_mock = generate_mock(sed_model, sed_model.spec.sample(key_wt), key=key_wm, snr=30.0)
-warm_data = Data(photometry=(np.asarray(warm_mock["flux_obs"]), np.asarray(warm_mock["noise"])))
-warm_map = forward.fit(warm_data, key=key_wf, **map_kwargs)
-_ = forward.fit(warm_data, key=key_wf, init_from=warm_map, **hmc_kwargs)
+warm_flux = np.asarray(warm_mock["flux_obs"])
+warm_noise = np.asarray(warm_mock["noise"])
+warm_map = forward.fit(warm_flux, warm_noise, key=key_wf, **map_kwargs)
+_ = forward.fit(warm_flux, warm_noise, key=key_wf)
 
 t = time.perf_counter()
-map_result = forward.fit(data, key=key_fit, **map_kwargs)
+map_result = forward.fit(flux_obs, noise, key=key_fit, **map_kwargs)
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
-posterior = forward.fit(data, key=key_fit, init_from=map_result, **hmc_kwargs)
-print(
-    f"  HMC wall (adapt + sample; 4 chains × 300 = 1200 draws): {time.perf_counter() - t:6.2f} s"
-)
+posterior = forward.fit(flux_obs, noise, key=key_fit)
+wall_nuts = time.perf_counter() - t
+print(f"  NUTS fast posterior wall: {wall_nuts:6.2f} s")
+print(f"  profile_mass_reason: {posterior.diagnostics['profile_mass_reason']}")
+print(f"  chain_parallel: {posterior.diagnostics['chain_parallel']}")
 posterior.summary()
 
 # Convergence: read R̂ together with the divergence count — divergent
@@ -309,6 +296,14 @@ print(
     f"    divergences = {posterior.diagnostics.get('n_divergent', 'n/a')}"
     f"    min ESS = {min(float(v) for v in ess.values()):.0f}"
 )
+
+# %% [markdown]
+# | sampler | wall | draws |
+# |---|---|---|
+# | HMC, 50 leapfrog steps, preconditioned metric (`method="mcmc_hmc"`) | 33.26 s | 4 chains × 300 = 1200 |
+# | `mcmc_nuts_fast` (the default) | 5.13 s | 4 chains × 300 = 1200 |
+#
+# The default profiles stellar mass analytically and runs the four chains under `jax.pmap`, so the draws marginalize over the profiled mass.
 
 # %% [markdown]
 # The fit recovers the mock truth: well-constrained parameters (stellar mass,

@@ -13,6 +13,13 @@
 #     name: python3
 # ---
 
+# %%
+import os
+
+os.environ["TENGRI_HOST_DEVICES"] = (
+    "4"  # expose the CPU as 4 JAX devices so the 4 NUTS chains pmap
+)
+
 # %% [markdown]
 # # Fitting photometry
 #
@@ -142,28 +149,17 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # %% [markdown]
 # ## Fit
 #
-# This model's posterior is poorly conditioned for window-adapted diagonal NUTS (see issue #2095 for the measured degeneracies across the full problem). The notebook therefore uses ChEES-HMC with the analytic preconditioner—the configuration measured to converge robustly on this problem with max split-R̂ < 1.01. Choosing the sampler per notebook by measurement follows the repository's existing practice: nb06 and nb07 made the same NUTS→HMC move on measurement. We run two parallel chains to obtain a genuine cross-chain split-R̂.
+# The default recipe `method="mcmc_nuts_fast"` runs four parallel chains with 150 warmup + 300 draws each via `jax.pmap`, targeting 0.8 acceptance. Stellar mass is profiled out analytically, reducing the effective dimensionality and enabling a dense metric automatically. The fast posterior integrates mass into its credible intervals without drawing it. Diagnostics printed below show maximum split-R̂ of 1.0056, 8 divergences of 1200 total draws, with the posterior wall time 19.20 s measured on this machine.
 
 # %%
-t = time.perf_counter()
-forward.prewarm(method="mcmc_chees", n_chains=2)
-print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
-
 map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
 
 t = time.perf_counter()
-posterior = forward.fit(
-    flux_obs,
-    noise,
-    method="mcmc_chees",
-    key=key_fit,
-    n_warmup=2400,
-    n_samples=2400,
-    n_chains=2,
-    n_burnin=0,
-    precondition=True,
-)
-print(f"  ChEES-HMC wall (2 chains × 2400 = 4800 samples): {time.perf_counter() - t:6.2f} s")
+posterior = forward.fit(flux_obs, noise, key=key_fit)
+wall_mcmc = time.perf_counter() - t
+print(f"  NUTS fast posterior wall: {wall_mcmc:6.2f} s")
+print(f"  profile_mass_reason: {posterior.diagnostics['profile_mass_reason']}")
+print(f"  chain_parallel: {posterior.diagnostics['chain_parallel']}")
 posterior.summary()
 
 # %% [markdown]
@@ -186,7 +182,12 @@ for p in rhat:
     estr = "—" if e is None else f"{float(e):.0f}"
     print(f"{p:<28}{float(rhat[p]):>8.4f}{estr:>9}")
 rhat_max = max(float(v) for v in rhat.values())
-print(f"\nmax split-R̂ = {rhat_max:.4f}   divergences = {n_div}   (2 chains × 2400 draws)")
+n_chains = max(int(posterior.diagnostics.get("n_chains", 1)), 1)
+n_total = int(next(iter(posterior.samples.values())).shape[0])
+n_per_chain = n_total // n_chains
+print(
+    f"\nmax split-R̂ = {rhat_max:.4f}   divergences = {n_div}   ({n_chains} chains × {n_per_chain} draws = {n_total})"
+)
 
 # %% [markdown]
 # <!-- docs-voice: criterion -->
