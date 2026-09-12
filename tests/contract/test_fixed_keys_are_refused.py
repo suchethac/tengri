@@ -17,11 +17,11 @@ pytestmark = pytest.mark.contract
 
 
 @pytest.fixture
-def model_with_fixed_redshift(synthetic_ssp, synthetic_obs):
+def model_with_fixed_redshift(synthetic_ssp, synthetic_tophat_obs):
     """Build a model with Fixed redshift and FREE parameters."""
     return SEDModel.build(
         ssp_data=synthetic_ssp,
-        observation=synthetic_obs,
+        observation=synthetic_tophat_obs,
         sfh={'type': 'dpl', 'alpha': FREE, 'beta': FREE},
         redshift=Fixed(0.05),
     )
