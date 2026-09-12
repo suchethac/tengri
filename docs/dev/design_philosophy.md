@@ -15,7 +15,7 @@ The durable contribution is not any particular SFH parametrization, dust model, 
 
 Every computation in tengri — from the power spectral density (PSD) of the SFH through stellar population synthesis, dust attenuation, and filter convolution — is implemented as a composition of differentiable JAX functions. This enables:
 
-1. **Gradient-based optimization** (MAP via Adam) in seconds per galaxy
+1. **Gradient-based optimization** (MAP via L-BFGS by default; Adam/AdamW/SGD selectable) in seconds per galaxy
 2. **Ray tracing MCMC** (Behroozi 2025) for gradient-directed posterior exploration
 3. **Hamiltonian Monte Carlo** (NUTS via BlackJAX) for exact posteriors in minutes
 4. **Variational inference** (geoVI via NIFTy.re) for approximate posteriors at scale

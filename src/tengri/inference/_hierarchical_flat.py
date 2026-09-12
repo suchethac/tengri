@@ -122,6 +122,14 @@ FLAT_SAMPLERS: dict[str, str] = {
 #: Listed so ``PopulationFitter`` can raise a specific error instead of a generic
 #: "unknown method", and so the reason survives longer than a commit message.
 FLAT_UNSUPPORTED: dict[str, str] = {
+    "mcmc_nuts_fast": (
+        "The single-galaxy photometry recipe (four chains x 150 warmup + 300 "
+        "draws on the mass-profiled posterior with a dense metric, "
+        "bench/reports/2026-09-11_profile_mass_20s.md). Neither leg exists here: "
+        "mass profiling is single-galaxy only, and the dense metric stops at "
+        "D <= 12 while hierarchical D grows with the catalog. Run mcmc_nuts for "
+        "the hierarchical posterior; the fast defaults would only pretend."
+    ),
     "mcmc_chees": (
         "ChEES adapts one trajectory length from an ensemble of chains held in "
         "memory at once, and hierarchical D grows with the catalog -- a 32-chain "
