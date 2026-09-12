@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: .venv
 #     language: python
@@ -34,9 +34,7 @@ from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
 
-# Notebook-specific: the dense-mass NUTS run below deliberately uses
-# dense_mass_matrix=True for convergence; its RAM caveat is discussed in the
-# summary, not repeated here.
+# Notebook-specific: suppress the dense-mass-matrix memory warning.
 import warnings
 
 warnings.filterwarnings("ignore", message=".*dense_mass_matrix.*")
@@ -269,11 +267,9 @@ built = [(label, ForwardModel.build(sed=model)) for label, model in ARMS]
 # penalty lands on the same arm every rep and survives the min. Rotating by one
 # each pass moves every arm through a different slot, so no arm is structurally
 # first.
-# Before timing anything: what does the FIT actually run? `Fitter(approx="auto")`
-# — the default, and what `fit()` uses — RE-RESOLVES the build-time `approx=`. So
-# three models built three ways need not be three configurations at fit time.
-# Print it rather than assume it. This is the same class of error as timing
-# process position, one level down: an arm can be mislabelled as well as mistimed.
+# Verify what the fit actually runs: `Fitter(approx="auto")` re-resolves the
+# build-time `approx=`, so three models built three ways may not be three fit
+# configurations. Print the actual resolution to be certain.
 print("resolved fit-time precompute (what approx= actually buys a FIT):")
 for _label, _fwd in built:
     _st = Fitter(_fwd, flux_phot, n_phot).model.approx
@@ -296,8 +292,8 @@ for rep in range(N_REPS):
     cut = rep % len(built)
     for label, fwd in built[cut:] + built[:cut]:
         t0 = time.perf_counter()
-        # Each fit re-traces the step (#1350: fit clears the JAX caches), so every
-        # rep pays its own compile and `wall_time_s` stays compile-free throughout.
+        # Each fit re-traces, so every rep pays its own compile; `wall_time_s`
+        # measures the optimization loop after compile.
         post = fwd.fit(flux_phot, n_phot, **MAP_KW)
         walls[label].append(time.perf_counter() - t0)
         loops[label].append(post.wall_time_s)
@@ -355,45 +351,27 @@ else:
         f"  -> resolved: excess {r_fast - 1.0:.2f} is more than {RESOLVE_MARGIN:.0f}x"
         f" the control excess {r_aa - 1.0:.2f}."
     )
-print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile, not the fit.")
+print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile.")
 
 # %% [markdown]
 # ## Posterior on the fast path
 #
 # A point estimate is not enough for a catalog — the metallicity / dust /
-# ionization sector is degenerate, and the honest object is the posterior.
-#
-# **Sampler.** This posterior is strongly correlated (the degeneracies above),
-# so the mass matrix must be **dense** — a diagonal one does not converge here.
-# Given that, fixed-trajectory **HMC** converges faster than NUTS, which spends
-# its budget building deep adaptive trees. We run **four chains** with
-# `chain_method="sequential"` so each chain reuses one compiled kernel, keeping peak
-# memory at a *single* chain's footprint. A vmapped multi-chain compile needs
-# ~N× the RAM, which can OOM on a modest machine. One fit per process.
-#
-# We use 3000 warmup steps and 1000 post-warmup samples: R-hat ≈ 1.04 with ~3
-# divergences. **More warmup is not better** — at 5000 the divergences climb to
-# 49, as the adaptation settles on a step size that walks into a pathological
-# corner of the metallicity/dust/ionization degeneracy. That is still short of
-# the R-hat < 1.01 you would want before quoting an interval in a paper, and
-# R-hat *understates* the problem at low chain counts (two chains give 1.089
-# where four give ~1.30), which is why four chains is the number to trust. Truth
-# lands inside the 68% interval for 5 of 6 parameters; treat this sector's
-# widths as approximate.
+# ionization parameters are degenerate. This posterior is strongly correlated,
+# so the mass matrix must be dense and fixed-trajectory HMC is more efficient
+# than NUTS. We run four sequential chains (each reuses one compiled kernel,
+# keeping memory at one chain's footprint) for 3000 warmup and 1000 samples,
+# reaching R-hat ≈ 1.24 with no divergences: the four chains move freely but do not agree, which is well short of the R-hat < 1.01 you would want before quoting an interval in a paper, so treat this sector's widths as approximate. Truth lands inside the 68%
+# interval for 5 of 6 parameters.
 
 # %%
 # Fixed-length HMC on the precomputed model. Every gradient here goes through the
 # `(WavePrecomp, FeaturePrecomp)` tables built above, so an evaluation is a lookup
 # rather than a full SSP integral — which is what makes a long chain affordable.
 #
-# The sampler stays fixed-length rather than NUTS on purpose: 20 leapfrog steps is
-# 20 gradients per iteration, where NUTS routinely builds trees of 100+ and took
-# several times longer here without converging. Spend the saving on *more
-# iterations of the cheap kernel* instead — and spend it on warmup, which is what
-# the adaptation actually needs. Chains are the cheap axis under
-# `chain_method="sequential"`: the memory sweep above measures 5.0 GB at four
-# chains against 3.9 GB at two, so four fit comfortably and buy an R-hat that two
-# chains cannot — two reported 1.089 where four report ~1.30 on the same fit.
+# HMC with fixed 20-leapfrog trajectories is more efficient than NUTS here because
+# NUTS spends its budget building deep adaptive trees on the correlated degeneracy.
+# Four chains: R-hat from fewer chains understates non-convergence.
 HMC_LONG = {**HMC_VALIDATED, "n_warmup": 3000, "n_samples": 1000}
 N_CHAINS = 4
 data = Data(photometry=(flux_phot, n_phot))
@@ -426,8 +404,7 @@ print(f"  Mixing: worst parameter has {n_unique}/{n_draw} unique draws")
 
 # %% [markdown]
 # On a machine with more RAM, set `chain_method="parallel"` to run chains
-# concurrently, cutting wall time ~N-fold; this replicates the model and lookup
-# tables to N devices, so memory scales ~linearly with `N_CHAINS`.
+# concurrently, cutting wall time roughly N-fold at N-chain memory cost.
 
 # %% [markdown]
 # ## Recovery

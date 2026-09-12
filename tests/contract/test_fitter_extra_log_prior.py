@@ -268,10 +268,11 @@ def test_extra_log_prior_is_an_engine_ledger_row(synthetic_ssp):
     of two Fitters sharing one Model that differ only in the hook. Pinned at
     the key level (not only through the loss values above): ``None`` vs a
     hook differ, two Fitters handed the SAME function agree, and the entry is
-    ``baked()``'s module-qualified name, never an address. Two distinct
-    closures returned by one factory therefore share a key (same qualified
-    name), which the identity keying did not do; distinct hooks should be
-    distinct functions.
+    ``baked()``'s module-qualified name plus the baked contents of any
+    captured cells (#2303), never an address. Two closures returned by one
+    factory therefore share a key only when they capture equal constants,
+    which the identity keying did not do; distinct hooks should be distinct
+    functions or capture distinct constants.
     """
     from tengri.inference._engine_policy import ENGINE_POLICY, FINGERPRINT_POLICY
 

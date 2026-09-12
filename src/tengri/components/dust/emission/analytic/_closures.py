@@ -772,10 +772,13 @@ def energy_balance_split(
     wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid. [Å] Must be sorted ascending.
     L_absorbed_stellar : float
-        Total absorbed stellar luminosity. [Lsun]
+        Total absorbed stellar luminosity. [Lsun or erg/s, as passed; must match
+        the units of L_agn_ir. On the component path both arrive in erg/s.]
     L_agn_ir : float
-        Additional AGN-heated IR luminosity. [Lsun] Default: read from the
-        declared ``dust_L_agn_ir`` (#2241); today 0.0.
+        Additional AGN-heated IR luminosity. [Lsun or erg/s, as passed; must match
+        the units of L_absorbed_stellar. On the component path both arrive in
+        erg/s.] Default: read from the declared ``dust_L_agn_ir`` (#2241);
+        today 0.0.
     eta_balance : float
         Energy balance parameter: ratio of re-emitted to absorbed stellar luminosity.
         [dimensionless] Default: read from the declared ``dust_eta_balance``

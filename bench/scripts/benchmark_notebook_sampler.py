@@ -73,11 +73,13 @@ neither is the "real" one:
 
 ===========  ==================================================================
 ``05``       what ``notebooks/05_fitting_photometry.py`` ships **today**
-             (``law="calzetti"``). The primary gate fixture -- this is what a
+             (``law="calzetti"`` with the wNE grid and ``neb=builders.neb.ssp()``
+             as of 2026-09-12). The primary gate fixture -- this is what a
              reader who runs the notebook actually gets.
-``05pre``    the **pre-#1989** model (``law_bc="calzetti", law_diff="power_law"``).
+``05pre``    the **pre-#1989 and pre-2026-09-12** model (``law_bc="calzetti",
+             law_diff="power_law"``, bare grid with ``neb=builders.neb.none()``).
              Kept so the published 2026-08-17 table stays reproducible and so
-             the dust-law sensitivity is measurable rather than inferred.
+             the dust-law and grid sensitivities are measurable rather than inferred.
 ``00now``    what ``notebooks/00_quickstart.py`` ships **today** (``dpl`` SFH,
              ONE Calzetti screen, nebular baked into the wNE grid, D=6). The
              live nb00 fixture, added in #2096. See below.
@@ -600,8 +602,11 @@ def _build_nb00_today(ssp):
 def _build_nb05(ssp):
     """``05_fitting_photometry`` **as shipped today**: quickstart + logzsol + tau_diff. D=8.
 
-    ``law="calzetti"`` -- both screens Calzetti -- which is what the notebook
-    builds on this HEAD, after PR #1989 (``176f8fd9d``) rewrote its dust line.
+    The notebook as of 2026-09-12 loads the nebular-baked ``prsc_miles_chabrier_wNE``
+    SSP grid and declares ``neb=builders.neb.ssp()``, so nebular emission is a
+    property of the grid, not a separate component. ``law="calzetti"`` -- both
+    screens Calzetti -- which is what the notebook builds on this HEAD, after
+    PR #1989 (``176f8fd9d``) rewrote its dust line.
     This is the primary gate fixture: it is what a reader who runs the notebook
     actually gets.
 
@@ -622,19 +627,21 @@ def _build_nb05(ssp):
             tau_diff=Uniform(0.0, 1.0),
         ),
         dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
-        neb=builders.neb.none(),
+        neb=builders.neb.ssp(),
         met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(0.05),
     )
 
 
 def _build_nb05_prelaw(ssp):
-    """``05_fitting_photometry`` as it stood BEFORE PR #1989. D=8.
+    """``05_fitting_photometry`` as it stood BEFORE PR #1989 and 2026-09-12 grid migration. D=8.
 
-    Identical to :func:`_build_nb05` in every parameter and prior, and different
-    in exactly one thing: the **diffuse** screen is a power law rather than
-    Calzetti. Both are real configurations of the same notebook, three days
-    apart, and the pair is the reason this function exists.
+    Identical to :func:`_build_nb05` in every parameter and prior except for two things:
+    the **diffuse** dust screen is a power law rather than Calzetti, and the
+    SSP grid is the bare ``fsps_prsc_miles_chabrier`` without nebular emission
+    (so ``neb=builders.neb.none()`` rather than ``neb=builders.neb.ssp()``).
+    Both are real configurations of the same notebook, three days apart (dust law
+    change in #1989), and the pair is the reason this function exists.
 
     The history, from the notebook's own git log rather than from anyone's
     reconstruction. Until 176f8fd9d ("fix(dust,api): attenuation laws are
@@ -886,17 +893,18 @@ NOTEBOOKS = {
     "05": dict(
         build=_build_nb05,
         parity=dict(kind="mirrors", notebook="notebooks/05_fitting_photometry.py"),
+        ssp="prsc_miles_chabrier_wNE",
         seed=7,
         snr=20.0,
-        n_chains=2,
-        shipped=dict(method="mcmc_nuts", n_warmup=600, n_samples=600),
+        n_chains=4,
+        shipped=dict(method="mcmc_nuts_fast", n_warmup=300, n_samples=600),
         note=(
-            "05_fitting_photometry AS SHIPPED TODAY (law='calzetti', both "
-            "screens, post-#1989). Does NOT reproduce the published "
-            "2026-08-17 report -- use '05pre' for that. D=8 with "
-            "dense_mass_matrix=True is the configuration CLAUDE.md records "
-            "peaking at 20+ GB in NUTS warmup, so HMC rows here run "
-            "dense_mass_matrix=False unless --dense is passed."
+            "05_fitting_photometry AS SHIPPED TODAY (2026-09-12): wNE grid with "
+            "nebular emission baked in (neb=builders.neb.ssp()), "
+            "law='calzetti' both screens (post-#1989). Runs mcmc_nuts_fast with "
+            "stricter convergence than default (n_warmup=300, n_samples=600, "
+            "n_chains=4). Does NOT reproduce the published 2026-08-17 report "
+            "-- use '05pre' for that."
         ),
     ),
     "05pre": dict(
@@ -904,31 +912,39 @@ NOTEBOOKS = {
         parity=dict(
             kind="historical",
             anchor="05",
-            superseded_by="#1989 (176f8fd9d, 2026-08-20)",
+            superseded_by="#1989 (176f8fd9d, 2026-08-20) and 2026-09-12 grid migration",
             differs_in=(
                 "dust_attenuation.law",
                 "dust_attenuation.law_bc",
                 "dust_attenuation.law_diff",
+                "neb.type",
+                "ssp.file",
+                "ssp.nebular",
             ),
             why=(
-                "nb05 before #1989 rewrote law_bc='calzetti' to law='calzetti'. "
-                "Exactly one physical change -- the diffuse screen -- and the "
-                "three keys are the two spellings of it. Kept so "
-                "2026-08-17_nb01_nb05_nuts_vs_hmc.md stays reproducible."
+                "nb05 before #1989 rewrote law_bc='calzetti' to law='calzetti' "
+                "(three dust-law keys), and before 2026-09-12 used the bare "
+                "fsps_prsc_miles_chabrier grid with neb=builders.neb.none(). "
+                "Kept so 2026-08-17_nb01_nb05_nuts_vs_hmc.md stays reproducible "
+                "under the pre-#1989 physics and pre-2026-09-12 grid."
             ),
         ),
         # nb05's own seed, SNR and chain count exactly. This row differs from
-        # "05" in the diffuse dust law and in nothing else, so the pair
-        # isolates PR #1989's physics change.
+        # "05" in the diffuse dust law, the SSP grid, and the nebular treatment,
+        # so the pair isolates PR #1989's physics change plus the 2026-09-12
+        # grid migration.
         seed=7,
         snr=20.0,
         n_chains=2,
         shipped=dict(method="mcmc_nuts", n_warmup=600, n_samples=600),
         note=(
             "05_fitting_photometry as it stood BEFORE PR #1989 changed "
-            "law_bc='calzetti' to law='calzetti'. The model the published "
-            "2026-08-17 report measured, kept so that table stays reproducible. "
-            "NOT what the notebook builds today -- use '05' for that."
+            "law_bc='calzetti' to law='calzetti' AND before 2026-09-12 migrated "
+            "to the wNE grid with baked-in nebular emission. Uses the bare "
+            "fsps_prsc_miles_chabrier grid with neb=builders.neb.none(). "
+            "The model the published 2026-08-17 report measured, kept so that "
+            "table stays reproducible. NOT what the notebook builds today -- "
+            "use '05' for that."
         ),
     ),
     "ctl-dpl": dict(

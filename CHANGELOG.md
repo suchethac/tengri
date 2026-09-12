@@ -327,6 +327,24 @@
 
 ### Changed
 
+- `dust_frac_agn` is now declared with a `free_prior` of `Uniform(0.0, 0.99)`,
+  making it wildcard-reachable (`all_params: FREE`) exactly on
+  `dale2014_cigale`, the engine variant whose shipped template grid carries the
+  QSO template where the parameter is live. On plain `dale2014` (QSO-less grid),
+  the parameter remains inert and unreachable by the wildcard, preventing the
+  sampler from exploring a flat dimension (#2244). The fix follows the
+  engine-scoped declared-exception pattern: `dale2014_cigale` declares `frac_agn`
+  at the component class level; plain `dale2014` omits it. Simultaneously, the
+  AGN+Dale double-count warning (#721) now fires on `dale2014_cigale` (where
+  `frac_agn` is live and can double-count with a composable AGN torus) instead
+  of plain `dale2014` (where the parameter is inert). One behavioral break
+  rides along: an explicit `frac_agn` key beside plain `dale2014` — previously
+  accepted and silently ignored — now raises `ParameterError` naming the
+  variant that reads it, via the grammar's standard unknown-key check
+  (#2244, #721). The same warning now also covers `energy_balance_split`, whose
+  `dust_L_agn_ir` slot adds AGN-heated IR beside an active composable AGN torus
+  (#2251).
+
 - The GRAHSP AGN disc normalization `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, erg/s) is
   renamed `agn_grahsp_log_l5100` (`Uniform(42.0, 47.0)`, dex), with no alias (#1206). The
   linear parameter *value itself* is `inf` in float32 before any kernel runs; translate with
@@ -798,6 +816,12 @@
   relative difference up to ~1.0 at z=2.0 in the damped wings, smaller at
   other redshifts -- and changes nothing on the grammar path, which always
   supplied 20.3. Part of #2265.
+- The energy-balance-split closure's docstring tagged its luminosity arguments
+  `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
+  supplies both in `erg/s` (component_factory.py:346). The docstring is now
+  unit-agnostic ("as passed"), with a note that both arguments must share the
+  same units, and the `dust_L_agn_ir` parameter declaration now explicitly
+  states `units="erg/s"` (#2251).
 
 - `finalize_profile_mass` reinserts the marginalized mass through one `jax.jit`
   program cached on the model per engine key (draws, keys, data, noise and

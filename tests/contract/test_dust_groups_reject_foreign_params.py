@@ -81,6 +81,22 @@ class TestForeignKeysRaise:
         assert "'alpha_dl14'" in message
         assert "draine_li2007" in message
 
+    def test_plain_dale2014_rejects_frac_agn(self):
+        """``frac_agn`` is declared by ``dale2014_cigale`` only (#2244): the plain
+        engine's shipped grid has no QSO template, so the key was silently inert
+        there before the engine scoping and is refused loudly after it."""
+        with pytest.raises(ParameterError) as exc_info:
+            build_groups(
+                dust_emission={
+                    "type": "dale2014",
+                    "all_params": WILDCARD,
+                    "frac_agn": Fixed(0.3),
+                }
+            )
+        message = str(exc_info.value)
+        assert "'frac_agn'" in message
+        assert "dale2014" in message
+
     def test_calzetti_rejects_slope(self):
         """``slope`` is read by ``power_law`` / ``conroy2010``, never by Calzetti."""
         with pytest.raises(ParameterError) as exc_info:
@@ -191,7 +207,8 @@ class TestOwnParametersAccepted:
             ("modified_blackbody", {"epsilon_mbb": Fixed(1e-2)}),
             ("draine_li2014", {"alpha_dl14": Fixed(2.5), "umin": Fixed(2.0)}),
             ("draine_li2007", {"umin": Fixed(2.0), "qpah": Fixed(3.0)}),
-            ("dale2014", {"alpha_dale": Fixed(2.0), "frac_agn": Fixed(0.0)}),
+            ("dale2014", {"alpha_dale": Fixed(2.0)}),
+            ("dale2014_cigale", {"alpha_dale": Fixed(2.0), "frac_agn": Fixed(0.0)}),
             ("themis", {"qhac": Fixed(0.1), "gamma_dl": Fixed(0.05)}),
         ],
     )

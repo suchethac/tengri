@@ -308,7 +308,7 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'spinning_dust'` — Include small spinning dust grains (default: auto from type).
 - `'f_cnm'` — Cold neutral medium fraction (parametrization-dependent).
-- `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`). `FREE` selects the declared default free prior, `Gaussian(1.0, 0.2)` truncated at 0; pass an explicit `Uniform(...)` (or any other prior) to override it.
+- `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`). `FREE` selects the declared default free prior, `Gaussian(1.0, 0.2)` truncated at 0; pass an explicit `Uniform(...)` (or any other prior) to override it. The `all_params` wildcard reaches it on **every** emission engine — it scales the budget every template normalizes to, so it is live regardless of the selected engine (#2286).
 - `'log_L_ir'` — Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright; leaving it undeclared keeps energy balance. Because it makes `eta_balance` inert, declaring both (with `eta_balance` free or fixed ≠ 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard; an explicit `FREE` on it is refused (declare a real prior instead).
 
 **Minimal example:**

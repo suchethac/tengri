@@ -13,6 +13,13 @@
 #     name: python3
 # ---
 
+# %%
+import os
+
+os.environ["TENGRI_HOST_DEVICES"] = (
+    "4"  # four CPU devices, one per chain
+)
+
 # %% [markdown]
 # # Fitting photometry
 #
@@ -33,6 +40,11 @@
 from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
+
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
+import warnings
+
+warnings.filterwarnings("ignore", message=".*wNE.*")
 
 import time
 from pathlib import Path
@@ -67,10 +79,10 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# The same UV–MIR bandset as the quickstart (GALEX → WISE), bare-stellar SSP.
+# The same UV–MIR bandset as the quickstart (GALEX → WISE) and the same SSP grid, which carries its nebular emission (lines and continuum), so no separate nebular model is needed.
 
 # %%
-SSP_NAME = "fsps_prsc_miles_chabrier"
+SSP_NAME = "prsc_miles_chabrier_wNE"
 ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 FILTERS = [
@@ -111,7 +123,7 @@ sed_model = SEDModel.build(
         tau_diff=Uniform(0.0, 1.0),
     ),
     dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
-    neb=builders.neb.none(),
+    neb=builders.neb.ssp(),
     met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.05),
 )
@@ -142,41 +154,28 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # %% [markdown]
 # ## Fit
 #
-# This model's posterior is poorly conditioned for window-adapted diagonal NUTS (see issue #2095 for the measured degeneracies across the full problem). The notebook therefore uses ChEES-HMC with the analytic preconditioner—the configuration measured to converge robustly on this problem with max split-R̂ < 1.01. Choosing the sampler per notebook by measurement follows the repository's existing practice: nb06 and nb07 made the same NUTS→HMC move on measurement. We run two parallel chains to obtain a genuine cross-chain split-R̂.
+# The no-argument default is tuned for a 15-20 s posterior; this notebook asks for stricter convergence with 300 warmup steps and 600 draws per chain, about 30 s on this machine. The sampler runs four NUTS chains in parallel and marginalizes the stellar mass analytically, so it never has to be drawn.
 
 # %%
-t = time.perf_counter()
-forward.prewarm(method="mcmc_chees", n_chains=2)
-print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
-
 map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
 
 t = time.perf_counter()
-posterior = forward.fit(
-    flux_obs,
-    noise,
-    method="mcmc_chees",
-    key=key_fit,
-    n_warmup=2400,
-    n_samples=2400,
-    n_chains=2,
-    n_burnin=0,
-    precondition=True,
-)
-print(f"  ChEES-HMC wall (2 chains × 2400 = 4800 samples): {time.perf_counter() - t:6.2f} s")
+posterior = forward.fit(flux_obs, noise, key=key_fit, n_warmup=300, n_samples=600)
+wall_mcmc = time.perf_counter() - t
+print(f"  NUTS fast posterior wall: {wall_mcmc:6.2f} s")
 posterior.summary()
 
 # %% [markdown]
 # ## Convergence
 #
 # Before any science: did the chains converge? Split-R̂ should be < 1.01,
-# effective sample size (ESS) a healthy fraction of the 4800 draws, and
+# effective sample size (ESS) a healthy fraction of the draws, and
 # divergences few. Anything failing here means the credible intervals are not
-# trustworthy.
+# trustworthy. A divergence count of a few percent means the integrator could not follow part of the posterior; read the widths of the worst-R̂ parameters as approximate. It also means the tails are under-explored, so quote medians and 68% intervals and do not lean on the extreme quantiles.
 
 # %%
 rhat = posterior.rhat()
-ess = posterior.ess() if hasattr(posterior, "ess") else {}
+ess = posterior.effective_sample_size()
 n_div = posterior.diagnostics.get("n_divergent", "n/a")
 
 print(f"{'parameter':<28}{'R̂':>8}{'ESS':>9}")
@@ -186,7 +185,12 @@ for p in rhat:
     estr = "—" if e is None else f"{float(e):.0f}"
     print(f"{p:<28}{float(rhat[p]):>8.4f}{estr:>9}")
 rhat_max = max(float(v) for v in rhat.values())
-print(f"\nmax split-R̂ = {rhat_max:.4f}   divergences = {n_div}   (2 chains × 2400 draws)")
+n_chains = max(int(posterior.diagnostics.get("n_chains", 1)), 1)
+n_total = int(next(iter(posterior.samples.values())).shape[0])
+n_per_chain = n_total // n_chains
+print(
+    f"\nmax split-R̂ = {rhat_max:.4f}   divergences = {n_div}   min ESS = {min(float(v) for v in ess.values()):.0f}   ({n_chains} chains × {n_per_chain} draws = {n_total})"
+)
 
 # %% [markdown]
 # <!-- docs-voice: criterion -->
