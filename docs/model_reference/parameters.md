@@ -34,12 +34,12 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | *Dust Attenuation* |  |  |  |  |  |
 | `dust_tau_bc` | $\tau_{\rm BC}$ | Uniform | $[0, 4]$ | --- | Birth-cloud V-band optical depth (default 1.0) |
 | `dust_tau_diff` | $\tau_{\rm diff}$ | Uniform | $[0, 3]$ | --- | Diffuse-ISM V-band optical depth (default 0.3) |
-| `dust_slope` | $n$ | Fixed(-0.7) | --- | --- | Power-law attenuation slope (Charlot-Fall convention) |
-| `dust_bump_strength` | $E_b$ | Fixed(0) | --- | --- | 2175 Å UV bump strength (Kriek & Conroy 2013) |
-| `dust_delta` | $\delta$ | Fixed(0) | --- | --- | Attenuation-curve slope deviation (Kriek & Conroy) |
+| `dust_slope` | $n$ | Uniform(-1.5, -0.3) | $[-1.5, -0.3]$ | --- | Power-law attenuation slope (Charlot-Fall convention) |
+| `dust_bump_strength` | $E_b$ | Uniform(0, 4) | $[0, 4]$ | --- | 2175 Å UV bump strength (Kriek & Conroy 2013) |
+| `dust_delta` | $\delta$ | Uniform(-1, 0.4) | $[-1, 0.4]$ | --- | Attenuation-curve slope deviation (Kriek & Conroy) |
 | `dust_Rv` | $R_V$ | Fixed(3.1) | --- | --- | Cardelli total-to-selective extinction |
 | `dust_f_obscuration` | $f_{\rm obs}$ | Fixed(0) | $[0, 1]$ | --- | Clumpy geometry fraction (Lower 2022) |
-| `dust_eta_balance` | $\eta$ | Fixed(1) | --- | --- | Energy-balance relaxation factor ($L_{\rm IR} = \eta L_{\rm absorbed}$) |
+| `dust_eta_balance` | $\eta$ | Gaussian(1, 0.2) | $[0, \infty)$ | --- | Energy-balance relaxation factor ($L_{\rm IR} = \eta L_{\rm absorbed}$) |
 | *Dust Screen Selectors* |  |  |  |  |  |
 | `dust_nebular_screen` | --- | `"birth_cloud"` | 3 choices | --- | Screen for the nebular continuum + line catalog |
 | `dust_shock_screen` | --- | `"diffuse"` | 3 choices | --- | Screen for the MAPPINGS V shock SED |
@@ -74,7 +74,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | `dust_T` | $T_{\rm dust}$ | Uniform | $[15, 60]$ | K | Dust temperature (MBB) |
 | `dust_beta_ir` | $\beta_{\rm IR}$ | Uniform | $[1.0, 2.5]$ | --- | MBB emissivity index |
 | `dust_alpha_dale` | $\alpha$ | Uniform | $[1.0, 4.0]$ | --- | Dale template slope |
-| `dust_eta_balance` | $\eta$ | Fixed(1) | $[0.5, 2.0]$ | --- | Energy balance relaxation |
+| `dust_eta_balance` | $\eta$ | Gaussian(1, 0.2) | $[0, \infty)$ | --- | Energy balance relaxation |
 | `dust_xi_pah` | $\xi_{\rm PAH}$ | Uniform | $[0, 0.15]$ | --- | PAH fraction (MAGPHYS) |
 | `dust_xi_mir` | $\xi_{\rm MIR}$ | Uniform | $[0, 0.15]$ | --- | Hot MIR fraction (MAGPHYS) |
 | `dust_xi_warm` | $\xi_W$ | Uniform | $[0.1, 0.5]$ | --- | Warm fraction (MAGPHYS) |

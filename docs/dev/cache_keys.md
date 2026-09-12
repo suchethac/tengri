@@ -33,14 +33,18 @@ The `baked()` function reduces a value to a hashable, equality-stable stand-in. 
 | object with `cache_key()` | `("cache_key", type_qualname, cache_key())` |
 | object with `jit_cache_key()` | `("jit_cache_key", type_qualname, jit_cache_key())` |
 | frozen dataclass | `(type_qualname, ((field_name, baked_value), …))` |
-| class (type) object | `("callable", "module.qualname")` |
-| function, method, callable | `("callable", "module.qualname")` |
+| `functools.partial` | `("partial", baked(func), baked(args), baked(keywords))` |
+| closure (non-empty `__closure__`) | `("callable", "module.qualname", tuple(baked captured content))` |
+| bound method (non-class `__self__`) | `("callable", "module.qualname", baked(instance))` |
+| plain function, class, builtin | `("callable", "module.qualname")` |
 | array-like (shape + dtype) | array-specific: `("array", shape_tuple, str(dtype), digest)` — see below |
 | Enum member | `("enum", type_qualname, member_name)` |
 | custom `__repr__` | `("repr", type_qualname, repr(value))` |
 | otherwise | `TypeError` — no address-bearing keys, ever |
 
 **Array hashing:** JAX arrays (immutable, identified by `id()`) are memoized via weakref for O(1) memo hits; the cached key is reused if the weakref is alive and `is` holds. NumPy arrays are mutable and are hashed on every call (a modified array yields a different key). The digest is BLAKE2b (deterministic across Python processes, unlike `hash()` which is per-process salted).
+
+**Closures and partials:** Closures (functions with a non-empty `__closure__` capturing constants), `functools.partial` objects, and bound methods are keyed by their **captured content or instance state**, never by address. Two closures from the same factory with different captured constants produce different keys—this prevents the silent misuse bug where a second `Fitter(..., extra_log_prior=hook)` with a hook from one factory shares a compiled loss with a first `Fitter` whose hook captured a different threshold. Bound methods include the instance's state (via its `cache_key()` or `__repr__`), so two calls to the same method on different instances produce different keys. Empty cells in a closure (an error to access) key as `("empty_cell",)`. If a closure captures a value that cannot be baked (no `cache_key()`, `__repr__`, or other fallback), the TypeError names the type and propagates—an intentional design: a hook capturing an unkeyable object must expose `cache_key()` to be usable in a cache.
 
 ## The tail
 
