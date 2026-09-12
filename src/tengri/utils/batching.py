@@ -39,8 +39,26 @@ __all__ = ["vmap_chunked"]
 # concrete values, or leaks a tracer. Everything else (a typo'd key, a shape
 # mismatch, an OOM) is a real bug and must propagate: catching it here would
 # silently reclassify it as a fact of life and route around it forever (#1128).
+#
+# ``ConcretizationTypeError`` is NOT the base of the ``Tracer*ConversionError``
+# family (#2264, measured on jax 0.11.1). ``TracerBoolConversionError``
+# (``bool(tracer)``) is a subclass of it, but ``TracerArrayConversionError``
+# (``np.asarray(tracer)`` / ``__array__``) and ``TracerIntegerConversionError``
+# (``operator.index(tracer)``) are siblings under ``JAXTypeError``, not
+# descendants of ``ConcretizationTypeError`` -- so a function that inspects its
+# input with ``np.asarray`` used to raise straight through this handler instead
+# of triggering the fallback. Listed explicitly, one entry per class (including
+# the already-covered ``TracerBoolConversionError``, for readability and so a
+# future jax release reshuffling the hierarchy cannot silently drop it) rather
+# than derived by scanning ``jax.errors`` for a ``Tracer.*ConversionError`` name
+# at import time: an auto-derived list would also swallow any newly added
+# tracer error whose semantics this module has not reviewed, which is exactly
+# the silent reclassification the comment above warns against.
 _NOT_TRACEABLE = (
-    jax.errors.ConcretizationTypeError,  # base of the Tracer*ConversionError family
+    jax.errors.ConcretizationTypeError,
+    jax.errors.TracerArrayConversionError,
+    jax.errors.TracerBoolConversionError,
+    jax.errors.TracerIntegerConversionError,
     jax.errors.UnexpectedTracerError,
     jax.errors.NonConcreteBooleanIndexError,
 )
