@@ -107,6 +107,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Importing a submodule through an aliased package spelling
+  (``from tengri.sps.dsps_wrapper import ...``) re-executed the module file:
+  two module objects for one file in one process, each with its own
+  module-level state (e.g. the SSP content-hash cache), the second execution
+  overwriting the canonical package attribute. A meta-path finder now binds
+  the existing canonical module object under the aliased name with no
+  re-execution, in both import orders, for all nine component aliases;
+  aliases stay lazy (no eager submodule imports at ``import tengri``)
+  (#2256).
 - The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
   continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
   ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``
