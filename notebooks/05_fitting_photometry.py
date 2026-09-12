@@ -74,10 +74,10 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# The same UV–MIR bandset as the quickstart (GALEX → WISE), bare-stellar SSP.
+# The same UV–MIR bandset as the quickstart (GALEX → WISE) and the same SSP grid, which carries its nebular emission (lines and continuum), so no separate nebular model is needed.
 
 # %%
-SSP_NAME = "fsps_prsc_miles_chabrier"
+SSP_NAME = "prsc_miles_chabrier_wNE"
 ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 FILTERS = [
@@ -118,7 +118,7 @@ sed_model = SEDModel.build(
         tau_diff=Uniform(0.0, 1.0),
     ),
     dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
-    neb=builders.neb.none(),
+    neb=builders.neb.ssp(),
     met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.05),
 )
