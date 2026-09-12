@@ -236,6 +236,50 @@ def test_window_rows_rejects_unknown_rel_to():
         window_rows(cases, lo=0, hi=4, rel_to="unknown")
 
 
+def test_window_rows_peak_override_scales_deviation():
+    """window_rows with peak= should override the window maximum for normalization."""
+    from reproduction._validation import window_rows
+
+    w = np.linspace(0, 10, 101)
+    L_ref = np.full(101, 0.001)
+    L_t = L_ref + 0.002  # difference of 0.002
+
+    cases = [("low_ref", w, L_ref, w, L_t)]
+
+    # Without peak=: window maximum is 0.001, so max_abs_dev = 0.002 / 0.001 = 2.0 (200%)
+    rows_no_peak = window_rows(cases, lo=0, hi=10, rel_to="peak")
+    assert len(rows_no_peak) == 1
+    assert rows_no_peak[0]["max_abs_dev"] == pytest.approx(2.0, rel=1e-9)
+
+    # With peak=1.0: max_abs_dev = 0.002 / 1.0 = 0.002
+    rows_with_peak = window_rows(cases, lo=0, hi=10, rel_to="peak", peak=1.0)
+    assert len(rows_with_peak) == 1
+    assert rows_with_peak[0]["max_abs_dev"] == pytest.approx(0.002, rel=1e-9)
+
+    # With peak=1.0: no point reaches 1% of 1.0 (0.01), so median_ratio is nan
+    assert np.isnan(rows_with_peak[0]["median_ratio"])
+
+
+def test_window_rows_peak_override_rejects_point_mode_and_nonpositive():
+    """window_rows should reject peak= with rel_to='point' and reject non-positive peak."""
+    from reproduction._validation import window_rows
+
+    w = np.array([1.0, 2.0, 3.0])
+    L = np.array([1.0, 2.0, 1.0])
+    cases = [("test", w, L, w, L)]
+
+    # peak= with rel_to="point" should raise ValueError
+    with pytest.raises(ValueError, match="peak= applies to rel_to='peak' only"):
+        window_rows(cases, lo=0, hi=4, rel_to="point", peak=1.0)
+
+    # Non-positive peak should raise ValueError
+    with pytest.raises(ValueError, match="peak must be positive"):
+        window_rows(cases, lo=0, hi=4, rel_to="peak", peak=0.0)
+
+    with pytest.raises(ValueError, match="peak must be positive"):
+        window_rows(cases, lo=0, hi=4, rel_to="peak", peak=-1.0)
+
+
 def test_print_window_table_x_unit_and_peak_header(capsys):
     """print_window_table should show x_unit and peak-specific headers."""
     from reproduction._validation import print_window_table

@@ -1070,6 +1070,7 @@ def window_rows(
     lo: float,
     hi: float,
     rel_to: str = "point",
+    peak: float | None = None,
 ) -> list[dict]:
     """Compute ratio statistics within a wavelength window for each case.
 
@@ -1091,6 +1092,12 @@ def window_rows(
         - "peak": Compute peak = max(L_ref[mask]); max_abs_dev = max(|L_t - L_ref|[mask]) / peak;
           median_ratio over points where L_ref >= 0.01 * peak.
 
+    peak : float, optional
+        Normalization scale for ``rel_to="peak"`` mode. If provided, overrides the
+        window maximum as the denominator for max_abs_dev and as the reference for
+        the 1% threshold of the median (points with L_ref >= 0.01 * peak).
+        Must be positive. Only applies when ``rel_to="peak"``.
+
     Returns
     -------
     list of dict
@@ -1108,6 +1115,12 @@ def window_rows(
     """
     if rel_to not in ("point", "peak"):
         raise ValueError(f"rel_to must be 'point' or 'peak', got {rel_to!r}")
+
+    if peak is not None and rel_to != "peak":
+        raise ValueError("peak= applies to rel_to='peak' only")
+
+    if peak is not None and peak <= 0:
+        raise ValueError("peak must be positive")
 
     rows = []
     for label, w_ref, L_ref, w_t, L_t in cases:
@@ -1146,23 +1159,50 @@ def window_rows(
                 x_at_max = float(w_in_window[np.isfinite(ratio)][idx_max])
 
         else:  # rel_to == "peak"
-            # Find peak in window
+            # Find peak in window or use provided peak
             valid_mask = L_ref_in_window > 0
-            if not np.any(valid_mask):
-                median_ratio = float("nan")
-                max_abs_dev = float("nan")
-                x_at_max = float("nan")
+            if peak is None:
+                # Use window maximum
+                if not np.any(valid_mask):
+                    median_ratio = float("nan")
+                    max_abs_dev = float("nan")
+                    x_at_max = float("nan")
+                else:
+                    peak_val = float(np.max(L_ref_in_window[valid_mask]))
+
+                    # Absolute deviation
+                    abs_diffs = np.abs(L_t_in_window - L_ref_in_window)
+                    max_abs_dev = float(np.max(abs_diffs) / peak_val)
+                    idx_max = np.argmax(abs_diffs)
+                    x_at_max = float(w_in_window[idx_max])
+
+                    # Median ratio over significant points
+                    threshold = 0.01 * peak_val
+                    significant_mask = (L_ref_in_window >= threshold) & (
+                        L_ref_in_window > 0
+                    )
+                    if np.any(significant_mask):
+                        L_t_sig = L_t_in_window[significant_mask]
+                        L_ref_sig = L_ref_in_window[significant_mask]
+                        out_array = np.full_like(L_ref_sig, np.nan)
+                        ratio_significant = np.divide(
+                            L_t_sig, L_ref_sig, where=True, out=out_array
+                        )
+                        median_ratio = float(np.median(ratio_significant))
+                    else:
+                        median_ratio = float("nan")
             else:
-                peak = float(np.max(L_ref_in_window[valid_mask]))
+                # Use provided peak
+                peak_val = peak
 
                 # Absolute deviation
                 abs_diffs = np.abs(L_t_in_window - L_ref_in_window)
-                max_abs_dev = float(np.max(abs_diffs) / peak)
+                max_abs_dev = float(np.max(abs_diffs) / peak_val)
                 idx_max = np.argmax(abs_diffs)
                 x_at_max = float(w_in_window[idx_max])
 
                 # Median ratio over significant points
-                threshold = 0.01 * peak
+                threshold = 0.01 * peak_val
                 significant_mask = (L_ref_in_window >= threshold) & (
                     L_ref_in_window > 0
                 )
