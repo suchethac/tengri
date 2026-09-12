@@ -1445,7 +1445,7 @@ V.print_window_table(_rows_5b_curve, ref_name="CIGALE", title="§5b A(λ)/A_V, m
 # floating-point — the residual is annotated on the right panel and printed
 # below, and it is exactly zero.
 #
-# **The energy anchor.** tengri's `L_absorbed` sits 2.1 % above CIGALE's
+# **The energy anchor.** tengri's `L_absorbed` sits 0.9 % above CIGALE's
 # `dust.luminosity` (printed below). That is §3's age-binning convention
 # arriving here: the absorbed luminosity is an integral over the attenuated
 # far-UV and optical, weighted toward the wavelengths where tengri's youngest
@@ -1576,7 +1576,7 @@ plt.close(fig)  # superseded by §6c's IR-library grids, which replace this pane
 # attenuation block, a single screen (`tau_bc = 0`, matching
 # `dustatt_modified_starburst`, which has no Charlot & Fall birth cloud;
 # A_V = R_V × E(B−V)_cont = 4.05 × 0.132 = 0.535 mag) carrying the
-# Leitherer-extended Calzetti curve with the 912 Å clip. So the 2.1 % anchor
+# Leitherer-extended Calzetti curve with the 912 Å clip. So the 0.9 % anchor
 # offset of §3/§6 enters every ratio printed here, and what the panels add is
 # whatever the *templates* do on top of it.
 #
@@ -1939,13 +1939,19 @@ for _name, _cases in (("casey2012", _cas_cases), ("schreiber2016", _sch_cases), 
 # %% [markdown]
 # ## §7 Panchromatic SED
 #
-# Same model, viewed across 1 Å (X-ray) to 10 m (radio). What appears
-# in the X-ray and radio panels arrives in §10 and §11.
+# The §6 model from the Lyman continuum to 1 m: stellar SED convolved
+# with the τ-delayed SFH, dust attenuation and Dale+2014 IR re-emission.
+# X-ray and radio blocks arrive in §10 and §11.
 #
-# **Far-UV (λ < 1000 Å) — now matched.** Calzetti+2000 was fit on
-# 1200 Å – 22000 Å; tengri's polynomial extrapolates below that, while
-# CIGALE's `dustatt_modified_starburst` drops to zero at 912 Å. Setting
-# `dust_attenuation={'lyman_cutoff': True}` applies the same 912 Å clip on both sides.
+# **Far-UV (λ < 912 Å).** Calzetti+2000 was fit on 1200–22000 Å; tengri's
+# polynomial extrapolates below that, while CIGALE's `dustatt_modified_starburst`
+# drops to zero at 912 Å. Setting `dust_attenuation={'lyman_cutoff': True}`
+# applies the same 912 Å clip on both sides.
+#
+# **Beyond 1 cm.** This model carries no radio block, so tengri's grid ends
+# at 1 cm, where the Cue nebular continuum stops; CIGALE's curve continues to
+# 1 m because its `nebular` module carries the free-free continuum into the
+# radio. Both codes' Dale 2014 templates end at 6 mm.
 
 # %%
 # Two panels on independent y-axes read as agreement whatever they contain,
@@ -1987,15 +1993,13 @@ U.panel(
 )
 ax_l.plot(w_c_ir, L_c_ir, "C0-", linewidth=1.5)
 ax_r.plot(s_ir.wave, s_ir.sed_intrinsic, "C1-", linewidth=1.5)
-_xmin_p = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
-_xmax_p = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
 # Frame the y-axis on the SED peak. Without this the panchromatic SED cliffs
 # to ~0 at the grid edges and the shared log axis autoscales across ~170
 # decades, crushing the real SED into a flat line at the top (it spans only
 # ~6 decades). Match the peak-anchored framing used by the other §-panels.
 _ymax_p = float(max(np.nanmax(L_c_ir), np.nanmax(np.asarray(s_ir.sed_intrinsic))))
 for ax in (ax_l, ax_r):
-    ax.set_xlim(_xmin_p, _xmax_p)
+    ax.set_xlim(2e2, 1e10)
     ax.set_ylim(_ymax_p * 1e-6, _ymax_p * 2.0)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
@@ -3434,46 +3438,28 @@ save_fig("cigale_10b_xray_inclination.png")
 # %% [markdown]
 # ## §11 Radio
 #
-# CIGALE's `radio` module is a pure star-forming synchrotron power law tied
-# to the IR-radio correlation (`qir_sf`, `alpha_sf`). tengri's `radio.condon92`
-# includes Murphy 2011 free-free (Eq. 11) plus synchrotron (Bell 2003). The
-# build pins `radio_q_ir = 2.5` and `radio_alpha_sf = 0.8` to match. The
-# synchrotron amplitude is anchored on `L_absorbed`: both codes compute
-# `L_ref = L_dust / (3.75e12 · 10^q_IR)`, so any mismatch in the absorbed
-# energy lands 1:1 in the radio.
+# CIGALE's `radio` module is a star-forming synchrotron power law tied to the
+# IR–radio correlation (`qir_sf`, `alpha_sf`). The build pins `radio_q_ir = 2.5`
+# and `radio_alpha_sf = 0.8` to match. The synchrotron amplitude is anchored on
+# `L_absorbed`: both codes compute `L_ref = L_dust / (3.75e12 · 10^q_IR)`, so any
+# mismatch in the absorbed energy lands 1:1 in the radio.
 #
-# tengri sits above CIGALE across the band and the excess *grows with
-# frequency* — the four printed total ratios climb monotonically from
-# 150 MHz to 100 GHz. The shape is the diagnosis: a normalization error would
-# offset the whole band by a constant, and this does not.
+# pcigale's `radio` module is synchrotron only. tengri's star-forming radio
+# block adds a Murphy+2011 thermal free-free term by default;
+# `radio={"sf": {"type": "bell2003", "freefree": False}}` turns it off. The
+# comparison here and in the capstone uses that switch.
 #
-# Separate the ratio into the only two things it can be made of.
+# With synchrotron on both sides the ratio is flat across 0.1–100 GHz, and two
+# conventions predict it without being fitted: the anchor frequency (Bell 2003
+# defines q_IR at 1.4 GHz, CIGALE normalizes at 21 cm = 1.4276 GHz → ×0.985)
+# and the energy anchor (`L_absorbed` 0.9 % above CIGALE's `dust.luminosity`,
+# §6); the printed range is 0.9936–0.9937× against a predicted 0.9937×
+# (anchor ×0.9845 · energy balance ×1.0093).
 #
-# **The non-thermal terms agree, and their offset is pure convention.** Both
-# codes emit a synchrotron power law of the same index, so tengri's synchrotron
-# over CIGALE's can only be a constant — and it is: flat across all three
-# decades (printed, and the dotted line on the ratio panel). Two conventions
-# predict that constant without reference to the measurement:
-#
-# - **Anchor frequency, ×0.985.** Bell 2003 defines q_IR at 1.4 GHz; CIGALE
-#   normalizes at 21 cm = 1.4276 GHz — a pure `(1.4276/1.4)^−0.8` offset.
-# - **Energy balance.** `L_absorbed` runs 2.1 % above CIGALE's
-#   `dust.luminosity` (§6's printed anchor, and §3's age-binning convention
-#   behind it — not an attenuation-curve difference). Both codes anchor the
-#   synchrotron on the dust luminosity
-#   (`L_ref = L_dust / (3.75e12 · 10^q_IR)`), so it lands in the radio 1:1.
-#
-# Their product is the measured flat offset; the cell prints the prediction
-# and the measurement side by side. Nothing is fitted: the prediction comes
-# from the two conventions, the measurement from the two SEDs, and they meet.
-#
-# **Everything above that line is thermal.** tengri's `condon92` carries a
-# Murphy+2011 free-free term; CIGALE's `radio` module has none. Free-free
-# is flat (α ≈ 0.1) where synchrotron is steep (α = 0.8), so its share climbs
-# with frequency, which is the entire rise of the ratio panel — the printed
-# thermal fraction at 0.15, 1.4, 10 and 100 GHz is that share. It is a physics
-# difference between the two codes rather than a discrepancy in the shared
-# physics.
+# The dash-dot curve is the default build. Free-free is flat (α ≈ 0.1) where
+# synchrotron is steep (α = 0.8), so its share climbs with frequency; the
+# thermal fraction is 9.7% at 1.4 GHz and 191.8% at 100 GHz. A physics
+# difference between the codes, not a discrepancy in the shared physics.
 #
 # **Verification Status:** PARTIAL (3/25) — Radio / X-ray / IGM / PSD physics
 
@@ -3504,6 +3490,17 @@ w_r, L_r = U.wnm_to_erg_per_hz_per_aa(
     np.asarray(sed_r.wavelength_grid), np.asarray(sed_r.luminosities["radio.sf_nonthermal"])
 )
 
+_dust_radio_cfg = {
+    "type": "two_component",
+    "law_bc": "leitherer02",
+    "law_diff": "leitherer02",
+    "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+    "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+    "lyman_cutoff": True,
+    "all_params": Fixed(DEFAULT),
+}
+
+# Build TWO models: synchrotron-only (freefree=False) matches CIGALE's radio module.
 m_r = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
@@ -3514,22 +3511,10 @@ m_r = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    # Same attenuation setup as §6 — the radio amplitude is anchored on
-    # L_absorbed through q_IR, so a mismatched dust config here would leak
-    # straight into the synchrotron normalization.
-    dust_attenuation={
-        "type": "two_component",
-        "law_bc": "leitherer02",
-        "law_diff": "leitherer02",
-        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
-        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "lyman_cutoff": True,
-        "all_params": Fixed(DEFAULT),
-    },
+    dust_attenuation=_dust_radio_cfg,
     dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
-    # q_IR pinned to CIGALE's qir_sf = 2.5 (tengri bucket default 2.64).
     radio={
-        "sf": {"type": "bell2003"},
+        "sf": {"type": "bell2003", "freefree": False},
         "agn": {"type": "powerlaw"},
         "radio_q_ir": Fixed(2.5),
         "radio_alpha_sf": Fixed(0.8),
@@ -3539,10 +3524,34 @@ m_r = SEDModel.build(
 )
 state_r = m_r.predict_state({})
 w_t = np.asarray(state_r.wave)
-sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron + Murphy free-free
+sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron only
 
-# Shared-axis overlay + ratio panel: the ratio rising above unity toward high ν
-# is tengri's free-free, which CIGALE's synchrotron-only module does not have.
+# Default build with Murphy+2011 free-free.
+m_r_ff = SEDModel.build(
+    ssp_data=ssp,
+    met=MET_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation=_dust_radio_cfg,
+    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    radio={
+        "sf": {"type": "bell2003"},
+        "agn": {"type": "powerlaw"},
+        "radio_q_ir": Fixed(2.5),
+        "radio_alpha_sf": Fixed(0.8),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+)
+state_r_ff = m_r_ff.predict_state({})
+sed_t_ff = np.asarray(state_r_ff.derived["sed_radio"])  # synchrotron + Murphy free-free
+
+# Shared-axis overlay + ratio panel: main pair is synchrotron-only on both sides.
 fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     w_r,
     L_r,
@@ -3550,63 +3559,39 @@ fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     sed_t,
     x_of_wave=lambda w: C_AA / w / 1e9,
     xlabel=r"$\nu$ [GHz]",
-    title="§11 SF radio — CIGALE synchrotron vs tengri synchrotron + free-free",
+    title="§11 SF radio — synchrotron matched; free-free is tengri's extension",
     label_c="CIGALE  radio.sf_nonthermal (synchrotron only)",
-    label_t="tengri  radio.condon92 (synchrotron + free-free)",
+    label_t="tengri  radio.bell2003, freefree=False (synchrotron only)",
     xlim=(0.1, 100.0),
     ratio_ylim=(0.5, 2.0),
 )
-# Overlay tengri's synchrotron-only term (Bell 2003). It is the load-bearing
-# curve of this panel: it lands *on* CIGALE's synchrotron-only sf_nonthermal,
-# which is what makes the excess at high frequency attributable to the
-# Murphy+2011 free-free CIGALE omits rather than to a synchrotron
-# normalization error. Landing on top of CIGALE also made it invisible — so
-# widen CIGALE into a translucent band and let the two thin curves read
-# against it.
-from tengri.radio import radio_sfr_bell2003 as _bell03
-
+# Widen CIGALE into a translucent band so the thin curves read against it.
 for _ln in ax.get_lines():
     if _ln.get_label().startswith("CIGALE"):
         _ln.set(linewidth=4.0, alpha=0.35, solid_capstyle="round")
 
-_syn_only = np.asarray(
-    _bell03(w_t, float(np.asarray(state_r.derived["L_ir"])), q_ir=2.5, alpha_sf=0.8)
-)
+# Overlay the default build (synchrotron + free-free) as a dashed line.
 ax.plot(
     C_AA / w_t / 1e9,
-    _syn_only,
-    color="0.25",
-    ls=":",
-    lw=1.6,
-    label="tengri  synchrotron only (Bell 2003)",
+    sed_t_ff,
+    color="C3",
+    ls="-.",
+    lw=1.4,
+    label="tengri  bell2003 + Murphy 2011 free-free (default)",
 )
 ax.legend(fontsize=8, frameon=False)
 _nu_r = C_AA / w_r / 1e9
 _g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
 print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
 
-# Close the ratio *at every frequency*, not at one probe point. The prediction
-# is purely the two convention/physics factors — thermal fraction (frequency
-# dependent) and the fixed 21 cm-vs-1.4 GHz anchor — times the energy-balance
-# anchor, which §3 and §6 already account for and which is printed here from
-# this section's own SED. If that curve traces the measured ratio across three
-# decades, the "radio deviation" is fully accounted for and nothing is left over.
+# The synchrotron terms (freefree=False on both sides) are flat — check against
+# the two conventions without being fitted to the measurement.
 _L_ir_t = float(np.asarray(state_r.derived["L_ir"]))
 _f_lir = _L_ir_t / (float(sed_r.info["dust.luminosity"]) * 1e7)
 _f_anchor = float((1.4276e9 / 1.4e9) ** (-0.8))
-
-# Split the measured ratio into the two things it can be made of, and check
-# each against a number derived *independently* of it.
-#
-# tengri's synchrotron alone, over CIGALE's synchrotron, is flat — the two
-# codes' non-thermal terms have the same spectral index, so their quotient can
-# only be a normalization. Predict that normalization from the two conventions
-# (anchor frequency and the energy-balance anchor) and compare. Nothing about
-# the prediction is fitted to the measurement, so their agreement is a real
-# check rather than an identity.
-_syn_on_c = np.asarray(_bell03(w_r, _L_ir_t, q_ir=2.5, alpha_sf=0.8))
+_syn_t_on_c = U.regrid(w_t, sed_t, w_r)
 _valid = (_nu_r >= 0.1) & (_nu_r <= 100.0) & (L_r > 0) & np.isfinite(ratio)
-_syn_ratio = _syn_on_c[_valid] / L_r[_valid]
+_syn_ratio = _syn_t_on_c[_valid] / L_r[_valid]
 print(
     f"§11 synchrotron alone, tengri/CIGALE: "
     f"{_syn_ratio.min():.4f}–{_syn_ratio.max():.4f} across 0.1–100 GHz (flat)"
@@ -3616,11 +3601,18 @@ print(
     f"energy-balance ×{_f_lir:.4f} = ×{_f_anchor * _f_lir:.4f}"
 )
 
-# Everything the total ratio carries above that flat line is the thermal term —
-# read off the model itself, not re-derived from a formula whose (T_e, thermal
-# fraction) would have to be guessed back out of the component.
-_ff_frac = ratio[_valid] / (_f_anchor * _f_lir) - 1.0
-_order = np.argsort(_nu_r[_valid])
+# Free-free excess: compute from the default build's ratio to CIGALE.
+_ratio_ff = np.asarray(U.regrid(w_t, sed_t_ff, w_r)) / np.where(L_r > 0, L_r, np.nan)
+_ratio_ff = np.where(np.isfinite(_ratio_ff), _ratio_ff, np.nan)
+_ff_frac = np.asarray(_ratio_ff[_valid]) / (_f_anchor * _f_lir) - 1.0
+ax_r.plot(
+    _nu_r,
+    _ratio_ff,
+    color="C3",
+    ls="-.",
+    lw=1.0,
+    label="default (free-free on)",
+)
 ax_r.axhline(
     _f_anchor * _f_lir,
     color="0.25",
@@ -3629,12 +3621,14 @@ ax_r.axhline(
     label=f"synchrotron only (anchor × energy balance = {_f_anchor * _f_lir:.3f})",
 )
 ax_r.legend(fontsize=7, frameon=False, loc="upper left")
-print("§11 implied free-free excess over CIGALE (which has no thermal term):")
+_nu_valid = np.asarray(_nu_r[_valid])
+_ratio_ff_valid = np.asarray(_ratio_ff[_valid])
+print("§11 default build (synchrotron + free-free) over CIGALE:")
 for _f in (0.15, 1.4, 10.0, 100.0):
-    _j = int(np.argmin(np.abs(_nu_r[_valid] - _f)))
+    _j = int(np.argmin(np.abs(_nu_valid - _f)))
     print(
-        f"    {_nu_r[_valid][_j]:6.2f} GHz: total ×{ratio[_valid][_j]:.3f} "
-        f"→ thermal fraction {_ff_frac[_j] * 100:5.1f}%"
+        f"    {float(_nu_valid[_j]):6.2f} GHz: total ×{float(_ratio_ff_valid[_j]):.3f} "
+        f"→ thermal fraction {float(_ff_frac[_j]) * 100:5.1f}%"
     )
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
@@ -3706,26 +3700,31 @@ save_fig("cigale_12_igm_transmission.png")
 # Setup nebular fiducial, modified-starburst attenuation, Dale+2014 IR
 # re-emission, plus §10 X-ray
 # (Yang+2020: XRB + hot gas, no AGN corona in this galaxy-only chain) and
-# §11 radio (Condon 1992 SF synchrotron, `q_IR = 2.5`), overlaid on CIGALE
+# §11 radio (Bell 2003 SF synchrotron, free-free off, `q_IR = 2.5`), overlaid on CIGALE
 # at matched parameters.
 #
 # **The stellar-to-FIR core reproduces to a few percent.** Optical agreement
 # is reported as a normalization ratio and its 16–84 % spread. With the
 # single-screen dust mapping (`tau_bc = 0`) the residual sits inside ±25 %
 # from the far-UV through the FIR; the sub-912 Å excursion is the
-# Lyman-continuum extrapolation and the mm-tail offset is the Dale template
-# cutoff (§6). The X-ray wing here is XRB + hot gas with no AGN corona —
-# `alpha_ox` is supplied but there is no disc for it to act on — and the
-# Lehmer+2016 LMXB term is scaled by the SSP mass-weighted age of this
-# galaxy, not by a default age. The radio wings rest on `q_IR = 2.5`, pinned
-# on both sides (§11). Every one of these is printed below.
+# Lyman-continuum extrapolation; between 1 mm and 1 cm both codes carry thermal
+# free-free from their nebular continuum — Cue's on tengri's side, CIGALE's
+# `nebular` module on the other — and the radio blocks are synchrotron-only
+# on both sides (`freefree: False`, §11), with ratios 1.00×, 1.07× and 1.05×
+# at 1 mm, 3 mm and 1 cm. Beyond 1 cm Cue's continuum has ended while
+# CIGALE's runs on to 1 m, so tengri sits low by that free-free share:
+# 0.84× at 3 cm, 0.95× at 1.4 GHz. The X-ray wing here is XRB + hot gas
+# with no AGN corona — `alpha_ox` is supplied but there is no disc for it to
+# act on — and the Lehmer+2016 LMXB term is scaled by the SSP mass-weighted age
+# of this galaxy, not by a default age. The radio wings rest on `q_IR = 2.5`,
+# pinned on both sides (§11). Every one of these is printed below.
 
 # %%
 import chex
 
 # The full X-ray -> radio party SED: the §6/§7 galaxy (stellar + dust + Dale
 # IR) now with the §10 X-ray (Yang+2020 XRB + hot gas — no AGN corona in this
-# galaxy-only chain) and §11 radio (Condon 1992 SF synchrotron, q_IR = 2.5)
+# galaxy-only chain) and §11 radio (Bell 2003 SF synchrotron, `freefree=False`, q_IR = 2.5)
 # bolted on, so the master grid spans ~0.01 Å (hard X-ray) to ~1 m (radio).
 sed_c_full = C.run_chain(
     [
@@ -3786,7 +3785,7 @@ m_full = SEDModel.build(
     dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
     radio={
-        "sf": {"type": "bell2003"},
+        "sf": {"type": "bell2003", "freefree": False},
         "agn": {"type": "powerlaw"},
         "radio_q_ir": Fixed(2.5),
         "radio_alpha_sf": Fixed(0.8),
@@ -3811,8 +3810,10 @@ resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 # single-screen dust mapping the ratio sits at ~1 with a few-percent spread.
 # Three things sit outside that window, all of them already accounted for:
 # the far-UV, which is §3's age-binning convention; the sub-912 Å excursion,
-# which is the Lyman-continuum extrapolation; and the mm tail, where the Dale
-# template stops. The Cue-vs-CLOUDY nebular residual §8 quantifies is folded
+# which is the Lyman-continuum extrapolation; and the 1 mm–1 cm decade, where
+# the nebular free-free continua of the two codes (Cue's ends at 1 cm, CIGALE's
+# `nebular` module runs to 1 m) are compared with synchrotron-only radio blocks
+# on both sides. The Cue-vs-CLOUDY nebular residual §8 quantifies is folded
 # into the optical window along with everything else.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
@@ -3839,6 +3840,12 @@ print(
 print(
     "  radio  1.4 GHz = {:.2f}×, 150 MHz = {:.2f}×  (SF synchrotron, q_IR = 2.5)".format(
         _ratio_at(_C_AA_HZ / 1.4e9), _ratio_at(_C_AA_HZ / 0.15e9)
+    )
+)
+print(
+    "  mm     1 mm = {:.2f}×, 3 mm = {:.2f}×, 1 cm = {:.2f}×, 3 cm = {:.2f}×  "
+    "(nebular free-free on both sides; radio blocks synchrotron-only)".format(
+        _ratio_at(1e7), _ratio_at(3e7), _ratio_at(1e8), _ratio_at(3e8)
     )
 )
 _assert_comparable(L_ext, L_t, name="full-SED head-to-head")
@@ -3920,7 +3927,7 @@ plt.show()
 #   pcigale's own docstring says the same and its code does not.
 # * **§5–§7 attenuation applied, dust IR, panchromatic.** Energy balance is
 #   exact (`|L_IR − L_absorbed| / L_absorbed = 0`). The energy *anchor* runs
-#   2.1 % above CIGALE's `dust.luminosity`, which is §3 and not the dust: the
+#   0.9 % above CIGALE's `dust.luminosity`, which is §3 and not the dust: the
 #   attenuation curves agree to 0.000 % and the absorbed fractions to under
 #   half a percent. `lyman_cutoff` matches CIGALE's 912 Å clip on the
 #   emergent far-UV; it does not touch the IR budget, which masks the Lyman
@@ -3952,11 +3959,10 @@ plt.show()
 # * **§10 X-ray.** Matched to 4 decimal places on disc L_2500, then a
 #   fraction of a percent at 2 keV, and the Yang+2022 inclination tilt is the
 #   same function on both sides across i = 0–80°.
-# * **§11 radio.** The synchrotron terms agree up to a flat factor that two
-#   conventions predict without being fitted to it: the 21 cm-vs-1.4 GHz
-#   anchor (×0.985) and §6's energy anchor. Everything above that line is
-#   tengri's Murphy+2011 free-free, which CIGALE's radio module does not
-#   have.
+# * **§11 radio.** The synchrotron terms sit on a flat factor two conventions
+#   predict (anchor ×0.985, §6's energy anchor) once `freefree: False` matches
+#   pcigale's synchrotron-only module; the default build adds Murphy+2011
+#   free-free, a physics extension pcigale's radio module does not carry.
 # * **§12 IGM.** Meiksin 2006 on both sides, max |ΔT| ~ 1e-7 at z = 3, 5, 7,
 #   median |ΔT| between 1e-17 and 1e-23, and no point anywhere above 1e-3 —
 #   the same prescription evaluated twice.
@@ -3976,6 +3982,7 @@ plt.show()
 # %% [markdown]
 # ## References
 #
+# * Bell 2003, ApJ 586, 794 — IR–radio correlation
 # * Boquien et al. 2019, A&A 622, A103 — CIGALE
 # * Bruzual & Charlot 2003, MNRAS 344, 1000 — BC03 SSPs
 # * Calzetti et al. 2000, ApJ 533, 682 — starburst attenuation law
@@ -3987,6 +3994,7 @@ plt.show()
 # * Li et al. 2025, ApJ, 986, 9 (Cue, arXiv:2405.04598) — neural CLOUDY emulator
 # * Madau 1995, ApJ 441, 18 — original IGM transmission
 # * Meiksin 2006, MNRAS 365, 807 — updated IGM transmission
+# * Murphy et al. 2011, ApJ 737, 67 — free-free radio SFR calibration
 # * Noll et al. 2009, A&A 507, 1793 — modified Calzetti
 # * Silva et al. 2004, MNRAS 355, 973 — AGN torus
 # * Stalevski et al. 2016, MNRAS 458, 2288 — SKIRTOR

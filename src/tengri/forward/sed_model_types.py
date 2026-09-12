@@ -340,6 +340,7 @@ class SEDModelState:
     uses_xray: bool
     radio_sfr_mode: str | None
     radio_agn_model: str | None
+    radio_include_freefree: bool | None
     z_fixed: float | None
     dl_cm_fixed: float | None
     param_map: object

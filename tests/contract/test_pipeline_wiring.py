@@ -422,39 +422,61 @@ def test_radio_model_attributes_carry_the_configured_values(
     )
 
 
-def test_no_dead_radio_include_freefree_plumbing(synthetic_tophat_obs):
-    """(fix round 2) ``include_freefree`` is not threaded through the public
-    grammar, and the dead ``SEDModel``/``SEDModelState`` plumbing that used
-    to compute it without ever delivering it is gone.
+def test_radio_include_freefree_plumbing_is_live(synthetic_tophat_obs):
+    """The grammar's ``radio.sf.freefree`` value is what the radio component gates on.
 
-    A 2026-09 audit found ``radio={'sf': {...}}`` had no way to set
-    ``include_freefree`` (``parameters.groups._translate_radio`` only ever
-    reads ``sf_dict['type']``), while ``SEDModel`` separately carried
-    ``self._radio_include_freefree`` (read from a ``spec.radio_include_freefree``
-    attribute the grammar never sets, defaulting to ``True``) that fed only a
-    JIT cache-key tuple and never reached ``RadioSEDComponentConfig`` --
-    the object ``radio_freefree`` actually gates on (see
-    ``RadioSEDComponent.predict``).
-
-    Resolution: delete the dead plumbing rather than thread a new grammar key
-    through it, because threading it would require editing
-    ``parameters/groups.py``'s ``_translate_radio`` -- out of this task's
-    scope (owned by a different task). ``include_freefree`` remains reachable
-    only via direct ``RadioSEDComponentConfig`` construction, still guarded
-    against the bell2003_split double-count by
-    ``test_radio_bell2003_split_no_double_count.py``.
+    Three layers must agree: ``model.spec.radio_include_freefree`` (set by
+    ``parameters.groups._translate_radio`` off the grammar key),
+    ``model._state.radio_include_freefree`` (the frozen ``SEDModelState`` copy
+    consumed by the kernel layer), and
+    ``RadioSEDComponentConfig.include_freefree`` on the live radio component
+    (see ``RadioSEDComponent.predict``, which is what ``radio_freefree``
+    actually gates on). A value declared through the grammar that stalls at
+    any one of these layers is silently ignored downstream. A model built
+    without the key must still resolve to a bool at the component -- the
+    auto-default, never a stale ``None`` reaching the physics call.
     """
-    from tengri.forward.sed_model_types import SEDModelState
+    from tengri.components.radio.component import RadioSEDComponent
 
-    assert "radio_include_freefree" not in SEDModelState.__dataclass_fields__, (
-        "SEDModelState must not carry a radio_include_freefree field: it was "
-        "dead (fed only a JIT cache-key tuple, never RadioSEDComponentConfig)"
+    ssp = _synthetic_ssp(log_wave_max=11.0, n_wave=900)
+    model = _build(
+        ssp_data=ssp,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "const", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti"},
+        dust_emission={"type": "draine_li2014"},
+        radio={
+            "sf": {"type": "bell2003", "freefree": False},
+            "agn": {"type": "powerlaw"},
+            "all_params": FREE,
+            "T_e": Uniform(5000.0, 20000.0),
+            "alpha_ff": Uniform(-0.3, 0.0),
+        },
     )
 
-    model = _radio_model(_synthetic_ssp(log_wave_max=11.0, n_wave=900), synthetic_tophat_obs)
-    assert not hasattr(model, "_radio_include_freefree"), (
-        "SEDModel must not carry a model-level _radio_include_freefree "
-        "attribute; the live switch is RadioSEDComponentConfig.include_freefree"
+    assert model.spec.radio_include_freefree is False, (
+        "the grammar's radio.sf.freefree value must reach model.spec"
+    )
+    assert model._state.radio_include_freefree is False, (
+        "SEDModelState must carry the same value the grammar declared"
+    )
+    radio_component = next(
+        (c for c in model._feature_chain() if isinstance(c, RadioSEDComponent)), None
+    )
+    assert radio_component is not None, "radio component must be in the built chain"
+    assert radio_component.config.include_freefree is False, (
+        "RadioSEDComponentConfig.include_freefree must equal the grammar value -- "
+        "the switch the radio component actually gates on"
+    )
+
+    default_model = _radio_model(ssp, synthetic_tophat_obs)
+    default_radio_component = next(
+        (c for c in default_model._feature_chain() if isinstance(c, RadioSEDComponent)), None
+    )
+    assert default_radio_component is not None, "radio component must be in the built chain"
+    assert isinstance(default_radio_component.config.include_freefree, bool), (
+        "a model built without the freefree key must still resolve to a bool "
+        "at the component -- the auto-default, not a stale None"
     )
 
 
