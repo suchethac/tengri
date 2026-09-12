@@ -81,6 +81,7 @@ from tengri.parameters._dust_keys import (
 from tengri.parameters._dust_laws import resolve_dust_screen_laws
 from tengri.parameters.priors import (
     Distribution,
+    Fixed,
     resolve_shorthand,
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
@@ -658,8 +659,6 @@ class Parameters:
         # Fixed(0.1). This makes the flat-form lgmet_scatter kwarg LIVE in the
         # stellar component's predictions (no longer silently ignored).
         if self._lgmet_scatter_for_fix is not None and not _met_logzsol_scatter_kwarg:
-            from tengri.parameters.priors import Fixed
-
             self._defaults["met_logzsol_scatter"] = Fixed(float(self._lgmet_scatter_for_fix))
 
         # --- Cue optional params (ionspec / gas extras) ---
