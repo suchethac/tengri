@@ -375,6 +375,13 @@ def _map_loss(ForwardModel, model, obs, flux, noise, truth, free_names, dtype, n
             jnp.asarray(noise, dtype=dtype),
             method="map",
             approx=None,
+            # Pinned, not "auto": since #2281 the auto setting marginalizes the mass
+            # analytically under float64 and declines under float32 (a guard in
+            # ``mass_profile._check_guards``), so the two arms would optimize
+            # different objectives on every seam the guard admits. Measured before
+            # the pin: ``map_loss`` 0.90 relative on four seams, and their ``param``
+            # column reading the profiled-vs-joint optimum gap (2.3e-4), not float32.
+            profile_mass=False,
             init_from=cur_init,
             key=jax.random.PRNGKey(_MAP_SEED),
             n_steps=n_steps,
