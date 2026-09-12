@@ -107,6 +107,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Four AGN sites integrated over the descending frequency grid by reversing
+  both trapezoid operands (``polar_dust.py``'s anisotropic polar luminosity,
+  ``adaf.py``'s float32 and float64 normalization integrals, ``unified.py``'s
+  disc L_bol). On Apple GPU via jax-mps under default MLX compile a reversed
+  array beside a broadcast scalar is silently zeroed past element 0
+  (jax-mps#232), and ``jnp.trapezoid`` multiplies by 0.5 internally, so the
+  torus lost its far-IR graybody entirely (measured x0.067 at 100 um in the
+  Herschel 250 band). Each site now integrates over the descending ``nu``
+  directly and negates the scalar result -- float64 moves only by summation
+  order (measured <= 2.2e-16 per site), MPS forward probes and the recorded
+  gradient probe match CPU exactly, and a source scan forbids reversed
+  trapezoid operands anywhere in ``src/tengri`` (#2295). The Apple-GPU
+  recipe's ``MLX_DISABLE_COMPILE=1`` rule stays until jax-mps#232 closes:
+  VJPs elsewhere still emit ``lax.rev``.
 - The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
   continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
   ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``
@@ -816,6 +830,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   is now float32-exact (previously the last disc in
   `tests/regression/precision/test_agn_disc_float32_inventory.py` that was not); the
   `Float32UnsafeAGNWarning` escape hatch it used is removed as unused.
+- **`profile_mass` now covers spectroscopy and joint photometry+spectroscopy fits, not
+  only photometry.** Every channel tengri fits is linear in the total stellar mass, so
+  the exact `chi2(M) = chi2_min + A*(M - M*)^2` quadratic (`tengri.inference.mass_profile`)
+  holds over the FULL data vector, not just the photometric one: `A` and `B = A*M*` are
+  now sums over whichever vector `data_type` assembles (photometry, spectroscopy, or
+  their photometry-then-spectrum concatenation for `"joint"`, the order
+  `tests/regression/bug/test_bug_1366_joint_data_record.py` pins), reusing
+  `loss_functions._build_prediction` (and its JIT-threaded SSP-grid path) so the
+  profiled statistics see exactly the vector and noise the unprofiled Gaussian
+  likelihood does. The linearity guard's two-mass probe is generalized the same way.
+  Calibration marginalization, any emission-line/line-ratio/spectral-index channel,
+  Student-t noise, a variable-noise model, and censored data remain refused
+  unconditionally (each is either its own marginalized linear block or carries its own
+  likelihood plumbing this module does not yet share); `"auto"` still steps aside
+  silently for them and an explicit `profile_mass=True` still raises naming the guard.
+  Behavioral change for spectroscopy/joint fits that satisfy every other guard: they
+  now profile the mass under `profile_mass="auto"` where they previously always sampled
+  it.
+
 - **The default inference method is `mcmc_nuts_fast`** (was `vi`): four NUTS
   chains, 150 warmup steps, no separate burn-in, 300 draws, target acceptance
   0.8, on the mass-profiled posterior with the dense metric and, when the CPU

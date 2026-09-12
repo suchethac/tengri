@@ -1,12 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Analytic marginalization of the total-stellar-mass amplitude (``profile_mass``).
 
-Photometry is linear in the total stellar mass :math:`M = 10^{\\ell}`, where
-:math:`\\ell` is a model's ``*_log_total_mass`` free parameter:
-:math:`f_i(\\theta, M) = M\\,f_i(\\theta)` for a filter :math:`i`, with
-:math:`f_i(\\theta)` the flux per unit mass at the other ``D - 1`` free
-parameters :math:`\\theta`. Under the Gaussian photometric likelihood this
-makes :math:`\\chi^2(M)` an exact quadratic,
+Every channel tengri fits is linear in the total stellar mass
+:math:`M = 10^{\\ell}`, where :math:`\\ell` is a model's ``*_log_total_mass``
+free parameter: photometric fluxes, spectral pixels, and (were the channel
+wired in, see Guards) a spectrum's line fluxes all satisfy
+:math:`f_i(\\theta, M) = M\\,f_i(\\theta)` for a data point :math:`i`, with
+:math:`f_i(\\theta)` the model prediction per unit mass at the other
+``D - 1`` free parameters :math:`\\theta`. Under a Gaussian likelihood this
+makes :math:`\\chi^2(M)`, summed over the FULL data vector
+:math:`d = (\\text{photometry}, \\text{spectrum})` (photometry-only,
+spectroscopy-only, or their concatenation for ``data_type="joint"``, in
+that order -- see ``loss_functions._build_prediction`` and
+``tests/regression/bug/test_bug_1366_joint_data_record.py``) with noise
+:math:`\\sigma`, an exact quadratic,
 
 .. math::
 
@@ -59,17 +66,23 @@ sampler's standardized coordinate via the prior's own
 the conditional mode :math:`\\ell^* = \\log_{10} M^*` for ``method="map"``.
 
 **Guards.** The exact quadratic in :math:`M` (and hence this whole module)
-requires: photometry-only data with a plain Gaussian likelihood (no
-spectroscopy, no emission-line channel, no calibration marginalization, no
-variable-noise model, no censored upper/lower limits); exactly one free
-``*log_total_mass`` parameter with a bounded-support prior; and photometry
-that is numerically linear in that parameter (a mass-independent additive
-component, e.g. an unmasked AGN continuum, breaks this). See
-:func:`configure_profile_mass`.
+requires: ``data_type`` one of ``"photometry"``, ``"spectroscopy"``, or
+``"joint"`` (any concatenation these fitter data types assemble, per
+``loss_functions._build_prediction``) with a plain
+Gaussian likelihood; no emission-line channel (marginalized, fitted, or
+measured line fluxes -- a channel with its own likelihood plumbing, not yet
+wired into this module even though line fluxes are linear in :math:`M` too);
+no line-ratio or spectral-index channel; no calibration marginalization
+(another block of linear parameters marginalized separately, not this
+module's math); no variable-noise model; no censored upper/lower limits;
+exactly one free ``*log_total_mass`` parameter with a bounded-support prior;
+and the full data vector numerically linear in that parameter (a
+mass-independent additive component, e.g. an unmasked AGN continuum, breaks
+this). See :func:`configure_profile_mass`.
 
 Measured on a D=8, 14-band mock (ctl-dpl): Hessian condition number
 3.7e4 -> 1.2e3, worst-of-six-seeds NUTS wall 227 s -> 40 s (see
-``docs/dev/inference_methods.md``, "Profiling the mass").
+``docs/dev/inference_methods.md``, "Profiling the Mass").
 
 References
 ----------
@@ -139,6 +152,14 @@ _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: docstring.
 _LINEARITY_TOL = 1e-8
 
+#: ``fitter.data_type`` values the exact chi^2(M) quadratic covers: photometry
+#: alone, spectroscopy alone, or their concatenation (photometry-then-spectrum,
+#: see ``tests/regression/bug/test_bug_1366_joint_data_record.py``). Excludes
+#: any channel with its own likelihood plumbing (emission lines, line ratios,
+#: spectral indices) or its own marginalized linear block (calibration) --
+#: those are refused by the guards below regardless of ``data_type``.
+_SUPPORTED_DATA_TYPES = frozenset({"photometry", "spectroscopy", "joint"})
+
 
 # ── Guards ──────────────────────────────────────────────────────────────────
 
@@ -157,18 +178,22 @@ def _mass_prior_bounds(dist: Distribution) -> tuple[float, float]:
 
 
 def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, float]:
-    """``(max|flux_ratio(theta, +1 dex mass) - 10|, tolerance)`` at a representative theta.
+    """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` at a representative theta.
 
     Probes the model's own physics, not the declared prior's support: two
     mass values one dex apart, held fixed, with every other free parameter at
     its prior median (``unstandardize(0.0)``, matching
     ``forward.forward_model._central_params``) and every fixed parameter at
-    its declared value. Catches a mass-independent additive component (e.g.
-    an AGN continuum) that the exact chi^2(M) quadratic cannot marginalize.
+    its declared value. The prediction probed is the fitter's own data-vector
+    assembly for its ``data_type`` (:func:`_predict_full_vector`), photometry,
+    spectroscopy, or their concatenation, so a spectroscopy channel with a
+    mass-independent additive term is caught exactly as a photometric one is.
+    Catches a mass-independent additive component (e.g. an AGN continuum)
+    that the exact chi^2(M) quadratic cannot marginalize.
 
-    The tolerance scales with the *actual* dtype ``predict_photometry``
-    returned (``jax.enable_x64`` may be off process-wide, silently downcasting
-    every ``float64`` request to ``float32``, see the warning in
+    The tolerance scales with the *actual* dtype the prediction returned
+    (``jax.enable_x64`` may be off process-wide, silently downcasting every
+    ``float64`` request to ``float32``, see the warning in
     https://docs.jax.dev/en/latest/notes/gotchas.html -- ``fitter.model`` and
     its inputs carry whatever precision the ambient JAX config gives them,
     not necessarily what a caller asked for): a fixed ``_LINEARITY_TOL``
@@ -195,8 +220,19 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     if getattr(spec, "stochastic", False):
         phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
 
-    pred_a = fitter.model.predict_photometry({**phys, mass_name: jnp.asarray(9.0)})
-    pred_b = fitter.model.predict_photometry({**phys, mass_name: jnp.asarray(10.0)})
+    use_components = bool(getattr(fitter, "use_components", False))
+    pred_a = _predict_full_vector(
+        fitter.model,
+        fitter.data_type,
+        {**phys, mass_name: jnp.asarray(9.0)},
+        use_components=use_components,
+    )
+    pred_b = _predict_full_vector(
+        fitter.model,
+        fitter.data_type,
+        {**phys, mass_name: jnp.asarray(10.0)},
+        use_components=use_components,
+    )
     max_dev = float(jnp.max(jnp.abs(pred_b / pred_a - 10.0)))
     tol = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
     return max_dev, tol
@@ -252,8 +288,11 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     except ValueError as exc:
         return str(exc), {}
 
-    if fitter.data_type != "photometry":
-        return f"data_type={fitter.data_type!r} (profile_mass requires 'photometry')", {}
+    if fitter.data_type not in _SUPPORTED_DATA_TYPES:
+        return (
+            f"data_type={fitter.data_type!r} (profile_mass requires one of "
+            f"{sorted(_SUPPORTED_DATA_TYPES)})"
+        ), {}
     if fitter._fits_lines(fitter.model):
         return "an emission-line channel is configured (marginalized, fitted, or measured)", {}
     if _has_line_adjacent_channel(fitter.model):
@@ -482,6 +521,50 @@ def suppress_placeholder_dead_fit_warning(fitter: Fitter):
 # ── The exact chi^2(M) quadratic and its marginal integral ──────────────────
 
 
+def _predict_full_vector(
+    model,
+    data_type: str,
+    phys: dict,
+    *,
+    use_components: bool = False,
+    jit_inputs: dict | None = None,
+    threaded_impl=None,
+) -> jnp.ndarray:
+    """The model's prediction for the fitter's FULL data vector, phot/spec/joint.
+
+    Delegates to ``loss_functions._build_prediction``,
+    the single assembly the ordinary (unprofiled) Gaussian likelihood scores
+    against for this ``data_type``: ``predict_photometry`` alone,
+    ``predict_spectrum`` alone, or their concatenation photometry-then-
+    spectrum for ``"joint"`` (the order
+    ``tests/regression/bug/test_bug_1366_joint_data_record.py`` pins). Reusing
+    it rather than re-deriving the dispatch means the profiled statistics see
+    exactly the vector (data mask, ``SpectrumPrecomp`` path, JIT-threaded SSP
+    grid included) the unprofiled likelihood does. Every emission-line /
+    line-ratio / spectral-index channel is excluded by construction: this
+    module's own guards (:func:`_check_guards`) refuse any fit carrying one,
+    so ``_build_prediction`` is always called with every feature-channel flag
+    off.
+    """
+    from tengri.inference.loss_functions import _build_prediction
+
+    _, predicted, _, _ = _build_prediction(
+        model,
+        phys,
+        data_type,
+        has_line_fluxes=False,
+        has_indices=False,
+        index_defs=None,
+        data_args={},
+        use_components=use_components,
+        has_line_ratios=False,
+        measured_line_defs=None,
+        jit_inputs=jit_inputs,
+        threaded_impl=threaded_impl,
+    )
+    return predicted
+
+
 def _profile_stats(
     model,
     mass_name: str,
@@ -489,17 +572,31 @@ def _profile_stats(
     data: jnp.ndarray,
     noise: jnp.ndarray,
     presence: jnp.ndarray | None = None,
+    *,
+    data_type: str,
+    use_components: bool = False,
+    jit_inputs: dict | None = None,
+    threaded_impl=None,
 ):
     """``(A, M*, chi2_min)`` of ``chi2(M) = chi2_min + A * (M - M*)**2``.
 
-    Exact whenever photometry is linear in ``M = 10**phys[mass_name]``, i.e.
-    the linearity guard's own condition. No assumption on what
-    ``phys[mass_name]`` actually is: the unit-mass flux ``pred /
+    Exact whenever the ``data_type`` data vector (:func:`_predict_full_vector`
+    -- photometry, spectroscopy, or their photometry-then-spectrum
+    concatenation for ``"joint"``) is linear in ``M = 10**phys[mass_name]``,
+    i.e. the linearity guard's own condition. No assumption on what
+    ``phys[mass_name]`` actually is: the unit-mass prediction ``pred /
     10**phys[mass_name]`` divides out whatever mass the prediction was made
     at, so this is safe to call with the placeholder-fixed value used during
     inference or a real posterior-sample mass used post hoc.
     """
-    pred = model.predict_photometry(phys)
+    pred = _predict_full_vector(
+        model,
+        data_type,
+        phys,
+        use_components=use_components,
+        jit_inputs=jit_inputs,
+        threaded_impl=threaded_impl,
+    )
     placeholder_mass = 10.0 ** phys[mass_name]
     # Divide by noise *before* squaring/multiplying (every chi^2 in tengri
     # does, see ``likelihoods.gaussian.standardized_residual``), AND divide
@@ -517,7 +614,8 @@ def _profile_stats(
     # range (~3e-40 here) -- and CPU XLA flushes subnormals in that
     # computation to exactly 0.0 -- which is fine for the forward value (that
     # band's contribution to A/B is negligible) but starves the reverse-mode
-    # cotangent reaching ``predict_photometry``: dividing by
+    # cotangent reaching the prediction (``predict_photometry`` /
+    # ``predict_spectrum``): dividing by
     # ``placeholder_mass`` *before* the noise normalization multiplies the
     # local Jacobian by an extra ``1/placeholder_mass`` on the way back,
     # weakening the cotangent by that same large factor (measured: enough to
@@ -594,6 +692,20 @@ def _sample_log_mass(key, A, mstar, ell_lo: float, ell_hi: float, mass_prior: Di
 # ── The profiled loss (drop-in for Fitter._build_loss_fn) ───────────────────
 
 
+def _threaded_predict_impl(model, use_components: bool):
+    """The threaded observables builder for ``model``, or ``None`` when unavailable.
+
+    Mirrors the threading ``loss_functions._build_data_neg_log_likelihood_fn``
+    sets up for the unprofiled loss, so the profiled one keeps the SSP grid
+    and template arrays as outer-level JAX ``Parameter`` ops rather than
+    baking them into the HLO as closure-captured constants (see that
+    function's Notes on cold-compile cost).
+    """
+    if use_components or not hasattr(model, "_get_or_build_predict_observables_jit"):
+        return None
+    return model._get_or_build_predict_observables_jit()
+
+
 def build_profiled_loss_fn(fitter: Fitter):
     """Build ``loss_fn(params_unbounded, data_args) -> scalar`` with mass profiled out.
 
@@ -619,6 +731,9 @@ def build_profiled_loss_fn(fitter: Fitter):
     mass_name = fitter._profile_mass_name
     mass_prior = fitter._profile_mass_prior
     ell_lo, ell_hi = fitter._profile_mass_bounds
+    data_type = fitter.data_type
+    use_components = bool(getattr(fitter, "use_components", False))
+    threaded_impl = _threaded_predict_impl(model, use_components)
 
     def loss_fn(params_unbounded, data_args):
         """-log p(d | xi) with the mass profiled out, plus 1/2 xi^T xi on the rest."""
@@ -635,6 +750,10 @@ def build_profiled_loss_fn(fitter: Fitter):
             data_args["data"],
             data_args["noise"],
             presence=data_args.get("presence"),
+            data_type=data_type,
+            use_components=use_components,
+            jit_inputs=data_args.get("_jit_inputs"),
+            threaded_impl=threaded_impl,
         )
         loglik = -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
 
@@ -672,6 +791,9 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
     mass_name = fitter._profile_mass_name
     mass_prior = fitter._profile_mass_prior
     ell_lo, ell_hi = fitter._profile_mass_bounds
+    data_type = fitter.data_type
+    use_components = bool(getattr(fitter, "use_components", False))
+    threaded_impl = _threaded_predict_impl(model, use_components)
 
     def loglik_unbounded(params_unbounded, data_args):
         """log p(d | xi) with the mass profiled out; no prior term."""
@@ -687,6 +809,10 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
             data_args["data"],
             data_args["noise"],
             presence=data_args.get("presence"),
+            data_type=data_type,
+            use_components=use_components,
+            jit_inputs=data_args.get("_jit_inputs"),
+            threaded_impl=threaded_impl,
         )
         return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
 
@@ -710,6 +836,9 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
     mass_name = fitter._profile_mass_name
     mass_prior = fitter._profile_mass_prior
     ell_lo, ell_hi = fitter._profile_mass_bounds
+    data_type = fitter.data_type
+    use_components = bool(getattr(fitter, "use_components", False))
+    threaded_impl = _threaded_predict_impl(model, use_components)
 
     def loglikelihood_fn(free_params, data_args):
         """log p(d | params), physical params, mass profiled out, no prior."""
@@ -726,6 +855,10 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
             data_args["data"],
             data_args["noise"],
             presence=data_args.get("presence"),
+            data_type=data_type,
+            use_components=use_components,
+            jit_inputs=data_args.get("_jit_inputs"),
+            threaded_impl=threaded_impl,
         )
         return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
 
@@ -779,12 +912,23 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     data, noise = fitter.data, fitter.noise
     presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
     fixed_values = fitter._fixed_values
+    data_type = fitter.data_type
+    use_components = bool(getattr(fitter, "use_components", False))
 
     if posterior.samples is not None:
 
         def stats_one(sample_dict):
             phys = {**fixed_values, **sample_dict}
-            return _profile_stats(model, mass_name, phys, data, noise, presence=presence)
+            return _profile_stats(
+                model,
+                mass_name,
+                phys,
+                data,
+                noise,
+                presence=presence,
+                data_type=data_type,
+                use_components=use_components,
+            )
 
         samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
         A_all, mstar_all, _ = jax.vmap(stats_one)(samples_no_mass)
@@ -800,7 +944,16 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
     else:
         phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
-        _, mstar, _ = _profile_stats(model, mass_name, phys, data, noise, presence=presence)
+        _, mstar, _ = _profile_stats(
+            model,
+            mass_name,
+            phys,
+            data,
+            noise,
+            presence=presence,
+            data_type=data_type,
+            use_components=use_components,
+        )
         posterior.params = {**posterior.params, mass_name: jnp.log10(mstar)}
 
     return posterior

@@ -545,6 +545,74 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
     )
 
 
+def _run_map_multistart_scipy(
+    context, *, key, n_restarts, n_steps, tol, optimizer, verbose, loss_fn, data_args
+):
+    """Run ``n_restarts`` scipy L-BFGS-B optimizations one after another; keep the best.
+
+    The multistart that :func:`_maybe_map_init` seeds every sampler with.
+    Measured 2026-09-12 on notebooks/07's tsnorm photometry model: the vmapped
+    JAX-BFGS multistart (:func:`_run_map_multistart_qn`) returned
+    neg-log-posterior **182.5** with ``converged=False`` from eight prior
+    draws, where one scipy L-BFGS-B start reaches **10.2** and the old Adam
+    multistart 27.6 -- a seed bad enough to send the notebook's HMC from
+    R-hat 1.000 to 1.37 and its joint fit past a 3000 s timeout. scipy's
+    L-BFGS-B is not JAX-traceable, so the restarts cannot be vmapped; at
+    ~0.4 s per start on a D <= 12 photometry fit a sequential loop is cheap,
+    and unlike JAX BFGS every start actually converges. Each restart draws
+    its own init from a split of ``key``; the lowest finite final loss wins
+    (:func:`_best_finite_restart` semantics: a start that diverged to a
+    non-finite loss never wins).
+    """
+    from tengri.inference.posterior import Posterior
+
+    keys = jax.random.split(key, n_restarts)
+    results = []
+    t0 = time.time()
+    for k in keys:
+        init_params = context.initial_params(k, init_from=None)
+        results.append(
+            _run_map_scipy(
+                context,
+                init_params=init_params,
+                grad_fn=context.grad_fn,
+                loss_fn=loss_fn,
+                data_args=data_args,
+                optimizer=optimizer,
+                n_steps=n_steps,
+                tol=tol,
+                verbose=False,
+            )
+        )
+    final_losses = jnp.asarray([float(r.diagnostics["final_loss"]) for r in results])
+    best = int(_best_finite_restart(final_losses))
+    winner = results[best]
+    wall_time = time.time() - t0
+    if verbose:
+        finite = np.asarray(final_losses, dtype=float)
+        n_diverged = int(np.sum(~np.isfinite(finite)))
+        worst = float(np.max(finite[np.isfinite(finite)]))
+        diverged_note = f"; {n_diverged} diverged" if n_diverged else ""
+        print(
+            f"  MAP (L-BFGS x{n_restarts} restarts, scipy) complete in {wall_time:.1f}s, "
+            f"best loss={float(final_losses[best]):.4f} (restart {best}; "
+            f"worst finite={worst:.1f}{diverged_note})"
+        )
+    diagnostics = dict(winner.diagnostics)
+    diagnostics.update(
+        {"n_restarts": int(n_restarts), "backend": "scipy_lbfgsb_sequential", "restart": best}
+    )
+    return Posterior(
+        samples=None,
+        params=winner.params,
+        method=f"MAP (L-BFGS, {n_restarts} restarts)",
+        wall_time_s=wall_time,
+        diagnostics=diagnostics,
+        loss_history=winner.loss_history,
+        _model=context.model,
+    )
+
+
 def _run_map_multistart_qn(context, *, key, n_restarts, n_steps, tol, optimizer, verbose):
     """Run ``n_restarts`` independent JAX BFGS optimizations via vmap; keep the best.
 
@@ -599,22 +667,10 @@ def _run_map_multistart_qn(context, *, key, n_restarts, n_steps, tol, optimizer,
     # optimizer cannot reach this function (the ``run_map`` gate below only
     # routes strings in ``_SCIPY_OPTIMIZERS`` here), so the memo is always safe
     # to use when a fitter is available.
-    _fitter = getattr(context, "fitter", None)
-    if _fitter is not None and hasattr(_fitter, "_memo_batch_kernel"):
-        _run_restarts = _fitter._memo_batch_kernel(
-            "_map_multistart_qn_kernel_cache",
-            (
-                "map_multistart_qn",
-                _fitter.compile_signature(),
-                optimizer,
-                int(n_steps),
-                float(tol),
-                int(n_restarts),
-            ),
-            _build_restarts,
-        )
-    else:
-        _run_restarts = _build_restarts()
+    # No memo: this path is opt-in (``optimizer="bfgs_jax"``) since the
+    # sequential scipy multistart replaced it as the L-BFGS default, and a memo
+    # keyed on the compile signature must not itself be a Fitter attribute.
+    _run_restarts = _build_restarts()
 
     t0 = time.time()
     params_b, fun_b, success_b, nit_b = _run_restarts(inits, data_args)
@@ -771,11 +827,26 @@ def run_map(
     # ``init_from`` is always honored as a single start, never multiplied.
     if n_restarts > 1 and init_from is None and isinstance(optimizer, str):
         if optimizer in _SCIPY_OPTIMIZERS:
-            # ── multi-start JAX BFGS (vmap'd restarts, keep the lowest-loss) ──
-            # scipy's L-BFGS-B is not JAX-traceable, so it cannot be vmapped over
-            # restarts the way the optax path below is; jax.scipy.optimize's BFGS
-            # is pure JAX and fills that role. See _run_map_multistart_qn and the
-            # ``optimizer`` docstring entry above.
+            # ── multi-start scipy L-BFGS-B, one restart after another ──
+            # The vmapped JAX-BFGS sibling (_run_map_multistart_qn, kept for
+            # optimizer="bfgs_jax") was measured to stall from prior draws on
+            # a tsnorm model (nlp 182 against 10 for one scipy start); see
+            # _run_map_multistart_scipy.
+            return _publish_map_init_cache(
+                context,
+                _run_map_multistart_scipy(
+                    context,
+                    key=key,
+                    n_restarts=n_restarts,
+                    n_steps=n_steps,
+                    tol=tol,
+                    optimizer=optimizer,
+                    verbose=verbose,
+                    loss_fn=loss_fn,
+                    data_args=data_args,
+                ),
+            )
+        if optimizer == "bfgs_jax":
             return _publish_map_init_cache(
                 context,
                 _run_map_multistart_qn(
@@ -784,7 +855,7 @@ def run_map(
                     n_restarts=n_restarts,
                     n_steps=n_steps,
                     tol=tol,
-                    optimizer=optimizer,
+                    optimizer="lbfgs",
                     verbose=verbose,
                 ),
             )
