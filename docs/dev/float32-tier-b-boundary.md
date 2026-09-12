@@ -1430,8 +1430,7 @@ sites), #2300 (a stale parity reference read as a device defect); and #2304 (#22
   keeps element 0 and zeros the rest (upstream jax-mps#232), which tengri tripped in
   `polar_dust.py`'s `trapezoid(l_nu[::-1], nu[::-1])` (torus SED ×0.10 at 100 µm). #2298
   rewrites that site and the three others of the same shape as negated descending-grid
-  integrals (float64 bit-for-bit), and the recipe keeps `MLX_DISABLE_COMPILE=1` while the
-  upstream defect is open — at no cost, the workload being dispatch-bound.
+  integrals (float64 bit-for-bit), and the recipe keeps `MLX_DISABLE_COMPILE=1` while jax-mps 0.10.10 is the release: the defect is fixed upstream in MLX 0.32.0 (ml-explore/mlx#3720) and lands in jax-mps via PR #233 (0.10.11), whose CI wheel the Mac session verified under default compile (all reproducer shapes correct; +AGN and +radio+xray seams pass without the flag; #2287 stays necessary, since negative host strides at transfer are still refused) — at no cost, the workload being dispatch-bound.
 
 ### The acceptance criterion, restated
 
