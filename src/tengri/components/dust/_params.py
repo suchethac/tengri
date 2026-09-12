@@ -32,7 +32,7 @@ superset.
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, LogNormal, Uniform
+from tengri.parameters.priors import Fixed, Gaussian, Uniform
 from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
@@ -158,17 +158,23 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "strict balance; free it to fit galaxies whose UV/optical and FIR are "
         "spatially decoupled and so violate energy balance (e.g. high-z "
         "sources), the way AGNfitter offers an *optional* energy-balance prior. "
-        "Recommended relaxed prior: ``LogNormal(mu=0.0, sigma=0.2)`` (median "
-        "eta=1, ~+/-20%), keeping balance as the soft default while allowing "
-        "controlled deviation.",
+        "Recommended relaxed prior: ``Gaussian(mu=1.0, sigma=0.2, lo=0.0)`` "
+        "(mean eta=1, ~+/-20%, truncated at 0), keeping balance as the soft "
+        "default while allowing controlled deviation.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         # The relaxed prior this description has recommended all along, now
-        # actually declared. LogNormal keeps eta positive and multiplicative
-        # about strict balance (median eta=1); the truncation at 5 is a guard
-        # against the sampler wandering into unphysically AGN-dominated IR, not
-        # a physical edge -- +/-3 sigma is [0.55, 1.82].
-        free_prior=LogNormal(0.0, 0.2, 0.0, 5.0, "Energy-balance relaxation factor", default=1.0),
+        # actually declared, stated in the linear quantity: eta itself is the
+        # linear multiplicative factor (L_IR = eta * L_absorbed), so a Gaussian
+        # on eta -- mean 1 (strict balance), sigma 0.2 (+/-20%) -- is the
+        # natural prior, not a LogNormal on log(eta). Truncated at 0 because
+        # eta < 0 is unphysical (lo=0.0 is required by the declaration's own
+        # validator above, "must be >= 0"); hi is left unbounded -- 5.0 was a
+        # 5-sigma guard for the log prior, which is 20 sigma away in the linear
+        # one, so no finite upper edge is needed to keep the sampler physical.
+        free_prior=Gaussian(
+            1.0, 0.2, 0.0, float("inf"), "Energy-balance relaxation factor", default=1.0
+        ),
     ),
     ParamDeclaration(
         "dust_T_warm",

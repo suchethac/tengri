@@ -11,6 +11,9 @@ All wavelengths are rest-frame vacuum values in Angstrom.
 from __future__ import annotations
 
 import jax.numpy as jnp
+import numpy as np
+
+from tengri.utils.host_array import host_array
 
 # ── Primary line catalog ──────────────────────────────────────────
 
@@ -155,7 +158,7 @@ DEFAULT_LINE_NAMES: tuple[str, ...] = (
     "[SII]6717",
     "[SII]6731",
 )
-DEFAULT_LINE_WAVELENGTHS: jnp.ndarray = jnp.array(
+DEFAULT_LINE_WAVELENGTHS: np.ndarray = host_array(
     [
         1215.67,  # Ly-alpha (vacuum)
         4102.89,  # H-delta (vacuum)
@@ -188,7 +191,7 @@ CLOUDY_LINE_NAMES: tuple[str, ...] = (
     "[SII]6716",
     "[SII]6731",
 )
-CLOUDY_LINE_WAVELENGTHS: jnp.ndarray = jnp.array(
+CLOUDY_LINE_WAVELENGTHS: np.ndarray = host_array(
     [
         3727.09,  # [OII] 3726 (vacuum)
         3729.88,  # [OII] 3729 (vacuum)
