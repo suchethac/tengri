@@ -696,32 +696,24 @@ def _build_nb05_prelaw(ssp):
 def _build_nb01(ssp):
     """``01_why_jax``: the minimal mock-recovery recipe, six bands.
 
-    Dimensionality is whatever ``recipes.mock_recovery_minimal`` currently
-    declares -- the recipe owns it, this file does not restate it -- and the
-    header line prints the measured count per run.
-
-    **Settled (#2096): this fixture matches the notebook, and structurally
-    cannot drift from it.** ``tools/check_harness_parity.py`` measures the two
-    models as spec-identical with a maximum relative difference of 0.0 in
-    predicted photometry across all six bands. That is not luck: nb05 and nb00
-    drifted because each *spelled its model out* in two places, whereas
-    ``01_why_jax.py`` and this function both say
-    ``**recipes.mock_recovery_minimal()`` -- one definition, in ``src/``, that
-    changes for both at once. The six filters are the only thing duplicated, and
-    ``notebooks/01_why_jax.py``'s ``SEDModel.build`` line has not changed since
-    ``27ffb8d0d`` ("docs(nb01): rewrite why-JAX for astronomers") apart from
-    formatting and the ``load_ssp`` path resolver (#1486). #2096 listed nb01 as
-    "unchecked", which was accurate, and as the last fixture of unknown status,
-    which it no longer is.
+    The notebook and this fixture both build ``recipes.mock_recovery_minimal()``
+    on the ``prsc_miles_chabrier_wNE`` grid with the same two-line override,
+    ``{"neb": {"type": "ssp"}}`` -- the grid carries its nebular emission, and the
+    recipe's stellar-only entry is replaced. Dimensionality is whatever the recipe
+    declares. The six filters are the only duplicated piece;
+    ``tools/check_harness_parity.py`` compares the parameter spec, the band list,
+    the SSP identity and the predicted photometry against the notebook's own
+    executed cells.
 
     The mock differs from the notebook's: the notebook draws its truth at
     ``PRNGKey(0)`` and its noise at ``PRNGKey(1)``, while ``run_one`` splits one
     seed three ways. Parity is a claim about the model, not the galaxy.
     """
+    cfg = {**recipes.mock_recovery_minimal(), "neb": {"type": "ssp"}}
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(list(_NB01_FILTERS))),
-        **recipes.mock_recovery_minimal(),
+        **cfg,
     )
 
 
@@ -878,6 +870,7 @@ NOTEBOOKS = {
     ),
     "01": dict(
         build=_build_nb01,
+        ssp="prsc_miles_chabrier_wNE",
         parity=dict(kind="mirrors", notebook="notebooks/01_why_jax.py"),
         seed=1,
         snr=20.0,

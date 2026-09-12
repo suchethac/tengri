@@ -18,14 +18,11 @@ template to copy. Each states its own caveats up front.
   evidence weight — putting a number on how much the choice of model
   contributes to the error budget.
 - **{doc}`jwst_nonparametric_fits`**: a Prospector-style continuity SFH fit to
-  JWST NIRCam broad plus medium band photometry at $z = 1.5$, run in individual
-  and catalog mode with the cost of each stage measured. Two settings decide
-  whether the fit means anything, and neither is the sampler's name: bin edges
-  that stop at the age of the universe, worth half a dex in stellar mass, and a
-  trajectory long enough to cross a correlated ratio posterior, worth a factor
-  of twelve in effective samples. The number to compare is the worst seed rather
-  than the average: cost per effective sample favors a shorter trajectory than
-  the one the page ships, and the floor is what argues against it.
+  JWST NIRCam broad plus medium band photometry at $z = 1.5$, with individual
+  single-galaxy and catalog posteriors timed. Bin edges log-spaced to the age of
+  the universe set the stellar mass to within half a dex. The default fit runs
+  four NUTS chains; the catalog runs fixed-length HMC. The page prints the wall
+  time of each.
 - **{doc}`apple_mps`**: running the forward model and fits on the Apple GPU via
   the community `jax-mps` backend. Needs a JAX version tengri does not pin and
   runs in pure float32, so it is a feasibility study rather than a
@@ -44,8 +41,8 @@ template to copy. Each states its own caveats up front.
   error bars, and `jax.grad` of a raw observable returns identically zero in
   float32 on any device, a result also confirmed by finite-difference checks that
   find the likelihood-path gradient wrong by about a factor of two, so float32
-  fitting is not safe either. The sampler section carries its own warning: those numbers are
-  a property of a fixture that turned out to be hard to sample, not of tengri.
+  fitting is not safe either. The sampler section measures a fixture that is
+  hard to sample; single-galaxy posteriors are a CPU job.
 
 - **{doc}`custom_filters_7dt`**: an instrument tengri does not carry, taken
   from delivered transmission curves through prediction to a fit. Three

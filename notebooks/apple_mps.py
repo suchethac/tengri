@@ -18,7 +18,7 @@
 #
 # **Status: experimental.** This is a working recipe with measured numbers, not a
 # supported configuration. It needs a JAX version tengri does not pin, and it
-# runs in pure float32, where parts of the model are still open work (#1206).
+# runs in pure float32, where parts of the model are still open work.
 # Nothing here changes the default: on CPU, in float64, nothing below applies.
 #
 # The one-line summary, measured on an Apple M4 Pro:
@@ -105,7 +105,7 @@
 # export MLX_DISABLE_COMPILE=1
 # ```
 #
-# tengri honors that (#1840) and holds it for the whole import (#1880). It will
+# tengri honors that and holds it for the whole import. It will
 # warn once that you are in float32 and that cosmological distances are the known
 # hazard — that warning is expected here, not a problem.
 #
@@ -114,10 +114,10 @@
 # (`y[::-1] * 2.0` keeps its first element and zeros the rest;
 # [jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)). tengri hits
 # it in the SKIRTOR polar-dust integral, which puts the torus far-infrared 10x low;
-# with fusion off the #1206 parity sweep passes 5 of 6 seams, and every seam ran
+# with fusion off the float32 parity sweep passes 5 of 6 seams, and every seam ran
 # faster. Details and the measured table: `docs/internal/getting_started/gpu.md`.
 #
-# Optional, and worth setting: `JAX_MPS_ASYNC_DISPATCH=1`. Measured, it cut cold
+# Optional, and worth setting: `JAX_MPS_ASYNC_DISPATCH=1`. It cut cold
 # compile from 8.1 s to 0.60 s. It changes warm time very little.
 
 # %%
@@ -219,10 +219,10 @@ for n in (1, 32):
     print(f"batch={n:4d}  gradient finite={finite}  device={jax.devices()[0]}")
 
 # %% [markdown]
-# ### Measured, M4 Pro, float32, `WavePrecomp`, 6 bands
+# ### M4 Pro, float32, `WavePrecomp`, 6 bands
 #
 # Gradient of `sum(predict_photometry)`, warm, one shape per process, medians of
-# 2-3 independent runs. Re-measured on tengri `082bee8c7`.
+# 2-3 independent runs.
 #
 # | batch | CPU per galaxy | MPS per galaxy | |
 # |---|---|---|---|
@@ -362,13 +362,15 @@ posterior = fitter.run("map", n_steps=100, verbose=False)
 print("MAP fit completed on", jax.devices()[0])
 
 # %% [markdown]
-# ### Measured: single-galaxy MAP, 300 ADAM steps
+# ### One galaxy, MAP, 300 Adam steps (`optimizer="adam"`)
 #
 # | run | CPU | MPS |
 # |---|---|---|
 # | 1 (includes compile) | 4.73 s | 20.07 s |
 # | 2 | **0.22 s** | 18.80 s |
 # | 3 | **0.22 s** | 19.43 s |
+#
+# The default MAP optimizer is now L-BFGS-B (scipy), a host-driven loop that dispatches one gradient per iteration — the same sequential shape as the Adam loop measured here, so these conclusions stand.
 #
 # Two things to read here.
 #
@@ -394,9 +396,10 @@ print("MAP fit completed on", jax.devices()[0])
 # runs.
 #
 # The honest position: a `CatalogFitter` over hundreds of galaxies with a vmapped
-# backend (`mcmc_nuts`, `mcmc_hmc`) is the case with the best chance, because it
+# backend (`mcmc_nuts`, `mcmc_hmc`, `mcmc_chees`) is the case with the best chance, because it
 # is the widest. It is **not measured end to end here**, and shape C is a reason
-# for tempered expectations rather than optimistic ones.
+# for tempered expectations rather than optimistic ones. The default single-galaxy posterior
+# (four NUTS chains, mass profiled) has the same sequential shape and stays on the CPU.
 
 # %% [markdown]
 # ## 6. Is the backend healthy?
@@ -421,7 +424,7 @@ print(f"matmul 2048^2: {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.0f} GF
 # %% [markdown]
 # ## 7. Limits, honestly
 #
-# * **float32 only.** #1206 tracks what is still open there. Forward photometry
+# * **float32 only.** What is still open there is tracked upstream. Forward photometry
 #   and gradients on the fit objective agree with float64 to ~1e-5 on the
 #   configurations measured so far, but that is not the whole model.
 # * **Single device.** MPS is one GPU; there is no sharding to do.

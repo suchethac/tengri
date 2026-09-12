@@ -24,10 +24,17 @@
 
 # %%
 import os
+import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+os.environ["TENGRI_HOST_DEVICES"] = "4"  # enable parallel chain execution on 4 devices
 
-import warnings
+from _setup import quiet
+
+quiet()
+
+# The wNE grid states that its nebular emission is baked in; that is the intent here.
+warnings.filterwarnings("ignore", message=".*wNE.*")
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
@@ -67,16 +74,18 @@ plot.setup_style()
 # ## A minimal star-forming galaxy
 #
 # `recipes.mock_recovery_minimal()` is the cheapest stable model — a
-# truncated-skew-normal SFH, single dust optical depth, no nebular
-# physics. Seven free parameters; tractable in seconds.
+# truncated-skew-normal SFH, single dust optical depth, with baked-in nebular emission.
+# Seven free parameters; tractable in seconds.
 
 # %%
-ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
+SSP_NAME = "prsc_miles_chabrier_wNE"
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1"])
 )
-model = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.mock_recovery_minimal())
+cfg = {**recipes.mock_recovery_minimal(), "neb": {"type": "ssp"}}  # the wNE grid carries its nebular emission; the recipe's "no nebular" entry is replaced
+model = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
 
 truth = model.spec.sample(jax.random.PRNGKey(0))
 mock = generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
@@ -86,7 +95,7 @@ flux_obs, noise = mock["flux_obs"], mock["noise"]
 # ## Figure 1 — the posterior gradient
 #
 # Two of the free parameters, varied on a 20×20 grid with the rest fixed
-# at truth: the peak SFR and the birth-cloud optical depth. Left panel:
+# at truth: the total stellar mass formed and the birth-cloud optical depth. Left panel:
 # the log-posterior surface, with contours at 1σ / 2σ / 3σ. Right panel:
 # `jax.grad` of the same quantity, plotted as a vector field.
 #
@@ -95,17 +104,19 @@ flux_obs, noise = mock["flux_obs"], mock["noise"]
 # difference between hours and seconds.
 
 # %%
-log_sfr_grid = np.linspace(-1.5, 2.0, 20)
-tau_grid = np.linspace(0.0, 1.5, 20)
-LSFR, TAU = np.meshgrid(log_sfr_grid, tau_grid, indexing="ij")
-
 base = dict(truth)
 free_keys = ("sfh_tsnorm_log_total_mass", "dust_tau_bc")
 
+m0 = float(truth[free_keys[0]])
+t0 = float(truth[free_keys[1]])
+log_m_grid = np.linspace(m0 - 0.15, m0 + 0.15, 20)
+tau_grid = np.linspace(max(0.0, t0 - 0.4), t0 + 0.4, 20)
+LOGM, TAU = np.meshgrid(log_m_grid, tau_grid, indexing="ij")
 
-def neg_log_post(log_sfr, tau):
+
+def neg_log_post(log_m, tau):
     p = dict(base)
-    p[free_keys[0]] = log_sfr
+    p[free_keys[0]] = log_m
     p[free_keys[1]] = tau
     flux_pred = model.predict_photometry(p)  # canonical lean JIT/vmap-safe path
     chi2 = jnp.sum(((flux_pred - flux_obs) / noise) ** 2)
@@ -119,26 +130,26 @@ def neg_log_post(log_sfr, tau):
 neg_log_post_jit = jax.jit(neg_log_post)
 grad_jit = jax.jit(jax.grad(neg_log_post, argnums=(0, 1)))
 
-nll_grid = np.zeros_like(LSFR)
-g_log_sfr = np.zeros_like(LSFR)
-g_tau = np.zeros_like(LSFR)
-for i in range(LSFR.shape[0]):
-    for j in range(LSFR.shape[1]):
-        nll_grid[i, j] = float(neg_log_post_jit(LSFR[i, j], TAU[i, j]))
-        gx, gy = grad_jit(LSFR[i, j], TAU[i, j])
-        g_log_sfr[i, j] = float(gx)
+nll_grid = np.zeros_like(LOGM)
+g_log_m = np.zeros_like(LOGM)
+g_tau = np.zeros_like(LOGM)
+for i in range(LOGM.shape[0]):
+    for j in range(LOGM.shape[1]):
+        nll_grid[i, j] = float(neg_log_post_jit(LOGM[i, j], TAU[i, j]))
+        gx, gy = grad_jit(LOGM[i, j], TAU[i, j])
+        g_log_m[i, j] = float(gx)
         g_tau[i, j] = float(gy)
 
 log_post = -(nll_grid - nll_grid.min())  # peak at zero
-step_x, step_y = -g_log_sfr, -g_tau  # ascend the posterior
+step_x, step_y = -g_log_m, -g_tau  # ascend the posterior
 mag = np.hypot(step_x, step_y)
 step_x = step_x / (mag + 1e-12)
 step_y = step_y / (mag + 1e-12)
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), constrained_layout=True)
 levels = -np.array([0.5 * s * s for s in (1.0, 2.0, 3.0)])[::-1]
-cs = axes[0].contourf(LSFR, TAU, log_post, levels=20, cmap="magma")
-axes[0].contour(LSFR, TAU, log_post, levels=levels, colors="white", linewidths=0.8)
+cs = axes[0].contourf(LOGM, TAU, log_post, levels=20, cmap="magma")
+axes[0].contour(LOGM, TAU, log_post, levels=levels, colors="white", linewidths=0.8)
 axes[0].scatter(
     [truth[free_keys[0]]],
     [truth[free_keys[1]]],
@@ -149,16 +160,16 @@ axes[0].scatter(
     zorder=5,
     label="truth",
 )
-axes[0].set_xlabel(r"$\log_{10}(\mathrm{peak\ SFR})\ [M_\odot/\mathrm{yr}]$")
+axes[0].set_xlabel(r"$\log_{10} M_\star\ [M_\odot]$")
 axes[0].set_ylabel(r"birth-cloud $\tau_V$")
 axes[0].set_title("log posterior")
 axes[0].legend(loc="lower right", frameon=False)
 fig.colorbar(cs, ax=axes[0], shrink=0.85, label=r"$\ln \mathcal{P}$")
 
 stride = 4
-axes[1].contour(LSFR, TAU, log_post, levels=levels, colors="0.5", linewidths=0.8)
+axes[1].contour(LOGM, TAU, log_post, levels=levels, colors="0.5", linewidths=0.8)
 axes[1].quiver(
-    LSFR[::stride, ::stride],
+    LOGM[::stride, ::stride],
     TAU[::stride, ::stride],
     step_x[::stride, ::stride],
     step_y[::stride, ::stride],
@@ -178,9 +189,9 @@ axes[1].scatter(
     edgecolor="k",
     zorder=5,
 )
-axes[1].set_xlabel(r"$\log_{10}(\mathrm{peak\ SFR})\ [M_\odot/\mathrm{yr}]$")
+axes[1].set_xlabel(r"$\log_{10} M_\star\ [M_\odot]$")
 axes[1].set_ylabel(r"birth-cloud $\tau_V$")
-axes[1].set_title(r"$-\nabla\, \chi^2 / 2$  (NUTS/HMC follows these arrows)")
+axes[1].set_title(r"$-\nabla\, \chi^2 / 2$  (NUTS follows these arrows)")
 fig.savefig(FIG_DIR / "01_gradient_map.png", dpi=300, bbox_inches="tight")
 
 # %% [markdown]
@@ -225,25 +236,18 @@ _ = forward(batch_params).block_until_ready()
 t_batch = perf_counter() - t0
 
 t0 = perf_counter()
-# Timing demonstration (not a converged posterior).
-# A real inference run needs more samples to assess convergence (see notebook 05).
-# This is just enough to show that NUTS sampling on a 7-D model happens in seconds,
-# not hours. Seven is also the emcee comparison's dimensionality, so the two
-# bars below are like-for-like rather than tengri solving a smaller problem.
-posterior = ForwardModel.build(sed=model).fit(
-    flux_obs,
-    noise,
-    method="mcmc_nuts",
-    key=jax.random.PRNGKey(2),
-    n_warmup=100,
-    n_samples=100,
-)
+# The default fit: four NUTS chains on the mass-profiled posterior with a dense metric.
+# Seven parameters is also the emcee comparison's dimensionality, so the bars are like-for-like.
+fwd_model = ForwardModel.build(sed=model)
+posterior = fwd_model.fit(flux_obs, noise, key=jax.random.PRNGKey(2), verbose=False)
 t_nuts = perf_counter() - t0
+
+print(f"NUTS posterior, 4 chains x 300 draws: {t_nuts:.1f} s")
 
 bars = {
     "single forward\n(JIT warm)": t_single,
     f"vmap of {n_batch}\nforwards": t_batch,
-    "single NUTS\nposterior (7-D)": t_nuts,
+    "NUTS posterior\n(7-D, 4 chains)": t_nuts,
     "emcee, 7-D\ngalaxy (lit.)": 3600.0,
 }
 fig2, ax = plt.subplots(figsize=(6.8, 4.0))
@@ -272,11 +276,12 @@ fig2.savefig(FIG_DIR / "01_wallclock.png", dpi=300, bbox_inches="tight")
 # steady state, what you want inside a population fit.
 
 # %%
+cfg = {**recipes.mock_recovery_minimal(), "neb": {"type": "ssp"}}  # the wNE grid carries its nebular emission; the recipe's "no nebular" entry is replaced
 model_fused = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     compile="fused",
-    **recipes.mock_recovery_minimal(),
+    **cfg,
 )
 
 # %% [markdown]

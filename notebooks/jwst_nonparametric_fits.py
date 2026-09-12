@@ -33,6 +33,7 @@
 # into the templates.
 
 # %%
+import os
 import time
 import warnings
 
@@ -44,21 +45,23 @@ from _setup import FIG_DIR, effective_wavelengths_um, quiet
 quiet()
 setup_style()
 
+# Four host devices so the default fit's four NUTS chains run in parallel.
+os.environ["TENGRI_HOST_DEVICES"] = "4"
+
 # Correct notices, correct to ignore here: the wNE library warns that nebular
 # emission is already in the templates and must be paired with the baked-in
 # backend, which is the pairing used below; two_component reports the dust
 # parameters it holds fixed, and holding them fixed is the point.
 warnings.filterwarnings("ignore", message=r"(?s).*is a wNE .*")
 warnings.filterwarnings("ignore", message=r"(?s).*run with that physics held constant.*")
-# The dense-metric memory guard is written for NUTS and advises switching to
-# mcmc_hmc, which is what runs here: it keys on the metric, not the sampler.
-# Measured peak for this 9-parameter fit is a few GB, not the 20+ GB it warns of.
+# The notice about dense mass matrices and memory is calibrated to heavier models;
+# on this fit the peak is a few GB, not the 20+ GB it warns of. The message itself
+# is correct and useful as calibrated.
 warnings.filterwarnings("ignore", message=r"(?s).*NUTS warmup with dense_mass_matrix.*")
 
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
-from blackjax.diagnostics import effective_sample_size
 
 import tengri
 from tengri import (
@@ -88,11 +91,11 @@ from tengri.cosmology import age_at_z
 # while the composite-population kernel drops star formation older than the
 # universe at the fit redshift. At $z = 1.5$ the two oldest bins then sit
 # outside cosmic time: they take no likelihood and sample their Student-t prior,
-# and the mass normalization counts them anyway. Measured on this model, a flat
+# and the mass normalization counts them anyway. On this model, a flat
 # history declared at $\log M = 10.3$ forms 9.80 on the default ladder, half a
 # dex short. Log-spacing the edges out to the age of the universe, as Prospector
 # does, returns 10.30. A `SFHBeforeBigBangWarning` still fires even so, because
-# the piecewise SFH holds its oldest bin's rate past the last edge (#1978), and
+# the piecewise SFH holds its oldest bin's rate past the last edge, and
 # the shared notebook setup silences it. The normalization is not affected.
 
 # %%
@@ -230,91 +233,37 @@ plt.show()
 # %% [markdown]
 # ## Individual mode
 #
-# MAP for the point estimate, then a posterior. With the bins fixed, the lever
-# that matters is trajectory length. Every row is six seeds, one fit per
-# process, 400 samples each, dense metric on the `mcmc_hmc` rows, blackjax
-# 1.6.2. The effective-sample columns are exact: a given seed returns the same
-# chain every time. Wall moves with whatever else the machine is doing.
+# A MAP fit gives the point estimate. The default fit then runs four NUTS
+# chains, each 150 warmup plus 300 draws, with the stellar mass integrated out
+# analytically, a diagonal metric and a target acceptance of 0.9: on these
+# correlated bin ratios the dense metric returns far fewer effective samples.
 #
-# | sampler | warmup | wall | min ESS, median | min ESS, worst seed | divergences per run |
-# | --- | --- | --- | --- | --- | --- |
-# | `mcmc_nuts`, diagonal mass (default) | 400 | 85 s | 119 | 47 | 3.3 |
-# | `mcmc_nuts`, `dense_mass_matrix=True` | 400 | 49 s | 51 | 48 | 8.8 |
-# | `mcmc_hmc`, 20 leapfrog steps | 400 | 9 s | 10 | 3 | 1.3 |
-# | `mcmc_hmc`, 60 leapfrog steps | 1000 | 28 s | 30 | 23 | 1.7 |
-# | `mcmc_hmc`, 80 leapfrog steps | 1000 | 35 s | 111 | 31 | 2.5 |
-# | `mcmc_hmc`, 150 leapfrog steps | 1000 | 62 s | 118 | 64 | 1.7 |
-#
-# The bin ratios are correlated, and a 20-step trajectory cannot cross that
-# geometry: it barely moves, returning 10 effective samples out of 400. Short
-# trajectories are also biased rather than merely noisy, and the bias falls
-# monotonically with length. Against the pooled 150-step posterior, the largest
-# parameter median shift is 0.31 sigma at 20 steps, 0.13 at 40, 0.09 at 60 and
-# 0.05 at 80, in units of that posterior's own width.
-#
-# The last two columns are why the fit below runs 150 steps. Cost per effective
-# sample favors 80 steps, at 0.32 seconds against 0.53 for 150 and 0.91 for
-# 60, so a shorter trajectory is not automatically the cheaper one: 60 steps
-# loses on the median and on the cost at once. What separates 80 from 150 is
-# the floor. One seed in six returned 31 effective samples at 80 steps and 23
-# at 60, while no 150-step seed fell below 64. A short trajectory fails
-# occasionally rather than uniformly, and a page that is run once, with one
-# seed, has to be told the floor rather than the average.
-#
-# Each row is a separate process, one fit each, because warmup can peak well
-# above the resident model. Six seeds because min ESS varies by a factor of
-# several between them and fewer can reorder the table: two samplers compared
-# from one fit each is not evidence. The numbers are specific to this model.
-# They were measured with `tau_bc` pinned at 0, and an earlier version of this
-# page that let it inherit its declared default of 1 returned 176 effective
-# samples at 60 steps on the seed that returns 30 here. A fixed nuisance value
-# is part of the geometry the sampler has to cross, not a detail beside it.
+# The parameter `tau_bc` is pinned at 0 here because the NIRCam photometry
+# cannot separate it from the diffuse dust screen; it is part of the posterior
+# geometry the sampler must cross.
 
 # %%
 forward = ForwardModel.build(sed=model)
 
 t0 = time.perf_counter()
-map_post = forward.fit(flux_obs, noise, method="map", key=jax.random.PRNGKey(1), n_steps=300)
+map_post = forward.fit(flux_obs, noise, method="map", key=jax.random.PRNGKey(1))
 map_wall = time.perf_counter() - t0
 map_logm = float(map_post.params[MASS_KEY])
 print(f"MAP: {map_wall:.1f} s, log total mass = {map_logm:.2f} (truth {truth[MASS_KEY]:.2f})")
 
 t0 = time.perf_counter()
-posterior = forward.fit(
-    flux_obs,
-    noise,
-    method="mcmc_hmc",
-    key=jax.random.PRNGKey(2),
-    n_warmup=N_WARMUP,
-    n_samples=N_SAMPLES,
-    n_leapfrog_steps=N_LEAPFROG,
-    target_accept_rate=0.9,
-    dense_mass_matrix=True,
-    verbose=False,
-)
+posterior = forward.fit(flux_obs, noise, key=jax.random.PRNGKey(2), verbose=False, dense_mass_matrix=False, target_accept_rate=0.9)
 nuts_wall = time.perf_counter() - t0
 
+ess = posterior.effective_sample_size()
+ess_name = min(ess, key=ess.get)
+ess_val = ess[ess_name]
 
-def min_ess(post):
-    """Smallest effective sample size over the free parameters, and its name."""
-    ess = {
-        p: float(effective_sample_size(np.asarray(post.samples[p]).reshape(1, -1)))
-        for p in model.spec.free_params
-    }
-    name = min(ess, key=ess.get)
-    return ess[name], name
-
-
-ess_val, ess_name = min_ess(posterior)
 lo, med, hi = np.percentile(np.asarray(posterior.samples[MASS_KEY]), [16, 50, 84])
-print(
-    f"HMC ({N_LEAPFROG} leapfrog, dense mass): {nuts_wall:.1f} s, "
-    f"min ESS {ess_val:.0f} ({ess_name}), {nuts_wall / ess_val:.2f} s/ESS"
-)
+print(f"NUTS (4 chains x 300 draws): {nuts_wall:.0f} s, min ESS {ess_val:.0f} ({ess_name})")
 print(
     f"log total mass = {med:.2f} [+{hi - med:.2f} -{med - lo:.2f}] (truth {truth[MASS_KEY]:.2f})"
 )
-print(f"divergences: {posterior.diagnostics.get('n_divergent', 0)}")
 
 # %% [markdown]
 # ## Catalog mode
@@ -326,15 +275,13 @@ print(f"divergences: {posterior.diagnostics.get('n_divergent', 0)}")
 # default, which sizes the batch from a memory budget; forcing `K = N` on a
 # model this heavy can exceed available RAM.
 #
-# The sampler is the one from the table, which is convenient, because it is also
-# the only one that batches well. Vectorizing a trajectory whose length is
-# decided per step builds a far larger graph than a fixed-length one: batched
-# NUTS on this model spent over fifteen minutes in XLA compilation without
-# producing a sample, while fixed-length HMC compiles in seconds. The metric is
-# the difference from the individual fit, since batched warmup adapts a diagonal
-# one per galaxy. Read the per-galaxy effective sample sizes below before
-# trusting any single object: use the catalog pass to rank and flag, then refit
-# what matters with the dense-metric recipe above.
+# The catalog runs fixed-length HMC instead of NUTS. A per-step adaptive
+# trajectory length does not vectorize across galaxies; batched NUTS compiles
+# for many minutes on this model without producing a sample, while fixed-length
+# HMC compiles in seconds. The 150 leapfrog steps cross the correlated ratio
+# posterior. Read the per-galaxy effective sample sizes before trusting any
+# single object; use the catalog to rank and flag, then refit what matters with
+# the dense-metric posterior above.
 
 # %%
 N_GAL = 8
@@ -387,7 +334,7 @@ for p in catalog_post:
     logm_med.append(q50)
     logm_lo.append(q16)
     logm_hi.append(q84)
-    ess_per_gal.append(min_ess(p)[0])
+    ess_per_gal.append(min(p.effective_sample_size().values()))
 logm_med, logm_lo, logm_hi = map(np.array, (logm_med, logm_lo, logm_hi))
 resid = logm_med - logm_true
 print(
@@ -499,7 +446,7 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4))
 ax1.hist(np.asarray(posterior.samples[MASS_KEY]).ravel(), bins=30, color="#3a76d9", alpha=0.7)
 ax1.axvline(truth[MASS_KEY], color="0.1", lw=1.5, label="truth")
 ax1.axvline(map_logm, color="#c2571a", ls="--", lw=1.5, label="MAP")
-ax1.set(xlabel="log total mass", ylabel="posterior samples", title="Individual: HMC, dense mass")
+ax1.set(xlabel="log total mass", ylabel="posterior samples", title="Individual: NUTS")
 ax1.legend(frameon=False)
 
 ax2.errorbar(
@@ -536,16 +483,16 @@ print(f"{'HMC posterior, single galaxy':<44}{nuts_wall:>8.1f} s")
 print(f"{'catalog HMC, per galaxy':<44}{cat_wall / N_GAL:>8.1f} s")
 
 # %% [markdown]
-# Rules of thumb from this configuration, on a laptop CPU with a warm compile
-# cache. A MAP takes a few seconds, and a single-galaxy posterior that mixes
-# takes about a minute. Catalog mode costs tens of seconds per galaxy and takes
-# fewer effective samples each, which is the trade it exists to make.
+# Rules of thumb from this configuration on a laptop CPU with a warm compile
+# cache. MAP takes a second or two. The single-galaxy posterior (printed above
+# as wall time) runs four NUTS chains and returns the full posterior; the
+# catalog runs HMC on each galaxy and takes the printed seconds per galaxy.
 #
 # A fit far outside those ranges usually means a wrong setting. Check three
 # things, in order: that the bin edges reach the age of the universe at the fit
 # redshift and no further, that the model was built with `WavePrecomp`, and that
-# the trajectory is long enough. Then check what the sampler did rather than how
-# long it took: a nonparametric fit that returns in seconds has almost certainly
-# not moved, and one that returns a low divergence count alongside a min ESS in
-# the single digits has not either. The "Choosing an inference method" page has
-# the sampler decision table.
+# the catalog trajectory is long enough. Then check what the sampler did rather
+# than how long it took: a nonparametric fit that returns in seconds has almost
+# certainly not moved, and one that returns a low divergence count alongside a
+# min ESS in the single digits has not either. The "Choosing an inference method"
+# page has the sampler decision table.
