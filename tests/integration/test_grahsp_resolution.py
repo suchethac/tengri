@@ -21,7 +21,7 @@ import pytest
 from tengri import Parameters
 from tengri.components.agn import resolve_agn_model
 from tengri.components.agn.grahsp.templates import DEFAULT_TEMPLATE_PATH
-from tengri.parameters.priors import Fixed, LogUniform, Uniform
+from tengri.parameters.priors import Fixed, Uniform
 
 # Registration / param-spec tests below need no template data; the two that
 # actually evaluate the GRAHSP forward model do, and the bundle is a build
@@ -54,7 +54,7 @@ def test_parameters_accepts_grahsp_params():
     p = Parameters(
         agn_model="grahsp",
         agn_log_lbol=Uniform(9.42, 14.42),
-        agn_grahsp_l5100=LogUniform(1.0e42, 1.0e47),
+        agn_grahsp_log_l5100=Uniform(42.0, 47.0),
         agn_grahsp_plslope=Uniform(-2.5, -1.0),
         agn_grahsp_uvslope=Fixed(0.0),
         agn_grahsp_plbendloc_nm=Fixed(100.0),
@@ -73,7 +73,7 @@ def test_parameters_accepts_grahsp_params():
         agn_grahsp_ebv_agn=Fixed(0.05),
     )
     free = list(p.free_params)
-    assert "agn_grahsp_l5100" in free
+    assert "agn_grahsp_log_l5100" in free
     assert "agn_grahsp_plslope" in free
     assert "agn_grahsp_fcov" in free
     fixed = p.get_fixed_values()

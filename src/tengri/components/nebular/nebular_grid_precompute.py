@@ -360,21 +360,21 @@ def _axis_range(spec, name):
     return _DEFAULT_RANGE[name]
 
 
-def _nion_of_state(state) -> jnp.ndarray:
-    nion = state.derived["nion"]
-    return jnp.sum(nion) if jnp.ndim(nion) else nion
-
-
 def _log_nion_of_state(state) -> jnp.ndarray:
     """log10 Q_H [dex re photons/s], never materializing the ~1e53 linear value.
 
-    Q_H overflows float32 (max 3.4e38), so the stellar component publishes
-    ``log_nion`` alongside ``nion`` for exactly this reason. Falls back to the
-    log of the linear publish for a state that carries only the latter.
+    Q_H overflows float32 (max 3.4e38) at any physical ionizing rate, so the
+    stellar component publishes the log key alongside the linear one for
+    exactly this reason, in the same ``apply()`` call -- one is never present
+    without the other (#1206 §C). This no longer falls back to a ``jnp.log10``
+    of the linear publish for a hypothetical state that carries only that key:
+    that branch was unreachable on every real model and was the tree's last
+    allow-listed raw linear-Q_H read
+    (``tests/regression/precision/test_no_raw_nion_read.py``), so a caller
+    that genuinely lacks the log publish now raises here rather than silently
+    materializing the overflow it exists to avoid.
     """
-    log_nion = state.derived.get("log_nion")
-    if log_nion is None:
-        return jnp.log10(_nion_of_state(state))
+    log_nion = state.derived["log_nion"]
     log_nion = jnp.asarray(log_nion)
     if not jnp.ndim(log_nion):
         return log_nion
@@ -437,11 +437,21 @@ def _refuse_tabulated_metallicity(model):
 def _dig_may_be_active(spec) -> bool:
     """True if DIG mixing may be active: ``neb_dig_frac`` free, or fixed non-zero.
 
-    Governs two grid-building decisions (#2222): whether ``neb_logU`` joins
-    ``axis_names`` even when it is itself Fixed (the DIG lookup always needs a
-    second query point distinct from the HII one), and how far the
-    ``neb_logU`` axis range must extend to cover it
-    (:func:`_dig_extended_logU_range`).
+    One predicate, three consumers, so none of them can disagree with the
+    others about whether DIG is active for a given spec:
+
+    - Two grid-building decisions (#2222): whether ``neb_logU`` joins
+      ``axis_names`` even when it is itself Fixed (the DIG lookup always
+      needs a second query point distinct from the HII one), and how far
+      the ``neb_logU`` axis range must extend to cover it
+      (:func:`_dig_extended_logU_range`).
+    - The evaluation-count decision (#2262): resolved once in
+      ``SEDModel._build_chain_configs`` into the frozen
+      ``NebularSEDComponentConfig.dig_active`` field threaded through
+      ``build_components``, and read directly by
+      ``SEDModel.predict_line_fluxes``'s own grid-reconstruction call --
+      when ``False``, the second HII/DIG evaluation is skipped outright
+      rather than run and zero-weighted.
 
     Before #2222 this same predicate (then named ``_refuse_active_dig_mixing``)
     raised ``DIGNotOnNebularGridError``; the grid now serves DIG mixing via two

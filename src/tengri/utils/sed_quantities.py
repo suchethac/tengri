@@ -1196,6 +1196,14 @@ def compute_l_radio_thermal(q_h: jnp.ndarray) -> jnp.ndarray:
     -------
     float
         Thermal radio luminosity at 1.4 GHz in erg/s/Hz.
+
+    Notes
+    -----
+    **float64 only.** ``q_h`` is ~1e53-1e56 photons/s, past float32's 3.4e38
+    ceiling at any physical ionizing rate; there is no in-range linear form
+    to accept. Use :func:`compute_l_radio_thermal_from_log_qh` under float32
+    (no ``src/`` caller reads this function today -- radio uses the
+    ``_from_log_qh`` twin, #1206 §C).
     """
     return 5.5e-28 * q_h
 
@@ -1498,5 +1506,13 @@ def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.
     -------
     float
         log10(ξ_ion) in Hz/erg.
+
+    Notes
+    -----
+    **float64 only.** ``q_h`` is ~1e53-1e56 photons/s, past float32's 3.4e38
+    ceiling at any physical ionizing rate; there is no in-range linear form
+    to accept. Use :func:`compute_xi_ion_from_log_qh` under float32 (no
+    ``src/`` caller reads this function today -- ``xi_ion`` uses the
+    ``_from_log_qh`` twin, #1206 §C).
     """
     return jnp.log10(jnp.maximum(q_h, _FLOOR()) / jnp.maximum(l_uv_erg, _FLOOR()))

@@ -133,6 +133,70 @@ class TestLogQH:
             log_qh = _log_qh_from_lacc(1e44, alpha)
             assert jnp.isfinite(log_qh), f"Q_H not finite for alpha={alpha}"
 
+    def test_requires_l_acc_erg_or_log10(self):
+        """Neither l_acc_erg nor log10_l_acc_erg given raises."""
+        with pytest.raises(ValueError, match="l_acc_erg"):
+            _log_qh_from_lacc(alpha_pl=-1.7)
+
+
+class TestLogQHFloat32Safe:
+    """The ``log10_l_acc_erg`` entry point (#1206 §C).
+
+    A real AGN has ``l_acc_erg`` ~ 1e44-1e46 erg/s, already past float32's
+    3.4e38 ceiling on its own -- ``l_ion = f_ion * l_acc_erg`` was ``inf``
+    before the mean-photon-energy division ever ran. ``log10_l_acc_erg``
+    carries the accretion luminosity as a log10 offset throughout instead.
+    """
+
+    def test_log10_matches_linear_in_float64(self):
+        """The two entry points agree to 1e-12 relative in float64."""
+        import numpy as np
+
+        l_acc_erg = 3e45
+        via_linear = float(_log_qh_from_lacc(l_acc_erg, -1.7))
+        via_log = float(_log_qh_from_lacc(alpha_pl=-1.7, log10_l_acc_erg=np.log10(l_acc_erg)))
+        np.testing.assert_allclose(via_log, via_linear, rtol=1e-12, atol=1e-10)
+
+    def test_log10_finite_in_pure_float32_where_linear_overflows(self):
+        """``gas_logqion``-scale AGN: the linear path is nan, the log path is not.
+
+        ``l_acc_erg = 3e45`` erg/s is a representative real AGN accretion
+        luminosity, past float32's 3.4e38 ceiling. Confirms both halves: the
+        linear path really does break in float32 (so this test's premise is
+        live), and the log10 path stays finite, non-zero, and float64-accurate.
+        """
+        import jax
+        import numpy as np
+
+        l_acc_erg = 3e45
+        log10_l_acc_erg = float(np.log10(l_acc_erg))
+
+        with jax.enable_x64(True):
+            log_qh_64 = float(_log_qh_from_lacc(alpha_pl=-1.7, log10_l_acc_erg=log10_l_acc_erg))
+
+        with jax.enable_x64(False):
+            l_acc32 = jnp.asarray(l_acc_erg, dtype=jnp.float32)
+            assert not bool(jnp.isfinite(l_acc32)), (
+                f"l_acc_erg=3e45 no longer overflows float32 ({l_acc32}) -- this "
+                "test's premise is gone, re-check whether the log10 path is still needed"
+            )
+            linear32 = _log_qh_from_lacc(l_acc32, -1.7)
+            assert not bool(jnp.isfinite(linear32)), (
+                f"the linear l_acc_erg path is finite at 3e45 erg/s in float32 "
+                f"({linear32}) -- expected an overflow this test exists to route around"
+            )
+
+            log10_l_acc32 = jnp.asarray(log10_l_acc_erg, dtype=jnp.float32)
+            log_qh_32 = _log_qh_from_lacc(alpha_pl=-1.7, log10_l_acc_erg=log10_l_acc32)
+
+        assert log_qh_32.dtype == jnp.float32, f"not float32: {log_qh_32.dtype}"
+        assert bool(jnp.isfinite(log_qh_32)), f"log10 path non-finite in float32: {log_qh_32}"
+        assert bool(log_qh_32 != 0.0), (
+            "log10 path is identically zero in pure float32 -- finite is not "
+            "enough, a value that has collapsed to zero is as unusable as a NaN one"
+        )
+        np.testing.assert_allclose(float(log_qh_32), log_qh_64, rtol=3e-3)
+
 
 # ── Tests: agn_nlr_cue (requires Cue weights) ─────────────────────
 class TestAgnNlrCue:

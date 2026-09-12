@@ -5384,6 +5384,7 @@ class SEDModel:
             # returned line fluxes (review I1, #2222).
             from tengri.components.nebular.dig import mix_dig_grid_reconstruction
             from tengri.components.nebular.nebular_grid_precompute import (
+                _dig_may_be_active,
                 _log_nion_of_state,
                 reconstruct_nebular_line_log_lums,
             )
@@ -5417,6 +5418,7 @@ class SEDModel:
                 neb_dig_frac=full_params["neb_dig_frac"],
                 neb_dig_delta_logU=full_params["neb_dig_delta_logU"],
                 log_domain=True,
+                dig_active=_dig_may_be_active(self.spec),
             )
         else:
             # ``state`` may be supplied by a caller that has already run the
@@ -7054,7 +7056,9 @@ class SEDModel:
         Returns
         -------
         IonizingQuantities
-            ``q_h``, ``xi_ion``.
+            ``xi_ion``. ``q_h`` was retired with no alias (#1206 §C); read
+            ``log_q_h`` from :meth:`predict_properties` instead
+            (``q_h = 10**log_q_h``).
 
         .. deprecated:: 2026-07 (cleanup PR-2)
             Interactive getter moved to the lazy Prediction wrapper:
@@ -8656,6 +8660,7 @@ class SEDModel:
         so calling it unconditionally here costs nothing the exact path
         wasn't already going to pay once :meth:`_build_component_chain` ran.
         """
+        from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
         from tengri.components.stellar.sfh.registry import apply_compositor_swap
         from tengri.forward.component_factory import build_components
 
@@ -8752,6 +8757,7 @@ class SEDModel:
             cue_full_catalog=bool(
                 getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
             ),
+            dig_active=_dig_may_be_active(self.spec),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),

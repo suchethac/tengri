@@ -62,6 +62,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   attenuation") and the code agree — the code previously attenuated shock
   unconditionally with the birth-cloud form — and by snapping (see Fixed,
   below).
+- `neb_hbfrac` (CB_19's HbFrac axis, matter- vs radiation-bounded escape
+  proxy) now declares `free_prior=Uniform(0.0, 1.0, default=1.0)`, so
+  `neb={'type': 'cb19', 'all_params': FREE}` and `neb={'type': 'cb19',
+  'hbfrac': FREE}` both free it instead of leaving it silently pinned.
+  Dropped from `tools/check_param_free_priors.py`'s `REFUSED` ledger
+  (freeable 90 -> 91, pinned 25 -> 24; it left the `inert` ground). The
+  shipped `data/cb19_templates.h5` carries no real variation along this
+  axis (measured: its two HbFrac nodes are bit-identical), the same
+  placeholder gap #2181 already found for `neb_log_nH` / `neb_co` /
+  `neb_dno` (#2198 tracks the pending 3MdB erratum) -- `neb_hbfrac` joins
+  those three: declared and freeable, refused loudly by
+  `check_cb19_free_params` against the current shipped grid rather than
+  silently inert (#2213).
 
 ### Changed
 
@@ -107,6 +120,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Four AGN sites integrated over the descending frequency grid by reversing
+  both trapezoid operands (``polar_dust.py``'s anisotropic polar luminosity,
+  ``adaf.py``'s float32 and float64 normalization integrals, ``unified.py``'s
+  disc L_bol). On Apple GPU via jax-mps under default MLX compile a reversed
+  array beside a broadcast scalar is silently zeroed past element 0
+  (jax-mps#232), and ``jnp.trapezoid`` multiplies by 0.5 internally, so the
+  torus lost its far-IR graybody entirely (measured x0.067 at 100 um in the
+  Herschel 250 band). Each site now integrates over the descending ``nu``
+  directly and negates the scalar result -- float64 moves only by summation
+  order (measured <= 2.2e-16 per site), MPS forward probes and the recorded
+  gradient probe match CPU exactly, and a source scan forbids reversed
+  trapezoid operands anywhere in ``src/tengri`` (#2295). The Apple-GPU
+  recipe's ``MLX_DISABLE_COMPILE=1`` rule stays until jax-mps#232 closes:
+  VJPs elsewhere still emit ``lax.rev``.
 - The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
   continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
   ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``
@@ -119,6 +146,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   max absolute difference 0.0 across ``predict_photometry``, ``rest_sed()``
   and line luminosities, both the cue and cb19 backends, at ``neb_dig_frac``
   in ``{0.0, 0.3, 0.9, 1.0}`` (#2221).
+
+- The nebular component's DIG mixing no longer evaluates the DIG branch when
+  the spec pins ``neb_dig_frac`` at the declared ``Fixed(0.0)`` default. A
+  build-time predicate ``_dig_may_be_active(spec)`` resolves to a frozen
+  ``dig_active`` config field, threaded to all seven mixing call sites (exact
+  path: cue + cloudy/cb19 continuum/lines; grid path: photometry + restband
+  reconstructions in ``apply``, plus ``predict_line_fluxes``'s own
+  line-luminosity reconstruction call), so a default model evaluates the
+  nebular backend once per channel instead of two, both the exact and the
+  fast-grid path. When ``dig_active=False``, the mixing core skips the second
+  evaluation entirely, returning the HII result unconditionally, not a
+  zero-weighted one. Measured gradient FLOPs of ``predict_photometry`` on the
+  #2195 fixture: the declared default is 147,434,528 against 159,926,608
+  forced active (159,926,608 / 147,434,528 = 1.085x), well short of a flat
+  50% -- the removed DIG evaluation is a small share of a
+  photometry gradient once dust attenuation and emission are in the graph, so
+  the saving scales with how much of the graph the nebular backend is, not a
+  fixed fraction. Because ``dig_active`` is resolved once from the spec at
+  build time, a call-time override of a spec-pinned ``neb_dig_frac`` (e.g.
+  passing a nonzero value through ``params`` at predict time) is not honored
+  on this path; declare the fraction ``FREE`` or ``Fixed`` at the intended
+  nonzero value instead (#2296) (#2262).
 
 - ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
   ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
@@ -499,6 +548,103 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   could not reach the Narayanan et al. (2018) MUFASA-fitted bump multipliers
   (up to 3.634 at z=4) that `narayanan_prior` itself now centers on (#2226).
 
+- The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
+  ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
+  signature defaults from the declared parameter table
+  (``declared_default(PARAMS, ...)``) or a shared named constant instead of
+  repeating the value as a bare literal; no default value changes (a
+  zero-diff probe over every closure at only-defaults confirms bit-identical
+  output before/after). ``EnergyBalanceSplitIRSEDComponent.predict`` now
+  subscripts ``p["f_cold"]`` and five siblings instead of falling back to a
+  stale ``.get(name, literal)`` default, so a hand-built params dict missing
+  a key raises ``KeyError`` naming it rather than silently substituting the
+  literal. A new stdlib-only guard, ``tools/check_literal_param_defaults.py``,
+  scans ``src/tengri/components/dust/emission/`` for a bare numeral standing
+  in for a name a ``ParamDeclaration`` or component class attribute already
+  owns, and is wired into the same CI job as ``check_param_defaults.py``.
+  ``dust_T``/``dust_beta_ir`` disagree between the shared
+  ``components/dust/_params.py`` table and every analytic template's own
+  default; that disagreement is left as-is and tracked separately (#2261)
+  (#2241).
+- `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
+  believing it the base of the `Tracer*ConversionError` family. On jax
+  0.11.1 that belief is false: `TracerArrayConversionError` (raised by
+  `np.asarray` on a tracer) and `TracerIntegerConversionError` (raised by
+  `operator.index` on a tracer) are siblings of `ConcretizationTypeError`
+  under `JAXTypeError`, not subclasses, so a mapped function that inspects
+  its input with `np.asarray` raised through the handler instead of
+  falling back to the eager per-draw loop. The handler now catches the
+  whole family explicitly (#2264).
+- The nebular component's DIG mixing no longer evaluates the DIG branch when
+  the spec pins ``neb_dig_frac`` at the declared ``Fixed(0.0)`` default. A
+  build-time predicate ``_dig_may_be_active(spec)`` resolves to a frozen
+  ``dig_active`` config field, threaded to all seven mixing call sites (exact
+  path: cue + cloudy/cb19 continuum/lines; grid path: photometry + restband
+  reconstructions in ``apply``, plus ``predict_line_fluxes``'s own
+  line-luminosity reconstruction call), so a default model evaluates the
+  nebular backend once per channel instead of two, both the exact and the
+  fast-grid path. When ``dig_active=False``, the mixing core skips the second
+  evaluation entirely, returning the HII result unconditionally, not a
+  zero-weighted one. Measured gradient FLOPs of ``predict_photometry`` on the
+  #2195 fixture: the declared default is 147,434,528 against 159,926,608
+  forced active (159,926,608 / 147,434,528 = 1.085x), well short of a flat
+  50% -- the removed DIG evaluation is a small share of a
+  photometry gradient once dust attenuation and emission are in the graph, so
+  the saving scales with how much of the graph the nebular backend is, not a
+  fixed fraction. Because ``dig_active`` is resolved once from the spec at
+  build time, a call-time override of a spec-pinned ``neb_dig_frac`` (e.g.
+  passing a nonzero value through ``params`` at predict time) is not honored
+  on this path; declare the fraction ``FREE`` or ``Fixed`` at the intended
+  nonzero value instead (#2296) (#2262).
+- `neb_hbfrac` was silently inert at any value: declared as a CB_19
+  parameter, but `CB19Backend.__init__`'s `hbfrac` constructor argument was
+  never threaded from `params`, and `load_cb19_grid` collapsed the HbFrac
+  axis to a single slice at load time regardless. `load_cb19_grid` now
+  retains both HbFrac nodes; `predict_nebular_line_luminosities` /
+  `predict_nebular_sed` interpolate `neb_hbfrac` at runtime via the same
+  `map_coordinates` scheme as `neb_log_nH` / `neb_co` / `neb_dno` (linear
+  over the grid's two nodes -- the only interpolant they support); and
+  `_BACKEND_OPTIONAL_PARAMS` threads it from `params` exactly like those
+  three siblings. `cb19_precompute.precompute` (the `WavePrecomp` adapter for
+  `neb={'type': 'cb19'}`) keeps HbFrac a discrete, load-time-style choice for
+  that surface, selecting the nearest retained node itself immediately after
+  loading (#2213).
+- BOSA's dust-emission template **shape** was silently pinned at the
+  unit-luminosity template regardless of the fitted luminosity. BOSA
+  (Boquien & Salim 2021) interpolates its template library on a
+  `(log L_TIR, log sSFR)` grid, so which row gets selected is itself a
+  function of the absorbed luminosity -- not just the overall normalization.
+  `BosaIRSEDComponent` never overrode `EmissionComponent.factors_l_ir`
+  (default `True`, unlike `energy_balance_split`, which does), so the
+  generic `apply()`-level speed shortcut always evaluated `predict()` at
+  `L_ir = 1` and rescaled the result afterwards -- correct total power,
+  wrong shape, always the same shape, across any luminosity range.
+  `factors_l_ir` is now `False` for BOSA, so `predict()` sees the real
+  budget and the grid lookup selects the luminosity-appropriate row. This
+  also required threading a float32-safe `log_L_ir` [dex] input through the
+  component and its closure (mirroring `energy_balance_split`), since the
+  real linear `L_ir` (~1e43 erg/s) overflows to `inf` in pure float32 while
+  its log does not. A second, compounding defect made the first fix alone
+  insufficient at real galaxy scales: the packaged grid's axis is
+  `log10(L_TIR / Lsun)` (Boquien & Salim 2021), while `L_ir` arrives in
+  erg/s (the tengri-wide SED contract) with no conversion applied, so any
+  astrophysically realistic `L_ir` (~1e42-1e45 erg/s) numerically saturated
+  the grid's ceiling node regardless of the real budget. The axis lookup
+  (only -- normalization stays in erg/s) now subtracts `LOG10_L_SUN`
+  (`tengri.utils.sed_quantities`, the `dust_log_L_ir` precedent) from the
+  erg/s log budget, so the template shape now tracks the fitted L_TIR across
+  the grid's full Lsun-relative span at real galaxy luminosities, not only
+  in the abstract (#2272).
+- Importing a submodule through an aliased package spelling
+  (``from tengri.sps.dsps_wrapper import ...``) re-executed the module file:
+  two module objects for one file in one process, each with its own
+  module-level state (e.g. the SSP content-hash cache), the second execution
+  overwriting the canonical package attribute. A meta-path finder now binds
+  the existing canonical module object under the aliased name with no
+  re-execution, in both import orders, for all nine component aliases;
+  aliases stay lazy (no eager submodule imports at ``import tengri``)
+  (#2256).
+
 ### Added
 
 - `run_nuts`/`run_dynamic_hmc` (and, via the same `_vmap_chains` seam,
@@ -790,6 +936,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   explicit-law rule.
 
 ### Changed
+
+- The eleven line-luminosity properties (`halpha`, `hbeta`, `lya`, `oii`, `oiii_4959`,
+  `oiii_5007`, `nii_6548`, `nii_6584`, `sii_6717`, `sii_6731`, `civ_1549`) and the three
+  X-ray luminosities (`l_x_xrb`, `l_x_agn`, `l_x_total`) now return `Lsun`, not `erg/s`
+  (#1206). **Breaking, with no alias** — a value of ~1e40-1e45 erg/s is `inf` in float32
+  (max 3.4028e38) as a bare number, before any physics runs; `halpha` now Lsun: multiply by
+  `3.828e33` for erg/s. The `log_<name>` / `log_l_x_*` companions are unchanged, still dex
+  re erg/s (`log_halpha == log10(halpha * L_sun)`); `log_l_x_agn` and `log_l_x_total` are
+  fixed alongside the unit change (previously `nan` in float32: they read the linear
+  `L_agn_bol` and took its `log10`; they now read the `log_L_agn_bol` companion the AGN
+  component already publishes). `IonizingQuantities.q_h` (the `state_to_ionizing_quantities`
+  bridge) and `XRayQuantities` are updated to match. `NAMING_CONTRACT.md` §4c documents the
+  unit-standard rule (luminosities in Lsun, unbounded rates as `log_*` in dex).
+- The linear ionizing photon rate `q_h` is retired, with no alias (#1206). Every physical
+  ionizing rate is ~1e53-1e56 photons/s, past float32's ceiling in any linear unit — there
+  is no float32-safe form to keep, unlike the line/X-ray luminosities above. `log_q_h`
+  (dex re photons/s) is the sole surviving property; `q_h` → `10**log_q_h`. `pred.q_h`,
+  `pred.ionizing.q_h` and `predict_properties(names=("q_h",))` now raise `KeyError` naming
+  `log_q_h`. `IonizingQuantities` drops the `q_h` field.
+- The GRAHSP AGN disc normalization `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, erg/s) is
+  renamed `agn_grahsp_log_l5100` (`Uniform(42.0, 47.0)`, dex), with no alias (#1206). The
+  linear parameter *value itself* is `inf` in float32 before any kernel runs; translate with
+  `agn_grahsp_log_l5100 = log10(agn_grahsp_l5100)`. The composable `grahsp_sbpl` disc block
+  is now float32-exact (previously the last disc in
+  `tests/regression/precision/test_agn_disc_float32_inventory.py` that was not); the
+  `Float32UnsafeAGNWarning` escape hatch it used is removed as unused.
+- **`profile_mass` now covers spectroscopy and joint photometry+spectroscopy fits, not
+  only photometry.** Every channel tengri fits is linear in the total stellar mass, so
+  the exact `chi2(M) = chi2_min + A*(M - M*)^2` quadratic (`tengri.inference.mass_profile`)
+  holds over the FULL data vector, not just the photometric one: `A` and `B = A*M*` are
+  now sums over whichever vector `data_type` assembles (photometry, spectroscopy, or
+  their photometry-then-spectrum concatenation for `"joint"`, the order
+  `tests/regression/bug/test_bug_1366_joint_data_record.py` pins), reusing
+  `loss_functions._build_prediction` (and its JIT-threaded SSP-grid path) so the
+  profiled statistics see exactly the vector and noise the unprofiled Gaussian
+  likelihood does. The linearity guard's two-mass probe is generalized the same way.
+  Calibration marginalization, any emission-line/line-ratio/spectral-index channel,
+  Student-t noise, a variable-noise model, and censored data remain refused
+  unconditionally (each is either its own marginalized linear block or carries its own
+  likelihood plumbing this module does not yet share); `"auto"` still steps aside
+  silently for them and an explicit `profile_mass=True` still raises naming the guard.
+  Behavioral change for spectroscopy/joint fits that satisfy every other guard: they
+  now profile the mass under `profile_mass="auto"` where they previously always sampled
+  it.
 
 - **The default inference method is `mcmc_nuts_fast`** (was `vi`): four NUTS
   chains, 150 warmup steps, no separate burn-in, 300 draws, target acceptance

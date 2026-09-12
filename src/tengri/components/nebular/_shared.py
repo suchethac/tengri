@@ -20,7 +20,7 @@ from tengri.components.nebular._constants import (
     _LYMAN_LIMIT,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
-from tengri.utils.scale import pow10
+from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
 
 #: ``log10`` of the two constants deferred out of the Q_H integrand (#1568).
 #: Python floats, evaluated once at import in float64, so they enter the graph
@@ -1019,12 +1019,30 @@ _ALPHA_EFF_2S_T4: float = 0.838e-13
 _ALPHA_EFF_2S_SLOPE: float = -0.728
 _A_2S: float = 8.226
 
+#: log10 of the physics constants that multiply the free-free and two-photon
+#: shape functions, precomputed in Python float64. ``_FF_COEFF * T**-0.5`` and
+#: ``_H_PLANCK * alpha_eff_2s(T) / _A_2S`` are themselves ~1e-40 -- past
+#: float32's smallest normal (1.18e-38) and flushed to exactly 0.0 by the
+#: platform's flush-to-subnormal behavior -- independent of Q_H, so peak-
+#: factoring the *shape* array alone (as
+#: :func:`~tengri.utils.scale.apply_log10_scale` does) cannot recover it: the
+#: array it would normalize is already zero before Q_H enters. The ``log10_q_h`` path below instead keeps
+#: every physics constant in the SAME log10 offset as ``Q_H/alpha_B`` and
+#: multiplies it, once, onto an O(1) shape function (#1206 §C).
+#: Reuses the module-level ``_LOG10_H_PLANCK`` (defined above from the
+#: imported ``_H_PLANCK``) rather than a second copy.
+_LOG10_FF_COEFF: float = _math.log10(_FF_COEFF)
+_LOG10_ALPHA_EFF_2S_T4: float = _math.log10(_ALPHA_EFF_2S_T4)
+_LOG10_A_2S: float = _math.log10(_A_2S)
+
 
 def compute_analytic_nebular_continuum(
     wave_aa: jnp.ndarray,
-    q_h: float,
+    q_h: float | None = None,
+    *,
     log_z_abs: float,
     temperature: float = 1e4,
+    log10_q_h: float | None = None,
 ) -> jnp.ndarray:
     r"""Compute hydrogen nebular continuum: free-free + two-photon emission.
 
@@ -1038,23 +1056,39 @@ def compute_analytic_nebular_continuum(
     wave_aa : array, shape (n_wave,)
         Wavelength grid in Å (rest-frame, increasing).
     q_h : float
-        Hydrogen-ionizing photon production rate. [photons/s]
+        Hydrogen-ionizing photon production rate. [photons/s] Ignored when
+        ``log10_q_h`` is given.
     log_z_abs : float
         Absolute metallicity. [log10(Z/Z_sun)]
         Currently unused; included for forward compatibility (metallicity scaling
         of free-free via He/metal opacity is reserved for a future update).
     temperature : float, optional
         Electron temperature in K. Default: 10^4 K (typical HII region). [K]
+    log10_q_h : float, optional
+        ``log10(q_h / (photons/s))``, keyword-only. When given, forms
+        :math:`Q_H/\alpha_B` as a log10 offset (via
+        :func:`~tengri.utils.scale.apply_log10_scale`) instead of the linear
+        ``q_h``, the float32-safe path (#1206 §C): a real ionizing source has
+        ``gas_logqion`` up to ~53, so the linear ``q_h`` (up to ~1e53) is
+        ``inf`` in float32 whenever ``gas_logqion > 38.5``, while the ~1e28
+        erg/s/Hz continuum this function returns is representable throughout.
+        Default ``None`` uses the linear ``q_h``.
 
     Returns
     -------
     array, shape (n_wave,)
         Nebular continuum spectral luminosity density. [erg/s/Hz]
 
+    Raises
+    ------
+    ValueError
+        If both ``q_h`` and ``log10_q_h`` are ``None``.
+
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives with no
-    Python-level branching on traced values.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives; the
+    ``q_h`` vs. ``log10_q_h`` branch is a Python-level choice of *which
+    argument was passed*, not branching on a traced value.
 
     **Case B recombination normalization** (Osterbrock & Ferland 2006, §4.3):
         The ionization balance is:
@@ -1131,6 +1165,11 @@ def compute_analytic_nebular_continuum(
     **Validity**: Use this function when Cloudy or Cue grids are unavailable.
     For science-grade nebular fitting, prefer CloudyGridBackend or CueBackend.
 
+    **Float32 safety (#1206 §C)**: the ``log10_q_h`` path is unchanged in
+    float64 to 1e-12 relative against the linear ``q_h`` path (both reduce to
+    the same :math:`Q_H/\alpha_B`); it differs only in what float32 can
+    evaluate.
+
     References
     ----------
     .. [1] D. E. Osterbrock and G. J. Ferland, "Astrophysics of Gaseous Nebulae
@@ -1147,22 +1186,44 @@ def compute_analytic_nebular_continuum(
        arXiv:1412.6345. https://doi.org/10.1051/0004-6361/201323152
 
     """
+    if q_h is None and log10_q_h is None:
+        raise ValueError("Pass either q_h or log10_q_h.")
     nu = _C_CGS / (wave_aa * 1e-8)  # Hz
 
     # Case B recombination coefficient: α_B(T) = α_B(1e4) × (T/1e4)^{-0.847}
     # Slope -0.847 from Storey & Hummer (1995) fit via pyNeb over 5e3–3e4 K.
     alpha_b = _ALPHA_B_T4 * (temperature / 1.0e4) ** _ALPHA_B_SLOPE
 
-    # n_e · n_p · V = Q_H / α_B
-    q_over_alpha = q_h / jnp.maximum(alpha_b, 1.0e-40)
+    # n_e · n_p · V = Q_H / α_B. The float32-safe form (log10_q_h given) never
+    # materializes the linear ratio: Q_H is ~1e53 photons/s whenever
+    # gas_logqion > 38.5, past float32's 3.4e38 ceiling, while the ~1e28
+    # erg/s/Hz continuum below is representable throughout (#1206 §C).
+    log10_alpha_b = jnp.log10(jnp.maximum(alpha_b, representable_denominator(1.0e-40)))
+    if log10_q_h is None:
+        q_over_alpha = q_h / jnp.maximum(alpha_b, representable_denominator(1.0e-40))
+    else:
+        log10_q_over_alpha = jnp.asarray(log10_q_h) - log10_alpha_b
 
     # ─── Free-free ───────────────────────────────────────────────────────────
     # Osterbrock & Ferland (2006), eq 4.16
     x = _H_PLANCK * nu / (_K_BOLTZ * temperature)  # dimensionless hν/kT
     # Gaunt factor: Draine (2011) eq 10.9 approximation; clip to ≥ 1
-    g_ff = jnp.maximum(1.0, jnp.sqrt(3.0) / jnp.pi * jnp.log(2.0 / jnp.maximum(x, 1e-30)))
-    gamma_ff = _FF_COEFF * temperature ** (-0.5) * g_ff * jnp.exp(-x)
-    L_ff = q_over_alpha * gamma_ff  # erg/s/Hz
+    g_ff = jnp.maximum(
+        1.0,
+        jnp.sqrt(3.0) / jnp.pi * jnp.log(2.0 / jnp.maximum(x, representable_denominator(1e-30))),
+    )
+    if log10_q_h is None:
+        gamma_ff = _FF_COEFF * temperature ** (-0.5) * g_ff * jnp.exp(-x)
+        L_ff = q_over_alpha * gamma_ff  # erg/s/Hz
+    else:
+        # ``_FF_COEFF * T**-0.5`` is ~6.8e-40: past float32's smallest normal
+        # (1.18e-38) on its OWN, before Q_H ever enters, so it underflows to
+        # exactly 0.0 whether or not the array it would multiply is
+        # peak-factored (#1206 §C). Keep it in the same log10 offset as
+        # ``log10_q_over_alpha`` and apply it once to the O(1) shape
+        # ``g_ff * exp(-x)``.
+        log10_ff_const = _LOG10_FF_COEFF - 0.5 * jnp.log10(jnp.asarray(temperature))
+        L_ff = apply_log10_scale(g_ff * jnp.exp(-x), log10_q_over_alpha + log10_ff_const)
 
     # ─── Two-photon ──────────────────────────────────────────────────────────
     # N&S 1984 shape: y = ν/ν_Lyα = λ_Lyα/λ, valid for 0 < y < 1 (λ > λ_Lyα).
@@ -1181,8 +1242,19 @@ def compute_analytic_nebular_continuum(
     # more cleanly, with y = ν/ν_Lyα:
     #   L_2q(ν) = (Q_H/α_B) × (α_eff_2s/A_2s) × h × y × A₂γ(y)   [erg/s/Hz]
     # where y = _LYA_AA/wave_aa = ν/ν_Lyα (already computed as y_raw).
-    alpha_eff_2s = _ALPHA_EFF_2S_T4 * (temperature / 1.0e4) ** _ALPHA_EFF_2S_SLOPE
-    L_2q = q_over_alpha * _H_PLANCK * y_raw * A2q / _A_2S * alpha_eff_2s
+    if log10_q_h is None:
+        alpha_eff_2s = _ALPHA_EFF_2S_T4 * (temperature / 1.0e4) ** _ALPHA_EFF_2S_SLOPE
+        two_photon_shape = _H_PLANCK * y_raw * A2q / _A_2S * alpha_eff_2s
+        L_2q = q_over_alpha * two_photon_shape
+    else:
+        # ``_H_PLANCK * alpha_eff_2s(T) / _A_2S`` is ~6.8e-41 on its own, the
+        # same class of independent-of-Q_H underflow as the free-free
+        # coefficient above; folded into the log10 offset for the same reason.
+        log10_alpha_eff_2s = _LOG10_ALPHA_EFF_2S_T4 + _ALPHA_EFF_2S_SLOPE * jnp.log10(
+            jnp.asarray(temperature) / 1.0e4
+        )
+        log10_two_photon_const = _LOG10_H_PLANCK - _LOG10_A_2S + log10_alpha_eff_2s
+        L_2q = apply_log10_scale(y_raw * A2q, log10_q_over_alpha + log10_two_photon_const)
 
     return L_ff + L_2q
 
@@ -1319,8 +1391,13 @@ class NebularContinuumFallback:
         gas_logqion = kwargs.get("gas_logqion")
         log_z = kwargs.get("log_z", _LOG10_ZSUN)
         if ssp_wave is not None and gas_logqion is not None:
-            q_h = 10.0**gas_logqion
-            cont_analytic = compute_analytic_nebular_continuum(ssp_wave, q_h, log_z_abs=log_z)
+            # log10_q_h, not q_h = 10.0**gas_logqion: Q_H is ~1e53 photons/s
+            # whenever gas_logqion > 38.5, past float32's 3.4e38 ceiling
+            # (#1206 §C), while the erg/s/Hz continuum this produces is
+            # representable throughout.
+            cont_analytic = compute_analytic_nebular_continuum(
+                ssp_wave, log_z_abs=log_z, log10_q_h=gas_logqion
+            )
             return lines_sed + cont_analytic
 
         if self.fallback_mode == "error":

@@ -109,7 +109,7 @@ def main() -> None:
             wave_jax,
             **recipe_kw,
             **fixed_kw,
-            agn_grahsp_l5100=1.0e44,
+            agn_grahsp_log_l5100=44.0,
         )
         return _bandpass_l_nu(np.asarray(l_nu), wave_aa, fw, ft)
 
@@ -119,12 +119,12 @@ def main() -> None:
     # Mode 2: JIT-composable + filter integration (JAX trapz inside JIT)
     # ──────────────────────────────────────────────────────────────────
     @jax.jit
-    def _jit_full(l5100):
+    def _jit_full(log_l5100):
         l_nu = composable_agn_l_nu(
             wave_jax,
             **recipe_kw,
             **fixed_kw,
-            agn_grahsp_l5100=l5100,
+            agn_grahsp_log_l5100=log_l5100,
         )
         nu = _C_AA_PER_S / wave_jax
         trans = jnp.interp(wave_jax, jnp.asarray(fw), jnp.asarray(ft), left=0.0, right=0.0)
@@ -133,7 +133,7 @@ def main() -> None:
         den = jnp.trapezoid((trans / nu)[order], nu[order])
         return num / den
 
-    t_jit_first, t_jit_med = _time(lambda: _jit_full(jnp.array(1.0e44)))
+    t_jit_first, t_jit_med = _time(lambda: _jit_full(jnp.array(44.0)))
 
     # ──────────────────────────────────────────────────────────────────
     # Mode 3: precompute + triweight lookup
@@ -144,7 +144,7 @@ def main() -> None:
         feii="grahsp",
         torus="skirtor",
         attenuation="smc_prevot",
-        axis_params=("agn_grahsp_l5100",),
+        axis_params=("agn_grahsp_log_l5100",),
     )
     t_build = time.time()
     pre = precompute(
@@ -153,12 +153,12 @@ def main() -> None:
         redshift=0.0,
         parameters=None,
         recipe=recipe,
-        axis_grids={"agn_grahsp_l5100": np.logspace(43, 46, 5)},
+        axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 5)},
     )
     fn = build_lookup(pre)
     t_build = time.time() - t_build
 
-    t_pre_first, t_pre_med = _time(lambda: fn(jnp.array(1.0), jnp.array(1.0e44)))
+    t_pre_first, t_pre_med = _time(lambda: fn(jnp.array(1.0), jnp.array(44.0)))
 
     print()
     print("composable AGN forward-model evaluation modes")
@@ -199,7 +199,7 @@ def main() -> None:
         feii="grahsp",
         torus="skirtor",
         attenuation="smc_prevot",
-        axis_params=("agn_grahsp_l5100", "agn_grahsp_plslope"),
+        axis_params=("agn_grahsp_log_l5100", "agn_grahsp_plslope"),
     )
     t_build2 = time.time()
     pre2 = precompute(
@@ -209,14 +209,14 @@ def main() -> None:
         parameters=None,
         recipe=recipe2d,
         axis_grids={
-            "agn_grahsp_l5100": np.logspace(43, 46, 5),
+            "agn_grahsp_log_l5100": np.linspace(43, 46, 5),
             "agn_grahsp_plslope": np.linspace(-2.5, -1.0, 5),
         },
     )
     fn2 = build_lookup(pre2)
     t_build2 = time.time() - t_build2
     t_pre2_first, t_pre2_med = _time(
-        lambda: fn2(jnp.array(1.0), jnp.array(1.0e44), jnp.array(-1.7))
+        lambda: fn2(jnp.array(1.0), jnp.array(44.0), jnp.array(-1.7))
     )
 
     print("multi-axis (2D: l5100 × plslope, 5×5 grid)")

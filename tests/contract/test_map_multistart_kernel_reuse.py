@@ -101,25 +101,26 @@ def test_different_config_builds_distinct_kernel(fitter):
 
 def _run_qn(f, **overrides):
     """Like ``_run`` but exercises the default optimizer ("lbfgs"), which for
-    ``n_restarts>1`` is the vmapped JAX BFGS multistart path
-    (``_run_map_multistart_qn``), memoized separately from the optax path
-    above under ``_map_multistart_qn_kernel_cache``.
+    ``n_restarts>1`` is the sequential scipy L-BFGS-B multistart
+    (``_run_map_multistart_scipy``); it has no compiled kernel to memoize.
     """
     kw = dict(n_restarts=3, n_steps=40, verbose=False)
     kw.update(overrides)
     return f.run("map", key=jax.random.PRNGKey(0), **kw)
 
 
-def test_qn_multistart_kernel_is_reused_across_calls(fitter):
-    """The default (lbfgs) multistart path also reuses its compiled kernel."""
-    fitter.__dict__.pop("_map_multistart_qn_kernel_cache", None)
+def test_qn_multistart_is_never_worse_than_one_start(fitter):
+    """The default (lbfgs) multistart must reach a loss no worse than a single start.
 
-    r1 = _run_qn(fitter)
-    cache_after_1 = dict(getattr(fitter, "_map_multistart_qn_kernel_cache", {}))
-    r2 = _run_qn(fitter)
-    cache_after_2 = dict(getattr(fitter, "_map_multistart_qn_kernel_cache", {}))
-
-    assert len(cache_after_1) == 1, "first call must memoize exactly one restart kernel"
-    assert cache_after_2 == cache_after_1, "second identical call must REUSE, not rebuild"
-    for r in (r1, r2):
-        assert np.isfinite(float(r.params["sfh_dpl_log_total_mass"]))
+    Measured 2026-09-12 on notebooks/07's tsnorm model: the vmapped JAX-BFGS
+    multistart returned neg-log-posterior 182.5 (converged=False) where one
+    scipy L-BFGS-B start reached 10.2, seeding every NUTS/HMC fit from a bad
+    basin. The sequential scipy multistart keeps the best of its starts, so it
+    can only match or beat a single start from the same key.
+    """
+    single = fitter.run("map", key=jax.random.PRNGKey(0), n_restarts=1, n_steps=200, verbose=False)
+    multi = _run_qn(fitter, n_steps=200)
+    assert multi.diagnostics["backend"] == "scipy_lbfgsb_sequential"
+    assert multi.diagnostics["n_restarts"] == 3
+    assert float(multi.diagnostics["final_loss"]) <= float(single.diagnostics["final_loss"]) + 1e-9
+    assert len(multi.loss_history) >= 2

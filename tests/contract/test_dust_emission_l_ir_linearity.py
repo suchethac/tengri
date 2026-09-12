@@ -40,6 +40,34 @@ AFFINE_MODELS = {
     "energy_balance_split": "L_ir_total = eta * L_stellar + L_agn_ir (additive AGN term)",
 }
 
+#: Models whose non-proportionality is a different shape than AFFINE_MODELS's
+#: additive term: the template SHAPE itself is looked up as a function of
+#: L_ir (a grid lookup), not merely scaled by it. BOSA (Boquien & Salim 2021)
+#: interpolates on a (log L_TIR, log sSFR) grid keyed by log10(L_TIR/Lsun), so
+#: ``sed_dust_ir(2*L) != 2*sed_dust_ir(L)`` in general (#2272: before the
+#: fix, ``factors_l_ir=True`` hid this by always evaluating the shape at the
+#: unit luminosity; a second, compounding defect -- the axis lookup used
+#: erg/s directly with no Lsun conversion -- would otherwise have saturated
+#: any astrophysically realistic probe to the grid's ceiling node regardless,
+#: masking the effect even with ``factors_l_ir=False``. Both are fixed.)
+#:
+#: The eta=1/eta=2 probe in ``test_sed_dust_ir_is_proportional_to_l_ir``
+#: actually DOES see this now: at the realistic stellar mass that probe
+#: builds, doubling eta moves ``log10(L_ir/Lsun)`` from ~9.81 to ~10.11 --
+#: both comfortably inside the grid's interior, at different interpolation
+#: nodes -- for a measured ~8.6% normalized-shape difference, nine orders of
+#: magnitude past the ``deviation < 1e-10`` threshold. bosa is listed here
+#: (and additionally exercised by
+#: :func:`test_shape_nonlinear_models_really_are_nonlinear`, at two more
+#: widely-separated L_ir values chosen directly on the grid's own axis) so
+#: the ledger records the property as a stated, understood exemption rather
+#: than a bare skip, and the dedicated proof pins the effect independently of
+#: this file's SFH/eta machinery.
+SHAPE_NONLINEAR_MODELS = {
+    "bosa": "template SHAPE is looked up by log10(L_TIR/Lsun) on a (log L_TIR, "
+    "log sSFR) grid, so it is a genuine function of L_ir rather than merely scaled by it",
+}
+
 
 def _is_standalone(model_name: str) -> bool:
     """Whether ``SEDModel.build`` accepts this type as a model's only emitter."""
@@ -139,6 +167,12 @@ def test_sed_dust_ir_is_proportional_to_l_ir(synthetic_ssp_wide, model_name):
 
     if model_name in AFFINE_MODELS:
         pytest.skip(f"{model_name} is affine by construction: {AFFINE_MODELS[model_name]}")
+    if model_name in SHAPE_NONLINEAR_MODELS:
+        pytest.skip(
+            f"{model_name} is not proportional to L_ir: {SHAPE_NONLINEAR_MODELS[model_name]} "
+            "(see test_shape_nonlinear_models_really_are_nonlinear for the dedicated, "
+            "independent proof at two more widely-separated L_ir values)"
+        )
     assert deviation < 1e-10, (
         f"{model_name} is not proportional to L_ir (ratio range "
         f"[{ratio.min()!r}, {ratio.max()!r}], deviation {deviation:.3e}). "
@@ -175,6 +209,65 @@ def test_affine_models_really_are_affine(synthetic_ssp_wide, model_name):
     )
     # The exact affine prediction, which also pins that L_agn_ir is applied.
     np.testing.assert_allclose(ratio, 1.5, rtol=1e-9)
+
+
+@pytest.mark.parametrize("model_name", sorted(SHAPE_NONLINEAR_MODELS))
+def test_shape_nonlinear_models_really_are_nonlinear(model_name):
+    """The SHAPE_NONLINEAR_MODELS exemption is earned, not asserted (#2272).
+
+    Unlike :func:`test_affine_models_really_are_affine`'s eta-doubling probe,
+    an eta probe at a realistic stellar mass cannot demonstrate bosa's
+    non-proportionality (see the comment on :data:`SHAPE_NONLINEAR_MODELS`):
+    both probe luminosities clip to the same grid-ceiling row. Call the
+    component directly at two erg/s ``L_ir`` values that land, after the
+    Lsun conversion (#2272 part 2), inside the grid's own ``log_ltir_grid``
+    axis instead, exactly as
+    ``tests/regression/bug/test_bug_2272_bosa_shape_follows_l_ir.py`` does
+    for the dedicated regression pin.
+    """
+    from tengri.components.dust.emission.templates.bosa import BosaIRSEDComponent
+    from tengri.protocols.component import ForwardState
+    from tengri.utils.sed_quantities import LOG10_L_SUN
+
+    component = BosaIRSEDComponent()
+    grid = component.load()
+    if grid is None:
+        pytest.skip("BOSA template grid not on disk")
+
+    log_ltir_grid = np.asarray(grid["log_ltir_grid"])
+    span = float(log_ltir_grid.max() - log_ltir_grid.min())
+    lo_axis = float(log_ltir_grid.min() + 0.25 * span)
+    hi_axis = float(log_ltir_grid.min() + 0.75 * span)
+    # The grid's axis is log10(L_TIR/Lsun); L_ir is erg/s, so add LOG10_L_SUN
+    # to land the erg/s value at the intended axis percentile.
+    l_lo = 10.0 ** (lo_axis + LOG10_L_SUN)
+    l_hi = 10.0 ** (hi_axis + LOG10_L_SUN)
+
+    import jax.numpy as jnp
+
+    wave = jnp.geomspace(3.0e3, 3.0e8, 3000)
+    params = {"dust_log_ssfr": jnp.asarray(-10.0)}
+
+    def _sed(l_ir):
+        state = ForwardState(
+            wave=wave,
+            derived={"L_ir": jnp.asarray(l_ir), "log_L_ir": jnp.asarray(np.log10(l_ir))},
+        )
+        return np.asarray(component.apply(state, params).derived["sed_dust_ir"], dtype=np.float64)
+
+    sed_lo = _sed(l_lo)
+    sed_hi = _sed(l_hi)
+    norm_lo = sed_lo / l_lo
+    norm_hi = sed_hi / l_hi
+    scale = np.maximum(np.abs(norm_lo), np.abs(norm_hi))
+    mask = scale > 1.0e-3 * scale.max()
+    max_rel_diff = float(np.max(np.abs(norm_hi[mask] - norm_lo[mask]) / scale[mask]))
+
+    assert max_rel_diff > 0.05, (
+        f"{model_name} is listed in SHAPE_NONLINEAR_MODELS but its normalized shape barely "
+        f"moved between L_ir={l_lo:.3e} and L_ir={l_hi:.3e} (max relative difference "
+        f"{max_rel_diff:.3e}); if it is now proportional, remove the exemption"
+    )
 
 
 def test_every_advertised_emission_model_can_be_evaluated(synthetic_ssp_wide):

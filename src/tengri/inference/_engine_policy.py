@@ -157,12 +157,6 @@ ENGINE_POLICY: KeyPolicy = {
         "n_restarts) -- already covered by compile_signature() and the engine key; "
         "not itself an engine-key input"
     ),
-    "_map_multistart_qn_kernel_cache": exclude(
-        "memo: compiled vmapped JAX-BFGS MAP-multistart kernel (map_dispatch.py), "
-        "keyed internally by (compile_signature, optimizer, n_steps, tol, "
-        "n_restarts); not itself an engine-key input -- and it must not be, "
-        "or memoizing the kernel changes the signature it is keyed on"
-    ),
     "_native_vi_nonlinear_engine": exclude(
         "memo: the already-built native-VI-nonlinear engine (vi/native.py), not an "
         "input to building one -- same category as _jit_sampler"
@@ -349,7 +343,6 @@ FINGERPRINT_POLICY: KeyPolicy = {
     "_batch_adapt_kernel_cache": exclude(_MEMO_REASON),
     "_blackjax_draw_kernel_cache": exclude(_MEMO_REASON),
     "_map_multistart_kernel_cache": exclude(_MEMO_REASON),
-    "_map_multistart_qn_kernel_cache": exclude(_MEMO_REASON),
     "_native_vi_nonlinear_engine": exclude(_MEMO_REASON),
     "_lut_bias_checked": exclude(_MEMO_REASON),
     "model": exclude("structure (kept by the model's own compile_signature(), not either ledger)"),
