@@ -35,8 +35,19 @@ from typing import NamedTuple
 import jax.numpy as jnp
 
 from tengri._data_setup import find_data_str
-from tengri.components.dust._params import SCHREIBER2018_T_K_DEFAULT, PARAMS
-from tengri.protocols.component import declared_default
+from tengri.components.dust._params import (
+    DEFAULT_DUST_ALPHA,
+    DEFAULT_DUST_ALPHA_DALE,
+    DEFAULT_DUST_ALPHA_DL14,
+    DEFAULT_DUST_F_PAH,
+    DEFAULT_DUST_FRAC_AGN,
+    DEFAULT_DUST_GAMMA_DL,
+    DEFAULT_DUST_LOG_SSFR,
+    DEFAULT_DUST_QHAC,
+    DEFAULT_DUST_QPAH,
+    DEFAULT_DUST_UMIN,
+    SCHREIBER2018_T_K_DEFAULT,
+)
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
@@ -151,9 +162,9 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
     def dl07_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 2.5,
+        dust_umin: float = DEFAULT_DUST_UMIN,
+        dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+        dust_qpah: float = DEFAULT_DUST_QPAH,
         **_kwargs,
     ) -> jnp.ndarray:
         """DL07 emission from tabulated templates (Draine & Li 2007).
@@ -353,10 +364,10 @@ def dl14_sed_from_grid(
     templates: dict,
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
-    dust_umin: float = 1.0,
-    dust_gamma_dl: float = 0.01,
-    dust_qpah: float = 2.5,
-    dust_alpha_dl14: float = 2.0,
+    dust_umin: float = DEFAULT_DUST_UMIN,
+    dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+    dust_qpah: float = DEFAULT_DUST_QPAH,
+    dust_alpha_dl14: float = DEFAULT_DUST_ALPHA_DL14,
     **_kwargs,
 ) -> jnp.ndarray:
     """DL14 emission from tabulated templates.
@@ -616,8 +627,8 @@ def dale2014_emission_lnu(
     templates_sf: jnp.ndarray,
     templates_qso: jnp.ndarray | None,
     has_qso: bool,
-    dust_alpha_dale: float = 2.0,
-    dust_frac_agn: float = 0.0,
+    dust_alpha_dale: float = DEFAULT_DUST_ALPHA_DALE,
+    dust_frac_agn: float = DEFAULT_DUST_FRAC_AGN,
 ) -> jnp.ndarray:
     r"""Dale+2014 star-forming + AGN dust emission, mixed and scaled to L_nu.
 
@@ -1014,8 +1025,8 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     def dale2014_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_alpha_dale: float = 2.0,
-        dust_frac_agn: float = 0.0,
+        dust_alpha_dale: float = DEFAULT_DUST_ALPHA_DALE,
+        dust_frac_agn: float = DEFAULT_DUST_FRAC_AGN,
         **_kwargs,
     ) -> jnp.ndarray:
         return dale2014_emission_lnu(
@@ -1152,7 +1163,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
         dust_T: float = SCHREIBER2018_T_K_DEFAULT,
-        dust_f_pah: float = 0.05,
+        dust_f_pah: float = DEFAULT_DUST_F_PAH,
         **_kwargs,
     ) -> jnp.ndarray:
         """Schreiber+2018 (S17) cold-dust emission from tabulated templates.
@@ -1165,7 +1176,8 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
             Total absorbed luminosity. The output L_nu is in the same units
             per Hz.
         dust_T : float
-            Dust temperature [K]. Clipped to the grid range. Default: 30.0.
+            Dust temperature [K]. Clipped to the grid range. Default: 25.0
+            (``SCHREIBER2018_T_K_DEFAULT``).
         dust_f_pah : float
             Fractional PAH contribution in [0, 1]. Default: 0.05.
         **_kwargs
@@ -1827,9 +1839,9 @@ def create_astrodust_from_grid(
     def astrodust_emission(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = declared_default(PARAMS, "dust_qpah"),
+        dust_umin: float = DEFAULT_DUST_UMIN,
+        dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+        dust_qpah: float = DEFAULT_DUST_QPAH,
         redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -2086,7 +2098,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
     def bosa_emission(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_log_ssfr: float = -10.0,
+        dust_log_ssfr: float = DEFAULT_DUST_LOG_SSFR,
         redshift: float = 0.0,
         log_L_ir: float | None = None,
         **_kwargs,
@@ -3059,10 +3071,10 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     def themis_emission(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qhac: float = 0.17,
-        dust_alpha: float = 2.0,
+        dust_umin: float = DEFAULT_DUST_UMIN,
+        dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+        dust_qhac: float = DEFAULT_DUST_QHAC,
+        dust_alpha: float = DEFAULT_DUST_ALPHA,
         redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:

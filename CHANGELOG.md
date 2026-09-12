@@ -857,23 +857,68 @@
   (#2241).
 
 - Dust tree literal defaults aligned with declarations (#2265): the full
-  ``dust/`` tree (attenuation, emission, component aggregation) now reads all
-  signature defaults and ``.get`` fallbacks from ``declared_default(...)`` or
-  class-level constants instead of repeating numerals. Three direct-call
-  changes: ``kriek_conroy(dust_bump_strength=1.0)`` now uses ``Fixed(0.0)``
-  (no bump vs KC13 published value); ``tea(dust_delta=-0.2)`` uses
-  ``Fixed(0.0)`` (Calzetti baseline vs KC13 empirical z~1 value);
-  ``schreiber2018_tabulated(dust_T=30.0)`` uses component declaration
-  ``Fixed(25.0)`` via ``SCHREIBER2018_T_K_DEFAULT``. ``astrodust_emission()``
-  and all template closures read from the shared table via
-  ``declared_default(PARAMS, ...)`` (e.g. dust_qpah: 3.0 -> 2.5). Grammar
-  path unchanged (``SEDModel.build`` always supplied declared values);
-  measured zero-diff on ``predict_photometry`` for every dust_emission type
-  and attenuation law. ``dust_T`` and ``dust_beta_ir`` table entries
-  corrected under owner ruling 1: ``dust_T`` stays ``Fixed(35.0)`` (graybody
-  and casey match; MBB and schreiber2016 read their own ``Fixed(30.0)`` and
-  ``Fixed(25.0)`` constants); ``dust_beta_ir`` changes to ``Fixed(1.8)``
-  (all four analytic templates match). (#2265, #2261)
+  ``dust/`` tree (attenuation, emission, component aggregation) now reads
+  every signature default and ``.get`` fallback from ``declared_default(...)``
+  or a named module constant instead of repeating a numeral --
+  ``tools/check_literal_param_defaults.py``'s default scope widens from
+  ``dust/emission/`` to the whole ``dust/`` tree and reports zero sites
+  (previously 44). Two real direct-call value corrections, each measured
+  against a class this task's own audit found disagreeing with the shared
+  table: ``schreiber2018_tabulated(dust_T=30.0)`` now reads
+  ``Schreiber2018IRSEDComponent``'s own ``Fixed(25.0)`` via
+  ``SCHREIBER2018_T_K_DEFAULT``; ``astrodust_emission(dust_qpah=3.0)`` now
+  reads the shared table's ``declared_default(PARAMS, "dust_qpah")`` = 2.5
+  (astrodust's grid has no qpah axis, so no class declares this name --
+  the table is the declaration). ``kriek_conroy`` and ``tea`` are corrected
+  the OTHER direction: an earlier pass at this same task (commit 99304f22d)
+  had also rewritten their signature defaults to the shared
+  ``ATTENUATION_PARAMS`` table's structural-off ``Fixed(0.0)``
+  (``dust_bump_strength`` 1.0->0.0, ``dust_delta`` -0.2->0.0), reasoning
+  "aligns with declarations" -- but these two are the law's OWN
+  citation-backed values (Kriek & Conroy 2013 Eq. 3 fiducial E_b=0.85;
+  Haskell et al. 2024 NIHAO-SKIRT z~1 median), stable in this codebase since
+  before the Phase-4 refactor, and that commit's claim of "no changes on the
+  grammar path" was false: ``resolve_bc_diff_law_params``'s
+  ``live_shape_params`` gate (#1833) hands a caller who does not explicitly
+  name ``bump_strength``/``delta`` -- including a blanket ``all_params:
+  Fixed(DEFAULT)`` wildcard, tagged ``wildcard_fixed`` and not in
+  ``_REQUESTED_PROVENANCE`` -- the LAW's own signature default, not the
+  table value, so the 0.0 rewrite silently deleted KC13's own 2175 A bump
+  on exactly the callers #1833 was written to protect. Caught by
+  ``tests/components/dust/test_dust_attenuation_laws.py::
+  TestKriekConroyMatchesFSPS`` going red (bump excess 0.019 vs FSPS's
+  0.166) under the 99304f22d state; restored to 1.0 / -0.2 via two new
+  named constants (``KRIEK_CONROY_BUMP_STRENGTH_DEFAULT``,
+  ``TEA_DELTA_DEFAULT`` in ``_params.py``, documented as deliberately NOT
+  the shared table's value) and that test is green again.
+  ``dust_beta_ir``'s table entry is corrected ``Fixed(1.6)`` ->
+  ``Fixed(1.8)`` to match all four analytic templates
+  (modified_blackbody/graybody/casey2012/schreiber2016), which already
+  declared 1.8 at the class level; ``dust_T`` stays ``Fixed(35.0)`` (the
+  majority: graybody, casey2012), with modified_blackbody/schreiber2016
+  (30.0) and schreiber2018 (25.0) reading their own named constants instead.
+  Zero-diff measured on ``predict_photometry`` for every registered
+  ``dust_emission`` type and every attenuation law under both
+  ``dust_attenuation`` types (59 grammar-path builds, ``all_params:
+  Fixed(DEFAULT)``): 57/59 bit-identical between this branch and origin/main.
+  The two exceptions (``casey2012``, ``schreiber2018``) are NOT a grammar-path
+  regression -- they are the ``dust_beta_ir`` table correction reaching those
+  two classes' own physics (which read ``p["beta_ir"]``), restoring output
+  to what each class's OWN ``Fixed(1.8)``/unrelated declaration already
+  specified; every OTHER dust_emission type either does not read
+  ``dust_beta_ir`` in its physics or is unaffected. kriek_conroy and tea are
+  confirmed bit-identical on the grammar path after being restored to their
+  original values. One further, PRE-EXISTING artifact (present already in
+  the unmerged base commit, before this session's own edits, and NOT
+  introduced by either): ``dust_log_L_ir`` -- declared with no
+  ``free_prior`` specifically so "a blanket wildcard must never reach it" --
+  is visible (value 10.0) in the ``all_params: Fixed(DEFAULT)``-resolved
+  parameter dict for any active ``dust_emission`` type, on this branch but
+  not on origin/main; its own gate (``_requested_dust_log_L_ir``, keyed on
+  provenance, not presence) still reports it unrequested, so energy balance
+  is unaffected, but the dict-shape contradiction is real and unexplained by
+  anything this task's diff touches. Flagged for separate investigation, not
+  fixed here (#2265, #2261).
 
 - `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
   believing it the base of the `Tracer*ConversionError` family. On jax

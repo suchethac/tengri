@@ -10,6 +10,7 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import DEFAULT_DUST_F_PAH, SCHREIBER2018_T_K_DEFAULT
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
@@ -50,8 +51,8 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
     # Free parameters (user-facing names, prefix-stripped). Canonical names
     # (#849): ``dust_T`` (was ``dust_tdust``) + ``dust_f_pah`` (was
     # ``dust_fpah``); old spellings resolve via _LEGACY_PARAM_ALIASES.
-    T = Fixed(25.0)
-    f_pah = Fixed(0.05)
+    T = Fixed(SCHREIBER2018_T_K_DEFAULT)
+    f_pah = Fixed(DEFAULT_DUST_F_PAH)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("schreiber2018",)
 

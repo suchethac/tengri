@@ -74,6 +74,14 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import renamed_kwarg as renamed_kwarg
+from tengri.components.dust._params import (
+    DEFAULT_DUST_BUMP_STRENGTH,
+    DEFAULT_DUST_DELTA,
+    DEFAULT_DUST_RV,
+    DEFAULT_DUST_SLOPE,
+    KRIEK_CONROY_BUMP_STRENGTH_DEFAULT,
+    TEA_DELTA_DEFAULT,
+)
 from tengri.components.dust.laws._registry import (
     _HEADLINE_LAWS as _HEADLINE_LAWS,
     DUST_LAWS as DUST_LAWS,
@@ -102,7 +110,7 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 @renamed_kwarg("n_slope", "dust_slope")
 def power_law(
     wavelength: jnp.ndarray,
-    dust_slope: float = -0.7,
+    dust_slope: float = DEFAULT_DUST_SLOPE,
 ) -> jnp.ndarray:
     r"""Power-law dust attenuation curve following Charlot & Fall (2000).
 
@@ -398,8 +406,8 @@ def reddy15(
 )
 def kriek_conroy(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 0.0,
-    dust_delta: float = 0.0,
+    dust_bump_strength: float = KRIEK_CONROY_BUMP_STRENGTH_DEFAULT,
+    dust_delta: float = DEFAULT_DUST_DELTA,
 ) -> jnp.ndarray:
     r"""Kriek & Conroy (2013) modified Calzetti + UV bump + slope delta.
 
@@ -760,7 +768,7 @@ def prevot_smc(
 )
 def cardelli(
     wavelength: jnp.ndarray,
-    dust_Rv: float = 3.1,
+    dust_Rv: float = DEFAULT_DUST_RV,
 ) -> jnp.ndarray:
     r"""Cardelli, Clayton & Mathis (1989) MW extinction with free R_V.
 
@@ -949,8 +957,8 @@ def li08(
 )
 def salim(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 0.0,
-    dust_delta: float = 0.0,
+    dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
+    dust_delta: float = DEFAULT_DUST_DELTA,
 ) -> jnp.ndarray:
     """Salim et al. (2018) modified Calzetti law (DSPS/Zacharegkas+2025 default).
 
@@ -1073,8 +1081,8 @@ def leitherer02(
 )
 def noll09(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 0.0,
-    dust_delta: float = 0.0,
+    dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
+    dust_delta: float = DEFAULT_DUST_DELTA,
     dust_bump_x0: float = 0.2175,
     dust_bump_gamma: float = 0.035,
 ) -> jnp.ndarray:
@@ -1163,8 +1171,8 @@ def noll09(
 )
 def salim_sbl18(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 0.0,
-    dust_delta: float = 0.0,
+    dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
+    dust_delta: float = DEFAULT_DUST_DELTA,
     dust_bump_x0: float = 0.2175,
     dust_bump_gamma: float = 0.035,
 ) -> jnp.ndarray:
@@ -1250,7 +1258,7 @@ def salim_sbl18(
 )
 def tea(
     wavelength: jnp.ndarray,
-    dust_delta: float = 0.0,
+    dust_delta: float = TEA_DELTA_DEFAULT,
     dust_tea_scatter: float = 0.0,
 ) -> jnp.ndarray:
     r"""TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).
@@ -1447,8 +1455,8 @@ def narayanan_z(
 @renamed_kwarg("n_slope", "dust_slope")
 def conroy2010(
     wavelength: jnp.ndarray,
-    dust_Rv: float = 3.1,
-    dust_slope: float = -0.7,
+    dust_Rv: float = DEFAULT_DUST_RV,
+    dust_slope: float = DEFAULT_DUST_SLOPE,
 ) -> jnp.ndarray:
     r"""Conroy+2010 mixed MW + power-law attenuation (FSPS dust_type=1).
 

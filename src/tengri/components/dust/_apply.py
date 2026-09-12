@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
 from tengri.components.dust.laws._registry import (
     reject_unread_law_kwargs,
     resolve_dust_law,
@@ -267,7 +268,7 @@ def two_component_dust(
     tau_v2: float,
     law_bc: str = "power_law",
     law_diff: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     t_birth: float = 1e7,
     transition_width: float = 0.3,
     bc_params: dict | None = None,
@@ -417,7 +418,7 @@ def two_component_dust_separable(
     tau_v2: float,
     law_bc_fn: Callable,
     law_diff_fn: Callable,
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Optimized two-component dust attenuation with factorized age-independent term.
@@ -512,7 +513,7 @@ def two_component_dust_fast(
     tau_v2: float,
     law_bc: str = "power_law",
     law_diff: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Fast dust attenuation using precomputed age weights.
@@ -578,7 +579,7 @@ def single_component_dust(
     wavelength: jnp.ndarray,
     tau_v: float,
     law: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Single-component (uniform foreground screen) dust attenuation.
@@ -649,7 +650,7 @@ def single_component_dust_fast(
     n_ages: int,
     tau_v: float,
     law: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Single-component dust attenuation broadcast to (n_ages, n_wave).
