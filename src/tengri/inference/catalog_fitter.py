@@ -1443,6 +1443,16 @@ class _CatalogFitterOriginal:
                 data_type=self.data_type,
                 presence=g.get("presence", None),
                 cache=self.cache,
+                # Profiling is not implemented for the vectorized catalog
+                # engines: this dummy fitter's compiled kernels (loss_fn,
+                # _free_names, init) are shared across every galaxy via
+                # jax.vmap, and its own ``.run()`` -- the one place
+                # ``finalize_profile_mass`` reinserts the marginalized mass
+                # -- is never called (the native/vmap engines read the
+                # kernels directly). "auto" would silently engage on a
+                # single-galaxy-shaped dummy, fix the mass at a placeholder
+                # for every galaxy, and never draw it back in. See #2254.
+                profile_mass=False,
             )
         return self._dummy_fitter
 
@@ -1912,11 +1922,12 @@ class _CatalogFitterOriginal:
             int(_dummy_flat.shape[0]),
             method="CatalogFitter",
             verbose=verbose,
+            spec=getattr(fitter, "spec", None),
         )
         if is_chees:
             use_dense = False
         elif verbose and not user_set_dense:
-            policy = "dense (D<8)" if use_dense else "diagonal (D>=8, #319)"
+            policy = "dense (D<=12, non-dense_basis)" if use_dense else "diagonal"
             print(f"CatalogFitter auto-mass-matrix: {policy}")
 
         run_one, unravel_fn = build_catalog_mcmc_engine(

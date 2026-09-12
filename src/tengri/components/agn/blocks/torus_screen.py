@@ -29,6 +29,7 @@ from tengri.components.agn.polar_dust import (
     calzetti2000_extinction_curve,
     smc_extinction_curve,
 )
+from tengri.utils.scale import representable_denominator
 
 # Torus blocks that represent a genuine dusty torus with an equatorial optical
 # depth + opening angle, mapped to the (opening-angle, V-band-tau) param names
@@ -98,7 +99,11 @@ def torus_screen_transmission(
     sin_oa = jnp.sin(jnp.deg2rad(oa_deg))
     type2 = jax_sigmoid((sin_oa - cos_inc) / _TRANSITION_WIDTH)
 
-    tau_lambda = jnp.maximum(tau_v, 0.0) * (k_lambda / jnp.maximum(k_v, 1e-30)) * type2
+    tau_lambda = (
+        jnp.maximum(tau_v, 0.0)
+        * (k_lambda / jnp.maximum(k_v, representable_denominator(1e-30)))
+        * type2
+    )
     return jnp.exp(-jnp.clip(tau_lambda, 0.0, 50.0))
 
 

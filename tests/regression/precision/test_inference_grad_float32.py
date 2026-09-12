@@ -80,7 +80,9 @@ def _context(ssp, flux, noise):
     """A Fitter/InferenceContext on the given data (converted to the active precision)."""
     from tengri.inference.context import InferenceContext
 
-    return InferenceContext.from_target(Fitter(_model(ssp), jnp.asarray(flux), jnp.asarray(noise)))
+    return InferenceContext.from_target(
+        Fitter(_model(ssp), jnp.asarray(flux), jnp.asarray(noise), profile_mass=False)
+    )
 
 
 def test_neg_log_posterior_gradient_is_finite_in_pure_float32(synthetic_ssp_wide):
