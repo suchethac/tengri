@@ -96,7 +96,9 @@ class Dale2014IRSEDComponent(EmissionComponent):
             wave,
             L_ir,
             dust_alpha_dale=p["alpha_dale"],
-            dust_frac_agn=p["frac_agn"],
+            # This engine does not declare frac_agn (its shipped grid carries no
+            # QSO template, #2244), so the closure gets the structural zero.
+            dust_frac_agn=0.0,
         )
         return sed_in + sed, {"sed_dust_ir": sed}
 
