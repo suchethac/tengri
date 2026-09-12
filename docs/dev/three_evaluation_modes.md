@@ -98,7 +98,7 @@ L_nu = composable_agn_l_nu(
     agn_torus_block="skirtor",
     agn_attenuation_block="smc_prevot",
     agn_log_lbol=45.0,
-    agn_grahsp_l5100=1e44,
+    agn_grahsp_log_l5100=44.0,
     agn_tau_skirtor=7.0,
     agn_attenuation_ebv=0.1,
 )
@@ -128,7 +128,7 @@ recipe = Recipe.from_selectors(
     disc="grahsp_sbpl",
     torus="skirtor",
     attenuation="smc_prevot",
-    axis_params=("agn_grahsp_l5100",),  # vary this in the fit
+    axis_params=("agn_grahsp_log_l5100",),  # vary this in the fit
 )
 pre = precompute(
     filter_waves=[filter_wave_aa],
@@ -136,10 +136,10 @@ pre = precompute(
     redshift=0.0,
     parameters=None,                  # or pass tengri.Parameters for auto-collapse
     recipe=recipe,
-    axis_grids={"agn_grahsp_l5100": np.logspace(43, 46, 5)},
+    axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 21)},
 )
 fn = build_lookup(pre)                # JIT-compiled triweight lookup
-photometry = fn(jnp.array(1.0), jnp.array(1e44))  # (n_filters,)
+photometry = fn(jnp.array(1.0), jnp.array(44.0))  # (n_filters,)
 ```
 
 ### Through the standard `Parameters` API
@@ -158,7 +158,7 @@ spec = Parameters(
     agn_log_lbol=Uniform(9.42, 13.42),
     agn_ir_frac=Fixed(0.0),  # #2069: cigale_joint ties amplitude to agn_ir_frac; fix at 0 to leave lbol free
     agn_axis_grids={
-        "agn_grahsp_l5100": np.logspace(43, 46, 5),
+        "agn_grahsp_log_l5100": np.linspace(43, 46, 21),
     },
     # ... other free / fixed params ...
 )

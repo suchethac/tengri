@@ -56,7 +56,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("disc", "grahsp_sbpl"): frozenset(
         {
             "agn_grahsp_cutoff_nm",
-            "agn_grahsp_l5100",
+            "agn_grahsp_log_l5100",
             "agn_grahsp_plbendloc_nm",
             "agn_grahsp_plbendwidth",
             "agn_grahsp_plslope",

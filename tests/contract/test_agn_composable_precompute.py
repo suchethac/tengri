@@ -60,10 +60,10 @@ def test_recipe_from_parameters():
         agn_torus_block = "skirtor"
         agn_attenuation_block = "smc_prevot"
 
-    r = Recipe.from_parameters(_StubParams(), axis_params=("agn_grahsp_l5100",))
+    r = Recipe.from_parameters(_StubParams(), axis_params=("agn_grahsp_log_l5100",))
     assert r.agn_disc_block == "grahsp_sbpl"
     assert r.agn_torus_block == "skirtor"
-    assert r.axis_params == ("agn_grahsp_l5100",)
+    assert r.axis_params == ("agn_grahsp_log_l5100",)
 
 
 def test_recipe_summary():
@@ -95,7 +95,7 @@ def test_template_hoist_returns_same_output_as_lru_load():
         agn_feii_block="grahsp",
         agn_torus_block="grahsp",
         agn_attenuation_block="grahsp_biatten",
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
         agn_grahsp_ebv=0.05,
     )
     out_no_hoist = composable_agn_l_nu(wave, **params)
@@ -122,7 +122,7 @@ def test_precompute_returns_documented_keys():
         disc="grahsp_sbpl",
         torus="grahsp",
         attenuation="grahsp_biatten",
-        axis_params=("agn_grahsp_l5100",),
+        axis_params=("agn_grahsp_log_l5100",),
     )
     out = composable_precompute.precompute(
         filter_waves=[fw],
@@ -130,7 +130,7 @@ def test_precompute_returns_documented_keys():
         redshift=0.0,
         parameters=None,
         recipe=recipe,
-        axis_grids={"agn_grahsp_l5100": np.logspace(43, 46, 4)},
+        axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 4)},
     )
     assert "grid_phot" in out
     assert "axes" in out
@@ -175,11 +175,11 @@ def test_auto_collapse_fixed_axis():
 
         @property
         def free_params(self):
-            return ["agn_grahsp_l5100"]
+            return ["agn_grahsp_log_l5100"]
 
     recipe = Recipe.from_parameters(
         _StubParams(),
-        axis_params=("agn_grahsp_l5100", "agn_grahsp_ebv"),
+        axis_params=("agn_grahsp_log_l5100", "agn_grahsp_ebv"),
     )
     out = composable_precompute.precompute(
         filter_waves=[fw],
@@ -188,7 +188,7 @@ def test_auto_collapse_fixed_axis():
         parameters=_StubParams(),
         recipe=recipe,
         axis_grids={
-            "agn_grahsp_l5100": np.logspace(43, 46, 3),
+            "agn_grahsp_log_l5100": np.linspace(43, 46, 3),
             "agn_grahsp_ebv": np.array([0.0, 0.05, 0.1]),
         },
     )
@@ -205,30 +205,43 @@ def test_auto_collapse_fixed_axis():
 @requires_grahsp
 def test_parity_at_grid_center():
     """Lookup at an exact grid-center point matches the runtime evaluation
-    integrated through the same filter to triweight-interp precision."""
+    integrated through the same filter to triweight-interp precision.
+
+    21 points, not 5 (#1206 §D). ``agn_grahsp_log_l5100`` replaced the linear
+    ``agn_grahsp_l5100``, and the underlying photometry is now EXPONENTIAL in
+    the axis coordinate rather than linear in it (grid_phot ~10x per grid
+    step at 5 points). Triweight is a *local weighted average*, not an exact
+    interpolant, so averaging an exponential's neighbors is biased high
+    relative to the true node value (Jensen's inequality) -- measured
+    lookup/grid_phot = 1.66 at the old 5-point density, 1.03 at 17 points,
+    1.01 at 33. The bias is a property of the coarse-grid triweight kernel
+    applied to a genuinely exponential function, not a defect in the grahsp
+    disc or the rename; 21 points restores comfortable margin under the
+    original 5% tolerance without weakening the assertion.
+    """
     fw, ft = _toy_filter()
     recipe = Recipe.from_selectors(
         disc="grahsp_sbpl",
         torus="grahsp",
         attenuation="none",
-        axis_params=("agn_grahsp_l5100",),
+        axis_params=("agn_grahsp_log_l5100",),
     )
 
-    axis_grid = np.logspace(43, 46, 5)
+    axis_grid = np.linspace(43, 46, 21)
     out = composable_precompute.precompute(
         filter_waves=[fw],
         filter_trans=[ft],
         redshift=0.0,
         parameters=None,
         recipe=recipe,
-        axis_grids={"agn_grahsp_l5100": axis_grid},
+        axis_grids={"agn_grahsp_log_l5100": axis_grid},
         # Match the runtime call exactly:
         wave_rest=np.logspace(2.0, 6.0, 1500, dtype=np.float64),
     )
     fn = composable_precompute.build_lookup(out)
 
     # Pick a grid-center value
-    l5100_value = float(axis_grid[2])
+    l5100_value = float(axis_grid[10])
     photo_lookup = float(fn(jnp.array(1.0), jnp.array(l5100_value))[0])
 
     # Reference: evaluate the runner directly on the same wave grid, then
@@ -243,7 +256,7 @@ def test_parity_at_grid_center():
         agn_torus_block="grahsp",
         agn_attenuation_block="none",
         agn_log_lbol=11.42,
-        agn_grahsp_l5100=l5100_value,
+        agn_grahsp_log_l5100=l5100_value,
     )
     # Trapezoidal filter integration: <F_nu> = int(F_nu * trans / nu dnu) /
     # int(trans/nu dnu). Use Å-side.
@@ -274,7 +287,7 @@ def test_lookup_jit_compiles_and_caches():
         disc="grahsp_sbpl",
         torus="grahsp",
         attenuation="grahsp_biatten",
-        axis_params=("agn_grahsp_l5100", "agn_grahsp_ebv"),
+        axis_params=("agn_grahsp_log_l5100", "agn_grahsp_ebv"),
     )
     pre = composable_precompute.precompute(
         filter_waves=[fw],
@@ -283,7 +296,7 @@ def test_lookup_jit_compiles_and_caches():
         parameters=None,
         recipe=recipe,
         axis_grids={
-            "agn_grahsp_l5100": np.logspace(43, 46, 4),
+            "agn_grahsp_log_l5100": np.linspace(43, 46, 4),
             "agn_grahsp_ebv": np.array([0.0, 0.05, 0.1, 0.3]),
         },
     )
@@ -291,11 +304,11 @@ def test_lookup_jit_compiles_and_caches():
 
     # First call: includes compile. Second call: pure cached lookup.
     t0 = time.time()
-    out1 = fn(jnp.array(1.0), jnp.array(1e44), jnp.array(0.05))
+    out1 = fn(jnp.array(1.0), jnp.array(44.0), jnp.array(0.05))
     _ = out1.block_until_ready()
     dt_compile = time.time() - t0
     t0 = time.time()
-    out2 = fn(jnp.array(1.0), jnp.array(2e44), jnp.array(0.1))
+    out2 = fn(jnp.array(1.0), jnp.array(44.3), jnp.array(0.1))
     _ = out2.block_until_ready()
     dt_cached = time.time() - t0
 
@@ -314,7 +327,7 @@ def test_build_lookup_returns_composable_lookup_with_axis_names():
         disc="grahsp_sbpl",
         torus="grahsp",
         attenuation="none",
-        axis_params=("agn_grahsp_l5100",),
+        axis_params=("agn_grahsp_log_l5100",),
     )
     pre = composable_precompute.precompute(
         filter_waves=[fw],
@@ -322,13 +335,13 @@ def test_build_lookup_returns_composable_lookup_with_axis_names():
         redshift=0.0,
         parameters=None,
         recipe=recipe,
-        axis_grids={"agn_grahsp_l5100": np.logspace(43, 46, 3)},
+        axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 3)},
     )
     fn = composable_precompute.build_lookup(pre)
     assert hasattr(fn, "axis_names")
-    assert fn.axis_names == ("agn_grahsp_l5100",)
+    assert fn.axis_names == ("agn_grahsp_log_l5100",)
     # Still callable as before.
-    out = fn(jnp.array(1.0), jnp.array(1e44))
+    out = fn(jnp.array(1.0), jnp.array(44.0))
     chex.assert_shape(out, (1,))
 
 
@@ -346,10 +359,10 @@ def test_kernel_accepts_arbitrary_axis_names():
     single = ComposableLookup(lambda scale, x: scale * x, axis_names=("agn_log_lbol",))
     multi = ComposableLookup(
         lambda scale, a, b: scale * (a + b),
-        axis_names=("agn_grahsp_l5100", "agn_grahsp_ebv"),
+        axis_names=("agn_grahsp_log_l5100", "agn_grahsp_ebv"),
     )
     assert single.axis_names == ("agn_log_lbol",)
-    assert multi.axis_names == ("agn_grahsp_l5100", "agn_grahsp_ebv")
+    assert multi.axis_names == ("agn_grahsp_log_l5100", "agn_grahsp_ebv")
 
 
 def test_parameters_agn_axis_grids_accepted():
@@ -367,11 +380,11 @@ def test_parameters_agn_axis_grids_accepted():
         agn_log_ledd=Fixed(-1.0),
         agn_tau_skirtor=Fixed(7.0),
         agn_axis_grids={
-            "agn_grahsp_l5100": np.logspace(43, 46, 4),
+            "agn_grahsp_log_l5100": np.linspace(43, 46, 4),
         },
     )
     assert p.agn_axis_grids is not None
-    assert "agn_grahsp_l5100" in p.agn_axis_grids
+    assert "agn_grahsp_log_l5100" in p.agn_axis_grids
     assert p.agn_disc_block == "grahsp_sbpl"
 
 
@@ -415,7 +428,7 @@ def test_lookup_works_with_explicit_jit_wrapper():
         disc="grahsp_sbpl",
         torus="grahsp",
         attenuation="none",
-        axis_params=("agn_grahsp_l5100",),
+        axis_params=("agn_grahsp_log_l5100",),
     )
     pre = composable_precompute.precompute(
         filter_waves=[fw, fw, fw],
@@ -423,9 +436,9 @@ def test_lookup_works_with_explicit_jit_wrapper():
         redshift=0.0,
         parameters=None,
         recipe=recipe,
-        axis_grids={"agn_grahsp_l5100": np.logspace(43, 46, 4)},
+        axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 4)},
     )
     fn = composable_precompute.build_lookup(pre)
-    out = assert_jit_matches_eager(fn, jnp.array(1.0), jnp.array(1e44))
+    out = assert_jit_matches_eager(fn, jnp.array(1.0), jnp.array(44.0))
     chex.assert_shape(out, (3,))
     chex.assert_tree_all_finite(out)

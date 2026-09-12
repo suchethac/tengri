@@ -71,7 +71,7 @@ def test_the_sweep_is_not_vacuous(model, pred):
     """It must actually cover the names that broke, or it proves nothing."""
     names = set(model.available_properties)
     assert len(names) > 20
-    for known in ("irx", "q_h", "xi_ion", "mass_weighted_age_gyr", "sfr_100myr"):
+    for known in ("irx", "log_q_h", "xi_ion", "mass_weighted_age_gyr", "sfr_100myr"):
         assert known in names, f"{known} vanished from the catalog — the sweep has a hole"
 
 

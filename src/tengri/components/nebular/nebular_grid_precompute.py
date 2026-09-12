@@ -360,21 +360,21 @@ def _axis_range(spec, name):
     return _DEFAULT_RANGE[name]
 
 
-def _nion_of_state(state) -> jnp.ndarray:
-    nion = state.derived["nion"]
-    return jnp.sum(nion) if jnp.ndim(nion) else nion
-
-
 def _log_nion_of_state(state) -> jnp.ndarray:
     """log10 Q_H [dex re photons/s], never materializing the ~1e53 linear value.
 
-    Q_H overflows float32 (max 3.4e38), so the stellar component publishes
-    ``log_nion`` alongside ``nion`` for exactly this reason. Falls back to the
-    log of the linear publish for a state that carries only the latter.
+    Q_H overflows float32 (max 3.4e38) at any physical ionizing rate, so the
+    stellar component publishes the log key alongside the linear one for
+    exactly this reason, in the same ``apply()`` call -- one is never present
+    without the other (#1206 §C). This no longer falls back to a ``jnp.log10``
+    of the linear publish for a hypothetical state that carries only that key:
+    that branch was unreachable on every real model and was the tree's last
+    allow-listed raw linear-Q_H read
+    (``tests/regression/precision/test_no_raw_nion_read.py``), so a caller
+    that genuinely lacks the log publish now raises here rather than silently
+    materializing the overflow it exists to avoid.
     """
-    log_nion = state.derived.get("log_nion")
-    if log_nion is None:
-        return jnp.log10(_nion_of_state(state))
+    log_nion = state.derived["log_nion"]
     log_nion = jnp.asarray(log_nion)
     if not jnp.ndim(log_nion):
         return log_nion

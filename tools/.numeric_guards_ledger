@@ -55,6 +55,7 @@ src/tengri/components/igm/meiksin06.py | jnp.maximum with floor 1e-30 < 1e-20 ->
 src/tengri/components/nebular/_recombination_coeffs.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/nebular/_shared.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/nebular/_shared.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/agn_nebular.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/nebular/agn_nebular.py | jnp.maximum with floor 1e-99 < 1e-20 -> 2
 src/tengri/components/nebular/cloudy_cb19.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/nebular/component.py | jnp.maximum with floor 0.0 < 1e-20 -> 1

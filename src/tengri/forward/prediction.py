@@ -1045,8 +1045,10 @@ class LineProperties(_CachedBase):
     """Lazy property accessor for emission line luminosities and diagnostic ratios.
 
     Accessing any line property triggers the nebular computation
-    if not already cached. All line luminosities are in erg/s. Diagnostic
-    ratios are dimensionless log10 values.
+    if not already cached. All eleven individual line luminosities are in
+    Lsun (**breaking, no alias, #1206 §A**; the ``log_<line>`` companions on
+    :attr:`Prediction.properties` stay in dex re erg/s). Diagnostic ratios
+    are dimensionless log10 values.
 
     If no nebular model is active, all line luminosities return NaN
     and all ratios return NaN.
@@ -1054,27 +1056,27 @@ class LineProperties(_CachedBase):
     Attributes
     ----------
     lya : property
-        Lyman-alpha [erg/s].
+        Lyman-alpha [Lsun].
     civ_1549 : property
-        C IV doublet [erg/s].
+        C IV doublet [Lsun].
     oii : property
-        [OII] doublet [erg/s].
+        [OII] doublet [Lsun].
     hbeta : property
-        H-beta [erg/s].
+        H-beta [Lsun].
     oiii_4959 : property
-        [OIII] 4959 [erg/s].
+        [OIII] 4959 [Lsun].
     oiii_5007 : property
-        [OIII] 5007 [erg/s].
+        [OIII] 5007 [Lsun].
     nii_6548 : property
-        [NII] 6548 [erg/s].
+        [NII] 6548 [Lsun].
     halpha : property
-        H-alpha [erg/s].
+        H-alpha [Lsun].
     nii_6584 : property
-        [NII] 6584 [erg/s].
+        [NII] 6584 [Lsun].
     sii_6717 : property
-        [SII] 6717 [erg/s].
+        [SII] 6717 [Lsun].
     sii_6731 : property
-        [SII] 6731 [erg/s].
+        [SII] 6731 [Lsun].
     bpt_nii : property
         BPT [NII] diagnostic [dimensionless].
     bpt_sii : property
@@ -1098,8 +1100,8 @@ class LineProperties(_CachedBase):
     Examples
     --------
     >>> pred = model.predict(params)
-    >>> pred.lines.halpha  # Hα luminosity in erg/s
-    Array(2.4e41, dtype=float64)
+    >>> pred.lines.halpha  # Hα luminosity in Lsun
+    Array(6.3e7, dtype=float64)
     >>> pred.lines.bpt_nii  # log10([NII]6584 / Hα)
     Array(-0.45, dtype=float64)
     """
@@ -1113,7 +1115,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1130,7 +1132,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Summed line luminosity [erg/s], or NaN if no nebular model.
+            Summed line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1147,7 +1149,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Summed line luminosity [erg/s], or NaN if no nebular model.
+            Summed line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1164,7 +1166,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1181,7 +1183,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1198,7 +1200,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1215,7 +1217,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1232,7 +1234,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1249,7 +1251,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1266,7 +1268,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1283,7 +1285,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [erg/s], or NaN if no nebular model.
+            Line luminosity [Lsun], or NaN if no nebular model.
 
         Notes
         -----
@@ -1586,11 +1588,11 @@ class XRayProperties(_CachedBase):
     Attributes
     ----------
     l_x_xrb : property
-        X-ray binary luminosity [erg/s].
+        X-ray binary luminosity [Lsun].
     l_x_agn : property
-        AGN X-ray luminosity [erg/s].
+        AGN X-ray luminosity [Lsun].
     l_x_total : property
-        Total X-ray luminosity [erg/s].
+        Total X-ray luminosity [Lsun].
 
     Notes
     -----
@@ -1598,11 +1600,16 @@ class XRayProperties(_CachedBase):
     :class:`Prediction` object. Returned by :attr:`Prediction.xray`.
     Not JIT-compatible (uses Python caching).
 
+    **Breaking, no alias (#1206 §B)**: all three return Lsun, not erg/s (an
+    AGN X-ray luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling).
+    The ``log_l_x_*`` companions on :attr:`Prediction.properties` stay in dex
+    re erg/s.
+
     Examples
     --------
     >>> pred = model.predict(params)
-    >>> pred.xray.l_x_xrb  # XRB luminosity (0.5-8 keV)
-    Array(3.1e40, dtype=float64)
+    >>> pred.xray.l_x_xrb  # XRB luminosity (0.5-8 keV), in Lsun
+    Array(8.1e6, dtype=float64)
     """
 
     @property
@@ -1612,7 +1619,7 @@ class XRayProperties(_CachedBase):
         Returns
         -------
         float
-            XRB X-ray luminosity in 0.5–8 keV band [erg/s].
+            XRB X-ray luminosity in 0.5–8 keV band [Lsun].
 
         Notes
         -----
@@ -1628,7 +1635,7 @@ class XRayProperties(_CachedBase):
         Returns
         -------
         float
-            AGN X-ray luminosity in 2–10 keV band [erg/s].
+            AGN X-ray luminosity in 2–10 keV band [Lsun].
 
         Notes
         -----
@@ -1644,7 +1651,7 @@ class XRayProperties(_CachedBase):
         Returns
         -------
         float
-            Combined XRB and AGN X-ray luminosity [erg/s].
+            Combined XRB and AGN X-ray luminosity [Lsun].
 
         Notes
         -----
@@ -1666,8 +1673,8 @@ class IonizingProperties(_CachedBase):
 
     Attributes
     ----------
-    q_h : property
-        Ionizing photon production rate [photons/s].
+    log_q_h : property
+        log10 ionizing photon production rate [dex re photons/s].
     xi_ion : property
         Ionizing photon production efficiency [Hz/erg].
 
@@ -1676,6 +1683,12 @@ class IonizingProperties(_CachedBase):
     JAX-compatible array container. Properties are lazy-cached within a
     :class:`Prediction` object. Returned by :attr:`Prediction.ionizing`.
     Not JIT-compatible (uses Python caching).
+
+    **``q_h`` retired, no alias (#1206 §C).** The linear ionizing photon rate
+    (~1e56 photons/s) overflows float32 at every physical rate, including
+    zero. ``pred.ionizing.q_h`` now raises ``KeyError`` naming the
+    replacement; use ``pred.ionizing.log_q_h`` (log10(photons/s)) and
+    convert with ``10**log_q_h`` where the linear value is needed.
 
     Examples
     --------
@@ -1686,21 +1699,34 @@ class IonizingProperties(_CachedBase):
 
     @property
     def q_h(self):
-        """Total ionizing photon production rate.
+        """Retired, no alias (#1206 §C). Raises ``KeyError`` naming ``log_q_h``.
 
-        Returns NaN if no nebular model is active.
+        Raises
+        ------
+        KeyError
+            Always: the linear photons/s value overflows float32 at every
+            physical ionizing rate. Use :attr:`log_q_h` and ``10**log_q_h``.
+        """
+        return self._pred.properties["q_h"]
+
+    @property
+    def log_q_h(self):
+        """log10 total ionizing photon production rate [dex re photons/s].
+
+        The float32-safe replacement for the retired linear ``q_h`` (#1206
+        §C): ``q_h [photons/s] = 10**log_q_h``.
 
         Returns
         -------
         float
-            Ionizing photon production rate [photons/s], or NaN if unavailable.
+            log10(ionizing photon production rate / (photons/s)).
 
         Notes
         -----
         **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._pred.properties["q_h"]
+        return self._pred.properties["log_q_h"]
 
     @property
     def xi_ion(self):
@@ -2981,17 +3007,17 @@ class Prediction:
 
     @property
     def halpha(self):
-        """Hα 6564 Å luminosity [erg/s]. Same as ``pred.lines.halpha``."""
+        """Hα 6564 Å luminosity [Lsun]. Same as ``pred.lines.halpha``."""
         return self.lines.halpha
 
     @property
     def hbeta(self):
-        """Hβ 4862 Å luminosity [erg/s]. Same as ``pred.lines.hbeta``."""
+        """Hβ 4862 Å luminosity [Lsun]. Same as ``pred.lines.hbeta``."""
         return self.lines.hbeta
 
     @property
     def oiii_5007(self):
-        """[O III] 5007 Å luminosity [erg/s]. Same as ``pred.lines.oiii_5007``."""
+        """[O III] 5007 Å luminosity [Lsun]. Same as ``pred.lines.oiii_5007``."""
         return self.lines.oiii_5007
 
     @property
@@ -3003,8 +3029,19 @@ class Prediction:
 
     @property
     def q_h(self):
-        """Total ionizing photon production rate [s⁻¹]. Same as ``pred.ionizing.q_h``."""
+        """Retired, no alias (#1206 §C). Raises ``KeyError`` naming ``log_q_h``.
+
+        Same as ``pred.ionizing.q_h``.
+        """
         return self.ionizing.q_h
+
+    @property
+    def log_q_h(self):
+        """log10 ionizing photon production rate [dex re s⁻¹].
+
+        Same as ``pred.ionizing.log_q_h``.
+        """
+        return self.ionizing.log_q_h
 
     @property
     def xi_ion(self):

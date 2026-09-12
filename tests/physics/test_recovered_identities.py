@@ -169,8 +169,10 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
         sfh_q = model.predict_properties(params, names=("sfr_10myr",))
         sfr_10myr = float(sfh_q["sfr_10myr"])
 
-        # Get Hα luminosity from nebular component
-        halpha_lum = float(model.predict(params).halpha)
+        # Get Hα luminosity [erg/s] from nebular component: the linear ``halpha``
+        # property is in Lsun (#1206 §A), the coefficient is per erg/s, so read
+        # the log companion, which stays in dex re erg/s.
+        halpha_lum = 10.0 ** float(model.predict(params).log_halpha)
 
         # Implied coefficient
         if halpha_lum > 0:

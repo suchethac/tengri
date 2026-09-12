@@ -101,12 +101,12 @@ print(f"  lum_weighted_age      = {pred.sed.luminosity_weighted_age_gyr:.2f} Gyr
 # Radio and X-ray (empirical scaling relations)
 print("=== Radio & X-ray ===")
 print(f"  l_1.4GHz              = {pred.radio.l_1p4ghz:.3e} erg/s/Hz")
-print(f"  l_x_xrb              = {pred.xray.l_x_xrb:.3e} erg/s")
+print(f"  l_x_xrb              = {pred.xray.l_x_xrb:.3e} Lsun")  # #1206: was erg/s
 
 # %%
 # Emission lines (NaN without free nebular model)
 print("=== Emission Lines ===")
-print(f"  halpha                = {pred.lines.halpha}")
+print(f"  halpha                = {pred.lines.halpha} Lsun")  # #1206: was erg/s
 print("  (NaN is expected with baked-in nebular SSPs)")
 
 # %% [markdown]
@@ -254,4 +254,4 @@ plt.show()
 # | `lines` | `bpt_nii`, `o3hb`, etc. | Lines | Diagnostic ratios |
 # | `radio` | `l_1p4ghz` | SFH | 1.4 GHz luminosity |
 # | `xray` | `l_x_xrb` | SFH | XRB luminosity |
-# | `ionizing` | `q_h`, `xi_ion` | Lines+SED | Ionizing photon budget |
+# | `ionizing` | `log_q_h`, `xi_ion` | Lines+SED | Ionizing photon budget |

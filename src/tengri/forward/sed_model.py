@@ -7056,7 +7056,9 @@ class SEDModel:
         Returns
         -------
         IonizingQuantities
-            ``q_h``, ``xi_ion``.
+            ``xi_ion``. ``q_h`` was retired with no alias (#1206 §C); read
+            ``log_q_h`` from :meth:`predict_properties` instead
+            (``q_h = 10**log_q_h``).
 
         .. deprecated:: 2026-07 (cleanup PR-2)
             Interactive getter moved to the lazy Prediction wrapper:

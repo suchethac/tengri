@@ -43,7 +43,7 @@ enforced by ``tools/check_param_prefixes.py``.
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, LogUniform, Uniform
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import ParamDeclaration, declared_default
 
 PARAMS: tuple[ParamDeclaration, ...] = (
@@ -609,13 +609,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # GRAHSP AGN model (Buchner+ 2024, arXiv:2405.19297). Prior ranges are the
     # "typical" intervals stated in each docstring (from the GRAHSP paper).
     ParamDeclaration(
-        "agn_grahsp_l5100",
-        LogUniform(1.0e42, 1.0e47, default=1.0e44),
-        "GRAHSP lambda*L_lambda(5100Å) [erg/s] (paper L_AGN). "
-        "Sets the AGN normalization; typical 1e42-1e47 for Sy1 to QSO.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        units="erg/s",
+        "agn_grahsp_log_l5100",
+        # log10(lambda*L_lambda(5100A) / (erg/s)). Breaking, no alias (#1206
+        # §D): the linear ``agn_grahsp_l5100`` (LogUniform(1e42, 1e47)) is
+        # ``inf`` in float32 as a bare value, before any physics runs.
+        Uniform(42.0, 47.0, default=44.0),
+        "GRAHSP log10(lambda*L_lambda(5100Å) / (erg/s)) (paper L_AGN). "
+        "Sets the AGN normalization; typical 42-47 for Sy1 to QSO.",
+        units="dex",
     ),
     ParamDeclaration(
         "agn_grahsp_uvslope",

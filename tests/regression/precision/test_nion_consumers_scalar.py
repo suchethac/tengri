@@ -203,26 +203,23 @@ class TestXiIonPropertyFactoryBitEquality:
         # Bit-identical (atol=0)
         assert_allclose(xi_ion_prop, xi_ion_factory, atol=0)
 
-    def test_property_factory_q_h_bit_equality(self, ssp_bare):
-        """(5b) q_h: property and factory bit-identical (unchanged linear surface).
+    def test_q_h_retired_no_alias(self, ssp_bare):
+        """(5b) q_h was retired with no alias (#1206 §C): both surfaces raise.
 
-        Verify pred.properties["q_h"] == state_to_ionizing_quantities(state).q_h
-        at atol=0. The q_h surface remains unchanged (deferred).
+        ``q_h`` overflowed float32 at every physical ionizing rate (~1e56
+        photons/s, past the 3.4e38 ceiling); ``log_q_h`` is the sole
+        surviving form. The bridge NamedTuple dropped the field entirely.
         """
-        from tengri.forward.component_factory import state_to_ionizing_quantities
+        from tengri.forward.component_factory import IonizingQuantities
 
         model = build_minimal_cue_model(ssp_bare, "float64")
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         p["redshift"] = 1.0
 
         pred = model.predict(p)
-        state = model.predict_state(p)
-
-        q_h_prop = float(pred.properties["q_h"])
-        q_h_factory = float(state_to_ionizing_quantities(state).q_h)
-
-        # Bit-identical (atol=0)
-        assert_allclose(q_h_prop, q_h_factory, atol=0)
+        with pytest.raises(KeyError, match="log_q_h"):
+            _ = pred.properties["q_h"]
+        assert "q_h" not in IonizingQuantities._fields
 
     def test_xi_ion_finite_and_positive_young_pop(self, ssp_bare):
         """(5c) xi_ion finite and positive for the young stellar population."""

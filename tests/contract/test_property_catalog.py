@@ -653,16 +653,27 @@ class TestIonizingGroupBitEquality:
         )
         return spec
 
-    def test_q_h(self, ion_model):
-        """q_h matches state_to_ionizing_quantities."""
-        from tengri.forward.component_factory import state_to_ionizing_quantities
+    def test_q_h_retired_raises(self, ion_model):
+        """``q_h`` was retired with no alias (#1206 §C): raises, names ``log_q_h``."""
+        params = ion_model.spec.sample(jax.random.PRNGKey(120))
+        with pytest.raises(KeyError, match="log_q_h"):
+            ion_model.predict_properties(params, names=("q_h",))
+        # The bridge NamedTuple dropped the field entirely, not just the
+        # registry entry (#1206 §C) -- a stray `.q_h` would otherwise pass
+        # silently as an `AttributeError` some callers catch too broadly.
+        from tengri.forward.component_factory import IonizingQuantities
 
+        assert "q_h" not in IonizingQuantities._fields
+
+    def test_log_q_h_matches_state_to_ionizing_quantities_xi_ion_input(self, ion_model):
+        """``log_q_h`` is finite and consistent with the bridge's own log_nion read."""
         params = ion_model.spec.sample(jax.random.PRNGKey(120))
         state = ion_model.predict_state(params)
-        ion_qty = state_to_ionizing_quantities(state)
 
-        props = ion_model.predict_properties(params, names=("q_h",))
-        chex.assert_trees_all_close(props["q_h"], ion_qty.q_h, rtol=0, atol=0)
+        props = ion_model.predict_properties(params, names=("log_q_h",))
+        chex.assert_trees_all_close(
+            props["log_q_h"], jnp.asarray(state.derived["log_nion"]), rtol=0, atol=0
+        )
 
     def test_xi_ion(self, ion_model):
         """xi_ion matches state_to_ionizing_quantities."""
@@ -892,13 +903,18 @@ class TestPhase1BPropertyCounts:
         assert expected.issubset(xray_names), f"Missing xray properties: {expected - xray_names}"
 
     def test_ionizing_group_count(self):
-        """Verify ionizing group has ionizing properties."""
+        """Verify ionizing group has ionizing properties.
+
+        ``q_h`` was retired with no alias (#1206 §C); ``log_q_h`` is its sole
+        surviving replacement.
+        """
         from tengri import list_properties
 
         ion_props = list_properties(group="ionizing")
         ion_names = {p["name"] for p in ion_props}
-        expected = {"q_h", "xi_ion"}
+        expected = {"log_q_h", "xi_ion"}
         assert expected.issubset(ion_names), f"Missing ionizing properties: {expected - ion_names}"
+        assert "q_h" not in ion_names, "'q_h' should be retired (#1206 §C), not registered"
 
     def test_sfh_group_count_extended(self):
         """Verify sfh group has Phase 1A + lum-weighted properties."""

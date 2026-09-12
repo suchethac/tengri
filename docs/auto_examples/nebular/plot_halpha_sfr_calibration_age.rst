@@ -29,7 +29,7 @@ show the calibration validity range is weakly sensitive to Z: higher Z
 reduces ionizing photon production, compressing the valid age window slightly
 toward older ages.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-87
+.. GENERATED FROM PYTHON SOURCE LINES 13-91
 
 
 
@@ -39,8 +39,25 @@ toward older ages.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:308: RuntimeWarning: invalid value encountered in scalar divide
+      log_Q_pred = b - _LOG_H + np.log10(np.abs((x_max_alpha - x_min_alpha) / alpha))
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:320: RuntimeWarning: invalid value encountered in scalar divide
+      term_Q = b + np.log10(np.abs(denom / alpha)) - log_Q - _LOG_H
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:322: RuntimeWarning: divide by zero encountered in scalar divide
+      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
+    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:322: RuntimeWarning: invalid value encountered in scalar subtract
+      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -58,6 +75,7 @@ toward older ages.
 
     import tengri
     from tengri.plot import setup_style
+    from tengri.utils.physics_constants import L_SUN
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -65,6 +83,7 @@ toward older ages.
 
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     log_sfr_true, sfr_true = 1.0, 10.0
+    # Murphy+2011: SFR = murphy_const * L(Halpha) with L(Halpha) in erg/s.
     murphy_const = 5.37e-42
     ages_myr = np.array([1.0, 3.0, 5.0, 10.0, 30.0, 100.0, 300.0])
     met_logzsol = np.array([-0.5, 0.0, 0.3])
@@ -98,8 +117,10 @@ toward older ages.
                 redshift=tengri.Fixed(0.0),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            l_halpha = float(model.predict(params).lines.halpha)
-            sfr_inferred.append(murphy_const * l_halpha)
+            # pred.lines.halpha is Lsun (#1206, breaking, no alias); the Murphy+2011
+            # calibration above is erg/s, so convert before applying it.
+            l_halpha_erg_s = float(model.predict(params).lines.halpha) * L_SUN
+            sfr_inferred.append(murphy_const * l_halpha_erg_s)
             ages_valid.append(age_myr)
 
         ratio = np.array(sfr_inferred) / sfr_true
@@ -122,7 +143,7 @@ toward older ages.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.140 seconds)
+   **Total running time of the script:** (0 minutes 26.564 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_halpha_sfr_calibration_age.py:

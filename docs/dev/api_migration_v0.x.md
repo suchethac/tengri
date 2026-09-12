@@ -1393,6 +1393,37 @@ only. Grammar spellings (`slope`, `slope_bc`, `slope_diff`, …) are unchanged.
 
 ---
 
+## Line, X-ray and ionizing-rate luminosities become Lsun; `q_h` retires; GRAHSP `l5100` becomes log-native (2026-09-11, #1206)
+
+**Breaking, no alias**, in four parts. Line luminosities and X-ray luminosities in
+erg/s, the linear ionizing photon rate `q_h`, and the linear GRAHSP normalization
+`agn_grahsp_l5100` all overflow float32 (max 3.4028e38) as bare values — `halpha`
+~1e40, `l_x_agn` ~1e40-1e45, `q_h` ~1e53-1e56, `agn_grahsp_l5100` up to 1e47 —
+before any physics runs, at every physical value. See `NAMING_CONTRACT.md` §4c for
+the unit-standard rule this establishes.
+
+| Old spelling | New spelling | Status (v0.x) |
+| --- | --- | --- |
+| `halpha`, `hbeta`, `lya`, `oii`, `oiii_4959`, `oiii_5007`, `nii_6548`, `nii_6584`, `sii_6717`, `sii_6731`, `civ_1549` — `[erg/s]` | Same names, `[Lsun]` | No alias. `log_<name>` (dex re erg/s) unchanged: `log_halpha == log10(halpha * L_sun)` |
+| `l_x_xrb`, `l_x_agn`, `l_x_total` — `[erg/s]` | Same names, `[Lsun]` | No alias. `log_l_x_*` (dex re erg/s) unchanged |
+| `q_h` [photons/s] (`pred.q_h`, `pred.ionizing.q_h`, `predict_properties(names=("q_h",))`) | `log_q_h` [dex re photons/s]; `q_h = 10**log_q_h` | `q_h` raises `KeyError` naming `log_q_h`. No re-united `Lsun`-style form: every physical `q_h` overflows float32 in any linear unit |
+| `agn_grahsp_l5100` — `LogUniform(1e42, 1e47)` [erg/s] | `agn_grahsp_log_l5100` — `Uniform(42.0, 47.0)` [dex] | No alias |
+
+Consumer-side translations: `halpha_erg_s = halpha * 3.828e33`; `q_h_linear =
+10**log_q_h`; `agn_grahsp_log_l5100 = log10(agn_grahsp_l5100)`.
+
+`IonizingQuantities` (the `state_to_ionizing_quantities` bridge NamedTuple) drops
+its `q_h` field; `XRayQuantities` (`state_to_xray_quantities`) moves `l_x_xrb` /
+`l_x_agn` / `l_x_total` to Lsun alongside the property change. The X-ray log
+companions `log_l_x_agn` / `log_l_x_total` are fixed as part of this change too:
+they previously read the linear `derived["L_agn_bol"]` and took its `log10`
+(`inf` in float32, `nan` after the bolometric correction); they now read the
+`log_L_agn_bol` companion the AGN component already publishes.
+
+See also: `docs/dev/float32-tier-b-boundary.md` §4 and §8 for the full physics
+diagnosis, and `bench/results/2026-09-11_unit_change_regression.md` for the
+measured regression table (every previously-broken property now finite in
+float32; every unaffected property's float64 value unchanged to 1e-12).
 ## `dust_log_L_ir` — total dust IR budget override (2026-09-11, #2187-series)
 
 A new parameter, `dust_log_L_ir` (`log10(L_IR/Lsun)`, API-level log-solar per
