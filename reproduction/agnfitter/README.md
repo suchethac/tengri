@@ -24,6 +24,15 @@ nuclei across `8 < log ν/Hz < 20`.
 | Radio | SPL / DPL (Eqs. 9–10), Bell-2003 SF (90/10 split) | `radio_agn`, `radio_agn_dpl`, `radio_sfr_bell2003_split`, `sfr_from_lir` |
 | Priors | Eight informative priors (`PRIORS_AGNfitter.py`) | `tengri.agn.priors.agnfitter_priors`; `Fitter(..., extra_log_prior=...)` |
 
+Beyond the single-node face-offs, the notebook sweeps several node grids
+directly off each library's own axes: SN12 and KD18 disc `(log M_BH, log
+λ_Edd)` nodes; S04 log N_H and NK08 inclination nodes; SKIRTOR `(oa, incl,
+τ)` index triples plus the full X-CIGALE grid at the fiducial; CAT3D-Wind
+`(incl, a, f_wd)` triples alongside the existing wind-fraction sweep; five
+S17 cold-dust `(T_dust, f_PAH)` nodes and three DH02_CE01 log L_IR nodes;
+an X-ray corona grid over Δα_ox and Γ; and a radio SPL `alpha x log ν_cut`
+grid plus a DPL `log ν_t` grid.
+
 tengri's `slone_netzer`, `silva04`, `cat3d_wind` (+ `cat3d_wind_lowfwd`),
 `skirtor_agnfitter` (+ `_1p`/`_2p`), `nenkova_agnfitter` (+ `_2p`/`_3p`),
 `kd18_agnfitter` (+ `_warmindex`), and `schreiber2018` blocks evaluate the
