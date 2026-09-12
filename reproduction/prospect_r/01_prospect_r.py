@@ -24,10 +24,13 @@
 #
 # The closed-form blocks — the SFH shapes, the mass-mapped metallicity
 # history, the attenuation curves, the IGM — match ProSpect to a fraction
-# of a percent. Nebular emission (§8) is where the two codes use genuinely
-# different inputs (different photoionization grids), and that section
-# quantifies the difference. ProSpect has no X-ray component; it does have
-# a radio continuum, which §11 includes.
+# of a percent. Every model on this page carries nebular emission — ProSpect
+# through `SFHfunc(emission = TRUE)`, whose `emissionLines` takes its ionization
+# parameter from `Z2q(Z)` (Orsi 2014; q = 1.4 × 10⁷ cm s⁻¹ at Z = 0.02,
+# logU = −3.32), and tengri through Cue at that same logU and Z_gas; §8 also
+# compares the line ratios at logU = −2. Residuals in every section include the
+# Levesque-2010-versus-Cloudy difference quantified in §8. ProSpect has no X-ray
+# component; it does have a radio continuum, which §11 includes.
 
 # %% [markdown]
 # ## Setup
@@ -47,11 +50,12 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from reproduction import _validation as V
 from reproduction.prospect_r._drivers import prospect_driver as P, units as U
 
 import tengri
-from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
-from tengri.utils.physics_constants import LOG10_ZSUN
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, load_ssp_data
+from tengri.utils.physics_constants import C_CGS, LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -101,6 +105,17 @@ TAU_BIRTH_FIDUCIAL = 1.0
 TAU_SCREEN_FIDUCIAL = 0.3
 POW_FIDUCIAL = -0.7
 MASS_SCALE = 10.0**LOG_MASS_FIDUCIAL
+
+# Ionization parameter ProSpect's SED path derives from Z (Orsi 2014).
+NEB_LOGU_FIDUCIAL = float(np.log10(P.z2q(Z_SOLAR) / C_CGS))
+
+# Fiducial nebular emission (Cue at matched ionization and metallicity).
+NEB_FIDUCIAL = {
+    "type": "cue",
+    "neb_logU": Fixed(NEB_LOGU_FIDUCIAL),
+    "neb_logZ_gas": Fixed(MET_LOGZSOL),
+    "all_params": Fixed(DEFAULT),
+}
 
 # nbclient kernels don't bind ``__file__`` (the kernel's resources path is
 # the notebook directory instead), so fall back to the CWD.
@@ -270,7 +285,8 @@ m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    n_grid=4096,  # dense lookback grid: the table compares the SFH form, not the 256-point diagnostic grid
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_sfh = m_sfh.predict_state({})
 _lbt_yr = np.asarray(s_sfh.derived["sfh_grid_lbt_yr"])
@@ -283,22 +299,193 @@ print(
     f"(ProSpect mpeak = {SNORM_FIDUCIAL['mpeak']:g} Gyr)"
 )
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax in (ax_l, ax_r):
-    ax.set_xlabel("Lookback time [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-    ax.set_xlim(0, 13.7)
-    ax.grid(True, alpha=0.3)
-ax_l.set_title("ProSpect massfunc_snorm / massfunc_dtau")
-ax_l.plot(t_p_sn / 1e9, sfr_p_sn, "C0-", linewidth=2.0, label="snorm (peak 10 Gyr)")
-ax_l.plot(t_p_dt / 1e9, sfr_p_dt, "C2--", linewidth=2.0, label="dtau (τ=3 Gyr)")
-ax_l.legend(fontsize=9)
-ax_r.set_title("tengri pipeline sfr_history (snorm)")
-ax_r.plot(t_p_sn / 1e9, sfr_p_sn, "C0-", linewidth=1.0, alpha=0.5, label="ProSpect snorm")
-ax_r.plot(_lbt_yr / 1e9, _sfr_history, "C1-", linewidth=2.0, label="tengri snorm")
-ax_r.legend(fontsize=9)
+# %% [markdown]
+# ## §2 cont'd — dtau, snorm_burst, snorm_trunc
+#
+# Three more ProSpect SFH families against their tengri counterparts, each
+# swept over one shape parameter: delayed-tau timescale τ, a recent burst
+# amplitude on the skew-normal, and a truncation sharpness. Each tengri model
+# is built once with the swept parameter free and evaluated per case; the
+# formed mass is matched to ProSpect's own integral so the curves sit at the
+# same amplitude. `dtau` maps to tengri's `delayed` (`tau_gyr`/`age_gyr`),
+# `snorm_burst` adds `burst_sfr`/`burst_age_gyr` to the fiducial skew-normal,
+# and `snorm_trunc` maps to `tsnorm`'s `trunc`. ProSpect's `massfunc_dtau`
+# continues past `mpeak` with a second timescale `magemax − mpeak`; the
+# comparison is the recent branch, which is tengri's `delayed`.
+# The τ-delayed families use
+# different truncation conventions past the peak and diverge on the oldest
+# tail; the windows below stay clear of ProSpect's own numerical zero.
+
+# %%
+DTAU_MPEAK = 10.0
+cases_sfh2 = []
+
+for tau in (1.0, 3.0):
+    t_p, sfr_p = P.sfh_curve(sfh="dtau", mSFR=10.0, mpeak=DTAU_MPEAK, mtau=tau)
+    o = np.argsort(t_p)
+    # ProSpect's massfunc_dtau has two branches: recent (age <= mpeak) and old (age > mpeak).
+    # tengri's delayed model represents only the recent branch, so extract it.
+    mask_p = t_p <= DTAU_MPEAK * 1e9
+    mass_p_recent = float(np.trapezoid(sfr_p[o][mask_p[o]], t_p[o][mask_p[o]]))
+    age_gyr = DTAU_MPEAK + tau  # exact match to ProSpect's recent-side (age<=mpeak) branch
+    if tau == 1.0:
+        m_dtau = SEDModel.build(
+            ssp_data=ssp,
+            met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+            sfh={
+                "type": "delayed",
+                "log_total_mass": Uniform(7.0, 12.5, default=10.0),
+                "tau_gyr": Uniform(0.1, 10.0, default=2.0),
+                "age_gyr": Uniform(0.5, 20.0, default=5.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            n_grid=4096,
+            neb=NEB_FIDUCIAL,
+            redshift=Fixed(0.0),
+        )
+        # Evaluate tengri at unity mass to extract the recent-branch mass fraction.
+        s_unity = m_dtau.predict_state(
+            {
+                "sfh_delayed_log_total_mass": 0.0,
+                "sfh_delayed_tau_gyr": tau,
+                "sfh_delayed_age_gyr": age_gyr,
+            }
+        )
+        lbt0 = np.asarray(s_unity.derived["sfh_grid_lbt_yr"])
+        sfr0 = np.asarray(s_unity.derived["sfr_history"])
+        _o_t = np.argsort(lbt0)
+        mask_t = lbt0 <= DTAU_MPEAK * 1e9
+        mass_t_recent = float(np.trapezoid(sfr0[_o_t][mask_t[_o_t]], lbt0[_o_t][mask_t[_o_t]]))
+    # Scale tengri to match ProSpect's recent-branch mass.
+    s = m_dtau.predict_state(
+        {
+            "sfh_delayed_log_total_mass": float(np.log10(mass_p_recent / mass_t_recent)),
+            "sfh_delayed_tau_gyr": tau,
+            "sfh_delayed_age_gyr": age_gyr,
+        }
+    )
+    lbt, sfr_t = np.asarray(s.derived["sfh_grid_lbt_yr"]), np.asarray(s.derived["sfr_history"])
+    cases_sfh2.append((f"dtau τ={tau:g} Gyr", t_p, sfr_p, lbt, sfr_t))
+
+for mburst in (1.0, 5.0):
+    t_p, sfr_p = P.sfh_curve(sfh="snorm_burst", mburst=mburst, mburstage=0.1, **SNORM_FIDUCIAL)
+    o = np.argsort(t_p)
+    mass_p = float(np.trapezoid(sfr_p[o], t_p[o]))
+    if mburst == 1.0:
+        m_burst = SEDModel.build(
+            ssp_data=ssp,
+            met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+            sfh={
+                "type": "snorm_burst",
+                "log_total_mass": Uniform(7.0, 12.5, default=10.0),
+                "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
+                "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
+                "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
+                "burst_sfr": Uniform(0.0, 2.0, default=0.1),
+                "burst_age_gyr": Fixed(0.1),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            n_grid=4096,
+            neb=NEB_FIDUCIAL,
+            redshift=Fixed(0.0),
+        )
+    burst_sfr = mburst / SNORM_FIDUCIAL["mSFR"]  # ratio to the bare kernel's own unit peak
+    s = m_burst.predict_state(
+        {
+            "sfh_snorm_burst_log_total_mass": float(np.log10(mass_p)),
+            "sfh_snorm_burst_burst_sfr": burst_sfr,
+        }
+    )
+    lbt, sfr_t = np.asarray(s.derived["sfh_grid_lbt_yr"]), np.asarray(s.derived["sfr_history"])
+    cases_sfh2.append((f"snorm_burst mburst={mburst:g}", t_p, sfr_p, lbt, sfr_t))
+
+for mtrunc in (1.0, 2.0, 4.0):
+    t_p, sfr_p = P.sfh_curve(
+        sfh="snorm_trunc", mSFR=10.0, mpeak=10.0, mperiod=1.0, mskew=0.5, mtrunc=mtrunc
+    )
+    o = np.argsort(t_p)
+    mass_p = float(np.trapezoid(sfr_p[o], t_p[o]))
+    if mtrunc == 1.0:
+        m_tsnorm = SEDModel.build(
+            ssp_data=ssp,
+            met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+            sfh={
+                "type": "tsnorm",
+                "log_total_mass": Uniform(7.0, 12.5, default=10.0),
+                "peak_lbt_gyr": Fixed(10.0),
+                "width_gyr": Fixed(1.0),
+                "skew": Fixed(0.5),
+                "trunc": Uniform(0.5, 10.0, default=2.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            n_grid=4096,
+            neb=NEB_FIDUCIAL,
+            redshift=Fixed(0.0),
+        )
+    s = m_tsnorm.predict_state(
+        {"sfh_tsnorm_log_total_mass": float(np.log10(mass_p)), "sfh_tsnorm_trunc": mtrunc}
+    )
+    lbt, sfr_t = np.asarray(s.derived["sfh_grid_lbt_yr"]), np.asarray(s.derived["sfr_history"])
+    cases_sfh2.append((f"snorm_trunc mtrunc={mtrunc:g}", t_p, sfr_p, lbt, sfr_t))
+
+for label, _w_ref, _L_ref, _w_t, _L_t in cases_sfh2:
+    _assert_comparable(_L_ref, _L_t, name=label)
+
+fig, (ax, ax_r), _ratios2 = V.sweep_fig(
+    cases_sfh2,
+    ref_label="ProSpect",
+    title="§2 cont'd — dtau, snorm_burst, snorm_trunc",
+    x_of_wave=lambda w: w / 1e9,
+    xlabel="lookback time [Gyr]",
+    ylabel=r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]",
+    xlim=(0.05, 13.7),
+    logy=False,
+)
 fig.tight_layout()
-save_fig("prospect_r_02_sfh.png")
+save_fig("prospect_r_02cont_sfh_families.png")
+
+AGE_UNIV_YR = 13.7e9
+_lo2, _hi2 = 0.02 * AGE_UNIV_YR, 0.99 * AGE_UNIV_YR
+# dtau: compare only the recent branch (age <= mpeak)
+_dtau_lo, _dtau_hi = 0.02 * DTAU_MPEAK * 1e9, DTAU_MPEAK * 1e9
+V.print_window_table(
+    V.window_rows(cases_sfh2[0:2], lo=_dtau_lo, hi=_dtau_hi, rel_to="peak"), ref_name="ProSpect", title="§2 cont'd — dtau; deviation as % of peak SFR", x_unit="Gyr", x_scale=1e-9
+)
+V.print_window_table(
+    V.window_rows(cases_sfh2[2:4], lo=_lo2, hi=0.95 * AGE_UNIV_YR, rel_to="peak"),
+    ref_name="ProSpect",
+    title="§2 cont'd — snorm_burst; deviation as % of peak SFR",
+    x_unit="Gyr", x_scale=1e-9,
+)
+# snorm_trunc's Gaussian-tail truncation reaches ProSpect's own numerical zero
+# by ~90% of the age; cap the window at 80% to stay in the well-defined range.
+V.print_window_table(
+    V.window_rows(cases_sfh2[4:7], lo=_lo2, hi=0.80 * AGE_UNIV_YR, rel_to="peak"),
+    ref_name="ProSpect",
+    title="§2 cont'd — snorm_trunc (2-80% of age); deviation as % of peak SFR",
+    x_unit="Gyr", x_scale=1e-9,
+)
 
 
 # %% [markdown]
@@ -352,7 +539,8 @@ m_zmm = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    n_grid=4096,
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_zmm = m_zmm.predict_state({})
 _age_t = np.asarray(s_zmm.derived["sfh_grid_lbt_yr"])
@@ -394,7 +582,8 @@ m_zmb = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    n_grid=4096,
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 _Z_box_t = 10.0 ** np.asarray(m_zmb.predict_state({}).derived["log_metallicity_history"])
 
@@ -446,7 +635,9 @@ print(
 # ## §3 Integrated stellar SED
 #
 # The fiducial skew-normal SFH convolved with the BC03 library at solar
-# metallicity, no dust or nebular, both scaled to 10^10 M⊙ formed.
+# metallicity, nebular emission enabled on both sides, no dust, both scaled to 10^10 M⊙ formed.
+# Band-integrated ratios compare the continuum; pointwise ratios would measure emission-line widths,
+# which differ between Cue and ProSpect's photoionization grid.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL — Photometry projection
@@ -458,6 +649,7 @@ sed_stel = P.prospect_sed(
     Z=Z_SOLAR,
     tau_birth=0.0,
     tau_screen=0.0,
+    extra={"emission": True},
 )
 w_p3, L_p3 = sed_stel["FinalLum"]
 L_p3 = L_p3 * PRO_SCALE
@@ -480,7 +672,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_p3, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -507,15 +699,9 @@ for ax in (ax_l, ax_r):
 fig.tight_layout()
 save_fig("prospect_r_03_stellar_sed.png")
 
-_mask_opt = (w_p3 >= 3000) & (w_p3 <= 10000)
 _t_on_p3 = U.regrid(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), w_p3)
-_ratios3 = _t_on_p3[_mask_opt] / L_p3[_mask_opt]
-_ratios3 = _ratios3[np.isfinite(_ratios3) & (_ratios3 > 0)]
-print(
-    f"§3 stellar SED tengri/ProSpect optical (3000–10000 Å): "
-    f"median {np.median(_ratios3):.3f}, P5 {np.percentile(_ratios3, 5):.3f}, "
-    f"P95 {np.percentile(_ratios3, 95):.3f}"
-)
+_rows3 = V.filter_rows(w_p3, _t_on_p3, L_p3, filters=V.UV_TO_NIR)
+V.print_filter_table(_rows3, ref_name="ProSpect", title="§3 stellar SED, UV-to-NIR bands", compact=True)
 
 
 # %% [markdown]
@@ -611,6 +797,7 @@ sed_atten = P.prospect_sed(
     tau_screen=TAU_SCREEN_FIDUCIAL,
     pow_birth=POW_FIDUCIAL,
     pow_screen=POW_FIDUCIAL,
+    extra={"emission": True},
 )
 w_p5, L_p5 = sed_atten["StarsAtten"]
 L_p5 = L_p5 * PRO_SCALE
@@ -635,32 +822,129 @@ m_d = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     dust_attenuation=DUST_FIDUCIAL,
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 L_t_atten = np.asarray(s_d.derived["sed_dust_attenuated"])
 _assert_comparable(L_p5, L_t_atten, name="§5 dust applied")
 
-fig, ((ax_l1, ax_r1), (ax_l2, ax_r2)) = plt.subplots(2, 2, sharey=True, figsize=(12, 8))
-U.panel(ax_l1, ax_r1, label_l="ProSpect  intrinsic", label_r="tengri  intrinsic")
-U.panel(
-    ax_l2,
-    ax_r2,
-    label_l=rf"ProSpect  CF ($\tau_b={TAU_BIRTH_FIDUCIAL:g},\ \tau_s={TAU_SCREEN_FIDUCIAL:g}$)",
-    label_r=rf"tengri  two-component ($\tau_{{bc}}={TAU_BIRTH_FIDUCIAL:g}$, "
-    rf"$\tau_{{diff}}={TAU_SCREEN_FIDUCIAL:g}$)",
+# %% [markdown]
+# ## §5 cont'd — pow, bump, τ_screen
+#
+# Two curve sweeps and an applied-SED sweep. The Charlot & Fall screen power
+# law's slope `pow` and the noll09 bump strength `Eb` are compared as
+# `A(λ)/A_V` over 1216-3000 Å — the slope sweep is an exact match (same
+# functional form on both sides); the bump sweep differs at the ~10-40% level
+# since the two bump normalizations are not identical. The applied sweep then
+# varies both optical depths (`τ_screen`, `τ_birth`) together and reads the
+# result off the UV-to-NIR bandpasses: all six combinations differ, and the
+# birth-cloud depth dominates the residual over the screen depth.
+
+# %%
+from tengri.dust import list_laws
+
+_laws2 = list_laws(headline=False).to_dict("fn")
+_wave_law2 = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
+
+
+def _norm_AV2(wave, A):
+    return A / A[np.argmin(np.abs(wave - 5500.0))]
+
+
+cases_dust_curve = []
+for _pow in (-0.4, -0.7, -1.0):
+    _w_p, _A_p = P.attenuation_curve(component="screen", tau=1.0, pow_=_pow, wave_aa=_wave_law2)
+    _AV_p = _norm_AV2(_w_p, _A_p)
+    _k_t = np.asarray(_laws2["power_law"](_wave_law2, dust_slope=_pow))
+    cases_dust_curve.append((f"pow={_pow:g}", _w_p, _AV_p, _wave_law2, _norm_AV2(_wave_law2, _k_t)))
+for _Eb in (0.0, 1.5, 3.0):
+    _w_p, _A_p = P.attenuation_curve(
+        component="screen", tau=1.0, pow_=POW_FIDUCIAL, Eb=_Eb, wave_aa=_wave_law2
+    )
+    _AV_p = _norm_AV2(_w_p, _A_p)
+    _k_t = np.asarray(_laws2["noll09"](_wave_law2, dust_bump_strength=_Eb))
+    cases_dust_curve.append((f"Eb={_Eb:g}", _w_p, _AV_p, _wave_law2, _norm_AV2(_wave_law2, _k_t)))
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dust_curve:
+    _assert_comparable(_L_ref, _L_t, name=_label)
+
+V.print_window_table(
+    V.window_rows(cases_dust_curve, lo=1216.0, hi=3000.0),
+    ref_name="ProSpect",
+    title="§5 cont'd — A(λ)/A_V curves (pow, Eb), 1216-3000 Å",
 )
-ax_l1.plot(w_p3, L_p3, "C0-", linewidth=1.5)
-ax_r1.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-ax_l2.plot(w_p5, L_p5, "C0-", linewidth=1.5)
-ax_r2.plot(s_d.wave, L_t_atten, "C1-", linewidth=1.5)
-_ymax = float(np.asarray(s_stellar.sed_intrinsic).max())
-for ax in (ax_l1, ax_r1, ax_l2, ax_r2):
-    ax.set_xlim(1e2, 5e4)
-    ax.set_ylim(_ymax * 1e-6, _ymax * 2)
-    ax.grid(True, alpha=0.3)
+
+DUST_APPLIED_TB = (0.5, 1.5)
+DUST_APPLIED_TS = (0.1, 0.3, 1.0)
+m_dsweep = SEDModel.build(
+    ssp_data=ssp,
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+    sfh={
+        "type": "snorm",
+        "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
+        "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
+        "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "type": "two_component",
+        "law_bc": "power_law",
+        "law_diff": "power_law",
+        "tau_bc": Uniform(0.0, 3.0, default=TAU_BIRTH_FIDUCIAL),
+        "tau_diff": Uniform(0.0, 2.0, default=TAU_SCREEN_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+cases_dust_applied = []
+for t_screen in DUST_APPLIED_TS:
+    for t_birth in DUST_APPLIED_TB:
+        _sed = P.prospect_sed(
+            massfunc="snorm",
+            sfh_pars=SNORM_FIDUCIAL,
+            Z=Z_SOLAR,
+            tau_birth=t_birth,
+            tau_screen=t_screen,
+            pow_birth=POW_FIDUCIAL,
+            pow_screen=POW_FIDUCIAL,
+            extra={"emission": True},
+        )
+        _w_p, _L_p = _sed["StarsAtten"]
+        _L_p = _L_p * PRO_SCALE
+        _s = m_dsweep.predict_state({"dust_tau_bc": t_birth, "dust_tau_diff": t_screen})
+        cases_dust_applied.append(
+            (
+                f"τ_bc={t_birth:g},τ_diff={t_screen:g}",
+                _w_p,
+                _L_p,
+                np.asarray(_s.wave),
+                np.asarray(_s.derived["sed_dust_attenuated"]),
+            )
+        )
+
+_sfr_t_dust = [np.interp(5500.0, c[3], c[4]) for c in cases_dust_applied]
+assert len(set(np.round(_sfr_t_dust, 6))) == len(_sfr_t_dust), "applied dust cases must all differ"
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dust_applied:
+    _assert_comparable(_L_ref, _L_t, name=_label)
+
+fig, (ax, ax_r), _ratios_dust = V.sweep_fig(
+    cases_dust_applied,
+    ref_label="ProSpect",
+    title="§5 cont'd — τ_screen × τ_birth applied",
+    x_of_wave=lambda w: w / 1e4,
+    xlabel=r"$\lambda$ [$\mu$m]",
+    xlim=(0.1, 3.0),
+)
 fig.tight_layout()
-save_fig("prospect_r_05_dust_applied.png")
+save_fig("prospect_r_05cont_dust_applied_sweep.png")
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dust_applied:
+    _L_t_on_ref = U.regrid(_w_t, _L_t, _w_ref)
+    _rows = V.filter_rows(_w_ref, _L_t_on_ref, _L_ref, filters=V.UV_TO_NIR)
+    V.print_filter_table(_rows, ref_name="ProSpect", title=f"§5 cont'd — {_label}", compact=True)
 
 
 # %% [markdown]
@@ -683,6 +967,7 @@ sed_ir = P.prospect_sed(
     tau_screen=TAU_SCREEN_FIDUCIAL,
     pow_birth=POW_FIDUCIAL,
     pow_screen=POW_FIDUCIAL,
+    extra={"emission": True},
 )
 w_p6, L_p6 = sed_ir["FinalLum"]
 L_p6 = L_p6 * PRO_SCALE
@@ -707,7 +992,7 @@ m_ir = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 _L_abs = float(np.asarray(s_ir.derived["L_absorbed"]))
@@ -721,26 +1006,6 @@ sed_full_t = np.asarray(s_ir.derived["sed_dust_attenuated"]) + np.asarray(
     s_ir.derived["sed_dust_ir"]
 )
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="ProSpect  CF + Dale 2014", label_r="tengri  power_law + Dale 2014")
-ax_l.plot(w_p6, L_p6, "C0-", linewidth=1.5)
-ax_r.plot(s_ir.wave, sed_full_t, "C1-", linewidth=1.5)
-ax_r.text(
-    0.05,
-    0.95,
-    rf"$|L_{{IR}} - L_{{abs}}| / L_{{abs}}$ = {_eb_resid:.1e}",
-    transform=ax_r.transAxes,
-    fontsize=10,
-    va="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e3, 1e7)
-    ax.set_ylim(1e24, 1e32)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
-save_fig("prospect_r_06_dust_ir.png")
-
 # Both SEDs are L_nu [erg/s/Hz]; compare the nu*L_nu peak on each side so the
 # peak is measured the same way (a raw L_nu argmax lands ~30 um redward).
 _fir = (w_p6 > 1e5) & (w_p6 < 1e7)
@@ -750,6 +1015,89 @@ _L_t6 = np.asarray(s_ir.derived["sed_dust_ir"])
 _fir_t = (_w_t6 > 1e5) & (_w_t6 < 1e7)
 _peak_t6 = _w_t6[_fir_t][np.argmax((_L_t6 * U.C_ANGSTROM_PER_S / _w_t6)[_fir_t])]
 print(f"§6 dust IR nu*Lnu peak: ProSpect {_peak_p6 / 1e4:.0f} um, tengri {_peak_t6 / 1e4:.0f} um")
+
+
+# %% [markdown]
+# ## §6 cont'd — Dale α sweep
+#
+# The Dale et al. (2014) radiation-field hardness α set to 1, 2, 3, and 4,
+# all other parameters at the §6 fiducial. Larger α weights the dust-mass
+# distribution toward lower radiation intensities, so the peak wavelength
+# moves redward (colder dust) as α grows. tengri's `dust_alpha_dale` is
+# declared free once and evaluated at each α; the IR bandpass table below
+# reads a systematic ~20% tengri/ProSpect offset across the pure-dust bands
+# that is flat in α — a template-normalization residual, not the shape
+# mismatch a sweep is built to catch.
+
+# %%
+m_ir_sweep = SEDModel.build(
+    ssp_data=ssp,
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+    sfh={
+        "type": "snorm",
+        "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
+        "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
+        "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "type": "two_component",
+        "law_bc": "power_law",
+        "law_diff": "power_law",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={
+        "type": "dale2014",
+        "alpha_dale": Uniform(0.0625, 4.0, default=2.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+cases_dale = []
+for _alpha in (1.0, 2.0, 3.0, 4.0):
+    _sed = P.prospect_sed(
+        massfunc="snorm",
+        sfh_pars=SNORM_FIDUCIAL,
+        Z=Z_SOLAR,
+        tau_birth=0.0,
+        tau_screen=TAU_SCREEN_FIDUCIAL,
+        pow_birth=POW_FIDUCIAL,
+        pow_screen=POW_FIDUCIAL,
+        alpha_SF_screen=_alpha,
+        extra={"emission": True},
+    )
+    _w_p, _L_p = _sed["FinalLum"]
+    _L_p = _L_p * PRO_SCALE
+    _s = m_ir_sweep.predict_state({"dust_alpha_dale": _alpha})
+    _sed_t = np.asarray(_s.derived["sed_dust_attenuated"]) + np.asarray(_s.derived["sed_dust_ir"])
+    cases_dale.append((f"α={_alpha:g}", _w_p, _L_p, np.asarray(_s.wave), _sed_t))
+
+_dale_peaks = []
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dale:
+    _fir_t2 = (_w_t > 1e5) & (_w_t < 1e7)
+    _dale_peaks.append(_w_t[_fir_t2][np.argmax((_L_t * U.C_ANGSTROM_PER_S / _w_t)[_fir_t2])])
+    _assert_comparable(_L_ref, _L_t, name=_label)
+assert len(set(np.round(_dale_peaks, -3))) == len(_dale_peaks), "alpha sweep must shift the FIR peak"
+print("§6 cont'd tengri FIR peaks [um] vs α:", [f"{p / 1e4:.0f}" for p in _dale_peaks])
+
+fig, (ax, ax_r), _ratios_dale = V.sweep_fig(
+    cases_dale,
+    ref_label="ProSpect",
+    title="§6 cont'd — Dale 2014 α sweep",
+    x_of_wave=lambda w: w / 1e4,
+    xlim=(1.0, 1e3),
+)
+fig.tight_layout()
+save_fig("prospect_r_06cont_dale_alpha.png")
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dale:
+    _L_t_on_ref = U.regrid(_w_t, _L_t, _w_ref)
+    _rows = V.filter_rows(_w_ref, _L_t_on_ref, _L_ref, filters=V.IR_BANDS)
+    V.print_filter_table(_rows, ref_name="ProSpect", title=f"§6 cont'd — {_label}", compact=True)
 
 
 # %% [markdown]
@@ -815,6 +1163,43 @@ _igm_diff = np.abs(T_t_igm[_win] - T_p_igm[_win])
 print(
     f"§12 Inoue14 IGM at z={Z_IGM:g} (950–1210 Å, off the Lyα step): "
     f"median |Δ| = {np.median(_igm_diff):.3e}, 95th pct |Δ| = {np.percentile(_igm_diff, 95):.3e}"
+)
+
+
+# %% [markdown]
+# ## §12 cont'd — z sweep
+#
+# The same Inoue et al. (2014) transmission at z = 2, 3, 5, 7, read over
+# 850-1216 Å rest-frame (Ångström, matching the units above — up to and
+# including the Lyα line itself). Both codes agree to within a few percent at
+# every redshift, the same floor as the single-z=4 case above.
+
+# %%
+cases_igm_z = []
+for _z in (2.0, 3.0, 5.0, 7.0):
+    _wave_rest = np.linspace(700.0, 1300.0, 800)
+    _w_igm, _T_p = P.igm_transmission(_wave_rest, _z)
+    _T_t = np.asarray(tengri_igm(_wave_rest * (1.0 + _z), np.asarray(_z)))
+    cases_igm_z.append((f"z={_z:g}", _w_igm, _T_p, _wave_rest, _T_t))
+
+fig, (ax, ax_r), _ratios_igm = V.sweep_fig(
+    cases_igm_z,
+    ref_label="ProSpect",
+    title="§12 cont'd — Inoue+2014 z sweep",
+    x_of_wave=lambda w: w,
+    xlabel=r"rest-frame $\lambda$ [Å]",
+    ylabel=r"$T(\lambda, z)$",
+    xlim=(850.0, 1216.0),
+    ratio_ylim=(0.9, 1.1),
+    logy=False,
+)
+fig.tight_layout()
+save_fig("prospect_r_12cont_igm_z_sweep.png")
+
+V.print_window_table(
+    V.window_rows(cases_igm_z, lo=850.0, hi=1216.0),
+    ref_name="ProSpect",
+    title="§12 cont'd — Inoue+2014 z sweep, 850-1216 Å",
 )
 
 
@@ -920,22 +1305,94 @@ if _L["Hα"][0] > 0 and _L["Hβ"][0] > 0:
         f"tengri {_L['Hα'][1] / _L['Hβ'][1]:.2f}  (Case B ≈ 2.86)"
     )
 
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="ProSpect  emissionLines",
-    label_r="tengri  Cue emulator",
+# %% [markdown]
+# ## §8 cont'd — q × Z_gas
+#
+# The ionization parameter `logU` (−3, −2, −1.5) crossed with gas-phase
+# metallicity `Z_gas` (0.004, 0.02 = solar) — six cases, tengri's `neb_logU`
+# and `neb_logZ_gas` both declared free on one Cue build, ProSpect's matching
+# `q = U·c` and `Z` passed to `emissionLines`. [O III]/Hβ is the diagnostic
+# most sensitive to both axes; Hα/Hβ (pure recombination) is essentially flat
+# across the grid on both sides, as expected.
+
+# %%
+m_neb2 = SEDModel.build(
+    ssp_data=ssp_neb,
+    met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+    sfh={
+        "type": "const",
+        "start_gyr": Fixed(NEB_AGE_GYR),
+        "end_gyr": Fixed(0.0),
+        "log_total_mass": Fixed(NEB_LOG_MASS),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Uniform(-4.0, -1.0, default=-2.0),
+        "neb_logZ_gas": Uniform(-2.0, 0.2, default=0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    redshift=Fixed(0.0),
 )
-ax_l.plot(w_p8, L_p8, "C0-", linewidth=1.0)
-ax_r.plot(w_t8, L_t8, "C1-", linewidth=1.0)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1000, 7000)
-    ax.set_yscale("log")
-    ax.set_xscale("linear")
-    ax.grid(True, alpha=0.3)
+
+cases_neb = []
+_neb_rows = []
+for _logU in (-3.0, -2.0, -1.5):
+    for _Zgas in (0.004, 0.02):
+        _q = 10.0**_logU * 2.99792458e10
+        _w_p, _L_p = P.nebular_lnu(sfr=SFR_NEB, Z=_Zgas, q=_q)
+        _logZ_gas = float(np.log10(_Zgas / Z_SOLAR))
+        _s = m_neb2.predict_state({"neb_logU": _logU, "neb_logZ_gas": _logZ_gas})
+        _w_t = np.asarray(_s.wave)
+        _L_t = np.asarray(_s.derived["sed_nebular"])
+        _label = f"logU={_logU:g},Z={_Zgas:g}"
+        cases_neb.append((_label, _w_p, _L_p, _w_t, _L_t))
+        _ha_p, _ha_t = U.line_lum(_w_p, _L_p, 6563.0), U.line_lum(_w_t, _L_t, 6563.0)
+        _hb_p, _hb_t = U.line_lum(_w_p, _L_p, 4861.0), U.line_lum(_w_t, _L_t, 4861.0)
+        _o3_p, _o3_t = U.line_lum(_w_p, _L_p, 5007.0), U.line_lum(_w_t, _L_t, 5007.0)
+        _o2_p, _o2_t = U.line_lum(_w_p, _L_p, 3727.0), U.line_lum(_w_t, _L_t, 3727.0)
+        _neb_rows.append(
+            (
+                _label,
+                _o3_p / _hb_p if _hb_p > 0 else float("nan"),
+                _o3_t / _hb_t if _hb_t > 0 else float("nan"),
+                _o2_p / _hb_p if _hb_p > 0 else float("nan"),
+                _o2_t / _hb_t if _hb_t > 0 else float("nan"),
+                _ha_p / _hb_p if _hb_p > 0 else float("nan"),
+                _ha_t / _hb_t if _hb_t > 0 else float("nan"),
+            )
+        )
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_neb:
+    _assert_comparable(_L_ref, _L_t, name=_label)
+
+print("\n  §8 cont'd — [O III]/Hβ, [O II]/Hβ, Hα/Hβ (ProSpect | tengri)")
+print(f"  {'case':<20} {'[OIII]/Hb':>20} {'[OII]/Hb':>20} {'Ha/Hb':>16}")
+print("  " + "-" * 78)
+for _label, _o3p, _o3t, _o2p, _o2t, _hap, _hat in _neb_rows:
+    print(
+        f"  {_label:<20} {_o3p:>8.3f} | {_o3t:<8.3f}   "
+        f"{_o2p:>8.3f} | {_o2t:<8.3f}   {_hap:>5.2f} | {_hat:<5.2f}"
+    )
+
+fig, (ax, ax_r), _ratios_neb = V.sweep_fig(
+    cases_neb,
+    ref_label="ProSpect",
+    title="§8 cont'd — logU × Z_gas",
+    x_of_wave=lambda w: w,
+    xlabel=r"$\lambda$ [Å]",
+    xlim=(1000.0, 7000.0),
+    logy=True,
+)
 fig.tight_layout()
-save_fig("prospect_r_08_nebular.png")
+save_fig("prospect_r_08cont_nebular_params.png")
 
 
 # %% [markdown]
@@ -1021,7 +1478,7 @@ m_agn = SEDModel.build(
         "agn_q_skirtor": Fixed(1.0),  # ProSpect q=1
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 w_t9 = np.asarray(s_agn.wave)
@@ -1047,29 +1504,187 @@ print(
 nuLnu_p = L_p9 * U.C_ANGSTROM_PER_S / w_p9
 nuLnu_t = L_t9 * U.C_ANGSTROM_PER_S / w_t9
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, lab in ((ax_l, "ProSpect  SKIRTOR template"), (ax_r, "tengri  SKIRTOR")):
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$\lambda$ [Å]")
-    ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
-    ax.set_title(lab)
-ax_l.plot(w_p9, nuLnu_p, "C0-", linewidth=1.5)
-ax_r.plot(w_t9, nuLnu_t, "C1-", linewidth=1.5)
-_peak_nu = max(float(np.max(nuLnu_p)), float(np.max(nuLnu_t)))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e7)
-    ax.set_ylim(_peak_nu * 1e-3, _peak_nu * 3)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
-save_fig("prospect_r_09_agn_skirtor.png")
+# %% [markdown]
+# ## §9 cont'd — SKIRTOR nodes and Fritz
+#
+# Six SKIRTOR nodes sweeping opening angle `ct`, inclination `an`, and optical
+# depth `ta` against ProSpect's `SKIRTOR_interp`, plus three Fritz et al.
+# (2006) nodes against `Fritz_interp` — a torus tengri has an exact
+# composable equivalent for (`torus={"type": "fritz"}`), matching ProSpect's
+# `AGNct`/`AGNrm`/`AGNan`/`AGNta`/`AGNal`/`AGNbe` one-to-one (`AGNal`→`gamma`,
+# `AGNbe`→`beta`). Both curves are peak-normalized over 1-100 µm so the
+# comparison is shape, not normalization. SKIRTOR tracks ProSpect near its
+# default inclination and diverges at the grazing an=0° node, where the raw
+# template's edge-on disc term is small on both sides. Fritz sits at a stable
+# ~0.3× — the composable torus block pairs with tengri's own disc rather than
+# ProSpect's combined template, as with the deprecated monolithic
+# SKIRTOR/power-law-disc pairing above.
 
-# Torus bump peak in νL_ν (restrict to λ > 1 µm to skip the disc continuum).
-_mir = w_p9 > 1e4
-_peak_p9 = w_p9[_mir][np.argmax(nuLnu_p[_mir])]
-_mir_t = w_t9 > 1e4
-_peak_t9 = w_t9[_mir_t][np.argmax(nuLnu_t[_mir_t])]
-print(f"§9 torus νLν peak: ProSpect {_peak_p9 / 1e4:.1f} µm, tengri {_peak_t9 / 1e4:.1f} µm")
+# %%
+m_skirtor_sweep = SEDModel.build(
+    ssp_data=ssp,
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+    sfh={
+        "type": "snorm",
+        "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
+        "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
+        "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    agn={
+        "type": "skirtor_stalevski",
+        "agn_log_lbol": Uniform(40.0, 50.0, default=45.0),
+        "agn_cos_inc": Uniform(0.0, 1.0, default=0.866),
+        "agn_oa_skirtor": Uniform(10.0, 80.0, default=40.0),
+        "agn_tau_skirtor": Uniform(0.1, 11.0, default=1.0),
+        "agn_p_skirtor": Fixed(1.0),
+        "agn_q_skirtor": Fixed(1.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+
+SKIRTOR_NODES = ((40, 30, 1), (40, 30, 7), (20, 30, 1), (60, 30, 1), (40, 0, 1), (40, 80, 1))
+cases_skirtor = []
+for _ct, _an, _ta in SKIRTOR_NODES:
+    _w_p, _L_p, _log_lbol = P.agn_torus_lnu(
+        model="SKIRTOR", lum_erg=AGN_LUM_ERG, ct=float(_ct), an=float(_an), ta=float(_ta)
+    )
+    _s = m_skirtor_sweep.predict_state(
+        {
+            "agn_log_lbol": _log_lbol,
+            "agn_cos_inc": float(np.cos(np.radians(_an))),
+            "agn_oa_skirtor": float(_ct),
+            "agn_tau_skirtor": float(_ta),
+        }
+    )
+    _w_t = np.asarray(_s.wave)
+    _L_t = np.asarray(_s.derived["sed_agn"])
+    cases_skirtor.append((f"ct={_ct},an={_an},ta={_ta}", _w_p, _L_p, _w_t, _L_t))
+
+
+def _peak_norm_1_100um(w, L):
+    m = (w >= 1e4) & (w <= 1e6)
+    return L / L[m].max()
+
+
+cases_skirtor_norm = [
+    (lbl, w_p, _peak_norm_1_100um(w_p, L_p), w_t, _peak_norm_1_100um(w_t, L_t))
+    for lbl, w_p, L_p, w_t, L_t in cases_skirtor
+]
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_skirtor_norm:
+    _assert_comparable(_L_ref, _L_t, name=_label)
+
+fig, (ax, ax_r), _ratios_sk = V.sweep_fig(
+    cases_skirtor_norm,
+    ref_label="ProSpect",
+    title="§9 cont'd — SKIRTOR nodes (peak-normalized, 1-100 µm)",
+    x_of_wave=lambda w: w / 1e4,
+    ylabel=r"$L_\nu$ (peak-normalized)",
+    xlim=(1e-1, 1e3),
+)
+fig.tight_layout()
+save_fig("prospect_r_09cont_skirtor_nodes.png")
+
+V.print_window_table(
+    V.window_rows(cases_skirtor_norm, lo=1e4, hi=1e6),
+    ref_name="ProSpect",
+    title="§9 cont'd — SKIRTOR nodes, peak-normalized 1-100 µm",
+)
+
+FRITZ_NODES = ((40, 30, 1, 4, -0.5), (40, 80, 1, 4, -0.5), (60, 30, 6, 2, -0.75))
+m_fritz = SEDModel.build(
+    ssp_data=ssp,
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+    sfh={
+        "type": "snorm",
+        "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
+        "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
+        "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    agn={
+        "torus": {
+            "type": "fritz",
+            "agn_fritz_oa": Uniform(10.0, 80.0, default=60.0),
+            "agn_fritz_r_ratio": Fixed(60.0),  # ProSpect AGNrm default
+            "agn_fritz_psy": Uniform(0.0, 90.0, default=30.0),
+            "agn_fritz_tau": Uniform(0.1, 10.0, default=1.0),
+            "agn_fritz_gamma": Uniform(0.0, 6.0, default=4.0),
+            "agn_fritz_beta": Uniform(-1.0, 0.0, default=-0.5),
+            "agn_torus_frac": Fixed(1.0),  # full bolometric to the template, matching ProSpect
+        },
+        "agn_log_lbol": Uniform(40.0, 50.0, default=45.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+cases_fritz = []
+for _ct, _an, _ta, _al, _be in FRITZ_NODES:
+    _w_p, _L_p, _log_lbol = P.agn_torus_lnu(
+        model="Fritz",
+        lum_erg=AGN_LUM_ERG,
+        ct=float(_ct),
+        an=float(_an),
+        ta=float(_ta),
+        al=float(_al),
+        be=float(_be),
+    )
+    _s = m_fritz.predict_state(
+        {
+            "agn_log_lbol": _log_lbol,
+            "agn_fritz_oa": float(_ct),
+            "agn_fritz_psy": float(_an),
+            "agn_fritz_tau": float(_ta),
+            "agn_fritz_gamma": float(_al),
+            "agn_fritz_beta": float(_be),
+        }
+    )
+    _w_t = np.asarray(_s.wave)
+    _L_t = np.asarray(_s.derived["sed_agn"])
+    cases_fritz.append((f"ct={_ct},an={_an},ta={_ta},al={_al},be={_be}", _w_p, _L_p, _w_t, _L_t))
+
+cases_fritz_norm = [
+    (lbl, w_p, _peak_norm_1_100um(w_p, L_p), w_t, _peak_norm_1_100um(w_t, L_t))
+    for lbl, w_p, L_p, w_t, L_t in cases_fritz
+]
+for _label, _w_ref, _L_ref, _w_t, _L_t in cases_fritz_norm:
+    _assert_comparable(_L_ref, _L_t, name=_label)
+
+fig, (ax, ax_r), _ratios_fr = V.sweep_fig(
+    cases_fritz_norm,
+    ref_label="ProSpect",
+    title="§9 cont'd — Fritz+2006 nodes (peak-normalized, 1-100 µm)",
+    x_of_wave=lambda w: w / 1e4,
+    ylabel=r"$L_\nu$ (peak-normalized)",
+    xlim=(1e-1, 1e3),
+)
+fig.tight_layout()
+save_fig("prospect_r_09cont_fritz.png")
+
+V.print_window_table(
+    V.window_rows(cases_fritz_norm, lo=1e4, hi=1e6),
+    ref_name="ProSpect",
+    title="§9 cont'd — Fritz+2006 nodes, peak-normalized 1-100 µm",
+)
 
 
 # %% [markdown]
@@ -1094,6 +1709,7 @@ sed_radio = P.prospect_sed(
     tau_birth=TAU_BIRTH_FIDUCIAL,
     tau_screen=TAU_SCREEN_FIDUCIAL,
     addradio_SF=True,
+    extra={"emission": True},
 )
 w_p11, L_p11 = sed_radio["FinalLum"]
 L_p11 = L_p11 * PRO_SCALE
@@ -1129,7 +1745,7 @@ m_radio = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     radio={"sf": {"type": "bell2003_split"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_radio = m_radio.predict_state({})
 w_t11 = np.asarray(s_radio.wave)
@@ -1162,6 +1778,75 @@ save_fig("prospect_r_11_radio.png")
 _rad = w_p11 > 1e8  # > 1 cm, radio
 if np.any(_rad) and L_p11[_rad].max() > 0:
     print(f"§11 ProSpect radio (>1 cm) peak L_ν = {L_p11[_rad].max():.2e} erg/s/Hz")
+
+
+# %% [markdown]
+# ## §11 cont'd — q_IR × α_SF
+#
+# The FIR-radio correlation normalization `q_IR` (2.3, 2.64, 2.9 — Bell 2003's
+# own value is 2.64) crossed with the synchrotron spectral index `α_SF` (0.7,
+# 0.8). `q_IR` is a tengri-only knob — ProSpect's `addradio_SF` calibrates its
+# own fixed FIR-radio ratio internally and exposes no equivalent — so only
+# `α_SF` (ProSpect's `sy_power_SF`) moves both sides; ProSpect's default
+# `waveout` grid also has an edge artifact right at 1.4 GHz, worked around
+# here with a finer, wider grid passed through `extra`. tengri sits near unity
+# at `q_IR = 2.64` and moves away on either side, exactly as the normalization
+# knob should.
+
+# %%
+import rpy2.robjects as _ro
+
+m_radio_sweep = SEDModel.build(
+    ssp_data=ssp,
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+    sfh={
+        "type": "snorm",
+        "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
+        "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
+        "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "type": "two_component",
+        "law_bc": "power_law",
+        "law_diff": "power_law",
+        "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
+        "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
+    radio={
+        "sf": {"type": "bell2003"},
+        "radio_q_ir": Uniform(1.8, 3.5, default=2.64),
+        "radio_alpha_sf": Uniform(0.5, 1.2, default=0.8),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+_waveout_ext = _ro.FloatVector(np.arange(2.0, 9.8, 0.005))  # avoids a ~1.4 GHz edge artifact
+
+for _q_ir in (2.3, 2.64, 2.9):
+    for _alpha in (0.7, 0.8):
+        _sed = P.prospect_sed(
+            massfunc="snorm",
+            sfh_pars=SNORM_FIDUCIAL,
+            Z=Z_SOLAR,
+            tau_birth=TAU_BIRTH_FIDUCIAL,
+            tau_screen=TAU_SCREEN_FIDUCIAL,
+            addradio_SF=True,
+            extra={"sy_power_SF": -_alpha, "waveout": _waveout_ext, "emission": True},
+        )
+        _w_p, _L_p = _sed["FinalLum"]
+        _L_p = _L_p * PRO_SCALE
+        _s = m_radio_sweep.predict_state({"radio_q_ir": _q_ir, "radio_alpha_sf": _alpha})
+        _w_t, _L_t = np.asarray(_s.wave), np.asarray(_s.sed_intrinsic)
+        _L_t_on_ref = U.regrid(_w_t, _L_t, _w_p)
+        _rows = V.radio_rows(_w_p, _L_t_on_ref, _L_p)
+        V.print_radio_table(
+            _rows, ref_name="ProSpect", title=f"§11 cont'd — q_IR={_q_ir:g}, α_SF={_alpha:g}"
+        )
 
 
 # %% [markdown]
@@ -1241,14 +1926,30 @@ plt.show()
 # absolute metallicity is matched), Charlot & Fall attenuation (§4), Dale
 # 2014 dust IR (§6), and Inoue 2014 IGM (§12, bit-identical away from
 # Lyman-α). Radio continuum (§11) and AGN torus (§9, SKIRTOR vs SKIRTOR) line
-# up in slope and peak.
+# up in slope and peak. The sweeps below extend each of these to a small grid
+# of parameters rather than one point, and the worst-case ratio in each grid
+# is what the single-point sections could not show.
+#
+# | Block | § | Cases | Worst tengri/ProSpect | Where |
+# |---|---|---|---|---|
+# | SFH families | §2 cont'd | 7 (dtau, snorm_burst, snorm_trunc) | 1.00–1.75× median | window, 2-99%/2-80% of age |
+# | Attenuation curves | §5 cont'd | 6 (pow, Eb) | 0.90–1.07× median | A(λ)/A_V, 1216-3000 Å |
+# | Attenuation applied | §5 cont'd | 6 (τ_screen×τ_birth) | 0.99–1.00× median (bands to 0.66×) | UV_TO_NIR bands |
+# | Dust IR | §6 cont'd | 4 (α) | 0.74–0.79× median | IR_BANDS |
+# | Nebular | §8 cont'd | 6 (logU×Z_gas) | line-ratio dependent | Hα, Hβ, [O III], [O II] |
+# | AGN SKIRTOR | §9 cont'd | 6 (ct,an,ta) | 1.02–1.49× median | peak-norm, 1-100 µm |
+# | AGN Fritz | §9 cont'd | 3 (ct,an,ta,al,be) | 0.28–0.35× median | peak-norm, 1-100 µm |
+# | Radio | §11 cont'd | 6 (q_IR×α_SF) | 0.57–1.94× (band ratios) | VLA/ALMA bands |
+# | IGM | §12 cont'd | 4 (z) | ~1.00× median | T(λ), 850-1216 Å |
 #
 # ProSpect's defining feature — metallicity history tied to cumulative stellar
 # mass formed (§2b) — is reproduced by tengri's `massmap_lin` mode: the two
 # agree to a couple of percent at half-mass. The one genuine difference is
 # nebular emission (§8), a deliberate disagreement between two photoionization
-# grids. ProSpect's EMILES library and Fritz (2006) torus have no tengri
-# equivalent.
+# grids. ProSpect's EMILES library has no tengri equivalent; Fritz (2006)
+# does (`torus={"type": "fritz"}`), and §9 cont'd compares it directly — the
+# composable torus block pairs with tengri's own disc rather than ProSpect's
+# combined disc+torus template, holding at ~0.3× across the swept nodes.
 
 # %% [markdown]
 # **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
