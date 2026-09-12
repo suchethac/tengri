@@ -1423,8 +1423,14 @@ sites), #2300 (a stale parity reference read as a device defect); and #2304 (#22
   panchromatic, read 3.3e-3 / 0.67 and was bisected to the *reference* predating #2260 (shock
   lines moved onto the diffuse screen, a deliberate physics change that moves Herschel-250 most
   and the `tau_diff` gradient with it) — identical on CPU float64, so not a device effect
-  (#2300). The 6/6 answer waits on a reference regenerated at a settled main; the sweep gains a
-  `--self-check` that refuses a stale reference (#2300).
+  (#2300). Against the reference regenerated at `f2b4b1843` (#2336) the answer is **6/6 with
+  MLX fusion on**, on jax-mps 0.10.10 and on the 0.10.11 CI wheel alike (forward ≤ 1.22e-5,
+  gradient ≤ 5.91e-3, MAP optimum ≤ 5.62e-5; the two builds agree to the digit), and 6/6 on
+  the same box's CPU-float32 arm. The sweep now carries a float64 `--self-check` that refuses
+  a stale reference, a staleness banner keyed on the `src/tengri` tree hash, and pins
+  `profile_mass=False` on both arms (the `"auto"` default marginalizes the mass under float64
+  and declines under float32, which had the two arms optimizing different MAP objectives on
+  four seams while every gate passed).
   Two MLX-compile findings on the way: the SKIRTOR grid handed negative-stride views to the
   device (#2287), and under default MLX compilation a reversed array times a broadcast scalar
   keeps element 0 and zeros the rest (upstream jax-mps#232), which tengri tripped in
@@ -1437,10 +1443,10 @@ sites), #2300 (a stale parity reference read as a device defect); and #2304 (#22
 > The full panchromatic forward model runs finite and accurate under `jax.enable_x64(False)`
 > end-to-end on CPU and CUDA (measured above), the default photometry + emission-line fit
 > converges in pure float32 to the float64 optimum (parameter vector ≤ 1e-2, measured 1e-5),
-> and Apple GPU via `jax-mps` (`JAX_ENABLE_X64=0`, `MLX_DISABLE_COMPILE=1`) passes
-> `bench/scripts/benchmark_float32_mps_parity.py` (measured: 5/6 seams at the gates against
-> the current reference, the sixth blocked on the reference itself, #2300; MPS matches CPU
-> float32 to 1.15e-5 on all six).
+> and Apple GPU via `jax-mps` (`JAX_ENABLE_X64=0`; `MLX_DISABLE_COMPILE=1` while 0.10.10 is
+> the pinned release) passes `bench/scripts/benchmark_float32_mps_parity.py` (measured: 6/6
+> seams at the gates against the `f2b4b1843` reference with fusion on, on 0.10.10 and 0.10.11,
+> #2336; MPS matches CPU float32 to 1.15e-5 on all six).
 
 Apple's `jax-metal` (0.1.1, 2024-10-08, jaxlib ≥ 0.4.34) is not viable against JAX 0.11 and is
 retired from the criterion — "Metal" in the section headings above is historical. The pytest
