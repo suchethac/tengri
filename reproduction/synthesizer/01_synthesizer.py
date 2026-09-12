@@ -2137,11 +2137,11 @@ print(
 #
 # Inoue+2014 and Madau+1995 at z = 2, 3, 5, 7, each evaluated on a shared
 # rest-frame grid (700-1300 Å, mapped through `(1+z)` to the observed frame
-# per model) so every redshift reads on one axis. Madau+1995's coarser
-# absorber statistics depart further from Inoue+2014 as the Lyman forest
-# deepens with z; both codes agree on Inoue+2014 to numerical precision at
-# every z. Worst window deviation in the rest-frame 850-1216 Å Lyman range
-# printed below.
+# per model) so every redshift reads on one axis. Both codes agree on
+# Inoue+2014 to numerical precision at every z. Madau+1995's coarser absorber
+# statistics diverge as z increases and transmission approaches zero in the
+# Lyman forest. Window deviations |ΔT| in per cent of unit transmission over
+# 850–1210 Å, clear of the Lyα step at 1215.67 Å. Worst deviation printed below.
 
 # %%
 _wave_rest_igm = np.linspace(700.0, 1300.0, 800)
@@ -2171,9 +2171,9 @@ fig, (ax, ax_r), _ = V.sweep_fig(
 save_fig("synthesizer_12b_z_sweep.png")
 
 V.print_window_table(
-    V.window_rows(_igm_cases, lo=850.0, hi=1216.0),
+    V.window_rows(_igm_cases, lo=850.0, hi=1210.0, rel_to="peak", peak=1.0),
     ref_name="Synthesizer",
-    title="§12b IGM transmission, rest-frame 850-1216 Å",
+    title="§12b IGM transmission, rest-frame 850–1210 Å; deviation as % of unit transmission",
 )
 
 
@@ -2267,7 +2267,7 @@ plt.show()
 # | Nebular logU/Z/f_esc | §8b | 12 | 3.98x ([O III]/Hβ, Z=0.004, logU=-1.5) | line ratios |
 # | AGN torus temperature | §9i | 3 | 0.24x median (normalization offset, shape tracks T) | IR_BANDS |
 # | AGN NLR covering factor | §9i | 3 | 1.0x ([O III]/Hβ, covering fraction is ratio-invariant) | line ratio |
-# | IGM z sweep | §12b | 8 | large at z=7 (both Madau curves near zero in the deep forest) | T(λ) window, 850-1216 Å |
+# | IGM z sweep | §12b | 8 | 21.1 % of unit transmission at z=5 Madau (Inoue14 exact at every z) | T(λ) window, 850–1210 Å |
 
 # %% [markdown]
 # **Verification Status:** PARTIAL (3/16) — Synthesizer parity
