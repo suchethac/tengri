@@ -22,11 +22,13 @@ and it is how each of those measurements is actually quoted.
 Why here and not in ``_drivers/units.py``
 -----------------------------------------
 CONTRACT section 3 says shared helpers live in ``_drivers/units.py``,
-byte-identical across comparisons. That rule is about helpers the *notebooks*
-use. These are validator-only: putting filter I/O and a 23-entry bandpass ladder
+byte-identical across comparisons. That rule is about helpers the *validators*
+use. Validator-only: putting filter I/O and a 23-entry bandpass ladder
 into six copies of a module every notebook imports would cost the notebook path
-and buy it nothing. One module, imported by the validators alone. CONTRACT
-section 3 records the carve-out.
+and buy it nothing. The sweep helpers ``sweep_fig``, ``window_rows``, and
+``print_window_table`` are imported by the reproduction notebooks; they live
+here to keep the validators and the sweep plotting synchronized. CONTRACT
+section 3 records both carry-outs.
 
 The bandpass convention, and why it is not a trap here
 ------------------------------------------------------
@@ -57,6 +59,7 @@ line luminosities [erg/s].
 
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 __all__ = [
@@ -69,14 +72,18 @@ __all__ = [
     "band_average",
     "convention_sensitivity",
     "filter_rows",
+    "filter_rows_native",
     "line_rows",
     "load_filter",
     "pivot_wavelength",
     "print_filter_table",
     "print_line_table",
     "print_radio_table",
+    "print_window_table",
     "print_xray_table",
     "radio_rows",
+    "sweep_fig",
+    "window_rows",
     "xray_rows",
 ]
 
@@ -304,6 +311,47 @@ def band_average(
     return float(np.trapezoid(L_on_f * wgt, fw) / denom)
 
 
+def _filter_rows_inner(
+    w_t: np.ndarray,
+    L_t: np.ndarray,
+    w_ref: np.ndarray,
+    L_ref: np.ndarray,
+    *,
+    filters: tuple[tuple[str, str], ...],
+    weight: str,
+) -> list[tuple[str, float, float, float, float]]:
+    """Shared logic for filter_rows and filter_rows_native.
+
+    Parameters
+    ----------
+    w_t : array_like, shape (n_wave_t,)
+        Rest-frame wavelength grid for tengri [Angstrom].
+    L_t : array_like, shape (n_wave_t,)
+        tengri :math:`L_\\nu` [erg/s/Hz] on ``w_t``.
+    w_ref : array_like, shape (n_wave_ref,)
+        Rest-frame wavelength grid for reference [Angstrom].
+    L_ref : array_like, shape (n_wave_ref,)
+        Reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
+    filters : tuple of (str, str)
+        ``(file stem, label)`` pairs.
+    weight : {"photon", "energy"}
+        Bandpass weight to pass to :func:`band_average`.
+
+    Returns
+    -------
+    list of tuple
+        ``(label, pivot_um, L_t_band, L_ref_band, ratio)`` per filter.
+    """
+    rows = []
+    for stem, label in filters:
+        fw, ft = load_filter(stem)
+        a = band_average(w_t, L_t, fw, ft, weight=weight)
+        b = band_average(w_ref, L_ref, fw, ft, weight=weight)
+        ratio = a / b if (np.isfinite(a) and np.isfinite(b) and b > 0) else float("nan")
+        rows.append((label, pivot_wavelength(fw, ft) / 1e4, a, b, ratio))
+    return rows
+
+
 def filter_rows(
     w_ref: np.ndarray,
     L_t: np.ndarray,
@@ -316,6 +364,10 @@ def filter_rows(
 
     Both spectra must already share ``w_ref`` -- regrid before calling, so the
     identical operation reaches both sides.
+
+    For line-rich spectra on fine grids compared against coarse reference grids,
+    see :func:`filter_rows_native`, which band-averages each side on its own grid
+    and avoids aliasing from interpolation.
 
     Parameters
     ----------
@@ -335,14 +387,58 @@ def filter_rows(
         order given. Uncovered bands carry ``nan`` and are kept in the list so
         the caller can show the gap.
     """
-    rows = []
-    for stem, label in filters:
-        fw, ft = load_filter(stem)
-        a = band_average(w_ref, L_t, fw, ft, weight=weight)
-        b = band_average(w_ref, L_ref, fw, ft, weight=weight)
-        ratio = a / b if (np.isfinite(a) and np.isfinite(b) and b > 0) else float("nan")
-        rows.append((label, pivot_wavelength(fw, ft) / 1e4, a, b, ratio))
-    return rows
+    return _filter_rows_inner(w_ref, L_t, w_ref, L_ref, filters=filters, weight=weight)
+
+
+def filter_rows_native(
+    w_t: np.ndarray,
+    L_t: np.ndarray,
+    w_ref: np.ndarray,
+    L_ref: np.ndarray,
+    *,
+    filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
+    weight: str = "photon",
+) -> list[tuple[str, float, float, float, float]]:
+    """Band-average each SED on its own grid and form the ratio.
+
+    Each spectrum is band-averaged independently on its native wavelength grid,
+    avoiding interpolation artifacts that arise when a fine-gridded spectrum
+    (especially one with narrow emission lines) is resampled onto a coarse grid
+    before band-averaging.
+
+    Parameters
+    ----------
+    w_t : array_like, shape (n_wave_t,)
+        Rest-frame wavelength grid for tengri [Angstrom].
+    L_t : array_like, shape (n_wave_t,)
+        tengri :math:`L_\\nu` [erg/s/Hz] on ``w_t``.
+    w_ref : array_like, shape (n_wave_ref,)
+        Rest-frame wavelength grid for reference [Angstrom].
+    L_ref : array_like, shape (n_wave_ref,)
+        Reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
+    filters : tuple of (str, str), optional
+        ``(file stem, label)`` pairs. Defaults to :data:`BROAD_FILTERS`.
+    weight : {"photon", "energy"}, optional
+        Bandpass weight; defaults to ``"photon"`` (tengri, DSPS, FSPS,
+        prospector). Both sides are integrated with the same weight and filter
+        curves.
+
+    Returns
+    -------
+    list of tuple
+        ``(label, pivot_um, L_t_band, L_ref_band, ratio)`` per filter, in the
+        order given. Uncovered bands carry ``nan`` and are kept in the list so
+        the caller can show the gap.
+
+    Notes
+    -----
+    Use this instead of :func:`filter_rows` when comparing a line-rich spectrum
+    on a fine grid (e.g., tengri with nebular emission) against a coarse
+    reference grid. Interpolating the fine spectrum onto the coarse grid before
+    band-averaging aliases narrow lines and distorts the band values; this
+    function avoids that by computing band averages on each side's native grid.
+    """
+    return _filter_rows_inner(w_t, L_t, w_ref, L_ref, filters=filters, weight=weight)
 
 
 def print_filter_table(
@@ -910,3 +1006,375 @@ def print_line_table(
     if blended:
         print(f"  b = window narrowed below 12 A to clear a neighbor: {', '.join(blended)}")
     print("  (no pass/fail flag: Cue vs Cloudy is a model difference, not a parity check)")
+
+
+# ---------------------------------------------------------------------------
+# Sweep helpers for reproducibility notebooks
+# ---------------------------------------------------------------------------
+
+
+def sweep_fig(
+    cases: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+    *,
+    ref_label: str,
+    title: str,
+    xlim: tuple[float, float] | None = None,
+    x_of_wave=None,
+    xlabel: str = r"wavelength [$\mu$m]",
+    ylabel: str = r"$L_\nu$ [erg/s/Hz]",
+    ratio_ylim: tuple[float, float] = (0.5, 1.5),
+    band: tuple[float, float] = (0.9, 1.1),
+    logy: bool = True,
+    figsize: tuple[float, float] = (8.5, 6.0),
+) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes], dict[str, np.ndarray]]:
+    """Overlay multiple SED comparisons with a ratio panel, one figure.
+
+    Each case shows the reference curve as a thick translucent solid line and
+    the tengri curve as a thin dashed line. Tengri is regridded onto the
+    reference wavelength grid via :func:`np.interp`. The bottom panel displays
+    the tengri/reference ratio for each case, with a shaded tolerance band.
+
+    Parameters
+    ----------
+    cases : list of tuple
+        Each tuple is ``(label, w_ref, L_ref, w_t, L_t)`` where:
+
+        - ``label`` : str
+            Case name for the legend.
+        - ``w_ref`` : ndarray, shape (n_wave,)
+            Reference wavelength grid [Å].
+        - ``L_ref`` : ndarray, shape (n_wave,)
+            Reference L_ν [erg/s/Hz] on w_ref.
+        - ``w_t`` : ndarray, shape (n_wave,)
+            Tengri wavelength grid [Å].
+        - ``L_t`` : ndarray, shape (n_wave,)
+            Tengri L_ν [erg/s/Hz] on w_t.
+    ref_label : str
+        Label for the reference curves in the legend (e.g., "CIGALE").
+    title : str
+        Panel title.
+    xlim : tuple, optional
+        x-limits in the plotted abscissa units.
+    x_of_wave : callable, optional
+        Maps wavelength [Å] to the plotted x-axis (e.g., ``lambda w: w / 1e4``
+        for µm). Identity (wavelength in Å) when ``None``.
+    xlabel : str, optional
+        x-axis label. Default: "wavelength [µm]".
+    ylabel : str, optional
+        Top panel y-axis label. Default: "L_ν [erg/s/Hz]".
+    ratio_ylim : tuple, optional
+        y-limits on the ratio panel. Default (0.5, 1.5).
+    band : tuple, optional
+        Shaded tolerance band (lo, hi) on the ratio panel. Default (0.9, 1.1).
+    logy : bool, optional
+        Use log scale on top panel y-axis. Default True.
+    figsize : tuple, optional
+        Figure size (width, height). Default (8.5, 6.0).
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure.
+    (ax, ax_ratio) : tuple of plt.Axes
+        Top (main SED) and bottom (ratio) axes.
+    ratios : dict
+        Mapping case label to the ratio array (tengri/reference) on w_ref.
+    """
+    fig, (ax, ax_r) = plt.subplots(
+        2, 1, figsize=figsize, sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+    )
+
+    ratios: dict[str, np.ndarray] = {}
+    colors = [f"C{i}" for i in range(len(cases))]
+
+    for (label, w_ref, L_ref, w_t, L_t), color in zip(cases, colors):
+        # Regrid tengri onto reference wavelength grid
+        L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
+        ratio = np.divide(L_t_on_ref, L_ref, where=(L_ref > 0), out=np.full_like(L_ref, np.nan))
+        ratios[label] = ratio
+
+        # Transform x-axis if needed
+        x_ref = w_ref if x_of_wave is None else x_of_wave(w_ref)
+
+        # Top panel: reference solid line, tengri dashed line
+        pos_ref = L_ref > 0
+        ax.plot(
+            x_ref[pos_ref],
+            L_ref[pos_ref],
+            color=color,
+            linestyle="-",
+            linewidth=2.2,
+            alpha=0.45,
+        )
+        pos_t = L_t_on_ref > 0
+        ax.plot(
+            x_ref[pos_t],
+            L_t_on_ref[pos_t],
+            color=color,
+            linestyle="--",
+            linewidth=1.0,
+            label=label,
+        )
+
+        # Ratio panel
+        ax_r.plot(x_ref, ratio, color=color, linestyle="-", linewidth=1.0)
+
+    # Configure top panel
+    ax.set_xscale("log")
+    if logy:
+        ax.set_yscale("log")
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.legend(fontsize=9, loc="best")
+    ax.grid(True, alpha=0.3)
+
+    # Add legend note about solid vs dashed
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(
+            handles,
+            labels,
+            fontsize=9,
+            loc="best",
+            title=f"solid = {ref_label}, dashed = tengri",
+            title_fontsize=8,
+        )
+
+    # Configure ratio panel
+    ax_r.axhspan(*band, color="0.85", zorder=0)
+    ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+    ax_r.set_xscale("log")
+    ax_r.set_ylim(*ratio_ylim)
+    ax_r.set_xlabel(xlabel)
+    ax_r.set_ylabel("tengri / ref", fontsize=9)
+    ax_r.grid(True, alpha=0.3)
+
+    return fig, (ax, ax_r), ratios
+
+
+def window_rows(
+    cases: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+    *,
+    lo: float,
+    hi: float,
+    rel_to: str = "point",
+    peak: float | None = None,
+) -> list[dict]:
+    """Compute ratio statistics within a wavelength window for each case.
+
+    For each case, tengri is regridded onto the reference wavelength grid,
+    then the tengri/reference ratio is computed and filtered to the window
+    [lo, hi] in wavelength. The median ratio and the maximum absolute
+    deviation from unity are computed over the windowed points.
+
+    Parameters
+    ----------
+    cases : list of tuple
+        Each tuple is ``(label, w_ref, L_ref, w_t, L_t)`` as in :func:`sweep_fig`.
+    lo, hi : float
+        Wavelength window bounds [Å].
+    rel_to : str, optional
+        Deviation calculation mode. Either "point" (default) or "peak".
+
+        - "point": max_abs_dev = max(|L_t/L_ref - 1|); median_ratio over all finite ratios.
+        - "peak": Compute peak = max(L_ref[mask]); max_abs_dev = max(|L_t - L_ref|[mask]) / peak;
+          median_ratio over points where L_ref >= 0.01 * peak.
+
+    peak : float, optional
+        Normalization scale for ``rel_to="peak"`` mode. If provided, overrides the
+        window maximum as the denominator for max_abs_dev and as the reference for
+        the 1% threshold of the median (points with L_ref >= 0.01 * peak).
+        Must be positive. Only applies when ``rel_to="peak"``.
+
+    Returns
+    -------
+    list of dict
+        One dict per case with keys:
+
+        - ``"label"`` : str
+        - ``"rel_to"`` : str
+            Mode used ("point" or "peak").
+        - ``"median_ratio"`` : float
+            Median of tengri/reference ratios (or relative difference) in the window.
+        - ``"max_abs_dev"`` : float
+            Maximum absolute deviation in the window.
+        - ``"x_at_max"`` : float
+            Wavelength where max_abs_dev occurs.
+    """
+    if rel_to not in ("point", "peak"):
+        raise ValueError(f"rel_to must be 'point' or 'peak', got {rel_to!r}")
+
+    if peak is not None and rel_to != "peak":
+        raise ValueError("peak= applies to rel_to='peak' only")
+
+    if peak is not None and peak <= 0:
+        raise ValueError("peak must be positive")
+
+    rows = []
+    for label, w_ref, L_ref, w_t, L_t in cases:
+        # Regrid tengri onto reference grid
+        if w_t.shape == w_ref.shape and np.allclose(w_t, w_ref):
+            L_t_on_ref = L_t
+        else:
+            L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
+
+        # Filter to wavelength window
+        in_window = (w_ref >= lo) & (w_ref <= hi)
+        L_ref_in_window = L_ref[in_window]
+        L_t_in_window = L_t_on_ref[in_window]
+        w_in_window = w_ref[in_window]
+
+        # Compute statistics based on mode
+        if rel_to == "point":
+            out_array = np.full_like(L_ref_in_window, np.nan)
+            ratio = np.divide(
+                L_t_in_window,
+                L_ref_in_window,
+                where=(L_ref_in_window > 0),
+                out=out_array,
+            )
+            finite_ratios = ratio[np.isfinite(ratio)]
+
+            if len(finite_ratios) == 0:
+                median_ratio = float("nan")
+                max_abs_dev = float("nan")
+                x_at_max = float("nan")
+            else:
+                median_ratio = float(np.median(finite_ratios))
+                deviations = np.abs(finite_ratios - 1.0)
+                max_abs_dev = float(np.max(deviations))
+                idx_max = np.argmax(deviations)
+                x_at_max = float(w_in_window[np.isfinite(ratio)][idx_max])
+
+        else:  # rel_to == "peak"
+            # Find peak in window or use provided peak
+            valid_mask = L_ref_in_window > 0
+            if peak is None:
+                # Use window maximum
+                if not np.any(valid_mask):
+                    median_ratio = float("nan")
+                    max_abs_dev = float("nan")
+                    x_at_max = float("nan")
+                else:
+                    peak_val = float(np.max(L_ref_in_window[valid_mask]))
+
+                    # Absolute deviation
+                    abs_diffs = np.abs(L_t_in_window - L_ref_in_window)
+                    max_abs_dev = float(np.max(abs_diffs) / peak_val)
+                    idx_max = np.argmax(abs_diffs)
+                    x_at_max = float(w_in_window[idx_max])
+
+                    # Median ratio over significant points
+                    threshold = 0.01 * peak_val
+                    significant_mask = (L_ref_in_window >= threshold) & (
+                        L_ref_in_window > 0
+                    )
+                    if np.any(significant_mask):
+                        L_t_sig = L_t_in_window[significant_mask]
+                        L_ref_sig = L_ref_in_window[significant_mask]
+                        out_array = np.full_like(L_ref_sig, np.nan)
+                        ratio_significant = np.divide(
+                            L_t_sig, L_ref_sig, where=True, out=out_array
+                        )
+                        median_ratio = float(np.median(ratio_significant))
+                    else:
+                        median_ratio = float("nan")
+            else:
+                # Use provided peak
+                peak_val = peak
+
+                # Absolute deviation
+                abs_diffs = np.abs(L_t_in_window - L_ref_in_window)
+                max_abs_dev = float(np.max(abs_diffs) / peak_val)
+                idx_max = np.argmax(abs_diffs)
+                x_at_max = float(w_in_window[idx_max])
+
+                # Median ratio over significant points
+                threshold = 0.01 * peak_val
+                significant_mask = (L_ref_in_window >= threshold) & (
+                    L_ref_in_window > 0
+                )
+                if np.any(significant_mask):
+                    L_t_sig = L_t_in_window[significant_mask]
+                    L_ref_sig = L_ref_in_window[significant_mask]
+                    out_array = np.full_like(L_ref_sig, np.nan)
+                    ratio_significant = np.divide(
+                        L_t_sig, L_ref_sig, where=True, out=out_array
+                    )
+                    median_ratio = float(np.median(ratio_significant))
+                else:
+                    median_ratio = float("nan")
+
+        rows.append(
+            {
+                "label": label,
+                "rel_to": rel_to,
+                "median_ratio": median_ratio,
+                "max_abs_dev": max_abs_dev,
+                "x_at_max": x_at_max,
+            }
+        )
+
+    return rows
+
+
+def print_window_table(
+    rows: list[dict],
+    *,
+    ref_name: str,
+    title: str,
+    tol: float = 0.05,
+    x_unit: str = "Å",
+    x_scale: float = 1.0,
+) -> None:
+    """Print wavelength-window statistics table.
+
+    Displays median ratio and maximum absolute deviation for each case,
+    with a ``<-- check`` flag when max_abs_dev exceeds ``tol``.
+
+    Parameters
+    ----------
+    rows : list of dict
+        As returned by :func:`window_rows`.
+    ref_name : str
+        Reference code name, for the column header.
+    title : str
+        Table heading.
+    tol : float, optional
+        Deviation threshold for the check flag. Default 0.05.
+    x_unit : str, optional
+        Unit label for the x-axis position column. Default "Å".
+    x_scale : float, optional
+        Scale factor to apply to x_at_max values. Default 1.0.
+    """
+    # Determine rel_to mode and validate consistency
+    rel_to_modes = set()
+    for row in rows:
+        mode = row.get("rel_to", "point")
+        rel_to_modes.add(mode)
+
+    if len(rel_to_modes) > 1:
+        raise ValueError(f"All rows must have the same rel_to mode. Found: {rel_to_modes}")
+
+    is_peak_mode = "peak" in rel_to_modes
+    dev_header = "max |Δ| [% peak]" if is_peak_mode else "max |Δ| [%]"
+
+    print(f"\n  {title}")
+    print(f"  {'case':<26} {'median ×':>12} {dev_header:>15} {'x at max [' + x_unit + ']':>15}")
+    print("  " + "-" * 74)
+    for row in rows:
+        label = row["label"]
+        median = row["median_ratio"]
+        max_dev = row["max_abs_dev"]
+        x_max = row["x_at_max"] * x_scale
+
+        flag = ""
+        if np.isfinite(max_dev) and max_dev > tol:
+            flag = "  <-- check"
+
+        if np.isfinite(median) and np.isfinite(max_dev):
+            print(f"  {label:<26} {median:>12.3f}x {max_dev * 100:>14.1f}% {x_max:>15.2f}{flag}")
+        else:
+            print(f"  {label:<26} {'--':>12} {'--':>15} {'--':>15}{flag}")

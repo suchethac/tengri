@@ -35,6 +35,20 @@ reference codes themselves differ there. `save_fig` uses the single
 arr_t, *, name)`. If you improve a shared helper, propagate it to every
 comparison in the same PR.
 
+Sweep sections use `sweep_fig`, `window_rows`, and `print_window_table` from
+`reproduction/_validation.py`, so every notebook draws and tabulates a sweep
+the same way. Three metric rules follow from what the tables showed: a curve
+that reaches zero (SFR(t) tails and onset, IGM transmission in the forest) is
+compared with `window_rows(..., rel_to="peak")` — SFR(t) as a fraction of the
+window's peak over 2–95 % of the age, transmission with `peak=1.0` over
+850–1210 Å, clear of the Lyα step; SFR(t)-only builds pass `n_grid=4096`, since
+`derived["sfr_history"]` otherwise sits on a 256-point log-lookback grid
+(0.39 Gyr at 10 Gyr) that the table would measure instead of the form; and band
+ladders on spectra that carry emission lines use `filter_rows_native`, which
+integrates each spectrum on its own grid — interpolating tengri's lines onto a
+coarse reference grid before band-averaging aliases (a 2× g band on BAGPIPES'
+grid).
+
 ## 3a. Matched inputs, asserted
 
 A comparison is only meaningful if both sides read the same templates, and
@@ -144,6 +158,9 @@ the validation. Never write that a tengri component was ported or
 copied from the reference code. External template and SSP data files
 used as matched inputs are "repackaged" into tengri's formats, and
 that is the word to use.
+
+Notebook prose carries no issue numbers and no account of what was tried;
+the investigation trail belongs in the pull request.
 
 ## 7. Rendering
 

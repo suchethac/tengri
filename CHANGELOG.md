@@ -330,6 +330,24 @@
 
 ### Changed
 
+- The six reproduction notebooks (`reproduction/{agnfitter,bagpipes,cigale,prospect_r,prospector,synthesizer}/01_*.py`)
+  now compare parameter sweeps and model cases in every physics block instead of one fiducial point
+  each: SFH families and τ × age grids, every attenuation law the reference code offers with its
+  slope / bump / R_V knobs and an A_V ladder, dust-emission library nodes (DL07, DL14, Casey 2012,
+  Schreiber 2016, Dale 2014, analytic emitters), nebular logU × Z_gas × f_esc grids, AGN disc and
+  torus node grids, IGM redshift sweeps, X-ray corona and radio grids — each new section is one
+  ratio-panel figure plus one printed table, and every Summary table is assembled from the render's
+  own printed numbers. Every model on every page now carries nebular emission on both sides (tengri:
+  Cue at the matched logU / Z_gas / f_esc; the reference code: its own nebular module), except the
+  raw-SSP check and AGNfitter-rX's host, which has no nebular term. Shared helpers in
+  `reproduction/_validation.py`: `sweep_fig` (overlay + ratio panel), `window_rows` (with a
+  peak-relative deviation for curves that reach zero, so SFR(t) tables no longer flag exact matches)
+  and `print_window_table` (unit and scale of the x column), and `filter_rows_native` (band
+  averages on each spectrum's own grid, since interpolating tengri's emission lines onto a coarse
+  reference grid before band-averaging aliases). The bagpipes driver aliases `np.trapz`
+  to `np.trapezoid` for NumPy ≥ 2, and ProSpect's `massfunc_dtau` is compared on its recent branch,
+  the only part that is a delayed-τ.
+
 - `dust_frac_agn` is now declared with a `free_prior` of `Uniform(0.0, 0.99)`,
   making it wildcard-reachable (`all_params: FREE`) exactly on
   `dale2014_cigale`, the engine variant whose shipped template grid carries the

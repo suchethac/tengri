@@ -73,8 +73,14 @@ attenuation applied · §6 dust IR re-emission (Dale 2014) · §7 panchromatic S
 §8 nebular emission · §9 AGN torus · §11 radio continuum · §12 IGM transmission
 (Inoue 2014) · full-SED head-to-head.
 
+Each of §2, §5, §6, §8, §9, §11, and §12 is followed by a "cont'd" sweep
+section that varies one or two parameters over a small grid instead of one
+point: SFH families (dtau, snorm_burst, snorm_trunc), attenuation curves and
+applied optical depths, the Dale 2014 α sweep, nebular logU × Z_gas, SKIRTOR
+and Fritz torus nodes, radio q_IR × α_SF, and an IGM redshift sweep.
+
 The library overlap is not exact, and the notebook is explicit about where it
-is not: ProSpect's EMILES library and Fritz (2006) torus have no tengri
-equivalent, and ProSpect's mass-mapped metallicity history maps onto tengri's
-time-based and closed-box modes only approximately. Each gap is quantified in
+is not: ProSpect's EMILES library has no tengri equivalent, and ProSpect's
+mass-mapped metallicity history maps onto tengri's time-based and closed-box
+modes only approximately. Each gap is quantified in
 its section rather than smoothed over.
