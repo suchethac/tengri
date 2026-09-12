@@ -23,6 +23,7 @@ Assumptions:
 import contextlib
 import dataclasses
 import enum
+import functools
 import hashlib
 import types
 import weakref
@@ -215,11 +216,14 @@ def baked(value) -> Hashable:
     5. Objects with cache_key() → ("cache_key", type_qualname, cache_key())
     6. Objects with jit_cache_key() → ("jit_cache_key", type_qualname, jit_cache_key())
     7. Dataclass instances → frozen_dataclass_key(value)
-    8. Callables (function, method, class) → ("callable", "module.qualname")
-    9. Array-like (has shape and dtype) → array_key(value) or raises on tracer
-    10. Enum members → ("enum", type_qualname, member_name)
-    11. Objects with custom __repr__ → ("repr", type_qualname, repr(value))
-    12. Otherwise → TypeError
+    8. functools.partial → ("partial", baked(func), baked(args), baked(keywords))
+    9. Callables with __closure__ → ("callable", "module.qualname", tuple of captured)
+    10. Bound methods (non-class __self__) → ("callable", "module.qualname", instance)
+    11. Plain callables (function, class, builtin) → ("callable", "module.qualname")
+    12. Array-like (has shape and dtype) → array_key(value) or raises on tracer
+    13. Enum members → ("enum", type_qualname, member_name)
+    14. Objects with custom __repr__ → ("repr", type_qualname, repr(value))
+    15. Otherwise → TypeError
     """
     # Phase 1: Scalars unchanged
     if value is None or isinstance(value, (bool, int, float, str, bytes)):
@@ -252,12 +256,40 @@ def baked(value) -> Hashable:
     if dataclasses.is_dataclass(value):
         return frozen_dataclass_key(value)
 
-    # Phase 5: Callable (function, method, class)
-    if callable(value):
+    # Phase 5: functools.partial
+    if isinstance(value, functools.partial):
         return (
-            "callable",
-            f"{value.__module__}.{value.__qualname__}",
+            "partial",
+            baked(value.func),
+            baked(value.args),
+            baked(value.keywords),
         )
+
+    # Phase 5b: Callable (function, method, class)
+    if callable(value):
+        qualname = f"{value.__module__}.{value.__qualname__}"
+
+        # Check for closure: non-empty __closure__ attribute
+        closure = getattr(value, "__closure__", None)
+        if closure is not None:
+            # Bake each cell's contents. Empty cells raise ValueError on cell_contents access.
+            captured = []
+            for cell in closure:
+                try:
+                    cell_value = cell.cell_contents
+                    captured.append(baked(cell_value))
+                except ValueError:
+                    # Empty cell
+                    captured.append(("empty_cell",))
+            return ("callable", qualname, tuple(captured))
+
+        # Check for bound method: __self__ present and not a class
+        self_obj = getattr(value, "__self__", None)
+        if self_obj is not None and not isinstance(self_obj, type):
+            return ("callable", qualname, baked(self_obj))
+
+        # Plain function, class, or builtin
+        return ("callable", qualname)
 
     # Phase 6: Array-like
     if hasattr(value, "shape") and hasattr(value, "dtype"):
