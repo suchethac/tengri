@@ -7,15 +7,13 @@
   `dust_attenuation` group gains `nebular_screen` (governs the nebular
   continuum, the line catalog, and the fast-nebular fallback grid; default
   `"birth_cloud"`), `shock_screen` (governs the MAPPINGS V shock SED; default
-  `"diffuse"`), and `agn_screen` (default, and today the only accepted value,
-  `"none"` — the AGN component runs after dust and carries its own
-  polar-dust screen). Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or
-  the synonym `"off"`; flat spellings `dust_nebular_screen` /
-  `dust_shock_screen` / `dust_agn_screen` mirror `dust_law_bc` /
-  `dust_law_neb`. One validator
+  `"diffuse"`), and `agn_screen` (default `"none"` — the AGN component runs
+  after dust and carries its own polar-dust screen). Each accepts
+  `"birth_cloud"`, `"diffuse"`, `"none"`, or the synonym `"off"`; flat
+  spellings `dust_nebular_screen` / `dust_shock_screen` / `dust_agn_screen`
+  mirror `dust_law_bc` / `dust_law_neb`. One validator
   (`tengri.parameters._dust_keys.resolve_screen_choices`) backs both
-  surfaces: an unknown value names the three choices; `agn_screen` other
-  than `none`/`off` is refused with the deferral reason above;
+  surfaces: an unknown value names the three choices;
   `single_component` dust refuses any value other than `none`/`off` or the
   source's own default (a single screen has no birth-cloud/diffuse
   distinction); `wg00`/`off` dust refuse the keys outright, like the other
@@ -32,6 +30,11 @@
   attenuation") and the code agree — the code previously attenuated shock
   unconditionally with the birth-cloud form — and by snapping (see Fixed,
   below).
+
+- `agn_screen` is functional: `birth_cloud` / `diffuse` put AGN light
+  through the galaxy's dust screens with the absorbed power joining the
+  energy balance; refused with `agn={'norm': 'cigale_joint'}`, which reads
+  that balance.
 
 - `neb_hbfrac` (CB_19's HbFrac axis, matter- vs radiation-bounded escape
   proxy) now declares `free_prior=Uniform(0.0, 1.0, default=1.0)`, so

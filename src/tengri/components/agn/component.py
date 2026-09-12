@@ -249,6 +249,33 @@ class AGNSEDComponent(TemplateThreading):
             ),
         )
 
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Dust publications, when using CIGALE-joint cross-component norm.
+
+        When ``agn_norm == "cigale_joint"``, the AGN component reads
+        ``log_L_ir`` and ``L_absorbed`` from the dust component to compute
+        the CIGALE-style disc/torus/polar normalization. Declaring these as
+        optional inputs ensures the dust component runs before AGN in this
+        configuration (#556). When ``agn_norm`` is ``"independent"`` or
+        ``"conserving"``, AGN has no dust dependency and these are omitted.
+        """
+        if self.config.agn_norm == "cigale_joint":
+            return (
+                DerivedKey(
+                    "log_L_ir",
+                    "dex",
+                    "log10(L_ir / (erg/s)); read by CIGALE-joint norm to scale torus",
+                ),
+                DerivedKey(
+                    "L_absorbed",
+                    "erg/s",
+                    "Total absorbed luminosity; read by CIGALE-joint norm "
+                    "(fallback if log_L_ir absent)",
+                ),
+            )
+        else:
+            return ()
+
     def precompute(
         self,
         ssp_data: Any | None = None,

@@ -3401,8 +3401,10 @@ class SEDModel:
         self._dust_law_neb = getattr(spec, "dust_law_neb", None)
         # Per-source dust-screen choice (#2234 replacement): which
         # screen attenuates the nebular continuum + line catalog, the shock
-        # SED, and (validated by `Parameters`/`parse_groups` to stay "none")
-        # AGN light. Consumed by `DustSEDComponent` via `build_components`.
+        # SED, and (#2260) the AGN SED when `agn_screen != "none"` -- AGN
+        # then runs before dust in the component chain. `"none"` (the
+        # default) leaves AGN after dust, unattenuated. Consumed by
+        # `DustSEDComponent` via `build_components`.
         self._dust_nebular_screen = getattr(spec, "dust_nebular_screen", "birth_cloud")
         self._dust_shock_screen = getattr(spec, "dust_shock_screen", "diffuse")
         self._dust_agn_screen = getattr(spec, "dust_agn_screen", "none")

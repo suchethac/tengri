@@ -61,9 +61,9 @@ The two-component framework's birth-cloud and diffuse-ISM screens attenuate the 
 |:---|:---|:---|
 | `nebular_screen` | `"birth_cloud"` | The nebular continuum, the discrete line catalog, and the fast-nebular fallback grid |
 | `shock_screen` | `"diffuse"` | The MAPPINGS V shock SED ({ref}`app-shock-details`) |
-| `agn_screen` | `"none"` (today the only accepted value) | AGN light |
+| `agn_screen` | `"none"` | AGN light |
 
-Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or the synonym `"off"`. `agn_screen` stays `"none"` because AGN light runs after dust in the pipeline (stellar, nebular, shock, dust, AGN, radio, X-ray, IGM) and carries its own polar-dust screen, matching the convention (e.g. CIGALE) that AGN light is never attenuated by the galaxy's own dust; galaxy screening of AGN light is a later change. `single_component` dust has no birth-cloud/diffuse distinction, so it accepts only `"none"`/`"off"` or a source's own default; `wg00` and dust-off models refuse these keys outright.
+Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or the synonym `"off"`. When `agn_screen` is set to `"birth_cloud"` or `"diffuse"`, the corresponding screen's transmission (Equation {eq}`eq-dust-transmission`) is applied to AGN light to model galaxy dust screening of the AGN SED. However, `agn_screen` cannot be combined with `agn_norm="cigale_joint"` because both depend on reading the dust budget (L_ir, L_absorbed); use `agn_norm="independent"` or `"conserving"` instead. `single_component` dust has no birth-cloud/diffuse distinction, so it accepts only `"none"`/`"off"` or a source's own default; `wg00` and dust-off models refuse these keys outright.
 
 (app-dust-curves)=
 

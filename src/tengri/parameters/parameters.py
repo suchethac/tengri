@@ -231,9 +231,14 @@ class Parameters:
         Which screen attenuates the MAPPINGS V shock SED.  One of
         ``"birth_cloud"``, ``"diffuse"`` (default), ``"none"``/``"off"``.
     dust_agn_screen : str
-        Which screen attenuates AGN light.  ``"none"`` (default, and today
-        the only accepted value): the AGN component runs after dust and
-        carries its own polar-dust screen.
+        Which screen attenuates AGN light.  One of ``"birth_cloud"``,
+        ``"diffuse"``, ``"none"``/``"off"`` (default): the AGN component
+        runs after dust, unattenuated, and carries its own polar-dust
+        screen (CIGALE convention).  When screened, the AGN component runs
+        before dust instead, and the absorbed AGN power joins the dust
+        energy balance.  Refused together with ``agn_norm="cigale_joint"``
+        (the default AGN cross-block normalization), which already reads
+        the dust energy balance -- see :meth:`Parameters.__init__`.
 
     **Dust Emission Settings**
 
@@ -523,6 +528,25 @@ class Parameters:
         # fittable param. "cigale_joint" (default) ties disc/torus/polar to
         # the single agn_power reference; "independent" keeps legacy scaling.
         self.agn_norm = kwargs.pop("agn_norm", "cigale_joint")
+
+        # Validate agn_norm x agn_screen cycle rule (PR-D2): screened AGN
+        # is incompatible with agn_norm="cigale_joint" because both read the
+        # dust budget. Check this after both are set.
+        if (
+            self.agn_model not in (None, "none")
+            and self.agn_norm == "cigale_joint"
+            and self.dust_agn_screen != "none"
+        ):
+            from tengri.config.exceptions import ParameterError
+
+            raise ParameterError(
+                f"dust_agn_screen={self.dust_agn_screen!r} is incompatible with "
+                f"agn_norm='cigale_joint'. Both read the dust budget (L_ir, L_absorbed) "
+                f"and cannot be used together. Choose one of:\n"
+                f"  - agn_norm='independent' (each block on its own scale)\n"
+                f"  - agn_norm='conserving' (energy-conserving joint scaling)\n"
+                f"  - dust_agn_screen='none' (unscreened AGN)"
+            )
         # Block-recipe validation (typo hard-error + suspicious-combo warnings)
         # is deferred until after the parameter distributions are built, so the
         # concrete agn_polar_ebv can be passed to Rule 7 (#890). Block selectors
@@ -1007,7 +1031,8 @@ class Parameters:
 
         # Per-source dust-screen choice (#2234 replacement): which screen
         # attenuates the nebular continuum + line catalog, the shock SED, and
-        # (validated to stay 'none' today) AGN light. One validator for both
+        # AGN light (#2260; refused together with agn_norm="cigale_joint",
+        # see the cycle-rule check below). One validator for both
         # surfaces: a grammar `dust_attenuation={'nebular_screen': ...}` build
         # and this flat-kwarg build are refused for the same reason.
         # `resolve_screen_choices` returns an entry ONLY for a source the
@@ -2393,7 +2418,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_law_neb": content("nebular dust law determines parameters"),
     "dust_nebular_screen": content("which screen the nebular light passes through (#2234)"),
     "dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
-    "dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
+    "dust_agn_screen": content(
+        "which screen AGN light passes through; also moves AGN before dust "
+        "in the component chain when != 'none' (#2260)"
+    ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
