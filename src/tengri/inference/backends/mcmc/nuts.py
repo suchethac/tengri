@@ -736,6 +736,7 @@ def run_nuts(
     # computations, so one pinned `key` returned two different posteriors. HMC
     # had already been split this way and was reproducible; NUTS had not.
     dense_mass_backoffs = 0
+    n_grad_adapt = 0
     if cached is not None:
         parameters = cached
         # A reused adaptation was tuned in an earlier call, so this fit measured no
@@ -752,7 +753,7 @@ def run_nuts(
             )
     else:
         with compile_timer("nuts_warmup", fitter.compile_signature(), method="mcmc_nuts"):
-            step_size, inv_mass_matrix, warmup_divergent = _nuts_warmup_only(
+            step_size, inv_mass_matrix, warmup_divergent, warmup_n_grad = _nuts_warmup_only(
                 init_flat,
                 warmup_key,
                 log_posterior_flat_2arg,
@@ -764,6 +765,7 @@ def run_nuts(
                 warmup_max_doublings,
             )
             jax.block_until_ready(step_size)
+        n_grad_adapt = int(warmup_n_grad)
 
         # Post-adaptation step size stability probe for dense mass matrix (#1999)
 
@@ -848,7 +850,7 @@ def run_nuts(
             )
 
         with compile_timer("nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent, expansions = _vmap_chains(
+            positions, divergent, expansions, n_leapfrog = _vmap_chains(
                 _init,
                 _scan,
                 init_flat=init_flat,
@@ -865,7 +867,7 @@ def run_nuts(
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent, expansions = _nuts_chain_scan(
+            positions, divergent, expansions, n_leapfrog = _nuts_chain_scan(
                 state,
                 chain_keys,
                 log_posterior_flat_2arg,
@@ -885,7 +887,9 @@ def run_nuts(
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
         expansions = expansions[n_burnin:]
+        n_leapfrog = n_leapfrog[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
+    n_grad_sample = int(jnp.sum(n_leapfrog))
     depth_stats = _tree_depth_stats(expansions, max_num_doublings)
     _warn_if_tree_depth_saturated(depth_stats)
 
@@ -942,6 +946,12 @@ def run_nuts(
             "chain_parallel": chain_parallel_effective,
             "n_divergent": n_divergent,
             "dense_mass_step_backoffs": dense_mass_backoffs,
+            # Gradient counts, the unit bench/reports compare samplers on:
+            # adaptation (0 when a cached adaptation was reused), the kept
+            # draws (burn-in excluded, summed over chains), and their sum.
+            "n_grad_adapt": n_grad_adapt,
+            "n_grad_sample": n_grad_sample,
+            "n_grad_total": n_grad_adapt + n_grad_sample,
             **warmup_record,
             "step_size": float(parameters["step_size"]),
             "warmup": "pathfinder" if pathfinder_warmstart else "window",

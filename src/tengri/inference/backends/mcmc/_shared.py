@@ -985,6 +985,10 @@ def _nuts_warmup_only(
         Per-step ``is_divergent`` flags from the adaptation, for the
         dead-warmup refusal (#2088). Both the window and the pathfinder
         adaptation report it.
+    warmup_n_grad : scalar int
+        Leapfrog steps (gradient evaluations) the adaptation spent, summed
+        over its ``n_warmup`` iterations, so a fit reports its warmup cost
+        in the unit the bench reports compare on.
 
     Notes
     -----
@@ -1006,7 +1010,9 @@ def _nuts_warmup_only(
     # memory cost #1028 removed.
     from blackjax.adaptation.base import get_filter_adapt_info_fn
 
-    _keep_divergence_flags = get_filter_adapt_info_fn(info_keys={"is_divergent"})
+    _keep_divergence_flags = get_filter_adapt_info_fn(
+        info_keys={"is_divergent", "num_integration_steps"}
+    )
 
     if use_pathfinder_warmup:
         from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
@@ -1032,7 +1038,13 @@ def _nuts_warmup_only(
         (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
 
     warmup_divergent = jnp.asarray(info.info.is_divergent)
-    return parameters["step_size"], parameters["inverse_mass_matrix"], warmup_divergent
+    warmup_n_grad = jnp.sum(jnp.asarray(info.info.num_integration_steps))
+    return (
+        parameters["step_size"],
+        parameters["inverse_mass_matrix"],
+        warmup_divergent,
+        warmup_n_grad,
+    )
 
 
 @functools.partial(jax.jit, static_argnums=(2, 6))
@@ -1069,7 +1081,9 @@ def _nuts_chain_scan(
     divergent : ndarray, shape (n_chain,)
     expansions : ndarray, shape (n_chain,)
         Per-iteration NUTS trajectory-expansion count (tree depth).
-        Caller slices ``[n_burnin:]`` on all three.
+    n_leapfrog : ndarray, shape (n_chain,)
+        Per-iteration leapfrog (gradient) count. Caller slices ``[n_burnin:]``
+        on all four.
     """
 
     def ld(pos):
@@ -1078,12 +1092,17 @@ def _nuts_chain_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
-        """Advance NUTS one step: position, divergence flag, tree depth."""
+        """Advance NUTS one step: position, divergence flag, tree depth, leapfrogs."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
-        return s, (s.position, info.is_divergent, info.num_trajectory_expansions)
+        return s, (
+            s.position,
+            info.is_divergent,
+            info.num_trajectory_expansions,
+            info.num_integration_steps,
+        )
 
-    _, (positions, divergent, expansions) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, expansions
+    _, (positions, divergent, expansions, n_leapfrog) = jax.lax.scan(_step, state, chain_keys)
+    return positions, divergent, expansions, n_leapfrog
 
 
 # ---------------------------------------------------------------------------

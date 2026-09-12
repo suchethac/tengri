@@ -410,7 +410,12 @@ measures the algorithm; the library adds the `_stabilize_dense_mass_step`
 probe, a multistart MAP seed, a heavier per-draw scan and posterior
 finalization. Removing that ~12 s is a profiling pass on `run_nuts`, not a
 sampler question, and is the next step to make the recipe's number the
-library's number. Model build (`SEDModel.build` + precompute-table load) is
+library's number. **Amended 2026-09-12:** that pass found the 28 s was a
+cold-compile number (fresh model per call); on a warm compile the same fit
+was 17.2 s, and after jitting the mass reinsertion 15.1-16.9 s on seed 7
+(126 s against the harness's 117 s summed over six seeds, for 3 % fewer
+gradients), at per-gradient parity on every phase --
+`bench/reports/2026-09-12_library_path_parity.md`. Model build (`SEDModel.build` + precompute-table load) is
 **25-27 s** per fresh model on this box and is outside the agreed budget; a
 notebook that rebuilds the model per galaxy pays it every time.
 

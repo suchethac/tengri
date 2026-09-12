@@ -1653,7 +1653,14 @@ Once inference on `theta` is done, the mass is reinserted: an exact conditional 
 `p(log10(M) | theta, d)` per posterior sample (inverse-CDF on the same quadrature grid,
 mapped to the sampler's standardized coordinate via the mass prior's own
 `standardize`/`unstandardize` pushforward) for sample-based backends, or the
-conditional mode `ell* = log10(M*)` for `method="map"`.
+conditional mode `ell* = log10(M*)` for `method="map"`. The reinsertion is one
+`jax.jit` program, cached on the model per engine key and taking the draws, keys,
+data, noise and presence mask as traced arguments: it costs the forward model once
+per draw (0.4 s for 1200 draws on a 14-band model) and is reused across galaxies.
+It was an eager `jax.vmap` until 2026-09-12, dispatching every draw's prediction
+op-by-op and re-tracing per fit -- 1.2 s warm, 5.5 s the first time in a process,
+and a `(n_draws, n_pixels)` memory spike on spectroscopy models
+(`bench/reports/2026-09-12_library_path_parity.md` Finding 3).
 
 ### Guards
 
@@ -1692,6 +1699,18 @@ drops from 3.7e4 to 1.2e3, and the worst wall-clock time over six seeds of a NUT
 degeneracy is what a fixed-metric sampler otherwise has to spend most of its gradients
 resolving; a galaxy whose chains previously froze (zero unique draws, `#1999`) samples
 cleanly once the mass is profiled out.
+
+The library path and the bench harness that chose the recipe pay the same per
+gradient (0.60 vs 0.61 ms per warmup gradient, 0.64 ms per chain-gradient in
+sampling, identical FLOPs for one gradient of the objective), and `run_nuts` now
+reports `n_grad_adapt`, `n_grad_sample` and `n_grad_total` in `Posterior.diagnostics`
+so a fit can be compared to a bench row in gradients rather than seconds -- the two
+implementations reach different adaptation realizations from the same key, so a
+single-seed wall ranks nothing. On a warm compile `forward.fit(data)` is the
+harness's wall plus ~1.5 s of fixed cost (the `#1999` dense-step probe, the mass
+reinsertion, an 8-restart MAP seed); in a fresh process it is ~8 s more, all tracing
+of programs the persistent compile cache already holds
+(`bench/reports/2026-09-12_library_path_parity.md`).
 
 ### References
 

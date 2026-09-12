@@ -868,6 +868,60 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
 # ── Reinserting the mass once inference is done ──────────────────────────────
 
 
+def _reinsert_mass_fn(fitter: Fitter):
+    """The compiled draws -> conditional-mass-draws map, cached on the model.
+
+    One ``jax.vmap`` over 1200 draws of a forward prediction is ~1.2 s when
+    dispatched eagerly (op-by-op under batching) and ~5 s the first time in a
+    process; under ``jax.jit`` it is one program. The jitted function closes
+    over the model, the fixed values and the mass prior -- everything the
+    fitter's engine cache key already covers -- and takes the draws, the
+    keys, the data, the noise and the presence mask as traced arguments, so
+    it is keyed by ``_engine_cache_key`` alone and reused across fits on the
+    same model, whatever the galaxy.
+    """
+    from tengri.inference._model_cache import _default_owner as _model_cache_owner
+
+    cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault(
+        "profile_mass_reinsert", {}
+    )
+    cache_key = fitter._engine_cache_key()
+    fn = cache.get(cache_key)
+    if fn is not None:
+        return fn
+
+    model = fitter.model
+    mass_name = fitter._profile_mass_name
+    mass_prior = fitter._profile_mass_prior
+    ell_lo, ell_hi = fitter._profile_mass_bounds
+    fixed_values = fitter._fixed_values
+    data_type = fitter.data_type
+    use_components = bool(getattr(fitter, "use_components", False))
+
+    def _reinsert(samples_no_mass, draw_keys, data, noise, presence):
+        def stats_one(sample_dict):
+            phys = {**fixed_values, **sample_dict}
+            return _profile_stats(
+                model,
+                mass_name,
+                phys,
+                data,
+                noise,
+                presence=presence,
+                data_type=data_type,
+                use_components=use_components,
+            )
+
+        A_all, mstar_all, _ = jax.vmap(stats_one)(samples_no_mass)
+        return jax.vmap(lambda k, a, m: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior))(
+            draw_keys, A_all, mstar_all
+        )
+
+    fn = jax.jit(_reinsert)
+    cache[cache_key] = fn
+    return fn
+
+
 def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Posterior:
     """Record the resolved ``profile_mass`` choice, and reinsert the mass if engaged.
 
@@ -906,8 +960,6 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
         return posterior
 
     mass_name = fitter._profile_mass_name
-    mass_prior = fitter._profile_mass_prior
-    ell_lo, ell_hi = fitter._profile_mass_bounds
     model = fitter.model
     data, noise = fitter.data, fitter.noise
     presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
@@ -916,29 +968,11 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     use_components = bool(getattr(fitter, "use_components", False))
 
     if posterior.samples is not None:
-
-        def stats_one(sample_dict):
-            phys = {**fixed_values, **sample_dict}
-            return _profile_stats(
-                model,
-                mass_name,
-                phys,
-                data,
-                noise,
-                presence=presence,
-                data_type=data_type,
-                use_components=use_components,
-            )
-
         samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
-        A_all, mstar_all, _ = jax.vmap(stats_one)(samples_no_mass)
-
-        n_draws = A_all.shape[0]
+        n_draws = next(iter(samples_no_mass.values())).shape[0]
         mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
         draw_keys = jax.random.split(mass_key, n_draws)
-        ell_samples = jax.vmap(
-            lambda k, a, m: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior)
-        )(draw_keys, A_all, mstar_all)
+        ell_samples = _reinsert_mass_fn(fitter)(samples_no_mass, draw_keys, data, noise, presence)
 
         posterior.samples = {**posterior.samples, mass_name: ell_samples}
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
