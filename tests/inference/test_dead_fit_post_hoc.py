@@ -334,7 +334,7 @@ def test_nuts_raises_on_sampling_collapse_after_healthy_warmup(
         state, chain_keys, logdensity_fn_2arg, data_args, step_size, inv_mass_matrix, max_doublings
     ):
         chain_scan_called.append(True)
-        positions, divergent_real, expansions = original_chain_scan(
+        positions, divergent_real, *rest = original_chain_scan(
             state,
             chain_keys,
             logdensity_fn_2arg,
@@ -344,11 +344,11 @@ def test_nuts_raises_on_sampling_collapse_after_healthy_warmup(
             max_doublings,
         )
         divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
-        return positions, divergent_patched, expansions
+        return positions, divergent_patched, *rest
 
     def patched_vmap_chains(_init, _scan, **kwargs):
         vmap_chains_called.append((kwargs["n_chains"], kwargs["n_iter"], kwargs["n_burnin"]))
-        positions, divergent_real, expansions = original_vmap_chains(_init, _scan, **kwargs)
+        positions, divergent_real, *rest = original_vmap_chains(_init, _scan, **kwargs)
         # For multi-chain test: kill the first chain (indices 0 to n_samples-1 after
         # burnin is discarded). The reshape logic validates chain-major layout.
         n_samples = kwargs["n_iter"] - kwargs["n_burnin"]
@@ -364,7 +364,7 @@ def test_nuts_raises_on_sampling_collapse_after_healthy_warmup(
             divergent_patched = divergent_patched.at[n_second_start:n_second_end].set(True)
         else:
             divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
-        return positions, divergent_patched, expansions
+        return positions, divergent_patched, *rest
 
     monkeypatch.setattr(nuts_backend, "_nuts_chain_scan", patched_chain_scan)
     monkeypatch.setattr(nuts_backend, "_vmap_chains", patched_vmap_chains)
@@ -433,7 +433,7 @@ def test_a_dead_sampling_evicts_the_cached_adaptation(
     def patched_chain_scan(
         state, chain_keys, logdensity_fn_2arg, data_args, step_size, inv_mass_matrix, max_doublings
     ):
-        positions, divergent_real, expansions = original_chain_scan(
+        positions, divergent_real, *rest = original_chain_scan(
             state,
             chain_keys,
             logdensity_fn_2arg,
@@ -443,7 +443,7 @@ def test_a_dead_sampling_evicts_the_cached_adaptation(
             max_doublings,
         )
         divergent_patched = jnp.ones_like(divergent_real, dtype=bool)
-        return positions, divergent_patched, expansions
+        return positions, divergent_patched, *rest
 
     # Patch to force all divergent, run, expect DeadFitError
     monkeypatch.setattr(nuts_backend, "_nuts_chain_scan", patched_chain_scan)
