@@ -84,13 +84,35 @@ KNOWN_BAD_LEDGER = {}
 
 
 def _collect_notebook_paths() -> list[Path]:
-    """Recursively find all .ipynb files under notebooks/ and docs/spine/."""
-    paths = []
-    for root_dir in ["notebooks", "docs/spine"]:
-        base = ROOT / root_dir
-        if base.exists():
-            paths.extend(sorted(base.glob("**/*.ipynb")))
-    return paths
+    """Enumerate tracked .ipynb files under notebooks/ and docs/spine/ via git ls-files.
+
+    Uses git ls-files to match CI enumeration and ensure untracked local renders
+    cannot fail a local run that CI would pass (#2315, #2050 drift-proofness).
+    Refuses to run outside a git checkout (git archive exports).
+    """
+    import subprocess
+
+    # check=True with no handler: outside a git checkout (a git archive
+    # export) this raises loudly instead of passing vacuously on an empty
+    # list -- the same refusal check_numeric_guards.py ships (#2050).
+    out = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--",
+            "notebooks/*.ipynb",
+            "notebooks/**/*.ipynb",
+            "docs/spine/*.ipynb",
+            "docs/spine/**/*.ipynb",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+    ).stdout
+
+    files = [ROOT / name for name in out.decode("utf-8").split("\0") if name]
+    return sorted(files)
 
 
 def _get_relative_path(path: Path) -> str:
