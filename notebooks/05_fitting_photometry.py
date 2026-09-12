@@ -17,7 +17,7 @@
 import os
 
 os.environ["TENGRI_HOST_DEVICES"] = (
-    "4"  # expose the CPU as 4 JAX devices so the 4 NUTS chains pmap
+    "4"  # four CPU devices, one per chain
 )
 
 # %% [markdown]
@@ -149,7 +149,7 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # %% [markdown]
 # ## Fit
 #
-# The default recipe `method="mcmc_nuts_fast"` runs four parallel chains with 150 warmup + 300 draws each via `jax.pmap`, targeting 0.8 acceptance. Stellar mass is profiled out analytically, reducing the effective dimensionality and enabling a dense metric automatically. The fast posterior integrates mass into its credible intervals without drawing it. Diagnostics printed below show maximum split-R̂ of 1.0056, 8 divergences of 1200 total draws, with the posterior wall time 19.20 s measured on this machine.
+# The default sampler runs four NUTS chains in parallel and marginalizes stellar mass analytically, so it never has to be drawn. The posterior took about 19 s on this machine.
 
 # %%
 map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
@@ -158,8 +158,6 @@ t = time.perf_counter()
 posterior = forward.fit(flux_obs, noise, key=key_fit)
 wall_mcmc = time.perf_counter() - t
 print(f"  NUTS fast posterior wall: {wall_mcmc:6.2f} s")
-print(f"  profile_mass_reason: {posterior.diagnostics['profile_mass_reason']}")
-print(f"  chain_parallel: {posterior.diagnostics['chain_parallel']}")
 posterior.summary()
 
 # %% [markdown]

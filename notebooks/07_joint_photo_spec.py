@@ -190,8 +190,8 @@ print(
 # %% [markdown]
 # ## Fit
 #
-# Both use `HMC_VALIDATED` (dense mass, n_warmup=1000, n_leapfrog=20) on lookup
-# tables (WavePrecomp for photometry; SpectrumPrecomp's dual LUT for the joint fit).
+# Both use `HMC_VALIDATED` with lookup tables: WavePrecomp for the photometry fit,
+# SpectrumPrecomp's dual LUT for the joint fit (photometry + spectrum).
 
 
 # %%

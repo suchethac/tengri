@@ -17,7 +17,7 @@
 import os
 
 os.environ["TENGRI_HOST_DEVICES"] = (
-    "4"  # expose the CPU as 4 JAX devices so the 4 NUTS chains pmap
+    "4"  # four CPU devices, one per chain
 )
 
 # %% [markdown]
@@ -245,28 +245,15 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # %% [markdown]
 # ## Fit
 #
-# The default no-argument recipe `forward.fit(flux_obs, noise, key=key_fit)`
-# runs `method="mcmc_nuts_fast"` with four parallel chains via `jax.pmap`,
-# 150 warmup steps and 300 draws per chain, targeting 0.8 acceptance. On
-# a photometry-only fit, stellar mass is automatically profiled out
-# analytically, reducing the problem's effective dimensionality. The dense
-# metric engages automatically for D ≤ 12. The posterior samples are over
-# the remaining free parameters and the marginal posterior of profiled mass.
-#
-# MAP uses L-BFGS by default; the timed fit below has no explicit `method=`
-# argument and so gets the recipe default. Kernel compilation depends on the
-# model shape and persists in the on-disk cache; pay it once by fitting a
-# throwaway prior draw. Everything galaxy-dependent stays inside the timed
-# fits: the MAP optimization, the HMC metric, the warmup adaptation, and the
-# sampling.
+# The default sampler (`mcmc_nuts_fast`) runs four NUTS chains in parallel and
+# marginalizes the stellar mass analytically; the posterior below took about
+# 5 s on this machine. First we fit a throwaway prior draw so compilation is
+# cached on disk; the timed fits that follow pay only the inference cost.
 
 # %%
 map_kwargs = dict(method="map", n_restarts=8, n_steps=500)
 
-# Kernel compilation depends on the model shape, not on the galaxy, and
-# persists in the on-disk cache — pay it once by fitting a throwaway prior
-# draw. Everything galaxy-dependent stays inside the timed fits below: the
-# MAP optimization and the sampling itself.
+# Cache the kernel once by fitting a throwaway prior draw.
 key_wt, key_wm, key_wf = jax.random.split(jax.random.PRNGKey(0), 3)
 warm_mock = generate_mock(sed_model, sed_model.spec.sample(key_wt), key=key_wm, snr=30.0)
 warm_flux = np.asarray(warm_mock["flux_obs"])
@@ -282,8 +269,6 @@ t = time.perf_counter()
 posterior = forward.fit(flux_obs, noise, key=key_fit)
 wall_nuts = time.perf_counter() - t
 print(f"  NUTS fast posterior wall: {wall_nuts:6.2f} s")
-print(f"  profile_mass_reason: {posterior.diagnostics['profile_mass_reason']}")
-print(f"  chain_parallel: {posterior.diagnostics['chain_parallel']}")
 posterior.summary()
 
 # Convergence: read R̂ together with the divergence count — divergent
@@ -297,13 +282,6 @@ print(
     f"    min ESS = {min(float(v) for v in ess.values()):.0f}"
 )
 
-# %% [markdown]
-# | sampler | wall | draws |
-# |---|---|---|
-# | HMC, 50 leapfrog steps, preconditioned metric (`method="mcmc_hmc"`) | 33.26 s | 4 chains × 300 = 1200 |
-# | `mcmc_nuts_fast` (the default) | 5.13 s | 4 chains × 300 = 1200 |
-#
-# The default profiles stellar mass analytically and runs the four chains under `jax.pmap`, so the draws marginalize over the profiled mass.
 
 # %% [markdown]
 # The fit recovers the mock truth: well-constrained parameters (stellar mass,
