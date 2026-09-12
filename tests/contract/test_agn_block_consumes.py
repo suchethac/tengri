@@ -52,20 +52,109 @@ def test_consumes_tables_reference_only_declared_params():
         assert params <= _DECLARED, f"{model} lists undeclared params: {params - _DECLARED}"
 
 
-def test_skirtor_torus_consumes_all_polar_dust_knobs():
-    """SKIRTOR torus must credit all three polar-dust knobs (regression).
+def test_skirtor_torus_no_longer_consumes_polar_dust_knobs():
+    """SKIRTOR torus must NOT credit any polar-dust knob (R22 regression guard).
 
-    ``skirtor_torus_block`` reads ``agn_polar_ebv``, ``agn_polar_T`` and
-    ``agn_polar_beta`` (polar-dust re-emission, active by default at
-    ``agn_polar_ebv = 0.03``). All three move the SED — empirically
-    ``Delta(polar_T) = 52%`` and ``Delta(polar_beta) = 2.4%`` across their
-    priors. Previously only ``agn_polar_ebv`` was credited, so a top-level
-    ``agn={'all_params': FREE}`` silently froze the polar-dust temperature and slope
-    (a silent-fixed gap). This guards against that regression without needing
-    the gitignored SKIRTOR grid (pure CONSUMES-table membership).
+    Superseded test (was ``test_skirtor_torus_consumes_all_polar_dust_knobs``):
+    ``skirtor_torus_block`` used to bundle its OWN Casey-2012 polar-dust
+    graybody (reading ``agn_polar_ebv``/``agn_polar_T``/``agn_polar_beta``,
+    active by default at ``agn_polar_ebv = 0.03``) — a SECOND, independent
+    polar-dust mechanism alongside the composable runner's Stage-1.5 disc
+    reddening and the standalone ``polar_dust`` attenuation block, so a
+    ``torus="skirtor"`` + ``atten="polar_dust"`` recipe screened the disc
+    TWICE (task13 fix-round-1, ruling R22). There is now exactly ONE
+    polar-dust mechanism — the standalone ``polar_dust`` attenuation block
+    (``("attenuation", "polar_dust")`` below) — and this torus emits only the
+    thermal SKIRTOR template. This guards against the bundled term coming
+    back, without needing the gitignored SKIRTOR grid (pure CONSUMES-table
+    membership).
     """
     skirtor = AGN_BLOCK_CONSUMES[("torus", "skirtor")]
-    assert {"agn_polar_ebv", "agn_polar_T", "agn_polar_beta"} <= skirtor
+    assert not ({"agn_polar_ebv", "agn_polar_T", "agn_polar_beta"} & skirtor)
+
+
+def test_skirtor_torus_consumes_radius_ratio():
+    """Task 16 (item 3, F4): agn_radius_ratio (the SKIRTOR grid's third axis)
+    was missing from AGN_BLOCK_CONSUMES[('torus', 'skirtor')] even though
+    skirtor_torus_block's own signature has always read it -- so
+    agn={'all_params': FREE} + torus='skirtor' never froze it via the
+    top-level wildcard (only the sub-block's own explicit short-key path
+    reached it). See test_skirtor_torus_wiring.py's own liveness guard.
+    """
+    assert "agn_radius_ratio" in AGN_BLOCK_CONSUMES[("torus", "skirtor")]
+
+
+def test_qsogen_and_smc_prevot_atten_consume_attenuation_ebv():
+    """Task 16 (item 3): ('attenuation', 'qsogen') was missing entirely from
+    AGN_BLOCK_CONSUMES (the top-level wildcard silently fell back to the
+    full superset whenever Temple+2021's own quasar extinction curve was
+    selected); ('attenuation', 'smc_prevot') was present but wrongly empty
+    (smc_prevot_block's signature reads agn_attenuation_ebv, same as
+    qsogen's). Both attenuation blocks delegate to the same E(B-V) knob.
+    """
+    assert AGN_BLOCK_CONSUMES[("attenuation", "qsogen")] == frozenset({"agn_attenuation_ebv"})
+    assert AGN_BLOCK_CONSUMES[("attenuation", "smc_prevot")] == frozenset({"agn_attenuation_ebv"})
+
+
+def test_slone_netzer_disc_registered():
+    """Task 16 (item 3): ('disc', 'slone_netzer') was omitted on a stale
+    "grid absent from CI" rationale. Both of the block's own axis parameters
+    are live and both are listed.
+
+    ``agn_log_ledd`` was briefly recorded as dead here. That reading was taken
+    at the shared declared default -1.0, which lies above the SN12 axis
+    ``[-4, -1.9586]`` and is clipped onto the edge node, where ``jnp.clip``
+    makes the gradient exactly zero by construction -- the dead baseline
+    ``tests/regression/agn/test_issue_1586_grid_support.py`` exists to describe,
+    not a #846 degeneracy. Measured inside the axis the gradient runs 5.9e-2 to
+    8.8e-1; that file pins the measurement.
+    """
+    assert AGN_BLOCK_CONSUMES[("disc", "slone_netzer")] == frozenset(
+        {"agn_log_mbh", "agn_log_ledd"}
+    )
+
+
+def test_every_declared_and_consumed_name_has_one_partition_owner():
+    """R34: partition completeness is a contract, not a convenience.
+
+    ``_AGN_PARTITION`` decides which wildcard can free a name. A name absent
+    from it silently defaults to the shared ``"agn"`` group, so the model is
+    only as complete as the hand-maintained table -- and every instrument built
+    on top inherits the hole. The measured-liveness module derives its
+    ``owned`` set from the same table, so a missing entry is invisible to the
+    measurement too: the blind spot moves rather than closing.
+
+    Measured before this contract existed: 31 of 94 declared ``agn_*``
+    parameters had no entry, among them every ``agn_nlr_*`` grid knob,
+    ``agn_blr_logU``/``logZ``/``logn``, ``agn_adaf_alpha``/``beta``/``delta``,
+    ``agn_astar``, ``agn_log_mdot`` and ``agn_cigale_disk_delta``; eight of
+    them were measured live on ``predict_photometry`` while no wildcard could
+    free them.
+
+    The expected set is derived from the registries -- the declared parameter
+    table and every name any block records as consumed -- never from
+    ``_AGN_PARTITION`` itself, which is the thing under test.
+    """
+    from tengri.components.agn._params import PARAMS
+    from tengri.parameters.groups import _AGN_PARTITION
+
+    universe = {pd.name for pd in PARAMS}
+    for consumed in AGN_BLOCK_CONSUMES.values():
+        universe |= set(consumed)
+
+    missing = sorted(name for name in universe if name not in _AGN_PARTITION)
+    assert not missing, (
+        f"{len(missing)} declared/consumed AGN names have no explicit "
+        f"_AGN_PARTITION owner and silently fall through to the shared 'agn' "
+        f"group: {missing}"
+    )
+
+    # The reverse direction: an agn_* entry naming a parameter that no longer
+    # exists is a stale owner nothing can reach.
+    stale = sorted(
+        name for name in _AGN_PARTITION if name.startswith("agn_") and name not in universe
+    )
+    assert not stale, f"_AGN_PARTITION owns names that are not declared: {stale}"
 
 
 def test_active_set_scopes_to_active_blocks():
@@ -90,7 +179,7 @@ def test_active_set_scopes_to_active_blocks():
     assert active == expected
     # Params owned by *inactive* blocks must not be active.
     assert "agn_tau" not in active  # Nenkova torus
-    assert "agn_grahsp_l5100" not in active  # GRAHSP disc
+    assert "agn_grahsp_log_l5100" not in active  # GRAHSP disc
     assert "agn_T_hot" not in active  # two-temperature torus
     # ... and the superset is much larger, so scoping is doing real work.
     assert len(active) < len(ALL_AGN_PARAMS)
@@ -102,11 +191,42 @@ def test_active_set_empty_without_agn():
 
 
 def test_unknown_block_falls_back_to_full_superset():
-    """An unknown/grid-gated block over-frees (safe) rather than under-frees."""
-    cfg = {"agn_model": "composable", "agn_torus_block": "cat3d_wind"}  # grid-gated, omitted
+    """An unknown/grid-gated block over-frees (safe) rather than under-frees.
+
+    Uses a name that is not, and can never accidentally become, a real
+    registered block (``cat3d_wind`` used to sit here on the theory its grid
+    was absent from CI; fix round 1 found the grid IS tracked and added the
+    real entry below, so this regression test now needs a genuinely
+    unregistered name rather than one that could quietly stop testing the
+    fallback the day someone registers it).
+    """
+    cfg = {"agn_model": "composable", "agn_torus_block": "definitely_unregistered_torus_type"}
     assert agn_active_param_set(cfg) == ALL_AGN_PARAMS
     # Unknown monolithic model likewise.
     assert agn_active_param_set({"agn_model": "grahsp"}) == ALL_AGN_PARAMS
+
+
+def test_cat3d_wind_family_top_level_wildcard_frees_exact_consumed_set():
+    """Fix round 1 (CRITICAL): ``cat3d_wind`` and ``cat3d_wind_lowfwd`` were
+    both absent from ``AGN_BLOCK_CONSUMES``, so ``agn={'all_params': FREE}``
+    with either torus fell back to the full ~96-name superset (89 of them
+    foreign to the block). Assert the exact freed set, not a count -- a
+    superset regression must fail here even if some other unrelated entry
+    changes the total count.
+    """
+    for torus_type, axis_params in (
+        ("cat3d_wind", {"agn_a_cat3d", "agn_fwd_cat3d"}),
+        ("cat3d_wind_lowfwd", {"agn_a_cat3d_lowfwd", "agn_fwd_cat3d_lowfwd"}),
+    ):
+        cfg = {"agn_model": "composable", "agn_torus_block": torus_type}
+        active = agn_active_param_set(cfg)
+        assert active != ALL_AGN_PARAMS, f"{torus_type}: still falling back to the full superset"
+        expected = (
+            AGN_SHARED_PARAMS | {"agn_cos_inc", "agn_theta_torus", "agn_torus_frac"} | axis_params
+        )
+        assert active == expected, (
+            f"{torus_type}: freed {sorted(active)}, expected {sorted(expected)}"
+        )
 
 
 def test_grahsp_composable_blocks_scope_not_superset():
@@ -280,12 +400,15 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
             agn={
                 "type": "composable",
                 "disc": {"type": "multicolor"},
-                "torus": {"type": "simple"},
+                # agn_theta_torus is the gray mask's own opening angle, read at
+                # the runner's torus stage; R34 gave it its torus owner, so the
+                # composable spelling nests it (agn_cos_inc stays shared -- the
+                # sightline is read by disc, torus and atten alike).
+                "torus": {"type": "simple", "agn_theta_torus": Fixed(45.0)},
                 "nlr": {"type": nlr_block},
                 "blr": {"type": blr_block},
                 "agn_log_lbol": Fixed(12.0),
                 "agn_cos_inc": Fixed(cos_inc),
-                "agn_theta_torus": Fixed(45.0),
                 "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.05),
@@ -355,7 +478,21 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
         redshift=Fixed(0.05),
     )
     free_agn = {p for p in model.spec.free_params if p.startswith("agn")}
-    assert free_agn == agn_active_param_set(cfg)
+    # agn_ebv_disc (Task 16, item 2): a category-wide companion read
+    # (compose_l_nu reddens EVERY disc block's own continuum with this
+    # Prevot-SMC screen at the runner stage, blocks/runner.py) that no
+    # individual disc TYPE's own signature names, so it is invisible to
+    # agn_active_param_set's AGN_BLOCK_CONSUMES-only union -- but IS
+    # reachable here because the disc sub-dict states no 'all_params' of
+    # its own, so it inherits the top-level wildcard, and its OWN
+    # sub-block scope (_agn_subblock_declared_params, groups.py's
+    # _AGN_CATEGORY_WIDE_COMPANION_PARAMS) correctly includes it. Not a
+    # gap in agn_active_param_set's OWN contract (it unions per-block
+    # CONSUMES entries for params partitioned to the top-level "agn"
+    # group; agn_ebv_disc is partitioned to "agn.disc" instead) -- see
+    # test_agn_wildcard_measured_liveness.py for the measured liveness
+    # proof.
+    assert free_agn == agn_active_param_set(cfg) | {"agn_ebv_disc"}
 
 
 def test_all_fixed_wildcard_frees_nothing_and_keeps_old_defaults(synthetic_ssp_wide):
@@ -507,3 +644,73 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
         if rel <= 1e-6:
             no_ops.append(name)
     assert not no_ops, f"recipe frees no-op AGN params (no effect on predict): {no_ops}"
+
+
+def test_every_consumed_name_is_reachable_from_some_wildcard():
+    """Every name a block reads can be freed by SOME wildcard on a build that
+    selects that block (R36).
+
+    Derived from ``AGN_BLOCK_CONSUMES`` -- the record of what each block
+    actually reads -- and checked against the partition, so it is the reads
+    that drive the expectation and never the ownership table it tests. A read
+    the grammar offers no way to fit is the defect this catches.
+
+    It caught one: ``('disc', 'schartmann2005_skirtor_atten')`` applies
+    SKIRTOR's own geometry to its disc continuum, so its CONSUMES entry names
+    ``agn_oa_skirtor``/``p``/``q``/``tau_skirtor`` -- all owned by ``agn.torus``
+    and all measured live (grads 6.9e-20 to 1.9e-19 with no torus selected).
+    With torus absent, no wildcard reached any of them: the disc's own frees
+    only what it owns, and the shared agn-level one cannot reach a
+    sub-block-owned name. Fixed by a cross-category companion, so the reading
+    block's wildcard claims such a name exactly while the owning category's
+    selected block does not read it itself.
+    """
+    from tengri.parameters.groups import (
+        _AGN_CONSUMES_CATEGORY,
+        _agn_param_group,
+        _agn_subblock_declared_params,
+    )
+
+    grammar_of = {v: k for k, v in _AGN_CONSUMES_CATEGORY.items()}
+    unreachable = []
+    for (consumes_cat, block_type), consumed in AGN_BLOCK_CONSUMES.items():
+        grammar_cat = grammar_of.get(consumes_cat, consumes_cat)
+        # The build under test selects this block and nothing else, which is
+        # the configuration in which its own wildcard has to suffice.
+        own = _agn_subblock_declared_params(
+            grammar_cat, block_type, selection={grammar_cat: block_type}
+        )
+        for name in sorted(consumed):
+            if name in own or _agn_param_group(name) == "agn":
+                continue
+            unreachable.append(
+                f"({consumes_cat!r}, {block_type!r}) reads {name!r}, owned by "
+                f"{_agn_param_group(name)!r}: neither this block's wildcard nor "
+                f"the shared agn-level one frees it"
+            )
+    assert not unreachable, "\n".join(unreachable)
+
+
+def test_every_registered_block_has_a_consumes_entry():
+    """A registered block with no entry is scoped by signature introspection.
+
+    That fallback is documented and safe in the over-freeing direction, but it
+    reads a signature rather than a measurement, so it credits a block with
+    every ``agn_*`` argument it accepts -- including ones it passes to a grid
+    axis that ignores them (``('nlr', 'feltre')``'s ``agn_nlr_xi_d``, measured
+    exactly dead, is why that entry exists). Registering every block makes the
+    table the single answer to "what does this block read".
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    registered = {
+        (category, name)
+        for category, types in AGN_BLOCKS.items()
+        for name in types
+        if name != "none"
+    }
+    missing = sorted(pair for pair in registered if pair not in AGN_BLOCK_CONSUMES)
+    assert not missing, (
+        f"{len(missing)} registered AGN blocks have no AGN_BLOCK_CONSUMES entry, "
+        f"so their wildcard scope comes from signature introspection: {missing}"
+    )

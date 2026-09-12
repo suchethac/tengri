@@ -154,7 +154,12 @@ def test_end_to_end_through_build(ssp_data_bc03):
                 "feii": {"type": "none"},
                 "atten": {"type": "qsogen", "agn_attenuation_ebv": Fixed(ebv)},
                 "agn_log_lbol": Fixed(11.0),
-                "agn_polar_ebv": Fixed(0.0),
+                # agn_polar_ebv removed (Task 16, item 11): it is an
+                # 'agn.atten'-owned parameter (placing it flat at the top
+                # level now raises, D1-guard-style: "nest it"), and moot here
+                # regardless -- atten='qsogen' (Temple+2021's own quasar
+                # extinction curve) never reads it; only atten='polar_dust'
+                # does (R22, task13 fix-round-1).
                 "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.0),

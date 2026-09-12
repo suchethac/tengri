@@ -315,6 +315,45 @@ def register_agn_model(
     return decorator
 
 
+#: Self-contained (un-composable) AGN model names -> their menu metadata.
+#:
+#: These names do NOT route through a composable preset: each is backed by its
+#: own forward function carrying structural variant selectors with no
+#: disc/torus block equivalent. Keeping the names here rather than as literals
+#: inside :func:`_resolve_monolithic_model` gives the registry ONE source, so
+#: :func:`monolithic_agn_model_names` and the public menu cannot fall out of
+#: step with what the resolver actually accepts.
+_SELF_CONTAINED_AGN_MODELS: dict[str, dict[str, str]] = {
+    "skirtor_stalevski": {
+        "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
+        "_description": "raw SKIRTOR radiative-transfer total (disc + torus + scattering)",
+    },
+    "grahsp": {
+        "citation": "Kauffmann et al. 2025 (GRAHSP)",
+        "_description": "self-contained GRAHSP AGN model (torus_model/disc_model selectors)",
+    },
+}
+
+
+def monolithic_agn_model_names() -> frozenset[str]:
+    """Every non-composable AGN model name ``agn={'type': ...}`` accepts.
+
+    The two halves of the monolithic menu: the deprecated preset names, which
+    route through the composable runner with fixed block selectors, and the
+    self-contained models, which resolve to their own forward function.
+
+    Returns
+    -------
+    frozenset of str
+        Model names, excluding ``"composable"``.
+
+    Notes
+    -----
+    **JIT-compatible**: no, reads module-level registries at call time.
+    """
+    return frozenset(_AGN_PRESETS) | frozenset(_SELF_CONTAINED_AGN_MODELS)
+
+
 def _resolve_monolithic_model(name: str) -> Callable | None:
     """Return the monolithic forward function for a self-contained model.
 
@@ -336,6 +375,8 @@ def _resolve_monolithic_model(name: str) -> Callable | None:
         The monolithic forward function (with a deprecation warning already
         emitted), or ``None`` if ``name`` is not a self-contained model.
     """
+    if name not in _SELF_CONTAINED_AGN_MODELS:
+        return None
     if name == "skirtor_stalevski":
         warnings.warn(
             "AGN model 'skirtor_stalevski' is deprecated. It returns the raw "
@@ -347,8 +388,8 @@ def _resolve_monolithic_model(name: str) -> Callable | None:
             stacklevel=3,
         )
         return skirtor_stalevski_agn
+    # Lazy import avoids a grahsp -> unified import cycle at module load.
     if name == "grahsp":
-        # Lazy import avoids a grahsp → unified import cycle at module load.
         from tengri.components.agn.grahsp.registry import grahsp
 
         warnings.warn(
@@ -409,7 +450,7 @@ def resolve_agn_model(name: str) -> Callable:
         return monolithic
 
     if name not in _AGN_PRESETS:
-        deprecated = [*_AGN_PRESETS.keys(), "skirtor_stalevski", "grahsp"]
+        deprecated = sorted(monolithic_agn_model_names())
         raise ValueError(
             f"Unknown AGN model '{name}'. Available: 'composable', "
             f"or any of the deprecated monolithic names: {deprecated}"
@@ -1261,8 +1302,10 @@ def relagn_agn(
 
     # Derive disc L_bol by integrating L_ν over ν (trapezoid in JAX)
     nu = _C_AA / wavelength  # decreasing
-    # Sort ascending for trapezoid
-    lbol_disc_erg = jnp.trapezoid(jnp.flip(l_disc_full), jnp.flip(nu))
+    # ``nu`` is descending: negate the trapezoid instead of flipping the
+    # operands (reversed operands are silently zeroed under MLX compile on
+    # Apple GPU: jax-mps#232, #2295).
+    lbol_disc_erg = -jnp.trapezoid(l_disc_full, nu)
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
 
     # Torus re-emits agn_torus_frac of disc L_bol

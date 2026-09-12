@@ -13,6 +13,18 @@ All functions are pure JAX, JIT-compatible, and fully differentiable.
 **SFR→radio conversion modes** (select via sfr_mode parameter):
 
 - ``"bell2003"``: Fixed FIRRC q_IR = 2.64 (Bell 2003). Default, no evolution.
+- ``"bell2003_split"``: AGNFITTER-RX parity mode (Martinez-Ramirez+2024, Sec 3):
+  the same Bell (2003) total L(1.4 GHz), but split 90%/10% into a
+  non-thermal (alpha=0.75, Baan & Klockner 2006) / thermal (alpha=0.10,
+  Dale & Helou 2002; Condon 1992) pair via :func:`radio_sfr_bell2003_split`,
+  in place of this module's default architecture -- one
+  ``radio_sfr_bell2003`` term (100% synchrotron-shaped) plus a SEPARATE,
+  independently-normalized ``radio_freefree`` term (Murphy+2011). The two
+  constructions are NOT the same convention: the default treats
+  ``q_ir=2.64`` as calibrating the non-thermal emission alone and adds
+  free-free on top; AGNFITTER-RX treats it as calibrating the COMBINED
+  (synchrotron + thermal) total and splits that total 90/10. Use
+  ``"bell2003_split"`` only when reproducing AGNFITTER-RX's construction.
 - ``"delvecchio2021"``: Mass + redshift-dependent FIRRC at 1.4 GHz (Delvecchio+2021).
   Correlation params exposed as arguments for hierarchical priors.
 - ``"mccheyne2022"``: Mass + redshift-dependent FIRRC at 150 MHz (McCheyne+2022).
@@ -30,7 +42,9 @@ import math
 
 import jax.numpy as jnp
 
-from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _L_SUN
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
+from tengri.protocols.component import declared_default
+from tengri.utils.physics_constants import C_AA as _C_AA
 from tengri.utils.scale import pow10 as _pow10
 
 # Bell (2003) ApJ 586, 794 Eq. 3: characteristic luminosity L* at 1.4 GHz.
@@ -47,15 +61,79 @@ _RADIO_WAVE_MIN_AA: float = 1.0e7
 # At 1.4 GHz, Te=1e4: 2.174e27 × (1.4)^{-0.1} ≈ 2.10e27 erg/s/Hz per M☉/yr
 _C_FF: float = 1.0 / 4.6e-28  # ≈ 2.174e27
 
-# Kennicutt+1998 IR-SFR calibration: L_IR [erg/s] → SFR [M☉/yr]
-_SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
-
-# log10 of the FIRRC / free-free divisors: used by the float32-safe branches
-# (#1206) that form the (representable) radio luminosity directly from
-# ``log10(L_IR)`` so the ~1e43 erg/s linear ``L_IR`` never materializes (it
-# overflows float32 max, 3.4e38, poisoning ``inf / finite → inf``).
+# log10 of the FIRRC divisor: used by the float32-safe branches (#1206) that
+# form the (representable) radio luminosity directly from ``log10(L_IR)`` so
+# the ~1e43 erg/s linear ``L_IR`` never materializes (it overflows float32
+# max, 3.4e38, poisoning ``inf / finite → inf``).
 _LOG10_FIRRC_CONST: float = math.log10(3.75e12)  # bell/delvecchio/mccheyne norm
-_LOG10_SFR_IR_KENNICUTT: float = math.log10(_SFR_IR_KENNICUTT)  # free-free
+
+# Declared default from _params.py: the Bell-2003 family and the radio_total*
+# dispatchers share this single registry value (Condon 1992, 0.8).
+_ALPHA_SF_DEFAULT: float = declared_default(_RADIO_PARAMS, "radio_alpha_sf")
+
+# Delvecchio+2021 and McCheyne+2022 each cite their OWN consensus spectral
+# index (Novak+2017 / SEMPER) rather than the registry default above -- a
+# single shared constant would silently overwrite one calibration's cited
+# value with the other's (round-2 fix, ruling R8, supersedes the blanket
+# "unify everyone to 0.8" reading of R2). Declared once each, not as bare
+# literals in the signatures below.
+_ALPHA_SF_DELVECCHIO2021: float = 0.7  # Novak+2017 consensus, SEMPER Eq. 4
+_ALPHA_SF_MCCHEYNE2022: float = 0.7  # McCheyne+2022, SEMPER Eq. 5
+
+# Reference (calibration) frequencies: each SF relation is anchored at the
+# frequency its survey was calibrated at, so these are per-relation
+# constants, not a single shared value, and the AGN jet has its own separate
+# reference frequency.
+_NU_REF_BELL2003_HZ: float = 1.4e9  # Bell (2003) calibration frequency
+_NU_REF_DELVECCHIO2021_HZ: float = 1.4e9  # SEMPER Eq. 4 (1.4 GHz)
+_NU_REF_MCCHEYNE2022_HZ: float = 1.5e8  # SEMPER Eq. 5 (150 MHz)
+_NU_REF_AGN_HZ: float = 5.0e9  # AGN radio reference frequency [Hz] (5 GHz)
+
+# AGNFITTER-RX (Martinez-Ramirez+2024, A&A 688 A46, Sec 3, p.3) parity mode:
+# the Bell (2003) total L(1.4 GHz) split into a 90% non-thermal / 10%
+# thermal pair. Declared once, cited, and reused by
+# :func:`radio_sfr_bell2003_split` -- NOT the same numbers as this module's
+# default ``_ALPHA_SF_DEFAULT`` (0.8, Condon 1992) or ``radio_freefree``'s
+# independent free-free normalization; see the module docstring's
+# "bell2003_split" entry for why the two constructions differ.
+_F_THERMAL_AGNFITTER: float = 0.10  # thermal fraction of the Bell(2003) total
+_ALPHA_NONTHERMAL_AGNFITTER: float = 0.75  # Baan & Klockner (2006)
+_ALPHA_THERMAL_AGNFITTER: float = 0.10  # Dale & Helou (2002); Condon (1992)
+
+# L_IR [erg/s] -> SFR [Msun/yr] calibration. Originally introduced for
+# upstream AGNfitter-rX's generic derived-SFR reporting utility
+# (MODEL_AGNfitter.py:1434-1449, ``sfr_IR``, used for REPORTING an
+# already-fit galaxy's SFR via :func:`sfr_from_lir`), and -- as of a
+# fix-round citation audit (2026-09) -- ALSO used internally by
+# :func:`radio_freefree` to build the free-free term of the radio SED
+# itself. The constant 3.88e-44 is Murphy et al. (2011, ApJ 737, 67) Eq. 4
+# -- their own Starburst99-derived total-infrared (8-1000 um) SFR
+# calibration for a Kroupa (2001) IMF -- NOT Kennicutt (1998), whose
+# published TIR-SFR constant is 4.5e-44 (Salpeter 1955 IMF, 0.1-100 Msun);
+# an earlier version of this module attributed 3.88e-44 to Kennicutt (1998)
+# in error.
+#
+# Before the 2026-09 audit, :func:`radio_freefree` used a SEPARATE, uncited
+# constant (``_SFR_IR_KENNICUTT = 1.73e10 * L_SUN``, labeled "Kennicutt+1998")
+# whose provenance could not be confirmed against any of the three published
+# L_IR-SFR calibrations checked: Kennicutt (1998) implies an L_IR threshold
+# of 5.805e9 Lsun per Msun/yr (1/4.5e-44/L_SUN); Murphy et al. (2011) implies
+# 6.733e9 Lsun (1/3.88e-44/L_SUN); Bell (2003, ApJ 586, 794, Eq. 4,
+# SFR = 1.72e-10 x L_IR[Lsun]) implies 5.814e9 Lsun. The removed constant's
+# 1.73e10 Lsun threshold is 2.6-3x higher than all three -- consistent with
+# it being Bell (2003)'s own coefficient (1.72e-10) miscopied with the
+# exponent sign inverted (1.72e-10 -> 1.72e+10) rather than correctly
+# inverted (1 / 1.72e-10 = 5.81e9). :func:`radio_freefree` now uses this
+# module's single cited Murphy+2011 constant instead, which raises its
+# free-free normalization by a factor of
+# (3.88e-44 * L_SUN) / (1 / 1.73e10) ~ 2.5695x (see that function's
+# docstring for the updated worked example and
+# ``tests/components/agn/test_radio.py::TestFreeFree`` for the pinned
+# regression value).
+_SFR_FROM_LIR_MURPHY2011: float = 3.88e-44  # Msun/yr per erg/s (Murphy+2011 Eq. 4)
+# log10 form (float32-safe, see _LOG10_FIRRC_CONST's comment above): used
+# internally by radio_freefree.
+_LOG10_SFR_FROM_LIR_MURPHY2011: float = math.log10(_SFR_FROM_LIR_MURPHY2011)
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
@@ -116,8 +194,8 @@ def radio_sfr_bell2003(
     wavelength: jnp.ndarray,
     L_ir: float,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
-    nu_ref: float = 1.4e9,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
+    nu_ref: float = _NU_REF_BELL2003_HZ,
     *,
     log_L_ir: float | None = None,
 ) -> jnp.ndarray:
@@ -171,6 +249,171 @@ def radio_sfr_bell2003(
 radio_star_forming = radio_sfr_bell2003
 
 
+def radio_sfr_bell2003_split(
+    wavelength: jnp.ndarray,
+    L_ir: float,
+    q_ir: float = 2.64,
+    f_thermal: float = _F_THERMAL_AGNFITTER,
+    alpha_nonthermal: float = _ALPHA_NONTHERMAL_AGNFITTER,
+    alpha_thermal: float = _ALPHA_THERMAL_AGNFITTER,
+    nu_ref: float = _NU_REF_BELL2003_HZ,
+    *,
+    log_L_ir: float | None = None,
+) -> jnp.ndarray:
+    r"""AGNFITTER-RX parity mode: Bell (2003) total split 90%/10%.
+
+    Reproduces AGNFITTER-RX's host-galaxy radio construction (Martinez-
+    Ramirez+2024, Sec 3, p.3): the Bell (2003) IR-radio correlation gives
+    the TOTAL (synchrotron + thermal) L(1.4 GHz), which is then split into
+    a 90% non-thermal / 10% thermal pair with the paper's own slopes,
+    rather than tengri's default architecture of one 100%-synchrotron
+    :func:`radio_sfr_bell2003` term plus a separately-normalized
+    :func:`radio_freefree` term (see the module docstring's
+    ``"bell2003_split"`` entry -- the two are different conventions for
+    what ``q_ir`` calibrates, not two names for the same physics).
+
+    .. math::
+
+        L_{1.4\,{\rm GHz}}^{\rm tot} = \frac{L_{\rm IR}}
+        {3.75 \times 10^{12} \times 10^{q_{\rm IR}}}
+
+        L_\nu = L_{1.4\,{\rm GHz}}^{\rm tot} \left[
+        (1 - f_{\rm th}) \left(\frac{\nu}{\nu_{\rm ref}}\right)^{-\alpha_{\rm nt}}
+        + f_{\rm th} \left(\frac{\nu}{\nu_{\rm ref}}\right)^{-\alpha_{\rm th}}
+        \right]
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
+    L_ir : float
+        Total infrared luminosity (8-1000 um) [erg/s].
+    q_ir : float
+        FIR-radio correlation parameter for the COMBINED total. Default 2.64
+        (Bell 2003, z=0).
+    f_thermal : float
+        Thermal fraction of the total L(1.4 GHz). Default 0.10 (AGNFITTER-RX).
+    alpha_nonthermal : float
+        Non-thermal (synchrotron) spectral index (S_nu ~ nu^-alpha). Default
+        0.75 (Baan & Klockner 2006, as adopted by AGNFITTER-RX).
+    alpha_thermal : float
+        Thermal (free-free) spectral index. Default 0.10 (Dale & Helou 2002;
+        Condon 1992, as adopted by AGNFITTER-RX).
+    nu_ref : float
+        Reference frequency [Hz]. Default 1.4 GHz.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure JAX function.
+
+    References
+    ----------
+    .. [1] E. F. Bell, "Estimating Star Formation Rates from Infrared and
+       Radio Luminosities: The Origin of the Radio-Infrared Correlation,"
+       ApJ, 586, 794 (2003). https://doi.org/10.1086/367829
+       bibcode: 2003ApJ...586..794B
+    .. [2] W. A. Baan and H. R. Klockner, "Radio properties of FIR-megamaser
+       nuclei," A&A, 449, 559 (2006). https://doi.org/10.1051/0004-6361:20053936
+       bibcode: 2006A&A...449..559B
+    .. [3] D. A. Dale and G. Helou, "The Infrared Spectral Energy
+       Distribution of Normal Star-forming Galaxies: Calibration at
+       Far-Infrared and Submillimeter Wavelengths," ApJ, 576, 159 (2002).
+       https://doi.org/10.1086/341632 bibcode: 2002ApJ...576..159D
+    .. [4] J. J. Condon, "Radio Emission from Normal Galaxies," ARA&A, 30,
+       575 (1992). https://doi.org/10.1146/annurev.aa.30.090192.003043
+       bibcode: 1992ARA&A..30..575C
+    .. [5] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
+       (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
+    """
+    nu = _C_AA / wavelength
+    if log_L_ir is None:
+        L_tot_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
+    else:
+        # float32-safe (#1206): see radio_sfr_bell2003 for the same pattern.
+        L_tot_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+    L_nu = L_tot_ref * (
+        (1.0 - f_thermal) * (nu / nu_ref) ** (-alpha_nonthermal)
+        + f_thermal * (nu / nu_ref) ** (-alpha_thermal)
+    )
+    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+
+
+def sfr_from_lir(
+    L_ir_erg_s: jnp.ndarray,
+    calibration: str = "murphy2011",
+) -> jnp.ndarray:
+    r"""Derived star formation rate from total infrared luminosity.
+
+    Reproduces AGNFITTER-RX's ``sfr_IR`` reporting utility
+    (``MODEL_AGNfitter.py:1434-1449``): used to REPORT a fitted galaxy's
+    derived SFR, distinct from (and not used by) the FIR-radio correlation
+    functions in this module that build the radio SED itself.
+
+    .. math::
+
+        {\rm SFR} = C \, L_{\rm IR}
+
+    Parameters
+    ----------
+    L_ir_erg_s : array_like
+        Total infrared luminosity (8-1000 um) [erg/s].
+    calibration : str
+        - ``"murphy2011"`` (default, and the only option): :math:`C =
+          3.88 \times 10^{-44}` Msun/yr per erg/s -- Murphy et al. (2011)
+          Eq. 4, their own Starburst99-derived total-infrared SFR
+          calibration for a Kroupa (2001) IMF, and AGNFITTER-RX's own
+          ``sfr_IR`` constant (verified against ``MODEL_AGNfitter.py``
+          directly, not from memory). An earlier version of this function
+          named this constant ``"kennicutt1998"`` in error: Kennicutt
+          (1998)'s own published total-infrared SFR constant is
+          :math:`4.5 \times 10^{-44}` (Salpeter 1955 IMF), a different
+          number. No ``"kennicutt1998"`` option is offered. This is the
+          same constant :func:`radio_freefree` now uses internally to build
+          its free-free term (a fix-round 2026-09 citation audit replaced
+          that function's previous, uncited normalization with this one --
+          see ``_SFR_FROM_LIR_MURPHY2011``'s module-level comment for the
+          measured effect on ``radio_freefree``'s output).
+
+    Returns
+    -------
+    ndarray
+        SFR [Msun/yr].
+
+    Raises
+    ------
+    ValueError
+        If ``calibration`` is not ``"murphy2011"``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure JAX function.
+
+    References
+    ----------
+    .. [1] E. Murphy et al., "Calibrating Extinction-Free Star Formation
+       Rate Diagnostics with 33 GHz Free-Free Emission in NGC 6946," ApJ,
+       737, 67 (2011), Eq. 4. https://doi.org/10.1088/0004-637X/737/2/67
+       bibcode: 2011ApJ...737...67M
+    .. [2] R. C. Kennicutt, Jr., "Star Formation in Galaxies Along the
+       Hubble Sequence," ARA&A, 36, 189 (1998).
+       https://doi.org/10.1146/annurev.astro.36.1.189
+       bibcode: 1998ARA&A..36..189K
+    .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
+       (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
+    """
+    L_ir_erg_s = jnp.asarray(L_ir_erg_s)
+    if calibration == "murphy2011":
+        return _SFR_FROM_LIR_MURPHY2011 * L_ir_erg_s
+    raise ValueError(f"Unknown calibration {calibration!r}. Choose 'murphy2011'.")
+
+
 def radio_sfr_delvecchio2021(
     wavelength: jnp.ndarray,
     L_ir: float,
@@ -179,8 +422,8 @@ def radio_sfr_delvecchio2021(
     q0: float = 2.743,
     mass_slope: float = 0.234,
     z_slope: float = -0.025,
-    alpha_sf: float = 0.7,
-    nu_ref: float = 1.4e9,
+    alpha_sf: float = _ALPHA_SF_DELVECCHIO2021,
+    nu_ref: float = _NU_REF_DELVECCHIO2021_HZ,
     apply_suppression: bool = True,
     *,
     log_L_ir: float | None = None,
@@ -268,8 +511,8 @@ def radio_sfr_mccheyne2022(
     q0: float = 1.98,
     mass_slope: float = -0.22,
     z_slope: float = 0.02,
-    alpha_sf: float = 0.7,
-    nu_ref: float = 1.5e8,
+    alpha_sf: float = _ALPHA_SF_MCCHEYNE2022,
+    nu_ref: float = _NU_REF_MCCHEYNE2022_HZ,
     apply_suppression: bool = True,
     *,
     log_L_ir: float | None = None,
@@ -362,10 +605,11 @@ def radio_freefree(
 ) -> jnp.ndarray:
     """Thermal free-free (bremsstrahlung) emission from HII regions.
 
-    Traces instantaneous SFR via the Kennicutt+1998 IR calibration and the
-    Murphy+2011 radio-SFR relation (Eq. 11).  At 1.4 GHz a typical star-forming
-    galaxy contributes ~5–15% of its total radio flux from free-free, depending
-    on the FIRRC calibration used for the synchrotron component.
+    Traces instantaneous SFR via the Murphy+2011 IR-SFR calibration (Eq. 4)
+    and the Murphy+2011 radio-SFR relation (Eq. 11).  At 1.4 GHz a typical
+    star-forming galaxy contributes ~5-15% of its total radio flux from
+    free-free, depending on the FIRRC calibration used for the synchrotron
+    component.
 
     .. math::
 
@@ -373,9 +617,19 @@ def radio_freefree(
         \\left(\\frac{\\nu}{\\rm GHz}\\right)^{\\alpha_{\\rm ff}}
         \\frac{L_{\\rm IR}}{L_{\\rm IR,\\odot}}
 
-    where :math:`C_{\\rm ff} = 1 / (4.6 \\times 10^{-28} \\, L_\\odot)
-    \\approx 5.68 \\times 10^{-7}` erg/s/Hz per M☉/yr at 1 GHz and
-    :math:`L_{\\rm IR,\\odot} = 1.73 \\times 10^{10}` Lsun (Kennicutt+1998).
+    where :math:`C_{\\rm ff} = 1 / (4.6 \\times 10^{-28})
+    \\approx 2.174 \\times 10^{27}` erg/s/Hz per M☉/yr at 1 GHz (this is
+    ``_C_FF`` in the source, unaffected by this fix) and
+    :math:`L_{\\rm IR,\\odot} = 6.733 \\times 10^{9}` Lsun (Murphy et al.
+    2011, Eq. 4: :math:`1 / (3.88 \\times 10^{-44}\\,{\\rm erg^{-1}\\,s}) /
+    L_\\odot`). A fix-round (2026-09) citation audit replaced this
+    function's previous normalization (an uncited
+    :math:`1.73 \\times 10^{10}` Lsun, labeled "Kennicutt+1998", that could
+    not be independently confirmed against Kennicutt 1998, Murphy et al.
+    2011, or Bell 2003) with this one; see ``_SFR_FROM_LIR_MURPHY2011``'s
+    module-level comment for the full before/after arithmetic. The change
+    raises this function's output by a factor of ~2.5695x at fixed
+    ``L_ir``.
 
     Parameters
     ----------
@@ -399,15 +653,16 @@ def radio_freefree(
     -----
     **JIT-compatible**: yes, pure JAX function.
 
-    Calibration check: at 1.4 GHz, Te=1e4 K, L_IR=1e10 Lsun (SFR≈0.58 M☉/yr):
-    L_ff ≈ 5.49e-7 × 0.58 ≈ 3.2e-7 Lsun/Hz (Murphy+2011 Table 1 consistent).
+    Calibration check: at 1.4 GHz, Te=1e4 K, L_IR=1e10 Lsun
+    (SFR = 3.88e-44 x 1e10 x 3.828e33 erg/s ≈ 1.485 M☉/yr, Murphy+2011 Eq. 4):
+    L_ff ≈ 2.102e27 erg/s/Hz per M☉/yr × 1.485 ≈ 3.122e27 erg/s/Hz
+    (≈ 8.156e-7 Lsun/Hz; Murphy+2011 Table 1 order-of-magnitude consistent).
 
     References
     ----------
 
-    - Murphy et al. 2011, ApJ, 737, 67 (Eq. 11)
+    - Murphy et al. 2011, ApJ, 737, 67 (Eq. 4, Eq. 11)
     - Condon 1992, ARA&A, 30, 575
-    - Kennicutt 1998, ARA&A, 36, 189
 
     """
     nu = _C_AA / wavelength  # Hz
@@ -415,9 +670,9 @@ def radio_freefree(
     # float32-safe (#1206): form the SFR straight from log10(L_IR) when supplied
     # so the ~1e43 linear L_IR (inf in float32) never materializes.
     if log_L_ir is None:
-        sfr = L_ir / _SFR_IR_KENNICUTT  # M☉/yr
+        sfr = L_ir * _SFR_FROM_LIR_MURPHY2011  # M☉/yr
     else:
-        sfr = _pow10(log_L_ir - _LOG10_SFR_IR_KENNICUTT)  # M☉/yr
+        sfr = _pow10(log_L_ir + _LOG10_SFR_FROM_LIR_MURPHY2011)  # M☉/yr
     # Murphy+2011 Eq. 11 inverted; (T_e/1e4)^0.45 factor from ionized gas physics
     L_nu = _C_FF * (T_e / 1.0e4) ** 0.45 * nu_ghz**alpha_ff * sfr
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
@@ -450,10 +705,10 @@ def _dispatch_sfr(
     L_ir : float
         IR luminosity [erg/s].
     sfr_mode : str
-        One of ``"none"``, ``"bell2003"``, ``"delvecchio2021"``,
-        ``"mccheyne2022"``. Default ``"bell2003"``.
+        One of ``"none"``, ``"bell2003"``, ``"bell2003_split"``,
+        ``"delvecchio2021"``, ``"mccheyne2022"``. Default ``"bell2003"``.
     q_ir : float
-        Fixed q_IR (bell2003 mode only) [dimensionless].
+        Fixed q_IR (bell2003/bell2003_split modes only) [dimensionless].
     alpha_sf : float
         Synchrotron spectral index [dimensionless].
     log_mstar : float
@@ -482,6 +737,11 @@ def _dispatch_sfr(
         return jnp.zeros_like(wavelength)
     elif sfr_mode == "bell2003":
         return radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf, log_L_ir=log_L_ir)
+    elif sfr_mode == "bell2003_split":
+        # alpha_sf is unused here: the split mode's two spectral indices
+        # (alpha_nonthermal=0.75, alpha_thermal=0.10) are AGNFITTER-RX's own
+        # fixed convention, not this module's tunable alpha_sf knob.
+        return radio_sfr_bell2003_split(wavelength, L_ir, q_ir, log_L_ir=log_L_ir)
     elif sfr_mode == "delvecchio2021":
         kw = {}
         if q0 is not None:
@@ -518,8 +778,8 @@ def _dispatch_sfr(
         )
     else:
         raise ValueError(
-            f"Unknown sfr_mode {sfr_mode!r}. "
-            "Choose 'none', 'bell2003', 'delvecchio2021', or 'mccheyne2022'."
+            f"Unknown sfr_mode {sfr_mode!r}. Choose 'none', 'bell2003', "
+            "'bell2003_split', 'delvecchio2021', or 'mccheyne2022'."
         )
 
 
@@ -528,7 +788,7 @@ def radio_agn(
     L_agn_bol: float,
     radio_loudness: float = 0.0,
     alpha_agn: float = 0.7,
-    nu_ref: float = 1.4e9,
+    nu_ref: float = _NU_REF_AGN_HZ,
     l_bband: float = 0.0,
     log_nu_cut: float = 13.0,
     *,
@@ -556,7 +816,7 @@ def radio_agn(
     alpha_agn : float
         AGN radio spectral index. Default 0.7.
     nu_ref : float
-        Reference frequency [Hz]. Default 1.4 GHz.
+        Reference frequency [Hz]. Default 5 GHz.
     l_bband : float
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly instead of deriving from L_agn_bol bolometric
@@ -605,13 +865,12 @@ def radio_agn(
     # L_5GHz from radio-loudness definition
     L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
 
-    # Power-law from 5 GHz with a synchrotron-aging exponential cutoff. The
+    # Power-law from nu_ref with a synchrotron-aging exponential cutoff. The
     # cutoff (not a hard wavelength floor) is what physically truncates the
     # jet at high frequency, so the jet extends smoothly into the sub-mm
     # instead of dropping to zero at 300 GHz (1 mm).
-    nu_5GHz = 5.0e9
     nu_cut = 10.0**log_nu_cut
-    return L_5GHz * (nu / nu_5GHz) ** (-alpha_agn) * jnp.exp(-nu / nu_cut)
+    return L_5GHz * (nu / nu_ref) ** (-alpha_agn) * jnp.exp(-nu / nu_cut)
 
 
 def radio_agn_dpl(
@@ -622,7 +881,7 @@ def radio_agn_dpl(
     alpha2: float = -0.1,
     log_nu_t: float = 10.0,
     log_nu_cut: float = 13.0,
-    nu_ref: float = 5.0e9,
+    nu_ref: float = _NU_REF_AGN_HZ,
     l_bband: float = 0.0,
     *,
     log_L_agn_bol: float | None = None,
@@ -725,7 +984,7 @@ def radio_total_terms(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha_agn: float = 0.7,
     sfr_mode: str = "bell2003",
@@ -863,7 +1122,7 @@ def radio_total(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha_agn: float = 0.7,
     sfr_mode: str = "bell2003",
@@ -965,7 +1224,7 @@ def radio_total_dpl_terms(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha1: float = -0.75,
     alpha2: float = -0.1,
@@ -1117,7 +1376,7 @@ def radio_total_dpl(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha1: float = -0.75,
     alpha2: float = -0.1,
@@ -1228,7 +1487,7 @@ def compute_radio_components(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha_agn: float = 0.7,
     sfr_mode: str = "bell2003",

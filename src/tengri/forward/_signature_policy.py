@@ -179,9 +179,23 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_needs_agn_lbol_flat_check": content(
         "owner-flagged: a build-time flag that selects a validation branch"
     ),
+    "_agn_lbol_is_user_fixed": content(
+        "owner-flagged: the sibling of the row above, same shape. It records "
+        "whether agn_log_lbol was spelled out by the user rather than left "
+        "free (R55), and selects the wording of the flat-direction refusal "
+        "_check_agn_lbol_flat_direction raises. Build-time only, reaching no "
+        "kernel -- content is the fail-safe classification, as for the flag "
+        "that gates the same check"
+    ),
     # ── Radio / X-ray / shock ──────────────────────────────────────────
     "_uses_radio": content("whether radio emission is attached"),
-    "_radio_include_freefree": content("radio free-free term enable flag"),
+    # No ``_radio_include_freefree`` row, deliberately: a 2026-09 citation audit
+    # deleted that attribute. It was read from a ``spec.radio_include_freefree``
+    # the public grammar never set, fed only the old hand-written signature
+    # tuple, and never reached ``RadioSEDComponentConfig`` -- the object
+    # ``radio_freefree`` actually gates on, which ``component_factory`` never
+    # accepted it for. 100% dead, so its removal changes no model's compiled
+    # HLO and is intentionally not replaced with anything here.
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),

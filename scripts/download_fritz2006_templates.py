@@ -9,7 +9,7 @@ a *converted* grid (``fritz2006_torus_grid.h5``, ~28 MB, triweight-ready).
 This script obtains that grid into ``data/`` via two routes, in order:
 
 1. **Hosted download** — fetch the pre-converted grid from the public host
-   (the SSP catalogue's host), needing no CIGALE install.
+   (the SSP catalog's host), needing no CIGALE install.
 2. **CIGALE fallback** — if the hosted file is unavailable, build the grid
    locally from a ``pcigale`` install (the build is bit-identical to the
    hosted file). This is the interim path until the converted grid is

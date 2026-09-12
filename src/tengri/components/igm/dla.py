@@ -45,9 +45,12 @@ References
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import (
     C_CGS,
     E_CHARGE_ESU,
@@ -70,7 +73,7 @@ _WL_LYA: float = 1215.6701
 _NU_LYA: float = C_CGS / (_WL_LYA * 1e-8)
 """Ly-alpha rest frequency [Hz]."""
 
-_K_LYA: float = _F_LYA * jnp.sqrt(jnp.pi) * E_CHARGE_ESU**2 / (M_ELECTRON * C_CGS)
+_K_LYA = host_array(_F_LYA * math.sqrt(math.pi) * E_CHARGE_ESU**2 / (M_ELECTRON * C_CGS))
 """Cross-section prefactor K = √π e² f / (m_e c) [cm² Hz]."""
 
 
@@ -167,7 +170,7 @@ def _sigma_lya(
     """
     dnu = _deltanu_doppler(temp, b_turb_kms)
     a = _A_LYA / (4.0 * jnp.pi * dnu)
-    sigma = _K_LYA / dnu * _voigt_tepper_garcia(x, a)
+    sigma = device_table(_K_LYA) / dnu * _voigt_tepper_garcia(x, a)
     # Lee (2013) asymmetry correction
     sigma = sigma * (1.0 - 1.792 * x * dnu / _NU_LYA)
     return sigma

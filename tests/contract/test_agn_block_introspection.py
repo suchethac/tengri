@@ -147,3 +147,30 @@ def test_agn_block_category_field_exists():
     assert categories_seen.issubset(BLOCK_CATEGORIES), (
         f"Unexpected categories: {categories_seen - BLOCK_CATEGORIES}"
     )
+
+
+@pytest.mark.contract
+def test_describe_agn_block_has_params_and_param_details():
+    """describe_agn_block gains params/param_details (D8, task-12 public-API
+    audit): silva04's torus block declares agn_log_nh_silva and
+    agn_torus_frac (plus the shared agn_log_lbol), each with a description
+    and a default sourced from _AGN_PARAMS -- previously absent for every
+    composable block, though describe_sfh_model already had it."""
+    rec = tengri.describe_agn_block("silva04", category="torus")
+    assert "params" in rec, "describe_agn_block has no 'params' key (D8 regression)"
+    assert "param_details" in rec, "describe_agn_block has no 'param_details' key (D8 regression)"
+    assert {"agn_log_nh_silva", "agn_torus_frac"} <= set(rec["params"])
+    by_name = {d["name"]: d for d in rec["param_details"]}
+    assert "agn_log_nh_silva" in by_name
+    assert by_name["agn_log_nh_silva"]["description"]
+    assert by_name["agn_log_nh_silva"]["default"]
+
+
+@pytest.mark.contract
+def test_describe_agn_block_params_derived_from_the_selected_block_function():
+    """params/param_details are sourced from the SAME signature introspection
+    the wildcard-scoping fix (_agn_subblock_declared_params) uses, not a
+    second, independently-maintained list: cat3d_wind's torus block reads
+    agn_a_cat3d/agn_fwd_cat3d in its own signature, and both must appear."""
+    rec = tengri.describe_agn_block("cat3d_wind", category="torus")
+    assert {"agn_a_cat3d", "agn_fwd_cat3d", "agn_torus_frac"} <= set(rec["params"])

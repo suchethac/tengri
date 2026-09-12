@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Emission-line luminosities need a float32-safe companion (#1534, #1206 item 3).
+r"""Emission-line luminosities need a float32-safe companion (#1534, #1206 §A/§B).
 
-Line luminosities are ~1e40-1e42 erg/s, past float32's 3.4e38 ceiling, so eleven
-public properties are ``inf`` in pure float32. #1206 item 3 proposes returning them
-in ``L_sun``/``log10`` -- a **breaking** unit change. This ships the additive
-alternative instead, following the ``log_q_h`` precedent that already shipped for the
-same reason: a ``log_<name>`` companion beside each linear property. Nothing breaks,
-no deprecation cycle, and the breaking change remains available later.
+Line luminosities are ~1e40-1e42 erg/s, past float32's 3.4e38 ceiling, so the
+eleven line properties (and the three X-ray luminosities) were ``inf`` in pure
+float32. Two repairs landed, in sequence: first the additive one, a
+``log_<name>`` companion beside each linear property (following the
+``log_q_h`` precedent) so nothing broke and no deprecation cycle was needed;
+then #1206 §A/§B's breaking unit change moved the linear properties
+themselves to Lsun, so they no longer overflow either. Both companions stay:
+``log_<name>`` is dex re erg/s, ``<name>`` is Lsun, and
+``log_<name> == log10(<name> * L_sun)``.
 
 **The companion has to be computed upstream of the overflow or it is decorative.**
 ``log10_magnitude(inf)`` is ``+inf`` by contract (#1527), so wrapping the *linear*
@@ -92,8 +95,9 @@ def test_the_sweep_is_not_vacuous(linear_and_log):
         assert doublet in names, f"{doublet} (a doublet) is not covered: {names}"
     for xray in ("l_x_xrb", "l_x_total"):
         assert xray in names, (
-            f"{xray} is not covered. Its linear form overflows float32 at ANY star "
-            f"formation rate — the HMXB coefficient alone is 2.6e39. Pairs: {names}"
+            f"{xray} is not covered. Its log companion is the float32-safe route to "
+            f"the HMXB coefficient (2.6e39, overflows float32 at any SFR) even though "
+            f"the linear form itself is now Lsun (#1206 §B). Pairs: {names}"
         )
 
 
@@ -127,31 +131,52 @@ def test_every_float32_unrepresentable_property_has_a_companion(ssp_bare):
 
 
 def test_the_companion_carries_the_right_value_in_float64(linear_and_log):
-    """``log_X == log10(X)`` wherever the linear form is finite and positive.
+    """``log_X == log10(X)`` (or ``log10(X) + log10(L_sun)`` for the Lsun set)
+    wherever the linear form is finite and positive.
 
     The doublets are the load-bearing entries: a companion that returned the first
     matched component, or the sum of the logs, would pass every single-line check
     here and fail these two.
+
+    The eleven line properties and the three X-ray luminosities moved to
+    ``units="Lsun"`` (breaking, no alias, #1206 §A/§B); their ``log_*``
+    companions stay in dex re erg/s, so the relationship there picks up a
+    ``+ log10(L_sun)`` offset. Every other pair is unaffected.
     """
+    from tengri.components.nebular.component import _LOG_LINE_NAMES
+    from tengri.utils.sed_quantities import LOG10_L_SUN
+
+    _LSUN_PROPERTIES = set(_LOG_LINE_NAMES) | {"l_x_xrb", "l_x_agn", "l_x_total"}
+
     names, lin, log = linear_and_log
     for name in names:
         a = float(np.asarray(lin[name]))
         b = float(np.asarray(log[f"log_{name}"]))
         if not np.isfinite(a) or a <= 0.0:
             continue
-        assert b == pytest.approx(np.log10(a), rel=1e-10), (
-            f"log_{name} = {b} but log10({name}) = {np.log10(a)}; the companion is "
+        expected = np.log10(a) + (LOG10_L_SUN if name in _LSUN_PROPERTIES else 0.0)
+        assert b == pytest.approx(expected, rel=1e-10), (
+            f"log_{name} = {b} but expected {expected}; the companion is "
             "not the log of its linear sibling"
         )
 
 
-def test_the_companion_is_finite_in_float32_where_the_linear_overflows(ssp_bare):
-    """The point of the exercise: pure float32, linear ``inf``, companion finite.
+def test_the_companion_is_finite_in_float32(ssp_bare):
+    """Every (X, log_X) pair on this fixture is finite in pure float32.
 
-    Asserting only that the companion is finite would pass for a constant. The
-    float64 comparison above pins the value; this pins that it *survives*.
+    Before #1206 §A/§B this test's point was narrower: the *linear* form
+    overflowed float32 (the eleven line properties and the three X-ray
+    luminosities were erg/s, ~1e40-1e45) while the log companion, read from
+    ``log_line_lums`` upstream of the overflow rather than computed after
+    it, stayed finite. That breaking unit change has since landed -- the
+    linear forms are Lsun now and no longer overflow on their own -- so
+    there is nothing left in THIS fixture's (X, log_X) census for the
+    "linear overflows" half to observe. The companion is checked anyway:
+    it is still the float32-safe route to the underlying erg/s quantity
+    (the HMXB coefficient alone is 2.6e39, still past float32's ceiling),
+    and this guards against a future regression reintroducing an
+    overflowing linear property with no working companion.
     """
-    f32_max = float(np.finfo(np.float32).max)
     with jax.enable_x64(True):
         model64 = _model(ssp_bare)
         names = [
@@ -160,23 +185,33 @@ def test_the_companion_is_finite_in_float32_where_the_linear_overflows(ssp_bare)
             if f"log_{n}" in model64.available_properties and not n.startswith("log_")
         ]
         lin64 = model64.predict_properties(_PARAMS, names=tuple(names))
+        log64 = model64.predict_properties(_PARAMS, names=tuple(f"log_{n}" for n in names))
+    assert names, "no (X, log_X) pairs on this fixture -- see test_the_sweep_is_not_vacuous"
 
-    overflowing = [n for n in names if abs(float(np.asarray(lin64[n]))) > f32_max]
-    assert overflowing, (
-        "no line property exceeds float32's ceiling on this fixture, so this test "
-        "cannot observe the defect it exists for"
-    )
+    # Two legitimate reasons a pair carries no signal for this sweep, both
+    # already non-finite in float64 (so excluding them loses no coverage):
+    # ``civ_1549`` is nan already in float64 on the Cue catalog (a known
+    # legacy subset gap, unrelated to this file: not every backend publishes
+    # every line); ``log_l_x_agn`` / ``log_l_x_total`` are legitimately -inf
+    # on this AGN-free fixture (the "no AGN" sentinel, #1206 §B), not a
+    # float32 defect.
+    names = [
+        n
+        for n in names
+        if np.isfinite(float(np.asarray(lin64[n])))
+        and np.isfinite(float(np.asarray(log64[f"log_{n}"])))
+    ]
+    assert names, "no finite-in-float64 (X, log_X) pairs remain to check"
 
     with jax.enable_x64(False):
         model32 = _model(ssp_bare)
-        log32 = model32.predict_properties(_PARAMS, names=tuple(f"log_{n}" for n in overflowing))
+        log32 = model32.predict_properties(_PARAMS, names=tuple(f"log_{n}" for n in names))
 
-    for name in overflowing:
+    for name in names:
         value = float(np.asarray(log32[f"log_{name}"]))
         assert np.isfinite(value), (
-            f"log_{name} is {value} in pure float32 while {name} overflows "
-            f"({float(np.asarray(lin64[name])):.4e} > {f32_max:.4e}). The companion is "
-            "being computed after the overflow instead of from log_line_lums."
+            f"log_{name} is {value} in pure float32. The companion is being computed "
+            "after an overflow instead of from the upstream log catalog."
         )
         assert np.any(value != 0.0), (
             "`value` is identically zero — finite is not enough, "

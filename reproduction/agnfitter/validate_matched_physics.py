@@ -10,7 +10,12 @@ residual is a physics/mapping problem.
 Run:
 
     JAX_PLATFORMS=cpu PYTHONPATH=$PWD/src:$PWD \
-        .venv/bin/python reproduction/agnfitter/validate_matched_physics.py
+        .venv/bin/python reproduction/agnfitter/validate_matched_physics.py [--figdir DIR]
+
+``--figdir`` overrides where the validation figure is written (default:
+``_figs/`` beside this script). The figure backend honors an ambient
+``MPLBACKEND`` (e.g. ``MPLBACKEND=Agg`` for a headless CI run) rather than
+overriding it; with none set, it defaults to ``Agg``.
 
 Needs only the committed reference grids under ``data/``
 (``agnfitter_bbb_reference.h5``, ``agnfitter_torus_reference.h5``,
@@ -34,6 +39,7 @@ of the repackaging. Shapes are peak-normalized, because AGNFITTER-RX and
 tengri carry different luminosity bookkeeping for the same template.
 """
 
+import argparse
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -44,7 +50,13 @@ from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")
+# Headless-safe default, but an ambient MPLBACKEND (e.g. a caller that has
+# already set MPLBACKEND=Agg, or wants a different backend) is honored rather
+# than overridden -- matplotlib reads that env var itself on the first
+# `import matplotlib.pyplot`, so calling `.use()` unconditionally here would
+# silently clobber a caller's explicit choice.
+if "MPLBACKEND" not in os.environ:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -176,7 +188,34 @@ def radio_report():
         )
 
 
-def main():
+def parse_args(argv=None):
+    """CLI arguments for this script.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Argument vector; defaults to ``sys.argv[1:]``.
+
+    Returns
+    -------
+    argparse.Namespace
+        Has one attribute, ``figdir`` (``Path | None``).
+    """
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--figdir",
+        type=Path,
+        default=None,
+        help="directory to write the validation figure to (default: _figs/ beside this script)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    figdir = args.figdir if args.figdir is not None else FIGS
+    figdir.mkdir(parents=True, exist_ok=True)
+
     A.require_available()
     U.verify_unit_conversion(rtol=1e-3)
 
@@ -241,7 +280,7 @@ def main():
         axr.grid(True, alpha=0.3)
     fig.tight_layout()
 
-    out = FIGS / "agnfitter_validate_matched_physics.png"
+    out = figdir / "agnfitter_validate_matched_physics.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"\n  wrote {out}\n")
 

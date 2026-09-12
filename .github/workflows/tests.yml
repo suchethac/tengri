@@ -223,6 +223,14 @@ jobs:
       # passed a dict where an Observation belongs, and `except Exception`
       # relabelled the TypeError "Could not create minimal model". Stdlib-only.
       - run: python tools/check_test_skip_handlers.py
+      # A module-scope numeric table reaches JAX only through device_table()
+      # (#2271). A jnp array at module scope is a device buffer whose dtype is
+      # fixed at import (jax-mps cannot even import the package); a plain numpy
+      # table reused across traces under a different x64 state comes back with
+      # the dtype of its FIRST conversion (JAX memoizes by object identity), so
+      # the conversion has to happen at the use with an explicit dtype. The
+      # runtime half is the census in tests/regression/precision. Stdlib-only.
+      - run: python tools/check_host_tables.py
       # The verification protocol is where README sends anyone asking what is
       # safe to use for science, and its Test File column IS the evidence. It
       # cited eight crossval tests; all eight were absent, every row read
@@ -410,6 +418,11 @@ jobs:
       - run: python tools/check_notebooks_executed.py
       # Validate that all reproduction notebooks have valid status assertions.
       - run: python tools/check_repro_status.py
+      # A committed reproduction render must still match the source it claims
+      # to have run from (metadata["tengri_render"]["source_sha256"]).
+      # Non-strict: most comparisons predate the stamp, so an unstamped
+      # render only warns; a stamped-but-stale one always fails.
+      - run: python tools/check_repro_render_fresh.py
       # Census: verify every check_*.py is wired or explicitly declared not wired (#2050).
       - run: python tools/check_guard_wiring.py
       # The same hazard one directory over: a gallery example that catches
@@ -696,6 +709,30 @@ jobs:
       - run: python tools/check_doc_grammar_keys.py
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # Grid-backed AGN priors (agn_log_nh_silva, agn_a_cat3d, agn_fwd_cat3d,
+      # agn_cos_inc via cat3d, agn_oa_skirtor/agn_incl_skirtor/agn_tv_skirtor)
+      # must declare exactly the vendored HDF5 grid's own axis extent (#2050
+      # Task 1, M-A). Needs only h5py + numpy (installed above), not a JIT
+      # trace, so it lives beside the other declaration guards rather than in
+      # `lint` (which installs only ruff).
+      - run: python tools/check_param_grid_extent.py
+      # A component class's class-level Uniform(lo, hi, ..., default=d)
+      # restates one domain _params.py PARAMS declaration by literal, and
+      # nothing required the two copies to agree: CAT3DTorus/Silva04Torus
+      # (Task 1) and SKIRTORTorus (Task 14) each drifted this way and were
+      # found only by hand. Pure ast + stdlib (no h5py/numpy needed, unlike
+      # the guard above), verified to run in a venv with nothing installed
+      # before being wired here.
+      - run: python tools/check_param_restatements.py
+      # A different question, one step earlier (#2241): not "is a signature
+      # default inside its declared prior's support" but "is a signature
+      # default, or a .get(name, literal) fallback, a bare numeral at all for
+      # a name a declaration already owns". Equality with the declaration
+      # cannot catch a pair that has already drifted (dust_T/dust_beta_ir did,
+      # unnoticed, before this guard existed, #2261), so this checks
+      # structure, not value. Scoped to the dust emission tree; stdlib-only,
+      # so it needs no venv beyond the interpreter, unlike its sibling above.
+      - run: python tools/check_literal_param_defaults.py
       # The redshift-specific instance of the same rule: a numeric default on
       # params.get('redshift', …) is unreachable in live paths and silences the
       # one condition worth hearing about — #1432.
@@ -1116,7 +1153,14 @@ jobs:
         # three stay at 50 and stay at -n 2. That last paragraph called this OOM
         # untouched by the cap — correct, and it is why raising 35 -> 50 did not
         # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
-        timeout-minutes: ${{ matrix.budget }}
+        #
+        # regression-a budget is 70 minutes; the matrix value stays 50 because the
+        # auto-generated job name "test (shard, paths, workers, budget)" is a
+        # required status check on main, so changing the matrix value renames the job
+        # and blocks every merge until branch protection is re-pinned. When the
+        # protection is re-pinned, move the 70 into the matrix and delete this
+        # expression.
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 70 || matrix.budget }}
       - uses: actions/cache/save@v6
         if: always()
         with:
@@ -1552,6 +1596,22 @@ jobs:
             pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
           fi
         timeout-minutes: ${{ matrix.timeout }}
+      # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
+      # tests/integration ran in NO job. The default addopts deselect the
+      # marker, and the step above collects two trees by path, so a `slow`
+      # test anywhere else was green nowhere -- which is where Task 16 put 130
+      # measured AGN-liveness cases (the exhaustive owned-and-live and R22
+      # polar sweeps), including every (category, type) pair the PR-tier
+      # subset drops. Runs once, on the `inference` leg only, since the marker
+      # expression is the same whichever suite the matrix is on.
+      # `!cancelled()`, not `always()`: `always()` runs this step even when the
+      # job was cancelled, so a cancelled run still spends 30 minutes here and
+      # reports its own outcome. `!cancelled()` keeps the run-on-failure
+      # behavior that matters (the step above going red must not skip this
+      # tier) while letting a cancellation actually cancel.
+      - if: ${{ !cancelled() && matrix.suite == 'inference' }}
+        run: pytest tests/contract -q -m 'slow and not crossval' -n 0
+        timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always()
         with:

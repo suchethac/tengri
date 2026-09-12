@@ -235,7 +235,7 @@ def test_the_published_balmer_decrement_property_rises(model, sweep):
 
 
 def test_the_log_companion_follows_its_linear_sibling(model, sweep):
-    """#1867: ``log_halpha`` must stay ``log10(halpha)`` once dust is applied.
+    """#1867: ``log_halpha`` must stay ``log10(halpha * L_sun)`` once dust is applied.
 
     Line luminosities are ~1e41 erg/s, past float32's ceiling, so the catalog
     carries a ``log_line_lums`` companion (#1534). Reddening the linear array
@@ -245,15 +245,21 @@ def test_the_log_companion_follows_its_linear_sibling(model, sweep):
     the same defect class as #1867 itself: a value updated in one place and not
     in its sibling. Pinned here too, against a dusty model specifically, since
     the precision test does not sweep dust.
+
+    ``halpha`` moved to Lsun (breaking, no alias, #1206 §A); ``log_halpha``
+    stays in dex re erg/s, so the relationship picks up ``+ log10(L_sun)``.
     """
+    from tengri.utils.sed_quantities import LOG10_L_SUN
+
     lo, hi = sweep
     for label, params in (("tau_lo", lo), ("tau_hi", hi)):
         out = model.predict_properties(params, names=("halpha", "hbeta", "log_halpha"))
         linear = float(np.asarray(out["halpha"]))
         log_companion = float(np.asarray(out["log_halpha"]))
-        assert log_companion == pytest.approx(np.log10(linear), rel=1e-9), (
-            f"[{label}] log_halpha = {log_companion} but log10(halpha) = "
-            f"{np.log10(linear)}; the companion is not the log of its linear sibling"
+        expected = np.log10(linear) + LOG10_L_SUN
+        assert log_companion == pytest.approx(expected, rel=1e-9), (
+            f"[{label}] log_halpha = {log_companion} but log10(halpha * L_sun) = "
+            f"{expected}; the companion is not the log of its linear sibling"
         )
 
 

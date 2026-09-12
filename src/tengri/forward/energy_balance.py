@@ -30,6 +30,16 @@ import warnings
 import jax
 import jax.numpy as jnp
 
+#: Lyman-continuum cutoff [Angstrom] (#922). Photons at shorter wavelengths
+#: ionize hydrogen rather than heat dust, so every canonical absorbed-luminosity
+#: integral in this module -- and
+#: :func:`tengri.utils.sed_quantities.compute_l_dust_absorbed`, which imports
+#: this constant and :func:`absorbed_integrand` to share the same convention --
+#: excludes them by default. Matches CIGALE (attenuation curves zeroed at
+#: lambda <= 91.2 nm) and Bagpipes (``fesc`` masking of the ionizing
+#: continuum); FSPS does not mask it.
+LYMAN_CUTOFF_AA: float = 912.0
+
 
 def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
     """Attribute a ``+inf`` energy balance to its component, on the eager path.
@@ -75,13 +85,44 @@ def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
     )
 
 
-def _absorbed_integrand(
+def absorbed_integrand(
     sed_intrinsic: jnp.ndarray,
     sed_attenuated: jnp.ndarray,
     wave: jnp.ndarray,
     lyman_cutoff_aa: float | None,
 ) -> jnp.ndarray:
-    """LyC-masked absorbed integrand :math:`L_\\nu^{\\rm intr} - L_\\nu^{\\rm att}`."""
+    r"""LyC-masked absorbed integrand :math:`L_\nu^{\rm intr} - L_\nu^{\rm att}`.
+
+    The single shared definition of "energy removed from the SED by dust
+    attenuation" (#922): every canonical ``L_absorbed`` integral in this
+    module, plus :func:`tengri.utils.sed_quantities.compute_l_dust_absorbed`,
+    builds its integrand through this function so the two public spellings of
+    the same quantity cannot silently disagree on the Lyman-continuum mask.
+
+    Parameters
+    ----------
+    sed_intrinsic : array_like, shape (n_wave,)
+        Intrinsic SED before dust attenuation [erg/s/Hz].
+    sed_attenuated : array_like, shape (n_wave,)
+        Dust-attenuated SED [erg/s/Hz].
+    wave : array_like, shape (n_wave,)
+        Wavelength grid [Angstrom]; used only for the Lyman-continuum mask.
+    lyman_cutoff_aa : float or None
+        Lyman-continuum cutoff [Angstrom]; energy absorbed at
+        ``wave < lyman_cutoff_aa`` is excluded (see :data:`LYMAN_CUTOFF_AA`).
+        ``None`` disables the mask (the full grid is integrated).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        The (optionally masked) per-bin absorbed luminosity density
+        [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``; ``lyman_cutoff_aa`` is a static
+    Python value, so the mask branch resolves at trace time.
+    """
     absorbed_lnu = sed_intrinsic - sed_attenuated
     if lyman_cutoff_aa is not None:
         absorbed_lnu = jnp.where(wave >= lyman_cutoff_aa, absorbed_lnu, 0.0)
@@ -163,7 +204,7 @@ def bolometric_absorbed_log10(
     nu: jnp.ndarray,
     *,
     wave: jnp.ndarray,
-    lyman_cutoff_aa: float | None = 912.0,
+    lyman_cutoff_aa: float | None = LYMAN_CUTOFF_AA,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""log10 of the absorbed bolometric luminosity, the float32-safe contract.
 
@@ -228,7 +269,7 @@ def bolometric_absorbed_log10(
     """
     from tengri.utils.scale import log10_magnitude
 
-    integrand = _absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
+    integrand = absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
     signed_norm, peak, ok, corrupt = _peak_factored_trapezoid(integrand, nu)
     log_norm = log10_magnitude(jnp.where(ok, signed_norm, 0.0))
     # Corrupt beats the -inf sentinel: -inf powers back to exactly 0.0, so
@@ -247,7 +288,7 @@ def bolometric_absorbed(
     nu: jnp.ndarray,
     *,
     wave: jnp.ndarray,
-    lyman_cutoff_aa: float | None = 912.0,
+    lyman_cutoff_aa: float | None = LYMAN_CUTOFF_AA,
 ) -> jnp.ndarray:
     r"""Signed bolometric luminosity absorbed by dust, LyC-masked.
 
@@ -324,7 +365,7 @@ def bolometric_absorbed(
            https://doi.org/10.1051/0004-6361/201834156
 
     """
-    integrand = _absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
+    integrand = absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
     signed_norm, peak, ok, _corrupt = _peak_factored_trapezoid(integrand, nu)
     # ``_corrupt`` is deliberately discarded here while
     # ``bolometric_absorbed_log10`` acts on it (#1527). This is the linear form:

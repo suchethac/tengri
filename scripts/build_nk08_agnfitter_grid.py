@@ -15,11 +15,11 @@ AGNfitter-rX) as a dict with keys:
 - ``incl-values`` — per-inclination angle values (one float per bin) in degrees.
 - ``wavelength`` — per-inclination array of ``log10(nu / Hz)``. Misleading key name:
   the values are log10 frequency, not wavelength. Converted here.
-- ``SED`` — per-inclination array of ``F_nu`` template values (relative, unnormalised).
+- ``SED`` — per-inclination array of ``F_nu`` template values (relative, unnormalized).
 
 Safety — pickle.load on external data
 -------------------------------------
-``pickle.load`` runs arbitrary code at deserialisation time. This script
+``pickle.load`` runs arbitrary code at deserialization time. This script
 uses a restricted :class:`pickle.Unpickler` whose ``find_class`` only returns
 NumPy array constructors (``numpy.core.multiarray._reconstruct``,
 ``numpy.ndarray``, ``numpy.dtype``, plus the ``numpy._core.*`` aliases
@@ -41,10 +41,10 @@ Dataset                       Shape             Description
 ============================  ================  ==========================================
 ``incl_axis``                 ``(n_incl,)``     Inclination [deg], ascending
 ``wavelength``                ``(n_wave,)``     common wavelength grid [Å], ascending
-``template``                  ``(n_incl, n_wave)``  F_nu template (unnormalised)
+``template``                  ``(n_incl, n_wave)``  F_nu template (unnormalized)
 ============================  ================  ==========================================
 
-``template`` is per-L_sun-normalised at runtime by :mod:`tengri.components.agn.nenkova_agnfitter`
+``template`` is per-L_sun-normalized at runtime by :mod:`tengri.components.agn.nenkova_agnfitter`
 using the same approach as silva04 — the runtime module divides the template by its
 trapezoidal integral over frequency and multiplies by ``L_bol * agn_torus_frac``.
 
@@ -77,6 +77,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from _agnfitter_download import archive_relpath
 
 _SAFE_CLASSES: frozenset[tuple[str, str]] = frozenset(
     {
@@ -167,8 +168,20 @@ def _regrid_templates(
     return common, out
 
 
-def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
-    """Read NK0_mean_1p.pickle and emit tengri's ``nenkova_agnfitter_torus_grid.h5``."""
+def build(
+    input_pickle: Path,
+    output_h5: Path,
+    n_wave: int = 4096,
+    source_label: str = archive_relpath("models/TORUS/NK0_mean_1p.pickle"),
+) -> None:
+    """Read NK0_mean_1p.pickle and emit tengri's ``nenkova_agnfitter_torus_grid.h5``.
+
+    ``source_label`` is the provenance string written to the ``source_pickle``
+    attribute: the path inside the pinned upstream archive, not wherever this
+    machine holds the file. Derived from ``_agnfitter_download.AGNFITTER_REF``
+    via :func:`_agnfitter_download.archive_relpath` so a future ref bump
+    cannot leave this default stale.
+    """
     d = _safe_load(input_pickle)
 
     missing = {"incl-values", "wavelength", "SED"} - set(d.keys())
@@ -193,11 +206,15 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         g.create_dataset("incl_axis", data=incl_values, compression="gzip")
         g.create_dataset("wavelength", data=wavelength_aa, compression="gzip")
         g.create_dataset("template", data=template, compression="gzip")
-        g.attrs["source_pickle"] = str(input_pickle)
+        # The path INSIDE the pinned upstream archive, never where this
+        # machine happened to keep it: an absolute path here ships a
+        # contributor's home directory to every user of the public
+        # repository (tools/check_no_local_paths.py).
+        g.attrs["source_pickle"] = source_label
         g.attrs["n_incl"] = n_incl
         g.attrs["n_wave"] = n_wave
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalised at runtime)"
+        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalized at runtime)"
 
     print(f"wrote {output_h5} — {n_incl} inclination bins × {n_wave} wavelength points")
 
@@ -231,8 +248,14 @@ def _cli() -> None:
     args = p.parse_args()
     from _agnfitter_download import resolve
 
-    input_pickle = resolve(args.input, "models/TORUS/NK0_mean_1p.pickle", download=args.download)
-    build(input_pickle, args.output, n_wave=args.n_wave)
+    repo_relpath = "models/TORUS/NK0_mean_1p.pickle"
+    input_pickle = resolve(args.input, repo_relpath, download=args.download)
+    build(
+        input_pickle,
+        args.output,
+        n_wave=args.n_wave,
+        source_label=archive_relpath(repo_relpath),
+    )
 
 
 if __name__ == "__main__":

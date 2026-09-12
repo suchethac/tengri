@@ -720,7 +720,11 @@ class FeaturePrecomp:
         (default) takes them from ``Observation.line_fluxes``.
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds (Cue only). Defaults to each
-        free parameter's prior support.
+        free parameter's prior support. ``ranges['neb_logU']`` is the HII
+        support, not necessarily the final axis: whenever DIG mixing could be
+        active it is still extended to cover the DIG-shifted query point,
+        never clipped and never bypassed by supplying a range explicitly
+        (#2222 review I2).
 
     Notes
     -----
@@ -746,13 +750,23 @@ class FeaturePrecomp:
     *not* allowed for spectral indices, where a break is a flux **ratio** and a
     smooth additive offset does not cancel.
 
-    **What it refuses.** The grid tabulates a single photoionization regime, so
-    DIG mixing has no place in it: a build with ``neb_dig_frac`` free or fixed
-    non-zero raises
-    :class:`~tengri.config.exceptions.DIGNotOnNebularGridError` rather than
-    reconstructing the HII term alone and leaving both DIG parameters inert
-    (#2195). Pin ``neb_dig_frac`` at 0, its declared default, or keep the exact
-    path for the nebular channel.
+    **DIG mixing (#2222).** Served from this same table by two lookups --
+    HII at ``neb_logU``, DIG at ``neb_logU + neb_dig_delta_logU`` -- mixed by
+    ``neb_dig_frac``:
+    :func:`~tengri.components.nebular.dig.mix_dig_grid_reconstruction`.
+    ``neb_logU`` joins the grid axes, and its range extends to cover the
+    shifted query -- even a range given explicitly via ``ranges=`` (review
+    I2) -- whenever ``neb_dig_frac`` is free or fixed non-zero, even when
+    ``neb_logU`` is itself Fixed, UNLESS the extension is degenerate
+    (``neb_logU`` Fixed and ``neb_dig_delta_logU`` Fixed at exactly 0.0: the
+    HII and DIG query points then coincide, DIG mixing is arithmetically the
+    HII term, and no axis is built at all -- review I3). Measured worst-case
+    relative error over 10 seeds against the exact path: 1.17e-3
+    (photometry) / 1.41e-3 (lines) at ``neb_dig_frac = 0.3``, versus 1.72e-3 /
+    2.04e-3 at ``neb_dig_frac = 0`` on the same fixture -- DIG mixing costs no
+    accuracy relative to the table's own baseline. Before #2222 a build with
+    ``neb_dig_frac`` free or fixed non-zero raised ``ValueError`` here rather
+    than reconstructing it; that refusal is gone.
 
     **JIT-compatible**: the resulting line prediction is JIT- and gradient-safe;
     the one-time build is eager.
@@ -1017,6 +1031,383 @@ def _validate_fracagn_requires_dust(spec) -> None:
         )
 
 
+#: Provenance tags meaning "the user named this parameter" (#2189).
+#:
+#: Everything else -- ``registry_default`` and the ``wildcard_*`` tags -- is
+#: the grammar filling a slot in, which a guard about a *stated* value must
+#: not read as a statement.
+_USER_PROVIDED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "user_free_grid"})
+
+
+def _param_is_user_provided(spec, name: str) -> bool:
+    """Whether ``name`` carries a user-provided disposition in ``spec``.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The parameter specification.
+    name : str
+        Full prefixed parameter name, e.g. ``'agn_log_lbol'``.
+
+    Returns
+    -------
+    bool
+        ``True`` only for the tags in :data:`_USER_PROVIDED_PROVENANCE`.
+        ``False`` when the spec carries no provenance at all -- the flat-kwarg
+        ``Parameters(...)`` escape hatch does not record it, and an expert
+        path must not be judged by a rule it cannot express.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    provenance = getattr(spec, "_group_provenance", None) or {}
+    return provenance.get(name) in _USER_PROVIDED_PROVENANCE
+
+
+def _validate_torus_frac_fracagn_conflict(spec) -> None:
+    """Raise if BOTH agn_torus_frac AND fracAGN are explicitly set (#2189, R15).
+
+    ``AGNSEDComponent.apply`` (``components/agn/component.py``) OVERRIDES
+    whatever ``agn_torus_frac`` a caller supplies with a value derived from
+    the dust-absorbed stellar luminosity (the CIGALE skirtor2016
+    ``agn_power = L_absorbed x fracAGN/(1-fracAGN)`` coupling) whenever
+    fracAGN (``agn_ir_frac``) is active -- regardless of ``agn_norm``.
+    Explicitly naming BOTH an ``agn_torus_frac`` prior/Fixed value AND an
+    active fracAGN is therefore a contradiction: the torus_frac value is
+    silently discarded. Measured (F1): 0.0 relative photometry change across
+    the full ``agn_torus_frac`` range whenever fracAGN is explicitly active
+    (any ``agn_norm``), versus 8.5x-30.6x when fracAGN is left at its
+    registry default (0.0, inactive).
+
+    This is a build-time safety gate, mirroring
+    :func:`_validate_fracagn_requires_dust`. The companion narrowing --
+    ``agn.torus={'all_params': FREE}`` never freeing ``agn_torus_frac`` when
+    fracAGN is active -- is a SEPARATE mechanism
+    (``parameters.groups._agn_ir_frac_explicit_and_active``, consulted while
+    computing wildcard scopes): a wildcard silently omits it, but naming both
+    explicitly is loud, because a caller who spells out ``agn_torus_frac``
+    expects it to do something.
+
+    Raises
+    ------
+    ConfigError
+        If ``agn_torus_frac`` was explicitly given a prior or Fixed value
+        (provenance ``user_prior``/``user_fixed``/``user_free``/
+        ``user_free_grid`` -- NOT ``registry_default`` or any
+        ``wildcard_*`` tag) AND fracAGN (``agn_ir_frac``) is active (FREE, or
+        Fixed with a positive, non-default value).
+
+    See Also
+    --------
+    #2189 : agn_torus_frac silently discarded under fracAGN coupling.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    if not _param_is_user_provided(spec, "agn_torus_frac"):
+        return  # torus_frac was not explicitly given; nothing to conflict with
+
+    if not _param_is_user_provided(spec, "agn_ir_frac"):
+        return  # fracAGN was not explicitly given (default 0.0 is inactive)
+
+    free = set(spec.free_params)
+    fixed = spec.get_fixed_values()
+    ir_frac_active = ("agn_ir_frac" in free) or (float(fixed.get("agn_ir_frac", 0.0)) > 0.0)
+    if not ir_frac_active:
+        return  # explicit but Fixed at 0.0: inert, not the conflict this guards
+
+    raise ConfigError(
+        "agn_torus_frac and fracAGN (agn_ir_frac) were both explicitly set. "
+        "Whenever fracAGN is active, AGNSEDComponent overrides agn_torus_frac "
+        "with a value derived from the dust-absorbed stellar luminosity (the "
+        "CIGALE skirtor2016 coupling) -- your agn_torus_frac value would be "
+        "silently discarded. Two ways out: (1) drop fracAGN "
+        "(agn={'ir_frac': Fixed(0.0)} or omit it) and keep agn_torus_frac for "
+        "independent torus scaling, or (2) drop agn_torus_frac and let "
+        "fracAGN drive the torus normalization via the CIGALE coupling. "
+        "See issue #2189."
+    )
+
+
+def _polar_reference_required_extent_aa(torus_block: str | None) -> tuple[float, float] | None:
+    """Wavelength range the polar dust's absorbed-power reference is built on.
+
+    Under ``agn_norm='cigale_joint'`` the disc is tied to the torus only for
+    the SKIRTOR torus (``blocks/runner.py``), and that tie is the one place a
+    caller's disc array gets resampled onto a foreign axis:
+    ``skirtor_disc_dust_ratio`` brings it onto the SKIRTOR templates' NATIVE
+    grid with ``left=0.0, right=0.0`` and renormalizes it there, because that
+    is the grid CIGALE's ``skirtor2016`` integrates the polar ``l_ext`` proxy
+    over (``x=AGN1.wl``). A model grid that does not reach that far leaves the
+    disc zero-filled over the difference.
+
+    Parameters
+    ----------
+    torus_block : str or None
+        Selected composable torus block name.
+
+    Returns
+    -------
+    tuple of float, or None
+        ``(min, max)`` of the native axis [A], read off the array the
+        resampling actually targets, so a regenerated grid moves the
+        requirement with it. ``None`` for every other torus block -- no tie,
+        no foreign axis, nothing to require -- and ``None`` when the SKIRTOR
+        disk/dust library is unavailable, in which case
+        ``skirtor_disc_dust_ratio`` takes its unity-ratio fallback and never
+        resamples at all.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    if torus_block != "skirtor":
+        return None
+    from tengri.components.agn.skirtor import _load_raw_disk_dust_grid
+
+    try:
+        grid = _load_raw_disk_dust_grid()
+    except FileNotFoundError:
+        return None
+    if grid is None:
+        return None
+    axis = np.asarray(grid.wave_grid)
+    if axis.size == 0:
+        return None
+    return float(axis.min()), float(axis.max())
+
+
+# The node-coincidence slack in _check_polar_reference_grid_extent, below:
+# float32 machine epsilon, the largest relative distance a float32 value can
+# sit from its true neighbor (see that function's inline comment).
+_FLOAT32_NODE_COINCIDENCE_SLACK = float(np.finfo(np.float32).eps)
+
+
+def _check_polar_reference_grid_extent(
+    rest_wavelength,
+    *,
+    attenuation_block: str | None,
+    agn_norm: str | None,
+    torus_block: str | None,
+) -> None:
+    """Refuse a wavelength grid that truncates the polar dust's reference (R66).
+
+    Active only where the truncation has a measured consequence: the
+    ``polar_dust`` attenuation block together with the CIGALE-joint tie
+    (``agn_norm='cigale_joint'`` + ``torus='skirtor'``), which is the one
+    configuration that resamples the caller's disc onto a foreign axis --
+    the SKIRTOR templates' native 10 A - 1e8 A grid -- with zero fill and
+    renormalizes it there. See
+    :func:`_polar_reference_required_extent_aa`.
+
+    Measured (``disc='skirtor'``, i=30, ``agn_ir_frac=0.3``, reading
+    ``int(polar)/int(torus)``): 0.264046724 on a covering 8 A - 1e8 A grid
+    and bit-identical on 0.0413 A - 3e11 A, 1 A - 1e9 A and 8 A - 1e8 A at
+    n=6000, against 0.290982429 on 500 A - 1e8 A (**+10.20%**), 0.284060926
+    on 80 A - 1e7 A (**+7.58%**) and 0.286324800 on 100 A - 1e6 A
+    (**+8.44%**). The second of those is why the requirement is the template
+    axis and not the disc block's own breakpoints: 80 A - 1e7 A spans the
+    CIGALE piecewise disc's declared 8 - 1e6 nm limits entirely and is still
+    7.6% off, because the shape extrapolates its end segments (those limits
+    hold 86.99% of its integral) and because the zero-fill happens on the
+    template axis. With ``disc='schartmann2005'`` the same grids move by
+    0.1% / -3.0% / 0.1% instead -- how much a truncation costs is a property
+    of the shape being zero-filled, which is why this refuses the truncation
+    rather than bounding the error.
+
+    A ``torus='skirtor'`` build covers this by construction --
+    ``forward.wavelength_extension._AGN_TORUS_TEMPLATES`` puts the template
+    axis into the master-grid union, measured to take a 91 A - 1e8 A SSP grid
+    to 10 A - 1e8 A -- so on the ``SEDModel`` surface this is a ratchet on
+    that union rather than a refusal callers will meet. The composable AGN
+    precompute has no such union and chooses its own grid, which is why it
+    calls this on the grid it was handed.
+
+    Parameters
+    ----------
+    rest_wavelength : array_like
+        The rest-frame wavelength grid to check [A].
+    attenuation_block : str or None
+        Selected composable attenuation block.
+    agn_norm : str or None
+        Selected cross-block normalization policy.
+    torus_block : str or None
+        Selected composable torus block.
+
+    Raises
+    ------
+    ConfigError
+        If the polar block and the joint tie are both active and
+        ``rest_wavelength`` does not cover the required range.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    if (attenuation_block or "none") != "polar_dust":
+        return
+    if str(agn_norm or "cigale_joint") != "cigale_joint":
+        return
+    required = _polar_reference_required_extent_aa(torus_block)
+    if required is None:
+        return
+
+    lo_req, hi_req = required
+    wave = np.asarray(rest_wavelength)
+    lo_got, hi_got = float(wave.min()), float(wave.max())
+    # Node coincidence is enough: resample_template zero-fills strictly
+    # outside the caller's span, so an endpoint exactly on the requirement
+    # loses nothing. The slack is float32 machine epsilon (2**-23 ~=
+    # 1.1920929e-7): that is the largest relative gap a single float32
+    # value can sit from its true neighbor (largest at the bottom of a
+    # binade, where ulp(x)/x = eps exactly), so it absorbs one float32
+    # grid-canonicalization rounding step in either direction without
+    # widening enough to accept a genuinely truncated grid.
+    if lo_got <= lo_req * (1.0 + _FLOAT32_NODE_COINCIDENCE_SLACK) and hi_got >= hi_req * (
+        1.0 - _FLOAT32_NODE_COINCIDENCE_SLACK
+    ):
+        return
+
+    from tengri.config.exceptions import ConfigError
+
+    raise ConfigError(
+        "the polar_dust attenuation block is active under "
+        "agn_norm='cigale_joint' with torus='skirtor', so the polar "
+        "dust's absorbed-power reference is built on the SKIRTOR "
+        f"templates' native wavelength axis, {lo_req:.6g} A to "
+        f"{hi_req:.6g} A (the grid CIGALE's skirtor2016 integrates its "
+        "l_ext proxy over). The model's rest-wavelength grid is "
+        f"{lo_got:.6g} A to {hi_got:.6g} A, which does not cover it: the "
+        "disc is resampled onto that axis with zero fill, so wherever "
+        "the grid does not reach the disc is set to zero and the "
+        "unit-area shape is renormalized over a truncated spectrum. "
+        "Measured with disc='skirtor', this moves int(polar)/int(torus) "
+        "by +10.20% on a 500 A - 1e8 A grid, +8.44% on a 100 A - 1e6 A "
+        "one and +7.58% on an 80 A - 1e7 A one, silently. "
+        "Fix: widen the wavelength grid to cover "
+        f"{lo_req:.6g} A - {hi_req:.6g} A -- normally the SKIRTOR torus "
+        "does that for you, by contributing its template axis to the "
+        "master-grid union (forward.wavelength_extension), so a grid "
+        "this narrow means that contribution is not arriving; check that "
+        "data/skirtor_templates_v3.h5 is present and registered. Or, if "
+        "you do not want the polar dust tied to the SKIRTOR reference, "
+        "select a different agn_norm or a different torus block. This "
+        "check runs at composition time on the block selection alone, so "
+        "it also fires when agn_ir_frac is currently Fixed(0.0) and none "
+        "of the tied outputs reach the SED -- agn_ir_frac can be freed to "
+        "a nonzero value at fit time, which is what the check is guarding."
+    )
+
+
+def _validate_fracagn_requires_cigale_joint(spec) -> None:
+    """Raise if an active fracAGN meets a non-joint ``agn_norm`` (R65, R67).
+
+    fracAGN (``agn_ir_frac``) is the CIGALE ``skirtor2016`` coupling: the AGN
+    power becomes ``L_absorbed x f/(1 - f)``, derived from the **dust-absorbed
+    stellar** luminosity, and every ``agn_norm`` policy routes the torus
+    through that derived power. Only ``'cigale_joint'`` routes the DISC
+    through it too, via the SKIRTOR template ratio ``R``. The other two
+    policies reference the disc to ``10**agn_log_lbol`` instead -- verbatim
+    under ``'independent'``, debited by ``(1 - agn_torus_frac)`` under
+    ``'conserving'`` -- so disc and torus sit on two unrelated luminosity
+    scales and their ratio is proportional to ``1/M*``: it reports the
+    stellar mass rather than any AGN parameter.
+
+    Measured (composable ``disc='schartmann2005'`` + ``torus='skirtor'``,
+    ``dust_emission='dale2014_cigale'``, ``agn_log_lbol`` at its registry
+    default, ``agn_ir_frac=0.3``), sweeping ONLY the stellar mass and reading
+    ``int(sed_agn_disc)/int(sed_agn_torus)``:
+
+    ============  ==================  ==================  ==================
+    ``log M*``    independent         conserving          cigale_joint
+    ============  ==================  ==================  ==================
+    0.0            5.004902e+10        5.004902e+10        2.838156
+    7.0            5.004902e+03        5.003901e+03        2.838156
+    10.0           5.004902e+00        4.004135e+00        2.838156
+    12.0           5.004902e-02        0.000000e+00        2.838156
+    ============  ==================  ==================  ==================
+
+    Twelve orders of magnitude in both refused columns, constant in the legal
+    one. The torus integral is identical to six digits under all three
+    (``7.626100e+42`` at ``log M* = 10``), which is what pins the mechanism on
+    the disc side rather than on the coupling. ``'conserving'`` is the worse of
+    the two: at ``log M* = 12`` the derived ``agn_torus_frac`` clips to 1 and
+    the disc is debited to **exactly zero**. Without fracAGN both policies are
+    coherent -- ``'independent'`` holds ``2.001533`` at every mass -- so the
+    pathology is the combination, not either half, which is why this refuses
+    the pair and nothing else. Nothing raised or warned before: the four
+    components still summed to ``sed_agn`` exactly, so the accounting was
+    intact while the configuration was meaningless.
+
+    Raises
+    ------
+    ConfigError
+        If ``spec.agn_norm`` is ``'independent'`` or ``'conserving'`` and
+        ``agn_ir_frac`` is active (FREE, or Fixed with a value > 0). An
+        explicit ``Fixed(0.0)`` states "no coupling" and is deliberately legal
+        -- it is one of the remedies this refusal names, and advice a guard
+        refuses is the #1364 defect.
+
+    See Also
+    --------
+    _validate_fracagn_requires_dust : the same shape one condition over (#944).
+    _validate_torus_frac_fracagn_conflict : the fracAGN sibling at #2189.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    policy = str(getattr(spec, "agn_norm", "cigale_joint") or "cigale_joint")
+    if policy not in ("independent", "conserving"):
+        return
+
+    free = set(spec.free_params)
+    fixed = spec.get_fixed_values()
+    # Active = FREE, or Fixed above zero. The registry default is 0.0, so this
+    # is also the "user-provided" test in every case that actually couples: a
+    # wildcard can free the parameter without the user naming it, and a freed
+    # fracAGN couples just as hard as a pinned one.
+    ir_frac_active = ("agn_ir_frac" in free) or (float(fixed.get("agn_ir_frac", 0.0)) > 0.0)
+    if not ir_frac_active:
+        return
+
+    disc_reference = {
+        "independent": (
+            "under 'independent' the disc stays on 10**agn_log_lbol by that policy's contract"
+        ),
+        "conserving": (
+            "under 'conserving' the disc stays on 10**agn_log_lbol debited by "
+            "(1 - agn_torus_frac), a second and unrelated reference"
+        ),
+    }[policy]
+    measured = {
+        "independent": (
+            "int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 to 5.00e-02 at log M* = 12"
+        ),
+        "conserving": (
+            "int(disc)/int(torus) runs from 5.00e+10 at log M* = 0 to exactly "
+            "0.00e+00 at log M* = 12, where the derived agn_torus_frac clips "
+            "to 1 and debits the disc away entirely"
+        ),
+    }[policy]
+
+    raise ConfigError(
+        f"agn_norm={policy!r} was selected with an active fracAGN "
+        "(agn_ir_frac). fracAGN derives the AGN power from the dust-absorbed "
+        "stellar luminosity, L_absorbed * f/(1 - f) (the CIGALE skirtor2016 "
+        f"coupling), and the torus follows it -- but {disc_reference}, so "
+        "disc and torus sit on two unrelated luminosity scales and their "
+        f"ratio scales as 1/M*: measured, {measured}, i.e. it reports the "
+        "stellar mass rather than any AGN parameter. Two ways out: (1) "
+        "agn={'norm': 'cigale_joint'} with a SKIRTOR torus, the single policy "
+        "that ties the disc to the same agn_power reference through the "
+        "template ratio R (measured: int(disc)/int(torus) = 2.838156 at every "
+        "stellar mass) -- this is the policy fracAGN was written for; or (2) "
+        f"keep 'norm': {policy!r} and set agn={{'agn_ir_frac': Fixed(0.0)}} "
+        "(or omit it) to drop the coupling, which leaves agn_torus_frac "
+        "scaling the torus and agn_log_lbol scaling the disc. See rulings R65 "
+        "and R67."
+    )
+
+
 def _validate_firrc_requires_dust(spec) -> None:
     """Raise if any FIRRC radio block is enabled without a dust component (#2106).
 
@@ -1072,34 +1463,59 @@ def _validate_firrc_requires_dust(spec) -> None:
 
 
 def _validate_dale2014_requires_no_sf_radio(spec) -> None:
-    """Raise if dale2014 dust emission is combined with SF radio (#1970).
+    r"""Raise if a radio-bearing dust template is combined with SF radio (#1970).
 
-    The Dale+2014 dust emission template (component name 'dale2014') embeds a
-    star-forming radio synchrotron continuum rising to 2.2459e9 Å (1.335 GHz).
-    The stripped variant 'dale2014_cigale' removes the radio tail beyond
-    7.727e7 Å per CIGALE convention.
+    Dale+2014's published dust emission templates embed a star-forming radio
+    synchrotron continuum rising to 2.2459e9 Å (1.335 GHz). Pairing them with
+    an active SF radio block double-counts the synchrotron in ``rest_sed``
+    between ~1.34 and ~10 GHz (3-22 cm), and the composed SED steps down ~2x
+    at the 1.335 GHz template edge (measured slope -4.93 vs. +0.77 expected).
 
-    When dale2014 is paired with an active SF radio block (radio enabled and
-    radio_sfr_mode != 'none'), the synchrotron is double-counted in rest_sed
-    between ~1.34 and ~10 GHz (3–22 cm), and the composed SED steps down ~2x at
-    the 1.335 GHz template edge (measured slope −4.93 vs. +0.77 expected).
+    **The test is on the template, not on its name** (R58). The guard used to
+    key on ``spec.dust_emission == 'dale2014'``, which is neither sufficient
+    nor necessary: a tail-free grid registered under that name -- what
+    ``register_dale2014_tabulated(cigale_grid, name='dale2014')`` produces --
+    was refused although it carries no radio, while a tail-bearing grid
+    registered under that name would have been accepted had it been filed
+    under any other. The embedded continuum is a property of the data, so the
+    refusal now reads the selected grid, via
+    :func:`~tengri.components.dust.emission_templates.dust_emission_radio_tail_aa`.
 
-    This is a build-time safety gate: dale2014 is only safe when combined with
-    AGN-only radio (radio_sfr_mode='none') or when radio is disabled entirely.
-    The remedy: switch to dale2014_cigale, which composes correctly with SF radio.
+    That function requires the tail to be both far enough red (strictly past
+    1e8 Å = 30 GHz) and **non-thermal**, because reach alone is not radio:
+    ``astrodust`` emits out to 3.0e8 Å on its spinning-dust component and
+    double-counts nothing. Non-thermal means the red-end spectral index
+    :math:`\alpha = d\ln L_\nu / d\ln\nu` is below 1 (R62): radio continua
+    are flat or falling toward higher frequency (synchrotron -0.8, free-free
+    -0.1, flat-spectrum 0), while thermal dust on its Rayleigh-Jeans side
+    rises as :math:`\nu^{2+\beta}`, i.e. :math:`\alpha \ge 3`. Measured, only
+    ``dale2014`` qualifies -- :math:`\alpha` = -0.665, against +3.111 (bosa),
+    +3.326 (astrodust), +4.810 (schreiber2016) and +5.510 (dale2014_cigale).
 
-    Deliberately NOT guarded: the radio component's free-free term (emitted only
-    when a nebular component publishes ``log_nion``; no grammar knob controls it)
-    overlaps the template's embedded thermal radio at the <~10% level near
-    1.4 GHz. Refusing it would block dale2014 + AGN radio + nebular with no
-    grammar-reachable remedy, so that overlap is documented on both Dale
-    components instead of guarded here.
+    A model whose red end cannot be measured -- a closed-form emission law, or
+    a grid that is not installed -- is not refused: an absent file must not
+    break model construction, and the loader raises on its own if the model is
+    ever evaluated.
+
+    Deliberately NOT guarded: the radio component's free-free term (emitted
+    only when a nebular component publishes ``log_nion``; no grammar knob
+    controls it) overlaps the template's embedded thermal radio at the <~10%
+    level near 1.4 GHz. Refusing it would block dale2014 + AGN radio +
+    nebular with no grammar-reachable remedy, so that overlap is documented on
+    both Dale components instead of guarded here.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The parameter specification.
 
     Raises
     ------
     ConfigError
-        If dust.emission == 'dale2014' AND radio is active with SF synchrotron
-        enabled (radio=True and radio_sfr_mode != 'none').
+        If the selected dust-emission template carries a non-thermal tail
+        (red-end :math:`d\ln L_\nu / d\ln\nu < 1`) past 1e8 Å AND radio is
+        active with SF synchrotron enabled (``radio=True`` and
+        ``radio_sfr_mode != 'none'``).
 
     See Also
     --------
@@ -1107,9 +1523,9 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     """
     from tengri.config.exceptions import ConfigError
 
-    # Check if dust emission is dale2014 (the radio-bearing variant)
-    if getattr(spec, "dust_emission", None) != "dale2014":
-        return  # Not dale2014, no guard needed
+    emission = getattr(spec, "dust_emission", None)
+    if not emission:
+        return  # No dust emission model, no template to double-count
 
     # Check if radio is enabled
     if not getattr(spec, "radio", False):
@@ -1122,18 +1538,39 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     if radio_sfr_mode == "none":
         return  # SF synchrotron is disabled (AGN-only), no conflict
 
-    # Both conditions met: dale2014 + active SF radio = double-count
+    from tengri.components.dust.emission_templates import (
+        _dust_emission_red_end,
+        dust_emission_radio_tail_aa,
+    )
+
+    red_edge = dust_emission_radio_tail_aa(emission)
+    if red_edge is None:
+        return  # Not template-backed, grid absent, or no rising radio tail
+
+    measured = _dust_emission_red_end(emission)
+    index = measured.index
+    ghz = 2.99792458e18 / red_edge / 1.0e9
     raise ConfigError(
-        "The Dale+2014 dust emission template (dust.emission='dale2014') "
-        "embeds its own star-forming radio synchrotron continuum to 1.335 GHz. "
-        "Combining it with an active SF radio block (radio.sf.type != 'none') "
-        "causes double-counting of the radio continuum (~2x in rest_sed "
-        "between ~1.34 and ~10 GHz). "
-        "Fix: use dust.emission='dale2014_cigale' instead, which has the radio "
-        "tail stripped per CIGALE convention and composes correctly with the "
-        "radio component. Alternatively, disable SF synchrotron with "
-        "radio={'sf': {'type': 'none'}} if you only want AGN radio. "
-        "See issue #1970."
+        f"The Dale+2014-family dust emission template selected by "
+        f"dust.emission={emission!r} embeds its own star-forming radio "
+        f"continuum: measured, it still emits at {red_edge:.4e} A "
+        f"({ghz:.3f} GHz), and its red-end spectral index there is "
+        f"dlnL_nu/dlnnu = {index:+.3f}, below the 1.0 that separates a radio "
+        f"continuum (flat or falling toward higher frequency: synchrotron "
+        f"-0.8, free-free -0.1) from thermal dust (Rayleigh-Jeans, "
+        f"nu^(2+beta), so >= 3). The axis was read from the grid's "
+        f"{measured.wavelength_key!r} dataset in {measured.wavelength_unit}. "
+        f"Combining it with an "
+        f"active SF radio block (radio.sf.type != 'none') causes "
+        f"double-counting of the radio continuum (~2x in rest_sed between "
+        f"~1.34 and ~10 GHz). "
+        f"Fix: use dust.emission='dale2014_cigale' instead, which has the "
+        f"radio tail stripped per CIGALE convention (its templates stop "
+        f"emitting at 7.727e+07 A) and composes correctly with the radio "
+        f"component. Alternatively, disable SF synchrotron with "
+        f"radio={{'sf': {{'type': 'none'}}}} if you only want AGN radio, or "
+        f"register a tail-free grid under this name. "
+        f"See issue #1970."
     )
 
 
@@ -1962,6 +2399,13 @@ class SEDModel:
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
         self._validate_shock_coverage(spec)
 
+        # ── The polar reference's integration range (R66) ─────────
+        # Runs here and not beside the ``spec``-only guards in ``build``
+        # because it is about the master rest-wavelength grid, which
+        # ``_init_multiwavelength`` just built out of the SSP grid and every
+        # attached component's native axis.
+        self._validate_polar_reference_grid_extent()
+
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
 
@@ -2026,7 +2470,6 @@ class SEDModel:
             uses_igm=self._uses_igm,
             uses_radio=self._uses_radio,
             uses_xray=self._uses_xray,
-            radio_include_freefree=getattr(self, "_radio_include_freefree", None),
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
             z_fixed=self._z_fixed,
@@ -3198,7 +3641,17 @@ class SEDModel:
         else:
             from tengri.components.nebular import BakedInBackend
 
-            self._nebular_backend = BakedInBackend()
+            # R49: an explicit neb={'type': 'ssp'} or neb={'type': 'none'}
+            # (both resolve here -- 'ssp' never falls into any branch above,
+            # 'none' resolves to nebular_mode='off' identically to an omitted
+            # neb=) states the baked-in choice, so the advisory is silenced.
+            # An omitted neb= reaches this same branch with the same
+            # nebular_mode='off' but _nebular_explicit=False, so the
+            # advisory still fires -- it is the only signal that
+            # distinguishes "the user said no nebular emission" from
+            # "the user never mentioned nebular emission at all".
+            warning_mode = "suppress" if getattr(spec, "_nebular_explicit", False) else "warn"
+            self._nebular_backend = BakedInBackend(ionizing_source_warning=warning_mode)
 
         return delta
 
@@ -3214,6 +3667,7 @@ class SEDModel:
         self._needs_agn_lbol_flat_check = False
         self._agn_lbol_dist = None
         self._agn_ir_frac_dist = None
+        self._agn_lbol_is_user_fixed = False
 
         self._agn_model = getattr(spec, "agn_model", None)
         # Static block selectors for the "composable" AGN recipe; default to
@@ -3241,9 +3695,29 @@ class SEDModel:
             # whether the SED is identical at upper and lower bounds of agn_log_lbol.
             # If identical, the direction is flat; raise loudly. The measurement is
             # deferred until after the model is fully constructed (line ~1808 of __init__).
+            #
+            # R55 widens the trigger from "free" to "free or user-provided". A
+            # value the user spelled out and the coupling then discards is the
+            # same defect as a flat sampler direction, and the repo's rule is
+            # explicit-over-silent: state a luminosity that cannot act and you
+            # are told, not quietly overruled. The registry default stays
+            # exempt -- every ``'all_params': Fixed(DEFAULT)`` AGN build
+            # carries one, and refusing those would refuse the recipes.
+            #
+            # The trigger is deliberately NOT a list of carve-outs. Measured
+            # across the declared Uniform(8, 14) prior with agn_ir_frac=0.3,
+            # only one configuration is inert (rel change 6.4e-15); an active
+            # nlr or blr block, a non-SKIRTOR torus, no torus, and
+            # norm='independent' all measure 2.5e5. The measurement below sees
+            # every one of those without being told about them.
             torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
             agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
-            if torus_is_skirtor and agn_norm_is_cigale_joint and lbol_is_free:
+            lbol_is_user_provided = _param_is_user_provided(spec, "agn_log_lbol")
+            if (
+                torus_is_skirtor
+                and agn_norm_is_cigale_joint
+                and (lbol_is_free or lbol_is_user_provided)
+            ):
                 agn_ir_frac_dist = agn_dists.get("agn_ir_frac")
                 ir_frac_is_fixed_at_zero = (
                     agn_ir_frac_dist is not None
@@ -3254,6 +3728,7 @@ class SEDModel:
                     # Store info needed for deferred measurement
                     self._agn_lbol_dist = agn_lbol_dist
                     self._agn_ir_frac_dist = agn_ir_frac_dist
+                    self._agn_lbol_is_user_fixed = lbol_is_user_provided and not lbol_is_free
                     self._needs_agn_lbol_flat_check = True
             # Identity entries for agn_* now come from registry auto-derive
             # in _build_param_map (Step B).
@@ -3354,8 +3829,20 @@ class SEDModel:
         """
         from tengri.config.exceptions import ConfigError
 
-        # Get the prior bounds for agn_log_lbol
-        lo, hi = self._agn_lbol_dist.bounds
+        # Bounds to sweep agn_log_lbol between. A free parameter carries the
+        # interval a sampler would explore. A user-provided ``Fixed`` value
+        # (R55) carries the DEGENERATE interval (v, v), and sweeping that
+        # compares the SED against itself -- "flat" for every model, a guard
+        # that would refuse every build. Sweep the declared prior instead:
+        # the question is whether the AGN luminosity direction does anything
+        # at all, not whether the pinned value in particular does.
+        if self._agn_lbol_dist.is_fixed:
+            from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+
+            _decl = next(p for p in _AGN_PARAMS if p.name == "agn_log_lbol")
+            lo, hi = float(_decl.prior.lo), float(_decl.prior.hi)
+        else:
+            lo, hi = self._agn_lbol_dist.bounds
 
         # Get the prior midpoint for agn_ir_frac. With precondition "agn_ir_frac
         # not Fixed(0)", it MUST have bounds (either as a distribution or as a Fixed
@@ -3421,16 +3908,62 @@ class SEDModel:
         is_flat = rel_diff < 1e-10
 
         if is_flat:
-            raise ConfigError(
-                f"agn_norm='cigale_joint' with skirtor and free agn_log_lbol: "
-                f"measured: the predicted SED is identical to within 1e-10 relative "
-                f"at agn_log_lbol={lo} and {hi} with agn_ir_frac={frac_mid} "
-                f"(rel_diff={rel_diff:.3e}). "
-                f"The CIGALE coupling ties amplitude to agn_ir_frac (fracAGN), so "
-                f"agn_log_lbol cannot move the likelihood. "
-                f"Fix agn_log_lbol (any value; it cancels), fix agn_ir_frac=0.0 to disable "
-                f"the tie, or set agn_norm='independent' to fit the luminosity directly."
+            # Same measurement, two readings of it. R55: a value the user
+            # spelled out is discarded; #2069: a free direction the sampler
+            # cannot move. The remedies are the same three, and none of them
+            # may be "pin agn_log_lbol" -- this guard now refuses that too, and
+            # advice a guard refuses is the #1364 defect.
+            kind = (
+                "agn_log_lbol was given a value and agn_ir_frac is active"
+                if self._agn_lbol_is_user_fixed
+                else "agn_norm='cigale_joint' with skirtor and free agn_log_lbol"
             )
+            consequence = (
+                "your agn_log_lbol value is computed over and discarded"
+                if self._agn_lbol_is_user_fixed
+                else "agn_log_lbol cannot move the likelihood"
+            )
+            raise ConfigError(
+                f"{kind}: measured: the predicted SED is identical to within "
+                f"1e-10 relative at agn_log_lbol={lo} and {hi} with "
+                f"agn_ir_frac={frac_mid} (rel_diff={rel_diff:.3e}). With "
+                f"agn_ir_frac the AGN power is derived from the dust-absorbed "
+                f"stellar luminosity, L_absorbed * f/(1 - f) (the CIGALE "
+                f"skirtor2016 coupling), so {consequence}. Drop one: omit "
+                f"agn_log_lbol and let fracAGN set the AGN power, or set "
+                f"agn_ir_frac=0.0 to disable the tie -- which also lets "
+                f"agn_norm='independent' put the disc on agn_log_lbol "
+                f"directly. Switching to agn_norm='independent' while KEEPING "
+                f"fracAGN active is not a way out and is refused separately "
+                f"(R65): the disc would sit on agn_log_lbol while the torus "
+                f"followed L_absorbed * f/(1 - f), so their ratio would "
+                f"report the stellar mass. See issues #2069 and #2210."
+            )
+
+    def _validate_polar_reference_grid_extent(self) -> None:
+        """Refuse a master grid that truncates the polar dust's reference (R66).
+
+        Thin wrapper reading this model's selectors and grid; the rule itself
+        is :func:`_check_polar_reference_grid_extent`, which the composable
+        AGN precompute calls on its own ``wave_rest`` so both surfaces refuse
+        the same grids with the same message.
+
+        Raises
+        ------
+        ConfigError
+            If the polar block and the joint tie are both active and
+            ``self._rest_wavelength`` does not cover the required range.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- construction-time only.
+        """
+        _check_polar_reference_grid_extent(
+            self._rest_wavelength,
+            attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
+            agn_norm=getattr(self, "_agn_norm", "cigale_joint"),
+            torus_block=getattr(self, "_agn_torus_block", None),
+        )
 
     def _init_multiwavelength(self, spec, ssp_data):
         """Configure radio, X-ray, shock, and build wavelength grid.
@@ -3446,7 +3979,6 @@ class SEDModel:
         if self._uses_radio:
             # Identity entries for radio_* now come from registry auto-derive
             # in _build_param_map (Step B).
-            self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
 
@@ -5350,7 +5882,27 @@ class SEDModel:
             # (from the passed state when available, else the SED-free
             # ``compute_nion``); the grid supplies ``L_line / Q_H``. The shared
             # redden + target-match + cosmology tail below is unchanged.
+            #
+            # DIG mixing (#2222): two lookups against this same table (HII at
+            # neb_logU, DIG at neb_logU + neb_dig_delta_logU), mixed by
+            # neb_dig_frac via mix_dig_grid_reconstruction. neb_logU joins
+            # grid.axis_names whenever DIG mixing could be active, even when
+            # it is itself Fixed, so a caller's ``params`` may omit it (a
+            # Fixed value is not guaranteed present in a hand-built dict).
+            #
+            # Merge the spec's Fixed values in exactly the way the exact path
+            # does (``predict_state``'s ``full_params = {**fixed_values,
+            # **params}``; the same one-line idiom is used verbatim elsewhere
+            # in this file, e.g. ``predict_photometry_components``). A
+            # registry-default fallback for an omitted key is NOT equivalent:
+            # a dict missing a Fixed key is correct on the exact path (it
+            # merges the spec's own value) and was silently wrong here for
+            # any model whose Fixed pin differs from the default -- measured
+            # 9.3e-1 (neb_logU) / 4.0e-1 (neb_dig_frac) relative error on the
+            # returned line fluxes (review I1, #2222).
+            from tengri.components.nebular.dig import mix_dig_grid_reconstruction
             from tengri.components.nebular.nebular_grid_precompute import (
+                _dig_may_be_active,
                 _log_nion_of_state,
                 reconstruct_nebular_line_log_lums,
             )
@@ -5365,7 +5917,27 @@ class SEDModel:
                 log_nion = self._compute_log_nion(params)
                 log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
             all_waves = jnp.asarray(grid.wavelengths)
-            log_all_lums = reconstruct_nebular_line_log_lums(log_nion, params, grid)
+            # Both lookups (HII and DIG) go through the log10 form: the
+            # linear sibling ``reconstruct_nebular_line_lums`` is ~1e40
+            # erg/s, out of float32 range (#2269), and mixing two such linear
+            # lookups would reintroduce exactly that overflow.
+            # `log_domain=True` keeps the mix itself in log10 space
+            # (`_log10_weighted_mix`) rather than exponentiating each lookup
+            # to mix and re-logging. ``full_params["neb_dig_frac"]`` is a
+            # JAX array here (never a Python literal), so the zero-fraction
+            # short-circuit never fires on this path -- both lookups always
+            # run, even at the declared ``Fixed(0.0)`` default (#2262).
+            full_params = {**self.spec.get_fixed_values(), **params}
+            log_all_lums = mix_dig_grid_reconstruction(
+                reconstruct_nebular_line_log_lums,
+                log_nion,
+                full_params,
+                grid,
+                neb_dig_frac=full_params["neb_dig_frac"],
+                neb_dig_delta_logU=full_params["neb_dig_delta_logU"],
+                log_domain=True,
+                dig_active=_dig_may_be_active(self.spec),
+            )
         else:
             # ``state`` may be supplied by a caller that has already run the
             # forward (e.g. the joint loss deriving line fluxes + ratios +
@@ -5542,7 +6114,10 @@ class SEDModel:
 
         Both are **SED-free in** :math:`Q_H` (the stellar-published ``nion``). The
         grid axes are whichever of ``met_logzsol`` / ``neb_logU`` /
-        ``neb_logZ_gas`` are FREE; fixed ionization params are baked.
+        ``neb_logZ_gas`` are FREE, PLUS ``neb_logU`` whenever DIG mixing could
+        be active (``neb_dig_frac`` free, or fixed non-zero, with a
+        non-degenerate DIG-shifted image -- #2222), even when ``neb_logU``
+        itself is Fixed; every other fixed ionization param is baked.
 
         Parameters
         ----------
@@ -5557,7 +6132,14 @@ class SEDModel:
             axes.
         ranges : dict, optional
             Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
-            param's prior support).
+            param's prior support). ``ranges['neb_logU']`` is treated as the
+            HII support, not the final axis: whenever DIG mixing could be
+            active it is still extended to cover the DIG-shifted query point
+            (never clipped, never bypassed) -- passing the prior support
+            verbatim here no longer disarms the extension (#2222 review I2;
+            before this fix an explicit range silently clipped the DIG
+            lookup, measured 5.4e-2, above this module's 3e-2 parity
+            ceiling).
 
         Returns
         -------
@@ -5568,12 +6150,6 @@ class SEDModel:
         ------
         ValueError
             If no Q_H-linear nebular backend (Cue) is configured.
-        DIGNotOnNebularGridError
-            If DIG mixing is active (``neb_dig_frac`` free, or fixed non-zero).
-            The grid has no DIG axis and no second photoionization regime to
-            mix, so it would answer with the HII term alone and leave both DIG
-            parameters inert (#2195). Reachable on dusty builds too: dust
-            disarms the grid for photometry, not for the line channel.
 
         Notes
         -----
@@ -6998,7 +7574,9 @@ class SEDModel:
         Returns
         -------
         IonizingQuantities
-            ``q_h``, ``xi_ion``.
+            ``xi_ion``. ``q_h`` was retired with no alias (#1206 §C); read
+            ``log_q_h`` from :meth:`predict_properties` instead
+            (``q_h = 10**log_q_h``).
 
         .. deprecated:: 2026-07 (cleanup PR-2)
             Interactive getter moved to the lazy Prediction wrapper:
@@ -8600,6 +9178,7 @@ class SEDModel:
         so calling it unconditionally here costs nothing the exact path
         wasn't already going to pay once :meth:`_build_component_chain` ran.
         """
+        from tengri.components.nebular.nebular_grid_precompute import _dig_may_be_active
         from tengri.components.stellar.sfh.registry import apply_compositor_swap
         from tengri.forward.component_factory import build_components
 
@@ -8696,6 +9275,7 @@ class SEDModel:
             cue_full_catalog=bool(
                 getattr(self.spec, "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
             ),
+            dig_active=_dig_may_be_active(self.spec),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),
@@ -9467,6 +10047,8 @@ class SEDModel:
         spec = parse_groups(**groups)
         _validate_dust_emission_is_energy_balanced(spec)
         _validate_fracagn_requires_dust(spec)
+        _validate_torus_frac_fracagn_conflict(spec)
+        _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
@@ -9483,13 +10065,52 @@ class SEDModel:
     def from_dict(
         cls, config: dict, ssp_data, *, filters=None, observation=None, **model_kwargs
     ) -> SEDModel:
-        """Build an SEDModel from a serialized config dict."""
+        """Build an SEDModel from a serialized config dict.
+
+        See Also
+        --------
+        SEDModel.to_dict : The introspection-side pair -- a LIVE model's own
+            nested-dict grammar (``self.spec.to_groups()``), not the
+            JSON/YAML-serialized form this method deserializes
+            (``tengri.config.serialize.deserialize_config``). Round-trip a
+            model you already built with
+            ``SEDModel.build(ssp_data=ssp, **model.to_dict())``; use
+            ``from_dict``/``from_json``/``from_yaml`` for a config that
+            arrived serialized (a file, a wire payload).
+        """
         from tengri.config.serialize import deserialize_config
 
         deserialized = deserialize_config(config)
         return cls.build(
             ssp_data, filters=filters, observation=observation, **deserialized, **model_kwargs
         )
+
+    def to_dict(self) -> dict:
+        """Return this model's nested-dict grammar (thin alias of ``self.spec.to_groups()``).
+
+        The introspection-side pair to :meth:`from_dict`: a round-trip
+        ``SEDModel.build(ssp_data=ssp, observation=obs, **model.to_dict())``
+        reproduces ``model.predict_photometry`` bit-exactly (D9, task-12
+        public-API audit -- ``from_dict`` existed with no such counterpart,
+        so the working round-trip was the less-discoverable
+        ``model.spec.to_groups()`` directly).
+
+        Returns
+        -------
+        dict
+            Nested-dict suitable for ``SEDModel.build(ssp_data=ssp, **result)``
+            or ``tengri.parse_groups(**result)``. Live ``Distribution``/
+            sentinel objects, NOT the JSON/YAML-serialized form ``from_dict``
+            consumes -- see :meth:`from_dict`.
+
+        See Also
+        --------
+        tengri.parameters.parameters.Parameters.to_groups : What this delegates to.
+        SEDModel.from_dict : The serialized-config-side counterpart.
+        SEDModel.config : Equivalent property (kept for back-compat); this
+            method is the discoverable, symmetric-with-``from_dict`` spelling.
+        """
+        return self.spec.to_groups()
 
     @classmethod
     def from_file(

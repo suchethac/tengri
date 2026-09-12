@@ -342,7 +342,7 @@ def convert(cue_dir: str, output_path: str) -> None:
     if line_wav_path.exists():
         line_wav = np.load(str(line_wav_path))
         npz["lineList_wav"] = np.asarray(line_wav, dtype=np.float64)
-        print(f"  lineList_wav: {line_wav.shape} (air for optical; vacuumised at boundary)")
+        print(f"  lineList_wav: {line_wav.shape} (air for optical; vacuumized at boundary)")
     else:
         print(f"  WARNING: {line_wav_path} not found")
 

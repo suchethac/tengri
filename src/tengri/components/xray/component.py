@@ -58,6 +58,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.scale import representable_denominator
 
 __all__ = ["XRaySEDComponent", "XRaySEDComponentConfig"]
 
@@ -384,7 +385,9 @@ class XRaySEDComponent(TemplateThreading):
         _w_sum = jnp.sum(age_weights)
         stellar_age_gyr = jnp.where(
             _w_sum > 0.0,
-            jnp.sum(age_weights * ssp_ages_yr) / jnp.maximum(_w_sum, 1e-30) / 1.0e9,
+            jnp.sum(age_weights * ssp_ages_yr)
+            / jnp.maximum(_w_sum, representable_denominator(1e-30))
+            / 1.0e9,
             1.0,
         )
 
@@ -560,43 +563,46 @@ class XRaySEDComponent(TemplateThreading):
 # Xray group property registration (Phase 1B)
 # ─────────────────────────────────────────────────────────────────────
 
-_TINY = 1e-30  # Floor for safe division
-
 
 def _l_x_xrb_fn(state, params):
-    """X-ray luminosity from X-ray binaries [erg/s]."""
-    from tengri.utils.sed_quantities import compute_l_x_xrb
+    """X-ray luminosity from X-ray binaries [Lsun].
 
-    derived = state.derived
-    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
-    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
-    mstar = jnp.power(10.0, log_mstar)
-    return compute_l_x_xrb(sfr, mstar)
+    **Breaking, no alias (#1206 §B).** Returns Lsun, not erg/s: the HMXB
+    coefficient alone is 2.6e39, past float32's 3.4e38 ceiling, so the erg/s
+    form is ``inf`` at any star formation rate, including zero. Converts the
+    float32-safe ``log_l_x_xrb`` companion with one ``pow10(log_x -
+    LOG10_L_SUN)`` rather than forming the erg/s value first.
+    """
+    from tengri.utils.scale import pow10
+    from tengri.utils.sed_quantities import LOG10_L_SUN
+
+    return pow10(_log_l_x_xrb_fn(state, params) - LOG10_L_SUN)
 
 
 def _l_x_agn_fn(state, params):
-    """X-ray luminosity from AGN [erg/s]."""
-    from tengri.utils.sed_quantities import compute_l_x_agn
+    """X-ray luminosity from AGN [Lsun]; 0.0 when no AGN is present.
 
-    derived = state.derived
-    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
-    # Preserve 0 for inactive AGN, not NaN (matches legacy behavior)
-    return jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
+    **Breaking, no alias (#1206 §B).** Returns Lsun, not erg/s (~1e40-1e45
+    erg/s, ``inf`` in float32). Converts the float32-safe ``log_l_x_agn``
+    companion, whose own ``-inf`` "no AGN" sentinel powers back to exactly
+    0.0, matching the legacy inactive-AGN behavior.
+    """
+    from tengri.utils.scale import pow10
+    from tengri.utils.sed_quantities import LOG10_L_SUN
+
+    return pow10(_log_l_x_agn_fn(state, params) - LOG10_L_SUN)
 
 
 def _l_x_total_fn(state, params):
-    """Total X-ray luminosity (XRB + AGN) [erg/s]."""
-    from tengri.utils.sed_quantities import compute_l_x_agn, compute_l_x_xrb
+    """Total X-ray luminosity (XRB + AGN) [Lsun].
 
-    derived = state.derived
-    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
-    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
-    mstar = jnp.power(10.0, log_mstar)
-    l_x_xrb = compute_l_x_xrb(sfr, mstar)
+    **Breaking, no alias (#1206 §B).** Returns Lsun, not erg/s. Converts the
+    float32-safe ``log_l_x_total`` companion with one ``pow10``.
+    """
+    from tengri.utils.scale import pow10
+    from tengri.utils.sed_quantities import LOG10_L_SUN
 
-    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
-    l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
-    return l_x_xrb + l_x_agn
+    return pow10(_log_l_x_total_fn(state, params) - LOG10_L_SUN)
 
 
 def _log_l_x_xrb_fn(state, params):
@@ -610,18 +616,27 @@ def _log_l_x_xrb_fn(state, params):
 
 
 def _log_l_x_agn_fn(state, params):
-    """log10 X-ray luminosity from AGN [dex re erg/s]; -inf when the AGN is off."""
-    from tengri.utils.scale import log10_magnitude
+    """log10 X-ray luminosity from AGN [dex re erg/s]; -inf when the AGN is off.
+
+    Reads the AGN component's ``log_L_agn_bol`` companion rather than taking a
+    log of the linear ``L_agn_bol`` (~1e46 erg/s, ``inf`` in float32): the old
+    ``log10(inf)`` round trip was itself the defect, silently returning
+    ``nan`` in float32 with no test pinning either the input or the output
+    (#1206 §B).
+    """
     from tengri.utils.sed_quantities import compute_log_l_x_agn
 
     derived = state.derived
-    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
-    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity, which is
-    # the -inf sentinel of log10_magnitude (#1527). Returning 0.0 here would claim
-    # 1 erg/s. The linear sibling returns 0.0 for the same state, correctly.
-    active = L_agn_bol > 0.0
-    log_l_bol = log10_magnitude(jnp.where(active, L_agn_bol, 1.0))
-    return jnp.where(active, compute_log_l_x_agn(log_l_bol), -jnp.inf)
+    log_L_agn_bol = derived.get("log_L_agn_bol")
+    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity.
+    # Returning 0.0 here would claim 1 erg/s. The linear sibling returns 0.0 for
+    # the same state, correctly. ``log_L_agn_bol`` is present in ``derived``
+    # exactly when the AGN component ran (and is then always finite, since it
+    # is a `pow10` of a bounded free parameter), which mirrors the linear
+    # helper's ``derived.get("L_agn_bol", 0.0)`` default for an XRB-only model.
+    if log_L_agn_bol is None:
+        return -jnp.inf
+    return compute_log_l_x_agn(jnp.asarray(log_L_agn_bol))
 
 
 def _log_l_x_total_fn(state, params):
@@ -643,21 +658,21 @@ from tengri.forward.properties import Property, register_properties
 
 _XRAY_PROPERTIES = {
     "l_x_xrb": Property(
-        units="erg/s",
+        units="Lsun",
         group="xray",
-        doc="X-ray luminosity from X-ray binaries",
+        doc="X-ray luminosity from X-ray binaries. `l_x_xrb = 10**(log_l_x_xrb - log10(L_sun))`",
         fn=_l_x_xrb_fn,
     ),
     "l_x_agn": Property(
-        units="erg/s",
+        units="Lsun",
         group="xray",
-        doc="X-ray luminosity from AGN",
+        doc="X-ray luminosity from AGN. `l_x_agn = 10**(log_l_x_agn - log10(L_sun))`",
         fn=_l_x_agn_fn,
     ),
     "l_x_total": Property(
-        units="erg/s",
+        units="Lsun",
         group="xray",
-        doc="Total X-ray luminosity (XRB + AGN)",
+        doc="Total X-ray luminosity (XRB + AGN). `l_x_total = 10**(log_l_x_total - log10(L_sun))`",
         fn=_l_x_total_fn,
     ),
     # Float32-safe companions (#1534). The HMXB coefficient alone is 2.6e39, past

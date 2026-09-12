@@ -31,6 +31,8 @@ parameters, returning SFR in solar masses per year.
 
 .. autofunction:: tengri.delayed_exponential
 
+.. autofunction:: tengri.declining_exponential
+
 .. autofunction:: tengri.triweight_burst
 
 SFH registry
@@ -137,6 +139,93 @@ Accretion disc, torus, BLR, NLR, and unified AGN models.
    :members: unified_agn, multicolor_agn, kubota_done_full_agn, unified_nlr_blr
    :noindex:
 
+AGN informative priors
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Optional composite log-prior penalty terms implementing the same physics as
+AGNfitter-rX's ``PRIORS_AGNfitter.py`` (energy balance, AGN-fraction luminosity-function
+ties, mid-IR/UV/X-ray consistency). Reachable as ``tengri.agn.priors``
+(mirroring the dust-priors pattern above); wired into a fit via
+``Fitter(..., extra_log_prior=...)``, see
+:func:`tengri.inference.loss_functions.build_logprior_fn`.
+
+.. automodule:: tengri.parameters.agn_priors
+   :members: AGNFITTER_HARD_REJECT, AGNFITTER_PRIOR_DEFAULTS, gaussian_log_prior,
+      prior_energy_balance, prior_stellar_mass, prior_agn_fraction,
+      prior_low_agn_fraction, prior_ir_syn_fraction, prior_uv_xrays,
+      prior_ir_xrays, prior_midir_uv, agnfitter_priors
+   :noindex:
+
+AGN template-library grid reductions (AGNfitter-rX)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Additional AGNfitter-rX torus/disc grid reductions, vendored at native
+resolution and validated against the upstream library.
+
+.. automodule:: tengri.components.agn.kd18_agnfitter
+   :members: kd18_agnfitter_sed, kd18_agnfitter_warmindex_sed,
+      create_kd18_agnfitter_from_grid, create_kd18_agnfitter_warmindex_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.nenkova_agnfitter_2p
+   :members: nenkova_agnfitter_2p_sed, create_nenkova_agnfitter_2p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.nenkova_agnfitter_3p
+   :members: nenkova_agnfitter_3p_sed, create_nenkova_agnfitter_3p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.skirtor_agnfitter_1p
+   :members: skirtor_agnfitter_1p_sed, create_skirtor_agnfitter_1p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.skirtor_agnfitter_2p
+   :members: skirtor_agnfitter_2p_sed, create_skirtor_agnfitter_2p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.cat3d_wind_lowfwd
+   :members: cat3d_wind_lowfwd_sed, create_cat3d_wind_lowfwd_from_grid
+   :noindex:
+
+Legacy AGN template-library modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Torus/disc template libraries and their ``SEDModelComponent`` adapters that
+predate the AGNfitter-rX parity branch (opt-in alternatives to the default
+``AGNSEDComponent`` registry entries above). Each adapter class names its own
+loader module under "See Also" in its docstring.
+
+.. automodule:: tengri.components.agn.skirtor
+   :members: create_skirtor_from_grid, skirtor_analytic, skirtor_sed
+   :noindex:
+
+.. automodule:: tengri.components.agn.nenkova_agnfitter
+   :members: create_nenkova_agnfitter_from_grid, nenkova_agnfitter_sed
+   :noindex:
+
+.. automodule:: tengri.components.agn.skirtor_agnfitter
+   :members: create_skirtor_agnfitter_from_grid, skirtor_agnfitter_sed
+   :noindex:
+
+.. automodule:: tengri.components.agn.cat3d_wind
+   :members: cat3d_wind_analytic, cat3d_wind_sed, cat3d_wind_sed_from_grid,
+      create_cat3d_wind_from_grid, load_cat3d_wind_default_grid,
+      load_cat3d_wind_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.silva04
+   :members: Silva04Grid, create_silva04_from_grid, load_silva04_grid,
+      silva04_analytic, silva04_sed, silva04_sed_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.cat3d_torus_model
+   :members: CAT3DTorus
+   :noindex:
+
+.. automodule:: tengri.components.agn.kd18_disc_model
+   :members: KD18Disc
+   :noindex:
+
 Nebular emission
 ----------------
 
@@ -148,7 +237,7 @@ network emulator, with optional shock and DIG mixing.
    :noindex:
 
 .. automodule:: tengri.components.nebular.dig
-   :members: mix_dig_emission
+   :members: mix_dig_emission, mix_dig_line_luminosities, mix_dig_grid_reconstruction
    :noindex:
 
 Observation models

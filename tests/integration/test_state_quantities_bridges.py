@@ -39,6 +39,7 @@ from tengri.forward import (
 )
 from tengri.forward.orchestrator import default_params_dict
 from tengri.protocols.component import ForwardState
+from tengri.utils.physics_constants import L_SUN
 
 # Bare-stellar SSP — required by Cue (wNE SSPs now raise CueWNESSPError).
 _SSP_PATH = pathlib.Path("data/fsps_prsc_miles_chabrier.h5").resolve()
@@ -144,8 +145,10 @@ def test_radio_quantities_finite_and_physical(state):
 def test_xray_quantities_finite_and_physical(state):
     xq = state_to_xray_quantities(state)
     assert isinstance(xq, XRayQuantities)
-    # XRB luminosity in plausible range
-    assert 1e37 < float(xq.l_x_xrb) < 1e42
+    # XRB luminosity in plausible range. Lsun, not erg/s (#1206 §B, breaking, no
+    # alias): the erg/s range this pinned before was [1e37, 1e42]; divided
+    # through by L_SUN = 3.828e33.
+    assert 1e37 / L_SUN < float(xq.l_x_xrb) < 1e42 / L_SUN
     # No AGN component → l_x_agn is exactly 0 (not NaN)
     assert float(xq.l_x_agn) == 0.0
     assert float(xq.l_x_total) == float(xq.l_x_xrb)
@@ -154,9 +157,9 @@ def test_xray_quantities_finite_and_physical(state):
 def test_ionizing_quantities_finite(state):
     iq = state_to_ionizing_quantities(state)
     assert isinstance(iq, IonizingQuantities)
-    # nion magnitude is set by stellar; the BakedIn SSP suppresses it
-    # but it should still be positive and finite.
-    assert float(iq.q_h) > 0.0
+    # ``q_h`` was retired with no alias (#1206 §C): IonizingQuantities no
+    # longer carries it. xi_ion is the sole remaining field.
+    assert "q_h" not in IonizingQuantities._fields
     assert float(iq.xi_ion) > 0.0
 
 

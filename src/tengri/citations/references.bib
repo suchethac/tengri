@@ -253,6 +253,23 @@
   upstream_code = {yi-jia-li/cue},
 }
 
+@ARTICLE{Reynolds_1984,
+  author        = {{Reynolds}, R.~J.},
+  title         = {{A Measurement of the Hydrogen Recombination Rate in the Diffuse Interstellar Medium}},
+  journal       = {\apj},
+  year          = 1984,
+  month         = jul,
+  volume        = {282},
+  pages         = {191--196},
+  doi           = {10.1086/162190},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/1984ApJ...282..191R},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {reynolds1984},
+  category      = {nebular},
+  short         = {Reynolds (1984)},
+  role          = {Galactic H-alpha background implies pervasive diffuse ionized gas (DIG mixing motivation)},
+}
+
 %% =====================================================================
 %%  Intergalactic medium
 %% =====================================================================
@@ -907,6 +924,31 @@
 }
 
 %% =====================================================================
+%%  AGN — informative priors (agn_priors.py, AGNfitter-rX validation)
+%% =====================================================================
+
+@ARTICLE{Stern_2015,
+  author        = {{Stern}, Daniel},
+  title         = {{The X-Ray to Mid-Infrared Relation of AGNs at High Luminosity}},
+  journal       = {\apj},
+  year          = 2015,
+  month         = jul,
+  volume        = {807},
+  number        = {2},
+  pages         = {129},
+  doi           = {10.1088/0004-637X/807/2/129},
+  archiveprefix = {arXiv},
+  eprint        = {1506.00162},
+  primaryclass  = {astro-ph.GA},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2015ApJ...807..129S},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {stern2015},
+  category      = {agn},
+  short         = {Stern (2015)},
+  role          = {Mid-IR--X-ray luminosity correlation behind AGNfitter-rX's prior_IR_XRays / prior_midIR_UV, validated by src/tengri/parameters/agn_priors.py},
+}
+
+%% =====================================================================
 %%  AGN — GRAHSP (Buchner+2024) and its empirical sub-model references
 %% =====================================================================
 
@@ -1303,6 +1345,27 @@
   category      = {agn},
   short         = {Nenkova et al. (2008)},
   role          = {CLUMPY — clumpy-medium AGN torus model},
+}
+
+@article{Nenkova_2008b,
+  author        = {{Nenkova}, Maia and {Sirocky}, Matthew M. and {Nikutta}, Robert and {Ivezi{\'c}}, {\v{Z}}eljko and {Elitzur}, Moshe},
+  title         = {{AGN Dusty Tori. II. Observational Implications of Clumpiness}},
+  journal       = {\apj},
+  year          = 2008,
+  month         = sep,
+  volume        = {685},
+  number        = {1},
+  pages         = {160-180},
+  doi           = {10.1086/590483},
+  archiveprefix = {arXiv},
+  eprint        = {0806.0512},
+  primaryclass  = {astro-ph},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2008ApJ...685..160N},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {clumpy_nenkova2008b},
+  category      = {agn},
+  short         = {Nenkova et al. (2008b)},
+  role          = {NK08 — AGNfitter-rX torus grid; observational implications of clumpy-medium tori},
 }
 
 @article{VandenBerk_2001,
@@ -2133,6 +2196,36 @@
   category      = {radio},
   short         = {Bell (2003)},
   role          = {IR-radio correlation / SFR calibration},
+}
+
+@ARTICLE{Kennicutt_1998,
+  author        = {{Kennicutt}, R.~C., Jr.},
+  title         = {{Star Formation in Galaxies Along the Hubble Sequence}},
+  journal       = {\araa},
+  year          = 1998,
+  volume        = {36},
+  pages         = {189},
+  doi           = {10.1146/annurev.astro.36.1.189},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/1998ARA&A..36..189K},
+  registry_key  = {kennicutt1998},
+  category      = {radio},
+  short         = {Kennicutt (1998)},
+  role          = {Total-infrared SFR calibration cited for comparison in sfr_from_lir's docstring (tengri's own default calibration is Murphy et al. 2011)},
+}
+
+@ARTICLE{Baan_Klockner_2006,
+  author        = {{Baan}, W.~A. and {Klockner}, H.~R.},
+  title         = {{Radio properties of FIR-megamaser nuclei}},
+  journal       = {\aap},
+  year          = 2006,
+  volume        = {449},
+  pages         = {559},
+  doi           = {10.1051/0004-6361:20053936},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2006A&A...449..559B},
+  registry_key  = {baanklockner2006},
+  category      = {radio},
+  short         = {Baan \& Klockner (2006)},
+  role          = {Non-thermal (synchrotron) spectral index adopted by radio_sfr_bell2003_split},
 }
 
 @ARTICLE{Lehmer_2016,

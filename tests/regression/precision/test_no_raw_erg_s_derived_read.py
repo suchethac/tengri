@@ -53,11 +53,15 @@ ALLOW = {
         "publishes no companion"
     ),
     "components/nebular/component.py": (
-        "_line_lums_for_ratios fallback arm, plus _line_luminosity_helper which "
-        "serves the 11 absolute erg/s line properties (#1206 §3)"
+        "_line_lums_for_ratios fallback arm only -- the 11 line properties moved to "
+        "Lsun and read the log catalog exclusively (#1206 §A), so "
+        "_line_luminosity_helper no longer reads this key"
     ),
     "forward/component_factory.py": (
-        "state_to_line_quantities builds the absolute erg/s line catalog (#1206 §3)"
+        "state_to_emission_lines builds the DEPRECATED EmissionLines bridge "
+        "(predict_emission_lines()), which is staying erg/s for its remaining "
+        "deprecation cycle rather than moving units mid-cycle; the live surface "
+        "(pred.lines / the Property catalog) is Lsun (#1206 §A)"
     ),
     "forward/prediction.py": "pred.lines absolute erg/s catalog (#1206 §3)",
     "forward/sed_model.py": "fast-line path reconstructs the absolute erg/s catalog (#1206 §3)",

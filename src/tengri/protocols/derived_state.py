@@ -319,6 +319,18 @@ class DerivedState:
     # X-CIGALE forwards cos i from the AGN module into yang20 (#980).
     agn_cos_inc: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
+    # Per-sub-block rest-frame SEDs from the composable AGN runner (task13,
+    # NAMING_CONTRACT §4b.5): disc-only, torus-only, NLR+BLR+FeII lines, and
+    # polar-dust re-emission (CIGALE skirtor2016 convention, Yang et al.
+    # 2020). Sum exactly to ``sed_agn`` (to floating-point reassociation).
+    # Published only when the AGN model is "composable" (absent for
+    # monolithic models, which have no separate sub-blocks); sed_agn_polar
+    # is a zeros-shaped array (not absent) whenever the composable model's
+    # agn_attenuation_block is not "polar_dust".
+    sed_agn_disc: jnp.ndarray | None = None
+    sed_agn_torus: jnp.ndarray | None = None
+    sed_agn_lines: jnp.ndarray | None = None
+    sed_agn_polar: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
     # AGN: filter-integrated LUT. Rest-frame Lν of
     # the AGN contribution per filter, shape ``(n_filters,)``. Published

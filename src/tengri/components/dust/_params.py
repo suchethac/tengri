@@ -26,14 +26,18 @@ modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
 draine2021_pah returns only ``dust_lgU``, astrodust uses a different
 ``dust_lgU`` bound, etc. The flat-builder bucket is the static superset
 registered together when ``dust_emission`` is set. The priors agree
-where they overlap; this file is the source of truth for the static
-superset.
+where they overlap for most names, but NOT for ``dust_T``/``dust_beta_ir``:
+every analytic template's own class-level declaration (30.0/35.0 K, 1.8)
+disagrees with this table's ``PARAMS`` entries (35.0 K, 1.6) -- see the
+comments on those two entries below, and #2261, filed to resolve which
+value is correct. This file remains the source of truth for the static
+superset regardless; that disagreement is a live discrepancy, not a typo.
 """
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, LogNormal, Uniform
-from tengri.protocols.component import ParamDeclaration
+from tengri.parameters.priors import Fixed, Gaussian, Uniform
+from tengri.protocols.component import ParamDeclaration, declared_default
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     # The three Casey (2012) graybody + mid-IR power-law parameters. Their
@@ -44,6 +48,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # T ~ 25-45 K for local (U)LIRGs, beta = 1.60 +/- 0.38, alpha = 2.0 +/- 0.5.
     ParamDeclaration(
         "dust_T",
+        # NOT the value any analytic template actually defaults to (#2241,
+        # #2261): modified_blackbody and schreiber2016 default to T=30.0 K,
+        # and casey2012/graybody's own class-level default happens to match
+        # this 35.0 only by coincidence. Whether this table or the templates
+        # are right is an open physics/sampler-geometry question filed as
+        # #2261; ``declared_default(PARAMS, "dust_T")`` is deliberately NOT
+        # used by the closures for this reason -- see
+        # ``MBB_T_K_DEFAULT``/``CASEY_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``
+        # below, which are each template's own value, not this one.
         Fixed(35.0),
         "Dust temperature (K) for graybody/Casey emission",
         lambda lo, hi: lo > 0,
@@ -58,6 +71,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "dust_beta_ir",
+        # NOT the value any analytic template actually defaults to (#2241,
+        # #2261): every template (modified_blackbody, graybody, casey2012)
+        # defaults ``dust_beta_ir`` to 1.8, not this table's 1.6. See the
+        # note on ``dust_T`` above -- ``ANALYTIC_BETA_IR_DEFAULT`` below is
+        # the templates' own value, deliberately not derived from this entry.
         Fixed(1.6),
         "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo >= 0,
@@ -158,17 +176,23 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "strict balance; free it to fit galaxies whose UV/optical and FIR are "
         "spatially decoupled and so violate energy balance (e.g. high-z "
         "sources), the way AGNfitter offers an *optional* energy-balance prior. "
-        "Recommended relaxed prior: ``LogNormal(mu=0.0, sigma=0.2)`` (median "
-        "eta=1, ~+/-20%), keeping balance as the soft default while allowing "
-        "controlled deviation.",
+        "Recommended relaxed prior: ``Gaussian(mu=1.0, sigma=0.2, lo=0.0)`` "
+        "(mean eta=1, ~+/-20%, truncated at 0), keeping balance as the soft "
+        "default while allowing controlled deviation.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         # The relaxed prior this description has recommended all along, now
-        # actually declared. LogNormal keeps eta positive and multiplicative
-        # about strict balance (median eta=1); the truncation at 5 is a guard
-        # against the sampler wandering into unphysically AGN-dominated IR, not
-        # a physical edge -- +/-3 sigma is [0.55, 1.82].
-        free_prior=LogNormal(0.0, 0.2, 0.0, 5.0, "Energy-balance relaxation factor", default=1.0),
+        # actually declared, stated in the linear quantity: eta itself is the
+        # linear multiplicative factor (L_IR = eta * L_absorbed), so a Gaussian
+        # on eta -- mean 1 (strict balance), sigma 0.2 (+/-20%) -- is the
+        # natural prior, not a LogNormal on log(eta). Truncated at 0 because
+        # eta < 0 is unphysical (lo=0.0 is required by the declaration's own
+        # validator above, "must be >= 0"); hi is left unbounded -- 5.0 was a
+        # 5-sigma guard for the log prior, which is 20 sigma away in the linear
+        # one, so no finite upper edge is needed to keep the sampler physical.
+        free_prior=Gaussian(
+            1.0, 0.2, 0.0, float("inf"), "Energy-balance relaxation factor", default=1.0
+        ),
     ),
     ParamDeclaration(
         "dust_T_warm",
@@ -357,6 +381,44 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
+# ── Derived defaults for direct import (#2241) ────────────────────────
+# A bare numeral repeated as a function's signature default, or as the second
+# argument of a ``.get(name, literal)`` call, is a second copy of a value this
+# table already owns, and the two can drift silently -- equality with the
+# declaration is not a safeguard here, because a pair that has already
+# drifted is exactly what an equality check cannot see. The analytic dust
+# emission closures (``emission/analytic/_closures.py``) and
+# ``energy_balance_split``'s component read these constants instead of
+# repeating the numbers; ``tools/check_literal_param_defaults.py`` guards the
+# rest of the tree against a new literal copy appearing.
+DEFAULT_DUST_LAMBDA_0_UM = declared_default(PARAMS, "dust_lambda_0_um")
+DEFAULT_DUST_ALPHA_MIR = declared_default(PARAMS, "dust_alpha_mir")
+DEFAULT_DUST_EPSILON_MBB = declared_default(PARAMS, "dust_epsilon_mbb")
+DEFAULT_DUST_F_PAH = declared_default(PARAMS, "dust_f_pah")
+DEFAULT_DUST_T_WARM = declared_default(PARAMS, "dust_T_warm")
+DEFAULT_DUST_T_COLD = declared_default(PARAMS, "dust_T_cold")
+DEFAULT_DUST_F_COLD = declared_default(PARAMS, "dust_f_cold")
+DEFAULT_DUST_BETA_WARM = declared_default(PARAMS, "dust_beta_warm")
+DEFAULT_DUST_BETA_COLD = declared_default(PARAMS, "dust_beta_cold")
+DEFAULT_DUST_L_AGN_IR = declared_default(PARAMS, "dust_L_agn_ir")
+DEFAULT_DUST_ETA_BALANCE = declared_default(PARAMS, "dust_eta_balance")
+
+# ``dust_T`` / ``dust_beta_ir`` are deliberately NOT declared_default(PARAMS,
+# ...) candidates (#2241, follow-up #2261): this table's own Fixed(35.0) /
+# Fixed(1.6) disagree with what every analytic template's own class-level
+# declaration actually defaults to (modified_blackbody/schreiber2016 use
+# T=30.0 K; every template uses beta_ir=1.8), so reading them off PARAMS
+# would silently CHANGE those templates' defaults -- a behavior change this
+# fix must not make. These four names are each template's own value today,
+# shared between its closure's signature default and its component's
+# class-level declaration so the two cannot drift from EACH OTHER, even
+# while both remain out of step with the table above until #2261 resolves
+# which value is correct.
+MBB_T_K_DEFAULT = 30.0
+CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
+SCHREIBER_T_K_DEFAULT = 30.0
+ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
+
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_tau_bc",
@@ -484,8 +546,23 @@ SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
 )
 
 __all__ = [
+    "ANALYTIC_BETA_IR_DEFAULT",
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
+    "CASEY_T_K_DEFAULT",
+    "DEFAULT_DUST_ALPHA_MIR",
+    "DEFAULT_DUST_BETA_COLD",
+    "DEFAULT_DUST_BETA_WARM",
+    "DEFAULT_DUST_EPSILON_MBB",
+    "DEFAULT_DUST_ETA_BALANCE",
+    "DEFAULT_DUST_F_COLD",
+    "DEFAULT_DUST_F_PAH",
+    "DEFAULT_DUST_LAMBDA_0_UM",
+    "DEFAULT_DUST_L_AGN_IR",
+    "DEFAULT_DUST_T_COLD",
+    "DEFAULT_DUST_T_WARM",
+    "MBB_T_K_DEFAULT",
     "PARAMS",
+    "SCHREIBER_T_K_DEFAULT",
     "SINGLE_COMPONENT_PARAMS",
 ]

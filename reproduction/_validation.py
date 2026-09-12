@@ -130,7 +130,7 @@ UV_TO_NIR: tuple[tuple[str, str], ...] = BROAD_FILTERS[:10]
 For comparisons that are **stellar + attenuation only**. Several reference
 codes apply energy balance unconditionally and re-emit the absorbed luminosity
 in the IR, while the matched tengri build carries no ``dust.emission`` block,
-so past a few um the two are modelling different things and every red band
+so past a few um the two are modeling different things and every red band
 reads as a large disagreement that is really a scope mismatch.
 
 Handing those comparisons this subset keeps the table honest. Extending one to
@@ -706,7 +706,7 @@ def safe_half_widths(
     half: float = 12.0,
     pad: float = 0.45,
 ) -> dict[str, float]:
-    """Per-line integration half-width that cannot reach a neighbouring line.
+    """Per-line integration half-width that cannot reach a neighboring line.
 
     Parameters
     ----------
@@ -715,7 +715,7 @@ def safe_half_widths(
     half : float, optional
         Requested half-width [Angstrom]. Default 12.
     pad : float, optional
-        Fraction of the nearest-neighbour separation allowed. Default 0.45,
+        Fraction of the nearest-neighbor separation allowed. Default 0.45,
         i.e. two adjacent windows leave a 10% gap between them.
 
     Returns
@@ -729,17 +729,17 @@ def safe_half_widths(
     separations are 14.8 A (Halpha--[N II] 6550) and 20.7 A (Halpha--[N II]
     6585), and [S II] 6718/6733 are 14.4 A apart, so the +/-12 A windows
     overlap and ``line_lum`` -- which subtracts the in-window floor as a flat
-    continuum -- integrates the *neighbour's wing*.
+    continuum -- integrates the *neighbor's wing*.
 
     Caught by injecting a Balmer pair of known ratio: both [N II] entries
     reported Halpha's ratio to three decimals, which is what a blend looks
     like when it is not looked for. Narrowing per line is not a full
     deblending (nothing measured off a spectrum can fully separate lines this
     close once they are broadened) but it stops the measurement being
-    dominated by a neighbour, and :func:`line_rows` reports which lines were
+    dominated by a neighbor, and :func:`line_rows` reports which lines were
     narrowed.
 
-    A multi-component entry is treated as **one feature**, centred on the span
+    A multi-component entry is treated as **one feature**, centered on the span
     of its components and wide enough to hold all of them. ``KEY_LINES`` lists
     [O II] 3727+3730 and C IV 1548+1551 as single entries precisely because
     their components are summed. Two mistakes are avoided: letting a doublet
@@ -747,7 +747,7 @@ def safe_half_widths(
     1.2 A and measured a fraction of each) and summing two overlapping
     per-component windows (which double-counts the flux between them).
 
-    Returns the **total** half-width, measured from the feature centre, so it
+    Returns the **total** half-width, measured from the feature center, so it
     already includes the doublet's own half-span.
     """
     out = {}
@@ -795,7 +795,7 @@ def line_rows(
         to the package's vacuum :data:`KEY_LINES`.
     half : float, optional
         Requested half-width [Angstrom], narrowed per line by
-        :func:`safe_half_widths` so a window cannot reach its neighbour.
+        :func:`safe_half_widths` so a window cannot reach its neighbor.
         Default 12.
     min_rel : float, optional
         Detection floor as a fraction of the brightest line measured on the
@@ -831,7 +831,7 @@ def line_rows(
     meas = []
     for key, centers in sorted(lines.items(), key=lambda kv: kv[1][0]):
         h = halves[key]
-        # One window per feature, centred on the component span: summing
+        # One window per feature, centered on the component span: summing
         # per-component windows would double-count an unresolved doublet.
         c0 = 0.5 * (min(centers) + max(centers))
         a = line_lum(w_t, L_t, c0, half=h)
@@ -908,5 +908,5 @@ def print_line_table(
             norm_s = "--"
         print(f"  {label:<14} {lam:>9.1f} {ratio:>15.3f}x {norm_s:>12}  {hw:>5.1f}{mark}")
     if blended:
-        print(f"  b = window narrowed below 12 A to clear a neighbour: {', '.join(blended)}")
+        print(f"  b = window narrowed below 12 A to clear a neighbor: {', '.join(blended)}")
     print("  (no pass/fail flag: Cue vs Cloudy is a model difference, not a parity check)")

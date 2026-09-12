@@ -28,6 +28,7 @@ References
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -381,7 +382,7 @@ def compute_grahsp_sed(
     wavelength: Array,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_grahsp_l5100: float | None = None,
+    agn_grahsp_log_l5100: float | None = None,
     agn_grahsp_uvslope: float = _DEFAULT_UVSLOPE,
     agn_grahsp_plslope: float = _DEFAULT_PLSLOPE,
     agn_grahsp_plbendloc_nm: float = _DEFAULT_PLBENDLOC_NM,
@@ -442,6 +443,15 @@ def compute_grahsp_sed(
     agn_lum_ratio : float, optional
         Fraction of bolometric luminosity carried by this AGN component.
         Default ``1.0``.
+    agn_grahsp_log_l5100 : float, optional
+        :math:`\log_{10}(\lambda L_\lambda(5100\,\mathrm{\AA}) / (\mathrm{erg/s}))`.
+        **Breaking, no alias (#1206 §D)**: replaces the linear
+        ``agn_grahsp_l5100`` (a bare value up to ``1e47`` erg/s overflows
+        JAX float32 range ``[1.18e-38, 3.40e38]`` before any physics
+        runs). If ``None`` (default), ``l5100`` is normalized internally
+        so the integrated intrinsic SED matches ``agn_log_lbol`` /
+        ``agn_lum_ratio``. Passing the old ``agn_grahsp_l5100`` name (via
+        ``**_kwargs``) raises ``TypeError``.
     agn_grahsp_uvslope, agn_grahsp_plslope, agn_grahsp_plbendloc_nm, \
 agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
         BBB SBPL parameters (Ryde 1999); see :func:`sbpl_bbb`.
@@ -461,8 +471,14 @@ agn_grahsp_hot_fcov
     templates : GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle.
     **_kwargs
-        Ignored. Accepted for compatibility with the AGN_MODELS registry
-        signature (extra parameters from sibling AGN models).
+        Non-``agn_grahsp_*`` entries are ignored, accepted for
+        compatibility with the AGN_MODELS registry signature (extra
+        parameters from sibling AGN models). Any ``agn_grahsp_*``-prefixed
+        entry is rejected with ``TypeError``: either it is the retired
+        ``agn_grahsp_l5100`` (#1206 §D; the message carries the
+        ``log10(agn_grahsp_l5100)`` translation to ``agn_grahsp_log_l5100``),
+        or it is an unrecognized GRAHSP parameter name (e.g. a typo), which
+        would otherwise be silently dropped.
 
     Returns
     -------
@@ -483,6 +499,28 @@ agn_grahsp_hot_fcov
     >>> wave = jnp.logspace(2, 6, 200)  # Å
     >>> L_nu = compute_grahsp_sed(wave, agn_log_lbol=11.42)
     """
+    if "agn_grahsp_l5100" in _kwargs:
+        _old_l5100 = _kwargs.pop("agn_grahsp_l5100")
+        _translation = (
+            f"log10(agn_grahsp_l5100) = {math.log10(_old_l5100)!r}"
+            if isinstance(_old_l5100, (int, float)) and _old_l5100 > 0
+            else "log10(agn_grahsp_l5100) is undefined for a non-positive value"
+        )
+        raise TypeError(
+            "compute_grahsp_sed() no longer accepts 'agn_grahsp_l5100' "
+            "(linear erg/s). Breaking, no alias (#1206 §D): a bare value "
+            "up to 1e47 erg/s overflows JAX float32 range "
+            "[1.18e-38, 3.40e38] before any physics runs. Pass "
+            f"'agn_grahsp_log_l5100' instead, i.e. {_translation}."
+        )
+    _unknown_grahsp = sorted(k for k in _kwargs if k.startswith("agn_grahsp_"))
+    if _unknown_grahsp:
+        raise TypeError(
+            f"compute_grahsp_sed() got unrecognized GRAHSP parameter(s) "
+            f"{_unknown_grahsp}; not part of the GRAHSP signature and would "
+            "otherwise be silently ignored."
+        )
+
     wave_angstrom = jnp.asarray(wavelength)
     wave_nm = wave_angstrom * 0.1
 
@@ -519,10 +557,12 @@ agn_grahsp_hot_fcov
     )
     sed_unit = evaluate_grahsp_agn(wave_nm, unit_params, templates)
     # Total bolometric luminosity at l5100 = 1.
-    if agn_grahsp_l5100 is not None:
+    if agn_grahsp_log_l5100 is not None:
         # Honor the explicit l5100 override (matches composable runner
-        # semantics; see :mod:`tengri.components.agn.blocks`).
-        l5100 = agn_grahsp_l5100
+        # semantics; see :mod:`tengri.components.agn.blocks`). Converted
+        # from the log-space public parameter (#1206 §D) to the linear
+        # value this function's internals use.
+        l5100 = 10.0**agn_grahsp_log_l5100
     else:
         l_bol_unit = sed_unit.l_bol_bbb + sed_unit.l_bol_torus
         target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_lum_ratio

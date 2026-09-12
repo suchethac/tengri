@@ -272,8 +272,8 @@ def compute_nlr_sed_feltre(
         NLR line FWHM [km/s]. Default 500.
     alpha_pl : float, optional
         AGN ionizing power-law slope :math:`f_\nu \propto \nu^{\alpha}`.
-        Feltre grid discretizes α ∈ {−2.0, −1.7, −1.4, −1.2}; the backend
-        snaps to the nearest grid point. Default −1.7.
+        The Feltre grid tabulates α ∈ {−2.0, −1.7, −1.4, −1.2}; the backend
+        interpolates between those nodes. Default −1.7.
     neb_logU : float, optional
         :math:`\log_{10}(U)` gas ionization parameter. Default −2.0.
     neb_logn : float, optional
@@ -283,8 +283,9 @@ def compute_nlr_sed_feltre(
         :math:`\log_{10}(Z_{\rm gas})` absolute gas metallicity. Default
         −1.8477 = :math:`\log_{10}(Z_\odot)`.
     xi_d : float, optional
-        Dust-to-metal ratio. Feltre discretizes ξ_d ∈ {0.1, 0.3, 0.5};
-        snaps to nearest. Default 0.3.
+        Dust-to-metal ratio. The Feltre grid tabulates ξ_d ∈ {0.1, 0.3, 0.5};
+        the backend interpolates between those nodes (R41, #2214 -- it used to
+        snap to the nearest, which left the axis with no gradient at all). Default 0.3.
     grid_path : str or None, optional
         Path to ``feltre_grid.h5``. If ``None``, uses tengri's default
         location (``data/feltre_grid.h5``) built via
@@ -408,7 +409,7 @@ def load_cue_agn_weights():
 
 def compute_nlr_sed_cue(
     wavelength: jnp.ndarray,
-    l_disc_bol_erg: float,
+    l_disc_bol_erg: float | None = None,
     covering_fraction: float = 0.1,
     fwhm_kms: float = 500.0,
     alpha_pl: float = -1.7,
@@ -417,6 +418,8 @@ def compute_nlr_sed_cue(
     neb_logZ_gas: float = -1.8477,
     weights_path: str | None = None,
     _template=None,
+    *,
+    log10_l_disc_bol_erg: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Cue-emulator AGN-ionized NLR adapter (the disc → Cue → NLR pipeline).
@@ -432,8 +435,9 @@ def compute_nlr_sed_cue(
     ----------
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg : float
+    l_disc_bol_erg : float, optional
         AGN disc bolometric luminosity [erg/s]; drives :math:`Q_{\rm H}`.
+        Ignored when ``log10_l_disc_bol_erg`` is given.
     covering_fraction : float, optional
         NLR covering factor; scales the emergent line luminosity. Default 0.1.
     fwhm_kms : float, optional
@@ -451,6 +455,10 @@ def compute_nlr_sed_cue(
         −1.8477 = solar.
     weights_path : str or None, optional
         Path to ``cue_weights.npz``. ``None`` uses the package default.
+    log10_l_disc_bol_erg : float, optional
+        ``log10(l_disc_bol_erg / (erg/s))``, keyword-only. When given, Q_H is
+        derived without ever forming the linear disc bolometric luminosity
+        (#1206 §C). Default ``None`` uses the linear ``l_disc_bol_erg``.
     **_kwargs
         Accepted for signature compatibility; ignored.
 
@@ -482,6 +490,7 @@ def compute_nlr_sed_cue(
         gas_logz=gas_logz_rel,
         alpha_pl=alpha_pl,
         template_data=_template,
+        log10_l_acc_erg=log10_l_disc_bol_erg,
     )
     # agn_nlr_cue already scales lines by covering_fraction; convert L_sun→erg/s.
     line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S

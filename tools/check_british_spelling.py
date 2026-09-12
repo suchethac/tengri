@@ -73,6 +73,7 @@ DEFAULT_ROOTS = (
     "docs",
     "examples",
     "notebooks",
+    "scripts",
     ".github",
     "README.md",
     "CONTRIBUTING.md",
@@ -152,6 +153,47 @@ ALLOWED_PHRASES = (
     "modelling framework THEMIS",
     "spectral energy distribution modelling due to bursty",
     "modelling AGN and galaxy SEDs from radio to X-rays",
+    # pcigale's own ``sfhdelayed``/``sfhdelayedbq`` SED modules declare a
+    # parameter literally named ``normalise`` (site-packages/pcigale/
+    # sed_modules/sfhdelayed.py); passing ``normalize`` instead is an
+    # "unexpected parameter" that pcigale's SedModule.__init__ raises on, and
+    # setting ``sfh.parameters["normalize"]`` instead of the real key is
+    # silently ignored (the module falls back to its own default). An
+    # external data-contract key (NAMING_CONTRACT §10), not tengri prose, and
+    # scoped to the exact call-site spellings rather than a token entry so
+    # ordinary "normalise" prose elsewhere stays flagged -- which the guard's
+    # own test asserts in both directions.
+    #
+    # ``normalise=True``/``normalise=False`` are the keyword spellings as
+    # written at a call site and as quoted in prose about one; they subsume
+    # the earlier ``"normalise=True,"`` and
+    # ``"normalise=True → sfh.sfr_integrated"`` entries, which were the same
+    # spelling with more punctuation attached. The reproduction/cigale
+    # notebook and its drivers both call the keyword and quote it while
+    # explaining the tengri equivalent (``log_total_mass = 0.0``), so the
+    # entries have to cover the bare ``keyword=value`` form rather than one
+    # exact surrounding line.
+    "normalise=True",
+    "normalise=False",
+    'sfh.parameters["normalise"]',
+    # Stalevski, Fritz, Baes, Nakos & Popović 2012, "3D radiative transfer
+    # modelling of the dusty tori around active galactic nuclei as a clumpy
+    # two-phase medium", MNRAS 420, 2756. arXiv:1109.1286,
+    # doi:10.1111/j.1365-2966.2011.19775.x. MNRAS is a British journal and
+    # the published title uses "modelling"; the two References entries below
+    # quote a shortened form of it, but the words kept are verbatim.
+    "3D radiative transfer modelling of the dusty",
+    # HDF5 attribute key of a shipped data file: scripts/build_slone_netzer_grid.py
+    # writes ``g.attrs["edd_labelling"]``, and the committed
+    # data/slone_netzer_disc_grid.h5 already carries that exact key on disk
+    # (verified: ``h5py.File(...)["slone_netzer"].attrs`` has "edd_labelling",
+    # not "edd_labeling"). An earlier --fix pass renamed the key in this
+    # script to the American spelling without regenerating the grid, silently
+    # desynchronizing the generator from its own shipped output (Task 11 fix
+    # round 1, item 4). A bare "labelling" token entry would blind the guard
+    # to ordinary prose uses of the word elsewhere -- scoped to the full
+    # compound identifier instead, per the ALLOWED_TOKENS note above.
+    "edd_labelling",
 )
 
 

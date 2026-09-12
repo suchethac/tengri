@@ -14,9 +14,15 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.utils.physics_constants import C_AA
+
 # Physical constants. CIGALE works in W/nm; the converter below carries the
 # full unit chain explicitly, so only the speed of light is needed here.
-C_ANGSTROM_PER_S: float = 2.998e18
+# tengri's exact c is the single value used on both sides of every comparison
+# in this notebook: the SSP repackaging, the W/nm converter, §8's line
+# integral and §11's frequency axis. A rounded 2.998e18 here would put a
+# 2.5e-5 floor under every residual the notebook reports.
+C_ANGSTROM_PER_S: float = C_AA
 
 
 def wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm):
@@ -28,7 +34,7 @@ def wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm):
     in erg/s/Hz.
 
     The conversion uses the Jacobian: L_ν = L_λ · λ² / c, with careful
-    unit handling. 1 W = 1e7 erg/s; 1 nm = 10 Å; c = 2.998e18 Å/s.
+    unit handling. 1 W = 1e7 erg/s; 1 nm = 10 Å; c is tengri's ``C_AA``.
 
     Parameters
     ----------

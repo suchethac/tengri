@@ -50,11 +50,13 @@ OVERRIDE_STEMS: tuple[str, ...] = ("slope", "bump_strength", "delta", "Rv")
 # ``Parameters._init_dust_config``, the grammar round-trip table) derives from
 # them instead of hand-listing the three names again.
 SCREEN_CHOICES: tuple[str, ...] = ("birth_cloud", "diffuse", "none")
-#: User-facing synonyms that normalize onto a canonical choice before any
-#: validation runs. ``"off"`` mirrors the ``dust_model``/group-``type``
-#: convention (``'none'``/``'off'`` both disable a block) so a caller does not
-#: have to remember two different spellings of "nothing" across the grammar.
-SCREEN_SYNONYMS: dict[str, str] = {"off": "none"}
+# The ``'off'`` synonym for ``'none'`` is NOT spelled here: the off-switch
+# vocabulary has exactly one home, ``tengri.parameters.groups._normalize_off_switch``
+# (the helper every off-switch group's ``type`` goes through), and both
+# surfaces -- ``_translate_dust_attenuation`` for the grammar and
+# ``Parameters._init_dust_config`` for the flat kwargs -- pass each raw
+# selector value through it BEFORE calling :func:`resolve_screen_choices`, so
+# this module only ever sees the canonical spelling.
 #: The three sources with a configurable screen. Order matches the tuple
 #: ``screen_keys()`` returns and the per-source default in
 #: :data:`_SCREEN_DEFAULTS`.
@@ -84,13 +86,16 @@ def screen_keys() -> tuple[str, ...]:
 
 
 def normalize_screen_choice(value: str, *, key: str) -> str:
-    """Normalize one dust-screen selector to a canonical :data:`SCREEN_CHOICES` value.
+    """Check one dust-screen selector against :data:`SCREEN_CHOICES`.
 
     Parameters
     ----------
     value : str
-        The user-supplied choice: one of :data:`SCREEN_CHOICES`, or a key of
-        :data:`SCREEN_SYNONYMS` (``"off"``).
+        The choice as the calling surface hands it: one of
+        :data:`SCREEN_CHOICES`. The ``'off'`` spelling of ``'none'`` is
+        already canonicalized by then (``groups._normalize_off_switch``, the
+        one home of the off-switch vocabulary, runs at the raw read on both
+        surfaces), so it is neither accepted nor named here.
     key : str
         The key name to name in the error message (e.g. ``"nebular_screen"``
         or ``"dust_shock_screen"``), so the raised error points at exactly
@@ -104,18 +109,16 @@ def normalize_screen_choice(value: str, *, key: str) -> str:
     Raises
     ------
     ParameterError
-        If ``value`` is not a recognized choice or synonym. Names ``key``
-        and the three choices.
+        If ``value`` is not a recognized choice. Names ``key`` and the three
+        choices.
     """
     from tengri.config.exceptions import ParameterError
 
-    resolved = SCREEN_SYNONYMS.get(value, value)
-    if resolved not in SCREEN_CHOICES:
+    if value not in SCREEN_CHOICES:
         raise ParameterError(
-            f"{key}={value!r} is not a valid dust-screen choice. Choose one of "
-            f"{SCREEN_CHOICES!r}, or 'off' (a synonym for 'none')."
+            f"{key}={value!r} is not a valid dust-screen choice. Choose one of {SCREEN_CHOICES!r}."
         )
-    return resolved
+    return value
 
 
 def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surface: str) -> dict:
@@ -164,7 +167,7 @@ def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surfac
         galaxy screening of AGN light is not yet wired); on a two-screen-only
         key given ANY explicit value when ``dust_model in ("wg00", "off")``
         (there are no birth-cloud/diffuse screens to choose between); on a
-        value other than ``"none"``/``"off"`` or the source's own default when
+        value other than ``"none"`` or the source's own default when
         ``dust_model == "single_component"`` (one screen, so there is no
         birth-cloud/diffuse distinction to select).
     """

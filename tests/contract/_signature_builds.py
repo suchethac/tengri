@@ -268,8 +268,8 @@ def predict_for_build(model):
 # ── H: extra, non-canonical helper (not one of the seven E.3 builds) ──────
 #
 # Materializes attributes that never appear on A-G: the conditionally-set
-# radio scalars (_radio_include_freefree/_radio_sfr_mode/_radio_agn_model,
-# set only `if self._uses_radio`), the fast-nebular grid table
+# radio scalars (_radio_sfr_mode/_radio_agn_model, set only
+# `if self._uses_radio`), the fast-nebular grid table
 # (_nebular_grid_table, set only by enable_fast_nebular(), which itself
 # requires a Q_H-linear nebular backend none of A-G attaches), and the
 # full-state-chain memo (_cached_full_state_chain, populated by a

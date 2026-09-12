@@ -56,6 +56,20 @@ def _slone_netzer_support() -> dict[str, tuple[float, float]]:
     return slone_netzer_grid_support()
 
 
+def _kd18_agnfitter_support() -> dict[str, tuple[float, float]]:
+    """Read the KD18-agnfitter disc grid axes (imported lazily -- h5py + file I/O)."""
+    from tengri.components.agn.kd18_agnfitter import kd18_agnfitter_grid_support
+
+    return kd18_agnfitter_grid_support()
+
+
+def _kd18_agnfitter_warmindex_support() -> dict[str, tuple[float, float]]:
+    """Read the KD18-agnfitter-warmindex disc grid axes (imported lazily)."""
+    from tengri.components.agn.kd18_agnfitter import kd18_agnfitter_warmindex_grid_support
+
+    return kd18_agnfitter_warmindex_grid_support()
+
+
 def _dust_emission_support(name: str) -> GridSupportFn:
     """Build an accessor for one template-backed dust emission model."""
 
@@ -75,6 +89,8 @@ def _dust_emission_support(name: str) -> GridSupportFn:
 #: every closed-form model.
 GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
     ("agn.disc", "slone_netzer"): _slone_netzer_support,
+    ("agn.disc", "kd18_agnfitter"): _kd18_agnfitter_support,
+    ("agn.disc", "kd18_agnfitter_warmindex"): _kd18_agnfitter_warmindex_support,
     **{
         ("dust.emission", _name): _dust_emission_support(_name)
         # Every selectable spelling, aliases included: the menu exposes
@@ -139,9 +155,9 @@ def grid_support(selector: str, name: str) -> dict[str, tuple[float, float]]:
 
 #: Slack on the containment test, relative to the grid's own width.
 #:
-#: A prior written to match a grid axis is normally transcribed to a handful of
+#: A prior written to match a grid axis is normally hand-entered to a handful of
 #: decimals, so it can overhang the true bound by a few ulp. Comparing exactly
-#: reports that transcription as a defect and then prints a self-contradictory
+#: reports that rounding as a defect and then prints a self-contradictory
 #: "0% of its range lies outside". A sliver this thin is not reachable by any
 #: fit, so treat it as contained (CLAUDE.md: compare floats with a tolerance,
 #: never ``==``).

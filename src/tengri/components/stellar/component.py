@@ -34,6 +34,7 @@ import jax.numpy as jnp
 
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
+from tengri.utils.host_array import device_table, host_array
 
 
 class SFHBeforeBigBangWarning(UserWarning):
@@ -102,13 +103,13 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_mass_remaining,
 )
 from tengri.parameters.translate import LOG10_ZSUN
-from tengri.utils.scale import _not_computable, log10_magnitude, pow10
+from tengri.utils.scale import _not_computable, log10_magnitude, pow10, representable_denominator
 
 # Default time bins for ``metallicity_model="bins"`` /
 # ``"bins_continuity"``: log-spaced from 1 Myr to 13.7 Gyr,
 # 7 edges → 6 bins, matching ``MET_REGISTRY``'s
 # ``_N_MET_BINS_DEFAULT``.
-_DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
+_DEFAULT_MET_BIN_EDGES_LOG_YR = host_array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 
 #: Accepted ``age_kernel`` values: how the SFH is integrated onto the SSP age
 #: grid. See :class:`StellarSEDComponentConfig` for the accuracy/cost tradeoff.
@@ -903,7 +904,7 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
         .at[idx + 1]
         .add(contrib * f)
     )
-    return w / jnp.maximum(jnp.sum(w), 1e-300), total_mass
+    return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), total_mass
 
 
 def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
@@ -934,7 +935,9 @@ def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     idx = jnp.clip(jnp.searchsorted(lg_nodes, lg_age) - 1, 0, n_age - 2)
     f_log = (lg_age - lg_nodes[idx]) / (lg_nodes[idx + 1] - lg_nodes[idx])
     # Fallback for a leading age = 0 template (lg = -inf): linear in age.
-    f_lin = (age - ssp_ages_yr[idx]) / jnp.maximum(ssp_ages_yr[idx + 1] - ssp_ages_yr[idx], 1e-30)
+    f_lin = (age - ssp_ages_yr[idx]) / jnp.maximum(
+        ssp_ages_yr[idx + 1] - ssp_ages_yr[idx], representable_denominator(1e-30)
+    )
     f = jnp.clip(jnp.where(jnp.isfinite(f_log), f_log, f_lin), 0.0, 1.0)
     total_mass = jnp.maximum(jnp.trapezoid(sfr_valid[1:], age_yr), 0.0)
     return contrib, idx, f, total_mass, age
@@ -1137,7 +1140,7 @@ def _joint_weights_cic_met_table(
         .at[:, idx + 1]
         .add(met_w.T * (contrib * f)[None, :])
     )
-    return joint / jnp.maximum(jnp.sum(joint), 1e-300), total_mass
+    return joint / jnp.maximum(jnp.sum(joint), representable_denominator(1e-300)), total_mass
 
 
 def _tabulated_sfh(params, t_obs_gyr):
@@ -2465,7 +2468,7 @@ class StellarSEDComponent:
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
-                else _DEFAULT_MET_BIN_EDGES_LOG_YR
+                else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
             metallicities_abs = (
                 jnp.stack([jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)])
@@ -2489,7 +2492,7 @@ class StellarSEDComponent:
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
-                else _DEFAULT_MET_BIN_EDGES_LOG_YR
+                else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
             log_z_base_abs = jnp.asarray(params["met_logzsol_base"]) + LOG10_ZSUN
             d_log_z = jnp.stack(
@@ -2795,7 +2798,9 @@ class StellarSEDComponent:
         # 0/0 here would NaN the whole SED. Zero weights → zero SED is the
         # honest answer (DSPS's kernel instead floors SFR to SFR_MIN and
         # returns uniform-ish garbage weights for the same input).
-        joint_weights = joint_weights / jnp.maximum(joint_weights.sum(), 1e-300)
+        joint_weights = joint_weights / jnp.maximum(
+            joint_weights.sum(), representable_denominator(1e-300)
+        )
         # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
         # folded into the (params-independent) SSP operand INSIDE the einsum, not
         # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
@@ -3518,7 +3523,7 @@ class StellarSEDComponent:
             # the youngest bin (which carries the ionizing, line-emitting stars) is
             # clipped ~10% low. The CIC path (below) bakes it in instead.
             weights = weights * _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)[None, :]
-            joint_weights = weights / jnp.maximum(weights.sum(), 1e-300)
+            joint_weights = weights / jnp.maximum(weights.sum(), representable_denominator(1e-300))
             return joint_weights, total_mass, ssp_ages_yr
 
         # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
@@ -3554,7 +3559,9 @@ class StellarSEDComponent:
         age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
         lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
         joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
-        joint_weights = joint_weights / jnp.maximum(joint_weights.sum(), 1e-300)
+        joint_weights = joint_weights / jnp.maximum(
+            joint_weights.sum(), representable_denominator(1e-300)
+        )
         return joint_weights, total_mass, ssp_ages_yr
 
     def compute_log_nion(self, params, ssp_data=None):
@@ -4096,13 +4103,6 @@ def _luminosity_weighted_metallicity_fn(state, params):
 # ─ Phase 1B: Ionizing group ─
 
 
-def _q_h_fn(state, params):
-    """Ionizing photon production rate [photons/s]."""
-    derived = state.derived
-    nan_scalar = jnp.asarray(jnp.nan)
-    return jnp.asarray(derived.get("nion", nan_scalar))
-
-
 def _log_q_h_fn(state, params):
     """log10 ionizing photon production rate [dex re photons/s]: float32-safe."""
     derived = state.derived
@@ -4274,16 +4274,17 @@ _SED_PROPERTIES = {
 }
 
 _IONIZING_PROPERTIES = {
-    "q_h": Property(
-        units="photons/s",
-        group="ionizing",
-        doc="Ionizing photon production rate",
-        fn=_q_h_fn,
-    ),
+    # ``q_h`` (linear photons/s, ~1e56) is retired with no alias (#1206 §C): it
+    # overflows float32 at every physical ionizing rate, including zero SFR.
+    # ``log_q_h`` is the sole surviving form; ``pred.q_h`` and
+    # ``predict_properties(..., names=("q_h",))`` raise ``KeyError`` naming it.
     "log_q_h": Property(
         units="dex",
         group="ionizing",
-        doc="log10(ionizing photon production rate / (photons/s)): float32-safe form of q_h",
+        doc=(
+            "log10(ionizing photon production rate / (photons/s)). "
+            "`q_h [photons/s] = 10**log_q_h`."
+        ),
         fn=_log_q_h_fn,
     ),
     "xi_ion": Property(

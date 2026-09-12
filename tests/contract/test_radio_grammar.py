@@ -13,6 +13,8 @@ Marker: @pytest.mark.contract
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
@@ -434,3 +436,483 @@ class TestRadioLegacyTypeRetirement:
         assert params.radio is True
         assert params.radio_sfr_mode == "bell2003"
         assert params.radio_agn_model == "powerlaw"
+
+
+@pytest.mark.contract
+class TestDaleRadioGuardMeasuresTheTemplate:
+    """The #1970 refusal must key on the grid's red edge, not on its name (R58).
+
+    Dale+2014's published templates embed a star-forming radio synchrotron
+    continuum, so pairing them with an active SF radio block double-counts the
+    radio. The guard refused the *name* ``'dale2014'``, which is neither
+    sufficient nor necessary:
+
+    * a tail-free grid registered under the name ``dale2014`` -- exactly what
+      ``register_dale2014_tabulated(cigale_grid, name='dale2014')`` produces --
+      was refused although it carries no radio to double-count;
+    * a tail-bearing grid registered under any other name was accepted.
+
+    Measured red edges (reddest wavelength with non-zero flux, union over
+    every alpha row): ``data/dale2014_templates.h5`` reaches **2.2459e9 A**
+    (1.335 GHz) and ``data/dale2014_templates_cigale.h5`` stops at
+    **7.727e7 A**, the strip edge ``Dale2014CigaleIRSEDComponent`` documents.
+    The 1e8 A threshold (1 cm, 30 GHz) sits between them -- 22x below the
+    tail-bearing one, 1.29x above the stripped one -- and blueward of the
+    whole 1.34-10 GHz double-count window.
+
+    The union matters: a single row is not the grid. The ``alpha=2.0`` row
+    alone stops at 6.026e7 A, 1.28x blueward of the 64-row union, and a
+    build-time refusal has to hold for every alpha the model can reach.
+
+    Reach alone is not enough, either: the tail must be **rising** in L_nu,
+    which is what synchrotron does and cold dust does not.
+    ``data/astrodust_templates.h5`` emits out to 3.0e8 A on its spinning-dust
+    component -- past the threshold -- and double-counts nothing. Measured
+    red-end slopes: dale2014 **+0.665** against -3.111 (bosa), -3.326
+    (astrodust), -4.810 (schreiber2016), -5.510 (dale2014_cigale).
+    """
+
+    _RADIO_SF: ClassVar[dict] = {"sf": {"type": "bell2003"}, "agn": {"type": "none"}}
+
+    def _build(self, ssp, emission_type, *, radio=True):
+        kw = {}
+        if radio:
+            kw["radio"] = self._RADIO_SF
+        return SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.1),
+            **kw,
+        )
+
+    #: ``registry name -> (grid file, red edge [A], red-end dlnLnu/dlnnu)``,
+    #: every template-backed emission model whose grid ships here. The third
+    #: entry is the red-end spectral index in FREQUENCY, so a thermal tail is
+    #: steeply POSITIVE (Rayleigh-Jeans is 2 + beta) and a non-thermal one is
+    #: near zero or negative. Only the first is a radio tail: the others
+    #: either stop blueward of 1e8 A or rise as dust must.
+    _MEASURED_RED_ENDS: ClassVar[dict[str, tuple[str, float, float]]] = {
+        "dale2014": ("data/dale2014_templates.h5", 2.245912e9, -0.665),
+        "dale2014_cigale": ("data/dale2014_templates_cigale.h5", 7.727e7, +5.510),
+        "astrodust": ("data/astrodust_templates.h5", 3.0e8, +3.326),
+        "bosa": ("data/bosa_templates.h5", 1.0e8, +3.111),
+        "schreiber2016": ("data/schreiber2016_templates.h5", 3.001310e7, +4.810),
+    }
+
+    @pytest.mark.parametrize("name", sorted(_MEASURED_RED_ENDS))
+    def test_measured_red_end_of_every_shipped_grid(self, name):
+        """Pin the edge AND the frequency index for every grid the guard sees."""
+        import os
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        path, edge, index = self._MEASURED_RED_ENDS[name]
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        got = _red_end_from_grid_file(path)
+        assert got.red_edge_aa == pytest.approx(edge, rel=1e-3, abs=0.0)
+        assert got.index == pytest.approx(index, rel=1e-2, abs=0.0)
+
+    @pytest.mark.parametrize("name", sorted(_MEASURED_RED_ENDS))
+    def test_only_dale2014_reads_as_a_radio_tail(self, name):
+        """The non-thermal-index condition is what keeps astrodust out.
+
+        astrodust reaches 3.0e8 A -- past the 1e8 A threshold -- so an
+        edge-only test would newly refuse ``astrodust`` + SF radio, which
+        double-counts nothing.
+        """
+        import os
+
+        from tengri.components.dust.emission_templates import dust_emission_radio_tail_aa
+
+        path, edge, _slope = self._MEASURED_RED_ENDS[name]
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        tail = dust_emission_radio_tail_aa(name)
+        if name == "dale2014":
+            assert tail == pytest.approx(edge, rel=1e-3, abs=0.0)
+        else:
+            assert tail is None, f"{name} must not read as a radio tail"
+
+    def test_builtin_dale2014_still_refused_with_sf_radio(self, synthetic_ssp_wide):
+        """#1970's own case keeps raising: the tail-bearing grid is unsafe."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match=r"radio"):
+            self._build(synthetic_ssp_wide, "dale2014")
+
+    def test_refusal_names_the_offending_red_edge(self, synthetic_ssp_wide):
+        """The message must carry the measured edge, not just the name."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError) as exc:
+            self._build(synthetic_ssp_wide, "dale2014")
+        msg = str(exc.value)
+        assert "2.2459e+09" in msg or "2.246e+09" in msg, (
+            f"the refusal must name the template's measured red edge; got: {msg}"
+        )
+
+    def test_builtin_dale2014_builds_without_sf_radio(self, synthetic_ssp_wide):
+        """No SF radio, nothing to double-count."""
+        model = self._build(synthetic_ssp_wide, "dale2014", radio=False)
+        assert model.spec.dust_emission == "dale2014"
+
+    def test_tail_free_grid_registered_as_dale2014_builds_with_radio(
+        self, synthetic_ssp_wide, monkeypatch
+    ):
+        """R58: the CIGALE grid under the name ``dale2014`` carries no radio.
+
+        This is the case ``eae23ba02`` had to work around in the reproduction
+        notebook, and the name test refused it.
+        """
+        import os
+
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission_templates import register_dale2014_tabulated
+
+        path = "data/dale2014_templates_cigale.h5"
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        saved = DUST_EMISSION_MODELS.get("dale2014")
+        register_dale2014_tabulated(path, name="dale2014")
+        try:
+            model = self._build(synthetic_ssp_wide, "dale2014")
+            assert model.spec.dust_emission == "dale2014"
+        finally:
+            if saved is not None:
+                DUST_EMISSION_MODELS["dale2014"] = saved
+
+    def test_tail_bearing_grid_under_the_tail_free_name_is_refused(self, synthetic_ssp_wide):
+        """R58's mirror: the tail follows the data, so the refusal must too.
+
+        Registering the radio-bearing grid under ``dale2014_cigale`` -- the
+        name whose whole point is that its tail is stripped -- must be
+        refused. The name test accepted it. (An arbitrary new registry name
+        is not reachable here: ``dust_emission={'type': ...}`` validates
+        against the component registry and raises ``ValueError`` for a name
+        it does not know, so ``dale2014_cigale`` is the reachable mirror.)
+        """
+        import os
+
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission_templates import register_dale2014_tabulated
+        from tengri.config.exceptions import ConfigError
+
+        path = "data/dale2014_templates.h5"
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        saved = DUST_EMISSION_MODELS.get("dale2014_cigale")
+        register_dale2014_tabulated(path, name="dale2014_cigale")
+        try:
+            with pytest.raises(ConfigError, match=r"radio"):
+                self._build(synthetic_ssp_wide, "dale2014_cigale")
+        finally:
+            if saved is not None:
+                DUST_EMISSION_MODELS["dale2014_cigale"] = saved
+            else:
+                DUST_EMISSION_MODELS.pop("dale2014_cigale", None)
+
+    def test_astrodust_builds_with_sf_radio(self, synthetic_ssp_wide):
+        """The control the rising-slope condition exists for.
+
+        astrodust's emitting span reaches 3.0e8 A, past the 1e8 A threshold,
+        but falls at -3.326 in L_nu: spinning dust, not synchrotron.
+        """
+        import os
+
+        if not os.path.exists("data/astrodust_templates.h5"):
+            pytest.skip("astrodust grid not available")
+        model = self._build(synthetic_ssp_wide, "astrodust")
+        assert model.spec.dust_emission == "astrodust"
+
+    def test_tail_free_builtin_variant_builds_with_radio(self, synthetic_ssp_wide):
+        """``dale2014_cigale`` keeps working, by measurement now not by name."""
+        model = self._build(synthetic_ssp_wide, "dale2014_cigale")
+        assert model.spec.dust_emission == "dale2014_cigale"
+
+
+@pytest.mark.contract
+class TestRadioTailRuleIsNonThermalAtItsBoundaries:
+    """R62: the #1970 guard refuses NON-THERMAL red ends, at tested boundaries.
+
+    What the guard must catch is a template that embeds star-forming RADIO
+    emission. Radio continua are flat or falling toward higher frequency:
+    with :math:`L_\\nu \\propto \\nu^\\alpha`, optically-thin synchrotron sits
+    at :math:`\\alpha \\approx -0.8`, optically-thin free-free at
+    :math:`\\alpha \\approx -0.1`, and a flat-spectrum source at
+    :math:`\\alpha = 0`. What it must NOT catch is thermal dust: on the
+    Rayleigh-Jeans side a modified blackbody goes as
+    :math:`\\nu^{2+\\beta}`, i.e. :math:`\\alpha = 3.6` at
+    :math:`\\beta = 1.6`, and spinning dust (AME, peaking near 30 GHz) also
+    rises toward higher frequency below its peak -- which is why
+    ``astrodust``'s 3.0e8 A edge measures :math:`\\alpha = +3.326`.
+
+    So the rule is: refuse when the emitting span reaches past
+    ``_RADIO_TAIL_RED_EDGE_AA`` (1e8 A = 1 cm = 30 GHz, blueward of the whole
+    1.34-10 GHz double-count window) AND the red-end index
+    :math:`d\\ln L_\\nu / d\\ln\\nu` over the reddest decade is
+    :math:`< 1`. The threshold at 1 leaves margin on both sides: every
+    shipped thermal grid measures +3.1 or steeper (2.1 of margin) and
+    ``dale2014`` measures -0.665 (1.665 of margin).
+
+    The rule this replaces was "index rising in wavelength", i.e.
+    :math:`\\alpha < 0`, which let the whole flat-and-inverted family through:
+    measured on a synthetic grid, an :math:`\\alpha = 0` flat-spectrum radio
+    tail at 2.2e9 A read ``None`` (not refused), and so did every
+    :math:`0 \\le \\alpha < 1`. Neither the edge threshold nor the index
+    threshold had a test at its boundary; ``bosa`` sits exactly at 1.0e8 A but
+    its ``None`` verdict is double-caused (the edge is not strictly greater
+    AND the index is +3.111), so it pins neither.
+    """
+
+    @staticmethod
+    def _synthetic_grid(path, edge_aa, index_nu, blue_aa=3600.0):
+        """One-row Dale-shaped grid emitting ``blue_aa..edge_aa``.
+
+        ``L_nu \\propto \\nu^{index_nu}``, i.e. ``lambda^{-index_nu}``, so the
+        measured red-end index is ``index_nu`` by construction.
+        """
+        import h5py
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import DALE2014_UNIT_L_NU
+
+        wave = np.geomspace(blue_aa, edge_aa, 600)
+        rows = (wave / 1.0e6) ** (-index_nu)
+        with h5py.File(path, "w") as f:
+            f.create_dataset("wavelength_aa", data=wave)
+            f.create_dataset("alpha_grid", data=np.array([1.0, 2.0]))
+            f.create_dataset("templates_sf", data=np.vstack([rows, rows]))
+            f.attrs["spectra_unit"] = DALE2014_UNIT_L_NU
+        return str(path)
+
+    def _verdict(self, tmp_path, edge_aa, index_nu):
+        """``dust_emission_radio_tail_aa`` on a synthetic grid, end to end.
+
+        Registered under ``dale2014_cigale`` because that is a name the
+        ``dust_emission={'type': ...}`` grammar can actually reach, and
+        ``register_dale2014_tabulated`` stamps the grid's measured red end
+        onto the closure it files -- the same path a user's own grid takes.
+        """
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission_templates import (
+            dust_emission_radio_tail_aa,
+            register_dale2014_tabulated,
+        )
+
+        path = self._synthetic_grid(tmp_path / "synthetic.h5", edge_aa, index_nu)
+        saved = DUST_EMISSION_MODELS.get("dale2014_cigale")
+        register_dale2014_tabulated(path, name="dale2014_cigale")
+        try:
+            return dust_emission_radio_tail_aa("dale2014_cigale")
+        finally:
+            if saved is not None:
+                DUST_EMISSION_MODELS["dale2014_cigale"] = saved
+            else:
+                DUST_EMISSION_MODELS.pop("dale2014_cigale", None)
+
+    def test_measured_index_matches_the_synthetic_construction(self, tmp_path):
+        """The measurement itself, before any rule is applied to it."""
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        for index_nu in (-0.8, -0.1, 0.0, 0.99, 1.0, 3.6):
+            path = self._synthetic_grid(tmp_path / f"m{index_nu}.h5", 2.2e9, index_nu)
+            got = _red_end_from_grid_file(path)
+            assert got.red_edge_aa == pytest.approx(2.2e9, rel=1e-9, abs=0.0)
+            assert got.index == pytest.approx(index_nu, rel=0.0, abs=1e-9), (
+                f"a synthetic L_nu ~ nu^{index_nu} tail measured {got.index}"
+            )
+
+    @pytest.mark.parametrize(
+        ("label", "index_nu", "refused"),
+        [
+            ("optically-thin synchrotron, alpha = -0.8", -0.8, True),
+            ("optically-thin free-free, alpha = -0.1", -0.1, True),
+            ("flat-spectrum radio, alpha = 0", 0.0, True),
+            ("index just below the threshold, alpha = 0.99", 0.99, True),
+            ("index exactly at the threshold, alpha = 1.0", 1.0, False),
+            ("Rayleigh-Jeans dust, beta = 1.6 -> alpha = 3.6", 3.6, False),
+        ],
+    )
+    def test_index_threshold_is_at_one_and_accepts_exactly_one(
+        self, tmp_path, label, index_nu, refused
+    ):
+        """Non-thermal is ``alpha < 1``; ``alpha = 1`` itself is accepted."""
+        tail = self._verdict(tmp_path, 2.2e9, index_nu)
+        if refused:
+            assert tail == pytest.approx(2.2e9, rel=1e-9, abs=0.0), (
+                f"{label} at 2.2e9 A must be refused as an embedded radio continuum, got {tail!r}"
+            )
+        else:
+            assert tail is None, f"{label} at 2.2e9 A is thermal dust; got {tail!r}"
+
+    @pytest.mark.parametrize(
+        ("edge_aa", "refused"),
+        [(9.9e7, False), (1.0e8, False), (1.0000001e8, True), (2.2e9, True)],
+    )
+    def test_edge_threshold_is_strictly_past_one_cm(self, tmp_path, edge_aa, refused):
+        """1e8 A exactly is accepted: the rule is *past* 1 cm, not at it.
+
+        30 GHz is blueward of the whole 1.34-10 GHz window an SF radio block
+        occupies, so a template stopping at or before it cannot double-count.
+        """
+        tail = self._verdict(tmp_path, edge_aa, -0.8)
+        if refused:
+            assert tail == pytest.approx(edge_aa, rel=1e-9, abs=0.0)
+        else:
+            assert tail is None, (
+                f"an alpha = -0.8 tail stopping at {edge_aa:.7e} A is at or blueward of "
+                f"the 1e8 A threshold and cannot overlap the 1.34-10 GHz window; "
+                f"got {tail!r}"
+            )
+
+
+@pytest.mark.contract
+class TestRedEndWavelengthUnits:
+    """The red-end reader must not assume a unit the file does not declare.
+
+    ``_red_end_from_grid_file`` resolves the wavelength axis by trying
+    ``wavelength_aa``, ``wavelength``, ``wavelength_um`` in order. The middle
+    key was scaled by 1e4, a micron assumption -- but every grid in this
+    repository that uses the bare key ``wavelength`` stores **Angstrom**:
+    ``dl07_templates.h5``, ``dl07_templates_v2.h5``, ``dl14_templates.h5``
+    (1e4-1e8 A) and ``skirtor_templates_v{2,3}.h5`` (10-1e8 A), three of them
+    saying so in a declared ``unit``/``units``/``wavelength_unit`` attribute.
+    ``load_dale2014_lnu_grid``'s v2 branch reads ``f["wavelength"]`` as A with
+    no scale.
+
+    Today the mistake is masked: none of those files carries a row dataset
+    under a key the reader recognizes, so it returns ``None`` and nothing is
+    refused. But any grid pairing ``wavelength`` with rows -- a user's own,
+    or a future vendored one -- would report a red edge 1e4x too red and be
+    falsely refused whenever SF radio is active. So the scale comes from the
+    file's declared unit attribute when it has one, and otherwise from this
+    repository's key convention, and the reader says which it used.
+    """
+
+    @staticmethod
+    def _grid(path, wave_key, wave_values, *, dataset_attrs=None, file_attrs=None):
+        """One-row grid under an arbitrary wavelength key, rising in wavelength."""
+        import h5py
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import DALE2014_UNIT_L_NU
+
+        wave = np.asarray(wave_values, dtype=float)
+        rows = (wave / wave.max()) ** 0.8  # alpha = -0.8, a synchrotron tail
+        with h5py.File(path, "w") as f:
+            ds = f.create_dataset(wave_key, data=wave)
+            for k, v in (dataset_attrs or {}).items():
+                ds.attrs[k] = v
+            f.create_dataset("alpha_grid", data=np.array([1.0, 2.0]))
+            f.create_dataset("templates_sf", data=np.vstack([rows, rows]))
+            f.attrs["spectra_unit"] = DALE2014_UNIT_L_NU
+            for k, v in (file_attrs or {}).items():
+                f.attrs[k] = v
+        return str(path)
+
+    def test_bare_wavelength_key_is_angstrom_by_repo_convention(self, tmp_path):
+        """``wavelength`` with no declared unit is A, not micron."""
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        wave = np.geomspace(3600.0, 2.2459e9, 400)
+        got = _red_end_from_grid_file(self._grid(tmp_path / "bare.h5", "wavelength", wave))
+        assert got.red_edge_aa == pytest.approx(2.2459e9, rel=1e-9, abs=0.0), (
+            f"a 3600-2.2459e9 A grid under the key 'wavelength' measured "
+            f"{got.red_edge_aa:.6e} A; a 1e4 micron factor would read 2.2459e+13 A and "
+            "falsely refuse it"
+        )
+        assert "angstrom" in got.wavelength_unit.lower()
+        assert got.wavelength_key == "wavelength"
+
+    @pytest.mark.parametrize(
+        ("dataset_attrs", "file_attrs"),
+        [
+            ({"unit": "micron"}, None),
+            ({"units": "um"}, None),
+            (None, {"wavelength_unit": "micron"}),
+        ],
+    )
+    def test_a_declared_micron_unit_wins_over_the_key_convention(
+        self, tmp_path, dataset_attrs, file_attrs
+    ):
+        """The three attribute spellings this repository's own grids use."""
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        wave_um = np.geomspace(0.36, 2.2459e5, 400)
+        got = _red_end_from_grid_file(
+            self._grid(
+                tmp_path / "declared.h5",
+                "wavelength",
+                wave_um,
+                dataset_attrs=dataset_attrs,
+                file_attrs=file_attrs,
+            )
+        )
+        assert got.red_edge_aa == pytest.approx(2.2459e9, rel=1e-9, abs=0.0)
+        assert "micron" in got.wavelength_unit.lower()
+
+    def test_a_declared_angstrom_unit_is_honored_on_the_micron_key(self, tmp_path):
+        """The mirror: a declaration overrides ``_um`` too, rather than being
+        overridden by it. Otherwise "read the declaration" is only half a
+        rule, and a mislabeled key would still decide the answer."""
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        wave = np.geomspace(3600.0, 2.2459e9, 400)
+        got = _red_end_from_grid_file(
+            self._grid(
+                tmp_path / "mixed.h5", "wavelength_um", wave, dataset_attrs={"unit": "Angstrom"}
+            )
+        )
+        assert got.red_edge_aa == pytest.approx(2.2459e9, rel=1e-9, abs=0.0)
+        assert "angstrom" in got.wavelength_unit.lower()
+
+    #: ``grid file -> (wavelength key, scale to A)``: the three real grids the
+    #: guard measures a red end on today. The edge must equal the h5py-read
+    #: axis maximum converted to A -- read here independently, not quoted.
+    _REAL_GRIDS: ClassVar[dict[str, tuple[str, float]]] = {
+        "data/dale2014_templates.h5": ("wavelength_aa", 1.0),
+        "data/dale2014_templates_cigale.h5": ("wavelength_aa", 1.0),
+        "data/astrodust_templates.h5": ("wavelength_um", 1.0e4),
+        "data/bosa_templates.h5": ("wavelength_aa", 1.0),
+        "data/schreiber2016_templates.h5": ("wavelength_aa", 1.0),
+    }
+
+    @pytest.mark.parametrize("path", sorted(_REAL_GRIDS))
+    def test_real_grids_measure_their_own_axis_in_angstrom(self, path):
+        """No shipped grid's red edge is off by a unit factor."""
+        import os
+
+        import h5py
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        key, scale = self._REAL_GRIDS[path]
+        with h5py.File(path, "r") as f:
+            axis_max_aa = float(np.asarray(f[key][()], dtype=float).ravel().max()) * scale
+        got = _red_end_from_grid_file(path)
+        assert got.wavelength_key == key
+        assert got.red_edge_aa <= axis_max_aa * (1.0 + 1e-9), (
+            f"{path}: measured emitting edge {got.red_edge_aa:.6e} A exceeds the axis "
+            f"maximum {axis_max_aa:.6e} A -- a unit factor is being applied twice"
+        )
+        assert got.red_edge_aa >= axis_max_aa / 1.0e3, (
+            f"{path}: measured emitting edge {got.red_edge_aa:.6e} A is more than 1000x "
+            f"blueward of the axis maximum {axis_max_aa:.6e} A -- the axis is probably "
+            "being read in the wrong unit"
+        )

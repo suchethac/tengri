@@ -6,7 +6,7 @@
 Variants from ``tengri.parameters.groups._VALID_AGN_NLR_TYPES``:
 ``none``, ``analytic``, ``synthesizer``, ``synthesizer_spectra``, ``grahsp``.
 Shared params under ``agn.nlr`` partition include ``nlr_cf``,
-``alpha_ion``.
+``nlr_alpha_pl``.
 """
 
 from __future__ import annotations

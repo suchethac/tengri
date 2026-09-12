@@ -28,8 +28,8 @@ from tengri.utils.sed_quantities import (
 
 pytestmark = pytest.mark.regression_bug
 
-_WAVE = jnp.asarray(np.logspace(np.log10(1000.0), np.log10(50000.0), 128))
-_AGES = jnp.asarray(np.logspace(6.0, 10.1, 12))
+_WAVE = np.logspace(np.log10(1000.0), np.log10(50000.0), 128)
+_AGES = np.logspace(6.0, 10.1, 12)
 
 
 def _flux(scale=1.0):

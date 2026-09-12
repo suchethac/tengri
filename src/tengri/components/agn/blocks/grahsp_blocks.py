@@ -24,6 +24,8 @@ All free parameters retain the ``agn_grahsp_*`` prefix from
 
 from __future__ import annotations
 
+import math as _math
+
 import jax.numpy as jnp
 from jax import Array
 
@@ -34,8 +36,12 @@ from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
 from tengri.utils.physics_constants import L_SUN as LSUN_ERG
+from tengri.utils.scale import apply_log10_scale, representable_floor
 
 __all__: list[str] = []  # blocks are registered via decorators; no public API
+
+#: log10(L_sun) [dex re erg/s], precomputed in Python float64 (#1206 §D).
+_LOG10_LSUN_ERG: float = _math.log10(LSUN_ERG)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -54,7 +60,7 @@ def grahsp_sbpl_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_grahsp_l5100: float | None = None,
+    agn_grahsp_log_l5100: float | None = None,
     agn_grahsp_uvslope: float = 0.0,
     agn_grahsp_plslope: float = -1.7,
     agn_grahsp_plbendloc_nm: float = 100.0,
@@ -64,7 +70,7 @@ def grahsp_sbpl_disc_block(
 ) -> Array:
     r"""GRAHSP smooth bending power-law BBB as a disc-stage block.
 
-    If ``agn_grahsp_l5100`` is unset (``None``), normalize so the BBB-only
+    If ``agn_grahsp_log_l5100`` is unset (``None``), normalize so the BBB-only
     bolometric integral matches ``10**agn_log_lbol * L_sun``. Otherwise use
     the explicit ``λL_λ(5100Å)`` value (matches upstream's parametric mode).
 
@@ -74,9 +80,12 @@ def grahsp_sbpl_disc_block(
         Rest-frame wavelength [Å].
     agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_grahsp_l5100 : float, optional
-        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` in erg/s. ``None``
-        triggers automatic normalization from ``agn_log_lbol``.
+    agn_grahsp_log_l5100 : float, optional
+        ``log10(lambda*L_lambda(5100A) / (erg/s))``. **Breaking, no alias
+        (#1206 §D)**: replaces the linear ``agn_grahsp_l5100``
+        (``LogUniform(1e42, 1e47)``), whose bare value is ``inf`` in float32
+        before any physics runs. ``None`` triggers automatic normalization
+        from ``agn_log_lbol``.
     agn_grahsp_uvslope, agn_grahsp_plslope, agn_grahsp_plbendloc_nm, \
 agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
         SBPL shape parameters; see :func:`sbpl_bbb`.
@@ -104,19 +113,44 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
     # corona (#1168). Below the >=91.2 nm bolometric window, so normalization
     # is unchanged.
     L_lambda_unit_nm = floor_disc_xray(wave_nm, L_lambda_unit_nm)
-    if agn_grahsp_l5100 is None:
+    if agn_grahsp_log_l5100 is None:
         # Normalize by the requested bolometric luminosity above the Lyman limit.
         from tengri.components.agn.grahsp.bolometric import (
             bolometric_luminosity_bbb,
         )
 
         l_bol_unit = bolometric_luminosity_bbb(wave_nm, L_lambda_unit_nm)
-        target = 10.0**agn_log_lbol * LSUN_ERG
-        l5100 = target / l_bol_unit
+        # log10(target) = agn_log_lbol + log10(L_sun); log10(l5100) =
+        # log10(target) - log10(l_bol_unit). Never materializes the linear
+        # target (~1e42-1e47, #1206 §D).
+        log_l5100 = (
+            jnp.asarray(agn_log_lbol)
+            + _LOG10_LSUN_ERG
+            - jnp.log10(jnp.maximum(l_bol_unit, representable_floor(1e-300)))
+        )
     else:
-        l5100 = agn_grahsp_l5100
+        # ``agn_log_lbol`` here may be the runner's SAFE REFERENCE value
+        # rather than the true one (component.py's float32 shape-hint
+        # scheme, #1206): it hands every block ``agn_log_lbol_shape`` (the
+        # true value) alongside the reference ``agn_log_lbol``, then
+        # rescales the WHOLE block output by
+        # ``10**(agn_log_lbol_shape - agn_log_lbol)`` afterward. An
+        # explicit ``agn_grahsp_log_l5100`` is decoupled from
+        # ``agn_log_lbol`` entirely, so without this it would not be
+        # covered by that rescale and would overflow float32 on its own
+        # (measured: L_lambda(5100A) ~ 1e39-1e42 at typical priors, past
+        # the 3.4e38 ceiling). Pre-shifting by the SAME offset here means
+        # the caller's rescale restores the true l5100 exactly, reusing
+        # the existing mechanism rather than adding a second one.
+        agn_log_lbol_shape = _params.get("agn_log_lbol_shape", agn_log_lbol)
+        log_l5100 = jnp.asarray(agn_grahsp_log_l5100) - (
+            jnp.asarray(agn_log_lbol_shape) - jnp.asarray(agn_log_lbol)
+        )
 
-    L_lambda_nm = L_lambda_unit_nm * l5100
+    # ``l5100`` itself (~1e42-1e47 erg/s) is past float32's 3.4e38 ceiling as a
+    # bare value; apply_log10_scale folds it into the O(1) shape array
+    # instead of forming ``L_lambda_unit_nm * l5100`` directly (#1206 §D).
+    L_lambda_nm = apply_log10_scale(L_lambda_unit_nm, log_l5100)
     # nm grid output -> Å grid: L_lambda[erg/s/Å] = L_lambda[erg/s/nm] / 10.
     return L_lambda_nm * 0.1
 

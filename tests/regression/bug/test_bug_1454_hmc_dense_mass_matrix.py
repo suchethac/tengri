@@ -42,18 +42,22 @@ def test_hmc_is_diagonal_wherever_nuts_is(n_dim):
     )
 
 
-@pytest.mark.parametrize("n_dim", [8, 9, 20])
-def test_the_auto_policy_is_diagonal_at_and_above_eight(n_dim):
+@pytest.mark.parametrize("n_dim", [13, 20])
+def test_the_auto_policy_is_diagonal_above_twelve(n_dim):
     """Pin the cliff itself, not just agreement between the two paths.
 
     Both could agree on 'dense everywhere' and satisfy the test above.
+
+    Revised 2026-09-11 (measured on ``ctl-dpl``, D=8, non-``dense_basis``
+    SFH: 1.1-1.9 GB RSS, not 20+ GB): the cliff moved from D=8 to D=12, see
+    ``tests/inference/test_dense_auto_policy.py`` for the full policy.
     """
     assert _resolve_dense_mass_matrix(None, n_dim) is False
 
 
-@pytest.mark.parametrize("n_dim", [1, 5, 7])
+@pytest.mark.parametrize("n_dim", [1, 5, 7, 8, 9, 12])
 def test_small_problems_keep_the_dense_matrix(n_dim):
-    """Guard the fix against over-reaching: dense converges better below 8."""
+    """Guard the fix against over-reaching: dense converges better at D <= 12."""
     assert _resolve_dense_mass_matrix(None, n_dim) is True
 
 

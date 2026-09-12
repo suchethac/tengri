@@ -111,32 +111,36 @@ Compensated summation (Kahan / pairwise) was **not** used: it addresses lost sig
 
 ---
 
-### 4. Output Properties Inherently Float32-Unrepresentable
+### 4. Output Properties Inherently Float32-Unrepresentable — DELIVERED (#1206 §A/§B/§C)
 
-**Fifteen emission-line and AGN luminosity properties return erg/s and exceed float32 max:**
+**Fifteen emission-line and AGN luminosity properties returned erg/s and exceeded float32 max:**
 
-Emission lines (11 properties from `src/tengri/forward/sed_model.py`):
+Emission lines (11 properties, `src/tengri/components/nebular/component.py`):
 - `civ_1549`, `halpha`, `hbeta`, `lya`, `nii_6548`, `nii_6584`, `oii`, `oiii_4959`, `oiii_5007`, `sii_6717`, `sii_6731`
 
-AGN and X-ray (from `src/tengri/forward/sed_model.py`):
+AGN and X-ray (`src/tengri/components/xray/component.py`, `src/tengri/components/stellar/component.py`):
 - `l_x_agn`, `l_x_total`, `l_x_xrb` (X-ray luminosities, ~1e40–1e45 erg/s)
 - `q_h` (ionizing photons, ~1e56 photons/s)
 
-**Fix:** Change the unit contract (BREAKING change) — return these properties in either:
-- `L_sun` (solar luminosities, ~1e−38 of erg/s for optical lines, ~1e−12 for Q_H in L_sun / 1.26e49 s−1).
-- `log10(quantity)` where quantity is in erg/s or appropriate physical units.
-
-Document the choice in `src/tengri/forward/sed_model.py` and update `NAMING_CONTRACT.md` § §4c (unit standards). Deprecate the linear erg/s forms with a multi-release warning cycle.
+**Delivered (breaking, no alias):**
+- The 11 line properties and the 3 X-ray luminosities now return `units="Lsun"`, same names, converted
+  from the float32-safe `log_<name>` / `log_l_x_*` companion via one `pow10(log_x - LOG10_L_SUN)` --
+  never materializing the erg/s intermediate. The `log_<name>` companions are unchanged, still dex re
+  erg/s: `log_halpha == log10(halpha * L_sun)`.
+- `q_h` is retired with no alias rather than re-united: there is no in-range linear form at any
+  physical ionizing rate (~1e53-1e56 photons/s always exceeds float32's 3.4e38 ceiling), so a Lsun-style
+  conversion would not have helped. `log_q_h` is the sole surviving property; `pred.q_h` and
+  `predict_properties(names=("q_h",))` raise `KeyError` naming the replacement.
+- `NAMING_CONTRACT.md` §4c documents the unit standard this establishes (luminosities in Lsun, rates
+  and unbounded quantities as `log_*` in dex).
 
 ---
 
-### 5. Component-Level Dtype Mismatch — AGN SKIRTOR Interpolation
+### 5. Component-Level Dtype Mismatch — AGN SKIRTOR Interpolation — DELIVERED
 
-**Problem:** AGN SKIRTOR template interpolation (`interp_nd_triweight` in `src/tengri/utils/grid_interp.py`, line 624) fails under pure float32 with dtype inconsistency.
+**Problem (historical):** AGN SKIRTOR template interpolation (`interp_nd_triweight` in `src/tengri/utils/grid_interp.py`) failed under pure float32 with dtype inconsistency: the lookup cast or promoted arguments, breaking the float32 path before the nebular (and hence Q_H) stage was reached.
 
-**Symptom:** The interpolation function casts or promotes arguments during lookup, breaking the float32 path before the nebular (and hence Q_H) stage is reached.
-
-**Fix:** Ensure `interp_nd_triweight` and all template-lookup code maintain dtype consistency through pure float32. Add a unit test (pure-float32 SKIRTOR mock SED) to the regression suite.
+**Delivered:** the lookup keeps its dtype through pure float32 (verified 2026-08-12; the `+AGN` seam of `bench/scripts/benchmark_float32_mps_parity.py` runs SKIRTOR in float32 on CPU, CUDA and Apple GPU). One backend-specific residue surfaced on `jax-mps` and is fixed (#2287): the SKIRTOR grid handed negative-stride numpy views to the device, which MLX refused as "GPU memory exhausted"; the grid is now contiguous at load.
 
 ---
 
@@ -366,8 +370,14 @@ finiteness guard passes that mutation clean.
 2. ~~Bolometric integral compensation.~~ **DONE** — peak-factored reductions plus the
    `bolometric_absorbed_log10` / `log10_add` contracts (§2). Kahan summation was the wrong tool: the
    failure is dynamic range, not lost digits.
-3. Linear-scale property unit changes (15 emission lines + AGN luminosities → L_sun or log10);
-   includes retiring the transition-only linear `derived["nion"]` once its readers move to `log_nion`.
+3. ~~Linear-scale property unit changes (15 emission lines + AGN luminosities → L_sun or log10);
+   includes retiring the transition-only linear `derived["nion"]` once its readers move to
+   `log_nion`.~~ **DONE (#2284, breaking with no alias; §4):** the eleven line properties and the
+   three X-ray luminosities return `Lsun` under the same names, `q_h` is retired for `log_q_h`,
+   `agn_grahsp_l5100` is `agn_grahsp_log_l5100`, and the two remaining internal linear `Q_H`
+   formers (the analytic nebular continuum and the AGN NLR) work in the log domain. The linear
+   `derived["nion"]` is no longer read by any fit-path consumer (`test_no_raw_nion_read.py`'s
+   allow-list is empty); the line-flux operators read `log_line_lums` / `log_nion` (#2269).
 4. ~~SKIRTOR interpolation dtype consistency.~~ **DONE**.
 5. ~~Inference method restrictions (MAP, Laplace, robust VI only).~~ **DONE (§6):** pure-float32
    inference works for gradient-based backends — MAP and NUTS run under `jax.enable_x64(False)` and
@@ -384,18 +394,22 @@ finiteness guard passes that mutation clean.
    luminosities (§7). Also fixed a float64 regression the AGN output-factoring introduced.
 8. ~~Multicolor accretion disc (L_bol-dependent shape) in pure float32.~~ **DONE** (§8) — log-space
    disc internals + shape/normalization split. The follow-up list this entry used to carry
-   (`kubota_done`, `adaf`, `relagn`, `slone_netzer`, `adaf_lopez2024`) has since closed: **eleven of
-   twelve** registered discs are float32-exact, pinned by the inventory table in §8. The one
-   remaining, `grahsp_sbpl`, is not a kernel problem — it is blocked on the linear erg/s parameter
-   `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, `inf` in float32), i.e. on **item 3**.
+   (`kubota_done`, `adaf`, `relagn`, `slone_netzer`, `adaf_lopez2024`) has since closed, and so has
+   the one holdout, `grahsp_sbpl`: **all twelve** registered discs are float32-exact, pinned by the
+   inventory table in §8. `grahsp_sbpl` was never a kernel problem — it was blocked on the linear
+   erg/s parameter `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, `inf` in float32) — and is fixed by
+   the log-space `agn_grahsp_log_l5100` (#1206 §D), the same breaking API change item 3 delivers for
+   the eleven line properties, the three X-ray luminosities and `q_h`.
 
-Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
+Each fix was a distinct pull request with targeted tests. Item 3 shipped as one breaking change with no alias (#2284), the repository's convention (#1720, #819, #2000), rather than the deprecation cycle an earlier draft of this section proposed. The close-out measurements are in the final section of this document.
 
-**What is left of the eight items above is item 3 plus one latent residue** — two further open
-threads that are *not* on that list follow after. Item 3 — the breaking unit change — is
-the only item that still blocks a *test*: both surviving pure-float32 `xfail`s name it, namely
-`test_linear_observables_pure_float32_cue_only` (linear `q_h` ~1e56 and the erg/s `line_lums` behind
-`balmer_decrement`) and `test_disc_float32_pending[grahsp_sbpl]` (the linear `agn_grahsp_l5100`).
+**Item 3 is DELIVERED** (#1206 §A/§B/§C/§D): the eleven line properties and the three X-ray
+luminosities moved to `units="Lsun"`, the linear `q_h` retired with no alias in favor of
+`log_q_h`, and `agn_grahsp_l5100` retired with no alias in favor of `agn_grahsp_log_l5100`. The two
+pure-float32 `xfail`s that named item 3 are both resolved: `test_linear_observables_pure_float32_cue_only`
+is un-xfailed (`log_q_h` finite, `balmer_decrement` finite; the retired `q_h` now raises rather than
+overflowing) and `test_disc_float32_pending[grahsp_sbpl]`'s entry is removed (`grahsp_sbpl` moved to
+the exact-disc inventory).
 
 ~~The residue is #1206 item 2's second half: five files still *return* a raw `4π d_L²`.~~
 **CLOSED by #1859.** The allow-list in `test_no_raw_flux_scale.py` is now empty and all five files
@@ -820,17 +834,17 @@ radio fit runs end-to-end in float32. Pinned by
 
 `tests/regression/precision/test_agn_disc_float32_inventory.py` runs every
 registered composable-AGN disc through float64-vs-float32 and enforces the
-result. Two float32 failure classes remain (each `xfail(strict)` — fixing one
-flips to an unexpected pass):
+result. All twelve are now exact; `_SHAPE_CLASS_XFAIL` and `_GRID_CLASS_XFAIL`
+are both empty.
 
 | disc | float32 status | class |
 |---|---|---|
 | `multicolor`, `kubota_done`, `adaf` | **exact** | **shape-class** — L_bol-dependent shape; log-space (or L_sun-unit) internals + the `agn_log_lbol_shape` split (true L_bol for the shape, reference for the magnitude) |
 | `powerlaw`, `richards2006`, `skirtor`, `qsogen`, `schartmann2005` | **exact** | shape-invariant (evaluated at the reference, rescaled) |
 | `adaf_lopez2024` | **exact** | shape-invariant; its CIGALE piecewise power law needed the log-space rebuild (see below) |
-| `relagn` | **exact** | normalized to `agn_log_lbol` like the other eleven discs (behavior change — see below) |
-| `grahsp_sbpl` | non-finite | blocked on a **linear erg/s parameter**: `agn_grahsp_l5100` is `LogUniform(1e42, 1e47, default=1e44)` — the parameter *value itself* is `inf` in float32, so `L_lambda_unit × inf = nan`. Its auto-normalized path (`l5100=None`, tied to `agn_log_lbol`) *does* scale ×10/dex and would work; the explicit-`l5100` path cannot (its `L_lambda` ~3e41 is out of range regardless). Needs a log-space parameter — **#1206 item 3**, an API change, not a kernel fix |
+| `relagn` | **exact** | normalized to `agn_log_lbol` like the other discs (behavior change — see below) |
 | `slone_netzer` | **exact** | was the tractable one — two silent float32 traps in its grid closure, both now fixed (see below) |
+| `grahsp_sbpl` | **exact** (#1206 §D) | was blocked on a **linear erg/s parameter**: `agn_grahsp_l5100` was `LogUniform(1e42, 1e47, default=1e44)` — the parameter *value itself* was `inf` in float32, so `L_lambda_unit × inf = nan`. Fixed with a log-space parameter, `agn_grahsp_log_l5100` (breaking, no alias): the auto-normalized path (`log_l5100=None`, tied to `agn_log_lbol`) was already consistent with the reference-evaluation scheme without any change; the *explicit*-`log_l5100` path now pre-shifts by the same `agn_log_lbol_shape − agn_log_lbol` offset every shape-class disc already carries, so the single downstream `apply_log10_scale` rescale restores the true l5100 -- no second rescale mechanism. This also covers `l5100_disc`, the scalar the `nlr`/`blr`/`feii`/`torus` GRAHSP blocks normalize to: it is derived from the (now reference-scale, during `_use_ref`) disc SED, so it inherits the same pre-shift and the whole GRAHSP sub-SED restores under the one global rescale. Measured end-to-end (`grahsp_sbpl` + SKIRTOR torus, `agn_log_lbol=11`): float32 finite, max relative deviation from float64 1.6e-5 above the noise floor. |
 
 ### The piecewise power-law fix (`adaf_lopez2024`)
 
@@ -1357,3 +1371,114 @@ the comparison resolves ~0.13 sigma and no better.
 different numbers, not rounded versions of each other; the first attempt gave median SNR
 19.8 against 20.0 — two datasets — and any z-score between them measures the noise
 realization. `compare_float32_catalog_posteriors.py --catalog` writes it once.
+
+---
+
+## Close-out (2026-09-12): every Tier B item delivered, and what "pure float32" now means
+
+The eight-item checklist above is closed. The last round (2026-09-11/12) shipped as a
+stack of six PRs, measured together on `origin/main` 0803a8167 before merging; every
+number below is a measurement, and the per-PR evidence is in each PR body.
+
+| PR | what it closed |
+|---|---|
+| #2269 | emission-line fluxes in pure float32: `predict_line_fluxes`, the FeaturePrecomp window LUT and the Cue fast grid read the log line catalog / `log_nion`, and `measure_line_fluxes(approx=True)` carries `L_sun` as an exact power-of-two split. Two strict xfails flipped. |
+| #2284 | item 3, breaking with no alias: eleven line + three X-ray properties in `Lsun` (same names), linear `q_h` retired for `log_q_h`, `agn_grahsp_l5100` → `agn_grahsp_log_l5100`; `log_l_x_agn` / `log_l_x_total` read `log_L_agn_bol` (they were NaN in float32); analytic nebular continuum and AGN NLR `Q_H` in the log domain; NAMING_CONTRACT §4c. |
+| #2270 | #2210: `G M_sun / c²` and `log10 L_Edd` carried so the `kubota_done` disc is finite across the whole `agn_log_mbh` prior; float64 bit-identical, measured in a fresh process (see #2275 below for why "fresh" matters). |
+| #2277 | #2022: `import tengri` sets `jax_default_matmul_precision="highest"` (an env var or an existing config wins), so float32 matmuls on Ampere+ never lower to TF32 (a 4.5 % error on Fisher error bars); #2023: the marginalization GEMM cuBLASLt refused is a broadcast-multiply-sum, bit-identical in float64. |
+| #2279 | #1860: the 42 remaining derivative-unsafe floors on the fit path go through `representable_denominator` / `representable_floor`; three diagnostics-only sites stay pinned (ratchet 45 → 3). |
+| #2274, #2294 | `bench/scripts/benchmark_float32_mps_parity.py`, a converged-MAP float32 parity sweep against a committed float64 reference, and the Apple-GPU recipe retargeted from `jax-metal` to `jax-mps`. |
+
+Related, from the Mac session that ran the Apple-GPU arm: #2287 (SKIRTOR negative-stride
+views), #2290 (#2271: 75 module-scope tables become host arrays converted at use, so
+`import tengri` allocates nothing on a device), #2298 (#2295: the four `trapezoid`-over-reversed
+sites), #2300 (a stale parity reference read as a device defect); and #2304 (#2293, below).
+
+### Acceptance, measured (CPU: Ryzen 5900X; GPU: RTX 3060, jaxlib 0.11.0)
+
+- `tests/regression/precision` on CPU: 730 passed, 16 skipped, 6 xfailed, 0 unexpected XPASS.
+- The same tree on CUDA with **no** `JAX_ENABLE_X64` / `JAX_DEFAULT_MATMUL_PRECISION` in the
+  environment: 730 passed, 16 skipped, 6 xfailed, 0 failed on the final tree (#2279, #2284,
+  #2304 merged locally; 38 min on the RTX 3060). The first CUDA pass had read 727 + 3: two
+  keyword-only calls, fixed on the stack, and #2293 (below).
+- **The criterion itself**, pure float32 (`JAX_ENABLE_X64=0` before Python) against a float64
+  process, converged L-BFGS-B MAP from the shared truth, SNR 30, z = 0.1:
+
+| seam | forward | line fluxes | posterior grad | MAP params (max abs dx, standardized) |
+|---|---:|---:|---:|---:|
+| panchromatic (stellar + dust IR + Cue + AGN + radio + X-ray + shock) + 4 bands + Cue line fluxes, exact operator, CPU | 3.27e-06 | 3.53e-05 | 1.08e-04 | 5.19e-05 |
+| Cue + photometry + line fluxes on the default `Fitter(approx="auto")` path (WavePrecomp + FeaturePrecomp), CPU | 6.00e-06 | 3.53e-05 | 8.13e-05 | 1.21e-05 |
+| panchromatic + lines, exact operator, CUDA | 8.22e-06 | 3.53e-05 | 1.68e-04 | 6.12e-05 |
+| Cue + lines on the default path, CUDA | 5.48e-06 | 3.53e-05 | 8.18e-05 | 3.80e-05 |
+
+  Both arms converged on every row. The line-flux figure is the same on every row because
+  it is the float32 rounding of the line catalog itself, not of any seam.
+- `benchmark_float32_mps_parity.py`, six photometry seams, CPU float32 arm: forward ≤ 1.1e-5,
+  gradient ≤ 4.1e-3, MAP optimum 2e-7..4.5e-5, all PASS. The Mac's CPU-float32 arm reproduces
+  these to the digit, so the numbers are float32 arithmetic, not platform.
+- **Apple GPU via `jax-mps` 0.10.10** (M4 Pro, jax 0.10.2, `JAX_ENABLE_X64=0`), measured by the
+  Mac session: MPS agrees with the same box's CPU-float32 arm to 1.15e-5 in photometry on every
+  seam, forward/gradient, eager/jit. Against the committed float64 reference, five of six seams
+  pass the gates (forward ≤ 1.2e-5, gradient ≤ 6.2e-3, MAP optimum ≤ 5.5e-5); the sixth,
+  panchromatic, read 3.3e-3 / 0.67 and was bisected to the *reference* predating #2260 (shock
+  lines moved onto the diffuse screen, a deliberate physics change that moves Herschel-250 most
+  and the `tau_diff` gradient with it) — identical on CPU float64, so not a device effect
+  (#2300). The 6/6 answer waits on a reference regenerated at a settled main; the sweep gains a
+  `--self-check` that refuses a stale reference (#2300).
+  Two MLX-compile findings on the way: the SKIRTOR grid handed negative-stride views to the
+  device (#2287), and under default MLX compilation a reversed array times a broadcast scalar
+  keeps element 0 and zeros the rest (upstream jax-mps#232), which tengri tripped in
+  `polar_dust.py`'s `trapezoid(l_nu[::-1], nu[::-1])` (torus SED ×0.10 at 100 µm). #2298
+  rewrites that site and the three others of the same shape as negated descending-grid
+  integrals (float64 bit-for-bit), and the recipe keeps `MLX_DISABLE_COMPILE=1` while jax-mps 0.10.10 is the release: the defect is fixed upstream in MLX 0.32.0 (ml-explore/mlx#3720) and lands in jax-mps via PR #233 (0.10.11), whose CI wheel the Mac session verified under default compile (all reproducer shapes correct; +AGN and +radio+xray seams pass without the flag; #2287 stays necessary, since negative host strides at transfer are still refused) — at no cost, the workload being dispatch-bound.
+
+### The acceptance criterion, restated
+
+> The full panchromatic forward model runs finite and accurate under `jax.enable_x64(False)`
+> end-to-end on CPU and CUDA (measured above), the default photometry + emission-line fit
+> converges in pure float32 to the float64 optimum (parameter vector ≤ 1e-2, measured 1e-5),
+> and Apple GPU via `jax-mps` (`JAX_ENABLE_X64=0`, `MLX_DISABLE_COMPILE=1`) passes
+> `bench/scripts/benchmark_float32_mps_parity.py` (measured: 5/6 seams at the gates against
+> the current reference, the sixth blocked on the reference itself, #2300; MPS matches CPU
+> float32 to 1.15e-5 on all six).
+
+Apple's `jax-metal` (0.1.1, 2024-10-08, jaxlib ≥ 0.4.34) is not viable against JAX 0.11 and is
+retired from the criterion — "Metal" in the section headings above is historical. The pytest
+tree has no Apple-GPU arm: `tests/conftest.py` forces x64 on, and dsps / blackjax allocate
+float64 at import (#2276).
+
+### Findings that are now rules
+
+- **Never set `JAX_ENABLE_X64=0` for pytest.** `tests/conftest.py` forces x64 on and every
+  precision test toggles float32 itself; the env var makes the float64 *reference* arms run
+  in float32 (~27 spurious failures, measured 2026-09-11). Pure-float32 runs are for scripts.
+- **A float32 forward earlier in a process shifts a later float64 forward by 1.4e-9** (#2275),
+  surviving `jax.clear_caches()` and `TENGRI_DISABLE_PRECOMP_CACHE=1`. A "float64 is unchanged"
+  claim needs a float64 reference from a fresh process; `test_float32_scale_seam_sweep.py`
+  now takes one through a subprocess.
+- **`jnp.ldexp` is one ULP off in float64 on CUDA** (XLA's lowering). The window-LUT split
+  in `observation/line_measurement.py` multiplies by the exactly representable `2**112`
+  instead; bit-identical on both backends.
+- **A parity bar must follow the dtype.** The Cue fast-grid vmapped-vs-eager check now uses
+  `max(1e-5, 256 · eps(dtype))`; the fixed 1e-5 was a float64 number that a correct float32
+  build could not meet on CUDA's reduction order.
+- **"Identically zero" is a defect only where float64 is not zero** (#2293 / #2304). The one
+  CUDA-only failure in the precision tree was `luminosity_weighted_metallicity` at exactly
+  `0.0` on the GPU: the test's chain had no `met` group, so the weighted `log10(Z/Zsun)` was
+  zero by construction, and the CPU passed the non-zero assertion through one float32 ULP of
+  rounding noise. The GPU was right. The chain now carries a metallicity ramp and the collapse
+  check is gated on the float64 reference.
+- **XLA:GPU flushes float32 subnormals.** Two gradient assertions that measured finite on CPU
+  measured exactly zero on CUDA for summands below ~1e-38; they are marked `finite-only` with the
+  backend reason. Fits are unaffected (the likelihood standardizes before squaring).
+
+### Still open, and deliberately not in the criterion
+
+- #1439: the `kubota_done` hot-corona gradient sign flip in float32 (§"Not fixed"). The #2279
+  measurement narrows it to the zone-luminosity rescale; the strict xfail stands.
+- #1388 / #1415: `jax.grad` of a raw (unweighted) observable is identically zero in float32;
+  `loss_scaled_grad` remains the remedy and the scaled-SED contract is a separate design.
+- #2276: dsps and blackjax allocate float64 at import, which is what keeps the pytest tree
+  off Apple GPU.
+- #2288: the composable precompute's documented 5-node `l5100` grid has 56 % median error and
+  no check (a float64 LUT-bias issue, not float32).

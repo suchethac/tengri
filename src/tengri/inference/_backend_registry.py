@@ -95,7 +95,11 @@ TIERS: frozenset[str] = frozenset({"primary", "experimental", "broken"})
 #: so aligning them is posterior-preserving.
 #:
 #: ``Galaxy.fit`` deliberately keeps ``"map"`` -- see the note in its docstring.
-DEFAULT_METHOD: str = "vi"
+#: 2026-09-11: ``"mcmc_nuts_fast"`` -- the owner's call ("default should be nuts"),
+#: backed by bench/reports/2026-09-11_profile_mass_20s.md: four NUTS chains on the
+#: mass-profiled posterior with a dense metric reach min ESS >= 100 in 9.5-17.2 s
+#: on eleven of twelve photometry seeds. ``Galaxy.fit`` still keeps ``"map"``.
+DEFAULT_METHOD: str = "mcmc_nuts_fast"
 
 _BACKENDS: dict[str, BackendEntry] = {}
 

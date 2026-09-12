@@ -24,6 +24,7 @@ Consolidated 2026-07 from the former per-model files (``nlr_analytic``,
 
 from __future__ import annotations
 
+import math as _math
 import os
 from pathlib import Path
 
@@ -40,6 +41,13 @@ from tengri.components.agn.nlr_cloudy import (
     load_cue_agn_weights,
 )
 from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG
+
+#: log10(L_sun) [dex re erg/s], precomputed in Python float64. Used only by
+#: ``nlr_cue_block`` to carry ``agn_log_lbol -> log10(l_disc_bol_erg)`` as a
+#: pure offset (#1206 §C), rather than materializing the linear
+#: ``10**agn_log_lbol * L_sun`` (~1e44-1e46, past float32's 3.4e38 ceiling)
+#: solely to feed a Q_H computation that only ever needed its log.
+_LOG10_L_SUN_ERG: float = _math.log10(_L_SUN_ERG)
 
 __all__ = [
     "nlr_analytic_block",
@@ -237,17 +245,20 @@ def nlr_cue_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    l_disc_bol_erg = 10.0**agn_log_lbol * _L_SUN_ERG
+    # log10(l_disc_bol_erg), not 10.0**agn_log_lbol * _L_SUN_ERG: a real AGN
+    # has l_disc_bol_erg ~ 1e44-1e46, already past float32's 3.4e38 ceiling on
+    # its own, and this block's only use of it is Q_H (#1206 §C).
+    log10_l_disc_bol_erg = jnp.asarray(agn_log_lbol) + _LOG10_L_SUN_ERG
     L_nu = compute_nlr_sed_cue(
         wave_aa,
         _template=templates,
-        l_disc_bol_erg=l_disc_bol_erg,
         covering_fraction=agn_nlr_cf,
         fwhm_kms=agn_nlr_fwhm_kms,
         alpha_pl=agn_nlr_alpha_pl,
         neb_logU=agn_nlr_logU,
         neb_logn=agn_nlr_logn,
         neb_logZ_gas=agn_nlr_logZ,
+        log10_l_disc_bol_erg=log10_l_disc_bol_erg,
     )
     L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
     return jnp.zeros_like(L_lambda), L_lambda

@@ -895,6 +895,10 @@ class Posterior:
         "sed_shock",
         "sed_dust_ir",
         "sed_agn",
+        "sed_agn_disc",
+        "sed_agn_torus",
+        "sed_agn_lines",
+        "sed_agn_polar",
         "sed_radio",
         "sed_xray",
     )
@@ -923,10 +927,13 @@ class Posterior:
             Keys: ``wavelength`` plus the entries of
             :attr:`Posterior._COMPONENT_KEYS` (``sed_total``,
             ``sed_attenuated``, ``sed_intrinsic``, ``sed_nebular``,
-            ``sed_shock``, ``sed_dust_ir``, ``sed_agn``, ``sed_radio``,
-            ``sed_xray``). Each component array has shape
-            ``(n_wave,)`` for MAP and ``(n_samples, n_wave)`` for
-            sampling.
+            ``sed_shock``, ``sed_dust_ir``, ``sed_agn``, ``sed_agn_disc``,
+            ``sed_agn_torus``, ``sed_agn_lines`` (nlr+blr+feii),
+            ``sed_agn_polar``, ``sed_radio``, ``sed_xray``). The four
+            ``sed_agn_*`` sub-block keys are zeros for a non-composable
+            (monolithic) AGN model or no AGN component at all. Each
+            component array has shape ``(n_wave,)`` for MAP and
+            ``(n_samples, n_wave)`` for sampling.
 
         Raises
         ------

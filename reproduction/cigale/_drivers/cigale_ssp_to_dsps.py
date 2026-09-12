@@ -12,7 +12,12 @@ Unit conversion:
   3. Normalize to Lsun = 3.828e33 erg/s: divide by Lsun
 
   Formula: L_nu [Lsun/Hz/Msun] = L_lambda [W/nm/Msun] * 1e6 * lambda²_Angstrom / c_Angstrom_per_s / L_sun_erg_per_s
-  where c = 2.998e18 Angstrom/s and L_sun = 3.828e33 erg/s.
+  where c and L_sun are tengri's ``C_AA`` and ``L_SUN``.
+
+The constants come from tengri rather than being written out here: the
+notebook reads this grid back with tengri's own c, so a rounded c on the write
+side would put a floor of |Δc|/c under §1's SSP residual for every wavelength
+and every age.
 """
 
 import pickle
@@ -21,9 +26,11 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+from tengri.utils.physics_constants import C_AA, L_SUN
+
 # Physical constants
-C_ANGSTROM_PER_S = 2.998e18  # speed of light in Angstrom/s
-L_SUN_ERG_PER_S = 3.828e33  # solar luminosity in erg/s
+C_ANGSTROM_PER_S = C_AA  # speed of light in Angstrom/s
+L_SUN_ERG_PER_S = L_SUN  # solar luminosity in erg/s
 
 
 def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:

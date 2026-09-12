@@ -13,10 +13,12 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total_dpl
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
+from tengri.protocols.component import declared_default
 
 __all__ = ["RadioDPL"]
 
@@ -24,17 +26,13 @@ __all__ = ["RadioDPL"]
 class RadioDPL(SEDModelComponent):
     r"""Radio synchrotron + free-free + AGN double-power-law with aging cutoff.
 
-    AGNfitter-rx broken double power-law:
+    AGNfitter-rx broken double power-law with smooth transition (Martinez-Ramirez+2024):
 
     .. math::
 
-        S_\nu^{\rm AGN} =
-            \begin{cases}
-                S_{\rm t}\,(\nu/\nu_{\rm t})^{\alpha_{\rm thin}}\,e^{-\nu/\nu_{\rm cut}}
-                    & \nu < \nu_{\rm t} \\
-                S_{\rm t}\,(\nu/\nu_{\rm t})^{\alpha_{\rm thick}}\,e^{-\nu/\nu_{\rm cut}}
-                    & \nu \geq \nu_{\rm t}
-            \end{cases}
+        L_\nu = L_{5\,\mathrm{GHz}} \left(\frac{\nu}{\nu_t}\right)^{\alpha_1}
+        \left[1 - \exp\left(-\left(\frac{\nu_t}{\nu}\right)^{\alpha_1 - \alpha_2}
+        \right)\right] \exp\left(-\frac{\nu}{\nu_{\mathrm{cut}}}\right)
 
     Pairs with the SF (Bell+2003 q_IR) and optional thermal free-free
     components: those flow through the standard radio primitive.
@@ -71,7 +69,11 @@ class RadioDPL(SEDModelComponent):
         description="FIR-radio correlation q_IR (Bell+2003)",
         units="dimensionless",
     )
-    alpha_sf = Fixed(0.8, description="SF synchrotron spectral index", units="dimensionless")
+    alpha_sf = Fixed(
+        declared_default(_RADIO_PARAMS, "radio_alpha_sf"),
+        description="SF synchrotron spectral index (L_ν ∝ ν^{-α})",
+        units="dimensionless",
+    )
 
     # AGN power-law trunk
     alpha_thin = Uniform(

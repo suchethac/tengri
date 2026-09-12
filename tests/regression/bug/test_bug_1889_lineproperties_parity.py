@@ -7,7 +7,9 @@ had to expose ``all_waves``, ``all_lums``, and ``.get()`` method to match
 the EmissionLines NamedTuple contract.
 
 This test verifies that both surfaces return identical results for:
-- Headline fields (halpha, hbeta, oiii_5007, etc.)
+- Headline fields (halpha, hbeta, oiii_5007, etc.; the deprecated surface
+  reports erg/s, ``pred.lines`` reports Lsun since #1206 §A, so the
+  comparison converts)
 - Full catalog arrays (all_waves, all_lums)
 - Nearest-wavelength lookup via .get(wavelength)
 - Tolerance boundary behavior
@@ -23,6 +25,7 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed
+from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.regression_bug
 
@@ -88,7 +91,9 @@ def test_lineproperties_parity_headline_fields(model_with_cue):
         "sii_6731",
     ]:
         old_val = float(getattr(old_lines, field))
-        new_val = float(getattr(new_lines, field))
+        # The deprecated surface stays in erg/s; ``pred.lines`` headline fields
+        # are in Lsun (#1206 §A), so compare in one unit.
+        new_val = float(getattr(new_lines, field)) * L_SUN
         # ``equal_nan``: NaN is a value both surfaces can legitimately carry,
         # meaning "the active catalog has no line at this wavelength". Cue's
         # catalog holds nothing within 5 A of C IV 1549, so ``civ_1549`` is NaN
@@ -141,7 +146,7 @@ def test_lineproperties_parity_get_exact_match(model_with_cue):
     old_halpha_via_get = float(old_lines.get(halpha_wavelength))
     new_halpha_via_get = float(new_lines.get(halpha_wavelength))
     old_halpha_direct = float(old_lines.halpha)
-    new_halpha_direct = float(new_lines.halpha)
+    new_halpha_direct = float(new_lines.halpha) * L_SUN  # Lsun -> erg/s (#1206 §A)
 
     # .get() should find the nearest match (H-alpha)
     assert jnp.allclose(jnp.asarray(old_halpha_via_get), jnp.asarray(new_halpha_via_get)), (

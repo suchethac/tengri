@@ -16,9 +16,10 @@ References
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
-   IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
-   arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
+.. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+   "The dust covering factor in active galactic nuclei," MNRAS, 458,
+   2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
+   https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
    radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
    (2024). arXiv:2405.12111.
@@ -32,12 +33,29 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.skirtor_agnfitter import create_skirtor_agnfitter_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig, SEDComponentState
+from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
 
 __all__ = ["SKIRTORAgnfitterTorus"]
+
+#: Single source of truth for ``oa_skirtor``/``incl_skirtor``/``tv_skirtor``'s
+#: bounds and defaults: the shared ``agn_oa_skirtor`` / ``agn_incl_skirtor`` /
+#: ``agn_tv_skirtor`` declarations in ``_params.py``. Read once at class-
+#: definition time so the class attributes below cannot drift from them the
+#: way ``CAT3DTorus``/``Silva04Torus`` did before Task 1 -- these three were
+#: numerically equal to the canonical declaration but were still an
+#: unprotected literal restatement (Task 1 fix round 1, finding 1).
+_OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
+_INCL_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_incl_skirtor")
+_TV_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tv_skirtor")
+#: ``log_lbol``/``torus_frac`` restated stale literals (default 11.0 vs the
+#: canonical 10.0) -- found by ``tools/check_param_restatements.py``
+#: (Task 11 item 5 / fix round 1, R25).
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
+_TORUS_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_torus_frac")
 
 
 @dataclass(frozen=True)
@@ -159,39 +177,39 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     oa_skirtor = Uniform(
-        10.0,
-        80.0,
+        _OA_SKIRTOR_PRIOR.lo,
+        _OA_SKIRTOR_PRIOR.hi,
         description="Half-opening angle (Stalevski et al.)",
         units="deg",
-        default=40.0,
+        default=_OA_SKIRTOR_PRIOR.default,
     )
     incl_skirtor = Uniform(
-        0.0,
-        90.0,
+        _INCL_SKIRTOR_PRIOR.lo,
+        _INCL_SKIRTOR_PRIOR.hi,
         description="Inclination angle (Stalevski et al.)",
         units="deg",
-        default=30.0,
+        default=_INCL_SKIRTOR_PRIOR.default,
     )
     tv_skirtor = Uniform(
-        3.0,
-        11.0,
+        _TV_SKIRTOR_PRIOR.lo,
+        _TV_SKIRTOR_PRIOR.hi,
         description="Equatorial optical depth τ_9.7",
         units="dimensionless",
-        default=7.0,
+        default=_TV_SKIRTOR_PRIOR.default,
     )
     torus_frac = Uniform(
-        0.0,
-        1.0,
+        _TORUS_FRAC_PRIOR.lo,
+        _TORUS_FRAC_PRIOR.hi,
         description="Torus luminosity fraction of L_bol",
         units="dimensionless",
-        default=0.5,
+        default=_TORUS_FRAC_PRIOR.default,
     )
 
     # Cross-component output

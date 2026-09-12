@@ -283,14 +283,15 @@ class XRayQuantities(NamedTuple):
     """Orchestrator-path mirror of the legacy
     :class:`tengri.forward.prediction.XRayProperties` accessor.
 
-    Fields:
+    Fields (**breaking, no alias, #1206 §B**: Lsun, not erg/s -- an AGN X-ray
+    luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling):
 
-    - ``l_x_xrb`` (erg/s), X-ray-binary luminosity (Lehmer 2010, 2016)
+    - ``l_x_xrb`` (Lsun), X-ray-binary luminosity (Lehmer 2010, 2016)
       computed from ``sfh_quantities.sfr_100myr`` and
       ``sfh_quantities.stellar_mass``.
-    - ``l_x_agn`` (erg/s), AGN X-ray luminosity from the published
-      ``L_agn_bol`` via :func:`compute_l_x_agn`.
-    - ``l_x_total`` (erg/s), sum of the two.
+    - ``l_x_agn`` (Lsun), AGN X-ray luminosity from the published
+      ``log_L_agn_bol`` via :func:`compute_log_l_x_agn`.
+    - ``l_x_total`` (Lsun), sum of the two.
 
     """
 
@@ -305,13 +306,14 @@ class IonizingQuantities(NamedTuple):
 
     Fields:
 
-    - ``q_h`` (photons/s), total ionizing photon production rate;
-      sourced directly from ``state.derived["nion"]``.
     - ``xi_ion`` (Hz/erg), production efficiency q_h / νLν(1500 Å).
 
+    ``q_h`` (photons/s) was retired with no alias (#1206 §C): it overflows
+    float32 at every physical ionizing rate. Read ``log_q_h`` from
+    :func:`~tengri.forward.sed_model.SEDModel.predict_properties` instead
+    (``q_h = 10**log_q_h``).
     """
 
-    q_h: jnp.ndarray
     xi_ion: jnp.ndarray
 
 
@@ -342,6 +344,16 @@ def build_components(
     # a defensive fallback for direct callers of this function; the grammar
     # path always resolves it explicitly from ``Parameters.cue_full_catalog``.
     cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT,
+    # When ``True`` (spec has ``neb_dig_frac`` free or fixed nonzero),
+    # both HII and DIG nebular components are evaluated and mixed (#2262).
+    # When ``False`` (spec pins ``neb_dig_frac`` at the default 0.0),
+    # only HII is evaluated. Resolved at build time by
+    # ``_dig_may_be_active(spec)``. Like ``cue_full_catalog`` above, this
+    # default is a defensive fallback for a direct caller of this function:
+    # ``True`` never silently drops a caller's declared DIG physics (it costs
+    # an extra evaluation instead), where ``False`` would. The grammar path
+    # always resolves it explicitly from ``_dig_may_be_active(self.spec)``.
+    dig_active: bool = True,
     # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
     # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.
@@ -599,14 +611,29 @@ def build_components(
         )
 
         # Energy-balanced IR re-emission. The two-component attenuator re-emits
-        # inside its own apply(); the single-screen path publishes L_ir (absorbed
-        # UV/optical/NIR luminosity) and relies on a downstream emission component
-        # to re-radiate it, without one, L_ir is computed but never re-emitted,
-        # silently dropping the dust IR (#565). The emission component reads L_ir
-        # as an optional input and produces sed_dust_ir; the topological sort places
-        # it after attenuation. Route through the same single dispatch seam. WG00
-        # keeps its historical behavior of appending no separate emission component.
-        if atten_type != "wg00" and dust_emission_model is not None:
+        # inside its own apply(); the single-screen path (single_component AND
+        # wg00 alike) publishes L_ir (absorbed UV/optical/NIR luminosity) and
+        # relies on a downstream emission component to re-radiate it, without
+        # one, L_ir is computed but never re-emitted, silently dropping the
+        # dust IR (#565). The emission component reads L_ir as an optional
+        # input and produces sed_dust_ir; the topological sort places it after
+        # attenuation. Route through the same single dispatch seam.
+        #
+        # WG00 used to be excluded here ("keeps its historical behavior of
+        # appending no separate emission component"): a user who built
+        # dust_attenuation={'type': 'wg00', ...} alongside an EXPLICIT
+        # dust_emission={'type': ..., ...} had that emission request silently
+        # ignored -- wg00_model.py computed L_ir/L_absorbed correctly but
+        # nothing ever consumed them, exactly the #565 defect this block
+        # already fixes for single_component/two_component, left open for the
+        # third type. No test pinned the exclusion (a wg00 build with a
+        # dust_emission model configured had no coverage), and a user who does
+        # not configure dust_emission is unaffected either way (the
+        # `dust_emission_model is not None` guard below still gates it off,
+        # matching every other attenuation type's default). Also the reason
+        # dust_eta_balance's wiring in wg00_model.py could not be verified live
+        # by measurement: L_ir had no downstream consumer to move.
+        if dust_emission_model is not None:
             # Astrodust+PAH (HD23) supports optional spinning-dust (AME) emission
             # and phase-mix configuration. Other dust-emission models do not.
             emission_config = None
@@ -636,6 +663,7 @@ def build_components(
                 config=NebularSEDComponentConfig(
                     backend=nebular_backend,
                     cue_full_catalog=cue_full_catalog,
+                    dig_active=dig_active,
                 ),
                 backend=nebular_backend_instance,
             )
@@ -1128,51 +1156,69 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
     """Convert :class:`ForwardState` → :class:`XRayQuantities`.
 
     Uses the SFH-derived SFR and stellar mass to compute the XRB
-    luminosity (Lehmer+10/16) and the published ``L_agn_bol`` to
-    compute the AGN corona luminosity (Duras+20).
+    luminosity (Lehmer+10/16) and the published ``log_L_agn_bol`` to
+    compute the AGN corona luminosity (Duras+20), staying in the log
+    domain throughout and converting to Lsun with one ``pow10`` -- the same
+    float32-safe route the ``xray`` property group uses (#1206 §B), so the
+    two stay bit-equal.
 
     Returns
     -------
     XRayQuantities
-        ``l_x_xrb``, ``l_x_agn``, ``l_x_total``.
+        ``l_x_xrb``, ``l_x_agn``, ``l_x_total`` [Lsun].
     """
-    from tengri.utils.sed_quantities import compute_l_x_agn, compute_l_x_xrb
+    from tengri.utils.scale import pow10
+    from tengri.utils.sed_quantities import (
+        LOG10_L_SUN,
+        compute_log_l_x_agn,
+        compute_log_l_x_xrb,
+    )
 
     derived = state.derived
     sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
     log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
-    mstar = jnp.power(10.0, log_mstar)
-    l_x_xrb = compute_l_x_xrb(sfr, mstar)
+    log_l_x_xrb = compute_log_l_x_xrb(sfr, log_mstar)
 
-    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
-    # ``compute_l_x_agn`` uses log10 internally, protect against the
-    # zero-AGN case where the conversion would produce -inf/NaN.
-    l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
+    log_L_agn_bol = derived.get("log_L_agn_bol")
+    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity,
+    # matching the linear helper's ``derived.get("L_agn_bol", 0.0)`` default
+    # for an XRB-only model (#1206 §B, same semantics as `_log_l_x_agn_fn`).
+    if log_L_agn_bol is None:
+        log_l_x_agn = -jnp.inf
+    else:
+        log_l_x_agn = compute_log_l_x_agn(jnp.asarray(log_L_agn_bol))
+
+    from jax.scipy.special import logsumexp
+
+    from tengri.utils.scale import LN10
+
+    stacked = jnp.stack(jnp.broadcast_arrays(log_l_x_xrb, jnp.asarray(log_l_x_agn)))
+    log_l_x_total = logsumexp(LN10 * stacked, axis=0) / LN10
 
     return XRayQuantities(
-        l_x_xrb=l_x_xrb,
-        l_x_agn=l_x_agn,
-        l_x_total=l_x_xrb + l_x_agn,
+        l_x_xrb=pow10(log_l_x_xrb - LOG10_L_SUN),
+        l_x_agn=pow10(jnp.asarray(log_l_x_agn) - LOG10_L_SUN),
+        l_x_total=pow10(log_l_x_total - LOG10_L_SUN),
     )
 
 
 def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
     """Convert :class:`ForwardState` → :class:`IonizingQuantities`.
 
-    Reads ``state.derived["nion"]`` for q_h (ionizing photon rate, photons/s;
-    deferred to #1206 items 2/3) and computes ``xi_ion`` from ``log_nion``
-    using the log-domain helper for float32 safety.
+    Computes ``xi_ion`` from ``log_nion`` using the log-domain helper for
+    float32 safety. ``q_h`` (linear photons/s) was retired with no alias
+    (#1206 §C); read ``log_q_h`` from
+    :func:`~tengri.forward.sed_model.SEDModel.predict_properties` instead.
 
     Returns
     -------
     IonizingQuantities
-        ``q_h``, ``xi_ion``.
+        ``xi_ion``.
     """
     from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
-    q_h = jnp.asarray(derived.get("nion", nan_scalar))
 
     sed = state.sed_intrinsic
     if sed is None:
@@ -1181,7 +1227,7 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
         log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
         xi_ion = compute_xi_ion_from_log_qh(log_nion, sed, state.wave)
 
-    return IonizingQuantities(q_h=q_h, xi_ion=xi_ion)
+    return IonizingQuantities(xi_ion=xi_ion)
 
 
 def state_to_sed_components(state: Any) -> dict:
@@ -1217,6 +1263,13 @@ def state_to_sed_components(state: Any) -> dict:
         - ``sed_nebular``, ``sed_shock``, ``sed_dust_ir``, ``sed_agn``,
           ``sed_radio``, ``sed_xray``, each component's own published
           contribution (zeros when the component is absent).
+        - ``sed_agn_disc``, ``sed_agn_torus``, ``sed_agn_lines``
+          (nlr + blr + feii), ``sed_agn_polar``: the composable AGN
+          runner's own per-sub-block rest-frame SEDs (task13,
+          NAMING_CONTRACT §4b.5), summing exactly to ``sed_agn``. Zeros
+          when the AGN component is absent OR uses a non-composable
+          (monolithic) model, which has no separate sub-blocks to
+          decompose.
 
     Notes
     -----
@@ -1248,6 +1301,10 @@ def state_to_sed_components(state: Any) -> dict:
         "sed_shock": jnp.asarray(derived.get("sed_shock", zeros)),
         "sed_dust_ir": jnp.asarray(derived.get("sed_dust_ir", zeros)),
         "sed_agn": jnp.asarray(derived.get("sed_agn", zeros)),
+        "sed_agn_disc": jnp.asarray(derived.get("sed_agn_disc", zeros)),
+        "sed_agn_torus": jnp.asarray(derived.get("sed_agn_torus", zeros)),
+        "sed_agn_lines": jnp.asarray(derived.get("sed_agn_lines", zeros)),
+        "sed_agn_polar": jnp.asarray(derived.get("sed_agn_polar", zeros)),
         "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
         "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),
     }

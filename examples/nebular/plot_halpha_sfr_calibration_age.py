@@ -24,6 +24,7 @@ import numpy as np
 
 import tengri
 from tengri.plot import setup_style
+from tengri.utils.physics_constants import L_SUN
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -31,6 +32,7 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 log_sfr_true, sfr_true = 1.0, 10.0
+# Murphy+2011: SFR = murphy_const * L(Halpha) with L(Halpha) in erg/s.
 murphy_const = 5.37e-42
 ages_myr = np.array([1.0, 3.0, 5.0, 10.0, 30.0, 100.0, 300.0])
 met_logzsol = np.array([-0.5, 0.0, 0.3])
@@ -64,8 +66,10 @@ for met in met_logzsol:
             redshift=tengri.Fixed(0.0),
         )
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        l_halpha = float(model.predict(params).lines.halpha)
-        sfr_inferred.append(murphy_const * l_halpha)
+        # pred.lines.halpha is Lsun (#1206, breaking, no alias); the Murphy+2011
+        # calibration above is erg/s, so convert before applying it.
+        l_halpha_erg_s = float(model.predict(params).lines.halpha) * L_SUN
+        sfr_inferred.append(murphy_const * l_halpha_erg_s)
         ages_valid.append(age_myr)
 
     ratio = np.array(sfr_inferred) / sfr_true

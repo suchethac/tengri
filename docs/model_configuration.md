@@ -308,7 +308,7 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'spinning_dust'` — Include small spinning dust grains (default: auto from type).
 - `'f_cnm'` — Cold neutral medium fraction (parametrization-dependent).
-- `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`), or `Uniform(...)` to leave it free.
+- `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`). `FREE` selects the declared default free prior, `Gaussian(1.0, 0.2)` truncated at 0; pass an explicit `Uniform(...)` (or any other prior) to override it.
 - `'log_L_ir'` — Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright; leaving it undeclared keeps energy balance. Because it makes `eta_balance` inert, declaring both (with `eta_balance` free or fixed ≠ 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard; an explicit `FREE` on it is refused (declare a real prior instead).
 
 **Minimal example:**
@@ -317,7 +317,7 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 ```
 
 **Gotchas:**
-- Energy balance: `eta_balance` defaults to `Fixed(1.0)`, which enforces `L_IR = L_absorbed`. Setting it free or to a constant ≠ 1 decouples IR and absorption.
+- Energy balance: `eta_balance` defaults to `Fixed(1.0)`, which enforces `L_IR = L_absorbed`. `FREE` resolves to `Gaussian(1.0, 0.2)` truncated at 0. Setting it free or to a constant ≠ 1 decouples IR and absorption.
 - Missing dust_emission (or `{'type': 'none'}`) is valid and common for UV-only work.
 
 
@@ -448,8 +448,8 @@ agn={
     'norm': 'cigale_joint',
 }
 
-# Or the legacy form (one-block AGN):
-agn={'type': 'legacy', 'all_params': Fixed(DEFAULT)}
+# Or a monolithic model (one self-contained block, no sub-blocks):
+agn={'type': 'skirtor_stalevski', 'all_params': Fixed(DEFAULT)}
 ```
 
 **Gotchas:**

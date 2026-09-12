@@ -49,6 +49,8 @@ References
 import jax.numpy as jnp
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
+from tengri.utils.host_array import device_table, host_array
+from tengri.utils.scale import representable_denominator
 
 # ── Physical constants ────────────────────────────────────────────
 
@@ -118,7 +120,7 @@ def compute_nlr_sed(
 # Lines sorted by wavelength [Angstrom], fluxes normalized to Hbeta=1.
 # Source: FSPS emline_wavelengths at indices
 # [38, 40, 41, 43, 45, 50, 51, 52, 59, 61, 62, 64, 68, 69, 70, 72, 73, 74, 75, 76, 77, 78, 80]
-_RICHARDSON_WAVES = jnp.array(
+_RICHARDSON_WAVES = host_array(
     [
         3727.1180,  # [O II] 3726
         3799.0277,  # Ba-8 3798
@@ -169,7 +171,7 @@ _RICHARDSON_WAVES = jnp.array(
 #: Prospector (``AGNSpecModel.init_aline_info``), which is the claim the
 #: docstring makes. Reverted; the guard is now a parity test against the
 #: published values, not an atomic-ratio assertion.
-_RICHARDSON_FLUXES = jnp.array(
+_RICHARDSON_FLUXES = host_array(
     [
         2.96,
         0.06,
@@ -274,10 +276,10 @@ def compute_nlr_sed_richardson2014(
     l_lines_total = line_efficiency * l_intercepted
 
     # Compute the total flux in the template (for normalization)
-    flux_sum = jnp.sum(_RICHARDSON_FLUXES)
+    flux_sum = jnp.sum(device_table(_RICHARDSON_FLUXES))
 
     # Luminosity per unit flux (normalized to Hbeta)
-    l_per_flux = l_lines_total / jnp.maximum(flux_sum, 1e-30)
+    l_per_flux = l_lines_total / jnp.maximum(flux_sum, representable_denominator(1e-30))
 
     # Sum Gaussian profiles for each line
     def _single_line(line_data):
@@ -290,7 +292,9 @@ def compute_nlr_sed_richardson2014(
     # vmap over lines
     from jax import vmap
 
-    line_data = jnp.stack([_RICHARDSON_WAVES, _RICHARDSON_FLUXES], axis=1)
+    line_data = jnp.stack(
+        [device_table(_RICHARDSON_WAVES), device_table(_RICHARDSON_FLUXES)], axis=1
+    )
     line_spectra = vmap(_single_line)(line_data)
     l_nu_lines = jnp.sum(line_spectra, axis=0)
 

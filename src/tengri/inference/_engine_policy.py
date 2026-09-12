@@ -113,7 +113,7 @@ from tengri._cache_keys import KeyPolicy, content, exclude, shape
 
 #: Bump whenever the engine-key derivation changes, or an existing row's
 #: MODE changes. See the module docstring for the full rule.
-ENGINE_VERSION = 1
+ENGINE_VERSION = 2  # 2026-09-12: _profile_mass joined the engine key
 
 #: Bump whenever the fingerprint derivation changes, or an existing row's
 #: MODE changes.
@@ -257,6 +257,23 @@ ENGINE_POLICY: KeyPolicy = {
         "contract ('no address-bearing keys, ever'), not a new failure mode"
     ),
     # ── Calibration ──────────────────────────────────────────────────────
+    # ── Mass profiling: the resolved flag bakes the marginal likelihood ────
+    "_profile_mass": content(
+        "profile_mass engaged: the loss is the mass-marginalized likelihood over "
+        "D-1 parameters (mass_profile.py); the free-name tuple also moves, but the "
+        "flag is the honest input"
+    ),
+    "_profile_mass_resolved": exclude("mirror of _profile_mass kept for diagnostics"),
+    "_profile_mass_reason": exclude("diagnostic text explaining the resolved flag"),
+    "_profile_mass_requested": exclude(
+        "the constructor argument (True/False/'auto'); only the resolved flag reaches the loss"
+    ),
+    "_profile_mass_name": exclude("derived from the spec; _free_names and the model key cover it"),
+    "_profile_mass_prior": exclude("the mass prior object, already part of the model's own key"),
+    "_profile_mass_bounds": exclude("derived from _profile_mass_prior"),
+    "_profile_mass_original_spec": exclude(
+        "the pre-profiling spec kept to undo the rewrite; structure the model key covers"
+    ),
     "_calibration_marginalize": content("enables the calibration-marginalized likelihood"),
     "_cal_n_poly": content("calibration polynomial order changes the design matrix shape"),
     "_cal_prior_sigma": content("calibration prior width is baked into the marginal likelihood"),
@@ -290,6 +307,20 @@ ENGINE_POLICY: KeyPolicy = {
         "old hand key's (rounded wavelengths, any-limit-mask-present) check -- it reaches "
         "per-line upper/lower-limit flags individually. None when unset, matching every "
         "Fitter sharing the model's own (already-covered) line-flux schema"
+    ),
+    # ── Extra log-prior hook (task-7, RULING R10) ───────────────────────
+    "_extra_log_prior": content(
+        "opt-in ``callable(params, state) -> scalar`` that build_loss_fn / "
+        "build_logprior_fn fold into the objective, so it changes what the compiled "
+        "loss computes. Every cache keyed by this method is namespaced per MODEL "
+        "object, so two Fitters sharing one Model -- the documented, encouraged "
+        "pattern -- would otherwise silently share whichever closure compiled first "
+        "regardless of the hook: a plain Fitter built after a hooked one would run the "
+        "HOOKED objective (or vice versa), never raising. baked() keys a callable by "
+        "its module-qualified name, never by address (the ledger's no-address rule), "
+        "so None vs a function, and two differently-named functions, get distinct "
+        "engines; two closures returned by the same factory share one. Pinned by "
+        "tests/contract/test_fitter_extra_log_prior.py"
     ),
 }
 
@@ -354,6 +385,14 @@ FINGERPRINT_POLICY: KeyPolicy = {
     "_auto_protocol_likelihood": exclude(_STRUCTURE_REASON),
     "_user_likelihood": exclude(_STRUCTURE_REASON),
     "_calibration_marginalize": exclude(_STRUCTURE_REASON),
+    "_profile_mass": exclude(_STRUCTURE_REASON),
+    "_profile_mass_resolved": exclude(_STRUCTURE_REASON),
+    "_profile_mass_reason": exclude(_STRUCTURE_REASON),
+    "_profile_mass_requested": exclude(_STRUCTURE_REASON),
+    "_profile_mass_name": exclude(_STRUCTURE_REASON),
+    "_profile_mass_prior": exclude(_STRUCTURE_REASON),
+    "_profile_mass_bounds": exclude(_STRUCTURE_REASON),
+    "_profile_mass_original_spec": exclude(_STRUCTURE_REASON),
     "_cal_n_poly": exclude(_STRUCTURE_REASON),
     "_cal_prior_sigma": exclude(_STRUCTURE_REASON),
     "_eline_marginalize": exclude(_STRUCTURE_REASON),
@@ -368,4 +407,5 @@ FINGERPRINT_POLICY: KeyPolicy = {
     "_eline_amplitude_names": exclude(_STRUCTURE_REASON),
     "_eline_amp_priors": exclude(_STRUCTURE_REASON),
     "_line_flux_override": exclude(_STRUCTURE_REASON),
+    "_extra_log_prior": exclude(_STRUCTURE_REASON),
 }

@@ -30,6 +30,7 @@ Re-exported here from emission.py:
 import functools
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import jax.numpy as jnp
 
@@ -715,6 +716,88 @@ def dale2014_emission_lnu(
     return scale_factor * norm * sed
 
 
+#: ``spectra_unit`` declaring rows already in the L_nu convention.
+#:
+#: Rows carrying this value are used as stored: unit-normalized
+#: :math:`L_\nu` with :math:`\int L_\nu\,d\nu = 1`. Written by
+#: ``scripts/regenerate_dale2014_from_official.py``.
+DALE2014_UNIT_L_NU = "L_nu normalized (integral over nu = 1)"
+
+#: ``spectra_unit`` declaring rows in the per-Angstrom L_lambda convention.
+#:
+#: Rows carrying this value are Jacobian-converted on load
+#: (:math:`L_\nu = L_\lambda\,\lambda^2/c`) and then unit-normalized in
+#: :math:`\nu`. Written by ``scripts/regenerate_dale2014_from_cigale.py``.
+DALE2014_UNIT_L_LAMBDA = "L_lambda per Angstrom (integral over lambda_Aa = 1)"
+
+#: The two declarations :func:`load_dale2014_lnu_grid` accepts.
+DALE2014_ACCEPTED_UNITS = (DALE2014_UNIT_L_NU, DALE2014_UNIT_L_LAMBDA)
+
+
+def _dale2014_already_lnu(declared: str | None, grid_path: str) -> bool:
+    """Whether a Dale2014 grid's declared unit means "use the rows as stored".
+
+    Parameters
+    ----------
+    declared : str or None
+        The grid's ``spectra_unit`` declaration, or ``None`` when absent.
+    grid_path : str
+        Path to the grid, for the refusal message. Its suffix selects the
+        remedy the message offers: the two regeneration scripts write HDF5, so
+        naming them to the owner of a ``.npz`` grid would be advice that
+        cannot be followed.
+
+    Returns
+    -------
+    bool
+        ``True`` for :data:`DALE2014_UNIT_L_NU`, ``False`` for
+        :data:`DALE2014_UNIT_L_LAMBDA`.
+
+    Raises
+    ------
+    ValueError
+        When ``declared`` is absent or is neither accepted value. Choosing a
+        default here would be a guess, and the two typings of one Dale grid
+        differ by the grid's own lambda-Jacobian -- on
+        ``dale2014_templates_cigale.h5`` a factor spanning 1.07e-2 to 9.60e4
+        across 2.0e4-6.0e7 A once each is unit-normalized in L_nu. There is no
+        tolerance at which the wrong typing is a small error.
+    """
+    if declared in DALE2014_ACCEPTED_UNITS:
+        return declared == DALE2014_UNIT_L_NU
+    seen = "absent" if declared is None else repr(declared)
+    # Where the declaration LIVES differs by container: an HDF5 file attribute
+    # (``f.attrs["spectra_unit"]``) against an ``.npz`` array entry
+    # (``data["spectra_unit"]``). This refusal reaches ``.npz`` grids too --
+    # that branch used to hard-code "convert" -- and both regeneration scripts
+    # write HDF5, so for a ``.npz`` grid they are not a remedy at all.
+    if grid_path.endswith(".npz"):
+        remedy = (
+            "For an .npz grid, add an entry named 'spectra_unit' holding that "
+            "string: np.savez(path, spectra_unit=np.array(<value>), "
+            "**existing_arrays). The two regeneration scripts under scripts/ "
+            "write HDF5, so they cannot produce this file."
+        )
+    else:
+        remedy = (
+            "For an HDF5 grid this is the file attribute "
+            "f.attrs['spectra_unit']. Regenerate with "
+            "scripts/regenerate_dale2014_from_cigale.py or "
+            "scripts/regenerate_dale2014_from_official.py, which write it."
+        )
+    raise ValueError(
+        f"Dale2014 grid {grid_path!r} does not declare a readable "
+        f"'spectra_unit' ({seen}). The stored unit decides whether the "
+        f"L_lambda -> L_nu Jacobian is applied, and the two typings of the "
+        f"same rows differ by the grid's own lambda-Jacobian (measured: a "
+        f"factor spanning 1.07e-2 to 9.60e4 on the CIGALE-sourced grid), so "
+        f"it cannot be inferred. Set 'spectra_unit' to exactly one of:\n"
+        f"  {DALE2014_UNIT_L_NU!r}\n"
+        f"  {DALE2014_UNIT_L_LAMBDA!r}\n"
+        f"{remedy}"
+    )
+
+
 def load_dale2014_lnu_grid(grid_path: str) -> dict:
     r"""Load + normalize a Dale+2014 template grid into L_nu jnp arrays.
 
@@ -727,12 +810,19 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
     that lives on the (truncated) dust grid (~0.54), preserving CIGALE's energy
     partition so the ``dust_frac_agn`` mixing matches CIGALE (#717).
 
+    The grid must **declare** the convention its rows are stored in, via a
+    ``spectra_unit`` entry holding exactly one of :data:`DALE2014_UNIT_L_NU`
+    (used as stored) or :data:`DALE2014_UNIT_L_LAMBDA` (Jacobian-converted).
+    Anything else -- absent, prose, a typo, a future spelling -- is refused
+    rather than read as one of them.
+
     Parameters
     ----------
     grid_path : str
         Path to a ``.npz`` or ``.h5`` Dale2014 template file. Must contain
         ``wavelength_aa`` (or ``wavelength``), ``alpha_grid`` (or ``grid/alpha``),
-        ``templates_sf`` (or ``spectra/templates``), and optionally
+        ``templates_sf`` (or ``spectra/templates``), a ``spectra_unit``
+        declaration (HDF5 attribute, or ``.npz`` array), and optionally
         ``templates_qso``.
 
     Returns
@@ -741,6 +831,11 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         ``wavelength_aa`` (n_wave,), ``alpha_grid`` (n_alpha,), ``templates_sf``
         (n_alpha, n_wave) [L_nu], ``templates_qso`` (n_wave,) [L_nu] or ``None``,
         ``has_qso`` (bool): arrays are jnp.
+
+    Raises
+    ------
+    ValueError
+        When the grid carries no accepted ``spectra_unit`` declaration.
 
     Notes
     -----
@@ -756,7 +851,8 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         templates_qso_raw = data.get("templates_qso", None)
         if templates_qso_raw is not None:
             templates_qso_raw = np.array(templates_qso_raw)
-        already_lnu = False
+        declared = str(data["spectra_unit"]) if "spectra_unit" in data else None
+        already_lnu = _dale2014_already_lnu(declared, grid_path)
     else:
         import h5py as _h5py
 
@@ -772,10 +868,12 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
                 alpha_grid_raw = np.array(f["alpha_grid"][:])
                 templates_raw = np.array(f["templates_sf"][:])
                 templates_qso_raw = None
-            # Check if already in L_nu normalized form
-            already_lnu = (
-                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
-            )
+            # The stored convention is declared, never inferred: an
+            # unrecognized value used to fall through to "convert", so a grid
+            # already in L_nu but labeled any other way was multiplied by
+            # lambda^2/c a second time, silently.
+            declared = str(f.attrs["spectra_unit"]) if "spectra_unit" in f.attrs else None
+            already_lnu = _dale2014_already_lnu(declared, grid_path)
             # Optional: load pure-AGN QSO template
             if "templates_qso" in f:
                 templates_qso_raw = np.array(f["templates_qso"][:])
@@ -929,6 +1027,13 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
             dust_alpha_dale=dust_alpha_dale,
             dust_frac_agn=dust_frac_agn,
         )
+
+    # Stamp the grid's own red edge onto the closure. The #1970 radio
+    # double-count guard has to know whether the template a model will
+    # actually evaluate reaches into the radio, and any grid may be filed
+    # under any registry name (``register_dale2014_tabulated(path, name=...)``),
+    # so the answer has to travel with the data, not with the key.
+    dale2014_tabulated.dust_emission_red_end = _red_end_from_grid_file(grid_path)
 
     return dale2014_tabulated
 
@@ -1981,6 +2086,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         L_absorbed: float,
         dust_log_ssfr: float = -10.0,
         redshift: float = 0.0,
+        log_L_ir: float | None = None,
         **_kwargs,
     ) -> jnp.ndarray:
         """BOSA emission from tabulated templates (Boquien & Salim 2021).
@@ -1998,6 +2104,22 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
             log10(sSFR / yr^-1).  Typical range: -12 to -8.
         redshift : float
             Source redshift (for CMB contrast correction).
+        log_L_ir : float, optional
+            ``log10(L_absorbed)`` [dex, **erg/s** -- the tengri-wide SED
+            contract], pre-computed upstream. When given, it is used in
+            place of ``jnp.log10(L_absorbed)`` for the normalization, and
+            (after converting to the grid's own Lsun-relative axis, see
+            below) for the grid-axis lookup too (#2272): ``L_absorbed`` is
+            ~1e43 erg/s and therefore ``inf`` in pure float32, while its log
+            is finite, so passing this avoids materializing the overflowed
+            linear value (mirrors ``EnergyBalanceSplitIRSEDComponent``, which
+            takes the same float32-safety approach for its own
+            ``factors_l_ir=False`` budget). ``None`` (the default) preserves
+            the exact original formula for callers that only have the linear
+            value (e.g. the legacy ``DUST_EMISSION_MODELS`` dispatch and the
+            bit-exact golden-fixture regression, see the comment at the
+            normalization below for why that path is deliberately NOT
+            converted).
 
         Returns
         -------
@@ -2010,10 +2132,34 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
         **Gradient-safe**: yes, differentiable everywhere.
         """
-        # L_TIR ~ L_absorbed (energy balance)
-        log_ltir = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
+        # L_TIR ~ L_absorbed (energy balance). ``log_ltir_ergs`` feeds the
+        # NORMALIZATION below and stays in erg/s throughout -- the delivered
+        # SED must integrate to the erg/s budget regardless of what unit the
+        # grid's own axis uses.
+        if log_L_ir is None:
+            log_ltir_ergs = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
+            log_ltir_axis = log_ltir_ergs
+        else:
+            log_ltir_ergs = jnp.asarray(log_L_ir)
+            # The packaged grid's axis is log10(L_TIR / Lsun) -- the
+            # Boquien & Salim 2021 convention (``scripts/build_bosa_hdf5.py``:
+            # "Grid: log10(L_TIR / L_sun): 8.5 -> 12.5", and its HDF5 writer
+            # normalizes the templates using the same ``L_SUN`` tengri uses
+            # elsewhere) -- while ``log_L_ir`` is erg/s (the tengri-wide SED
+            # contract). Convert for the AXIS LOOKUP only, via the #2273
+            # precedent (``dust_log_L_ir + LOG10_L_SUN`` in
+            # ``components/dust/component.py`` etc.): without this, any
+            # astrophysically realistic L_ir (~1e42-1e45 erg/s, i.e. dex
+            # 42-45) numerically saturates the grid's ceiling node (12.5)
+            # regardless of the real budget, which is the other half of
+            # #2272's disease -- the ``factors_l_ir`` fix alone only stopped
+            # ``apply()`` from pinning the lookup at a fixed unit-luminosity
+            # placeholder; it did not make the lookup land on the right node.
+            from tengri.utils.sed_quantities import LOG10_L_SUN
 
-        log_ltir_c = jnp.clip(log_ltir, log_ltir_grid[0], log_ltir_grid[-1])
+            log_ltir_axis = log_ltir_ergs - LOG10_L_SUN
+
+        log_ltir_c = jnp.clip(log_ltir_axis, log_ltir_grid[0], log_ltir_grid[-1])
         log_ssfr_c = jnp.clip(dust_log_ssfr, log_ssfr_grid[0], log_ssfr_grid[-1])
 
         n_l = len(log_ltir_grid)
@@ -2049,14 +2195,42 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         # to L_absorbed regardless of the native template grid spacing.
         nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
         t_integral = -jnp.trapezoid(sed, nu)
-        norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
 
         # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
         # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
         # this component exists to satisfy. ``redshift`` is kept in the signature
         # for call-site compatibility.
-        return norm * sed
+        if log_L_ir is None:
+            # Original linear-division formula (no Lsun conversion, no log
+            # domain), kept bit-exact on purpose: it is a shape-reference
+            # contract pinned by
+            # tests/regression/test_dust_emission_grid_components.py's golden
+            # fixture (L_ir_erg_s=1e44 -> log10=44, clipped to the grid's
+            # ceiling node either way you slice it: converting would move it
+            # to log10(L_TIR/Lsun)=10.42, a DIFFERENT, interior node, which
+            # would change the golden's pinned shape). This branch is reached
+            # only by a direct ``.predict()``/closure call with no
+            # ``log_L_ir`` -- the real ``apply()``-driven pipeline (both
+            # ``model.predict()`` and ``model.predict_photometry()``) always
+            # supplies ``log_L_ir`` (declared in ``optional_inputs``) and so
+            # always takes the converted branch below.
+            norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
+            return norm * sed
+
+        # log-domain rescale (#2272): equal to ``(L_absorbed / t_integral) * sed``
+        # to fp roundoff, but never materializes ``L_absorbed`` (~1e43, inf in
+        # float32) as a linear value. Uses ``log_ltir_ergs`` (NOT the
+        # Lsun-converted ``log_ltir_axis`` used for the shape lookup above) --
+        # the delivered SED integrates to the erg/s budget exactly; only the
+        # axis lookup needed the unit conversion.
+        from tengri.utils.scale import apply_log10_scale, representable_floor
+
+        log_t_integral = jnp.log10(
+            jnp.clip(jnp.abs(t_integral), representable_floor(1.0e-300), None)
+        )
+        log_norm = jnp.where(t_integral > 0.0, log_ltir_ergs - log_t_integral, -jnp.inf)
+        return apply_log10_scale(sed, log_norm)
 
     return bosa_emission
 
@@ -2334,6 +2508,440 @@ def dust_emission_grid_support(name: str) -> dict[str, tuple[float, float]]:
                 axis = np.asarray(_qhac_axis_to_cigale(jnp.asarray(axis)), dtype=float)
             support[param] = (float(axis.min()), float(axis.max()))
     return support
+
+
+#: Wavelength past which an emitting template overlaps the radio (1 cm, 30 GHz).
+#:
+#: Blueward of the whole 1.34-10 GHz window in which the Dale+2014 embedded
+#: continuum double-counts an SF radio block. The shipped grids sit either
+#: side with margin: ``dale2014`` emits to 2.2459e9 Å (22x redward) and
+#: ``dale2014_cigale`` stops at 7.727e7 Å (1.29x blueward). The comparison is
+#: strict (``>``): a template stopping exactly at 30 GHz is blueward of the
+#: whole window and cannot double-count.
+_RADIO_TAIL_RED_EDGE_AA = 1.0e8
+
+#: Red-end spectral index below which an emitting tail reads as NON-thermal.
+#:
+#: With :math:`L_\nu \propto \nu^\alpha`, thermal dust on its
+#: Rayleigh-Jeans side goes as :math:`\nu^{2+\beta}`, so
+#: :math:`\alpha \ge 3` for any physical emissivity index; spinning dust
+#: (AME) below its ~30 GHz peak also rises toward higher frequency. Radio
+#: continua do the opposite or stay flat: optically-thin synchrotron
+#: :math:`\alpha \approx -0.8`, optically-thin free-free
+#: :math:`\alpha \approx -0.1`, flat-spectrum sources :math:`\alpha = 0`.
+#: A threshold at 1 separates the two families with margin on both sides:
+#: every shipped thermal grid measures +3.1 or steeper and ``dale2014``
+#: measures -0.665. Accepting :math:`\alpha = 1` exactly keeps the refusal on
+#: the side that never fires spuriously.
+_RADIO_TAIL_MIN_THERMAL_INDEX = 1.0
+
+#: Declared wavelength-unit strings a grid may carry, to their factor to Å.
+#:
+#: Matched case-insensitively after stripping whitespace. A grid that declares
+#: its unit is believed over any convention: this repository's own grids
+#: declare it three different ways (``dl07_templates_v2.h5`` and
+#: ``skirtor_templates_v2.h5`` as a dataset ``unit`` attribute,
+#: ``dl14_templates.h5`` as ``units``, ``dale2014_templates.h5`` and
+#: ``bosa_templates.h5`` as a file-level ``wavelength_unit``), and all of them
+#: say Angstrom.
+_WAVELENGTH_UNIT_TO_AA: dict[str, float] = {
+    "a": 1.0,
+    "aa": 1.0,
+    "angstrom": 1.0,
+    "angstroms": 1.0,
+    "\u00c5": 1.0,
+    "nm": 10.0,
+    "nanometer": 10.0,
+    "nanometers": 10.0,
+    "um": 1.0e4,
+    "\u00b5m": 1.0e4,
+    "\u03bcm": 1.0e4,
+    "micron": 1.0e4,
+    "microns": 1.0e4,
+    "micrometer": 1.0e4,
+    "micrometers": 1.0e4,
+    "m": 1.0e10,
+    "meter": 1.0e10,
+    "meters": 1.0e10,
+}
+
+#: Fallback factor to Å per wavelength dataset key, used only when the file
+#: declares no unit of its own.
+#:
+#: The bare key ``wavelength`` is **Angstrom** here. Every grid in this
+#: repository that uses it stores Angstrom -- ``dl07_templates{,_v2}.h5`` and
+#: ``dl14_templates.h5`` span 1e4-1e8 Å, ``skirtor_templates_v{2,3}.h5`` span
+#: 10-1e8 Å -- and ``load_dale2014_lnu_grid``'s v2 branch reads
+#: ``f["wavelength"]`` as Å with no scale. Reading it as micron instead
+#: reported a red edge 1e4x too red (measured 2.2459e13 Å for a 2.2459e9 Å
+#: grid, even one declaring ``unit='Angstrom'``), a latent false refusal for
+#: any grid pairing that key with template rows. ``wavelength_um`` carries its
+#: unit in its name, which is what ``astrodust_templates.h5`` relies on.
+_WAVELENGTH_KEY_TO_AA: dict[str, float] = {
+    "wavelength_aa": 1.0,
+    "wavelength": 1.0,
+    "wavelength_um": 1.0e4,
+}
+
+
+#: Canonical name per factor to Å, so a declaration's spelling ("um", "\u00b5m",
+#: "microns") is reported under one name with the raw text quoted beside it.
+_CANONICAL_WAVELENGTH_UNIT: dict[float, str] = {
+    1.0: "Angstrom",
+    10.0: "nm",
+    1.0e4: "micron",
+    1.0e10: "meter",
+}
+
+
+class GridRedEnd(NamedTuple):
+    r"""Red end of a dust-emission grid, with the unit it was read in.
+
+    Attributes
+    ----------
+    red_edge_aa : float
+        Reddest wavelength [Å] at which any template row is non-zero.
+    index : float
+        Smallest red-end spectral index :math:`d\ln L_\nu / d\ln\nu` any
+        row shows over the reddest decade of the emitting span. Negative or
+        near zero is non-thermal (radio); :math:`\ge 3` is thermal dust.
+    wavelength_key : str
+        The dataset key the wavelength axis was read from.
+    wavelength_unit : str
+        Human-readable statement of the unit used and where it came from -- a
+        declared attribute, or this repository's key convention. Carried so a
+        refusal can say which, since a wrong assumption here scales the red
+        edge by orders of magnitude.
+    """
+
+    red_edge_aa: float
+    index: float
+    wavelength_key: str
+    wavelength_unit: str
+
+
+def _wavelength_scale_to_aa(dataset, handle, key: str) -> tuple[float, str]:
+    """``(factor to Å, where that factor came from)`` for one wavelength axis.
+
+    A declared unit attribute wins over the key convention, in both
+    directions: a ``wavelength_um`` dataset declaring Angstrom is read as
+    Angstrom. An unrecognized declaration falls back to the key convention
+    and says so, rather than raising -- an unmeasurable red end must not break
+    model construction (the #1970 guard's own contract), and the key name is
+    itself an explicit declaration in this repository.
+    """
+    declared = None
+    # On the wavelength DATASET a bare ``unit``/``units`` unambiguously
+    # describes the wavelength; at FILE level only the qualified
+    # ``wavelength_unit`` does -- several grids here carry a file-level
+    # ``units_emission`` / ``spectra_unit`` describing the flux instead, and a
+    # bare ``units`` there would be the same kind of ambiguity.
+    for source, attrs, names in (
+        ("dataset", dataset.attrs, ("unit", "units", "wavelength_unit")),
+        ("file", handle.attrs, ("wavelength_unit",)),
+    ):
+        for attr_name in names:
+            raw = attrs.get(attr_name)
+            if raw is None:
+                continue
+            text = raw.decode() if isinstance(raw, bytes) else str(raw)
+            scale = _WAVELENGTH_UNIT_TO_AA.get(text.strip().lower())
+            if scale is not None:
+                name = _CANONICAL_WAVELENGTH_UNIT[scale]
+                return scale, (
+                    f"{name} (declared: {source} attribute {attr_name!r} = {text.strip()!r})"
+                )
+            if declared is None:
+                declared = f"{source} attribute {attr_name!r} = {text.strip()!r}"
+    fallback = _WAVELENGTH_KEY_TO_AA[key]
+    unit = _CANONICAL_WAVELENGTH_UNIT[fallback]
+    if declared is not None:
+        return fallback, (
+            f"{unit} (repository convention for the key {key!r}; the file's "
+            f"{declared} is not a unit this reader recognizes)"
+        )
+    return fallback, f"{unit} (repository convention for the key {key!r}; none declared)"
+
+
+def _red_end_from_grid_file(path: str) -> GridRedEnd | None:
+    r"""Red edge of a dust-emission grid and its :math:`L_\nu` slope there.
+
+    Parameters
+    ----------
+    path : str
+        Path to a template HDF5 grid.
+
+    Returns
+    -------
+    GridRedEnd or None
+        The reddest wavelength [Å] at which any template row is non-zero, the
+        SMALLEST red-end spectral index :math:`d\ln L_\nu / d\ln\nu` any row
+        shows over the reddest decade of that span, and the wavelength key and
+        unit those were read in. ``None`` when the file carries no
+        recognizable wavelength/template pair.
+
+    Notes
+    -----
+    The index is what separates an embedded non-thermal continuum from a cold
+    or spinning-dust tail that merely reaches long wavelengths. Writing
+    :math:`L_\nu \propto \nu^\alpha`, thermal dust on its Rayleigh-Jeans side
+    has :math:`\alpha = 2 + \beta \ge 3`, while radio continua are flat or
+    falling toward higher frequency (synchrotron
+    :math:`\alpha \approx -0.8`, free-free :math:`\alpha \approx -0.1`,
+    flat-spectrum :math:`\alpha = 0`). Measured on the shipped grids:
+    ``dale2014`` -0.665 (a textbook SF synchrotron index) against +3.111
+    (bosa), +3.326 (astrodust), +4.810 (schreiber2016) and +5.510
+    (dale2014_cigale) -- the two families are 3.8 apart, either side of
+    :data:`_RADIO_TAIL_MIN_THERMAL_INDEX`.
+
+    The MINIMUM over rows, not the mean or the sum's: one radio-bearing row in
+    an otherwise thermal library is still a double-count wherever the model
+    can reach it, and the minimum in :math:`\nu` is the most non-thermal row.
+
+    **JIT-compatible**: no, file I/O. Composition-time only.
+
+    Reads the *non-zero span*, not the grid extent: a grid may be padded with
+    zeros far past its physical red edge, and it is the emitting edge that
+    decides whether the template overlaps a separately-modeled component.
+    ``data/dale2014_templates_cigale.h5`` is exactly that shape -- its axis
+    runs to 2.2459e9 Å while its flux stops at 7.727e7 Å, the strip edge
+    ``Dale2014CigaleIRSEDComponent`` documents.
+
+    The span is the union over every template row, not one row's: a model may
+    be evaluated anywhere on its grid, so a build-time refusal has to hold for
+    every reachable axis value. The Dale grid's ``alpha=2.0`` row alone stops
+    at 6.026e7 Å, 1.28x blueward of the 64-row union.
+    """
+    import h5py
+    import numpy as np
+
+    with h5py.File(path, "r") as f:
+        wave = None
+        wave_key = ""
+        wave_unit = ""
+        # Keys in preference order; the SCALE is resolved per file, from its
+        # own declared unit where it has one, never assumed from the key alone
+        # (see _wavelength_scale_to_aa and _WAVELENGTH_KEY_TO_AA).
+        for key in _WAVELENGTH_KEY_TO_AA:
+            if isinstance(f.get(key), h5py.Dataset):
+                scale, wave_unit = _wavelength_scale_to_aa(f[key], f, key)
+                wave = np.asarray(f[key][()], dtype=float).ravel() * scale
+                wave_key = key
+                break
+        if wave is None or wave.size == 0:
+            return None
+        emitting = np.zeros(wave.size, dtype=bool)
+        rows_all: list[np.ndarray] = []
+        found = False
+        for key in (
+            "templates_sf",
+            "spectra/templates",
+            "spectra",
+            "continuum",
+            "pah",
+            "L_nu_total",
+            "L_nu_solLum_per_Hz",
+        ):
+            # ``in f`` is true for groups too, and indexing a group then
+            # slicing it raises: several grids (dl07, dl14) store a ``spectra``
+            # GROUP where others store a dataset of that name. Only datasets
+            # carry rows to measure.
+            if not isinstance(f.get(key), h5py.Dataset):
+                continue
+            arr = np.asarray(f[key][()], dtype=float)
+            if arr.ndim == 1 and arr.size == wave.size:
+                rows = arr[None, :]
+            elif arr.ndim >= 2 and arr.shape[-1] == wave.size:
+                rows = arr.reshape(-1, wave.size)
+            elif arr.ndim >= 2 and arr.shape[0] == wave.size:
+                rows = arr.reshape(wave.size, -1).T
+            else:
+                continue
+            emitting |= np.any(rows != 0.0, axis=0)
+            rows_all.append(rows)
+            found = True
+        if not found or not emitting.any():
+            return None
+        edge = float(wave[emitting].max())
+
+    # Most non-thermal index any row shows over the reddest decade of the
+    # emitting span. Per-row, not on the row sum: one radio-bearing row in an
+    # otherwise thermal library is still a double-count wherever the model can
+    # reach it.
+    #
+    # Fitted against ``-log10(lambda)``, which IS ``log10(nu)`` up to an
+    # additive constant that only moves the intercept: the returned number is
+    # ``d ln L_nu / d ln nu`` directly, needing no sign flip at the call site.
+    window = emitting & (wave >= edge / 10.0) & (wave <= edge)
+    index = np.inf
+    for row in np.vstack(rows_all):
+        m = window & (row > 0.0)
+        if int(m.sum()) < 3:
+            continue
+        fit = np.polyfit(-np.log10(wave[m]), np.log10(row[m]), 1)
+        index = min(index, float(fit[0]))
+    if not np.isfinite(index):
+        return None
+    return GridRedEnd(
+        red_edge_aa=edge,
+        index=index,
+        wavelength_key=wave_key,
+        wavelength_unit=wave_unit,
+    )
+
+
+def dust_emission_red_edge_aa(name: str) -> float | None:
+    r"""Reddest emitting wavelength of the SELECTED dust-emission template.
+
+    The #1970 guard needs to know whether the template a model will actually
+    evaluate carries flux into the radio, which is a property of the *grid*,
+    not of the registry key it was filed under. A caller may register any grid
+    under any name (:func:`register_dale2014_tabulated`), so this consults the
+    live registry entry first and only then the name's vendored default.
+
+    Parameters
+    ----------
+    name : str
+        Registry name of the emission model, e.g. ``'dale2014'``.
+
+    Returns
+    -------
+    float or None
+        Reddest wavelength [Å] with non-zero flux, or ``None`` when the model
+        is not template-backed, its grid is not installed, or its red edge
+        cannot be measured (a closed-form model, or an unresolved lazy entry
+        with no vendored file).
+
+    Notes
+    -----
+    **JIT-compatible**: no, file I/O. Call at composition time.
+
+    Measured on the shipped grids: ``dale2014`` reaches 2.2459e9 Å (1.335 GHz,
+    the embedded star-forming synchrotron continuum) and ``dale2014_cigale``
+    stops at 7.727e7 Å (7.7 mm), CIGALE having stripped that tail. The
+    ``alpha=2.0`` row alone stops at 6.026e7 Å; this returns the 64-row union,
+    because a build-time refusal has to hold for every alpha a model can
+    reach.
+
+    Examples
+    --------
+    >>> from tengri.components.dust.emission_templates import dust_emission_red_edge_aa
+    >>> dust_emission_red_edge_aa("dale2014_cigale")  # doctest: +SKIP
+    77270000.0
+    """
+    measured = _dust_emission_red_end(name)
+    return None if measured is None else measured.red_edge_aa
+
+
+def _dust_emission_red_end(name: str) -> GridRedEnd | None:
+    r""":class:`GridRedEnd` of the grid ``name`` will evaluate.
+
+    The index is :math:`d\ln L_\nu / d\ln\nu` over the reddest decade of
+    the emitting span -- see :func:`_red_end_from_grid_file`.
+    """
+    from tengri._data_setup import find_data
+
+    from .emission.emission import DUST_EMISSION_MODELS
+
+    # A registered override wins: ``register_*_tabulated`` stamps the grid's
+    # measured red end onto the closure it files, so a name pointing at a
+    # different grid than its vendored default reports that grid's numbers.
+    stamped = getattr(DUST_EMISSION_MODELS.get(name), "dust_emission_red_end", None)
+    if stamped is not None:
+        # Stamped by ``create_dale2014_from_grid`` from this same reader, so
+        # it is already a GridRedEnd; rebuilt rather than returned as-is so a
+        # hand-stamped plain pair still reads back with the fields named.
+        return GridRedEnd(
+            red_edge_aa=float(stamped[0]),
+            index=float(stamped[1]),
+            wavelength_key=getattr(stamped, "wavelength_key", ""),
+            wavelength_unit=getattr(stamped, "wavelength_unit", "unrecorded"),
+        )
+
+    entry = _DUST_EMISSION_GRID_AXES.get(_DUST_EMISSION_ALIASES.get(name, name))
+    if entry is None:
+        return None
+    stem = entry[0].rsplit(".", 1)[0]
+    path = find_data(stem + "_v2.h5", entry[0])
+    if path is None:
+        return None
+    return _red_end_from_grid_file(str(path))
+
+
+def dust_emission_radio_tail_aa(name: str) -> float | None:
+    r"""Red edge of ``name``'s embedded NON-THERMAL radio tail, if it has one.
+
+    The question the #1970 double-count guard actually asks: does the
+    template this model will evaluate carry its own **radio continuum**,
+    which a separately-modeled SF radio block would then emit a second time?
+    Two measured conditions, both required (R62).
+
+    1. The emitting span reaches strictly past
+       :data:`_RADIO_TAIL_RED_EDGE_AA` (1e8 Å = 1 cm = 30 GHz), which is
+       blueward of the whole 1.34-10 GHz window where an embedded continuum
+       overlaps an SF radio block.
+    2. The red-end spectral index :math:`d\ln L_\nu / d\ln\nu`, measured over
+       the reddest decade of the emitting span, is below
+       :data:`_RADIO_TAIL_MIN_THERMAL_INDEX` (1.0).
+
+    Condition 2 is the physics. Writing :math:`L_\nu \propto \nu^\alpha`:
+
+    * **Radio continua are flat or falling toward higher frequency.**
+      Optically-thin synchrotron sits at :math:`\alpha \approx -0.8`,
+      optically-thin free-free at :math:`\alpha \approx -0.1`, and a
+      flat-spectrum source at :math:`\alpha = 0`. All are far below 1.
+    * **Thermal dust rises steeply toward higher frequency.** On the
+      Rayleigh-Jeans side a modified blackbody goes as
+      :math:`\nu^{2+\beta}`, so :math:`\alpha \ge 3` for any physical
+      emissivity index (:math:`\alpha = 3.6` at :math:`\beta = 1.6`).
+      Spinning dust (AME), peaking near 30 GHz, likewise rises toward higher
+      frequency below its peak -- which is exactly what ``astrodust``'s
+      3.0e8 Å edge is, and it measures :math:`\alpha = +3.326`.
+
+    Reach alone is therefore not enough: without condition 2 every template
+    that merely touches the microwave is refused, ``astrodust`` included,
+    which double-counts nothing. And condition 2 has to be stated as an index
+    threshold rather than "rising toward longer wavelength"
+    (:math:`\alpha < 0`): that weaker form let the whole flat-and-inverted
+    family through, measured on synthetic grids at :math:`\alpha = 0` and
+    :math:`\alpha = 0.99`, both of which are radio and neither of which was
+    refused.
+
+    Parameters
+    ----------
+    name : str
+        Registry name of the emission model, e.g. ``'dale2014'``.
+
+    Returns
+    -------
+    float or None
+        The red edge [Å] when both conditions hold, else ``None``.
+
+    Notes
+    -----
+    **JIT-compatible**: no, file I/O. Call at composition time.
+
+    Measured on every installed template-backed grid, only ``dale2014``
+    qualifies: 2.2459e9 Å at :math:`\alpha = -0.665`. The rest measure
+    +3.111 (bosa), +3.326 (astrodust), +4.810 (schreiber2016) and +5.510
+    (dale2014_cigale) -- 3.8 away from Dale's, with the threshold between
+    them. ``bosa`` stops exactly at 1.0e8 Å, so it also fails condition 1.
+
+    Examples
+    --------
+    >>> from tengri.components.dust.emission_templates import dust_emission_radio_tail_aa
+    >>> dust_emission_radio_tail_aa("dale2014_cigale") is None  # doctest: +SKIP
+    True
+    """
+    measured = _dust_emission_red_end(name)
+    if measured is None:
+        return None
+    if (
+        measured.red_edge_aa > _RADIO_TAIL_RED_EDGE_AA
+        and measured.index < _RADIO_TAIL_MIN_THERMAL_INDEX
+    ):
+        return measured.red_edge_aa
+    return None
 
 
 #: FSPS-to-CIGALE rescaling of the THEMIS a-C(:H) mass-fraction axis.

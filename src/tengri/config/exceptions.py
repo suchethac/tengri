@@ -111,29 +111,6 @@ class ParameterDefaultMissingError(ParameterError):
     """
 
 
-class DIGNotOnNebularGridError(ParameterError):
-    r"""DIG mixing was asked of the per-Q_H nebular grid, which has no DIG axis (#2195).
-
-    The grid built by :meth:`tengri.SEDModel.enable_fast_nebular` (also reached
-    through ``approx=FeaturePrecomp()``) tabulates the nebular emission over
-    whichever of ``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas`` are free, and
-    reconstructs it as :math:`Q_H \times \mathrm{interp}(\text{grid})`. Neither
-    ``neb_dig_frac`` nor ``neb_dig_delta_logU`` is a candidate axis, and the
-    reconstruction has no second ionization regime to mix in, so an armed grid
-    drops DIG mixing entirely: both parameters go silently inert together.
-
-    Raised at the point the grid is armed, which is where the incompatibility
-    first becomes concrete, rather than being discovered as a posterior on two
-    parameters the likelihood never saw.
-
-    Parameters
-    ----------
-    message : str
-        Human-readable error description naming the offending disposition of
-        ``neb_dig_frac`` and both ways out.
-    """
-
-
 class ConfigError(TengriError, ValueError):
     """Invalid Config construction or missing fields.
 
@@ -331,12 +308,6 @@ class DeadGradientParameterWarning(UserWarning):
     configuration, the forward model is correct either way, and a gradient-free
     sampler can still fit it. Filter this category if you are sampling without
     gradients.
-
-    See Also
-    --------
-    tengri.components.agn.component.Float32UnsafeAGNWarning
-        The same discipline for a block that is numerically unsafe rather than
-        gradient-dead.
     """
 
 

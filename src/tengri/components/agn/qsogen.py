@@ -103,6 +103,7 @@ import numpy as np
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
 from tengri.components.dust.attenuation import smc as smc_curve
+from tengri.utils.host_array import device_table, host_array
 
 # ── Physical constants (CGS) ──────────────────────────────────────
 from tengri.utils.physics_constants import (
@@ -110,7 +111,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_LIGHT,
     L_SUN as _LSUN_ERG,
 )
-from tengri.utils.scale import representable_exponent
+from tengri.utils.scale import representable_denominator, representable_exponent
 
 # Normalization wavelength
 _LAMBDA_NORM = 5500.0  # Angstrom
@@ -215,7 +216,7 @@ def _load_emline_template_arrays():
 # and stored as module-level closures referenced by _empirical_emission_lines.
 try:
     _EMLINE_WAV, _EMLINE_MED, _EMLINE_REF, _EMLINE_PEAKY, _EMLINE_WINDY, _EMLINE_NARROW = (
-        _load_emline_template_arrays()
+        host_array(x) for x in _load_emline_template_arrays()
     )
 except FileNotFoundError:
     # If template file is missing, set to None. _empirical_emission_lines will
@@ -223,8 +224,8 @@ except FileNotFoundError:
     _EMLINE_WAV = None
 
 # Redshift-luminosity relation from SDSS DR16Q (Temple+2021 config.py)
-_ZLUM = np.array([0.23, 0.34, 0.6, 1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 3.3, 3.7, 4.13, 4.5])
-_LUMVAL = np.array(
+_ZLUM = host_array([0.23, 0.34, 0.6, 1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 3.3, 3.7, 4.13, 4.5])
+_LUMVAL = host_array(
     [-21.76, -22.9, -24.1, -25.4, -26.0, -26.6, -27.1, -27.6, -27.9, -28.1, -28.4, -28.6, -28.9]
 )
 
@@ -323,7 +324,7 @@ def _broken_powerlaw_continuum(
     # ``wavelength < 124.0`` band; the gradient w.r.t. the shape parameters
     # flows unchanged for lambda >= 124 A. Applied here, before the caller's
     # bolometric normalization, so the removed flux no longer dilutes L_bol.
-    continuum = f_nu / jnp.maximum(f_norm, 1e-30)
+    continuum = f_nu / jnp.maximum(f_norm, representable_denominator(1e-30))
     return jnp.where(wavelength >= _XRAY_FLOOR_LAMBDA_AA, continuum, 0.0)
 
 
@@ -373,7 +374,11 @@ def _hot_dust_blackbody(
     cont_at_anchor = jnp.interp(
         jnp.array([_LAMBDA_BB_ANCHOR]), wavelength, continuum_flam, left=0.0, right=0.0
     )[0]
-    cmult = bbnorm * jnp.maximum(cont_at_anchor, 1e-60) / jnp.maximum(bb_anchor, 1e-60)
+    cmult = (
+        bbnorm
+        * jnp.maximum(cont_at_anchor, 1e-60)
+        / jnp.maximum(bb_anchor, representable_denominator(1e-60))
+    )
 
     return cmult * bb_fnu
 
@@ -496,17 +501,17 @@ def _empirical_emission_lines(
     """
     # Use module-level emission-line template arrays (loaded at import time
     # to avoid file I/O and tracer leaks inside JIT scope). BUG-NSS-03 fix.
-    if _EMLINE_WAV is None:
+    if device_table(_EMLINE_WAV) is None:
         raise FileNotFoundError(
             "QSOGen emission line template not found. Expected at data/qsogen_emline_template.dat"
         )
 
-    linwav = _EMLINE_WAV
-    medval = _EMLINE_MED
-    conval_raw = _EMLINE_REF
-    pkyval = _EMLINE_PEAKY
-    wdyval = _EMLINE_WINDY
-    _nlr = _EMLINE_NARROW
+    linwav = device_table(_EMLINE_WAV)
+    medval = device_table(_EMLINE_MED)
+    conval_raw = device_table(_EMLINE_REF)
+    pkyval = device_table(_EMLINE_PEAKY)
+    wdyval = device_table(_EMLINE_WINDY)
+    _nlr = device_table(_EMLINE_NARROW)
 
     # Baldwin effect: emline_type = (M_i - benorm) * beslope
     # beslope > 0, benorm = -27 -> brighter quasars (more negative M_i)

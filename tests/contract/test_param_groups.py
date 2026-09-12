@@ -813,7 +813,9 @@ class TestAllParamsAlias:
         """A top-level ``agn={'all_params': FREE}`` is block-scoped (does not affect sfh)."""
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-            agn={"type": "simple", "all_params": FREE},
+            # 'composable', not the removed toy model 'simple': a block name at
+            # the agn top level is refused at build time (R37).
+            agn={"type": "composable", "all_params": FREE},
             redshift=Fixed(0.1),
         )
         # AGN params should be free, SFH params should be fixed

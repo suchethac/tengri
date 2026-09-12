@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.19.5
 #   kernelspec:
 #     display_name: .venv
 #     language: python
@@ -231,7 +231,8 @@ print(
 # %% [markdown]
 # ## Measure the fit time: exact vs WavePrecomp vs fast
 #
-# MAP fit (200 Adam steps) on photometry + line likelihood, timed on all three paths.
+# MAP fit (200 L-BFGS-B iterations, the default optimizer) on photometry + line
+# likelihood, timed on all three paths.
 # `WavePrecomp` is the photometry lookup — SSP × filter table replacing full integration
 # with table look-up. `FeaturePrecomp` adds a per-Q_H nebular grid. The line channel
 # already keeps nebular work off the per-gradient path, so on a line-flux fit the

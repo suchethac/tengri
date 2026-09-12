@@ -256,19 +256,22 @@ def test_nebular_legacy_bucket_matches_canonical_tuple() -> None:
     _assert_bucket_matches_canonical(bucket, canonical)
 
 
-def test_agn_legacy_bucket_matches_canonical_tuple_plus_extras() -> None:
-    # AGN bucket = canonical agn_* tuple PLUS the ``neb_xid`` orphan
-    # kept in _builders._AGN_EXTRAS for the Feltre NLR backend.
+def test_agn_legacy_bucket_matches_canonical_tuple() -> None:
+    # AGN bucket = the canonical agn_* tuple, exactly. It used to carry one
+    # entry more -- the ``neb_xid`` orphan merged in by
+    # ``_builders._LAZY_DECL_EXTRAS`` -- which R41 (#2214) found was a second
+    # name for the Feltre dust-to-metal axis the tuple already declares as
+    # ``agn_nlr_xi_d``. With the orphan gone the bucket has no extras hook at
+    # all, so "derived view of the component's own declarations" is now
+    # literal rather than approximate.
     from tengri.components.agn._params import PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
 
     bucket = _resolve_lazy_bucket("_AGN_PARAMS")
 
     canonical_names = {d.name for d in canonical}
-    assert canonical_names < set(bucket), "agn canonical must be a subset of bucket"
-    assert set(bucket) - canonical_names == {"neb_xid"}, (
-        "only neb_xid may live in the bucket outside the canonical tuple"
-    )
+    assert "agn_nlr_xi_d" in canonical_names, "the surviving axis name must be declared"
+    assert set(bucket) == canonical_names
     _assert_bucket_matches_canonical(bucket, canonical)
 
 

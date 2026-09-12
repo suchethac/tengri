@@ -122,6 +122,13 @@ RECIPE_FREE_PARAMS = {
     "agn_panchromatic": [
         "agn_a_spin",
         "agn_cos_inc",
+        # agn_ebv_disc added (Task 16, item 2): a category-wide companion
+        # read (compose_l_nu reddens EVERY disc block's own continuum with
+        # this Prevot-SMC screen at the runner stage, #916) invisible to
+        # per-type introspection/AGN_BLOCK_CONSUMES alike; this recipe's
+        # disc sub-dict states no 'all_params' of its own, so it inherits
+        # the top-level wildcard and is now correctly freed.
+        "agn_ebv_disc",
         "agn_ir_frac",
         "agn_log_lbol",
         "agn_log_mbh",
@@ -130,10 +137,19 @@ RECIPE_FREE_PARAMS = {
         "agn_nlr_line_efficiency",
         "agn_oa_skirtor",
         "agn_p_skirtor",
-        "agn_polar_T",
-        "agn_polar_beta",
-        "agn_polar_ebv",
+        # agn_polar_T/beta/ebv removed (task13 fix-round-1, R22): this
+        # recipe never selects atten='polar_dust' (nor did it before), it
+        # only got these "for free" because skirtor_torus_block used to
+        # bundle its own polar-dust graybody -- a SECOND, independent
+        # mechanism removed by R22. Add atten={'type': 'polar_dust'} to this
+        # recipe to opt back into polar dust explicitly.
         "agn_q_skirtor",
+        # agn_radius_ratio added (Task 12's scope fix, 07c9d849d -- this
+        # task's own base commit, predates all task13 work): the AGN
+        # sub-block wildcard scoping fix there started freeing it under
+        # this recipe's torus='skirtor' + 'all_params': FREE; the frozen
+        # list here was never updated to match.
+        "agn_radius_ratio",
         "agn_tau_skirtor",
         "agn_torus_frac",
         "dust_tau_bc",
@@ -151,6 +167,9 @@ RECIPE_FREE_PARAMS = {
         "agn_blr_cf",
         "agn_blr_line_efficiency",
         "agn_cos_inc",
+        # agn_ebv_disc added (Task 16, item 2): see the agn_panchromatic
+        # entry above for the same note.
+        "agn_ebv_disc",
         "agn_fe2_strength",
         "agn_ir_frac",
         "agn_log_lbol",
@@ -165,8 +184,17 @@ RECIPE_FREE_PARAMS = {
         "agn_polar_ebv",
         "agn_polar_oa",
         "agn_q_skirtor",
+        # agn_radius_ratio added (Task 12's scope fix, 07c9d849d -- see the
+        # agn_panchromatic entry above for the same, longer-standing note).
+        "agn_radius_ratio",
         "agn_tau_skirtor",
-        "agn_torus_frac",
+        # agn_torus_frac REMOVED (Task 16, #2189, R15): this recipe's
+        # agn_ir_frac (fracAGN) is free, and AGNSEDComponent.apply()
+        # overrides whatever agn_torus_frac is given whenever fracAGN is
+        # active -- freeing it was a dead sampler dimension (measured: 0.0
+        # relative photometry change across its whole range under this
+        # exact condition). The agn.torus sub-block's own wildcard now
+        # narrows it out automatically.
         "dust_tau_bc",
         "dust_tau_diff",
         "met_logzsol",

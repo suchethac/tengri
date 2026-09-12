@@ -12,9 +12,10 @@ References
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
-   IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
-   arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
+.. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+   "The dust covering factor in active galactic nuclei," MNRAS, 458,
+   2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
+   https://doi.org/10.1093/mnras/stw444
 """
 
 from __future__ import annotations
@@ -25,11 +26,45 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig, SEDComponentState
+from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
 
 __all__ = ["SKIRTORTorus"]
+
+#: Single source of truth for EVERY class-level declared parameter's bounds
+#: and default: the corresponding canonical ``agn_*`` declaration in
+#: ``_params.py``. Read once at class-definition time so no class attribute
+#: below can drift from it the way ``oa_skirtor`` did (this class restated a
+#: stale ``Uniform(20.0, 60.0, default=40.0)`` while the canonical declaration
+#: -- and this class's own vendored grid, ``data/skirtor_templates_v3.h5``,
+#: ``grid/opening_angle`` = [10, 80] -- had moved to ``[10, 80]``; Task 1 fix
+#: round 1, finding 2) and the way ``polar_beta`` restated a stale
+#: ``Uniform(1.0, 2.5)`` against the canonical ``[1.0, 2.0]`` (Task 14 fix
+#: round 1). Task 14 fix round 2: a re-review found the SAME drift class
+#: twice more (``polar_ebv`` default 0.1 vs canonical 0.03; ``log_lbol``
+#: default 11.0 vs canonical 10.0) after the round-1 fix had already derived
+#: ten of the twelve -- so ALL twelve are now derived, with none left as a
+#: literal a future reviewer would have to notice by hand.
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
+_OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
+_TAU_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tau_skirtor")
+_P_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_p_skirtor")
+_Q_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_q_skirtor")
+_COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
+_RADIUS_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_radius_ratio")
+_POLAR_EBV_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_ebv")
+_POLAR_T_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_T")
+_POLAR_BETA_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_beta")
+#: R17 (Task 16): renamed from ``_BAND_FRAC_PRIOR``/``agn_band_frac``. This
+#: class's covering-fraction attribute and the composable ``skirtor_torus_block``
+#: (and six OTHER composable torus blocks) always meant the same physical
+#: quantity under two different declared names -- ``_params.py``'s own
+#: deprecation note had it backwards (called agn_torus_frac deprecated in
+#: FAVOR of agn_band_frac, the name with exactly one consumer: this class).
+_TORUS_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_torus_frac")
+_DELTA_PRIOR = declared_prior(_AGN_PARAMS, "agn_delta")
 
 
 @dataclass(frozen=True)
@@ -106,19 +141,22 @@ class SKIRTORTorus(SEDModelComponent):
     q_skirtor : Uniform
         Polar dust density power-law gradient. [dimensionless, 0–1.5]
     oa_skirtor : Uniform
-        Torus half-opening angle. [degrees, 20–60]
+        Torus half-opening angle. [degrees, 10–80]
     cos_inc : Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
-    frac_agn : Uniform
-        AGN fraction in a configurable band (CIGALE convention).
+    torus_frac : Uniform
+        AGN torus covering factor: L_AGN / L_total in a configurable band
+        (CIGALE convention). Renamed from ``band_frac`` (R17, Task 16): the
+        composable ``skirtor_torus_block`` and six other composable torus
+        blocks always called this same quantity ``agn_torus_frac``.
         [dimensionless, 0–1]
     polar_ebv : Uniform
         Polar dust E(B-V) (Type-1 sightline only). [mag, 0–0.5]
-    polar_temperature : Uniform
-        Polar dust graybody temperature. [K, 50–200]
+    polar_T : Uniform
+        Polar dust graybody temperature. [K, 50–150]
     polar_beta : Uniform
         Polar dust emissivity index (Casey 2012 modified blackbody).
-        [dimensionless, 1–2.5]
+        [dimensionless, 1–2]
     delta : Uniform
         Disc spectral slope modulation (CIGALE ``skirtor2016`` delta).
         [dimensionless, -1.0–1.0]. For ``disk_type`` 0/1 it tilts the disc
@@ -153,7 +191,10 @@ class SKIRTORTorus(SEDModelComponent):
 
     **Polar dust**: Applied to Type 1 sightlines (cos_inc ≥ cos(90° - oa))
     via the smooth sigmoid from polar_dust.py. Energy-conserving reemission
-    as Casey-2012 modified blackbody.
+    as Casey-2012 modified blackbody. This class's polar dust is bundled
+    into its own ``predict()``, independent of the composable path, where
+    it is instead owned end to end by the standalone ``atten='polar_dust'``
+    block (see ``blocks/atten.py::polar_dust_reemission_lnu``).
 
     **Citation**: Stalevski et al. 2016 (SKIRTOR); Yang et al. 2020, §2.2.2
     (polar dust + anisotropy).
@@ -185,83 +226,90 @@ class SKIRTORTorus(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     tau_skirtor = Uniform(
-        3.0,
-        11.0,
+        _TAU_SKIRTOR_PRIOR.lo,
+        _TAU_SKIRTOR_PRIOR.hi,
         description="9.7 µm optical depth (Stalevski et al.)",
         units="dimensionless",
-        default=7.0,
+        default=_TAU_SKIRTOR_PRIOR.default,
     )
     p_skirtor = Uniform(
-        0.0,
-        1.5,
+        _P_SKIRTOR_PRIOR.lo,
+        _P_SKIRTOR_PRIOR.hi,
         description="Radial dust density gradient",
         units="dimensionless",
-        default=1.0,
+        default=_P_SKIRTOR_PRIOR.default,
     )
     q_skirtor = Uniform(
-        0.0,
-        1.5,
+        _Q_SKIRTOR_PRIOR.lo,
+        _Q_SKIRTOR_PRIOR.hi,
         description="Polar dust density gradient",
         units="dimensionless",
-        default=1.0,
+        default=_Q_SKIRTOR_PRIOR.default,
     )
     oa_skirtor = Uniform(
-        20.0,
-        60.0,
+        _OA_SKIRTOR_PRIOR.lo,
+        _OA_SKIRTOR_PRIOR.hi,
         description="Torus half-opening angle",
         units="deg",
-        default=40.0,
+        default=_OA_SKIRTOR_PRIOR.default,
     )
     cos_inc = Uniform(
-        0.0,
-        1.0,
+        _COS_INC_PRIOR.lo,
+        _COS_INC_PRIOR.hi,
         description="Cosine of inclination",
         units="dimensionless",
-        default=0.45,
+        default=_COS_INC_PRIOR.default,
     )
-    band_frac = Uniform(
-        0.0,
-        1.0,
-        description="AGN fraction (L_AGN / L_total, CIGALE convention)",
+    radius_ratio = Uniform(
+        _RADIUS_RATIO_PRIOR.lo,
+        _RADIUS_RATIO_PRIOR.hi,
+        description="Torus outer/inner radius ratio",
         units="dimensionless",
-        default=0.2,
+        default=_RADIUS_RATIO_PRIOR.default,
+    )
+    torus_frac = Uniform(
+        _TORUS_FRAC_PRIOR.lo,
+        _TORUS_FRAC_PRIOR.hi,
+        description="AGN torus covering factor (L_AGN / L_total, CIGALE convention)",
+        units="dimensionless",
+        default=_TORUS_FRAC_PRIOR.default,
     )
     polar_ebv = Uniform(
-        0.0,
-        0.5,
+        _POLAR_EBV_PRIOR.lo,
+        _POLAR_EBV_PRIOR.hi,
         description="Polar dust E(B-V) (Type-1 sightline)",
         units="mag",
-        default=0.1,
+        default=_POLAR_EBV_PRIOR.default,
     )
-    polar_temperature = Uniform(
-        50.0,
-        200.0,
+    polar_T = Uniform(
+        _POLAR_T_PRIOR.lo,
+        _POLAR_T_PRIOR.hi,
         description="Polar dust graybody temperature",
         units="K",
-        default=100.0,
+        default=_POLAR_T_PRIOR.default,
     )
     polar_beta = Uniform(
-        1.0,
-        2.5,
+        _POLAR_BETA_PRIOR.lo,
+        _POLAR_BETA_PRIOR.hi,
         description="Polar dust emissivity index",
         units="dimensionless",
-        default=1.6,
+        default=_POLAR_BETA_PRIOR.default,
     )
     delta = Uniform(
-        -1.0,
-        1.0,
+        _DELTA_PRIOR.lo,
+        _DELTA_PRIOR.hi,
         description="Disc spectral slope modulation delta (CIGALE skirtor2016). "
         "For disk_type 0/1 it tilts the optical-MIR disc slope; for disk_type 2 "
         "it is the ADAF->thin-disc blend weight (clipped to [0, 1]).",
         units="dimensionless",
-        default=0.0,
+        default=_DELTA_PRIOR.default,
     )
     # NOTE: CIGALE's ``lambda_fracAGN`` (band over which the AGN fraction is
     # normalized) is intentionally NOT exposed here. tengri normalizes frac_agn
@@ -343,11 +391,12 @@ class SKIRTORTorus(SEDModelComponent):
             - p_skirtor: radial density gradient
             - q_skirtor: polar density gradient
             - oa_skirtor: opening angle (degrees)
+            - radius_ratio: torus outer/inner radius ratio
             - cos_inc: cosine of inclination
-            - frac_agn: AGN luminosity fraction
+            - torus_frac: AGN torus covering factor (L_AGN / L_total)
             - delta: disc spectral slope modulation (-1.0 to 1.0)
             - polar_ebv: polar dust E(B-V)
-            - polar_temperature: polar dust graybody temperature (K)
+            - polar_T: polar dust graybody temperature (K)
             - polar_beta: polar dust emissivity index
 
         sed_in : ndarray, shape (n_wave,)
@@ -392,6 +441,7 @@ class SKIRTORTorus(SEDModelComponent):
             polar_dust_emission,
             polar_dust_extinction,
         )
+        from tengri.utils.scale import representable_denominator
 
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
@@ -415,8 +465,9 @@ class SKIRTORTorus(SEDModelComponent):
             agn_p_skirtor=p["p_skirtor"],
             agn_q_skirtor=p["q_skirtor"],
             agn_oa_skirtor=p["oa_skirtor"],
+            agn_radius_ratio=p["radius_ratio"],
             agn_cos_inc=p["cos_inc"],
-            frac_agn=p["band_frac"],
+            frac_agn=p["torus_frac"],
         )
 
         # Unpack components
@@ -459,7 +510,7 @@ class SKIRTORTorus(SEDModelComponent):
         shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
         # Re-tilt factor (unit-area / lambda-vs-nu normalizations cancel in the
         # ratio). Floor the denominator to stay finite where the disc is ~0.
-        retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
+        retilt = shape_sel / jnp.maximum(shape_ref, representable_denominator(1e-100))
         sed_disc = sed_disc_template * retilt
         # Restore the disc bolometric luminosity (shape-only change).
         L_retilt_safe = bolometric_integral_nu(sed_disc, nu, floor=1e-100)
@@ -487,7 +538,7 @@ class SKIRTORTorus(SEDModelComponent):
         sed_polar_reemit = polar_dust_emission(
             bolometric_integral_nu(l_abs, nu),
             wave,
-            temperature=p["polar_temperature"],
+            temperature=p["polar_T"],
             beta=p["polar_beta"],
             lambda_0=2e6,
         )

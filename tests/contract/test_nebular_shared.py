@@ -304,7 +304,7 @@ class TestComputeAnalyticNebularContinuum:
         from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont = assert_jit_matches_eager(
-            compute_analytic_nebular_continuum, wave_optical, 1e49, -1.848
+            compute_analytic_nebular_continuum, wave_optical, 1e49, log_z_abs=-1.848
         )
         chex.assert_tree_all_finite(cont)
 

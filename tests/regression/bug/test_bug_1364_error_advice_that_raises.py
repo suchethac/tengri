@@ -15,6 +15,12 @@ what the message asked (#1364).
    *backend constructor* arguments, but the warnings fire from ``SEDModel.build``, and
    the build grammar does not forward them, so trying it there raises ``TypeError``.
 
+Two routes are advertised today, and each test executes the one its own message
+carries. ``BakedInBackend``'s advisory names the grammar spelling
+``neb={'type': 'ssp'}`` -- R49 replaced its ``filterwarnings`` route with that, so the
+advice to execute is now a ``SEDModel.build``, not a filter -- while the CB19 messages
+still name ``warnings.filterwarnings(message=...)``.
+
 These tests are written to resist going stale: rather than hard-coding the fixed text,
 they take the advice **out of the message the code actually emits** and execute it. Edit
 a message into something that no longer works and the corresponding test fails.
@@ -44,6 +50,24 @@ def _advised_filter(message_text):
         f"{message_text}"
     )
     return m.group(1)
+
+
+def _advised_neb_group(message_text):
+    """Pull the ``neb={'type': '...'}`` spelling out of an emitted warning's text.
+
+    The grammar counterpart of :func:`_advised_filter`: R49 replaced this
+    advisory's ``filterwarnings`` route with an explicit ``neb=`` spelling, so
+    the executable advice is now a build keyword. Returns it as the dict to
+    pass. Fails the test if the message stopped advertising one, which is
+    itself the regression.
+    """
+    m = re.search(r"neb=\{'type': '([a-z_]+)'\}", message_text)
+    assert m, (
+        "message no longer advertises a neb={'type': '...'} route; a user "
+        "building via SEDModel.build has no reachable way to silence it:\n"
+        f"{message_text}"
+    )
+    return {"type": m.group(1)}
 
 
 class TestLineListAdviceIsConstructible:
@@ -97,24 +121,90 @@ class TestLineListAdviceIsConstructible:
 class TestAdvertisedSuppressionActuallySuppresses:
     """Each warning must name a route that works from where the user is standing."""
 
-    def test_baked_in_nebular_warning(self):
-        """LOAD-BEARING. The filter is read from the emitted message and executed."""
-        from tengri.components.nebular.baked_in import BakedInBackend
+    def test_baked_in_nebular_warning(self, synthetic_ssp_wide):
+        """LOAD-BEARING. The spelling is read from the emitted message and BUILT.
+
+        R49 replaced this advisory's ``warnings.filterwarnings(message=...)``
+        route with an explicit grammar spelling, ``neb={'type': 'ssp'}``, so
+        the route to execute is a build, not a filter. Same purpose as before
+        -- run the advice the message gives rather than spell-check it -- and
+        the same shape: the spelling is parsed out of the text the code emits,
+        so editing the message into something that does not work fails here.
+        """
+        from tengri import DEFAULT, Fixed, SEDModel
+        from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularWarning
 
         with warnings.catch_warnings(record=True) as rec:
             warnings.simplefilter("always")
             BakedInBackend()
         assert len(rec) == 1, "probe setup failed: BakedInBackend() did not warn once"
-        advice = _advised_filter(str(rec[0].message))
+        neb_group = _advised_neb_group(str(rec[0].message))
+
+        def build(**extra):
+            return SEDModel.build(
+                ssp_data=synthetic_ssp_wide,
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
+                redshift=Fixed(0.1),
+                **extra,
+            )
+
+        # The silent default still advises: exactly one advisory, else the
+        # probe below proves nothing (a build that never warns would "pass"
+        # the suppression assertion vacuously).
+        with warnings.catch_warnings(record=True) as rec_default:
+            warnings.simplefilter("always")
+            build()
+        baseline = [w for w in rec_default if issubclass(w.category, BakedInNebularWarning)]
+        assert len(baseline) == 1, (
+            f"probe setup failed: the silent default emitted {len(baseline)} "
+            "BakedInNebularWarning, expected exactly 1 -- without it the "
+            "suppression check below is vacuous"
+        )
+
+        # Now the route the message advertises, executed as written.
+        with warnings.catch_warnings(record=True) as rec_advised:
+            warnings.simplefilter("always")
+            build(neb=neb_group)
+        left = [w for w in rec_advised if issubclass(w.category, BakedInNebularWarning)]
+        assert len(left) == 0, (
+            f"the message advertises neb={neb_group!r} as the way to silence this "
+            f"advisory when building via SEDModel.build, but {len(left)} "
+            "BakedInNebularWarning remain -- the advice does not work"
+        )
+
+    def test_the_other_advertised_neb_spelling_also_suppresses(self, synthetic_ssp_wide):
+        """The message offers ``{'type': 'none'}`` too; both must be real."""
+        from tengri import DEFAULT, Fixed, SEDModel
+        from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularWarning
+
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always")
+            BakedInBackend()
+        text = str(rec[0].message)
+        assert "{'type': 'none'}" in text, (
+            f"message no longer advertises the 'none' spelling:\n{text}"
+        )
 
         with warnings.catch_warnings(record=True) as rec2:
             warnings.simplefilter("always")
-            warnings.filterwarnings("ignore", message=advice)
-            BakedInBackend()
-        assert len(rec2) == 0, (
-            f"the message advertises filterwarnings(message={advice!r}) but that does "
-            "not silence it -- the advice does not work"
-        )
+            SEDModel.build(
+                ssp_data=synthetic_ssp_wide,
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
+                neb={"type": "none"},
+                redshift=Fixed(0.1),
+            )
+        left = [w for w in rec2 if issubclass(w.category, BakedInNebularWarning)]
+        assert len(left) == 0, f"neb={{'type': 'none'}} leaves {len(left)} advisory(ies)"
 
     @pytest.mark.parametrize("index", [0, 1])
     def test_cb19_warnings(self, index):

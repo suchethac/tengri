@@ -15,11 +15,11 @@ AGNfitter v1/rX) as a dict with keys:
 - ``Nh-values`` — per-bin hydrogen column density values (one float per bin).
 - ``wavelength`` — per-bin array of ``log10(nu / Hz)``. Misleading key name:
   the values are log10 frequency, not wavelength. Converted here.
-- ``SED`` — per-bin array of ``F_nu`` template values (relative, unnormalised).
+- ``SED`` — per-bin array of ``F_nu`` template values (relative, unnormalized).
 
 Safety — pickle.load on external data
 -------------------------------------
-``pickle.load`` runs arbitrary code at deserialisation time. This script
+``pickle.load`` runs arbitrary code at deserialization time. This script
 uses a restricted :class:`pickle.Unpickler` whose ``find_class`` only returns
 NumPy array constructors (``numpy.core.multiarray._reconstruct``,
 ``numpy.ndarray``, ``numpy.dtype``, plus the ``numpy._core.*`` aliases
@@ -41,10 +41,10 @@ Dataset                  Shape             Description
 ======================  ================  ==========================================
 ``log_nh_axis``          ``(n_nh,)``       log10(N_H / cm^-2), ascending
 ``wavelength``           ``(n_wave,)``     common wavelength grid [Å], ascending
-``template``             ``(n_nh, n_wave)``  F_nu template (unnormalised)
+``template``             ``(n_nh, n_wave)``  F_nu template (unnormalized)
 ======================  ================  ==========================================
 
-``template`` is per-L_sun-normalised in the same way tengri's SKIRTOR path
+``template`` is per-L_sun-normalized in the same way tengri's SKIRTOR path
 handles it — the runtime module divides the template by its trapezoidal
 integral over frequency and multiplies by ``L_bol * agn_torus_frac``.
 
@@ -200,7 +200,7 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         g.attrs["n_nh"] = n_nh
         g.attrs["n_wave"] = n_wave
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalised at runtime)"
+        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalized at runtime)"
 
     print(f"wrote {output_h5} — {n_nh} N_H bins × {n_wave} wavelength points")
 

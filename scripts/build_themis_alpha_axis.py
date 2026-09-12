@@ -5,7 +5,7 @@ tengri ships the FSPS/DustEM-built THEMIS templates (``build_themis_from_fsps``,
 PR #574): a single-U component and a power-law (PDR) component at the Jones+2017
 default ``alpha = 2.0`` only. CIGALE additionally exposes ``alpha`` (the slope of
 ``dU/dM \propto U^{-alpha}``) over [1.0, 3.0]. This script augments the shipped
-FSPS grid with an ``alpha`` axis WITHOUT changing the ``alpha = 2`` behaviour:
+FSPS grid with an ``alpha`` axis WITHOUT changing the ``alpha = 2`` behavior:
 
     powerlaw_alpha[q, u, k] = FSPS_powerlaw[q, u] * R(u, alpha_k)
 
@@ -19,7 +19,7 @@ from the a-C(:H) grain fraction). At ``alpha = 2`` the ratio is identically 1,
 so ``powerlaw_alpha[..., alpha2, :] == FSPS_powerlaw`` bit-for-bit — the default
 SED, energy balance, and the gamma-warming calibration are unchanged.
 
-This keeps the scientifically-preferred FSPS normalisation as the anchor while
+This keeps the scientifically-preferred FSPS normalization as the anchor while
 making ``dust_alpha`` a faithful, CIGALE-derived free parameter.
 
 Requirements: pcigale installed (tengri's main ``.venv`` has it). The FSPS
@@ -96,8 +96,8 @@ def main() -> int:
 
     # Store only the compact ratio R(umin, alpha, wave) — the loader
     # reconstructs powerlaw_alpha = powerlaw[:, :, None, :] * R. This keeps the
-    # tracked file small (~MB) instead of materialising the full 4-D grid
-    # (~40 MB). R is dimensionless and the loader unit-normalises each spectrum
+    # tracked file small (~MB) instead of materializing the full 4-D grid
+    # (~40 MB). R is dimensionless and the loader unit-normalizes each spectrum
     # anyway, so only the shape matters. ratio[:, i_a2, :] == 1 (anchor).
     ratio_f32 = ratio.astype(np.float32)
 
@@ -118,7 +118,7 @@ def main() -> int:
             "powerlaw_alpha[q,u,k] = FSPS_powerlaw[q,u] * powerlaw_alpha_ratio[u,k]; "
             "ratio R from CIGALE pcigale.data SimpleDatabase('themis') (qhac-averaged, "
             "anchored at alpha=2 -> ratio 1). The loader reconstructs the 4-D PDR grid "
-            "and unit-normalises each spectrum; alpha=2 reproduces the FSPS power-law."
+            "and unit-normalizes each spectrum; alpha=2 reproduces the FSPS power-law."
         )
         f.attrs["alpha_axis_generated_by"] = "scripts/build_themis_alpha_axis.py"
     print(

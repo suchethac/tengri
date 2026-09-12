@@ -42,6 +42,7 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Fixed, Uniform
@@ -52,6 +53,54 @@ from tengri.protocols.component import (
 )
 
 __all__ = ["RadioPowerLawSEDComponent", "RadioPowerLawSEDComponentConfig"]
+
+
+def _declared_free_prior(params: tuple[ParamDeclaration, ...], name: str) -> Uniform:
+    """Read a parameter's ``free_prior`` Uniform out of its declaration.
+
+    Companion to :func:`tengri.protocols.component.declared_default`/
+    ``declared_prior``: ``radio_alpha_sf``'s registry ``prior`` is
+    ``Fixed(0.8)`` (the pinned-unless-wildcarded value), so ``declared_prior``
+    returns that ``Fixed`` scalar and cannot supply bounds. This component
+    treats ``alpha_sf`` as genuinely free, so it needs the accompanying
+    ``Uniform`` ``free_prior`` instead -- reading it directly (rather than
+    restating its bounds as a second literal) is what stops the class
+    attribute from drifting to a stale or sign-flipped copy again (round-2
+    fix: ``default=-declared_default(...)`` fed a negative ``alpha_sf`` into
+    the shared ``L_nu = L_ref * (nu/nu_ref)**(-alpha_sf)`` formula and
+    produced a spectrum RISING with frequency).
+
+    Parameters
+    ----------
+    params : tuple of ParamDeclaration
+        The declaring component's ``PARAMS`` tuple.
+    name : str
+        Parameter name to look up, e.g. ``"radio_alpha_sf"``.
+
+    Returns
+    -------
+    Uniform
+        The declared ``free_prior`` distribution.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not declared in ``params``.
+    ValueError
+        If the declaration carries no ``free_prior``.
+    """
+    for declaration in params:
+        if declaration.name == name:
+            if declaration.free_prior is None:
+                raise ValueError(f"{name!r} has no free_prior declared.")
+            return declaration.free_prior
+    raise KeyError(f"{name!r} is not declared in the supplied PARAMS tuple.")
+
+
+#: Single source of truth for the class-level ``alpha_sf`` attribute below:
+#: the canonical ``radio_alpha_sf`` free-parameter declaration in
+#: ``_params.py`` (``Uniform(0.5, 1.2, default=0.8)``, positive slope).
+_ALPHA_SF_FREE_PRIOR = _declared_free_prior(_RADIO_PARAMS, "radio_alpha_sf")
 
 
 @dataclass(frozen=True)
@@ -114,11 +163,16 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
         default=2.4,
     )
     alpha_sf = Uniform(
-        -1.0,
-        1.0,
-        description="SFR-driven radio spectral index",
+        _ALPHA_SF_FREE_PRIOR.lo,
+        _ALPHA_SF_FREE_PRIOR.hi,
+        description=(
+            "SFR-driven radio spectral index; sign convention "
+            "L_nu ∝ nu^(-alpha_sf) (shared with radio_sfr_bell2003), so "
+            "alpha_sf > 0 gives the standard falling optically-thin "
+            "synchrotron spectrum"
+        ),
         units="dimensionless",
-        default=-0.7,
+        default=_ALPHA_SF_FREE_PRIOR.default,
     )
     loudness = Fixed(0.0, description="AGN radio loudness", units="dex")
     alpha_agn = Uniform(

@@ -235,3 +235,69 @@ class TestAnalyticNebularContinuumDifferentiability:
         sed = _compute(_Q_H_REF)
         chex.assert_equal_shape([sed, wave])
         chex.assert_tree_all_finite(sed)
+
+
+class TestAnalyticNebularContinuumLog10QH:
+    """The float32-safe ``log10_q_h`` entry point (#1206 §C).
+
+    ``compute_analytic_nebular_continuum`` forms :math:`Q_H/\\alpha_B` linearly
+    by default; the linear ``q_h`` (up to ~1e53 photons/s for a real ionizing
+    source, ``gas_logqion`` up to ~53) overflows float32's 3.4e38 ceiling
+    whenever ``gas_logqion > 38.5``, while the ~1e28 erg/s/Hz continuum this
+    function returns is representable throughout. ``log10_q_h`` carries the
+    ratio as a log10 offset via ``apply_log10_scale`` instead.
+    """
+
+    def test_log10_q_h_matches_linear_q_h_in_float64(self):
+        """The two entry points agree to 1e-12 relative in float64."""
+        wave = jnp.linspace(912.0, 10000.0, 2000)
+        log10_q_h = 50.0  # log10(_Q_H_REF), same reference rate as the file default
+
+        via_linear = compute_analytic_nebular_continuum(wave, _Q_H_REF, log_z_abs=-1.848)
+        via_log = compute_analytic_nebular_continuum(wave, log_z_abs=-1.848, log10_q_h=log10_q_h)
+        np.testing.assert_allclose(
+            np.asarray(via_log), np.asarray(via_linear), rtol=1e-12, atol=0.0
+        )
+
+    def test_log10_q_h_finite_in_pure_float32_at_gas_logqion_52(self):
+        """The linear path overflows at ``gas_logqion = 52``; the log path does not.
+
+        ``gas_logqion = 52`` (``Q_H ~ 1e52`` photons/s) is a representative real
+        ionizing source, past float32's 3.4e38 ceiling. Confirms both halves of
+        the claim: the linear path really does overflow (so this test's premise
+        is live), and the log path stays finite and non-zero.
+        """
+        wave = jnp.linspace(912.0, 10000.0, 2000)
+
+        with jax.enable_x64(False):
+            wave32 = jnp.asarray(wave, dtype=jnp.float32)
+            q_h32 = jnp.asarray(10.0**52, dtype=jnp.float32)
+            assert not bool(jnp.isfinite(q_h32)), (
+                f"q_h=1e52 no longer overflows float32 ({q_h32}) -- this test's "
+                "premise is gone, re-check whether the log10_q_h path is still needed"
+            )
+            linear = compute_analytic_nebular_continuum(wave32, q_h32, log_z_abs=-1.848)
+            assert not bool(jnp.all(jnp.isfinite(linear))), (
+                "the linear q_h path is finite at gas_logqion=52 in float32 -- "
+                "expected an overflow this test exists to route around"
+            )
+
+            log10_q_h32 = jnp.asarray(52.0, dtype=jnp.float32)
+            via_log = compute_analytic_nebular_continuum(
+                wave32, log_z_abs=-1.848, log10_q_h=log10_q_h32
+            )
+
+        assert via_log.dtype == jnp.float32, f"not float32: {via_log.dtype}"
+        assert bool(jnp.all(jnp.isfinite(via_log))), (
+            f"log10_q_h path is non-finite in pure float32 at gas_logqion=52: {via_log}"
+        )
+        assert bool(jnp.any(via_log != 0.0)), (
+            "log10_q_h path is identically zero in pure float32 -- finite is not "
+            "enough, a value that has collapsed to zero is as unusable as a NaN one"
+        )
+
+    def test_requires_q_h_or_log10_q_h(self):
+        """Neither q_h nor log10_q_h given raises, rather than silently NaN-ing."""
+        wave = jnp.linspace(3000.0, 8000.0, 200)
+        with pytest.raises(ValueError, match="q_h"):
+            compute_analytic_nebular_continuum(wave, log_z_abs=-1.848)

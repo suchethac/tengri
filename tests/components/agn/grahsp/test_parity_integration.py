@@ -87,12 +87,14 @@ def test_grad_flows_through_new_params():
     from tengri.components.agn.grahsp.model import compute_grahsp_sed
 
     g_bc = jax.grad(
-        lambda a: jnp.sum(compute_grahsp_sed(WAVE_AA, agn_grahsp_l5100=1e44, agn_grahsp_a_bc=a))
+        lambda a: jnp.sum(
+            compute_grahsp_sed(WAVE_AA, agn_grahsp_log_l5100=44.0, agn_grahsp_a_bc=a)
+        )
     )(0.5)
     g_tt = jax.grad(
         lambda t: jnp.sum(
             compute_grahsp_sed(
-                WAVE_AA, agn_grahsp_l5100=1e44, torus_model="mn12", agn_grahsp_tor_temp=t
+                WAVE_AA, agn_grahsp_log_l5100=44.0, torus_model="mn12", agn_grahsp_tor_temp=t
             )
         )
     )(0.3)

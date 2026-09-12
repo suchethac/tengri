@@ -40,7 +40,17 @@ _TRUTH = {"sfh_delayed_log_total_mass": 10.0, "agn_log_lbol": 11.0}
 
 
 def _model(ssp, radio):
-    """A stellar + dust(+IR) + power-law-disc AGN + radio model. ``radio`` is the group."""
+    """A stellar + dust(+IR) + power-law-disc AGN + radio model. ``radio`` is the group.
+
+    ``agn_log_lbol`` is pinned at 11.0 and that is the value the AGN is built
+    at: this build used to carry ``fracAGN: 0.1`` as well, which under
+    ``cigale_joint`` derives the AGN power from the dust-absorbed stellar
+    luminosity and discards the stated 11.0 (R55 refuses the pair -- measured
+    rel_diff 5.040e-16 between ``agn_log_lbol`` 8.0 and 14.0 on the SF-only
+    radio arm). ``_TRUTH`` hands the same 11.0 to every prediction, and the
+    AGN jet arm's radio-loudness reference is derived from it, so the
+    coupling was overwriting the one luminosity this file measures at.
+    """
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "wise_w3", "wise_w4"]))
     return SEDModel.build(
         ssp_data=ssp,
@@ -67,7 +77,6 @@ def _model(ssp, radio):
             "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
             "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
-            "fracAGN": 0.1,
         },
         radio=radio,
         redshift=Fixed(0.1),
@@ -144,7 +153,9 @@ def test_neg_log_posterior_gradient_finite_with_radio_in_float32(ssp_bare):
 
     with jax.enable_x64(False):
         model = _model(ssp_bare, radio)
-        ctx = InferenceContext.from_target(Fitter(model, jnp.asarray(flux), jnp.asarray(noise)))
+        ctx = InferenceContext.from_target(
+            Fitter(model, jnp.asarray(flux), jnp.asarray(noise), profile_mass=False)
+        )
         da = ctx.data_args
         p = ctx.initial_params(jax.random.PRNGKey(3))
         g = jax.grad(lambda q: ctx.neg_log_posterior_fn(q, da))(p)

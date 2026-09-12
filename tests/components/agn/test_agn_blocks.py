@@ -130,6 +130,46 @@ def test_validate_active_downstream_no_disc_warns():
         )
 
 
+def test_validate_torus_only_no_disc_emits_no_recipe_warning():
+    """R48: a torus-only composable build (disc='none') must NOT trigger the
+    Rule-3 'no disc, active downstream' advisory. Every torus impl except
+    'grahsp' normalizes off ``agn_log_lbol``/``agn_torus_frac`` directly and
+    emits non-zero flux with disc='none' (measured: ``cat3d_wind`` under both
+    ``norm='independent'`` and ``norm='cigale_joint'`` sums sed_agn_torus to
+    3.849e34 -- never zero), so the disc-anchored advisory was false for it.
+    """
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", RecipeWarning)
+        issues = validate_block_recipe(
+            agn_disc_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block="cat3d_wind",
+            agn_attenuation_block="none",
+        )
+    assert issues == [], issues
+    assert not any(issubclass(x.category, RecipeWarning) for x in w)
+
+
+def test_validate_anchored_downstream_alone_names_only_that_block():
+    """A genuinely disc-anchored block (feii='boroson_green', which reads
+    ``l5100_disc`` for its normalization) alone with disc='none' still warns,
+    naming only itself -- never a torus block that happens to also be
+    inactive ('none') here."""
+    with pytest.warns(RecipeWarning, match=r"feii='boroson_green'"):
+        issues = validate_block_recipe(
+            agn_disc_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="boroson_green",
+            agn_torus_block="none",
+            agn_attenuation_block="none",
+        )
+    assert len(issues) == 1, issues
+    assert "torus=" not in issues[0]
+
+
 def test_validate_unknown_block_raises_not_warns():
     """Typo in selector should be a hard error."""
     with pytest.raises(ValueError, match="Unknown disc block"):
@@ -199,21 +239,22 @@ def test_smc_prevot_block_matches_redden_disc():
 def _grahsp_params():
     """Single-source GRAHSP parameter set used by both pipelines.
 
-    ``agn_grahsp_l5100`` is **explicit** here. Without it, the two paths
-    use different conventions:
+    L5100 is **explicit** (``agn_grahsp_log_l5100``, shared by both call
+    sites below -- #1206 §D renamed it in both the composable blocks and
+    ``compute_grahsp_sed`` in lockstep, so one spelling now covers both
+    paths). Without it, the two paths use different conventions:
 
     - ``compute_grahsp_sed`` (monolithic): rescales l5100 so the total
       AGN-side bolometric integral matches ``10**agn_log_lbol * L_sun``.
     - ``composable_agn_l_nu`` (block runner): each block self-normalizes
       from its own params, with no post-hoc bolometric coupling.
 
-    Setting ``agn_grahsp_l5100`` directly bypasses both the monolithic
-    rescale and the composable disc auto-norm, so the two paths agree
-    bit-for-bit.
+    Setting l5100 directly bypasses both the monolithic rescale and the
+    composable disc auto-norm, so the two paths agree bit-for-bit.
     """
     return dict(
         agn_log_lbol=44.5,
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
         agn_grahsp_uvslope=0.0,
         agn_grahsp_plslope=-1.7,
         agn_grahsp_plbendloc_nm=100.0,
@@ -258,13 +299,38 @@ def test_all_grahsp_recipe_matches_compute_grahsp_sed():
     # Both paths exercise the same physics. The runner derives l5100_disc
     # via ``jnp.interp(5100Å, wave, L_λ_disc) × 5100`` from the disc grid;
     # the monolithic path uses the analytic l5100 directly. With explicit
-    # ``agn_grahsp_l5100`` they agree to grid-interpolation precision.
+    # l5100 (same physical value, one spelling per path) they agree to
+    # grid-interpolation precision.
     np.testing.assert_allclose(
         np.asarray(out_composable),
         np.asarray(out_monolithic),
         rtol=1e-3,
         atol=0.0,
     )
+
+
+def test_compute_grahsp_sed_rejects_retired_l5100_name():
+    """#1206 §D: ``agn_grahsp_l5100`` (linear) must not be silently absorbed
+    by ``compute_grahsp_sed``'s ``**_kwargs``. Passing it must raise, with
+    the error message carrying the ``log10(...)`` translation to the new
+    ``agn_grahsp_log_l5100`` name -- not fall through to the auto-normalize
+    default, which is exactly the silent-failure class
+    ``tests/integration/test_grahsp_resolution.py`` documents.
+    """
+    from tengri.components.agn.grahsp import compute_grahsp_sed
+
+    wave_aa = jnp.logspace(2, 6, 400)
+    with pytest.raises((TypeError, ValueError), match="agn_grahsp_log_l5100"):
+        compute_grahsp_sed(wave_aa, agn_log_lbol=44.5, agn_grahsp_l5100=1.0e44)
+
+
+def test_compute_grahsp_sed_rejects_unknown_grahsp_kwarg():
+    """A typo'd ``agn_grahsp_*`` name must raise, not be silently dropped."""
+    from tengri.components.agn.grahsp import compute_grahsp_sed
+
+    wave_aa = jnp.logspace(2, 6, 400)
+    with pytest.raises((TypeError, ValueError), match="agn_grahsp_DOES_NOT_EXIST"):
+        compute_grahsp_sed(wave_aa, agn_log_lbol=44.5, agn_grahsp_DOES_NOT_EXIST=1.0)
 
 
 def test_mix_grahsp_disc_with_simple_torus():
@@ -279,7 +345,7 @@ def test_mix_grahsp_disc_with_simple_torus():
         agn_torus_block="two_temperature",
         agn_attenuation_block="smc_prevot",
         agn_log_lbol=45.0,
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
         agn_T_hot=1200.0,
         agn_T_warm=300.0,
         agn_frac_hot=0.3,
@@ -303,7 +369,7 @@ def test_disc_only_recipe_is_pure_continuum():
         agn_feii_block="none",
         agn_torus_block="none",
         agn_attenuation_block="none",
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
     )
     # Should be smooth (no line spikes) and positive across the disc's
     # physical range. The disc reads zero below the alpha_ox corona's blue
@@ -325,7 +391,7 @@ def test_runner_jit_compatible():
     wave_aa = jnp.logspace(2, 6, 200)
 
     @jax.jit
-    def fwd(l5100, ebv):
+    def fwd(log_l5100, ebv):
         return composable_agn_l_nu(
             wave_aa,
             agn_log_lbol=44.5,
@@ -335,11 +401,11 @@ def test_runner_jit_compatible():
             agn_feii_block="grahsp",
             agn_torus_block="grahsp",
             agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_l5100=l5100,
+            agn_grahsp_log_l5100=log_l5100,
             agn_grahsp_ebv=ebv,
         )
 
-    out = fwd(jnp.array(1.0e44), jnp.array(0.1))
+    out = fwd(jnp.array(44.0), jnp.array(0.1))
     chex.assert_equal_shape([out, wave_aa])
     chex.assert_tree_all_finite(out)
 
@@ -415,7 +481,7 @@ def test_resolve_via_agn_models_registry():
         agn_feii_block="none",
         agn_torus_block="grahsp",
         agn_attenuation_block="none",
-        agn_grahsp_l5100=1.0e44,
+        agn_grahsp_log_l5100=44.0,
     )
     out_registry = fn_via_registry(wave_aa, agn_log_lbol=44.5, **p)
     out_direct = composable_agn_l_nu(wave_aa, agn_log_lbol=44.5, **p)
@@ -434,7 +500,10 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
     Regression: agn_ebv_disc (the AGNfitter ``EBVbbb`` analog, consumed by
     the composable runner since #916) had no ParamDeclaration and no partition
     entry, so the recommended SEDModel.build path could not redden the disc at
-    all. It now lowers like any other shared agn-group parameter.
+    all. It now lowers via the agn.disc sub-block (Task 16, item 1:
+    agn_ebv_disc is an ``agn.disc``-owned parameter, a runner-level disc-stage
+    read, not the shared "agn" group -- placing it flat at the top level now
+    raises, D1-guard-style: "nest it").
     """
     from tengri import DEFAULT, Fixed, SEDModel
 
@@ -462,12 +531,11 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT), "ebv_disc": Fixed(0.0)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
             "agn_log_lbol": Fixed(11.0),
-            "agn_ebv_disc": Fixed(0.0),
             "all_params": Fixed(DEFAULT),
         },
     )
@@ -491,12 +559,11 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT), "ebv_disc": Fixed(0.5)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
             "agn_log_lbol": Fixed(11.0),
-            "agn_ebv_disc": Fixed(0.5),
             "all_params": Fixed(DEFAULT),
         },
     )
@@ -527,7 +594,11 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
     Regression: agn_attenuation_ebv had no ParamDeclaration and no partition
     entry, so ``atten={'type': 'smc_prevot'}`` built a block pinned at
     E(B−V)=0 — a silent no-op. It now lowers via the agn.atten sub-block.
-    Updated to use law='prevot_smc' syntax (new form).
+    Updated to use law='prevot_smc' syntax (new form). Both the short key
+    'attenuation_ebv' and the full name 'agn_attenuation_ebv' resolve here
+    (R30); the full name is used below because this test is about the
+    parameter's effect on predict_state, not about key resolution --
+    tests/contract/test_agn_atten_law_key.py owns the short-key contract.
     """
     from tengri import DEFAULT, Fixed, SEDModel
 
@@ -561,7 +632,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "blr": {"type": "none"},
             "atten": {
                 "law": "prevot_smc",
-                "attenuation_ebv": Fixed(0.0),
+                "agn_attenuation_ebv": Fixed(0.0),
                 "all_params": Fixed(DEFAULT),
             },
             "agn_log_lbol": Fixed(11.0),
@@ -594,7 +665,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "blr": {"type": "none"},
             "atten": {
                 "law": "prevot_smc",
-                "attenuation_ebv": Fixed(0.5),
+                "agn_attenuation_ebv": Fixed(0.5),
                 "all_params": Fixed(DEFAULT),
             },
             "agn_log_lbol": Fixed(11.0),
@@ -619,3 +690,32 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
         f"agn_attenuation_ebv parameter had no effect on SED: "
         f"max relative change = {max_rel_diff:.2e}"
     )
+
+
+@pytest.mark.contract
+def test_agn_attenuation_ebv_at_top_level_raises_with_nesting_advice():
+    """Task 16 (item 11): placing an 'agn.atten'-owned parameter FLAT at the
+    ``agn`` top level (rather than nested under ``agn={'atten': {...}}``) is
+    the D1 guard's intended refusal (Task 12), not merely absorbed and
+    ignored. This is the failure mode
+    test_agn_attenuation_ebv_settable_via_sedbuild and
+    test_qsogen_extinction.py::test_end_to_end_through_build hit at this
+    branch's base -- both rewritten to the nested form; this is the
+    complementary NEGATIVE case proving the top-level spelling really does
+    raise, with advice naming the correct nesting.
+    """
+    from tengri import DEFAULT, Fixed
+    from tengri.parameters.groups import parse_groups
+
+    with pytest.raises(ValueError, match=r"(?i)nest it"):
+        parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            agn={
+                "type": "composable",
+                "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+                "atten": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+                "agn_attenuation_ebv": Fixed(0.3),  # top-level: should raise
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )

@@ -33,8 +33,25 @@ positional argument: 'agn_torus_frac'``. That is not a defect in the adapter:
 agn_torus_frac)`` -- one grid axis plus one *runtime* parameter that is
 deliberately not a grid axis (CLAUDE.md: ``agn_torus_frac`` must not be
 auto-derived in the forward pass). The old caller passed positionally and
-assumed an arity of ``1 + len(axes)``. Supplying it makes the collapse
-bit-exact: ``max|diff| = 0.0`` at ``agn_torus_frac`` of 0.25, 0.5 and 0.9.
+assumed an arity of ``1 + len(axes)``. Supplying it made the collapse
+bit-exact at the time (``max|diff| = 0.0`` at ``agn_torus_frac`` of 0.25, 0.5
+and 0.9) -- BEFORE Task 3 (RULING R11) migrated ``silva04_precompute``'s
+runtime lookup kernel from triweight to node-exact PCHIP
+(``interp_nd_pchip``/``interp_collapsed(..., kernel="pchip")``,
+``build_silva04_photometry_lookup``/``build_lookup``). The shared
+auto-collapse machinery both silva04 and ten other adapters share
+(``collapse_fixed_axes`` -> ``slice_fixed_axes``,
+``forward/precompute/templates.py`` / ``utils/grid_interp.py``) always
+collapses via triweight, unconditionally, regardless of which kernel the
+calling adapter's own runtime lookup uses. Once silva04's runtime kernel
+diverged from the collapse kernel, "collapse then evaluate" and "evaluate
+directly" stopped being the same computation: triweight is a smoothing
+kernel, not node-exact the way PCHIP is, so it disagrees with a direct PCHIP
+evaluation even pinned exactly at a grid node. Task 16 (AGNfitter-rX parity
+plan) measured this precisely (see ``_UNCOVERED["silva04_precompute"]``
+below) and moved silva04 out of ``_CASES``: fixing it for real means
+threading a kernel choice through the shared collapse utility for every
+adapter that calls it, out of scope for an AGN-grammar task.
 
 The two lookups disagree on how it is passed -- the full one takes it
 positionally, the collapsed one keyword-only after ``*free_axis_values`` -- so
@@ -78,18 +95,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tests._data_skip import DATA_DIR, requires_cb19
+from tests._data_skip import requires_cb19
 
 pytestmark = pytest.mark.contract
 
-_SILVA04_GRID = DATA_DIR / "silva04_torus_grid.h5"
-# The CB_19 rows take ``usable_cb19_grid_path`` instead: their subject is axis
+# The CB_19 rows take ``usable_cb19_grid_path``: their subject is axis
 # collapse, not which file is on disk, and the packaged one may be the flat
-# placeholder of #924, which the loader refuses (#2181).
-
-requires_silva04_torus = pytest.mark.skipif(
-    not _SILVA04_GRID.is_file(), reason=f"Silva04 torus grid not found at {_SILVA04_GRID}"
-)
+# placeholder of #924, which the loader refuses (#2181). No ``_SILVA04_GRID``
+# path constant is needed -- silva04 is in ``_UNCOVERED``, not ``_CASES``.
 
 # Standard synthetic filter set (used across test adapters)
 _CENTERS = np.array([3e5, 1e7, 1e8, 1e10])  # FIR-radio Angstrom
@@ -232,17 +245,11 @@ _CASES = [
     ("dust_casey_pivot", "dust", "dust_analytic_precompute", "casey2012", 3, 4, "radio", {}, ()),
     # graybody: (T, beta_ir, lambda_0_um). Pin its pivot for the same reason.
     ("dust_graybody", "dust", "dust_analytic_precompute", "graybody", 2, 3, "radio", {}, ()),
-    (
-        "silva04",
-        "agn",
-        "silva04_precompute",
-        None,
-        0,
-        1,
-        "radio",
-        {"grid_path": str(_SILVA04_GRID)},
-        (requires_silva04_torus,),
-    ),
+    # silva04_precompute: see _UNCOVERED["silva04_precompute"] and the module
+    # docstring above -- moved out of _CASES (Task 16, AGNfitter-rX parity
+    # plan), not "no test written": it WAS tested and measured to mismatch by
+    # ~5.2e-5 relative even pinned at an exact grid node (triweight-collapse
+    # vs PCHIP-runtime kernel mismatch, not floating-point noise).
 ]
 
 
@@ -319,36 +326,67 @@ def test_cb19_collapse_axis0(filter_set_radio, usable_cb19_grid_path):
 
 
 @requires_cb19
-def test_cb19_hbfrac_parameter(filter_set_radio, usable_cb19_grid_path):
-    """CB19 precompute accepts hbfrac parameter and threads it to the loader.
+def test_cb19_hbfrac_parameter(filter_set_radio, tmp_path):
+    """CB19 precompute accepts hbfrac and selects a slice from the loaded grid.
 
-    HbFrac is a discrete load-time choice, not an interpolation axis. Verify that
-    the hbfrac parameter is passed through to load_cb19_grid. The synthetic fixture
-    carries identical line ratios for both HbFrac=0.0 and 1.0 slices, so the wiring
-    is verified by monkeypatch rather than by a value difference.
+    Since #2213, ``load_cb19_grid`` no longer accepts an ``hbfrac`` kwarg: it
+    always loads both HbFrac nodes, and this adapter -- which still treats
+    HbFrac as a discrete, load-time-style choice rather than an interpolation
+    axis -- selects the nearest node itself, from ``grid.hbfrac_grid``, right
+    after loading. Verify (1) the loader is called with no ``hbfrac`` kwarg and
+    (2) ``hbfrac=0.0`` vs ``hbfrac=1.0`` select genuinely different slices.
+
+    Deliberately writes its own synthetic grid rather than taking
+    ``usable_cb19_grid_path``: that fixture prefers the packaged file whenever
+    it is not *globally* degenerate, and the packaged ``data/cb19_templates.h5``
+    is exactly that case -- non-degenerate overall (log_OH/log_age/log_U carry
+    real variation) but, measured directly, bit-identical between its two
+    HbFrac nodes (as are its log_nH/log_CO/dNO axes; #2198 tracks the pending
+    3MdB erratum). A value-difference assertion against that file would be
+    false on correctly-wired code, exactly the routing-fix trap this test
+    exists to avoid: a monkeypatch-only check that never compares values would
+    pass unchanged whether or not the selected slice is the requested one.
     """
     from tengri.components.nebular import cb19_precompute as adapter
+    from tests._cb19_grid import write_synthetic_cb19_grid
 
+    grid_path = write_synthetic_cb19_grid(tmp_path / "cb19_templates.h5")
     waves, trans = filter_set_radio
 
-    # Monkeypatch load_cb19_grid to record the hbfrac kwarg it receives
+    # Monkeypatch load_cb19_grid to record how it is called.
     with patch(
         "tengri.components.nebular.cb19_precompute.load_cb19_grid", wraps=adapter.load_cb19_grid
     ) as mock_loader:
-        # Call precompute with hbfrac=0.0
-        result = adapter.precompute(
-            waves, trans, 0.5, parameters=None, filepath=str(usable_cb19_grid_path), hbfrac=0.0
+        result_hb0 = adapter.precompute(
+            waves, trans, 0.5, parameters=None, filepath=str(grid_path), hbfrac=0.0
         )
 
-        # Verify loader was called with hbfrac=0.0
+        # The loader itself no longer takes hbfrac -- it always loads both nodes.
         mock_loader.assert_called()
         call_kwargs = mock_loader.call_args.kwargs
-        assert "hbfrac" in call_kwargs, "hbfrac kwarg not passed to loader"
-        assert call_kwargs["hbfrac"] == 0.0, f"Expected hbfrac=0.0, got {call_kwargs['hbfrac']}"
+        assert "hbfrac" not in call_kwargs, (
+            "load_cb19_grid should no longer receive an hbfrac kwarg (#2213); "
+            "the adapter collapses the retained axis itself"
+        )
 
-        # Verify the result is valid
-        assert "log_line_ratios" in result, "Precompute should return log_line_ratios"
-        assert len(result["axes"]) == 6, "CB19 should have 6 axes after fix"
+    result_hb1 = adapter.precompute(
+        waves, trans, 0.5, parameters=None, filepath=str(grid_path), hbfrac=1.0
+    )
+
+    # Verify the results are valid
+    assert "log_line_ratios" in result_hb0, "Precompute should return log_line_ratios"
+    assert len(result_hb0["axes"]) == 6, "CB19 should have 6 axes after fix"
+
+    # The two requested slices must be genuinely different values, not just a
+    # different code path that happens to compute the same numbers.
+    diff = np.abs(
+        np.asarray(result_hb0["log_line_ratios"]) - np.asarray(result_hb1["log_line_ratios"])
+    )
+    assert np.max(diff) > 0.0, (
+        "hbfrac=0.0 and hbfrac=1.0 selected bit-identical slices from a grid "
+        "that carries genuine HbFrac variation -- the nearest-node selection "
+        "did not route correctly"
+    )
 
 
 # ── Which adapters this file actually covers ──────────────────────
@@ -358,11 +396,57 @@ def test_cb19_hbfrac_parameter(filter_set_radio, usable_cb19_grid_path):
 #: fails when a new adapter appears in neither this map nor ``_CASES``.
 _UNCOVERED: dict[str, str] = {
     "cat3d_precompute": "signature-driven collapse mismatches; cause not decidable from here",
+    # Fix round 2: run through the same Silva04-shaped harness this round
+    # (grid_path kwarg, agn_torus_frac keyword, PCHIP collapse) -- it mismatches
+    # the same way cat3d_precompute does (measured ~0.1-1.5% at each of its
+    # three axes, non-zero, not an exception), so it gets the same honest
+    # reason rather than the untested "no collapse test written" placeholder.
+    "cat3d_wind_lowfwd_precompute": (
+        "signature-driven collapse mismatches; cause not decidable from here"
+    ),
     "disc_precompute": "signature-driven collapse mismatches; cause not decidable from here",
     "qsogen_precompute": "signature-driven collapse mismatches; cause not decidable from here",
     "nenkova_agnfitter_precompute": "signature-driven collapse mismatches; not diagnosed",
+    # Fix round 2: both siblings mismatch the same way when run through the
+    # same harness (measured ~0.05-0.2% at each axis, non-zero, not an
+    # exception) -- registered with their sibling's exact reason.
+    "nenkova_agnfitter_2p_precompute": "signature-driven collapse mismatches; not diagnosed",
+    "nenkova_agnfitter_3p_precompute": "signature-driven collapse mismatches; not diagnosed",
     "skirtor_precompute": "5 axes; no collapse test written",
     "skirtor_agnfitter_precompute": "3 axes; no collapse test written",
+    # Fix round 2: unlike the 3p sibling above (never tested), both of these
+    # WERE run through the harness this round and measured to mismatch
+    # (~0.06-2.2% at each axis, non-zero, not an exception) -- the same
+    # signature-driven-mismatch finding as cat3d_precompute/nenkova_agnfitter_precompute
+    # above, so they get that honest reason rather than "no collapse test
+    # written" (which their own testing this round has made untrue).
+    "skirtor_agnfitter_1p_precompute": (
+        "signature-driven collapse mismatches; cause not decidable from here"
+    ),
+    "skirtor_agnfitter_2p_precompute": (
+        "signature-driven collapse mismatches; cause not decidable from here"
+    ),
+    # Task 16 (AGNfitter-rX parity plan, item 14): WAS in _CASES until Task 3
+    # (RULING R11) migrated this adapter's runtime lookup kernel from
+    # triweight to node-exact PCHIP without also updating the shared
+    # collapse machinery it calls (collapse_fixed_axes -> slice_fixed_axes,
+    # forward/precompute/templates.py / utils/grid_interp.py), which always
+    # collapses via triweight regardless of the calling adapter's own
+    # runtime kernel. Measured: pinning the single agn_log_nh_silva axis at
+    # an EXACT grid node (test's own `a[len(a) // 2]`, a genuine tabulated
+    # value, not an interpolated midpoint) still gives a max relative
+    # mismatch of 5.19e-05 between the collapsed (triweight-collapsed then
+    # evaluated) and full (direct PCHIP) lookups -- non-zero, reproducible,
+    # not floating-point noise, and not fixable by pinning at a different
+    # node or by reordering axes (there is only one axis). A real fix means
+    # threading a kernel choice through the shared collapse utility for
+    # every one of the ~11 adapters that call it, out of scope for a
+    # AGN-parameter-ownership/wildcard-scope/grammar task.
+    "silva04_precompute": (
+        "triweight-collapse vs PCHIP-runtime kernel mismatch (Task 3 R11 migrated the "
+        "runtime kernel, not the shared collapse machinery); measured 5.19e-05 max rel "
+        "diff pinned exactly at a grid node"
+    ),
     "cloudy_precompute": "3 axes; needs the untracked CLOUDY MIST grid",
     "feltre_precompute": "4 axes; no collapse test written",
     "mappings_photo_precompute": "4 axes; no collapse test written",

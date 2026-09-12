@@ -94,6 +94,25 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     _os.environ.setdefault("ABSL_LOG_LEVEL", "ERROR")
 
+# Host-device fan-out for CPU chain parallelism (jax.pmap over MCMC chains --
+# see chain_parallel="pmap" on run_nuts / _parallel_chains in
+# inference/backends/mcmc/_shared.py). JAX only exposes multiple CPU
+# "devices" via the XLA flag --xla_force_host_platform_device_count, and that
+# flag must be set BEFORE the first `import jax` below: device count is fixed
+# at backend initialization and cannot be changed afterwards.
+# TENGRI_HOST_DEVICES=<n> is the documented shortcut so a user need not know
+# the XLA_FLAGS spelling; it is a no-op when XLA_FLAGS already requests a host
+# device count of its own (an explicit XLA_FLAGS wins).
+_host_devices = _os.environ.get("TENGRI_HOST_DEVICES")
+if _host_devices and "xla_force_host_platform_device_count" not in _os.environ.get(
+    "XLA_FLAGS", ""
+):
+    _os.environ["XLA_FLAGS"] = (
+        f"{_os.environ.get('XLA_FLAGS', '')} "
+        f"--xla_force_host_platform_device_count={int(_host_devices)}"
+    ).strip()
+del _host_devices
+
 # Enable float64 by DEFAULT: required for cosmological distance calculations
 # (dL^2 at z>0.01 overflows float32).
 #
@@ -312,6 +331,7 @@ from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
     constant,
+    declining_exponential,
     delayed_exponential,
     delayed_tau,
     double_powerlaw,
@@ -496,6 +516,22 @@ xray = _components.xray
 
 # Register module aliases for convenient short imports (Pattern 3: from tengri.agn import ...)
 sys.modules["tengri.agn"] = agn
+# ``tengri.agn.priors`` is an ALIAS import (``components/agn/__init__.py`` does
+# ``from tengri.parameters import agn_priors as priors``), not a physical file
+# inside ``components/agn/``'s own directory -- unlike e.g. ``dust.priors``,
+# which IS a real ``components/dust/priors.py`` and so is found by ordinary
+# file-based import machinery once ``tengri.dust`` is aliased. Aliasing
+# ``tengri.agn`` alone therefore makes attribute access
+# (``tengri.agn.priors.agnfitter_priors``) and the two-level
+# ``from tengri.agn import priors`` (which falls back to attribute lookup on
+# the already-imported package when submodule import fails) both work, but
+# ``from tengri.agn.priors import agnfitter_priors`` needs ``tengri.agn.priors``
+# to resolve as a genuine module BEFORE any attribute lookup happens -- there
+# is no such fallback for a three-level ``from a.b.c import name``. Registering
+# the SAME module object under this second key lets the import system find it
+# via the sys.modules cache directly, without ever touching the (nonexistent)
+# ``components/agn/priors.py`` file path.
+sys.modules["tengri.agn.priors"] = agn.priors
 sys.modules["tengri.dust"] = dust
 sys.modules["tengri.nebular"] = nebular
 sys.modules["tengri.sfh"] = sfh
@@ -504,6 +540,24 @@ sys.modules["tengri.stellar"] = stellar
 sys.modules["tengri.igm"] = igm
 sys.modules["tengri.radio"] = radio
 sys.modules["tengri.xray"] = xray
+
+# Install import finder to resolve submodule imports through aliases to canonical
+# modules, avoiding re-execution of module-level code (#2256).
+from tengri._module_aliases import install_alias_finder
+
+install_alias_finder(
+    {
+        "tengri.agn": "tengri.components.agn",
+        "tengri.dust": "tengri.components.dust",
+        "tengri.nebular": "tengri.components.nebular",
+        "tengri.sfh": "tengri.components.stellar.sfh",
+        "tengri.sps": "tengri.components.stellar.sps",
+        "tengri.stellar": "tengri.components.stellar",
+        "tengri.igm": "tengri.components.igm",
+        "tengri.radio": "tengri.components.radio",
+        "tengri.xray": "tengri.components.xray",
+    }
+)
 
 # Observation layer shortcut (already exists in imports above)
 # observation module is imported separately below
@@ -690,6 +744,7 @@ __all__ = [  # noqa: RUF022
     "data_path",
     # Components & physics
     "FilterConvention",
+    "FilterCurve",
     "Data",
     "CompositeIndexDef",
     "SpectralIndexDef",

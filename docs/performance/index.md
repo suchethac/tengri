@@ -164,6 +164,12 @@ tracks which scripts are due for a re-run.
   GPU, the community `jax-mps` plugin is the supported path -- see
   `notebooks/apple_mps.py` for the install recipe and measured throughput, and
   `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check.
+- **Pure float32** (`JAX_ENABLE_X64=0` before Python starts) is supported end-to-end
+  as of 2026-09 (#1206): the full panchromatic model and the default photometry +
+  emission-line fit converge to the float64 optimum to ~1e-5 on CPU and CUDA, and to
+  ~4e-5 on Apple GPU via `jax-mps`. It is a *memory* knob, not a clock: 2.02x galaxies
+  per GiB at batch 8192 on the fitting path, 1.25x at 2048, nothing at one galaxy.
+  Measurements and the acceptance criterion: `docs/dev/float32-tier-b-boundary.md`.
 - **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS
   warmup with `dense_mass_matrix=True` peaks 3–6× steady state; can hit 20+ GB on D
   ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass_matrix=False`.

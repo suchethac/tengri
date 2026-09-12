@@ -11,6 +11,22 @@ This test reads the committed reference data (data/agnfitter_cold_dust_reference
 group 'dh02_ce01'), verifies tengri's ``dh02_ce01`` reproduces the same *shape*
 (normalized L_nu) at several irlum nodes to a tight tolerance after regridding
 to a common wavelength axis.
+
+Both ``dh02_ce01_grid.h5`` (tengri's runtime grid, ``scripts/build_dh02_ce01_grid.py``)
+and this reference (``scripts/build_agnfitter_bbb_reference.py``) preserve each
+of the pickle's 169 templates' own native wavelength sampling rather than
+double-resampling everything onto one foreign axis, which used to smear the
+aromatic/PAH-forest region (~3.2-3.9 µm) by up to 0.47 dex at the grid-edge
+``irlum`` nodes (``colddust_radio.md`` D2).
+
+Both files also deduplicate three repeated ``irlum`` values the same way:
+keeping the LAST raw-order occurrence of each, matching AGNfitter-rX's own
+``STARBURSTFdict_4plot[str(irlum)] = ...`` dict construction
+(``MODEL_AGNfitter.py::STARBURST``), which overwrites a repeated key with
+every later row it sees. An earlier version kept the FIRST occurrence
+instead (task3 fix round 1, item 1), disagreeing with upstream by ~0.0254
+dex at the affected edge node -- undetected because the reference shared the
+same wrong tie-break.
 """
 
 from __future__ import annotations
@@ -173,3 +189,96 @@ def test_dh02_ce01_energy_balance() -> None:
     integral = -np.trapezoid(sed, nu)
     # Tolerance: numerical quadrature on a coarse grid
     assert abs(integral - 1.0) < 1.0e-2, f"Energy balance violation: ∫L_nu dν = {integral}"
+
+
+@pytest.mark.parametrize("log_lir_label", ["irlum_min", "irlum_max", 9.0, 11.0, 12.0])
+def test_dh02_ce01_log_ratio_at_edges(log_lir_label) -> None:
+    """Log10-ratio shape fidelity, including the ``irlum`` grid-edge nodes.
+
+    Includes ``irlum.min()``/``irlum.max()``: the two edges where the prior
+    builder's float32 + 1024-point ``np.geomspace`` double resampling reached
+    ~0.47 dex (a factor ~3x) at the top node (``colddust_radio.md`` D2). The
+    other tests above use a peak-normalized *linear* residual, which is
+    insensitive to a large fractional error confined to a narrow,
+    small-amplitude feature far from the peak (exactly where D2's worst
+    residual sat: 3.2-3.9 µm, well off the ~50-150 µm cold-dust peak);
+    log10-ratio is not.
+
+    tengri is evaluated on the reference's own native wavelength grid (no
+    extra resampling), so this isolates the model's shape fidelity from
+    resampling noise, matching ``test_schreiber2018_matches_agnfitter_pah``
+    above.
+    """
+    irlum_ref, wave_ref, sed_ref = _load_reference_dh02_ce01()
+    if log_lir_label == "irlum_min":
+        log_lir = float(irlum_ref.min())
+    elif log_lir_label == "irlum_max":
+        log_lir = float(irlum_ref.max())
+    else:
+        log_lir = float(log_lir_label)
+
+    idx_closest = np.argmin(np.abs(irlum_ref - log_lir))
+    sed_ref_closest = sed_ref[idx_closest]
+
+    l_te = _tengri_dh02_ce01(wave_ref, log_lir)
+    assert np.all(np.isfinite(l_te))
+
+    band = (wave_ref > 3.0e4) & (wave_ref < 1.0e7)  # 3-1000 um
+    i100 = np.argmin(np.abs(wave_ref / 1.0e4 - 100.0))
+    scale = sed_ref_closest[i100] / l_te[i100]
+    logratio = np.log10(np.abs((l_te * scale)[band] / sed_ref_closest[band]))
+
+    assert np.all(np.isfinite(logratio)), "non-finite log10-ratio in the 3-1000 um band"
+    worst = float(np.nanmax(np.abs(logratio)))
+    assert worst < 0.02, (
+        f"log_LIR={log_lir:.4f} (matched ref irlum={irlum_ref[idx_closest]:.4f}): "
+        f"max|log10 ratio| = {worst:.4f} over 3-1000 um (expect <0.02)"
+    )
+
+
+def test_dh02_ce01_duplicate_irlum_keeps_upstream_row() -> None:
+    """The duplicated irlum=8.3091 row must be upstream's LAST raw occurrence.
+
+    Regression test for task3 fix round 1, item 1. AGNfitter-rX's own
+    ``STARBURSTFdict_4plot[str(irlum)] = ...`` dict construction
+    (``MODEL_AGNfitter.py::STARBURST``) iterates the pickle's raw rows in
+    storage order and assigns into a plain dict, so a repeated ``irlum`` key
+    is overwritten by every later occurrence -- raw row 59 is what
+    AGNfitter-rX actually uses at runtime for ``irlum=8.3091``, not row 58.
+    An earlier version of ``build_dh02_ce01_grid.py`` kept row 58 (a stable
+    sort by irlum, then first-occurrence dedup), which disagreed with
+    upstream by ~0.0254 dex at this exact edge node. The two candidate rows
+    differ by ~1% in shape (not floating-point noise), so this is a real
+    physics choice.
+
+    Pins against a small vendored copy of raw row 59's own SED value at one
+    wavelength (read directly from ``DH02_CE01.pickle`` while writing this
+    test, independent of both builders) rather than only checking that the
+    production grid and the committed crossval reference agree with each
+    other -- agreeing with each other was exactly how this defect went
+    undetected: both files shared the same (wrong) tie-break.
+    """
+    import h5py
+
+    with h5py.File(_GRID_PATH, "r") as f:
+        g = f["dh02_ce01"]
+        irlum = np.asarray(g["irlum_axis"][:])
+        wave = np.asarray(g["wavelength"][:])
+        template = np.asarray(g["template"][:])
+        kept_raw_index = np.asarray(g["kept_raw_index"][:])
+
+    i_min = int(np.argmin(irlum))
+    assert abs(float(irlum[i_min]) - 8.3091) < 1.0e-6, (
+        f"expected the irlum=8.3091 edge node at the minimum, got {irlum[i_min]}"
+    )
+    assert int(kept_raw_index[i_min]) == 59, (
+        f"irlum=8.3091 must keep upstream's LAST raw-order occurrence (row 59); "
+        f"got row {kept_raw_index[i_min]} -- wrong duplicate-irlum tie-break"
+    )
+
+    # Vendored literal: DH02_CE01.pickle's raw row 59, SED value at
+    # wavelength 900277.651651651 Å (~90 um) -- a point where rows 58 and 59
+    # differ by ~1%, so this is a real distinguishing check, not noise.
+    idx_w = int(np.argmin(np.abs(wave - 900277.651651651)))
+    assert abs(wave[idx_w] - 900277.651651651) < 1.0e-3, "wavelength axis moved"
+    np.testing.assert_allclose(template[i_min, idx_w], 4.860547557732e-12, rtol=1.0e-9, atol=0.0)

@@ -32,7 +32,13 @@ pytestmark = pytest.mark.contract
 
 _C_AA_PER_S = 2.99792458e18
 
-# The names as a measured run listed them; a rename or removal must edit this on purpose.
+# The names as a measured run listed them; a rename or removal must edit this
+# on purpose. Written under the PUBLIC dust_emission.type spelling (Ruling
+# R82/R84): ``draine2021_pah`` here, not the internal ``draine2021_pah_ir``
+# registry key -- the grammar (and so tengri.list_dust_emission_models(), the
+# source of _all_balanced_types() below) has never advertised the latter.
+# See tests._dust_emission_names for the registry-key -> public-spelling map
+# this list is written consistently with.
 _REQUIRED = (
     "astrodust",
     "bosa",
@@ -40,7 +46,7 @@ _REQUIRED = (
     "dale2014",
     "dale2014_cigale",
     "dh02_ce01",
-    "draine2021_pah_ir",
+    "draine2021_pah",
     "draine_li2007",
     "draine_li2014",
     "graybody",
@@ -51,10 +57,7 @@ _REQUIRED = (
 )
 _NOT_BALANCED_BY_DESIGN = ("pah_drude", "energy_balance_split")
 # Menu spellings that select a component already covered under its canonical name.
-# ``draine2021_pah`` -> ``draine2021_pah_ir`` joined this list when the canonical
-# spelling became a menu row of its own: the component publishes ``sed_dust_ir``
-# and so is listed, and running both spellings would run one component twice.
-_ALIASES_OF_REQUIRED = ("dl07", "dl14", "draine2021_pah", "mbb")
+_ALIASES_OF_REQUIRED = ("dl07", "dl14", "mbb")
 _ANALYTIC = ("casey2012", "graybody", "modified_blackbody", "schreiber2016")
 _RTOL_TEMPLATE = 1e-7
 _RTOL_ANALYTIC = 5e-6
@@ -124,7 +127,17 @@ def test_census_every_required_type_completed():
     The one skip this census accepts is the data gate: a PAH spelling skipped
     because the untracked grid is absent is a known, named absence, not a
     silent drop, and it is subtracted only when the grid really is missing.
+
+    Also pins ``_REQUIRED`` to the PUBLIC ``dust_emission`` spelling for the
+    Draine+2021 PAHspec component (Ruling R82/R84): the registry key
+    ``draine2021_pah_ir`` is an internal spelling ``SEDModel.build``'s grammar
+    has refused directly since Ruling R82 (commit 8963b591f), reachable only
+    through its alias ``draine2021_pah``. Checked against
+    :func:`tests._dust_emission_names.dust_ir_registry_to_public`, the shared
+    helper Ruling R84 introduced, rather than repeating that mapping by hand.
     """
+    from tests._dust_emission_names import dust_ir_registry_to_public
+
     data_gated = set() if has_pahspec() else set(PAHSPEC_EMISSION_TYPES)
     missing = sorted(set(_REQUIRED) - set(_COMPLETED) - data_gated)
     assert not missing, (
@@ -132,3 +145,10 @@ def test_census_every_required_type_completed():
     )
     unexpected = sorted(set(_all_balanced_types()) - set(_REQUIRED))
     assert not unexpected, f"new energy-balanced types must be added to _REQUIRED: {unexpected}"
+
+    draine2021_public_name = dust_ir_registry_to_public()["draine2021_pah_ir"]
+    assert draine2021_public_name in _REQUIRED and "draine2021_pah_ir" not in _REQUIRED, (
+        "_REQUIRED must name the Draine+2021 PAHspec component by its public "
+        f"spelling ({draine2021_public_name!r}), not the internal registry key "
+        "'draine2021_pah_ir'"
+    )

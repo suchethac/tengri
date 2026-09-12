@@ -225,6 +225,11 @@ def save_ledger(ledger: dict[tuple[str, str], int]) -> None:
         "# Ledger of safe numeric guard patterns (auto-generated)",
         "# Format: path | pattern -> count",
         "# Keyed on (file path, pattern description) for drift-proofness (#2050).",
+        # Carried by the writer, not hand-added to the artifact: this line was
+        # in the committed ledger and the first --regen after it silently
+        # dropped it.
+        "# Blind spot: same-bucket swap (remove + add in one commit) ships "
+        "unadjudicated; code review catches it.",
     ]
     for (path, pattern), count in sorted(ledger.items()):
         lines.append(f"{path} | {pattern} -> {count}")
