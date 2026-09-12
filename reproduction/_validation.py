@@ -22,11 +22,13 @@ and it is how each of those measurements is actually quoted.
 Why here and not in ``_drivers/units.py``
 -----------------------------------------
 CONTRACT section 3 says shared helpers live in ``_drivers/units.py``,
-byte-identical across comparisons. That rule is about helpers the *notebooks*
-use. These are validator-only: putting filter I/O and a 23-entry bandpass ladder
+byte-identical across comparisons. That rule is about helpers the *validators*
+use. Validator-only: putting filter I/O and a 23-entry bandpass ladder
 into six copies of a module every notebook imports would cost the notebook path
-and buy it nothing. One module, imported by the validators alone. CONTRACT
-section 3 records the carve-out.
+and buy it nothing. The sweep helpers ``sweep_fig``, ``window_rows``, and
+``print_window_table`` are imported by the reproduction notebooks; they live
+here to keep the validators and the sweep plotting synchronized. CONTRACT
+section 3 records both carry-outs.
 
 The bandpass convention, and why it is not a trap here
 ------------------------------------------------------
@@ -57,6 +59,7 @@ line luminosities [erg/s].
 
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 __all__ = [
@@ -75,8 +78,11 @@ __all__ = [
     "print_filter_table",
     "print_line_table",
     "print_radio_table",
+    "print_window_table",
     "print_xray_table",
     "radio_rows",
+    "sweep_fig",
+    "window_rows",
     "xray_rows",
 ]
 
@@ -910,3 +916,263 @@ def print_line_table(
     if blended:
         print(f"  b = window narrowed below 12 A to clear a neighbor: {', '.join(blended)}")
     print("  (no pass/fail flag: Cue vs Cloudy is a model difference, not a parity check)")
+
+
+# ---------------------------------------------------------------------------
+# Sweep helpers for reproducibility notebooks
+# ---------------------------------------------------------------------------
+
+
+def sweep_fig(
+    cases: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+    *,
+    ref_label: str,
+    title: str,
+    xlim: tuple[float, float] | None = None,
+    x_of_wave=None,
+    xlabel: str = r"wavelength [$\mu$m]",
+    ylabel: str = r"$L_\nu$ [erg/s/Hz]",
+    ratio_ylim: tuple[float, float] = (0.5, 1.5),
+    band: tuple[float, float] = (0.9, 1.1),
+    logy: bool = True,
+    figsize: tuple[float, float] = (8.5, 6.0),
+) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes], dict[str, np.ndarray]]:
+    """Overlay multiple SED comparisons with a ratio panel, one figure.
+
+    Each case shows the reference curve as a thick translucent solid line and
+    the tengri curve as a thin dashed line. Tengri is regridded onto the
+    reference wavelength grid via :func:`np.interp`. The bottom panel displays
+    the tengri/reference ratio for each case, with a shaded tolerance band.
+
+    Parameters
+    ----------
+    cases : list of tuple
+        Each tuple is ``(label, w_ref, L_ref, w_t, L_t)`` where:
+
+        - ``label`` : str
+            Case name for the legend.
+        - ``w_ref`` : ndarray, shape (n_wave,)
+            Reference wavelength grid [Å].
+        - ``L_ref`` : ndarray, shape (n_wave,)
+            Reference L_ν [erg/s/Hz] on w_ref.
+        - ``w_t`` : ndarray, shape (n_wave,)
+            Tengri wavelength grid [Å].
+        - ``L_t`` : ndarray, shape (n_wave,)
+            Tengri L_ν [erg/s/Hz] on w_t.
+    ref_label : str
+        Label for the reference curves in the legend (e.g., "CIGALE").
+    title : str
+        Panel title.
+    xlim : tuple, optional
+        x-limits in the plotted abscissa units.
+    x_of_wave : callable, optional
+        Maps wavelength [Å] to the plotted x-axis (e.g., ``lambda w: w / 1e4``
+        for µm). Identity (wavelength in Å) when ``None``.
+    xlabel : str, optional
+        x-axis label. Default: "wavelength [µm]".
+    ylabel : str, optional
+        Top panel y-axis label. Default: "L_ν [erg/s/Hz]".
+    ratio_ylim : tuple, optional
+        y-limits on the ratio panel. Default (0.5, 1.5).
+    band : tuple, optional
+        Shaded tolerance band (lo, hi) on the ratio panel. Default (0.9, 1.1).
+    logy : bool, optional
+        Use log scale on top panel y-axis. Default True.
+    figsize : tuple, optional
+        Figure size (width, height). Default (8.5, 6.0).
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure.
+    (ax, ax_ratio) : tuple of plt.Axes
+        Top (main SED) and bottom (ratio) axes.
+    ratios : dict
+        Mapping case label to the ratio array (tengri/reference) on w_ref.
+    """
+    fig, (ax, ax_r) = plt.subplots(
+        2, 1, figsize=figsize, sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+    )
+
+    ratios: dict[str, np.ndarray] = {}
+    colors = [f"C{i}" for i in range(len(cases))]
+
+    for (label, w_ref, L_ref, w_t, L_t), color in zip(cases, colors):
+        # Regrid tengri onto reference wavelength grid
+        L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
+        ratio = np.divide(L_t_on_ref, L_ref, where=(L_ref > 0), out=np.full_like(L_ref, np.nan))
+        ratios[label] = ratio
+
+        # Transform x-axis if needed
+        x_ref = w_ref if x_of_wave is None else x_of_wave(w_ref)
+
+        # Top panel: reference solid line, tengri dashed line
+        pos_ref = L_ref > 0
+        ax.plot(
+            x_ref[pos_ref],
+            L_ref[pos_ref],
+            color=color,
+            linestyle="-",
+            linewidth=2.2,
+            alpha=0.45,
+        )
+        pos_t = L_t_on_ref > 0
+        ax.plot(
+            x_ref[pos_t],
+            L_t_on_ref[pos_t],
+            color=color,
+            linestyle="--",
+            linewidth=1.0,
+            label=label,
+        )
+
+        # Ratio panel
+        ax_r.plot(x_ref, ratio, color=color, linestyle="-", linewidth=1.0)
+
+    # Configure top panel
+    ax.set_xscale("log")
+    if logy:
+        ax.set_yscale("log")
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.legend(fontsize=9, loc="best")
+    ax.grid(True, alpha=0.3)
+
+    # Add legend note about solid vs dashed
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(
+            handles,
+            labels,
+            fontsize=9,
+            loc="best",
+            title=f"solid = {ref_label}, dashed = tengri",
+            title_fontsize=8,
+        )
+
+    # Configure ratio panel
+    ax_r.axhspan(*band, color="0.85", zorder=0)
+    ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+    ax_r.set_xscale("log")
+    ax_r.set_ylim(*ratio_ylim)
+    ax_r.set_xlabel(xlabel)
+    ax_r.set_ylabel("tengri / ref", fontsize=9)
+    ax_r.grid(True, alpha=0.3)
+
+    return fig, (ax, ax_r), ratios
+
+
+def window_rows(
+    cases: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+    *,
+    lo: float,
+    hi: float,
+) -> list[dict]:
+    """Compute ratio statistics within a wavelength window for each case.
+
+    For each case, tengri is regridded onto the reference wavelength grid,
+    then the tengri/reference ratio is computed and filtered to the window
+    [lo, hi] in wavelength. The median ratio and the maximum absolute
+    deviation from unity are computed over the windowed points.
+
+    Parameters
+    ----------
+    cases : list of tuple
+        Each tuple is ``(label, w_ref, L_ref, w_t, L_t)`` as in :func:`sweep_fig`.
+    lo, hi : float
+        Wavelength window bounds [Å].
+
+    Returns
+    -------
+    list of dict
+        One dict per case with keys:
+
+        - ``"label"`` : str
+        - ``"median_ratio"`` : float
+            Median of tengri/reference ratios in the window.
+        - ``"max_abs_dev"`` : float
+            Maximum of |ratio - 1| in the window.
+        - ``"x_at_max"`` : float
+            Wavelength where max_abs_dev occurs.
+    """
+    rows = []
+    for label, w_ref, L_ref, w_t, L_t in cases:
+        # Regrid tengri onto reference grid
+        L_t_on_ref = np.interp(w_t, w_t, L_t, left=0.0, right=0.0)
+        if not np.all(w_t == w_ref):
+            L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
+
+        ratio = np.divide(L_t_on_ref, L_ref, where=(L_ref > 0), out=np.full_like(L_ref, np.nan))
+
+        # Filter to wavelength window
+        in_window = (w_ref >= lo) & (w_ref <= hi)
+        ratio_in_window = ratio[in_window]
+        w_in_window = w_ref[in_window]
+
+        # Compute statistics
+        finite_ratios = ratio_in_window[np.isfinite(ratio_in_window)]
+        if len(finite_ratios) == 0:
+            median_ratio = float("nan")
+            max_abs_dev = float("nan")
+            x_at_max = float("nan")
+        else:
+            median_ratio = float(np.median(finite_ratios))
+            deviations = np.abs(finite_ratios - 1.0)
+            max_abs_dev = float(np.max(deviations))
+            idx_max = np.argmax(deviations)
+            x_at_max = float(w_in_window[np.isfinite(ratio_in_window)][idx_max])
+
+        rows.append(
+            {
+                "label": label,
+                "median_ratio": median_ratio,
+                "max_abs_dev": max_abs_dev,
+                "x_at_max": x_at_max,
+            }
+        )
+
+    return rows
+
+
+def print_window_table(
+    rows: list[dict],
+    *,
+    ref_name: str,
+    title: str,
+    tol: float = 0.05,
+) -> None:
+    """Print wavelength-window statistics table.
+
+    Displays median ratio and maximum absolute deviation for each case,
+    with a ``<-- check`` flag when max_abs_dev exceeds ``tol``.
+
+    Parameters
+    ----------
+    rows : list of dict
+        As returned by :func:`window_rows`.
+    ref_name : str
+        Reference code name, for the column header.
+    title : str
+        Table heading.
+    tol : float, optional
+        Deviation threshold for the check flag. Default 0.05.
+    """
+    print(f"\n  {title}")
+    print(f"  {'case':<20} {'median ×':>12} {'max |Δ| [%]':>15} {'x at max [A]':>15}")
+    print("  " + "-" * 68)
+    for row in rows:
+        label = row["label"]
+        median = row["median_ratio"]
+        max_dev = row["max_abs_dev"]
+        x_max = row["x_at_max"]
+
+        flag = ""
+        if np.isfinite(max_dev) and max_dev > tol:
+            flag = "  <-- check"
+
+        if np.isfinite(median) and np.isfinite(max_dev):
+            print(f"  {label:<20} {median:>12.3f}x {max_dev * 100:>14.1f}% {x_max:>15.1f}{flag}")
+        else:
+            print(f"  {label:<20} {'--':>12} {'--':>15} {'--':>15}{flag}")

@@ -35,6 +35,10 @@ reference codes themselves differ there. `save_fig` uses the single
 arr_t, *, name)`. If you improve a shared helper, propagate it to every
 comparison in the same PR.
 
+Sweep sections use `sweep_fig`, `window_rows`, and `print_window_table` from
+`reproduction/_validation.py`, so every notebook draws and tabulates a sweep
+the same way.
+
 ## 3a. Matched inputs, asserted
 
 A comparison is only meaningful if both sides read the same templates, and
@@ -144,6 +148,9 @@ the validation. Never write that a tengri component was ported or
 copied from the reference code. External template and SSP data files
 used as matched inputs are "repackaged" into tengri's formats, and
 that is the word to use.
+
+Notebook prose carries no issue numbers and no account of what was tried;
+the investigation trail belongs in the pull request.
 
 ## 7. Rendering
 
