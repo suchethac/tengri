@@ -398,7 +398,7 @@ def reddy15(
 )
 def kriek_conroy(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 1.0,
+    dust_bump_strength: float = 0.0,
     dust_delta: float = 0.0,
 ) -> jnp.ndarray:
     r"""Kriek & Conroy (2013) modified Calzetti + UV bump + slope delta.
@@ -1250,7 +1250,7 @@ def salim_sbl18(
 )
 def tea(
     wavelength: jnp.ndarray,
-    dust_delta: float = -0.2,
+    dust_delta: float = 0.0,
     dust_tea_scatter: float = 0.0,
 ) -> jnp.ndarray:
     r"""TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).

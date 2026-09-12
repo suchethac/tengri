@@ -35,6 +35,8 @@ from typing import NamedTuple
 import jax.numpy as jnp
 
 from tengri._data_setup import find_data_str
+from tengri.components.dust._params import SCHREIBER2018_T_K_DEFAULT, PARAMS
+from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
@@ -1149,7 +1151,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
     def schreiber2018_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_T: float = 30.0,
+        dust_T: float = SCHREIBER2018_T_K_DEFAULT,
         dust_f_pah: float = 0.05,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -1827,7 +1829,7 @@ def create_astrodust_from_grid(
         L_absorbed: float,
         dust_umin: float = 1.0,
         dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 3.0,
+        dust_qpah: float = declared_default(PARAMS, "dust_qpah"),
         redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:

@@ -856,6 +856,25 @@
   default; that disagreement is left as-is and tracked separately (#2261)
   (#2241).
 
+- Dust tree literal defaults aligned with declarations (#2265): the full
+  ``dust/`` tree (attenuation, emission, component aggregation) now reads all
+  signature defaults and ``.get`` fallbacks from ``declared_default(...)`` or
+  class-level constants instead of repeating numerals. Three direct-call
+  changes: ``kriek_conroy(dust_bump_strength=1.0)`` now uses ``Fixed(0.0)``
+  (no bump vs KC13 published value); ``tea(dust_delta=-0.2)`` uses
+  ``Fixed(0.0)`` (Calzetti baseline vs KC13 empirical z~1 value);
+  ``schreiber2018_tabulated(dust_T=30.0)`` uses component declaration
+  ``Fixed(25.0)`` via ``SCHREIBER2018_T_K_DEFAULT``. ``astrodust_emission()``
+  and all template closures read from the shared table via
+  ``declared_default(PARAMS, ...)`` (e.g. dust_qpah: 3.0 -> 2.5). Grammar
+  path unchanged (``SEDModel.build`` always supplied declared values);
+  measured zero-diff on ``predict_photometry`` for every dust_emission type
+  and attenuation law. ``dust_T`` and ``dust_beta_ir`` table entries
+  corrected under owner ruling 1: ``dust_T`` stays ``Fixed(35.0)`` (graybody
+  and casey match; MBB and schreiber2016 read their own ``Fixed(30.0)`` and
+  ``Fixed(25.0)`` constants); ``dust_beta_ir`` changes to ``Fixed(1.8)``
+  (all four analytic templates match). (#2265, #2261)
+
 - `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
   believing it the base of the `Tracer*ConversionError` family. On jax
   0.11.1 that belief is false: `TracerArrayConversionError` (raised by
