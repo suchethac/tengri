@@ -117,38 +117,51 @@ def test_dense_mass_spectrum_precomp_fit_is_live():
 
 
 def test_probe_is_load_bearing(monkeypatch):
-    """With the probe disabled, the same construction freezes again.
+    """A probe that reports instability halves the step the fit samples with.
 
-    Guards against the probe being silently disconnected: the pre-probe
-    behavior (DeadFitError from the #2110 guard, or a majority-divergent
-    chain) must return when the probe is a no-op. Distinct noise seed so
-    the adaptation cache from the live test cannot serve a stabilized
-    step to this fit.
+    Guards against the probe being silently disconnected from the dense-mass
+    path. Until 2026-09-12 this test disabled the probe and asserted that the
+    #1999 freeze returned; it no longer does on this fixture -- the L-BFGS
+    MAP seed (#2311) starts the adaptation where the unprobed step is already
+    stable, with or without mass profiling (0 divergences either way) -- so a
+    natural freeze is not a signal the test can rely on. The wiring is: the
+    probe's verdict on the adapted step is what decides the step size the
+    sampler runs at. Force the verdict (unstable once, then stable) and read
+    the decision off the fit: exactly one backoff, a step half the adapted
+    one, and the chain still live. Distinct noise seed so the adaptation cache
+    from the live test cannot serve a step to this fit.
     """
     from tengri import Data
-    from tengri.config.exceptions import DeadFitError
-    from tengri.inference.backends.mcmc import _shared, hmc, nuts
+    from tengri.inference.backends.mcmc import _shared
 
-    def _noop(kernel, state, ld, da, step, imm, extra, sampler_name=None):
-        return step, 0
+    verdicts = iter([1.0, 0.0])  # first probe: every trajectory diverged; second: none
+    seen_steps: list[float] = []
 
-    monkeypatch.setattr(_shared, "_stabilize_dense_mass_step", _noop)
-    monkeypatch.setattr(hmc, "_stabilize_dense_mass_step", _noop)
-    monkeypatch.setattr(nuts, "_stabilize_dense_mass_step", _noop)
+    def _forced_probe(kernel, state, ld, da, step, imm, max_doublings):
+        seen_steps.append(float(step))
+        return jnp.asarray(next(verdicts))
 
-    _sed_model, forward, flux, noise = _build_forward_and_data(noise_seed=1)
-    try:
-        posterior = forward.fit(
-            Data(spectrum=(flux, noise)),
-            key=jax.random.PRNGKey(1),
-            precondition=False,
-            **HMC_VALIDATED,
-        )
-    except DeadFitError:
-        return  # the frozen signature, caught by the #2110 guard
-    n_div = int(posterior.diagnostics.get("n_divergent", 0))
-    n_samples = HMC_VALIDATED["n_samples"]
-    assert n_div > n_samples // 2, (
-        f"probe disabled yet the fit stayed live (n_divergent={n_div}): "
-        "either the freeze no longer reproduces or the probe is not load-bearing"
+    monkeypatch.setattr(_shared, "_probe_nuts_stability_jit", _forced_probe)
+
+    sed_model, forward, flux, noise = _build_forward_and_data(noise_seed=1)
+    posterior = forward.fit(
+        Data(spectrum=(flux, noise)),
+        key=jax.random.PRNGKey(1),
+        precondition=False,
+        **HMC_VALIDATED,
+    )
+    assert posterior.diagnostics["dense_mass_step_backoffs"] == 1, (
+        "the probe reported instability once, yet the fit records no backoff: "
+        f"probe disconnected (diagnostics={posterior.diagnostics})"
+    )
+    assert len(seen_steps) == 2 and seen_steps[1] == pytest.approx(seen_steps[0] / 2), (
+        f"the second probe should see half the adapted step, saw {seen_steps}"
+    )
+    assert posterior.diagnostics["step_size"] == pytest.approx(seen_steps[1]), (
+        "the sampler did not run at the step the probe settled on"
+    )
+    n_div = int(posterior.diagnostics.get("n_divergent", -1))
+    uniq = [len(np.unique(np.asarray(posterior.samples[p]))) for p in sed_model.spec.free_params]
+    assert n_div <= 30 and min(uniq) > 400, (
+        f"halving the step should leave the chain live: {n_div} divergent, unique/param={uniq}"
     )
