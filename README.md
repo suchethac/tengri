@@ -86,7 +86,7 @@ The `[all]` extra pulls in the optimizer and sampler backends (`optax`, `blackja
 
 - **CPU**: default, no extra setup.
 - **CUDA**: `pip install -e ".[gpu]"`, then follow [JAX's CUDA notes](https://jax.readthedocs.io/en/latest/installation.html#gpu-support).
-- **Apple Silicon**: Apple's own `jax-metal` (0.1.1, 2024-10) is not viable against this JAX version. The supported path is the community `jax-mps` plugin (MLX-backed, float32 only; set `MLX_DISABLE_COMPILE=1` while jax-mps#232 is open upstream) -- see `notebooks/apple_mps.py` for setup and `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust without it.
+- **Apple Silicon**: Apple's own `jax-metal` (0.1.1, 2024-10) is not viable against this JAX version. The supported path is the community `jax-mps` plugin (MLX-backed, float32 only; set `MLX_DISABLE_COMPILE=1` on 0.10.10; fixed upstream in MLX 0.32.0, arriving with jax-mps 0.10.11) -- see `notebooks/apple_mps.py` for setup and `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust without it.
 
 **Precision:** float64 by default. Pure float32 (`JAX_ENABLE_X64=0` before Python starts) runs the full panchromatic model and the default photometry + emission-line fit end-to-end on CPU, CUDA and Apple GPU, converging to the float64 optimum to ~1e-5 (measured; `docs/dev/float32-tier-b-boundary.md`).
 
