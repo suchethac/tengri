@@ -423,7 +423,7 @@ All major components are implemented and tested:
 - **Radio**: synchrotron + free-free + AGN compact (Condon+92, Krolik & Chen+91)
 - **X-ray**: XRB (HMXB+LMXB), AGN corona (α_ox, nthcomp power law)
 - **Observation layer**: photometry (broadband, precomputed), spectroscopy (wavelength grid, emission line fitting/marginalization), calibration polynomial marginalization
-- **Inference**: MAP (Adam/AdamW/SGD), Ray Tracing, NUTS, geoVI, MGVI, ESS, NSS, Laplace, Pathfinder, vi_native, vi_native_linear — 13 canonical methods
+- **Inference**: MAP (L-BFGS default, Adam/AdamW/SGD selectable), Ray Tracing, NUTS, geoVI, MGVI, ESS, NSS, Laplace, Pathfinder, vi_native, vi_native_linear — 13 canonical methods
 - **Hierarchical**: HierarchicalFitter with NIFTy CorrelatedFieldMaker (shared PSD)
 - **Docs**: Sphinx + Furo site with Sphinx Gallery examples, GitHub Pages
 
