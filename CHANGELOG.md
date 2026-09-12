@@ -47,6 +47,13 @@
   `check_cb19_free_params` against the current shipped grid rather than
   silently inert (#2213).
 
+- `radio={'sf': {'type': ..., 'freefree': False}}` turns the star-forming
+  block's Murphy+2011 thermal free-free term off (synchrotron only — what
+  pcigale's `radio` module emits); omitted, it stays on except for
+  `bell2003_split`, which carries its own thermal fraction. Reaches
+  `RadioSEDComponentConfig.include_freefree`; documented in
+  `docs/model_reference/xray_radio.md`.
+
 
 - `run_nuts`/`run_dynamic_hmc` (and, via the same `_vmap_chains` seam,
   `mcmc_hmc`'s existing `chain_method="parallel"`) accept

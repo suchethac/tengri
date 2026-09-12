@@ -429,6 +429,7 @@ def build_components(
     use_radio: bool = False,
     radio_sfr_mode: str = "bell2003",
     radio_agn_model: str = "powerlaw",
+    radio_include_freefree: bool | None = None,
     xray_model: str = "yang20",
     use_xray: bool = False,
     use_igm: bool = False,
@@ -739,6 +740,7 @@ def build_components(
                 config=RadioSEDComponentConfig(
                     sfr_mode=radio_sfr_mode,
                     agn_radio_model=radio_agn_model,
+                    include_freefree=radio_include_freefree,
                 ),
             )
         )
