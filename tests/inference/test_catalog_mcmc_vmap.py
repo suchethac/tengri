@@ -363,7 +363,11 @@ def test_catalog_mass_matrix_follows_the_single_fit_policy():
     from tengri.inference.backends.mcmc.nuts import _resolve_dense_mass_matrix
 
     assert _resolve_dense_mass_matrix(None, 3) is True
-    assert _resolve_dense_mass_matrix(None, 8) is False
+    # D=8 is dense too as of the 2026-09-11 D<=12 revision (measured
+    # 1.1-1.9 GB RSS on ctl-dpl, a non-dense_basis SFH); D=13 crosses into
+    # diagonal. See tests/inference/test_dense_auto_policy.py.
+    assert _resolve_dense_mass_matrix(None, 8) is True
+    assert _resolve_dense_mass_matrix(None, 13) is False
     # An explicit choice still wins, in both directions.
     assert _resolve_dense_mass_matrix(False, 3) is False
     assert _resolve_dense_mass_matrix(True, 20) is True

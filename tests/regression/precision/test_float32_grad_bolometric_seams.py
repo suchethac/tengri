@@ -145,7 +145,12 @@ def _nlp_gradient(ssp, obs, groups, flux, noise, *, x64, dtype):
     with jax.enable_x64(x64):
         model = _build(ssp, obs, groups)
         ctx = InferenceContext.from_target(
-            Fitter(model, jnp.asarray(flux, dtype=dtype), jnp.asarray(noise, dtype=dtype))
+            Fitter(
+                model,
+                jnp.asarray(flux, dtype=dtype),
+                jnp.asarray(noise, dtype=dtype),
+                profile_mass=False,
+            )
         )
         data_args = ctx.data_args
         names = sorted(ctx.initial_params(jax.random.PRNGKey(1)))

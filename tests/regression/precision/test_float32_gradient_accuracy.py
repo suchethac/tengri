@@ -218,7 +218,9 @@ def test_likelihood_gradient_is_accurate_in_float32(ssp_bare, obs):
     def nlp_gradient(x64, dtype):
         with jax.enable_x64(x64):
             m = _build(ssp_bare, obs)
-            ctx = InferenceContext.from_target(Fitter(m, jnp.asarray(flux), jnp.asarray(noise)))
+            ctx = InferenceContext.from_target(
+                Fitter(m, jnp.asarray(flux), jnp.asarray(noise), profile_mass=False)
+            )
             data_args = ctx.data_args
             names = sorted(ctx.initial_params(jax.random.PRNGKey(1)))
             point = {k: jnp.asarray(0.0, dtype=dtype) for k in names}

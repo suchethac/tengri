@@ -113,7 +113,7 @@ from tengri._cache_keys import KeyPolicy, content, exclude, shape
 
 #: Bump whenever the engine-key derivation changes, or an existing row's
 #: MODE changes. See the module docstring for the full rule.
-ENGINE_VERSION = 1
+ENGINE_VERSION = 2  # 2026-09-12: _profile_mass joined the engine key
 
 #: Bump whenever the fingerprint derivation changes, or an existing row's
 #: MODE changes.
@@ -156,6 +156,12 @@ ENGINE_POLICY: KeyPolicy = {
         "internally by (compile_signature, optimizer, n_steps, learning_rate, "
         "n_restarts) -- already covered by compile_signature() and the engine key; "
         "not itself an engine-key input"
+    ),
+    "_map_multistart_qn_kernel_cache": exclude(
+        "memo: compiled vmapped JAX-BFGS MAP-multistart kernel (map_dispatch.py), "
+        "keyed internally by (compile_signature, optimizer, n_steps, tol, "
+        "n_restarts); not itself an engine-key input -- and it must not be, "
+        "or memoizing the kernel changes the signature it is keyed on"
     ),
     "_native_vi_nonlinear_engine": exclude(
         "memo: the already-built native-VI-nonlinear engine (vi/native.py), not an "
@@ -257,6 +263,23 @@ ENGINE_POLICY: KeyPolicy = {
         "contract ('no address-bearing keys, ever'), not a new failure mode"
     ),
     # ── Calibration ──────────────────────────────────────────────────────
+    # ── Mass profiling: the resolved flag bakes the marginal likelihood ────
+    "_profile_mass": content(
+        "profile_mass engaged: the loss is the mass-marginalized likelihood over "
+        "D-1 parameters (mass_profile.py); the free-name tuple also moves, but the "
+        "flag is the honest input"
+    ),
+    "_profile_mass_resolved": exclude("mirror of _profile_mass kept for diagnostics"),
+    "_profile_mass_reason": exclude("diagnostic text explaining the resolved flag"),
+    "_profile_mass_requested": exclude(
+        "the constructor argument (True/False/'auto'); only the resolved flag reaches the loss"
+    ),
+    "_profile_mass_name": exclude("derived from the spec; _free_names and the model key cover it"),
+    "_profile_mass_prior": exclude("the mass prior object, already part of the model's own key"),
+    "_profile_mass_bounds": exclude("derived from _profile_mass_prior"),
+    "_profile_mass_original_spec": exclude(
+        "the pre-profiling spec kept to undo the rewrite; structure the model key covers"
+    ),
     "_calibration_marginalize": content("enables the calibration-marginalized likelihood"),
     "_cal_n_poly": content("calibration polynomial order changes the design matrix shape"),
     "_cal_prior_sigma": content("calibration prior width is baked into the marginal likelihood"),
@@ -326,6 +349,7 @@ FINGERPRINT_POLICY: KeyPolicy = {
     "_batch_adapt_kernel_cache": exclude(_MEMO_REASON),
     "_blackjax_draw_kernel_cache": exclude(_MEMO_REASON),
     "_map_multistart_kernel_cache": exclude(_MEMO_REASON),
+    "_map_multistart_qn_kernel_cache": exclude(_MEMO_REASON),
     "_native_vi_nonlinear_engine": exclude(_MEMO_REASON),
     "_lut_bias_checked": exclude(_MEMO_REASON),
     "model": exclude("structure (kept by the model's own compile_signature(), not either ledger)"),
@@ -354,6 +378,14 @@ FINGERPRINT_POLICY: KeyPolicy = {
     "_auto_protocol_likelihood": exclude(_STRUCTURE_REASON),
     "_user_likelihood": exclude(_STRUCTURE_REASON),
     "_calibration_marginalize": exclude(_STRUCTURE_REASON),
+    "_profile_mass": exclude(_STRUCTURE_REASON),
+    "_profile_mass_resolved": exclude(_STRUCTURE_REASON),
+    "_profile_mass_reason": exclude(_STRUCTURE_REASON),
+    "_profile_mass_requested": exclude(_STRUCTURE_REASON),
+    "_profile_mass_name": exclude(_STRUCTURE_REASON),
+    "_profile_mass_prior": exclude(_STRUCTURE_REASON),
+    "_profile_mass_bounds": exclude(_STRUCTURE_REASON),
+    "_profile_mass_original_spec": exclude(_STRUCTURE_REASON),
     "_cal_n_poly": exclude(_STRUCTURE_REASON),
     "_cal_prior_sigma": exclude(_STRUCTURE_REASON),
     "_eline_marginalize": exclude(_STRUCTURE_REASON),

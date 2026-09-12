@@ -3131,6 +3131,52 @@ def _evict_cached_adaptation(fitter, method_key):
     cache.pop(_adaptation_cache_key(fitter, method_key), None)
 
 
+def _resolve_chain_parallel(chain_parallel: str, n_chains: int) -> bool:
+    """Resolve ``chain_parallel`` into a pmap (``True``) / vmap (``False``) choice.
+
+    ``"vmap"`` and ``"pmap"`` are explicit; ``"auto"`` picks ``pmap`` when at
+    least ``n_chains`` devices of the platform in use are visible and
+    ``n_chains > 1``, otherwise ``vmap``. See :func:`_vmap_chains`, which
+    calls this to dispatch, and :func:`_parallel_chains` for the pmap body.
+
+    Parameters
+    ----------
+    chain_parallel : {"auto", "vmap", "pmap"}
+        The caller's request.
+    n_chains : int
+        Number of chains that will be dispatched.
+
+    Returns
+    -------
+    bool
+        ``True`` to run via :func:`_parallel_chains` (``jax.pmap``),
+        ``False`` for :func:`_vmap_chains`'s own ``jax.vmap`` body.
+
+    Raises
+    ------
+    ValueError
+        ``chain_parallel="pmap"`` with fewer than ``n_chains`` JAX devices
+        visible, or an unrecognized ``chain_parallel`` value.
+    """
+    n_dev = jax.device_count()
+    if chain_parallel == "vmap":
+        return False
+    if chain_parallel == "pmap":
+        if n_dev < n_chains:
+            raise ValueError(
+                f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
+                f"devices, found {n_dev}. Set the TENGRI_HOST_DEVICES environment "
+                f"variable to {n_chains} (or more) before the first `import jax` "
+                "-- tengri reads it at import time and appends "
+                "--xla_force_host_platform_device_count to XLA_FLAGS for you -- "
+                "or pass chain_parallel='vmap' / 'auto'."
+            )
+        return True
+    if chain_parallel == "auto":
+        return n_chains > 1 and n_dev >= n_chains
+    raise ValueError(f"chain_parallel must be 'auto', 'vmap', or 'pmap', got {chain_parallel!r}")
+
+
 def _vmap_chains(
     init_state_fn,
     chain_scan_fn,
@@ -3141,15 +3187,27 @@ def _vmap_chains(
     n_iter,
     n_burnin,
     jitter_scale=1e-3,
+    chain_parallel="vmap",
 ):
-    """Run ``n_chains`` independent MCMC chains in parallel via ``jax.vmap``.
+    """Run ``n_chains`` independent MCMC chains, in parallel via ``jax.vmap`` or ``jax.pmap``.
 
     Shared multi-chain plumbing used by HMC / NUTS / dHMC / GHMC / MCLMC.
     Each chain starts from ``init_flat + jitter`` and shares the same
-    cached adaptation; the vmap dispatches them across XLA SIMD lanes
-    (CPU) or accelerator cores (GPU/TPU). Per-chain burnin is discarded
-    before the ``(n_chains, n_iter, ...)`` → flattened reshape so
-    ``n_burnin`` correctly applies to *each* chain.
+    cached adaptation. The default ``chain_parallel="vmap"`` keeps every
+    existing caller's behavior unchanged -- SIMD-batched onto one device.
+    Passing ``chain_parallel="pmap"`` (or ``"auto"``, which resolves to
+    ``"pmap"`` when at least ``n_chains`` JAX devices are visible) dispatches
+    to :func:`_parallel_chains` instead, mapping one chain per device via
+    ``jax.pmap``. Measured on ``ctl-dpl`` (D=8, 4 chains) with 4 forced host
+    CPU devices (``TENGRI_HOST_DEVICES=4``): the sampling phase drops
+    19.5s -> 3.5s versus the ``vmap`` path; warmup (always single-chain) is
+    unaffected. ``run_nuts`` and ``run_dynamic_hmc`` resolve their own
+    ``chain_parallel="auto"`` default before calling this function and pass
+    the concrete ``"vmap"``/``"pmap"`` choice through, so this function's own
+    default only matters to callers (GHMC, MCLMC, HMC's ``chain_method``)
+    that do not pass ``chain_parallel`` at all.
+    Per-chain burnin is discarded before the ``(n_chains, n_iter, ...)`` →
+    flattened reshape so ``n_burnin`` correctly applies to *each* chain.
 
     Parameters
     ----------
@@ -3173,6 +3231,10 @@ def _vmap_chains(
         Per-chain burn-in to discard before flatten.
     jitter_scale : float, default 1e-3
         Gaussian jitter scale applied to ``init_flat`` for each chain.
+    chain_parallel : {"auto", "vmap", "pmap"}, default "vmap"
+        Executor choice, resolved via :func:`_resolve_chain_parallel`.
+        ``"pmap"`` raises ``ValueError`` when fewer than ``n_chains`` JAX
+        devices are visible; ``"auto"`` falls back to ``"vmap"`` instead.
 
     Returns
     -------
@@ -3180,6 +3242,18 @@ def _vmap_chains(
     ``(n_chains, n_iter)`` dimensions burnin-discarded and flattened to
     ``(n_chains * (n_iter - n_burnin),)``.
     """
+    if _resolve_chain_parallel(chain_parallel, n_chains):
+        return _parallel_chains(
+            init_state_fn,
+            chain_scan_fn,
+            init_flat=init_flat,
+            chain_key=chain_key,
+            n_chains=n_chains,
+            n_iter=n_iter,
+            n_burnin=n_burnin,
+            jitter_scale=jitter_scale,
+        )
+
     keys = jax.random.split(chain_key, n_chains + 2)
     new_chain_key, jitter_key, init_key_seed = keys[0], keys[1], keys[2]
     per_chain_init_keys = jax.random.split(init_key_seed, n_chains)

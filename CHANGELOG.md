@@ -501,6 +501,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `run_nuts`/`run_dynamic_hmc` (and, via the same `_vmap_chains` seam,
+  `mcmc_hmc`'s existing `chain_method="parallel"`) accept
+  `chain_parallel: {"auto", "vmap", "pmap"}`, default `"auto"`. `"pmap"` maps
+  `n_chains` chains one-per-device via `jax.pmap` instead of SIMD-batching
+  them onto one device with `jax.vmap`, and raises `ValueError` (naming
+  `TENGRI_HOST_DEVICES`) if fewer than `n_chains` devices are visible;
+  `"auto"` picks `"pmap"` when enough devices of the platform in use are
+  visible and `n_chains > 1`, else falls back to `"vmap"`. Warmup stays
+  single-chain either way; per-chain adaptation was measured worse (inflated
+  R-hat from per-chain metrics) and is not offered. Measured on `ctl-dpl`
+  (D=8, 4 chains) with 4 forced host CPU devices: the sampling phase drops
+  19.5s -> 3.5s. The resolved choice is recorded in
+  `posterior.diagnostics["chain_parallel"]`. New env hook
+  `TENGRI_HOST_DEVICES=<n>` (read by `tengri/__init__.py` before the first
+  `import jax`) appends `--xla_force_host_platform_device_count=<n>` to
+  `XLA_FLAGS` so CPU users can get extra JAX devices without knowing the XLA
+  flag spelling; a no-op if `XLA_FLAGS` already requests a host device count.
+  See `docs/dev/inference_methods.md` and the JAX section of `CLAUDE.md`.
+
+- `Fitter`/`ForwardModel.fit(..., profile_mass=...)` analytically marginalizes
+  the total-stellar-mass amplitude (the free `*_log_total_mass` parameter)
+  instead of sampling it: inference runs on the remaining `D - 1` parameters,
+  and the mass is drawn from its exact conditional posterior afterward (or set
+  to its conditional mode for `method="map"`). Exact for a photometry-only
+  Gaussian likelihood linear in the mass (Sivia & Skilling 2006, Sec. 3.2);
+  guarded at construction (no spectroscopy, no emission-line or calibration
+  marginalization, no variable-noise model, no censored data, exactly one free
+  `*_log_total_mass` with a bounded prior, and a numerical linearity check that
+  catches e.g. an unmasked AGN continuum). Default `"auto"` engages it only
+  when every guard passes, falling back to ordinary sampling otherwise;
+  `True`/`False` force it on/off (`True` raises `ValueError` naming the first
+  failed guard). Measured on a D=8, 14-band mock: Hessian condition number
+  3.7e4 -> 1.2e3, worst-of-six-seeds NUTS wall 227 s -> 40 s. See
+  `tengri.inference.mass_profile` and `docs/dev/inference_methods.md`
+  ("Profiling the mass").
 - The per-Q_H nebular grid (`enable_fast_nebular` / `approx=FeaturePrecomp()`)
   now serves DIG mixing instead of refusing it: `neb_logU` joins the grid axes
   whenever `neb_dig_frac` could be active (free, or fixed non-zero), even when
@@ -781,6 +816,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   is now float32-exact (previously the last disc in
   `tests/regression/precision/test_agn_disc_float32_inventory.py` that was not); the
   `Float32UnsafeAGNWarning` escape hatch it used is removed as unused.
+- **The default inference method is `mcmc_nuts_fast`** (was `vi`): four NUTS
+  chains, 150 warmup steps, no separate burn-in, 300 draws, target acceptance
+  0.8, on the mass-profiled posterior with the dense metric and, when the CPU
+  is exposed as devices (`TENGRI_HOST_DEVICES`), pmapped chains. Measured at
+  9.5-17.2 s per galaxy on eight logical cores across twelve `ctl-dpl` /
+  `ctl-jwst` seeds with min ESS >= 100 on eleven
+  (`bench/reports/2026-09-11_profile_mass_20s.md`). `forward.fit(data)`,
+  `Fitter.run()` and `fit_batch` all share it; `fit_batch` runs it one galaxy
+  at a time (the vmapped shared-adaptation engine is measured to freeze
+  lanes). `method="vi"` is unchanged and still selectable. The new method is
+  canonical (`mcmc_nuts_fast`), primary tier, and every setting is
+  overridable; its draw budget lives in `defaults.toml`
+  `[inference.mcmc_nuts_fast]`.
+
+- **NUTS/HMC/dynamic-HMC `dense_mass_matrix=None` auto-policy is dense at
+  D <= 12, not D < 8** (behavioral change, #319 revision). The D < 8 cliff
+  generalized a `mean_sfh_type="dense_basis"` finding (22.78 GB warmup peak
+  at D=8) to every SFH. Measured on `ctl-dpl` (D=8 photometry, 14 bands, a
+  non-`dense_basis` DPL SFH): the dense window adaptation uses 1.1-1.9 GB
+  RSS and costs 3.4x fewer gradients per effective sample than diagonal
+  (dense 34 g/draw, ESS 83; diagonal 550 g/draw, ESS 113; six-seed sweep).
+  `_resolve_dense_mass_matrix` now returns dense for `n_dim <= 12` *unless*
+  the spec's SFH is `dense_basis` (diagonal at any D in that case — it is
+  `dense_basis`'s per-sample derived-quantity publishing, not dimensionality
+  on its own, that drives the historical spike), and diagonal above D = 12
+  regardless of SFH. `HMC`/`dynamic HMC`/`CatalogFitter`/`fit_batch` all
+  route through the shared `resolve_dense_mass_gate`, so the revision applies
+  uniformly; the `DENSE_MASS_MAX_DIM=30` cap and explicit `True`/`False`
+  overrides are unchanged. A fit at D=8-12 that pinned a diagonal-metric
+  posterior mean or wall-time to a tight tolerance may need updating; pass
+  `dense_mass_matrix=False` to keep the previous diagonal behavior exactly.
+
+- **MAP defaults to L-BFGS, not Adam** (behavioral change). `run_map`'s
+  `optimizer=` default is now `"lbfgs"` (alias `"lbfgs_scipy"`), and every
+  internal MAP seed that does not pass an explicit `optimizer=`
+  (`_maybe_map_init`'s NUTS/HMC/VI warm start, `run_laplace`, `run_pathfinder`,
+  the vmapped batch-MAP path in `Fitter._fit_batch_vmap_map`) picks it up.
+  Measured on a D=8, 14-band mock recovery fixture: the population default
+  (Adam, 8 restarts × 800 steps) reached a negative log posterior of 6.33 and
+  had not converged (a 300-step single run reached 7.88, a 100-step run 115),
+  while a single scipy L-BFGS-B start reached 6.0008 in well under a second;
+  on a second fixture the Hessian at the Adam point carried a negative
+  eigenvalue, i.e. was not even a local minimum. Every downstream consumer of
+  a MAP point — sampler warm starts, the Laplace approximation, preconditioning
+  metrics — is better served by a converged optimum than by a fixed
+  gradient-step budget that may or may not have reached one. Two
+  implementations share the `"lbfgs"` name because scipy is not JAX-traceable
+  and so cannot be vmapped: the single-start path (`n_restarts=1`, the
+  default) runs scipy's L-BFGS-B; the multi-start and vmapped-batch paths
+  (`n_restarts>1`, or `Fitter.fit_batch(method="map")`) run
+  `jax.scipy.optimize.minimize(method="BFGS")` instead, which is pure JAX and
+  therefore vmappable — and, like scipy, needs no optional dependency
+  (`jax.scipy` ships with `jax` itself, unlike `optax`/`jaxopt`). `"adam"`,
+  `"adamw"`, `"sgd"`, and pre-built optax optimizers remain fully supported by
+  name.
+- **`profile_mass` defaults to `"auto"`, not off** (behavioral change). Every
+  `Fitter`/`ForwardModel.fit` call that qualifies (see the Added entry above)
+  now analytically marginalizes the mass by default; a fit that does not
+  qualify falls back to ordinary sampling unchanged. Because the mass
+  amplitude is exactly integrable, sample-based backends recover the same
+  posterior for every other parameter (an amplitude marginalized exactly
+  cannot shift the marginal of the rest); `method="map"` can shift by a small
+  amount instead, since the joint MAP and the profiled-marginal MAP are not
+  identical estimators — an existing test or notebook that pins a MAP value or
+  a posterior mean to a tight tolerance on a qualifying photometry fit may
+  need to widen it, or pass `profile_mass=False` to keep the previous
+  behavior exactly.
 - Cue's default line catalog is now the full ~138-line set instead of the
   128-line CLOUDY/FSPS-matched subset (`cue_full_catalog` defaults to
   `True`); pass `neb={'type': 'cue', 'full_catalog': False}` (or
