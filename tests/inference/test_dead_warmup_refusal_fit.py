@@ -96,11 +96,16 @@ def _dead_warmup(*args, **kwargs):
     return jnp.array(0.01), jnp.ones((1,)), jnp.ones((n_warmup,), dtype=bool)
 
 
+def _dead_nuts_warmup(*args, **kwargs):
+    # NUTS's warmup also returns its gradient count (n_grad_adapt diagnostic).
+    return *_dead_warmup(*args, **kwargs), jnp.array(0)
+
+
 def test_nuts_refuses_a_dead_warmup_before_sampling(
     synthetic_ssp, simple_observation, monkeypatch
 ):
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    monkeypatch.setattr(nuts_backend, "_nuts_warmup_only", _dead_warmup)
+    monkeypatch.setattr(nuts_backend, "_nuts_warmup_only", _dead_nuts_warmup)
 
     def _sampling_must_not_run(*args, **kwargs):
         raise AssertionError("the sampling scan ran after a dead warmup")
@@ -114,7 +119,7 @@ def test_nuts_refuses_a_dead_warmup_before_sampling(
 
 def test_a_refused_warmup_is_not_cached(synthetic_ssp, simple_observation, monkeypatch, caplog):
     forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
-    monkeypatch.setattr(nuts_backend, "_nuts_warmup_only", _dead_warmup)
+    monkeypatch.setattr(nuts_backend, "_nuts_warmup_only", _dead_nuts_warmup)
     with pytest.raises(DeadFitError):
         _fit(forward, flux_obs, noise)
     monkeypatch.undo()
