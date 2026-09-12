@@ -250,7 +250,7 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 #
 # The default sampler (`mcmc_nuts_fast`) runs four NUTS chains in parallel and
 # marginalizes the stellar mass analytically; the posterior below took about
-# 5 s on this machine. First we fit a throwaway prior draw so compilation is
+# 9 s on this machine. First we fit a throwaway prior draw so compilation is
 # cached on disk; the timed fits that follow pay only the inference cost.
 
 # %%
