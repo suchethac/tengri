@@ -275,10 +275,12 @@ reference's own float64 CPU measurement on the current tree and fails above 1e-9
 separates "the device is wrong" from "the physics moved since the file was written".
 The MAP fit uses L-BFGS to genuine convergence (`init_from` pinned to the shared truth,
 restarted from a stall rather than given a bigger iteration cap), and the reference
-generator refuses to write a file where any seam did not converge. The MAP-loss
-deviation prints as an informational column only -- at a converged optimum the loss is
-stationary, so it is the parameter vector, not the loss value, that is the scientific
-quantity gated:
+generator refuses to write a file where any seam did not converge, and both arms run
+it with `profile_mass=False` spelled out (the `"auto"` default marginalizes the mass
+under float64 and declines under float32, which would make the two arms optimize
+different objectives). The MAP-loss deviation prints as an informational column only
+-- at a converged optimum the loss is stationary, so it is the parameter vector, not
+the loss value, that is the scientific quantity gated:
 
 ```bash
 # 1. Is the committed reference still the physics of this tree? (CPU, float64, ~5 min)
