@@ -190,7 +190,7 @@ _AGN_PARTITION = {
     "agn_log_mdot": "agn.disc",  # relagn accretion rate
     "agn_cigale_disk_delta": "agn.disc",  # skirtor/schartmann2005 disc slope
     "agn_grahsp_cutoff_nm": "agn.disc",
-    "agn_grahsp_l5100": "agn.disc",
+    "agn_grahsp_log_l5100": "agn.disc",
     "agn_grahsp_plbendloc_nm": "agn.disc",
     "agn_grahsp_plbendwidth": "agn.disc",
     "agn_grahsp_plslope": "agn.disc",
@@ -260,7 +260,7 @@ def _agn_param_group(name: str) -> str:
         ``"agn"`` (shared) or ``"agn.<subblock>"``.
     """
     # No substring catch-all: the six GRAHSP disc parameters this used to
-    # cover (agn_grahsp_l5100, _uvslope, _plslope, _plbendloc_nm,
+    # cover (agn_grahsp_log_l5100, _uvslope, _plslope, _plbendloc_nm,
     # _plbendwidth, _cutoff_nm) now have explicit entries, and R34's census
     # keeps it that way. The rule was `"grahsp" in name -> "agn.disc"`, which
     # OVERRODE an explicit shared entry rather than filling a gap: with
