@@ -148,11 +148,18 @@ def _message_for(**groups) -> str:
     return message
 
 
+#: parse_groups resolves the CLOUDY grid file before validating keys, so the
+#: retired-key message can only be observed on a type that needs no file; cue is
+#: chosen because its parameter set includes neb_fdust, the name the generic
+#: resolver used to mis-suggest.
+_GRID_FREE_NEB_TYPE = "cue"
+
+
 @pytest.mark.parametrize("key", _RETIRED_SPELLINGS)
 def test_the_retired_key_in_the_neb_group_names_the_replacement(key):
     """The worst of the three: the generic resolver sent ``neb_xid`` to
     ``neb_fdust``, a real parameter of an unrelated quantity."""
-    _message_for(neb={"type": "cloudy", key: Fixed(0.5)})
+    _message_for(neb={"type": _GRID_FREE_NEB_TYPE, key: Fixed(0.5)})
 
 
 @pytest.mark.parametrize("key", _RETIRED_SPELLINGS)
@@ -170,7 +177,7 @@ def test_the_retired_key_under_agn_nlr_names_the_replacement(key):
 
 def test_the_message_shows_the_placement_that_works():
     """A refusal that does not spell the working form is half an answer."""
-    message = _message_for(neb={"type": "cloudy", "neb_xid": Fixed(0.5)})
+    message = _message_for(neb={"type": _GRID_FREE_NEB_TYPE, "neb_xid": Fixed(0.5)})
     assert "'nlr'" in message, message
     assert "feltre" in message, message
 
