@@ -422,8 +422,12 @@ DEFAULT_DUST_ETA_BALANCE = declared_default(PARAMS, "dust_eta_balance")
 # which value is correct.
 MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
-SCHREIBER_T_K_DEFAULT = 30.0
+SCHREIBER_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent class-level default
 ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
+
+# Astrodust (Hensley & Draine 2023) grid fiducial PAH mass fraction (%)
+# matching Draine+2021 PAHspec "standard" reference (#2265)
+ASTRODUST_QPAH_DEFAULT = 3.79
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -553,6 +557,7 @@ SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
 
 __all__ = [
     "ANALYTIC_BETA_IR_DEFAULT",
+    "ASTRODUST_QPAH_DEFAULT",
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
     "CASEY_T_K_DEFAULT",

@@ -35,13 +35,14 @@ from typing import Any, ClassVar
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._params import ASTRODUST_QPAH_DEFAULT
 from tengri.components.dust.astrodust_hd23 import (
     load_astrodust_hd23_or_raise,
     resample_lnu_on_aa_grid,
 )
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
-from tengri.parameters.priors import Uniform
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import SEDComponentConfig
 
 __all__ = ["AstrodustIRConfig", "AstrodustIRSEDComponent"]
@@ -162,6 +163,10 @@ class AstrodustIRSEDComponent(EmissionComponent):
         description="log10(U), starlight intensity in local-ISRF (U=1) units",
         units="dex",
     )
+
+    # PAH mass fraction for the Hensley & Draine 2023 grid fiducial
+    # (matches Draine+2021 PAHspec "standard" reference): #2265
+    qpah = Fixed(ASTRODUST_QPAH_DEFAULT)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("hensley_draine2023",)
 
