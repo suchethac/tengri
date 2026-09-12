@@ -67,6 +67,17 @@ milliseconds. `TENGRI_PRECOMP_CACHE_DIR` / `TENGRI_DISABLE_PRECOMP_CACHE`
 mirror the JAX-cache knobs. The pytest suite disables it globally in
 `tests/conftest.py` (hermeticity); its contract tests opt back in.
 
+`TENGRI_HOST_DEVICES=<n>` gets CPU users extra JAX devices without knowing the
+XLA flag spelling: `src/tengri/__init__.py` reads it before its own `import jax`
+and appends `--xla_force_host_platform_device_count=<n>` to `XLA_FLAGS` (a
+no-op if `XLA_FLAGS` already requests a host device count). This is what lets
+`run_nuts(..., chain_parallel="pmap")` (and `run_dynamic_hmc`, and `run_hmc`'s
+`chain_method="parallel"`) map `n_chains` MCMC chains one-per-device via
+`jax.pmap` instead of SIMD-batching them onto one device — measured 19.5s ->
+3.5s for the sampling phase of a 4-chain NUTS fit with
+`TENGRI_HOST_DEVICES=4`. See `docs/dev/inference_methods.md` ("CPU Chain
+Parallelism").
+
 After upgrading JAX (`pip install -U jax`), wipe stale entries:
 
 ```python
@@ -475,7 +486,7 @@ by the iteration cap all raise loudly by design — do not weaken these guards.
   - **A line channel** is served by supplying the line fluxes from the table, so `loss_functions` need not set `needs_state=True` and rebuild the full-grid SED via `predict_state` per likelihood. **Dust does not touch this.** Measured on the #1477 fixture — dusty model, 5 bands + 3 line fluxes, gradient FLOPs of the *fit objective* — `WavePrecomp` 1,933,823 vs the pair **405,825** (**4.77x**), beside a dust-free control identical to the digit either way (251,783).
   - `fast_nebular_can_engage` answers the **photometry** question only. Consult it for the photometry-only top-up; never to decide whether a line-flux fit gets the LUT. #1760 did, on the strength of a guard that measured `jnp.sum(model.predict_photometry(params))` — an objective that cannot observe the line-channel saving — and every dusty line-flux fit silently returned to the pre-#1477 cost.
   - **Measure the objective you are claiming about.** A photometry-surface FLOP count says nothing about the line channel, and vice versa. Guards: `test_bug_1748_feature_precomp_effect.py` (photometry) and `test_bug_1770_line_lut_survives_dust.py` (lines) — run both.
-- **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass_matrix=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass_matrix=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
+- **One NUTS fit per notebook process.** Each warmup peaks at 1-6 GB on D ≤ 12 photometry fits (measured 1.1-1.9 GB at D=8 with a DPL SFH) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with `dense_mass_matrix=True`. The `dense_mass_matrix=None` auto-policy (2026-09-11 revision, #319) already avoids this for `dense_basis` specs at any D; a `dense_basis` notebook that forces `dense_mass_matrix=True` explicitly, or any multi-fit notebook wanting the lowest possible peak regardless of SFH, still needs `dense_mass_matrix=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
 - **Subagent rejection ≠ child kill.** A rejected subagent's `python notebook.py` keeps running. After rejecting, run `ps -axo pid,rss,comm | grep python` and `kill -9` zombies
 
 ## Testing

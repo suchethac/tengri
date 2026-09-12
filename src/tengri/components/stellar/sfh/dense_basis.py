@@ -33,6 +33,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.utils.host_array import device_table, host_array
+from tengri.utils.scale import representable_denominator
 
 # ── Constants ─────────────────────────────────────────────────────
 
@@ -528,7 +529,7 @@ def dense_basis(
     mass_recent = jnp.sum(jnp.where(recent_mask, sfr, 0.0)) * dt_yr
     mass_init = jnp.sum(jnp.where(recent_mask, 0.0, sfr)) * dt_yr
     mass_remaining = jnp.maximum(target_mass - mass_recent, 0.0)
-    init_scale = mass_remaining / jnp.maximum(mass_init, 1e-30)
+    init_scale = mass_remaining / jnp.maximum(mass_init, representable_denominator(1e-30))
     sfr = jnp.where(recent_mask, sfr, sfr * init_scale)
 
     # --- Recent-SFR override (dense_basis lines 182-183) ---

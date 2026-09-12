@@ -52,6 +52,7 @@ import jax.numpy as jnp
 
 from tengri.utils.grid_interp import pchip_interp_1d
 from tengri.utils.host_array import device_table, host_array
+from tengri.utils.scale import representable_denominator
 
 # Maximum age of the universe in years: hardcoded, not fittable.
 AGEMAX_YR = 14e9
@@ -96,7 +97,9 @@ def _renormalize_to_mass(
     shapes without changing the answer when the shape is non-trivial.
     """
     mass_norm = jnp.trapezoid(shape, t_lookback)
-    return shape * (10.0**log_total_mass) / jnp.maximum(mass_norm, 1e-30)
+    return (
+        shape * (10.0**log_total_mass) / jnp.maximum(mass_norm, representable_denominator(1e-30))
+    )
 
 
 def window_weight(
@@ -1802,8 +1805,8 @@ def sfh2exp(
     # burst holds exactly f_burst of the total stellar mass (CIGALE convention).
     m_main = jnp.trapezoid(main, t_lookback)
     m_burst = jnp.trapezoid(burst, t_lookback)
-    main_unit = main / jnp.maximum(jnp.abs(m_main), 1e-300)
-    burst_unit = burst / jnp.maximum(jnp.abs(m_burst), 1e-300)
+    main_unit = main / jnp.maximum(jnp.abs(m_main), representable_denominator(1e-300))
+    burst_unit = burst / jnp.maximum(jnp.abs(m_burst), representable_denominator(1e-300))
     shape = (1.0 - f_burst) * main_unit + f_burst * burst_unit
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 

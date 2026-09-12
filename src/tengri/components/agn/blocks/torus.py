@@ -37,6 +37,7 @@ from tengri.components.agn.skirtor_agnfitter import (
 )
 from tengri.components.agn.torus import nenkova_torus
 from tengri.utils.physics_constants import L_SUN
+from tengri.utils.scale import representable_denominator
 
 __all__ = [
     "cat3d_wind_torus_block",
@@ -503,7 +504,7 @@ def skirtor_torus_block(
         # Normalize the Schartmann shape to that bolometric.
         L_disc_lambda = (
             _sch_shape
-            / jnp.maximum(jnp.trapezoid(_sch_shape, wave_aa), 1e-30)
+            / jnp.maximum(jnp.trapezoid(_sch_shape, wave_aa), representable_denominator(1e-30))
             * (10.0 ** jnp.asarray(_faceon_lbol))
             * _L_SUN_ERG
         )
@@ -531,5 +532,5 @@ def skirtor_torus_block(
     # ``self.SKIRTOR2016.dust += blackbody`` followed by ``norm = 1/∫``.
     L_bol_erg = (10.0**agn_log_lbol) * _L_SUN_ERG
     l_scale = L_bol_erg * agn_torus_frac
-    rescale = l_scale / jnp.maximum(l_scale + l_ext, 1e-30)
+    rescale = l_scale / jnp.maximum(l_scale + l_ext, representable_denominator(1e-30))
     return (L_lambda_thermal + polar_L_lambda) * rescale

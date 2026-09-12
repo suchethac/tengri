@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.utils.grid_interp import resample_template
+from tengri.utils.scale import representable_denominator
 
 # Wavelength ranges (Angstrom)
 # 0.0413 Angstrom = hc / (300 keV) with hc = 12.398 keV.Angstrom: the hard edge
@@ -82,7 +83,7 @@ def make_union_grid(
         keep[0] = True
         # Use the larger of the two endpoints for the relative scale so the
         # check is symmetric.
-        rel_gap = np.diff(merged) / np.maximum(merged[:-1], 1e-300)
+        rel_gap = np.diff(merged) / np.maximum(merged[:-1], representable_denominator(1e-300))
         keep[1:] = rel_gap > dedupe_tol_rel
         merged = merged[keep]
     return jnp.asarray(merged)

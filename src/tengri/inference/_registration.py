@@ -254,6 +254,57 @@ register_backend(
     legacy_fitter=False,
 )(_ctx_run_raytrace)
 
+
+def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
+    """``mcmc_nuts_fast``: the 20 s photometry recipe as a named method.
+
+    NUTS with the settings ``bench/reports/2026-09-11_profile_mass_20s.md``
+    measured at 9.5-17.2 s per galaxy on eight logical CPU cores across twelve
+    ``ctl-dpl``/``ctl-jwst`` seeds (min ESS >= 100 on eleven, split R-hat
+    1.009-1.043): four chains, 150 warmup steps, no separate burn-in (the
+    warmup is the burn-in; split R-hat across the four chains is the
+    stationarity check), 300 draws per chain, target acceptance 0.8. The mass
+    profiling, the dense metric at D <= 12 and ``chain_parallel="auto"`` are
+    the fitter's and ``run_nuts``'s own defaults, so this wrapper adds only
+    the draw budget and one hint: without host devices the chains run under
+    ``vmap`` and the sampling phase is ~4x longer, which is what
+    ``TENGRI_HOST_DEVICES=4`` (set before ``import tengri``) fixes.
+
+    Every setting is overridable through ``**kw``; ``defaults.toml``'s
+    ``[inference.mcmc_nuts_fast]`` section carries the draw budget so
+    ``Fitter.run`` merges it the same way it merges every other method's.
+    """
+    import logging
+
+    import jax
+
+    if int(kw.get("n_chains", 4)) > 1 and len(jax.devices()) < int(kw.get("n_chains", 4)):
+        logging.getLogger(__name__).info(
+            "mcmc_nuts_fast: %d JAX device(s) for %d chains, so the chains run under vmap; "
+            "export TENGRI_HOST_DEVICES=%d before importing tengri to pmap them.",
+            len(jax.devices()),
+            int(kw.get("n_chains", 4)),
+            int(kw.get("n_chains", 4)),
+        )
+    settings = dict(n_chains=4, n_warmup=150, n_burnin=0, n_samples=300, target_accept_rate=0.8)
+    settings.update(kw)
+    return _ctx_run_nuts(
+        context, key=key, init_from=init_from, precondition=precondition, **settings
+    )
+
+
+register_backend(
+    "mcmc_nuts_fast",
+    tier="primary",
+    short_doc=(
+        "NUTS at the 20 s photometry recipe: 4 chains x (150 warmup + 300 draws), "
+        "no burn-in, target 0.8; mass profiled, dense metric, pmapped chains by default"
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_run_nuts_fast)
+
 # ── Promoted from experimental ──────────────────────────────────────────
 # Validated against DPL (D=6) and dense_basis (D=7) photometry mocks
 # on 2026-05-22 (issue #231). See docs/dev/benchmarks/2026-05-22_inference_backend_validation.md.
