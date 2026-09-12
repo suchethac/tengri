@@ -5,22 +5,19 @@ Two independent checks, deliberately kept separate because they read different
 things:
 
 - :func:`test_dust_closure_literals_match_declarations` is an **AST check**: it
-  parses each named source file BY PATH (``ast.parse(path.read_text())``) and
+  parses each named source file by path (``ast.parse(path.read_text())``) and
   looks for a bare numeral standing in for a name ``PARAMS``/``ATTENUATION_PARAMS``
-  declares. It never imports ``tengri``, so there is no "RED against main's
-  source" form to demonstrate for it the way there is for an import-based test:
-  running it against ``src/`` on ``main`` (rather than this worktree) means
-  pointing ``ROOT``/``DUST_TREE`` at a different checkout, not swapping a
-  Python import path, and it would have caught nothing on main anyway for the
-  ``f_obscuration``/``.get(...)`` shapes before this fix widened its own name
-  resolution (see the docstring on :func:`_resolve_bare_name` below).
+  declares. It never imports ``tengri``, so it can be pointed at any checkout by
+  changing ``ROOT``/``DUST_TREE`` rather than the Python import path. It
+  resolves the bare spelling of a declared name (e.g. ``f_obscuration`` for
+  ``dust_f_obscuration``) the same way ``tools/check_literal_param_defaults.py``
+  does -- see :func:`_resolve_bare_name`.
 - :func:`test_dust_params_table_consistency` **imports tengri objects**
   (``_REGISTRY``, the component classes, ``PARAMS``/``ATTENUATION_PARAMS``) and
-  compares each registered dust emission component's OWN class-level prior
-  against the shared table. This one has a real RED form against main's
-  source: on main, ``ModifiedBlackbodyIRSEDComponent``'s ``dust_beta_ir=1.8``
-  disagreed with the table's (then) ``Fixed(1.6)`` and was not on the
-  exception list, so the parametrized case for that pair failed.
+  compares each registered dust emission component's own class-level prior
+  against the shared table, parametrized one case per (class, declared name)
+  pair, with a documented exception list for the pairs left as a tracked,
+  live discrepancy rather than reconciled.
 """
 
 import ast
@@ -144,8 +141,7 @@ def _extract_numeric_defaults_from_file(path: Path) -> dict[str, tuple[int, floa
 def test_dust_closure_literals_match_declarations(filename):
     """Every numeric literal for a declared dust param matches its declaration.
 
-    AST check: parses ``filename`` by path and never imports ``tengri``. See
-    the module docstring for why this test has no main-source RED form.
+    AST check: parses ``filename`` by path and never imports ``tengri``.
     """
     file_path = DUST_TREE / filename
     if not file_path.exists():
@@ -190,24 +186,23 @@ def test_dust_closure_literals_match_declarations(filename):
         pytest.fail("\n".join(failures))
 
 
-# ── Registered-class vs shared-table consistency (owner ruling 1) ─────────
+# ── Registered-class vs shared-table consistency ───────────────────────────
 #
-# Owner ruling 1: the component's own class-level prior wins over the shared
-# ``components/dust/_params.py`` table; a table entry that disagrees is
-# corrected to the class value, or dropped where a per-model value cannot be
-# expressed (multiple classes disagreeing with EACH OTHER, not just the
-# table -- ``dust_T`` is the one case of that shape: MBB/schreiber2016 read
-# 30.0, graybody/casey2012 read 35.0, schreiber2018 reads 25.0, and the table
-# keeps 35.0 as the majority. See ``_params.py``'s ``dust_T`` docstring).
+# The component's own class-level prior is the declaration for a name that
+# some class declares; a shared ``components/dust/_params.py`` table entry
+# that disagrees is a stale copy. ``dust_T`` is the one case where multiple
+# classes disagree with EACH OTHER, not just the table: MBB/schreiber2016
+# read 30.0, graybody/casey2012 read 35.0, schreiber2018 reads 25.0, and the
+# table keeps 35.0 as the majority (see ``_params.py``'s ``dust_T``
+# docstring).
 #
 # Every OTHER class-vs-table disagreement this test finds must either match
 # (the common case) or be a reasoned, named exception below -- never silently
-# pass. ``dust_lgU`` is the one other case found while writing this test:
-# AstrodustIRSEDComponent and Draine2021PAHIRSEDComponent agree with EACH
-# OTHER (default=1.0) but not with the table's ``Fixed(0.0)``; see the
-# matching note on ``_params.py``'s ``dust_lgU`` entry for why that is left
-# as a tracked discrepancy (a real behavior change on the legacy flat-builder
-# path, out of this task's authorized scope) rather than corrected here.
+# pass. ``dust_lgU`` is the one other case: AstrodustIRSEDComponent and
+# Draine2021PAHIRSEDComponent agree with EACH OTHER (default=1.0) but not
+# with the table's ``Fixed(0.0)``; see the matching note on ``_params.py``'s
+# ``dust_lgU`` entry for why that stays a tracked discrepancy (#2261) rather
+# than corrected here.
 _TABLE_CLASS_EXCEPTIONS: dict[tuple[str, str], str] = {
     ("ModifiedBlackbodyIRSEDComponent", "dust_T"): (
         "declares Fixed(MBB_T_K_DEFAULT)=30.0; table keeps Fixed(35.0), the "
@@ -283,12 +278,8 @@ def test_dust_params_table_consistency(cls, full_name, class_default, table_defa
     """A registered class's own prior matches the shared table, or is excepted.
 
     Imports tengri objects (``_REGISTRY``, the component classes, the two
-    param tables). RED against main's source: on main
-    ``ModifiedBlackbodyIRSEDComponent`` declares ``dust_beta_ir=Fixed(1.8)``
-    while the table's (then-uncorrected) entry read ``Fixed(1.6)``, and that
-    pair was not on any exception list, so
-    ``test_dust_params_table_consistency[ModifiedBlackbodyIRSEDComponent:dust_beta_ir]``
-    failed there.
+    param tables) and is parametrized one case per (class, declared name)
+    pair (see :func:`_registered_emission_class_param_cases`).
     """
     exception_key = (cls.__name__, full_name)
     if exception_key in _TABLE_CLASS_EXCEPTIONS:
@@ -299,6 +290,5 @@ def test_dust_params_table_consistency(cls, full_name, class_default, table_defa
     assert abs(class_default - table_default) < 1e-10, (
         f"{cls.__name__} declares {full_name}={class_default}, but the shared "
         f"table declares {table_default}. Either correct the table entry to "
-        "match the class (owner ruling 1) or add a reasoned entry to "
-        "_TABLE_CLASS_EXCEPTIONS."
+        "match the class or add a reasoned entry to _TABLE_CLASS_EXCEPTIONS."
     )

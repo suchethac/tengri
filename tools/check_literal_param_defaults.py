@@ -107,8 +107,8 @@ ROOT = Path(__file__).resolve().parent.parent
 #: Default scopes: the trees already swept clean of literal copies (#2241's
 #: dust emission, #2265's dust tree widening, #2265's radio, stellar, igm).
 #: A no-argument run covers all of them and must report zero sites; the
-#: remaining component trees join this tuple as #2297's per-tree rulings land
-#: and their sweeps go in.
+#: remaining component trees join this tuple as #2297's per-tree decisions
+#: land and their sweeps go in.
 DEFAULT_SCOPES: tuple[Path, ...] = (
     ROOT / "src" / "tengri" / "components" / "dust",
     ROOT / "src" / "tengri" / "components" / "radio",

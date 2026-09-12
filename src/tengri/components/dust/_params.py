@@ -300,26 +300,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_lgU",
         # Found while widening this table's class/closure audit (#2265): both
-        # classes that declare ``lgU`` (AstrodustIRSEDComponent,
-        # Draine2021PAHIRSEDComponent) agree with each other at
-        # ``default=1.0``, disagreeing with this entry's ``Fixed(0.0)``. Unlike
-        # ``dust_T`` this is not a multi-way split that forces the table to
-        # keep a different value than any one class -- both readers already
-        # agree, so ruling 1 would correct this entry to 1.0. Left as a
-        # tracked, undecided discrepancy rather than changed here: measured
-        # directly (not assumed), a ``dust_emission={'type': ..., 'all_params':
-        # Fixed(DEFAULT)}`` build's resolved ``dust_T``/``dust_beta_ir`` DOES
-        # come from THIS table (registry_default), not from the selected
-        # class's own ``Fixed(...)`` attribute -- e.g. ``casey2012`` under a
-        # wildcard-fixed build reads ``dust_beta_ir`` from the table, which is
-        # exactly why correcting THAT entry (#2265) changed casey2012's
-        # ``predict_photometry`` on the grammar path. So correcting
-        # ``dust_lgU`` here to 1.0 would be a REAL behavior change reaching
-        # every wildcard-fixed astrodust/draine2021_pah build, not merely the
-        # legacy flat-builder path -- out of this task's authorized scope.
-        # tests/contract/test_dust_closure_defaults.py::
-        # test_dust_params_table_consistency carries this pair as an explicit,
-        # reasoned exception rather than silently passing or silently fixing.
+        # classes declaring ``lgU`` (AstrodustIRSEDComponent,
+        # Draine2021PAHIRSEDComponent) agree at ``default=1.0``, disagreeing
+        # with this entry's ``Fixed(0.0)``. Correcting it would change every
+        # wildcard-``Fixed(DEFAULT)`` astrodust/draine2021_pah build -- the
+        # same table-wins-over-class path ``dust_beta_ir`` took for
+        # ``casey2012`` above -- so it stays a tracked discrepancy (#2261).
+        # ``test_dust_closure_defaults.py::test_dust_params_table_consistency``
+        # carries this pair as an explicit, reasoned exception.
         Fixed(0.0),
         "log10(U) starlight intensity in mMMP units for Draine+2021 PAHspec (0..7)",
         lambda lo, hi: lo >= 0.0 and hi <= 7.0,
@@ -462,38 +450,20 @@ ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012, schre
 
 # ── Attenuation-law-own defaults (#2265) ──────────────────────────────
 # ``kriek_conroy``/``tea`` are plain functions, not ``SEDModelComponent``
-# subclasses, so they have no class attribute to read -- but their signature
-# defaults are NOT interchangeable placeholders for
-# ``ATTENUATION_PARAMS``'s shared ``dust_bump_strength``/``dust_delta``
-# entries (both ``Fixed(0.0)``, the correct "off" value for a law like
-# ``calzetti`` that discards them structurally). Each of these two constants
-# is instead the LAW'S OWN, citation-backed, git-history-stable value:
-# ``dust_bump_strength=1.0`` for Kriek & Conroy (2013) is the paper's own
-# E_b=0.85 fiducial (``e_b = bump_strength * (0.85 - 1.9*delta)``, this
-# module's Eq. 3 comment); ``dust_delta=-0.2`` for TEA (Haskell et al. 2024)
-# is that paper's own NIHAO-SKIRT median for 0.5 < z < 2 star-forming
-# galaxies. Both held steady at these values from the pre-refactor codebase
-# (commit 1c312ae90) through years of subsequent dust-attenuation fixes,
-# until a first pass at this exact guard-widening task (99304f22d)
-# mistakenly replaced them with the shared table's structural-off 0.0,
-# reasoning "aligns with declarations" without checking that the two names
-# are read by more than one caller for different reasons. That commit's own
-# message claimed "No changes on the grammar path" for both -- false: see
+# subclasses, so their signature defaults are not interchangeable
+# placeholders for ``ATTENUATION_PARAMS``'s shared ``dust_bump_strength``/
+# ``dust_delta`` (both ``Fixed(0.0)``, correct as the "off" value for a
+# law like ``calzetti`` that discards them structurally). Each constant
+# here is instead the LAW's OWN citation-backed value:
+# ``dust_bump_strength=1.0`` is Kriek & Conroy (2013)'s own E_b=0.85
+# fiducial (``e_b = bump_strength * (0.85 - 1.9*delta)``, this module's
+# Eq. 3 comment); ``dust_delta=-0.2`` is Haskell et al. (2024) TEA's own
+# NIHAO-SKIRT median, 0.5 < z < 2 star-forming galaxies.
 # ``resolve_bc_diff_law_params`` in ``_apply.py`` (the ``live_shape_params``
-# gate, #1833) -- a caller that does not explicitly name
-# ``bump_strength``/``delta`` (including a blanket ``all_params:
-# Fixed(DEFAULT)`` wildcard, which tags every name ``wildcard_fixed``, not
-# in ``_REQUESTED_PROVENANCE``) gets the LAW's own signature default, not the
-# shared table value -- exactly the mechanism #1833 added to stop the
-# opposite mistake (injecting the shared zero deleted KC13's own 2175 Å
-# bump, measured 128% on the SED). The 99304f22d change also broke
-# ``tests/components/dust/test_dust_attenuation_laws.py::
-# TestKriekConroyMatchesFSPS::test_bump_excess_matches_fsps_at_delta_zero``
-# (FSPS bump excess 0.166 vs tengri's 0.019 at the shared-table 0.0), the
-# most direct evidence available that 1.0 is the value these two names must
-# keep. Restored here as named constants so the guard is satisfied (a Name,
-# not a bare literal) without repeating 99304f22d's mistake of also
-# rewriting the number.
+# gate, #1833) hands a caller that omits ``bump_strength``/``delta`` --
+# including a blanket ``all_params: Fixed(DEFAULT)`` wildcard -- the LAW's
+# own default, not the shared table's; pinned by
+# ``TestKriekConroyMatchesFSPS::test_bump_excess_matches_fsps_at_delta_zero``.
 KRIEK_CONROY_BUMP_STRENGTH_DEFAULT = 1.0  # Kriek & Conroy 2013 Eq. 3, E_b = 0.85 fiducial
 TEA_DELTA_DEFAULT = -0.2  # Haskell et al. 2024 NIHAO-SKIRT median, 0.5 < z < 2 SF galaxies
 
