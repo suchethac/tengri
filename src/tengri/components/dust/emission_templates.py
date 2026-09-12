@@ -2119,9 +2119,11 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         # Lsun-converted ``log_ltir_axis`` used for the shape lookup above) --
         # the delivered SED integrates to the erg/s budget exactly; only the
         # axis lookup needed the unit conversion.
-        from tengri.utils.scale import apply_log10_scale
+        from tengri.utils.scale import apply_log10_scale, representable_floor
 
-        log_t_integral = jnp.log10(jnp.clip(jnp.abs(t_integral), 1.0e-300, None))
+        log_t_integral = jnp.log10(
+            jnp.clip(jnp.abs(t_integral), representable_floor(1.0e-300), None)
+        )
         log_norm = jnp.where(t_integral > 0.0, log_ltir_ergs - log_t_integral, -jnp.inf)
         return apply_log10_scale(sed, log_norm)
 
