@@ -107,6 +107,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Four AGN sites integrated over the descending frequency grid by reversing
+  both trapezoid operands (``polar_dust.py``'s anisotropic polar luminosity,
+  ``adaf.py``'s float32 and float64 normalization integrals, ``unified.py``'s
+  disc L_bol). On Apple GPU via jax-mps under default MLX compile a reversed
+  array beside a broadcast scalar is silently zeroed past element 0
+  (jax-mps#232), and ``jnp.trapezoid`` multiplies by 0.5 internally, so the
+  torus lost its far-IR graybody entirely (measured x0.067 at 100 um in the
+  Herschel 250 band). Each site now integrates over the descending ``nu``
+  directly and negates the scalar result -- float64 moves only by summation
+  order (measured <= 2.2e-16 per site), MPS forward probes and the recorded
+  gradient probe match CPU exactly, and a source scan forbids reversed
+  trapezoid operands anywhere in ``src/tengri`` (#2295). The Apple-GPU
+  recipe's ``MLX_DISABLE_COMPILE=1`` rule stays until jax-mps#232 closes:
+  VJPs elsewhere still emit ``lax.rev``.
 - The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
   continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
   ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``
