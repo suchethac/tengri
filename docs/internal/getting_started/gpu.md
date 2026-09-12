@@ -270,22 +270,34 @@ that gap: it writes a float64 reference on CPU (`--write-reference`), then, run 
 Mac under the `jax-mps` venv above, checks six model seams (`stellar_dust`, `+dust IR`,
 `+Cue`, `+AGN`, `+radio+xray`, `panchromatic`) in pure float32 against it -- max relative
 forward error, gradient error, and a *converged* MAP fit's optimum parameter-vector
-deviation, PASS/FAIL at 3e-3 / 1e-2 / 1e-2. The MAP fit uses L-BFGS to genuine
-convergence (`init_from` pinned to the shared truth, restarted from a stall rather than
-given a bigger iteration cap), and the reference generator refuses to write a file where
-any seam did not converge. The MAP-loss deviation prints as an informational column
-only -- at a converged optimum the loss is stationary, so it is the parameter vector,
-not the loss value, that is the scientific quantity gated:
+deviation, PASS/FAIL at 3e-3 / 1e-2 / 1e-2. A third mode, `--self-check`, reruns the
+reference's own float64 CPU measurement on the current tree and fails above 1e-9: it
+separates "the device is wrong" from "the physics moved since the file was written".
+The MAP fit uses L-BFGS to genuine convergence (`init_from` pinned to the shared truth,
+restarted from a stall rather than given a bigger iteration cap), and the reference
+generator refuses to write a file where any seam did not converge. The MAP-loss
+deviation prints as an informational column only -- at a converged optimum the loss is
+stationary, so it is the parameter vector, not the loss value, that is the scientific
+quantity gated:
 
 ```bash
+# 1. Is the committed reference still the physics of this tree? (CPU, float64, ~5 min)
+JAX_ENABLE_X64=1 JAX_PLATFORMS=cpu \
+    python bench/scripts/benchmark_float32_mps_parity.py \
+    --self-check bench/results/float32_parity_reference_f2b4b1843.json
+# 2. The device sweep, under the three rules
 JAX_ENABLE_X64=0 JAX_PLATFORMS=mps MLX_DISABLE_COMPILE=1 \
     python bench/scripts/benchmark_float32_mps_parity.py \
-    --reference bench/results/float32_parity_reference_<sha>.json
+    --reference bench/results/float32_parity_reference_f2b4b1843.json
 ```
 
 It refuses to run with `jax_enable_x64=True` (a one-line fix is printed instead of a
 silent float64 fallback), and a seam that cannot be built in float32 today is skipped
-with a printed reason rather than failing the sweep.
+with a printed reason rather than failing the sweep. The reference file records the
+`src/tengri` tree hash it was written from; when the current tree's hash differs the
+sweep prints a `REFERENCE MAY BE STALE` banner (with the number of `src/tengri` commits
+since) above and below its table and points at step 1. A FAIL under that banner is a
+claim about the file until the self-check has measured it (#2300).
 
 Measured 2026-09-12 on an M4 Pro (jax 0.10.2, `jax-mps` 0.10.10) under the three rules
 above, on a tree based on `f6c36d9d3`, against the float64 CPU reference
@@ -295,7 +307,10 @@ from what the GPU backend adds. That reference predates #2260 (shock lines moved
 diffuse screen), which shifted the `panchromatic` seam's float64 answer by 3.3e-3 in
 Herschel-250 and its `tau_diff` gradient by 67%: on any later tree the `panchromatic`
 row reads FAIL on `fwd` against this file on every device, CPU-float64 included (#2300).
-Regenerate the reference (`--write-reference`) before re-measuring that row.
+The file is kept for this table; the current reference is
+`float32_parity_reference_f2b4b1843.json` (written at `f2b4b1843`, after #2291, the
+AGN validation round that moved the three torus seams' float64 photometry by 2.2e-2).
+Run the self-check against it before trusting any FAIL on a later tree.
 
 | seam | fwd | grad | param | status | CPU-f32 grad |
 |---|---|---|---|---|---|
