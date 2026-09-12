@@ -194,3 +194,62 @@ def test_baked_in_satisfies_protocol():
     """BakedInBackend satisfies NebularBackend Protocol."""
     b = BakedInBackend(ionizing_source_warning="suppress")
     assert isinstance(b, NebularBackend), "BakedInBackend must satisfy NebularBackend Protocol"
+
+
+# ── SEDModel.build seam (R49): explicit neb= states the choice ────
+
+
+def _build(ssp_data, *, neb_kwargs: dict):
+    """Minimal stellar+dust build, varying only the ``neb`` group."""
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]))
+    return SEDModel.build(
+        ssp_data=ssp_data,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.1),
+        **neb_kwargs,
+    )
+
+
+def test_omitted_neb_still_warns(ssp_data_fsps):
+    """R49: an omitted ``neb=`` (the silent default) still fires the
+    baked-in advisory -- nothing acknowledged the choice."""
+    with pytest.warns(BakedInNebularWarning):
+        _build(ssp_data_fsps, neb_kwargs={})
+
+
+def test_explicit_neb_ssp_silences_the_advisory(ssp_data_fsps):
+    """R49: neb={'type': 'ssp'} states the baked-in choice explicitly."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", BakedInNebularWarning)
+        _build(ssp_data_fsps, neb_kwargs={"neb": {"type": "ssp"}})
+    assert not any(issubclass(x.category, BakedInNebularWarning) for x in w)
+
+
+def test_explicit_neb_none_silences_the_advisory(ssp_data_fsps):
+    """R49: neb={'type': 'none'} states the baked-in choice explicitly too
+    (it resolves to the same BakedInBackend as 'ssp' and an omitted neb=)."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", BakedInNebularWarning)
+        _build(ssp_data_fsps, neb_kwargs={"neb": {"type": "none"}})
+    assert not any(issubclass(x.category, BakedInNebularWarning) for x in w)
+
+
+def test_explicit_cue_unaffected(ssp_data_fsps):
+    """A different explicit backend (cue) never touches BakedInBackend at
+    all, so it must not warn either -- confirms the fix didn't couple the
+    two paths."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", BakedInNebularWarning)
+        try:
+            _build(ssp_data_fsps, neb_kwargs={"neb": {"type": "cue"}})
+        except FileNotFoundError:
+            pytest.skip("Cue weights file not present")
+    assert not any(issubclass(x.category, BakedInNebularWarning) for x in w)

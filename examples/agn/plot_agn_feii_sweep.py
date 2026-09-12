@@ -67,11 +67,14 @@ model = tengri.SEDModel.build(
     dust_attenuation=DUST,
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "disc": {
+            "type": "multicolor",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "log_ledd": -1.0,
+        },
         "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT), "agn_blr_cf": 0.1},
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_lbol": 12.0,
-        "log_ledd": -1.0,
         "lum_ratio": 1.0,
     },
     redshift=tengri.Fixed(0.05),

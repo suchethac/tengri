@@ -97,9 +97,18 @@ AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 #
 # - ``"none"``: SF synchrotron turned off; AGN radio only.
 # - ``"bell2003"`` (default): fixed-q FIR-radio correlation.
+# - ``"bell2003_split"``: AGNFITTER-RX parity mode -- the Bell(2003) total
+#   L(1.4 GHz) split 90%/10% non-thermal/thermal (see radio.py module
+#   docstring for how this differs from tengri's default architecture).
 # - ``"delvecchio2021"``: mass- and z-dependent FIRRC at 1.4 GHz.
 # - ``"mccheyne2022"``: mass- and z-dependent FIRRC at 150 MHz.
-SF_RADIO_MODELS: tuple[str, ...] = ("none", "bell2003", "delvecchio2021", "mccheyne2022")
+SF_RADIO_MODELS: tuple[str, ...] = (
+    "none",
+    "bell2003",
+    "bell2003_split",
+    "delvecchio2021",
+    "mccheyne2022",
+)
 
 
 @dataclass(frozen=True)
@@ -111,13 +120,17 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     name : str
         Diagnostic identifier. Default ``"radio"``.
     sfr_mode : str
-        Star-formation synchrotron mode. One of
-        ``{"none", "bell2003", "delvecchio2021", "mccheyne2022"}``. The
-        ``"none"`` mode turns off the SF component entirely (pure AGN radio).
-        Default ``"bell2003"``.
-    include_freefree : bool
-        Add Murphy+2011 thermal free-free component. Default ``True``
-        (matches :func:`radio_total`'s default).
+        Star-formation synchrotron mode. One of :data:`SF_RADIO_MODELS`:
+        ``{"none", "bell2003", "bell2003_split", "delvecchio2021",
+        "mccheyne2022"}``. The ``"none"`` mode turns off the SF component
+        entirely (pure AGN radio). Default ``"bell2003"``.
+    include_freefree : bool or None
+        Add Murphy+2011 thermal free-free component. ``None`` (default) means
+        "auto": resolves to ``True`` for every ``sfr_mode`` except
+        ``"bell2003_split"``, where it resolves to ``False`` (see below).
+        Passing an explicit ``True``/``False`` pins it; explicit ``True``
+        together with ``sfr_mode="bell2003_split"`` raises
+        :class:`~tengri.config.exceptions.ConfigError` (see below).
     agn_radio_model : str
         AGN radio sub-model. One of :data:`AGN_RADIO_MODELS`:
         ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
@@ -126,11 +139,25 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         bit-identically. Physical-aging kernels ``"JP"``, ``"KP"``,
         ``"tribble"`` are reserved names rejected at construction with a
         :class:`ValueError`; the physics lands in a follow-up PR.
+
+    Notes
+    -----
+    **``"bell2003_split"`` forces ``include_freefree=False`` (ruling R19).**
+    :func:`tengri.components.radio.radio.radio_sfr_bell2003_split` already
+    allocates 10% of the Bell (2003) *total* L(1.4 GHz) to a thermal
+    component (see its docstring); the separately-normalized
+    :func:`tengri.components.radio.radio.radio_freefree` (Murphy+2011) term
+    this component would otherwise add on top is a SECOND, independently
+    calibrated thermal component -- double counting, measured at
+    ff/sf ~ 0.33-0.36 (33-36% excess thermal flux) at L_ir=1e44 erg/s. This
+    class refuses to construct that combination silently: an explicit
+    ``include_freefree=True`` with ``sfr_mode="bell2003_split"`` raises
+    rather than being overridden quietly (explicit-over-silent, ADR-0011).
     """
 
     name: str = "radio"
     sfr_mode: str = "bell2003"
-    include_freefree: bool = True
+    include_freefree: bool | None = None
     agn_radio_model: str = "powerlaw"
 
     def __post_init__(self) -> None:
@@ -148,6 +175,29 @@ class RadioSEDComponentConfig(SEDComponentConfig):
             raise ValueError(
                 f"Unknown sfr_mode {self.sfr_mode!r}. Choose one of {SF_RADIO_MODELS}."
             )
+        # bell2003_split already allocates a thermal fraction of the Bell
+        # (2003) TOTAL (radio_sfr_bell2003_split); adding the independently
+        # normalized radio_freefree term on top double-counts the thermal
+        # emission (measured ff/sf ~ 0.33-0.36 at L_ir=1e44 erg/s). Force it
+        # off for this mode; an explicit request to include it anyway raises
+        # rather than being silently overridden (explicit-over-silent).
+        if self.sfr_mode == "bell2003_split":
+            if self.include_freefree is True:
+                from tengri.config.exceptions import ConfigError
+
+                raise ConfigError(
+                    "radio: include_freefree=True is incompatible with "
+                    "sfr_mode='bell2003_split'. radio_sfr_bell2003_split "
+                    "already allocates 10% of the Bell (2003) TOTAL L(1.4 GHz) "
+                    "to a thermal component; adding radio_freefree "
+                    "(Murphy+2011) on top double-counts the thermal emission "
+                    "(measured ff/sf ~ 0.33-0.36 excess). Leave include_freefree "
+                    "unset (it resolves to False automatically for this mode) "
+                    "or pass include_freefree=False explicitly."
+                )
+            object.__setattr__(self, "include_freefree", False)
+        elif self.include_freefree is None:
+            object.__setattr__(self, "include_freefree", True)
 
 
 @dataclass(frozen=True)

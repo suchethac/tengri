@@ -191,11 +191,24 @@ def test_fwd_cat3d_node_exactness(grid, component):
         assert worst < 1e-3, f"fwd={grid['fwd'][k]}: shape residual {worst:.2e} > 1e-3"
 
 
-def test_parameter_bounds():
-    """Priors cover the CAT3D-Wind grid extent."""
+def test_parameter_bounds(grid):
+    """Priors cover the CAT3D-Wind grid extent, read from the h5 axes (not literals).
+
+    ``a_cat3d`` / ``fwd_cat3d`` compare directly against their grid axes.
+    ``cos_inc`` compares against ``cos(deg2rad(incl_axis))``: the grid is
+    parameterized by inclination in degrees, the declared parameter by its
+    cosine. ``cos(90 deg)`` is ~6e-17 in float64, not bit-exact 0.0, so this
+    comparison uses a tolerance rather than exact equality (same abs tol as
+    ``tools/check_param_grid_extent.py``).
+    """
     from tengri.components.agn.cat3d_torus_model import CAT3DTorus
 
     c = CAT3DTorus()
-    assert (c.cos_inc.lo, c.cos_inc.hi) == (0.0, 1.0)
-    assert (c.a_cat3d.lo, c.a_cat3d.hi) == (-2.5, -0.5)
-    assert (c.fwd_cat3d.lo, c.fwd_cat3d.hi) == (0.0, 1.0)
+    assert (c.a_cat3d.lo, c.a_cat3d.hi) == (float(grid["a"].min()), float(grid["a"].max()))
+    assert (c.fwd_cat3d.lo, c.fwd_cat3d.hi) == (
+        float(grid["fwd"].min()),
+        float(grid["fwd"].max()),
+    )
+    cos_inc_axis = np.cos(np.deg2rad(grid["incl"]))
+    assert c.cos_inc.lo == pytest.approx(float(cos_inc_axis.min()), abs=1e-9)
+    assert c.cos_inc.hi == pytest.approx(float(cos_inc_axis.max()), abs=1e-9)

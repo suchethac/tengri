@@ -119,6 +119,17 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten` (the deprecated
   `agn.lines` alias expands to an `nlr`/`blr` pair)
   ([ADR-0018](../adr/0018-composable-agn-grammar.md)).
+  - Some `agn.disc` blocks already carry their own hot corona in the template
+    itself (`kubota_done`, `kd18_agnfitter`, `kd18_agnfitter_warmindex`).
+    Composing one of them with an `xray` group selection that *also* adds an
+    AGN corona (`'simple'`/`'yang20'`/`'lopez24'`/`'xray_aird'`/
+    `'agn_xray_corona'`) raises: *"disc '\<name\>' already carries a hot
+    corona; xray={'type': '\<v\>'} would add a second alpha_ox corona (+51%
+    over 0.5-10 keV). Set xray={'type': 'none'} or choose a disc without
+    intrinsic X-rays."* Pick one: `xray={'type': 'none'}` with a
+    corona-carrying disc, or an X-ray-emission-free disc
+    (`'richards2006'`/`'multicolor'`/`'slone_netzer'`/...) with an `xray`
+    selection.
 - **Sentinels** `FREE` / `DEFAULT` are singletons exported from `tengri`.
   `FREE` defers a parameter to the registry's default prior; `DEFAULT` is
   legal only as `Fixed(DEFAULT)`, pinning a parameter at the registry default

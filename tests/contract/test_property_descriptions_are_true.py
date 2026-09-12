@@ -17,7 +17,7 @@ those descriptions were false:
   was also wrong, so the two errors compounded.
 
 Guard A executes the published sentence. The formula is *parsed out of the
-description* rather than transcribed beside it: a hand-written copy of the
+description* rather than retyped beside it: a hand-written copy of the
 right formula would keep passing while the published text said something else,
 which is precisely the two-copies failure that produced the bug. Two ways to
 fail, and the shipped wording hits both:

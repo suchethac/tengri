@@ -102,9 +102,9 @@ def _compute_one(args: tuple) -> tuple[tuple[int, int, int], np.ndarray]:
             gamma_hot=1.7,
             gamma_warm=2.7,
             r_hot=-1,  # no hot corona (set to r_isco)
-            r_warm=-1,  # no warm Comptonisation (set to r_isco)
+            r_warm=-1,  # no warm Comptonization (set to r_isco)
             log_rout=-1,  # self-gravity outer radius
-            fcol=-1,  # Done+2012 colour correction
+            fcol=-1,  # Done+2012 color correction
             h_max=10.0,
             z=0.0,
         )

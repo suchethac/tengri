@@ -11,7 +11,7 @@ script vendors them into a tengri-native HDF5 grid that can be interpolated
 Why vendor instead of read the ``.dat`` at runtime
 ---------------------------------------------------
 WG00 attenuation is not a fixed ``k(λ)`` scaled by ``τ_V``: the *shape* of the
-curve depends on ``τ_V`` (high-τ sightlines self-shield → greyer). So a faithful
+curve depends on ``τ_V`` (high-τ sightlines self-shield → grayer). So a faithful
 ``dust_type=3`` needs the full ``A(λ; τ_V)`` table, interpolated in ``τ_V``. A
 pure-JAX triweight kernel over the vendored grid makes ``τ_V`` a fully
 differentiable, JIT/vmap-safe *fitted* parameter — matching the SKIRTOR /

@@ -80,8 +80,13 @@ def test_bolometric_family_f64_exact_vs_frozen():
             np.float64(_frozen_l_tir(sed, wave)),
             rtol=1e-12,
         )
+        # ``include_lyc=True``: the frozen reference is verbatim pre-#1206
+        # arithmetic (no Lyman-continuum mask), and this comparison is about
+        # the peak-factored reduction's float64 exactness, not the #922
+        # physics convention -- so the caller opts out of the default mask
+        # to match what ``_frozen_l_abs`` actually computes.
         assert_allclose(
-            np.float64(compute_l_dust_absorbed(sed, sed_att, wave)),
+            np.float64(compute_l_dust_absorbed(sed, sed_att, wave, include_lyc=True)),
             np.float64(_frozen_l_abs(sed, sed_att, wave)),
             rtol=1e-12,
         )

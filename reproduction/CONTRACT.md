@@ -174,6 +174,22 @@ Never run `ruff format` on `reproduction/*.py`. The percent-format
 cells carry hand-tuned alignment that formatting destroys; lint scope
 for this repo is `src/` and `tests/` only.
 
+`scripts/render_reproduction_notebook.py <slug>` runs this recipe for you:
+`jupytext --to ipynb`, then the `PYTHONHASHSEED=0`/`PYTHONPATH` nbconvert
+invocation above with `MPLBACKEND` unset, failing loudly on any error-output
+cell or a `SystemExit`-truncated run (a notebook that stops on a missing
+input reads as a clean, zero-exit success under `nbclient` — see
+`tools/check_notebooks_executed.py`). On success it stamps
+`metadata["tengri_render"] = {"source_sha256", "executed_at",
+"tengri_version"}` on the rendered `.ipynb` — `source_sha256` is the SHA-256
+of the source `.py`'s *code* cells only (markdown edits don't invalidate a
+render) — and copies the result to `docs/reproduction/` (§8).
+`tools/check_repro_render_fresh.py` recomputes that hash from the checked-out
+`.py` and fails if it disagrees with the stamp, so a source edit that never
+gets re-rendered cannot ship silently. Unstamped renders (every comparison
+predates this convention) only warn; `--strict` requires a stamp on all of
+them.
+
 ## 8. Publishing
 
 The docs site shows *committed copies*, not the sources:
@@ -181,11 +197,24 @@ The docs site shows *committed copies*, not the sources:
 `docs/reproduction/_figs/`. nbsphinx renders stored outputs
 (`nbsphinx_execute = "never"`), so there is no auto-sync. Whenever you
 re-render a source notebook, re-copy the `.ipynb` and figures into
-`docs/reproduction/` **in the same PR**.
-`tests/contract/test_reproduction_docs_sync.py` pins this: the SHA-1 of
-every embedded PNG, in document order, must match between source and
-docs copy. It bit us once — a fixed attenuation panel (#552) kept
-showing its pre-fix figure on the live site until #555.
+`docs/reproduction/` **in the same PR** —
+`scripts/render_reproduction_notebook.py` does this for you as its last
+step. `tests/contract/test_reproduction_docs_sync.py` pins this two ways:
+the SHA-1 of every embedded PNG, in document order, must match between
+source and docs copy (it bit us once — a fixed attenuation panel (#552)
+kept showing its pre-fix figure on the live site until #555), and
+separately the SHA-1 of every code cell's *source*, in document order,
+must also match — the figure check alone stays green when a code-only
+edit (an API migration, say) lands in the source notebook but the docs
+copy is never re-copied, since the numeric output (and so every figure)
+is unaffected.
+
+`scripts/sync_reproduction_notebooks_for_docs.py` (a prose-only-edit
+transplant that never re-executes anything — see §9) preserves an
+existing `tengri_render` stamp exactly and never fabricates one: it
+copies only cell `source`, never notebook `metadata`, so a stamp it
+carries forward still reflects the last *real* execution, not the
+text-only sync.
 
 ## 9. Adding a comparison
 

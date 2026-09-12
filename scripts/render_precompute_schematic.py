@@ -89,7 +89,7 @@ CONVERGENCE = {1: 8.7, 3: 1.4, 5: 0.6, 8: 0.3}
 TAYLOR_ERROR = {"z = 0.05": 45.0, "z = 1": 215.0}
 
 INK = "#1c1c1c"
-GREY = "#8a8a8a"
+GRAY = "#8a8a8a"
 BLUE = "#2b6cb0"
 ORANGE = "#c05621"
 GREEN = "#2f6f4f"
@@ -218,7 +218,7 @@ def _shade_subbands(ax, grid, curve, edges):
             zorder=1,
         )
     for e in edges:
-        ax.axvline(e, color=GREY, lw=0.7, ls=(0, (3, 3)), zorder=2)
+        ax.axvline(e, color=GRAY, lw=0.7, ls=(0, (3, 3)), zorder=2)
 
 
 def _guard_canvas(fig, *, max_inches: float = 40.0) -> None:
@@ -360,7 +360,7 @@ def _panel_per_age(ax, grid, tw, templates, nodes, edges, lg_age_gyr):
             edges[k], edges[k + 1], color=BLUE, alpha=0.15 if k % 2 == 0 else 0.02, zorder=0
         )
     for e in edges:
-        ax.axvline(e, color=GREY, lw=0.7, ls=(0, (3, 3)), zorder=2)
+        ax.axvline(e, color=GRAY, lw=0.7, ls=(0, (3, 3)), zorder=2)
 
     for row, j in enumerate(idx):
         integrand = templates[j] * tw
@@ -463,14 +463,14 @@ def _panel_sfh(ax, lookback_yr, sfr, weights, lg_age_gyr):
     """(e) The SFH supplies one mass weight per age bin."""
     age_gyr = 10.0**lg_age_gyr
     ax.plot(
-        lookback_yr / 1e9, sfr / sfr.max(), color=GREY, lw=1.4, zorder=3, label="SFH: SFR($t$)"
+        lookback_yr / 1e9, sfr / sfr.max(), color=GRAY, lw=1.4, zorder=3, label="SFH: SFR($t$)"
     )
     ax.set_xscale("log")
     ax.set_xlim(1e-4, 12.0)
     ax.set_ylim(0, 1.35)
     ax.set_xlabel("lookback age  [Gyr]", fontsize=8)
-    ax.set_ylabel("SFR  (normalized)", fontsize=8, color=GREY)
-    ax.tick_params(axis="y", labelcolor=GREY, labelsize=7)
+    ax.set_ylabel("SFR  (normalized)", fontsize=8, color=GRAY)
+    ax.tick_params(axis="y", labelcolor=GRAY, labelsize=7)
     ax.tick_params(axis="x", labelsize=7)
 
     ax2 = ax.twinx()
@@ -506,7 +506,7 @@ def _panel_contract(ax, grid, tw, templates, phi, nodes, weights, lg_age_gyr):
         age_gyr,
         0,
         weights * per_age_bare / norm,
-        color=GREY,
+        color=GRAY,
         alpha=0.30,
         zorder=2,
         label="$w_j \\sum_k \\Phi_{jk}$  (no dust)",
@@ -549,7 +549,7 @@ def _panel_contract(ax, grid, tw, templates, phi, nodes, weights, lg_age_gyr):
         fontsize=6.9,
         color=INK,
         zorder=8,
-        bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=GREY, lw=0.6, alpha=0.95),
+        bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=GRAY, lw=0.6, alpha=0.95),
     )
     ax.set_title(
         "(f)  per call: screen at each bin's nodes,\nweight by $w_j$, sum — the CSP integral",
@@ -711,7 +711,7 @@ def _draw_convergence_panel(ax):
     ax.plot(
         guide_k,
         CONVERGENCE[5] * (5.0 / guide_k) ** 2,
-        color=GREY,
+        color=GRAY,
         lw=1.0,
         ls=(0, (4, 3)),
         zorder=2,

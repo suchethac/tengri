@@ -226,7 +226,7 @@ def _fetch_component(
     n_vals = np.power(10.0, log_densities).tolist()  # back to cm⁻³ for matching
     b_vals = b_fields.tolist()
 
-    # Group lines by emis table to minimise queries
+    # Group lines by emis table to minimize queries
     tables_needed: dict[str, list[int]] = {}  # table → list of line indices
     for li, (_, _, tbl, _) in enumerate(_LINE_MAP):
         tables_needed.setdefault(tbl, []).append(li)

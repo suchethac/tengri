@@ -368,14 +368,19 @@ def agn_panchromatic() -> dict:
         neb=builders.neb.cue(all_params=Fixed(DEFAULT)),
         agn=builders.agn.composable(
             all_params=FREE,
-            # No 'all_params' on the disc block itself (#2187): every
-            # multicolor-disc parameter (agn_log_lbol, agn_log_mbh,
-            # agn_cos_inc, agn_a_spin, agn_lum_ratio, agn_ir_frac) is a
-            # *shared* AGN parameter -- partitioned under "agn", never
-            # "agn.disc" -- so the composable-level wildcard above already
-            # frees every one of them. A wildcard restated on 'disc' itself
-            # covers zero parameters under 'multicolor' and now raises.
-            disc=builders.agn.disc.multicolor(),
+            # 'all_params' on the disc block is load-bearing, not a restated
+            # no-op. #2187 removed it on the premise that every multicolor-disc
+            # parameter is a *shared* AGN parameter partitioned under "agn",
+            # so that the composable-level wildcard above already reached them
+            # and a disc-level wildcard covered zero (which now raises). That
+            # premise no longer holds: the declared-reads partition puts
+            # agn_a_spin, agn_log_mbh and agn_ebv_disc under "agn.disc", and
+            # the resolver consults a parameter's OWNING sub-block dict. With
+            # no wildcard here those three fall through to Fixed(DEFAULT) and
+            # the recipe silently pins BH spin, BH mass and the disc reddening.
+            # The disc wildcard covers three parameters, so it does not trip
+            # the covers-zero raise.
+            disc=builders.agn.disc.multicolor(all_params=FREE),
             torus=builders.agn.torus.skirtor(all_params=FREE),
             nlr=builders.agn.nlr.analytic(all_params=FREE),
         ),

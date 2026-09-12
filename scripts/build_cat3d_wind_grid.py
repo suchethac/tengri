@@ -47,11 +47,11 @@ Dataset              Shape                   Description
 ``a_axis``           ``(n_a,)``              radial power-law index, ascending
 ``fwd_axis``         ``(n_fwd,)``            wind fraction, ascending
 ``wavelength``       ``(n_wave,)``           common wavelength grid [Å], ascending
-``template``         ``(n_incl, n_a, n_fwd, n_wave)``  F_nu template (unnormalised)
+``template``         ``(n_incl, n_a, n_fwd, n_wave)``  F_nu template (unnormalized)
 ===================  =====================  ============================================
 
 Templates are shape-only; the runtime module
-(:mod:`tengri.components.agn.cat3d_wind`) applies per-L_sun normalisation.
+(:mod:`tengri.components.agn.cat3d_wind`) applies per-L_sun normalization.
 
 References
 ----------
@@ -84,6 +84,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from _agnfitter_download import archive_relpath
 
 _SAFE_CLASSES: frozenset[tuple[str, str]] = frozenset(
     {
@@ -163,8 +164,20 @@ def _log_nu_to_wavelength_angstrom(log_nu_hz: np.ndarray) -> np.ndarray:
     return (_C_LIGHT_M_S / nu_hz) * 1e10
 
 
-def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
-    """Read CAT3D_mean_3p.pickle and emit tengri's ``cat3d_wind_torus_grid.h5``."""
+def build(
+    input_pickle: Path,
+    output_h5: Path,
+    n_wave: int = 4096,
+    source_label: str = archive_relpath("models/TORUS/CAT3D_mean_3p.pickle"),
+) -> None:
+    """Read CAT3D_mean_3p.pickle and emit tengri's ``cat3d_wind_torus_grid.h5``.
+
+    ``source_label`` is the provenance string written to the ``source_pickle``
+    attribute: the path inside the pinned upstream archive, not wherever this
+    machine holds the file. Derived from ``_agnfitter_download.AGNFITTER_REF``
+    via :func:`_agnfitter_download.archive_relpath` so a future ref bump
+    cannot leave this default stale.
+    """
     df = _safe_load(input_pickle)
     for col in ("incl-values", "a-values", "fwd-values", "wavelength", "SED"):
         if col not in df.columns:
@@ -218,10 +231,10 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
 
     # AGNfitter's CAT3D library is not a full Cartesian product of the
     # three axes.  Tengri's triweight interpolation would smear zero
-    # templates into neighbouring cells, producing unphysical SEDs at
+    # templates into neighboring cells, producing unphysical SEDs at
     # intermediate parameter values.  Fill missing cells with the
-    # nearest-neighbour populated cell in axis-index space — this
-    # matches AGNfitter's own nearest-neighbour runtime lookup at every
+    # nearest-neighbor populated cell in axis-index space — this
+    # matches AGNfitter's own nearest-neighbor runtime lookup at every
     # queried populated cell, and produces a smoothly-interpolable grid
     # for tengri's gradient-based inference.
     missing_count = int((~populated).sum())
@@ -240,14 +253,18 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         g.create_dataset("fwd_axis", data=fwd_axis, compression="gzip")
         g.create_dataset("wavelength", data=common_wave, compression="gzip")
         g.create_dataset("template", data=template, compression="gzip")
-        g.attrs["source_pickle"] = str(input_pickle)
+        # The path INSIDE the pinned upstream archive, never where this
+        # machine happened to keep it: an absolute path here ships a
+        # contributor's home directory to every user of the public
+        # repository (tools/check_no_local_paths.py).
+        g.attrs["source_pickle"] = source_label
         g.attrs["n_incl"] = incl_axis.size
         g.attrs["n_a"] = a_axis.size
         g.attrs["n_fwd"] = fwd_axis.size
         g.attrs["n_wave"] = n_wave
         g.attrs["missing_grid_points"] = missing_count
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalised at runtime)"
+        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalized at runtime)"
 
     filled = incl_axis.size * a_axis.size * fwd_axis.size - missing_count
     print(
@@ -286,8 +303,14 @@ def _cli() -> None:
     args = p.parse_args()
     from _agnfitter_download import resolve
 
-    input_pickle = resolve(args.input, "models/TORUS/CAT3D_mean_3p.pickle", download=args.download)
-    build(input_pickle, args.output, n_wave=args.n_wave)
+    repo_relpath = "models/TORUS/CAT3D_mean_3p.pickle"
+    input_pickle = resolve(args.input, repo_relpath, download=args.download)
+    build(
+        input_pickle,
+        args.output,
+        n_wave=args.n_wave,
+        source_label=archive_relpath(repo_relpath),
+    )
 
 
 if __name__ == "__main__":

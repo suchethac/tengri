@@ -34,7 +34,7 @@ Reference: Kubota & Done 2018, MNRAS, 480, 1247 (warm-Compton disc with
 relativistic ISCO); Hagen & Done 2023, MNRAS, 525, 3455 (RELAGN
 formulation).
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-100
+.. GENERATED FROM PYTHON SOURCE LINES 18-103
 
 
 
@@ -87,9 +87,12 @@ formulation).
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.5,
             "lum_ratio": 1.0,
-            "log_mbh": 8.5,
-            "a_spin": tengri.Uniform(0.0, 0.998),
-            "disc": {"type": "kubota_done", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "disc": {
+                "type": "kubota_done",
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "log_mbh": 8.5,
+                "a_spin": tengri.Uniform(0.0, 0.998),
+            },
         },
         redshift=tengri.Fixed(0.0),
     )
@@ -131,11 +134,6 @@ formulation).
 
     fig.tight_layout()
     plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.664 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_relagn_spin.py:

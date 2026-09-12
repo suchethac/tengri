@@ -70,10 +70,10 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
     #: ``SEDModel._requested_dust_log_L_ir`` and frozen here the same way the
     #: two-component/single-component screens carry it. ``True`` makes
     #: :meth:`WG00AttenuationSEDComponent.apply` replace ``log_L_ir =
-    #: log_L_absorbed`` outright with ``params["dust_log_L_ir"] + LOG10_L_SUN``;
-    #: ``False`` (default, including a component built directly with no spec
-    #: to ask) keeps energy balance unchanged. A static Python bool, not a
-    #: traced value.
+    #: log_L_absorbed + log10(dust_eta_balance)`` outright with
+    #: ``params["dust_log_L_ir"] + LOG10_L_SUN``; ``False`` (default, including
+    #: a component built directly with no spec to ask) keeps strict/relaxed
+    #: energy balance unchanged. A static Python bool, not a traced value.
     log_l_ir_requested: bool = False
 
 
@@ -147,19 +147,26 @@ class WG00AttenuationSEDComponent(TemplateThreading):
             DerivedKey(
                 "L_ir",
                 "erg/s",
-                "Dust IR budget: L_absorbed unless a dust_log_L_ir override "
-                "is declared (#2187-series)",
+                "Dust IR budget: L_absorbed * dust_eta_balance unless a "
+                "dust_log_L_ir override is declared (#2187-series)",
             ),
-            DerivedKey("L_absorbed", "erg/s", "The ABSORBED luminosity (energy balance)"),
+            DerivedKey(
+                "L_absorbed",
+                "erg/s",
+                "Dust-absorbed luminosity, LyC-masked; equals L_ir only under "
+                "strict energy balance (dust_eta_balance == 1, no dust_log_L_ir "
+                "override)",
+            ),
             DerivedKey("log_L_ir", "dex", "log10(L_ir / (erg/s)); float32-safe form"),
             DerivedKey(
                 "log_L_absorbed",
                 "dex",
                 "log10(L_absorbed / (erg/s)); the ABSORBED energy budget, "
-                "independent of any declared dust_log_L_ir override (#1837/"
-                "#2187-series split). The WG00 screen applies no dust_eta_balance "
-                "scaling, so log_L_absorbed == log_L_ir unless an override is "
-                "declared.",
+                "independent of dust_eta_balance and of any declared "
+                "dust_log_L_ir override (#1837/#2187-series split). "
+                "log_L_ir = log_L_absorbed + log10(dust_eta_balance) under "
+                "strict/relaxed energy balance, or is replaced outright by a "
+                "declared dust_log_L_ir; log_L_absorbed itself never moves.",
             ),
             DerivedKey("dust_attenuation_factor", "", "exp(-A(lambda; tau_v)) on pipeline grid"),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
@@ -284,14 +291,29 @@ class WG00AttenuationSEDComponent(TemplateThreading):
             # Total dust IR budget override (#2187-series): a STATIC branch
             # (see ``WG00AttenuationSEDComponentConfig.log_l_ir_requested``),
             # so both branches stay JIT-clean; only the traced value of
-            # ``dust_log_L_ir`` is fittable. This screen applies no
-            # ``dust_eta_balance`` scaling of its own, so the override is the
-            # only way ``log_L_ir`` departs from ``log_L_absorbed`` here.
+            # ``dust_log_L_ir`` is fittable. ``dust_eta_balance`` is inert
+            # here by construction -- ``SEDModel`` raises at build time if it
+            # is freed or user-Fixed away from 1.0 alongside a declared
+            # override (see ``_validate_dust_log_l_ir_override``).
             from tengri.utils.sed_quantities import LOG10_L_SUN
 
             log_l_ir = jnp.asarray(params["dust_log_L_ir"]) + LOG10_L_SUN
         else:
-            log_l_ir = log_l_absorbed
+            # dust_eta_balance: L_IR = eta * L_absorbed. Same log-space
+            # treatment as component.py/two_component.py, so the parameter
+            # means one thing regardless of which dust_attenuation type is
+            # selected. eta<=0 has no re-emitted energy at all (-inf in log
+            # space, 0.0 linear), matching the jnp.maximum(..., 0.0) clip the
+            # linear form carries. Default eta=1.0 makes jnp.log10(1.0) == 0,
+            # so L_ir reproduces L_absorbed bit-for-bit -- this wiring changes
+            # no existing default SED.
+            eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
+            eta_positive = eta_balance > 0
+            log_l_ir = jnp.where(
+                eta_positive,
+                log_l_absorbed + jnp.log10(jnp.where(eta_positive, eta_balance, 1.0)),
+                -jnp.inf,
+            )
         l_ir = pow10(log_l_ir)
         l_absorbed = pow10(log_l_absorbed)
 

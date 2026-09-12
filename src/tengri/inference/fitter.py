@@ -1201,6 +1201,32 @@ class Fitter:
         resolved choice and reason are always recorded in
         ``Posterior.diagnostics["profile_mass_resolved"]`` /
         ``["profile_mass_reason"]``.
+    extra_log_prior : callable or None, optional
+        Opt-in extra log-prior term, ``extra_log_prior(params, state) ->
+        scalar``, where ``params`` is the resolved physical parameter dict
+        (free + fixed, mirrors merged) and ``state`` is
+        ``self.model.predict_state(params)`` (a
+        :class:`~tengri.protocols.ForwardState`). Added to the physical-space
+        log-prior built by
+        :func:`~tengri.inference.loss_functions.build_logprior_fn` (used by
+        nested sampling / evidence computation, and available to any caller
+        via ``fitter._build_logprior_fn()``). Must be JIT/grad-safe: pure,
+        no Python-level branching on traced values. Default ``None`` (no
+        extra term; the returned log-prior is bit-identical to before this
+        parameter existed). Example, the AGNfitter energy-balance prior::
+
+            def extra(params, state):
+                from tengri.agn.priors import prior_energy_balance
+
+                return prior_energy_balance(
+                    l_gal_att=state.derived["L_absorbed"],
+                    l_sb_emit=state.derived["L_ir"],
+                    mode="restrictive",
+                )
+
+        passed as ``Fitter(model, data, noise, extra_log_prior=extra)``. (The
+        derived-key names above are illustrative; verify them against the
+        specific model's published ``state.derived`` keys.)
 
     Returns
     -------
@@ -1297,6 +1323,7 @@ class Fitter:
         approx="auto",
         params_override=None,
         profile_mass: bool | str = "auto",
+        extra_log_prior: Callable | None = None,
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -1456,6 +1483,20 @@ class Fitter:
         self._free_names = self.spec.free_params
         self._fixed_values = self.spec.get_fixed_values()
         self._bounds = {n: self.spec.get_distribution(n).bounds for n in self._free_names}
+
+        # ── Extra log-prior hook (#[task-7], D7) ────────────────────
+        # Opt-in additive term folded into the physical-space log-prior
+        # (``loss_functions.build_logprior_fn``) so a user can attach
+        # composite priors that link multiple predicted quantities --
+        # e.g. AGNfitter-style informative priors (``tengri.agn.priors``) --
+        # without tengri hard-coding any specific physics. See that
+        # function's Notes for the exact call signature and an example.
+        if extra_log_prior is not None and not callable(extra_log_prior):
+            raise TypeError(
+                f"extra_log_prior must be callable(params, state) -> scalar or "
+                f"None, got {type(extra_log_prior).__name__}"
+            )
+        self._extra_log_prior = extra_log_prior
 
         # ── Per-fit params override (issue #1329) ──────────────────
         # Validate params_override: keys must be fixed parameters (not free),

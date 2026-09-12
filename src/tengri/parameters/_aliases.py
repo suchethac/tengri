@@ -22,6 +22,12 @@ _LEGACY_PARAM_ALIASES = {
     "sfh_tau_peak_gyr": "sfh_dpl_tau_gyr",
     "psd_sigma": "sfh_field_psd_sigma",
     "psd_tau_myr": "sfh_field_psd_tau_myr",
+    # agn_polar_temperature retired (Task 16, item 10): no consumer remained
+    # in src/ (grep-verified) -- Task 13/14 already renamed every real
+    # consumer's own parameter to agn_polar_T (the composable polar-dust
+    # reemission block, SKIRTORTorus's own attribute). This declaration was
+    # the orphaned original the rename left behind.
+    "agn_polar_temperature": "agn_polar_T",
     # Dust-emission name unification (#849): the Schreiber tabulated components used
     # divergent spellings for the same physics: dust temperature and PAH mass
     # fraction. Canonical: ``dust_T`` (shared with modified_blackbody / casey2012
@@ -52,8 +58,17 @@ _LEGACY_PARAM_ALIASES = {
     #
     # dust_frac_agn keeps its name -- the ``dust_`` prefix already says which
     # component owns it, so it was never ambiguous.
+    #
+    # agn_frac_agn's target was retargeted from agn_band_frac to agn_torus_frac
+    # (Task 16, R17): agn_band_frac was SKIRTORTorus's own name for the exact
+    # same quantity seven OTHER composable torus blocks (and now SKIRTORTorus
+    # itself) call agn_torus_frac -- one canonical name, not two that happened
+    # to mean the same thing. agn_band_frac itself is now a retired, loud-error
+    # legacy key (see groups.py's agn.torus sub-block translation), not a soft
+    # alias -- unlike every other entry in this table, it cannot resolve here
+    # because the quantity has a live REPLACEMENT name, not merely a rename.
     "agn_fracAGN": "agn_ir_frac",
-    "agn_frac_agn": "agn_band_frac",
+    "agn_frac_agn": "agn_torus_frac",
     "agn_frac": "agn_lum_ratio",
 }
 

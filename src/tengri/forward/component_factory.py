@@ -611,14 +611,29 @@ def build_components(
         )
 
         # Energy-balanced IR re-emission. The two-component attenuator re-emits
-        # inside its own apply(); the single-screen path publishes L_ir (absorbed
-        # UV/optical/NIR luminosity) and relies on a downstream emission component
-        # to re-radiate it, without one, L_ir is computed but never re-emitted,
-        # silently dropping the dust IR (#565). The emission component reads L_ir
-        # as an optional input and produces sed_dust_ir; the topological sort places
-        # it after attenuation. Route through the same single dispatch seam. WG00
-        # keeps its historical behavior of appending no separate emission component.
-        if atten_type != "wg00" and dust_emission_model is not None:
+        # inside its own apply(); the single-screen path (single_component AND
+        # wg00 alike) publishes L_ir (absorbed UV/optical/NIR luminosity) and
+        # relies on a downstream emission component to re-radiate it, without
+        # one, L_ir is computed but never re-emitted, silently dropping the
+        # dust IR (#565). The emission component reads L_ir as an optional
+        # input and produces sed_dust_ir; the topological sort places it after
+        # attenuation. Route through the same single dispatch seam.
+        #
+        # WG00 used to be excluded here ("keeps its historical behavior of
+        # appending no separate emission component"): a user who built
+        # dust_attenuation={'type': 'wg00', ...} alongside an EXPLICIT
+        # dust_emission={'type': ..., ...} had that emission request silently
+        # ignored -- wg00_model.py computed L_ir/L_absorbed correctly but
+        # nothing ever consumed them, exactly the #565 defect this block
+        # already fixes for single_component/two_component, left open for the
+        # third type. No test pinned the exclusion (a wg00 build with a
+        # dust_emission model configured had no coverage), and a user who does
+        # not configure dust_emission is unaffected either way (the
+        # `dust_emission_model is not None` guard below still gates it off,
+        # matching every other attenuation type's default). Also the reason
+        # dust_eta_balance's wiring in wg00_model.py could not be verified live
+        # by measurement: L_ir had no downstream consumer to move.
+        if dust_emission_model is not None:
             # Astrodust+PAH (HD23) supports optional spinning-dust (AME) emission
             # and phase-mix configuration. Other dust-emission models do not.
             emission_config = None
@@ -1248,6 +1263,13 @@ def state_to_sed_components(state: Any) -> dict:
         - ``sed_nebular``, ``sed_shock``, ``sed_dust_ir``, ``sed_agn``,
           ``sed_radio``, ``sed_xray``, each component's own published
           contribution (zeros when the component is absent).
+        - ``sed_agn_disc``, ``sed_agn_torus``, ``sed_agn_lines``
+          (nlr + blr + feii), ``sed_agn_polar``: the composable AGN
+          runner's own per-sub-block rest-frame SEDs (task13,
+          NAMING_CONTRACT §4b.5), summing exactly to ``sed_agn``. Zeros
+          when the AGN component is absent OR uses a non-composable
+          (monolithic) model, which has no separate sub-blocks to
+          decompose.
 
     Notes
     -----
@@ -1279,6 +1301,10 @@ def state_to_sed_components(state: Any) -> dict:
         "sed_shock": jnp.asarray(derived.get("sed_shock", zeros)),
         "sed_dust_ir": jnp.asarray(derived.get("sed_dust_ir", zeros)),
         "sed_agn": jnp.asarray(derived.get("sed_agn", zeros)),
+        "sed_agn_disc": jnp.asarray(derived.get("sed_agn_disc", zeros)),
+        "sed_agn_torus": jnp.asarray(derived.get("sed_agn_torus", zeros)),
+        "sed_agn_lines": jnp.asarray(derived.get("sed_agn_lines", zeros)),
+        "sed_agn_polar": jnp.asarray(derived.get("sed_agn_polar", zeros)),
         "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
         "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),
     }

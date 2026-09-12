@@ -765,6 +765,11 @@ class SEDProperties(_CachedBase):
             ``sed_attenuated`` (stellar post-dust), ``sed_nebular``,
             ``sed_shock``, ``sed_dust_ir``, ``sed_agn``, ``sed_radio``,
             ``sed_xray``, zeros for components not in the chain.
+            ``sed_agn_disc``, ``sed_agn_torus``, ``sed_agn_lines``
+            (nlr + blr + feii), ``sed_agn_polar``: the composable AGN
+            runner's per-sub-block rest-frame SEDs (summing exactly to
+            ``sed_agn``); zeros for a non-composable (monolithic) AGN
+            model or no AGN component at all.
 
         Examples
         --------

@@ -38,6 +38,8 @@ VIOLATIONS = [
     "Reference SED-fitting frameworks (for comparison and porting credit)",
     "SKIRTOR port lives in components/agn/.",  # proximity rule
     "canonical ports for CIGALE-equivalent physics",  # proximity rule
+    "This module was transcribed from AGNfitter's implementation.",  # proximity rule
+    "Coefficients transcribed from CIGALE's data file.",  # proximity rule
 ]
 
 
@@ -77,6 +79,11 @@ INNOCENT = [
     "CIGALE's bundled Chabrier-IMF grid, repackaged in the DSPS HDF5 layout.",
     "Implements the Meiksin (2006) IGM model as CIGALE evaluates it.",
     "reimplemented in JAX following the published equations",
+    # 'transcribed' alone is copying a NUMBER by hand, not a provenance claim
+    # -- it needs a reference code beside it (the proximity rule) to mean
+    # anything about tengri's own code, same as bare 'port'.
+    "a number transcribed from a grid axis",
+    "Read from the registry, never transcribed from a grid axis or a fixture.",
 ]
 
 
@@ -89,6 +96,18 @@ def test_bare_port_without_a_reference_code_is_not_flagged():
     """The proximity rule needs BOTH halves, or every network port trips it."""
     assert not _reasons("bind the server to a free port")
     assert _reasons("bind the CIGALE port")
+
+
+def test_bare_transcribed_without_a_reference_code_is_not_flagged():
+    """Same proximity rule as bare 'port': needs BOTH halves.
+
+    Regression for the false positive that forced main commit ba23f6e5d to
+    reword its own docstring from "transcribed" to "hand-entered" -- the
+    unanchored ``\\btranscrib\\w*`` pattern flagged ordinary uses that have
+    nothing to do with tengri's provenance.
+    """
+    assert not _reasons("a number transcribed from a grid axis")
+    assert _reasons("transcribed from AGNfitter")
 
 
 # --- prose wrapped across a line break ---------------------------------------
@@ -107,6 +126,10 @@ WRAPPED_VIOLATIONS = [
     "The birth-cloud treatment is adapted\nfrom the reference code.\n",
     # Indented continuation, the usual docstring shape.
     '"""Torus grid.\n\n    The grid was translated\n    from the original Fortran.\n    """\n',
+    # 'transcribed' is proximity-only (see test_bare_transcribed_without_a_
+    # reference_code_is_not_flagged), so the wrap must still pair it with a
+    # reference code across the break.
+    "This module was transcribed\nfrom CIGALE's original routine.\n",
 ]
 
 

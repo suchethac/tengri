@@ -57,10 +57,12 @@ def _build(ssp, **extra):
         (
             {
                 "neb": {"type": "none"},
-                # No 'all_params' on the disc block itself (#2187): every
-                # multicolor disc parameter is a *shared* AGN parameter, so a
-                # wildcard restated on 'disc' covers zero parameters and now
-                # raises. Only a disc's presence (for the corona) matters here.
+                # No 'all_params' on the disc block itself: only a disc's
+                # presence (for the corona) matters here. #2187 dropped it on
+                # the claim that a disc wildcard covers zero parameters and
+                # raises; under per-sub-block declared-reads scoping
+                # "agn.disc" owns real parameters, so the wildcard is merely
+                # unnecessary here, not refused.
                 "agn": {
                     "type": "composable",
                     "disc": builders.agn.disc.multicolor(),

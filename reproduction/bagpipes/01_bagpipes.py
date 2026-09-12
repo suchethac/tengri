@@ -409,7 +409,7 @@ save_fig("bagpipes_10_sfh_dblplaw.png")
 print(
     f"§2a peak location: BAGPIPES @ lookback {t_b_dpl[np.argmax(sfr_b_dpl)] / 1e9:.2f} Gyr, "
     f"tengri dpl @ {_peak_lbt_dpl:.2f} Gyr (same cosmic-time frame; "
-    f"residual is SFH-grid discretisation)"
+    f"residual is SFH-grid discretization)"
 )
 
 
@@ -495,7 +495,7 @@ save_fig("bagpipes_11_sfh_lognormal.png")
 print(
     f"§2b peak location: BAGPIPES @ lookback {t_b_ln[np.argmax(sfr_b_ln)] / 1e9:.2f} Gyr, "
     f"tengri lnorm @ {_peak_lbt_ln:.2f} Gyr (same cosmic-time frame; "
-    f"residual is grid discretisation + log10-vs-Carnall wing shape)"
+    f"residual is grid discretization + log10-vs-Carnall wing shape)"
 )
 
 

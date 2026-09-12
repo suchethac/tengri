@@ -12,6 +12,7 @@ from tengri.components.radio.radio import (
     radio_agn_dpl,
     radio_freefree,
     radio_sfr_bell2003,
+    radio_sfr_bell2003_split,
     radio_sfr_delvecchio2021,
     radio_sfr_mccheyne2022,
     radio_star_forming,
@@ -19,6 +20,7 @@ from tengri.components.radio.radio import (
     radio_total_dpl,
     radio_total_dpl_terms,
     radio_total_terms,
+    sfr_from_lir,
 )
 
 # Imported for the registration side effect: RadioDPL ('radio_dpl') enters
@@ -53,6 +55,7 @@ __all__ = [
     "radio_agn_dpl",
     "radio_freefree",
     "radio_sfr_bell2003",
+    "radio_sfr_bell2003_split",
     "radio_sfr_delvecchio2021",
     "radio_sfr_mccheyne2022",
     "radio_star_forming",
@@ -61,4 +64,5 @@ __all__ = [
     "radio_total_dpl_terms",
     "radio_total_terms",
     "register_radio_model",
+    "sfr_from_lir",
 ]

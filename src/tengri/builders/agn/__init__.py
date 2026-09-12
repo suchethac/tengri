@@ -54,7 +54,7 @@ Examples
 --------
 >>> from tengri import builders, FREE, Uniform
 >>> agn = builders.agn.skirtor(all_params=FREE, log_lbol=Uniform(9.42, 13.42))
->>> agn = builders.agn.simple(log_mbh=Uniform(6, 9))
+>>> agn = builders.agn.multicolor_agn(log_mbh=Uniform(6, 9))
 """
 
 from __future__ import annotations
@@ -73,6 +73,7 @@ from tengri.builders._factory import (
     short_form,
 )
 from tengri.builders.agn import atten, blr, disc, feii, nlr, torus
+from tengri.components.agn.unified import monolithic_agn_model_names
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
 from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
@@ -186,15 +187,18 @@ composable.__module__ = "tengri.builders.agn"
 
 
 def _discover_top_level_params() -> list[str]:
-    """Short-form names for params all 13 top-level AGN models activate.
+    """Short-form names for params every top-level AGN model activates.
 
-    All non-composable top-level models (simple, standard, skirtor, etc.)
-    share the same 48-param superset. Discover them once via the simplest
-    model and use the same set for all 13.
+    A non-composable model declares the full ``agn_*`` superset, the same one
+    for all of them, so it is discovered once through a single model and
+    reused. The probe used to pass ``type='simple'``, which is a composable
+    torus block and not a model at all -- it built only because the grammar
+    forwarded any string to ``agn_model`` and deferred validation to predict
+    time (R37 now refuses it here).
     """
     recipe = {
         "sfh": {"type": "dpl"},
-        "agn": {"type": "simple", WILDCARD_ALIAS: FREE},
+        "agn": {"type": "skirtor", WILDCARD_ALIAS: FREE},
     }
     import warnings
 
@@ -207,22 +211,13 @@ def _discover_top_level_params() -> list[str]:
 
 _TOP_LEVEL_SHORT_PARAMS = _discover_top_level_params()
 
-# List of top-level AGN model names (excluding composable).
-_TOP_LEVEL_MODELS = [
-    "adaf",
-    "cat3d_wind",
-    "grahsp",
-    "kubota_done",
-    "kubota_done_full",
-    "multicolor_agn",
-    "qsogen",
-    "relagn",
-    "silva04",
-    "simple",
-    "skirtor",
-    "standard",
-    "unified_nlr_blr",
-]
+# Top-level AGN model names (excluding composable), from the registry rather
+# than restated. The hand-written list this replaces carried "simple" and
+# "standard" -- composable torus block names, not models -- so
+# `builders.agn.simple()` and `builders.agn.standard()` produced configs that
+# raise `Unknown AGN model` at predict time, and it omitted `richards2006` and
+# `skirtor_stalevski`, which do build. R37's eager validation surfaced both.
+_TOP_LEVEL_MODELS = sorted(monolithic_agn_model_names())
 
 
 def _populate_top_level_factories() -> dict[str, Callable[..., dict]]:

@@ -179,7 +179,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/510378",  # drude_profiles.py +4
         "10.1086/519990",  # xray.py
         "10.1086/651008",  # desi.py +1
-        "10.1088/0004-637x/685/1/160",  # nenkova_agnfitter.py
         "10.1088/0004-637x/708/1/58",  # attenuation.py
         "10.1088/0004-637x/724/1/559",  # sed_quantities.py
         "10.1088/0004-637x/737/2/67",  # unified.py +2
@@ -254,7 +253,6 @@ BIB_TITLE_DRIFT = frozenset(
         "10.1051/0004-6361/200912497",  # bib: Analysis of galaxy spectral energy distributi
         "10.1051/0004-6361/201834156",  # bib: CIGALE: a python Code Investigating GALaxy Em
         "10.1086/308197",  # bib: Multiple Scattering in Clumpy Media. II. Galactic Environm
-        "10.1086/308692",  # bib: The Dust Content and Opacity of Actively Star-forming Gala
         "10.1086/511055",  # bib: Infrared Emission from Interstellar Dust. IV. The Silicate
         "10.1086/589652",  # bib: The MAPPINGS III Library of Fast Radiative Shock Models
         "10.1088/0004-637x/780/2/172",  # bib: Andromeda's Dust

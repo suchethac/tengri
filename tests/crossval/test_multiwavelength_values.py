@@ -27,9 +27,12 @@ pytestmark = pytest.mark.crossval
 _C_AA = 2.99792458e18  # c in Angstrom/s
 _LSUN = 3.828e33  # erg/s
 
-# Standard L_IR values in erg/s for SFR calibration
-_L_IR_SFR1 = 1e10 * _LSUN  # L_IR for SFR ~ 1 Msun/yr (Kennicutt 1998)
-_L_IR_SFR10 = 1e11 * _LSUN  # L_IR for SFR ~ 10 Msun/yr
+# Standard L_IR values in erg/s for SFR calibration. Nominal round-number
+# tags ("SFR1"/"SFR10") -- see individual tests for the exact SFR each
+# radio relation derives from these (radio_freefree's internal conversion
+# gives SFR ≈ 1.49 Msun/yr for _L_IR_SFR1, per Murphy et al. 2011 Eq. 4).
+_L_IR_SFR1 = 1e10 * _LSUN  # L_IR ~ 1e10 Lsun
+_L_IR_SFR10 = 1e11 * _LSUN  # L_IR ~ 1e11 Lsun
 
 
 # ── 1. Radio: absolute values in erg/s/Hz ─────────────────────────
@@ -84,16 +87,19 @@ class TestRadioAbsoluteValues:
         """Murphy+2011 Eq. 11: free-free L_nu at 1.4 GHz for SFR=1.
 
         L_ff(1.4 GHz) ≈ 2.1e27 erg/s/Hz per Msun/yr (Murphy+2011 Table 1).
-        With L_IR = 1e10 Lsun → SFR ≈ 0.58 Msun/yr (Kennicutt 1998).
-        Expected: ~1.2e27 erg/s/Hz.
+        With L_IR = 1e10 Lsun → SFR ≈ 1.49 Msun/yr (Murphy et al. 2011 Eq. 4;
+        a fix-round 2026-09 citation audit replaced this module's previous,
+        uncited L_IR->SFR constant -- which implied SFR ≈ 0.58 Msun/yr here,
+        mislabeled "Kennicutt 1998" -- with Murphy+2011's own Eq. 4).
+        Expected: ~3.1e27 erg/s/Hz.
         """
         from tengri.components.radio import radio_freefree
 
         wave = jnp.array([_C_AA / 1.4e9])
         l_ff = float(radio_freefree(wave, L_ir=_L_IR_SFR1)[0])
 
-        # Should be ~10% of synchrotron (~2e28), so ~1e27
-        assert 1e26 < l_ff < 1e28, f"L_ff(1.4GHz) = {l_ff:.2e}, expected ~1e27 erg/s/Hz"
+        # Should be ~10-15% of synchrotron (~2.3e28), so a few 1e27
+        assert 1e26 < l_ff < 1e28, f"L_ff(1.4GHz) = {l_ff:.2e}, expected ~3e27 erg/s/Hz"
 
     def test_free_free_flatter_than_synchrotron(self):
         """Free-free (α_ff ~ -0.1) is flatter than synchrotron (α_sf ~ 0.8)."""

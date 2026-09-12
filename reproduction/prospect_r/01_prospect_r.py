@@ -62,6 +62,7 @@ except NameError:
     pass
 
 warnings.filterwarnings("ignore")
+warnings.filterwarnings("default", module=r"tengri(\.|$)")
 tengri.plot.setup_style()
 
 # Unit-sanity guard: ProSpect returns L_λ in L⊙/Å, which the driver
@@ -269,7 +270,7 @@ m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_sfh = m_sfh.predict_state({})
 _lbt_yr = np.asarray(s_sfh.derived["sfh_grid_lbt_yr"])
@@ -351,7 +352,7 @@ m_zmm = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_zmm = m_zmm.predict_state({})
 _age_t = np.asarray(s_zmm.derived["sfh_grid_lbt_yr"])
@@ -393,7 +394,7 @@ m_zmb = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _Z_box_t = 10.0 ** np.asarray(m_zmb.predict_state({}).derived["log_metallicity_history"])
 
@@ -479,7 +480,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_p3, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -634,7 +635,7 @@ m_d = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     dust_attenuation=DUST_FIDUCIAL,
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 L_t_atten = np.asarray(s_d.derived["sed_dust_attenuated"])
@@ -706,7 +707,7 @@ m_ir = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 _L_abs = float(np.asarray(s_ir.derived["L_absorbed"]))
@@ -959,7 +960,11 @@ save_fig("prospect_r_08_nebular.png")
 # `norm=1/∫dust`), and deprecated monolithic `agn={'type':'skirtor'}`
 # (power-law disc, ~0.28×). The residual to 1.0× is a parameter-convention
 # mismatch (ProSpect's `ct`/`rm` vs SKIRTOR's `oa`/`R`) — not the disc/total
-# treatment.
+# treatment. tengri deprecates `skirtor_stalevski` as a public model name
+# (it has no composable disc+torus recipe equivalent), and this section
+# selects it anyway on purpose: it is the one tengri model that reads
+# ProSpect's own raw SKIRTOR total-SED template rather than a composable
+# reinterpretation of it, which is the deliberate comparison target here.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus
@@ -975,9 +980,8 @@ print(
 # Pin tengri's SKIRTOR to ProSpect's `SKIRTOR_interp` defaults so the two read the
 # *same* point in the Stalevski (2016) library: inclination an=30° (cos_inc=0.866 —
 # a Type-1 sightline that looks into the polar cone and sees the disc), opening angle
-# ct=40°, optical depth ta=1, and p=q=1. ``agn_band_frac=1`` routes the full bolometric
-# into the template, matching ProSpect's ``lum`` normalization (tengri otherwise scales
-# the AGN down by ``frac_agn`` as a host-fraction knob).
+# ct=40°, optical depth ta=1, and p=q=1. The monolithic SKIRTOR model normalizes the
+# template to `agn_log_lbol` itself, matching ProSpect's ``lum`` normalization.
 m_agn = SEDModel.build(
     ssp_data=ssp,
     met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
@@ -1015,10 +1019,9 @@ m_agn = SEDModel.build(
         "agn_tau_skirtor": Fixed(1.0),  # ProSpect ta=1
         "agn_p_skirtor": Fixed(1.0),  # ProSpect p=1
         "agn_q_skirtor": Fixed(1.0),  # ProSpect q=1
-        "agn_band_frac": Fixed(1.0),  # full L_bol into template (match ProSpect lum)
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 w_t9 = np.asarray(s_agn.wave)
@@ -1073,9 +1076,12 @@ print(f"§9 torus νLν peak: ProSpect {_peak_p9 / 1e4:.1f} µm, tengri {_peak_t
 # ## §11 Radio continuum
 #
 # ProSpect models radio continuum tied to the SFR via `addradio_SF` (free-free
-# + synchrotron). tengri's `condon92` model (Condon 1992) is the matching
-# star-formation radio prescription. The comparison is slope and normalization
-# at matched SFR. (ProSpect has no X-ray component.)
+# + synchrotron). tengri's `bell2003_split` radio block matches that pair: the
+# Bell (2003) total SFR-radio luminosity L(1.4 GHz) split into a non-thermal
+# synchrotron component (S_ν ∝ ν^−0.75, Baan & Klockner 2006) and a thermal
+# free-free component (S_ν ∝ ν^−0.10, Dale & Helou 2002; Condon 1992). The
+# comparison is slope and normalization at matched SFR. (ProSpect has no
+# X-ray component.)
 
 # %% [markdown]
 # **Verification Status:** PARTIAL (3/16) — Radio + X-ray + AGN
@@ -1111,16 +1117,31 @@ m_radio = SEDModel.build(
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
-    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
-    redshift=Fixed(0.0),
+    # dale2014_cigale (not dale2014): the plain Dale+2014 template embeds its own
+    # star-forming radio synchrotron continuum to 1.335 GHz, which double-counts
+    # against the active radio.sf block below (#1970); the CIGALE variant has that
+    # tail stripped and composes correctly with a separate radio component.
+    # ProSpect's own Dale templates carry no radio tail, since ProSpect adds
+    # radio continuum as a separate step via `addradio_SF`.
+    dust_emission={
+        "type": "dale2014_cigale",
+        "alpha_dale": Fixed(3.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    radio={"sf": {"type": "bell2003_split"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_radio = m_radio.predict_state({})
 w_t11 = np.asarray(s_radio.wave)
 L_t11 = np.asarray(s_radio.sed_intrinsic)
 
 fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="ProSpect  + radio (free-free + sync)", label_r="tengri  + Condon 92")
+U.panel(
+    ax_l,
+    ax_r,
+    label_l="ProSpect  + radio (free-free + sync)",
+    label_r="tengri  bell2003_split (free-free + synchrotron)",
+)
 ax_l.plot(w_p11, L_p11, "C0-", linewidth=1.5)
 ax_r.plot(w_t11, L_t11, "C1-", linewidth=1.5)
 # Span the full SED in view (dust-IR peak through the radio tail) so the FIR bump
@@ -1246,5 +1267,8 @@ plt.show()
 # * Fritz et al. 2006, MNRAS 366, 767 — AGN torus library
 # * Levesque et al. 2010, ApJ 712, 1019 — nebular photoionization grid
 # * Condon 1992, ARA&A 30, 575 — radio continuum from star formation
+# * Bell 2003, ApJ 586, 794 — SFR-radio (FIRRC) normalization
+# * Dale & Helou 2002, ApJ 576, 159 — infrared-radio correlation calibration (thermal free-free slope)
+# * Baan & Klockner 2006, A&A 449, 559 — non-thermal (synchrotron) spectral index
 # * Inoue et al. 2014, MNRAS 442, 1805 — IGM absorption
 # * Li et al. 2025 — Cue nebular emulator

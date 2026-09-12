@@ -115,6 +115,13 @@ from tengri.components.agn.unified import (
     unified_nlr_blr,
 )
 
+# Informative AGN prior penalty terms (implementing the same physics as
+# AGNfitter-rX's PRIORS_AGNfitter.py, validated against it); implementation
+# lives in tengri.parameters.agn_priors,
+# exposed here as ``tengri.agn.priors`` mirroring the
+# ``tengri.components.dust.priors`` (Narayanan+2018) pattern.
+from tengri.parameters import agn_priors as priors
+
 # New names
 
 __all__ = [
@@ -165,6 +172,7 @@ __all__ = [
     "nenkova_torus",
     "planck_lnu",
     "powerlaw_disc",
+    "priors",
     "qsogen",
     "register_agn_block",
     "register_agn_model",

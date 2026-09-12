@@ -78,6 +78,7 @@ except NameError:
     pass
 
 warnings.filterwarnings("ignore")
+warnings.filterwarnings("default", module=r"tengri(\.|$)")
 tengri.plot.setup_style()
 
 # Unit-sanity guard. Synthesizer reports L_ν in erg/s/Hz natively, so the bridge
@@ -234,7 +235,7 @@ _m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
@@ -303,7 +304,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_s3, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -423,7 +424,7 @@ m_d = SEDModel.build(
         "tau_diff": Fixed(TAU_DIFF),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 _assert_comparable(L_s5_attn, s_d.derived["sed_dust_attenuated"], name="§5 dust applied")
@@ -496,7 +497,7 @@ m_ir = SEDModel.build(
         "gamma_dl": Fixed(0.05),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 _L_abs = float(np.asarray(s_ir.derived["L_absorbed"]))
@@ -775,24 +776,28 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
         },
         agn={
             "type": "composable",
-            "disc": {"type": disc},
-            "torus": {"type": torus},
+            # Match Synthesizer's black hole, not just its bolometric luminosity:
+            # the kubota_done (qsosed) disc temperature profile — and therefore the
+            # UV bump shape and height — is set by M_BH (the Eddington ratio is
+            # derived from agn_log_lbol and agn_log_mbh, #846, not a separate knob).
+            # Leaving agn_log_mbh at tengri's default (1e7 M⊙) ran a hotter, fainter
+            # disc (0.75x); pinning it to the §9 BH gives a ~0.98x match.
+            "disc": {
+                "type": disc,
+                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+            },
+            "torus": {
+                "type": torus,
+                "agn_theta_torus": Fixed(THETA_TORUS),
+                "agn_torus_frac": Fixed(_TORUS_FRAC),
+            },
             "nlr": {"type": nlr},
             "blr": {"type": blr},
             "agn_log_lbol": Fixed(agn_log_lbol),
-            # Match Synthesizer's black hole, not just its bolometric luminosity:
-            # the kubota_done (qsosed) disc temperature profile — and therefore the
-            # UV bump shape and height — is set by M_BH and the Eddington ratio.
-            # Leaving these at tengri's defaults (1e7 M⊙) ran a hotter, fainter
-            # disc (0.75x); pinning them to the §9 BH gives a ~0.98x match.
-            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             "agn_cos_inc": Fixed(cos_inc),
-            "agn_theta_torus": Fixed(THETA_TORUS),
-            "agn_torus_frac": Fixed(_TORUS_FRAC),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
@@ -835,18 +840,20 @@ for disc_type, _ in _disc_models:
         },
         agn={
             "type": "composable",
-            "disc": {"type": disc_type},
-            "torus": {"type": "none"},
-            "lines": {"type": "none"},
-            "agn_log_lbol": Fixed(agn_log_lbol),
             # Match the §9 BH so the kubota_done disc temperature profile matches
             # Synthesizer's qsosed (ignored by the power-law disc). Without this the
             # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
-            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
+            "disc": {
+                "type": disc_type,
+                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+            },
+            "torus": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
+            "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     _disc_tengri[disc_type] = (np.asarray(s.wave), np.asarray(s.derived["sed_agn"]))
@@ -1023,6 +1030,10 @@ print(
 # compare mid-IR shape and peak at matched bolometric luminosity. The
 # parametric `two_temperature` peaks warmer than 1000 K BB; the radiative-transfer
 # `nenkova` (CLUMPY) peaks cooler — the spread reflects model-family differences.
+# tengri deprecates `two_temperature_torus` as a toy model unsuitable for science
+# fits; this comparison selects it anyway because, like Synthesizer's own
+# blackbody torus, it is a parametric graybody rather than a radiative-transfer
+# template — the matched footing for this shape comparison.
 
 # %%
 w_torus_s, L_torus_s = agn["torus"]
@@ -1049,11 +1060,12 @@ for torus_type in ("nenkova", "two_temperature"):
             "type": "composable",
             "disc": {"type": "none"},
             "torus": {"type": torus_type},
-            "lines": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
             "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     _torus_tengri[torus_type] = (np.asarray(s.wave), np.asarray(s.derived["sed_agn"]))
@@ -1107,7 +1119,11 @@ print(
 # `cosine_inclination = 0.5`; tengri by intrinsic bolometric), so they do not
 # fade with inclination. (tengri's physically Type-2-obscured BLR is the
 # separate `nlr_blr_synthesizer` path in `recipes.unified_agn()`; here we
-# reproduce Synthesizer's isotropic convention.)
+# reproduce Synthesizer's isotropic convention.) The unified build's torus is
+# `_agn_grammar`'s default, tengri's deprecated `simple_torus` — a
+# single-temperature blackbody, which is exactly what Synthesizer's own torus
+# is, so the deprecated toy model is the deliberate match here, not a
+# production choice.
 
 # %%
 # tengri builds the *entire* unified AGN in ONE ``SEDModel.build`` call (via the
@@ -1221,13 +1237,12 @@ _m_vis = SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},
-        "torus": {"type": "simple"},
+        "torus": {"type": "simple", "agn_theta_torus": Fixed(THETA_TORUS)},
         "agn_log_lbol": Fixed(agn_log_lbol),
         "agn_cos_inc": Uniform(0.0, 1.0),
-        "agn_theta_torus": Fixed(THETA_TORUS),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _w_vis = np.asarray(_m_vis.predict_state({"agn_cos_inc": 0.5}).wave)
 _i5000 = int(np.argmin(np.abs(_w_vis - 5000.0)))
@@ -1310,19 +1325,22 @@ def _unified_phot(approx):
         },
         agn={
             "type": "composable",
-            "disc": {"type": "kubota_done"},
-            "torus": {"type": "simple"},
+            "disc": {
+                "type": "kubota_done",
+                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+            },
+            "torus": {
+                "type": "simple",
+                "agn_theta_torus": Fixed(THETA_TORUS),
+                "agn_torus_frac": Fixed(_TORUS_FRAC),
+            },
             "nlr": {"type": "synthesizer_spectra"},
             "blr": {"type": "synthesizer_spectra"},
             "agn_log_lbol": Fixed(agn_log_lbol),
-            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             "agn_cos_inc": Fixed(BH_COS_INC),
-            "agn_theta_torus": Fixed(THETA_TORUS),
-            "agn_torus_frac": Fixed(_TORUS_FRAC),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.05),
+        neb={"type": "ssp"}, redshift=Fixed(0.05),
     )
     return np.asarray(m.predict_photometry({}))
 
@@ -1378,7 +1396,7 @@ _m_free = SEDModel.build(
         "agn_log_lbol": Fixed(agn_log_lbol),
         "all_params": FREE,
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _agn_free = sorted(str(_p) for _p in _m_free.spec.free_params if str(_p).startswith("agn_"))
 print(f"§9h 'all_params': FREE frees {len(_agn_free)} AGN parameters:")

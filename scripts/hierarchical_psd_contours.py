@@ -38,7 +38,7 @@ import numpy as np
 from tengri.inference.population.estimator import SharedGrid, shared_log_posterior
 from tengri.inference.population.reconstruct import centered_fields
 
-# Joint NUTS (N=4, D=98) 68% marginals and median, transcribed from
+# Joint NUTS (N=4, D=98) 68% marginals and median, hand-entered from
 # docs/dev/hierarchical-psd-preliminary-results.md 5.2. Hard-coded because that
 # 5.7 h run wrote only a summary; regenerate with hierarchical_psd_joint_fit.py
 # --out and update both places together if it is ever rerun.

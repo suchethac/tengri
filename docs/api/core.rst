@@ -242,6 +242,13 @@ Filter convention
    :members:
    :show-inheritance:
 
+Filter curve
+------------
+
+.. autoclass:: tengri.FilterCurve
+   :members:
+   :show-inheritance:
+
 Noise model
 -----------
 
