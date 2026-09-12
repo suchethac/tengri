@@ -1133,7 +1133,14 @@ jobs:
         # three stay at 50 and stay at -n 2. That last paragraph called this OOM
         # untouched by the cap — correct, and it is why raising 35 -> 50 did not
         # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
-        timeout-minutes: ${{ matrix.budget }}
+        #
+        # regression-a budget is 70 minutes; the matrix value stays 50 because the
+        # auto-generated job name "test (shard, paths, workers, budget)" is a
+        # required status check on main, so changing the matrix value renames the job
+        # and blocks every merge until branch protection is re-pinned. When the
+        # protection is re-pinned, move the 70 into the matrix and delete this
+        # expression.
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 70 || matrix.budget }}
       - uses: actions/cache/save@v6
         if: always()
         with:
