@@ -32,26 +32,33 @@ from benchmark_float32_mps_parity import (
     self_check_drift,
 )
 
-
-def test_a_reference_at_the_current_tree_raises_no_banner():
-    assert reference_staleness("abc1234", 0) is None
+TREE = "a40a2558cddbf4438f4c13a45a6b8e4b04182293"  # a git tree hash of src/tengri
 
 
-def test_src_commits_since_the_reference_produce_a_banner_naming_the_count_and_the_remedy():
-    banner = reference_staleness("abc1234", 7)
+def test_the_same_src_tree_raises_no_banner_whatever_the_commit_history_says():
+    """Identity is the content hash of ``src/tengri``, not the commit: a squash-merge
+    makes the writing commit unreachable, and a rebase renames it, but the physics tree
+    is byte-identical and the reference still describes it."""
+    assert reference_staleness("abc1234", TREE, TREE, src_commits_since=None) is None
+    assert reference_staleness("abc1234", TREE, TREE, src_commits_since=5) is None
+
+
+def test_a_different_src_tree_produces_a_banner_naming_the_count_and_the_remedy():
+    banner = reference_staleness("abc1234", TREE, "f" * 40, src_commits_since=7)
     assert banner is not None
     assert "7" in banner and "abc1234" in banner
     assert "--self-check" in banner, "the banner must say how to measure the staleness"
 
 
-def test_a_reference_without_a_tree_sha_is_flagged_not_trusted():
-    banner = reference_staleness(None, None)
-    assert banner is not None and "--self-check" in banner
+def test_a_different_src_tree_with_uncountable_history_is_still_a_banner():
+    """Shallow clones cannot count commits; the tree hash already says it differs."""
+    banner = reference_staleness("abc1234", TREE, "f" * 40, src_commits_since=None)
+    assert banner is not None and "--self-check" in banner and "abc1234" in banner
 
 
-def test_an_undeterminable_history_is_flagged_not_trusted():
-    """Shallow clones cannot count commits; that is not the same as zero."""
-    banner = reference_staleness("abc1234", None)
+def test_a_reference_without_a_src_tree_stamp_is_flagged_not_trusted():
+    """Files written before the stamp existed cannot be told apart from stale ones."""
+    banner = reference_staleness(None, None, TREE, src_commits_since=None)
     assert banner is not None and "--self-check" in banner
 
 

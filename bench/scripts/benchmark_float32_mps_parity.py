@@ -182,11 +182,16 @@ def _git(*args: str) -> str | None:
 
 
 def _tree_sha() -> str | None:
-    """The tree's HEAD SHA, suffixed ``-dirty`` when the working tree has changes."""
+    """HEAD's SHA, suffixed ``-dirty`` when ``src/tengri`` has uncommitted changes.
+
+    The reference describes the physics tree, ``src/tengri``, and nothing else, so both
+    this stamp and ``_src_commits_since`` are scoped to it: an edit to this script or to
+    a test does not make a reference stale, and must not mark it dirty.
+    """
     sha = _git("rev-parse", "HEAD")
     if sha is None:
         return None
-    dirty = _git("status", "--porcelain", "--untracked-files=no")
+    dirty = _git("status", "--porcelain", "--untracked-files=no", "--", "src/tengri")
     return sha + ("-dirty" if dirty else "")
 
 
@@ -199,29 +204,46 @@ def _src_commits_since(ref_sha: str) -> int | None:
     return int(out) if out is not None and out.isdigit() else None
 
 
-def reference_staleness(ref_sha: str | None, src_commits_since: int | None) -> str | None:
+def _src_tree() -> str | None:
+    """The git tree hash of ``src/tengri`` at HEAD: the identity of the physics tree.
+
+    Content-addressed, so it survives a squash-merge or a rebase that would make the
+    writing commit unreachable; two checkouts with byte-identical ``src/tengri`` share
+    it whatever their history.
+    """
+    return _git("rev-parse", "HEAD:src/tengri")
+
+
+def reference_staleness(
+    ref_sha: str | None,
+    ref_src_tree: str | None,
+    here_src_tree: str | None,
+    src_commits_since: int | None,
+) -> str | None:
     """A warning banner when the reference may not describe this tree, else ``None``.
 
     The float32 sweep cannot measure staleness itself (x64 off, possibly no float64
-    device), so it can only correlate: a reference written on another tree with
-    ``src/tengri`` commits in between *may* be stale, and the measurement is
-    ``--self-check`` on CPU. Warn-only on purpose: a reference from a sibling branch is
-    a legitimate thing to compare against during review.
+    device), so it can only correlate: the reference was written against one
+    ``src/tengri`` (its tree hash is in the file) and this checkout has another, so the
+    file *may* be stale, and the measurement is ``--self-check`` on CPU. Identity is the
+    tree hash, not the commit: same tree, no banner, whatever the history says.
+    Warn-only on purpose: a reference from a sibling branch is a legitimate thing to
+    compare against during review.
     """
     remedy = (
         "measure before trusting a FAIL: JAX_ENABLE_X64=1 JAX_PLATFORMS=cpu python "
         "bench/scripts/benchmark_float32_mps_parity.py --self-check <reference>"
     )
-    if ref_sha is None:
-        return f"REFERENCE HAS NO tree_sha (written before #2300); {remedy}"
-    if src_commits_since is None:
-        return f"CANNOT COUNT src commits since reference {ref_sha[:9]} (shallow clone?); {remedy}"
-    if src_commits_since == 0:
+    if ref_src_tree is None:
+        return f"REFERENCE HAS NO src_tree stamp (written before #2300); {remedy}"
+    if here_src_tree is not None and ref_src_tree == here_src_tree:
         return None
-    return (
-        f"REFERENCE MAY BE STALE: {src_commits_since} commit(s) touch src/tengri since "
-        f"{ref_sha[:9]}; {remedy}"
+    since = (
+        f"{src_commits_since} commit(s) touch src/tengri since"
+        if src_commits_since is not None
+        else "src/tengri differs from the one written at"
     )
+    return f"REFERENCE MAY BE STALE: {since} {(ref_sha or '?')[:9]}; {remedy}"
 
 
 def self_check_drift(ref_rows: dict, here_rows: dict) -> dict[str, float]:
@@ -587,9 +609,9 @@ def _self_check(ref, groups, ssp, obs, args, banner) -> int:
     drift = self_check_drift({k: v for k, v in ref["seams"].items() if k in groups}, here)
     stale = {k: d for k, d in drift.items() if not (d < _TOL_SELF_CHECK)}
     print()
-    print(
-        f"reference tree_sha: {(ref.get('meta') or {}).get('tree_sha')}   this tree: {_tree_sha()}"
-    )
+    ref_meta = ref.get("meta") or {}
+    print(f"reference: tree_sha {ref_meta.get('tree_sha')}  src_tree {ref_meta.get('src_tree')}")
+    print(f"this tree: tree_sha {_tree_sha()}  src_tree {_src_tree()}")
     if banner:
         print(f"note: {banner}")
     if stale:
@@ -665,8 +687,10 @@ def main() -> int:
         if write_reference
         else ("self-check" if self_check else "parity-sweep"),
         "dtype": dtype_label,
-        # The tree the file describes (#2300). ``reference_staleness`` reads it back.
+        # The tree the file describes (#2300). ``reference_staleness`` compares
+        # ``src_tree`` (content hash of src/tengri); ``tree_sha`` is for humans.
         "tree_sha": _tree_sha(),
+        "src_tree": _src_tree(),
         "jax": jax.__version__,
         "jaxlib": jaxlib.__version__,
         "backend": jax.default_backend(),
@@ -690,10 +714,14 @@ def main() -> int:
     if not write_reference:
         with open(args.self_check if self_check else args.reference) as fh:
             ref = json.load(fh)
-        ref_sha = (ref.get("meta") or {}).get("tree_sha")
+        ref_meta = ref.get("meta") or {}
+        ref_sha = ref_meta.get("tree_sha")
         ref_sha_plain = ref_sha.replace("-dirty", "") if ref_sha else None
         banner = reference_staleness(
-            ref_sha, _src_commits_since(ref_sha_plain) if ref_sha_plain else None
+            ref_sha,
+            ref_meta.get("src_tree"),
+            _src_tree(),
+            _src_commits_since(ref_sha_plain) if ref_sha_plain else None,
         )
         if banner and not self_check:
             print(f"WARNING: {banner}", flush=True)
