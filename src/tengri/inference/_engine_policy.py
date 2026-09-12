@@ -308,6 +308,20 @@ ENGINE_POLICY: KeyPolicy = {
         "per-line upper/lower-limit flags individually. None when unset, matching every "
         "Fitter sharing the model's own (already-covered) line-flux schema"
     ),
+    # ── Extra log-prior hook (task-7, RULING R10) ───────────────────────
+    "_extra_log_prior": content(
+        "opt-in ``callable(params, state) -> scalar`` that build_loss_fn / "
+        "build_logprior_fn fold into the objective, so it changes what the compiled "
+        "loss computes. Every cache keyed by this method is namespaced per MODEL "
+        "object, so two Fitters sharing one Model -- the documented, encouraged "
+        "pattern -- would otherwise silently share whichever closure compiled first "
+        "regardless of the hook: a plain Fitter built after a hooked one would run the "
+        "HOOKED objective (or vice versa), never raising. baked() keys a callable by "
+        "its module-qualified name, never by address (the ledger's no-address rule), "
+        "so None vs a function, and two differently-named functions, get distinct "
+        "engines; two closures returned by the same factory share one. Pinned by "
+        "tests/contract/test_fitter_extra_log_prior.py"
+    ),
 }
 
 
@@ -393,4 +407,5 @@ FINGERPRINT_POLICY: KeyPolicy = {
     "_eline_amplitude_names": exclude(_STRUCTURE_REASON),
     "_eline_amp_priors": exclude(_STRUCTURE_REASON),
     "_line_flux_override": exclude(_STRUCTURE_REASON),
+    "_extra_log_prior": exclude(_STRUCTURE_REASON),
 }

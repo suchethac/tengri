@@ -14,9 +14,9 @@ error to tell them apart.
 
 The renames, each via ``_LEGACY_PARAM_ALIASES`` + ``DeprecationWarning``:
 
-    agn_fracAGN  -> agn_ir_frac     the AGN share of the dust IR
-    agn_frac_agn -> agn_band_frac   the AGN share in a band
-    agn_frac     -> agn_lum_ratio   a *ratio* (0-5), not a fraction
+    agn_fracAGN  -> agn_ir_frac      the AGN share of the dust IR
+    agn_frac_agn -> agn_torus_frac   the AGN share in a band
+    agn_frac     -> agn_lum_ratio    a *ratio* (0-5), not a fraction
 
 ``dust_frac_agn`` keeps its name: the ``dust_`` prefix already says which
 component owns it.
@@ -26,6 +26,16 @@ component owns it.
 with a different prior in the same module. Applying it would have silently
 merged two AGN normalizations — in the code path #556 already had to
 disentangle once. ``test_no_rename_collided`` pins that they stayed distinct.
+
+**Update (Task 16, R17).** ``agn_frac_agn``'s target was originally
+``agn_band_frac``: SKIRTORTorus's own name for this exact quantity. Task 16
+found ``agn_band_frac`` had exactly one consumer (that class) while SEVEN
+composable torus blocks (and, since R17, SKIRTORTorus itself) call the
+identical quantity ``agn_torus_frac`` -- one canonical name, not two that
+happened to mean the same thing. ``agn_band_frac`` is retired (a loud-error
+legacy key in the ``agn.torus`` sub-block grammar, not a soft alias here --
+see ``groups.py``), and this module's ``RENAMES``/assertions were repointed
+at ``agn_torus_frac``.
 """
 
 from __future__ import annotations
@@ -41,7 +51,7 @@ pytestmark = pytest.mark.contract
 
 RENAMES = {
     "agn_fracAGN": "agn_ir_frac",
-    "agn_frac_agn": "agn_band_frac",
+    "agn_frac_agn": "agn_torus_frac",
     "agn_frac": "agn_lum_ratio",
 }
 
@@ -101,7 +111,7 @@ def test_no_rename_collided():
     )
     # The specific values, pinned — a merge would change one of them.
     assert str(priors["agn_ir_frac"]).startswith("Uniform(0.0, 0.99")
-    assert str(priors["agn_band_frac"]).startswith("Uniform(0.0, 1.0")
+    assert str(priors["agn_torus_frac"]).startswith("Uniform(0.0, 1.0")
     assert str(priors["agn_lum_ratio"]).startswith("Uniform(0.0, 5.0")
 
 
@@ -117,7 +127,7 @@ def test_each_new_name_says_which_normalization_it_is():
     """The point of the rename: the name must disambiguate, not just differ."""
     expectations = {
         "agn_ir_frac": "ir",
-        "agn_band_frac": "band",
+        "agn_torus_frac": "band",
         "agn_lum_ratio": "ratio",
     }
     for name, token in expectations.items():
@@ -192,6 +202,14 @@ DOCUMENTED_MENTIONS = {
         "the short-form alias comment cites agn_frac -> agn_lum_ratio as the "
         "rename that invalidated the grammar's short key `agn={'frac': ...}`"
     ),
+    ("parameters/agn_ownership.py", "agn_fracAGN"): (
+        "Task 16 (item 5, #2189): _AGN_IR_FRAC_SPELLINGS must recognize the "
+        "OLD spelling too, so _agn_ir_frac_explicit_and_active still detects "
+        "a user who wrote agn_fracAGN explicitly (it resolves through the "
+        "alias to agn_ir_frac, but the guard needs to see the raw dict key "
+        "before that resolution runs) -- deliberately checking for the "
+        "legacy name, not a stale reference to it"
+    ),
 }
 
 
@@ -233,3 +251,81 @@ def test_the_documented_mentions_are_still_real():
         assert re.search(rf"\b{re.escape(old)}\b", path.read_text()), (
             f"{rel} no longer mentions {old!r}, so its exemption is stale"
         )
+
+
+class TestBandFracRenameReachesEveryPlacement:
+    """``agn_band_frac`` gets ONE message wherever a pre-rename config wrote it.
+
+    The redirect used to fire only inside the ``torus`` sub-block. The top
+    level is where every pre-rename config actually wrote the key (see
+    ``reproduction/prospect_r/01_prospect_r.py``), and there it fell through to
+    the generic unknown-key path: *"Did you mean: agn_frac, agn_ir_frac?"* --
+    neither of which is the replacement, and both of which are real parameters,
+    so following the suggestion would silently fit something else.
+    """
+
+    @staticmethod
+    def _raises_rename_hint(agn: dict) -> str:
+        from tengri.parameters import DEFAULT, Fixed, parse_groups
+
+        with pytest.raises(ValueError) as exc_info, warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            parse_groups(
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+                agn=agn,
+                redshift=Fixed(0.5),
+            )
+        message = str(exc_info.value)
+        assert "agn_torus_frac" in message, message
+        assert "agn_ir_frac" not in message, message
+        assert "Did you mean" not in message, message
+        return message
+
+    @pytest.mark.parametrize("key", ["agn_band_frac", "band_frac"])
+    def test_composable_top_level_gets_the_rename_hint_and_the_nesting(self, key):
+        from tengri.parameters import Fixed
+
+        message = self._raises_rename_hint(
+            {
+                "type": "composable",
+                "norm": "independent",
+                "disc": {"type": "multicolor"},
+                "torus": {"type": "skirtor"},
+                key: Fixed(0.5),
+            }
+        )
+        assert "torus" in message, message
+
+    @pytest.mark.parametrize("key", ["agn_band_frac", "band_frac"])
+    def test_composable_torus_sub_block_gets_the_rename_hint(self, key):
+        from tengri.parameters import Fixed
+
+        self._raises_rename_hint(
+            {
+                "type": "composable",
+                "norm": "independent",
+                "disc": {"type": "multicolor"},
+                "torus": {"type": "skirtor", key: Fixed(0.5)},
+            }
+        )
+
+    @pytest.mark.parametrize("key", ["agn_band_frac", "band_frac"])
+    def test_monolithic_top_level_gets_the_rename_hint_at_the_same_level(self, key):
+        """A monolithic build has no sub-block, so the advice must not nest."""
+        from tengri.parameters import Fixed
+
+        message = self._raises_rename_hint({"type": "silva04", key: Fixed(0.5)})
+        assert "{'torus'" not in message, message
+
+    def test_a_monolithic_model_that_does_not_read_it_says_so(self):
+        """``skirtor_stalevski`` pins ``frac_agn=1.0`` internally, so the
+        renamed key has no effect there either: measured 0.0 relative SED
+        change across the whole prior. Sending the reader to ``agn_torus_frac``
+        without saying that would be a second dead end.
+        """
+        from tengri.parameters import Fixed
+
+        message = self._raises_rename_hint(
+            {"type": "skirtor_stalevski", "agn_band_frac": Fixed(1.0)}
+        )
+        assert "skirtor_stalevski" in message, message

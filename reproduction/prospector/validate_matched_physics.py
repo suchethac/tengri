@@ -88,7 +88,7 @@ Lyman alpha does not, by a factor of ~120:
 
 Lya is a resonant line: its escape depends on scattering and on dust
 destruction inside the H II region, which every code treats by its own
-convention, so a large divergence here is a modelling choice rather than a
+convention, so a large divergence here is a modeling choice rather than a
 defect. What the table adds is that the divergence is *confined* to it. Two
 caveats on the number: both grids carry only three points at 10 A spacing
 across the line, so it is resolution-limited (the ratio survives because both

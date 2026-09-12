@@ -4,7 +4,7 @@
 The dict is hand-maintained, and it had drifted in exactly one direction: 17
 hosted grids were absent and no entry was phantom. That asymmetry names the
 cause — grids were added to the server and only the Chabrier ones were
-transcribed — and it says which failure to expect next time.
+entered here — and it says which failure to expect next time.
 
 The two directions fail differently, so they are separate tests:
 

@@ -27,12 +27,31 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.cat3d_wind import create_cat3d_wind_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig, SEDComponentState
+from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
 
 __all__ = ["CAT3DTorus"]
+
+#: Single source of truth for ``a_cat3d``/``fwd_cat3d``/``cos_inc``'s bounds
+#: and defaults: the shared ``agn_a_cat3d`` / ``agn_fwd_cat3d`` /
+#: ``agn_cos_inc`` declarations in ``_params.py``. Read once at class-
+#: definition time so the class attributes below cannot drift from them the
+#: way they did before Task 1 (this class restated stale ``Uniform(-2.5,
+#: -0.5)`` / ``Uniform(0.0, 1.0)`` literals for ``a_cat3d`` / ``fwd_cat3d``
+#: while the canonical declarations, and the vendored
+#: ``data/cat3d_wind_torus_grid.h5`` axes, had long since moved to
+#: ``[-3.0, -1.5]`` / ``[1.0, 2.25]``).
+_A_CAT3D_PRIOR = declared_prior(_AGN_PARAMS, "agn_a_cat3d")
+_FWD_CAT3D_PRIOR = declared_prior(_AGN_PARAMS, "agn_fwd_cat3d")
+_COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
+#: ``log_lbol``/``torus_frac`` restated stale literals (default 11.0 vs the
+#: canonical 10.0) -- the same mechanism as the three priors above, found by
+#: ``tools/check_param_restatements.py`` (Task 11 item 5 / fix round 1, R25).
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
+_TORUS_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_torus_frac")
 
 
 @dataclass(frozen=True)
@@ -90,9 +109,9 @@ class CAT3DTorus(SEDModelComponent):
     cos_inc : Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
     a_cat3d : Uniform
-        Radial power-law index of clump distribution. [dimensionless, -2.5–-0.5]
+        Radial power-law index of clump distribution. [dimensionless, -3.0–-1.5]
     fwd_cat3d : Uniform
-        Polar-wind mass fraction. [dimensionless, 0–1]
+        Polar-wind mass fraction. [dimensionless, 1.0–2.25]
     torus_frac : Uniform
         Fraction of L_bol reprocessed by torus. [dimensionless, 0–1]
 
@@ -142,39 +161,39 @@ class CAT3DTorus(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     cos_inc = Uniform(
-        0.0,
-        1.0,
+        _COS_INC_PRIOR.lo,
+        _COS_INC_PRIOR.hi,
         description="Cosine of inclination",
         units="dimensionless",
-        default=0.45,
+        default=_COS_INC_PRIOR.default,
     )
     a_cat3d = Uniform(
-        -2.5,
-        -0.5,
+        _A_CAT3D_PRIOR.lo,
+        _A_CAT3D_PRIOR.hi,
         description="Radial power-law index of clump distribution",
         units="dimensionless",
-        default=-0.5,
+        default=_A_CAT3D_PRIOR.default,
     )
     fwd_cat3d = Uniform(
-        0.0,
-        1.0,
+        _FWD_CAT3D_PRIOR.lo,
+        _FWD_CAT3D_PRIOR.hi,
         description="Polar-wind mass fraction",
         units="dimensionless",
-        default=0.4,
+        default=_FWD_CAT3D_PRIOR.default,
     )
     torus_frac = Uniform(
-        0.0,
-        1.0,
+        _TORUS_FRAC_PRIOR.lo,
+        _TORUS_FRAC_PRIOR.hi,
         description="Torus luminosity fraction of L_bol",
         units="dimensionless",
-        default=0.5,
+        default=_TORUS_FRAC_PRIOR.default,
     )
 
     # Cross-component output

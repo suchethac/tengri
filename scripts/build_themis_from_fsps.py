@@ -11,10 +11,10 @@ template per U_min. This is the *direct* source (not CIGALE's repackaging).
 Unlike the previous build, the two components are kept with their **real
 relative power**: the power-law column carries DustEM's true higher
 luminosity per H, so a dust-mass fraction ``gamma`` warms the SED correctly.
-single_u is normalised to unit frequency integral; powerlaw is normalised by
+single_u is normalized to unit frequency integral; powerlaw is normalized by
 the *same* per-(qhac,U_min) factor, so it integrates to the real ratio
 ∫powerlaw / ∫single_u. The loader passes these through unchanged
-(spectra_unit flag) and the forward renormalises the mix to L_absorbed.
+(spectra_unit flag) and the forward renormalizes the mix to L_absorbed.
 
 References: Jones, Köhler, Ysard et al. 2017 A&A 602 A46; Conroy+2009 (FSPS).
 """

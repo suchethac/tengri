@@ -776,6 +776,7 @@ class Parameters:
                 agn_nlr_block=self.agn_nlr_block,
                 agn_blr_block=self.agn_blr_block,
                 agn_feii_block=self.agn_feii_block,
+                agn_norm=self.agn_norm,
                 agn_torus_block=self.agn_torus_block,
                 agn_attenuation_block=self.agn_attenuation_block,
                 params=recipe_params,
@@ -816,6 +817,22 @@ class Parameters:
 
     def _init_nebular_config(self, kwargs):
         """Resolve nebular emission backend from kwargs."""
+        # R49: presence, not value, of any of the three neb-group kwargs
+        # means the caller explicitly stated a nebular disposition -- via
+        # ``SEDModel.build(neb={'type': ...})`` -> ``parse_groups``
+        # (``_translate_neb`` sets at least one of these three keys for
+        # every ``neb_type``, including 'none': ``nebular=False,
+        # nebular_ssp=False, nebular_cue=False``) or directly via this flat
+        # constructor. Omitted ``neb=`` never reaches ``_translate_neb``, so
+        # none of the three keys are present here. Same presence-based
+        # mechanism as ``_user_provided`` (parameters.py, used for
+        # ``agn_log_ledd``), just at group granularity: this decides whether
+        # :class:`~tengri.components.nebular.baked_in.BakedInBackend`'s
+        # advisory should fire (see ``SEDModel._init_nebular``'s ``else``
+        # branch).
+        self._nebular_explicit = (
+            "nebular_ssp" in kwargs or "nebular" in kwargs or "nebular_cue" in kwargs
+        )
         nebular_ssp = kwargs.pop("nebular_ssp", False)
         nebular = kwargs.pop("nebular", False)
         nebular_cue = kwargs.pop("nebular_cue", False)
@@ -997,9 +1014,16 @@ class Parameters:
         # caller actually named, so an untouched model keeps the per-source
         # default (see `_SCREEN_DEFAULTS`) without that default ever being
         # validated as though it were an explicit (and possibly refused)
-        # request.
+        # request. Each raw value passes through `_normalize_off_switch`
+        # first -- the one place the 'none'/'off' vocabulary lives (groups.py;
+        # imported here lazily, as `parameters_to_groups` is below, because
+        # groups imports this module) -- so the validator only ever sees the
+        # canonical spelling, exactly as the grammar surface hands it.
+        from tengri.parameters.groups import _normalize_off_switch
+
         _screen_given = {
-            source: kwargs.pop(f"dust_{source}_screen", None) for source in SCREEN_SOURCES
+            source: _normalize_off_switch(kwargs.pop(f"dust_{source}_screen", None))
+            for source in SCREEN_SOURCES
         }
         _screen_choices = resolve_screen_choices(
             _screen_given, dust_model=self.dust_model, surface="flat"
@@ -2329,6 +2353,15 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_mean_sfh_type": content("SFH model selection determines parameters"),
     "_n_grid": content("grid size for stochastic SFH determines parameters"),
     "_nebular_cb19": content("nebular backend selection determines parameters"),
+    "_nebular_explicit": content(
+        "owner-flagged: a build-time flag that selects an advisory branch. True "
+        "when the caller stated a nebular disposition (any of the three neb "
+        "kwargs present), which silences BakedInBackend's baked-in-emission "
+        "advisory in SEDModel._init_nebular (R49). It reaches no kernel, so "
+        "content only costs an extra compile slot for two otherwise-identical "
+        "models -- the fail-safe direction, and the same classification "
+        "SIGNATURE_POLICY gives _needs_agn_lbol_flat_check for the same shape."
+    ),
     "_nebular_mappings": content("nebular backend selection determines parameters"),
     "_nebular_mappings_agn": content("nebular backend selection determines parameters"),
     "age_kernel": content("age kernel type (CIC vs DSPS) affects SFH integration"),

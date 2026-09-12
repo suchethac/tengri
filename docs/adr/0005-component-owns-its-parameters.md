@@ -67,13 +67,16 @@ Specific design points settled by the implementation:
   import time and several of those transitively re-enter `_param_defs`.
   Resolution is deferred to first attribute access; the
   `_LAZY_DECL_SOURCES` table maps bucket name → `(module, attribute)`.
-- **`_LAZY_DECL_EXTRAS` handles cross-prefix orphans** — currently only
-  `neb_xid`, which is nebular-prefixed but consumed by the Feltre NLR
-  backend alongside `agn_alpha_ion` and so historically lived in the
-  AGN bucket. Moving it into `components/agn/_params.py` would break
-  the agn_* prefix invariant enforced by
-  `tools/check_param_prefixes.py`; the extras hook lets it stay in
-  `_param_defs._AGN_EXTRAS` while still flowing through the lazy view.
+- **`_LAZY_DECL_EXTRAS` handled cross-prefix orphans, and is gone** — it
+  ever held one entry, `neb_xid`: a nebular-prefixed name for the Feltre NLR
+  dust-to-metal grid axis, kept out of `components/agn/_params.py` because the
+  `agn_*` prefix invariant (`tools/check_param_prefixes.py`) would refuse it
+  there. R41 (#2214) found the same axis already declared under the name the
+  block reads, `agn_nlr_xi_d`, so the orphan was a duplicate rather than a
+  cross-prefix case. With one name for the axis there is nothing to merge:
+  the extras table, the hook in `_resolve_lazy_bucket`, and the registry's own
+  adapter loop are all removed, and every bucket is exactly its component's
+  own declarations.
 - **`_NON_SFH_PARAMS` retains 5 entries** — `met_logzsol`, `redshift`,
   `noise_frac_cal`, `noise_dof`, `sigma_v_kms` — that are genuinely
   shared globals with no single component home. The "junk drawer"

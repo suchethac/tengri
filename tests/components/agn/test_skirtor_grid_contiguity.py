@@ -37,8 +37,11 @@ def raw():
 
 
 def test_every_cube_handed_to_jax_is_c_contiguous(raw):
+    # ``norm`` (``spectra/norm`` on the v3 grid, parameter-shaped with no
+    # wavelength axis) is flipped with the same inclination axis and handed to
+    # JAX as ``SkirtorDiscDustGrid.norm``, so it needs the same contiguity.
     bad = {}
-    for key in ("total", "disk", "dust"):
+    for key in ("total", "disk", "dust", "norm"):
         if key in raw:
             cube = np.asarray(raw[key])
             if not cube.flags["C_CONTIGUOUS"] or min(cube.strides) < 0:

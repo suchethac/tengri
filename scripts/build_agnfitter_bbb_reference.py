@@ -28,7 +28,10 @@ The HDF5 stores wavelength in Angstrom (ascending) and SED in F_nu. Grid models
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import pickle
+import pickletools
 import sys
 from pathlib import Path
 
@@ -38,13 +41,24 @@ import numpy as np
 # Allow standalone invocation (``python scripts/build_agnfitter_bbb_reference.py``)
 # to import the package's physics constants rather than redefining them.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from _grid_native_sampling import dedupe_last_write_wins, native_wavelength_grid, place_on_grid
+
 from tengri.utils.physics_constants import C_AA
 
-# Allow-list: the minimal numpy/pandas container set that round-trips AGNfitter's
-# legacy-pandas pickles. Deliberately EXCLUDES ``new_block`` / ``_unpickle_block``
-# so pandas takes the legacy ``Block`` path that accepts a ``slice`` placement —
-# the newer typed path rejects the slice these old pickles store. ``functools.partial``
-# is required by THB21.
+# Allow-list: the minimal numpy/pandas container set that round-trips every
+# pickle this script reads (R06, THB21, KD18, SN12 under models/BBB;
+# DH02_CE01 under models/STARBURST; S04, NK0_mean_1p, SKIRTOR_mean_3p,
+# CAT3D_mean_3p under models/TORUS) -- measured by running the preflight
+# opcode scan below against all nine files (see task-5-report.md for the
+# per-file GLOBAL listing). ``Block`` (legacy) and ``new_block`` (the format
+# THB21/SKIRTOR_mean_3p use) are BOTH needed: which one a given pickle's byte
+# stream references was fixed at write time by whatever pandas version wrote
+# it, so allow-listing both does not change which reconstruction path any one
+# file takes -- it only stops the OTHER files from needing a less-restricted
+# fallback. Likewise ``BlockManager`` (multi-column) and
+# ``SingleBlockManager`` (single-column, SKIRTOR_mean_3p's Series). No pickle
+# in this set needs ``_unpickle_block``. ``functools.partial`` is required by
+# THB21.
 _SAFE_CLASSES = frozenset(
     {
         ("numpy.core.multiarray", "_reconstruct"),
@@ -59,7 +73,9 @@ _SAFE_CLASSES = frozenset(
         ("pandas.core.indexes.base", "_new_Index"),
         ("pandas.core.indexes.range", "RangeIndex"),
         ("pandas.core.internals.managers", "BlockManager"),
+        ("pandas.core.internals.managers", "SingleBlockManager"),
         ("pandas.core.internals.blocks", "Block"),
+        ("pandas.core.internals.blocks", "new_block"),
         ("pandas.core.arrays.numpy_", "PandasArray"),
         ("__builtin__", "slice"),
         ("builtins", "slice"),
@@ -67,6 +83,30 @@ _SAFE_CLASSES = frozenset(
         ("functools", "partial"),
     }
 )
+_PY2_MODULE_ALIASES: dict[str, str] = {"__builtin__": "builtins"}
+
+
+def _safe_new_block(values, placement, *args, **kwargs):
+    """Trusted shim for ``pandas.core.internals.blocks.new_block``.
+
+    THB21.pickle was written by a pandas version that stored a plain
+    ``slice`` as the block placement; the installed pandas' real
+    ``new_block`` requires a ``BlockPlacement`` and raises ``TypeError`` on a
+    bare slice (confirmed empirically: the SAME slice-vs-``BlockPlacement``
+    mismatch the ``_SAFE_CLASSES`` comment above already flags for the
+    legacy ``Block`` path, here on the ``new_block`` path instead). This is
+    exactly what ``pandas.read_pickle``'s own version-compat shims do
+    internally; doing the equivalent one-line conversion here keeps the load
+    on the restricted unpickler instead of reaching for pandas' full (much
+    larger, less audited) compat machinery.
+    """
+    from pandas.core.internals.blocks import new_block as _real_new_block
+
+    if isinstance(placement, slice):
+        from pandas._libs.internals import BlockPlacement
+
+        placement = BlockPlacement(placement)
+    return _real_new_block(values, placement, *args, **kwargs)
 
 
 class _RestrictedUnpickler(pickle.Unpickler):
@@ -79,30 +119,56 @@ class _RestrictedUnpickler(pickle.Unpickler):
             import builtins
 
             return getattr(builtins, name)
+        if (module, name) == ("pandas.core.internals.blocks", "new_block"):
+            return _safe_new_block
         return super().find_class(module, name)
 
 
-def _load(pickle_path: Path):
-    """Load an AGNfitter pickle.
+def _preflight_opcode_scan(pickle_path: Path) -> None:
+    """Abort if any GLOBAL reference in the pickle is outside ``_SAFE_CLASSES``.
 
-    Tries the restricted unpickler first. AGNfitter's DataFrame pickles were
-    written across several pandas versions whose internal block formats are not
-    forward-compatible with the plain unpickler; for those we fall back to
-    ``pandas.read_pickle`` (which carries the version-compat shims). This is a
-    BUILD-TIME-ONLY read of a trusted, developer-supplied AGNfitter clone — the
-    shipped artefact is HDF5 and no test ever reads a pickle.
+    Mirrors ``scripts/build_kd18_grid.py``'s preflight scan: a defense-in-depth
+    check that runs BEFORE unpickling, so an unexpected class name is refused
+    outright rather than relying solely on ``find_class`` rejecting it mid-load.
     """
-    try:
-        with pickle_path.open("rb") as fh:
-            return _RestrictedUnpickler(fh, encoding="latin1").load()
-    except (pickle.UnpicklingError, TypeError, ModuleNotFoundError) as exc:
-        import pandas as pd
-
-        print(
-            f"  (restricted unpickle of {pickle_path.name} failed: {exc}; "
-            "falling back to trusted pandas.read_pickle)"
+    seen: set[tuple[str, str]] = set()
+    with pickle_path.open("rb") as fh:
+        out = io.StringIO()
+        pickletools.dis(fh, annotate=0, out=out)
+    for line in out.getvalue().splitlines():
+        if "GLOBAL" not in line:
+            continue
+        try:
+            qual = line.split("'", 1)[1].rsplit("'", 1)[0]
+        except IndexError:
+            continue
+        parts = qual.rsplit(" ", 1)
+        if len(parts) != 2:
+            continue
+        mod, name = parts
+        mod = _PY2_MODULE_ALIASES.get(mod, mod)
+        seen.add((mod, name))
+    unexpected = seen - _SAFE_CLASSES
+    if unexpected:
+        raise RuntimeError(
+            f"Unexpected GLOBAL references in {pickle_path}: {sorted(unexpected)}. "
+            "Refusing to proceed."
         )
-        return pd.read_pickle(pickle_path)
+
+
+def _load(pickle_path: Path):
+    """Load an AGNfitter pickle: untrusted data, restricted-unpickler ONLY.
+
+    Scans every ``GLOBAL`` opcode against ``_SAFE_CLASSES`` before unpickling,
+    then unpickles through :class:`_RestrictedUnpickler`. There is no
+    ``pandas.read_pickle`` fallback: these pickles are untrusted upstream
+    data (AGNfitter-rX is a third-party repository, cloned/downloaded by a
+    contributor, not developer-authored), so a class the allow-list rejects
+    must fail the build, not silently escalate to an unrestricted loader.
+    """
+    _preflight_opcode_scan(pickle_path)
+    with pickle_path.open("rb") as fh:
+        return _RestrictedUnpickler(fh, encoding="latin1").load()
 
 
 def _log_nu_to_aa(log_nu_hz: np.ndarray) -> np.ndarray:
@@ -233,27 +299,63 @@ def main() -> None:
     # ── Cold-dust (starburst) reference: DH02_CE01 ──────────────────────────
     # Dale & Helou 2002 + Chary & Elbaz 2001, an IR-luminosity grid. Lives in
     # models/STARBURST; stored 'wavelength' is already log10(nu/Hz) per node.
+    #
+    # Native-sampling preservation (#task3-M-B D2): this reference is the
+    # ground truth `test_dh02_ce01_vs_agnfitter.py` compares tengri's runtime
+    # `dh02_ce01` model against. Regridding it onto one foreign
+    # `_common_axis` log-spaced grid (the prior approach) discarded the same
+    # aromatic/PAH-forest resolution the runtime builder used to discard (D1's
+    # mechanism) -- so even after fixing the runtime grid
+    # (`build_dh02_ce01_grid.py`) to keep native samples, comparing it against
+    # a still-regridded reference reintroduced up to 0.4 dex of spurious
+    # residual at 3.2-3.9 um that belonged to the reference, not the model
+    # (measured while implementing this fix). Using the shared
+    # `native_wavelength_grid`/`place_on_grid` (task3 fix round 1 RULING R14)
+    # here instead keeps this reference exact wherever a row's own tabulated
+    # points allow it, matching `build_dh02_ce01_grid.py`.
+    #
+    # Duplicate-irlum tie-break (task3 fix round 1, item 1): three irlum
+    # values repeat across raw rows. This reference used to store all 169
+    # rows undeduped, with the production grid's (then-wrong) first-occurrence
+    # dedup and this file's own undeduped nearest-match lookup both landing on
+    # the SAME raw row by coincidence -- agreeing with each other, and both
+    # disagreeing with upstream's actual last-write-wins dict construction.
+    # dedupe_last_write_wins is shared with build_dh02_ce01_grid.py so this
+    # reference is upstream-faithful, not merely builder-consistent.
     cold_src = args.src.parent / "STARBURST" / "DH02_CE01.pickle"
     if cold_src.is_file():
         dh = _load(cold_src)
-        dh_irlum = np.asarray(dh["irlum-values"], dtype=np.float64).ravel()
-        dh_lognu_rows = [np.asarray(w, dtype=np.float64) for w in dh["wavelength"]]
-        common_dh = _common_axis(dh_lognu_rows, args.n_wave)
+        dh_irlum_raw = np.asarray(dh["irlum-values"], dtype=np.float64).ravel()
+        dh_lognu_rows_raw = [np.asarray(w, dtype=np.float64) for w in dh["wavelength"]]
+        dh_sed_rows_raw = [np.asarray(s, dtype=np.float64) for s in dh["SED"]]
+
+        dh_irlum, dh_kept_idx = dedupe_last_write_wins(dh_irlum_raw)
+        dh_wave_aa_rows = [_log_nu_to_aa(dh_lognu_rows_raw[i]) for i in dh_kept_idx]
+        dh_sed_rows = [dh_sed_rows_raw[i] for i in dh_kept_idx]
+
+        common_dh, dh_mode = native_wavelength_grid(dh_wave_aa_rows)
         dh_grid = np.stack(
-            [
-                _regrid(ln, np.asarray(s, dtype=np.float64), common_dh)
-                for ln, s in zip(dh_lognu_rows, dh["SED"])
-            ]
-        )  # (n_irlum, n_wave)
+            [place_on_grid(wa, s, common_dh) for wa, s in zip(dh_wave_aa_rows, dh_sed_rows)]
+        )  # (n_irlum_unique, n_wave)
         cold_out = args.out.parent / "agnfitter_cold_dust_reference.h5"
         with h5py.File(cold_out, "w") as fc:
             fc.attrs["source"] = "AGNfitter-rX models/STARBURST"
             fc.attrs["wavelength_unit"] = "Angstrom"
             fc.attrs["sed_unit"] = "F_nu (relative)"
             g = fc.create_group("dh02_ce01")
-            g.create_dataset("wavelength", data=common_dh.astype(np.float32), compression="gzip")
-            g.create_dataset("sed", data=dh_grid.astype(np.float32), compression="gzip")
-            g.create_dataset("irlum", data=dh_irlum.astype(np.float32), compression="gzip")
+            # Full precision (repo policy: never shrink a vendored grid --
+            # matches the s17/s17_radio groups this file's sibling script
+            # appends, which are also stored float64).
+            g.create_dataset("wavelength", data=common_dh, compression="gzip")
+            g.create_dataset("sed", data=dh_grid, compression="gzip")
+            g.create_dataset("irlum", data=dh_irlum, compression="gzip")
+            g.create_dataset("kept_raw_index", data=dh_kept_idx, compression="gzip")
+            g.attrs["native_sampling"] = dh_mode
+            g.attrs["dedup"] = (
+                "last-write-wins (matches MODEL_AGNfitter.py's "
+                "dict-keyed-by-str(irlum) construction)"
+            )
+            g.attrs["source_sha256"] = hashlib.sha256(cold_src.read_bytes()).hexdigest()
         print(f"Wrote {cold_out} ({cold_out.stat().st_size / 1024:.0f} KB)")
     else:
         print(f"  (skipped cold dust: {cold_src} not found)")
@@ -261,7 +363,7 @@ def main() -> None:
     # ── Torus references: S04 / NK08 / SKIRTOR / CAT3D ──────────────────────
     # Built from models/TORUS so the AGNfitter torus comparison is available
     # without the /tmp clone. The existing data/*_torus_grid.h5 are tengri's OWN
-    # model grids (different normalisation/coverage) — NOT the AGNfitter refs —
+    # model grids (different normalization/coverage) — NOT the AGNfitter refs —
     # so these are stored separately as the upstream tabulation.
     torus_src = args.src.parent / "TORUS"
     torus_out = args.out.parent / "agnfitter_torus_reference.h5"
@@ -303,6 +405,69 @@ def main() -> None:
                     g.create_dataset(k, data=v.astype(np.float32), compression="gzip")
                 g.attrs["axis_cols"] = ",".join(axis_cols)
 
+            def _write_df_grid_native(grp_name, pickle_name, axis_cols, row_slice=None):
+                """Native-resolution (no regrid) DataFrame reference group.
+
+                Unlike ``_write_df_grid`` above (which regrids every template
+                onto a synthetic ``n_wave``-point log-spaced axis), the five
+                torus reductions this writes all share ONE ``log10(nu/Hz)``
+                axis across every row (verified below), so this reads it
+                directly and reshapes ``SED`` values into an N-D array
+                without resampling -- an exact reproduction of the upstream
+                numbers, not an interpolation of them. Deliberately an
+                independent row-by-row read of the pickle (its own
+                dict-lookup, not shared code with
+                ``scripts/build_agnfitter_torus_reductions.py``'s vendored-grid
+                builder), so a shared bug in one cannot silently pass the
+                other's crossval test.
+                """
+                df = _load(torus_src / pickle_name)
+                if row_slice is not None:
+                    df = df.iloc[row_slice]
+                df = df.reset_index(drop=True)
+
+                axis_arrays = [
+                    np.sort(np.asarray(df[c].unique(), dtype=np.float64)) for c in axis_cols
+                ]
+                shape = tuple(int(a.size) for a in axis_arrays)
+
+                first_log_nu = np.asarray(df["wavelength"].iloc[0], dtype=np.float64).ravel()
+                for log_nu in df["wavelength"]:
+                    if not np.array_equal(
+                        np.asarray(log_nu, dtype=np.float64).ravel(), first_log_nu
+                    ):
+                        raise ValueError(
+                            f"{pickle_name} ({grp_name}): rows do not share one "
+                            "common wavelength grid; native-resolution reference "
+                            "requires it."
+                        )
+                wave_desc_aa = _log_nu_to_aa(first_log_nu)
+                order = np.argsort(wave_desc_aa)
+                wave_aa = wave_desc_aa[order]
+
+                key_cols = [df[c].to_numpy(dtype=np.float64) for c in axis_cols]
+                row_by_key: dict[tuple[float, ...], int] = {}
+                for i in range(len(df)):
+                    row_by_key[tuple(float(col[i]) for col in key_cols)] = i
+
+                sed_values = df["SED"].to_numpy()
+                template = np.empty((*shape, wave_aa.size), dtype=np.float64)
+                for idx in np.ndindex(*shape):
+                    key = tuple(float(axis_arrays[d][idx[d]]) for d in range(len(axis_cols)))
+                    row_i = row_by_key[key]
+                    sed = np.asarray(sed_values[row_i], dtype=np.float64).ravel()
+                    template[idx] = sed[order]
+
+                g = ft.create_group(grp_name)
+                g.create_dataset("wavelength", data=wave_aa, compression="gzip")
+                g.create_dataset("template", data=template, compression="gzip")
+                for c, arr in zip(axis_cols, axis_arrays, strict=True):
+                    g.create_dataset(
+                        f"{c.replace('-values', '')}_axis", data=arr, compression="gzip"
+                    )
+                g.attrs["axis_cols"] = ",".join(axis_cols)
+                g.attrs["resolution"] = "native (no resampling)"
+
             _write_node_dict("s04", "S04.pickle", "Nh-values")
             _write_node_dict("nk08", "NK0_mean_1p.pickle", "incl-values")
             _write_df_grid(
@@ -313,6 +478,20 @@ def main() -> None:
                 "CAT3D_mean_3p.pickle",
                 ["incl-values", "a-values", "fwd-values"],
                 row_slice=210,
+            )
+            _write_df_grid_native("nk08_2p", "NK0_mean_2p.pickle", ["incl-values", "oa-values"])
+            _write_df_grid_native(
+                "nk08_3p", "NK0_mean_3p.pickle", ["incl-values", "oa-values", "tv-values"]
+            )
+            _write_df_grid_native("skirtor_mean1p", "SKIRTOR_mean_1p.pickle", ["incl-values"])
+            _write_df_grid_native(
+                "skirtor_mean2p", "SKIRTOR_mean_2p.pickle", ["oa-values", "incl-values"]
+            )
+            _write_df_grid_native(
+                "cat3d_lowfwd",
+                "CAT3D_mean_3p.pickle",
+                ["incl-values", "a-values", "fwd-values"],
+                row_slice=slice(0, 210),
             )
         print(f"Wrote {torus_out} ({torus_out.stat().st_size / 1024:.0f} KB)")
     else:

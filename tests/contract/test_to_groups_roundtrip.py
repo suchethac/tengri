@@ -501,7 +501,14 @@ class TestWildcardEmissionIdempotence:
                 dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
                 neb={"type": "cue", "all_params": FREE},
                 igm={"type": "inoue14", "all_params": Fixed(DEFAULT)},
-                agn={"type": "simple", "all_params": Fixed(DEFAULT), "log_lbol": Uniform(9, 13)},
+                # 'composable', not the removed toy model 'simple': a block name
+                # at the agn top level is refused at build time (R37). The
+                # wildcard-plus-override shape the roundtrip tests is unchanged.
+                agn={
+                    "type": "composable",
+                    "all_params": Fixed(DEFAULT),
+                    "log_lbol": Uniform(9, 13),
+                },
                 redshift=Fixed(0.5),
             )
 

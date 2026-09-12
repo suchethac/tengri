@@ -151,7 +151,7 @@ For a canonical Type-1 quasar at z=1, agn_log_lbol=12 (L_bol ≈ 10^45 erg/s), i
 
 .. [14] Casey, C. M. (2012). Stellar Mass Assembly and Morphological Transformations since z ~ 3 from CANDELS. MNRAS, 425, 3094. https://doi.org/10.1111/j.1365-2966.2012.21455.x
 
-.. [15] Kubota, A., & Done, C. (2018). Accretion States of the Ultraluminous X-ray Source IC 342 X-1. MNRAS, 480, 1247. https://doi.org/10.1093/mnras/sty1997
+.. [15] Kubota, A., & Done, C. (2018). A physical model of the broad-band continuum of AGN and its implications for the UV/X relation and optical variability. MNRAS, 480, 1247. https://doi.org/10.1093/mnras/sty1890
 
 .. [16] Dovciak, M., Karas, V., & Yaqoob, T. (2004). Radiation of Accretion Disks Illuminated by a Lamp-post Source and Its Correlations with Reflection Spectra of Black Hole Binaries. ApJS, 153, 205. https://doi.org/10.1086/421115
 

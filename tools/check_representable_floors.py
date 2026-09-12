@@ -162,6 +162,14 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 _PINNED_DENOMINATORS = 3
 
 
+
+
+#: On the AGNfitter validation branch, two of the original 43 sub-subnormal
+#: denominators had already been replaced by `jnp.where` selects in the R59
+#: AGN dust-budget split (`blocks/runner.py`), and the SKIRTOR no-grid
+#: fallback's `jnp.maximum(int, 1e-30)` renormalization had been rewritten,
+#: so the merged tree lands on the same 3 as main.
+
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:
     """Return ``(lineno, floor)`` for each ``x / guard(y, floor)`` below the bound.
 

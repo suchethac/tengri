@@ -269,8 +269,14 @@ class TestSKIRTORPolarDustIntegration:
         and agn_torus_block="skirtor", comparing Type 2 sightlines (cos_inc=0.0)
         with polar_ebv in {0.0, 0.3}.
 
-        FIR luminosity should increase strictly by >5% when polar_ebv=0.3
-        vs polar_ebv=0.0, due to isotropic graybody reemission.
+        FIR luminosity should increase strictly by >3% when polar_ebv=0.3
+        vs polar_ebv=0.0, due to isotropic graybody reemission. (Threshold
+        was >5% before task13 fix-round-1 item 1 added the polar cone's
+        covering fraction -- a function of agn_polar_oa alone, Yang+2020
+        section 2.2.2 -- to the re-emission normalization: at the default
+        agn_polar_oa=45deg used here, the covering fraction is ~0.58, so the
+        FIR bump this test measures is correspondingly smaller than before;
+        measured ratio at these exact params is 1.044.)
 
         References
         ----------
@@ -301,7 +307,7 @@ class TestSKIRTORPolarDustIntegration:
             "agn_torus_block": "skirtor",
             "agn_disc_block": "multicolor",
             "agn_cos_inc": 0.0,  # Type 2 (edge-on)
-            "agn_polar_temperature": 100.0,
+            "agn_polar_T": 100.0,
             "agn_polar_beta": 1.6,
             "agn_polar_oa": 45.0,
             "agn_polar_law": "smc",
@@ -339,9 +345,9 @@ class TestSKIRTORPolarDustIntegration:
         fir_lum_ebv_03 = jnp.sum(sed_ebv_03[fir_mask] * delta_nu[fir_mask])
 
         ratio = fir_lum_ebv_03 / (fir_lum_ebv_0 + 1e-20)
-        assert float(ratio) > 1.05, (
+        assert float(ratio) > 1.03, (
             f"Composable runner: FIR luminosity did not increase with polar_ebv. "
-            f"ratio={float(ratio):.3f}, expected > 1.05. "
+            f"ratio={float(ratio):.3f}, expected > 1.03. "
             f"FIR(ebv=0.0)={float(fir_lum_ebv_0):.3e}, "
             f"FIR(ebv=0.3)={float(fir_lum_ebv_03):.3e}"
         )

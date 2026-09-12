@@ -257,6 +257,14 @@ These are not numerical bugs but missing or placeholder implementations that pro
 **Grid data:** VizieR catalog J/MNRAS/456/3354 was not deposited. Acquisition path documented in `scripts/download_feltre_grid.py`. When `data/feltre_grid.h5` is absent, `FeltreNLRBackend.__init__` raises `FileNotFoundError` with instructions rather than crashing at inference time.
 **Tests:** `tests/unit/test_feltre_nlr.py` — 13 tests: 6 data-independent (import, FileNotFoundError, nearest-idx, dispatcher routing) always pass; 7 smoke/physics tests skip when `data/feltre_grid.h5` absent.
 **Reference:** Feltre, Charlot & Gutkin (2016), MNRAS 456, 3354.
+**Update (2026-09, R41(b), #2214):** Since R41(b) both α_pl and ξ_d are
+interpolated with the same C²-continuous triweight kernel as the other three
+axes, not snapped to their nearest node — the file paths and test module
+named above (`src/tengri/models/nebular/agn_nebular.py`,
+`tests/unit/test_feltre_nlr.py`) no longer exist; the current locations are
+`src/tengri/components/nebular/agn_nebular.py` and
+`tests/regression/paper/test_feltre_nlr.py`. This paragraph is a historical
+record of the original fix and is left as written above.
 
 ---
 
@@ -717,3 +725,84 @@ consistency or perf improvements, not correctness bugs.
   the JIT cost (~17s compile for NIFTy vi, ~5s for native vi on the 7-param
   model) on first fit. A `scripts/warmup_cache.py` that pre-compiles the
   standard model configs would move that cost to install-time.
+
+## AGNfitter-rX Parity Audit (2026-09): deferred items
+
+Cross-cutting findings from the fourteen-task AGNfitter-rX parity sweep that
+are correctness or maintainability concerns but were out of scope for the
+tasks that found them (each would need its own review of downstream fit
+behavior or a larger refactor). Tracked here rather than fixed inline or
+silently dropped.
+
+- **PARITY-01 — `agn_log_lbol` and eleven siblings drifted between five
+  legacy AGN disc/torus classes and their canonical `_params.py`
+  declaration. FIXED (Task 11 fix round 1, ruling R25).**
+  `tools/check_param_restatements.py` (new, Task 11 item 5) statically
+  compares every class-level `Uniform(lo, hi, ..., default=d)` restatement
+  against the canonical `ParamDeclaration` for the same parameter name; its
+  first run found `CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`,
+  and `SKIRTORAgnfitterTorus` (`src/tengri/components/agn/{cat3d_torus_model,
+  kd18_disc_model, powerlaw_disc_model, silva04_model,
+  skirtor_agnfitter_model}.py`) all restating `agn_log_lbol`'s default as
+  `11.0` against `agn/_params.py`'s canonical `10.0`, `KD18Disc` alone
+  restating ten more parameters (`agn_log_mbh`, `agn_log_ledd`, `agn_a_spin`,
+  `agn_cos_inc`, `agn_f_hard`, `agn_gamma_warm`, `agn_kt_warm`,
+  `agn_gamma_hard`, `agn_kt_hot`, `agn_r_warm_ratio`, `agn_lum_ratio`) with
+  bounds and/or defaults disagreeing with the canonical declaration —
+  several by more than a default value (e.g. `agn_log_ledd` bounds
+  `[-3, 0]` vs canonical `[-2, 0.5]`) — and `PowerLawDisc` restating
+  `agn_alpha` and `agn_lum_ratio` similarly. An initial pass allowlisted all
+  eighteen as a pre-existing drift needing its own downstream-fit-behavior
+  review; ruling R25 overrode that and had every one of them switched to
+  `declared_prior(PARAMS, name)` instead — the same mechanical pattern
+  `CAT3DTorus`'s and `Silva04Torus`'s *other* priors, and all of
+  `SKIRTORTorus`'s, already used after Task 1 / Task 14. `ALLOWLIST` in
+  `tools/check_param_restatements.py` is now empty. This is a behavior
+  change for any existing caller of these five classes with default/bound
+  params left unset — see the Task 11 fix-round-1 commit for the full
+  per-parameter before/after table and the updated contract tests in
+  `tests/contract/test_agn_component_backends.py`.
+
+- **PARITY-02 — `agn_priors.py` is 1198 lines; a package split was
+  suggested but not done (Task 7).** `src/tengri/parameters/agn_priors.py`
+  holds all eight AGNfitter-rX informative-prior functions plus their
+  `agnfitter_priors` adapter; the file-size guidance elsewhere in this repo
+  (`tools/check_file_sizes.py`) is 800 lines outside `data/`. Splitting by
+  prior family (energy balance / AGN fraction / mid-IR-X-ray-UV ties) was
+  raised in review and deferred as non-blocking.
+
+- **PARITY-03 — `radio.py` is 1574 lines (1328 pre-existing + Task 6's
+  `bell2003_split`/`sfr_from_lir`).** Same file-size guidance as above;
+  splitting the free-free/synchrotron calibration helpers from the
+  SED-component class was raised and deferred as non-blocking.
+
+- **PARITY-04 — `include_freefree` is not reachable via the model-building
+  dict grammar (Task 6).** `bell2003_split`'s separate free-free term is a
+  component/function-level Python option only (`component_factory.py`); no
+  `radio={'include_freefree': ...}` grammar key routes to it, so a user
+  cannot select it declaratively — dead plumbing by the explicit-over-silent
+  rule (either give it a grammar key, or remove the option).
+
+- **PARITY-05 — GRAHSP/composable AGN sub-block parameter ownership is
+  split three ways with no single source of truth (Task 12/13/16
+  findings).** A parameter like `agn_polar_ebv` can be read by a torus
+  block's bundled polar term, by the runner's Stage-1.5 line-of-sight
+  reddening (every `atten` type), and by the standalone
+  `atten='polar_dust'` block — which of the three "owns" a given parameter
+  for a given `(torus, atten)` configuration was determined only by
+  measurement (peer sweeps, Task 12/13's orchestrator probes), never by any
+  declaration. R22 (this task's CHANGELOG entry) consolidated the polar-dust
+  case specifically; the general three-way ownership split for AGN
+  sub-block parameters (which wildcard frees what, under which
+  `(torus, atten)` pair) is Task 16's larger, still-open item.
+
+- **PARITY-06 — `tools/check_param_defaults.py` was in-range-only, blind to
+  a restated declaration with a drifted default (closed by Task 11 item
+  5).** It only checked that a function *signature* default lies inside
+  its *own* declared prior's support; it had no notion of a *second*
+  independent declaration of the same parameter to compare against, so
+  `SKIRTORTorus`'s drifted `agn_band_frac`/`agn_polar_ebv`/`agn_log_lbol`
+  defaults (Task 14) and the eighteen restatements in PARITY-01 above
+  (also now fixed, fix round 1) were both invisible to it.
+  `tools/check_param_restatements.py` (Task 11 item 5, wired into the
+  smoke job) closes this class of blind spot going forward.

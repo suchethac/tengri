@@ -95,10 +95,20 @@ data/*.h5
 !data/silva04_torus_grid.h5
 !data/nenkova_agnfitter_torus_grid.h5
 !data/dh02_ce01_grid.h5
+# AGNfitter-rX torus reductions beyond the AGNfitter-faithful defaults above
+# (Task 4). Regenerate with:
+#   python scripts/build_agnfitter_torus_reductions.py --torus-dir /tmp/AGNfitter-rX/models/TORUS
+!data/nenkova_agnfitter_2p_torus_grid.h5
+!data/nenkova_agnfitter_3p_torus_grid.h5
+!data/skirtor_mean1p_torus_grid.h5
+!data/skirtor_mean2p_torus_grid.h5
+!data/cat3d_wind_lowfwd_torus_grid.h5
 # Fritz+2006 torus grid (#347/#804). Regenerate with:
 #   python scripts/download_fritz2006_templates.py && python scripts/build_fritz2006_grid.py
 !data/fritz2006_torus_grid.h5
 !data/slone_netzer_disc_grid.h5
+!data/kd18_agnfitter_disc_grid.h5
+!data/kd18_agnfitter_warmindex_disc_grid.h5
 !data/wg00_attenuation_grid.h5
 # wg00_attenuation_grid.h5 (~95 KB): regenerate with python scripts/build_wg00_grid.py --download
 # Regenerate with: python scripts/convert_fsps_cloudy_grid.py && python scripts/convert_dl07_templates.py
@@ -222,6 +232,7 @@ _galrun/
 # `tools/check_tracked_not_ignored.py` now fails on any tracked file its own
 # .gitignore would exclude, so this list cannot silently fall behind again.
 !data/agnfitter_cold_dust_reference.h5
+!data/agnfitter_galaxy_reference.h5
 !data/agnfitter_torus_reference.h5
 !data/astrodust_templates.h5
 !data/bosa_templates.h5
@@ -247,6 +258,14 @@ _galrun/
 # Vendored test fixtures. Small, deterministic, and committed on purpose; the
 # blanket *.npz / *.h5 rules above are aimed at generated arrays, not at these.
 !tests/fixtures/**
+# The blanket re-inclusion above also un-ignores the root __pycache__/ and
+# *.py[cod] rules for anything under this tree, so a compiled cache from
+# importing a fixture module directly (e.g. `pytest
+# tests/fixtures/assertion_holes/holes.py`) shows up as a permanently
+# untracked directory instead of being ignored like every other cache in the
+# repo. Re-ignore both, at any depth under the fixtures tree.
+tests/fixtures/**/__pycache__/
+tests/fixtures/**/*.py[cod]
 
 # scratch logs from local recovery runs
 *_run.log

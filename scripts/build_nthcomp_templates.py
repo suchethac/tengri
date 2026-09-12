@@ -3,7 +3,7 @@
 
 Calls RELAGN's ``pyNTHCOMP.donthcomp`` (scotthgn/RELAGN, credit A.D. Thomas,
 ported from XSpec donthcomp.f) to solve the Kompaneets equation on a 4-D grid
-of (gamma, kTe, kTbb, nu) and saves the normalised spectral shapes to
+of (gamma, kTe, kTbb, nu) and saves the normalized spectral shapes to
 ``data/nthcomp_templates.h5`` (HDF5).
 
 Once built, tengri loads the table at import and uses JAX trilinear
@@ -78,7 +78,7 @@ def _relagn_fnu(
 
         F_nu ∝ E_mid * photar[i] / ΔE
 
-    where E_mid is the bin-centre energy [keV] and ΔE the bin width [keV].
+    where E_mid is the bin-center energy [keV] and ΔE the bin width [keV].
     The result is interpolated onto the requested ``nu_hz`` grid.
 
     Parameters
@@ -93,7 +93,7 @@ def _relagn_fnu(
     Returns
     -------
     fnu : ndarray
-        Non-negative spectral shape in F_nu units (unnormalised).
+        Non-negative spectral shape in F_nu units (unnormalized).
     """
     import pyNTHCOMP as nthcomp
 
@@ -122,7 +122,7 @@ def build_table(
     n_ktbb: int = 25,
     n_nu: int = 300,
 ) -> dict:
-    """Compute the nthcomp normalised spectral shape table.
+    """Compute the nthcomp normalized spectral shape table.
 
     Parameters
     ----------

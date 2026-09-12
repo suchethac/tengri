@@ -208,12 +208,12 @@ def _agn_model(ssp, obs):
         dust_attenuation={"type": "two_component", "law": "calzetti"},
         agn={
             "type": "composable",
-            # No 'all_params' on the disc block itself (#2187): every
-            # kubota_done disc parameter is a *shared* AGN parameter --
-            # partitioned under "agn", never "agn.disc" -- so the
-            # composable-level wildcard below already frees every one of
-            # them; a wildcard restated on 'disc' covers zero parameters
-            # and now raises.
+            # No 'all_params' on the disc block itself: the composable-level
+            # wildcard below already frees what this test needs. (#2187
+            # dropped it on the stronger claim that a disc wildcard covers
+            # zero parameters and raises -- not true under per-sub-block
+            # declared-reads scoping, where "agn.disc" owns parameters of its
+            # own. Unnecessary here, not refused.)
             "disc": {"type": "kubota_done"},
             "torus": {"type": "skirtor", "all_params": FREE},
             "atten": {"type": "polar_dust", "all_params": FREE},
@@ -387,21 +387,74 @@ def test_parameter_is_in_its_declaring_bucket(bucket, param):
 def test_radio_model_attributes_carry_the_configured_values(
     synthetic_tophat_obs,
 ):
-    """``sfr_mode`` and ``include_freefree`` are model attributes, not params.
+    """``sfr_mode`` is a model attribute, not a param; ``include_freefree``
+    reaches the live ``RadioSEDComponentConfig``, not a model-level attribute.
 
     Previously ``assert "_radio_sfr_mode" in _model_src()`` — a substring
     search over the whole of ``sed_model.py``, which a comment mentioning the
     name satisfies.  Read the attributes off a built model instead, and require
     the configured block name rather than merely a truthy value.
+
+    A fix-round (2026-09) audit found ``SEDModel._radio_include_freefree``
+    (asserted here in an earlier version of this test) was dead: it read a
+    ``spec.radio_include_freefree`` attribute the public grammar never sets
+    and fed only a JIT cache-key tuple, never ``RadioSEDComponentConfig``
+    itself (``component_factory.build_components`` never passed it through).
+    That attribute and its plumbing have been deleted; this test now reads
+    ``include_freefree`` off the actual radio component in the built chain,
+    which IS what ``radio_freefree`` gates on (see
+    ``RadioSEDComponent.predict``).
     """
+    from tengri.components.radio.component import RadioSEDComponent
+
     model = _radio_model(_synthetic_ssp(log_wave_max=11.0, n_wave=900), synthetic_tophat_obs)
 
     assert model._radio_sfr_mode == "bell2003", (
         f"radio sf block 'bell2003' must reach the model; got {model._radio_sfr_mode!r}"
     )
-    assert model._radio_include_freefree is True, (
+    radio_component = next(
+        (c for c in model._feature_chain() if isinstance(c, RadioSEDComponent)), None
+    )
+    assert radio_component is not None, "radio component must be in the built chain"
+    assert radio_component.config.include_freefree is True, (
         "free-free must be enabled by default; a False here silently removes the "
         "thermal component that radio_T_e and radio_alpha_ff control"
+    )
+
+
+def test_no_dead_radio_include_freefree_plumbing(synthetic_tophat_obs):
+    """(fix round 2) ``include_freefree`` is not threaded through the public
+    grammar, and the dead ``SEDModel``/``SEDModelState`` plumbing that used
+    to compute it without ever delivering it is gone.
+
+    A 2026-09 audit found ``radio={'sf': {...}}`` had no way to set
+    ``include_freefree`` (``parameters.groups._translate_radio`` only ever
+    reads ``sf_dict['type']``), while ``SEDModel`` separately carried
+    ``self._radio_include_freefree`` (read from a ``spec.radio_include_freefree``
+    attribute the grammar never sets, defaulting to ``True``) that fed only a
+    JIT cache-key tuple and never reached ``RadioSEDComponentConfig`` --
+    the object ``radio_freefree`` actually gates on (see
+    ``RadioSEDComponent.predict``).
+
+    Resolution: delete the dead plumbing rather than thread a new grammar key
+    through it, because threading it would require editing
+    ``parameters/groups.py``'s ``_translate_radio`` -- out of this task's
+    scope (owned by a different task). ``include_freefree`` remains reachable
+    only via direct ``RadioSEDComponentConfig`` construction, still guarded
+    against the bell2003_split double-count by
+    ``test_radio_bell2003_split_no_double_count.py``.
+    """
+    from tengri.forward.sed_model_types import SEDModelState
+
+    assert "radio_include_freefree" not in SEDModelState.__dataclass_fields__, (
+        "SEDModelState must not carry a radio_include_freefree field: it was "
+        "dead (fed only a JIT cache-key tuple, never RadioSEDComponentConfig)"
+    )
+
+    model = _radio_model(_synthetic_ssp(log_wave_max=11.0, n_wave=900), synthetic_tophat_obs)
+    assert not hasattr(model, "_radio_include_freefree"), (
+        "SEDModel must not carry a model-level _radio_include_freefree "
+        "attribute; the live switch is RadioSEDComponentConfig.include_freefree"
     )
 
 

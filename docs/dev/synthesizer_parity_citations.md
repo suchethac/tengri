@@ -231,7 +231,7 @@ When implementing any model in Workstream B:
 1. **Lookup** the bibkey above for the canonical paper.
 2. **Read** the full bib entry by `grep -A 30 "@.*\{<bibkey>," ~/writing-workspace/projects/tengri/99-references.bib`.
 3. **Read** the paper PDF (search `~/writing-workspace/` for the file, or fetch via DOI).
-4. **Transcribe** title / authors / journal / year / arXiv / DOI verbatim into the docstring `References` section per `docs/dev/docstring-standard.md`.
+4. **Copy** title / authors / journal / year / arXiv / DOI verbatim into the docstring `References` section per `docs/dev/docstring-standard.md`.
 5. **Verify** the equations against the paper (not against synthesizer code, not against memory).
 6. **Cite** the synthesizer issue/PR that motivated any pitfall fix in the commit message.
 

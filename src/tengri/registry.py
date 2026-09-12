@@ -359,7 +359,25 @@ class _DescribeRecord(dict):
 def _extract_params(entry: Any, kind: str) -> list[str]:
     """Best-effort free-parameter list for a registry entry.
 
-    AGN entries → introspect callable signature, keep names starting with ``agn_``.
+    AGN model entries → introspect ``entry.callable``'s signature, keep names
+    starting with ``agn_``. AGN BLOCK entries (composable disc/nlr/blr/feii/
+    torus/attenuation) → ``entry`` is a ``(category, block_type)`` pair (the
+    grammar sub-block key, e.g. ``"torus"``, and the selected type name, e.g.
+    ``"skirtor"``), resolved through
+    ``tengri.parameters.groups._agn_subblock_declared_params`` -- the SAME
+    signature-introspection-then-partition-filter the ``all_params: FREE``
+    wildcard scoping uses (task-12 fix round 1, item 1). This is deliberately
+    NOT raw ``inspect.signature`` over the bare ``AGN_BLOCKS[category][name]``
+    callable (the pre-fix-round-1 behavior here, and still how ``agn_model``
+    below works): a bare signature also names parameters this block reads but
+    does not OWN (shared masking knobs like ``agn_cos_inc``, or -- for
+    ``skirtor`` -- the ``agn.atten``-owned polar-dust triple it also applies),
+    which the wildcard can never actually free, so listing them as
+    "params you can set" here would advertise a freedom the resolver does not
+    deliver. Nor is it ``_declared_param_names`` (the
+    ``component_factory._REGISTRY``-only lookup used for ``dust_emission``
+    et al.): composable AGN blocks are bare functions in ``AGN_BLOCKS``, not
+    entries in that registry.
     SFH entries → ``callable.params`` (an ``SFHModelSpec`` field) → key list.
     Dust laws / others → empty (parameters come from the caller, not the
     registered function).
@@ -381,6 +399,15 @@ def _extract_params(entry: Any, kind: str) -> list[str]:
         except (TypeError, ValueError):
             return []
         return [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
+
+    if kind == "agn_block":
+        from tengri.parameters.groups import _agn_subblock_declared_params
+
+        category, block_type = entry
+        declared = _agn_subblock_declared_params(category, block_type)
+        if not declared:
+            return []
+        return sorted(declared)
 
     return []
 
@@ -526,6 +553,36 @@ def _extract_param_details(entry: Any, kind: str) -> list[dict]:
 
             agn_params = _resolve_lazy_bucket("_AGN_PARAMS")
             for n in agn_names:
+                meta = agn_params.get(n)
+                if meta is None:
+                    continue
+                description, _check, _err, default = meta
+                out.append(
+                    {
+                        "name": n,
+                        "default": str(default),
+                        "description": description,
+                    }
+                )
+        except (ImportError, AttributeError):
+            pass
+        return out
+
+    if kind == "agn_block":
+        # ``entry`` is a ``(category, block_type)`` pair, resolved through the
+        # same _agn_subblock_declared_params source _extract_params uses (see
+        # its docstring): the OWNED, freeable set, not a raw signature.
+        from tengri.parameters.groups import _agn_subblock_declared_params
+
+        category, block_type = entry
+        declared = _agn_subblock_declared_params(category, block_type)
+        if not declared:
+            return out
+        try:
+            from tengri.parameters._builders import _resolve_lazy_bucket
+
+            agn_params = _resolve_lazy_bucket("_AGN_PARAMS")
+            for n in sorted(declared):
                 meta = agn_params.get(n)
                 if meta is None:
                     continue
@@ -691,8 +748,62 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.agn.unified import AGN_MODELS
 
     out = [_entry_to_dict(n, e, kind="agn_model") for n, e in AGN_MODELS.items()]
+    out.extend(_monolithic_agn_model_rows())
     out = _filter_menu(out, "status", status, listing="list_agn_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def _monolithic_agn_model_rows() -> list[dict]:
+    """Menu rows for the non-composable ``agn={'type': ...}`` names.
+
+    ``AGN_MODELS`` holds exactly one entry, the composable runner, because the
+    monolithic names are not registered through :func:`register_agn_model` --
+    the preset names route through the composable runner with fixed block
+    selectors, and the two self-contained names resolve to their own forward
+    function. Both remain buildable, so both belong on the advertised menu:
+    listing only ``composable`` made every other accepted spelling
+    undiscoverable.
+
+    Each row is derived, never restated. A preset's summary is its own
+    ``_description`` and its citation is the union of the citations of the
+    blocks it selects; a self-contained model carries both in its registry
+    entry.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCK_META
+    from tengri.components.agn.unified import _AGN_PRESETS, _SELF_CONTAINED_AGN_MODELS
+
+    rows: list[dict] = []
+    for name, meta in _SELF_CONTAINED_AGN_MODELS.items():
+        rows.append(
+            {
+                "name": name,
+                "kind": "agn_model",
+                "status": "deprecated",
+                "citation": meta["citation"],
+                "short_doc": meta["_description"],
+                "use": _usage_hint(name, "agn_model"),
+            }
+        )
+    for name, preset in _AGN_PRESETS.items():
+        citations: list[str] = []
+        for kwarg, block_type in preset.items():
+            if not kwarg.endswith("_block") or block_type == "none":
+                continue
+            category = kwarg.removeprefix("agn_").removesuffix("_block")
+            citation = AGN_BLOCK_META.get((category, block_type), {}).get("citation", "")
+            if citation and citation not in citations:
+                citations.append(citation)
+        rows.append(
+            {
+                "name": name,
+                "kind": "agn_model",
+                "status": "deprecated",
+                "citation": "; ".join(citations),
+                "short_doc": preset["_description"],
+                "use": _usage_hint(name, "agn_model"),
+            }
+        )
+    return rows
 
 
 def list_agn_blocks(*, category: str | None = None, status: str | None = None) -> _RegistryTable:
@@ -784,6 +895,28 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
                 "short_doc": meta.get("short_doc", ""),
                 "use": use_str,
             }
+            # Mirrors list_sfh_models / list_agn_models: params/param_details
+            # are the "what range do I put in my Uniform()" answer for a
+            # block the caller hasn't seen before. Previously absent for every
+            # composable block (D8, task-12 audit). `_extract_params`/
+            # `_extract_param_details` take ``(group_key, name)`` -- the
+            # grammar sub-block key (``group_key``, e.g. ``"atten"``, NOT the
+            # registry label ``cat``, e.g. ``"attenuation"`` -- see
+            # ``_agn_subblock_declared_params``'s ``category`` parameter) and
+            # the selected block-type name -- and resolve them through the
+            # SAME source the wildcard-scoping fix uses
+            # (``_agn_subblock_declared_params``), not raw signature
+            # introspection over the bare ``AGN_BLOCKS[cat][name]`` callable
+            # (task-12 fix round 1, item 1): a raw signature also names
+            # parameters this block reads but does not own (shared masking
+            # knobs, or another sub-block's own params), which the wildcard
+            # can never actually free.
+            params = _extract_params((group_key, name), "agn_block")
+            if params:
+                entry_dict["params"] = params
+            details = _extract_param_details((group_key, name), "agn_block")
+            if details:
+                entry_dict["param_details"] = details
             out.append(entry_dict)
 
     out = _filter_menu(out, "status", status, listing="list_agn_blocks")
@@ -1197,6 +1330,10 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
     ("sf", "bell2003"): {
         "citation": "Bell 2003 (ApJ 586, 794)",
         "short_doc": "Fixed-q FIR-radio correlation",
+    },
+    ("sf", "bell2003_split"): {
+        "citation": "Bell 2003 (ApJ 586, 794); Martinez-Ramirez+2024 (A&A 692, A85)",
+        "short_doc": "Bell 2003 total L(1.4 GHz) split 90% non-thermal / 10% thermal",
     },
     ("sf", "delvecchio2021"): {
         "citation": "Delvecchio+2021 FIRRC (SEMPER Eq. 4, arXiv:2503.20525)",

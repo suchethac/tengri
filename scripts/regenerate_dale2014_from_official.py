@@ -11,7 +11,7 @@ from the canonical source:
 The README on that page (``README.SFAGN``) documents the format:
 
 * ``spectra/spectra.0.00AGN.dat`` — pure star-forming (AGN fraction = 0).
-* Column 1: wavelength in micrometres.
+* Column 1: wavelength in micrometers.
 * Columns 2 — 65: :math:`\\log_{10}(\\nu f_\\nu)` (cgs-equivalent;
   absolute scaling is arbitrary per the README, only the shape matters).
 * Column index ``c`` (1-based, 2 ≤ c ≤ 65) corresponds to
@@ -23,13 +23,13 @@ Tengri storage convention (``data/dale2014_templates.h5``):
 
 * ``wavelength_aa`` — wavelength in Angstrom, shape (1496,).
 * ``alpha_grid``    — α values, shape (64,).
-* ``templates_sf``  — :math:`L_\\nu` templates per-Hz, normalised so
+* ``templates_sf``  — :math:`L_\\nu` templates per-Hz, normalized so
   :math:`\\int L_\\nu d\\nu = 1`, shape (n_alpha, n_wave). The runtime
   loader ``create_dale2014_from_grid`` multiplies by ``L_absorbed``
   directly to get an :math:`L_\\nu` SED.
 
 Conversion: :math:`L_\\nu(\\lambda) = 10^{col}(\\lambda) / \\nu`, where
-:math:`\\nu = c/\\lambda`. Normalising by the per-template
+:math:`\\nu = c/\\lambda`. Normalizing by the per-template
 :math:`\\int L_\\nu d\\nu` makes the absolute units of column 2-65 drop
 out (the README explicitly says "the absolute scaling is arbitrary").
 
@@ -100,7 +100,7 @@ def regenerate(output_path: str = OUTPUT) -> None:
     if not (abs(alphas[31] - 2.0) < 1e-12 and abs(alphas[-1] - 4.0) < 1e-12):
         raise AssertionError("α grid does not match the README spec.")
 
-    # Convert log10(ν·f_ν) → L_ν per α, then normalise to ∫L_ν dν = 1.
+    # Convert log10(ν·f_ν) → L_ν per α, then normalize to ∫L_ν dν = 1.
     nu = C_AA_PER_S / wave_aa  # Hz, descending (λ ascending)
     nu_fnu = 10.0**log_nu_fnu
     L_nu = nu_fnu / nu[:, None]  # (n_wave, n_alpha)
@@ -121,7 +121,7 @@ def regenerate(output_path: str = OUTPUT) -> None:
     for i in range(templates.shape[0]):
         integral = np.trapezoid(templates[i, sort_idx], nu_sorted)
         if not (0.999 < integral < 1.001):
-            raise ValueError(f"α={alphas[i]} normalisation failed (got {integral:.6f}).")
+            raise ValueError(f"α={alphas[i]} normalization failed (got {integral:.6f}).")
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with h5py.File(output_path, "w") as f:

@@ -86,8 +86,8 @@ ax_sed.grid(True, which="both", alpha=0.25)
 
 ratio = L_radio_t / L_radio_c
 ax_ratio.semilogx(wave_r / 1e8, ratio, color="k", lw=1.4)
-ax_ratio.axhline(1.0, color="grey", lw=0.8, ls=":")
-ax_ratio.axhspan(0.95, 1.05, color="grey", alpha=0.15, label="±5%")
+ax_ratio.axhline(1.0, color="gray", lw=0.8, ls=":")
+ax_ratio.axhspan(0.95, 1.05, color="gray", alpha=0.15, label="±5%")
 ax_ratio.set_xlim(1, 100)
 ax_ratio.set_ylim(0.9, 1.1)
 ax_ratio.set_xlabel(r"$\lambda$ [cm]")
@@ -215,8 +215,8 @@ ax_sed.grid(True, which="both", alpha=0.25)
 
 ratio = L_xray_t / L_xray_c
 ax_ratio.semilogx(E_keV, ratio, color="k", lw=1.4)
-ax_ratio.axhline(1.0, color="grey", lw=0.8, ls=":")
-ax_ratio.axhspan(0.95, 1.05, color="grey", alpha=0.15)
+ax_ratio.axhline(1.0, color="gray", lw=0.8, ls=":")
+ax_ratio.axhspan(0.95, 1.05, color="gray", alpha=0.15)
 ax_ratio.set_xlim(0.1, 10.0)
 ax_ratio.set_ylim(0.9, 1.1)
 ax_ratio.set_xlabel("E [keV]")

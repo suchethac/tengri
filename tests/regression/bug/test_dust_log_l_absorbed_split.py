@@ -157,8 +157,11 @@ def test_agn_torus_coupling_reads_absorbed_not_ir(ssp):
                 "disc": {"type": "multicolor"},
                 "torus": {"type": "skirtor"},
                 "norm": "cigale_joint",
+                # No agn_log_lbol: with agn_ir_frac active the AGN power is
+                # L_absorbed * f/(1 - f) (the CIGALE skirtor2016 coupling), and
+                # a user-given agn_log_lbol beside it is refused at build
+                # (#2069/#2210) because it would be computed over and discarded.
                 "ir_frac": Fixed(0.3),
-                "agn_log_lbol": Fixed(11.5),
                 "other_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.0),

@@ -50,21 +50,22 @@ Dataset              Shape                          Description
 ``incl_axis``        ``(n_incl,)``                  inclination [deg], ascending
 ``tv_axis``          ``(n_tv,)``                    optical depth, ascending
 ``wavelength``       ``(n_wave,)``                  common wavelength grid [Å], ascending
-``template``         ``(n_oa, n_incl, n_tv, n_wave)``  F_nu template (unnormalised)
+``template``         ``(n_oa, n_incl, n_tv, n_wave)``  F_nu template (unnormalized)
 ===================  ============================  ============================================
 
 Templates are shape-only; the runtime module
 (:mod:`tengri.components.agn.skirtor_agnfitter`) applies per-L_sun
-normalisation and scales to ``agn_log_lbol`` + ``agn_torus_frac``.
+normalization and scales to ``agn_log_lbol`` + ``agn_torus_frac``.
 
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
    torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
-   IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
-   arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
+.. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+   "The dust covering factor in active galactic nuclei," MNRAS, 458,
+   2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
+   https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
    radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
    (2024). arXiv:2405.12111.
@@ -336,7 +337,7 @@ def build(
         g.attrs["n_tv"] = n_tv
         g.attrs["n_wave"] = n_wave
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalised at runtime)"
+        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalized at runtime)"
         g.attrs["template_dtype"] = str(dtype_template)
         g.attrs["description"] = (
             "SKIRTOR-averaged (mean over clumpiness p,q and radial index) "

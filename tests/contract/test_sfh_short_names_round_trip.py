@@ -95,7 +95,7 @@ def test_short_name_strips_the_whole_type_prefix(sfh_type, full, short):
     """``_extract_short_name`` drops the full ``sfh_<type>_`` prefix, no more, no less."""
     assert full in SFH_REGISTRY[sfh_type].params, (
         f"{full!r} is no longer a declared parameter of {sfh_type!r}; "
-        "this table transcribes the registry and must be updated with it"
+        "this table restates the registry and must be updated with it"
     )
     # ``_short_names_for_group`` calls with an empty dict, so the derivation
     # has to work from the parameter name alone.

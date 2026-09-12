@@ -133,7 +133,7 @@ def _total_grads(row: dict) -> int | None:
 
 
 def _markdown(latest: dict) -> None:
-    """Emit the report's rows table, so no number is hand-transcribed."""
+    """Emit the report's rows table, so no number is entered by hand."""
     print(
         "| fixture | seed | config | wall s | total grads | max split R-hat | "
         "div | div rate | min ESS | ancestor ESS | rungs | distinct draws |"
