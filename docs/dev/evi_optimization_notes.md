@@ -192,7 +192,7 @@ posteriors.
 | nifty_geovi | `fitter.run("nifty_geovi")` | Full NIFTy | ~18s |
 | nifty_mgvi | `fitter.run("nifty_mgvi")` | Full NIFTy | ~18s |
 | geovi_nuts / mgvi_nuts | `fitter.run("geovi_nuts")` | VI + NUTS | ~20s |
-| MAP | `fitter.run("map")` | Adam/optax | ~2s |
+| MAP | `fitter.run("map")` | L-BFGS (default; Adam/optax selectable via `optimizer=`) | ~2s |
 | Ray Tracing | `fitter.run("raytrace")` | Custom JAX | ~60s |
 | NUTS | `fitter.run("nuts")` | BlackJAX | ~120s |
 

@@ -18,7 +18,7 @@ The table below is a decision aid; when it disagrees with
 
 | Situation | Method | Why |
 |-----------|--------|-----|
-| Quick point estimate / initialization | `map` | Adam optimizer. Cold ~4s, warm ~0.3–2s. Use to warm-start a sampler via `init_from=`. |
+| Quick point estimate / initialization | `map` | L-BFGS by default (scipy L-BFGS-B single-start; JAX BFGS via `jax.scipy.optimize` when vmapped/multi-start) — converges more reliably than a fixed-step optimizer. Adam/AdamW/SGD remain available via `optimizer=`. Cold ~4s, warm ~0.3–2s measured under the former Adam default; L-BFGS is typically faster warm (see `docs/dev/inference_methods.md` §6.10). Use to warm-start a sampler via `init_from=`. |
 | Fast posterior approximation | `laplace` | Gaussian around the MAP from the Hessian. Cold ~5–9 s, warm ~1–2 s. Good when the posterior is roughly Gaussian. |
 | Auto-dispatch (beginner) | `mcmc` | Selects NUTS for low-D, raytrace for high-D. Convenient when you're unsure of the right sampler. |
 | Exact posterior, low-D (D ≤ 6) photometry | `mcmc_nuts` | No-U-Turn Sampler. Gold standard for small parametric models. Cold ~90 s at D=6 DPL. |

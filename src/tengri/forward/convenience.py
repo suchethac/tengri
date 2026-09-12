@@ -434,7 +434,7 @@ def fit_batch(
     flux_cols: list[str],
     err_cols: list[str],
     redshift_col: str | None = None,
-    method: str = "vi",
+    method: str = DEFAULT_METHOD,
     n_workers: int = 1,
     verbose: bool = True,
     output_dir: str | None = None,

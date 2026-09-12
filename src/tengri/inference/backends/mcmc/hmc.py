@@ -114,18 +114,23 @@ def run_hmc(
     target_accept_rate : float
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool or None, default None
-        ``None`` (auto) switches to diagonal at D >= 8, the same policy NUTS
-        uses (``tengri.inference.backends.mcmc.nuts._resolve_dense_mass_matrix``,
-        #319). ``True`` / ``False`` force the choice.
+        ``None`` (auto) resolves through the same
+        ``tengri.inference.backends.mcmc.nuts._resolve_dense_mass_matrix``
+        policy NUTS uses, via the shared
+        :func:`~tengri.inference.backends.mcmc.nuts.resolve_dense_mass_gate`
+        seam: dense at D <= 12 unless the spec's SFH is ``dense_basis``
+        (diagonal at any D), diagonal above D = 12. ``True`` / ``False``
+        force the choice.
 
-        This used to default to ``True``, which combined with the
+        This used to default to ``True`` outright, which combined with the
         ``n_dim <= 30`` cap below meant HMC ran a **dense** mass matrix over
-        the whole D = 8-30 band, exactly the band where NUTS deliberately
-        switches to diagonal to dodge the 20+ GB warmup spike. Measured
-        consequence: ``mcmc_hmc`` at D = 9 peaked at 13.47 GB and was
-        SIGKILLed, while ``mcmc_nuts`` at the same D was already diagonal
-        (#1413, #1454). The high-D advisory could not catch it either, it
-        fires above D = 30, by which point HMC has *stopped* using dense.
+        the whole D = 8-30 band, exactly the band where NUTS's
+        (then-simpler) auto-policy switched to diagonal at any D >= 8 to
+        dodge the 20+ GB warmup spike. Measured consequence: ``mcmc_hmc`` at
+        D = 9 peaked at 13.47 GB and was SIGKILLed, while ``mcmc_nuts`` at
+        the same D was already diagonal (#1413, #1454). The high-D advisory
+        could not catch it either, it fires above D = 30, by which point HMC
+        has *stopped* using dense.
     chain_method : {"vmap", "sequential", "parallel"}, default "vmap"
         How ``n_chains > 1`` chains are executed.
 
@@ -192,7 +197,11 @@ def run_hmc(
     )
 
     use_dense = resolve_dense_mass_gate(
-        dense_mass_matrix, n_dim, method="mcmc_hmc", verbose=verbose
+        dense_mass_matrix,
+        n_dim,
+        method="mcmc_hmc",
+        verbose=verbose,
+        spec=getattr(fitter, "spec", None),
     )
     # HMC carries the same O(D^2) warmup cost as NUTS, so it gets the same
     # warning. It never had one: the shared high-D advisory keys on method name

@@ -64,7 +64,12 @@ def fitter(synthetic_ssp_wide):
 
 
 def _run(f, **overrides):
-    kw = dict(n_restarts=3, n_steps=40, verbose=False)
+    # Pinned to "adam": this test is specifically about _run_map_multistart's
+    # optax-based memo (see module docstring, "it is plain Adam"). The default
+    # optimizer is now "lbfgs", which for n_restarts>1 routes to the
+    # *different* vmapped-JAX-BFGS multistart path and its own memo cache --
+    # see test_qn_multistart_kernel_is_reused_across_calls below.
+    kw = dict(n_restarts=3, n_steps=40, verbose=False, optimizer="adam")
     kw.update(overrides)
     return f.run("map", key=jax.random.PRNGKey(0), **kw)
 
@@ -92,3 +97,29 @@ def test_different_config_builds_distinct_kernel(fitter):
     _run(fitter, n_steps=60)
     cache = getattr(fitter, "_map_multistart_kernel_cache", {})
     assert len(cache) == 2, "distinct n_steps must key distinct kernels, not collide"
+
+
+def _run_qn(f, **overrides):
+    """Like ``_run`` but exercises the default optimizer ("lbfgs"), which for
+    ``n_restarts>1`` is the vmapped JAX BFGS multistart path
+    (``_run_map_multistart_qn``), memoized separately from the optax path
+    above under ``_map_multistart_qn_kernel_cache``.
+    """
+    kw = dict(n_restarts=3, n_steps=40, verbose=False)
+    kw.update(overrides)
+    return f.run("map", key=jax.random.PRNGKey(0), **kw)
+
+
+def test_qn_multistart_kernel_is_reused_across_calls(fitter):
+    """The default (lbfgs) multistart path also reuses its compiled kernel."""
+    fitter.__dict__.pop("_map_multistart_qn_kernel_cache", None)
+
+    r1 = _run_qn(fitter)
+    cache_after_1 = dict(getattr(fitter, "_map_multistart_qn_kernel_cache", {}))
+    r2 = _run_qn(fitter)
+    cache_after_2 = dict(getattr(fitter, "_map_multistart_qn_kernel_cache", {}))
+
+    assert len(cache_after_1) == 1, "first call must memoize exactly one restart kernel"
+    assert cache_after_2 == cache_after_1, "second identical call must REUSE, not rebuild"
+    for r in (r1, r2):
+        assert np.isfinite(float(r.params["sfh_dpl_log_total_mass"]))
