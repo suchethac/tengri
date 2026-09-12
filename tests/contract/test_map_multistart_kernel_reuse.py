@@ -64,7 +64,12 @@ def fitter(synthetic_ssp_wide):
 
 
 def _run(f, **overrides):
-    kw = dict(n_restarts=3, n_steps=40, verbose=False)
+    # Pinned to "adam": this test is specifically about _run_map_multistart's
+    # optax-based memo (see module docstring, "it is plain Adam"). The default
+    # optimizer is now "lbfgs", which for n_restarts>1 routes to the
+    # *different* vmapped-JAX-BFGS multistart path and its own memo cache --
+    # see test_qn_multistart_kernel_is_reused_across_calls below.
+    kw = dict(n_restarts=3, n_steps=40, verbose=False, optimizer="adam")
     kw.update(overrides)
     return f.run("map", key=jax.random.PRNGKey(0), **kw)
 
@@ -92,3 +97,30 @@ def test_different_config_builds_distinct_kernel(fitter):
     _run(fitter, n_steps=60)
     cache = getattr(fitter, "_map_multistart_kernel_cache", {})
     assert len(cache) == 2, "distinct n_steps must key distinct kernels, not collide"
+
+
+def _run_qn(f, **overrides):
+    """Like ``_run`` but exercises the default optimizer ("lbfgs"), which for
+    ``n_restarts>1`` is the sequential scipy L-BFGS-B multistart
+    (``_run_map_multistart_scipy``); it has no compiled kernel to memoize.
+    """
+    kw = dict(n_restarts=3, n_steps=40, verbose=False)
+    kw.update(overrides)
+    return f.run("map", key=jax.random.PRNGKey(0), **kw)
+
+
+def test_qn_multistart_is_never_worse_than_one_start(fitter):
+    """The default (lbfgs) multistart must reach a loss no worse than a single start.
+
+    Measured 2026-09-12 on notebooks/07's tsnorm model: the vmapped JAX-BFGS
+    multistart returned neg-log-posterior 182.5 (converged=False) where one
+    scipy L-BFGS-B start reached 10.2, seeding every NUTS/HMC fit from a bad
+    basin. The sequential scipy multistart keeps the best of its starts, so it
+    can only match or beat a single start from the same key.
+    """
+    single = fitter.run("map", key=jax.random.PRNGKey(0), n_restarts=1, n_steps=200, verbose=False)
+    multi = _run_qn(fitter, n_steps=200)
+    assert multi.diagnostics["backend"] == "scipy_lbfgsb_sequential"
+    assert multi.diagnostics["n_restarts"] == 3
+    assert float(multi.diagnostics["final_loss"]) <= float(single.diagnostics["final_loss"]) + 1e-9
+    assert len(multi.loss_history) >= 2

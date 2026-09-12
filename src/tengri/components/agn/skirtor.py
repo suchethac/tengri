@@ -45,6 +45,7 @@ from tengri.utils.interpolation import edges_for_grid
 #: Angstrom-grid templates. Matches the value used in
 #: ``tengri.components.agn.blocks.runner.C_AA_PER_S``.
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
+from tengri.utils.scale import representable_denominator
 
 
 class SKIRTORComponents(NamedTuple):
@@ -781,7 +782,9 @@ def skirtor_disc_dust_ratio(
     disc_n = resample_template(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
     ext_n = resample_template(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
     int_disk0 = jnp.trapezoid(disk_0_n, wave_grid)
-    shape_n = disc_n / jnp.maximum(jnp.trapezoid(disc_n, wave_grid), 1e-30)
+    shape_n = disc_n / jnp.maximum(
+        jnp.trapezoid(disc_n, wave_grid), representable_denominator(1e-30)
+    )
     disk_analytic = shape_n * int_disk0
     # CIGALE nan_to_num: zero the disc where the face-on disc vanishes.
     incl_n = jnp.where(disk_0_n > 0, disk_i_n / jnp.where(disk_0_n > 0, disk_0_n, 1.0), 0.0)
@@ -1004,7 +1007,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
         spec = interp_nd_triweight(total_j, axes, edges, point)  # L_nu shape on wave_g
         l_scale = 10.0**agn_log_lbol * _L_SUN * frac_agn
         bolo = jnp.trapezoid(spec[order], nu_g[order])
-        spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), 1e-100))
+        spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), representable_denominator(1e-100)))
         return resample_template(wavelength, wave_g, spec_n, left=0.0, right=0.0)
 
     return fn
@@ -1189,7 +1192,7 @@ agn_radius_ratio, agn_cos_inc : float, optional
     # return 0 attenuation (no contribution).
     ratio_template = jnp.where(
         disk_at_face > 1e-30,
-        disk_at_i / jnp.maximum(disk_at_face, 1e-30),
+        disk_at_i / jnp.maximum(disk_at_face, representable_denominator(1e-30)),
         0.0,
     )
     # Interpolate to user wave grid; clip to [0, 1.5] so numerical noise can't

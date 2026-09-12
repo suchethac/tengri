@@ -26,6 +26,8 @@ This document consolidates and expands:
 12. [Convergence Diagnostics](#12-convergence-diagnostics)
 13. [Quick Reference](#13-quick-reference)
 14. [References](#14-references)
+15. [Profiling the Mass](#15-profiling-the-mass)
+16. [CPU Chain Parallelism](#16-cpu-chain-parallelism)
 
 ---
 
@@ -54,6 +56,7 @@ NIFTy is the computational library implementing geoVI; the `vi` method uses its 
 
 | Problem | D | Recommended | Fallback |
 |---------|--:|-------------|----------|
+| Photometry, parametric SFH (the default) | 7-12 | `mcmc_nuts_fast` (4 chains x 150 + 300, mass profiled, dense metric; 15-20 s on 8 cores) | `mcmc_nuts` |
 | Smooth SFH, few bands | ~7 | `vi` (15 iter) | `mcmc_raytrace` |
 | Stochastic SFH, photometry | ~137 | `vi` (15 iter) | `vi_linear` (20 iter) |
 | Stochastic SFH, spectrum | ~200 | `vi_linear` (20 iter) | `vi` (25 iter) |
@@ -72,14 +75,18 @@ from tengri import SEDModel, Parameters, Fitter
 model = SEDModel(spec, ssp)
 fitter = Fitter(model, data, noise)
 
-# Simple (vi is the default)
-result = fitter.run("vi", n_iterations=15)
+# Simple: the default is mcmc_nuts_fast -- four NUTS chains, 150 warmup steps,
+# no separate burn-in, 300 draws, on the mass-profiled posterior with a dense
+# metric (bench/reports/2026-09-11_profile_mass_20s.md). Export
+# TENGRI_HOST_DEVICES=4 before importing tengri to pmap the chains.
+result = fitter.run()
+result = fitter.run("vi", n_iterations=15)     # geoVI, the previous default
 
 # With initialization from MAP
 result_map = fitter.run("map", n_steps=1500)
 result = fitter.run("vi", init_from=result_map)
 
-# Batch fitting (default method: vi)
+# Batch fitting (default method: mcmc_nuts_fast, one galaxy at a time)
 results = fitter.fit_batch(galaxies)
 
 # Access results
@@ -817,16 +824,33 @@ warning is issued when `spec.stochastic` is True.
 ### 6.10 map
 
 ```python
-result = fitter.run("map", n_steps=1500, optimizer="adam", learning_rate=0.02)
+result = fitter.run("map", n_steps=500)
 ```
 
-**MAP** (Maximum A Posteriori) point estimate via gradient descent. No posterior samples.
+**MAP** (Maximum A Posteriori) point estimate via quasi-Newton optimization or gradient
+descent. No posterior samples.
 
-**Optimizers**: `"adam"` (default), `"adamw"`, `"sgd"`, or any pre-built optax optimizer.
+**Optimizers**: `"lbfgs"` (default, alias `"lbfgs_scipy"`) is quasi-Newton and reaches a
+converged optimum reliably where a fixed-step gradient-descent budget may not. Two
+implementations share the name because scipy is not JAX-traceable and so cannot be
+vmapped: `n_restarts=1` (the default) runs scipy's L-BFGS-B with a Wolfe line search and
+zero JAX compilation for the optimizer itself; `n_restarts>1` runs
+`jax.scipy.optimize.minimize(method="BFGS")` for every restart inside one `jax.vmap`, so
+the restarts execute as a single compiled kernel. Neither needs an optional dependency.
+`"adam"`, `"adamw"`, `"sgd"`, or any pre-built optax optimizer remain available —
+first-order, vmappable at any `n_restarts`, but converge less reliably to a true optimum
+(measured on a D=8, 14-band mock: 8 restarts × 800 Adam steps reached a negative log
+posterior of 6.33, not converged, against 6.0008 for a single L-BFGS-B start in
+under a second; a Hessian at the Adam point can carry a negative eigenvalue, i.e. not
+even a local minimum).
 
 **Features**:
-- Early stopping: halts when loss doesn't improve by `rtol` over `patience` steps
-- Returns `loss_history` for convergence diagnostics
+- `n_steps` is `maxiter` for the quasi-Newton solvers; for optax it is the (early-stoppable)
+  gradient-step budget. `learning_rate`, `early_stopping`, `patience`, `rtol` apply to optax
+  only. `tol` is the quasi-Newton gradient-norm convergence tolerance.
+- Returns `loss_history` for convergence diagnostics — the full per-step trace for optax,
+  a single final value for the quasi-Newton solvers (no per-iteration trace is available
+  without a Python callback, which neither the scipy nor the vmapped JAX path supports).
 
 **Use case**: Initialization for MCMC or VI methods. A quick MAP run provides a good
 starting point that dramatically improves convergence:
@@ -1042,7 +1066,7 @@ All benchmarks on MacBook Pro M-series, CPU (`JAX_PLATFORMS=cpu`).
 
 | Method | D=7 (smooth) | D=137 (stochastic) | Notes |
 |--------|-------------|-------------------|-------|
-| `map` (1000 steps) | ~3s | ~5s | Adam optimizer |
+| `map` (1000 steps) | ~3s | ~5s | Default optimizer at time of measurement (Adam); default is now `"lbfgs"`, typically faster (see 6.10) |
 | `vi_nifty` (10 iter) | ~12s | ~30s | NIFTy exact math |
 | `vi_nifty` full logging (10 iter) | ~18s | ~45s | Full NIFTy with logging |
 | `vi` (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run | First call only |
@@ -1580,3 +1604,158 @@ VIConfig(
 - Behroozi, P. (2025). "Ray Tracing Sampler." Apache 2.0 license.
 - Vehtari, A. et al. (2021). "Rank-normalization, folding, and localization."
   Bayesian Analysis 16(2):667-718. (ESS/Rhat diagnostics)
+
+---
+
+## 15. Profiling the Mass
+
+`Fitter(..., profile_mass=...)` / `ForwardModel.fit(..., profile_mass=...)` analytically
+marginalizes the total-stellar-mass amplitude (the free parameter named
+`*_log_total_mass`) instead of sampling it, so every backend runs on the remaining
+`D - 1` parameters and the mass is drawn from its exact conditional posterior
+afterward. Implementation: `tengri.inference.mass_profile`.
+
+### The math
+
+Every channel tengri fits is linear in `M = 10**log_total_mass`: photometric fluxes and
+spectral pixels both satisfy `f_i(theta, M) = M * f_i(theta)` for a data point `i`, with
+`f_i(theta)` the model prediction per unit mass at the other `D - 1` parameters. Under a
+Gaussian likelihood this makes chi-squared an exact quadratic in `M`, summed over the
+FULL data vector `d = (photometry, spectrum)` (photometry alone, spectroscopy alone, or
+their concatenation for `data_type="joint"`, photometry-then-spectrum -- the order
+`tests/regression/bug/test_bug_1366_joint_data_record.py` pins):
+
+```
+chi2(M) = chi2_min + A * (M - M*)^2
+A     = sum_i f_i(theta)^2 / sigma_i^2
+M*    = (1/A) * sum_i d_i * f_i(theta) / sigma_i^2
+chi2_min = sum_i d_i^2 / sigma_i^2 - A * M*^2
+```
+
+with `d_i` the observed flux and `sigma_i` its 1-sigma uncertainty. Marginalizing `M`
+under its own prior `p(ell)` (`ell = log10(M)`, the mass parameter's declared prior
+density) is the standard closed-form result for a linear amplitude in a Gaussian
+likelihood (Sivia & Skilling 2006, Sec. 3.2):
+
+```
+log p(d | theta) = -1/2 chi2_min + log integral( exp(-1/2 A (M(ell) - M*)^2) p(ell) dell )
+```
+
+evaluated by a fixed-size (48-node) trapezoid quadrature in `ell`, over a window
+`+/- 8 sigma_ell` around `ell* = log10(M*)` (clamped to the prior's own support), with
+`sigma_ell = 1 / (sqrt(A) * M* * ln(10))`. No forward-model evaluation happens inside
+the integral, only evaluations of the already-known exact quadratic. The sampled
+log-posterior is `log p(d | theta) + log p(theta)`, the standardized N(0, I) prior on
+the surviving `D - 1` xi's; the mass's own N(0, 1) prior term does not appear, because
+the integral above already accounts for it.
+
+Once inference on `theta` is done, the mass is reinserted: an exact conditional draw
+`p(log10(M) | theta, d)` per posterior sample (inverse-CDF on the same quadrature grid,
+mapped to the sampler's standardized coordinate via the mass prior's own
+`standardize`/`unstandardize` pushforward) for sample-based backends, or the
+conditional mode `ell* = log10(M*)` for `method="map"`.
+
+### Guards
+
+`profile_mass` requires, checked at `Fitter` construction:
+
+- `data_type` one of `"photometry"`, `"spectroscopy"`, or `"joint"` -- any
+  concatenation these fitter data types assemble (photometry, spectroscopy, or their
+  photometry-then-spectrum concatenation), scored via the same prediction the
+  unprofiled Gaussian likelihood uses (`loss_functions._build_prediction`);
+- no emission-line channel (marginalized, fitted, or measured line fluxes), no
+  line-ratio or spectral-index channel -- a spectrum's line fluxes are linear in `M`
+  too, but that channel carries its own likelihood plumbing and is not yet wired into
+  this module;
+- no calibration marginalization -- another block of linear parameters marginalized
+  separately, not this module's math;
+- a Gaussian likelihood (`noise_dof == 0`, no variable-noise `noise_frac_cal` model);
+- no censored data (upper/lower limits);
+- exactly one free `*_log_total_mass` parameter, with a bounded-support prior; and
+- the full data vector numerically linear in that parameter (two masses one dex apart,
+  all else fixed, agree to `max|ratio - 10| < 1e-8`) -- a mass-independent additive
+  component (e.g. an unmasked AGN continuum, on either channel) fails this and disables
+  profiling.
+
+`profile_mass="auto"` (the default on `Fitter` and `ForwardModel.fit`) engages
+profiling only when every guard passes, falling back to ordinary sampling with one
+`logging.INFO` line naming the reason otherwise. `profile_mass=True` raises
+`ValueError` naming the first failed guard instead of falling back; `profile_mass=False`
+disables it unconditionally. The resolved choice and reason are always recorded in
+`Posterior.diagnostics["profile_mass_resolved"]` / `["profile_mass_reason"]`.
+
+### Measured effect
+
+On a D=8, 14-band photometry mock (`ctl-dpl`): the Hessian condition number at the MAP
+drops from 3.7e4 to 1.2e3, and the worst wall-clock time over six seeds of a NUTS fit
+(MAP + adaptation + sampling) drops from 227 s to 40 s. The removed mass/age
+degeneracy is what a fixed-metric sampler otherwise has to spend most of its gradients
+resolving; a galaxy whose chains previously froze (zero unique draws, `#1999`) samples
+cleanly once the mass is profiled out.
+
+### References
+
+- D. S. Sivia and J. Skilling, *Data Analysis: A Bayesian Tutorial*, 2nd ed., Oxford
+  University Press (2006), Sec. 3.2 (marginalizing a linear amplitude out of a Gaussian
+  likelihood).
+
+---
+
+## 16. CPU Chain Parallelism
+
+### The problem `_vmap_chains` doesn't solve
+
+`run_nuts`/`run_hmc`/`run_dynamic_hmc` with `n_chains > 1` dispatch through
+`_vmap_chains` (`tengri.inference.backends.mcmc._shared`), which SIMD-batches the
+chains onto a single device via `jax.vmap`. On CPU that batches `n_chains` chains
+into lanes of one XLA program rather than running them concurrently, so wall time
+scales close to linearly with `n_chains` even though the chains are statistically
+independent and embarrassingly parallel.
+
+### `chain_parallel`
+
+`run_nuts` and `run_dynamic_hmc` accept `chain_parallel: {"auto", "vmap", "pmap"}`
+(default `"auto"`); `mcmc_hmc`'s existing `chain_method="parallel"` already covers
+the same ground via the same underlying `_parallel_chains` (`jax.pmap`) executor.
+
+- `"vmap"`: the original single-device SIMD-batched behavior.
+- `"pmap"`: maps `n_chains` chains one-per-device via `jax.pmap`. Raises
+  `ValueError` (naming `TENGRI_HOST_DEVICES`) if fewer than `n_chains` JAX devices
+  are visible.
+- `"auto"`: `"pmap"` when at least `n_chains` devices of the platform in use are
+  visible and `n_chains > 1`, else `"vmap"`.
+
+Warmup is always single-chain and is unaffected by this choice. Per-chain
+adaptation (each chain tuning its own step size / mass matrix) was measured worse
+-- per-chain metrics inflate split-R-hat -- and is deliberately not offered; only
+the sampling phase's chain dispatch is parallelized this way. The resolved choice
+(`"vmap"` or `"pmap"`, or `"n/a (n_chains=1)"` for a single chain) is recorded in
+`posterior.diagnostics["chain_parallel"]`.
+
+### Getting extra CPU devices: `TENGRI_HOST_DEVICES`
+
+JAX exposes exactly one CPU "device" by default; `jax.pmap` across chains needs
+`n_chains` of them, which normally requires setting
+`XLA_FLAGS=--xla_force_host_platform_device_count=N` **before the first `import
+jax`** (device count is fixed at backend initialization and cannot change
+afterwards). `import tengri` reads the `TENGRI_HOST_DEVICES=<n>` environment
+variable at the top of `tengri/__init__.py` -- before its own `import jax` -- and
+appends the XLA flag for you if `XLA_FLAGS` does not already request a host device
+count (an explicit `XLA_FLAGS` wins):
+
+```bash
+TENGRI_HOST_DEVICES=4 python -c "import tengri, jax; print(jax.devices())"
+# [CpuDevice(id=0), CpuDevice(id=1), CpuDevice(id=2), CpuDevice(id=3)]
+```
+
+See also the JAX section of `CLAUDE.md` (next to `TENGRI_JAX_CACHE_DIR` and the
+other JAX-related env vars).
+
+### Measured effect
+
+On `ctl-dpl` (D=8, 4 chains) with 4 forced host CPU devices
+(`TENGRI_HOST_DEVICES=4`): the sampling phase drops from 19.5 s to 3.5 s versus
+`chain_parallel="vmap"` on one device; the (always single-chain) warmup phase is
+unchanged. `"pmap"` and `"vmap"` sample the same posterior on the same key --
+`chain_parallel` changes *where* the chains run, not the target distribution or
+per-chain RNG stream.

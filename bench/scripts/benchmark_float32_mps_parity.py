@@ -112,6 +112,15 @@ _N_STEPS = 1000
 #: is what a line-search stall needs. See ``_map_loss``.
 _MAX_MAP_RESTARTS = 5
 
+#: Sites rewritten for #2295 (jax-mps#232): reversed-operand trapezoids replaced
+#: with negated-descending to avoid silent zero-out on MLX compile.
+_REWRITTEN_SITES = (
+    "polar_dust.py: anisotropic_polar_luminosity negated-descending (#2295)",
+    "adaf.py: normalization integral (float32) negated-descending (#2295)",
+    "adaf.py: normalization integral (float64) negated-descending (#2295)",
+    "unified.py: disc L_bol negated-descending (#2295)",
+)
+
 
 def _refuse_wrong_precision(write_reference: bool) -> None:
     """Exit with the one-line environment fix if ``jax_enable_x64`` is set wrong.
@@ -645,6 +654,10 @@ def main() -> int:
         "gap seen here is float32's own chi-squared evaluation (cancellation in "
         "data-minus-model at this SNR), already bounded by the fwd/grad columns."
     )
+    print()
+    print("Rewritten sites (#2295):")
+    for site in _REWRITTEN_SITES:
+        print(f"  {site}")
     print(f"device: {meta['devices']}  jax {meta['jax']}  jaxlib {meta['jaxlib']}")
     return 1 if any_fail else 0
 
