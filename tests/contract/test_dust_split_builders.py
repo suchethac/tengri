@@ -139,12 +139,13 @@ class TestDustEmissionBuilders:
         assert isinstance(result, dict)
         assert result["type"] == "dale2014"
         assert "eta_balance" in result
-        # eta_balance is a LogNormal prior with mu=0
-        from tengri.parameters.priors import LogNormal
+        # eta_balance is a linear Gaussian prior with mean 1, truncated at 0
+        from tengri.parameters.priors import Gaussian
 
-        assert isinstance(result["eta_balance"], LogNormal)
-        assert result["eta_balance"].mu == 0.0
+        assert isinstance(result["eta_balance"], Gaussian)
+        assert result["eta_balance"].mu == 1.0
         assert result["eta_balance"].sigma == 0.2
+        assert result["eta_balance"].lo == 0.0
 
     def test_relaxed_energy_balance_in_build(self):
         """relaxed_energy_balance() output builds successfully."""

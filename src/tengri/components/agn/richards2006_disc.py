@@ -25,6 +25,8 @@ from importlib.resources import files
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.host_array import device_table, host_array
+
 __all__ = [
     "RICHARDS2006_NU_FNU",
     "RICHARDS2006_WAVE_AA",
@@ -43,7 +45,7 @@ def _load_template() -> tuple[np.ndarray, np.ndarray]:
     return wave_aa, nu_fnu
 
 
-RICHARDS2006_WAVE_AA, RICHARDS2006_NU_FNU = _load_template()
+RICHARDS2006_WAVE_AA, RICHARDS2006_NU_FNU = (host_array(x) for x in _load_template())
 """Tabulated Richards+2006 template, ascending in wavelength [Å]."""
 
 # Pre-compute L_nu shape: nu·F_nu / nu = F_nu, then proportional to L_nu.
@@ -55,11 +57,11 @@ from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 _RICHARDS2006_NU_HZ = _C_AA_PER_S / RICHARDS2006_WAVE_AA
 _RICHARDS2006_LNU_SHAPE = RICHARDS2006_NU_FNU / _RICHARDS2006_NU_HZ
 # Integrate L_nu shape over frequency for bolometric normalization
-_idx_sort = jnp.argsort(_RICHARDS2006_NU_HZ)
+_idx_sort = np.argsort(_RICHARDS2006_NU_HZ)
 _RICHARDS2006_BOL_INTEGRAL = float(
-    jnp.trapezoid(
-        jnp.asarray(_RICHARDS2006_LNU_SHAPE)[_idx_sort],
-        jnp.asarray(_RICHARDS2006_NU_HZ)[_idx_sort],
+    np.trapezoid(
+        np.asarray(_RICHARDS2006_LNU_SHAPE)[_idx_sort],
+        np.asarray(_RICHARDS2006_NU_HZ)[_idx_sort],
     )
 )
 
@@ -110,8 +112,8 @@ def richards2006_disc(
     # Look up L_nu shape at requested wavelengths (zero outside template range)
     lnu_shape = jnp.interp(
         wavelength,
-        jnp.asarray(RICHARDS2006_WAVE_AA),
-        jnp.asarray(_RICHARDS2006_LNU_SHAPE),
+        device_table(RICHARDS2006_WAVE_AA),
+        device_table(_RICHARDS2006_LNU_SHAPE),
         left=0.0,
         right=0.0,
     )

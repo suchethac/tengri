@@ -44,10 +44,19 @@ because the HII and DIG branches now differ only by the ionization parameter,
 no longer also by Q_H and the ionizing-spectrum shape.
 
 The second gap #2195 covers is structural: the per-Q_H nebular grid
-(``enable_fast_nebular`` / ``approx=FeaturePrecomp()``) tabulates only
-``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas``, so DIG mixing cannot be
-reconstructed from it at all. That now raises instead of silently dropping
-both DIG parameters.
+(``enable_fast_nebular`` / ``approx=FeaturePrecomp()``) tabulated only
+``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas``, with no axis for a second
+photoionization regime, so an armed grid returned the HII term alone and both
+DIG parameters went silently inert. #2195 shipped a refusal
+(``DIGNotOnNebularGridError``) as the interim contract, naming that as an
+unsupported combination rather than mis-answering it.
+
+#2222 replaces the refusal with the real fix: ``neb_logU`` joins the grid
+axes whenever DIG mixing could be active, its range extended (never clipped,
+never refused) to cover the DIG-shifted query point, and the grid mixes two
+lookups against the same table (``mix_dig_grid_reconstruction``,
+``dig.py``). ``test_nebular_grid_reconstructs_active_dig_mixing`` below is
+the parity assertion that replaces the old refusal test.
 """
 
 from __future__ import annotations
@@ -60,7 +69,6 @@ import pytest
 jax.config.update("jax_platforms", "cpu")
 
 from tengri import DEFAULT, FREE, FeaturePrecomp, Fixed, Observation, Photometry, SEDModel
-from tengri.config.exceptions import DIGNotOnNebularGridError
 from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
 
 pytestmark = pytest.mark.regression_bug
@@ -224,20 +232,50 @@ def test_pure_dig_with_no_offset_is_the_hii_solution(_cue_fixture_available):
 
 
 @requires_cue_weights
-def test_nebular_grid_refuses_active_dig_mixing(_cue_fixture_available):
-    """The per-Q_H grid has no DIG axis, so arming it with DIG on must raise.
+def test_nebular_grid_reconstructs_active_dig_mixing(_cue_fixture_available):
+    r"""The per-Q_H grid now serves DIG mixing via two lookups, not a refusal (#2222).
 
-    ``neb_dig_frac`` fixed at 0, its declared default, is the one disposition
-    the grid can represent, and that build still succeeds.
+    Before #2222, arming the grid (``approx=FeaturePrecomp()``) with
+    ``neb_dig_frac`` free or fixed non-zero raised
+    ``DIGNotOnNebularGridError``. This fixture's dust
+    (``two_component`` calzetti + ``dale2014``) makes ``must_materialize_sed``
+    disarm the photometry shortcut (every dusty model reads ``sed_nebular``
+    for the energy balance), so the grid serves the **line** channel only
+    here; that is what this test checks against the exact DIG-mixed forward.
     """
-    approx = FeaturePrecomp(lines=jnp.asarray([4862.68, 5008.24, 6564.61]), n_grid=4)
+    target = jnp.asarray([4862.68, 5008.24, 6564.61, 6585.27])  # Hb, [OIII], Ha, [NII]
+    approx = FeaturePrecomp(lines=target, n_grid=14)
 
-    with pytest.raises(DIGNotOnNebularGridError, match=r"neb_dig_frac is fixed at 0\.3"):
-        _build({"dig_frac": Fixed(0.3)}, approx=approx)
+    for neb_extra in (
+        {"dig_frac": Fixed(0.3)},
+        {"dig_frac": FREE, "dig_delta_logU": FREE},
+    ):
+        exact_model = _build(neb_extra)
+        grid_model = _build(neb_extra, approx=approx)
+        # neb_logU joins the grid's axes purely because DIG could be active
+        # here, even though this fixture never frees it (Fixed at -3.0).
+        table = grid_model._nebular_grid_table
+        assert "neb_logU" in table.axis_names, table.axis_names
 
-    with pytest.raises(DIGNotOnNebularGridError, match="neb_dig_frac is free"):
-        _build({"dig_frac": FREE}, approx=approx)
+        worst = 0.0
+        for i in range(6):
+            p = dict(exact_model.spec.sample(jax.random.PRNGKey(1000 + i)))
+            exact = np.asarray(
+                exact_model.predict_line_fluxes(p, target_wavelengths=target, redden=False)
+            )
+            fast = np.asarray(
+                grid_model.predict_line_fluxes(p, target_wavelengths=target, redden=False)
+            )
+            strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
+            rel = np.max(np.abs(fast - exact)[strong] / (np.abs(exact)[strong] + 1e-40))
+            worst = max(worst, rel)
+        assert worst < 3e-2, (
+            f"grid-path DIG mixing off by {worst:.2e} relative to the exact "
+            f"path for neb_extra={neb_extra!r}"
+        )
 
+    # neb_dig_frac fixed at 0, the declared default, needs no extension and is
+    # unaffected: the #2195-era positive case still builds and still works.
     model = _build({"dig_delta_logU": FREE}, approx=approx)
     assert model.spec.fixed_value("neb_dig_frac") == 0.0
 

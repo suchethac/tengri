@@ -29,8 +29,12 @@ References
 
 from __future__ import annotations
 
+import math
+
 import jax.numpy as jnp
 from jax import Array
+
+from tengri.utils.host_array import device_table, host_array
 
 __all__ = [
     "AGN_TYPE_BL",
@@ -47,7 +51,7 @@ AGN_TYPE_LINER: int = 3
 # Speed of light, km/s
 _C_KMS: float = 299792.458
 # FWHM-to-sigma conversion factor.
-_FWHM_TO_SIGMA: float = 1.0 / (2.0 * (2.0 * jnp.log(2.0)) ** 0.5)
+_FWHM_TO_SIGMA = host_array(1.0 / (2.0 * (2.0 * math.log(2.0)) ** 0.5))  # 0-d, see #2271
 # Reference wavelength in nm (5100 Å).
 _LAMBDA_5100_NM: float = 510.0
 # H-beta to L(5100) ratios.
@@ -68,7 +72,7 @@ def _add_gaussians(
     """
     # Per-line widths in nm.
     width_nm = line_wave_nm * (linewidth_kms / _C_KMS)  # km/s / (km/s) = 1
-    sigma = width_nm * _FWHM_TO_SIGMA  # (n_lines,)
+    sigma = width_nm * device_table(_FWHM_TO_SIGMA)  # (n_lines,)
     norm_factor = _LAMBDA_5100_NM / jnp.sqrt(jnp.pi * sigma**2)  # (n_lines,)
     # Broadcast: (n_wave, n_lines)
     diff = wave_nm[:, None] - line_wave_nm[None, :]

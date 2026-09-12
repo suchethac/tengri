@@ -57,6 +57,7 @@ from tengri.forward.precompute.templates import (
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import PreintegratedGrid
+from tengri.utils.host_array import device_table, host_array
 
 # Each radio sub-model precomputes along one parameter axis.
 AXIS_PARAMS_SYNCHROTRON = ("radio_alpha_sf",)
@@ -78,7 +79,7 @@ _L_REF = 1.0e44  # erg/s: convenient unit-luminosity reference
 # Standard rest-frame wavelength grid covering radio (1 mm to 1 km) and
 # extending blueward enough that the suppression mask in radio.py
 # (lambda > _RADIO_WAVE_MIN_AA) is not pathological.
-_WAVE_REST = np.logspace(7, 13, 1024, dtype=np.float64)  # 0.1 um to 100 km
+_WAVE_REST = host_array(np.logspace(7, 13, 1024, dtype=np.float64))  # 0.1 um to 100 km
 
 
 def _build_grid_synchrotron(
@@ -92,11 +93,11 @@ def _build_grid_synchrotron(
     templates = np.empty((alpha_grid.size, _WAVE_REST.size), dtype=np.float64)
     for i, a in enumerate(alpha_grid):
         templates[i] = np.asarray(
-            _radio_synchrotron(jnp.asarray(_WAVE_REST), L_ir=_L_REF, alpha_sf=float(a))
+            _radio_synchrotron(device_table(_WAVE_REST), L_ir=_L_REF, alpha_sf=float(a))
         )
     return precompute_template_photometry(
         templates=templates,
-        wave_rest=_WAVE_REST,
+        wave_rest=np.asarray(_WAVE_REST),
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(alpha_grid,),
@@ -118,11 +119,11 @@ def _build_grid_freefree(
     templates = np.empty((alpha_grid.size, _WAVE_REST.size), dtype=np.float64)
     for i, a in enumerate(alpha_grid):
         templates[i] = np.asarray(
-            _radio_freefree(jnp.asarray(_WAVE_REST), L_ir=_L_REF, alpha_ff=float(a))
+            _radio_freefree(device_table(_WAVE_REST), L_ir=_L_REF, alpha_ff=float(a))
         )
     return precompute_template_photometry(
         templates=templates,
-        wave_rest=_WAVE_REST,
+        wave_rest=np.asarray(_WAVE_REST),
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(alpha_grid,),
@@ -145,7 +146,7 @@ def _build_grid_agn_jet(
     for i, a in enumerate(alpha_grid):
         templates[i] = np.asarray(
             _radio_agn(
-                jnp.asarray(_WAVE_REST),
+                device_table(_WAVE_REST),
                 L_agn_bol=_L_REF,
                 radio_loudness=0.0,
                 alpha_agn=float(a),
@@ -153,7 +154,7 @@ def _build_grid_agn_jet(
         )
     return precompute_template_photometry(
         templates=templates,
-        wave_rest=_WAVE_REST,
+        wave_rest=np.asarray(_WAVE_REST),
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(alpha_grid,),
