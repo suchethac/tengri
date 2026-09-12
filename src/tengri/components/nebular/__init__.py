@@ -93,7 +93,11 @@ from tengri.components.nebular.cloudy_grid import (
     CloudyGridWNESSPWarning,
 )
 from tengri.components.nebular.cue import CueBackend
-from tengri.components.nebular.dig import mix_dig_emission
+from tengri.components.nebular.dig import (
+    mix_dig_emission,
+    mix_dig_grid_reconstruction,
+    mix_dig_line_luminosities,
+)
 from tengri.components.nebular.mappings_photo import (
     IonizingSpectrumInconsistencyError,
     IonizingSpectrumInconsistencyWarning,
@@ -196,6 +200,8 @@ __all__ = [
     "compute_qh",
     "compute_shock_sed",
     "mix_dig_emission",
+    "mix_dig_grid_reconstruction",
+    "mix_dig_line_luminosities",
     "register_nebular_model",
     "shock_line_ratios",
 ]
