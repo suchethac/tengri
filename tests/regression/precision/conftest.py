@@ -81,7 +81,9 @@ def forward_outputs(model, z, log10_mass):
     -------
     dict
         Keys ``"photometry"``, ``"rest_sed"``, ``"halpha"``, ``"l_tir"``,
-        ``"q_h"`` — all cast to float64 for cross-dtype comparison.
+        ``"log_q_h"`` — all cast to float64 for cross-dtype comparison.
+        ``halpha`` is Lsun (#1206 §A); the retired linear ``q_h`` (#1206 §C)
+        is replaced here by its sole surviving form, ``log_q_h``.
     """
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     p["redshift"] = z
@@ -92,5 +94,5 @@ def forward_outputs(model, z, log10_mass):
         "rest_sed": np.asarray(pred.rest_sed(), dtype=np.float64),
         "halpha": np.float64(pred.lines.halpha),
         "l_tir": np.float64(pred.properties["l_tir"]),
-        "q_h": np.float64(pred.properties["q_h"]),
+        "log_q_h": np.float64(pred.properties["log_q_h"]),
     }

@@ -541,6 +541,24 @@ sys.modules["tengri.igm"] = igm
 sys.modules["tengri.radio"] = radio
 sys.modules["tengri.xray"] = xray
 
+# Install import finder to resolve submodule imports through aliases to canonical
+# modules, avoiding re-execution of module-level code (#2256).
+from tengri._module_aliases import install_alias_finder
+
+install_alias_finder(
+    {
+        "tengri.agn": "tengri.components.agn",
+        "tengri.dust": "tengri.components.dust",
+        "tengri.nebular": "tengri.components.nebular",
+        "tengri.sfh": "tengri.components.stellar.sfh",
+        "tengri.sps": "tengri.components.stellar.sps",
+        "tengri.stellar": "tengri.components.stellar",
+        "tengri.igm": "tengri.components.igm",
+        "tengri.radio": "tengri.components.radio",
+        "tengri.xray": "tengri.components.xray",
+    }
+)
+
 # Observation layer shortcut (already exists in imports above)
 # observation module is imported separately below
 

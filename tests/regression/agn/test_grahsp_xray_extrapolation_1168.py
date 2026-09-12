@@ -94,11 +94,11 @@ def test_grahsp_preserves_uv_optical():
 def test_grahsp_transition_exactly_at_corona_edge():
     """The block floor sits at 124 A: zero just below, positive just above.
 
-    Passes an explicit ``agn_grahsp_l5100`` so the block skips its auto
+    Passes an explicit ``agn_grahsp_log_l5100`` so the block skips its auto
     L_bol normalization (which integrates only >=91.2 nm and would divide by
     zero on this sub-Lyman probe grid)."""
     lam = np.asarray(
-        grahsp_sbpl_disc_block(jnp.asarray([120.0, 130.0]), 45.0, agn_grahsp_l5100=1.0e44)
+        grahsp_sbpl_disc_block(jnp.asarray([120.0, 130.0]), 45.0, agn_grahsp_log_l5100=44.0)
     )
     assert lam[0] == 0.0, "120 A (inside corona band) must be zero"
     assert lam[1] > 0.0, "130 A (disc EUV) must be positive"

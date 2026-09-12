@@ -5,12 +5,13 @@ Tests verify:
 - Hβ → L_sun/Q_H unit conversion constant is correct
 - CB19GridData NamedTuple structure
 - _frac_idx clipping and monotonicity
-- _interp_6d returns correct shape and is finite
+- _interp_7d returns correct shape and is finite
 - CB19Backend fallback/load errors
 - predict_nebular_line_luminosities signature and output shape
 - predict_nebular_continuum returns zero continuum
 - param_spec registrations for nebular='cb19'
 - JIT compatibility of prediction functions
+- neb_hbfrac wiring: live, midpoint-linear, jit/grad-safe (#2213)
 
 Tests that require data/cb19_templates.h5 are skipped gracefully when missing.
 """
@@ -49,15 +50,16 @@ def cb19_module():
 def fake_grid_data(cb19_module):
     """Build a minimal CB19GridData without an HDF5 file for interpolation tests."""
     mod = cb19_module
-    n_oh, n_age, n_u, n_nh, n_co, n_dno, n_lines = 7, 5, 6, 4, 3, 3, 10
+    n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines = 7, 5, 6, 4, 3, 3, 2, 10
     log_oh = jnp.linspace(-5.06, -2.58, n_oh)
     log_age = jnp.linspace(6.0, 8.0, n_age)
     log_u = jnp.linspace(-4.0, -1.5, n_u)
     log_nh = jnp.linspace(1.0, 4.0, n_nh)
     log_co = jnp.linspace(-1.0, 0.15, n_co)
     dno = jnp.linspace(-0.25, 0.25, n_dno)
+    hbfrac = jnp.array([0.0, 1.0])
     # Random log-space ratios — constant 0.0 (ratio=1.0 = same as Hβ)
-    log_ratios = jnp.zeros((n_oh, n_age, n_u, n_nh, n_co, n_dno, n_lines))
+    log_ratios = jnp.zeros((n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines))
     waves = jnp.array([1215.67, 1549.0, 4862.68, 5007.0] + [3000.0] * (n_lines - 4))
     return mod.CB19GridData(
         log_OH_grid=log_oh,
@@ -66,6 +68,7 @@ def fake_grid_data(cb19_module):
         log_nH_grid=log_nh,
         log_CO_grid=log_co,
         dNO_grid=dno,
+        hbfrac_grid=hbfrac,
         line_wavelengths=waves,
         log_line_ratios=log_ratios,
         log_hb_per_qh=float(np.log10(mod._HB_PER_QH_LSUN)),
@@ -138,8 +141,8 @@ class TestFracIdx:
         assert float(fi) <= float(len(grid) - 1)
 
 
-# ── _interp_6d ────────────────────────────────────────────────────
-class TestInterp6D:
+# ── _interp_7d ────────────────────────────────────────────────────
+class TestInterp7D:
     def test_constant_grid_returns_constant(self, cb19_module, fake_grid_data):
         """Interpolation on a constant grid (all 0.0) returns 0.0 everywhere (limit test)."""
         grid = fake_grid_data
@@ -150,9 +153,10 @@ class TestInterp6D:
             grid.log_nH_grid,
             grid.log_CO_grid,
             grid.dNO_grid,
+            grid.hbfrac_grid,
         )
-        vals = (-3.0, 7.0, -3.0, 2.0, -0.36, 0.0)
-        result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
+        vals = (-3.0, 7.0, -3.0, 2.0, -0.36, 0.0, 1.0)
+        result = cb19_module._interp_7d(grid.log_line_ratios, grids, vals)
         n_lines = grid.log_line_ratios.shape[-1]
         chex.assert_shape(result, (n_lines,))
         chex.assert_tree_all_finite(result)
@@ -168,9 +172,10 @@ class TestInterp6D:
             grid.log_nH_grid,
             grid.log_CO_grid,
             grid.dNO_grid,
+            grid.hbfrac_grid,
         )
-        vals = (-3.5, 7.0, -2.5, 2.0, -0.5, 0.1)
-        result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
+        vals = (-3.5, 7.0, -2.5, 2.0, -0.5, 0.1, 0.5)
+        result = cb19_module._interp_7d(grid.log_line_ratios, grids, vals)
         n_lines = grid.log_line_ratios.shape[-1]
         chex.assert_shape(result, (n_lines,))
         chex.assert_tree_all_finite(result)
@@ -343,8 +348,8 @@ class TestCB19BackendMocked:
 
 # ── JIT compatibility ─────────────────────────────────────────────
 class TestJITCompatibility:
-    def test_interp_6d_jittable(self, cb19_module, fake_grid_data):
-        """_interp_6d must trace without errors under jax.jit."""
+    def test_interp_7d_jittable(self, cb19_module, fake_grid_data):
+        """_interp_7d must trace without errors under jax.jit."""
         grid = fake_grid_data
         grids = (
             grid.log_OH_grid,
@@ -353,22 +358,26 @@ class TestJITCompatibility:
             grid.log_nH_grid,
             grid.log_CO_grid,
             grid.dNO_grid,
+            grid.hbfrac_grid,
         )
 
         @jax.jit
-        def _call(log_oh):
-            return cb19_module._interp_6d(
+        def _call(log_oh, neb_hbfrac):
+            return cb19_module._interp_7d(
                 grid.log_line_ratios,
                 grids,
-                (log_oh, 7.0, -3.0, 2.0, -0.36, 0.0),
+                (log_oh, 7.0, -3.0, 2.0, -0.36, 0.0, neb_hbfrac),
             )
 
-        result = _call(jnp.array(-3.2))
+        result = _call(jnp.array(-3.2), jnp.array(0.5))
         assert result.shape[0] == grid.log_line_ratios.shape[-1]
+        chex.assert_tree_all_finite(result)
 
     def test_predict_lines_jittable(self, cb19_module, fake_grid_data):
-        """predict_nebular_line_luminosities must be JIT-traceable."""
+        """predict_nebular_line_luminosities must be JIT-traceable, including
+        under a traced ``neb_hbfrac`` (#2213 -- the sibling axes' pattern)."""
         backend = object.__new__(cb19_module.CB19Backend)
+        backend.hbfrac = 1.0
         backend.grid = fake_grid_data
         backend._log_hb_per_qh = fake_grid_data.log_hb_per_qh
         backend._max_neb_log_age = 8.0
@@ -378,15 +387,16 @@ class TestJITCompatibility:
         backend._young_idx = None
 
         @jax.jit
-        def _call(log_z):
+        def _call(log_z, neb_hbfrac):
             _, lums = backend.predict_nebular_line_luminosities(
                 jnp.ones(5),
                 jnp.linspace(6.5, 8.5, 5),
                 log_z,
+                neb_hbfrac=neb_hbfrac,
             )
             return lums
 
-        result = _call(jnp.array(-1.848))
+        result = _call(jnp.array(-1.848), jnp.array(0.3))
         chex.assert_tree_all_finite(result)
 
 
@@ -537,8 +547,10 @@ class TestPreintegrateForPhotometry:
         # (the only collapses are on axes 3,4,5 at exactly the defaults — but
         # since the fake grid is constant across those axes, the collapse is
         # value-preserving).
-        on_grid = b.grid.log_line_ratios[log_oh_idx, age_idx, u_idx, :, :, :, :]
-        # Average over the axes 3,4,5 should equal a single grid value (constant fake grid).
+        on_grid = b.grid.log_line_ratios[log_oh_idx, age_idx, u_idx, :, :, :, :, :]
+        # Average over axes 3,4,5,6 (nH, CO, dNO, HbFrac -- all collapsed by
+        # preintegrate_for_photometry) should equal a single grid value
+        # (constant fake grid).
         runtime_log_lum = float(on_grid.mean()) + b._log_hb_per_qh
         np.testing.assert_allclose(
             np.array(log_lum_per_qh_preint),
@@ -641,12 +653,13 @@ class TestParamSpec:
 class TestCB19WithRealH5:
     def test_load_default_group(self, cb19_module):
         """Load SSP/Kroupa01/mu100 group and verify shapes."""
-        grid = cb19_module.load_cb19_grid(sed_type="SSP", imf="Kroupa01", mup=100.0, hbfrac=1.0)
-        assert grid.log_line_ratios.ndim == 7
-        n_oh, _n_age, n_u, n_nh, _n_co, _n_dno, _n_lines = grid.log_line_ratios.shape
+        grid = cb19_module.load_cb19_grid(sed_type="SSP", imf="Kroupa01", mup=100.0)
+        assert grid.log_line_ratios.ndim == 8
+        n_oh, _n_age, n_u, n_nh, _n_co, _n_dno, n_hbfrac, _n_lines = grid.log_line_ratios.shape
         assert n_oh == 7
         assert n_u == 6
         assert n_nh == 4
+        assert n_hbfrac == 2, "HbFrac axis must retain both grid nodes (#2213)"
 
     def test_line_wavelengths_match_vacuum(self, cb19_module):
         """Verify key vacuum wavelengths are present (Hβ=4862.68 Å, Hα=6564.61 Å)."""
@@ -655,11 +668,6 @@ class TestCB19WithRealH5:
         assert np.any(np.abs(waves - 4862.68) < 1.0), "Hβ not found"
         assert np.any(np.abs(waves - 6564.61) < 1.0), "Hα not found"
 
-    def test_hbfrac_snap_warning(self, cb19_module):
-        """Requesting an unusual HbFrac value triggers a UserWarning."""
-        with pytest.warns(UserWarning, match="hbfrac"):
-            cb19_module.load_cb19_grid(hbfrac=0.42)
-
     def test_no_all_nan_slices_at_solar(self, cb19_module):
         """At solar metallicity and fiducial parameters, most lines should be finite."""
         grid = cb19_module.load_cb19_grid()
@@ -667,7 +675,8 @@ class TestCB19WithRealH5:
         oh_idx = int(jnp.argmin(jnp.abs(grid.log_OH_grid - (-3.07))))
         age_idx = int(jnp.argmin(jnp.abs(grid.log_age_grid - 7.0)))  # 10 Myr
         u_idx = int(jnp.argmin(jnp.abs(grid.log_U_grid - (-3.0))))
-        slice_ = np.array(grid.log_line_ratios[oh_idx, age_idx, u_idx, 1, 1, 1, :])
+        hb_idx = int(jnp.argmin(jnp.abs(grid.hbfrac_grid - 1.0)))  # radiation-bounded
+        slice_ = np.array(grid.log_line_ratios[oh_idx, age_idx, u_idx, 1, 1, 1, hb_idx, :])
         n_finite = np.sum(np.isfinite(slice_))
         n_total = len(slice_)
         assert n_finite > n_total * 0.5, (
@@ -679,8 +688,14 @@ class TestCB19WithRealH5:
         grid = cb19_module.load_cb19_grid()
         waves = np.array(grid.line_wavelengths)
         hb_idx = np.argmin(np.abs(waves - 4862.68))
-        hb_log_ratio = float(grid.log_line_ratios[3, 10, 2, 1, 1, 1, hb_idx])
+        hbfrac_idx = int(jnp.argmin(jnp.abs(grid.hbfrac_grid - 1.0)))  # radiation-bounded
+        hb_log_ratio = float(grid.log_line_ratios[3, 10, 2, 1, 1, 1, hbfrac_idx, hb_idx])
         assert abs(hb_log_ratio - 0.0) < 0.05, f"Hβ log10(ratio) = {hb_log_ratio:.3f} ≠ 0.0"
+
+    def test_hbfrac_axis_retains_both_nodes(self, cb19_module):
+        """The shipped grid's two HbFrac nodes are ``[0.0, 1.0]`` (#2213)."""
+        grid = cb19_module.load_cb19_grid()
+        np.testing.assert_allclose(np.array(grid.hbfrac_grid), [0.0, 1.0])
 
 
 # ── _init_nebular dispatch regression (issue #361) ────────────────
@@ -724,3 +739,351 @@ class TestSEDModelInitNebularDispatch:
         assert model.spec.nebular_mode == "cb19"
         assert isinstance(model._nebular_backend, CB19Backend)
         assert not isinstance(model._nebular_backend, BakedInBackend)
+
+
+# ── neb_hbfrac wiring (#2213) ──────────────────────────────────────
+#
+# The shipped ``data/cb19_templates.h5`` is not usable for any content-fact
+# assertion here: measured directly (scratch probe) on the real, tracked-
+# elsewhere file, its two HbFrac nodes are bit-identical (max|diff| = 0.0
+# across every OH/age/U/nH/CO/dNO combination) -- the same placeholder gap
+# #2181 found for neb_log_nH / neb_co / neb_dno, tracked pending the #2198
+# 3MdB erratum. But ``data/cb19_templates.h5`` is untracked, and on a machine
+# without it (every CI runner) ``tests/conftest.py``'s ``pytest_configure``
+# writes its own synthetic stand-in at that exact path
+# (``_create_cb19_fixture_if_missing``) -- so "what the shipped path
+# contains" is machine-dependent, not a fixed fact a test can assert (the
+# same problem ``usable_cb19_grid_path``/``_cb19_grid_is_degenerate`` in
+# ``tests/conftest.py`` exist to name generally). Every test below that
+# depends on the grid's *content* is therefore hermetic: it writes its own
+# synthetic grid via ``write_synthetic_cb19_grid`` (varying HbFrac by default
+# since #2213, or ``vary_hbfrac=False`` for the one test that wants it flat)
+# rather than reading ``data/cb19_templates.h5``, so the assertion holds
+# regardless of what any given machine happens to have on disk at that path.
+# The one exception,
+# ``test_hbfrac_default_matches_pre_fix_behavior_on_shipped_grid``, reads the
+# default path deliberately: its claim (the default-resolved call is
+# bit-identical to the explicit ``neb_hbfrac=1.0`` call) holds for *any* grid
+# content, so it is unaffected by which file -- real or CI-synthetic -- sits
+# at that path.
+class TestHbFracWiring:
+    @pytest.fixture
+    def synthetic_backend(self, tmp_path, synthetic_ssp_wide):
+        """A real CB19Backend loaded from a synthetic grid varying every axis.
+
+        Built with ``ssp_data`` (rather than bare ``grid_path=``): without it,
+        ``_log_qh_scale`` stays at its 0.0 fallback (no ionizing flux to
+        normalize against) and ``_lum_scale`` sits at ~1.2e-46 -- so tiny that
+        the cotangent flowing back through ``_frac_idx``'s ``float32`` cast on
+        the interpolation coordinate underflows to bit-exact zero, and *every*
+        CB19 grid-axis gradient (not just ``neb_hbfrac``) silently vanishes.
+        ``synthetic_ssp_wide`` reaches down to the Lyman limit, giving Q_H (and
+        so ``_lum_scale``) its normal ~O(1-1e20) production-path scale, which
+        matches how ``SEDModel.build`` always constructs this backend
+        (``CB19Backend(ssp_data=ssp_data)``, never bare). This is a real,
+        pre-existing numerical-precision trap in the shared ``_frac_idx``
+        helper (affects every CB19 axis alike), not something #2213
+        introduced -- see the completion report for the full finding.
+        """
+        from tengri.components.nebular.cloudy_cb19 import CB19Backend
+        from tests._cb19_grid import write_synthetic_cb19_grid
+
+        grid_path = write_synthetic_cb19_grid(tmp_path / "cb19_templates.h5")
+        return CB19Backend(grid_path=grid_path, ssp_data=synthetic_ssp_wide)
+
+    @pytest.mark.regression_bug
+    def test_hbfrac_is_live_regression(self, synthetic_backend):
+        """neb_hbfrac=1.0 vs 0.0 give materially different line luminosities.
+
+        Regression for #2213: before the fix, ``neb_hbfrac`` had no runtime
+        consumer at all, so this assertion failed for *every* value -- the
+        parameter was declared but bit-exactly inert. Uses the synthetic grid
+        (see module note above); mirrors the shape of the sibling
+        ``neb_log_nH`` / ``neb_co`` / ``neb_dno`` tests in this file
+        (``test_fesc_suppresses_lines`` et al.) -- vary one axis, hold the
+        rest fixed, compare.
+        """
+        backend = synthetic_backend
+        ssp_weights = jnp.ones(3)
+        ssp_log_ages = jnp.array([6.5, 7.0, 7.5])
+        common = dict(log_z=-1.848, neb_logU=-3.0, neb_log_nH=2.0, neb_co=-0.36, neb_dno=0.0)
+        _, lums_rad = backend.predict_nebular_line_luminosities(
+            ssp_weights, ssp_log_ages, neb_hbfrac=1.0, **common
+        )
+        _, lums_matter = backend.predict_nebular_line_luminosities(
+            ssp_weights, ssp_log_ages, neb_hbfrac=0.0, **common
+        )
+        rel_diff = jnp.abs(lums_rad - lums_matter) / jnp.maximum(lums_rad, 1e-300)
+        assert float(jnp.max(rel_diff)) > 1e-3, (
+            "neb_hbfrac=1.0 and neb_hbfrac=0.0 gave the same line luminosities "
+            "on a grid engineered to vary along HbFrac -- the axis is not wired"
+        )
+
+    @_SKIP_NO_H5
+    @pytest.mark.regression_bug
+    def test_hbfrac_default_matches_pre_fix_behavior_on_shipped_grid(self, cb19_module):
+        """Default (unset) neb_hbfrac reproduces the old radiation-bounded slice.
+
+        The compatibility half of #2213's fix: before the fix,
+        ``CB19Backend()`` bare-constructed always read the radiation-bounded
+        (HbFrac=1.0) slice, collapsed at load time. After the fix, the default
+        (``neb_hbfrac=None`` falling back to ``self.hbfrac=1.0``) must select
+        the *identical* slice. Verified directly against the real shipped
+        grid -- no synthetic stand-in needed for a same-value comparison.
+        """
+        backend = cb19_module.CB19Backend()
+        ssp_weights = jnp.ones(3)
+        ssp_log_ages = jnp.array([6.5, 7.0, 7.5])
+        _, lums_default = backend.predict_nebular_line_luminosities(
+            ssp_weights, ssp_log_ages, log_z=-1.848
+        )
+        _, lums_explicit_rad = backend.predict_nebular_line_luminosities(
+            ssp_weights, ssp_log_ages, log_z=-1.848, neb_hbfrac=1.0
+        )
+        np.testing.assert_array_equal(
+            np.array(lums_default),
+            np.array(lums_explicit_rad),
+            err_msg="default neb_hbfrac must bit-exactly match the explicit "
+            "radiation-bounded (1.0) value it falls back to",
+        )
+
+    @pytest.mark.regression_bug
+    def test_check_cb19_free_params_refuses_hbfrac_on_a_flat_grid(self, cb19_module, tmp_path):
+        """``check_cb19_free_params`` refuses ``neb_hbfrac`` when its axis is flat.
+
+        The pinned contract (#2181, extended to HbFrac by #2213): the
+        flat-axis guard (``cb19_flat_axis_params`` / ``check_cb19_free_params``)
+        *covers* the HbFrac axis, exactly as it already covers ``neb_log_nH``
+        / ``neb_co`` / ``neb_dno``. This is a claim about the guard's
+        coverage, not about what ``data/cb19_templates.h5`` happens to
+        contain on any given machine -- see the ``#2198``/``#2181`` prose in
+        this module's docstring and the ``neb_hbfrac`` declaration comment
+        (``components/nebular/_params.py``) for that separate,
+        machine-dependent fact.
+
+        Deliberately hermetic: builds its own grid with
+        ``write_synthetic_cb19_grid(..., vary_hbfrac=False)`` rather than
+        reading the shipped path. ``data/cb19_templates.h5`` is untracked
+        (#2198) and CI writes its own synthetic stand-in there at collection
+        time (``tests/conftest.py``'s ``_create_cb19_fixture_if_missing``);
+        since #2213 gave that stand-in real HbFrac variation (to support the
+        *other* tests in this class), a version of this test reading the
+        shipped path passes or fails depending on which grid a given machine
+        happens to have on disk -- exactly the trap
+        ``usable_cb19_grid_path``/``_cb19_grid_is_degenerate`` in
+        ``tests/conftest.py`` exist to name for the general case. It must
+        not be gated on ``data/cb19_templates.h5`` existing, and must not
+        skip when the loaded grid turns out non-flat: either would skip
+        exactly when it would otherwise catch a regression.
+        """
+        from tengri.config.exceptions import ParameterError
+        from tests._cb19_grid import write_synthetic_cb19_grid
+
+        grid_path = write_synthetic_cb19_grid(tmp_path / "cb19_templates.h5", vary_hbfrac=False)
+        grid = cb19_module.load_cb19_grid(filepath=grid_path)
+        flat = cb19_module.cb19_flat_axis_params(grid)
+        assert "neb_hbfrac" in flat, (
+            "cb19_flat_axis_params did not report neb_hbfrac on a grid whose "
+            "HbFrac axis was deliberately written flat"
+        )
+        with pytest.raises(ParameterError, match="neb_hbfrac"):
+            cb19_module.check_cb19_free_params(grid, {"neb_hbfrac"}, grid_path=grid_path)
+
+    @pytest.mark.contract
+    def test_hbfrac_midpoint_is_mean_of_endpoints(self, cb19_module, synthetic_backend):
+        """neb_hbfrac=0.5's log10(ratio) equals the mean of the two end-members.
+
+        The defining property of a linear interpolant over a 2-node axis
+        (brief item b): ``_interp_7d`` (via ``map_coordinates(order=1)``) is
+        linear in **log10-ratio space**, not in the final linear-luminosity
+        space -- the arithmetic mean of the log10 ratios is the
+        (log10 of the) *geometric* mean of the linear ratios, not their
+        arithmetic mean. Checked directly on ``_interp_7d``'s output (mirrors
+        ``TestInterp7D`` and the general ``_frac_idx`` midpoint test,
+        ``TestFracIdx.test_midpoint``) and cross-checked end to end through
+        ``predict_nebular_line_luminosities`` via the geometric-mean identity.
+        """
+        grid = synthetic_backend.grid
+        grids = (
+            grid.log_OH_grid,
+            grid.log_age_grid,
+            grid.log_U_grid,
+            grid.log_nH_grid,
+            grid.log_CO_grid,
+            grid.dNO_grid,
+            grid.hbfrac_grid,
+        )
+        point = (-3.0, 7.0, -3.0, 2.0, -0.36, 0.0)
+        log_ratio_0 = cb19_module._interp_7d(grid.log_line_ratios, grids, (*point, 0.0))
+        log_ratio_1 = cb19_module._interp_7d(grid.log_line_ratios, grids, (*point, 1.0))
+        log_ratio_mid = cb19_module._interp_7d(grid.log_line_ratios, grids, (*point, 0.5))
+        np.testing.assert_allclose(
+            np.array(log_ratio_mid),
+            0.5 * (np.array(log_ratio_0) + np.array(log_ratio_1)),
+            atol=1e-6,
+        )
+
+        # End to end: the geometric-mean identity this implies for the final
+        # (linear) line luminosities, since every other multiplicative factor
+        # in predict_nebular_line_luminosities is neb_hbfrac-independent.
+        backend = synthetic_backend
+        ssp_weights = jnp.ones(3)
+        ssp_log_ages = jnp.array([6.5, 7.0, 7.5])
+        common = dict(log_z=-1.848, neb_logU=-3.0, neb_log_nH=2.0, neb_co=-0.36, neb_dno=0.0)
+        _, lums_0 = backend.predict_nebular_line_luminosities(
+            ssp_weights, ssp_log_ages, neb_hbfrac=0.0, **common
+        )
+        _, lums_1 = backend.predict_nebular_line_luminosities(
+            ssp_weights, ssp_log_ages, neb_hbfrac=1.0, **common
+        )
+        _, lums_mid = backend.predict_nebular_line_luminosities(
+            ssp_weights, ssp_log_ages, neb_hbfrac=0.5, **common
+        )
+        np.testing.assert_allclose(
+            np.array(lums_mid),
+            np.sqrt(np.array(lums_0) * np.array(lums_1)),
+            rtol=1e-5,
+        )
+
+    @pytest.mark.contract
+    def test_all_params_free_frees_hbfrac(self):
+        """``neb={'type': 'cb19', 'all_params': FREE}`` frees neb_hbfrac at (0, 1)."""
+        import tengri
+        from tengri import FREE, Uniform
+
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            neb={"type": "cb19", "all_params": FREE},
+            redshift=tengri.Fixed(0.1),
+        )
+        assert "neb_hbfrac" in spec.free_params
+        assert spec.get_distribution("neb_hbfrac") == Uniform(0.0, 1.0)
+
+    @pytest.mark.contract
+    def test_explicit_hbfrac_free_resolves_declared_prior(self):
+        """``neb={'type': 'cb19', 'hbfrac': FREE}`` resolves to the declared prior."""
+        import tengri
+        from tengri import FREE, Uniform
+
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            neb={"type": "cb19", "hbfrac": FREE},
+            redshift=tengri.Fixed(0.1),
+        )
+        assert "neb_hbfrac" in spec.free_params
+        assert spec.get_distribution("neb_hbfrac") == Uniform(0.0, 1.0)
+
+    @pytest.mark.gradient
+    def test_hbfrac_gradient_finite_and_nonzero(self, synthetic_backend):
+        """d(line flux)/d(neb_hbfrac) is finite and nonzero under jit (#2213).
+
+        The parameter is on the fit path now; a zero or non-finite gradient
+        would leave a sampler unable to move it despite it being declared
+        free. Uses the synthetic grid -- see module note above for why the
+        shipped grid cannot support this claim.
+        """
+        backend = synthetic_backend
+        ssp_weights = jnp.ones(3)
+        ssp_log_ages = jnp.array([6.5, 7.0, 7.5])
+
+        @jax.jit
+        def total_flux(neb_hbfrac):
+            _, lums = backend.predict_nebular_line_luminosities(
+                ssp_weights,
+                ssp_log_ages,
+                log_z=-1.848,
+                neb_logU=-3.0,
+                neb_log_nH=2.0,
+                neb_co=-0.36,
+                neb_dno=0.0,
+                neb_hbfrac=neb_hbfrac,
+            )
+            return jnp.sum(lums)
+
+        grad = jax.grad(total_flux)(jnp.array(0.5))
+        assert jnp.isfinite(grad), f"gradient is non-finite: {grad}"
+        assert float(jnp.abs(grad)) > 0.0, "gradient is exactly zero: neb_hbfrac is inert"
+
+    @pytest.mark.regression_bug
+    def test_component_threads_neb_hbfrac_to_backend(self, synthetic_backend):
+        """params['neb_hbfrac'] must flow through NebularSEDComponent to the backend.
+
+        The tests above all drive ``CB19Backend`` directly, so none of them
+        exercises the *component* seam a real fit goes through:
+        ``NebularSEDComponent.apply`` splats ``_backend_accepted_params(type(
+        self.backend))`` (component.py, the ``for _name in ...`` loop feeding
+        ``common_kwargs``) into the backend call, and that set is read off
+        ``_BACKEND_OPTIONAL_PARAMS``. Every test above stays green if
+        ``"neb_hbfrac"`` is dropped from ``_BACKEND_OPTIONAL_PARAMS`` -- exactly
+        the #2213 trap (declared and backend-live, but never threaded from
+        ``params``) -- because none of them go through this component.
+        Verified directly: removing the entry from ``_BACKEND_OPTIONAL_PARAMS``
+        and rerunning ``TestHbFracWiring`` leaves the other 7 tests passing.
+
+        Drives ``NebularSEDComponent.apply`` (not the bare backend) with a
+        CB19Backend on the synthetic varied-HbFrac grid -- the shipped grid's
+        bit-identical end-members would make this assertion false on
+        correctly-wired code (see the module note above).
+        """
+        from tengri.components.nebular.component import (
+            NebularSEDComponent,
+            NebularSEDComponentConfig,
+        )
+        from tengri.protocols import DerivedState, ForwardState
+
+        comp = NebularSEDComponent(
+            config=NebularSEDComponentConfig(backend="cb19"),
+            backend=synthetic_backend,
+        )
+
+        n_wave = 50
+        wave = jnp.linspace(1000.0, 9000.0, n_wave)
+        ssp_ages_yr = jnp.array([10**6.5, 10**7.0, 10**7.5])
+        age_weights = jnp.ones(3)
+        state = ForwardState(
+            wave=wave,
+            sed_intrinsic=jnp.zeros(n_wave),
+            derived=DerivedState(ssp_ages_yr=ssp_ages_yr, age_weights=age_weights),
+        )
+        common_params = {
+            "met_logzsol": 0.0,
+            "neb_logU": -3.0,
+            "neb_logZ_gas": 0.0,
+            "neb_fesc": 0.0,
+            "neb_fesc_lya": 0.0,
+            "neb_fdust": 0.0,
+            "neb_log_nH": 2.0,
+            "neb_co": -0.36,
+            "neb_dno": 0.0,
+        }
+
+        out_rad = comp.apply(state, {**common_params, "neb_hbfrac": 1.0})
+        out_matter = comp.apply(state, {**common_params, "neb_hbfrac": 0.0})
+
+        sed_rad = np.array(out_rad.derived["sed_nebular"])
+        sed_matter = np.array(out_matter.derived["sed_nebular"])
+        chex.assert_tree_all_finite(sed_rad)
+        chex.assert_tree_all_finite(sed_matter)
+        rel_diff = np.abs(sed_rad - sed_matter) / np.maximum(np.abs(sed_rad), 1e-300)
+        assert np.max(rel_diff) > 1e-3, (
+            "params['neb_hbfrac']=1.0 vs 0.0 gave the same NebularSEDComponent "
+            "sed_nebular output -- the component-level threading "
+            "(_BACKEND_OPTIONAL_PARAMS / _backend_accepted_params) is not "
+            "wiring the value to the backend"
+        )
+
+        # The discrete line catalog is published through the same
+        # common_kwargs splat (component.py's second predict_nebular_line_
+        # luminosities call, for line_waves/line_lums) -- check it too, since
+        # a threading bug could in principle hit one call site and not the
+        # other.
+        lums_rad = np.array(out_rad.derived["line_lums"])
+        lums_matter = np.array(out_matter.derived["line_lums"])
+        chex.assert_tree_all_finite(lums_rad)
+        chex.assert_tree_all_finite(lums_matter)
+        rel_diff_lines = np.abs(lums_rad - lums_matter) / np.maximum(np.abs(lums_rad), 1e-300)
+        assert np.max(rel_diff_lines) > 1e-3, (
+            "params['neb_hbfrac']=1.0 vs 0.0 gave the same published "
+            "line_lums -- the discrete line-catalog call site did not "
+            "receive the threaded neb_hbfrac value"
+        )

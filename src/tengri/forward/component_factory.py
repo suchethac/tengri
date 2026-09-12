@@ -283,14 +283,15 @@ class XRayQuantities(NamedTuple):
     """Orchestrator-path mirror of the legacy
     :class:`tengri.forward.prediction.XRayProperties` accessor.
 
-    Fields:
+    Fields (**breaking, no alias, #1206 §B**: Lsun, not erg/s -- an AGN X-ray
+    luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling):
 
-    - ``l_x_xrb`` (erg/s), X-ray-binary luminosity (Lehmer 2010, 2016)
+    - ``l_x_xrb`` (Lsun), X-ray-binary luminosity (Lehmer 2010, 2016)
       computed from ``sfh_quantities.sfr_100myr`` and
       ``sfh_quantities.stellar_mass``.
-    - ``l_x_agn`` (erg/s), AGN X-ray luminosity from the published
-      ``L_agn_bol`` via :func:`compute_l_x_agn`.
-    - ``l_x_total`` (erg/s), sum of the two.
+    - ``l_x_agn`` (Lsun), AGN X-ray luminosity from the published
+      ``log_L_agn_bol`` via :func:`compute_log_l_x_agn`.
+    - ``l_x_total`` (Lsun), sum of the two.
 
     """
 
@@ -305,13 +306,14 @@ class IonizingQuantities(NamedTuple):
 
     Fields:
 
-    - ``q_h`` (photons/s), total ionizing photon production rate;
-      sourced directly from ``state.derived["nion"]``.
     - ``xi_ion`` (Hz/erg), production efficiency q_h / νLν(1500 Å).
 
+    ``q_h`` (photons/s) was retired with no alias (#1206 §C): it overflows
+    float32 at every physical ionizing rate. Read ``log_q_h`` from
+    :func:`~tengri.forward.sed_model.SEDModel.predict_properties` instead
+    (``q_h = 10**log_q_h``).
     """
 
-    q_h: jnp.ndarray
     xi_ion: jnp.ndarray
 
 
@@ -1154,51 +1156,69 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
     """Convert :class:`ForwardState` → :class:`XRayQuantities`.
 
     Uses the SFH-derived SFR and stellar mass to compute the XRB
-    luminosity (Lehmer+10/16) and the published ``L_agn_bol`` to
-    compute the AGN corona luminosity (Duras+20).
+    luminosity (Lehmer+10/16) and the published ``log_L_agn_bol`` to
+    compute the AGN corona luminosity (Duras+20), staying in the log
+    domain throughout and converting to Lsun with one ``pow10`` -- the same
+    float32-safe route the ``xray`` property group uses (#1206 §B), so the
+    two stay bit-equal.
 
     Returns
     -------
     XRayQuantities
-        ``l_x_xrb``, ``l_x_agn``, ``l_x_total``.
+        ``l_x_xrb``, ``l_x_agn``, ``l_x_total`` [Lsun].
     """
-    from tengri.utils.sed_quantities import compute_l_x_agn, compute_l_x_xrb
+    from tengri.utils.scale import pow10
+    from tengri.utils.sed_quantities import (
+        LOG10_L_SUN,
+        compute_log_l_x_agn,
+        compute_log_l_x_xrb,
+    )
 
     derived = state.derived
     sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
     log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
-    mstar = jnp.power(10.0, log_mstar)
-    l_x_xrb = compute_l_x_xrb(sfr, mstar)
+    log_l_x_xrb = compute_log_l_x_xrb(sfr, log_mstar)
 
-    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
-    # ``compute_l_x_agn`` uses log10 internally, protect against the
-    # zero-AGN case where the conversion would produce -inf/NaN.
-    l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
+    log_L_agn_bol = derived.get("log_L_agn_bol")
+    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity,
+    # matching the linear helper's ``derived.get("L_agn_bol", 0.0)`` default
+    # for an XRB-only model (#1206 §B, same semantics as `_log_l_x_agn_fn`).
+    if log_L_agn_bol is None:
+        log_l_x_agn = -jnp.inf
+    else:
+        log_l_x_agn = compute_log_l_x_agn(jnp.asarray(log_L_agn_bol))
+
+    from jax.scipy.special import logsumexp
+
+    from tengri.utils.scale import LN10
+
+    stacked = jnp.stack(jnp.broadcast_arrays(log_l_x_xrb, jnp.asarray(log_l_x_agn)))
+    log_l_x_total = logsumexp(LN10 * stacked, axis=0) / LN10
 
     return XRayQuantities(
-        l_x_xrb=l_x_xrb,
-        l_x_agn=l_x_agn,
-        l_x_total=l_x_xrb + l_x_agn,
+        l_x_xrb=pow10(log_l_x_xrb - LOG10_L_SUN),
+        l_x_agn=pow10(jnp.asarray(log_l_x_agn) - LOG10_L_SUN),
+        l_x_total=pow10(log_l_x_total - LOG10_L_SUN),
     )
 
 
 def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
     """Convert :class:`ForwardState` → :class:`IonizingQuantities`.
 
-    Reads ``state.derived["nion"]`` for q_h (ionizing photon rate, photons/s;
-    deferred to #1206 items 2/3) and computes ``xi_ion`` from ``log_nion``
-    using the log-domain helper for float32 safety.
+    Computes ``xi_ion`` from ``log_nion`` using the log-domain helper for
+    float32 safety. ``q_h`` (linear photons/s) was retired with no alias
+    (#1206 §C); read ``log_q_h`` from
+    :func:`~tengri.forward.sed_model.SEDModel.predict_properties` instead.
 
     Returns
     -------
     IonizingQuantities
-        ``q_h``, ``xi_ion``.
+        ``xi_ion``.
     """
     from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
-    q_h = jnp.asarray(derived.get("nion", nan_scalar))
 
     sed = state.sed_intrinsic
     if sed is None:
@@ -1207,7 +1227,7 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
         log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
         xi_ion = compute_xi_ion_from_log_qh(log_nion, sed, state.wave)
 
-    return IonizingQuantities(q_h=q_h, xi_ion=xi_ion)
+    return IonizingQuantities(xi_ion=xi_ion)
 
 
 def state_to_sed_components(state: Any) -> dict:

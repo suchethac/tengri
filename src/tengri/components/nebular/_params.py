@@ -220,15 +220,20 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         "HbFrac=1 = fully radiation-bounded; escape fraction ≈ 1 − HbFrac",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
-        # Deliberately NO free_prior. Unlike the CB19 axes beside it, HbFrac is
-        # not an interpolation axis at runtime: ``load_cb19_grid`` snaps it to
-        # the nearest of the grid's two HbFrac values and collapses the axis at
-        # load time, and the collapsed grid is what every prediction reads. The
-        # snap target comes from the ``CB19Backend(hbfrac=...)`` constructor
-        # argument, which the build grammar does not forward, so the parameter
-        # has no runtime consumer at all -- sweeping it across [0, 1] moves the
-        # SED by exactly 0.0. A continuous prior over two reachable values would
-        # be wrong even if it were wired.
+        # #2213: HbFrac is now a genuine interpolation axis at runtime --
+        # ``load_cb19_grid`` retains both grid nodes, ``predict_nebular_line_
+        # luminosities`` / ``predict_nebular_sed`` interpolate it via the same
+        # ``map_coordinates`` scheme as ``neb_log_nH`` / ``neb_co`` / ``neb_dno``,
+        # and ``_BACKEND_OPTIONAL_PARAMS`` threads ``neb_hbfrac`` from ``params``
+        # exactly like its three siblings. The interval below is the grid's
+        # literal full support, matching how the neighboring CB19 axes declare
+        # theirs. Like those siblings, the *shipped* grid (#2198, pending a
+        # 3MdB erratum) carries no real variation along this axis --
+        # ``check_cb19_free_params`` refuses freeing it against that file, the
+        # same guard that already refuses ``neb_log_nH`` / ``neb_co`` /
+        # ``neb_dno`` there -- so freeing it is a loud, explicit refusal today,
+        # not the silent no-op it was before this fix.
+        free_prior=Uniform(0.0, 1.0, "HbFrac", default=1.0),
     ),
 )
 

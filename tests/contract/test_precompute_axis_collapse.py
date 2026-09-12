@@ -326,36 +326,67 @@ def test_cb19_collapse_axis0(filter_set_radio, usable_cb19_grid_path):
 
 
 @requires_cb19
-def test_cb19_hbfrac_parameter(filter_set_radio, usable_cb19_grid_path):
-    """CB19 precompute accepts hbfrac parameter and threads it to the loader.
+def test_cb19_hbfrac_parameter(filter_set_radio, tmp_path):
+    """CB19 precompute accepts hbfrac and selects a slice from the loaded grid.
 
-    HbFrac is a discrete load-time choice, not an interpolation axis. Verify that
-    the hbfrac parameter is passed through to load_cb19_grid. The synthetic fixture
-    carries identical line ratios for both HbFrac=0.0 and 1.0 slices, so the wiring
-    is verified by monkeypatch rather than by a value difference.
+    Since #2213, ``load_cb19_grid`` no longer accepts an ``hbfrac`` kwarg: it
+    always loads both HbFrac nodes, and this adapter -- which still treats
+    HbFrac as a discrete, load-time-style choice rather than an interpolation
+    axis -- selects the nearest node itself, from ``grid.hbfrac_grid``, right
+    after loading. Verify (1) the loader is called with no ``hbfrac`` kwarg and
+    (2) ``hbfrac=0.0`` vs ``hbfrac=1.0`` select genuinely different slices.
+
+    Deliberately writes its own synthetic grid rather than taking
+    ``usable_cb19_grid_path``: that fixture prefers the packaged file whenever
+    it is not *globally* degenerate, and the packaged ``data/cb19_templates.h5``
+    is exactly that case -- non-degenerate overall (log_OH/log_age/log_U carry
+    real variation) but, measured directly, bit-identical between its two
+    HbFrac nodes (as are its log_nH/log_CO/dNO axes; #2198 tracks the pending
+    3MdB erratum). A value-difference assertion against that file would be
+    false on correctly-wired code, exactly the routing-fix trap this test
+    exists to avoid: a monkeypatch-only check that never compares values would
+    pass unchanged whether or not the selected slice is the requested one.
     """
     from tengri.components.nebular import cb19_precompute as adapter
+    from tests._cb19_grid import write_synthetic_cb19_grid
 
+    grid_path = write_synthetic_cb19_grid(tmp_path / "cb19_templates.h5")
     waves, trans = filter_set_radio
 
-    # Monkeypatch load_cb19_grid to record the hbfrac kwarg it receives
+    # Monkeypatch load_cb19_grid to record how it is called.
     with patch(
         "tengri.components.nebular.cb19_precompute.load_cb19_grid", wraps=adapter.load_cb19_grid
     ) as mock_loader:
-        # Call precompute with hbfrac=0.0
-        result = adapter.precompute(
-            waves, trans, 0.5, parameters=None, filepath=str(usable_cb19_grid_path), hbfrac=0.0
+        result_hb0 = adapter.precompute(
+            waves, trans, 0.5, parameters=None, filepath=str(grid_path), hbfrac=0.0
         )
 
-        # Verify loader was called with hbfrac=0.0
+        # The loader itself no longer takes hbfrac -- it always loads both nodes.
         mock_loader.assert_called()
         call_kwargs = mock_loader.call_args.kwargs
-        assert "hbfrac" in call_kwargs, "hbfrac kwarg not passed to loader"
-        assert call_kwargs["hbfrac"] == 0.0, f"Expected hbfrac=0.0, got {call_kwargs['hbfrac']}"
+        assert "hbfrac" not in call_kwargs, (
+            "load_cb19_grid should no longer receive an hbfrac kwarg (#2213); "
+            "the adapter collapses the retained axis itself"
+        )
 
-        # Verify the result is valid
-        assert "log_line_ratios" in result, "Precompute should return log_line_ratios"
-        assert len(result["axes"]) == 6, "CB19 should have 6 axes after fix"
+    result_hb1 = adapter.precompute(
+        waves, trans, 0.5, parameters=None, filepath=str(grid_path), hbfrac=1.0
+    )
+
+    # Verify the results are valid
+    assert "log_line_ratios" in result_hb0, "Precompute should return log_line_ratios"
+    assert len(result_hb0["axes"]) == 6, "CB19 should have 6 axes after fix"
+
+    # The two requested slices must be genuinely different values, not just a
+    # different code path that happens to compute the same numbers.
+    diff = np.abs(
+        np.asarray(result_hb0["log_line_ratios"]) - np.asarray(result_hb1["log_line_ratios"])
+    )
+    assert np.max(diff) > 0.0, (
+        "hbfrac=0.0 and hbfrac=1.0 selected bit-identical slices from a grid "
+        "that carries genuine HbFrac variation -- the nearest-node selection "
+        "did not route correctly"
+    )
 
 
 # ── Which adapters this file actually covers ──────────────────────

@@ -7,10 +7,14 @@ exposing a 6-axis line-luminosity grid:
 
     (log_OH, log_age, log_U, log_nH, log_CO, dNO)
 
-HbFrac (Hβ fraction; 1.0 = radiation-bounded) is a discrete load-time choice
-specified via the ``hbfrac`` keyword argument to :func:`precompute`. The nearest
-grid slice is selected at load time. HbFrac is not an interpolation axis and is
-not settable through Parameters.
+HbFrac (Hβ fraction; 1.0 = radiation-bounded) is a discrete choice for this
+adapter, specified via the ``hbfrac`` keyword argument to :func:`precompute`.
+Since #2213, :func:`~tengri.components.nebular.cloudy_cb19.load_cb19_grid`
+retains both HbFrac nodes -- it is a genuine interpolation axis on the exact
+(non-precomputed) path -- so this module selects the nearest node itself,
+immediately after loading, and collapses it away before building the
+6-axis photometry surface below. HbFrac stays a load-time discrete choice
+for *this* adapter and is not settable through Parameters.
 
 The dual (line_lum, continuum_phot) precompute follows the canonical CLOUDY
 pattern: emission lines are projected through filter curves via a precomputed
@@ -123,8 +127,11 @@ def precompute(
         Upper stellar mass limit (100.0 or 300.0 M_sun).
     hbfrac : float, keyword-only
         HbFrac slice (1.0 = radiation-bounded, ~0.0 = matter-bounded). A discrete
-        load-time choice; the nearest grid node is selected. Not an interpolation
-        axis and not settable through Parameters. Default 1.0.
+        choice for this adapter: :func:`~tengri.components.nebular.cloudy_cb19.
+        load_cb19_grid` now loads both HbFrac nodes (#2213), and this function
+        selects the nearest one and collapses it away immediately, before the
+        6-axis photometry surface is built. Not settable through Parameters.
+        Default 1.0.
 
     Returns
     -------
@@ -159,8 +166,15 @@ def precompute(
         sed_type=sed_type,
         imf=imf,
         mup=mup,
-        hbfrac=hbfrac,
     )
+
+    # ``load_cb19_grid`` retains both HbFrac nodes (#2213); this adapter still
+    # treats HbFrac as a discrete, load-time-style choice rather than an
+    # interpolation axis, so select the nearest node and collapse it away
+    # immediately -- before anything below reads ``grid.log_line_ratios``.
+    hbfrac_grid = np.asarray(grid.hbfrac_grid)
+    i_hb = int(np.argmin(np.abs(hbfrac_grid - hbfrac)))
+    log_line_ratios = grid.log_line_ratios[..., i_hb, :]
 
     # Build the (n_lines, n_filt) filter projection matrix
     # Each row integrates one emission line (delta function) through filter curves
@@ -181,7 +195,8 @@ def precompute(
                 line_wave_obs, fw, ft, left=0.0, right=0.0
             )
 
-    # Build grid axes from CB19 data (6 axes; HbFrac is a load-time choice, not an axis)
+    # Build grid axes from CB19 data (6 axes; HbFrac was already collapsed above,
+    # not an axis for this adapter).
     axes_np = (
         np.asarray(grid.log_OH_grid),
         np.asarray(grid.log_age_grid),
@@ -218,7 +233,7 @@ def precompute(
         return {
             "line_weight_matrix": jnp.asarray(line_weight_matrix),
             "line_wavelengths": jnp.asarray(grid.line_wavelengths),
-            "log_line_ratios": grid.log_line_ratios,
+            "log_line_ratios": log_line_ratios,
             "log_hb_per_qh": grid.log_hb_per_qh,
             "grid_axes": preint.axes,
             "axes": remaining_axes,
@@ -229,7 +244,7 @@ def precompute(
     return {
         "line_weight_matrix": jnp.asarray(line_weight_matrix),
         "line_wavelengths": jnp.asarray(grid.line_wavelengths),
-        "log_line_ratios": grid.log_line_ratios,
+        "log_line_ratios": log_line_ratios,
         "log_hb_per_qh": grid.log_hb_per_qh,
         "grid_axes": preint.axes,
         "axes": preint.axes,

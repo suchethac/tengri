@@ -111,22 +111,28 @@ Compensated summation (Kahan / pairwise) was **not** used: it addresses lost sig
 
 ---
 
-### 4. Output Properties Inherently Float32-Unrepresentable
+### 4. Output Properties Inherently Float32-Unrepresentable — DELIVERED (#1206 §A/§B/§C)
 
-**Fifteen emission-line and AGN luminosity properties return erg/s and exceed float32 max:**
+**Fifteen emission-line and AGN luminosity properties returned erg/s and exceeded float32 max:**
 
-Emission lines (11 properties from `src/tengri/forward/sed_model.py`):
+Emission lines (11 properties, `src/tengri/components/nebular/component.py`):
 - `civ_1549`, `halpha`, `hbeta`, `lya`, `nii_6548`, `nii_6584`, `oii`, `oiii_4959`, `oiii_5007`, `sii_6717`, `sii_6731`
 
-AGN and X-ray (from `src/tengri/forward/sed_model.py`):
+AGN and X-ray (`src/tengri/components/xray/component.py`, `src/tengri/components/stellar/component.py`):
 - `l_x_agn`, `l_x_total`, `l_x_xrb` (X-ray luminosities, ~1e40–1e45 erg/s)
 - `q_h` (ionizing photons, ~1e56 photons/s)
 
-**Fix:** Change the unit contract (BREAKING change) — return these properties in either:
-- `L_sun` (solar luminosities, ~1e−38 of erg/s for optical lines, ~1e−12 for Q_H in L_sun / 1.26e49 s−1).
-- `log10(quantity)` where quantity is in erg/s or appropriate physical units.
-
-Document the choice in `src/tengri/forward/sed_model.py` and update `NAMING_CONTRACT.md` § §4c (unit standards). Deprecate the linear erg/s forms with a multi-release warning cycle.
+**Delivered (breaking, no alias):**
+- The 11 line properties and the 3 X-ray luminosities now return `units="Lsun"`, same names, converted
+  from the float32-safe `log_<name>` / `log_l_x_*` companion via one `pow10(log_x - LOG10_L_SUN)` --
+  never materializing the erg/s intermediate. The `log_<name>` companions are unchanged, still dex re
+  erg/s: `log_halpha == log10(halpha * L_sun)`.
+- `q_h` is retired with no alias rather than re-united: there is no in-range linear form at any
+  physical ionizing rate (~1e53-1e56 photons/s always exceeds float32's 3.4e38 ceiling), so a Lsun-style
+  conversion would not have helped. `log_q_h` is the sole surviving property; `pred.q_h` and
+  `predict_properties(names=("q_h",))` raise `KeyError` naming the replacement.
+- `NAMING_CONTRACT.md` §4c documents the unit standard this establishes (luminosities in Lsun, rates
+  and unbounded quantities as `log_*` in dex).
 
 ---
 
@@ -384,18 +390,22 @@ finiteness guard passes that mutation clean.
    luminosities (§7). Also fixed a float64 regression the AGN output-factoring introduced.
 8. ~~Multicolor accretion disc (L_bol-dependent shape) in pure float32.~~ **DONE** (§8) — log-space
    disc internals + shape/normalization split. The follow-up list this entry used to carry
-   (`kubota_done`, `adaf`, `relagn`, `slone_netzer`, `adaf_lopez2024`) has since closed: **eleven of
-   twelve** registered discs are float32-exact, pinned by the inventory table in §8. The one
-   remaining, `grahsp_sbpl`, is not a kernel problem — it is blocked on the linear erg/s parameter
-   `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, `inf` in float32), i.e. on **item 3**.
+   (`kubota_done`, `adaf`, `relagn`, `slone_netzer`, `adaf_lopez2024`) has since closed, and so has
+   the one holdout, `grahsp_sbpl`: **all twelve** registered discs are float32-exact, pinned by the
+   inventory table in §8. `grahsp_sbpl` was never a kernel problem — it was blocked on the linear
+   erg/s parameter `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, `inf` in float32) — and is fixed by
+   the log-space `agn_grahsp_log_l5100` (#1206 §D), the same breaking API change item 3 delivers for
+   the eleven line properties, the three X-ray luminosities and `q_h`.
 
 Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
 
-**What is left of the eight items above is item 3 plus one latent residue** — two further open
-threads that are *not* on that list follow after. Item 3 — the breaking unit change — is
-the only item that still blocks a *test*: both surviving pure-float32 `xfail`s name it, namely
-`test_linear_observables_pure_float32_cue_only` (linear `q_h` ~1e56 and the erg/s `line_lums` behind
-`balmer_decrement`) and `test_disc_float32_pending[grahsp_sbpl]` (the linear `agn_grahsp_l5100`).
+**Item 3 is DELIVERED** (#1206 §A/§B/§C/§D): the eleven line properties and the three X-ray
+luminosities moved to `units="Lsun"`, the linear `q_h` retired with no alias in favor of
+`log_q_h`, and `agn_grahsp_l5100` retired with no alias in favor of `agn_grahsp_log_l5100`. The two
+pure-float32 `xfail`s that named item 3 are both resolved: `test_linear_observables_pure_float32_cue_only`
+is un-xfailed (`log_q_h` finite, `balmer_decrement` finite; the retired `q_h` now raises rather than
+overflowing) and `test_disc_float32_pending[grahsp_sbpl]`'s entry is removed (`grahsp_sbpl` moved to
+the exact-disc inventory).
 
 ~~The residue is #1206 item 2's second half: five files still *return* a raw `4π d_L²`.~~
 **CLOSED by #1859.** The allow-list in `test_no_raw_flux_scale.py` is now empty and all five files
@@ -820,17 +830,17 @@ radio fit runs end-to-end in float32. Pinned by
 
 `tests/regression/precision/test_agn_disc_float32_inventory.py` runs every
 registered composable-AGN disc through float64-vs-float32 and enforces the
-result. Two float32 failure classes remain (each `xfail(strict)` — fixing one
-flips to an unexpected pass):
+result. All twelve are now exact; `_SHAPE_CLASS_XFAIL` and `_GRID_CLASS_XFAIL`
+are both empty.
 
 | disc | float32 status | class |
 |---|---|---|
 | `multicolor`, `kubota_done`, `adaf` | **exact** | **shape-class** — L_bol-dependent shape; log-space (or L_sun-unit) internals + the `agn_log_lbol_shape` split (true L_bol for the shape, reference for the magnitude) |
 | `powerlaw`, `richards2006`, `skirtor`, `qsogen`, `schartmann2005` | **exact** | shape-invariant (evaluated at the reference, rescaled) |
 | `adaf_lopez2024` | **exact** | shape-invariant; its CIGALE piecewise power law needed the log-space rebuild (see below) |
-| `relagn` | **exact** | normalized to `agn_log_lbol` like the other eleven discs (behavior change — see below) |
-| `grahsp_sbpl` | non-finite | blocked on a **linear erg/s parameter**: `agn_grahsp_l5100` is `LogUniform(1e42, 1e47, default=1e44)` — the parameter *value itself* is `inf` in float32, so `L_lambda_unit × inf = nan`. Its auto-normalized path (`l5100=None`, tied to `agn_log_lbol`) *does* scale ×10/dex and would work; the explicit-`l5100` path cannot (its `L_lambda` ~3e41 is out of range regardless). Needs a log-space parameter — **#1206 item 3**, an API change, not a kernel fix |
+| `relagn` | **exact** | normalized to `agn_log_lbol` like the other discs (behavior change — see below) |
 | `slone_netzer` | **exact** | was the tractable one — two silent float32 traps in its grid closure, both now fixed (see below) |
+| `grahsp_sbpl` | **exact** (#1206 §D) | was blocked on a **linear erg/s parameter**: `agn_grahsp_l5100` was `LogUniform(1e42, 1e47, default=1e44)` — the parameter *value itself* was `inf` in float32, so `L_lambda_unit × inf = nan`. Fixed with a log-space parameter, `agn_grahsp_log_l5100` (breaking, no alias): the auto-normalized path (`log_l5100=None`, tied to `agn_log_lbol`) was already consistent with the reference-evaluation scheme without any change; the *explicit*-`log_l5100` path now pre-shifts by the same `agn_log_lbol_shape − agn_log_lbol` offset every shape-class disc already carries, so the single downstream `apply_log10_scale` rescale restores the true l5100 -- no second rescale mechanism. This also covers `l5100_disc`, the scalar the `nlr`/`blr`/`feii`/`torus` GRAHSP blocks normalize to: it is derived from the (now reference-scale, during `_use_ref`) disc SED, so it inherits the same pre-shift and the whole GRAHSP sub-SED restores under the one global rescale. Measured end-to-end (`grahsp_sbpl` + SKIRTOR torus, `agn_log_lbol=11`): float32 finite, max relative deviation from float64 1.6e-5 above the noise floor. |
 
 ### The piecewise power-law fix (`adaf_lopez2024`)
 

@@ -2086,6 +2086,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         L_absorbed: float,
         dust_log_ssfr: float = -10.0,
         redshift: float = 0.0,
+        log_L_ir: float | None = None,
         **_kwargs,
     ) -> jnp.ndarray:
         """BOSA emission from tabulated templates (Boquien & Salim 2021).
@@ -2103,6 +2104,22 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
             log10(sSFR / yr^-1).  Typical range: -12 to -8.
         redshift : float
             Source redshift (for CMB contrast correction).
+        log_L_ir : float, optional
+            ``log10(L_absorbed)`` [dex, **erg/s** -- the tengri-wide SED
+            contract], pre-computed upstream. When given, it is used in
+            place of ``jnp.log10(L_absorbed)`` for the normalization, and
+            (after converting to the grid's own Lsun-relative axis, see
+            below) for the grid-axis lookup too (#2272): ``L_absorbed`` is
+            ~1e43 erg/s and therefore ``inf`` in pure float32, while its log
+            is finite, so passing this avoids materializing the overflowed
+            linear value (mirrors ``EnergyBalanceSplitIRSEDComponent``, which
+            takes the same float32-safety approach for its own
+            ``factors_l_ir=False`` budget). ``None`` (the default) preserves
+            the exact original formula for callers that only have the linear
+            value (e.g. the legacy ``DUST_EMISSION_MODELS`` dispatch and the
+            bit-exact golden-fixture regression, see the comment at the
+            normalization below for why that path is deliberately NOT
+            converted).
 
         Returns
         -------
@@ -2115,10 +2132,34 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
         **Gradient-safe**: yes, differentiable everywhere.
         """
-        # L_TIR ~ L_absorbed (energy balance)
-        log_ltir = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
+        # L_TIR ~ L_absorbed (energy balance). ``log_ltir_ergs`` feeds the
+        # NORMALIZATION below and stays in erg/s throughout -- the delivered
+        # SED must integrate to the erg/s budget regardless of what unit the
+        # grid's own axis uses.
+        if log_L_ir is None:
+            log_ltir_ergs = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
+            log_ltir_axis = log_ltir_ergs
+        else:
+            log_ltir_ergs = jnp.asarray(log_L_ir)
+            # The packaged grid's axis is log10(L_TIR / Lsun) -- the
+            # Boquien & Salim 2021 convention (``scripts/build_bosa_hdf5.py``:
+            # "Grid: log10(L_TIR / L_sun): 8.5 -> 12.5", and its HDF5 writer
+            # normalizes the templates using the same ``L_SUN`` tengri uses
+            # elsewhere) -- while ``log_L_ir`` is erg/s (the tengri-wide SED
+            # contract). Convert for the AXIS LOOKUP only, via the #2273
+            # precedent (``dust_log_L_ir + LOG10_L_SUN`` in
+            # ``components/dust/component.py`` etc.): without this, any
+            # astrophysically realistic L_ir (~1e42-1e45 erg/s, i.e. dex
+            # 42-45) numerically saturates the grid's ceiling node (12.5)
+            # regardless of the real budget, which is the other half of
+            # #2272's disease -- the ``factors_l_ir`` fix alone only stopped
+            # ``apply()`` from pinning the lookup at a fixed unit-luminosity
+            # placeholder; it did not make the lookup land on the right node.
+            from tengri.utils.sed_quantities import LOG10_L_SUN
 
-        log_ltir_c = jnp.clip(log_ltir, log_ltir_grid[0], log_ltir_grid[-1])
+            log_ltir_axis = log_ltir_ergs - LOG10_L_SUN
+
+        log_ltir_c = jnp.clip(log_ltir_axis, log_ltir_grid[0], log_ltir_grid[-1])
         log_ssfr_c = jnp.clip(dust_log_ssfr, log_ssfr_grid[0], log_ssfr_grid[-1])
 
         n_l = len(log_ltir_grid)
@@ -2154,14 +2195,42 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         # to L_absorbed regardless of the native template grid spacing.
         nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
         t_integral = -jnp.trapezoid(sed, nu)
-        norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
 
         # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
         # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
         # this component exists to satisfy. ``redshift`` is kept in the signature
         # for call-site compatibility.
-        return norm * sed
+        if log_L_ir is None:
+            # Original linear-division formula (no Lsun conversion, no log
+            # domain), kept bit-exact on purpose: it is a shape-reference
+            # contract pinned by
+            # tests/regression/test_dust_emission_grid_components.py's golden
+            # fixture (L_ir_erg_s=1e44 -> log10=44, clipped to the grid's
+            # ceiling node either way you slice it: converting would move it
+            # to log10(L_TIR/Lsun)=10.42, a DIFFERENT, interior node, which
+            # would change the golden's pinned shape). This branch is reached
+            # only by a direct ``.predict()``/closure call with no
+            # ``log_L_ir`` -- the real ``apply()``-driven pipeline (both
+            # ``model.predict()`` and ``model.predict_photometry()``) always
+            # supplies ``log_L_ir`` (declared in ``optional_inputs``) and so
+            # always takes the converted branch below.
+            norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
+            return norm * sed
+
+        # log-domain rescale (#2272): equal to ``(L_absorbed / t_integral) * sed``
+        # to fp roundoff, but never materializes ``L_absorbed`` (~1e43, inf in
+        # float32) as a linear value. Uses ``log_ltir_ergs`` (NOT the
+        # Lsun-converted ``log_ltir_axis`` used for the shape lookup above) --
+        # the delivered SED integrates to the erg/s budget exactly; only the
+        # axis lookup needed the unit conversion.
+        from tengri.utils.scale import apply_log10_scale, representable_floor
+
+        log_t_integral = jnp.log10(
+            jnp.clip(jnp.abs(t_integral), representable_floor(1.0e-300), None)
+        )
+        log_norm = jnp.where(t_integral > 0.0, log_ltir_ergs - log_t_integral, -jnp.inf)
+        return apply_log10_scale(sed, log_norm)
 
     return bosa_emission
 

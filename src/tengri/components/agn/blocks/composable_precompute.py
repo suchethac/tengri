@@ -60,6 +60,33 @@ from tengri.utils.grid_interp import (
 
 __all__ = ["AXIS_PARAMS", "build_lookup", "precompute"]
 
+#: Per-axis reparametrization applied ONLY to the coordinate the triweight
+#: kernel interpolates over, not to the physics evaluation (#1206 follow-up,
+#: coordinator review item 3). ``grahsp_sbpl``'s photometry is linear in
+#: *linear* l5100 (``compute_grahsp_sed``'s own docstring: "GRAHSP outputs
+#: are linear in l5100"), but ``agn_grahsp_log_l5100`` (#1206 SS D) is the
+#: axis coordinate users supply, so grid_phot is EXPONENTIAL in it. Triweight
+#: is a local weighted average, not an exact interpolant: averaging an
+#: exponential over an interval is biased high (Jensen's inequality), and the
+#: bias grows with interval width. Measured at the doc's original 5-node
+#: default across the declared prior (42-47 dex): base (linear axis, #1206's
+#: merge-base) already had substantial bias (median 55.7%, max 342% relative
+#: error vs the exact block, 20 random points) but the log axis was
+#: measurably worse (median 245%, max 348%). Interpolating over the
+#: exponentiated coordinate (mirroring what the linear axis already gave the
+#: kernel for free) removes the log axis's part of that gap without
+#: widening any test tolerance or touching the shared triweight kernel.
+#: Build-time transform: applied to NumPy axis-grid arrays outside JIT.
+_INTERP_AXIS_TRANSFORM: dict[str, Any] = {
+    "agn_grahsp_log_l5100": lambda values: 10.0 ** np.asarray(values, dtype=np.float64),
+}
+#: Runtime transform: applied to (possibly-traced) JAX query scalars inside
+#: the JIT-compiled lookup. Same math as the build-time transform above,
+#: expressed with jnp so it works under tracing.
+_INTERP_AXIS_TRANSFORM_JAX: dict[str, Any] = {
+    "agn_grahsp_log_l5100": lambda value: 10.0 ** jnp.asarray(value),
+}
+
 #: Placeholder. Unlike per-model precompute modules, the composable
 #: recipe determines its own axes via ``Recipe.axis_params``. The
 #: ``PrecomputeModule`` Protocol requires this attribute, so we expose
@@ -315,12 +342,48 @@ def precompute(
         wave_rest, recipe, axis_grids, fixed_values, agn_log_lbol_default
     )
 
+    # An axis this call will auto-collapse (below) must NOT be reparametrized:
+    # ``collapse_fixed_axes`` matches the Fixed value straight from
+    # ``parameters.get_fixed_values()`` (untransformed) against the stored
+    # axis array, so transforming only the axis would silently collapse at
+    # the wrong grid location. Declaring a param both an ``axis_param`` (to
+    # sweep) and ``Fixed`` in the same ``Parameters`` is an unusual setup;
+    # falling back to the pre-existing (biased but *correct*) untransformed
+    # behavior for it is safer than risking a silently wrong collapse.
+    # Mirrors collapse_fixed_axes's own two collapse triggers exactly (a
+    # param Fixed in ``parameters``, or not free and present in ``defaults``
+    # a.k.a. our own ``fixed_values`` argument) so this guard never misses a
+    # case that function would actually collapse.
+    _would_collapse: set[str] = set()
+    if parameters is not None:
+        _param_fixed = set(parameters.get_fixed_values())
+        _free_names = set(getattr(parameters, "free_params", ()) or ())
+        _would_collapse |= _param_fixed
+        _would_collapse |= {
+            name
+            for name in axis_names
+            if name not in _param_fixed
+            and name not in _free_names
+            and name in (fixed_values or {})
+        }
+    _transformed_axes = tuple(
+        name
+        for name in axis_names
+        if name in _INTERP_AXIS_TRANSFORM and name not in _would_collapse
+    )
+
+    def _interp_axis_values(name: str) -> np.ndarray:
+        raw = np.asarray(axis_grids[name], dtype=np.float64)
+        if name in _transformed_axes:
+            return _INTERP_AXIS_TRANSFORM[name](raw)
+        return raw
+
     preint = precompute_template_photometry(
         templates=spectra,
         wave_rest=wave_rest,
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=tuple(np.asarray(axis_grids[name], dtype=np.float64) for name in axis_names),
+        axes=tuple(_interp_axis_values(name) for name in axis_names),
         redshift=redshift,
         dl_cm=1.0,
         # composable_agn_l_nu returns L_nu; tell the helper not to convert
@@ -334,6 +397,7 @@ def precompute(
         "axes": tuple(jnp.asarray(axis_grids[name]) for name in axis_names),
         "_preint": preint,
         "_axis_names": tuple(axis_names),
+        "_interp_axis_transform": _transformed_axes,
     }
 
     # Auto-collapse Fixed axes (mirror qsogen_precompute).
@@ -353,6 +417,7 @@ def precompute(
         "_preint": collapsed,
         "_axis_names": tuple(axis_names),
         "_collapsed_axes": fixed_indices,
+        "_interp_axis_transform": _transformed_axes,
     }
 
 
@@ -414,11 +479,31 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     collapsed = preint.get("_collapsed_axes") or {}
     surviving_names = tuple(name for i, name in enumerate(full_names) if i not in collapsed)
 
+    # Axes whose STORED coordinate (``_preint``/``axes``) is a
+    # reparametrization of the caller-facing axis value -- see
+    # ``_INTERP_AXIS_TRANSFORM``. Queries below must apply the same
+    # transform before reaching the triweight kernel, since it interpolates
+    # in the stored (possibly transformed) coordinate.
+    transformed: tuple[str, ...] = tuple(preint.get("_interp_axis_transform", ()))
+
+    def _query_transform(name: str, value):
+        fn = _INTERP_AXIS_TRANSFORM_JAX.get(name) if name in transformed else None
+        return fn(value) if fn is not None else value
+
     if not collapsed:
-        return ComposableLookup(
-            build_template_photometry_lookup(preint["_preint"]),
-            axis_names=surviving_names,
-        )
+        inner = build_template_photometry_lookup(preint["_preint"])
+
+        if not transformed:
+            return ComposableLookup(inner, axis_names=surviving_names)
+
+        @jax.jit
+        def _lookup_transformed(scale, *free_axis_values):
+            mapped = tuple(
+                _query_transform(name, v) for name, v in zip(surviving_names, free_axis_values)
+            )
+            return inner(scale, *mapped)
+
+        return ComposableLookup(_lookup_transformed, axis_names=surviving_names)
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
@@ -429,7 +514,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         """Triweight lookup on the remaining free axes."""
         if not axes:
             return scale * grid_phot
-        normed = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+        mapped = tuple(
+            _query_transform(name, v) for name, v in zip(surviving_names, free_axis_values)
+        )
+        normed = interp_nd_triweight(grid_phot, axes, edges, mapped)
         return scale * normed
 
     return ComposableLookup(_lookup_collapsed, axis_names=surviving_names)

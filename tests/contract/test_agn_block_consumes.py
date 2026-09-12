@@ -179,7 +179,7 @@ def test_active_set_scopes_to_active_blocks():
     assert active == expected
     # Params owned by *inactive* blocks must not be active.
     assert "agn_tau" not in active  # Nenkova torus
-    assert "agn_grahsp_l5100" not in active  # GRAHSP disc
+    assert "agn_grahsp_log_l5100" not in active  # GRAHSP disc
     assert "agn_T_hot" not in active  # two-temperature torus
     # ... and the superset is much larger, so scoping is doing real work.
     assert len(active) < len(ALL_AGN_PARAMS)
