@@ -405,7 +405,9 @@ def test_dust_frac_agn_engine_scoped_freedom(synthetic_ssp_wide, panchromatic_ob
     grid where the parameter is live. The plain variant has the parameter inert;
     freeing it would waste sampler steps on a flat dimension (#2244, #1482 class).
     Engine-scoped declaration (class-level attribute present on cigale, absent on
-    plain) implements the established declared-exception pattern (#2286).
+    plain) scopes the wildcard by data liveness (#2244) — unlike
+    dust_eta_balance, which is live on every engine and so sits in every
+    engine's wildcard scope (#2291).
     """
     # Plain dale2014: frac_agn is NOT declared at engine class level, so
     # the wildcard cannot free it even though it has a free_prior in the registry.

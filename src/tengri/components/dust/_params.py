@@ -326,9 +326,10 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # engine class (plain Dale2014IRSEDComponent) omits a class-level frac_agn
         # declaration, so the wildcard scope excludes it there. The CIGALE variant
         # (Dale2014CigaleIRSEDComponent) declares frac_agn at class level, making
-        # it wildcard-reachable on dale2014_cigale only. This pattern follows the
-        # established declared-exception model (#2286, dust_eta_balance on
-        # energy_balance_split). The disease it solves: the registry is flat (one
+        # it wildcard-reachable on dale2014_cigale only (#2244). The exception is
+        # grounded in data liveness, not group structure -- contrast
+        # dust_eta_balance, which #2291 put in every engine's wildcard scope
+        # because it is live everywhere. The disease it solves: the registry is flat (one
         # declaration shared by both Dale engines), but the AGN term the parameter
         # scales needs the pure-AGN QSO template, which only the CIGALE grid
         # data/dale2014_templates_cigale.h5 ships. On plain dale2014 with only
