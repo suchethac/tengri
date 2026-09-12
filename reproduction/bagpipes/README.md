@@ -36,6 +36,23 @@ posterior sampling and can be ignored here — we use
 `bagpipes.model_galaxy` for forward-modeling only. Tengri itself
 should already be importable.
 
+### BAGPIPES 1.3.5 + NumPy ≥ 2.5 compatibility
+
+BAGPIPES 1.3.5 under numpy 2.5.2+ fails in two places:
+
+- **`star_formation_history.py:51`** — `TypeError: only 0-dimensional arrays can be converted to Python scalars` due to strict array-to-scalar conversions. Apply this one-line patch to the installed package:
+
+  ```python
+  # In site-packages/bagpipes/models/star_formation_history.py line 51, change:
+  #   self.hubble_time = utils.age_at_z[utils.z_array == 0.]
+  # to:
+  #   self.hubble_time = float(np.squeeze(utils.age_at_z[utils.z_array == 0.]))
+  ```
+
+- **`np.trapz` removal** — `AttributeError: module 'numpy' has no attribute 'trapz'` in `model_galaxy.py`, `dust_emission_model.py`, and `making/make_cloudy_models.py`. The driver (`bagpipes_driver.py`) automatically aliases `np.trapz` to the NumPy ≥ 2.0 name `np.trapezoid` at import, so no manual patch is needed for model evaluation.
+
+The `hubble_time` patch mirrors the numpy-2 compatibility fix documented in `reproduction/cigale/README.md`.
+
 ## Regenerating the BC03+MILES SSP grid
 
 ```bash
@@ -72,13 +89,9 @@ persistent cache and finish in under a minute.
 
 ## What the notebook covers
 
-§1 SSPs · §2 delayed-τ SFH · §3 stellar SED · §4 dust attenuation
-curves · §5 attenuation applied · §6 dust IR + energy balance ·
-§7 panchromatic · §8 nebular (Cloudy v25 vs Cue v17) · §9 LSF /
-velocity broadening · §10 double-power-law SFH · §11 lognormal SFH ·
-§12 IGM · §13 forward-model timing · §14 SDSS ugriz photometry ·
-§15 metallicity sensitivity · §16 Asada+2025 CGM damping wing ·
-§17 Leja+2019 continuity non-parametric SFH.
+**Sections:** §1 SSPs · §2 Delayed-τ SFH · §2 cont'd Intrinsic SED per SFH form · §3 Continuity SFH · §4 Stellar SED · §5 Metallicity sensitivity · §5 cont'd Metallicity sweep · §6 Dust attenuation curves · §7 Dust attenuation applied · §7 cont'd Dust attenuation laws · §8 Dust IR emission · §8 cont'd DL07 IR grid · §9 Nebular emission · §9 cont'd Nebular ionization · §10 Line-spread function · §11 Panchromatic SED · §12 Inoue14 IGM · §12 cont'd Asada CGM · §12b Inoue14 redshift sweep · §13 Photometry · §13b Photometry without nebular · §13c Photometry at z = 0.5 · §14 Forward-model timing · tengri in BAGPIPES-mode full-SED head-to-head.
+
+**Sweeps:** Extended parameter variations with ratio panels and filter tables for SFH forms (exponential τ, constant, double power-law, lognormal), metallicity (0.2–2.5 Z☉), dust attenuation (A_V, CF00 slope, Salim bump), dust IR emission (q_PAH, U_min, γ), and nebular ionization (logU, Z_gas, f_esc).
 
 AGN, X-ray, and radio sections are skipped — BAGPIPES has no
 counterpart. See `reproduction/cigale/` for those.
