@@ -437,11 +437,21 @@ def _refuse_tabulated_metallicity(model):
 def _dig_may_be_active(spec) -> bool:
     """True if DIG mixing may be active: ``neb_dig_frac`` free, or fixed non-zero.
 
-    Governs two grid-building decisions (#2222): whether ``neb_logU`` joins
-    ``axis_names`` even when it is itself Fixed (the DIG lookup always needs a
-    second query point distinct from the HII one), and how far the
-    ``neb_logU`` axis range must extend to cover it
-    (:func:`_dig_extended_logU_range`).
+    One predicate, three consumers, so none of them can disagree with the
+    others about whether DIG is active for a given spec:
+
+    - Two grid-building decisions (#2222): whether ``neb_logU`` joins
+      ``axis_names`` even when it is itself Fixed (the DIG lookup always
+      needs a second query point distinct from the HII one), and how far
+      the ``neb_logU`` axis range must extend to cover it
+      (:func:`_dig_extended_logU_range`).
+    - The evaluation-count decision (#2262): resolved once in
+      ``SEDModel._build_chain_configs`` into the frozen
+      ``NebularSEDComponentConfig.dig_active`` field threaded through
+      ``build_components``, and read directly by
+      ``SEDModel.predict_line_fluxes``'s own grid-reconstruction call --
+      when ``False``, the second HII/DIG evaluation is skipped outright
+      rather than run and zero-weighted.
 
     Before #2222 this same predicate (then named ``_refuse_active_dig_mixing``)
     raised ``DIGNotOnNebularGridError``; the grid now serves DIG mixing via two
