@@ -285,6 +285,9 @@ print(
     f"    min ESS = {min(float(v) for v in ess.values()):.0f}"
 )
 
+# %% [markdown]
+# `forward.fit(Data(photometry=(flux_obs, noise)), ...)` is the same call with
+# the channel named; that spelling is what the joint fits in 07 and 10 use.
 
 # %% [markdown]
 # The fit recovers the mock truth: well-constrained parameters (stellar mass,
