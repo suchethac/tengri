@@ -330,6 +330,24 @@
 
 ### Changed
 
+- `dust_frac_agn` is now declared with a `free_prior` of `Uniform(0.0, 0.99)`,
+  making it wildcard-reachable (`all_params: FREE`) exactly on
+  `dale2014_cigale`, the engine variant whose shipped template grid carries the
+  QSO template where the parameter is live. On plain `dale2014` (QSO-less grid),
+  the parameter remains inert and unreachable by the wildcard, preventing the
+  sampler from exploring a flat dimension (#2244). The fix follows the
+  engine-scoped declared-exception pattern: `dale2014_cigale` declares `frac_agn`
+  at the component class level; plain `dale2014` omits it. Simultaneously, the
+  AGN+Dale double-count warning (#721) now fires on `dale2014_cigale` (where
+  `frac_agn` is live and can double-count with a composable AGN torus) instead
+  of plain `dale2014` (where the parameter is inert). One behavioral break
+  rides along: an explicit `frac_agn` key beside plain `dale2014` — previously
+  accepted and silently ignored — now raises `ParameterError` naming the
+  variant that reads it, via the grammar's standard unknown-key check
+  (#2244, #721). The same warning now also covers `energy_balance_split`, whose
+  `dust_L_agn_ir` slot adds AGN-heated IR beside an active composable AGN torus
+  (#2251).
+
 - The GRAHSP AGN disc normalization `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, erg/s) is
   renamed `agn_grahsp_log_l5100` (`Uniform(42.0, 47.0)`, dex), with no alias (#1206). The
   linear parameter *value itself* is `inf` in float32 before any kernel runs; translate with
@@ -784,6 +802,27 @@
 
 ### Fixed
 
+- The energy-balance-split closure's docstring tagged its luminosity arguments
+  `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
+  supplies both in `erg/s` (component_factory.py:346). The docstring is now
+  unit-agnostic ("as passed"), with a note that both arguments must share the
+  same units, and the `dust_L_agn_ir` parameter declaration now explicitly
+  states `units="erg/s"` (#2251).
+
+- `finalize_profile_mass` reinserts the marginalized mass through one `jax.jit`
+  program cached on the model per engine key (draws, keys, data, noise and
+  presence traced), instead of an eager `jax.vmap` over every draw that
+  dispatched each forward prediction op-by-op and re-traced per fit: 1.2 s ->
+  0.4 s warm and 5.5 s -> 2.0 s cold on 1200 draws of a 14-band model, and no
+  `(n_draws, n_pixels)` spike on spectroscopy models. With it, `forward.fit(data)`
+  pays what the bench harness pays per gradient on every phase; `run_nuts` now
+  reports `n_grad_adapt` / `n_grad_sample` / `n_grad_total` so the comparison is
+  made in gradients. `benchmark_laplace_nuts_20s.py` builds its context with
+  `profile_mass=False` again (its own marginalization needs the full-D
+  context; under the `"auto"` default every `--profile-mass` row died), and
+  `test_nuts_split_warmup_keeps_sampling_quality` asks for 400 draws (the
+  profiled fixed-key realization sat on its 1.1 R-hat bar at 200)
+  (`bench/reports/2026-09-12_library_path_parity.md`).
 - The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
   ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
   signature defaults from the declared parameter table

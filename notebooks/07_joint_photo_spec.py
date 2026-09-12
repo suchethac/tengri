@@ -34,6 +34,11 @@ from _setup import FIG_DIR, HMC_VALIDATED, effective_wavelengths_um, quiet
 
 quiet()
 
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
+import warnings
+
+warnings.filterwarnings("ignore", message=".*wNE.*")
+
 import time
 from pathlib import Path
 
@@ -70,12 +75,13 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 # ## Stellar library and observation
 #
 # Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
-# 3800–9200 Å observed). At z = 0.05 this covers the 4000 Å break, Hβ, Mgb triplet,
-# Fe5270/Fe5335 blends, Hα, and Ca II triplet — the absorption features that carry
+# 3800–9200 Å observed). At z = 0.05 this covers the 4000 Å break, the Balmer lines Hβ and Hα,
+# the Mgb triplet, the Fe5270/Fe5335 blends and the Ca II triplet — the features that carry
 # metallicity and light-weighted age. Sampling at 260 pixels resolves these indices.
+# The SSP grid carries its nebular emission (lines and continuum), so no separate nebular model is needed.
 
 # %%
-SSP_NAME = "fsps_prsc_miles_chabrier"
+SSP_NAME = "prsc_miles_chabrier_wNE"
 ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 Z_GAL = 0.05
@@ -134,7 +140,7 @@ def build(obs, approx=None):
             tau_diff=Uniform(0.0, 1.0),
         ),
         dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
-        neb=builders.neb.none(),
+        neb=builders.neb.ssp(),
         met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(Z_GAL),
     )
@@ -190,8 +196,8 @@ print(
 # %% [markdown]
 # ## Fit
 #
-# Both use `HMC_VALIDATED` (dense mass, n_warmup=1000, n_leapfrog=20) on lookup
-# tables (WavePrecomp for photometry; SpectrumPrecomp's dual LUT for the joint fit).
+# Both use `HMC_VALIDATED` with lookup tables: WavePrecomp for the photometry fit,
+# SpectrumPrecomp's dual LUT for the joint fit (photometry + spectrum).
 
 
 # %%

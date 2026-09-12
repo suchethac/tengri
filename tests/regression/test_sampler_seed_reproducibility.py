@@ -203,7 +203,13 @@ def test_nuts_split_warmup_keeps_sampling_quality(ssp_data_fsps, target):
     """
     flux, noise = target
     _, forward = _build(ssp_data_fsps)
-    n_samples = 200
+    # 400 draws per chain, not 200: since profile_mass="auto" (#2281) this fit
+    # samples the 7-D profiled space, and the fixed-key realization on this
+    # all-parameters-free tsnorm fixture (skew/width are the degenerate
+    # directions every sampler report since 2026-08-20 records) sat at
+    # R-hat 1.110 with 200 draws -- a coin flip against the 1.1 bar, not a
+    # mixing failure. Measured 2026-09-12: 1.031 at 400 draws, 12 divergences.
+    n_samples = 400
     n_chains = 2
     posterior = forward.fit(
         flux,

@@ -934,21 +934,37 @@ def _warn_dead_gradient_params(spec) -> None:
 
 
 def _warn_agn_dust_double_count(spec) -> None:
-    """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
+    """Warn when composable AGN and dust emission both inject AGN IR.
 
-    The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014's
-    embedded quasar template ``dust_frac_agn`` are two distinct AGN surfaces,
-    both keyed off the same stellar ``L_absorbed`` (component_factory.py:346,
-    ADR-0018 §5, issue #721). With both > 0 the AGN mid/far-IR is double-counted
-    the SKIRTOR/torus block already models AGN IR, so Dale2014's fracAGN should
-    be 0 (matching CIGALE's skirtor2016-vs-dale2014-fracAGN choice).
+    Two engines can double-count AGN-heated IR when paired with composable AGN:
+
+    1. **Dale2014 CIGALE** — The composable AGN's ``agn_ir_frac`` (CIGALE-joint
+       tie) and Dale2014 CIGALE's embedded quasar template ``dust_frac_agn`` are
+       two distinct AGN surfaces, both keyed off the same stellar ``L_absorbed``
+       (component_factory.py:346, ADR-0018 §5, issue #721). With both > 0 the
+       AGN mid/far-IR is double-counted. The SKIRTOR/torus block already models
+       AGN IR, so Dale2014 CIGALE's frac_agn should be 0.
+
+    2. **energy_balance_split** — The composable AGN's torus (agn_ir_frac > 0)
+       emits AGN-heated IR with the correct spectral shape. The energy_balance_split
+       engine's dust_L_agn_ir parameter adds a *separate* AGN-heated component
+       (45 K and 20 K blackbodies), both keyed off the same stellar L_absorbed
+       (issue #2251). With both > 0 the AGN IR is double-counted. Use one surface:
+       set dust_L_agn_ir=0 (the default) and let composable AGN own the AGN IR, or
+       drop the composable AGN and use energy_balance_split's L_agn_ir slot alone.
+
+    **Inert on plain dale2014**: The parameter ``dust_frac_agn`` is inert
+    (bit-identical predictions) on the plain Dale2014 backend — it lacks the QSO
+    template grid — so the warning does not fire there. It fires only on
+    dale2014_cigale, where the CIGALE-grid engine carries the embedded quasar
+    template and the parameter is live and can double-count with an AGN block.
 
     Value-aware (the structural ``build_components`` guard cannot be): a FREE
     param counts as positive-active; a Fixed param counts only if its value is
-    > 0, so ``dust_frac_agn`` pinned to 0 (e.g. a torus-only AGN recipe) does
-    not warn. Emits a filterable :class:`AGNDustDoubleCountWarning`.
+    > 0. Emits a filterable :class:`AGNDustDoubleCountWarning`.
     """
-    if getattr(spec, "dust_emission", None) != "dale2014":
+    dust_emission = getattr(spec, "dust_emission", None)
+    if dust_emission not in ("dale2014_cigale", "energy_balance_split"):
         return
     free = set(spec.free_params)
     fixed = spec.get_fixed_values()
@@ -958,23 +974,39 @@ def _warn_agn_dust_double_count(spec) -> None:
             return True
         return float(fixed.get(name, 0.0)) > 0.0
 
-    if not (_positive_active("dust_frac_agn") and _positive_active("agn_ir_frac")):
-        return
-
     from tengri.config.exceptions import AGNDustDoubleCountWarning
 
-    warnings.warn(
-        "Both AGN surfaces are active: the composable AGN (agn_ir_frac > 0) and "
-        "Dale2014 dust emission (dust_frac_agn > 0). Both inject AGN-heated IR "
-        "from the same stellar L_absorbed, so AGN mid/far-IR is DOUBLE-COUNTED. "
-        "Use one surface: set dust_frac_agn=0 and let the composable AGN torus "
-        "(e.g. SKIRTOR) own the AGN IR, recommended when a torus block is "
-        "configured, or drop the composable AGN and use Dale2014's embedded "
-        "quasar template alone. See ADR-0018 §5 / issue #721. Filter "
-        "AGNDustDoubleCountWarning if the overlap is deliberate.",
-        AGNDustDoubleCountWarning,
-        stacklevel=3,
-    )
+    if dust_emission == "dale2014_cigale":
+        if not (_positive_active("dust_frac_agn") and _positive_active("agn_ir_frac")):
+            return
+        warnings.warn(
+            "Both AGN surfaces are active: the composable AGN (agn_ir_frac > 0) and "
+            "Dale2014 CIGALE dust emission (dust_frac_agn > 0). Both inject AGN-heated IR "
+            "from the same stellar L_absorbed, so AGN mid/far-IR is DOUBLE-COUNTED. "
+            "Use one surface: set dust_frac_agn=0 and let the composable AGN torus "
+            "(e.g. SKIRTOR) own the AGN IR, recommended when a torus block is "
+            "configured, or drop the composable AGN and use Dale2014 CIGALE's embedded "
+            "quasar template alone. See ADR-0018 §5 / issue #721 / issue #2251. Filter "
+            "AGNDustDoubleCountWarning if the overlap is deliberate.",
+            AGNDustDoubleCountWarning,
+            stacklevel=3,
+        )
+    elif dust_emission == "energy_balance_split":
+        if not (_positive_active("dust_L_agn_ir") and _positive_active("agn_ir_frac")):
+            return
+        warnings.warn(
+            "Both AGN surfaces are active: the composable AGN (agn_ir_frac > 0) and "
+            "energy_balance_split dust emission (dust_L_agn_ir > 0). The composable AGN "
+            "torus emits AGN-heated IR with the correct spectral shape, while "
+            "energy_balance_split adds a separate 45 K and 20 K blackbody AGN component. "
+            "Both are keyed off the same stellar L_absorbed, so AGN IR is DOUBLE-COUNTED. "
+            "Use one surface: set dust_L_agn_ir=0 (the default) and let the composable "
+            "AGN torus own the AGN IR, or drop the composable AGN and use "
+            "energy_balance_split's L_agn_ir slot alone. See issue #2251 / #721. Filter "
+            "AGNDustDoubleCountWarning if the overlap is deliberate.",
+            AGNDustDoubleCountWarning,
+            stacklevel=3,
+        )
 
 
 def _validate_fracagn_requires_dust(spec) -> None:

@@ -334,7 +334,11 @@ def _build_problem(notebook: str, seed: int, dtype: str = "float64"):
     flux = np.asarray(mock["flux_obs"], dtype=np_dtype)
     noise = np.asarray(mock["noise"], dtype=np_dtype)
     forward = ForwardModel.build(sed=cfg["build"](ssp))
-    fitter = Fitter(forward, data=flux, noise=noise)
+    # The harness marginalizes the mass itself (``--profile-mass`` below) and
+    # needs the FULL-D context to do it: since #2281 ``profile_mass="auto"`` is
+    # the library default and would fix the mass in the spec before this
+    # context is built, leaving ``_mass_free_name`` nothing to find.
+    fitter = Fitter(forward, data=flux, noise=noise, profile_mass=False)
     ctx = InferenceContext.from_target(fitter)
     return cfg, forward, ctx, flux, noise, truth, key_fit
 
@@ -1004,6 +1008,7 @@ def run_fit(args) -> dict:
                 data,
                 method="map",
                 key=key_map,
+                profile_mass=False,
                 n_restarts=args.map_restarts,
                 n_steps=args.map_steps,
                 optimizer=args.map_optimizer,

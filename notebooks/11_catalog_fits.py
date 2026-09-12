@@ -183,20 +183,14 @@ print(
 # ## Fit the catalog in parallel — timed in detail
 #
 # One call fits the whole catalog. `Catalog.fit(method="mcmc_hmc",
-# forward_chunk_size=K)` builds a **single** JIT'd HMC program and streams the `N`
-# galaxies through `jax.lax.map(..., batch_size=K)`: `K` galaxies advance their
-# chains *together* on every sampler step, and the compiled graph is `O(1)` in the
-# catalog size `N` — one program whether you fit 12 galaxies or 12 million. We use
-# **HMC** (the catalog default): its fixed-length trajectories are cheap and
-# predictable, which matters for a *catalog* — NUTS can spend a whole step building
-# a deep tree on a banana-shaped photo-z posterior, and paid once per galaxy that
-# adds up. We set `K = N` (fit them all at once), a diagonal mass matrix (each
-# galaxy is low-D and the parallelism is *width over galaxies*), and one chain per
-# galaxy. `K = N` is right for a model this light; on heavier models
-# (nonparametric SFHs, many bands, line channels) an explicit `K = N` can exceed
-# available RAM, so leave `forward_chunk_size` at its `"auto"` default there and
-# let it size `K` from a memory budget. We time a single forward evaluation
-# first, then the catalog.
+# forward_chunk_size=K)` builds a **single** JIT'd program and streams the `N`
+# galaxies through the sampler: `K` galaxies advance their chains together on
+# every step, and the compiled graph is `O(1)` in catalog size `N`. We choose
+# **HMC** here because its fixed-length trajectories keep per-galaxy cost
+# predictable — NUTS can spend a whole step building a deep tree on the photo-z
+# posterior, which adds up. We set `K = N` (fit all at once), a diagonal mass
+# matrix, and one chain per galaxy. `K = N` suits a model this light; on heavier models (nonparametric SFHs, many bands, line channels) leave `forward_chunk_size` at its `"auto"` default so it sizes `K` from a memory budget. We time a single forward evaluation first,
+# then the full catalog.
 
 # %%
 FIT_KW = dict(
@@ -417,33 +411,26 @@ plt.show()
 # ## Summary
 #
 # - A catalog of independent galaxies is **embarrassingly parallel**, and each
-#   galaxy is a cheap low-dimensional posterior — so the catalog default is
-#   **per-galaxy HMC** (`mcmc_hmc`; `mcmc_nuts` vectorizes too), not VI. HMC's
-#   fixed-length trajectories keep the per-posterior cost predictable, which is
-#   what a catalog rewards — the measured time per posterior is in the table above.
+#   galaxy is a cheap low-dimensional posterior. This notebook fits them with
+#   per-galaxy HMC (`mcmc_hmc`; `mcmc_nuts` vectorizes too). `Catalog.fit`
+#   defaults to MAP; we choose HMC here because its fixed-length trajectories keep
+#   per-posterior cost predictable.
 # - **`Catalog.fit(method="mcmc_hmc", forward_chunk_size=K)`** fits the whole
 #   catalog as *one* vectorized program: `K` galaxies advance per sampler step and
-#   the compiled graph is `O(1)` in the catalog size, so the compile is paid once
-#   and amortizes over the catalog. `K = 1` is the serial baseline; `K = N` is
-#   fully vectorized. Changing `K` changes only the throughput, never the
-#   posterior — the vectorization is bit-exact (covered by the chunk-invariance
-#   tests in `tests/inference/test_catalog_mcmc_vmap.py`).
+#   the compiled graph is `O(1)` in catalog size. `K = 1` is serial; `K = N` is
+#   fully vectorized. Changing `K` changes only throughput, never the posterior —
+#   vectorization is bit-exact.
 # - **The per-posterior cost is the sampler, not the dimensionality.** Each fit is
-#   ~220 HMC iterations x 20 leapfrog steps ~ 4400 forward-model gradient
-#   evaluations; the 3 free parameters are cheap, the ~4400 SED evaluations are the
-#   cost. The speedup is machine-dependent — read it off the table above.
+#   ~220 HMC iterations × 20 leapfrog steps, ~4400 forward-model gradient
+#   evaluations. The 3 free parameters are cheap; the SED evaluations are the cost.
+#   The speedup is machine-dependent.
 # - **Free redshift rides `WavePrecomp`**: the LUT is tabulated over redshift, so
-#   a photo-z fit interpolates the table (nebular emission lines and all) instead
-#   of re-integrating the forward model per step. Baking the nebular emission into
-#   the SSP (the wNE grid) keeps the line-boosted colors while adding **zero**
-#   per-step cost — no nebular emulator runs inside the sampler.
+#   a photo-z fit interpolates the table instead of re-integrating per step. The
+#   wNE SSP (baked nebular emission) keeps the line-boosted colors at zero
+#   per-step cost.
 # - The vectorized fit **recovers photo-z, stellar mass, and dust** across the
-#   catalog — the throughput does not come at the cost of the science, even with
-#   the dust–redshift degeneracy left in.
-# - A **GPU** extends the same batching effect much further — the `K` chains run
-#   across thousands of lanes at once, so the same call scales to thousands of
-#   galaxies. For the measured GPU throughput see
-#   `bench/scripts/benchmark_catalog_throughput.py`; for cluster-scale catalogs
-#   (one GPU per slice, array jobs) see `scripts/slurm/`; and to shard *one* very
-#   high-dimensional hierarchical fit across devices, see
-#   `docs/internal/advanced/hierarchical.md` (VI, the other track).
+#   catalog, even with the dust–redshift degeneracy left free.
+# - A **GPU** extends batching much further — `K` chains run across thousands of
+#   lanes at once, so the same call scales to thousands of galaxies. For GPU
+#   throughput see `bench/scripts/benchmark_catalog_throughput.py`; for
+#   cluster-scale catalogs see `scripts/slurm/`.
