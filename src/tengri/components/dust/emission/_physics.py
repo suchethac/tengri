@@ -3,16 +3,20 @@
 
 Pure, dependency-light helpers used by every emission closure: the Planck
 function, the da Cunha et al. (2013) CMB heating correction, and the
-energy-balance absorbed-luminosity integrals. This module is a leaf: it
-imports only ``jax.numpy`` and physical constants, so closure modules
-(``analytic/``, ``templates/``) and the ``emission`` facade can all import
-from it without an import cycle.
+energy-balance absorbed-luminosity integrals. This module is a leaf: besides
+``jax.numpy`` and physical constants it imports only the dust component's own
+``_params.py`` (for :func:`~tengri.protocols.component.declared_default`,
+#2241), which is itself a leaf with no dependency back into ``emission/``, so
+closure modules (``analytic/``, ``templates/``) and the ``emission`` facade
+can all import from this module without an import cycle.
 """
 
 from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import PARAMS
+from tengri.protocols.component import declared_default
 from tengri.utils.blackbody import planck_bnu_wave as _planck_bnu_wave
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
@@ -115,7 +119,7 @@ _T_CMB_0 = 2.725  # CMB temperature at z=0 (K)
 def cmb_corrected_temperature(
     T_dust: float,
     redshift: float,
-    beta_ir: float = 1.6,
+    beta_ir: float = declared_default(PARAMS, "dust_beta_ir"),
 ) -> float:
     r"""Effective dust temperature including CMB heating.
 
@@ -129,7 +133,11 @@ def cmb_corrected_temperature(
     redshift : float
         Source redshift. [dimensionless]
     beta_ir : float
-        Dust emissivity index. [dimensionless] Default: 1.6.
+        Dust emissivity index. [dimensionless] Default: read from the
+        declared ``dust_beta_ir`` (#2241); today 1.6, matching the value this
+        default has always used. Every analytic closure in this package
+        passes its own ``dust_beta_ir`` explicitly, so this default is only
+        live for a caller that omits the argument.
 
     Returns
     -------
