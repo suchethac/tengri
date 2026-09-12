@@ -83,7 +83,7 @@
 # combination that leaves both where they are.
 
 # %% [markdown]
-# ## 2. The two rules
+# ## 2. The three rules
 #
 # **Rule 1 — MPS has no float64, at all.** Not "slower"; absent. A float64 array
 # does not get downcast, it raises:
@@ -102,11 +102,20 @@
 # ```bash
 # export JAX_ENABLE_X64=0
 # export JAX_PLATFORMS=mps
+# export MLX_DISABLE_COMPILE=1
 # ```
 #
 # tengri honors that (#1840) and holds it for the whole import (#1880). It will
 # warn once that you are in float32 and that cosmological distances are the known
 # hazard — that warning is expected here, not a problem.
+#
+# **Rule 3 — turn MLX kernel fusion off** (`MLX_DISABLE_COMPILE=1`). With it on,
+# a reversed array combined with a broadcast scalar is silently wrong on MPS
+# (`y[::-1] * 2.0` keeps its first element and zeros the rest;
+# [jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)). tengri hits
+# it in the SKIRTOR polar-dust integral, which puts the torus far-infrared 10x low;
+# with fusion off the #1206 parity sweep passes 5 of 6 seams, and every seam ran
+# faster. Details and the measured table: `docs/internal/getting_started/gpu.md`.
 #
 # Optional, and worth setting: `JAX_MPS_ASYNC_DISPATCH=1`. Measured, it cut cold
 # compile from 8.1 s to 0.60 s. It changes warm time very little.
@@ -118,6 +127,7 @@ import os
 # first cell, before any other import touches JAX.
 os.environ["JAX_ENABLE_X64"] = "0"
 os.environ["JAX_PLATFORMS"] = "mps"
+os.environ["MLX_DISABLE_COMPILE"] = "1"
 os.environ["JAX_MPS_ASYNC_DISPATCH"] = "1"
 
 import jax

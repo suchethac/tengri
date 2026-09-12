@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression: fittable lognormal metallicity-scatter parameter (#506).
 
-BAGPIPES / Carnall+2018 §3.2 model chemical-mixing inhomogeneity as a
+BAGPIPES / Carnall+2018 §3.1.2 model chemical-mixing inhomogeneity as a
 Gaussian-in-log10(Z) metallicity distribution function (MDF) of width sigma
 about the mean metallicity. DSPS's ``calc_rest_sed_sfh_table_lognormal_mdf`` /
 ``..._met_table`` kernels already apply exactly this lognormal MDF via their
@@ -21,7 +21,7 @@ These tests pin: (1) the parameter is free and threaded (not a silent no-op),
 References
 ----------
 .. [1] A. C. Carnall et al., "Inferring the star formation histories of massive
-   quiescent galaxies with BAGPIPES," MNRAS, 480, 4379 (2018), §3.2.
+   quiescent galaxies with BAGPIPES," MNRAS, 480, 4379 (2018), §3.1.2.
 """
 
 from __future__ import annotations

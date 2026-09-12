@@ -148,7 +148,7 @@ network emulator, with optional shock and DIG mixing.
    :noindex:
 
 .. automodule:: tengri.components.nebular.dig
-   :members: mix_dig_emission
+   :members: mix_dig_emission, mix_dig_line_luminosities, mix_dig_grid_reconstruction
    :noindex:
 
 Observation models

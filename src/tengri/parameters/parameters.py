@@ -820,6 +820,10 @@ class Parameters:
         nebular = kwargs.pop("nebular", False)
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
+        # #2220: explicit cb19 grid, mirroring nebular_mappings_grid_path /
+        # nebular_mappings_agn_grid_path below. None resolves the packaged
+        # default at CB19Backend construction time.
+        self.nebular_cb19_grid_path = kwargs.pop("nebular_cb19_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
         # See CUE_FULL_CATALOG_DEFAULT (imported above, declared in
         # tengri.config.settings): the one declaration every other spelling
@@ -1293,6 +1297,23 @@ class Parameters:
             "be the LARGER number. The names read backwards on purpose (they are "
             "chronological, the axis is lookback), which is exactly why this is easy "
             "to invert by accident",
+        ),
+        (
+            "sfh_dpl_lookback_age_gyr",
+            "sfh_dpl_lookback_end_gyr",
+            "star formation cannot stop before it starts: 'age_gyr' is the lookback "
+            "to the OLDER truncation (SF onset) and 'end_gyr' the lookback to the "
+            "YOUNGER truncation (SF cessation), so age_gyr must be the LARGER "
+            "number, same convention as sfh_const_start_gyr/sfh_const_end_gyr "
+            "(#2247)",
+        ),
+        (
+            "sfh_trunc_exp_age_gyr",
+            "sfh_trunc_exp_end_gyr",
+            "star formation cannot stop before it starts: 'age_gyr' is the lookback "
+            "time of formation (SF onset) and 'end_gyr' the lookback at which SF "
+            "ceases, so age_gyr must be the LARGER number, same convention as "
+            "sfh_const_start_gyr/sfh_const_end_gyr (#2247)",
         ),
     )
 
@@ -2361,6 +2382,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "met_mode": content("metallicity mode determines parameters"),
     "neb_ionization": content("nebular ionization source determines parameters"),
     "nebular": content("nebular emission backend determines parameters"),
+    "nebular_cb19_grid_path": content("cb19 grid path determines available parameters"),
     "nebular_mappings_agn_density": content("MAPPINGS AGN density determines parameters"),
     "nebular_mappings_agn_grid_path": content("MAPPINGS AGN grid path determines parameters"),
     "nebular_mappings_agn_ionizing_source_warning": content(

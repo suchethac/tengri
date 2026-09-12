@@ -28,6 +28,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import (
     C_AA as _C_AA,
     H_PLANCK as _H_PLANCK,
@@ -47,7 +48,7 @@ COS_INC_REF_30DEG = 0.8660254037844387  # cos(30°)
 # σ(E) · E³ = c0 + c1·E + c2·E² with σ in 10⁻²⁴ cm² and E in keV.
 # Fit valid for 0.030 ≤ E ≤ 10 keV; above 10 keV the cross-section is
 # negligible (drops faster than E⁻³) and we return transmission = 1.
-_MM83_E_EDGES = jnp.array(
+_MM83_E_EDGES = host_array(
     [
         0.030,
         0.100,
@@ -66,7 +67,7 @@ _MM83_E_EDGES = jnp.array(
         10.000,
     ]
 )
-_MM83_C0 = jnp.array(
+_MM83_C0 = host_array(
     [
         17.3,
         34.6,
@@ -84,7 +85,7 @@ _MM83_C0 = jnp.array(
         701.2,
     ]
 )
-_MM83_C1 = jnp.array(
+_MM83_C1 = host_array(
     [
         608.1,
         267.9,
@@ -102,7 +103,7 @@ _MM83_C1 = jnp.array(
         25.2,
     ]
 )
-_MM83_C2 = jnp.array(
+_MM83_C2 = host_array(
     [
         -2150.0,
         -476.1,
@@ -183,10 +184,10 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     # discontinuity at exactly E = 10 keV under floating round-trip.
     in_range = E >= 0.030
 
-    idx = jnp.clip(jnp.searchsorted(_MM83_E_EDGES, E, side="right") - 1, 0, 13)
-    c0 = _MM83_C0[idx]
-    c1 = _MM83_C1[idx]
-    c2 = _MM83_C2[idx]
+    idx = jnp.clip(jnp.searchsorted(device_table(_MM83_E_EDGES), E, side="right") - 1, 0, 13)
+    c0 = jnp.take(device_table(_MM83_C0), idx)
+    c1 = jnp.take(device_table(_MM83_C1), idx)
+    c2 = jnp.take(device_table(_MM83_C2), idx)
     sigma_e3 = c0 + c1 * E + c2 * E**2  # 10⁻²⁴ cm² · keV³
     sigma = sigma_e3 / jnp.maximum(E, 1e-30) ** 3 * 1e-24  # cm²
 

@@ -129,6 +129,9 @@ the forward model, and listed oldest first within each group.
   (2023), [arXiv:2112.06830](https://arxiv.org/abs/2112.06830).
 - ProGeny — stellar population spectra generator. Robotham & Bellstedt
   (2025), [arXiv:2410.17697](https://arxiv.org/abs/2410.17697).
+- APOGEE Milky Way disk metallicity distribution functions — the measured
+  MDF widths sourcing the `met_logzsol_scatter` prior interval. Hayden et
+  al. (2015), [arXiv:1503.02110](https://arxiv.org/abs/1503.02110).
 
 ### Initial mass functions
 
@@ -168,6 +171,9 @@ the forward model, and listed oldest first within each group.
 - [Cue](https://github.com/yi-jia-li/cue) — neural emulator for nebular
   emission lines. Li et al. (2025),
   [arXiv:2405.04598](https://arxiv.org/abs/2405.04598).
+- Galactic H-alpha background implies pervasive diffuse ionized gas (DIG
+  mixing motivation). Reynolds (1984),
+  [doi:10.1086/162190](https://doi.org/10.1086/162190).
 - [Synthesizer](https://github.com/synthesizer-project/synthesizer) —
   synthetic observables package, source of the Cloudy AGN NLR/BLR grids and
   much nebular and SSP machinery. Lovell et al. (2025),

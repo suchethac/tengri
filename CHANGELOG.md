@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `met_logzsol_scatter` (the lognormal MDF width, in dex) now declares a
+  `free_prior` of `Uniform(0.02, 0.4)`, so `met={'all_params': FREE}` (delta
+  mode) and `met={'logzsol_scatter': FREE}` both work instead of refusing.
+  The interval brackets the Milky Way disk MDF widths measured by
+  Hayden et al. 2015 (sigma[Fe/H] = 0.17-0.32 dex across the disk) and the
+  registry default `Fixed(0.1)`. All ten shipped recipes' free parameter
+  sets are unchanged (#2245).
+- The star-formation ordering constraint "SF cannot stop before it starts"
+  is now enforced for the `dpl_lookback` and `trunc_exp` SFH types:
+  `sfh_*_age_gyr` (onset lookback) must exceed `sfh_*_end_gyr` (cessation
+  lookback), raising `ValueError` at build time on inversion, exactly like
+  the existing `sfh_const_start_gyr`/`sfh_const_end_gyr` pair. Previously
+  these two constraints were stated only in prose and an inverted pair
+  built without complaint (#2247, phase 1).
 - `dust_log_L_ir` (`log10(L_IR/Lsun)`): a total dust IR budget override.
   Declaring it -- `Fixed` or any free prior, via `dust_emission={'log_L_ir':
   ...}` -- replaces the energy-balance IR budget (`log_L_ir =
@@ -75,6 +89,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   re-emission pool receives. A source whose screen choice is `"none"` is
   unattenuated and so contributes exactly zero to the integral, with no
   separate on/off branch needed.
+- `dust_eta_balance`'s declared free prior is a linear `Gaussian(1.0, 0.2)`
+  truncated at 0 (was `LogNormal(0, 0.2)` on log eta);
+  `builders.dust.emission.relaxed_energy_balance(sigma=)` takes the linear
+  sigma.
 - `import tengri` raises the default matmul precision to `"highest"` at
   import, unconditionally, unless `JAX_DEFAULT_MATMUL_PRECISION` is already
   set or the live config already holds a value; `tengri.utils.devices.setup_jax`
@@ -88,6 +106,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
 
 ### Fixed
+
+- The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
+  continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
+  ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``
+  for lines -- instead of each carrying its own copy of the
+  ``(1 - f) * HII + f * DIG`` mixing arithmetic. Backend kwargs (e.g. Cue's
+  resolved ionizing population) now reach both the HII and DIG evaluations
+  from one frozen dict, and the inline snapshot-before-mutation copy that let
+  #2195 ship behind twenty green unit tests of the unused ``mix_dig_emission``
+  is gone. Output is bit-identical to the prior inline arithmetic: measured
+  max absolute difference 0.0 across ``predict_photometry``, ``rest_sed()``
+  and line luminosities, both the cue and cb19 backends, at ``neb_dig_frac``
+  in ``{0.0, 0.3, 0.9, 1.0}`` (#2221).
+
+- ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
+  ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
+  types' own ``grid`` keys already did, and the path now round-trips through
+  ``spec.to_groups()`` instead of silently reverting to the packaged default
+  on re-parse. Before, the cb19 branch of the grammar never read the key and
+  the path vanished without an error, so the only route to a non-default
+  grid was the module default. ``grid`` is refused by name on every ``neb``
+  type that never reads it (``cue``, ``ssp``, ``none``) instead of being
+  silently accepted and dropped; the three cb19 refusal messages now name
+  the key (#2220).
 
 - `log_L_ir` conflated the re-emitted IR budget with the ABSORBED
   stellar+nebular energy for three readers (`pred.l_dust_absorbed`, the
@@ -494,6 +536,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   3.7e4 -> 1.2e3, worst-of-six-seeds NUTS wall 227 s -> 40 s. See
   `tengri.inference.mass_profile` and `docs/dev/inference_methods.md`
   ("Profiling the mass").
+- The per-Q_H nebular grid (`enable_fast_nebular` / `approx=FeaturePrecomp()`)
+  now serves DIG mixing instead of refusing it: `neb_logU` joins the grid axes
+  whenever `neb_dig_frac` could be active (free, or fixed non-zero), even when
+  `neb_logU` is itself Fixed, and its range extends (never clips, never
+  refuses) to cover the DIG-shifted query point `neb_logU + neb_dig_delta_logU`.
+  Reconstruction mixes two lookups against the same table via the new
+  `mix_dig_grid_reconstruction` (`dig.py`), sharing the one mixing core
+  `mix_dig_emission` / `mix_dig_line_luminosities` already use. Measured
+  worst-case relative error over 10 seeds against the exact path: 1.17e-3
+  (photometry) / 1.41e-3 (lines) at `neb_dig_frac = 0.3` with the axis extended,
+  versus 1.72e-3 / 2.04e-3 at `neb_dig_frac = 0` on the same fixture -- both
+  well inside the repository's 3e-2 parity ceiling (#2222).
+- ``mix_dig_line_luminosities`` (``tengri.components.nebular.dig``), exported
+  from ``tengri.components.nebular``: the line-luminosity counterpart of
+  ``mix_dig_emission``, sharing its DIG mixing core. It calls
+  ``predict_nebular_line_luminosities`` (instead of ``predict_nebular_sed``),
+  keeps the HII call's ``line_waves``, and mixes only the luminosities (#2221).
 - `bench/scripts/benchmark_float32_mps_parity.py` -- a self-contained pure-float32
   parity sweep for the Apple GPU (#1206). Apple's own `jax-metal` last released 0.1.1
   on 2024-10-08 and pins `jax == jaxlib >= 0.4.34`, not viable against tengri's JAX
@@ -679,6 +738,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
+- `DIGNotOnNebularGridError` and the refusal it backed
+  (`nebular_grid_precompute._refuse_active_dig_mixing`). Building the per-Q_H
+  nebular grid with an active `neb_dig_frac` no longer raises: the grid now
+  reconstructs DIG mixing via two lookups instead (see `### Added`, #2222).
 - The `stellar` build group (#1720). Metallicity is now configured through
   `met`, parallel to `sfh`: `stellar={'met_mode': 'table'}` becomes
   `met={'type': 'table'}`, and `stellar={'met_logzsol': …}` becomes
