@@ -120,6 +120,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and line luminosities, both the cue and cb19 backends, at ``neb_dig_frac``
   in ``{0.0, 0.3, 0.9, 1.0}`` (#2221).
 
+- The nebular component's DIG mixing no longer evaluates the DIG branch when
+  the spec pins ``neb_dig_frac`` at the declared ``Fixed(0.0)`` default. A
+  build-time predicate ``_dig_may_be_active(spec)`` resolves to a frozen
+  ``dig_active`` config field, threaded to all six mixing call sites (exact path:
+  cue + cloudy/cb19 continuum/lines; grid path: photometry + restband +
+  line-luminosity reconstructions). When ``dig_active=False``, the mixing core
+  skips the second evaluation entirely, returning the HII result unconditionally.
+  Measured ~50% reduction in gradient FLOPs on the default model (#2262).
+
 - ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
   ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
   types' own ``grid`` keys already did, and the path now round-trips through

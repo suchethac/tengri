@@ -39,7 +39,9 @@ import jax.numpy as jnp
 from tengri.utils.scale import pow10
 
 
-def _mix_dig_backend_evaluations(evaluate, combine, neb_logU, neb_dig_frac, neb_dig_delta_logU):
+def _mix_dig_backend_evaluations(
+    evaluate, combine, neb_logU, neb_dig_frac, neb_dig_delta_logU, *, dig_active=None
+):
     """Evaluate a backend at the HII and (if needed) DIG ionization parameters.
 
     Parameters
@@ -59,17 +61,25 @@ def _mix_dig_backend_evaluations(evaluate, combine, neb_logU, neb_dig_frac, neb_
         DIG mass fraction. [dimensionless, in [0, 1]]
     neb_dig_delta_logU : float
         Offset in ionization parameter for DIG (negative). [dex]
+    dig_active : bool, optional
+        Whether DIG mixing is active. When ``True``, both evaluations run.
+        When ``False``, only HII is evaluated (short-circuit). When ``None``
+        (default), uses a Python-float check on ``neb_dig_frac``. [dimensionless]
 
     Returns
     -------
     Whatever ``evaluate`` or ``combine`` returns: the HII-only result when
-    ``neb_dig_frac`` short-circuits, else ``combine``'s result.
+    ``dig_active`` is False or the short-circuit fires, else ``combine``'s result.
     """
     hii_result = evaluate(neb_logU)
 
-    # Short-circuit: when neb_dig_frac is a Python literal 0.0, skip the extra
-    # forward pass entirely. Under JIT with a traced value both passes execute.
-    if isinstance(neb_dig_frac, (int, float)) and neb_dig_frac == 0.0:
+    # Short-circuit when DIG is not active or neb_dig_frac is a Python literal 0.0
+    if dig_active is False:
+        # Build-time decision: DIG is not active, skip entirely
+        return hii_result
+
+    if dig_active is None and isinstance(neb_dig_frac, (int, float)) and neb_dig_frac == 0.0:
+        # Direct-caller short-circuit: neb_dig_frac is a Python literal 0.0
         return hii_result
 
     dig_result = evaluate(neb_logU + neb_dig_delta_logU)
@@ -140,10 +150,11 @@ def _log10_weighted_mix(log_hii, log_dig, frac):
 
     Returns
     -------
-    ndarray
+    ndarray, shape () or same as `log_hii`/`log_dig`
         log10 of the mixed magnitude [dex]. ``-inf`` when both ``log_hii``
         and ``log_dig`` are ``-inf`` (no NaN: the offset subtraction is
-        skipped when the offset itself is non-finite).
+        skipped when the offset itself is non-finite). NaN when both inputs
+        are ``+inf`` (degenerate: no finite term dominates the mix).
 
     Notes
     -----
@@ -158,9 +169,10 @@ def _log10_weighted_mix(log_hii, log_dig, frac):
     offset = jnp.maximum(log_hii, log_dig)
     # When both inputs are -inf, offset is -inf too, and log_hii - offset
     # would be `-inf - (-inf)` = NaN. Route the subtraction through a finite
-    # stand-in offset in that case only (never used to compute the returned
-    # value): pow10(-inf - 0.0) = pow10(-inf) = 0.0 for both terms, the
-    # weighted sum is exactly 0.0, and log10(0.0) = -inf, not NaN.
+    # stand-in offset in that case only: pow10(-inf - 0.0) = pow10(-inf) = 0.0
+    # for both terms, the weighted sum is exactly 0.0, and log10(0.0) = -inf.
+    # The stand-in offset (0.0) is then added back (0.0 + log10(0.0) = -inf),
+    # not used in the subtraction, so no NaN arises.
     safe_offset = jnp.where(jnp.isfinite(offset), offset, 0.0)
     weighted_sum = (1.0 - frac) * pow10(log_hii - safe_offset) + frac * pow10(
         log_dig - safe_offset
@@ -181,6 +193,8 @@ def mix_dig_emission(
     neb_dig_frac: float = 0.0,
     neb_dig_delta_logU: float = -1.0,
     line_sigma_aa: float = 0.0,
+    *,
+    dig_active: bool | None = None,
     **kwargs,
 ) -> jnp.ndarray:
     r"""Predict nebular SED with HII region and diffuse ionized gas components.
@@ -220,6 +234,12 @@ def mix_dig_emission(
     line_sigma_aa : float, optional
         Gaussian line width for emission-line placement. Default: 0.0 (delta).
         [Å]
+    dig_active : bool, optional
+        Whether DIG mixing is active. When ``True``, both HII and DIG are
+        evaluated. When ``False``, only HII is evaluated (skip DIG entirely).
+        When ``None`` (default), uses Python-float check on ``neb_dig_frac``.
+        Call-time overrides of a spec-pinned ``neb_dig_frac`` are not honored
+        when ``dig_active=False`` (#2296). [dimensionless]
     **kwargs
         Additional backend-specific keyword arguments (passed to both calls).
 
@@ -299,7 +319,8 @@ def mix_dig_emission(
         return _linear_mix(neb_hii, neb_dig, frac)
 
     return _mix_dig_backend_evaluations(
-        _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU
+        _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU,
+        dig_active=dig_active
     )
 
 
@@ -316,6 +337,8 @@ def mix_dig_line_luminosities(
     neb_dig_frac: float = 0.0,
     neb_dig_delta_logU: float = -1.0,
     line_sigma_aa: float = 0.0,
+    *,
+    dig_active: bool | None = None,
     **kwargs,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""Predict discrete line luminosities with HII and DIG components.
@@ -361,6 +384,12 @@ def mix_dig_line_luminosities(
         Unused by the line-luminosity channel (kept for a signature identical
         to :func:`mix_dig_emission`; forwarded via ``**kwargs`` to the backend,
         which ignores it). Default: 0.0. [Å]
+    dig_active : bool, optional
+        Whether DIG mixing is active. When ``True``, both HII and DIG are
+        evaluated. When ``False``, only HII is evaluated (skip DIG entirely).
+        When ``None`` (default), uses Python-float check on ``neb_dig_frac``.
+        Call-time overrides of a spec-pinned ``neb_dig_frac`` are not honored
+        when ``dig_active=False`` (#2296). [dimensionless]
     **kwargs
         Additional backend-specific keyword arguments (passed to both calls).
 
@@ -429,12 +458,21 @@ def mix_dig_line_luminosities(
         return line_waves, _linear_mix(line_lums_hii, line_lums_dig, frac)
 
     return _mix_dig_backend_evaluations(
-        _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU
+        _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU,
+        dig_active=dig_active
     )
 
 
 def mix_dig_grid_reconstruction(
-    reconstruct, amplitude, point, table, neb_dig_frac, neb_dig_delta_logU, *, log_domain=False
+    reconstruct,
+    amplitude,
+    point,
+    table,
+    neb_dig_frac,
+    neb_dig_delta_logU,
+    *,
+    log_domain=False,
+    dig_active=None,
 ):
     r"""Mix two per-Q_H grid reconstructions (HII + DIG) at a shifted ``neb_logU`` (#2222).
 
@@ -502,6 +540,11 @@ def mix_dig_grid_reconstruction(
         whose linear form (~1e40 erg/s) overflows float32 (#2269): mixing the
         log10 values directly, rather than exponentiating each to mix and
         re-logging, keeps every intermediate in range.
+    dig_active : bool, optional
+        Whether DIG mixing is active. When ``True``, both HII and DIG are
+        evaluated. When ``False``, only HII is evaluated (skip DIG entirely).
+        When ``None`` (default), uses Python-float check on ``neb_dig_frac``.
+        [dimensionless]
 
     Returns
     -------
@@ -572,5 +615,6 @@ def mix_dig_grid_reconstruction(
         return _linear_mix(hii_result, dig_result, frac)
 
     return _mix_dig_backend_evaluations(
-        _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU
+        _evaluate, _combine, neb_logU, neb_dig_frac, neb_dig_delta_logU,
+        dig_active=dig_active
     )

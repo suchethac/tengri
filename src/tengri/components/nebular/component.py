@@ -147,12 +147,19 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         no-match answer, made loud by #2239), while every other headline
         Hα/Hβ/etc. accessor, ``predict_photometry`` and ``rest_sed`` are
         bit-identical either way (#2236).
+    dig_active : bool
+        Whether Diffuse Ionized Gas (DIG) mixing is active. When ``False``
+        (default, when spec pins ``neb_dig_frac`` at 0.0), the nebular backend
+        is evaluated once per channel. When ``True`` (spec has ``neb_dig_frac``
+        free or fixed nonzero), both HII and DIG components are evaluated and
+        mixed. Resolved at build time via ``_dig_may_be_active(spec)`` (#2262).
     """
 
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
     cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT
+    dig_active: bool = False
 
 
 @dataclass(frozen=True)
@@ -749,6 +756,7 @@ class NebularSEDComponent(TemplateThreading):
                 self.backend,
                 neb_dig_frac=_dig_frac,
                 neb_dig_delta_logU=_dig_delta_logU,
+                dig_active=self.config.dig_active,
                 **cue_call_kwargs,
                 **cue_extras,
                 template_data=template_data,
@@ -772,6 +780,7 @@ class NebularSEDComponent(TemplateThreading):
                 template_data=template_data,
                 neb_dig_frac=_dig_frac,
                 neb_dig_delta_logU=_dig_delta_logU,
+                dig_active=self.config.dig_active,
                 **common_kwargs,
             )
 
@@ -792,6 +801,7 @@ class NebularSEDComponent(TemplateThreading):
                         self.backend,
                         neb_dig_frac=_dig_frac,
                         neb_dig_delta_logU=_dig_delta_logU,
+                        dig_active=self.config.dig_active,
                         **cue_call_kwargs,
                         **cue_extras,
                         template_data=template_data,
@@ -805,6 +815,7 @@ class NebularSEDComponent(TemplateThreading):
                         template_data=template_data,
                         neb_dig_frac=_dig_frac,
                         neb_dig_delta_logU=_dig_delta_logU,
+                        dig_active=self.config.dig_active,
                         **common_kwargs,
                     )
                 # CLAUDE.md contract: vacuum wavelengths throughout. See
@@ -926,6 +937,7 @@ class NebularSEDComponent(TemplateThreading):
                 grid,
                 neb_dig_frac=_dig_frac,
                 neb_dig_delta_logU=_dig_delta_logU,
+                dig_active=self.config.dig_active,
             )
             # The rest-frame twin, from the same interpolation point (#1665).
             # The exact path emits these two together; emitting only the first
@@ -938,6 +950,7 @@ class NebularSEDComponent(TemplateThreading):
                 grid,
                 neb_dig_frac=_dig_frac,
                 neb_dig_delta_logU=_dig_delta_logU,
+                dig_active=self.config.dig_active,
             )
         elif (
             self._state is not None
