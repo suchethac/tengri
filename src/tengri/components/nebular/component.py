@@ -50,11 +50,11 @@ from tengri.utils.scale import log10_magnitude
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 
 #: Nebular parameters only some photoionization backends model. CB19 carries
-#: them as three of its six interpolation axes; CLOUDY, Cue and the baked-in
-#: backend have no such axes. They are threaded per backend by
-#: :func:`_backend_accepted_params` rather than added to the shared kwargs
-#: unconditionally.
-_BACKEND_OPTIONAL_PARAMS: tuple[str, ...] = ("neb_log_nH", "neb_co", "neb_dno")
+#: them as four of its seven interpolation axes (``neb_hbfrac`` joined the
+#: other three in #2213); CLOUDY, Cue and the baked-in backend have no such
+#: axes. They are threaded per backend by :func:`_backend_accepted_params`
+#: rather than added to the shared kwargs unconditionally.
+_BACKEND_OPTIONAL_PARAMS: tuple[str, ...] = ("neb_log_nH", "neb_co", "neb_dno", "neb_hbfrac")
 
 #: Backend methods the shared kwargs dict is splatted into. A parameter is
 #: threaded only when *every* method that exists names it, so a backend that
@@ -648,10 +648,11 @@ class NebularSEDComponent(TemplateThreading):
             # profile width (Prospector-style). Default 100 km/s.
             "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
         }
-        # Axes only some backends model (CB19's log_nH / log_CO / dNO). Passed
-        # only to a backend that names them; a value absent from ``params``
-        # falls through to the backend's own signature default, which matches
-        # the registry default for each, so the two cannot disagree.
+        # Axes only some backends model (CB19's log_nH / log_CO / dNO / hbfrac).
+        # Passed only to a backend that names them; a value absent from
+        # ``params`` falls through to the backend's own signature default,
+        # which matches the registry default for each, so the two cannot
+        # disagree.
         for _name in _backend_accepted_params(type(self.backend)):
             if _name in params:
                 common_kwargs[_name] = jnp.asarray(params[_name])

@@ -80,11 +80,17 @@ REFUSED: dict[str, tuple[str, str]] = {
     # Scoping the dust wildcard to the laws the build selects is what made them
     # declarable, which is the general remedy this ground was pointing at.
     "neb_xid": ("inert", "Feltre NLR only, and a 3-node grid inside a wider validator"),
-    "neb_hbfrac": (
-        "inert",
-        "declared but never wired -- constructor-only argument; HbFrac axis "
-        "collapsed at grid load (#2213)",
-    ),
+    # neb_hbfrac left this list in #2213: HbFrac is now a genuine interpolation
+    # axis (load_cb19_grid retains both nodes; predict_nebular_line_
+    # luminosities / predict_nebular_sed interpolate it; _BACKEND_OPTIONAL_
+    # PARAMS threads it from params), so the wildcard is no longer wired to a
+    # dead argument. It is declarable now, the general remedy this ground
+    # points at -- same shape as the dust attenuation-law modifiers noted
+    # above. (The shipped grid still carries no real variation along this
+    # axis, same as neb_log_nH/neb_co/neb_dno; check_cb19_free_params refuses
+    # freeing it against that file. That is a runtime data guard, not a
+    # reason to withhold the declaration -- the sibling three were never
+    # listed here for the same reason.)
     "shock_b_over_sqrt_n": (
         "inert",
         "real gradient since the index-space fix but ~18% autodiff-vs-FD "

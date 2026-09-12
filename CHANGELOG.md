@@ -62,6 +62,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   attenuation") and the code agree — the code previously attenuated shock
   unconditionally with the birth-cloud form — and by snapping (see Fixed,
   below).
+- `neb_hbfrac` (CB_19's HbFrac axis, matter- vs radiation-bounded escape
+  proxy) now declares `free_prior=Uniform(0.0, 1.0, default=1.0)`, so
+  `neb={'type': 'cb19', 'all_params': FREE}` and `neb={'type': 'cb19',
+  'hbfrac': FREE}` both free it instead of leaving it silently pinned.
+  Dropped from `tools/check_param_free_priors.py`'s `REFUSED` ledger
+  (freeable 90 -> 91, pinned 25 -> 24; it left the `inert` ground). The
+  shipped `data/cb19_templates.h5` carries no real variation along this
+  axis (measured: its two HbFrac nodes are bit-identical), the same
+  placeholder gap #2181 already found for `neb_log_nH` / `neb_co` /
+  `neb_dno` (#2198 tracks the pending 3MdB erratum) -- `neb_hbfrac` joins
+  those three: declared and freeable, refused loudly by
+  `check_cb19_free_params` against the current shipped grid rather than
+  silently inert (#2213).
 
 ### Changed
 
@@ -534,6 +547,103 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   the old ceiling
   could not reach the Narayanan et al. (2018) MUFASA-fitted bump multipliers
   (up to 3.634 at z=4) that `narayanan_prior` itself now centers on (#2226).
+
+- The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
+  ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
+  signature defaults from the declared parameter table
+  (``declared_default(PARAMS, ...)``) or a shared named constant instead of
+  repeating the value as a bare literal; no default value changes (a
+  zero-diff probe over every closure at only-defaults confirms bit-identical
+  output before/after). ``EnergyBalanceSplitIRSEDComponent.predict`` now
+  subscripts ``p["f_cold"]`` and five siblings instead of falling back to a
+  stale ``.get(name, literal)`` default, so a hand-built params dict missing
+  a key raises ``KeyError`` naming it rather than silently substituting the
+  literal. A new stdlib-only guard, ``tools/check_literal_param_defaults.py``,
+  scans ``src/tengri/components/dust/emission/`` for a bare numeral standing
+  in for a name a ``ParamDeclaration`` or component class attribute already
+  owns, and is wired into the same CI job as ``check_param_defaults.py``.
+  ``dust_T``/``dust_beta_ir`` disagree between the shared
+  ``components/dust/_params.py`` table and every analytic template's own
+  default; that disagreement is left as-is and tracked separately (#2261)
+  (#2241).
+- `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
+  believing it the base of the `Tracer*ConversionError` family. On jax
+  0.11.1 that belief is false: `TracerArrayConversionError` (raised by
+  `np.asarray` on a tracer) and `TracerIntegerConversionError` (raised by
+  `operator.index` on a tracer) are siblings of `ConcretizationTypeError`
+  under `JAXTypeError`, not subclasses, so a mapped function that inspects
+  its input with `np.asarray` raised through the handler instead of
+  falling back to the eager per-draw loop. The handler now catches the
+  whole family explicitly (#2264).
+- The nebular component's DIG mixing no longer evaluates the DIG branch when
+  the spec pins ``neb_dig_frac`` at the declared ``Fixed(0.0)`` default. A
+  build-time predicate ``_dig_may_be_active(spec)`` resolves to a frozen
+  ``dig_active`` config field, threaded to all seven mixing call sites (exact
+  path: cue + cloudy/cb19 continuum/lines; grid path: photometry + restband
+  reconstructions in ``apply``, plus ``predict_line_fluxes``'s own
+  line-luminosity reconstruction call), so a default model evaluates the
+  nebular backend once per channel instead of two, both the exact and the
+  fast-grid path. When ``dig_active=False``, the mixing core skips the second
+  evaluation entirely, returning the HII result unconditionally, not a
+  zero-weighted one. Measured gradient FLOPs of ``predict_photometry`` on the
+  #2195 fixture: the declared default is 147,434,528 against 159,926,608
+  forced active (159,926,608 / 147,434,528 = 1.085x), well short of a flat
+  50% -- the removed DIG evaluation is a small share of a
+  photometry gradient once dust attenuation and emission are in the graph, so
+  the saving scales with how much of the graph the nebular backend is, not a
+  fixed fraction. Because ``dig_active`` is resolved once from the spec at
+  build time, a call-time override of a spec-pinned ``neb_dig_frac`` (e.g.
+  passing a nonzero value through ``params`` at predict time) is not honored
+  on this path; declare the fraction ``FREE`` or ``Fixed`` at the intended
+  nonzero value instead (#2296) (#2262).
+- `neb_hbfrac` was silently inert at any value: declared as a CB_19
+  parameter, but `CB19Backend.__init__`'s `hbfrac` constructor argument was
+  never threaded from `params`, and `load_cb19_grid` collapsed the HbFrac
+  axis to a single slice at load time regardless. `load_cb19_grid` now
+  retains both HbFrac nodes; `predict_nebular_line_luminosities` /
+  `predict_nebular_sed` interpolate `neb_hbfrac` at runtime via the same
+  `map_coordinates` scheme as `neb_log_nH` / `neb_co` / `neb_dno` (linear
+  over the grid's two nodes -- the only interpolant they support); and
+  `_BACKEND_OPTIONAL_PARAMS` threads it from `params` exactly like those
+  three siblings. `cb19_precompute.precompute` (the `WavePrecomp` adapter for
+  `neb={'type': 'cb19'}`) keeps HbFrac a discrete, load-time-style choice for
+  that surface, selecting the nearest retained node itself immediately after
+  loading (#2213).
+- BOSA's dust-emission template **shape** was silently pinned at the
+  unit-luminosity template regardless of the fitted luminosity. BOSA
+  (Boquien & Salim 2021) interpolates its template library on a
+  `(log L_TIR, log sSFR)` grid, so which row gets selected is itself a
+  function of the absorbed luminosity -- not just the overall normalization.
+  `BosaIRSEDComponent` never overrode `EmissionComponent.factors_l_ir`
+  (default `True`, unlike `energy_balance_split`, which does), so the
+  generic `apply()`-level speed shortcut always evaluated `predict()` at
+  `L_ir = 1` and rescaled the result afterwards -- correct total power,
+  wrong shape, always the same shape, across any luminosity range.
+  `factors_l_ir` is now `False` for BOSA, so `predict()` sees the real
+  budget and the grid lookup selects the luminosity-appropriate row. This
+  also required threading a float32-safe `log_L_ir` [dex] input through the
+  component and its closure (mirroring `energy_balance_split`), since the
+  real linear `L_ir` (~1e43 erg/s) overflows to `inf` in pure float32 while
+  its log does not. A second, compounding defect made the first fix alone
+  insufficient at real galaxy scales: the packaged grid's axis is
+  `log10(L_TIR / Lsun)` (Boquien & Salim 2021), while `L_ir` arrives in
+  erg/s (the tengri-wide SED contract) with no conversion applied, so any
+  astrophysically realistic `L_ir` (~1e42-1e45 erg/s) numerically saturated
+  the grid's ceiling node regardless of the real budget. The axis lookup
+  (only -- normalization stays in erg/s) now subtracts `LOG10_L_SUN`
+  (`tengri.utils.sed_quantities`, the `dust_log_L_ir` precedent) from the
+  erg/s log budget, so the template shape now tracks the fitted L_TIR across
+  the grid's full Lsun-relative span at real galaxy luminosities, not only
+  in the abstract (#2272).
+- Importing a submodule through an aliased package spelling
+  (``from tengri.sps.dsps_wrapper import ...``) re-executed the module file:
+  two module objects for one file in one process, each with its own
+  module-level state (e.g. the SSP content-hash cache), the second execution
+  overwriting the canonical package attribute. A meta-path finder now binds
+  the existing canonical module object under the aliased name with no
+  re-execution, in both import orders, for all nine component aliases;
+  aliases stay lazy (no eager submodule imports at ``import tengri``)
+  (#2256).
 
 ### Added
 
