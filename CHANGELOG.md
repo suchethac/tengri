@@ -107,6 +107,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- BOSA's dust-emission template **shape** was silently pinned at the
+  unit-luminosity template regardless of the fitted luminosity. BOSA
+  (Boquien & Salim 2021) interpolates its template library on a
+  `(log L_TIR, log sSFR)` grid, so which row gets selected is itself a
+  function of the absorbed luminosity -- not just the overall normalization.
+  `BosaIRSEDComponent` never overrode `EmissionComponent.factors_l_ir`
+  (default `True`, unlike `energy_balance_split`, which does), so the
+  generic `apply()`-level speed shortcut always evaluated `predict()` at
+  `L_ir = 1` and rescaled the result afterwards -- correct total power,
+  wrong shape, always the same shape, across any luminosity range.
+  `factors_l_ir` is now `False` for BOSA, so `predict()` sees the real
+  budget and the grid lookup selects the luminosity-appropriate row. This
+  also required threading a float32-safe `log_L_ir` [dex] input through the
+  component and its closure (mirroring `energy_balance_split`), since the
+  real linear `L_ir` (~1e43 erg/s) overflows to `inf` in pure float32 while
+  its log does not. A second, compounding defect made the first fix alone
+  insufficient at real galaxy scales: the packaged grid's axis is
+  `log10(L_TIR / Lsun)` (Boquien & Salim 2021), while `L_ir` arrives in
+  erg/s (the tengri-wide SED contract) with no conversion applied, so any
+  astrophysically realistic `L_ir` (~1e42-1e45 erg/s) numerically saturated
+  the grid's ceiling node regardless of the real budget. The axis lookup
+  (only -- normalization stays in erg/s) now subtracts `LOG10_L_SUN`
+  (`tengri.utils.sed_quantities`, the `dust_log_L_ir` precedent) from the
+  erg/s log budget, so the template shape now tracks the fitted L_TIR across
+  the grid's full Lsun-relative span at real galaxy luminosities, not only
+  in the abstract (#2272).
 - ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
   ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
   types' own ``grid`` keys already did, and the path now round-trips through
