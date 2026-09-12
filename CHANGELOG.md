@@ -57,7 +57,6 @@
   `RadioSEDComponentConfig.include_freefree`; documented in
   `docs/model_reference/xray_radio.md`.
 
-
 - `run_nuts`/`run_dynamic_hmc` (and, via the same `_vmap_chains` seam,
   `mcmc_hmc`'s existing `chain_method="parallel"`) accept
   `chain_parallel: {"auto", "vmap", "pmap"}`, default `"auto"`. `"pmap"` maps
