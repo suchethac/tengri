@@ -286,7 +286,7 @@ def _build_engine(ssp_wide, obs):
     n_band = model.observation.n_data
     assert n_band <= len(_DATA), f"fixture has {n_band} bands; extend _DATA"
     truth = np.asarray(_DATA[:n_band])
-    fitter = Fitter(model, jnp.asarray(truth), jnp.asarray(truth * 0.05))
+    fitter = Fitter(model, jnp.asarray(truth), jnp.asarray(truth * 0.05), profile_mass=False)
     pos = fitter._initialize_unbounded(jax.random.PRNGKey(1))
     engine = build_jit_engine(fitter, pos)
     return engine, fitter._data_args, engine["flatten"](pos)

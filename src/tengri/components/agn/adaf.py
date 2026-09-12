@@ -723,12 +723,14 @@ def adaf_spectrum(
 
     total = sc + brems
     # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
-    # reference on the float32 path). nu descending -> reverse for trapezoid.
+    # reference on the float32 path). nu descending -> negate the trapezoid
+    # (reversed operands are silently zeroed under MLX compile on Apple GPU:
+    # jax-mps#232, #2295).
     if _f32:
         # ``l_bol_erg`` ~1e44 and the ~1e43 erg/s spectral integral overflow;
         # work the normalization in L_sun (total/L_sun keeps the integral in
         # range) and order 10**log_lbol / integral before the ~1e28 shape.
-        integral = jnp.trapezoid((total / _LSUN_ERG)[::-1], nu[::-1])
+        integral = -jnp.trapezoid(total / _LSUN_ERG, nu)
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
         # smallest subnormal is 1.4e-45, so the literal IS 0.0 there, in this,
         # the float32 branch, the divide-by-zero guard guarded nothing. Returns
@@ -739,7 +741,7 @@ def adaf_spectrum(
             * total
         )
     else:
-        integral = jnp.trapezoid(total[::-1], nu[::-1])
+        integral = -jnp.trapezoid(total, nu)
         l_nu = (
             10.0**agn_log_lbol
             * _LSUN_ERG

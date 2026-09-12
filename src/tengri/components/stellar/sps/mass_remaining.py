@@ -65,6 +65,8 @@ References
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.scale import representable_denominator
+
 # ── IMF definitions: dn/dlog(m) as a function of mass ─────────────
 
 
@@ -326,7 +328,8 @@ def compute_mass_remaining_fraction(
         # ``utils/sed_quantities.py``.
         return jnp.where(
             total_mass > 1e-20,
-            (living_mass + dead_remnant_mass) / jnp.maximum(total_mass, 1e-30),
+            (living_mass + dead_remnant_mass)
+            / jnp.maximum(total_mass, representable_denominator(1e-30)),
             jnp.nan,
         )
 
