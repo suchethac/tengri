@@ -23,6 +23,7 @@ import jax.numpy as jnp
 from tengri.components.igm._params import DEFAULT_DLA_LOG_N_HI
 from tengri.components.igm.dla import _A_LYA, _F_LYA, _NU_LYA, _WL_LYA
 from tengri.cosmology import PLANCK18
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import C_CGS
 
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
@@ -33,7 +34,7 @@ _N_LINES = 39
 # line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0; a rounded value put the
 # forest edge ~0.33 Å rest / ~2.6 Å observed at z=7 redward of every other
 # code; see tests/regression/paper/test_igm_inoue.py).
-_LAMBDA_LYMAN = jnp.array(
+_LAMBDA_LYMAN = host_array(
     [
         1215.67,
         1025.720,
@@ -83,7 +84,7 @@ _LAMBDA_LIMIT = 911.8  # Angstrom
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
 # Shape (39, 3): [A_j1, A_j2, A_j3]
 # From eazy-py LAFcoeff.txt
-_A_LAF = jnp.array(
+_A_LAF = host_array(
     [
         [1.690e-02, 2.354e-03, 1.026e-04],
         [4.692e-03, 6.536e-04, 2.849e-05],
@@ -136,7 +137,7 @@ _A_LAF = jnp.array(
 # high (a near-copy of the first) and the first column ~1.1-1.27x too high
 # in the line tail, over-absorbing the z >= 2 Lyman continuum. Regression:
 # tests/components/igm/test_inoue14_dla_coefficients.py.
-_A_DLA = jnp.array(
+_A_DLA = host_array(
     [
         [1.617e-04, 5.390e-05],
         [1.545e-04, 5.151e-05],
@@ -194,7 +195,7 @@ def _tau_ls_laf(
     """
     # Broadcast: wave_obs (n_wave,) vs _LAMBDA_LYMAN (39,)
     # Shapes: lam_j (39, 1), wave (1, n_wave) -> (39, n_wave)
-    lam_j = _LAMBDA_LYMAN[:, None]  # (39, 1)
+    lam_j = device_table(_LAMBDA_LYMAN)[:, None]  # (39, 1)
     wave = wave_obs[None, :]  # (1, n_wave)
 
     lam_max = lam_j * (1.0 + z_source)
@@ -204,9 +205,9 @@ def _tau_ls_laf(
     lam_break2 = 5.7 * lam_j
 
     ratio = wave / lam_j  # (39, n_wave)
-    t1 = _A_LAF[:, 0:1] * ratio**1.2
-    t2 = _A_LAF[:, 1:2] * ratio**3.7
-    t3 = _A_LAF[:, 2:3] * ratio**5.5
+    t1 = device_table(_A_LAF)[:, 0:1] * ratio**1.2
+    t2 = device_table(_A_LAF)[:, 1:2] * ratio**3.7
+    t3 = device_table(_A_LAF)[:, 2:3] * ratio**5.5
 
     t_j = jnp.where(wave < lam_break1, t1, jnp.where(wave < lam_break2, t2, t3))
     return jnp.sum(jnp.where(active, t_j, 0.0), axis=0)
@@ -223,7 +224,7 @@ def _tau_ls_dla(
 
     Vectorized over all 39 Lyman transitions (no Python loop).
     """
-    lam_j = _LAMBDA_LYMAN[:, None]  # (39, 1)
+    lam_j = device_table(_LAMBDA_LYMAN)[:, None]  # (39, 1)
     wave = wave_obs[None, :]  # (1, n_wave)
 
     lam_max = lam_j * (1.0 + z_source)
@@ -232,8 +233,8 @@ def _tau_ls_dla(
     lam_break = 3.0 * lam_j
     ratio = wave / lam_j
 
-    t1 = _A_DLA[:, 0:1] * ratio**2.0
-    t2 = _A_DLA[:, 1:2] * ratio**3.0
+    t1 = device_table(_A_DLA)[:, 0:1] * ratio**2.0
+    t2 = device_table(_A_DLA)[:, 1:2] * ratio**3.0
 
     t_j = jnp.where(wave < lam_break, t1, t2)
     return jnp.sum(jnp.where(active, t_j, 0.0), axis=0)
@@ -760,7 +761,7 @@ def igm_transmission_patchy(
 
 # Lyman-series rest-frame wavelengths and coefficients (Madau 1995, Table 1).
 # 17 lines from Ly-alpha (1216 Å) to Ly-limit.
-_MADAU_LYW = jnp.array(
+_MADAU_LYW = host_array(
     [
         1215.67,
         1025.72,
@@ -781,7 +782,7 @@ _MADAU_LYW = jnp.array(
         914.576,
     ]
 )
-_MADAU_COEFF = jnp.array(
+_MADAU_COEFF = host_array(
     [
         3.6e-3,
         1.7e-3,
@@ -889,7 +890,7 @@ def igm_transmission_madau(
     tau_line, _ = jax.lax.scan(
         _add_line_tau,
         jnp.zeros_like(wave_obs),
-        jnp.stack([_MADAU_LYW, _MADAU_COEFF], axis=1),
+        jnp.stack([device_table(_MADAU_LYW), device_table(_MADAU_COEFF)], axis=1),
     )
 
     # ── Lyman-continuum absorption ────────────────────────────────
