@@ -33,6 +33,7 @@ EXPECTED_ALL = frozenset(
         # Core
         "Exponential",
         "FilterConvention",
+        "FilterCurve",
         "FlatSlab",
         "ForwardModel",
         "Galaxy",
@@ -307,3 +308,31 @@ def test_every_curated_dir_name_resolves() -> None:
     """No curated tab-completion name may 404 on attribute access."""
     for name in dir(tengri):
         assert hasattr(tengri, name), f"curated name {name!r} does not resolve"
+
+
+# Analytic mean-SFH shapes, flat-importable off ``tengri`` even though none
+# is in ``__all__`` (matching every other physics function -- SFH shapes are
+# reached in practice via the ``sfh={'type': ...}`` build grammar, not a
+# top-level import, so they are demoted-by-omission rather than curated).
+# Task 11 item 9: ``declining_exponential`` (the FSPS/bagpipes "tau" shape,
+# registered SFH type ``"tau"``) was missing from this flat set while its
+# siblings were present -- ``tengri.declining_exponential`` raised
+# AttributeError though ``tengri.sfh.declining_exponential`` worked.
+_SFH_MEAN_SHAPE_NAMES = (
+    "exponential",
+    "delayed_exponential",
+    "declining_exponential",
+    "constant",
+    "delayed_tau",
+    "dpl",
+    "double_powerlaw",
+)
+
+
+@pytest.mark.parametrize("name", _SFH_MEAN_SHAPE_NAMES)
+def test_sfh_mean_shape_functions_are_flat_importable(name: str) -> None:
+    """Every analytic mean-SFH shape resolves directly off ``tengri``."""
+    assert hasattr(tengri, name), f"tengri.{name} does not resolve"
+    assert getattr(tengri, name) is getattr(tengri.sfh, name), (
+        f"tengri.{name} and tengri.sfh.{name} are different objects"
+    )

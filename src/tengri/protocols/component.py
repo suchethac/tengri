@@ -52,6 +52,7 @@ __all__ = [
     "SEDComponentConfig",
     "SEDComponentState",
     "declared_default",
+    "declared_prior",
 ]
 
 
@@ -201,6 +202,56 @@ def declared_default(params: Sequence[ParamDeclaration], name: str) -> float:
                 f"give the declaration a `default=` or state the value explicitly."
             )
         return float(default)
+    raise KeyError(f"{name!r} is not declared in the supplied PARAMS tuple.")
+
+
+def declared_prior(params: Sequence[ParamDeclaration], name: str) -> Any:
+    """Read a parameter's registered prior distribution out of its declaration.
+
+    Companion to :func:`declared_default`, one step earlier: instead of just
+    the scalar default, this returns the whole prior object (``lo``, ``hi``
+    and ``default`` together), so a component wrapper never has to restate
+    bounds that already have a canonical home.
+
+    Use it when a class-level free-parameter attribute on a
+    :class:`~tengri.components.sed_model_component.SEDModelComponent`
+    subclass must track a shared ``PARAMS`` declaration exactly, rather than
+    duplicating its numbers as a second literal. A duplicate is how
+    ``CAT3DTorus`` and ``Silva04Torus`` drifted out of sync with the grid
+    extent their own priors were supposed to describe: their class bodies
+    restated ``Uniform(lo, hi, ...)`` literals that had gone stale relative to
+    ``tengri.components.agn._params.PARAMS``, and nothing caught it (Task 1 of
+    the AGNfitter-rX parity plan, mechanism M-A).
+
+    Parameters
+    ----------
+    params : sequence of ParamDeclaration
+        The declaring component's ``PARAMS`` tuple.
+    name : str
+        Parameter name to look up, e.g. ``"agn_a_cat3d"``.
+
+    Returns
+    -------
+    Distribution
+        The declared prior object (e.g. a :class:`~tengri.parameters.priors.Uniform`).
+        Callers that also want their own component-local ``description`` /
+        ``units`` text should read ``.lo`` / ``.hi`` / ``.default`` off the
+        result and construct a fresh prior from them, rather than reusing the
+        object directly and inheriting its (often empty) description.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not declared in ``params``.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; import-time lookup over a static
+    tuple, never traced.
+    """
+    for declaration in params:
+        if declaration.name == name:
+            return declaration.prior
     raise KeyError(f"{name!r} is not declared in the supplied PARAMS tuple.")
 
 

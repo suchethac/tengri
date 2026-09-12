@@ -448,8 +448,8 @@ agn={
     'norm': 'cigale_joint',
 }
 
-# Or the legacy form (one-block AGN):
-agn={'type': 'legacy', 'all_params': Fixed(DEFAULT)}
+# Or a monolithic model (one self-contained block, no sub-blocks):
+agn={'type': 'skirtor_stalevski', 'all_params': Fixed(DEFAULT)}
 ```
 
 **Gotchas:**

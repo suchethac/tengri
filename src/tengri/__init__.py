@@ -331,6 +331,7 @@ from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
     constant,
+    declining_exponential,
     delayed_exponential,
     delayed_tau,
     double_powerlaw,
@@ -515,6 +516,22 @@ xray = _components.xray
 
 # Register module aliases for convenient short imports (Pattern 3: from tengri.agn import ...)
 sys.modules["tengri.agn"] = agn
+# ``tengri.agn.priors`` is an ALIAS import (``components/agn/__init__.py`` does
+# ``from tengri.parameters import agn_priors as priors``), not a physical file
+# inside ``components/agn/``'s own directory -- unlike e.g. ``dust.priors``,
+# which IS a real ``components/dust/priors.py`` and so is found by ordinary
+# file-based import machinery once ``tengri.dust`` is aliased. Aliasing
+# ``tengri.agn`` alone therefore makes attribute access
+# (``tengri.agn.priors.agnfitter_priors``) and the two-level
+# ``from tengri.agn import priors`` (which falls back to attribute lookup on
+# the already-imported package when submodule import fails) both work, but
+# ``from tengri.agn.priors import agnfitter_priors`` needs ``tengri.agn.priors``
+# to resolve as a genuine module BEFORE any attribute lookup happens -- there
+# is no such fallback for a three-level ``from a.b.c import name``. Registering
+# the SAME module object under this second key lets the import system find it
+# via the sys.modules cache directly, without ever touching the (nonexistent)
+# ``components/agn/priors.py`` file path.
+sys.modules["tengri.agn.priors"] = agn.priors
 sys.modules["tengri.dust"] = dust
 sys.modules["tengri.nebular"] = nebular
 sys.modules["tengri.sfh"] = sfh
@@ -523,6 +540,24 @@ sys.modules["tengri.stellar"] = stellar
 sys.modules["tengri.igm"] = igm
 sys.modules["tengri.radio"] = radio
 sys.modules["tengri.xray"] = xray
+
+# Install import finder to resolve submodule imports through aliases to canonical
+# modules, avoiding re-execution of module-level code (#2256).
+from tengri._module_aliases import install_alias_finder
+
+install_alias_finder(
+    {
+        "tengri.agn": "tengri.components.agn",
+        "tengri.dust": "tengri.components.dust",
+        "tengri.nebular": "tengri.components.nebular",
+        "tengri.sfh": "tengri.components.stellar.sfh",
+        "tengri.sps": "tengri.components.stellar.sps",
+        "tengri.stellar": "tengri.components.stellar",
+        "tengri.igm": "tengri.components.igm",
+        "tengri.radio": "tengri.components.radio",
+        "tengri.xray": "tengri.components.xray",
+    }
+)
 
 # Observation layer shortcut (already exists in imports above)
 # observation module is imported separately below
@@ -709,6 +744,7 @@ __all__ = [  # noqa: RUF022
     "data_path",
     # Components & physics
     "FilterConvention",
+    "FilterCurve",
     "Data",
     "CompositeIndexDef",
     "SpectralIndexDef",

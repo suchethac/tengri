@@ -13,9 +13,10 @@ References
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
-   IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
-   arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
+.. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+   "The dust covering factor in active galactic nuclei," MNRAS, 458,
+   2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
+   https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
    radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
    (2024). arXiv:2405.12111.
@@ -94,9 +95,9 @@ def precompute_skirtor_agnfitter_photometry(
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
        torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
        arXiv:1109.1286.
-    .. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
-       IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
-       arXiv:1602.01954.
+    .. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+       "The dust covering factor in active galactic nuclei," MNRAS, 458,
+       2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
 
     Notes
     -----
@@ -111,7 +112,6 @@ def precompute_skirtor_agnfitter_photometry(
     the runtime normalization in ``skirtor_agnfitter.py``.
     """
     from tengri.components.agn._phys import C_LIGHT as _C_CGS
-    from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
     raw = _load_skirtor_agnfitter_arrays(grid_path)
     grid = np.asarray(raw["template"], dtype=np.float64)  # (n_oa, n_incl, n_tv, n_wave)
@@ -186,8 +186,6 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
     -----
     **JIT-compatible**: yes, pure JAX with no data I/O.
     """
-    from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
-
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
 
@@ -236,7 +234,11 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
             axes,
             (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
         )
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        # grid_phot/phot already carries the _LSUN_ERG factor from the
+        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
+        # not multiply it in again here (fix round 1: this double-counted
+        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        l_scale = 10.0**agn_log_lbol * agn_torus_frac
         return l_scale * phot
 
     return skirtor_agnfitter_photometry
@@ -333,7 +335,11 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     @jax.jit
     def skirtor_agnfitter_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """SKIRTOR_mean_3p torus photometry with collapsed (fixed) axes via PCHIP."""
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        # grid_phot/phot already carries the _LSUN_ERG factor from the
+        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
+        # not multiply it in again here (fix round 1: this double-counted
+        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        l_scale = 10.0**agn_log_lbol * agn_torus_frac
         phot = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_scale * phot
 

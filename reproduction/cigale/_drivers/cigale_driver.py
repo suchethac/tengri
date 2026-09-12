@@ -138,68 +138,58 @@ def to_lnu(sed):
     return U.wnm_to_erg_per_hz_per_aa(sed.wavelength_grid, sed.luminosity)
 
 
-def attenuation_curve(law_name, **params):
-    """Extract attenuation curve A_λ from a pcigale dust law.
+def attenuation_curve(law_name, wave_aa, **params):
+    """A(λ)/A_V from a pcigale dust law's own analytic curve function.
 
-    Applies the dust attenuation module to a flat unity stellar SED
-    and computes A_λ = -2.5 log10(L_attenuated / L_intrinsic).
+    Calls the module-level curve function each ``dustatt_*`` module exposes —
+    ``a_vs_ebv`` for the Calzetti/Leitherer family, ``alambda_av`` for the
+    Charlot & Fall power laws — on ``wave_aa``, and normalizes to its value at
+    5500 Å.
+
+    This reads the *law*, not a spectrum attenuated by it. Running a stellar
+    SED through the module instead measures something else: ``calzleit``
+    (``E_BV_old_factor``, default 0.44) and ``modified_CF00`` (birth-cloud term
+    on young stars only) attenuate the young and old populations differently,
+    so ``-2.5 log10(L_att/L_int)`` on a composite SED returns an
+    SSP-weighted *mixture* of two curves, which depends on the SFH and the
+    separation age. Against that mixture tengri's single analytic law
+    disagrees by 1.7 % (calzleit) to 50 % (modified_CF00) with no physics
+    behind either number. ``modified_CF00`` is the one law whose comparison
+    needs two curves on both sides, and the notebook composes them explicitly.
 
     Parameters
     ----------
     law_name : str
-        Dust law module name (e.g., "dustatt_modified_starburst").
+        Dust law module name (e.g. ``"dustatt_modified_starburst"``).
+    wave_aa : array_like, shape (n_wave,)
+        Wavelength grid in Angstroms.
     **params : dict
-        Parameters for the dust law (e.g., E_BV=0.3).
+        Keyword arguments for the module's curve function. ``a_vs_ebv`` takes
+        ``bump_wave``, ``bump_width``, ``bump_ampl`` and ``power_slope`` (in
+        nm and CIGALE's own units); ``alambda_av`` takes ``delta``.
 
     Returns
     -------
-    wave_aa : ndarray, shape (n_wave,)
-        Wavelength in Angstroms.
-    A_lambda_mag : ndarray, shape (n_wave,)
-        Attenuation in magnitudes.
+    a_over_av : ndarray, shape (n_wave,)
+        A(λ) normalized to A_V, dimensionless.
+
+    Raises
+    ------
+    AttributeError
+        If the module exposes neither ``a_vs_ebv`` nor ``alambda_av``. Raised
+        rather than swallowed: a law that stops evaluating must vanish from
+        the panel loudly, not silently.
     """
-    # Build a flat stellar SED to apply attenuation to. Times are in Myr
-    # for sfhdelayed; age_burst=20 / tau_burst=50 are safe defaults that
-    # avoid the empty-burst-array crash in pcigale.
-    sed_intrinsic = SED()
-    sfh_cls = _get_module_class("sfhdelayed")
-    sfh = sfh_cls(
-        name="sfhdelayed",
-        tau_main=1000,
-        age_main=5000,
-        tau_burst=50,
-        age_burst=20,
-        f_burst=0.0,
-        sfr_A=1.0,
-        normalise=True,
-    )
-    sfh.process(sed_intrinsic)
+    mod = importlib.import_module(f"pcigale.sed_modules.{law_name}")
+    if hasattr(mod, "a_vs_ebv"):
+        curve = mod.a_vs_ebv
+    else:
+        curve = mod.alambda_av
 
-    ssp_cls = _get_module_class("bc03")
-    ssp = ssp_cls(name="bc03", imf=1, metallicity=0.02, separation_age=10)
-    ssp.process(sed_intrinsic)
-
-    # Get the intrinsic spectrum
-    L_intrinsic = sed_intrinsic.luminosity.copy()
-
-    # Apply attenuation
-    sed_attenuated = SED()
-    sfh.process(sed_attenuated)
-    ssp.process(sed_attenuated)
-
-    dust_cls = _get_module_class(law_name)
-    dust = dust_cls(name=law_name, **params)
-    dust.process(sed_attenuated)
-
-    L_attenuated = sed_attenuated.luminosity
-
-    # Compute A_λ in magnitudes
-    with np.errstate(divide="ignore", invalid="ignore"):
-        A_lambda_mag = -2.5 * np.log10(L_attenuated / L_intrinsic)
-    A_lambda_mag = np.nan_to_num(A_lambda_mag, nan=0.0, posinf=0.0, neginf=0.0)
-
-    wave_aa, _ = U.wnm_to_erg_per_hz_per_aa(sed_intrinsic.wavelength_grid, L_intrinsic)
-    return wave_aa, A_lambda_mag
+    wave_aa = np.asarray(wave_aa, dtype=float)
+    grid_nm = np.concatenate([wave_aa, [5500.0]]) / 10.0
+    a = np.asarray(curve(grid_nm, **params), dtype=float)
+    return a[:-1] / a[-1]
 
 
 def sfh_curve(sfh_module_name, **params):

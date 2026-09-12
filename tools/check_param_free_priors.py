@@ -72,14 +72,13 @@ sys.path.insert(0, str(ROOT / "src"))
 from tengri.parameters.priors import Fixed
 from tengri.parameters.registry import registry
 
-#: name -> (ground, reason). See the module docstring for the four grounds.
+#: name -> (ground, reason). See the module docstring for the six grounds.
 REFUSED: dict[str, tuple[str, str]] = {
     # ── inert: the wildcard is not scoped to the variant that reads them ──
     # The four attenuation-law shape modifiers that used to sit here --
     # dust_Rv, dust_delta, dust_bump_strength, dust_slope -- are declared now.
     # Scoping the dust wildcard to the laws the build selects is what made them
     # declarable, which is the general remedy this ground was pointing at.
-    "neb_xid": ("inert", "Feltre NLR only, and a 3-node grid inside a wider validator"),
     # neb_hbfrac left this list in #2213: HbFrac is now a genuine interpolation
     # axis (load_cb19_grid retains both nodes; predict_nebular_line_
     # luminosities / predict_nebular_sed interpolate it; _BACKEND_OPTIONAL_
@@ -91,6 +90,7 @@ REFUSED: dict[str, tuple[str, str]] = {
     # freeing it against that file. That is a runtime data guard, not a
     # reason to withhold the declaration -- the sibling three were never
     # listed here for the same reason.)
+
     "shock_b_over_sqrt_n": (
         "inert",
         "real gradient since the index-space fix but ~18% autodiff-vs-FD "
@@ -167,8 +167,6 @@ REFUSED: dict[str, tuple[str, str]] = {
         "Sec 2.1.2); no range in the paper's prior table or reference code "
         "(default 0.0 only) -- any interval would be invented",
     ),
-    "xray_delta_alpha_ox": ("no-evidence", "needs the Just+2007 alpha_ox intrinsic scatter"),
-    "agn_xray_delta_alpha_ox": ("no-evidence", "as xray_delta_alpha_ox; kept in step with it"),
 }
 
 VALID_GROUNDS = {
@@ -206,7 +204,7 @@ def main() -> int:
             print(f"  {name}")
         print(
             "\nGive each a free_prior (its admissible range -- measured from the grid it\n"
-            "indexes where there is one, never transcribed from a description), or add it\n"
+            "indexes where there is one, never hand-entered from a description), or add it\n"
             "to REFUSED in this file with one of the six grounds and a reason."
         )
 

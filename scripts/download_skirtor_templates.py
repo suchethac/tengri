@@ -256,7 +256,7 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
         grp.create_dataset("cos_inclination", data=COS_INC_VALUES)
 
         # Store spectra as float32 to keep the committed grid small (the R axis
-        # tripled the cell count). Templates are normalised per-∫dust at f64 build
+        # tripled the cell count). Templates are normalized per-∫dust at f64 build
         # precision above; f32 storage (~1e-7) is well below all SED tolerances,
         # and node-exact / path-vs-path tests stay machine-precise (same stored
         # values on both sides). Axes/norm stay f64.

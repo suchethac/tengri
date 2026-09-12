@@ -16,6 +16,8 @@ from tengri.components.agn.cat3d_torus_model import CAT3DTorus
 from tengri.components.agn.kd18_disc_model import KD18Disc
 from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 from tengri.components.agn.silva04_model import Silva04Torus
+from tengri.components.agn.skirtor_agnfitter_model import SKIRTORAgnfitterTorus
+from tengri.components.agn.skirtor_model import SKIRTORTorus
 from tengri.components.sed_model_component import SEDModelComponent
 
 pytestmark = pytest.mark.contract
@@ -82,6 +84,42 @@ class TestKD18DiscContract:
         inputs = component.inputs()
         assert len(inputs) == 0
 
+    def test_kd18_bounds_match_canonical_declaration(self):
+        """Every KD18Disc free-parameter bound/default derives from the
+        canonical PARAMS declaration (Task 11 fix round 1, ruling R25).
+
+        Before this fix, all twelve of these were restated as independent
+        literals that had drifted from ``agn/_params.py`` -- e.g.
+        ``log_lbol`` default ``11.0`` vs canonical ``10.0``, ``log_mbh``
+        default ``8.0`` vs canonical ``7.0``, ``log_ledd`` bounds
+        ``(-3.0, 0.0)`` vs canonical ``(-2.0, 0.5)``, ``a_spin`` default
+        ``0.5`` vs canonical ``0.0``. Fails if the class ever restates one
+        of them as a literal again.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = KD18Disc()
+        for attr, canonical_name in (
+            ("log_lbol", "agn_log_lbol"),
+            ("log_mbh", "agn_log_mbh"),
+            ("log_ledd", "agn_log_ledd"),
+            ("a_spin", "agn_a_spin"),
+            ("cos_inc", "agn_cos_inc"),
+            ("f_hard", "agn_f_hard"),
+            ("gamma_warm", "agn_gamma_warm"),
+            ("kt_warm", "agn_kt_warm"),
+            ("gamma_hard", "agn_gamma_hard"),
+            ("kt_hot", "agn_kt_hot"),
+            ("r_warm_ratio", "agn_r_warm_ratio"),
+            ("lum_ratio", "agn_lum_ratio"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr
+
     def test_kd18_predict_shape(self):
         """KD18Disc.predict returns valid shapes."""
         component = KD18Disc()
@@ -130,6 +168,32 @@ class TestPowerLawDiscContract:
         expected = {"agn_log_lbol", "agn_alpha", "agn_T_max", "agn_lum_ratio"}
         assert param_names == expected
 
+    def test_powerlaw_bounds_match_canonical_declaration(self):
+        """Every PowerLawDisc free-parameter bound/default derives from the
+        canonical PARAMS declaration (Task 11 fix round 1, ruling R25).
+
+        Before this fix, ``log_lbol`` restated default ``11.0`` vs
+        canonical ``10.0``; ``alpha`` restated bounds ``(-1.5, -0.5)`` vs
+        canonical ``(-2.0, 0.0)``; ``lum_ratio`` restated bounds/default
+        ``(0.0, 1.0, 0.5)`` vs canonical ``(0.0, 5.0, 1.0)``. Fails if the
+        class ever restates one of them as a literal again.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = PowerLawDisc()
+        for attr, canonical_name in (
+            ("log_lbol", "agn_log_lbol"),
+            ("alpha", "agn_alpha"),
+            ("T_max", "agn_T_max"),
+            ("lum_ratio", "agn_lum_ratio"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr
+
     def test_powerlaw_outputs(self):
         """PowerLawDisc publishes L_agn_disc."""
         component = PowerLawDisc()
@@ -176,6 +240,43 @@ class TestSilva04TorusContract:
 
         expected = {"agn_log_lbol", "agn_log_nh_silva", "agn_torus_frac"}
         assert param_names == expected
+
+    def test_silva04_log_nh_matches_canonical_declaration(self):
+        """log_nh_silva derives from the canonical PARAMS declaration (single source
+        of truth, Task 1/M-A). Fails if the class ever restates a literal
+        ``Uniform(lo, hi, ...)`` that can drift from ``agn_log_nh_silva`` again,
+        the way it drifted to ``(22.0, 25.0)`` while the grid moved to
+        ``(21.5, 24.45)``.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        canonical = declared_prior(PARAMS, "agn_log_nh_silva")
+        component = Silva04Torus()
+        assert component.log_nh_silva.lo == canonical.lo
+        assert component.log_nh_silva.hi == canonical.hi
+        assert component.log_nh_silva.default == canonical.default
+
+    def test_silva04_log_lbol_and_torus_frac_match_canonical_declaration(self):
+        """log_lbol/torus_frac derive from the canonical PARAMS declarations
+        (Task 11 fix round 1, ruling R25). Before this fix, ``log_lbol``
+        restated default ``11.0`` vs canonical ``10.0`` and ``torus_frac``
+        restated bounds/default vs canonical. Fails if the class ever
+        restates one of them as a literal again.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = Silva04Torus()
+        for attr, canonical_name in (
+            ("log_lbol", "agn_log_lbol"),
+            ("torus_frac", "agn_torus_frac"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr
 
     def test_silva04_outputs(self):
         """Silva04Torus publishes L_agn_torus."""
@@ -232,6 +333,35 @@ class TestCAT3DTorusContract:
         }
         assert param_names == expected
 
+    def test_cat3d_bounds_match_canonical_declaration(self):
+        """a_cat3d/fwd_cat3d/cos_inc derive from the canonical PARAMS declarations
+        (single source of truth, Task 1/M-A). Fails if the class ever restates a
+        literal ``Uniform(lo, hi, ...)`` that can drift from
+        ``agn_a_cat3d``/``agn_fwd_cat3d``/``agn_cos_inc`` again, the way
+        ``fwd_cat3d`` drifted to a stale ``Uniform(0.0, 1.0)`` while the canonical
+        declaration (and the vendored grid) moved to ``(1.0, 2.25)``.
+        Extended in Task 11 fix round 1 (ruling R25) to also cover
+        ``log_lbol``/``torus_frac``, which restated a stale
+        ``default=11.0`` (vs canonical ``10.0``) and stale ``torus_frac``
+        bounds/default respectively.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = CAT3DTorus()
+        for attr, canonical_name in (
+            ("a_cat3d", "agn_a_cat3d"),
+            ("fwd_cat3d", "agn_fwd_cat3d"),
+            ("cos_inc", "agn_cos_inc"),
+            ("log_lbol", "agn_log_lbol"),
+            ("torus_frac", "agn_torus_frac"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr
+
     def test_cat3d_outputs(self):
         """CAT3DTorus publishes L_agn_torus."""
         component = CAT3DTorus()
@@ -261,3 +391,85 @@ class TestCAT3DTorusContract:
         # Should return zero emission gracefully
         assert sed_out.shape == wave.shape
         assert published["L_agn_torus"] == 0.0
+
+
+class TestSKIRTORAgnfitterTorusContract:
+    """SKIRTOR_mean_3p (AGNfitter-faithful) torus component contract validation
+    (Task 1/M-A fix round 1, finding 1).
+    """
+
+    def test_skirtor_agnfitter_registered(self):
+        """SKIRTORAgnfitterTorus is registered with unique name."""
+        from tengri.components.sed_model_component import _REGISTRY
+
+        assert "skirtor_agnfitter" in _REGISTRY
+        assert _REGISTRY["skirtor_agnfitter"] is SKIRTORAgnfitterTorus
+
+    def test_skirtor_agnfitter_bounds_match_canonical_declaration(self):
+        """oa_skirtor/incl_skirtor/tv_skirtor derive from the canonical PARAMS
+        declarations (single source of truth, Task 1/M-A). Numerically equal
+        to ``agn_oa_skirtor``/``agn_incl_skirtor``/``agn_tv_skirtor`` today but
+        were unprotected literal restatements before this fix round -- fails
+        if the class ever restates one of them as a literal again (the same
+        way ``CAT3DTorus.fwd_cat3d`` drifted to a stale ``Uniform(0.0, 1.0)``
+        while its canonical declaration moved to ``(1.0, 2.25)``).
+        Extended in Task 11 fix round 1 (ruling R25) to also cover
+        ``log_lbol``/``torus_frac``, which were genuine drifts (``log_lbol``
+        default ``11.0`` vs canonical ``10.0``), not merely unprotected.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = SKIRTORAgnfitterTorus()
+        for attr, canonical_name in (
+            ("oa_skirtor", "agn_oa_skirtor"),
+            ("incl_skirtor", "agn_incl_skirtor"),
+            ("tv_skirtor", "agn_tv_skirtor"),
+            ("log_lbol", "agn_log_lbol"),
+            ("torus_frac", "agn_torus_frac"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr
+
+
+class TestSKIRTORTorusContract:
+    """SKIRTOR (X-CIGALE-faithful, default ``skirtor`` block) torus component
+    contract validation (Task 1/M-A fix round 1, finding 2).
+    """
+
+    def test_skirtor_registered(self):
+        """SKIRTORTorus is registered with unique name."""
+        from tengri.components.sed_model_component import _REGISTRY
+
+        assert "skirtor" in _REGISTRY
+        assert _REGISTRY["skirtor"] is SKIRTORTorus
+
+    def test_skirtor_bounds_match_canonical_declaration(self):
+        """oa_skirtor/tau_skirtor/p_skirtor/q_skirtor/cos_inc derive from the
+        canonical PARAMS declarations (single source of truth, Task 1/M-A).
+        Fails if the class ever restates a literal ``Uniform(lo, hi, ...)``
+        that can drift from ``agn_oa_skirtor``/... again, the way
+        ``oa_skirtor`` drifted to a stale ``Uniform(20.0, 60.0)`` while both
+        the canonical declaration and this class's own vendored grid
+        (``data/skirtor_templates_v3.h5``, ``grid/opening_angle`` = [10, 80])
+        moved to ``(10.0, 80.0)``.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = SKIRTORTorus()
+        for attr, canonical_name in (
+            ("oa_skirtor", "agn_oa_skirtor"),
+            ("tau_skirtor", "agn_tau_skirtor"),
+            ("p_skirtor", "agn_p_skirtor"),
+            ("q_skirtor", "agn_q_skirtor"),
+            ("cos_inc", "agn_cos_inc"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr

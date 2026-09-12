@@ -5,7 +5,7 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the Feltre, Charlot & Gutkin (2016) CLOUDY c13.03 AGN NLR photoionization grid,
 exposing a 4D preintegrated line-luminosity grid:
 
-    (neb_logZ_gas, agn_alpha_ion, neb_logU, neb_xid)
+    (neb_logZ_gas, agn_nlr_alpha_pl, neb_logU, agn_nlr_xi_d)
 
 with 20 emission lines (O II, Hβ, O III, O I, N II, Hα, S II, NV, CIV, HeII,
 and optical UV lines).
@@ -14,6 +14,30 @@ The dual (line_lum, continuum_phot) precompute follows the canonical CLOUDY
 pattern: emission lines are projected through filter curves via a precomputed
 ``(n_lines, n_filt)`` weight matrix, enabling fast filter-integrated line flux
 lookup at runtime.
+
+.. warning::
+
+    **This adapter has never run, and does not work as written** (measured at
+    b2a2a4d33 and unchanged by R41). Two independent reasons:
+
+    1. Nothing schedules it. ``forward/precompute/registry.py`` maps
+       ``"feltre_nlr"`` here, but ``registry.resolve`` has no caller anywhere
+       in ``src/`` -- the live precompute adapters are reached by direct
+       import instead. That is true of every entry in that registry, not only
+       this one, so the registry is currently a catalog rather than a
+       dispatch seam.
+    2. The axes do not match the grid. :data:`AXIS_PARAMS` and the ``axes``
+       tuple built in :func:`precompute` are four entries in the order
+       ``(logZ, alpha, logU, xi_d)``, while ``logHB_per_logq`` / ``line_ratios``
+       are five-dimensional in the order ``(alpha, logU, logn, logZ, xi_d)``:
+       ``logn`` is missing and the rest are permuted. Calling the callable
+       :func:`build_lookup` returns raises
+       ``TypeError: dot_general requires contracting dimensions to have the
+       same shape, got (16,) and (4,)``.
+
+    The runtime path -- :class:`~tengri.components.nebular.agn_nebular.FeltreNLRBackend`,
+    reached through ``agn={'nlr': {'type': 'feltre'}}`` -- is the one that
+    works, and it is what the ``nlr='feltre'`` block calls.
 
 References
 ----------
@@ -48,12 +72,22 @@ from tengri.utils.interpolation import edges_for_grid
 
 # Axis parameters: ordered tuple matching the Feltre grid axes.
 # neb_logZ_gas: absolute log10(Z), neb_logU: ionization parameter,
-# neb_xid: dust-to-metal ratio, agn_alpha_ion: UV power-law slope.
+# agn_nlr_xi_d: dust-to-metal ratio, agn_nlr_alpha_pl: UV power-law slope.
+#
+# R41 (#2214): the dust-to-metal axis was named ``neb_xid`` here and
+# ``agn_nlr_xi_d`` in the block that reads the same grid. One axis, one name:
+# ``agn_nlr_xi_d``, declared in ``components/agn/_params.py`` and owned by
+# ``agn.nlr``.
+#
+# R50 (#2214): the ionizing power-law slope axis had the same disease --
+# ``agn_alpha_ion`` here, ``agn_nlr_alpha_pl`` in the block that reads the same
+# grid. One axis, one name: ``agn_nlr_alpha_pl``, also declared in
+# ``components/agn/_params.py`` and owned by ``agn.nlr``.
 AXIS_PARAMS: tuple[str, ...] = (
     "neb_logZ_gas",
-    "agn_alpha_ion",
+    "agn_nlr_alpha_pl",
     "neb_logU",
-    "neb_xid",
+    "agn_nlr_xi_d",
 )
 
 
@@ -201,7 +235,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Returns a callable with signature::
 
-        fn(log_qh, neb_logZ_gas, agn_alpha_ion, neb_logU, neb_xid)
+        fn(log_qh, neb_logZ_gas, agn_nlr_alpha_pl, neb_logU, agn_nlr_xi_d)
             -> (line_wavelengths, line_lum)
 
     Returns

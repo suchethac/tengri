@@ -292,9 +292,9 @@ def calzetti(
 
     References
     ----------
-    .. [1] S. Calzetti et al., "The Dust Content and Opacity of Star-Forming
-       Galaxies," ApJ, 533, 682 (2000).
-       https://doi.org/10.1086/308692
+    .. [1] S. Calzetti et al., "The Dust Content and Opacity of Actively
+       Star-forming Galaxies," ApJ, 533, 682 (2000).
+       https://doi.org/10.1086/308692 bibcode: 2000ApJ...533..682C
     """
     wave_um = wavelength / 1e4
     x = 1.0 / wave_um

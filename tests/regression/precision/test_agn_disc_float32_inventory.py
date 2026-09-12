@@ -40,6 +40,14 @@ entry and rationale.
 This test pins the exact discs (regression guard) and ``xfail``\ s the rest
 (progress tracker: fixing one turns its ``xfail`` into an unexpected pass). It is
 the enforced record of "checked every AGN disc component".
+
+Coverage note: every build here carries no ``agn_ir_frac`` (fracAGN), so
+``compose_l_nu`` selects the ``_disc_debited`` branch of the disc luminosity
+(the plain ``agn_log_lbol``-normalized shape) for the value this file
+verdicts; the ``agn_power x R`` SKIRTOR-R-tie branch -- active only under a
+non-zero fracAGN with ``cigale_joint`` -- is still traced on every build here
+but never the selected branch, so a float32 fault confined to it would not
+surface in this inventory.
 """
 
 import jax
@@ -126,8 +134,13 @@ def _sed_agn(ssp, disc, dtype):
             "disc": {"type": disc, "all_params": Fixed(DEFAULT)},
             "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
+            # The float32 verdict below is measured AT this luminosity, so it
+            # has to be the one the forward uses. This build used to carry
+            # ``fracAGN: 0.1`` too, which derives the AGN power from the
+            # dust-absorbed stellar luminosity and discards the stated 11.0
+            # (R55 refuses that pair); the inventory was then silently
+            # measuring each disc at the fracAGN-derived scale instead.
             "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
-            "fracAGN": 0.1,
         },
         redshift=Fixed(0.1),
     )

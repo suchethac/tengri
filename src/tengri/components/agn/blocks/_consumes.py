@@ -30,11 +30,17 @@ disc block) reconstructs the full live set. The contract test
 empirically live set is a subset of the scoped active set, so this table cannot
 silently drift out of date.
 
-Blocks/models that require a data grid absent from CI (``cat3d_wind``,
-``slone_netzer``, the GRAHSP line/feii blocks) are intentionally **omitted**:
-:func:`agn_active_param_set` falls back to the full superset for any unknown
-block, so the wildcard over-frees (never under-frees) for those, a safe,
-documented degradation rather than a silent exclusion.
+Blocks/models genuinely absent from this table fall back to the full
+superset via :func:`agn_active_param_set`, so the wildcard over-frees (never
+under-frees) for an unregistered name -- a safe, documented degradation
+rather than a silent exclusion. Fix round 2: this sentence previously listed
+``cat3d_wind`` and "the GRAHSP line/feii blocks" here too, but both are
+registered below (``cat3d_wind``/``cat3d_wind_lowfwd`` since fix round 1 --
+their grids are tracked in CI, so the original "grid absent from CI" rationale
+no longer held; the GRAHSP ``nlr``/``blr``/``feii`` entries were registered
+independently of this task). Task 16 similarly registered ``("disc",
+"slone_netzer")``, previously omitted on the same "grid absent from CI"
+rationale -- also stale (measured, this checkout).
 """
 
 from __future__ import annotations
@@ -81,7 +87,11 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("disc", "multicolor"): frozenset({"agn_a_spin", "agn_log_mbh"}),
-    ("disc", "powerlaw"): frozenset({"agn_alpha"}),
+    # R34: agn_T_max (the block's own UV cutoff temperature) was missing --
+    # measured live on predict_photometry once the partition gave it a disc
+    # owner, so the disc wildcard would otherwise free the slope and leave the
+    # cutoff pinned.
+    ("disc", "powerlaw"): frozenset({"agn_alpha", "agn_T_max"}),
     ("disc", "qsogen"): frozenset(),
     ("disc", "relagn"): frozenset({"agn_log_mbh", "agn_log_mdot", "agn_astar", "agn_cos_inc"}),
     ("disc", "richards2006"): frozenset(),
@@ -97,6 +107,33 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("disc", "skirtor"): frozenset({"agn_cigale_disk_delta"}),
+    # Task 16 (item 3): previously omitted with "requires a data grid absent
+    # from CI" -- that no longer holds (the grid this checkout ships builds
+    # and differentiates it fine). Both axis parameters are live and both are
+    # listed. agn_log_ledd was briefly recorded here as dead; that reading came
+    # from a baseline outside the block's own grid. The shared declared default
+    # -1.0 sits above the SN12 axis [-4, -1.9586] and is clipped onto the edge
+    # node, where jnp.clip makes the gradient exactly zero by construction
+    # (#1586's whole subject). Re-measured at points inside the axis, jax.grad
+    # of log(sum L_lambda) is 5.9e-2 at -2.0, 8.8e-1 at -2.5 and 1.2e-1 at
+    # -3.5, with a 754% relative SED change between -3.5 and -2.0 -- so this is
+    # nothing like the #846 degeneracy of kubota_done/multicolor above, where
+    # the Eddington ratio is genuinely derived from agn_log_lbol. Pinned by
+    # tests/regression/agn/test_issue_1586_grid_support.py, which measures the
+    # gradient rather than restating this table.
+    ("disc", "slone_netzer"): frozenset({"agn_log_mbh", "agn_log_ledd"}),
+    # The two AGNfitter-rX Kubota & Done grids. Registered here rather than
+    # left to the signature fallback (R37 round 2): measured on the scoping
+    # module's own fixtures, worst-of-five-seeds |grad| on
+    # predict_photometry, every name in each signature is live --
+    # agn_log_mbh 1.6e-15, agn_log_ledd 1.9e-15 for both, and
+    # agn_gamma_warm 1.8e-16 for the warm-index variant, which is the axis
+    # that distinguishes it. agn_log_lbol is omitted from both, as from every
+    # other entry: it is in AGN_SHARED_PARAMS and always active.
+    ("disc", "kd18_agnfitter"): frozenset({"agn_log_mbh", "agn_log_ledd"}),
+    ("disc", "kd18_agnfitter_warmindex"): frozenset(
+        {"agn_log_mbh", "agn_log_ledd", "agn_gamma_warm"}
+    ),
     ("torus", "grahsp"): frozenset(
         {
             "agn_grahsp_cool_lam_um",
@@ -115,9 +152,61 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("torus", "nenkova"): frozenset(
         {"agn_ir_frac", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
-    ("torus", "nenkova_agnfitter"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
+    # Task 16 (item 3): agn_torus_frac was missing -- nenkova_agnfitter_torus_
+    # block's own signature has always read it (its own covering fraction,
+    # like every other composable torus block); this entry previously listed
+    # only the generic gray Type-1/2 mask reads (agn_cos_inc/agn_theta_torus).
+    ("torus", "nenkova_agnfitter"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_torus_frac"}
+    ),
+    # CAT3D-Wind (Hönig & Kishimoto 2017): neither in TORUS_SCREEN_PARAMS
+    # (torus_screen.py) nor _SELF_CONTAINED_TORI (runner.py), so both receive
+    # the same generic gray mask as nenkova/silva04/two_temperature above
+    # (empirically confirmed: perturbing agn_theta_torus across its prior
+    # moves sed_agn by ~1.5e-3 for both, isolated with a multicolor disc).
+    # Fix round 1 (CRITICAL): both entries were previously absent -- the
+    # historical "grid absent from CI" rationale for cat3d_wind no longer
+    # holds (data/cat3d_wind_torus_grid.h5 is tracked and negated in
+    # .gitignore) -- so agn={'all_params': FREE} with either torus silently
+    # fell back to the full ~96-name superset (89 of them foreign to the
+    # block). See test_cat3d_wind_family_top_level_wildcard_frees_exact_consumed_set.
+    ("torus", "cat3d_wind"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_a_cat3d", "agn_fwd_cat3d", "agn_torus_frac"}
+    ),
+    ("torus", "cat3d_wind_lowfwd"): frozenset(
+        {
+            "agn_cos_inc",
+            "agn_theta_torus",
+            "agn_a_cat3d_lowfwd",
+            "agn_fwd_cat3d_lowfwd",
+            "agn_torus_frac",
+        }
+    ),
+    ("torus", "nenkova_agnfitter_2p"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_oa_nenkova", "agn_torus_frac"}
+    ),
+    ("torus", "nenkova_agnfitter_3p"): frozenset(
+        {
+            "agn_cos_inc",
+            "agn_theta_torus",
+            "agn_oa_nenkova",
+            "agn_tv_nenkova",
+            "agn_torus_frac",
+        }
+    ),
     ("torus", "qsogen"): frozenset(),
-    ("torus", "silva04"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
+    # Task 16 (item 3): silva04's own axis (agn_log_nh_silva) and covering
+    # fraction (agn_torus_frac) were missing -- this entry previously listed
+    # ONLY the generic gray Type-1/2 mask params (agn_cos_inc/agn_theta_torus,
+    # a runner Stage-4.5 read every physical-decomposition torus shares), so
+    # the top-level agn={'all_params': FREE} wildcard never reached silva04's
+    # own two declared parameters at all. Invisible until
+    # _agn_subblock_declared_params started sourcing from this table (Task 16,
+    # item 1): it used to fall back to raw signature introspection, which
+    # DID find them.
+    ("torus", "silva04"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_log_nh_silva", "agn_torus_frac"}
+    ),
     ("torus", "simple"): frozenset(
         {"agn_T_torus", "agn_ir_frac", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
@@ -138,27 +227,45 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_ir_frac",
             "agn_oa_skirtor",
             "agn_p_skirtor",
-            # Polar-dust re-emission (active by default at agn_polar_ebv=0.03):
-            # all three polar knobs are read by skirtor_torus_block and move the
-            # SED (empirically Delta(polar_T)=52%, Delta(polar_beta)=2.4% across
-            # their priors). Earlier only agn_polar_ebv was credited, so a
-            # top-level agn={'*': FREE} silently froze the polar-dust temperature
-            # and slope.
-            "agn_polar_ebv",
-            "agn_polar_T",
-            "agn_polar_beta",
+            # R22 (task13 fix-round-1): the polar_dust knobs used to be listed
+            # here too -- skirtor_torus_block bundled its OWN Casey-2012 polar
+            # graybody (active by default at agn_polar_ebv=0.03), a SECOND
+            # polar-dust mechanism alongside the standalone ``polar_dust``
+            # attenuation block, so torus=skirtor + atten=polar_dust screened
+            # the disc twice. There is now exactly ONE mechanism (the
+            # standalone atten block, see ("attenuation", "polar_dust")
+            # below); this torus emits only the thermal SKIRTOR template and
+            # reads no agn_polar_* name.
             "agn_q_skirtor",
             "agn_tau_skirtor",
             "agn_torus_frac",
+            # Task 14/16 (F4): agn_radius_ratio (the SKIRTOR grid's third
+            # axis) was missing here -- skirtor_torus_block's own signature
+            # has always read it (unlike SKIRTORTorus, the class, whose
+            # equivalent bug -- hardcoded 20.0, never passed through -- Task
+            # 14 fixed); measured live via
+            # test_skirtor_torus_wiring.py::test_skirtor_radius_ratio_live_on_composable_path.
+            "agn_radius_ratio",
         }
     ),
+    # R34: agn_theta_torus (the runner's gray Type-1/2 visibility mask, the
+    # same read the nenkova/silva04/cat3d entries already record) was missing
+    # from all three AGNfitter-rX SKIRTOR variants -- measured live on
+    # predict_photometry for each once the partition gave it a torus owner.
     ("torus", "skirtor_agnfitter"): frozenset(
         {
             "agn_oa_skirtor",
             "agn_incl_skirtor",
             "agn_tv_skirtor",
             "agn_torus_frac",
+            "agn_theta_torus",
         }
+    ),
+    ("torus", "skirtor_agnfitter_1p"): frozenset(
+        {"agn_incl_skirtor", "agn_torus_frac", "agn_theta_torus"}
+    ),
+    ("torus", "skirtor_agnfitter_2p"): frozenset(
+        {"agn_oa_skirtor", "agn_incl_skirtor", "agn_torus_frac", "agn_theta_torus"}
     ),
     ("torus", "two_temperature"): frozenset(
         {
@@ -171,10 +278,62 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_theta_torus",
         }
     ),
+    # agn_nlr_fwhm_kms is deliberately absent, and the two measurements that
+    # disagree about it are both recorded here. This block does pass the line
+    # width through, and a jax.grad on predict_photometry is not exactly zero
+    # -- but the quantity this table records is "moves the SED by more than a
+    # relative 1e-6" (see Provenance above), and a line width at fixed line
+    # luminosity redistributes flux inside a line that a broadband filter
+    # integrates over: measured <= 1e-6 relative on the agn_panchromatic
+    # recipe's own filters, which is why
+    # test_agn_panchromatic_free_params_all_move_predict calls it a no-op.
+    # Listing it would make a recipe free a dimension no fit can constrain.
     ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
     ("nlr", "synthesizer"): frozenset({"agn_nlr_cf"}),
     ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
     ("nlr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    # Cue's five photoionization axes plus the covering fraction, all measured
+    # live (agn_nlr_cf 8.5e-15, agn_nlr_alpha_pl 2.9e-15, agn_nlr_logZ
+    # 1.2e-15, agn_nlr_logn 3.3e-16, agn_nlr_logU 1.1e-16).
+    # agn_nlr_fwhm_kms is excluded for the same reason as ('nlr', 'analytic')
+    # below: a line width at fixed line luminosity redistributes flux inside a
+    # line a broadband filter integrates over, so it falls under this table's
+    # own "> 1e-6 relative" criterion (its grad here, 1.5e-18, is the smallest
+    # of the seven by three orders of magnitude).
+    ("nlr", "cue"): frozenset(
+        {
+            "agn_nlr_cf",
+            "agn_nlr_alpha_pl",
+            "agn_nlr_logU",
+            "agn_nlr_logZ",
+            "agn_nlr_logn",
+        }
+    ),
+    # R34 partitioned the Feltre grid axes to "agn.nlr", which put them in this
+    # block's own wildcard scope for the first time. agn_nlr_xi_d was excluded
+    # then: measured exactly dead, grad 0.0 at every one of five sampled points
+    # and 0.0 relative change across the declared [0.1, 0.5].
+    #
+    # R41 (#2214) found the cause was the backend, not the grid. The shipped
+    # data/feltre_grid.h5 carries THREE dust-to-metal nodes ([0.1, 0.3, 0.5]);
+    # the backend snapped xi_d to the nearest of them, and a nearest-neighbor
+    # lookup is piecewise constant, so its gradient is zero everywhere by
+    # construction. With the axis interpolated by the same C2 triweight kernel
+    # as logU/logn/logZ, xi_d measures live on this table's own criterion:
+    # 0.154 relative sed_agn change between the 0.3 and 0.7 prior quantiles,
+    # against 0.384 for agn_nlr_logU and 0.317 for agn_nlr_alpha_pl on the
+    # same build.
+    ("nlr", "feltre"): frozenset(
+        {
+            "agn_nlr_cf",
+            "agn_nlr_fwhm_kms",
+            "agn_nlr_alpha_pl",
+            "agn_nlr_logU",
+            "agn_nlr_logn",
+            "agn_nlr_logZ",
+            "agn_nlr_xi_d",
+        }
+    ),
     ("blr", "analytic"): frozenset(
         {
             "agn_blr_cf",
@@ -194,7 +353,12 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("feii", "grahsp"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
-    ("feii", "qsogen_balmer"): frozenset(),
+    # QSOgen Balmer continuum (Temple+2021), registered in #1488 but never
+    # added here, so the block's own enabling knob was invisible to the
+    # top-level ``agn={'all_params': FREE}`` wildcard scope: selectable,
+    # buildable, and (until a caller named ``agn_bcnorm`` explicitly)
+    # permanently pinned at its Fixed(DEFAULT)=0.0 (issue #2175).
+    ("feii", "qsogen_balmer"): frozenset({"agn_bcnorm"}),
     ("attenuation", "grahsp_biatten"): frozenset({"agn_grahsp_ebv", "agn_grahsp_ebv_agn"}),
     ("attenuation", "polar_dust"): frozenset(
         {
@@ -202,10 +366,28 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_polar_beta",
             "agn_polar_ebv",
             "agn_polar_oa",
+            # Re-emission temperature (task13): the standalone polar_dust
+            # attenuation block's graybody term reads agn_polar_T via
+            # polar_dust_reemission_lnu (blocks/atten.py), called
+            # unconditionally by the runner whenever this block is
+            # selected. Previously omitted because a name mismatch
+            # (agn_polar_temperature vs the declared agn_polar_T) made the
+            # parameter empirically dead.
+            "agn_polar_T",
         }
     ),
-    ("attenuation", "qsogen_smc"): frozenset(),
-    ("attenuation", "smc_prevot"): frozenset(),
+    # R34: this block's own reddening knob, agn_ebv, was recorded as reading
+    # nothing at all -- measured live on predict_photometry once the partition
+    # gave agn_ebv its atten owner. It is NOT agn_attenuation_ebv, the separate
+    # E(B-V) the smc_prevot/qsogen blocks apply (R30).
+    ("attenuation", "qsogen_smc"): frozenset({"agn_ebv"}),
+    ("attenuation", "smc_prevot"): frozenset({"agn_attenuation_ebv"}),
+    # Task 16 (item 3): previously missing entirely -- the top-level wildcard
+    # silently fell back to the full ~50-name superset whenever atten='qsogen'
+    # (Temple+2021's own quasar extinction curve, alternates.py
+    # qsogen_quasar_ext_block) was selected. Its signature reads
+    # agn_attenuation_ebv (like smc_prevot above), nothing else.
+    ("attenuation", "qsogen"): frozenset({"agn_attenuation_ebv"}),
 }
 
 #: Monolithic (non-composable) AGN model -> the agn_* params it consumes.
@@ -291,6 +473,7 @@ __all__ = [
     "AGN_SHARED_PARAMS",
     "ALL_AGN_PARAMS",
     "agn_active_param_set",
+    "monolithic_agn_declared_params",
 ]
 
 
@@ -337,3 +520,77 @@ def agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
             return ALL_AGN_PARAMS  # unknown/grid-gated block: safe over-free
         active |= consumed
     return frozenset(active)
+
+
+def monolithic_agn_declared_params(model: str) -> frozenset[str]:
+    """The ``agn_*`` names a non-composable AGN model declares.
+
+    A monolithic model has no sub-block to nest a parameter under: its declared
+    parameters ARE the ``agn`` top level, so this is the set the key validator
+    accepts there (R27). Derived, never hand-listed:
+
+    * a **preset** name routes through the composable runner with fixed block
+      selectors, so it declares :data:`AGN_SHARED_PARAMS`, whatever its selected
+      blocks declare in :data:`AGN_BLOCK_CONSUMES`, and its own
+      :data:`AGN_MODEL_CONSUMES` entry when it has one;
+    * a **self-contained** name resolves to its own forward function, so it
+      declares the ``agn_*`` parameters in that function's signature plus the
+      shared normalization knobs.
+
+    Parameters
+    ----------
+    model : str
+        A non-composable AGN model name (see
+        :func:`~tengri.components.agn.unified.monolithic_agn_model_names`).
+
+    Returns
+    -------
+    frozenset of str
+        Fully prefixed ``agn_*`` names. Empty for an unrecognized model.
+
+    Notes
+    -----
+    **JIT-compatible**: no, pure-Python builder-time helper.
+
+    A ``**kwargs`` catch-all in a self-contained forward function is NOT a
+    declaration: ``skirtor_stalevski`` swallows ``agn_torus_frac`` that way and
+    pins ``frac_agn=1.0`` internally, so the parameter is exactly inert there
+    (measured: 0.0 relative SED change from 0.05 to 0.95, against 19.7 for
+    ``agn_oa_skirtor`` on the same call). Accepting a swallowed name would free
+    a dimension the model cannot see.
+    """
+    import inspect
+
+    from tengri.components.agn.unified import (
+        _AGN_PRESETS,
+        _SELF_CONTAINED_AGN_MODELS,
+        _resolve_monolithic_model,
+    )
+
+    if model in _SELF_CONTAINED_AGN_MODELS:
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = _resolve_monolithic_model(model)
+        if fn is None:  # pragma: no cover - table and resolver share one source
+            return frozenset()
+        # Intersected with ALL_AGN_PARAMS so a structural selector that happens
+        # to carry the prefix (grahsp's ``agn_type``, which chooses a variant
+        # rather than being fitted) is not offered as a fittable parameter.
+        signature_names = {
+            name for name in inspect.signature(fn).parameters if name.startswith("agn_")
+        } & ALL_AGN_PARAMS
+        return frozenset(AGN_SHARED_PARAMS | signature_names)
+
+    preset = _AGN_PRESETS.get(model)
+    if preset is None:
+        return frozenset()
+
+    declared = set(AGN_SHARED_PARAMS) | set(AGN_MODEL_CONSUMES.get(model, ()))
+    for category, kwarg in _BLOCK_SELECTOR_KWARGS:
+        block_type = preset.get(kwarg)
+        if not block_type or block_type == "none":
+            continue
+        declared |= set(AGN_BLOCK_CONSUMES.get((category, block_type), ()))
+    return frozenset(declared)

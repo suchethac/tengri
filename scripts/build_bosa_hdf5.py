@@ -146,11 +146,11 @@ def parse_fits(fits_path: Path) -> dict:
     nu_hz = c_cgs / lam_cm
     L_nu = nu_Lnu / nu_hz[None, None, :]  # broadcast
 
-    # Normalised templates: int L_nu dnu = 1.  Same convention as
+    # Normalized templates: int L_nu dnu = 1.  Same convention as
     # tengri's other dust IR loaders so the runtime path can rescale
     # by the energy-balance ``L_ir`` directly.
     L_sun = 3.828e33  # erg/s
-    # Convert Lsun/Hz -> erg/s/Hz, then normalise.
+    # Convert Lsun/Hz -> erg/s/Hz, then normalize.
     L_nu_cgs = L_nu * L_sun
     # int L_nu d nu — wavelength in increasing order, so integrate
     # against -d ln(λ) trick used elsewhere.
@@ -162,7 +162,7 @@ def parse_fits(fits_path: Path) -> dict:
         "wavelength_aa": wave_aa.astype(np.float64),
         "log_ltir_grid": LOG_LTIR_GRID.astype(np.float32),
         "log_ssfr_grid": LOG_SSFR_GRID.astype(np.float32),
-        "spectra": L_nu_normalized.astype(np.float64),  # (n_ltir, n_ssfr, n_wave) normalised
+        "spectra": L_nu_normalized.astype(np.float64),  # (n_ltir, n_ssfr, n_wave) normalized
         "L_nu_solLum_per_Hz": L_nu.astype(np.float64),  # absolute (Lsun/Hz)
     }
 

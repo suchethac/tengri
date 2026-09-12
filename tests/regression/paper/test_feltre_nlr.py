@@ -4,16 +4,17 @@
 These tests exercise the backend's behavior without the actual grid data:
   - FileNotFoundError when the grid file is absent
   - FeltreGridData dataclass structure
-  - _nearest_idx returns correct index
   - agn_nlr_emission dispatcher raises ValueError when feltre_backend is None
   - agn_nlr_emission dispatcher raises ValueError for unknown backend
 
 When ``data/feltre_grid.h5`` *is* present, additional tests validate:
   - Grid loads with correct shapes
+  - The interpolation axes are ascending and the tabulated arrays were
+    permuted with them
   - predict_agn_nlr_lines returns finite arrays
   - Gradient w.r.t. neb_logU and neb_logZ_gas is finite (triweight is C²)
-  - Nearest-neighbor snap: varying alpha_pl by a tiny amount does not change output
-  - At-grid-node interpolation: result equals direct table lookup within 1%
+  - alpha_pl is interpolated, not snapped: a sub-node perturbation moves the
+    result (R41, #2214 -- it used to be required NOT to)
 """
 
 from __future__ import annotations
@@ -72,15 +73,45 @@ def test_feltre_backend_filenotfound_when_missing(tmp_path: Path) -> None:
         FeltreNLRBackend(grid_path=nonexistent)
 
 
-def test_nearest_idx_basic() -> None:
-    """_nearest_idx returns correct nearest index."""
-    from tengri.components.nebular.agn_nebular import _nearest_idx
+@pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
+def test_feltre_axes_are_ascending_and_the_grid_was_permuted_with_them() -> None:
+    """R41 (#2214): every axis is interpolated, so every axis must ascend.
 
-    axis = jnp.array([-1.2, -1.4, -1.7, -2.0])
-    assert _nearest_idx(axis, -1.2) == 0
-    assert _nearest_idx(axis, -2.0) == 3
-    assert _nearest_idx(axis, -1.5) == 1  # -1.4 is closer (0.1) than -1.7 (0.2)
-    assert _nearest_idx(axis, -1.85) == 3  # -2.0 is closer (0.15) than -1.7 (0.15 tie→3)
+    The backend sorts all five axes once at construction. Sorting an axis
+    without applying the same permutation to the tabulated arrays would
+    scramble the grid silently -- nothing downstream can tell a permuted table
+    from a physical one -- so the permutation is checked against the raw
+    arrays, node by node, not just the axis order.
+    """
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
+
+    backend = FeltreNLRBackend(_GRID_PATH)
+    raw = (
+        backend.grid.alpha_axis,
+        backend.grid.logUs_axis,
+        backend.grid.logn_axis,
+        backend.grid.logZ_axis,
+        backend.grid.xi_d_axis,
+    )
+    for i, axis in enumerate(backend._axes):
+        a = np.asarray(axis)
+        assert np.all(np.diff(a) > 0), f"axis {i} is not strictly ascending: {a}"
+        assert sorted(np.asarray(raw[i]).tolist()) == pytest.approx(a.tolist())
+
+    # One node per axis: the sorted table's entry must be the raw table's entry
+    # at the position that node came from.
+    idx_sorted, idx_raw = [], []
+    for i, axis in enumerate(backend._axes):
+        node = float(np.asarray(axis)[-1])
+        idx_sorted.append(int(np.argmin(np.abs(np.asarray(axis) - node))))
+        idx_raw.append(int(np.argmin(np.abs(np.asarray(raw[i]) - node))))
+    np.testing.assert_allclose(
+        float(backend._logHB_sorted[tuple(idx_sorted)]),
+        float(backend.grid.logHB_per_logq[tuple(idx_raw)]),
+        rtol=0.0,
+        atol=0.0,
+        err_msg="the axis was sorted but the tabulated array was not permuted with it",
+    )
 
 
 def test_dispatcher_requires_feltre_backend() -> None:
@@ -196,32 +227,32 @@ def test_feltre_gradient_logZ_is_finite() -> None:
 
 
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
-def test_feltre_alpha_nearest_neighbor_snap() -> None:
-    """Tiny perturbation to alpha_pl within the nearest-neighbor bin gives same result."""
+def test_feltre_alpha_is_interpolated_not_snapped() -> None:
+    """A sub-node perturbation of alpha_pl moves the lines (R41, #2214).
+
+    This test used to require the opposite -- ``assert_array_equal`` between
+    alpha_pl=-1.7 and alpha_pl=-1.65, both nearest to the -1.7 node. That
+    identity IS the defect: a piecewise-constant lookup has no gradient, so
+    the discrete axes could not be fitted. Both are now interpolated with the
+    same C2 triweight kernel as logU/logn/logZ.
+    """
     from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     backend = FeltreNLRBackend(_GRID_PATH)
-    _, lum_ref = backend.predict_agn_nlr_lines(
-        alpha_pl=-1.7,
-        neb_logU=-2.0,
-        neb_logn=3.0,
-        neb_logZ_gas=-1.8477,
-        xi_d=0.3,
-        log_qh=53.0,
-    )
-    # alpha_pl=-1.65 is still nearest to -1.7 (next value is -1.4, midpoint=-1.55)
-    _, lum_perturbed = backend.predict_agn_nlr_lines(
-        alpha_pl=-1.65,
-        neb_logU=-2.0,
-        neb_logn=3.0,
-        neb_logZ_gas=-1.8477,
-        xi_d=0.3,
-        log_qh=53.0,
-    )
-    np.testing.assert_array_equal(
-        np.asarray(lum_ref),
-        np.asarray(lum_perturbed),
-        err_msg="Nearest-neighbor alpha snap: result should be identical within same bin",
+    kw = dict(neb_logU=-2.0, neb_logn=3.0, neb_logZ_gas=-1.8477, xi_d=0.3, log_qh=53.0)
+    _, lum_node = backend.predict_agn_nlr_lines(alpha_pl=-1.7, **kw)
+    # -1.65 is inside the old nearest-neighbor bin of -1.7 (the next node is
+    # -1.4, so the bin edge sits at -1.55).
+    _, lum_between = backend.predict_agn_nlr_lines(alpha_pl=-1.65, **kw)
+
+    ref = np.asarray(lum_node)
+    got = np.asarray(lum_between)
+    live = ref > 0
+    assert live.any(), "no positive line luminosity to compare"
+    rel = np.max(np.abs(got[live] - ref[live]) / ref[live])
+    assert rel > 1e-6, (
+        f"alpha_pl is still snapped: max relative change {rel:.3e} inside the "
+        "old nearest-neighbor bin"
     )
 
 

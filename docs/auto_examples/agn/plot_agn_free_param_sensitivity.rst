@@ -119,7 +119,7 @@ blocks consume. Before the registry fix this set was empty.
 
  .. code-block:: none
 
-    AGN parameters freed by agn={'all_params': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_ir_frac', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
+    AGN parameters freed by agn={'all_params': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_ebv_disc', 'agn_ir_frac', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
 
 
 
@@ -188,6 +188,11 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.771 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

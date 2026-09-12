@@ -991,7 +991,7 @@ sed -n '/^  lint:/,/^  [a-z-]*:$/p'  .github/workflows/tests.yml | grep -oE '^  
 sed -n '/^  smoke:/,/^  [a-z-]*:$/p' .github/workflows/tests.yml | grep -oE '^      - run: .*' | sed 's/^      - run: //'
 ```
 
-**Never transcribe the list, never reuse yesterday's, never glob
+**Never retype the list by hand, never reuse yesterday's, never glob
 `tools/check_*.py`.** The three failures, in order of how convincing each looked
 at the time:
 

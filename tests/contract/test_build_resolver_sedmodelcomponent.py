@@ -28,10 +28,18 @@ class TestBuildResolverDustAttenuation:
         """
         assert law not in _REGISTRY
         # Two loud-failure messages are acceptable (#664/#784): an outright
-        # "Unknown dust type" (e.g. 'mw', 'salim18' — not registered laws) or
-        # the law-vs-type redirect for names that ARE registered attenuation
-        # laws ('calzetti', 'smc'): "<law> is a dust attenuation *law*…".
-        with pytest.raises(ValueError, match=r"Unknown dust type|is a dust attenuation \*law\*"):
+        # "Unknown dust_attenuation type" (e.g. 'mw', 'salim18' — not registered
+        # laws) or the law-vs-type redirect for names that ARE registered
+        # attenuation laws ('calzetti', 'smc'): "<law> is a dust attenuation
+        # *law*…". Both are bare ``ValueError(f"...")`` in
+        # ``_translate_dust_attenuation`` — no typed error carries the
+        # offending group as a structured field — so a prose match is the
+        # only pin available; anchored on the stable lead-in rather than the
+        # full sentence so a wording tweak downstream of it does not retrigger
+        # this test.
+        with pytest.raises(
+            ValueError, match=r"Unknown dust_attenuation type|is a dust attenuation \*law\*"
+        ):
             SEDModel.build(
                 ssp_data=ssp_data_bc03, dust_attenuation={"type": law}, redshift=Fixed(0.1)
             )
@@ -91,11 +99,17 @@ class TestBuildResolverDustEmission:
         not the deleted duplicates (``dl07_ir``) nor the surviving unique
         components (``schreiber2016_ir``/``draine2021_pah_ir``, still in
         ``_REGISTRY``). They used to be silently accepted then fail at predict
-        (the removed #738 footgun)."""
-        with pytest.raises(ValueError, match="Unknown dust emission type"):
+        (the removed #738 footgun).
+        """
+        # dust_attenuation now requires an explicit law (laws are EXPLICIT,
+        # not implied by a default) -- an empty dict raises on the
+        # attenuation group before ever reaching the emission-type check this
+        # test targets, so give it a valid law here, same as
+        # test_emission_model_builds above.
+        with pytest.raises(ValueError, match="Unknown dust_emission type"):
             SEDModel.build(
                 ssp_data=ssp_data_bc03,
-                dust_attenuation={},
+                dust_attenuation={"law": "power_law"},
                 dust_emission={"type": component_name},
                 redshift=Fixed(0.1),
             )

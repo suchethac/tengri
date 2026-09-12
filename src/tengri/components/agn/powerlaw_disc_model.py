@@ -21,12 +21,26 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig
+from tengri.protocols.component import SEDComponentConfig, declared_prior
 
 __all__ = ["PowerLawDisc"]
+
+#: Single source of truth for every class-level prior below: the shared
+#: ``agn_*`` declarations in ``_params.py``. Read once at class-definition
+#: time so these class attributes cannot drift from the canonical
+#: declaration the way they did before this fix (found by
+#: ``tools/check_param_restatements.py``, Task 11 item 5 / fix round 1,
+#: R25): ``log_lbol`` default 11.0 vs canonical 10.0, ``alpha`` bounds
+#: (-1.5, -0.5) vs canonical (-2, 0), ``lum_ratio`` bounds (0, 1) vs
+#: canonical (0, 5).
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
+_ALPHA_PRIOR = declared_prior(_AGN_PARAMS, "agn_alpha")
+_T_MAX_PRIOR = declared_prior(_AGN_PARAMS, "agn_T_max")
+_LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
 
 
 @dataclass(frozen=True)
@@ -57,11 +71,11 @@ class PowerLawDisc(SEDModelComponent):
     log_lbol : Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
     alpha : Uniform
-        Power-law spectral index. [dimensionless, -1.5–-0.5]
+        Power-law spectral index. [dimensionless, -2–0]
     T_max : Uniform
         UV cutoff temperature. [K, 10^4–10^6]
-    frac : Uniform
-        Fraction of bolometric luminosity from disc. [dimensionless, 0–1]
+    lum_ratio : Uniform
+        Fraction of bolometric luminosity from disc. [dimensionless, 0–5]
 
     Cross-component outputs
     -----------------------
@@ -98,32 +112,32 @@ class PowerLawDisc(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     alpha = Uniform(
-        -1.5,
-        -0.5,
+        _ALPHA_PRIOR.lo,
+        _ALPHA_PRIOR.hi,
         description="Power-law spectral index",
         units="dimensionless",
-        default=-0.5,
+        default=_ALPHA_PRIOR.default,
     )
     T_max = Uniform(
-        1e4,
-        1e6,
+        _T_MAX_PRIOR.lo,
+        _T_MAX_PRIOR.hi,
         description="UV cutoff temperature",
         units="K",
-        default=1e5,
+        default=_T_MAX_PRIOR.default,
     )
     lum_ratio = Uniform(
-        0.0,
-        1.0,
+        _LUM_RATIO_PRIOR.lo,
+        _LUM_RATIO_PRIOR.hi,
         description="Disc luminosity fraction of L_bol",
         units="dimensionless",
-        default=0.5,
+        default=_LUM_RATIO_PRIOR.default,
     )
 
     # Cross-component output

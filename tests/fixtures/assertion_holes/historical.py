@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The two shipped bugs, transcribed as they stood before their fixes.
+"""The two shipped bugs, exactly as they stood before their fixes.
 
 A guard is verified against history, not against its author's intuition. These
 are not paraphrases: each assertion below is the wording that was in the tree

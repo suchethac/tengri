@@ -25,9 +25,9 @@ matching :mod:`tengri.components.agn.silva04`.
 
 References
 ----------
-.. [1] M. Nenkova et al., "Revisiting the AGN torus with MIDI and VISIR
-   Herschel observations," ApJ 685, 160 (2008). arXiv:0806.1512.
-   DOI: 10.1088/0004-637X/685/1/160.
+.. [1] M. Nenkova, M. M. Sirocky, R. Nikutta, Z. Ivezic, and M. Elitzur,
+   "AGN Dusty Tori. II. Observational Implications of Clumpiness," ApJ 685,
+   160 (2008). doi:10.1086/590483. arXiv:0806.0512. bibcode:2008ApJ...685..160N.
 .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the
    radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
    (2024). arXiv:2405.12111. DOI: 10.1051/0004-6361/202449329.
@@ -277,9 +277,9 @@ def nenkova_agnfitter_sed(
 
     References
     ----------
-    .. [1] M. Nenkova et al., "Revisiting the AGN torus with MIDI and VISIR
-       Herschel observations," ApJ 685, 160 (2008). arXiv:0806.1512.
-       DOI: 10.1088/0004-637X/685/1/160.
+    .. [1] M. Nenkova, M. M. Sirocky, R. Nikutta, Z. Ivezic, and M. Elitzur,
+       "AGN Dusty Tori. II. Observational Implications of Clumpiness," ApJ 685,
+       160 (2008). doi:10.1086/590483. arXiv:0806.0512. bibcode:2008ApJ...685..160N.
     .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the
        radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
        (2024). arXiv:2405.12111. DOI: 10.1051/0004-6361/202449329.

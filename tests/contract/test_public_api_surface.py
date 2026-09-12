@@ -59,6 +59,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
         "FilterConvention",
+        "FilterCurve",
         "FlatSlab",
         "Sersic",
         # ── SEDComponent extension surface — demoted; see DEMOTED_BUT_IMPORTABLE
@@ -233,10 +234,11 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
 # distinguish "removed" from "demoted".
 DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
     {
-        # User-facing extension surfaces — importable but not advertised in
-        # __all__ (custom filters / custom physics-block base class). Examples
-        # use ``from tengri import FilterCurve`` / ``SEDModelComponent``.
-        "FilterCurve",
+        # User-facing extension surface — importable but not advertised in
+        # __all__ (custom physics-block base class). Examples use
+        # ``from tengri import SEDModelComponent``. (FilterCurve moved to
+        # ALLOWED_TOP_LEVEL — Task 11 item 9: a custom-filter example
+        # constructs one directly, same tier as FilterConvention.)
         "SEDModelComponent",
         # Branding
         "LOGO",

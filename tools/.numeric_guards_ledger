@@ -1,6 +1,13 @@
 # Ledger of safe numeric guard patterns (auto-generated)
 # Format: path | pattern -> count
 # Keyed on (file path, pattern description) for drift-proofness (#2050).
+# Blind spot: same-bucket swap (remove + add in one commit) ships unadjudicated; code review catches it.
+# NOTE: --regen rewrites this file from the tree and drops hand-written comment
+# lines above; re-add them after regenerating (the line above was lost once).
+# nebular_grid_precompute's and line_precompute's '-30.0' floors are LOG-SPACE
+# floors: they clamp log10(Q_H), so -30.0 dex is the same guard as the 1e-30
+# linear floor each replaced, not a new 30-orders-smaller one. The pattern
+# matcher reads the literal, not the space it lives in.
 src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 5
 src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
@@ -11,7 +18,7 @@ src/tengri/components/agn/adaf.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/feii.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/masking.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/blocks/runner.py | jnp.clip with floor 0.0 < 1e-20 -> 1
-src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
 src/tengri/components/agn/blocks/torus_screen.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blocks/torus_screen.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/blr.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
@@ -26,6 +33,7 @@ src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-100 < 1e-20
 src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/agn/fracagn.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/fracagn.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/agn/kd18_agnfitter.py | jnp.clip with floor 0.0 < 1e-20 -> 5
 src/tengri/components/agn/kd_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 7
 src/tengri/components/agn/kd_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
 src/tengri/components/agn/nlr_gaussian_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1

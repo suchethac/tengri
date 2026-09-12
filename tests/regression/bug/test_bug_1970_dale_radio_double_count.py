@@ -160,12 +160,22 @@ class TestDale2014RadioDoubleCount1970:
     def test_dale2014_cigale_sf_radio_composed_sed_is_smooth(
         self, synthetic_ssp_wide, synthetic_tophat_obs
     ):
-        """dale2014_cigale + SF radio produces smooth composed SED.
+        """dale2014_cigale + SF radio produces a smoothly curving composed SED.
 
-        The smoothness test: between 0.5 and 30 GHz (1e8–6e9 Å in wavelength),
-        every node-to-node log-log slope should be within 0.15 of the median.
-        This would have caught #1970: the unguarded dale2014 combo shows
-        a −4.93 slope at the template edge vs. +0.77 expected.
+        Smoothness criterion: the log-log slope between adjacent radio-band
+        nodes (0.5-30 GHz, 1e8-6e9 Angstrom) changes by less than 0.05 from
+        one interval to the next. Deviation-from-median was the wrong
+        quantity: it also flags the physically required, gradual free-free
+        flattening toward high frequency as a defect, whereas #1970's real
+        double-count defect is a node-to-node slope JUMP (-4.93 next to
+        +0.77, a change of order 5).
+
+        Physical pin: the free-free thermal fraction rises from ~10% at
+        1.4 GHz to ~50% at 30 GHz (Condon 1992, ARA&A, 30, 575), so the
+        lowest-frequency node sits close to the pure-synchrotron slope the
+        sampled ``radio_alpha_sf`` implies, while the highest-frequency node
+        is measurably flatter, bounded below by the pure free-free slope the
+        sampled ``radio_alpha_ff`` implies.
         """
         import jax
         import jax.numpy as jnp
@@ -203,14 +213,47 @@ class TestDale2014RadioDoubleCount1970:
 
         slopes = jnp.diff(log_sed) / jnp.diff(log_wave)
 
-        # Smoothness criterion: |slope - median| < 0.15
-        median_slope = jnp.median(slopes)
-        max_deviation = jnp.max(jnp.abs(slopes - median_slope))
+        # Smoothness criterion: adjacent-interval slope CHANGE stays small.
+        # A genuine double-count kink jumps the slope by ~5.7 at the
+        # template edge; physical synchrotron+free-free curvature changes
+        # by ~0.015 per node here.
+        slope_change = jnp.diff(slopes)
+        max_slope_change = jnp.max(jnp.abs(slope_change))
 
-        assert float(max_deviation) < 0.15, (
-            f"Composed SED is not smooth in radio band: max deviation {float(max_deviation):.3f} "
-            f"from median slope {float(median_slope):.3f}. This suggests double-counting "
-            f"or other incompatibility at the template edge."
+        assert float(max_slope_change) < 0.05, (
+            f"Composed SED curvature changes abruptly between adjacent radio-band "
+            f"nodes: max |Δslope| {float(max_slope_change):.3f}. This suggests "
+            f"double-counting or other incompatibility at the template edge."
+        )
+
+        # Physical pin: radio_alpha_sf/radio_alpha_ff are read from the sampled
+        # params (never hardcoded) since only the sampled value is meaningful
+        # per draw. L_nu ~ nu**-alpha_sf and L_nu ~ nu**alpha_ff give
+        # d log L_nu / d log wave = +alpha_sf (pure synchrotron) and
+        # -alpha_ff (pure free-free) respectively.
+        alpha_sf = params["radio_alpha_sf"]
+        alpha_ff = params["radio_alpha_ff"]
+        lowest_freq_slope = slopes[-1]  # nearest 6e9 Å / 0.5 GHz
+        highest_freq_slope = slopes[0]  # nearest 1e8 Å / 30 GHz
+
+        assert float(jnp.abs(lowest_freq_slope - alpha_sf)) < 0.10, (
+            f"Lowest-frequency slope {float(lowest_freq_slope):.3f} strays from the "
+            f"pure-synchrotron value radio_alpha_sf={float(alpha_sf):.3f} by more "
+            f"than 0.10; the ~10% Condon (1992) thermal fraction at 1.4 GHz should "
+            f"leave this node close to the synchrotron-only spectral index."
+        )
+        assert float(highest_freq_slope) < float(lowest_freq_slope) - 0.15, (
+            f"Highest-frequency slope {float(highest_freq_slope):.3f} is not at "
+            f"least 0.15 flatter than the lowest-frequency slope "
+            f"{float(lowest_freq_slope):.3f}; the free-free thermal fraction rising "
+            f"toward ~50% by 30 GHz (Condon 1992) should flatten the spectrum "
+            f"measurably at the high-frequency end."
+        )
+        assert float(highest_freq_slope) > -float(alpha_ff) - 1e-6, (
+            f"Highest-frequency slope {float(highest_freq_slope):.3f} has overshot "
+            f"below the pure free-free slope -radio_alpha_ff="
+            f"{-float(alpha_ff):.3f}; a synchrotron+free-free mixture cannot be "
+            f"flatter than its flattest (free-free) component."
         )
 
     def test_dale2014_cigale_templates_zero_beyond_1e8_angstrom(self):

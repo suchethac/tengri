@@ -65,6 +65,7 @@ _DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _DISK_H5 = _DATA_DIR / "agnfitter_bbb_reference.h5"
 _TORUS_H5 = _DATA_DIR / "agnfitter_torus_reference.h5"
 _COLD_H5 = _DATA_DIR / "agnfitter_cold_dust_reference.h5"
+_GALAXY_H5 = _DATA_DIR / "agnfitter_galaxy_reference.h5"
 _C_AA = 2.99792458e18  # speed of light [Å/s]
 
 
@@ -199,9 +200,48 @@ def disk_template(
 
 
 # ── Torus libraries ─────────────────────────────────────────────────────────
+# Task 4 vendored five additional AGNfitter-rX torus reductions into
+# ``agnfitter_torus_reference.h5`` (native resolution, no resampling -- see
+# ``scripts/build_agnfitter_bbb_reference.py::_write_df_grid_native``), but
+# left no accessor for them. These map onto the SAME (incl, oa, tau, a, fwd)
+# keyword vocabulary the four legacy libraries already use below, so no new
+# parameter names are introduced -- ``tau`` doubles for a reduction's
+# ``tv_axis`` exactly as it already does for SKIRTOR's ``tv-values``.
+_TORUS_REDUCTION_GROUP: dict[str, str] = {
+    "NK08_2P": "nk08_2p",
+    "NK08_3P": "nk08_3p",
+    "SKIRTOR_MEAN1P": "skirtor_mean1p",
+    "SKIRTOR_MEAN2P": "skirtor_mean2p",
+    "CAT3D_LOWFWD": "cat3d_lowfwd",
+}
+# Per-reduction axis order, as stored by the h5 writer (``<axis>_axis``
+# datasets in this order, then the trailing wavelength axis on ``template``).
+_TORUS_REDUCTION_AXES: dict[str, tuple[str, ...]] = {
+    "NK08_2P": ("incl", "oa"),
+    "NK08_3P": ("incl", "oa", "tau"),
+    "SKIRTOR_MEAN1P": ("incl",),
+    "SKIRTOR_MEAN2P": ("oa", "incl"),
+    "CAT3D_LOWFWD": ("incl", "a", "fwd"),
+}
+# keyword -> h5 dataset name for each axis token used above.
+_AXIS_H5_KEY: dict[str, str] = {
+    "incl": "incl_axis",
+    "oa": "oa_axis",
+    "tau": "tv_axis",
+    "a": "a_axis",
+    "fwd": "fwd_axis",
+}
+
+
 def list_tori() -> list[str]:
-    """Names of the torus libraries this driver can load."""
-    return ["S04", "NK08", "SKIRTOR", "CAT3D"]
+    """Names of the torus libraries this driver can load.
+
+    The first four are AGNfitter-rX's headline libraries (one template or a
+    coarse grid each); the remaining five are additional averaged reductions
+    of the same NK08/SKIRTOR/CAT3D families that AGNfitter-rX also ships
+    (Task 4), read from the same committed ``agnfitter_torus_reference.h5``.
+    """
+    return ["S04", "NK08", "SKIRTOR", "CAT3D", *_TORUS_REDUCTION_GROUP]
 
 
 def torus_template(
@@ -220,20 +260,22 @@ def torus_template(
 
     Parameters
     ----------
-    name : {"S04", "NK08", "SKIRTOR", "CAT3D"}
-        Torus library name.
+    name : {"S04", "NK08", "SKIRTOR", "CAT3D", "NK08_2P", "NK08_3P", \
+"SKIRTOR_MEAN1P", "SKIRTOR_MEAN2P", "CAT3D_LOWFWD"}
+        Torus library or reduction name (see :func:`list_tori`).
     log_nh : float, optional
         S04 hydrogen column ``log10(N_H)``.
     incl : float, optional
-        Inclination [deg] (NK08, SKIRTOR, CAT3D).
+        Inclination [deg] (NK08, SKIRTOR, CAT3D, and every ``_2P``/``_3P``/
+        ``_MEAN*P`` reduction below).
     oa : float, optional
-        Half-opening angle [deg] (SKIRTOR).
+        Half-opening angle [deg] (SKIRTOR, NK08_2P, NK08_3P, SKIRTOR_MEAN2P).
     tau : float, optional
-        Equatorial optical depth (SKIRTOR ``tv``).
+        Equatorial optical depth (SKIRTOR ``tv``; also NK08_3P's ``tv_axis``).
     a : float, optional
-        Radial cloud power-law index (CAT3D).
+        Radial cloud power-law index (CAT3D, CAT3D_LOWFWD).
     fwd : float, optional
-        Polar-wind mass fraction (CAT3D).
+        Polar-wind mass fraction (CAT3D, CAT3D_LOWFWD).
 
     Returns
     -------
@@ -243,6 +285,8 @@ def torus_template(
         Torus luminosity density [erg/s/Hz], AGNFITTER-RX normalization.
     """
     name = name.upper()
+    if name in _TORUS_REDUCTION_GROUP:
+        return _reduction_template(name, incl=incl, oa=oa, tau=tau, a=a, fwd=fwd)
     if name == "S04":
         d = _ref(_TORUS_H5, "s04")
         i = _nearest(d["axis"], log_nh)
@@ -282,9 +326,44 @@ def torus_template(
     raise ValueError(f"Unknown torus library {name!r}; choose from {list_tori()}")
 
 
+def _reduction_template(
+    name: str,
+    *,
+    incl: float | None,
+    oa: float | None,
+    tau: float | None,
+    a: float | None,
+    fwd: float | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load one of the five Task-4 torus reductions at its nearest grid node.
+
+    Reads ``agnfitter_torus_reference.h5``'s ``<reduction>`` group (native
+    wavelength resolution, ascending Å already -- see
+    ``scripts/build_agnfitter_bbb_reference.py::_write_df_grid_native``) and
+    indexes its ``template`` array along the reduction's declared axis order
+    (:data:`_TORUS_REDUCTION_AXES`), selecting the nearest node on each axis
+    given by name from the local scope (``incl``, ``oa``, ``tau``, ``a``,
+    ``fwd``).
+    """
+    values = {"incl": incl, "oa": oa, "tau": tau, "a": a, "fwd": fwd}
+    d = _ref(_TORUS_H5, _TORUS_REDUCTION_GROUP[name])
+    idx = tuple(
+        _nearest(d[_AXIS_H5_KEY[axis]], values[axis]) for axis in _TORUS_REDUCTION_AXES[name]
+    )
+    template = np.asarray(d["template"], dtype=np.float64)[idx]
+    wave_aa = np.asarray(d["wavelength"], dtype=np.float64)
+    return wave_aa, _renorm("TO", template)
+
+
 def torus_axes(name: str) -> dict[str, np.ndarray]:
     """Grid axes for a torus library."""
     name = name.upper()
+    if name in _TORUS_REDUCTION_GROUP:
+        d = _ref(_TORUS_H5, _TORUS_REDUCTION_GROUP[name])
+        return {
+            axis: np.asarray(d[_AXIS_H5_KEY[axis]], dtype=np.float64)
+            for axis in _TORUS_REDUCTION_AXES[name]
+        }
     if name == "S04":
         d = _ref(_TORUS_H5, "s04")
         return {"log_nh": np.asarray(d["axis"], dtype=np.float64)}
@@ -543,7 +622,12 @@ def _s17_radio_tables():
     tdust : ndarray, shape (n_tdust,)
         Dust temperatures [K].
     lir_conv : ndarray, shape (n_tdust,)
-        LIR conversion factors (Bell 2003 convention).
+        L_IR already in erg/s (the vendored ``LIR_conv`` column, unlike the
+        plain ``LIR`` column read elsewhere in this module, is **not** in
+        L_sun -- ``LIR_conv / LIR == 3.826e33`` exactly across every Tdust
+        node, i.e. upstream has already applied the L_sun -> erg/s
+        conversion for this column). A caller that multiplies it by
+        ``3.826e33`` again double-converts by 33 orders of magnitude.
     fpah : ndarray, shape (n_fpah,)
         PAH mass fraction grid.
     """
@@ -597,9 +681,12 @@ def cold_dust_radio_template(
 
     Notes
     -----
-    This model includes radio frequencies (down to ~1.4 GHz = 0.2 mm) and was
-    calibrated against the infrared-radio correlation (Bell 2003). The radio
-    tail above ~1 mm is a power law with spectral index ~-0.75.
+    This model includes radio frequencies (down to the vendored table's
+    lowest tabulated node, ~1.0017 GHz -- measured directly from
+    ``_s17_radio_tables()['dust_nu_hz'].min()``, not the ~1.4 GHz this
+    docstring previously claimed) and was calibrated against the
+    infrared-radio correlation (Bell 2003). The radio tail above ~1 mm is a
+    power law with spectral index ~-0.75.
 
     References
     ----------
@@ -629,8 +716,10 @@ def cold_dust_radio_axes() -> dict[str, np.ndarray]:
     Returns
     -------
     dict
-        Keys ``tdust`` (dust temperature [K]) and ``fpah`` (PAH mass fraction),
-        ``lir_conv`` (LIR conversion factor for Bell 2003 relation).
+        Keys ``tdust`` (dust temperature [K]), ``fpah`` (PAH mass fraction),
+        and ``lir_conv`` (L_IR **already in erg/s** -- see
+        :func:`_s17_radio_tables`'s docstring; do not re-multiply by
+        ``3.826e33``).
     """
     _, _, _, _, tdust_ax, lir_conv, fpah_ax = _s17_radio_tables()
     return {"tdust": tdust_ax, "fpah": fpah_ax, "lir_conv": lir_conv}
@@ -695,6 +784,71 @@ def alpha_ox(l_2500: float, scatter: float = 0.0) -> float:
     return -0.137 * np.log10(l_2500) + 2.638 + scatter
 
 
+def _nearest_lookup(x_query: float, x_grid: np.ndarray, y_grid: np.ndarray) -> float:
+    """Nearest-neighbor lookup, matching ``scipy.interpolate.interp1d(kind='nearest')``.
+
+    Parameters
+    ----------
+    x_query : float
+        Query abscissa.
+    x_grid : ndarray, shape (n,)
+        Grid abscissa, any order (not required to be sorted).
+    y_grid : ndarray, shape (n,)
+        Grid ordinate, in the same order as ``x_grid``.
+
+    Returns
+    -------
+    float
+        ``y_grid`` at the grid node nearest ``x_query`` -- a snap to a node,
+        never a blend of two. An exact midpoint between two nodes resolves
+        to the **lower-``x`` neighbor**, matching ``interp1d``'s own
+        tie-break (verified against it: ``interp1d([0,1,3],[10,20,30],
+        kind='nearest')(2.0) == 20.0``, the node at ``x=1``, not ``x=3``) --
+        and independent of whether ``x_grid`` arrives ascending or
+        descending, because the grid is sorted internally before the
+        distances are compared. ``np.argmin`` alone is order-dependent (it
+        returns the *first* occurrence on a tie, which is the low-``x``
+        node only if the input already happens to be ascending); sorting
+        first is what makes the "any order" claim above true rather than
+        an accident of whoever's caller passes ascending data.
+    """
+    x_grid = np.asarray(x_grid, dtype=np.float64)
+    y_grid = np.asarray(y_grid, dtype=np.float64)
+    order = np.argsort(x_grid)
+    x_sorted = x_grid[order]
+    y_sorted = y_grid[order]
+    idx = int(np.argmin(np.abs(x_sorted - x_query)))
+    return float(y_sorted[idx])
+
+
+def _l2500_from_template(wave_aa: np.ndarray, L_nu: np.ndarray) -> float:
+    """L(2500 Angstrom), snapped to the nearest disk-template node.
+
+    Implements ``MODEL_AGNfitter.XRAYS``'s own
+    ``interp1d(bbb_nu, bbb_Fnu, kind='nearest')`` -- a node snap, not a
+    linear blend. Measured on the THB21 template: linear interpolation gives
+    L_2500 = 3.610371e-30 against nearest-neighbor's 3.615649e-30 (0.06%,
+    negligible at this template's fine 1024-point sampling, but the point is
+    fidelity to the upstream lookup rule, not the size of the effect on any
+    one template).
+
+    Parameters
+    ----------
+    wave_aa : ndarray, shape (n,)
+        Disk wavelength grid [Angstrom].
+    L_nu : ndarray, shape (n,)
+        Disk luminosity density [erg/s/Hz], same grid.
+
+    Returns
+    -------
+    float
+        L_nu [erg/s/Hz] at the grid node nearest 2500 Angstrom, compared in
+        log frequency (upstream's own axis).
+    """
+    log_nu = np.log10(units.C_ANGSTROM_PER_S / np.asarray(wave_aa, dtype=np.float64))
+    return _nearest_lookup(np.log10(NU_2500), log_nu, np.asarray(L_nu, dtype=np.float64))
+
+
 def disk_xray_extension(
     wave_aa: np.ndarray,
     L_nu: np.ndarray,
@@ -726,10 +880,7 @@ def disk_xray_extension(
     xray_L_nu : ndarray, shape (1000,)
         X-ray luminosity density [erg/s/Hz].
     """
-    log_nu = np.log10(units.C_ANGSTROM_PER_S / np.asarray(wave_aa, dtype=np.float64))
-    L_2500 = float(
-        np.interp(np.log10(NU_2500), np.sort(log_nu), np.asarray(L_nu)[np.argsort(log_nu)])
-    )
+    L_2500 = _l2500_from_template(wave_aa, L_nu)
     alpha = alpha_ox(L_2500, scatter)
     fnu_2kev = L_2500 * 10.0 ** (alpha / 0.3838)
     a = fnu_2kev / ((_H_KEV_PER_HZ * NU_2KEV) ** (-gamma + 1) * np.exp(-NU_2KEV / 7.2540e19))
@@ -745,3 +896,136 @@ def _nearest(axis: np.ndarray, value: float | None) -> int:
     if value is None:
         return int(len(axis) // 2)
     return int(np.argmin(np.abs(axis - float(value))))
+
+
+# ── GALAXY (BC03 stellar population) reference ──────────────────────────────
+# Vendored from AGNfitter-rX's models/GALAXY/{BC03_840seds,BC03_seds_metal_medium}
+# pickles by scripts/build_agnfitter_galaxy_reference.py: same never-touch-the-
+# clone-at-runtime contract as the disk/torus/cold-dust groups above, on a
+# separate committed h5 (data/agnfitter_galaxy_reference.h5) since GALAXY
+# is not part of any AGN block.
+def require_galaxy_available() -> None:
+    """Raise a clear, actionable error if the committed GALAXY grid is missing."""
+    if not _GALAXY_H5.is_file():
+        raise FileNotFoundError(
+            "AGNfitter GALAXY reference grid missing from data/ "
+            "(agnfitter_galaxy_reference.h5). Regenerate with "
+            "scripts/build_agnfitter_galaxy_reference.py (needs an AGNfitter-rX clone)."
+        )
+
+
+def galaxy_axes(metal: bool = False) -> dict[str, np.ndarray]:
+    """Grid axes for the GALAXY (BC03) stellar-population library.
+
+    Reproduces the ``(tau, age[, metal])`` grid ``MODEL_AGNfitter.GALAXY()``
+    tabulates for its ``'BC03'`` (single, near-solar metallicity) and
+    ``'BC03_metal'`` (4 metallicities) branches.
+
+    Parameters
+    ----------
+    metal : bool
+        If ``True``, read the ``bc03_metal`` group (4 metallicities, 18 tau x
+        20 ages) and include its ``metal`` axis. Default ``False`` reads the
+        single-metallicity ``bc03_840`` group (28 tau x 30 ages).
+
+    Returns
+    -------
+    dict
+        ``{"tau": ndarray [Gyr], "age": ndarray [yr], "wavelength": ndarray
+        [Angstrom]}``, plus ``"metal"`` (``[Z/Zsun]``) when ``metal=True``.
+    """
+    require_galaxy_available()
+    d = _ref(_GALAXY_H5, "bc03_metal" if metal else "bc03_840")
+    axes = {"tau": d["tau_axis"], "age": d["age_axis"], "wavelength": d["wavelength_aa"]}
+    if metal:
+        axes["metal"] = d["metal_axis"]
+    return axes
+
+
+def galaxy_template(
+    tau: float,
+    age: float,
+    metal: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load one GALAXY (BC03) stellar-population template (nearest grid node).
+
+    Reproduces the template access in ``MODEL_AGNfitter.GALAXY()`` (the
+    ``'BC03'`` / ``'BC03_metal'`` branches): a declining-exponential
+    (:math:`\\mathrm{SFR}(t) \\propto e^{-t/\\tau}`) star formation history at
+    fixed (tau, age[, metal]), unreddened (``E(B-V)_{gal} = 0``; reddening is
+    applied separately -- see :mod:`tengri.components.dust`).
+
+    Parameters
+    ----------
+    tau : float
+        e-folding timescale [Gyr] (nearest grid node).
+    age : float
+        Stellar population age [yr] (nearest grid node).
+    metal : float, optional
+        Metallicity [Z/Zsun] (nearest grid node). When given, reads the
+        4-metallicity ``bc03_metal`` group instead of the single-metallicity
+        ``bc03_840`` group.
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (1221,)
+        Wavelength [Angstrom], ascending, AGNfitter-rX's native (unresampled)
+        BC03 grid.
+    L_nu : ndarray, shape (1221,)
+        Stellar luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    The 1221-point native wavelength grid is coarser than tengri's own
+    ``bc03_pdva_stelib_chabrier`` SSP grid (6900 points); this driver keeps
+    AGNfitter-rX's native sampling rather than resampling onto a shared grid
+    (M-B in the parity audit: resampling a narrow spectral feature loses
+    amplitude), so a node-exact comparison is only valid at each side's own
+    tabulated wavelengths, not point-by-point across a shared grid.
+    """
+    require_galaxy_available()
+    d = _ref(_GALAXY_H5, "bc03_metal" if metal is not None else "bc03_840")
+    t = _nearest(d["tau_axis"], tau)
+    a = _nearest(d["age_axis"], age)
+    if metal is not None:
+        m = _nearest(d["metal_axis"], metal)
+        L_nu = d["sed"][m, t, a, :]
+    else:
+        L_nu = d["sed"][t, a, :]
+    return d["wavelength_aa"], L_nu
+
+
+def galaxy_sfr(tau: float, metal: float | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Instantaneous SFR(age) at fixed tau from the GALAXY (BC03) library.
+
+    Reproduces ``MODEL_AGNfitter.GALAXY()``'s ``GALAXY_SFRdict``: the pickle's
+    own tabulated SFR(t), which pins the star-formation-history functional
+    form the reproduction notebook must use. At any tau node, SFR(age) is
+    monotonically declining from the youngest tabulated age (10 Myr) --
+    the classic declining-exponential tau-model, NOT a delayed-tau history
+    (which would rise before falling). See the parity audit's D1 finding.
+
+    Parameters
+    ----------
+    tau : float
+        e-folding timescale [Gyr] (nearest grid node).
+    metal : float, optional
+        Metallicity [Z/Zsun] (nearest grid node); reads ``bc03_metal`` when
+        given, else the single-metallicity ``bc03_840`` group.
+
+    Returns
+    -------
+    age_axis : ndarray, shape (n_age,)
+        Stellar population age [yr], ascending.
+    sfr : ndarray, shape (n_age,)
+        Instantaneous star formation rate [Msun/yr] at each ``age_axis`` node.
+    """
+    require_galaxy_available()
+    d = _ref(_GALAXY_H5, "bc03_metal" if metal is not None else "bc03_840")
+    t = _nearest(d["tau_axis"], tau)
+    if metal is not None:
+        m = _nearest(d["metal_axis"], metal)
+        sfr = d["sfr"][m, t, :]
+    else:
+        sfr = d["sfr"][t, :]
+    return d["age_axis"], sfr

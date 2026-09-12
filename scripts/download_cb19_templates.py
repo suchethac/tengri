@@ -490,7 +490,7 @@ def _fetch_cb19(
     hb_idx = _idx_map(axes["HbFrac"])
 
     def _nh_idx(val: float) -> int:
-        """Nearest-neighbour snap for log_nH."""
+        """Nearest-neighbor snap for log_nH."""
         return int(np.argmin(np.abs(axes["log_nH"] - val)))
 
     # Collect line column names (filter to those actually in the DB)
@@ -584,7 +584,7 @@ def _fetch_cb19(
                 age_r = round(age_raw, 4)
                 i_age = age_idx_maps[sed].get(age_r)
                 if i_age is None:
-                    # Nearest-neighbour fallback
+                    # Nearest-neighbor fallback
                     diffs = np.abs(age_arrays[sed] - age_raw)
                     if diffs.min() < 0.02:
                         i_age = int(np.argmin(diffs))

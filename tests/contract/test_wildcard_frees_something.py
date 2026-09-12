@@ -647,16 +647,31 @@ class TestZeroDeclarationWildcardsRaise2187:
                 redshift=Fixed(0.1),
             )
 
-    def test_agn_feii_qsogen_balmer_wildcard_covers_no_parameters(self):
-        """The shared AGN scope excludes ``qsogen_balmer``'s own parameters."""
+    def test_agn_blr_grahsp_wildcard_covers_no_parameters(self):
+        """An AGN sub-block type that owns none of the parameters it reads.
+
+        Every knob GRAHSP's BLR consumes is a line-strength shared with the
+        NLR and Fe II categories, so the declared-and-OWNED set for
+        ``agn.blr`` under ``grahsp`` is empty and its own ``'*'`` covers
+        nothing.
+
+        This test used to select ``feii={'type': 'qsogen_balmer'}``, on the
+        premise that the shared AGN scope excluded that type's parameters.
+        Per-sub-block scoping replaced that shared union with what the
+        SELECTED type declares and owns
+        (``_agn_subblock_declared_params``), and under it ``agn.feii`` owns
+        ``agn_bcnorm`` -- one real parameter, so the wildcard there frees
+        something and correctly does not raise. The rule is unchanged; the
+        fixture had to move to a sub-block that is still genuinely empty.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            with pytest.raises(ParameterError, match=r"group 'agn\.feii' covers no parameters"):
+            with pytest.raises(ParameterError, match=r"group 'agn\.blr' covers no parameters"):
                 tengri.parse_groups(
                     sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                     agn={
                         "type": "composable",
-                        "feii": {"type": "qsogen_balmer", "all_params": FREE},
+                        "blr": {"type": "grahsp", "all_params": FREE},
                     },
                     redshift=Fixed(0.1),
                 )
@@ -676,7 +691,11 @@ class TestZeroDeclarationWildcardsRaise2187:
             )
 
     def test_the_error_names_the_group_the_user_actually_wrote(self):
-        """Actionable: the message must name the dotted sub-block, not just 'agn'."""
+        """Actionable: the message must name the dotted sub-block, not just 'agn'.
+
+        Same fixture move as the test above: ``agn.feii``/``qsogen_balmer``
+        owns a parameter under per-sub-block scoping and no longer raises.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             with pytest.raises(ParameterError) as exc:
@@ -684,11 +703,11 @@ class TestZeroDeclarationWildcardsRaise2187:
                     sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                     agn={
                         "type": "composable",
-                        "feii": {"type": "qsogen_balmer", "all_params": FREE},
+                        "blr": {"type": "grahsp", "all_params": FREE},
                     },
                     redshift=Fixed(0.1),
                 )
-        assert "agn.feii" in str(exc.value)
+        assert "agn.blr" in str(exc.value)
 
 
 # ── Regression: an explicit per-parameter FREE must be honored or refused ─

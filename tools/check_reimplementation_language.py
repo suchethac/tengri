@@ -23,9 +23,14 @@ there are two tiers:
 
 1. ``BANNED_PHRASES`` catches unambiguous claims: "ported from", "copied
    from", "faithful port", and friends.
-2. A proximity rule catches the bare word "port" on a line that also names
-   one of ``REFERENCE_CODES``. This is what finds "ProSpect port" and
-   "SKIRTOR port", where the phrase alone looks innocent.
+2. A proximity rule catches the bare word "port" or "transcrib..." on a
+   line that also names one of ``REFERENCE_CODES``. This is what finds
+   "ProSpect port" and "SKIRTOR port", where the phrase alone looks
+   innocent, and it is also why "transcribed" is not in ``BANNED_PHRASES``:
+   unlike "copied from" or "adapted from", "transcribed" alone has no
+   direction (a number transcribed *from a grid axis*, by hand, is not a
+   provenance claim about tengri's own code) and needs a named reference
+   code beside it to mean anything.
 
 Every pattern is ``\\b``-anchored on the left. Without that, "ported from"
 matches inside "exported from" and "supported from", which is most of this
@@ -164,6 +169,10 @@ REFERENCE_CODES = (
     "cloudy",
 )
 PORT_WORD_RE = re.compile(r"\bport(?:s|ed|ing)?\b", re.IGNORECASE)
+# No directional anchor like the "X from" phrases above -- "transcribed" alone
+# is as common and innocent as bare "port" (a number transcribed from a grid
+# axis, by hand), so it is proximity-gated on REFERENCE_CODES the same way.
+TRANSCRIBE_WORD_RE = re.compile(r"\btranscrib\w*", re.IGNORECASE)
 REFERENCE_RE = re.compile("|".join(REFERENCE_CODES), re.IGNORECASE)
 # Network ports and hostnames: "port=3306", "port: 3306", "icg.port.ac.uk".
 NETWORK_PORT_RE = re.compile(r"port\s*[=:]|\.port\.|_PORT\b", re.IGNORECASE)
@@ -178,6 +187,8 @@ def _scan_line(line: str):
         return None
     if PORT_WORD_RE.search(line) and REFERENCE_RE.search(line):
         return '"port" on a line naming a reference code'
+    if TRANSCRIBE_WORD_RE.search(line) and REFERENCE_RE.search(line):
+        return '"transcribed" on a line naming a reference code'
     return None
 
 
@@ -207,11 +218,16 @@ def _scan_wrap(first: str, second: str):
     # a split banned phrase cannot span a full stop in the first place.
     if head.endswith((".", "!", "?", ":", ";")) or NETWORK_PORT_RE.search(joined):
         return None
-    across = (PORT_WORD_RE.search(head) and REFERENCE_RE.search(tail)) or (
+    across_port = (PORT_WORD_RE.search(head) and REFERENCE_RE.search(tail)) or (
         REFERENCE_RE.search(head) and PORT_WORD_RE.search(tail)
     )
-    if across:
+    if across_port:
         return '"port" wrapped onto a line naming a reference code'
+    across_transcribe = (TRANSCRIBE_WORD_RE.search(head) and REFERENCE_RE.search(tail)) or (
+        REFERENCE_RE.search(head) and TRANSCRIBE_WORD_RE.search(tail)
+    )
+    if across_transcribe:
+        return '"transcribed" wrapped onto a line naming a reference code'
     return None
 
 

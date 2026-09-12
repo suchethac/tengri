@@ -132,7 +132,7 @@ def build_model(variant: str):
 
 
 def make_mock(model, seed=42, snr=20.0):
-    """Centre-of-prior truth → mock photometry."""
+    """Center-of-prior truth → mock photometry."""
     key = jr.PRNGKey(seed)
     free = model.spec.free_params
     truth = {}
@@ -175,7 +175,7 @@ def recovery_quality(posterior, truth: dict) -> dict:
 
 
 def run_one(backend: str, model, obs, truth) -> dict:
-    """Single (backend, model) trial. Returns a JSON-serialisable dict."""
+    """Single (backend, model) trial. Returns a JSON-serializable dict."""
     entry = _BACKENDS[backend]
     kw = KW.get(backend, {})
 

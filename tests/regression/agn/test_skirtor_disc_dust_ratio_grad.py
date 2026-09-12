@@ -37,8 +37,15 @@ def _skirtor_grid():
 )
 @pytest.mark.parametrize("at_node", [True, False])
 def test_skirtor_disc_dust_ratio_grad_finite(param, at_node):
-    """R and R_faceon are differentiable w.r.t. each SKIRTOR grid-axis param,
-    both at grid nodes and off-node."""
+    """Every field of the returned tie is differentiable w.r.t. each SKIRTOR
+    grid-axis param, both at grid nodes and off-node.
+
+    ``faceon_shape_native`` joined the return value when the polar-dust
+    face-on reference moved onto the native grid (R60), and it is
+    ``disc_n / trapezoid(disc_n, wave_grid)`` with ``disc_n`` resampled from
+    the caller's grid -- a second path through the same PCHIP interpolant, so
+    it is summed into the loss here rather than left unguarded.
+    """
     from tengri.components.agn.blocks import resolve_agn_block
     from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
 
@@ -63,8 +70,14 @@ def test_skirtor_disc_dust_ratio_grad_finite(param, at_node):
     def loss(v):
         kw = dict(base)
         kw[param] = v
-        R, incl, R_faceon = skirtor_disc_dust_ratio(wave, disc, ext, agn_cos_inc=0.6, **kw)
-        return R + jnp.sum(incl) + R_faceon
+        tie = skirtor_disc_dust_ratio(wave, disc, ext, agn_cos_inc=0.6, **kw)
+        return (
+            tie.R
+            + jnp.sum(tie.incl_ratio)
+            + tie.R_faceon
+            + jnp.sum(tie.faceon_shape_native)
+            + jnp.sum(tie.wave_native)
+        )
 
     g = float(jax.grad(loss)(base[param]))
     assert np.isfinite(g), (
@@ -74,3 +87,53 @@ def test_skirtor_disc_dust_ratio_grad_finite(param, at_node):
         "`g` is identically zero — finite is not enough, "
         "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
+
+
+class TestNoGridFallbackReturnsAUnitShape:
+    """The no-grid fallback normalizes by the integral it measured, not a floor.
+
+    When the raw SKIRTOR disk/dust grid is absent, ``skirtor_disc_dust_ratio``
+    degrades to the caller's own grid and returns the disc renormalized to
+    unit area as ``faceon_shape_native`` -- the array the polar dust's
+    absorbed-power proxy integrates against. That renormalization used to
+    divide by ``jnp.maximum(int, 1e-30)``. The floor is not inert: a disc
+    whose integral falls below ``1e-30`` (a faint AGN, or simply a disc whose
+    support barely overlaps the caller's grid) came back scaled by
+    ``int / 1e-30`` instead of to unit area, so the polar reference silently
+    lost the same factor. The denominator is now SELECTED -- zero integral
+    gives a zero shape, anything positive is divided by itself -- which is
+    also what keeps division's ``-num/den**2`` VJP off a squared floor.
+    """
+
+    @staticmethod
+    def _tie(monkeypatch, disc_scale):
+        import tengri.components.agn.skirtor as sk
+
+        monkeypatch.setattr(sk, "_load_raw_disk_dust_grid", lambda *a, **k: None)
+        wave = jnp.linspace(1000.0, 100000.0, 512)
+        disc = jnp.full_like(wave, disc_scale)
+        ext = jnp.ones_like(wave)
+        return wave, sk.skirtor_disc_dust_ratio(wave, disc, ext, agn_cos_inc=0.6)
+
+    def test_a_faint_disc_still_gets_a_unit_area_shape(self, monkeypatch):
+        """Integral ~1e-35, well under the retired 1e-30 floor."""
+        wave, tie = self._tie(monkeypatch, 1.0e-40)
+        area = float(jnp.trapezoid(tie.faceon_shape_native, wave))
+        assert area == pytest.approx(1.0, rel=1e-10, abs=0.0), (
+            "the no-grid fallback must renormalize by the integral it measured; a "
+            f"1e-30 floor leaves the shape scaled by int/1e-30 instead. area={area:.6e}"
+        )
+
+    def test_an_ordinary_disc_is_unchanged(self, monkeypatch):
+        """The control: above the retired floor nothing about this moves."""
+        wave, tie = self._tie(monkeypatch, 1.0)
+        area = float(jnp.trapezoid(tie.faceon_shape_native, wave))
+        assert area == pytest.approx(1.0, rel=1e-10, abs=0.0)
+
+    def test_a_dead_disc_gives_a_zero_shape_not_a_spike(self, monkeypatch):
+        """The documented degenerate value: nothing to normalize, so nothing."""
+        _wave, tie = self._tie(monkeypatch, 0.0)
+        shape = np.asarray(tie.faceon_shape_native)
+        assert np.all(np.isfinite(shape)) and np.all(shape == 0.0), (
+            f"a disc that integrates to zero has no shape to normalize; got {shape[:4]}"
+        )

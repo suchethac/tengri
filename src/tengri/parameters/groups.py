@@ -104,6 +104,7 @@ from typing import NamedTuple
 
 from tengri.config.exceptions import (
     AdvisoryWarning,
+    ConfigError,
     DefaultFixedParametersWarning,
     ParameterError,
     WildcardPartialFreeWarning,
@@ -121,6 +122,25 @@ from tengri.parameters._dust_keys import (
     screen_keys,
     short_to_full,
     validate_shape_requests,
+)
+
+# Re-exported so `parameters.groups.<name>` keeps resolving for every caller
+# and test that already imports these from here (R35 moved the definitions to
+# their own module; the import paths are unchanged).
+from tengri.parameters.agn_ownership import (  # noqa: F401
+    _AGN_CATEGORY_WIDE_COMPANION_PARAMS,
+    _AGN_CONSUMES_CATEGORY,
+    _AGN_IR_FRAC_LEGACY_SPELLINGS,
+    _AGN_IR_FRAC_SPELLINGS,
+    _AGN_PARTITION,
+    _AGN_SUBBLOCK_COMPANION_KEY,
+    _TORUS_REGISTRY_ALLOWED_DEVIATIONS,
+    _agn_param_group,
+    _agn_subblock_companion_params,
+    _agn_subblock_declared_params,
+    _fracagn_value_is_active,
+    agn_cross_category_claims,
+    check_agn_torus_registry_agreement,
 )
 from tengri.parameters.parameters import CUE_FULL_CATALOG_DEFAULT, Parameters
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
@@ -395,6 +415,17 @@ def _valid_dust_emission_types() -> frozenset[str]:
     maintenance. Union with the alias map keys (e.g., draine2021_pah →
     draine2021_pah_ir) so grammar type names resolve correctly.
 
+    A ``"*_ir"``-suffixed registry name that is only reachable as an alias
+    *target* (never registered under its own short spelling, unlike
+    ``draine_li2007``/``draine_li2014``/``modified_blackbody``, which keep
+    their un-suffixed registry name directly valid alongside their ``dl07``/
+    ``dl14``/``mbb`` aliases) is a ``SEDModelComponent`` parity mirror, not a
+    grammar-facing engine name (see ``TestBuildResolverDustEmission`` and
+    #738) -- it must be reached only through its alias, e.g.
+    ``draine2021_pah`` for ``draine2021_pah_ir``. Excluding it here is what
+    keeps ``_standalone_dust_emission_types`` and the ``dust_emission.type``
+    grammar from also accepting the leaked internal spelling.
+
     Includes ``energy_balance_split`` (a registered two-temperature + AGN-IR
     component publishing ``sed_dust_ir``, Kokorev+2021; a real model, not a
     helper). Also includes ``_LAZY_DUST_EMISSION_TYPES`` (ADR-0005 / ADR-0008).
@@ -412,7 +443,14 @@ def _valid_dust_emission_types() -> frozenset[str]:
     # Add alias keys (grammar names that map to registry names)
     alias_keys = frozenset(_EMISSION_TYPE_ALIASES.keys())
 
-    return dust_ir_components | alias_keys | _LAZY_DUST_EMISSION_TYPES
+    # "*_ir" alias targets (e.g. draine2021_pah_ir) are internal component
+    # names, not public grammar -- drop them even though their outputs
+    # otherwise qualify them for dust_ir_components above.
+    leaked_ir_targets = frozenset(
+        value for value in _EMISSION_TYPE_ALIASES.values() if value.endswith("_ir")
+    )
+
+    return (dust_ir_components - leaked_ir_targets) | alias_keys | _LAZY_DUST_EMISSION_TYPES
 
 
 def _dust_emission_component_class(emission_type: str):
@@ -648,72 +686,6 @@ _AGN_BLOCK_TO_KWARG: dict[str, str] = {
     "blr": "agn_blr_block",
     "feii": "agn_feii_block",
     "atten": "agn_attenuation_block",
-}
-
-#: Partition table: agn_* param name -> group path (for sub-block routing).
-#: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
-_AGN_PARTITION = {
-    # Shared params (no sub-block prefix)
-    "agn_lum_ratio": "agn",
-    "agn_log_lbol": "agn",
-    "agn_alpha": "agn",
-    "agn_log_mbh": "agn",
-    "agn_log_ledd": "agn",
-    "agn_a_spin": "agn",
-    "agn_cos_inc": "agn",
-    # Disc dust obscuration (Prevot SMC; AGNfitter EBVbbb). Shared (not
-    # agn.disc): redden_disc applies it at the runner disc stage for every
-    # disc type, mirroring agn_log_lbol.
-    "agn_ebv_disc": "agn",
-    # Torus
-    "agn_T_torus": "agn.torus",
-    "agn_T_hot": "agn.torus",
-    "agn_T_warm": "agn.torus",
-    "agn_frac_hot": "agn.torus",
-    "agn_tau_torus": "agn.torus",
-    "agn_tau": "agn.torus",  # Nenkova+2008 CLUMPY equatorial optical depth
-    "agn_tau_skirtor": "agn.torus",
-    "agn_p_skirtor": "agn.torus",
-    "agn_q_skirtor": "agn.torus",
-    "agn_oa_skirtor": "agn.torus",
-    "agn_radius_ratio": "agn.torus",
-    # SKIRTOR_mean_3p (AGNfitter-rX averaged) torus
-    "agn_incl_skirtor": "agn.torus",
-    "agn_tv_skirtor": "agn.torus",
-    # CAT3D-Wind clumpy torus (Hönig & Kishimoto 2017)
-    "agn_a_cat3d": "agn.torus",
-    "agn_fwd_cat3d": "agn.torus",
-    # Silva+04 obscured-torus column density
-    "agn_log_nh_silva": "agn.torus",
-    "agn_torus_frac": "agn.torus",
-    # Fritz et al. (2006) smooth-dust torus
-    "agn_fritz_r_ratio": "agn.torus",
-    "agn_fritz_tau": "agn.torus",
-    "agn_fritz_beta": "agn.torus",
-    "agn_fritz_gamma": "agn.torus",
-    "agn_fritz_oa": "agn.torus",
-    "agn_fritz_psy": "agn.torus",
-    # Narrow-line region
-    "agn_nlr_cf": "agn.nlr",
-    "agn_alpha_ion": "agn.nlr",  # NLR photoionization knob
-    "neb_xid": "agn.nlr",  # Nebular ionization for NLR
-    # Broad-line region
-    "agn_blr_cf": "agn.blr",
-    # FeII
-    "agn_fe2_strength": "agn.feii",
-    # Attenuation
-    "agn_polar_ebv": "agn.atten",
-    "agn_polar_oa": "agn.atten",
-    "agn_polar_T": "agn.atten",
-    "agn_polar_beta": "agn.atten",
-    "agn_attenuation_ebv": "agn.atten",  # smc_prevot block E(B-V)
-    # Radiation physics (shared disc normalization)
-    "agn_f_hard": "agn",
-    "agn_gamma_warm": "agn",
-    "agn_kt_warm": "agn",
-    "agn_gamma_hard": "agn",
-    "agn_kt_hot": "agn",
-    "agn_r_warm_ratio": "agn",
 }
 
 #: Top-level kwargs that are not groups (passed through to Parameters).
@@ -1017,7 +989,24 @@ def parse_groups(**kwargs) -> Parameters:
     # structural variant that group selected. Computed once, consulted once in
     # the resolve loop below; see :func:`_wildcard_scopes` for why every group
     # with a structural axis needs an entry and what happens when one lacks it.
-    wildcard_scopes = _wildcard_scopes(structural_kwargs, structural_params, param_partition)
+    agn_ir_frac_active = _agn_ir_frac_explicit_and_active(kwargs.get("agn"))
+    wildcard_scopes = _wildcard_scopes(
+        structural_kwargs,
+        structural_params,
+        param_partition,
+        agn_ir_frac_active=agn_ir_frac_active,
+    )
+    # A block that reads a name another category owns has it in its wildcard
+    # scope, but the resolver looks for a parameter in its OWNING sub-block
+    # dict, so the reading block's '*' would never be consulted. This maps such
+    # a name to the category whose wildcard also governs it here (R36).
+    agn_cross_claims = agn_cross_category_claims(
+        {
+            category: structural_kwargs.get(kwarg)
+            for category, kwarg in _AGN_BLOCK_TO_KWARG.items()
+            if structural_kwargs.get(kwarg)
+        }
+    )
 
     # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
     # group it was written in. ``FREE`` resolves to the registry default, which
@@ -1101,7 +1090,12 @@ def parse_groups(**kwargs) -> Parameters:
             # or (less commonly) a sub-block parameter at the top level.
             # Both should work. Build a merged search view across the
             # canonical location and the sibling locations; conflicts raise.
-            group_dict = _build_agn_search_view(param_name, kwargs.get("agn", {}), group)
+            group_dict = _build_agn_search_view(
+                param_name,
+                kwargs.get("agn", {}),
+                group,
+                wildcard_from=agn_cross_claims.get(param_name),
+            )
         elif group == "radio.sf" or group == "radio.agn":
             # Radio sub-blocks: descend into radio={'sf': {...}} / {'agn': {...}}
             # (mirrors the dust.emission sub-group path above).
@@ -1160,6 +1154,16 @@ def parse_groups(**kwargs) -> Parameters:
         is_agn = group == "agn" or group.startswith("agn.")
         scope = wildcard_scopes.get(group)
         wildcard_active = scope is None or param_name in scope
+        # A cross-category companion is governed by the READING block's
+        # wildcard (R36), so its scope is the one that decides here: the
+        # owner's scope excludes it, and on a build where the owner is 'none'
+        # that scope is empty, which is exactly how four names the
+        # schartmann2005_skirtor_atten disc reads resolved
+        # wildcard_fixed_inactive with nothing able to free them.
+        claiming_category = agn_cross_claims.get(param_name)
+        if not wildcard_active and claiming_category is not None:
+            claim_scope = wildcard_scopes.get(f"agn.{claiming_category}")
+            wildcard_active = claim_scope is None or param_name in claim_scope
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -1172,7 +1176,14 @@ def parse_groups(**kwargs) -> Parameters:
         # so only the active branch is tracked.
         if tag == "wildcard_free":
             freed = not final_dist.is_fixed
-            wildcard_free_outcome.setdefault(group, []).append((param_name, freed))
+            # Booked against the wildcard that actually freed it. For a
+            # cross-category companion (R36) that is the READING block's, not
+            # the owner's: booking it under the owner made
+            # _narrow_outcome_to_selected_component rebuild the owner's group
+            # from a declared set the freed name is not in, and report the
+            # owner's own untouched parameters as "freed 0 of 3".
+            outcome_group = f"agn.{claiming_category}" if claiming_category else group
+            wildcard_free_outcome.setdefault(outcome_group, []).append((param_name, freed))
             # Report the *outcome*, not the request. A wildcard-FREE that found
             # no declared prior leaves the parameter Fixed, and tagging it
             # "[all_params FREE]" put a row reading FREE inside the Fixed block
@@ -1246,7 +1257,9 @@ def parse_groups(**kwargs) -> Parameters:
     if not allow_empty_wildcard:
         _check_wildcard_freed_something(
             _seed_zero_declaration_wildcards(
-                _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params),
+                _narrow_outcome_to_selected_component(
+                    wildcard_free_outcome, structural_params, wildcard_scopes
+                ),
                 kwargs,
             )
         )
@@ -1661,8 +1674,20 @@ def _z_narrowed_onset_params(spec) -> frozenset[str]:
 #: Sub-block group name -> the ``structural_params`` attribute naming the
 #: component selected for it. Only groups listed here are narrowed; add an
 #: entry when another sub-block's parameter partition is wider than any one
-#: component's declarations.
-_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {"dust_emission": "dust_emission"}
+#: component's declarations. The six ``agn.*`` entries route through
+#: :func:`_agn_subblock_declared_params` (signature introspection) rather
+#: than :func:`_declared_param_names` (the ``component_factory._REGISTRY``
+#: lookup dust_emission and every other entry here use) -- see
+#: :func:`_narrow_outcome_to_selected_component`.
+_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {
+    "dust_emission": "dust_emission",
+    "agn.disc": "agn_disc_block",
+    "agn.torus": "agn_torus_block",
+    "agn.nlr": "agn_nlr_block",
+    "agn.blr": "agn_blr_block",
+    "agn.feii": "agn_feii_block",
+    "agn.atten": "agn_attenuation_block",
+}
 
 
 def _declared_param_names(component_type: str) -> frozenset[str] | None:
@@ -1737,6 +1762,7 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
 def _narrow_outcome_to_selected_component(
     outcome: dict[str, list[tuple[str, bool]]],
     structural_params,
+    wildcard_scopes: dict[str, frozenset[str] | None],
 ) -> dict[str, list[tuple[str, bool]]]:
     """Restrict a sub-block's wildcard outcome to its selected component's params.
 
@@ -1758,6 +1784,20 @@ def _narrow_outcome_to_selected_component(
         Group name -> list of ``(param_name, was_freed)``.
     structural_params : StructuralParams
         Carries the selected component per sub-block.
+    wildcard_scopes : dict
+        The SAME per-group scopes :func:`_wildcard_scopes` computed earlier
+        in this parse (param name -> the group's actual freeable set). For
+        an ``agn.<category>`` group this is consulted INSTEAD of
+        re-deriving the declared set from
+        :func:`_agn_subblock_declared_params` directly: that raw
+        introspection cannot see build-specific narrowing (#2189, RULING
+        R15: ``agn_torus_frac`` dropped from the ``agn.torus`` scope when
+        fracAGN is active), so re-deriving it here silently un-does that
+        narrowing and reports the excluded parameter as "stuck; no
+        declared prior" -- true for #1482's dale2014 case, false and
+        misleading for this one. Required: the one caller always threads it,
+        and a fallback that re-derives an un-narrowed scope could only ever
+        re-introduce the bug this argument exists to fix.
 
     Returns
     -------
@@ -1771,7 +1811,10 @@ def _narrow_outcome_to_selected_component(
         component_type = getattr(structural_params, attr, None)
         if component_type is None:
             continue
-        declared = _declared_param_names(component_type)
+        if group.startswith("agn."):
+            declared = wildcard_scopes.get(group)
+        else:
+            declared = _declared_param_names(component_type)
         if declared is None:
             continue  # unregistered or declaration-free: keep the old behavior
         freed = {name for name, was_freed in narrowed[group] if was_freed}
@@ -1854,7 +1897,12 @@ def _seed_zero_declaration_wildcards(
     ``wildcard_fixed_inactive`` before the resolve loop ever records anything,
     and an AGN sub-block whose params fall outside the shared AGN scope
     (``agn.feii`` under ``qsogen_balmer``) does the same -- none of those were
-    in the census, so their wildcards resolved silently. Walking every dict
+    in the census, so their wildcards resolved silently. AGN is the sharpest
+    case: once each ``agn.<category>`` wildcard is scoped to what the SELECTED
+    block type declares and owns (:func:`_agn_subblock_declared_params`, rather
+    than the shared all-active-blocks union), EVERY one of the six categories
+    can reach an empty scope for some registered type, so naming them by
+    measured exception was never going to hold. Walking every dict
     the caller actually passed makes the set exhaustive by construction
     instead of by memory: it will keep working for a future component that
     reaches zero under some structural choice nobody has measured yet.
@@ -2299,6 +2347,67 @@ def _all_law_shape_params() -> frozenset[str]:
 _DUST_LAW_SLOTS: tuple[str, ...] = ("dust_law_bc", "dust_law_diff", "dust_law_neb")
 
 
+def _agn_ir_frac_explicit_and_active(agn_dict: object) -> bool:
+    """Whether the raw ``agn={...}`` dict explicitly sets fracAGN active.
+
+    Used to narrow the ``agn.torus`` sub-block's own wildcard scope (#2189,
+    RULING R15): whenever fracAGN is explicitly active,
+    ``AGNSEDComponent.apply`` (``components/agn/component.py``) OVERRIDES
+    whatever ``agn_torus_frac`` the user or wildcard supplied with a value
+    derived from the dust-absorbed stellar luminosity (the CIGALE
+    skirtor2016 ``agn_power = L_absorbed x fracAGN/(1-fracAGN)`` coupling),
+    so freeing ``agn_torus_frac`` under those conditions hands the sampler a
+    dimension with zero effect on the SED -- measured (F1): 0.0 relative
+    change in photometry across the full ``agn_torus_frac`` range whenever
+    fracAGN is explicitly active, versus 8.5x-30.6x otherwise.
+
+    Checked on the RAW dict, before alias/short-key resolution runs (this is
+    consulted while computing wildcard scopes, upstream of per-parameter
+    resolution) -- every spelling in :data:`_AGN_IR_FRAC_SPELLINGS` is tried,
+    since a user may write any of the full/short, canonical/legacy forms.
+
+    Parameters
+    ----------
+    agn_dict : object
+        The raw ``agn`` group value from the caller's kwargs (normally a
+        dict; anything else returns ``False``).
+
+    Returns
+    -------
+    bool
+        ``True`` iff fracAGN is explicitly given AND can be nonzero: a free
+        prior (``Uniform``, ...; almost surely samples positive), a bare
+        positive scalar, or ``Fixed`` at a positive value.
+        ``Fixed(DEFAULT)`` (fracAGN's own registry default is 0.0) and an
+        explicit ``Fixed(0.0)`` both return ``False`` -- explicit-but-inert,
+        not the conflict this guards.
+    """
+    if not isinstance(agn_dict, dict):
+        return False
+
+    written: list[object] = []
+    # The canonical spelling, resolved through the builder's OWN view, so
+    # every placement the builder honors is seen -- including a shared
+    # parameter written inside a sub-block, which the grammar advertises and
+    # which used to slip past this guard entirely (R34(b)).
+    view = _build_agn_search_view("agn_ir_frac", agn_dict, _agn_param_group("agn_ir_frac"))
+    short_name = _extract_short_name("agn_ir_frac", {})
+    if short_name in view:
+        written.append(view[short_name])
+    # The legacy spellings the view does not resolve, at the top level ONLY.
+    # fracAGN is a top-level key (R38): every sub-block placement of any of its
+    # four spellings is refused by _translate_agn, so scanning sub-dicts here
+    # could only ever disagree with what the builder honors -- which is exactly
+    # what it did, silently narrowing agn_torus_frac out of the torus wildcard
+    # on the strength of a sub-block key the builder dropped.
+    for key in _AGN_IR_FRAC_LEGACY_SPELLINGS:
+        if key in agn_dict:
+            written.append(agn_dict[key])
+    # Any active write makes it active: an answer that depended on which
+    # spelling was reached first would depend on set iteration order.
+    return any(_fracagn_value_is_active(value) for value in written)
+
+
 def _dust_wildcard_scopes(
     structural_params: Parameters,
     param_partition: dict[str, str],
@@ -2333,10 +2442,33 @@ def _dust_wildcard_scopes(
     scopes: dict[str, frozenset[str] | None] = {}
 
     # ── dust_emission: the selected IR engine's own declarations ──
-    scopes["dust_emission"] = (
+    # ``dust_eta_balance`` is partitioned into this group (registered whenever
+    # dust_emission is set, ``components/dust/_params.py``), but it is READ by
+    # the attenuator (``DustAttenuationSEDComponent``/``DustSEDComponent``
+    # apply ``L_ir = eta * L_absorbed``), not by any emission engine's own
+    # ``predict``. Narrowing this scope to the SELECTED engine's own
+    # declared set -- correct for every parameter an engine actually reads --
+    # silently orphans ``dust_eta_balance`` for every engine except
+    # ``energy_balance_split`` (which states it via its own
+    # ``reads_parameters`` marker, see that class): ``dust_emission={'type':
+    # 'schreiber2018', 'all_params': FREE}`` would free ``dust_T``/``dust_f_pah``
+    # but leave ``dust_eta_balance`` pinned at ``Fixed(1.0)``, reachable by no
+    # wildcard at all (``dust_attenuation={'all_params': FREE}`` does not reach
+    # it either -- the grammar partitions it into ``dust_emission``, not
+    # ``dust_attenuation``). It is live once wired on the attenuator (moves
+    # L_ir regardless of which IR engine is selected), so it belongs in every
+    # engine's freeable set unconditionally, the same fix
+    # ``energy_balance_split``'s marker already applies for itself, generalized
+    # here instead of via nine more per-engine markers. Stated here rather than
+    # in :func:`_wildcard_scopes` so the round-trip emitter, which reaches this
+    # scope through :func:`parameters_to_groups`, gives the same answer.
+    _dust_emission_declared = (
         _declared_param_names(structural_params.dust_emission)
         if structural_params.dust_emission is not None
         else None
+    )
+    scopes["dust_emission"] = (
+        None if _dust_emission_declared is None else _dust_emission_declared | {"dust_eta_balance"}
     )
 
     # ── dust: the attenuation laws the selected slots name ──
@@ -2373,6 +2505,8 @@ def _wildcard_scopes(
     structural_kwargs: dict,
     structural_params: Parameters,
     param_partition: dict[str, str],
+    *,
+    agn_ir_frac_active: bool = False,
 ) -> dict[str, frozenset[str] | None]:
     """Per-group scope for ``all_params: FREE``, keyed by group name.
 
@@ -2384,6 +2518,12 @@ def _wildcard_scopes(
         Structural-only spec, used for the selected ``dust_emission`` engine.
     param_partition : dict
         Parameter name -> owning group, from :func:`_partition_by_group`.
+    agn_ir_frac_active : bool, keyword-only
+        Whether the raw ``agn={...}`` dict explicitly sets fracAGN active
+        (:func:`_agn_ir_frac_explicit_and_active`). When true, ``agn_torus_frac``
+        is removed from the ``agn.torus`` sub-block's own wildcard scope
+        (#2189, RULING R15): it is overridden and inert whenever fracAGN is
+        active, so freeing it would hand the sampler a dead dimension.
 
     Returns
     -------
@@ -2419,11 +2559,42 @@ def _wildcard_scopes(
     """
     scopes: dict[str, frozenset[str] | None] = {}
 
-    # ── AGN: every agn.* sub-block shares the active-block scope ──
+    # ── AGN ──
+    # Top level: the union across every ACTIVE block (unchanged mechanism,
+    # AGN_BLOCK_CONSUMES-sourced; pinned by test_agn_block_consumes.py).
+    # Each agn.<category> sub-block: its OWN, narrower scope -- exactly what
+    # the SELECTED type's own block function declares (signature
+    # introspection, see _agn_subblock_declared_params). These are
+    # deliberately DIFFERENT computations: the old code gave every sub-block
+    # the same all-active-blocks union the top level uses, so a torus-only
+    # wildcard could free (or fail to free) parameters no torus type reads
+    # (D2 silva04 froze 0 of its own 2 params; cat3d_wind, absent from the
+    # CONSUMES table, fell back to the full ~50-param superset and froze 20
+    # dead names) -- task-12 audit.
     agn_active = _agn_active_param_set(structural_kwargs)
+    # The whole per-category block selection, so a sub-block scope can be
+    # conditioned on what the rest of the build actually selects (R33's feii
+    # companion, R36's cross-category one).
+    agn_selection = {
+        cat: structural_kwargs.get(kwarg)
+        for cat, kwarg in _AGN_BLOCK_TO_KWARG.items()
+        if structural_kwargs.get(kwarg)
+    }
     for group in set(param_partition.values()):
-        if group == "agn" or group.startswith("agn."):
+        if group == "agn":
             scopes[group] = agn_active
+        elif group.startswith("agn."):
+            category = group[len("agn.") :]
+            block_type = structural_kwargs.get(_AGN_BLOCK_TO_KWARG.get(category, ""))
+            declared = _agn_subblock_declared_params(category, block_type, selection=agn_selection)
+            # #2189 (RULING R15): agn_torus_frac is overridden and inert
+            # whenever fracAGN is explicitly active (see
+            # _agn_ir_frac_explicit_and_active); the torus sub-block's own
+            # wildcard must never free a dimension the CIGALE coupling
+            # discards regardless of its value.
+            if category == "torus" and agn_ir_frac_active and declared:
+                declared = declared - {"agn_torus_frac"}
+            scopes[group] = declared
 
     # ── radio: the selected sf mode / agn model ──
     scopes["radio.sf"] = _RADIO_SF_PARAMS_BY_MODE.get(
@@ -2630,6 +2801,15 @@ def _translate_structural(groups: dict) -> dict:
             is_sentinel_or_token = val is FREE or val is DEFAULT or _is_default_fixed(val)
             if not is_sentinel_or_token:
                 result[key] = val
+
+    # Both the selected AGN disc block and the selected xray variant are now
+    # known: refuse a disc that already carries a hot corona (M-D) composed
+    # with an xray group that would add a second one (#1586-adjacent, but for
+    # X-ray rather than a grid clip). One call, single source of truth in
+    # ``components/xray/_models.py``.
+    from tengri.components.xray._models import check_disc_xray_double_count
+
+    check_disc_xray_double_count(result.get("agn_disc_block"), result.get("xray_model"))
 
     return result
 
@@ -3055,6 +3235,46 @@ def _reject_per_screen_keys_no_law_reads(
     )
 
 
+#: Spellings a user may write to switch a group off. ``'none'`` is the
+#: canonical form every group's own type menu declares; ``'off'`` is the one
+#: accepted synonym.
+_OFF_SWITCH_SPELLINGS = frozenset({"none", "off"})
+
+
+def _normalize_off_switch(type_value: str | None) -> str | None:
+    """Canonicalize an off-switch spelling onto the group's own ``'none'``.
+
+    This is the one place the off-switch vocabulary is defined. Every group
+    that carries an off switch -- ``dust_attenuation``, ``dust_emission``,
+    ``agn``, ``neb``, ``shock``, ``radio``'s ``sf``/``agn`` sub-blocks,
+    ``xray`` and ``igm`` -- calls this immediately after reading its raw
+    ``type`` value, before any type-menu validation or off-switch branching.
+    The three per-source dust-screen selectors (``nebular_screen`` /
+    ``shock_screen`` / ``agn_screen``, #2234) are values rather than group
+    types but carry the same off switch, and both surfaces pass each raw
+    selector through here before ``_dust_keys.resolve_screen_choices``
+    validates it. A new off spelling (or a new group joining the family) is
+    one edit here, not one per translator.
+
+    Parameters
+    ----------
+    type_value : str or None
+        The raw ``type`` value read from a group dict (or sub-block dict).
+        ``None`` passes through unchanged: a group that defaults its type to
+        ``None`` (``dust_emission``) still spells "off" as the absence of a
+        type, which this helper does not touch.
+
+    Returns
+    -------
+    str or None
+        ``'none'`` if ``type_value`` is any accepted off spelling; otherwise
+        ``type_value`` unchanged.
+    """
+    if type_value in _OFF_SWITCH_SPELLINGS:
+        return "none"
+    return type_value
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -3070,31 +3290,36 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     validator :meth:`Parameters._init_dust_config` calls for the flat
     surface.
     """
-    dust_type = dust_atten_dict.get("type", "two_component")
+    dust_type = _normalize_off_switch(dust_atten_dict.get("type", "two_component"))
 
     # Per-source dust-screen choice (#2234 replacement): resolved and
     # validated BEFORE any early return below, so every dust type (including
-    # 'off'/'wg00', which return early just below/further down) applies the
+    # 'none'/'wg00', which return early just below/further down) applies the
     # same refusal rules as 'two_component'. One validator for both surfaces
     # (mirrors _init_dust_config's flat-kwarg call to the same function):
     # only 'two_component' ever reads the resolved values (component_factory
     # passes them into DustSEDComponentConfig), but the validation itself is
-    # not conditioned on reaching that point.
-    _screen_given = {source: dust_atten_dict.get(f"{source}_screen") for source in SCREEN_SOURCES}
+    # not conditioned on reaching that point. Each raw value passes through
+    # _normalize_off_switch first -- the one place the 'none'/'off' vocabulary
+    # lives -- so the validator only ever sees the canonical spelling.
+    _screen_given = {
+        source: _normalize_off_switch(dust_atten_dict.get(f"{source}_screen"))
+        for source in SCREEN_SOURCES
+    }
     _screen_choices = resolve_screen_choices(
         _screen_given,
-        dust_model=("off" if dust_type in ("none", "off") else dust_type),
+        dust_model=("off" if dust_type == "none" else dust_type),
         surface="grammar",
     )
     for _source, _choice in _screen_choices.items():
         result[f"dust_{_source}_screen"] = _choice
 
-    # 'none'/'off' disable the dust block entirely; parity with neb/agn/radio/
-    # xray/igm/shock, all of which accept type='none' (and the generic grammar
-    # error even promises it). The forward model reads dust_model=='off' as
-    # use_dust=False, so normalize both spellings onto that sentinel and skip
-    # law parsing (there is nothing to attenuate).
-    if dust_type in ("none", "off"):
+    # 'none' (its 'off' synonym normalized above by _normalize_off_switch)
+    # disables the dust block entirely; parity with neb/agn/radio/xray/igm/
+    # shock, all of which accept the same off switch. The forward model reads
+    # dust_model=='off' as use_dust=False, so skip law parsing (there is
+    # nothing to attenuate).
+    if dust_type == "none":
         result["dust_model"] = "off"
         return
 
@@ -3564,10 +3789,10 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
     Handles IR re-emission model selection and associated structural
     configuration (e.g., astrodust spinning dust and f_cnm).
     """
-    emission_type = dust_emis_dict.get("type")
-    if emission_type in ("none", "off"):
+    emission_type = _normalize_off_switch(dust_emis_dict.get("type"))
+    if emission_type == "none":
         # Explicitly disable IR re-emission, for parity with the group-level
-        # 'none'. Leave result['dust_emission'] unset (its off default).
+        # off switch. Leave result['dust_emission'] unset (its off default).
         emission_type = None
     if emission_type is not None:
         # Dust IR emission types are engine names (modified_blackbody, dale2014,
@@ -3608,7 +3833,7 @@ _NEBULAR_TYPE_HINTS = {
 
 def _translate_neb(neb_dict: dict, result: dict) -> None:
     """Translate neb group to nebular settings."""
-    neb_type = neb_dict.get("type", "none")
+    neb_type = _normalize_off_switch(neb_dict.get("type", "none"))
 
     # Validate type
     valid_neb = _valid_nebular_types()
@@ -3702,7 +3927,7 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
     ``log_density``, ``b_over_sqrt_n``) resolve to the ``shock_*`` bucket
     params in :func:`parse_groups`.
     """
-    shock_type = shock_dict.get("type", "mappings")
+    shock_type = _normalize_off_switch(shock_dict.get("type", "mappings"))
     valid_shock = _VALID_SHOCK_TYPES
     if shock_type not in valid_shock:
         suggestions = difflib.get_close_matches(shock_type, valid_shock, n=2, cutoff=0.6)
@@ -3747,7 +3972,7 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     today. That is also why it survived -- a latent default is invisible until
     someone relies on it.
     """
-    igm_type = igm_dict.get("type", "inoue14")
+    igm_type = _normalize_off_switch(igm_dict.get("type", "inoue14"))
 
     # Validate type
     valid_igm = _valid_igm_types()
@@ -3916,7 +4141,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     if has_sf_block:
         sf_dict = radio_dict["sf"]
         if isinstance(sf_dict, dict):
-            sf_variant = sf_dict.get("type", "bell2003")
+            sf_variant = _normalize_off_switch(sf_dict.get("type", "bell2003"))
             from tengri.components.radio.component import SF_RADIO_MODELS
 
             valid_sf = frozenset(SF_RADIO_MODELS)
@@ -3930,7 +4155,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     if has_agn_block:
         agn_dict = radio_dict["agn"]
         if isinstance(agn_dict, dict):
-            agn_variant = agn_dict.get("type", "powerlaw")
+            agn_variant = _normalize_off_switch(agn_dict.get("type", "powerlaw"))
             from tengri.components.radio.component import AGN_RADIO_MODELS
 
             valid_agn = frozenset(AGN_RADIO_MODELS)
@@ -4126,7 +4351,7 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
 
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
-    xray_type = xray_dict.get("type", "none")
+    xray_type = _normalize_off_switch(xray_dict.get("type", "none"))
 
     # Validate type
     valid_xray = _valid_xray_types()
@@ -4880,14 +5105,24 @@ def _validate_user_keys(
         # Validate the top-level group dict.
         group_allowed = _GROUP_STRUCTURAL_KEYS.get(top_key, frozenset({"type", "*"}))
         param_names = _short_names_for_group(top_key, param_partition)
+        monolithic_agn_model: str | None = None
         if top_key == "agn":
-            # AGN top-level accepts only the shared param short/full names
-            # (agn_log_lbol, agn_lum_ratio), not sub-block-owned params.
-            # Sub-block params written at the top level raise with guidance
-            # on correct nesting (e.g., agn={'torus': {'tau_skirtor': ...}}).
-            # This matches dust.emission strictness: parameters must be nested
-            # under their owning sub-block.
+            # For a COMPOSABLE build the AGN top level accepts only the shared
+            # param short/full names (agn_log_lbol, agn_lum_ratio); sub-block
+            # params written at the top level raise with guidance on correct
+            # nesting (e.g., agn={'torus': {'tau_skirtor': ...}}). This matches
+            # dust.emission strictness: parameters belong to their owner.
             param_names = param_names | agn_shared_names
+            # A MONOLITHIC build has no sub-block to nest under -- and
+            # agn={'type': <monolithic>, 'disc': {...}} is refused outright by
+            # the monolithic/sub-block check -- so the nesting guard would
+            # leave it with no working spelling at all (R27). Its declared
+            # parameters ARE the agn top level, enumerated from the registry
+            # rather than allow-listed; names it does not declare still raise,
+            # with advice that fits a monolithic build.
+            monolithic_agn_model = _monolithic_agn_type(top_val)
+            if monolithic_agn_model is not None:
+                param_names = param_names | _monolithic_agn_top_level_names(monolithic_agn_model)
         # NOTE: the dust top level deliberately does NOT accept dust.emission
         # short names. It used to, "for legacy code that flattens emission
         # params at the dust level ... still resolved via the dust.emission
@@ -4978,6 +5213,7 @@ def _validate_user_keys(
             top_val,
             group_allowed | param_names | neb_type_specific_keys,
             param_partition,
+            monolithic_agn_model=monolithic_agn_model,
             # neb's displayed list must show the resolved type's actual
             # structural keys (e.g. cb19/cloudy/mappings/mappings_agn include
             # 'grid', cue/ssp/none do not), not just the base set 'grid' was
@@ -5035,12 +5271,178 @@ def _validate_user_keys(
                 _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
+#: Both spellings of the retired covering-fraction key (R17): the short sub-block
+#: form and the fully prefixed one. Neither is a declared parameter any more, so
+#: without an interception the generic resolver difflib-suggests ``agn_frac`` /
+#: ``agn_ir_frac`` -- two real, unrelated parameters, so following the suggestion
+#: silently fits something else.
+_AGN_BAND_FRAC_KEYS: frozenset[str] = frozenset({"band_frac", "agn_band_frac"})
+
+
+def _agn_band_frac_rename_error(top_type: object, *, placement: str) -> ValueError:
+    """The one message the retired ``agn_band_frac`` gets, wherever it was written.
+
+    Parameters
+    ----------
+    top_type : object
+        The ``agn['type']`` value, or ``None`` for the implicit composable form.
+    placement : {"top", "torus"}
+        Where the key was found: the agn top level, or the torus sub-block.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement and the spelling that works for THIS build.
+        A composable build nests the key under ``torus``; a monolithic build
+        has no sub-block and writes it flat, so telling it to nest would be a
+        second refusal. A monolithic model that does not read the renamed
+        parameter at all is told that instead of being sent to a name it
+        ignores.
+    """
+    head = (
+        "'agn_band_frac' (short form 'band_frac') was renamed 'agn_torus_frac': "
+        "SKIRTORTorus's own, single-consumer name for the AGN torus covering "
+        "factor was retired in favor of the name every OTHER composable torus "
+        "block already used for the identical quantity."
+    )
+    model = top_type if isinstance(top_type, str) else "composable"
+    if model == "composable":
+        where = "found in agn['torus']" if placement == "torus" else "found at the agn top level"
+        return ValueError(
+            f"{head} A composable build nests it under the owning sub-block "
+            f"({where}):\n"
+            "  agn={'torus': {'type': 'skirtor', 'agn_torus_frac': Uniform(...)}}"
+        )
+    if "agn_torus_frac" in _monolithic_agn_top_level_names(model):
+        return ValueError(
+            f"{head} A monolithic build has no sub-block, so write the new name "
+            f"at the same level:\n"
+            f"  agn={{'type': {model!r}, 'agn_torus_frac': Uniform(...)}}"
+        )
+    return ValueError(
+        f"{head} The monolithic model {model!r} does not read 'agn_torus_frac' "
+        f"either -- it pins the covering fraction internally, so neither name "
+        f"has any effect on its SED. Drop the key, or select a model that reads "
+        f"it (agn={{'type': 'composable', 'torus': {{'type': 'skirtor', "
+        f"'agn_torus_frac': Uniform(...)}}}})."
+    )
+
+
+def _monolithic_agn_type(agn_dict: dict) -> str | None:
+    """The non-composable AGN model ``agn_dict`` selects, if it selects one.
+
+    Parameters
+    ----------
+    agn_dict : dict
+        The user's ``agn`` group dict.
+
+    Returns
+    -------
+    str or None
+        The model name, or ``None`` for a composable build (including the
+        implicit composable form that states no ``'type'`` at all).
+    """
+    from tengri.components.agn.unified import monolithic_agn_model_names
+
+    model = agn_dict.get("type")
+    if not isinstance(model, str) or model == "composable":
+        return None
+    return model if model in monolithic_agn_model_names() else None
+
+
+def _monolithic_agn_top_level_names(model: str) -> set[str]:
+    """Short and full spellings a monolithic AGN model accepts at the agn level."""
+    from tengri.components.agn.blocks._consumes import monolithic_agn_declared_params
+
+    out: set[str] = set()
+    for full_name in monolithic_agn_declared_params(model):
+        out.add(full_name)
+        out.add(_extract_short_name(full_name, {}))
+    return out
+
+
+#: Both spellings of the retired Feltre dust-to-metal key (R41, #2214): the
+#: nebular-prefixed orphan and the short form the sub-block grammar would have
+#: resolved it under. Neither is a declared parameter any more -- the axis has
+#: one name, ``agn_nlr_xi_d``, owned by the ``nlr`` block that reads it. Without
+#: an interception the generic key resolver answers ``neb_xid`` in the ``neb``
+#: group with "Did you mean: neb_fdust?", a real parameter of an unrelated
+#: quantity, so following the suggestion silently fits something else.
+_NEB_XID_KEYS: frozenset[str] = frozenset({"neb_xid", "xid"})
+
+
+def _neb_xid_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``neb_xid`` gets, wherever it was written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'neb'``, ``'agn'``, ``'agn.nlr'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, why the old name never worked, and the one
+        placement that does.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'agn_nlr_xi_d' (short "
+        f"form 'nlr_xi_d'): the Feltre+2016 NLR dust-to-metal grid axis was "
+        f"carried under two names, and the nebular-prefixed one was declared "
+        f"under every composable AGN build while nothing read it. The axis "
+        f"belongs to the 'nlr' sub-block, which is what reads it:\n"
+        f"  agn={{'type': 'composable', 'nlr': {{'type': 'feltre', "
+        f"'agn_nlr_xi_d': Uniform(0.1, 0.5)}}}}"
+    )
+
+
+#: Both spellings of the retired Feltre ionizing-slope key (R50, #2214): the
+#: duplicate declaration and the short form the sub-block grammar would have
+#: resolved it under. Neither is a declared parameter any more -- the axis has
+#: one name, ``agn_nlr_alpha_pl``, owned by the ``nlr`` block that reads it.
+#: The re-review that found this (task-16-followup-review.md #4) measured it
+#: reachable and silently inert: ``nlr={'type': 'feltre', 'agn_alpha_ion':
+#: FREE}`` (or the short form) parsed, freed the parameter, and moved nothing.
+_ALPHA_ION_KEYS: frozenset[str] = frozenset({"agn_alpha_ion", "alpha_ion"})
+
+
+def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``agn_alpha_ion`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.nlr'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, why the old name never worked, and the one
+        placement that does.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'agn_nlr_alpha_pl' (short "
+        f"form 'nlr_alpha_pl'): the Feltre+2016 NLR ionizing power-law slope was "
+        f"carried under two names -- identical prior and default -- and "
+        f"'agn_alpha_ion' was read by nothing while 'agn_nlr_alpha_pl' is what "
+        f"blocks/nlr.py actually reads. The axis belongs to the 'nlr' sub-block, "
+        f"which is what reads it:\n"
+        f"  agn={{'type': 'composable', 'nlr': {{'type': 'feltre', "
+        f"'agn_nlr_alpha_pl': Uniform(-2.0, -1.2)}}}}"
+    )
+
+
 def _check_dict_keys(
     group: str,
     user_dict: dict,
     allowed: set,
     param_partition: dict[str, str],
     *,
+    monolithic_agn_model: str | None = None,
     displayed_structural_keys: set[str] | None = None,
 ) -> None:
     """Raise ``ValueError`` on any unrecognized key in ``user_dict``.
@@ -5058,10 +5460,31 @@ def _check_dict_keys(
         below, independent of this parameter. ``None`` (every caller but the
         top-level ``neb`` one) keeps the base set, unchanged from before this
         parameter existed.
+
+    monolithic_agn_model : str, optional
+        Names the non-composable AGN model this dict selects, when it selects
+        one; the sub-block nesting advice is replaced for those, because such a
+        build has no sub-block to nest under.
     """
     for key in user_dict:
         if key in allowed:
             continue
+
+        # R41 (#2214): the retired neb_xid is intercepted before the generic
+        # resolver reaches it, in every group -- it was a nebular-prefixed key
+        # for an AGN block's grid axis, so a pre-rename config could have
+        # written it under `neb`, at the `agn` top level, or nested under
+        # `agn.nlr`, and the generic suggestion is wrong (and actively harmful)
+        # in the first of those.
+        if key in _NEB_XID_KEYS:
+            raise _neb_xid_retired_error(group, str(key))
+
+        # R50 (#2214): same shape, one ruling later -- the retired
+        # agn_alpha_ion (a duplicate of agn_nlr_alpha_pl, not a cross-prefix
+        # orphan) is intercepted in every group before it can be freed as a
+        # silently inert dimension.
+        if key in _ALPHA_ION_KEYS:
+            raise _alpha_ion_retired_error(group, str(key))
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),
@@ -5095,6 +5518,19 @@ def _check_dict_keys(
         # produced before: tells the reader to write exactly what they wrote.
         # Name the sub-block instead.
         owner = _subblock_owning(str(key), group, param_partition)
+        if owner is not None and monolithic_agn_model is not None:
+            # The nesting advice is a dead end here: a monolithic build refuses
+            # sub-block keys on the next hop, so the reader would be sent from
+            # one refusal to another. Say what this model does declare instead.
+            raise ValueError(
+                f"{key!r} is not a parameter of the monolithic AGN model "
+                f"{monolithic_agn_model!r}, so writing it here would be silently "
+                f"ignored. A monolithic model takes its own parameters flat at the "
+                f"agn level and refuses sub-block keys, so there is no nesting that "
+                f"would work. Either drop {key!r}, or switch to "
+                f"agn={{'type': 'composable', ...}}, where {key!r} is owned by the "
+                f"{owner.split('.', 1)[1]!r} sub-block."
+            )
         if owner is not None:
             sub = owner.split(".", 1)[1]
             raise ValueError(
@@ -5152,7 +5588,9 @@ def _subblock_owning(key: str, group: str, param_partition: dict[str, str]) -> s
     return None
 
 
-def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
+def _build_agn_search_view(
+    param_name: str, agn_dict: dict, group: str, *, wildcard_from: str | None = None
+) -> dict:
     """Build the resolution view for one AGN parameter.
 
     AGN parameters live in a two-level nest: the top-level ``agn`` dict
@@ -5204,10 +5642,11 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     if not isinstance(agn_dict, dict):
         return {}
 
-    # The short name the resolver expects (`_extract_short_name` strips
-    # the `agn_` prefix from full AGN param names; pre-compute it here
-    # so we can search every candidate dict by either spelling).
-    short_name = param_name[4:] if param_name.startswith("agn_") else param_name
+    # The short name the resolver expects. Delegates to `_extract_short_name`
+    # (rather than a local `agn_`-prefix strip) so the two always agree on the
+    # spelling; pre-computed here so we can search every candidate dict by
+    # either the short or the full name.
+    short_name = _extract_short_name(param_name, {})
 
     # Canonical and sibling dicts to scan.
     canonical_subkey = group.replace("agn.", "") if group.startswith("agn.") else None
@@ -5282,10 +5721,22 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
         # parameters the active blocks actually consume: e.g. ``agn_polar_ebv``
         # is partitioned to ``agn.atten`` but consumed by the SKIRTOR torus, so
         # a top-level wildcard must be able to reach it.
-        if canonical_subkey is not None and "*" not in canonical_dict and "*" in agn_dict:
-            merged = dict(canonical_dict)
-            merged["*"] = agn_dict["*"]
-            return merged
+        if canonical_subkey is not None and "*" not in canonical_dict:
+            # A cross-category companion (R36): the block that READS this name
+            # governs it with its own wildcard while the owning category's
+            # selected block does not read it. Consulted before the top-level
+            # fallback, and only when the owner's own dict states no wildcard,
+            # so an explicit disposition on the owner still wins.
+            if wildcard_from is not None:
+                claiming = agn_dict.get(wildcard_from)
+                if isinstance(claiming, dict) and "*" in claiming:
+                    merged = dict(canonical_dict)
+                    merged["*"] = claiming["*"]
+                    return merged
+            if "*" in agn_dict:
+                merged = dict(canonical_dict)
+                merged["*"] = agn_dict["*"]
+                return merged
         return canonical_dict
 
     # Single hit: return a synthetic dict carrying that one override
@@ -5299,6 +5750,59 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     elif canonical_subkey is not None and "*" in agn_dict:
         view["*"] = agn_dict["*"]
     return view
+
+
+def _validate_agn_top_type(top_type: str) -> None:
+    """Refuse an ``agn['type']`` that is not an AGN model (R37).
+
+    Parameters
+    ----------
+    top_type : str
+        The non-composable value written for ``agn['type']``.
+
+    Raises
+    ------
+    ConfigError
+        Naming the composable form when the string is a registered block type
+        (``'fritz'`` is a torus block, not a model), and the model menu with
+        close matches otherwise.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+    from tengri.components.agn.unified import AGN_MODELS, monolithic_agn_model_names
+
+    # 'none' is the grammar's universal off switch, not a model name -- neb,
+    # shock, radio, xray, igm and both dust groups all take it, and agn is
+    # named among them in _translate_dust's own comment. It is also a
+    # registered type in all six composable categories, so without this the
+    # block-name branch below claims it and answers "no AGN at all" with
+    # agn={'type': 'composable', 'atten': {'type': 'none', ...}} -- a build
+    # that HAS an AGN.
+    valid = monolithic_agn_model_names() | set(AGN_MODELS) | {"none"}
+    if top_type in valid:
+        return
+
+    categories = sorted(
+        grammar_category
+        for grammar_category, consumes_category in _AGN_CONSUMES_CATEGORY.items()
+        if top_type in AGN_BLOCKS.get(consumes_category, {})
+    )
+    if categories:
+        where = categories[0]
+        plural = "" if len(categories) == 1 else f" (also registered under {categories[1:]})"
+        raise ConfigError(
+            f"agn['type']={top_type!r} is a composable {where} block, not an AGN "
+            f"model{plural}. Select it per sub-block:\n"
+            f"  agn={{'type': 'composable', {where!r}: {{'type': {top_type!r}, ...}}}}"
+        )
+
+    suggestions = difflib.get_close_matches(top_type, sorted(valid), n=2, cutoff=0.6)
+    hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+    raise ConfigError(
+        f"agn['type']={top_type!r} is not an AGN model.{hint} "
+        f"Models: {sorted(valid)}. Composable block types are selected per "
+        f"sub-block instead, e.g. agn={{'type': 'composable', "
+        f"'torus': {{'type': 'skirtor'}}}}."
+    )
 
 
 def _translate_agn(agn_dict: dict, result: dict) -> None:
@@ -5332,12 +5836,85 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         specification. Also raised if both ``lines`` and ``nlr``/``blr``
         are provided.
     """
+    # R17 (Task 16): the retired agn_band_frac reaches its replacement from
+    # wherever a pre-rename config wrote it, which is overwhelmingly the agn
+    # top level (reproduction/prospect_r/01_prospect_r.py wrote it there), not
+    # the torus sub-block the first interception covered.
+    if _AGN_BAND_FRAC_KEYS & set(agn_dict):
+        raise _agn_band_frac_rename_error(agn_dict.get("type"), placement="top")
+
+    # R38: fracAGN is a top-level key. It drives the runner's cross-block
+    # normalization stage, not one block's physics, so writing it inside a
+    # sub-block reads as that block's parameter and is refused rather than
+    # half-honored. Before this the four spellings behaved three ways there:
+    # the builder honored 'ir_frac'/'agn_ir_frac' (a shared name resolves from
+    # any sub-block) and silently dropped the two legacy ones, while the #2189
+    # detector saw all four -- so a dropped key still narrowed agn_torus_frac
+    # out of the torus wildcard, and the conflict guard, which reads
+    # provenance, did not fire.
+    for sub_name in (*_AGN_SUBBLOCK_KEYS, "lines"):
+        sub_spec = agn_dict.get(sub_name)
+        if not isinstance(sub_spec, dict):
+            continue
+        misplaced = sorted(_AGN_IR_FRAC_SPELLINGS & set(sub_spec))
+        if misplaced:
+            raise ValueError(
+                f"agn[{sub_name!r}][{misplaced[0]!r}] is not a {sub_name} parameter: "
+                f"fracAGN sets the AGN's share of the reprocessed infrared for the "
+                f"whole model, at the runner's cross-block normalization stage, so "
+                f"it is written once at the agn top level:\n"
+                f"  agn={{'agn_ir_frac': ..., {sub_name!r}: {{...}}}}\n"
+                f"Note that an active fracAGN overrides agn_torus_frac (#2189), so "
+                f"the two cannot both be given explicitly."
+            )
+
     # Top-level 'type' selects a monolithic AGN model when not 'composable'.
     # Previously this key was silently dropped and the model collapsed to
     # composable-with-all-none-blocks, which emits identically zero: a
     # silent-failure footgun (closes #417 second case).
-    top_type = agn_dict.get("type")
+    # R51 (#2214) / R81: normalize the 'off' synonym before anything else
+    # reads it, via the one shared helper every off-switch group calls
+    # (_normalize_off_switch) -- so both spellings are indistinguishable from
+    # this point on, ahead of the R37 validator and the R42 'none' branch
+    # below.
+    top_type = _normalize_off_switch(agn_dict.get("type"))
     if top_type is not None and top_type != "composable":
+        # R37: validate the name HERE, before anything else reads it. It used
+        # to be forwarded to ``agn_model`` unchecked, "validated lazily by
+        # resolve_agn_model at predict time, where the available list is fully
+        # populated (some models register late through plugins)" -- a rationale
+        # that never held: ``resolve_agn_model`` consults ``AGN_MODELS`` only
+        # for ``"composable"``, so a plugin registering any other name is
+        # unreachable regardless. What the deferral bought was that
+        # ``agn={'type': 'fritz'}`` and ``agn={'type': 'totally_bogus_xyz'}``
+        # built identically and both died on the first ``predict_photometry``
+        # with ``Unknown AGN model``; and a parameter written beside such a
+        # type got the sub-block nesting advice, which is a dead end twice
+        # over. Raising here also runs before key validation, so the reader is
+        # told the real problem.
+        _validate_agn_top_type(top_type)
+        # R42: 'none' is the group's off switch, not a model name. R37
+        # (e5d2b447c) exempted it from the validator above but still forwarded
+        # it to ``agn_model``, where ``resolve_agn_model`` has no such model:
+        # every ``agn={'type': 'none'}`` build parsed and then died at the
+        # first ``predict_photometry`` with "Unknown AGN model 'none'".
+        # Normalize onto the same off sentinel every other group uses -- leave
+        # ``agn_model`` unset, which is what an omitted ``agn`` group carries
+        # and what the component factory tests (``if agn_model is not None``).
+        # The sub-block check is repeated here with its own message: the
+        # shared one below calls the type a monolithic AGN model, which
+        # 'none' is not, and returning without it would silently drop the
+        # sub-blocks the caller wrote.
+        if top_type == "none":
+            switched_off = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)
+            if switched_off:
+                raise ValueError(
+                    f"agn={{'type': 'none'}} switches the AGN off entirely, but "
+                    f"sub-block keys {switched_off} are also present -- switched off, "
+                    f"they would be built by nothing and silently ignored. Drop "
+                    f"'type': 'none' to build those blocks, or drop the sub-blocks."
+                )
+            return
         # Reject mixing a monolithic ``type`` with sub-block selectors;
         # the two surfaces are mutually exclusive.
         used_blocks = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)
@@ -5348,10 +5925,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 f"the sub-blocks, or remove 'type' and let the composable "
                 f"runner use the per-block selectors."
             )
-        # Forward ``type`` to ``agn_model`` and skip the block-selector
-        # plumbing. Unknown model names are validated lazily by
-        # ``resolve_agn_model`` at predict time, where the available list
-        # is fully populated (some models register late through plugins).
+        # Forward the validated ``type`` to ``agn_model`` and skip the
+        # block-selector plumbing.
         result["agn_model"] = top_type
         return
 
@@ -5448,6 +6023,20 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 f"got {type(block_spec).__name__}."
             )
 
+        # R17 (Task 16): agn_band_frac is a retired legacy key -- SKIRTORTorus's
+        # former, single-consumer name for the SAME covering-fraction quantity
+        # every other composable torus block (and, since R17, SKIRTORTorus
+        # itself) calls agn_torus_frac. Intercept BOTH spellings a caller might
+        # still write (the short key 'band_frac' and the full 'agn_band_frac')
+        # before the generic per-parameter key resolver reaches them: since
+        # neither is a declared parameter any more, that resolver's difflib
+        # suggestion does not reliably land on 'torus_frac' (edit distance
+        # between "band_frac" and "torus_frac" is large), so a caller updating
+        # old code would see a generic "unknown key" with the wrong suggestion
+        # rather than the one-message redirect this raises instead.
+        if block_name == "torus" and _AGN_BAND_FRAC_KEYS & set(block_spec):
+            raise _agn_band_frac_rename_error("composable", placement="torus")
+
         # Special handling for atten: 'law' key selects smc_prevot via DUST_LAWS,
         # while 'type' selects genuine attenuation models (polar_dust, grahsp_biatten, etc)
         block_type = None
@@ -5464,14 +6053,25 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 )
 
             # Reject old law-as-type spelling: type='smc_prevot'
-            if type_key == "smc_prevot":
+            if type_key in ("smc_prevot", "prevot_smc"):
+                # Task 16 (item 9, F8): both spellings a caller might try must
+                # reach the working form in ONE message. Before this,
+                # type='prevot_smc' (reversed word order) fell through to the
+                # generic "Unknown type" check below, which difflib-suggested
+                # 'smc_prevot' -- itself ALSO refused by this very check, a
+                # second hop to the same destination. Intercepting both here
+                # means either spelling reaches the fix directly.
                 raise ValueError(
-                    "agn['atten'] type='smc_prevot' is no longer supported. "
+                    f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
+                    "  agn={'atten': {'law': 'prevot_smc', 'attenuation_ebv': Uniform(...)}}\n"
                     "'prevot_smc' is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
-                    "not a new choice."
+                    "not a new choice. 'attenuation_ebv' is the short spelling of "
+                    "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
+                    "the unrelated, pre-existing agn_ebv parameter (the separate "
+                    "qsogen_smc attenuation block's own reddening knob), whose short "
+                    "spelling is 'ebv'."
                 )
 
             if law_key is not None:
@@ -5578,11 +6178,7 @@ def _partition_by_group(
             if agn_flat:
                 partition[name] = "agn"
                 continue
-            # Use partition table for fine-grained routing
-            partition[name] = _AGN_PARTITION.get(name, "agn")
-            # Catch-all for grahsp_* -> disc
-            if partition[name] == "agn" and "grahsp" in name:
-                partition[name] = "agn.disc"
+            partition[name] = _agn_param_group(name)
         elif name.startswith("xray_"):
             partition[name] = "xray"
         elif name in _RADIO_SF_PARAM_NAMES:
