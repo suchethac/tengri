@@ -58,6 +58,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.scale import representable_denominator
 
 __all__ = ["XRaySEDComponent", "XRaySEDComponentConfig"]
 
@@ -384,7 +385,9 @@ class XRaySEDComponent(TemplateThreading):
         _w_sum = jnp.sum(age_weights)
         stellar_age_gyr = jnp.where(
             _w_sum > 0.0,
-            jnp.sum(age_weights * ssp_ages_yr) / jnp.maximum(_w_sum, 1e-30) / 1.0e9,
+            jnp.sum(age_weights * ssp_ages_yr)
+            / jnp.maximum(_w_sum, representable_denominator(1e-30))
+            / 1.0e9,
             1.0,
         )
 

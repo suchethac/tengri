@@ -111,7 +111,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_LIGHT,
     L_SUN as _LSUN_ERG,
 )
-from tengri.utils.scale import representable_exponent
+from tengri.utils.scale import representable_denominator, representable_exponent
 
 # Normalization wavelength
 _LAMBDA_NORM = 5500.0  # Angstrom
@@ -324,7 +324,7 @@ def _broken_powerlaw_continuum(
     # ``wavelength < 124.0`` band; the gradient w.r.t. the shape parameters
     # flows unchanged for lambda >= 124 A. Applied here, before the caller's
     # bolometric normalization, so the removed flux no longer dilutes L_bol.
-    continuum = f_nu / jnp.maximum(f_norm, 1e-30)
+    continuum = f_nu / jnp.maximum(f_norm, representable_denominator(1e-30))
     return jnp.where(wavelength >= _XRAY_FLOOR_LAMBDA_AA, continuum, 0.0)
 
 
@@ -374,7 +374,11 @@ def _hot_dust_blackbody(
     cont_at_anchor = jnp.interp(
         jnp.array([_LAMBDA_BB_ANCHOR]), wavelength, continuum_flam, left=0.0, right=0.0
     )[0]
-    cmult = bbnorm * jnp.maximum(cont_at_anchor, 1e-60) / jnp.maximum(bb_anchor, 1e-60)
+    cmult = (
+        bbnorm
+        * jnp.maximum(cont_at_anchor, 1e-60)
+        / jnp.maximum(bb_anchor, representable_denominator(1e-60))
+    )
 
     return cmult * bb_fnu
 

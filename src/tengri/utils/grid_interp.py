@@ -30,7 +30,7 @@ import numpy as np
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import log10_flux_scale as _log10_flux_scale
+from tengri.utils.scale import log10_flux_scale as _log10_flux_scale, representable_denominator
 
 __all__ = [
     "PreintegratedGrid",
@@ -163,7 +163,7 @@ def subband_quadrature(
     # law, which goes as 1/lambda, so it must stay finite and positive.
     live = i_k != 0.0
     nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
-    return i_k / np.maximum(denom, 1e-30), nodes
+    return i_k / np.maximum(denom, representable_denominator(1e-30)), nodes
 
 
 @dataclasses.dataclass(frozen=True)
@@ -455,7 +455,9 @@ def preintegrate_grid(
         trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
         tw_grid = trans_on_grid * _filter_weight_np(grid, convention)
         denom = _np_trapezoid(tw_grid, grid)
-        eff_waves_obs[f_idx] = _np_trapezoid(tw_grid * grid, grid) / np.maximum(denom, 1e-30)
+        eff_waves_obs[f_idx] = _np_trapezoid(tw_grid * grid, grid) / np.maximum(
+            denom, representable_denominator(1e-30)
+        )
 
         # Interpolate all templates onto the union grid
         # Shape: (n_grid_points, len(grid))
@@ -465,13 +467,15 @@ def preintegrate_grid(
         weight = tw_grid[None, :]
         integrand = templates_on_grid * weight
         num = _np_trapezoid(integrand, grid, axis=-1)
-        phot_flat[:, f_idx] = num / np.maximum(denom, 1e-30)
+        phot_flat[:, f_idx] = num / np.maximum(denom, representable_denominator(1e-30))
 
         # Compute Taylor moment if requested
         if taylor:
             dlam = grid[None, :] - eff_waves_obs[f_idx]
             num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
-            moment_flat[:, f_idx] = num_moment / np.maximum(denom, 1e-30)
+            moment_flat[:, f_idx] = num_moment / np.maximum(
+                denom, representable_denominator(1e-30)
+            )
 
         # Sub-band quadrature nodes and weights (#1122): the single
         # implementation, shared with the free-z ztable precompute so the two
@@ -589,7 +593,9 @@ def preintegrate_lines(
             # amplify for blue out-of-band lines).
             T_at_line = np.interp(lam_obs, fw_np, ft_np, left=0.0, right=0.0)
             denom = filter_denoms[f_idx]
-            line_filter_weights[line_idx, f_idx] = T_at_line * w_at_line / np.maximum(denom, 1e-30)
+            line_filter_weights[line_idx, f_idx] = (
+                T_at_line * w_at_line / np.maximum(denom, representable_denominator(1e-30))
+            )
 
     # Convert axes and precompute edges
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)
