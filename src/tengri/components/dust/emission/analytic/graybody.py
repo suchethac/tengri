@@ -10,6 +10,12 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    ANALYTIC_BETA_IR_DEFAULT,
+    CASEY_T_K_DEFAULT,
+    DEFAULT_DUST_EPSILON_MBB,
+    DEFAULT_DUST_LAMBDA_0_UM,
+)
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 from tengri.parameters.resolve import require_redshift
@@ -62,11 +68,18 @@ class GraybodyIRSEDComponent(EmissionComponent):
 
     name: str = "graybody"
 
-    # Free parameters (user-facing names, prefix-stripped)
-    T = Fixed(35.0)
-    beta_ir = Fixed(1.8)
-    lambda_0_um = Fixed(200.0)
-    epsilon_mbb = Fixed(1.0)
+    # Free parameters (user-facing names, prefix-stripped). ``T``/``beta_ir``
+    # read the same module constants as the closure's own signature defaults
+    # (#2241), so the two cannot drift from each other; see
+    # ``tengri.components.dust._params`` for why they are not derived from
+    # that table's own ``dust_T``/``dust_beta_ir`` entries (#2261).
+    # ``lambda_0_um``/``epsilon_mbb`` read the same ``declared_default(PARAMS,
+    # ...)`` constants the closure's signature reads, for the same reason
+    # (#2241): a bare literal here would be a second, independent copy.
+    T = Fixed(CASEY_T_K_DEFAULT)
+    beta_ir = Fixed(ANALYTIC_BETA_IR_DEFAULT)
+    lambda_0_um = Fixed(DEFAULT_DUST_LAMBDA_0_UM)
+    epsilon_mbb = Fixed(DEFAULT_DUST_EPSILON_MBB)
 
     # ``cigale`` is the registry key that ``references.bib`` gives Boquien et
     # al. (2019); ``boquien2019`` is not a key any lookup resolves, and

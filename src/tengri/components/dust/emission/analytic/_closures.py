@@ -15,6 +15,23 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    ANALYTIC_BETA_IR_DEFAULT,
+    CASEY_T_K_DEFAULT,
+    DEFAULT_DUST_ALPHA_MIR,
+    DEFAULT_DUST_BETA_COLD,
+    DEFAULT_DUST_BETA_WARM,
+    DEFAULT_DUST_EPSILON_MBB,
+    DEFAULT_DUST_ETA_BALANCE,
+    DEFAULT_DUST_F_COLD,
+    DEFAULT_DUST_F_PAH,
+    DEFAULT_DUST_L_AGN_IR,
+    DEFAULT_DUST_LAMBDA_0_UM,
+    DEFAULT_DUST_T_COLD,
+    DEFAULT_DUST_T_WARM,
+    MBB_T_K_DEFAULT,
+    SCHREIBER_T_K_DEFAULT,
+)
 from tengri.components.dust.emission._physics import (
     cmb_contrast_factor,
     cmb_corrected_temperature,
@@ -45,10 +62,10 @@ _X_MIN: float = 1e-10
 def modified_blackbody(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
-    dust_T: float = 30.0,
-    dust_beta_ir: float = 1.8,
+    dust_T: float = MBB_T_K_DEFAULT,
+    dust_beta_ir: float = ANALYTIC_BETA_IR_DEFAULT,
     redshift: float = 0.0,
-    dust_epsilon_mbb: float = 1.0,
+    dust_epsilon_mbb: float = DEFAULT_DUST_EPSILON_MBB,
     **_kwargs,
 ) -> jnp.ndarray:
     """Optically-thin modified blackbody dust emission.
@@ -153,11 +170,11 @@ def modified_blackbody(
 def graybody(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
-    dust_T: float = 35.0,
-    dust_beta_ir: float = 1.8,
-    dust_lambda_0_um: float = 200.0,
+    dust_T: float = CASEY_T_K_DEFAULT,
+    dust_beta_ir: float = ANALYTIC_BETA_IR_DEFAULT,
+    dust_lambda_0_um: float = DEFAULT_DUST_LAMBDA_0_UM,
     redshift: float = 0.0,
-    dust_epsilon_mbb: float = 1.0,
+    dust_epsilon_mbb: float = DEFAULT_DUST_EPSILON_MBB,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""General-opacity graybody dust emission.
@@ -195,14 +212,16 @@ def graybody(
         Emissivity index.  Typical range: 1.5--2.0. [dimensionless]
     dust_lambda_0_um : float
         Graybody optical depth pivot wavelength (µm): the wavelength where
-        optical depth τ = 1. Default 200 µm (Casey 2012); Synthesizer uses
-        100 µm. [µm]
+        optical depth τ = 1 (Casey 2012); Synthesizer uses 100 µm. [µm]
+        Default: read from the declared ``dust_lambda_0_um`` (#2241); today
+        200 µm.
     redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
         Default 0 (no correction). [dimensionless]
     dust_epsilon_mbb : float
         Fraction of L_absorbed carried by this graybody (CIGALE mbb epsilon_mbb;
-        1.0 = full energy balance). [dimensionless, in [0, 1]]
+        1.0 = full energy balance). [dimensionless, in [0, 1]] Default: read
+        from the declared ``dust_epsilon_mbb`` (#2241); today 1.0.
 
     Returns
     -------
@@ -278,8 +297,9 @@ _CASEY_B2 = 6.246  # dimensionless (per unit α)
 _CASEY_B3_PER_K = 1.905e-4  # 1/K
 _CASEY_B4_PER_K = 7.243e-5  # 1/K (per unit α)
 # Default opacity pivot of the general graybody, Casey (2012) Eq. 1.
-# Now parametric via dust_lambda_0_um; this is the default.
-_CASEY_LAMBDA0_CM_DEFAULT = 200.0e-4  # 200 µm [cm]
+# Now parametric via dust_lambda_0_um; this is the default, derived from the
+# one declared µm value (#2241) rather than repeating "200" a third time.
+_CASEY_LAMBDA0_CM_DEFAULT = DEFAULT_DUST_LAMBDA_0_UM * 1.0e-4  # um -> cm
 
 
 def _casey_lambda_c_cm(T_eff: float, dust_alpha_mir: float) -> jnp.ndarray:
@@ -368,10 +388,10 @@ def _casey_graybody_nu(
 def casey2012(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
-    dust_T: float = 35.0,
-    dust_beta_ir: float = 1.8,
-    dust_alpha_mir: float = 2.0,
-    dust_lambda_0_um: float = 200.0,
+    dust_T: float = CASEY_T_K_DEFAULT,
+    dust_beta_ir: float = ANALYTIC_BETA_IR_DEFAULT,
+    dust_alpha_mir: float = DEFAULT_DUST_ALPHA_MIR,
+    dust_lambda_0_um: float = DEFAULT_DUST_LAMBDA_0_UM,
     optically_thin: bool = False,
     redshift: float = 0.0,
     **_kwargs,
@@ -392,8 +412,9 @@ def casey2012(
               (\lambda/\lambda_c)^{\alpha}\, e^{-(\lambda/\lambda_c)^2}
         \right]
 
-    with :math:`\lambda_0` from ``dust_lambda_0_um`` (default 200 µm per
-    Casey 2012) and :math:`\lambda_c(\alpha, T)` from Eqs. 11-12. Every
+    with :math:`\lambda_0` from ``dust_lambda_0_um`` (default read from the
+    declaration, #2241; today 200 µm per Casey 2012) and
+    :math:`\lambda_c(\alpha, T)` from Eqs. 11-12. Every
     variable: :math:`T` = dust temperature [K], :math:`\beta` = emissivity
     index, :math:`\alpha` = mid-IR slope, :math:`\nu` = frequency [Hz],
     :math:`\lambda` = wavelength. The total frequency integral is
@@ -422,8 +443,8 @@ def casey2012(
     dust_alpha_mir : float
         Mid-IR power-law slope. Typical range: 1.5-2.5. [dimensionless]
     dust_lambda_0_um : float
-        Graybody opacity pivot wavelength (µm). Default 200 µm (Casey 2012).
-        [µm]
+        Graybody opacity pivot wavelength (µm) [µm]. Default: read from the
+        declared ``dust_lambda_0_um`` (#2241); today 200 µm (Casey 2012).
     optically_thin : bool
         If True, use the optically-thin graybody limit
         :math:`(\lambda_0/\lambda)^\beta \nu^3 / (e^{h\nu/kT}-1)`
@@ -609,8 +630,8 @@ def pah_drude(
 def schreiber2016(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
-    dust_T: float = 30.0,
-    dust_f_pah: float = 0.05,
+    dust_T: float = SCHREIBER_T_K_DEFAULT,
+    dust_f_pah: float = DEFAULT_DUST_F_PAH,
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -633,11 +654,11 @@ def schreiber2016(
         Total absorbed luminosity. Unit-agnostic: the output L_nu will be
         in the same units per Hz.
     dust_T : float
-        Dust continuum temperature in Kelvin.
-        Typical range: 15--60 K. Default: 30.0.
+        Dust continuum temperature in Kelvin. Typical range: 15--60 K.
+        Default: read from ``SCHREIBER_T_K_DEFAULT`` (#2241); today 30.0.
     dust_f_pah : float
         Fractional contribution from PAH emission in [0, 1].
-        Default: 0.05.
+        Default: read from the declared ``dust_f_pah`` (#2241); today 0.05.
     redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
         Default: 0.
@@ -731,13 +752,13 @@ def schreiber2016(
 def energy_balance_split(
     wavelength_aa: jnp.ndarray,
     L_absorbed_stellar: float,
-    L_agn_ir: float = 0.0,
-    eta_balance: float = 1.0,
-    f_cold: float = 0.5,
-    dust_T_warm: float = 45.0,
-    dust_T_cold: float = 20.0,
-    dust_beta_warm: float = 1.5,
-    dust_beta_cold: float = 2.0,
+    L_agn_ir: float = DEFAULT_DUST_L_AGN_IR,
+    eta_balance: float = DEFAULT_DUST_ETA_BALANCE,
+    f_cold: float = DEFAULT_DUST_F_COLD,
+    dust_T_warm: float = DEFAULT_DUST_T_WARM,
+    dust_T_cold: float = DEFAULT_DUST_T_COLD,
+    dust_beta_warm: float = DEFAULT_DUST_BETA_WARM,
+    dust_beta_cold: float = DEFAULT_DUST_BETA_COLD,
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -755,22 +776,29 @@ def energy_balance_split(
         the units of L_agn_ir. On the component path both arrive in erg/s.]
     L_agn_ir : float
         Additional AGN-heated IR luminosity. [Lsun or erg/s, as passed; must match
-        the units of L_absorbed_stellar. On the component path both arrive in erg/s.]
-        Default: 0.0.
+        the units of L_absorbed_stellar. On the component path both arrive in
+        erg/s.] Default: read from the declared ``dust_L_agn_ir`` (#2241);
+        today 0.0.
     eta_balance : float
         Energy balance parameter: ratio of re-emitted to absorbed stellar luminosity.
-        [dimensionless] Default: 1.0 (strict energy balance).
+        [dimensionless] Default: read from the declared ``dust_eta_balance``
+        (#2241); today 1.0 (strict energy balance).
     f_cold : float
         Fraction of total IR luminosity in the cold component.
-        [dimensionless, in [0, 1]] Default: 0.5.
+        [dimensionless, in [0, 1]] Default: read from the declared
+        ``dust_f_cold`` (#2241); today 0.5.
     dust_T_warm : float
-        Warm dust temperature. [K] Default: 45.0.
+        Warm dust temperature. [K] Default: read from the declared
+        ``dust_T_warm`` (#2241); today 45.0.
     dust_T_cold : float
-        Cold dust temperature. [K] Default: 20.0.
+        Cold dust temperature. [K] Default: read from the declared
+        ``dust_T_cold`` (#2241); today 20.0.
     dust_beta_warm : float
-        Warm component emissivity index. [dimensionless] Default: 1.5.
+        Warm component emissivity index. [dimensionless] Default: read from
+        the declared ``dust_beta_warm`` (#2241); today 1.5.
     dust_beta_cold : float
-        Cold component emissivity index. [dimensionless] Default: 2.0.
+        Cold component emissivity index. [dimensionless] Default: read from
+        the declared ``dust_beta_cold`` (#2241); today 2.0.
     redshift : float
         Source redshift. [dimensionless] When > 0, CMB heating correction is applied
         to both components. Default: 0.0.
