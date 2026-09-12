@@ -28,7 +28,8 @@ verdict count the selected engine's **own** declared parameters:
 ======================  ==================  =========================
 ``emission.type``       declares            ``'all_params': FREE`` outcome
 ======================  ==================  =========================
-``dale2014``            2, both unfreeable  **raises** ("0 of 2")
+``dale2014``            1, unfreeable       **raises** ("0 of 1")
+``dale2014_cigale``     2, 1 freeable       **warns** ("1 of 2")
 ``casey2012``           3, all unfreeable   **raises** ("0 of 3")
 ``themis``              4, 2 freeable       **warns** ("2 of 4")
 ``draine_li2014``       4, 2 freeable       **warns**
@@ -394,6 +395,39 @@ def test_the_freed_set_depends_on_the_backend(synthetic_ssp_wide, panchromatic_o
     assert len(set(freed_sets.values())) > 1, (
         "dust.emission '*' expands to one backend-blind set again — the engine's "
         f"own declarations are not being consulted (#1482). Freed sets: {freed_sets}"
+    )
+
+
+def test_dust_frac_agn_engine_scoped_freedom(synthetic_ssp_wide, panchromatic_obs):
+    """dust_frac_agn is wildcard-reachable only on dale2014_cigale, not plain dale2014.
+
+    Both engines declare frac_agn, but only dale2014_cigale carries the QSO template
+    grid where the parameter is live. The plain variant has the parameter inert;
+    freeing it would waste sampler steps on a flat dimension (#2244, #1482 class).
+    Engine-scoped declaration (class-level attribute present on cigale, absent on
+    plain) scopes the wildcard by data liveness (#2244) — unlike
+    dust_eta_balance, which is live on every engine and so sits in every
+    engine's wildcard scope (#2291).
+    """
+    # Plain dale2014: frac_agn is NOT declared at engine class level, so
+    # the wildcard cannot free it even though it has a free_prior in the registry.
+    dale2014_model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014")
+    assert "dust_frac_agn" not in dale2014_model.spec.free_params, (
+        "dust_frac_agn should not be freed under plain dale2014 (inert parameter)"
+    )
+
+    # dale2014_cigale: frac_agn IS declared at engine class level, so the
+    # wildcard frees it (it has a free_prior in the registry).
+    cigale_model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014_cigale")
+    assert "dust_frac_agn" in cigale_model.spec.free_params, (
+        "dust_frac_agn should be freed under dale2014_cigale (live parameter)"
+    )
+
+    # Liveness check: frac_agn must move predict_photometry on cigale.
+    _, live = _live_params(cigale_model)
+    assert "dust_frac_agn" in live, (
+        "dust_frac_agn is free on cigale but does not move photometry (inert) — "
+        "the QSO template failed to load or the grid is missing"
     )
 
 

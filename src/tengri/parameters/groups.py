@@ -1494,7 +1494,7 @@ def _narrow_free_priors_to_grid(
                 units=dist.units,
                 default=default,
             )
-            provenance[pname] = provenance[pname] + "_grid"
+            provenance[pname] = provenance[pname] + _GRID_NARROWED_SUFFIX
 
 
 #: SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
