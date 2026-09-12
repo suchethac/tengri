@@ -797,9 +797,10 @@
   explicit-law rule.
 
 
-### Fixed
+### Changed
 
-- **Params dicts are free-only; every entry point refuses a Fixed key.**
+- **Params dicts are free-only; every entry point refuses a Fixed key
+  (#2296; breaking change).**
   ``model.predict(params)`` and every prediction surface now refuse a `params`
   key the spec declared ``Fixed``, raising ``ParameterError`` naming the key,
   the pinned value, and the remedy. ``Parameters.sample(key)`` and
@@ -808,7 +809,9 @@
   new ``Posterior.fixed_values`` property. This closes the silent physics error
   where a Fixed-key override was honored on some specialized paths
   (FeaturePrecomp) and dropped on others (exact), producing stealthily different
-  physics (#2296).
+  physics.
+
+### Fixed
 
 - The energy-balance-split closure's docstring tagged its luminosity arguments
   `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
