@@ -69,6 +69,27 @@ def test_window_rows_excludes_outliers():
     assert row["median_ratio"] == pytest.approx(1.0, rel=1e-9)
 
 
+def test_window_rows_different_grids():
+    """window_rows should handle when tengri grid differs from reference grid."""
+    from reproduction._validation import window_rows
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    # Tengri grid: 3x more points over the same range
+    w_t = np.linspace(1000.0, 4000.0, 12)
+    L_t = np.interp(w_t, w_ref, L_ref)
+
+    cases = [("finer_grid", w_ref, L_ref, w_t, L_t)]
+    rows = window_rows(cases, lo=1500.0, hi=3500.0)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["label"] == "finer_grid"
+    # Identical function on both grids should give median ≈ 1 (interpolation adds small error)
+    assert row["median_ratio"] == pytest.approx(1.0, rel=0.05)
+    assert row["max_abs_dev"] == pytest.approx(0.0, abs=0.05)
+
+
 def test_print_window_table_output(capsys):
     """print_window_table should output title, labels, and check flags correctly."""
     from reproduction._validation import print_window_table

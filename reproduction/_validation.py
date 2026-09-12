@@ -1100,8 +1100,9 @@ def window_rows(
     rows = []
     for label, w_ref, L_ref, w_t, L_t in cases:
         # Regrid tengri onto reference grid
-        L_t_on_ref = np.interp(w_t, w_t, L_t, left=0.0, right=0.0)
-        if not np.all(w_t == w_ref):
+        if w_t.shape == w_ref.shape and np.allclose(w_t, w_ref):
+            L_t_on_ref = L_t
+        else:
             L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
 
         ratio = np.divide(L_t_on_ref, L_ref, where=(L_ref > 0), out=np.full_like(L_ref, np.nan))
