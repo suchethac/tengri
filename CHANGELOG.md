@@ -107,6 +107,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
+  continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
+  ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``
+  for lines -- instead of each carrying its own copy of the
+  ``(1 - f) * HII + f * DIG`` mixing arithmetic. Backend kwargs (e.g. Cue's
+  resolved ionizing population) now reach both the HII and DIG evaluations
+  from one frozen dict, and the inline snapshot-before-mutation copy that let
+  #2195 ship behind twenty green unit tests of the unused ``mix_dig_emission``
+  is gone. Output is bit-identical to the prior inline arithmetic: measured
+  max absolute difference 0.0 across ``predict_photometry``, ``rest_sed()``
+  and line luminosities, both the cue and cb19 backends, at ``neb_dig_frac``
+  in ``{0.0, 0.3, 0.9, 1.0}`` (#2221).
+
 - ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
   ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``
   types' own ``grid`` keys already did, and the path now round-trips through
@@ -488,6 +501,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- The per-Q_H nebular grid (`enable_fast_nebular` / `approx=FeaturePrecomp()`)
+  now serves DIG mixing instead of refusing it: `neb_logU` joins the grid axes
+  whenever `neb_dig_frac` could be active (free, or fixed non-zero), even when
+  `neb_logU` is itself Fixed, and its range extends (never clips, never
+  refuses) to cover the DIG-shifted query point `neb_logU + neb_dig_delta_logU`.
+  Reconstruction mixes two lookups against the same table via the new
+  `mix_dig_grid_reconstruction` (`dig.py`), sharing the one mixing core
+  `mix_dig_emission` / `mix_dig_line_luminosities` already use. Measured
+  worst-case relative error over 10 seeds against the exact path: 1.17e-3
+  (photometry) / 1.41e-3 (lines) at `neb_dig_frac = 0.3` with the axis extended,
+  versus 1.72e-3 / 2.04e-3 at `neb_dig_frac = 0` on the same fixture -- both
+  well inside the repository's 3e-2 parity ceiling (#2222).
+- ``mix_dig_line_luminosities`` (``tengri.components.nebular.dig``), exported
+  from ``tengri.components.nebular``: the line-luminosity counterpart of
+  ``mix_dig_emission``, sharing its DIG mixing core. It calls
+  ``predict_nebular_line_luminosities`` (instead of ``predict_nebular_sed``),
+  keeps the HII call's ``line_waves``, and mixes only the luminosities (#2221).
 - `bench/scripts/benchmark_float32_mps_parity.py` -- a self-contained pure-float32
   parity sweep for the Apple GPU (#1206). Apple's own `jax-metal` last released 0.1.1
   on 2024-10-08 and pins `jax == jaxlib >= 0.4.34`, not viable against tengri's JAX
@@ -673,6 +703,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
+- `DIGNotOnNebularGridError` and the refusal it backed
+  (`nebular_grid_precompute._refuse_active_dig_mixing`). Building the per-Q_H
+  nebular grid with an active `neb_dig_frac` no longer raises: the grid now
+  reconstructs DIG mixing via two lookups instead (see `### Added`, #2222).
 - The `stellar` build group (#1720). Metallicity is now configured through
   `met`, parallel to `sfh`: `stellar={'met_mode': 'table'}` becomes
   `met={'type': 'table'}`, and `stellar={'met_logzsol': …}` becomes
