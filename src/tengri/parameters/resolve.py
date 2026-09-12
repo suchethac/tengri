@@ -19,8 +19,91 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 
+def refuse_fixed_overrides(spec, params):
+    r"""Refuse any params key the spec declared Fixed (#2296).
+
+    Fixed parameters are not required at predict time; that is what fixing them
+    *means*, so a user's dict legitimately omits them. However, a user **cannot**
+    pass a key the spec declared Fixed at a different value: such an override is
+    silently ignored on exact paths and honored on specialized paths (FeaturePrecomp),
+    creating a silent physics error. This function raises loudly when a Fixed key
+    is present, enforcing a single rule: rebuild the model if you want to change
+    a Fixed parameter.
+
+    This check is static and safe under ``jax.jit`` / ``jax.vmap``: it is a pure
+    membership test on dict keys, with no value comparison.
+
+    Parameters
+    ----------
+    spec : ParamSpec
+        The model's ``spec``, carrying the fixed parameter declarations.
+    params : dict
+        User-supplied parameters.
+
+    Raises
+    ------
+    ParameterError
+        If any key in ``params`` is in ``spec.fixed_params``.
+        Message names the key, the pinned value, and the remedy.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    offending = sorted(set(params) & set(spec.fixed_params))
+    if offending:
+        detail = "; ".join(
+            f"{k!r} (pinned {spec.fixed_value(k)!r})" for k in offending
+        )
+        raise ParameterError(
+            f"params overrides Fixed parameter(s): {detail}. "
+            "Call-time overrides of a Fixed parameter are not supported (#2296); "
+            "rebuild the model with this parameter FREE, or with a different "
+            "Fixed value, instead."
+        )
+
+
+def merge_fixed_params(spec, params):
+    r"""Refuse Fixed key overrides, then merge Fixed values into params.
+
+    This is the one seam through which every caller's params dict meets the
+    spec's fixed values. It refuses any Fixed key present (#2296), then fills in
+    any omitted Fixed values, returning a complete dict ready for the forward model.
+
+    Parameters
+    ----------
+    spec : ParamSpec
+        The model's ``spec``, carrying the fixed parameter declarations.
+    params : dict
+        User-supplied parameters (free params only; see :func:`refuse_fixed_overrides`).
+
+    Returns
+    -------
+    dict
+        A **new** dict: ``params`` plus every numeric fixed value it omitted.
+
+    Raises
+    ------
+    ParameterError
+        If ``params`` contains a Fixed key (see :func:`refuse_fixed_overrides`).
+    """
+    refuse_fixed_overrides(spec, params)
+
+    merged = dict(params)
+    for name in spec.fixed_params:
+        if name in merged:
+            continue
+        value = spec.fixed_value(name)
+        if value is None or isinstance(value, (str, bool)):
+            continue
+        merged[name] = jnp.asarray(value)
+    return merged
+
+
 def resolve_fixed_params(model, params):
     r"""Fill a user params dict with the model's **Fixed** parameter values.
+
+    .. deprecated:: 1.0
+        Use :func:`merge_fixed_params` with ``model.spec`` instead.
+        This function is kept for compatibility only.
 
     Fixed parameters are not required at predict time; that is the whole point
     of fixing them, so a user's dict legitimately omits them. The forward model
@@ -60,38 +143,23 @@ def resolve_fixed_params(model, params):
     model : SEDModel
         The model, whose ``spec`` carries the fixed values.
     params : dict
-        User-supplied parameters (free params, and optionally some fixed ones).
+        User-supplied parameters (free params only; Fixed keys are refused).
 
     Returns
     -------
     dict
         A **new** dict: ``params`` plus every numeric fixed value it omitted.
-        User-supplied values always win, an explicit override is never clobbered.
 
     Raises
     ------
     AttributeError
         If ``model`` has no ``spec``, or the spec has no ``fixed_params`` /
         ``fixed_value``. Loud on purpose; see Notes.
+    ParameterError
+        If ``params`` contains a Fixed key (#2296).
     """
     spec = model.spec
-
-    resolved = dict(params)
-    for name in spec.fixed_params:
-        if name in resolved:
-            continue  # the user passed it explicitly: never override
-        value = spec.fixed_value(name)
-        if value is None or isinstance(value, (str, bool)):
-            # Structural choices (attenuation-law names, backend flags), not
-            # parameters. They are consumed at build time and must never enter a
-            # dict that gets traced.
-            continue
-        # Anything else is numeric. Note this deliberately does NOT gate on
-        # ``isinstance(value, (int, float))``: a numpy float32 or a 0-d array is
-        # not a Python float, and an allowlist of concrete types would silently
-        # skip it: reintroducing the very drop this function exists to prevent.
-        resolved[name] = jnp.asarray(value)
-    return resolved
+    return merge_fixed_params(spec, params)
 
 
 def require_redshift(params, where):

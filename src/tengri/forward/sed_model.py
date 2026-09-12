@@ -91,6 +91,7 @@ from tengri.forward.sed_model_types import (
 )
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
+from tengri.parameters.resolve import merge_fixed_params
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
@@ -8163,8 +8164,12 @@ class SEDModel:
         # SEDModels with the same structure but different fixed values
         # share one compiled function.
         if fixed_values is None:
-            fixed_values = self.spec.get_fixed_values()
-        full_params = {**fixed_values, **params}
+            # Refuse any Fixed key present in params (#2296)
+            full_params = merge_fixed_params(self.spec, params)
+        else:
+            # JIT runtime override path: caller provides both fixed and free values,
+            # so skip the refusal check (it has already happened at the entry point).
+            full_params = {**fixed_values, **params}
 
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their

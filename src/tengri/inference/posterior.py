@@ -479,6 +479,25 @@ class Posterior:
             names.append("psd_xi")
         return tuple(names)
 
+    @property
+    def fixed_values(self) -> dict:
+        """Fixed parameter values from the model spec (#2296).
+
+        Returns a dict of parameter name → pinned value for every parameter
+        the spec declared Fixed. Use this for display/diagnostics; ``params``
+        and ``samples`` carry free parameters only and are safe to feed back
+        into ``model.predict(...)``.
+
+        Returns
+        -------
+        dict
+            Fixed parameter name → value. Empty dict if the posterior has no
+            model (hand-built posteriors).
+        """
+        if self._model is None:
+            return {}
+        return dict(self._model.spec.get_fixed_values())
+
     # ── Derived quantities ────────────────────────────────────────
 
     @functools.cached_property

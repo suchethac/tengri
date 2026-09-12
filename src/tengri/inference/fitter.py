@@ -3039,15 +3039,19 @@ class Fitter:
         return params
 
     def _to_physical(self, params_unbounded: dict) -> dict:
-        """Convert a single unbounded param dict to physical space."""
+        """Convert a single unbounded param dict to physical space.
+
+        Returns free parameters only. Fixed parameters are accessible via
+        :attr:`Posterior.fixed_values` (#2296).
+        """
         params = {}
         for name in self._free_names:
             dist = self.spec.get_distribution(name)
             params[name] = dist.unstandardize(params_unbounded[name])
-        for name, val in self._fixed_values.items():
-            # self._fixed_values already carries any per-fit params override
-            # (#1329, merged at construction), no separate merge needed here.
-            params[name] = jnp.array(val)
+        # NOTE: Fixed parameters are omitted. Callers should use
+        # spec.get_fixed_values() or posterior.fixed_values for those.
+        # This ensures that model.predict(posterior.params) never receives
+        # an overridden Fixed key (#2296).
         if self.spec.stochastic and "psd_xi" in params_unbounded:
             # Publish under both names so the returned ``Posterior.params``
             # evaluates to the model that was actually fitted: ``psd_xi`` is the
