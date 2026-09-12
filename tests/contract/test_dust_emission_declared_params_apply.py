@@ -30,13 +30,12 @@ docstring and ``tests/regression/bug/test_energy_balance_split_wildcard_scope.py
 so its own ``declared_parameters()`` is empty by design; its
 ``reads_parameters`` marker names the keys instead, and this test reads
 their defaults from that shared table.
-
-**Known limit (#2241, not this census).** ``EnergyBalanceSplitIRSEDComponent.predict``
-reads its knobs via ``p.get("f_cold", 0.5)`` and four siblings rather than
-plain subscripting, so a future declared-parameter gap on that one type
-would pass here vacuously (the fallback literal absorbs the miss instead of
-raising); #2241 (filed) tracks removing those fallbacks so this census can
-actually exercise ``energy_balance_split`` the way it does every other type.
+:func:`test_energy_balance_split_missing_shared_param_raises` exercises the
+gap this component's own declarations cannot: since ``predict`` now
+subscripts ``p["f_cold"]`` and siblings directly rather than falling back to
+a stale literal (#2241), a ``reads_parameters`` name missing from the
+supplied dict raises ``KeyError`` here exactly the way a #2167-shaped gap
+does for every other registered type.
 
 **Data gate.** ``draine2021_pah_ir`` needs the untracked, gitignored
 ``data/pahspec_draine2021.h5`` (104 MB, not on any CI runner). Unlike every
@@ -156,6 +155,33 @@ def test_declared_defaults_are_sufficient_for_apply(name):
     )
     assert "sed_dust_ir" in out.derived
     _COMPLETED.append(name)
+
+
+def test_energy_balance_split_missing_shared_param_raises():
+    """A ``reads_parameters`` supply gap on ``energy_balance_split`` now
+    raises, mirroring how a #2167-shaped gap fails every other type above.
+
+    Deliberately does NOT add to ``_COMPLETED``: this is a negative case
+    (asserts ``apply()`` raises), not a member of the sufficiency
+    parametrization above.
+
+    Before #2241, ``EnergyBalanceSplitIRSEDComponent.predict`` read this
+    knob via ``p.get("f_cold", 0.5)``, so deleting it from the supplied
+    dict below would have silently substituted the stale literal and
+    returned a finite SED instead of raising -- exactly the vacuous pass
+    the module docstring used to flag as a known limit of this census.
+    """
+    component = _registered_emission_components()["energy_balance_split"]()
+    state = ForwardState(
+        wave=_WAVE,
+        sed_intrinsic=jnp.zeros_like(_WAVE),
+        derived={"L_ir": 1e44, "log_L_ir": jnp.log10(1e44)},
+    )
+    params = _params_for(component)
+    del params["dust_f_cold"]  # apply() strips the "dust_" prefix before predict()
+
+    with pytest.raises(KeyError, match="f_cold"):
+        component.apply(state, params)
 
 
 def test_census_only_the_pahspec_gate_may_skip():

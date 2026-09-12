@@ -145,7 +145,11 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
         p : dict
             Parameters with the ``dust_`` prefix stripped. Reads the globally
             declared ``T_warm``, ``T_cold``, ``f_cold``, ``beta_warm``,
-            ``beta_cold``, ``L_agn_ir`` (falling back to their defaults).
+            ``beta_cold``, ``L_agn_ir`` by key; missing on the grammar path is
+            impossible (``SEDModel.build`` resolves every declared default up
+            front), so a missing key here means a hand-built ``params`` dict
+            skipped the grammar, and raises ``KeyError`` naming it (#2241)
+            rather than silently substituting a stale literal.
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for an emission component).
         wave : ndarray, shape (n_wave,)
@@ -201,7 +205,16 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
         # terms are ~1e43 erg/s (inf in float32); log10_add sums their log
         # magnitudes without ever forming the linear sum. -inf on either term
         # (absent) drops out exactly.
-        log_total = log10_add(jnp.asarray(log_L_ir), _log10_nonneg(p.get("L_agn_ir", 0.0)))
+        #
+        # Plain subscripting, not ``.get(name, literal)`` (#2241): on the
+        # grammar path ``p`` always holds every declared ``dust_`` parameter
+        # (``SEDModel.build`` resolves every default up front, see
+        # ``reads_parameters`` above), so the six knobs below are always
+        # present there and a fallback literal is live only for a hand-built
+        # ``params`` dict that skips the grammar. Substituting a stale
+        # literal for a missing key there is a silent wrong answer; raising
+        # ``KeyError`` naming the missing key is the loud one.
+        log_total = log10_add(jnp.asarray(log_L_ir), _log10_nonneg(p["L_agn_ir"]))
 
         # Unit-luminosity two-temperature shape S(lambda), independent of the
         # total. Evaluated at L_absorbed_stellar=1, L_agn_ir=0 so ebs_fn returns
@@ -211,11 +224,11 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
             1.0,
             L_agn_ir=0.0,
             eta_balance=1.0,  # already applied to L_ir by the attenuator
-            f_cold=p.get("f_cold", 0.5),
-            dust_T_warm=p.get("T_warm", 45.0),
-            dust_T_cold=p.get("T_cold", 20.0),
-            dust_beta_warm=p.get("beta_warm", 1.5),
-            dust_beta_cold=p.get("beta_cold", 2.0),
+            f_cold=p["f_cold"],
+            dust_T_warm=p["T_warm"],
+            dust_T_cold=p["T_cold"],
+            dust_beta_warm=p["beta_warm"],
+            dust_beta_cold=p["beta_cold"],
             redshift=z,
         )
         sed = apply_log10_scale(shape, log_total)

@@ -10,6 +10,11 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    ANALYTIC_BETA_IR_DEFAULT,
+    DEFAULT_DUST_EPSILON_MBB,
+    MBB_T_K_DEFAULT,
+)
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 from tengri.parameters.resolve import require_redshift
@@ -54,10 +59,17 @@ class ModifiedBlackbodyIRSEDComponent(EmissionComponent):
 
     name: str = "modified_blackbody"
 
-    # Free parameters (user-facing names, prefix-stripped)
-    T = Fixed(30.0)
-    beta_ir = Fixed(1.8)
-    epsilon_mbb = Fixed(1.0)
+    # Free parameters (user-facing names, prefix-stripped). ``T``/``beta_ir``
+    # read the same module constants as the closure's own signature defaults
+    # (#2241), so the two cannot drift from each other; see
+    # ``tengri.components.dust._params`` for why they are not derived from
+    # that table's own ``dust_T``/``dust_beta_ir`` entries (#2261).
+    # ``epsilon_mbb`` reads the same ``declared_default(PARAMS, ...)``
+    # constant the closure's signature reads, for the same reason (#2241): a
+    # bare literal here would be a second, independent copy.
+    T = Fixed(MBB_T_K_DEFAULT)
+    beta_ir = Fixed(ANALYTIC_BETA_IR_DEFAULT)
+    epsilon_mbb = Fixed(DEFAULT_DUST_EPSILON_MBB)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "draine2011",
