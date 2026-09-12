@@ -1077,6 +1077,17 @@ class Observation:
         # one. New components add their precompute field to DerivedState and
         # apply(), no change to predict_via_precomp required.
         precomp_keys = [k for k in state.derived.field_names() if k.endswith("_phot_lnu_precomp")]
+        # Substitute the dust-attenuated AGN form for the intrinsic one when both
+        # are present (PR-D2, mirrors shock's #1434 treatment below). Checked
+        # against ``state.derived`` directly, not ``precomp_keys``:
+        # ``agn_phot_lnu_attenuated_precomp`` ends in ``_attenuated_precomp``, not
+        # ``_phot_lnu_precomp``, so it never satisfies the filter above and a
+        # membership check against ``precomp_keys`` would always be False. Excluding
+        # the intrinsic key here prevents double-counting; the attenuated value
+        # itself is added back into the two-component dust bucket further down
+        # (next to the shock and nebular attenuated forms).
+        if state.derived.get("agn_phot_lnu_attenuated_precomp") is not None:
+            precomp_keys = [k for k in precomp_keys if k != "agn_phot_lnu_precomp"]
         precomp_contribs = [state.derived[k] for k in precomp_keys if k in state.derived]
         if not precomp_contribs:
             raise ValueError(
@@ -1176,6 +1187,15 @@ class Observation:
                 "DustSEDComponent, making sed_shock available for dust to read and "
                 "publish the attenuated form."
             )
+        # AGN precomp substitution (PR-D2): when agn_phot_lnu_attenuated_precomp is
+        # present (agn_screen != 'none'), the intrinsic agn_phot_lnu_precomp was already
+        # excluded from the sum above (near line 1083), and the attenuated value is
+        # added back into the two-component dust bucket below, next to shock. No raise
+        # here (unlike shock's structural gate above): when agn_screen='none' (default),
+        # the dust component legitimately publishes no attenuated key -- the reader
+        # cannot see the screen choice, and an unscreened AGN staying in the plain
+        # ``*_phot_lnu_precomp`` sum, unattenuated, is correct (AGN runs after dust).
+        agn_phi_attenuated_precomp = state.derived.get("agn_phot_lnu_attenuated_precomp")
         # Track shock separately for diagnostics (intrinsic form).
         shock_only_phi = (
             shock_phi_intrinsic if shock_phi_intrinsic is not None else jnp.zeros_like(total_phi)
@@ -1293,17 +1313,32 @@ class Observation:
             # Shock is attenuated by the same dust screen (#1434). The dust component
             # publishes shock_phot_lnu_attenuated_precomp, the band-integrated attenuated
             # form. This is added as-is (not rescreened) to avoid drift from the exact path.
+            # AGN, screened (PR-D2, #2260): the dust component publishes
+            # agn_phot_lnu_attenuated_precomp, the band-integrated attenuated form,
+            # only when agn_screen != 'none'. Added as-is (not rescreened), the same
+            # treatment as shock just above; its intrinsic counterpart was already
+            # excluded from ``total_phi`` (near line 1083) so this is additive, not
+            # a double-count.
             nebular_exact = state.derived.get("nebular_phot_lnu_attenuated_precomp")
             shock_attenuated_for_output = (
                 shock_phi_attenuated_precomp
                 if shock_phi_attenuated_precomp is not None
                 else jnp.zeros_like(total_phi)
             )
+            agn_attenuated_for_output = (
+                agn_phi_attenuated_precomp
+                if agn_phi_attenuated_precomp is not None
+                else jnp.zeros_like(total_phi)
+            )
             if nebular_exact is not None:
-                nebular_attenuated = nebular_exact + shock_attenuated_for_output
+                nebular_attenuated = (
+                    nebular_exact + shock_attenuated_for_output + agn_attenuated_for_output
+                )
             else:
                 nebular_attenuated = (
-                    a_diff_lut * a_bc_lut * nebular_phi_for_dust + shock_attenuated_for_output
+                    a_diff_lut * a_bc_lut * nebular_phi_for_dust
+                    + shock_attenuated_for_output
+                    + agn_attenuated_for_output
                 )
             total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
