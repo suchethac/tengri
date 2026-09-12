@@ -35,7 +35,7 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
             "all_params": Fixed(DEFAULT),
         },
         dust_emission={"type": emission, "frac_agn": dust_frac_agn}
-        if emission == "dale2014"
+        if emission in ("dale2014", "dale2014_cigale")
         else {"type": emission},
     )
     if with_agn:
@@ -58,27 +58,56 @@ def _fires(spec) -> bool:
 
 @pytest.mark.unit
 class TestDoubleCountGuardFires:
-    """The guard fires exactly when both AGN surfaces are positive-active."""
+    """The guard fires exactly when both AGN surfaces are positive-active on cigale."""
 
-    def test_both_fixed_positive_warns(self):
-        assert _fires(_spec(Fixed(0.3), Fixed(0.5)))
+    def test_cigale_both_fixed_positive_warns(self):
+        # Only dale2014_cigale carries the QSO template where frac_agn is live.
+        assert _fires(_spec(Fixed(0.3), Fixed(0.5), emission="dale2014_cigale"))
 
-    def test_both_free_warns(self):
+    def test_cigale_both_free_warns(self):
         # A free param can take positive values → counts as active.
-        assert _fires(_spec(Uniform(0.0, 0.9), Uniform(0.01, 0.99)))
+        assert _fires(_spec(Uniform(0.0, 0.9), Uniform(0.01, 0.99), emission="dale2014_cigale"))
+
+    def test_plain_dale2014_both_positive_no_warn(self):
+        # Plain dale2014 lacks the QSO template; frac_agn is inert there.
+        # No warning even with both parameters nominally positive. Note: plain
+        # dale2014 doesn't declare frac_agn, so we can't pass it explicitly.
+        # Create the spec manually to test that the gate doesn't fire on plain dale2014.
+        spec = parse_groups(
+            redshift=Fixed(0.1),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014"},
+            agn={
+                "type": "composable",
+                "disc": {"type": "multicolor"},
+                "torus": {"type": "none"},
+                "agn_ir_frac": Fixed(0.5),
+                "all_params": Fixed(DEFAULT),
+            },
+        )
+        assert not _fires(spec)
 
     def test_dust_frac_agn_zero_no_warn(self):
-        assert not _fires(_spec(Fixed(0.0), Fixed(0.5)))
+        # Zero on either surface prevents double-count on cigale.
+        assert not _fires(_spec(Fixed(0.0), Fixed(0.5), emission="dale2014_cigale"))
 
     def test_agn_fracagn_zero_no_warn(self):
-        assert not _fires(_spec(Fixed(0.3), Fixed(0.0)))
+        assert not _fires(_spec(Fixed(0.3), Fixed(0.0), emission="dale2014_cigale"))
 
     def test_no_agn_no_warn(self):
-        # Dale2014 fracAGN alone (the embedded-proxy use) is legitimate.
-        assert not _fires(_spec(Fixed(0.3), Fixed(0.0), with_agn=False))
+        # Dale2014 frac_agn alone (the embedded-proxy use) is legitimate.
+        assert not _fires(
+            _spec(Fixed(0.3), Fixed(0.0), emission="dale2014_cigale", with_agn=False)
+        )
 
     def test_non_dale_emission_no_warn(self):
-        # Only Dale2014 carries the embedded quasar template.
+        # Only dale2014_cigale carries the embedded quasar template.
+        # Plain dale2014 lacks it; other engines don't have the parameter at all.
         assert not _fires(_spec(Fixed(0.0), Fixed(0.5), emission="casey2012"))
 
 
@@ -99,6 +128,7 @@ class TestFlagshipRecipesDoNotWarn:
 @pytest.mark.unit
 class TestGuardEndToEndAndFilterable:
     def test_build_warns_on_both_active(self, synthetic_ssp_wide):
+        # Warning fires on dale2014_cigale (where frac_agn is live), not plain dale2014.
         with pytest.warns(AGNDustDoubleCountWarning, match="DOUBLE-COUNTED"):
             SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
@@ -110,7 +140,7 @@ class TestGuardEndToEndAndFilterable:
                     "tau_diff": Fixed(0.0),
                     "all_params": Fixed(DEFAULT),
                 },
-                dust_emission={"type": "dale2014", "frac_agn": Fixed(0.3)},
+                dust_emission={"type": "dale2014_cigale", "frac_agn": Fixed(0.3)},
                 agn={
                     "type": "composable",
                     "disc": {"type": "multicolor"},
@@ -122,6 +152,7 @@ class TestGuardEndToEndAndFilterable:
             )
 
     def test_build_silent_when_dust_frac_agn_zero(self, synthetic_ssp_wide):
+        # Even on cigale (where frac_agn is live), zero value means no double-count warning.
         with warnings.catch_warnings():
             warnings.simplefilter("error", AGNDustDoubleCountWarning)
             model = SEDModel.build(
@@ -132,10 +163,9 @@ class TestGuardEndToEndAndFilterable:
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    # frac_agn defaults to 0
                     "all_params": Fixed(DEFAULT),
                 },
-                dust_emission={"type": "dale2014"},
+                dust_emission={"type": "dale2014_cigale", "frac_agn": Fixed(0.0)},
                 agn={
                     "type": "composable",
                     "disc": {"type": "multicolor"},
@@ -150,5 +180,5 @@ class TestGuardEndToEndAndFilterable:
     def test_warning_is_filterable(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", AGNDustDoubleCountWarning)
-            # Must not raise even though both surfaces are active.
-            _warn_agn_dust_double_count(_spec(Fixed(0.3), Fixed(0.5)))
+            # Must not raise even though both surfaces are active on cigale.
+            _warn_agn_dust_double_count(_spec(Fixed(0.3), Fixed(0.5), emission="dale2014_cigale"))

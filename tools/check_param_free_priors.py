@@ -12,7 +12,7 @@ This guard removes the ambiguity. A parameter with a ``Fixed`` default and no
 fails the build until someone writes down which it is -- a range, or why there
 isn't one.
 
-The reasons below are not decoration. They record four genuinely different
+The reasons below are not decoration. They record six genuinely different
 grounds for refusing, and the distinction matters when revisiting them:
 
 ``inert``
@@ -148,14 +148,8 @@ REFUSED: dict[str, tuple[str, str]] = {
         "refused; codified in Parameters._ORDERED_PAIRS (#2247)",
     ),
     # ── explicit-only: real freedom, but not one a default fit can constrain ──
-    "dust_frac_agn": (
-        "explicit-only",
-        "real range [0, 0.99); the QSO-carrying grid ships (dale2014_cigale, "
-        "wired and tested), but the registry is flat (one declaration shared "
-        "by both Dale engines), so a global free would open it as an inert "
-        "dimension under plain SF-only dale2014 (#1482 class) -- free it "
-        "explicitly beside dale2014_cigale",
-    ),
+    # dust_frac_agn removed: now declares a free_prior and reaches wildcard on
+    # dale2014_cigale only via engine-scoped class-level declaration (#2244).
     "dust_f_obscuration": (
         "explicit-only",
         "achromatic transmission floor: persistently high directional "
@@ -213,7 +207,7 @@ def main() -> int:
         print(
             "\nGive each a free_prior (its admissible range -- measured from the grid it\n"
             "indexes where there is one, never transcribed from a description), or add it\n"
-            "to REFUSED in this file with one of the four grounds and a reason."
+            "to REFUSED in this file with one of the six grounds and a reason."
         )
 
     if stale:

@@ -722,12 +722,11 @@ jobs:
       # log_total_mass is a unit-mass normalization, not a bug.
       - run: python tools/check_param_ranges.py
       # #887's guarantee — every parameter is either freeable by
-      # `all_params: FREE` or refused on the record with one of four reasons —
+      # `all_params: FREE` or refused on the record with a documented reason —
       # shipped in #1638 with a guard that promises "adding a new one fails the
       # build until someone writes down which it is". It was never given a
       # `- run:` line, so it could not fail any build: the guarantee was
-      # unenforced from the day it landed. Green as written (358 parameters, 78
-      # freeable, 33 pinned), so this turns it on with no ratchet.
+      # unenforced from the day it landed. This turns it on with no ratchet.
       - run: python tools/check_param_free_priors.py
       - run: python tools/check_test_markers.py
       # A @pytest.mark.slow test outside tests/inference and tests/integration

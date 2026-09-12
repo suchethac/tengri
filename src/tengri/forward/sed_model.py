@@ -934,21 +934,27 @@ def _warn_dead_gradient_params(spec) -> None:
 
 
 def _warn_agn_dust_double_count(spec) -> None:
-    """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
+    """Warn when composable AGN and Dale2014 CIGALE ``dust_frac_agn`` both inject AGN IR.
 
-    The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014's
+    The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014 CIGALE's
     embedded quasar template ``dust_frac_agn`` are two distinct AGN surfaces,
     both keyed off the same stellar ``L_absorbed`` (component_factory.py:346,
-    ADR-0018 §5, issue #721). With both > 0 the AGN mid/far-IR is double-counted
-    the SKIRTOR/torus block already models AGN IR, so Dale2014's fracAGN should
-    be 0 (matching CIGALE's skirtor2016-vs-dale2014-fracAGN choice).
+    ADR-0018 §5, issue #721). With both > 0 the AGN mid/far-IR is double-counted.
+    The SKIRTOR/torus block already models AGN IR, so Dale2014 CIGALE's frac_agn
+    should be 0 (matching CIGALE's skirtor2016-vs-dale2014-fracAGN choice).
+
+    **Inert on plain dale2014**: The parameter ``dust_frac_agn`` is inert
+    (bit-identical predictions) on the plain Dale2014 backend — it lacks the QSO
+    template grid — so the warning does not fire there. It fires only on
+    dale2014_cigale, where the CIGALE-grid engine carries the embedded quasar
+    template and the parameter is live and can double-count with an AGN block.
 
     Value-aware (the structural ``build_components`` guard cannot be): a FREE
     param counts as positive-active; a Fixed param counts only if its value is
     > 0, so ``dust_frac_agn`` pinned to 0 (e.g. a torus-only AGN recipe) does
     not warn. Emits a filterable :class:`AGNDustDoubleCountWarning`.
     """
-    if getattr(spec, "dust_emission", None) != "dale2014":
+    if getattr(spec, "dust_emission", None) != "dale2014_cigale":
         return
     free = set(spec.free_params)
     fixed = spec.get_fixed_values()
@@ -965,11 +971,11 @@ def _warn_agn_dust_double_count(spec) -> None:
 
     warnings.warn(
         "Both AGN surfaces are active: the composable AGN (agn_ir_frac > 0) and "
-        "Dale2014 dust emission (dust_frac_agn > 0). Both inject AGN-heated IR "
+        "Dale2014 CIGALE dust emission (dust_frac_agn > 0). Both inject AGN-heated IR "
         "from the same stellar L_absorbed, so AGN mid/far-IR is DOUBLE-COUNTED. "
         "Use one surface: set dust_frac_agn=0 and let the composable AGN torus "
         "(e.g. SKIRTOR) own the AGN IR, recommended when a torus block is "
-        "configured, or drop the composable AGN and use Dale2014's embedded "
+        "configured, or drop the composable AGN and use Dale2014 CIGALE's embedded "
         "quasar template alone. See ADR-0018 §5 / issue #721. Filter "
         "AGNDustDoubleCountWarning if the overlap is deliberate.",
         AGNDustDoubleCountWarning,

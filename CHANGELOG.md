@@ -117,6 +117,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `with jax.enable_x64(False): ...` while the process default stays x64-on --
   exactly the pattern `test_fisher_float32.py`'s own float32 arm uses. An
   explicit `JAX_DEFAULT_MATMUL_PRECISION` always wins (#2022).
+- `dust_frac_agn` is now declared with a `free_prior` of `Uniform(0.0, 0.99)`,
+  making it wildcard-reachable (`all_params: FREE`) exactly on
+  `dale2014_cigale`, the engine variant whose shipped template grid carries the
+  QSO template where the parameter is live. On plain `dale2014` (QSO-less grid),
+  the parameter remains inert and unreachable by the wildcard, preventing the
+  sampler from exploring a flat dimension (#2244). The fix follows the
+  engine-scoped declared-exception pattern: `dale2014_cigale` declares `frac_agn`
+  at the component class level; plain `dale2014` omits it. Simultaneously, the
+  AGN+Dale double-count warning (#721) now fires on `dale2014_cigale` (where
+  `frac_agn` is live and can double-count with a composable AGN torus) instead
+  of plain `dale2014` (where the parameter is inert). One behavioral break
+  rides along: an explicit `frac_agn` key beside plain `dale2014` — previously
+  accepted and silently ignored — now raises `ParameterError` naming the
+  variant that reads it, via the grammar's standard unknown-key check
+  (#2244, #721).
 
 ### Fixed
 

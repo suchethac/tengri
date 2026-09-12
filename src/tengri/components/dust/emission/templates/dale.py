@@ -58,7 +58,6 @@ class Dale2014IRSEDComponent(EmissionComponent):
 
     # Free parameters (user-facing names, prefix-stripped)
     alpha_dale = Fixed(2.0)
-    frac_agn = Fixed(0.0)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("dale2014",)
 

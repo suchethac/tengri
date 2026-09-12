@@ -302,17 +302,21 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "L_AGN = L_dust*f/(1-f) (CIGALE dale2014, 0<=f<1)",
         lambda lo, hi: lo >= 0.0 and hi < 1.0,
         "must be in [0, 1)",
-        # Deliberately NO free_prior, and this one was measured rather than
-        # argued. The validator bounds both ends, so the #887 convention
-        # (free_prior == the validator interval) would give Uniform(0, 0.99) --
-        # but the AGN term it scales needs the pure-AGN QSO template, and only
-        # data/dale2014_templates_cigale.h5 ships one. The default
-        # data/dale2014_templates.h5 holds {alpha_grid, templates_sf,
-        # wavelength_aa} and no templates_qso, so sweeping frac_agn across its
-        # whole support leaves predict_photometry bit-identical: freeing it by
-        # default would hand the sampler exactly the flat direction #1482
-        # removed. Free it explicitly (frac_agn=Uniform(0, 0.99)) alongside the
-        # CIGALE template, where it is live.
+        free_prior=Uniform(0.0, 0.99, "AGN fraction", units=""),
+        # Engine-scoped: declared with a free_prior, but only the plain-dale2014
+        # engine class (plain Dale2014IRSEDComponent) omits a class-level frac_agn
+        # declaration, so the wildcard scope excludes it there. The CIGALE variant
+        # (Dale2014CigaleIRSEDComponent) declares frac_agn at class level, making
+        # it wildcard-reachable on dale2014_cigale only. This pattern follows the
+        # established declared-exception model (#2286, dust_eta_balance on
+        # energy_balance_split). The disease it solves: the registry is flat (one
+        # declaration shared by both Dale engines), but the AGN term the parameter
+        # scales needs the pure-AGN QSO template, which only the CIGALE grid
+        # data/dale2014_templates_cigale.h5 ships. On plain dale2014 with only
+        # data/dale2014_templates.h5 ({alpha_grid, templates_sf, wavelength_aa},
+        # no templates_qso), sweeping frac_agn leaves predict_photometry bit-identical
+        # — a flat direction that would waste sampler steps (#1482). Scoping to
+        # cigale via class-level declaration prevents that.
         # Caught by tests/contract/test_dust_emission_wildcard.py::
         # test_no_freed_parameter_is_inert[dale2014].
     ),
