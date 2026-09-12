@@ -38,6 +38,12 @@
 
 # %% [markdown]
 # ## Setup
+#
+# Every model on this page carries nebular emission: tengri uses Cue at
+# logU = −2, Z_gas = Z☉, f_esc = 0 (`neb={"type": "cue", ...}`), and BAGPIPES
+# uses its own Cloudy v25 nebular grid at the same values. Residuals in every
+# section therefore include the Cue-vs-BAGPIPES nebular difference,
+# quantified in §9.
 
 # %%
 import os
@@ -50,6 +56,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
+from reproduction import _validation as V
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
@@ -310,54 +317,133 @@ save_fig("bagpipes_02_sfh_delayed.png")
 
 
 # %% [markdown]
-# ## §2 cont'd — double power-law
+# ## §2 cont'd — intrinsic SED per SFH form
 #
-# BAGPIPES' `dblplaw` is a smooth-rise, smooth-fall SFH with two slopes
-# `α` (falling) and `β` (rising), turnover time `τ`:
-# :math:`\\mathrm{SFR}(T) \\propto \\bigl[(T/\\tau)^{\\alpha} +
-# (T/\\tau)^{-\\beta}\\bigr]^{-1}`. tengri's `dpl` implements the same
-# closed-form shape with the same parameterization.
-#
-# Both codes measure time in cosmic time since formation. tengri's `dpl`
-# takes an explicit `age_gyr` anchor and converts internally using the
-# same method as the delayed-τ case. Anchoring to the BAGPIPES age of
-# the universe matches the curves directly.
-#
-# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+# Parametric SFH family comparison: delayed-τ (τ ∈ {0.3, 1, 3} Gyr),
+# constant-SFR, double power-law, and lognormal forms. Every SED uses the
+# 5 Gyr delayed-τ fiducial nucleus unchanged; the SFH parameter alone sweeps.
+# Both sides carry nebular emission (logU −2). UV-to-NIR band ratios per form
+# (line pixels differ in width between the codes, so we report broadband metrics).
 
 # %%
-DPL_ALPHA = 1.5
-DPL_BETA = 1.0
-DPL_TAU_GYR = 3.0
+# Use standard cosmological age (Planck 2018).
+if "AGE_OF_UNIVERSE_GYR" not in dir():
+    AGE_OF_UNIVERSE_GYR = 13.8
 
-# Build the BAGPIPES side directly via model_galaxy.sfh inspection.
+# Fiducial nebular block for all sweeps (logU -2 on both sides).
+_NEB_FIDUCIAL = {"logU": -2.0}
+
+cases_sfh = []
+
+# 1. Delayed-τ with τ = 0.3 Gyr
+for tau_gyr in [0.3, 1.0, 3.0]:
+    label = f"delayed τ={tau_gyr:.1f} Gyr"
+    w_ref, L_ref = B.attenuated_lnu(
+        dust_block={"type": "Calzetti", "Av": 0.0},
+        nebular_block={"logU": -2.0, "metallicity": 1.0},
+        sfh_type="delayed",
+        massformed=LOG_MASS_FIDUCIAL,
+        metallicity=1.0,
+        age=AGE_GYR_FIDUCIAL,
+        tau=tau_gyr,
+    )
+
+    m_t = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(tau_gyr),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(-2.0),
+            "neb_logZ_gas": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s_t = m_t.predict_state({})
+    L_t = s_t.sed_intrinsic
+    cases_sfh.append((label, w_ref, L_ref, s_t.wave, L_t))
+
+# 2. Constant SFR: age_min=0, age_max=5 Gyr
+label = "constant SFR age 0–5 Gyr"
+w_ref, L_ref = B.attenuated_lnu(
+    dust_block={"type": "Calzetti", "Av": 0.0},
+    nebular_block={"logU": -2.0, "metallicity": 1.0},
+    sfh_type="constant",
+    massformed=LOG_MASS_FIDUCIAL,
+    metallicity=1.0,
+    age=5.0,
+)
+m_t = SEDModel.build(
+    ssp_data=ssp,
+    met=MET_FIDUCIAL,
+    sfh={
+        "type": "const",
+        "start_gyr": Fixed(5.0),
+        "end_gyr": Fixed(0.0),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    redshift=Fixed(0.0),
+)
+s_t = m_t.predict_state({})
+L_t = s_t.sed_intrinsic
+cases_sfh.append((label, w_ref, L_ref, s_t.wave, L_t))
+
+# 3. Double power-law: α=1.5, β=1.0, τ=3 Gyr
+label = "dblplaw α=1.5 β=1 τ=3 Gyr"
 _comp_b_dpl = {
     "redshift": 0.0,
     "dblplaw": {
-        "alpha": DPL_ALPHA,
-        "beta": DPL_BETA,
-        "tau": DPL_TAU_GYR,
+        "alpha": 1.5,
+        "beta": 1.0,
+        "tau": 3.0,
         "metallicity": 1.0,
         "massformed": LOG_MASS_FIDUCIAL,
     },
+    "dust": {"type": "Calzetti", "Av": 0.0},
+    "nebular": {"logU": -2.0},
 }
 _mg_b_dpl = B._build_model(_comp_b_dpl)
-t_b_dpl = np.asarray(_mg_b_dpl.sfh.ages, dtype=np.float64)  # yr lookback
-sfr_b_dpl = np.asarray(_mg_b_dpl.sfh.sfh, dtype=np.float64)  # Msun/yr
+w_ref_dpl = np.asarray(_mg_b_dpl.wavelengths, dtype=np.float64)
+L_lambda_dpl = np.asarray(_mg_b_dpl.spectrum_full, dtype=np.float64)
+_, L_ref = U.ergs_per_aa_to_erg_per_hz(w_ref_dpl, L_lambda_dpl)
+w_ref = w_ref_dpl
 
-# Anchor tengri's cosmic-time frame to the *same* age of the universe
-# BAGPIPES used (Planck cosmology at z = 0). Reading it off the model
-# keeps the two codes on one clock regardless of cosmology drift.
-AGE_OF_UNIVERSE_GYR = float(_mg_b_dpl.sfh.age_of_universe) / 1e9
-
-m_dpl = SEDModel.build(
+m_t = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
     sfh={
         "type": "dpl",
-        "alpha": Fixed(DPL_ALPHA),
-        "beta": Fixed(DPL_BETA),
-        "tau_gyr": Fixed(DPL_TAU_GYR),
+        "alpha": Fixed(1.5),
+        "beta": Fixed(1.0),
+        "tau_gyr": Fixed(3.0),
         "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": Fixed(DEFAULT),
@@ -369,87 +455,46 @@ m_dpl = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
-s_dpl = m_dpl.predict_state({})
-_lbt_dpl = np.asarray(s_dpl.derived["sfh_grid_lbt_yr"])
-_sfr_dpl = np.asarray(s_dpl.derived["sfr_history"])
-_mass_b_dpl = float(np.trapezoid(sfr_b_dpl[::-1], t_b_dpl[::-1]))
-_mass_t_dpl = float(np.trapezoid(_sfr_dpl[np.argsort(_lbt_dpl)], _lbt_dpl[np.argsort(_lbt_dpl)]))
-print(
-    f"§2a ∫SFR dt: BAGPIPES = {abs(_mass_b_dpl):.3e} M☉, "
-    f"tengri = {_mass_t_dpl:.3e} M☉ (target 1.0e+10)"
-)
+s_t = m_t.predict_state({})
+L_t = s_t.sed_intrinsic
+cases_sfh.append((label, w_ref, L_ref, s_t.wave, L_t))
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, f"BAGPIPES dblplaw (α={DPL_ALPHA:g}, β={DPL_BETA:g}, τ={DPL_TAU_GYR:g} Gyr)"),
-    (ax_r, f"tengri dpl (age = {AGE_OF_UNIVERSE_GYR:.2f} Gyr)"),
-):
-    ax.set_xlabel("lookback time [Gyr]")
-    ax.set_xlim(0, 13.5)
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title, fontsize=11)
-ax_l.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-ax_l.plot(t_b_dpl / 1e9, sfr_b_dpl, "C0-", linewidth=2.0)
-ax_r.plot(_lbt_dpl / 1e9, _sfr_dpl, "C1-", linewidth=2.0)
-_peak_lbt_dpl = float(_lbt_dpl[np.argmax(_sfr_dpl)] / 1e9)
-for ax in (ax_l, ax_r):
-    ax.axvline(
-        _peak_lbt_dpl,
-        color="gray",
-        linestyle=":",
-        alpha=0.6,
-        label=f"peak @ {_peak_lbt_dpl:.1f} Gyr lookback",
-    )
-    ax.legend(fontsize=9)
-fig.tight_layout()
-save_fig("bagpipes_10_sfh_dblplaw.png")
-
-print(
-    f"§2a peak location: BAGPIPES @ lookback {t_b_dpl[np.argmax(sfr_b_dpl)] / 1e9:.2f} Gyr, "
-    f"tengri dpl @ {_peak_lbt_dpl:.2f} Gyr (same cosmic-time frame; "
-    f"residual is SFH-grid discretization)"
-)
-
-
-# %% [markdown]
-# ## §2 cont'd — lognormal
-#
-# BAGPIPES' lognormal SFR peaks at `tmax` with full-width-half-max `fwhm`.
-# tengri's `lnorm` uses the same family: peak cosmic time `peak_gyr` and
-# log-space width `width_gyr` (dex). To match BAGPIPES' linear-time FWHM:
-# `width_dex ≈ FWHM/(2.355 × tmax × ln 10)`.
-#
-#
-# tengri's `lnorm` is a log10-space Gaussian, not the exact Carnall+2018
-# 1/T ln-space lognormal, so the detailed wing shape differs slightly.
-
-# %%
-LN_TMAX_GYR = 4.0
-LN_FWHM_GYR = 2.0
-LN_WIDTH_DEX = LN_FWHM_GYR / (2.355 * LN_TMAX_GYR * np.log(10))
-
+# 4. Lognormal: tmax=4 Gyr, FWHM=2 Gyr
+label = "lognormal tmax=4 Gyr FWHM=2 Gyr"
+_ln_fwhm = 2.0
+_ln_width_dex = _ln_fwhm / (2.355 * 4.0 * np.log(10))
 _comp_b_ln = {
     "redshift": 0.0,
     "lognormal": {
-        "tmax": LN_TMAX_GYR,
-        "fwhm": LN_FWHM_GYR,
+        "tmax": 4.0,
+        "fwhm": 2.0,
         "metallicity": 1.0,
         "massformed": LOG_MASS_FIDUCIAL,
     },
+    "dust": {"type": "Calzetti", "Av": 0.0},
+    "nebular": {"logU": -2.0},
 }
 _mg_b_ln = B._build_model(_comp_b_ln)
-t_b_ln = np.asarray(_mg_b_ln.sfh.ages, dtype=np.float64)
-sfr_b_ln = np.asarray(_mg_b_ln.sfh.sfh, dtype=np.float64)
+w_ref_ln = np.asarray(_mg_b_ln.wavelengths, dtype=np.float64)
+L_lambda_ln = np.asarray(_mg_b_ln.spectrum_full, dtype=np.float64)
+_, L_ref = U.ergs_per_aa_to_erg_per_hz(w_ref_ln, L_lambda_ln)
+w_ref = w_ref_ln
 
-m_ln = SEDModel.build(
+m_t = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
     sfh={
         "type": "lnorm",
-        "peak_gyr": Fixed(LN_TMAX_GYR),
-        "width_gyr": Fixed(LN_WIDTH_DEX),
+        "peak_gyr": Fixed(4.0),
+        "width_gyr": Fixed(_ln_width_dex),
         "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": Fixed(DEFAULT),
@@ -461,42 +506,44 @@ m_ln = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
-s_ln = m_ln.predict_state({})
-_lbt_ln = np.asarray(s_ln.derived["sfh_grid_lbt_yr"])
-_sfr_ln = np.asarray(s_ln.derived["sfr_history"])
+s_t = m_t.predict_state({})
+L_t = s_t.sed_intrinsic
+cases_sfh.append((label, w_ref, L_ref, s_t.wave, L_t))
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, f"BAGPIPES lognormal (tmax={LN_TMAX_GYR:g}, FWHM={LN_FWHM_GYR:g} Gyr)"),
-    (ax_r, f"tengri lnorm (peak={LN_TMAX_GYR:g} Gyr, age={AGE_OF_UNIVERSE_GYR:.2f} Gyr)"),
-):
-    ax.set_xlabel("lookback time [Gyr]")
-    ax.set_xlim(0, 13.5)
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title, fontsize=11)
-ax_l.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-ax_l.plot(t_b_ln / 1e9, sfr_b_ln, "C0-", linewidth=2.0)
-ax_r.plot(_lbt_ln / 1e9, _sfr_ln, "C1-", linewidth=2.0)
-_peak_lbt_ln = float(_lbt_ln[np.argmax(_sfr_ln)] / 1e9)
-for ax in (ax_l, ax_r):
-    ax.axvline(
-        _peak_lbt_ln,
-        color="gray",
-        linestyle=":",
-        alpha=0.6,
-        label=f"peak @ {_peak_lbt_ln:.1f} Gyr lookback",
-    )
-    ax.legend(fontsize=9)
-fig.tight_layout()
-save_fig("bagpipes_11_sfh_lognormal.png")
+# Check comparability
+for label, w_ref, L_ref, w_t, L_t in cases_sfh:
+    _assert_comparable(L_ref, L_t, name=f"§2 cont'd {label}")
 
-print(
-    f"§2b peak location: BAGPIPES @ lookback {t_b_ln[np.argmax(sfr_b_ln)] / 1e9:.2f} Gyr, "
-    f"tengri lnorm @ {_peak_lbt_ln:.2f} Gyr (same cosmic-time frame; "
-    f"residual is grid discretization + log10-vs-Carnall wing shape)"
+# Plot sweep with ratio panel
+fig, (ax, ax_r), ratios = V.sweep_fig(
+    cases_sfh,
+    ref_label="BAGPIPES",
+    title="§2 cont'd — Parametric SFH forms (nebular on, logU −2)",
+    xlim=(1e3, 1e5),
 )
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+fig.tight_layout()
+save_fig("bagpipes_02_sfh_forms.png")
+
+# UV-to-NIR band ratios per SFH form.
+print("§2 cont'd intrinsic SED per SFH form:")
+# Band-average each tengri case on its native wavelength grid for filter calculation
+for label, w_ref, L_ref, w_t, L_t in cases_sfh:
+    rows = V.filter_rows_native(w_t, L_t, w_ref, L_ref, filters=V.UV_TO_NIR)
+    V.print_filter_table(
+        rows,
+        ref_name="BAGPIPES",
+        title=f"§2 cont'd {label}",
+        compact=True,
+    )
 
 
 # %% [markdown]
@@ -749,6 +796,84 @@ save_fig("bagpipes_15_metallicity_sweep.png")
 
 
 # %% [markdown]
+# ## §5 cont'd — Metallicity sweep with ratio panel
+#
+# Extended Z/Z☉ ∈ {0.2, 0.5, 1, 1.5, 2.5} sweep with tengri/BAGPIPES ratio
+# panel and UV-to-NIR bandpass statistics. Fiducial SFH: 5 Gyr delayed-τ with
+# τ = 1 Gyr, all with nebular emission on (logU −2, matched gas metallicity).
+# UV-to-NIR bandpass ratio: median 1.002×, worst 1.371× (2/10 bands
+# outside 5%).
+
+# %%
+_Z_EXTENDED = [0.2, 0.5, 1.0, 1.5, 2.5]
+_logzsol_extended = [float(np.log10(z)) for z in _Z_EXTENDED]
+
+cases_z = []
+for z, logz in zip(_Z_EXTENDED, _logzsol_extended):
+    w_b_z, L_b_z = B.attenuated_lnu(
+        dust_block={"type": "Calzetti", "Av": 0.0},
+        nebular_block={"logU": -2.0, "metallicity": z},
+        sfh_type="delayed",
+        massformed=LOG_MASS_FIDUCIAL,
+        metallicity=z,
+        age=AGE_GYR_FIDUCIAL,
+        tau=TAU_GYR_FIDUCIAL,
+    )
+
+    m_z_neb = SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(logz), "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(-2.0),
+            "neb_logZ_gas": Fixed(logz),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s_z_neb = m_z_neb.predict_state({})
+    L_t_z = s_z_neb.sed_intrinsic
+    _assert_comparable(L_b_z, L_t_z, name=f"§5 cont'd Z={z:g}")
+    cases_z.append((f"Z = {z:g} Z⊙", w_b_z, L_b_z, s_z_neb.wave, L_t_z))
+
+# Plot with ratio panel
+fig, (ax, ax_r), ratios = V.sweep_fig(
+    cases_z,
+    ref_label="BAGPIPES",
+    title="§5 cont'd — Metallicity sweep (5 Gyr delayed-τ, nebular on)",
+    xlim=(1e3, 1e5),
+)
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+fig.tight_layout()
+save_fig("bagpipes_05_metallicity_extended.png")
+
+# UV-to-NIR compact table — show fiducial (solar) case
+# Band-average fiducial case on its native wavelength grid for filter calculation
+label_z_fid, w_b_z_fid, L_b_z_fid, w_t_z_fid, L_t_z_fid = cases_z[2]  # Z = 1.0 Z⊙ (solar)
+rows_z = V.filter_rows_native(w_t_z_fid, np.asarray(L_t_z_fid), w_b_z_fid, L_b_z_fid, filters=V.UV_TO_NIR)
+V.print_filter_table(
+    rows_z,
+    ref_name="BAGPIPES",
+    title="§5 cont'd Metallicity sweep",
+    compact=True,
+)
+
+
+# %% [markdown]
 # ## §6 Dust attenuation curves
 #
 # Dust laws from BAGPIPES (Calzetti+2000, Cardelli+1989, Charlot & Fall 2000,
@@ -904,6 +1029,253 @@ save_fig("bagpipes_05_dust_attenuation_applied.png")
 
 
 # %% [markdown]
+# ## §7 cont'd — Dust attenuation laws and A_V
+#
+# Extended dust parameter space: Calzetti A_V ∈ {0.3, 1, 3}; CF00 power-law
+# slope n ∈ {0.5, 0.7, 1.0} at fixed eta = 1; Salim (delta, B) pairs
+# {(−0.3, 0), (0, 1), (0.3, 3)}; Cardelli A_V=1. Two panels: left shows A_V
+# and CF00 slope modulation; right shows dust-law families with their
+# A(2175)/A_V bump normalizations (Salim only). Fiducial SFH throughout,
+# nebular on. A(2175)/A_V for δ = −0.3/0/+0.3: BAGPIPES 2.807/2.363/2.091,
+# tengri 2.766/2.338/2.317. UV-to-NIR bandpass ratio across both panels:
+# median 1.009×, worst 1.404× (2/10 bands outside 5%).
+
+# %%
+# Figure 1: A_V and eta variations with Calzetti + CF00
+cases_av = []
+
+# Calzetti A_V sweep
+for av in [0.3, 1.0, 3.0]:
+    label = f"Calzetti A_V={av:g}"
+    w_ref, L_ref = B.attenuated_lnu(
+        dust_block={"type": "Calzetti", "Av": av},
+        nebular_block={"logU": -2.0, "metallicity": 1.0},
+        sfh_type="delayed",
+        massformed=LOG_MASS_FIDUCIAL,
+        metallicity=1.0,
+        age=AGE_GYR_FIDUCIAL,
+        tau=TAU_GYR_FIDUCIAL,
+    )
+    tau_diff_av = av / 1.086
+
+    m_av = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(tau_diff_av),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(-2.0),
+            "neb_logZ_gas": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s_av = m_av.predict_state({})
+    L_t = s_av.sed_intrinsic
+    _assert_comparable(L_ref, L_t, name=f"§7 cont'd {label}")
+    cases_av.append((label, w_ref, L_ref, s_av.wave, L_t))
+
+# CF00 with n sweep (eta=1.0 fixed)
+for n in [0.5, 0.7, 1.0]:
+    label = f"CF00 n={n:.1f}"
+    w_ref, L_ref = B.attenuated_lnu(
+        dust_block={"type": "CF00", "Av": 1.0, "n": n, "eta": 1.0},
+        nebular_block={"logU": -2.0, "metallicity": 1.0},
+        sfh_type="delayed",
+        massformed=LOG_MASS_FIDUCIAL,
+        metallicity=1.0,
+        age=AGE_GYR_FIDUCIAL,
+        tau=TAU_GYR_FIDUCIAL,
+    )
+    slope_diff_n = -n
+
+    m_n = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "power_law",
+            "law_diff": "power_law",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(1.0 / 1.086),
+            "slope_diff": slope_diff_n,
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(-2.0),
+            "neb_logZ_gas": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s_n = m_n.predict_state({})
+    L_t = s_n.sed_intrinsic
+    _assert_comparable(L_ref, L_t, name=f"§7 cont'd {label}")
+    cases_av.append((label, w_ref, L_ref, s_n.wave, L_t))
+
+fig, (ax, ax_r), ratios = V.sweep_fig(
+    cases_av,
+    ref_label="BAGPIPES",
+    title="§7 cont'd — A_V and CF00 slope variations",
+    xlim=(2e3, 1e5),
+)
+fig.tight_layout()
+save_fig("bagpipes_07a_dust_av_eta.png")
+
+# Figure 2: Dust laws (Salim, Cardelli) with bump characterization
+cases_laws = []
+
+# Salim (delta, B) sweep: calculate A(2175)/A_V for reference
+for delta, b in [(-0.3, 0.0), (0.0, 1.0), (0.3, 3.0)]:
+    label = f"Salim δ={delta:+.1f} B={b:.0f}"
+    w_ref, L_ref = B.attenuated_lnu(
+        dust_block={"type": "Salim", "Av": 1.0, "delta": delta, "B": b},
+        nebular_block={"logU": -2.0, "metallicity": 1.0},
+        sfh_type="delayed",
+        massformed=LOG_MASS_FIDUCIAL,
+        metallicity=1.0,
+        age=AGE_GYR_FIDUCIAL,
+        tau=TAU_GYR_FIDUCIAL,
+    )
+
+    m_salim = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law": "salim_sbl18",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(1.0 / 1.086),
+            "delta_diff": delta,
+            "bump_strength_diff": b,
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(-2.0),
+            "neb_logZ_gas": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s_salim = m_salim.predict_state({})
+    L_t = s_salim.sed_intrinsic
+    _assert_comparable(L_ref, L_t, name=f"§7 cont'd {label}")
+
+    # Calculate A(2175)/A_V on both sides by evaluating the law function
+    # directly (the same approach as §6), normalized to A_V at 5500 Å —
+    # there is no per-wavelength attenuation-curve key on the built model.
+    w_ref_bump, A_ref_bump = B.attenuation_curve(
+        dust_block={"type": "Salim", "Av": 1.0, "delta": delta, "B": b}
+    )
+    a_2175_ref = np.interp(2175.0, w_ref_bump, _norm_AV(w_ref_bump, A_ref_bump))
+
+    A_t_bump = np.asarray(
+        _tengri_laws["salim_sbl18"](wave_law, dust_bump_strength=b, dust_delta=delta)
+    )
+    a_2175_t = np.interp(2175.0, wave_law, _norm_AV(wave_law, A_t_bump))
+
+    print(
+        f"§7 cont'd Salim δ={delta:+.1f} B={b:.0f}: "
+        f"A(2175)/A_V = BAGPIPES {a_2175_ref:.3f}, tengri {a_2175_t:.3f}"
+    )
+
+    cases_laws.append((label, w_ref, L_ref, s_salim.wave, L_t))
+
+# Cardelli
+label = "Cardelli R_V=3.1"
+w_ref, L_ref = B.attenuated_lnu(
+    dust_block={"type": "Cardelli", "Av": 1.0},
+    nebular_block={"logU": -2.0, "metallicity": 1.0},
+    sfh_type="delayed",
+    massformed=LOG_MASS_FIDUCIAL,
+    metallicity=1.0,
+    age=AGE_GYR_FIDUCIAL,
+    tau=TAU_GYR_FIDUCIAL,
+)
+
+m_cardelli = SEDModel.build(
+    ssp_data=ssp,
+    met=MET_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+        "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "type": "two_component",
+        "law": "cardelli",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(1.0 / 1.086),
+        "Rv_diff": 3.1,
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    redshift=Fixed(0.0),
+)
+s_cardelli = m_cardelli.predict_state({})
+L_t = s_cardelli.sed_intrinsic
+_assert_comparable(L_ref, L_t, name=f"§7 cont'd {label}")
+cases_laws.append((label, w_ref, L_ref, s_cardelli.wave, L_t))
+
+fig, (ax, ax_r), ratios = V.sweep_fig(
+    cases_laws,
+    ref_label="BAGPIPES",
+    title="§7 cont'd — Dust law families (Salim, Cardelli)",
+    xlim=(2e3, 1e5),
+)
+fig.tight_layout()
+save_fig("bagpipes_07b_dust_laws.png")
+
+# Compact UV-to-NIR table for laws — show first law
+# Band-average fiducial case on its native wavelength grid for filter calculation
+label_law0, w_b_law0, L_b_law0, w_t_law0, L_t_law0 = cases_laws[0]
+rows_laws = V.filter_rows_native(w_t_law0, np.asarray(L_t_law0), w_b_law0, L_b_law0, filters=V.UV_TO_NIR)
+V.print_filter_table(
+    rows_laws,
+    ref_name="BAGPIPES",
+    title="§7 cont'd Dust laws",
+    compact=True,
+)
+
+
+# %% [markdown]
 # ## §8 Dust IR re-emission and energy balance
 #
 # BAGPIPES re-emits absorbed stellar UV/optical through the Draine & Li
@@ -1011,6 +1383,117 @@ for ax in (ax_l, ax_r):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("bagpipes_06_dust_ir.png")
+
+
+# %% [markdown]
+# ## §8 cont'd — DL07 IR grid parameters
+#
+# Draine & Li (2007) template space sweep: (q_PAH, U_min, γ) over 4 cases
+# plus the fiducial. q_PAH controls PAH mass fraction; U_min sets the minimum
+# radiation field strength; γ weights the PDR luminosity distribution. All
+# points use the same fiducial SFH (5 Gyr delayed-τ, τ=1 Gyr), Calzetti dust
+# (A_V=1), and nebular emission (logU −2). Energy balance holds in all 5
+# cases (L_IR/L_absorbed = 1.000, residual < 1e-15). IR-band (30–300 μm)
+# ratio: median 0.963×, worst 0.963× (0/13 bands outside 5%).
+
+# %%
+dl07_cases = [
+    ("fiducial", QPAH_FIDUCIAL, UMIN_FIDUCIAL, GAMMA_FIDUCIAL),
+    ("q_PAH=0.47", 0.47, UMIN_FIDUCIAL, GAMMA_FIDUCIAL),
+    ("U_min=5", QPAH_FIDUCIAL, 5.0, GAMMA_FIDUCIAL),
+    ("γ=0.3", QPAH_FIDUCIAL, UMIN_FIDUCIAL, 0.3),
+    ("q_PAH=4.58", 4.58, UMIN_FIDUCIAL, GAMMA_FIDUCIAL),
+]
+
+cases_dl07 = []
+for label, qpah, umin, gamma in dl07_cases:
+    comp_b_dl = {
+        "redshift": 0.0,
+        "delayed": {
+            "metallicity": 1.0,
+            "age": AGE_GYR_FIDUCIAL,
+            "tau": TAU_GYR_FIDUCIAL,
+            "massformed": LOG_MASS_FIDUCIAL,
+        },
+        "dust": {
+            "type": "Calzetti",
+            "Av": AV_FIDUCIAL,
+            "eta": 1.0,
+            "qpah": qpah,
+            "umin": umin,
+            "gamma": gamma,
+        },
+    }
+    mg_b_dl = B._build_model(comp_b_dl)
+    w_b_dl, L_b_dl = B.to_lnu(mg_b_dl)
+
+    m_dl = SEDModel.build(
+        ssp_data=ssp,
+        met=MET_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(TAU_BC),
+            "tau_diff": Fixed(TAU_DIFF),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={
+            "type": "draine_li2007",
+            "qpah": Fixed(qpah),
+            "umin": Fixed(umin),
+            "gamma_dl": Fixed(gamma),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(-2.0),
+            "neb_logZ_gas": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s_dl = m_dl.predict_state({})
+    sed_full_t_dl = s_dl.derived["sed_dust_attenuated"] + s_dl.derived["sed_dust_ir"]
+
+    L_ir_t = float(np.asarray(s_dl.derived["L_ir"]))
+    L_abs_t = float(np.asarray(s_dl.derived["L_absorbed"]))
+    eb_resid_dl = abs(L_ir_t - L_abs_t) / max(L_abs_t, 1e-30)
+
+    print(
+        f"§8 cont'd {label}: L_IR/L_abs = {L_ir_t / max(L_abs_t, 1e-30):.3f}, "
+        f"EB resid = {eb_resid_dl:.1e}"
+    )
+
+    _assert_comparable(L_b_dl, sed_full_t_dl, name=f"§8 cont'd {label}")
+    cases_dl07.append((label, w_b_dl, L_b_dl, s_dl.wave, sed_full_t_dl))
+
+fig, (ax, ax_r), ratios = V.sweep_fig(
+    cases_dl07,
+    ref_label="BAGPIPES",
+    title="§8 cont'd — DL07 grid (q_PAH, U_min, γ) variations",
+    xlim=(1e3, 1e7),
+)
+fig.tight_layout()
+save_fig("bagpipes_08_dl07_grid.png")
+
+# IR bands table — show fiducial (q_PAH=2.5, U_min=1.0, γ=0.05) case
+# Band-average fiducial case on its native wavelength grid for filter calculation
+label_dl0, w_b_dl0, L_b_dl0, w_t_dl0, L_t_dl0 = cases_dl07[0]
+rows_dl07 = V.filter_rows_native(w_t_dl0, np.asarray(L_t_dl0), w_b_dl0, L_b_dl0, filters=V.IR_BANDS)
+V.print_filter_table(
+    rows_dl07,
+    ref_name="BAGPIPES",
+    title="§8 cont'd DL07 grid",
+    compact=True,
+)
 
 
 # %% [markdown]
@@ -1181,6 +1664,98 @@ for _lo, _hi in [(3000.0, 3600.0), (4000.0, 4300.0), (5500.0, 6300.0)]:
         print(f"    {_lo:.0f}–{_hi:.0f} Å: {_ct / _cb:.2f}×")
 fig.tight_layout()
 save_fig("bagpipes_08_nebular.png")
+
+
+# %% [markdown]
+# ## §9 cont'd — Nebular ionization & metallicity × escape fraction
+#
+# Expanded nebular parameter space: logU ∈ {−3, −2, −1.5}, Z_gas ∈ {0.3, 1, 2} Z☉,
+# f_esc ∈ {0, 0.5} (6 cases total). BAGPIPES via `nebular: {logU, metallicity, fesc}`;
+# tengri via free `neb_logU`, `neb_logZ_gas`, `neb_fesc` in Cue. Per-case tengri/BAGPIPES
+# line-luminosity ratios (Hα, Hβ, [O III], [O II]) shown per case.
+#
+# At logU=−2, Z=1 Z☉ (matching §9): Hα 0.98×, Hβ 0.98×, [O III] 1.01×,
+# [O II] 0.77×. The Z=2 Z☉ case is the outlier — Hα/Hβ rise to 1.86×/1.82×
+# while [O III] falls to 0.22× — and f_esc=0.5 scales every line down by
+# roughly the escape fraction (0.59–0.78×).
+
+# %%
+neb_cases_list = [
+    # logU sweep at Z=1 Z☉, f_esc=0
+    ("logU=-3.0", -3.0, 1.0, 0.0),
+    ("logU=-2.0", -2.0, 1.0, 0.0),
+    ("logU=-1.5", -1.5, 1.0, 0.0),
+    # Z_gas sweep at logU=-2, f_esc=0
+    ("Z=0.3 Z☉", -2.0, 0.3, 0.0),
+    ("Z=2 Z☉", -2.0, 2.0, 0.0),
+    # f_esc sweep at logU=-2, Z=1 Z☉
+    ("f_esc=0.5", -2.0, 1.0, 0.5),
+]
+
+print("§9 cont'd nebular line luminosity ratios (tengri Cue / BAGPIPES Cloudy v25):")
+for label, logu, z, fesc in neb_cases_list:
+    # BAGPIPES
+    comp_b_neb_case = {
+        "redshift": 0.0,
+        "constant": {"metallicity": z, "age_min": 0.0, "age_max": NEB_AGE, "massformed": 9.0},
+        "nebular": {"logU": logu, "fesc": fesc, "metallicity": z},
+    }
+    mg_b_neb_case = B._build_model(comp_b_neb_case, spec_wavs=_neb_spec_wavs)
+    w_b_neb_case = mg_b_neb_case.spectrum[:, 0]
+    L_b_neb_full = mg_b_neb_case.spectrum[:, 1] * w_b_neb_case**2 / U.C_ANGSTROM_PER_S
+
+    # Stellar continuum
+    comp_b_stellar = {
+        "redshift": 0.0,
+        "constant": {"metallicity": z, "age_min": 0.0, "age_max": NEB_AGE, "massformed": 9.0},
+    }
+    mg_b_stellar = B._build_model(comp_b_stellar, spec_wavs=_neb_spec_wavs)
+    L_b_stellar = mg_b_stellar.spectrum[:, 1] * w_b_neb_case**2 / U.C_ANGSTROM_PER_S
+    L_b_neb_lines = np.clip(L_b_neb_full - L_b_stellar, 0.0, None)
+
+    # tengri
+    logz_neb = float(np.log10(z))
+    m_neb_case = SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(logz_neb), "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "const",
+            "start_gyr": Fixed(NEB_AGE),
+            "end_gyr": Fixed(0.0),
+            "log_total_mass": Fixed(9.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(logu),
+            "neb_logZ_gas": Fixed(logz_neb),
+            "neb_fesc": Fixed(fesc),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s_neb_case = m_neb_case.predict_state({})
+    L_t_neb_lines = np.asarray(s_neb_case.derived["sed_nebular"])
+    w_t_neb_case = np.asarray(s_neb_case.wave)
+    _assert_comparable(L_b_neb_lines, L_t_neb_lines, name=f"§9 cont'd {label}")
+
+    # Compute line ratios
+    print(f"  {label}:")
+    for center, name in [(6563.0, "Hα"), (4861.0, "Hβ"), (5007.0, "[O III]"), (3727.0, "[O II]")]:
+        lb = U.line_lum(w_b_neb_case, L_b_neb_lines, center)
+        lt = U.line_lum(w_t_neb_case, L_t_neb_lines, center)
+        if lb > 0:
+            ratio_str = f"{lt / lb:.2f}×"
+        else:
+            ratio_str = "—"
+        print(f"    {name:>6} {center:.0f}: {ratio_str}")
 
 
 # %% [markdown]
@@ -1483,6 +2058,53 @@ print(
     f"T(with CGM) = {T_cgm_zoom[_idx_red]:.3f}, "
     f"τ_CGM ≈ {-np.log(max(T_cgm_zoom[_idx_red], 1e-10) / max(T_inoue_zoom[_idx_red], 1e-10)):.3f}"
 )
+# %% [markdown]
+# ## §12b — Inoue14 IGM transmission, redshift sweep
+#
+# IGM transmission T(λ, z) via Inoue+2014 at z ∈ {1, 2, 3, 5}. Both BAGPIPES
+# and tengri implement the same piecewise formula; agreement is redward of the
+# Lyman limit. Transmission window (800–1300 Å rest) shows the Lyman-series
+# opacity stack and Lyman-continuum absorption (< 912 Å) from the DLA term.
+# The median ratio is 1.000× at every redshift; the printed max deviation
+# (4.0% at z=1, rising to 610% at z=5) is a single-pixel spike at the
+# Lyman-α edge (1215.7 Å), the same edge-sampling effect as §12, not a
+# broadband disagreement.
+
+# %%
+from tengri import igm_transmission as _tngigm_sweep
+
+igm_zreds = [1.0, 2.0, 3.0, 5.0]
+
+fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
+axes = axes.flatten()
+
+cases_igm = []
+for ax, z in zip(axes, igm_zreds):
+    w_b_igm_z, T_b_igm_z = B.igm_transmission(z)
+
+    wave_obs_z = w_b_igm_z * (1.0 + z)
+    T_t_igm_z = np.asarray(_tngigm_sweep(wave_obs_z, np.asarray(z)))
+    _assert_comparable(T_b_igm_z, T_t_igm_z, name=f"§12b z={z:.0f}")
+    cases_igm.append((f"z={z:.0f}", w_b_igm_z, T_b_igm_z, w_b_igm_z, T_t_igm_z))
+
+    ax.plot(w_b_igm_z, T_b_igm_z, "C0-", linewidth=2.0, label="BAGPIPES Inoue14")
+    ax.plot(w_b_igm_z, T_t_igm_z, "k--", linewidth=1.0, label="tengri Inoue14")
+    ax.set_xlabel(r"rest-frame $\lambda$ [Å]")
+    ax.set_ylabel(r"$T(\lambda, z)$")
+    ax.set_xlim(800, 1300)
+    ax.set_ylim(-0.05, 1.1)
+    ax.set_title(f"z = {z:.0f}")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
+
+fig.tight_layout()
+save_fig("bagpipes_12_igm_redshifts.png")
+
+V.print_window_table(
+    V.window_rows(cases_igm, lo=850.0, hi=1210.0, rel_to="peak", peak=1.0),
+    ref_name="BAGPIPES",
+    title="§12b — Inoue14 IGM transmission, redshift sweep; deviation as % of unit transmission, 850–1210 Å",
+)
 
 
 # %% [markdown]
@@ -1701,6 +2323,50 @@ for _b, _f, _mf, _mn, _mfn, _mnn in zip(
     )
 
 
+
+
+# %% [markdown]
+# ## §13c — Photometry at z = 0.5
+#
+# SDSS ugriz photometry after redshifting the §11/§13 panchromatic fiducial
+# (stellar + Calzetti dust + DL07 IR + nebular) into the observed frame and
+# applying the Inoue+2014 IGM transmission at z = 0.5, the same curve used
+# in §12. BAGPIPES' own redshift handling additionally applies
+# luminosity-distance dimming, which has no counterpart in §13's fixed
+# d = 10 pc convention, so both sides keep the rest-frame SED build and
+# apply the IGM curve as an external multiplicative factor on the
+# redshifted wavelength axis. Residuals track the stellar + nebular SED
+# differences from §4 and §9; the IGM term itself is negligible here since
+# the SDSS bands sample rest-frame wavelengths well redward of Lyman-α at
+# this redshift. Δ mag (tengri − BAGPIPES): u −0.005, g −0.041, r +0.057,
+# i +0.017, z −0.008.
+
+# %%
+Z_PHOT = 0.5
+
+w_b_igm_z05, T_b_igm_z05 = B.igm_transmission(Z_PHOT)
+T_b_on_full = np.interp(w_b_full, w_b_igm_z05, T_b_igm_z05, left=0.0, right=1.0)
+L_b_z05 = L_b_full * T_b_on_full
+wave_b_obs_z05 = w_b_full * (1.0 + Z_PHOT)
+
+wave_t_obs_z05 = np.asarray(s_full.wave) * (1.0 + Z_PHOT)
+T_t_igm_z05 = np.asarray(_tngigm(wave_t_obs_z05, np.asarray(Z_PHOT)))
+L_t_z05 = _L_t_full * T_t_igm_z05
+
+_assert_comparable(L_b_z05, L_t_z05, name="§13c photometry z=0.5")
+
+bp_mags_z05 = []
+tng_mags_z05 = []
+print(f"§13c SDSS photometry at z = {Z_PHOT}:")
+print(f"{'band':8s} BAGPIPES  tengri  Δ mag")
+for _b, _f in zip(_sdss_bands, _filters):
+    mag_b_z05 = _ab_mag(wave_b_obs_z05, L_b_z05, _f.wave, _f.trans)
+    mag_t_z05 = _ab_mag(wave_t_obs_z05, L_t_z05, _f.wave, _f.trans)
+    bp_mags_z05.append(mag_b_z05)
+    tng_mags_z05.append(mag_t_z05)
+    print(f"{_b:8s} {mag_b_z05:7.3f}  {mag_t_z05:7.3f}  {mag_t_z05 - mag_b_z05:+.3f}")
+
+
 # %% [markdown]
 # ## §14 Forward-model timing — order-of-magnitude sanity check
 #
@@ -1884,8 +2550,9 @@ plt.show()
 # - **§11 panchromatic.** The combined picture; per-section residuals
 #   stack.
 # - **§12 IGM.** Inoue14 vs Inoue14 agrees redward of the Lyman limit
-#   and now extends below 912 Å (LyC opacity restored). The Asada+2025
-#   CGM damping wing (§12b, tengri-only) produces the full Totani+06
+#   and now extends below 912 Å (LyC opacity restored), holding at a
+#   median ratio of 1.000× across z = 1–5 (§12b). The Asada+2025 CGM
+#   damping wing (§12 cont'd, tengri-only) produces the full Totani+06
 #   damping-wing shape at z = 7.
 # - **§13 SDSS photometry.** With the §7 single-screen dust, tengri
 #   matches the BAGPIPES ugriz magnitudes to ≤ 0.02 mag in r/i/z but stays

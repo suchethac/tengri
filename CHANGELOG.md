@@ -7,15 +7,13 @@
   `dust_attenuation` group gains `nebular_screen` (governs the nebular
   continuum, the line catalog, and the fast-nebular fallback grid; default
   `"birth_cloud"`), `shock_screen` (governs the MAPPINGS V shock SED; default
-  `"diffuse"`), and `agn_screen` (default, and today the only accepted value,
-  `"none"` — the AGN component runs after dust and carries its own
-  polar-dust screen). Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or
-  the synonym `"off"`; flat spellings `dust_nebular_screen` /
-  `dust_shock_screen` / `dust_agn_screen` mirror `dust_law_bc` /
-  `dust_law_neb`. One validator
+  `"diffuse"`), and `agn_screen` (default `"none"` — the AGN component runs
+  after dust and carries its own polar-dust screen). Each accepts
+  `"birth_cloud"`, `"diffuse"`, `"none"`, or the synonym `"off"`; flat
+  spellings `dust_nebular_screen` / `dust_shock_screen` / `dust_agn_screen`
+  mirror `dust_law_bc` / `dust_law_neb`. One validator
   (`tengri.parameters._dust_keys.resolve_screen_choices`) backs both
-  surfaces: an unknown value names the three choices; `agn_screen` other
-  than `none`/`off` is refused with the deferral reason above;
+  surfaces: an unknown value names the three choices;
   `single_component` dust refuses any value other than `none`/`off` or the
   source's own default (a single screen has no birth-cloud/diffuse
   distinction); `wg00`/`off` dust refuse the keys outright, like the other
@@ -32,6 +30,11 @@
   attenuation") and the code agree — the code previously attenuated shock
   unconditionally with the birth-cloud form — and by snapping (see Fixed,
   below).
+
+- `agn_screen` is functional: `birth_cloud` / `diffuse` put AGN light
+  through the galaxy's dust screens with the absorbed power joining the
+  energy balance; refused with `agn={'norm': 'cigale_joint'}`, which reads
+  that balance.
 
 - `neb_hbfrac` (CB_19's HbFrac axis, matter- vs radiation-bounded escape
   proxy) now declares `free_prior=Uniform(0.0, 1.0, default=1.0)`, so
@@ -333,6 +336,24 @@
 
 
 ### Changed
+
+- The six reproduction notebooks (`reproduction/{agnfitter,bagpipes,cigale,prospect_r,prospector,synthesizer}/01_*.py`)
+  now compare parameter sweeps and model cases in every physics block instead of one fiducial point
+  each: SFH families and τ × age grids, every attenuation law the reference code offers with its
+  slope / bump / R_V knobs and an A_V ladder, dust-emission library nodes (DL07, DL14, Casey 2012,
+  Schreiber 2016, Dale 2014, analytic emitters), nebular logU × Z_gas × f_esc grids, AGN disc and
+  torus node grids, IGM redshift sweeps, X-ray corona and radio grids — each new section is one
+  ratio-panel figure plus one printed table, and every Summary table is assembled from the render's
+  own printed numbers. Every model on every page now carries nebular emission on both sides (tengri:
+  Cue at the matched logU / Z_gas / f_esc; the reference code: its own nebular module), except the
+  raw-SSP check and AGNfitter-rX's host, which has no nebular term. Shared helpers in
+  `reproduction/_validation.py`: `sweep_fig` (overlay + ratio panel), `window_rows` (with a
+  peak-relative deviation for curves that reach zero, so SFR(t) tables no longer flag exact matches)
+  and `print_window_table` (unit and scale of the x column), and `filter_rows_native` (band
+  averages on each spectrum's own grid, since interpolating tengri's emission lines onto a coarse
+  reference grid before band-averaging aliases). The bagpipes driver aliases `np.trapz`
+  to `np.trapezoid` for NumPy ≥ 2, and ProSpect's `massfunc_dtau` is compared on its recent branch,
+  the only part that is a delayed-τ.
 
 - `dust_frac_agn` is now declared with a `free_prior` of `Uniform(0.0, 0.99)`,
   making it wildcard-reachable (`all_params: FREE`) exactly on
@@ -806,6 +827,23 @@
 
 ### Fixed
 
+- ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
+  from standing in for declared parameter defaults) had two blind spots, both
+  fixed: it was scoped to ``dust/emission/`` only, and it never saw negative
+  or explicit-positive defaults at all -- ``ast.parse`` renders ``-3.0`` as
+  ``UnaryOp(USub, Constant)``, which the bare ``ast.Constant`` gate skipped.
+  The no-argument run now covers every swept tree (``dust/emission``,
+  ``radio``, ``stellar``, ``igm``; the rest join as #2297's rulings land),
+  and all closure defaults in radio, stellar, and igm read their values
+  through ``declared_default(...)`` or a shared named module constant rather
+  than repeating them as bare numerals. Zero-diff probes over radio and
+  stellar confirm bit-identical output. One real slip surfaced by the sweep:
+  igm's two ``dla_log_n_hi`` fallbacks said 20.0 where the declaration says
+  20.3 (``DEFAULT_DLA_LOG_N_HI``, which both sites now read). That changes
+  DIRECT calls that omit the argument with ``use_dla=True`` -- measured max
+  relative difference up to ~1.0 at z=2.0 in the damped wings, smaller at
+  other redshifts -- and changes nothing on the grammar path, which always
+  supplied 20.3. Part of #2265.
 - The energy-balance-split closure's docstring tagged its luminosity arguments
   `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
   supplies both in `erg/s` (component_factory.py:346). The docstring is now

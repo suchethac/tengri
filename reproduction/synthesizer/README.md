@@ -80,6 +80,14 @@ tengri Cue) · **§9 AGN — the Unified AGN model** · §12 IGM (Inoue 2014 / M
 X-ray and radio are skipped — Synthesizer has no counterpart. The numbering keeps
 the gap (§10 X-ray, §11 radio) to line up with the CIGALE master sequence.
 
+Six sections extend a single-point comparison into a parameter sweep: §2b
+(Gaussian, double power law, truncated exponential, log-normal SFH families),
+§4b (grain-model, MWN18, Li08, and Calzetti-bump attenuation curves), §6b
+(the DL07/DL14 grid plus blackbody, greybody, and Casey12 analytic dust
+emitters), §8b (Cue `logU` × metallicity × escape fraction), §9i (AGN torus
+temperature and NLR covering factor), and §12b (IGM transmission across
+z = 2-7).
+
 ### §9 — the Unified AGN model (the focus)
 
 - **§9a disc** — Synthesizer disc vs tengri `kubota_done` (qsosed) and

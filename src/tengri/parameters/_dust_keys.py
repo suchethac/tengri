@@ -62,9 +62,11 @@ SCREEN_CHOICES: tuple[str, ...] = ("birth_cloud", "diffuse", "none")
 #: :data:`_SCREEN_DEFAULTS`.
 SCREEN_SOURCES: tuple[str, ...] = ("nebular", "shock", "agn")
 #: Per-source default, read by both the grammar translator and the flat-kwarg
-#: resolver so the two surfaces cannot drift. ``agn`` defaults to (and today
-#: must stay) ``"none"``: the AGN component runs after dust in the pipeline
-#: and carries its own polar-dust screen (see ``resolve_screen_choices``).
+#: resolver so the two surfaces cannot drift. ``agn`` defaults to ``"none"``:
+#: the AGN component runs after dust in the pipeline, unattenuated, and
+#: carries its own polar-dust screen (CIGALE convention). ``"birth_cloud"``
+#: / ``"diffuse"`` move AGN before dust instead (#2260), refused together
+#: with ``agn_norm="cigale_joint"``.
 _SCREEN_DEFAULTS: dict[str, str] = {
     "nebular": "birth_cloud",
     "shock": "diffuse",
@@ -161,15 +163,12 @@ def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surfac
     Raises
     ------
     ParameterError
-        On an unrecognized value (see :func:`normalize_screen_choice`); on
-        ``agn_screen`` resolving to anything but ``"none"`` (today the AGN
-        component runs after dust and carries its own polar-dust screen, so
-        galaxy screening of AGN light is not yet wired); on a two-screen-only
-        key given ANY explicit value when ``dust_model in ("wg00", "off")``
-        (there are no birth-cloud/diffuse screens to choose between); on a
-        value other than ``"none"`` or the source's own default when
-        ``dust_model == "single_component"`` (one screen, so there is no
-        birth-cloud/diffuse distinction to select).
+        On an unrecognized value (see :func:`normalize_screen_choice`); on a
+        two-screen-only key given ANY explicit value when
+        ``dust_model in ("wg00", "off")`` (there are no birth-cloud/diffuse
+        screens to choose between); on a value other than ``"none"`` or the
+        source's own default when ``dust_model == "single_component"`` (one
+        screen, so there is no birth-cloud/diffuse distinction to select).
     """
     resolved: dict[str, str] = {}
     for source in SCREEN_SOURCES:
@@ -182,13 +181,6 @@ def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surfac
 
         from tengri.config.exceptions import ParameterError
 
-        if source == "agn" and choice != "none":
-            raise ParameterError(
-                f"{display_key}={raw[source]!r}: galaxy screening of AGN light lands "
-                f"in the next change; today the AGN component runs after dust and "
-                f"carries its own polar-dust screen. Leave {display_key!r} unset, or "
-                f"set it to 'none'."
-            )
         if dust_model in ("wg00", "off"):
             raise ParameterError(
                 f"{display_key!r} is a two-component-only dust_attenuation key (it "

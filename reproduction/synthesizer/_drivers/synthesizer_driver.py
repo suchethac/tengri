@@ -160,6 +160,128 @@ def sfh_curve(
     return t_lookback_yr[order], sfr[order]
 
 
+def sfh_curve_named(
+    cls_name: str, *, ngrid: int = 512, max_age_gyr: float = 13.7, **kwargs: Any
+) -> tuple[np.ndarray, np.ndarray]:
+    r"""Return SFR(t_lookback) for a named Synthesizer parametric SFH class, ∫ = 1 M⊙.
+
+    Instantiates the class directly from ``synthesizer.parametric.sf_hist`` and
+    evaluates its ``get_sfr`` on a lookback-time grid — every one of the four
+    classes below treats its ``age`` argument as literal lookback time (0 =
+    observed today), the same convention tengri's lookback-time SFH families
+    use, so no time-axis reversal is needed.
+
+    Parameters
+    ----------
+    cls_name : {"Gaussian", "DoublePowerLaw", "TruncatedExponential", "LogNormal"}
+        Class name in ``synthesizer.parametric.sf_hist``.
+    ngrid : int
+        Number of lookback-time samples.
+    max_age_gyr : float
+        Truncation age [Gyr] (Synthesizer's ``max_age``).
+    **kwargs
+        Class-specific parameters, all in Gyr where a Synthesizer argument is
+        a ``unyt_quantity``: ``peak_age_gyr``, ``sigma_gyr`` (Gaussian);
+        ``peak_age_gyr``, ``alpha``, ``beta`` (DoublePowerLaw); ``tau_gyr``
+        (TruncatedExponential); ``tau`` (dimensionless), ``peak_age_gyr``
+        (LogNormal). ``min_age_gyr`` (default 0) applies to every class.
+
+    Returns
+    -------
+    t_lookback_yr : ndarray, shape (ngrid,)
+        Lookback time [yr], ascending, 0 = observation epoch.
+    sfr : ndarray, shape (ngrid,)
+        Star formation rate [M⊙/yr], normalized to 1 M⊙ formed.
+    """
+    from synthesizer.parametric import sf_hist
+    from unyt import Gyr
+
+    cls = getattr(sf_hist, cls_name)
+    max_age = max_age_gyr * Gyr
+    min_age = float(kwargs.pop("min_age_gyr", 0.0)) * Gyr
+
+    if cls_name == "Gaussian":
+        sfh = cls(
+            peak_age=kwargs["peak_age_gyr"] * Gyr,
+            sigma=kwargs["sigma_gyr"] * Gyr,
+            max_age=max_age,
+            min_age=min_age,
+        )
+    elif cls_name == "DoublePowerLaw":
+        sfh = cls(
+            peak_age=kwargs["peak_age_gyr"] * Gyr,
+            alpha=kwargs["alpha"],
+            beta=kwargs["beta"],
+            min_age=min_age,
+            max_age=max_age,
+        )
+    elif cls_name == "TruncatedExponential":
+        sfh = cls(tau=kwargs["tau_gyr"] * Gyr, max_age=max_age, min_age=min_age)
+    elif cls_name == "LogNormal":
+        sfh = cls(
+            tau=kwargs["tau"],
+            peak_age=kwargs["peak_age_gyr"] * Gyr,
+            max_age=max_age,
+            min_age=min_age,
+        )
+    else:
+        raise ValueError(f"unsupported SFH class {cls_name!r}")
+
+    # Start just above zero: DoublePowerLaw's second term is age**beta, a pole
+    # at exactly age = 0 for beta < 0.
+    t_lookback_yr = np.linspace(1.0, max_age_gyr * 1e9, ngrid)
+    sfr_raw = np.asarray(sfh.get_sfr(t_lookback_yr), dtype=np.float64)
+    mass = np.trapezoid(sfr_raw, t_lookback_yr)
+    sfr = sfr_raw / mass if mass > 0 else sfr_raw
+    return t_lookback_yr, sfr
+
+
+def dust_emission_named(
+    cls_name: str, *, wave_aa: np.ndarray, **kwargs: Any
+) -> tuple[np.ndarray, np.ndarray]:
+    r"""Return a standalone, bolometric-normalized analytic dust emission shape.
+
+    ``Blackbody``, ``Greybody``, and ``Casey12`` (``synthesizer.emission_models
+    .generators.dust``) each expose ``get_spectra(lam)``, a scaling-free
+    evaluation that needs no emitter or grid: the returned :math:`L_\nu`
+    integrates to a bolometric luminosity of 1 (arbitrary units), the direct
+    analog of tengri's analytic dust-emission laws before they are scaled to
+    :math:`L_{\rm ir}`.
+
+    Parameters
+    ----------
+    cls_name : {"Blackbody", "Greybody", "Casey12"}
+        Class name in ``synthesizer.emission_models.generators.dust``.
+    wave_aa : array_like, shape (n_wave,)
+        Wavelength grid [Å] to evaluate on.
+    **kwargs
+        Class-specific parameters: ``temperature_k`` (all three);
+        ``emissivity`` (Greybody, Casey12); ``lambda_0_um`` (Greybody,
+        Casey12's ``lam_0``); ``alpha``, ``n_bb`` (Casey12).
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    L_nu : ndarray, shape (n_wave,)
+        Bolometric-normalized spectral luminosity [erg/s/Hz per unit L_bol].
+    """
+    from synthesizer.emission_models.generators import dust as dustgen
+    from unyt import K, angstrom, um
+
+    cls = getattr(dustgen, cls_name)
+    init_kwargs: dict[str, Any] = dict(kwargs)
+    if "temperature_k" in init_kwargs:
+        init_kwargs["temperature"] = init_kwargs.pop("temperature_k") * K
+    if "lambda_0_um" in init_kwargs:
+        init_kwargs["lam_0"] = init_kwargs.pop("lambda_0_um") * um
+
+    model = cls(**init_kwargs)
+    wave_aa = np.asarray(wave_aa, dtype=np.float64)
+    sed = model.get_spectra(wave_aa * angstrom)
+    return U.sed_to_lnu(sed)
+
+
 # ---------------------------------------------------------------------------
 # §3, §5, §7 — composite stellar populations
 # ---------------------------------------------------------------------------

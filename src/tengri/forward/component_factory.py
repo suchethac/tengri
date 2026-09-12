@@ -456,14 +456,19 @@ def build_components(
        backend.
     4. ``DustSEDComponent``, applies two-component attenuation to the
        per-age stellar cube; also attenuates the nebular continuum + line
-       catalog and the shock SED per their own configured screens
-       (``nebular_screen`` / ``shock_screen``, #2234); integrates absorbed
+       catalog, the shock SED, and the AGN SED when ``agn_screen != 'none'``,
+       each per its own configured screen (``nebular_screen`` /
+       ``shock_screen`` / ``agn_screen``, #2234, #2260); integrates absorbed
        luminosity, adds IR re-emission, publishes ``L_ir``.
     5. ``AGNSEDComponent``, adds AGN disc + torus + lines and publishes
-       ``L_agn_bol``. AGN light runs AFTER dust, so it is never attenuated
-       by the galaxy's own dust screens (``agn_screen`` is validated to
-       stay ``"none"``): the AGN component carries its own polar-dust
-       screen instead, matching the CIGALE convention.
+       ``L_agn_bol``. With the default ``agn_screen="none"``, AGN light runs
+       AFTER dust (CIGALE convention), unattenuated by the galaxy's own dust
+       screens: the AGN component carries its own polar-dust screen instead.
+       When ``agn_screen`` is ``"birth_cloud"`` or ``"diffuse"``, the sort
+       moves AGN to run BEFORE dust instead (dust then declares ``sed_agn``
+       an optional input), so the galaxy's dust screen also attenuates the
+       AGN SED and the absorbed AGN power joins the energy balance
+       (refused together with ``agn_norm="cigale_joint"``, #2260).
     6. ``RadioSEDComponent``, synchrotron, reads ``L_ir``,
        ``log_mstar``, ``L_agn_bol`` with documented fallbacks.
     7. ``XRaySEDComponent``, XRBs + AGN corona, reads ``sfr``,
