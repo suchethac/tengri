@@ -512,7 +512,9 @@ def test_warn_agn_dust_double_count_fires_with_screened_agn(synthetic_ssp_wide):
     are correctly, not silently, mutually exclusive.
 
     ``_warn_agn_dust_double_count`` (``src/tengri/forward/sed_model.py``)
-    fires only when ``spec.dust_emission == "dale2014"`` and BOTH
+    fires only when ``spec.dust_emission == "dale2014_cigale"`` (the CIGALE grid
+    carries the embedded quasar template; on plain ``dale2014`` ``dust_frac_agn``
+    is a structural zero since #2314) and BOTH
     ``dust_frac_agn`` and ``agn_ir_frac`` (fracAGN) are positive-active.
     fracAGN is itself refused outside ``agn_norm="cigale_joint"``
     (``_validate_fracagn_requires_cigale_joint``, R65/R67: 'independent' and
@@ -541,7 +543,7 @@ def test_warn_agn_dust_double_count_fires_with_screened_agn(synthetic_ssp_wide):
                 "agn_screen": screen,
             },
             dust_emission={
-                "type": "dale2014",
+                "type": "dale2014_cigale",
                 "all_params": Fixed(DEFAULT),
                 "frac_agn": Fixed(0.3),
             },
