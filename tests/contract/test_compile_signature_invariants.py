@@ -661,23 +661,18 @@ def test_lsf_n_bins_numeric_probe():
 
 
 def test_lgmet_scatter_signature_differs():
-    """lgmet_scatter 0.1 vs 0.3 must change compile_signature.
+    """lgmet_scatter kwarg makes predict_photometry differ (LIVE, not dead).
 
-    Numeric probe reported verbatim, not asserted (see docstring below):
-    ``Parameters(lgmet_scatter=...)`` sets ``SEDModel._lgmet_scatter``
-    (this row), which ``StellarSEDComponent.predict`` reads only as the
-    FALLBACK in ``params.get("met_logzsol_scatter", self.config.lgmet_scatter)``.
-    Measured: on every build tried (met_logzsol Fixed or Uniform), the
-    auto-derived ``met_logzsol_scatter`` parameter is present in the sampled
-    params dict at its OWN registry default (0.1) regardless of the
-    ``lgmet_scatter=`` kwarg, so the fallback never engages and
-    predict_photometry is bit-identical (max reldiff exactly 0.0) between
-    the two builds. The kernel itself IS sensitive to scatter width (checked
-    directly against ``tengri.components.stellar.component._lgmet_weights``
-    at a metallicity centered on the SSP grid), so this is a real dead
-    build-time knob under the configurations reachable from the public API
-    today, not a broken kernel. Filed as a finding in the E.3 report rather
-    than a new issue (out of scope for the compile_signature policy rewrite).
+    BEFORE FIX (#2255): Parameters(lgmet_scatter=0.1) vs 0.3 changed
+    compile_signature but predict_photometry was bit-identical (max_reldiff
+    exactly 0.0). The kwarg was dead: the met_logzsol_scatter parameter got
+    its value from the registry default Fixed(0.1) regardless of the flat kwarg.
+
+    AFTER FIX: The flat kwarg now SETS the registered met_logzsol_scatter's
+    Fixed value. Parameters(lgmet_scatter=0.3) builds a spec where
+    met_logzsol_scatter is Fixed(0.3), so predict_photometry differs.
+
+    Test assertion: max_reldiff > 1e-8 (the kwarg is now LIVE).
     """
     ssp = _bare_stellar_ssp()
     obs = Observation(
@@ -701,19 +696,24 @@ def test_lgmet_scatter_signature_differs():
         "lgmet_scatter must change compile_signature"
     )
 
-    params = model_narrow.spec.sample(jax.random.PRNGKey(0))
-    f_narrow = model_narrow.predict_photometry(params)
-    f_wide = model_wide.predict_photometry(dict(params))
+    # Each model samples ITS OWN params at the same key: the free parameters
+    # (identical priors) draw identically, so the only difference is each
+    # spec's registered Fixed met_logzsol_scatter. Feeding one model's dict
+    # to the other would carry the narrow model's 0.1 along and mask the
+    # registered value by construction (#2255).
+    params_narrow = model_narrow.spec.sample(jax.random.PRNGKey(0))
+    params_wide = model_wide.spec.sample(jax.random.PRNGKey(0))
+    f_narrow = model_narrow.predict_photometry(params_narrow)
+    f_wide = model_wide.predict_photometry(params_wide)
     max_reldiff = float(jnp.max(jnp.abs(f_narrow - f_wide) / jnp.abs(f_narrow)))
-    # Reported, not asserted as a real difference: see docstring. The
-    # signature-inequality assertion above is the real regression guard;
-    # this documents the measured (null) numeric result precisely so it
-    # cannot silently start meaning something different later.
-    assert max_reldiff == 0.0, (
-        f"expected the diagnosed dead-fallback null result (0.0); measured {max_reldiff:.3e}. "
-        "If this is now nonzero, met_logzsol_scatter's auto-registration changed and "
-        "lgmet_scatter may have become reachable -- update this test's docstring and "
-        "tighten the assertion to `> 1e-8`."
+    # The kwarg is LIVE: changing scatter width 0.1 -> 0.3 must change photometry.
+    # The exact magnitude depends on the stellar population composition, but
+    # a metallicity scatter change should be measurable. Use a loose floor (1e-8)
+    # to avoid false flakes from rounding while confirming the effect is real.
+    assert max_reldiff > 1e-8, (
+        f"lgmet_scatter must change predict_photometry (max_reldiff={max_reldiff:.3e}). "
+        "The kwarg should be LIVE after #2255. If this is zero, check that "
+        "met_logzsol_scatter is being set from lgmet_scatter in SEDModel._init_observation."
     )
 
 

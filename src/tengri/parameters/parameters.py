@@ -444,6 +444,23 @@ class Parameters:
 
     def __init__(self, **kwargs):
         # ── Settings ──────────────────────────────────────────────
+        # Capture lgmet_scatter early (before _build_param_registry) for the
+        # registration seam fix (#2255). The kwarg must be handled here because
+        # it's not a valid parameter name, so it won't make it into the parameter
+        # registry and would otherwise be lost. Store as an instance variable
+        # for access in _init_metallicity_config.
+        self._lgmet_scatter_for_fix = kwargs.pop("lgmet_scatter", None)
+        _met_logzsol_scatter_kwarg = "met_logzsol_scatter" in kwargs
+        if self._lgmet_scatter_for_fix is not None and _met_logzsol_scatter_kwarg:
+            raise ValueError(
+                "Cannot specify both 'lgmet_scatter' and 'met_logzsol_scatter' in "
+                "the same Parameters() call. Use one or the other: "
+                "'lgmet_scatter' (the flat-form kwarg for the metallicity scatter "
+                "width, legacy) or 'met_logzsol_scatter' (the grammar-form name). "
+                "They are the same parameter; passing both is silent shadowing, which "
+                "is not allowed."
+            )
+
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 256))
@@ -659,6 +676,17 @@ class Parameters:
             eline_mode=self.eline_mode,
             eline_broad=self.eline_broad,
         )
+
+        # ── met_logzsol_scatter registration seam (#2255) ──
+        # On the flat-form path, met_logzsol_scatter is auto-registered as Fixed
+        # from _build_param_registry. If the user passed lgmet_scatter and didn't
+        # also pass the grammar-form met_logzsol_scatter, update the registered
+        # default to use that kwarg value instead of the registry's hardcoded
+        # Fixed(0.1). This makes the flat-form lgmet_scatter kwarg LIVE in the
+        # stellar component's predictions (no longer silently ignored).
+        if self._lgmet_scatter_for_fix is not None and not _met_logzsol_scatter_kwarg:
+            self._defaults["met_logzsol_scatter"] = Fixed(float(self._lgmet_scatter_for_fix))
+
         # --- Cue optional params (ionspec / gas extras) ---
         _cue_ionspec = _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
         _cue_gas_extra = _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
@@ -1174,7 +1202,16 @@ class Parameters:
 
         self.alpha_fe_evolving = kwargs.pop("alpha_fe_evolving", False)
         self.met_interp = kwargs.pop("met_interp", "smooth")
-        self.lgmet_scatter = float(kwargs.pop("lgmet_scatter", 0.1))
+
+        # lgmet_scatter was captured and validated at __init__ start for the
+        # registration seam fix (#2255). Store it here for SEDModel to access
+        # as self.lgmet_scatter (used as fallback when params dict has no
+        # met_logzsol_scatter entry).
+        lgmet_scatter_value = (
+            self._lgmet_scatter_for_fix if self._lgmet_scatter_for_fix is not None else 0.1
+        )
+        self.lgmet_scatter = float(lgmet_scatter_value)
+
         # Redshift-table interpolation mode (used when a precomputed z-table
         # is enabled via ``approx=WavePrecomp(...)`` AND redshift is free).
         # "linear" → piecewise-linear (C^0, default).
