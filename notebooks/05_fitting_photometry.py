@@ -41,6 +41,11 @@ from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
 
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
+import warnings
+
+warnings.filterwarnings("ignore", message=".*wNE.*")
+
 import time
 from pathlib import Path
 
@@ -164,13 +169,13 @@ posterior.summary()
 # ## Convergence
 #
 # Before any science: did the chains converge? Split-R̂ should be < 1.01,
-# effective sample size (ESS) a healthy fraction of the 4800 draws, and
+# effective sample size (ESS) a healthy fraction of the draws, and
 # divergences few. Anything failing here means the credible intervals are not
 # trustworthy.
 
 # %%
 rhat = posterior.rhat()
-ess = posterior.ess() if hasattr(posterior, "ess") else {}
+ess = posterior.effective_sample_size()
 n_div = posterior.diagnostics.get("n_divergent", "n/a")
 
 print(f"{'parameter':<28}{'R̂':>8}{'ESS':>9}")
@@ -184,7 +189,7 @@ n_chains = max(int(posterior.diagnostics.get("n_chains", 1)), 1)
 n_total = int(next(iter(posterior.samples.values())).shape[0])
 n_per_chain = n_total // n_chains
 print(
-    f"\nmax split-R̂ = {rhat_max:.4f}   divergences = {n_div}   ({n_chains} chains × {n_per_chain} draws = {n_total})"
+    f"\nmax split-R̂ = {rhat_max:.4f}   divergences = {n_div}   min ESS = {min(float(v) for v in ess.values()):.0f}   ({n_chains} chains × {n_per_chain} draws = {n_total})"
 )
 
 # %% [markdown]

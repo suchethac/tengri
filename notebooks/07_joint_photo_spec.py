@@ -34,6 +34,11 @@ from _setup import FIG_DIR, HMC_VALIDATED, effective_wavelengths_um, quiet
 
 quiet()
 
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
+import warnings
+
+warnings.filterwarnings("ignore", message=".*wNE.*")
+
 import time
 from pathlib import Path
 

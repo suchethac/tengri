@@ -52,6 +52,9 @@ import warnings
 
 warnings.filterwarnings("default", message=".*BakedInBackend.*")
 
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
+warnings.filterwarnings("ignore", message=".*wNE.*")
+
 from pathlib import Path
 
 import jax
