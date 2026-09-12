@@ -278,6 +278,29 @@ def test_prose_nan_does_not_fail(tmp_path):
     assert len(failures) == 0
 
 
+def test_catalog_row_with_nan_in_description_passes(tmp_path):
+    """Catalog rows with NaN in description (not as a value) pass."""
+    catalog_output = (
+        "       nebular    civ_1549                         Lsun      lines     "
+        "CIV 1549 line luminosity, NaN with a warning on cue's legacy 128-line...\n"
+        "       nebular    log_civ_1549                     dex       lines     "
+        "log10 of civ 1549 line luminosity, nan with a warning on cue's 128-lin...\n"
+    )
+    nb = _make_notebook(
+        [
+            _code_cell(
+                "print(catalog)",
+                [_text_output(catalog_output)],
+            ),
+        ]
+    )
+    path = tmp_path / "test.ipynb"
+    path.write_text(json.dumps(nb), encoding="utf-8")
+
+    failures, _warnings = check_notebook(path)
+    assert len(failures) == 0
+
+
 # ---------------------------------------------------------------------------
 # Known-bad ledger tests
 # ---------------------------------------------------------------------------

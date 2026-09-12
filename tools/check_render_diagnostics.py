@@ -165,30 +165,46 @@ def _check_nan_in_table(text: str) -> bool:
     Parameter summary tables typically have:
     - Leading whitespace (indentation)
     - Parameter name (identifier with underscores like sfh_dpl_beta)
-    - Multiple numeric values
-    - Possibly nan/NaN as one of the values
+    - Values consisting only of numeric tokens, nan/NaN/inf/-inf, and punctuation
 
-    This distinguishes them from prose which typically starts with words,
-    not indented parameter names.
+    This distinguishes them from prose/catalog rows which contain descriptive
+    words after the parameter name.
     """
     for line in text.split("\n"):
         if not line or not line[0].isspace():
-            # Prose and table headers typically don't start with indent,
-            # but parameter value rows do
             continue
         # Check if this looks like a parameter name followed by values
         # Pattern: leading space(s), then parameter-like name (word_word),
-        # then multiple numeric/nan values
+        # then remaining content
         match = re.match(r"\s+[\w_]+\s+", line)
         if not match:
             continue
-        # Now check if nan/NaN appears in the values part after the parameter name
+        # Extract values part after the parameter name
         values_part = line[match.end() :]
-        if re.search(r"\s(nan|NaN)\s", " " + values_part + " "):
-            # Also confirm there are other numeric values
-            numeric_values = re.findall(r"[\d\-\+\.eE]+", values_part)
-            if len(numeric_values) >= 1:  # At least 1 numeric value + nan
-                return True
+        # Check if nan/NaN appears in the values part
+        if not re.search(r"\b(nan|NaN|inf|-inf)\b", values_part):
+            continue
+        # For a real parameter summary row, values part must consist ONLY of:
+        # - Numeric tokens (including +, -, ., e notation)
+        # - nan/NaN/inf/-inf keywords
+        # - Punctuation (commas, percent signs, brackets, spaces)
+        # No other alphabetic words allowed
+        # Remove all valid tokens and see if anything remains
+        cleaned = values_part
+        # Remove numeric tokens
+        cleaned = re.sub(r"[\d\.\-\+eE]+", "", cleaned)
+        # Remove nan/NaN/inf/-inf
+        cleaned = re.sub(r"\b(nan|NaN|inf|-inf)\b", "", cleaned)
+        # Remove punctuation and whitespace
+        cleaned = re.sub(r"[\s,%\[\]\(\)\-\+\*\/\.\:]+", "", cleaned)
+        # If anything remains, it's a word (catalog/prose description)
+        if cleaned:
+            # Has descriptive words, not a parameter summary row
+            continue
+        # This is a real parameter summary row with nan and numeric values
+        # Confirm there are numeric values
+        if re.search(r"[\d\.\-\+eE]+", values_part):
+            return True
     return False
 
 
