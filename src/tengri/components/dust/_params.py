@@ -26,12 +26,18 @@ modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
 draine2021_pah returns only ``dust_lgU``, astrodust uses a different
 ``dust_lgU`` bound, etc. The flat-builder bucket is the static superset
 registered together when ``dust_emission`` is set. The priors agree
-where they overlap for most names, but NOT for ``dust_T``/``dust_beta_ir``:
-every analytic template's own class-level declaration (30.0/35.0 K, 1.8)
-disagrees with this table's ``PARAMS`` entries (35.0 K, 1.6) -- see the
-comments on those two entries below, and #2261, filed to resolve which
-value is correct. This file remains the source of truth for the static
-superset regardless; that disagreement is a live discrepancy, not a typo.
+where they overlap for most names, but NOT for ``dust_T`` (or, before
+#2265's correction, ``dust_beta_ir``): every analytic template's own
+class-level declaration (30.0/35.0/25.0 K for ``dust_T``) disagrees with
+this table's single ``dust_T`` entry (35.0 K) -- see the comment on that
+entry below, and #2261, filed to resolve which value is correct. This
+disagreement is measured to reach ``predict_photometry`` on the
+``SEDModel.build`` grammar path too, not only the legacy flat builder: a
+``dust_emission={'type': ..., 'all_params': Fixed(DEFAULT)}`` build
+resolves shared names like ``dust_T``/``dust_beta_ir`` from THIS table,
+not from the selected class's own attribute (#2265). This file remains
+the source of truth for the static superset regardless; the ``dust_T``
+disagreement is a live discrepancy, not a typo.
 """
 
 from __future__ import annotations
