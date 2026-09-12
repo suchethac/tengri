@@ -781,6 +781,24 @@
 
 ### Fixed
 
+- ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
+  from standing in for declared parameter defaults) had two blind spots, both
+  fixed: it was scoped to ``dust/emission/`` only, and it never saw negative
+  or explicit-positive defaults at all -- ``ast.parse`` renders ``-3.0`` as
+  ``UnaryOp(USub, Constant)``, which the bare ``ast.Constant`` gate skipped.
+  The no-argument run now covers every swept tree (``dust/emission``,
+  ``radio``, ``stellar``, ``igm``; the rest join as #2297's rulings land),
+  and all closure defaults in radio, stellar, and igm read their values
+  through ``declared_default(...)`` or a shared named module constant rather
+  than repeating them as bare numerals. Zero-diff probes over radio and
+  stellar confirm bit-identical output. One real slip surfaced by the sweep:
+  igm's two ``dla_log_n_hi`` fallbacks said 20.0 where the declaration says
+  20.3 (``DEFAULT_DLA_LOG_N_HI``, which both sites now read). That changes
+  DIRECT calls that omit the argument with ``use_dla=True`` -- measured max
+  relative difference up to ~1.0 at z=2.0 in the damped wings, smaller at
+  other redshifts -- and changes nothing on the grammar path, which always
+  supplied 20.3. Part of #2265.
+
 - The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
   ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
   signature defaults from the declared parameter table

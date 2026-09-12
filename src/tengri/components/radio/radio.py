@@ -71,6 +71,9 @@ _LOG10_FIRRC_CONST: float = math.log10(3.75e12)  # bell/delvecchio/mccheyne norm
 # dispatchers share this single registry value (Condon 1992, 0.8).
 _ALPHA_SF_DEFAULT: float = declared_default(_RADIO_PARAMS, "radio_alpha_sf")
 
+# Declared default from _params.py: AGN radio loudness (radio-quiet default)
+_LOUDNESS_DEFAULT: float = declared_default(_RADIO_PARAMS, "radio_loudness")
+
 # Delvecchio+2021 and McCheyne+2022 each cite their OWN consensus spectral
 # index (Novak+2017 / SEMPER) rather than the registry default above -- a
 # single shared constant would silently overwrite one calibration's cited
@@ -786,7 +789,7 @@ def _dispatch_sfr(
 def radio_agn(
     wavelength: jnp.ndarray,
     L_agn_bol: float,
-    radio_loudness: float = 0.0,
+    radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha_agn: float = 0.7,
     nu_ref: float = _NU_REF_AGN_HZ,
     l_bband: float = 0.0,
@@ -876,7 +879,7 @@ def radio_agn(
 def radio_agn_dpl(
     wavelength: jnp.ndarray,
     L_agn_bol: float,
-    radio_loudness: float = 0.0,
+    radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha1: float = -0.75,
     alpha2: float = -0.1,
     log_nu_t: float = 10.0,
@@ -985,7 +988,7 @@ def radio_total_terms(
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
     alpha_sf: float = _ALPHA_SF_DEFAULT,
-    radio_loudness: float = 0.0,
+    radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha_agn: float = 0.7,
     sfr_mode: str = "bell2003",
     log_mstar: float = 10.0,
@@ -1123,7 +1126,7 @@ def radio_total(
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
     alpha_sf: float = _ALPHA_SF_DEFAULT,
-    radio_loudness: float = 0.0,
+    radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha_agn: float = 0.7,
     sfr_mode: str = "bell2003",
     log_mstar: float = 10.0,
@@ -1225,7 +1228,7 @@ def radio_total_dpl_terms(
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
     alpha_sf: float = _ALPHA_SF_DEFAULT,
-    radio_loudness: float = 0.0,
+    radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha1: float = -0.75,
     alpha2: float = -0.1,
     log_nu_t: float = 10.0,
@@ -1377,7 +1380,7 @@ def radio_total_dpl(
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
     alpha_sf: float = _ALPHA_SF_DEFAULT,
-    radio_loudness: float = 0.0,
+    radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha1: float = -0.75,
     alpha2: float = -0.1,
     log_nu_t: float = 10.0,
@@ -1488,7 +1491,7 @@ def compute_radio_components(
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
     alpha_sf: float = _ALPHA_SF_DEFAULT,
-    radio_loudness: float = 0.0,
+    radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha_agn: float = 0.7,
     sfr_mode: str = "bell2003",
     log_mstar: float = 10.0,
