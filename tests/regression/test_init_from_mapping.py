@@ -14,6 +14,8 @@ free names are read, and anything missing starts at the standardized ``0.0``.
 
 from __future__ import annotations
 
+import contextlib
+
 import numpy as np
 import pytest
 
@@ -32,7 +34,7 @@ from tengri import (
     builders,
     generate_mock,
 )
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import DeadFitError, ParameterError
 
 pytestmark = [pytest.mark.regression_bug, pytest.mark.slow]
 
@@ -154,5 +156,10 @@ def test_partial_mapping_warns_that_the_rest_start_at_the_prior_center(ssp_data_
     partial = {free[0]: float(np.asarray(point.params[free[0]]))}
 
     _, forward = _build(ssp_data_fsps)
-    with pytest.warns(UserWarning, match="prior center"):
+    # The warning is the subject; the fit it precedes is the garbage one the
+    # docstring measures, and since the #2093 guard it may end as DeadFitError
+    # (100 % divergent draws from the prior-center start) rather than as a
+    # posterior at R-hat 1e15. Either outcome is the weak start doing what the
+    # warning says it does.
+    with pytest.warns(UserWarning, match="prior center"), contextlib.suppress(DeadFitError):
         forward.fit(flux, noise, key=jax.random.PRNGKey(3), init_from=partial, **NUTS)
