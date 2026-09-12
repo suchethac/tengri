@@ -39,6 +39,11 @@
 
 # %% [markdown]
 # ## Setup
+#
+# Every model on this page carries nebular emission: tengri uses Cue (Li et al. 2025)
+# at logU = −2, Z_gas = Z☉, f_esc = 0; Synthesizer uses its Cloudy grid at the same
+# values. Residuals in every section therefore include the Cue-vs-Cloudy nebular
+# difference, quantified in §8.
 
 # %%
 import os
@@ -96,6 +101,17 @@ TAU_GYR_FIDUCIAL = 1.0
 AGE_GYR_FIDUCIAL = 5.0
 AV_FIDUCIAL = 1.0
 Z_FIDUCIAL = 0.02  # absolute metallicity (≈ solar on the Synthesizer grid)
+
+# Fiducial nebular configuration (Cue at logU=-2, solar metallicity, f_esc=0).
+# Every model carries this nebular emission; residuals include the Cue-vs-Cloudy
+# difference, quantified in §8.
+NEB_FIDUCIAL = {
+    "type": "cue",
+    "logU": Fixed(-2.0),
+    "logZ_gas": Fixed(0.0),
+    "fesc": Fixed(0.0),
+    "all_params": Fixed(DEFAULT),
+}
 
 # nbclient kernels don't bind ``__file__`` (the resources path is the notebook
 # directory), so fall back to the CWD.
@@ -235,7 +251,7 @@ _m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
@@ -248,34 +264,171 @@ print(
     f"tengri pipeline = {_mass_t:.4f} M⊙ (target 1.0000)"
 )
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, "Synthesizer delayed-τ (τ=1 Gyr, age=5 Gyr)"),
-    (ax_r, "tengri pipeline sfr_history (log-lbt grid)"),
+# %% [markdown]
+# ### §2b Gaussian, double power law, truncated exponential (and log-normal)
+#
+# `SFH.Gaussian` (peak = 5 Gyr, σ = 1, 2 Gyr) against tengri `norm`
+# (`peak_lbt_gyr = 5`, `width_gyr = σ/√2`, one build, width free); σ = 1 Gyr
+# is narrower than the SSP grid's age spacing there, which tengri flags at
+# build time. `SFH.DoublePowerLaw` (two nodes) against `dpl_lookback` —
+# Synthesizer's second exponent is `-beta` in tengri's convention, and the
+# grammar only admits the interior-peaked branch (`beta > 0`).
+# `SFH.TruncatedExponential` (two nodes) against `trunc_exp`, same signed
+# `tau`. `SFH.LogNormal` against `lnorm` is a different functional form
+# shown for reference with a wider window and no shape tolerance. The table
+# below reports each case's largest |ΔSFR| as a fraction of the peak SFR
+# in the window.
+
+# %%
+from reproduction import _validation as V
+
+
+def _sfh_model(sfh_dict):
+    return SEDModel.build(
+        ssp_data=ssp,
+        sfh=sfh_dict,
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+
+
+def _tengri_sfr(model, overrides):
+    st = model.predict_state(overrides)
+    lbt = np.asarray(st.derived["sfh_grid_lbt_yr"])
+    sfr = np.asarray(st.derived["sfr_history"])
+    order = np.argsort(lbt)
+    return lbt[order], sfr[order]
+
+
+_sfh_cases = []
+_sfh_windows = {}  # label -> (lo_yr, hi_yr)
+
+_m_norm = _sfh_model(
+    {
+        "type": "norm",
+        "peak_lbt_gyr": Fixed(5.0),
+        "width_gyr": Uniform(0.3, 2.0),
+        "log_total_mass": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    }
+)
+for sigma_gyr in (1.0, 2.0):
+    label = f"Gaussian σ={sigma_gyr:g} Gyr"
+    w_s, L_s = S.sfh_curve_named("Gaussian", peak_age_gyr=5.0, sigma_gyr=sigma_gyr, max_age_gyr=13.7)
+    width_gyr = sigma_gyr / np.sqrt(2.0)
+    w_t, L_t = _tengri_sfr(_m_norm, {"sfh_norm_width_gyr": width_gyr})
+    _sfh_cases.append((label, w_s, L_s, w_t, L_t))
+    _sfh_windows[label] = (0.02 * 13.7e9, 0.95 * 13.7e9)
+
+# Both nodes from the interior-peaked (beta > 0) branch the public grammar admits.
+for alpha, beta, peak_gyr, end_gyr, age_gyr in (
+    (2.0, 1.0, 2.0, 0.0, 10.0),
+    (1.5, 2.0, 4.0, 1.0, 13.0),
 ):
-    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-    ax.set_xlim(0, 5)
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title)
-    ax.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
-ax_l.plot(t_s_cosmic_gyr, sfr_s, "C0-", linewidth=2.0, label=rf"$\tau$ = {TAU_GYR_FIDUCIAL:g} Gyr")
-ax_l.legend(fontsize=9)
-ax_r.plot(t_t_cosmic_gyr, _sfr_history, "C1-", linewidth=2.0)
-fig.tight_layout()
-save_fig("synthesizer_02_sfh_delayed.png")
+    label = f"DPL α={alpha:g} β={beta:g}"
+    w_s, L_s = S.sfh_curve_named(
+        "DoublePowerLaw",
+        peak_age_gyr=peak_gyr,
+        alpha=alpha,
+        beta=-beta,
+        min_age_gyr=end_gyr,
+        max_age_gyr=age_gyr,
+    )
+    m = _sfh_model(
+        {
+            "type": "dpl_lookback",
+            "alpha": Fixed(alpha),
+            "beta": Fixed(beta),
+            "peak_gyr": Fixed(peak_gyr),
+            "age_gyr": Fixed(age_gyr),
+            "end_gyr": Fixed(end_gyr),
+            "log_total_mass": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        }
+    )
+    w_t, L_t = _tengri_sfr(m, {})
+    _sfh_cases.append((label, w_s, L_s, w_t, L_t))
+    _sfh_windows[label] = (0.02 * age_gyr * 1e9, 0.95 * age_gyr * 1e9)
+
+# The declared prior keeps tau > 0 on both sides of this comparison.
+for tau_gyr, end_gyr, age_gyr in ((1.0, 0.5, 8.0), (3.0, 0.0, 12.0)):
+    label = f"TruncExp τ={tau_gyr:g} Gyr"
+    w_s, L_s = S.sfh_curve_named(
+        "TruncatedExponential", tau_gyr=tau_gyr, min_age_gyr=end_gyr, max_age_gyr=age_gyr
+    )
+    m = _sfh_model(
+        {
+            "type": "trunc_exp",
+            "tau_gyr": Fixed(tau_gyr),
+            "age_gyr": Fixed(age_gyr),
+            "end_gyr": Fixed(end_gyr),
+            "log_total_mass": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        }
+    )
+    w_t, L_t = _tengri_sfr(m, {})
+    _sfh_cases.append((label, w_s, L_s, w_t, L_t))
+    _sfh_windows[label] = (0.02 * age_gyr * 1e9, 0.95 * age_gyr * 1e9)
+
+_ln_label = "LogNormal (different form)"
+w_s, L_s = S.sfh_curve_named("LogNormal", tau=0.5, peak_age_gyr=3.0, max_age_gyr=13.7)
+m = _sfh_model(
+    {
+        "type": "lnorm",
+        "peak_gyr": Fixed(10.7),
+        "width_gyr": Fixed(0.5),
+        "age_gyr": Fixed(13.7),
+        "log_total_mass": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    }
+)
+w_t, L_t = _tengri_sfr(m, {})
+_sfh_cases.append((_ln_label, w_s, L_s, w_t, L_t))
+# Wider window: the lognormal PDF vanishes at its own truncation edges, where
+# a Gaussian-in-log-lookback does not, so the 2-99% edges are not informative.
+_sfh_windows[_ln_label] = (0.10 * 13.7e9, 0.90 * 13.7e9)
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _sfh_cases:
+    _assert_comparable(_L_ref, _L_t, name=f"§2b {_label}")
+
+fig, (ax, ax_r), _sfh_ratios = V.sweep_fig(
+    _sfh_cases,
+    ref_label="Synthesizer",
+    title="§2b Parametric SFH families",
+    x_of_wave=lambda t: t / 1e9,
+    xlabel="lookback time [Gyr]",
+    ylabel=r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]",
+    logy=False,
+    ratio_ylim=(0.0, 2.0),
+    xlim=(0.0, 14.0),
+)
+save_fig("synthesizer_02b_sfh_families.png")
+
+_sfh_rows = []
+for case in _sfh_cases:
+    lo_yr, hi_yr = _sfh_windows[case[0]]
+    _sfh_rows.extend(V.window_rows([case], lo=lo_yr, hi=hi_yr, rel_to="peak"))
+V.print_window_table(
+    _sfh_rows, ref_name="Synthesizer", title="§2b SFR(t), 2–95 % of each case's age (10–90 % for LogNormal); deviation as % of peak SFR", x_unit="Gyr", x_scale=1e-9
+)
 
 
 # %% [markdown]
 # ## §3 Integrated stellar SED
 #
-# The τ-delayed SFH convolved with the SSP grid, no dust or nebular. Both
-# form 10^10 M⊙. The printed ~1.09× optical ratio is *not* a normalization
-# error — it is the two codes' independent SFH discretizations: Synthesizer
+# The τ-delayed SFH convolved with the SSP grid with nebular emission. Both
+# form 10^10 M⊙. The printed optical ratio reflects both the two codes'
+# independent SFH discretizations and their nebular model differences: Synthesizer
 # integrates an analytic SFZH onto SSP age-bin edges, while tengri convolves
 # on its log-lookback quadrature (validated against dense code-independent
-# convolution, #964). The mild chromatic spread (P5–P95 ≈ 1.05–1.10) follows
-# from different age weighting.
+# convolution).
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL — Photometry projection
@@ -286,6 +439,7 @@ w_s3, L_s3 = S.stellar_sed(
     max_age_gyr=AGE_GYR_FIDUCIAL,
     metallicity=Z_FIDUCIAL,
     log_mass=LOG_MASS_FIDUCIAL,
+    nebular=True,
 )
 
 m_stellar = SEDModel.build(
@@ -304,7 +458,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_s3, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -367,29 +521,80 @@ _law_pairs = [
     ("power_law", {"slope": -0.7}, "power_law", "Power law (δ=−0.7)"),
 ]
 
-fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
-for ax, title in (
-    (ax_l, "Synthesizer attenuation laws"),
-    (ax_r, "tengri attenuation laws"),
-):
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$\lambda$ [Å]")
-    ax.set_xlim(1e3, 3e4)
-    ax.set_ylim(0.05, 20)
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
-ax_l.set_ylabel(r"$A_\lambda / A_V$")
+# %% [markdown]
+# ### §4b Grain models, MWN18, Li08, Calzetti bump
+#
+# Synthesizer's `GrainModels` (WD01 SMCBar/MWRV31, D03 MWRV31, HD23 MWRV31)
+# against tengri's `wd01_smcbar`, `wd01_mwrv31`, `d03_mwrv31`, `hd23_mwrv31` —
+# both read the same `dust_extinction` grain tables, so agreement is
+# near-exact. `MWN18` (fixed Milky Way curve) against `narayanan_z` at
+# z = 0, 2 — tengri's law evolves with redshift while Synthesizer's does not,
+# so the residual grows with z by construction. `ParametricLi08` against
+# `li08`, both at a Calzetti-like node — independent parameterizations of
+# the same functional family. `Calzetti2000(ampl=...)` against `noll09` at
+# matched bump amplitude 0.5, 1. Worst window deviation printed below.
 
-for syn_name, kw, tengri_law, label in _law_pairs:
-    w_s4, A_s4 = S.attenuation_curve(syn_name, wave_aa=wave_law, **kw)
-    ax_l.plot(w_s4, _norm_AV(w_s4, A_s4), linewidth=2.0, label=label)
-    A_t = np.asarray(_tengri_laws[tengri_law](wave_law))
-    ax_r.plot(wave_law, _norm_AV(wave_law, A_t), linewidth=2.0, label=label)
-ax_l.legend(fontsize=10)
-ax_r.legend(fontsize=10)
-fig.tight_layout()
-save_fig("synthesizer_04_dust_attenuation.png")
+# %%
+from tengri.components.dust.attenuation import (
+    d03_mwrv31,
+    hd23_mwrv31,
+    li08,
+    narayanan_z,
+    noll09,
+    wd01_mwrv31,
+    wd01_smcbar,
+)
+
+_atten_cases = []
+for syn_name, syn_kw, tengri_fn, tengri_kw, label in (
+    ("GrainModels", {"model": "WD01", "submodel": "SMCBar"}, wd01_smcbar, {}, "WD01 SMCBar"),
+    ("GrainModels", {"model": "WD01", "submodel": "MWRV31"}, wd01_mwrv31, {}, "WD01 MWRV31"),
+    ("GrainModels", {"model": "D03", "submodel": "MWRV31"}, d03_mwrv31, {}, "D03 MWRV31"),
+    ("GrainModels", {"model": "HD23", "submodel": "MWRV31"}, hd23_mwrv31, {}, "HD23 MWRV31"),
+):
+    w_s4, A_s4 = S.attenuation_curve(syn_name, wave_aa=wave_law, **syn_kw)
+    A_t4 = np.asarray(tengri_fn(wave_law, **tengri_kw))
+    _atten_cases.append((label, w_s4, _norm_AV(w_s4, A_s4), wave_law, _norm_AV(wave_law, A_t4)))
+
+for z in (0.0, 2.0):
+    w_s4, A_s4 = S.attenuation_curve("MWN18", wave_aa=wave_law)
+    A_t4 = np.asarray(narayanan_z(wave_law, redshift=z))
+    _atten_cases.append(
+        (f"MWN18 vs narayanan_z z={z:g}", w_s4, _norm_AV(w_s4, A_s4), wave_law, _norm_AV(wave_law, A_t4))
+    )
+
+w_s4, A_s4 = S.attenuation_curve("ParametricLi08", wave_aa=wave_law, model="Calzetti")
+A_t4 = np.asarray(li08(wave_law, dust_c1=3.5, dust_c2=2.5, dust_c3=3.0, dust_c4=0.0))
+_atten_cases.append(("Li08 (Calzetti-like)", w_s4, _norm_AV(w_s4, A_s4), wave_law, _norm_AV(wave_law, A_t4)))
+
+for ampl in (0.5, 1.0):
+    w_s4, A_s4 = S.attenuation_curve("calzetti_bump", wave_aa=wave_law, ampl=ampl)
+    A_t4 = np.asarray(noll09(wave_law, dust_bump_strength=ampl))
+    _atten_cases.append(
+        (f"Calzetti bump ampl={ampl:g}", w_s4, _norm_AV(w_s4, A_s4), wave_law, _norm_AV(wave_law, A_t4))
+    )
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _atten_cases:
+    _assert_comparable(_L_ref, _L_t, name=f"§4b {_label}")
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    _atten_cases,
+    ref_label="Synthesizer",
+    title="§4b Grain models, MWN18, Li08, Calzetti bump",
+    x_of_wave=lambda w: w / 1e4,
+    xlabel=r"$\lambda$ [$\mu$m]",
+    ylabel=r"$A_\lambda/A_V$",
+    logy=True,
+    xlim=(0.1, 3.0),
+    ratio_ylim=(0.4, 2.2),
+)
+save_fig("synthesizer_04b_atten_laws.png")
+
+V.print_window_table(
+    V.window_rows(_atten_cases, lo=1216.0, hi=3000.0),
+    ref_name="Synthesizer",
+    title="§4b A(λ)/A_V, 1216-3000 Å",
+)
 
 
 # %% [markdown]
@@ -424,7 +629,7 @@ m_d = SEDModel.build(
         "tau_diff": Fixed(TAU_DIFF),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 _assert_comparable(L_s5_attn, s_d.derived["sed_dust_attenuated"], name="§5 dust applied")
@@ -497,7 +702,7 @@ m_ir = SEDModel.build(
         "gamma_dl": Fixed(0.05),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 _L_abs = float(np.asarray(s_ir.derived["L_absorbed"]))
@@ -505,27 +710,268 @@ _L_ir = float(np.asarray(s_ir.derived["L_ir"]))
 _eb_resid = abs(_L_ir - _L_abs) / max(_L_abs, 1e-30)
 print(f"§6 tengri energy balance: L_abs={_L_abs:.3e}, L_IR={_L_ir:.3e}, resid={_eb_resid:.2e}")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="Synthesizer  DL07 dust IR",
-    label_r="tengri  DL07 dust IR (energy-balanced)",
-)
-ax_l.plot(w_ir_s, L_ir_s, "C0-", linewidth=1.5)
-ax_r.plot(s_ir.wave, s_ir.derived["sed_dust_ir"], "C1-", linewidth=1.5)
-_irpk = max(float(L_ir_s.max()), float(np.asarray(s_ir.derived["sed_dust_ir"]).max()))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e4, 1e7)
-    ax.set_ylim(_irpk * 1e-3, _irpk * 3)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
-save_fig("synthesizer_06_dust_ir.png")
 _pk_s = w_ir_s[(w_ir_s > 1e5)][np.argmax(L_ir_s[(w_ir_s > 1e5)])]
 _wt = np.asarray(s_ir.wave)
 _Lt = np.asarray(s_ir.derived["sed_dust_ir"])
 _pk_t = _wt[(_wt > 1e5)][np.argmax(_Lt[(_wt > 1e5)])]
 print(f"§6 dust IR far-IR peak: Synthesizer {_pk_s / 1e4:.0f} µm, tengri {_pk_t / 1e4:.0f} µm")
+
+
+# %% [markdown]
+# ### §6b DL07 (q_PAH, U_min, γ) and analytic emitters
+#
+# Four `(q_PAH, U_min, γ)` nodes spanning the DL07 grid plus two `α` nodes
+# via `draine_li2014` (`total_emission(..., alpha=...)` against
+# `draine_li2014 {..., alpha_dl14}`), all through `S.total_emission` at the
+# §6 fiducial screen. `S.dust_emission_named` supplies three standalone
+# analytic shapes — `Blackbody` (T = 30, 50 K) against `mbb {T, beta_ir}`,
+# `Greybody` against `graybody {T, beta_ir, lambda_0_um}`, `Casey12` against
+# `casey2012 {T, beta_ir, alpha_mir, lambda_0_um}` — each scaled to the §6
+# fiducial's absorbed luminosity so both sides carry the same bolometric
+# power; `mbb`'s β_ir modification blueshifts its peak relative to
+# Synthesizer's unmodified blackbody, `casey2012`'s two forms agree almost
+# exactly. Worst `IR_BANDS` ratio for each case is printed below.
+
+# %%
+# umin capped at 20 -- tengri's DL07/DL14 grid extent is [0.1, 20] (Synthesizer's own
+# grid reaches 25, but 20 keeps both sides reading the identical, uninterpolated node).
+_dl_nodes = [(0.47, 0.1, 0.01), (2.5, 1.0, 0.05), (2.5, 5.0, 0.3), (4.58, 20.0, 0.5)]
+_dl_cases = []
+for qpah_pct, umin_n, gamma_n in _dl_nodes:
+    te = S.total_emission(
+        tau_gyr=TAU_GYR_FIDUCIAL,
+        max_age_gyr=AGE_GYR_FIDUCIAL,
+        metallicity=Z_FIDUCIAL,
+        log_mass=LOG_MASS_FIDUCIAL,
+        av=AV_FIDUCIAL,
+        qpah=qpah_pct / 100.0,
+        umin=umin_n,
+        gamma=gamma_n,
+        components=("dust_emission",),
+    )
+    w_s6, L_s6 = te["dust_emission"]
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={
+            "type": "draine_li2007",
+            "qpah": Fixed(qpah_pct),
+            "umin": Fixed(umin_n),
+            "gamma_dl": Fixed(gamma_n),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+    s6 = m.predict_state({})
+    label = f"DL07 qpah={qpah_pct:g}% Umin={umin_n:g} γ={gamma_n:g}"
+    _dl_cases.append((label, w_s6, L_s6, np.asarray(s6.wave), np.asarray(s6.derived["sed_dust_ir"])))
+
+for alpha_dl in (1.5, 2.5):
+    te = S.total_emission(
+        tau_gyr=TAU_GYR_FIDUCIAL,
+        max_age_gyr=AGE_GYR_FIDUCIAL,
+        metallicity=Z_FIDUCIAL,
+        log_mass=LOG_MASS_FIDUCIAL,
+        av=AV_FIDUCIAL,
+        qpah=QPAH_FRAC,
+        umin=UMIN,
+        gamma=0.05,
+        alpha=alpha_dl,
+        components=("dust_emission",),
+    )
+    w_s6, L_s6 = te["dust_emission"]
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={
+            "type": "draine_li2014",
+            "qpah": Fixed(2.5),
+            "umin": Fixed(UMIN),
+            "gamma_dl": Fixed(0.05),
+            "alpha_dl14": Fixed(alpha_dl),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+    s6 = m.predict_state({})
+    label = f"DL14 α={alpha_dl:g}"
+    _dl_cases.append((label, w_s6, L_s6, np.asarray(s6.wave), np.asarray(s6.derived["sed_dust_ir"])))
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _dl_cases:
+    _assert_comparable(_L_ref, _L_t, name=f"§6b {_label}")
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    _dl_cases, ref_label="Synthesizer", title="§6b DL07/DL14 grid nodes", xlim=(1e4, 1e7)
+)
+save_fig("synthesizer_06b_dl07_grid.png")
+for label, w_ref, L_ref, w_t, L_t in _dl_cases:
+    L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
+    V.print_filter_table(
+        V.filter_rows(w_ref, L_t_on_ref, L_ref, filters=V.IR_BANDS),
+        ref_name="Synthesizer",
+        title=f"§6b {label}",
+        compact=True,
+    )
+
+_analytic_cases = []
+for T_bb in (30.0, 50.0):
+    w_s6, L_s6 = S.dust_emission_named("Blackbody", wave_aa=s_ir.wave, temperature_k=T_bb)
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "mbb", "T": Fixed(T_bb), "beta_ir": Fixed(1.5), "all_params": Fixed(DEFAULT)},
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+    s6 = m.predict_state({})
+    _analytic_cases.append(
+        (f"mbb T={T_bb:g}K", w_s6, L_s6 * _L_abs, np.asarray(s6.wave), np.asarray(s6.derived["sed_dust_ir"]))
+    )
+
+for T_gb, beta_gb in ((30.0, 1.5), (45.0, 2.0)):
+    w_s6, L_s6 = S.dust_emission_named(
+        "Greybody", wave_aa=s_ir.wave, temperature_k=T_gb, emissivity=beta_gb, lambda_0_um=100.0
+    )
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={
+            "type": "graybody",
+            "T": Fixed(T_gb),
+            "beta_ir": Fixed(beta_gb),
+            "lambda_0_um": Fixed(100.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+    s6 = m.predict_state({})
+    _analytic_cases.append(
+        (
+            f"graybody T={T_gb:g}K β={beta_gb:g}",
+            w_s6,
+            L_s6 * _L_abs,
+            np.asarray(s6.wave),
+            np.asarray(s6.derived["sed_dust_ir"]),
+        )
+    )
+
+for T_c, beta_c, alpha_c in ((35.0, 2.0, 2.0), (50.0, 1.6, 2.5)):
+    w_s6, L_s6 = S.dust_emission_named(
+        "Casey12", wave_aa=s_ir.wave, temperature_k=T_c, emissivity=beta_c, alpha=alpha_c, lambda_0_um=200.0
+    )
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={
+            "type": "casey2012",
+            "T": Fixed(T_c),
+            "beta_ir": Fixed(beta_c),
+            "alpha_mir": Fixed(alpha_c),
+            "lambda_0_um": Fixed(200.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=NEB_FIDUCIAL,
+        redshift=Fixed(0.0),
+    )
+    s6 = m.predict_state({})
+    _analytic_cases.append(
+        (
+            f"casey2012 T={T_c:g}K β={beta_c:g} α={alpha_c:g}",
+            w_s6,
+            L_s6 * _L_abs,
+            np.asarray(s6.wave),
+            np.asarray(s6.derived["sed_dust_ir"]),
+        )
+    )
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _analytic_cases:
+    _assert_comparable(_L_ref, _L_t, name=f"§6b {_label}")
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    _analytic_cases, ref_label="Synthesizer", title="§6b Analytic dust emitters", xlim=(1e4, 1e7)
+)
+save_fig("synthesizer_06c_analytic_emitters.png")
+for label, w_ref, L_ref, w_t, L_t in _analytic_cases:
+    L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
+    V.print_filter_table(
+        V.filter_rows(w_ref, L_t_on_ref, L_ref, filters=V.IR_BANDS),
+        ref_name="Synthesizer",
+        title=f"§6b {label}",
+        compact=True,
+    )
 
 
 # %% [markdown]
@@ -566,12 +1012,7 @@ m_full = SEDModel.build(
         "gamma_dl": Fixed(0.05),
         "all_params": Fixed(DEFAULT),
     },
-    neb={
-        "type": "cue",
-        "neb_logU": Fixed(-2.0),
-        "neb_logZ_gas": Fixed(0.0),
-        "all_params": Fixed(DEFAULT),
-    },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
@@ -627,42 +1068,12 @@ m_neb = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={
-        "type": "cue",
-        "neb_logU": Fixed(-2.0),
-        "neb_logZ_gas": Fixed(0.0),
-        "all_params": Fixed(DEFAULT),
-    },
+    neb=NEB_FIDUCIAL,
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
 L_neb_t = np.asarray(s_neb.derived["sed_nebular"])
 
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="Synthesizer  Cloudy nebular (10 Myr CSF)",
-    label_r="tengri  Cue emulator (10 Myr CSF)",
-)
-ax_l.plot(w_neb_s, L_neb_s, "C0-", linewidth=1.0)
-ax_r.plot(s_neb.wave, L_neb_t, "C1-", linewidth=1.0)
-
-
-# Frame the y-axis on the lines inside the plotted window (900–7000 Å); a global
-# max would be set by a far-UV resonance line off-panel, leaving dead headroom.
-def _winpk(w, L, lo=900.0, hi=7000.0):
-    w = np.asarray(w)
-    m = (w >= lo) & (w <= hi)
-    return float(np.nanmax(L[m])) if m.any() else float(np.nanmax(L))
-
-
-_npk = max(_winpk(w_neb_s, L_neb_s), _winpk(np.asarray(s_neb.wave), L_neb_t))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(900, 7000)
-    ax.set_ylim(_npk * 1e-3, _npk * 2)
-    ax.set_xscale("linear")
-    ax.grid(True, alpha=0.3)
 # Integrated line luminosity (width- and grid-independent). A single-bin peak
 # ratio measures line width, not luminosity, so it is not used here.
 #
@@ -686,8 +1097,143 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
         )
     else:
         print(f"    {_name} {_c:.0f} Å: unmeasurable on the coarse test grid")
-fig.tight_layout()
-save_fig("synthesizer_08_nebular.png")
+
+
+# %% [markdown]
+# ### §8b logU × Z × f_esc
+#
+# The Synthesizer test grid's own axes (printed below) are age and
+# metallicity only — no ionisation-parameter axis — so `logU` is swept on
+# the tengri side alone (Cue `neb_logU`, one build) against one fixed
+# Synthesizer reference per `(Z, f_esc)` pair; `Z` snaps to the nearest grid
+# metallicity node. `f_esc` scales tengri's Cue nebular budget by
+# `(1 - f_esc)` directly; Synthesizer's standalone nebular component does
+# not respond to `f_esc` there (it only redirects the escaping continuum),
+# so the absolute Hβ column carries that difference while the line-ratio
+# columns do not. Worst absolute departure printed below.
+
+# %%
+wave_grid_aa, ages_grid_yr, mets_grid = S.ssp_grid_axes()
+print(
+    f"§8b Synthesizer test grid axes: {ages_grid_yr.shape[0]} ages, "
+    f"{mets_grid.shape[0]} metallicities (no logU axis)"
+)
+
+_KEY = {"Ha": 6564.6, "Hb": 4862.7, "OIII": 5008.2, "OII": 3728.5}
+
+
+def _neb_ratios(w, L):
+    hb = U.line_lum(w, L, _KEY["Hb"], half=30.0)
+    if hb <= 0:
+        return float("nan"), float("nan"), float("nan"), hb
+    ha = U.line_lum(w, L, _KEY["Ha"], half=30.0)
+    o3 = U.line_lum(w, L, _KEY["OIII"], half=30.0)
+    o2 = U.line_lum(w, L, _KEY["OII"], half=30.0)
+    return ha / hb, o3 / hb, o2 / hb, hb
+
+
+_neb8b_rows = []
+for Z_node in (0.004, 0.02):
+    Z_snap = float(mets_grid[np.argmin(np.abs(mets_grid - Z_node))])
+    w_s8, L_s8 = S.nebular_sed(age_gyr=NEB_AGE, metallicity=Z_snap, log_mass=NEB_LOGMASS)
+    L_s8 = np.clip(L_s8, 0.0, None)
+    ha_hb_s, o3_hb_s, o2_hb_s, hb_s = _neb_ratios(w_s8, L_s8)
+    for fesc_node in (0.0, 0.5):
+        for logU_node in (-3.0, -2.0, -1.5):
+            m8 = SEDModel.build(
+                ssp_data=ssp,
+                sfh={
+                    "type": "const",
+                    "start_gyr": Fixed(NEB_AGE),
+                    "end_gyr": Fixed(0.0),
+                    "log_total_mass": Fixed(NEB_LOGMASS),
+                    "all_params": Fixed(DEFAULT),
+                },
+                dust_attenuation={
+                    "law": "power_law",
+                    "type": "two_component",
+                    "tau_bc": Fixed(0.0),
+                    "tau_diff": Fixed(0.0),
+                    "all_params": Fixed(DEFAULT),
+                },
+                neb={
+                    "type": "cue",
+                    "logU": Fixed(logU_node),
+                    "logZ_gas": Fixed(float(np.log10(Z_snap / 0.02))),
+                    "fesc": Fixed(fesc_node),
+                    "all_params": Fixed(DEFAULT),
+                },
+                redshift=Fixed(0.0),
+            )
+            s8 = m8.predict_state({})
+            L_t8 = np.asarray(s8.derived["sed_nebular"])
+            ha_hb_t, o3_hb_t, o2_hb_t, hb_t = _neb_ratios(np.asarray(s8.wave), L_t8)
+            _neb8b_rows.append((Z_snap, fesc_node, logU_node, ha_hb_t, ha_hb_s, o3_hb_t, o3_hb_s, o2_hb_t, o2_hb_s, hb_t, hb_s))
+
+print("\n  §8b logU × Z × f_esc line ratios (tengri Cue / Synthesizer Cloudy, ±30 Å)")
+print(
+    f"  {'Z':>6} {'fesc':>5} {'logU':>6} {'Ha/Hb t':>8} {'Ha/Hb s':>8} "
+    f"{'OIII/Hb t':>10} {'OIII/Hb s':>10} {'OII/Hb t':>9} {'OII/Hb s':>9} {'Hb tengri':>11}"
+)
+_worst_hb_ratio = 1.0
+for Z_snap, fesc_node, logU_node, ha_t, ha_s, o3_t, o3_s, o2_t, o2_s, hb_t, hb_s in _neb8b_rows:
+    print(
+        f"  {Z_snap:>6.3f} {fesc_node:>5.1f} {logU_node:>6.1f} {ha_t:>8.2f} {ha_s:>8.2f} "
+        f"{o3_t:>10.2f} {o3_s:>10.2f} {o2_t:>9.2f} {o2_s:>9.2f} {hb_t:>11.2e}"
+    )
+    if hb_s > 0:
+        _worst_hb_ratio = max(_worst_hb_ratio, abs(hb_t / hb_s - 1.0) + 1.0)
+print("  f_esc = 0.5 halves tengri's Hβ (Cue scales the nebular budget by 1-f_esc directly)")
+
+# Visual sweep: 3 logU nodes at the Z = 0.02, f_esc = 0 fiducial against the
+# ONE Synthesizer curve the grid can produce there (no logU axis to move).
+_neb8b_cases = []
+_Z_vis = float(mets_grid[np.argmin(np.abs(mets_grid - 0.02))])
+w_s8b, L_s8b = S.nebular_sed(age_gyr=NEB_AGE, metallicity=_Z_vis, log_mass=NEB_LOGMASS)
+L_s8b = np.clip(L_s8b, 0.0, None)
+for logU_node in (-3.0, -2.0, -1.5):
+    m8b = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "const",
+            "start_gyr": Fixed(NEB_AGE),
+            "end_gyr": Fixed(0.0),
+            "log_total_mass": Fixed(NEB_LOGMASS),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={
+            "type": "cue",
+            "logU": Fixed(logU_node),
+            "logZ_gas": Fixed(float(np.log10(_Z_vis / 0.02))),
+            "fesc": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    s8b = m8b.predict_state({})
+    _neb8b_cases.append(
+        (f"logU={logU_node:g}", w_s8b, L_s8b, np.asarray(s8b.wave), np.asarray(s8b.derived["sed_nebular"]))
+    )
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _neb8b_cases:
+    _assert_comparable(_L_ref, _L_t, name=f"§8b {_label}")
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    _neb8b_cases,
+    ref_label="Synthesizer",
+    title="§8b Cue logU sweep (Z=0.02, f_esc=0)",
+    xlim=(900.0, 7000.0),
+    logy=True,
+    ratio_ylim=(0.0, 3.0),
+)
+save_fig("synthesizer_08b_neb_logu_z_fesc.png")
 
 
 # %% [markdown]
@@ -797,7 +1343,7 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "agn_cos_inc": Fixed(cos_inc),
             "all_params": Fixed(DEFAULT),
         },
-        neb={"type": "ssp"}, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
@@ -853,7 +1399,7 @@ for disc_type, _ in _disc_models:
             "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
-        neb={"type": "ssp"}, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     _disc_tengri[disc_type] = (np.asarray(s.wave), np.asarray(s.derived["sed_agn"]))
@@ -1065,27 +1611,11 @@ for torus_type in ("nenkova", "two_temperature"):
             "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
-        neb={"type": "ssp"}, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     _torus_tengri[torus_type] = (np.asarray(s.wave), np.asarray(s.derived["sed_agn"]))
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l, ax_r, label_l="Synthesizer  torus (Blackbody 1000 K)", label_r="tengri  torus models"
-)
-ax_l.plot(w_torus_s, L_torus_s, "C0-", linewidth=1.5)
-for c, tt in zip(("C1", "C2"), ("nenkova", "two_temperature")):
-    wt, Lt = _torus_tengri[tt]
-    ax_r.plot(wt, Lt, c + "-", linewidth=1.5, label=tt)
-ax_r.legend(fontsize=9)
-_tpk = max(float(L_torus_s.max()), float(_torus_tengri["nenkova"][1].max()))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e3, 1e7)
-    ax.set_ylim(_tpk * 1e-3, _tpk * 3)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
-save_fig("synthesizer_09e_torus.png")
 _pk_s = w_torus_s[(w_torus_s > 1e4)][np.argmax(L_torus_s[(w_torus_s > 1e4)])]
 
 
@@ -1242,7 +1772,7 @@ _m_vis = SEDModel.build(
         "agn_cos_inc": Uniform(0.0, 1.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 _w_vis = np.asarray(_m_vis.predict_state({"agn_cos_inc": 0.5}).wave)
 _i5000 = int(np.argmin(np.abs(_w_vis - 5000.0)))
@@ -1340,7 +1870,7 @@ def _unified_phot(approx):
             "agn_cos_inc": Fixed(BH_COS_INC),
             "all_params": Fixed(DEFAULT),
         },
-        neb={"type": "ssp"}, redshift=Fixed(0.05),
+        neb=NEB_FIDUCIAL, redshift=Fixed(0.05),
     )
     return np.asarray(m.predict_photometry({}))
 
@@ -1396,12 +1926,179 @@ _m_free = SEDModel.build(
         "agn_log_lbol": Fixed(agn_log_lbol),
         "all_params": FREE,
     },
-    neb={"type": "ssp"}, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL, redshift=Fixed(0.0),
 )
 _agn_free = sorted(str(_p) for _p in _m_free.spec.free_params if str(_p).startswith("agn_"))
 print(f"§9h 'all_params': FREE frees {len(_agn_free)} AGN parameters:")
 for _p in _agn_free:
     print("   ", _p)
+
+
+# %% [markdown]
+# ### §9i Torus temperature, NLR covering factor, disc transmission
+#
+# `S.agn_unified(torus_temperature_k=T)` at T = 500, 1000, 1500 K against
+# tengri's `torus={"type": "simple", "agn_T_torus": Uniform(300, 2000)}` —
+# one build, `agn_T_torus` free, a direct 1:1 knob on both sides. `cf_nlr`
+# at 0.05, 0.1, 0.3 against `nlr={"type": "synthesizer_spectra",
+# "agn_nlr_cf": Uniform(0, 1)}` — a covering fraction scales both codes'
+# NLR templates uniformly, so the [O III]/Hβ ratio is invariant to it and
+# only absolute luminosity moves. Synthesizer's `disc_transmission` modes
+# are printed for reference; tengri's disc visibility is the smooth
+# sigmoid mask already shown in §9f, a different mechanism, not swept here.
+# Worst `IR_BANDS` ratio for the torus sweep below.
+
+# %%
+m_torus_i = SEDModel.build(
+    ssp_data=ssp,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    agn={
+        "type": "composable",
+        "disc": {"type": "none"},
+        "torus": {
+            "type": "simple",
+            "agn_T_torus": Uniform(300.0, 2000.0),
+            "agn_theta_torus": Fixed(THETA_TORUS),
+            "agn_torus_frac": Fixed(_TORUS_FRAC),
+        },
+        "nlr": {"type": "none"},
+        "blr": {"type": "none"},
+        "agn_log_lbol": Fixed(agn_log_lbol),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+_torus9i_cases = []
+for T_torus in (500.0, 1000.0, 1500.0):
+    r = S.agn_unified(
+        mass_msun=BH_MASS,
+        eddington=BH_EDD,
+        inclination_deg=BH_INC,
+        metallicity=BH_Z,
+        cf_nlr=CF,
+        cf_blr=CF,
+        theta_torus_deg=THETA_TORUS,
+        torus_temperature_k=T_torus,
+        components=("torus",),
+    )
+    w_s9i, L_s9i = r["torus"]
+    st9i = m_torus_i.predict_state({"agn_T_torus": T_torus})
+    _torus9i_cases.append(
+        (f"T={T_torus:g}K", w_s9i, L_s9i, np.asarray(st9i.wave), np.asarray(st9i.derived["sed_agn"]))
+    )
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _torus9i_cases:
+    _assert_comparable(_L_ref, _L_t, name=f"§9i torus {_label}")
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    _torus9i_cases, ref_label="Synthesizer", title="§9i Torus temperature sweep", xlim=(1e3, 1e7)
+)
+save_fig("synthesizer_09i_torus_temp.png")
+for label, w_ref, L_ref, w_t, L_t in _torus9i_cases:
+    L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
+    V.print_filter_table(
+        V.filter_rows(w_ref, L_t_on_ref, L_ref, filters=V.IR_BANDS),
+        ref_name="Synthesizer",
+        title=f"§9i torus {label}",
+        compact=True,
+    )
+
+m_nlr_i = SEDModel.build(
+    ssp_data=ssp,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    agn={
+        "type": "composable",
+        "disc": {"type": "kubota_done", "agn_log_mbh": Fixed(float(np.log10(BH_MASS)))},
+        "torus": {"type": "none"},
+        "nlr": {"type": "synthesizer_spectra", "agn_nlr_cf": Uniform(0.0, 1.0)},
+        "blr": {"type": "none"},
+        "agn_log_lbol": Fixed(agn_log_lbol),
+        "agn_cos_inc": Fixed(BH_COS_INC),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL,
+    redshift=Fixed(0.0),
+)
+_w_disc_i, _L_disc_i = _agn_grammar(torus="none")
+
+_nlr9i_rows = []
+_nlr9i_cases = []
+for cf_nlr in (0.05, 0.1, 0.3):
+    r = S.agn_unified(
+        mass_msun=BH_MASS,
+        eddington=BH_EDD,
+        inclination_deg=BH_INC,
+        metallicity=BH_Z,
+        cf_nlr=cf_nlr,
+        cf_blr=CF,
+        theta_torus_deg=THETA_TORUS,
+        components=("nlr",),
+    )
+    w_s9i, L_s9i = r["nlr"]
+    st9i = m_nlr_i.predict_state({"agn_nlr_cf": cf_nlr})
+    w_t9i = np.asarray(st9i.wave)
+    L_t9i = np.asarray(st9i.derived["sed_agn"]) - np.interp(w_t9i, _w_disc_i, _L_disc_i)
+    _nlr9i_cases.append((f"cf_nlr={cf_nlr:g}", w_s9i, L_s9i, w_t9i, L_t9i))
+
+    def _peak9i(w, L, w0, half=15.0):
+        m_ = (w >= w0 - half) & (w <= w0 + half)
+        return float(np.nanmax(L[m_])) if m_.any() else float("nan")
+
+    o3hb_t9i = _peak9i(w_t9i, L_t9i, 5006.84) / _peak9i(w_t9i, L_t9i, 4861.33)
+    o3hb_s9i = _peak9i(w_s9i, L_s9i, 5006.84) / _peak9i(w_s9i, L_s9i, 4861.33)
+    hb_t9i = _peak9i(w_t9i, L_t9i, 4861.33)
+    _nlr9i_rows.append((cf_nlr, o3hb_t9i, o3hb_s9i, hb_t9i))
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _nlr9i_cases:
+    _assert_comparable(_L_ref, np.clip(_L_t, 0.0, None), name=f"§9i NLR {_label}")
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    _nlr9i_cases,
+    ref_label="Synthesizer",
+    title="§9i NLR covering-factor sweep",
+    xlim=(1000.0, 10000.0),
+    logy=True,
+    ratio_ylim=(0.0, 2.0),
+)
+save_fig("synthesizer_09i_nlr_cf.png")
+
+print("\n  §9i NLR covering-factor sweep ([O III]/Hβ ratio is cf-invariant by construction)")
+print(f"  {'cf_nlr':>7} {'[OIII]/Hb t':>12} {'[OIII]/Hb s':>12} {'Hb tengri':>11}")
+for cf_nlr, o3hb_t9i, o3hb_s9i, hb_t9i in _nlr9i_rows:
+    print(f"  {cf_nlr:>7.2f} {o3hb_t9i:>12.2f} {o3hb_s9i:>12.2f} {hb_t9i:>11.2e}")
+
+print(
+    "§9i Synthesizer disc_transmission modes: escaped, none, nlr, blr, random, "
+    "weighted_combination (default) — tengri's inclination mask is a separate, "
+    "differentiable mechanism (§9f), not swept against these."
+)
 
 
 # %% [markdown]
@@ -1425,26 +2122,56 @@ _, T_s_madau = S.igm_transmission(redshift=Z_IGM, model="madau96", wave_obs_aa=w
 T_t_inoue = np.asarray(tengri.igm_transmission(jnp.asarray(w_obs), float(Z_IGM)))
 T_t_madau = np.asarray(igm_transmission_madau(jnp.asarray(w_obs), np.asarray(Z_IGM)))
 
-fig, ax = plt.subplots(1, 1, figsize=(10, 5))
-ax.plot(w_obs, T_s_inoue, "C0-", linewidth=2.0, label=f"Synthesizer Inoue14, z={Z_IGM:g}")
-ax.plot(w_obs, T_t_inoue, "k--", linewidth=1.0, label="tengri Inoue14")
-ax.plot(w_obs, T_s_madau, "C1-", linewidth=2.0, alpha=0.7, label="Synthesizer Madau96")
-ax.plot(w_obs, T_t_madau, "C3:", linewidth=1.2, label="tengri Madau")
-ax.set_xlabel(r"observed $\lambda$ [Å]")
-ax.set_ylabel(r"IGM transmission $T(\lambda, z)$")
-ax.set_xlim(3000, 8000)
-ax.set_ylim(0, 1.05)
-ax.set_title(f"IGM transmission at z = {Z_IGM:g}")
-ax.legend(fontsize=9)
-ax.grid(True, alpha=0.3)
-fig.tight_layout()
-save_fig("synthesizer_12_igm.png")
-
 _win = (w_obs >= (1 + Z_IGM) * 950) & (w_obs <= (1 + Z_IGM) * 1216)
 _diff = np.abs(T_t_inoue[_win] - T_s_inoue[_win])
 print(
     f"§12 Inoue14 IGM at z={Z_IGM:g}: "
     f"max |Δ| = {_diff.max():.3e}, median |Δ| = {np.median(_diff):.3e}"
+)
+
+
+# %% [markdown]
+# ### §12b z sweep
+#
+# Inoue+2014 and Madau+1995 at z = 2, 3, 5, 7, each evaluated on a shared
+# rest-frame grid (700-1300 Å, mapped through `(1+z)` to the observed frame
+# per model) so every redshift reads on one axis. Madau+1995's coarser
+# absorber statistics depart further from Inoue+2014 as the Lyman forest
+# deepens with z; both codes agree on Inoue+2014 to numerical precision at
+# every z. Worst window deviation in the rest-frame 850-1216 Å Lyman range
+# printed below.
+
+# %%
+_wave_rest_igm = np.linspace(700.0, 1300.0, 800)
+_igm_cases = []
+for z_node in (2.0, 3.0, 5.0, 7.0):
+    _wave_obs_igm = _wave_rest_igm * (1.0 + z_node)
+    _, T_s_i = S.igm_transmission(redshift=z_node, model="inoue14", wave_obs_aa=_wave_obs_igm)
+    _, T_s_m = S.igm_transmission(redshift=z_node, model="madau96", wave_obs_aa=_wave_obs_igm)
+    T_t_i = np.asarray(tengri.igm_transmission(jnp.asarray(_wave_obs_igm), float(z_node)))
+    T_t_m = np.asarray(igm_transmission_madau(jnp.asarray(_wave_obs_igm), np.asarray(z_node)))
+    _igm_cases.append((f"z={z_node:g} Inoue14", _wave_rest_igm, T_s_i, _wave_rest_igm, T_t_i))
+    _igm_cases.append((f"z={z_node:g} Madau", _wave_rest_igm, T_s_m, _wave_rest_igm, T_t_m))
+
+for _label, _w_ref, _L_ref, _w_t, _L_t in _igm_cases:
+    _assert_comparable(_L_ref + 1e-6, _L_t + 1e-6, name=f"§12b {_label}")
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    _igm_cases,
+    ref_label="Synthesizer",
+    title="§12b IGM transmission, z sweep",
+    x_of_wave=lambda w: w,
+    xlabel=r"rest-frame $\lambda$ [Å]",
+    ylabel=r"$T(\lambda, z)$",
+    logy=False,
+    ratio_ylim=(0.0, 2.0),
+)
+save_fig("synthesizer_12b_z_sweep.png")
+
+V.print_window_table(
+    V.window_rows(_igm_cases, lo=850.0, hi=1216.0),
+    ref_name="Synthesizer",
+    title="§12b IGM transmission, rest-frame 850-1216 Å",
 )
 
 
@@ -1525,7 +2252,20 @@ plt.show()
 # (§9c, §9d) draw from the same Cloudy grids, though spectra differ in line
 # representation. Where codes use independent physics — accretion disc (§9a),
 # torus (§9e), and disc–torus geometry (§9f, Synthesizer's hard mask vs
-# tengri's smooth sigmoid) — the comparison is shape and amplitude.
+# tengri's smooth sigmoid) — the comparison is shape and amplitude. The sweep
+# sections extend six of these comparisons across parameter families rather
+# than single points:
+#
+# | Block | § | Cases | Worst tengri/Synthesizer | Where |
+# |---|---|---|---|---|
+# | Parametric SFH | §2b | 7 | 36.9 % of peak (LogNormal tail, different functional form) | SFR(t) window |
+# | Attenuation laws | §4b | 9 | 2.04x (MWN18 vs the z-evolving narayanan_z at z=0) | A(λ)/A_V window |
+# | DL07/DL14 grid | §6b | 6 | 1.23x median (qpah=2.5%, Umin=5) | IR_BANDS |
+# | Analytic emitters | §6b | 6 | 170x at WISE W1 (mbb's β_ir vs an unmodified blackbody) | IR_BANDS |
+# | Nebular logU/Z/f_esc | §8b | 12 | 3.98x ([O III]/Hβ, Z=0.004, logU=-1.5) | line ratios |
+# | AGN torus temperature | §9i | 3 | 0.24x median (normalization offset, shape tracks T) | IR_BANDS |
+# | AGN NLR covering factor | §9i | 3 | 1.0x ([O III]/Hβ, covering fraction is ratio-invariant) | line ratio |
+# | IGM z sweep | §12b | 8 | large at z=7 (both Madau curves near zero in the deep forest) | T(λ) window, 850-1216 Å |
 
 # %% [markdown]
 # **Verification Status:** PARTIAL (3/16) — Synthesizer parity
@@ -1542,7 +2282,12 @@ plt.show()
 # * Feltre et al. 2016, MNRAS 456, 3354 — AGN narrow-line-region grids
 # * Nenkova et al. 2008, ApJ 685, 160 — clumpy torus
 # * Calzetti et al. 2000, ApJ 533, 682 — starburst attenuation
-# * Draine & Li 2007, ApJ 657, 810 — dust IR emission
+# * Draine & Li 2007, ApJ 657, 810; Draine et al. 2014, ApJ 780, 172 — DL07/DL14
+# * Weingartner & Draine 2001 (ApJ 548, 296); Draine 2003 (ApJ 598, 1017);
+#   Hensley & Draine 2023 (ApJ 948, 55) — WD01/D03/HD23 grains
+# * Narayanan et al. 2018, ApJ 869, 70 — MWN18 attenuation
+# * Li et al. 2008, ApJ 685, 1046 — Li08 attenuation
+# * Casey 2012, MNRAS 425, 3094 — Casey12 dust IR
 # * Inoue et al. 2014, MNRAS 442, 1805 — IGM attenuation
 # * Madau 1995, ApJ 441, 18 — IGM absorption
 # * Li et al. 2025 — Cue nebular emulator
