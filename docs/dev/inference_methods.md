@@ -1617,10 +1617,13 @@ afterward. Implementation: `tengri.inference.mass_profile`.
 
 ### The math
 
-Photometry is linear in `M = 10**log_total_mass`: `flux_i(theta, M) = M * f_i(theta)`
-for filter `i`, with `f_i(theta)` the flux per unit mass at the other `D - 1`
-parameters. Under the Gaussian photometric likelihood this makes chi-squared an exact
-quadratic in `M`:
+Every channel tengri fits is linear in `M = 10**log_total_mass`: photometric fluxes and
+spectral pixels both satisfy `f_i(theta, M) = M * f_i(theta)` for a data point `i`, with
+`f_i(theta)` the model prediction per unit mass at the other `D - 1` parameters. Under a
+Gaussian likelihood this makes chi-squared an exact quadratic in `M`, summed over the
+FULL data vector `d = (photometry, spectrum)` (photometry alone, spectroscopy alone, or
+their concatenation for `data_type="joint"`, photometry-then-spectrum -- the order
+`tests/regression/bug/test_bug_1366_joint_data_record.py` pins):
 
 ```
 chi2(M) = chi2_min + A * (M - M*)^2
@@ -1656,16 +1659,23 @@ conditional mode `ell* = log10(M*)` for `method="map"`.
 
 `profile_mass` requires, checked at `Fitter` construction:
 
-- photometry-only data (`data_type == "photometry"`), no spectroscopy channel;
+- `data_type` one of `"photometry"`, `"spectroscopy"`, or `"joint"` -- any
+  concatenation these fitter data types assemble (photometry, spectroscopy, or their
+  photometry-then-spectrum concatenation), scored via the same prediction the
+  unprofiled Gaussian likelihood uses (`loss_functions._build_prediction`);
 - no emission-line channel (marginalized, fitted, or measured line fluxes), no
-  line-ratio or spectral-index channel;
-- no calibration marginalization;
+  line-ratio or spectral-index channel -- a spectrum's line fluxes are linear in `M`
+  too, but that channel carries its own likelihood plumbing and is not yet wired into
+  this module;
+- no calibration marginalization -- another block of linear parameters marginalized
+  separately, not this module's math;
 - a Gaussian likelihood (`noise_dof == 0`, no variable-noise `noise_frac_cal` model);
 - no censored data (upper/lower limits);
 - exactly one free `*_log_total_mass` parameter, with a bounded-support prior; and
-- photometry numerically linear in that parameter (two masses one dex apart, all else
-  fixed, agree to `max|flux_ratio - 10| < 1e-8`) -- a mass-independent additive
-  component (e.g. an unmasked AGN continuum) fails this and disables profiling.
+- the full data vector numerically linear in that parameter (two masses one dex apart,
+  all else fixed, agree to `max|ratio - 10| < 1e-8`) -- a mass-independent additive
+  component (e.g. an unmasked AGN continuum, on either channel) fails this and disables
+  profiling.
 
 `profile_mass="auto"` (the default on `Fitter` and `ForwardModel.fit`) engages
 profiling only when every guard passes, falling back to ordinary sampling with one

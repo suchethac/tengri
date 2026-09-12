@@ -805,6 +805,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **`profile_mass` now covers spectroscopy and joint photometry+spectroscopy fits, not
+  only photometry.** Every channel tengri fits is linear in the total stellar mass, so
+  the exact `chi2(M) = chi2_min + A*(M - M*)^2` quadratic (`tengri.inference.mass_profile`)
+  holds over the FULL data vector, not just the photometric one: `A` and `B = A*M*` are
+  now sums over whichever vector `data_type` assembles (photometry, spectroscopy, or
+  their photometry-then-spectrum concatenation for `"joint"`, the order
+  `tests/regression/bug/test_bug_1366_joint_data_record.py` pins), reusing
+  `loss_functions._build_prediction` (and its JIT-threaded SSP-grid path) so the
+  profiled statistics see exactly the vector and noise the unprofiled Gaussian
+  likelihood does. The linearity guard's two-mass probe is generalized the same way.
+  Calibration marginalization, any emission-line/line-ratio/spectral-index channel,
+  Student-t noise, a variable-noise model, and censored data remain refused
+  unconditionally (each is either its own marginalized linear block or carries its own
+  likelihood plumbing this module does not yet share); `"auto"` still steps aside
+  silently for them and an explicit `profile_mass=True` still raises naming the guard.
+  Behavioral change for spectroscopy/joint fits that satisfy every other guard: they
+  now profile the mass under `profile_mass="auto"` where they previously always sampled
+  it.
+
 - **The default inference method is `mcmc_nuts_fast`** (was `vi`): four NUTS
   chains, 150 warmup steps, no separate burn-in, 300 draws, target acceptance
   0.8, on the mass-profiled posterior with the dense metric and, when the CPU
