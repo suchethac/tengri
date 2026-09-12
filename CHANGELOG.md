@@ -123,11 +123,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The nebular component's DIG mixing no longer evaluates the DIG branch when
   the spec pins ``neb_dig_frac`` at the declared ``Fixed(0.0)`` default. A
   build-time predicate ``_dig_may_be_active(spec)`` resolves to a frozen
-  ``dig_active`` config field, threaded to all six mixing call sites (exact path:
-  cue + cloudy/cb19 continuum/lines; grid path: photometry + restband +
-  line-luminosity reconstructions). When ``dig_active=False``, the mixing core
-  skips the second evaluation entirely, returning the HII result unconditionally.
-  Measured ~50% reduction in gradient FLOPs on the default model (#2262).
+  ``dig_active`` config field, threaded to all seven mixing call sites (exact
+  path: cue + cloudy/cb19 continuum/lines; grid path: photometry + restband
+  reconstructions in ``apply``, plus ``predict_line_fluxes``'s own
+  line-luminosity reconstruction call), so a default model evaluates the
+  nebular backend once per channel instead of two, both the exact and the
+  fast-grid path. When ``dig_active=False``, the mixing core skips the second
+  evaluation entirely, returning the HII result unconditionally, not a
+  zero-weighted one. Measured gradient FLOPs of ``predict_photometry`` on the
+  #2195 fixture: the declared default is 147,434,528 against 159,926,608
+  forced active (159,926,608 / 147,434,528 = 1.085x), well short of a flat
+  50% -- the removed DIG evaluation is a small share of a
+  photometry gradient once dust attenuation and emission are in the graph, so
+  the saving scales with how much of the graph the nebular backend is, not a
+  fixed fraction. Because ``dig_active`` is resolved once from the spec at
+  build time, a call-time override of a spec-pinned ``neb_dig_frac`` (e.g.
+  passing a nonzero value through ``params`` at predict time) is not honored
+  on this path; declare the fraction ``FREE`` or ``Fixed`` at the intended
+  nonzero value instead (#2296) (#2262).
 
 - ``neb={'type': 'cb19', 'grid': <path>}`` now reaches the cb19 backend as
   ``nebular_cb19_grid_path``, the way the ``cloudy`` and ``mappings`` ``neb``

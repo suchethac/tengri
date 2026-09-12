@@ -148,18 +148,27 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         Hα/Hβ/etc. accessor, ``predict_photometry`` and ``rest_sed`` are
         bit-identical either way (#2236).
     dig_active : bool
-        Whether Diffuse Ionized Gas (DIG) mixing is active. When ``False``
-        (default, when spec pins ``neb_dig_frac`` at 0.0), the nebular backend
-        is evaluated once per channel. When ``True`` (spec has ``neb_dig_frac``
-        free or fixed nonzero), both HII and DIG components are evaluated and
-        mixed. Resolved at build time via ``_dig_may_be_active(spec)`` (#2262).
+        Whether Diffuse Ionized Gas (DIG) mixing is active. When ``False``,
+        the nebular backend is evaluated once per channel (HII only). When
+        ``True`` (the bare-dataclass default), both HII and DIG components
+        are evaluated and mixed -- the same defensive-fallback shape as
+        :attr:`cue_full_catalog`, permissive rather than silently dropping a
+        direct caller's declared physics. The grammar path
+        (:meth:`~tengri.SEDModel.build`) never relies on this default: it
+        always resolves the field explicitly via ``_dig_may_be_active(spec)``,
+        which reads ``False`` for a spec that pins ``neb_dig_frac`` at its
+        declared ``Fixed(0.0)``. A call-time override of a spec-pinned
+        ``neb_dig_frac`` (e.g. passing a nonzero value through ``params`` at
+        predict time) is not honored on this path: this field is fixed once
+        at build time and does not re-read a later runtime value (#2296)
+        (#2262).
     """
 
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
     cue_full_catalog: bool = CUE_FULL_CATALOG_DEFAULT
-    dig_active: bool = False
+    dig_active: bool = True
 
 
 @dataclass(frozen=True)
@@ -928,8 +937,13 @@ class NebularSEDComponent(TemplateThreading):
             # interp_point["neb_logU"], DIG at neb_logU + neb_dig_delta_logU),
             # mixed by neb_dig_frac -- the grid-path counterpart of the exact
             # path's mix_dig_emission/mix_dig_line_luminosities calls above.
-            # Costs nothing extra when neb_dig_frac is a Python 0.0: the
-            # short-circuit lives in dig.py's _mix_dig_backend_evaluations.
+            # Costs nothing extra at the declared Fixed(0.0) default: NOT
+            # because neb_dig_frac is a Python 0.0 here (through apply() it is
+            # always a JAX array/tracer, so that check never fires -- #2262),
+            # but because self.config.dig_active was resolved to False at
+            # build time from the spec (_dig_may_be_active), which makes
+            # _mix_dig_backend_evaluations skip the second reconstruct() call
+            # outright.
             derived_overrides["nebular_phot_lnu_precomp"] = mix_dig_grid_reconstruction(
                 reconstruct_nebular_phot,
                 log_nion,

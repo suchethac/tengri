@@ -345,8 +345,13 @@ def build_components(
     # When ``True`` (spec has ``neb_dig_frac`` free or fixed nonzero),
     # both HII and DIG nebular components are evaluated and mixed (#2262).
     # When ``False`` (spec pins ``neb_dig_frac`` at the default 0.0),
-    # only HII is evaluated. Resolved at build time by ``_dig_may_be_active(spec)``.
-    dig_active: bool = False,
+    # only HII is evaluated. Resolved at build time by
+    # ``_dig_may_be_active(spec)``. Like ``cue_full_catalog`` above, this
+    # default is a defensive fallback for a direct caller of this function:
+    # ``True`` never silently drops a caller's declared DIG physics (it costs
+    # an extra evaluation instead), where ``False`` would. The grammar path
+    # always resolves it explicitly from ``_dig_may_be_active(self.spec)``.
+    dig_active: bool = True,
     # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
     # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.
