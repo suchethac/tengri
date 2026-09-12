@@ -21,6 +21,7 @@ from tengri.inference.catalog_fitter import (
 )
 from tengri.inference.catalog_ingest import ingest_catalog
 from tengri.inference.history_ingest import ingest_histories
+from tengri.parameters.resolve import refuse_fixed_overrides
 
 __all__ = ["Catalog"]
 
@@ -976,6 +977,9 @@ class Catalog:
             n_galaxies = int(next(iter(columns.values())).shape[0])
         else:
             columns, n_galaxies = self._as_columns(param_table)
+
+        # Refuse any Fixed key in columns (#2296)
+        refuse_fixed_overrides(self.fwd.spec, columns)
 
         fixed = {
             name: np.broadcast_to(np.asarray(value), (n_galaxies,)).copy()

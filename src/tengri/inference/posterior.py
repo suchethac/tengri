@@ -29,6 +29,7 @@ import numpy as np
 
 from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri._mapping import ReadOnlyPropertyMapping
+from tengri.parameters.resolve import merge_fixed_params
 
 logger = logging.getLogger(__name__)
 
@@ -989,7 +990,8 @@ class Posterior:
         def _one(p: dict) -> dict:
             from tengri.forward.component_factory import state_to_sed_components
 
-            full_p = {**self._model.spec.get_fixed_values(), **p}
+            # Refuse any Fixed key in p (#2296)
+            full_p = merge_fixed_params(self._model.spec, p)
             state = self._model.predict_state(full_p)
             return state_to_sed_components(state)
 

@@ -5960,7 +5960,8 @@ class SEDModel:
             # JAX array here (never a Python literal), so the zero-fraction
             # short-circuit never fires on this path -- both lookups always
             # run, even at the declared ``Fixed(0.0)`` default (#2262).
-            full_params = {**self.spec.get_fixed_values(), **params}
+            # Refuse any Fixed key in params (#2296)
+            full_params = merge_fixed_params(self.spec, params)
             log_all_lums = mix_dig_grid_reconstruction(
                 reconstruct_nebular_line_log_lums,
                 log_nion,
@@ -7673,7 +7674,8 @@ class SEDModel:
                 "carries a Photometry instance."
             )
         state = self.predict_state(params)
-        full = {**self.spec.get_fixed_values(), **params}
+        # Refuse any Fixed key in params (#2296)
+        full = merge_fixed_params(self.spec, params)
         return self.observation.predict(state, full)["phot_fnu"]
 
     def _spectrum_via_state(self, params, wave_obs=None):
@@ -7736,7 +7738,8 @@ class SEDModel:
             )
 
         state = self.predict_state(params)
-        full = {**self.spec.get_fixed_values(), **params}
+        # Refuse any Fixed key in params (#2296)
+        full = merge_fixed_params(self.spec, params)
         return self.observation.predict(
             state,
             full,

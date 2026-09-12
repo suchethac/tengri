@@ -25,6 +25,7 @@ import numpy as np
 
 from tengri.forward.population import Population
 from tengri.inference._backend_registry import DEFAULT_METHOD
+from tengri.parameters.resolve import merge_fixed_params
 from tengri.protocols.component import ForwardState
 from tengri.protocols.derived_state import DerivedState
 
@@ -1316,11 +1317,12 @@ class ForwardModel:
             elif "." not in k:
                 sliced[k] = v
 
-        full: dict[str, Any] = {}
+        # Refuse any Fixed key in sliced params, then merge (#2296)
         spec = getattr(pop.sed, "spec", None)
         if spec is not None and hasattr(spec, "get_fixed_values"):
-            full.update(spec.get_fixed_values())
-        full.update(sliced)
+            full = merge_fixed_params(spec, sliced)
+        else:
+            full = dict(sliced)
         return full
 
 
