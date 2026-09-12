@@ -177,5 +177,129 @@ def test_sweep_fig_with_x_of_wave():
     plt.close(fig)
 
 
+def test_window_rows_peak_relative_tails():
+    """window_rows with rel_to='peak' should handle tails correctly."""
+    from reproduction._validation import window_rows
+
+    # Gaussian SED with tails
+    w = np.linspace(0, 10, 201)
+    L_ref = np.exp(-0.5 * ((w - 5) / 1.0) ** 2)
+    L_t = L_ref + 1e-3
+
+    cases = [("gaussian", w, L_ref, w, L_t)]
+
+    # Pointwise mode: tails will have large deviations
+    rows_point = window_rows(cases, lo=0, hi=10, rel_to="point")
+    assert len(rows_point) == 1
+    assert rows_point[0]["rel_to"] == "point"
+    assert rows_point[0]["max_abs_dev"] > 0.05  # tails blow up
+
+    # Peak mode: should give ~1e-3 max deviation
+    rows_peak = window_rows(cases, lo=0, hi=10, rel_to="peak")
+    assert len(rows_peak) == 1
+    assert rows_peak[0]["rel_to"] == "peak"
+    assert rows_peak[0]["max_abs_dev"] == pytest.approx(1e-3, rel=1e-6)
+    assert rows_peak[0]["median_ratio"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_window_rows_point_mode_unchanged():
+    """window_rows with rel_to='point' should match existing default behavior."""
+    from reproduction._validation import window_rows
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    L_t = np.array([1.1, 2.2, 1.65, 0.55])
+
+    cases = [("scaled", w_ref, L_ref, w_ref, L_t)]
+
+    # Default call (should be rel_to="point")
+    rows_default = window_rows(cases, lo=1500.0, hi=3500.0)
+    # Explicit rel_to="point"
+    rows_point = window_rows(cases, lo=1500.0, hi=3500.0, rel_to="point")
+
+    assert len(rows_default) == len(rows_point) == 1
+    assert rows_default[0]["median_ratio"] == pytest.approx(rows_point[0]["median_ratio"])
+    assert rows_default[0]["max_abs_dev"] == pytest.approx(rows_point[0]["max_abs_dev"])
+    assert rows_default[0]["x_at_max"] == pytest.approx(rows_point[0]["x_at_max"])
+    assert rows_point[0]["rel_to"] == "point"
+
+
+def test_window_rows_rejects_unknown_rel_to():
+    """window_rows should reject unknown rel_to values."""
+    from reproduction._validation import window_rows
+
+    w = np.array([1.0, 2.0, 3.0])
+    L = np.array([1.0, 2.0, 1.0])
+    cases = [("test", w, L, w, L)]
+
+    with pytest.raises(ValueError, match="rel_to must be"):
+        window_rows(cases, lo=0, hi=4, rel_to="unknown")
+
+
+def test_print_window_table_x_unit_and_peak_header(capsys):
+    """print_window_table should show x_unit and peak-specific headers."""
+    from reproduction._validation import print_window_table
+
+    # Point mode rows
+    rows_point = [
+        {
+            "label": "case_point",
+            "median_ratio": 1.0,
+            "max_abs_dev": 0.01,
+            "x_at_max": 2000.0,
+            "rel_to": "point",
+        }
+    ]
+
+    # Peak mode rows
+    rows_peak = [
+        {
+            "label": "case_peak",
+            "median_ratio": 1.0,
+            "max_abs_dev": 0.001,
+            "x_at_max": 5000.0,
+            "rel_to": "peak",
+        }
+    ]
+
+    # Test default x_unit (should be "Å")
+    print_window_table(rows_point, ref_name="ref", title="Point Mode")
+    captured = capsys.readouterr()
+    assert "x at max [Å]" in captured.out
+    assert "max |Δ| [%]" in captured.out
+
+    # Test custom x_unit
+    print_window_table(rows_point, ref_name="ref", title="Custom Unit", x_unit="yr")
+    captured = capsys.readouterr()
+    assert "x at max [yr]" in captured.out
+
+    # Test peak mode header
+    print_window_table(rows_peak, ref_name="ref", title="Peak Mode")
+    captured = capsys.readouterr()
+    assert "max |Δ| [% peak]" in captured.out
+    assert "x at max [Å]" in captured.out
+
+    # Test x_scale parameter with large values
+    rows_gyr = [
+        {
+            "label": "case_gyr",
+            "median_ratio": 1.0,
+            "max_abs_dev": 0.01,
+            "x_at_max": 4.95e9,  # Large value to be scaled to Gyr
+            "rel_to": "point",
+        }
+    ]
+    print_window_table(rows_gyr, ref_name="ref", title="Scaled", x_unit="Gyr", x_scale=1e-9)
+    captured = capsys.readouterr()
+    assert "x at max [Gyr]" in captured.out
+    assert "4.95" in captured.out
+    assert "4949758794" not in captured.out  # Should not show unscaled value
+
+    # Test mixed rows raise ValueError
+    mixed_rows = rows_point + rows_peak
+    with pytest.raises(ValueError, match="same rel_to mode"):
+        print_window_table(mixed_rows, ref_name="ref", title="Mixed")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

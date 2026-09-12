@@ -1069,6 +1069,7 @@ def window_rows(
     *,
     lo: float,
     hi: float,
+    rel_to: str = "point",
 ) -> list[dict]:
     """Compute ratio statistics within a wavelength window for each case.
 
@@ -1083,6 +1084,12 @@ def window_rows(
         Each tuple is ``(label, w_ref, L_ref, w_t, L_t)`` as in :func:`sweep_fig`.
     lo, hi : float
         Wavelength window bounds [Å].
+    rel_to : str, optional
+        Deviation calculation mode. Either "point" (default) or "peak".
+
+        - "point": max_abs_dev = max(|L_t/L_ref - 1|); median_ratio over all finite ratios.
+        - "peak": Compute peak = max(L_ref[mask]); max_abs_dev = max(|L_t - L_ref|[mask]) / peak;
+          median_ratio over points where L_ref >= 0.01 * peak.
 
     Returns
     -------
@@ -1090,13 +1097,18 @@ def window_rows(
         One dict per case with keys:
 
         - ``"label"`` : str
+        - ``"rel_to"`` : str
+            Mode used ("point" or "peak").
         - ``"median_ratio"`` : float
-            Median of tengri/reference ratios in the window.
+            Median of tengri/reference ratios (or relative difference) in the window.
         - ``"max_abs_dev"`` : float
-            Maximum of |ratio - 1| in the window.
+            Maximum absolute deviation in the window.
         - ``"x_at_max"`` : float
             Wavelength where max_abs_dev occurs.
     """
+    if rel_to not in ("point", "peak"):
+        raise ValueError(f"rel_to must be 'point' or 'peak', got {rel_to!r}")
+
     rows = []
     for label, w_ref, L_ref, w_t, L_t in cases:
         # Regrid tengri onto reference grid
@@ -1105,29 +1117,70 @@ def window_rows(
         else:
             L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
 
-        ratio = np.divide(L_t_on_ref, L_ref, where=(L_ref > 0), out=np.full_like(L_ref, np.nan))
-
         # Filter to wavelength window
         in_window = (w_ref >= lo) & (w_ref <= hi)
-        ratio_in_window = ratio[in_window]
+        L_ref_in_window = L_ref[in_window]
+        L_t_in_window = L_t_on_ref[in_window]
         w_in_window = w_ref[in_window]
 
-        # Compute statistics
-        finite_ratios = ratio_in_window[np.isfinite(ratio_in_window)]
-        if len(finite_ratios) == 0:
-            median_ratio = float("nan")
-            max_abs_dev = float("nan")
-            x_at_max = float("nan")
-        else:
-            median_ratio = float(np.median(finite_ratios))
-            deviations = np.abs(finite_ratios - 1.0)
-            max_abs_dev = float(np.max(deviations))
-            idx_max = np.argmax(deviations)
-            x_at_max = float(w_in_window[np.isfinite(ratio_in_window)][idx_max])
+        # Compute statistics based on mode
+        if rel_to == "point":
+            out_array = np.full_like(L_ref_in_window, np.nan)
+            ratio = np.divide(
+                L_t_in_window,
+                L_ref_in_window,
+                where=(L_ref_in_window > 0),
+                out=out_array,
+            )
+            finite_ratios = ratio[np.isfinite(ratio)]
+
+            if len(finite_ratios) == 0:
+                median_ratio = float("nan")
+                max_abs_dev = float("nan")
+                x_at_max = float("nan")
+            else:
+                median_ratio = float(np.median(finite_ratios))
+                deviations = np.abs(finite_ratios - 1.0)
+                max_abs_dev = float(np.max(deviations))
+                idx_max = np.argmax(deviations)
+                x_at_max = float(w_in_window[np.isfinite(ratio)][idx_max])
+
+        else:  # rel_to == "peak"
+            # Find peak in window
+            valid_mask = L_ref_in_window > 0
+            if not np.any(valid_mask):
+                median_ratio = float("nan")
+                max_abs_dev = float("nan")
+                x_at_max = float("nan")
+            else:
+                peak = float(np.max(L_ref_in_window[valid_mask]))
+
+                # Absolute deviation
+                abs_diffs = np.abs(L_t_in_window - L_ref_in_window)
+                max_abs_dev = float(np.max(abs_diffs) / peak)
+                idx_max = np.argmax(abs_diffs)
+                x_at_max = float(w_in_window[idx_max])
+
+                # Median ratio over significant points
+                threshold = 0.01 * peak
+                significant_mask = (L_ref_in_window >= threshold) & (
+                    L_ref_in_window > 0
+                )
+                if np.any(significant_mask):
+                    L_t_sig = L_t_in_window[significant_mask]
+                    L_ref_sig = L_ref_in_window[significant_mask]
+                    out_array = np.full_like(L_ref_sig, np.nan)
+                    ratio_significant = np.divide(
+                        L_t_sig, L_ref_sig, where=True, out=out_array
+                    )
+                    median_ratio = float(np.median(ratio_significant))
+                else:
+                    median_ratio = float("nan")
 
         rows.append(
             {
                 "label": label,
+                "rel_to": rel_to,
                 "median_ratio": median_ratio,
                 "max_abs_dev": max_abs_dev,
                 "x_at_max": x_at_max,
@@ -1143,6 +1196,8 @@ def print_window_table(
     ref_name: str,
     title: str,
     tol: float = 0.05,
+    x_unit: str = "Å",
+    x_scale: float = 1.0,
 ) -> None:
     """Print wavelength-window statistics table.
 
@@ -1159,21 +1214,37 @@ def print_window_table(
         Table heading.
     tol : float, optional
         Deviation threshold for the check flag. Default 0.05.
+    x_unit : str, optional
+        Unit label for the x-axis position column. Default "Å".
+    x_scale : float, optional
+        Scale factor to apply to x_at_max values. Default 1.0.
     """
+    # Determine rel_to mode and validate consistency
+    rel_to_modes = set()
+    for row in rows:
+        mode = row.get("rel_to", "point")
+        rel_to_modes.add(mode)
+
+    if len(rel_to_modes) > 1:
+        raise ValueError(f"All rows must have the same rel_to mode. Found: {rel_to_modes}")
+
+    is_peak_mode = "peak" in rel_to_modes
+    dev_header = "max |Δ| [% peak]" if is_peak_mode else "max |Δ| [%]"
+
     print(f"\n  {title}")
-    print(f"  {'case':<20} {'median ×':>12} {'max |Δ| [%]':>15} {'x at max [A]':>15}")
-    print("  " + "-" * 68)
+    print(f"  {'case':<26} {'median ×':>12} {dev_header:>15} {'x at max [' + x_unit + ']':>15}")
+    print("  " + "-" * 74)
     for row in rows:
         label = row["label"]
         median = row["median_ratio"]
         max_dev = row["max_abs_dev"]
-        x_max = row["x_at_max"]
+        x_max = row["x_at_max"] * x_scale
 
         flag = ""
         if np.isfinite(max_dev) and max_dev > tol:
             flag = "  <-- check"
 
         if np.isfinite(median) and np.isfinite(max_dev):
-            print(f"  {label:<20} {median:>12.3f}x {max_dev * 100:>14.1f}% {x_max:>15.1f}{flag}")
+            print(f"  {label:<26} {median:>12.3f}x {max_dev * 100:>14.1f}% {x_max:>15.2f}{flag}")
         else:
-            print(f"  {label:<20} {'--':>12} {'--':>15} {'--':>15}{flag}")
+            print(f"  {label:<26} {'--':>12} {'--':>15} {'--':>15}{flag}")
