@@ -72,6 +72,7 @@ __all__ = [
     "band_average",
     "convention_sensitivity",
     "filter_rows",
+    "filter_rows_native",
     "line_rows",
     "load_filter",
     "pivot_wavelength",
@@ -310,6 +311,47 @@ def band_average(
     return float(np.trapezoid(L_on_f * wgt, fw) / denom)
 
 
+def _filter_rows_inner(
+    w_t: np.ndarray,
+    L_t: np.ndarray,
+    w_ref: np.ndarray,
+    L_ref: np.ndarray,
+    *,
+    filters: tuple[tuple[str, str], ...],
+    weight: str,
+) -> list[tuple[str, float, float, float, float]]:
+    """Shared logic for filter_rows and filter_rows_native.
+
+    Parameters
+    ----------
+    w_t : array_like, shape (n_wave_t,)
+        Rest-frame wavelength grid for tengri [Angstrom].
+    L_t : array_like, shape (n_wave_t,)
+        tengri :math:`L_\\nu` [erg/s/Hz] on ``w_t``.
+    w_ref : array_like, shape (n_wave_ref,)
+        Rest-frame wavelength grid for reference [Angstrom].
+    L_ref : array_like, shape (n_wave_ref,)
+        Reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
+    filters : tuple of (str, str)
+        ``(file stem, label)`` pairs.
+    weight : {"photon", "energy"}
+        Bandpass weight to pass to :func:`band_average`.
+
+    Returns
+    -------
+    list of tuple
+        ``(label, pivot_um, L_t_band, L_ref_band, ratio)`` per filter.
+    """
+    rows = []
+    for stem, label in filters:
+        fw, ft = load_filter(stem)
+        a = band_average(w_t, L_t, fw, ft, weight=weight)
+        b = band_average(w_ref, L_ref, fw, ft, weight=weight)
+        ratio = a / b if (np.isfinite(a) and np.isfinite(b) and b > 0) else float("nan")
+        rows.append((label, pivot_wavelength(fw, ft) / 1e4, a, b, ratio))
+    return rows
+
+
 def filter_rows(
     w_ref: np.ndarray,
     L_t: np.ndarray,
@@ -322,6 +364,10 @@ def filter_rows(
 
     Both spectra must already share ``w_ref`` -- regrid before calling, so the
     identical operation reaches both sides.
+
+    For line-rich spectra on fine grids compared against coarse reference grids,
+    see :func:`filter_rows_native`, which band-averages each side on its own grid
+    and avoids aliasing from interpolation.
 
     Parameters
     ----------
@@ -341,14 +387,58 @@ def filter_rows(
         order given. Uncovered bands carry ``nan`` and are kept in the list so
         the caller can show the gap.
     """
-    rows = []
-    for stem, label in filters:
-        fw, ft = load_filter(stem)
-        a = band_average(w_ref, L_t, fw, ft, weight=weight)
-        b = band_average(w_ref, L_ref, fw, ft, weight=weight)
-        ratio = a / b if (np.isfinite(a) and np.isfinite(b) and b > 0) else float("nan")
-        rows.append((label, pivot_wavelength(fw, ft) / 1e4, a, b, ratio))
-    return rows
+    return _filter_rows_inner(w_ref, L_t, w_ref, L_ref, filters=filters, weight=weight)
+
+
+def filter_rows_native(
+    w_t: np.ndarray,
+    L_t: np.ndarray,
+    w_ref: np.ndarray,
+    L_ref: np.ndarray,
+    *,
+    filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
+    weight: str = "photon",
+) -> list[tuple[str, float, float, float, float]]:
+    """Band-average each SED on its own grid and form the ratio.
+
+    Each spectrum is band-averaged independently on its native wavelength grid,
+    avoiding interpolation artifacts that arise when a fine-gridded spectrum
+    (especially one with narrow emission lines) is resampled onto a coarse grid
+    before band-averaging.
+
+    Parameters
+    ----------
+    w_t : array_like, shape (n_wave_t,)
+        Rest-frame wavelength grid for tengri [Angstrom].
+    L_t : array_like, shape (n_wave_t,)
+        tengri :math:`L_\\nu` [erg/s/Hz] on ``w_t``.
+    w_ref : array_like, shape (n_wave_ref,)
+        Rest-frame wavelength grid for reference [Angstrom].
+    L_ref : array_like, shape (n_wave_ref,)
+        Reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
+    filters : tuple of (str, str), optional
+        ``(file stem, label)`` pairs. Defaults to :data:`BROAD_FILTERS`.
+    weight : {"photon", "energy"}, optional
+        Bandpass weight; defaults to ``"photon"`` (tengri, DSPS, FSPS,
+        prospector). Both sides are integrated with the same weight and filter
+        curves.
+
+    Returns
+    -------
+    list of tuple
+        ``(label, pivot_um, L_t_band, L_ref_band, ratio)`` per filter, in the
+        order given. Uncovered bands carry ``nan`` and are kept in the list so
+        the caller can show the gap.
+
+    Notes
+    -----
+    Use this instead of :func:`filter_rows` when comparing a line-rich spectrum
+    on a fine grid (e.g., tengri with nebular emission) against a coarse
+    reference grid. Interpolating the fine spectrum onto the coarse grid before
+    band-averaging aliases narrow lines and distorts the band values; this
+    function avoids that by computing band averages on each side's native grid.
+    """
+    return _filter_rows_inner(w_t, L_t, w_ref, L_ref, filters=filters, weight=weight)
 
 
 def print_filter_table(

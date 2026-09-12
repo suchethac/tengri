@@ -345,5 +345,134 @@ def test_print_window_table_x_unit_and_peak_header(capsys):
         print_window_table(mixed_rows, ref_name="ref", title="Mixed")
 
 
+def test_filter_rows_native_preserves_a_narrow_line_on_a_coarse_grid():
+    """filter_rows_native should preserve a narrow line when grids differ."""
+    from reproduction._validation import (
+        BROAD_FILTERS,
+        band_average,
+        filter_rows,
+        filter_rows_native,
+        load_filter,
+    )
+
+    # Fine grid covering SDSS g filter range (3630-5830 Å, with margin)
+    w_fine = np.arange(3500.0, 6000.0, 0.5)
+    sigma = 2.0  # Å
+    peak_wavelength = 5007.0
+    ew = 200.0  # Angstrom equivalent width
+    # For a Gaussian: integral = peak * sigma * sqrt(2*pi) = ew
+    # So: peak = ew / (sigma * sqrt(2*pi))
+    line_peak = ew / (sigma * np.sqrt(2 * np.pi))
+    line = line_peak * np.exp(-0.5 * ((w_fine - peak_wavelength) / sigma) ** 2)
+    L_fine = 1.0 + line  # Flat continuum + line (tengri side)
+
+    # Coarse grid: same range, much coarser spacing (reference side)
+    w_coarse = np.arange(3500.0, 6000.0, 25.0)
+    L_coarse = np.ones_like(w_coarse)  # Just continuum, no line on reference
+
+    # Get SDSS g filter (covers 5007 Å)
+    g_filter = BROAD_FILTERS[3]  # SDSS g
+    assert g_filter[1] == "SDSS g"
+    fw, ft = load_filter(g_filter[0])
+
+    # Demonstrate the aliasing problem: when you interpolate L_fine to coarse grid
+    # and band-average, you lose the line information
+    L_fine_interp_to_coarse = np.interp(w_coarse, w_fine, L_fine)
+    band_via_interp = band_average(
+        w_coarse, L_fine_interp_to_coarse, fw, ft, weight="photon"
+    )
+    band_coarse_ref = band_average(w_coarse, L_coarse, fw, ft, weight="photon")
+
+    # Band-average on fine grid (correct result)
+    band_on_fine = band_average(w_fine, L_fine, fw, ft, weight="photon")
+    band_coarse_ref_direct = band_average(w_coarse, L_coarse, fw, ft, weight="photon")
+
+    # The ratio via interpolation + band-average should be closer to 1.0 than
+    # it should be
+    if np.isfinite(band_via_interp) and np.isfinite(band_coarse_ref) and band_coarse_ref > 0:
+        ratio_via_interp = band_via_interp / band_coarse_ref
+        # The ratio should be closer to 1.0 than the true ratio
+        if (
+            np.isfinite(band_on_fine)
+            and np.isfinite(band_coarse_ref_direct)
+            and band_coarse_ref_direct > 0
+        ):
+            ratio_true = band_on_fine / band_coarse_ref_direct
+            # Aliasing error: the interpolated ratio should be significantly smaller
+            # than the true ratio
+            aliasing_underestimation = (ratio_true - ratio_via_interp) / ratio_true
+            assert (
+                aliasing_underestimation > 0.10
+            ), f"Expected >10% underestimation, got {aliasing_underestimation:.1%}"
+
+    # Now test filter_rows_native: should preserve the line and give correct ratio
+    rows_native = filter_rows_native(
+        w_fine, L_fine, w_coarse, L_coarse, filters=(g_filter,), weight="photon"
+    )
+    assert len(rows_native) == 1
+    label, _lambda_eff_um, _L_t_band, _L_ref_band, ratio_native = rows_native[0]
+    assert label == "SDSS g"
+    # filter_rows_native should give the same result as band-averaging each on its own grid
+    # So it should match band_on_fine / band_coarse_ref_direct
+    if np.isfinite(band_on_fine) and np.isfinite(band_coarse_ref_direct):
+        expected_ratio = band_on_fine / band_coarse_ref_direct
+        assert ratio_native == pytest.approx(expected_ratio, rel=1e-12)
+        # And it should be significantly larger than the interpolated ratio
+        assert ratio_native > ratio_via_interp * 1.05  # At least 5% larger
+
+    # Also verify that filter_rows (interpolated method) gives a worse result
+    rows_bad = filter_rows(
+        w_coarse, L_fine_interp_to_coarse, L_coarse, filters=(g_filter,), weight="photon"
+    )
+    assert len(rows_bad) == 1
+    _label, _lambda_eff_um, _L_t, _L_ref, ratio_bad = rows_bad[0]
+    # filter_rows result should be significantly smaller than filter_rows_native
+    assert ratio_bad < ratio_native * 0.95
+
+
+def test_filter_rows_native_matches_filter_rows_on_a_shared_grid():
+    """filter_rows_native should match filter_rows when both use the same grid."""
+    from reproduction._validation import (
+        BROAD_FILTERS,
+        filter_rows,
+        filter_rows_native,
+    )
+
+    # Create a smooth spectrum on one grid
+    w = np.linspace(1000.0, 20000.0, 500)
+    L_t = 1.0 + 0.1 * np.sin(2 * np.pi * w / 5000.0)  # Smooth variation
+    L_ref = L_t * 1.05  # Reference is slightly different
+
+    # Use first 5 broad filters
+    test_filters = BROAD_FILTERS[:5]
+
+    # Call filter_rows (both on shared grid w)
+    rows_shared = filter_rows(w, L_t, L_ref, filters=test_filters, weight="photon")
+
+    # Call filter_rows_native (both on same grid w)
+    rows_native = filter_rows_native(w, L_t, w, L_ref, filters=test_filters, weight="photon")
+
+    # Both should return same number of rows
+    assert len(rows_shared) == len(rows_native) == len(test_filters)
+
+    # Each row should match to very high precision
+    for i, (row_shared, row_native) in enumerate(zip(rows_shared, rows_native)):
+        label_s, piv_s, L_t_s, L_ref_s, ratio_s = row_shared
+        label_n, piv_n, L_t_n, L_ref_n, ratio_n = row_native
+
+        assert label_s == label_n, f"Row {i}: label mismatch"
+        assert piv_s == pytest.approx(piv_n, rel=1e-12)
+        assert L_t_s == pytest.approx(L_t_n, rel=1e-12)
+        assert L_ref_s == pytest.approx(L_ref_n, rel=1e-12)
+
+        # Ratio match should also be excellent (both NaN or both finite and equal)
+        if np.isnan(ratio_s) and np.isnan(ratio_n):
+            pass  # Both NaN is fine
+        elif np.isfinite(ratio_s) and np.isfinite(ratio_n):
+            assert ratio_s == pytest.approx(ratio_n, rel=1e-12)
+        else:
+            raise AssertionError(f"Row {i}: one ratio is NaN, the other is not")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
