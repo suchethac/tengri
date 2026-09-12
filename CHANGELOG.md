@@ -800,20 +800,22 @@
 ### Fixed
 
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
-  from standing in for declared parameter defaults) scope widened from
-  ``dust/emission/`` to the full ``dust/`` tree (#2265): attenuation laws,
-  component aggregation, and parameter application all sweep now. Three
-  long-drifted sites in attenuation and emission closures aligned with their
-  declarations: ``kriek_conroy(dust_bump_strength=1.0)`` now reads
-  ``Fixed(0.0)``; ``tea(dust_delta=-0.2)`` now reads ``Fixed(0.0)``
-  (direct-call-only changes, the grammar path supplied the declared value all
-  along); ``schreiber2018_tabulated(dust_T=30.0)`` now reads the component's
-  class-level ``T=Fixed(25.0)`` via a named constant
-  ``SCHREIBER_T_K_DEFAULT``. ``astrodust_emission()`` gains a ``qpah``
-  declaration on ``AstrodustIRSEDComponent`` (``Fixed(3.79)``, the Hensley &
-  Draine 2023 grid fiducial) and the closure reads it via
-  ``ASTRODUST_QPAH_DEFAULT``. No changes to the grammar or precompute path
-  (``SEDModel.build`` always supplies declared values). (#2265, #2261)
+  from standing in for declared parameter defaults) had two blind spots, both
+  fixed: it was scoped to ``dust/emission/`` only, and it never saw negative
+  or explicit-positive defaults at all -- ``ast.parse`` renders ``-3.0`` as
+  ``UnaryOp(USub, Constant)``, which the bare ``ast.Constant`` gate skipped.
+  The no-argument run now covers every swept tree (``dust/emission``,
+  ``radio``, ``stellar``, ``igm``; the rest join as #2297's rulings land),
+  and all closure defaults in radio, stellar, and igm read their values
+  through ``declared_default(...)`` or a shared named module constant rather
+  than repeating them as bare numerals. Zero-diff probes over radio and
+  stellar confirm bit-identical output. One real slip surfaced by the sweep:
+  igm's two ``dla_log_n_hi`` fallbacks said 20.0 where the declaration says
+  20.3 (``DEFAULT_DLA_LOG_N_HI``, which both sites now read). That changes
+  DIRECT calls that omit the argument with ``use_dla=True`` -- measured max
+  relative difference up to ~1.0 at z=2.0 in the damped wings, smaller at
+  other redshifts -- and changes nothing on the grammar path, which always
+  supplied 20.3. Part of #2265.
 - The energy-balance-split closure's docstring tagged its luminosity arguments
   `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
   supplies both in `erg/s` (component_factory.py:346). The docstring is now
@@ -853,6 +855,25 @@
   ``components/dust/_params.py`` table and every analytic template's own
   default; that disagreement is left as-is and tracked separately (#2261)
   (#2241).
+
+- Dust tree literal defaults aligned with declarations (#2265): the full
+  ``dust/`` tree (attenuation, emission, component aggregation) now reads all
+  signature defaults and ``.get`` fallbacks from ``declared_default(...)`` or
+  class-level constants instead of repeating numerals. Three direct-call
+  changes: ``kriek_conroy(dust_bump_strength=1.0)`` now uses ``Fixed(0.0)``
+  (no bump vs KC13 published value); ``tea(dust_delta=-0.2)`` uses
+  ``Fixed(0.0)`` (Calzetti baseline vs KC13 empirical z~1 value);
+  ``schreiber2018_tabulated(dust_T=30.0)`` uses component declaration
+  ``Fixed(25.0)`` via ``SCHREIBER2018_T_K_DEFAULT``. ``astrodust_emission()``
+  and all template closures read from the shared table via
+  ``declared_default(PARAMS, ...)`` (e.g. dust_qpah: 3.0 -> 2.5). Grammar
+  path unchanged (``SEDModel.build`` always supplied declared values);
+  measured zero-diff on ``predict_photometry`` for every dust_emission type
+  and attenuation law. ``dust_T`` and ``dust_beta_ir`` table entries
+  corrected under owner ruling 1: ``dust_T`` stays ``Fixed(35.0)`` (graybody
+  and casey match; MBB and schreiber2016 read their own ``Fixed(30.0)`` and
+  ``Fixed(25.0)`` constants); ``dust_beta_ir`` changes to ``Fixed(1.8)``
+  (all four analytic templates match). (#2265, #2261)
 
 - `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
   believing it the base of the `Tracer*ConversionError` family. On jax

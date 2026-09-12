@@ -48,15 +48,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # T ~ 25-45 K for local (U)LIRGs, beta = 1.60 +/- 0.38, alpha = 2.0 +/- 0.5.
     ParamDeclaration(
         "dust_T",
-        # NOT the value any analytic template actually defaults to (#2241,
-        # #2261): modified_blackbody and schreiber2016 default to T=30.0 K,
-        # and casey2012/graybody's own class-level default happens to match
-        # this 35.0 only by coincidence. Whether this table or the templates
-        # are right is an open physics/sampler-geometry question filed as
-        # #2261; ``declared_default(PARAMS, "dust_T")`` is deliberately NOT
-        # used by the closures for this reason -- see
-        # ``MBB_T_K_DEFAULT``/``CASEY_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``
-        # below, which are each template's own value, not this one.
+        # Analytic templates split on this value (#2265, #2261): graybody and
+        # casey2012 declare Fixed(35.0); modified_blackbody and schreiber2016
+        # declare Fixed(30.0). This table stays at 35.0 (the majority) and the
+        # MBB/schreiber2016 closures read their own constants
+        # (``MBB_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``) instead of the table.
+        # Schreiber2018IRSEDComponent reads its own ``SCHREIBER2018_T_K_DEFAULT
+        # = 25.0``. Closures are free to disagree with the table while class
+        # declarations internally match their corresponding closures.
         Fixed(35.0),
         "Dust temperature (K) for graybody/Casey emission",
         lambda lo, hi: lo > 0,
@@ -71,12 +70,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "dust_beta_ir",
-        # NOT the value any analytic template actually defaults to (#2241,
-        # #2261): every template (modified_blackbody, graybody, casey2012)
-        # defaults ``dust_beta_ir`` to 1.8, not this table's 1.6. See the
-        # note on ``dust_T`` above -- ``ANALYTIC_BETA_IR_DEFAULT`` below is
-        # the templates' own value, deliberately not derived from this entry.
-        Fixed(1.6),
+        # Every analytic template (modified_blackbody, graybody, casey2012,
+        # schreiber2016) declares Fixed(1.8), not the old table value 1.6 (#2265,
+        # #2261). Corrected to match all four templates; ``ANALYTIC_BETA_IR_DEFAULT
+        # = 1.8`` below is shared across all closures and components.
+        Fixed(1.8),
         "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
@@ -84,8 +82,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # models put the physical minimum, and below the widely presumed 1.5 --
         # and carried to +2.4 sigma above the mean. Relaxed to >= 0 to support
         # pure blackbody (beta=0, emissivity ~ 1 everywhere); all closures are
-        # well-defined at beta=0.
-        free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.6),
+        # well-defined at beta=0. Empirical value 1.8 from the templates.
+        free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.8),
     ),
     ParamDeclaration(
         "dust_lambda_0_um",
@@ -422,12 +420,9 @@ DEFAULT_DUST_ETA_BALANCE = declared_default(PARAMS, "dust_eta_balance")
 # which value is correct.
 MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
-SCHREIBER_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent class-level default
-ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
-
-# Astrodust (Hensley & Draine 2023) grid fiducial PAH mass fraction (%)
-# matching Draine+2021 PAHspec "standard" reference (#2265)
-ASTRODUST_QPAH_DEFAULT = 3.79
+SCHREIBER_T_K_DEFAULT = 30.0  # schreiber2016 analytic component
+SCHREIBER2018_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent tabulated
+ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012, schreiber2016
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -557,7 +552,6 @@ SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
 
 __all__ = [
     "ANALYTIC_BETA_IR_DEFAULT",
-    "ASTRODUST_QPAH_DEFAULT",
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
     "CASEY_T_K_DEFAULT",
@@ -575,5 +569,6 @@ __all__ = [
     "MBB_T_K_DEFAULT",
     "PARAMS",
     "SCHREIBER_T_K_DEFAULT",
+    "SCHREIBER2018_T_K_DEFAULT",
     "SINGLE_COMPONENT_PARAMS",
 ]
