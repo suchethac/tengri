@@ -67,7 +67,15 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # resampled first and normalized on the evaluation grid through a
 # ``jnp.where``-selected division. A deletion, not a migration, so the site
 # leaves both this count and ``_PINNED_DENOMINATORS`` below.
-_PINNED = 39
+# 39 -> 26: a side effect of the #1860 denominator round below. 13 of the 39
+# sub-subnormal literals here were ALSO derivative-unsafe denominators (1e-60/
+# 1e-100/1e-300, each <= the 1.4e-45 subnormal floor this rule checks), and
+# wrapping them in ``representable_denominator`` moved the literal from a bare
+# ``ast.Constant`` guard argument to a ``Call``, so this rule's pattern match
+# (which only sees a literal argument) no longer sees them either. The
+# underlying guards did not disappear, only the source shape their old
+# ``ast.Constant`` matched; every one is still a live, now doubly-safe floor.
+_PINNED = 26
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
@@ -124,34 +132,43 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #: first and normalized on the evaluation grid through a ``jnp.where``-selected
 #: division, so the floored denominator is gone rather than moved.
 #:
-#: 45 -> 44 with the float32 line-channel fix: ``nebular_grid_precompute``'s
-#: ``1.0 / jnp.maximum(nion, 1e-30)`` is gone, not re-floored. Q_H is ~1e53, so
-#: in float32 the clamped denominator was ``inf`` and the quotient exactly 0.0;
-#: the reciprocal is now a ``-log10 Q_H`` offset and there is no denominator.
-#: This is the "migrated, so lower the pin" case the check below asks for.
+#: 45 -> 3 (#1860 and the float32 line-channel fix, #1206, landing together):
+#: every site in ``components/`` (AGN blocks/blr/disc/kd_precompute/nlr/qsogen/
+#: skirtor/skirtor_model, 15; nebular ``_shared.py``, 2; stellar component.py/
+#: sfh/sps, 11; xray, 1), ``observation/spectral_indices.py`` (5) and
+#: ``utils/grid_interp.py`` + ``utils/wavelength.py`` (6) now calls
+#: ``representable_denominator``. The two nebular ``1.0 / jnp.maximum(nion,
+#: 1e-30)`` sites (``nebular_grid_precompute.py`` and the dormant
+#: ``line_precompute.py``) are gone rather than re-floored: Q_H is ~1e53, so in
+#: float32 the clamped denominator was ``inf`` and the quotient exactly 0.0; the
+#: reciprocal is now a ``-log10 Q_H`` offset applied via ``apply_log10_scale``
+#: and there is no denominator. The reachability check the earlier note asked
+#: for: the 6 ``utils/`` sites are eager numpy build-time precompute
+#: (``PreintegratedGrid``/``subband_quadrature``/``make_union_grid``, each
+#: docstringed "JIT-compatible: no"), so no JAX VJP ever passes through them,
+#: but the fix is free and keeps the census clean.
 #:
-#: 44 -> 43 closing the same class in the dormant ``line_precompute.py`` (#1206):
-#: its own ``rows.append(lum / jnp.maximum(nion, 1e-30))`` is the identical
-#: pattern, one file over, left unconverted when the grid builder above was
-#: fixed. ``_log_nion_of_state`` (mirroring the grid builder's helper of the
-#: same name) plus a ``-log10 Q_H`` offset applied via ``apply_log10_scale``
-#: retires it the same way.
-#:
-#: 43 -> 41 with the AGN validation round: the R59 AGN dust-budget split in
-#: ``components/agn/blocks/runner.py`` divided twice through
-#: ``jnp.maximum(..., 1e-300)`` -- once for the polar share and once for the
-#: graybody rescale -- and both denominators are now selected with a
-#: ``jnp.where`` on the live predicate before the divide. That is exactly the
-#: failure this bound exists for: the forward value was a clean ``0/1e-300 ==
-#: 0.0`` at ``agn_polar_ebv = 0`` while ``grad`` of the AGN dust total with
-#: respect to it came back ``nan``, measured on both a ``'none'`` and a
-#: ``'skirtor'`` torus. It is finite (6.743538e+33 / 4.134017e+33) now, and
-#: unchanged away from the degenerate point.
+#: The 3 left pinned are ``inference/posterior.py``'s ``bpt_nii_oiii`` (736,
+#: 741) and ``agn_fraction`` (1020): post-hoc diagnostics over an already-
+#: completed fit's stored posterior draws (``self.samples`` / ``self.
+#: eline_fluxes``), read for reporting/plotting after ``model.fit`` returns.
+#: Nothing differentiates a ``Posterior`` method, so #1860's failure mode (a
+#: VJP dividing by zero) cannot occur there; they are not a backlog, and
+#: raising the floor would risk moving the deliberately-chosen ``1e-30``/
+#: ``1e-300`` display literals for no reachable benefit.
 #:
 #: Do NOT raise this to make a red run green. A rise means a new site was added,
 #: which is the thing this exists to prevent.
-_PINNED_DENOMINATORS = 41
+_PINNED_DENOMINATORS = 3
 
+
+
+
+#: On the AGNfitter validation branch, two of the original 43 sub-subnormal
+#: denominators had already been replaced by `jnp.where` selects in the R59
+#: AGN dust-budget split (`blocks/runner.py`), and the SKIRTOR no-grid
+#: fallback's `jnp.maximum(int, 1e-30)` renormalization had been rewritten,
+#: so the merged tree lands on the same 3 as main.
 
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:
     """Return ``(lineno, floor)`` for each ``x / guard(y, floor)`` below the bound.

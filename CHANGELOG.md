@@ -287,6 +287,24 @@
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
 ### Changed
+- **`profile_mass` now covers spectroscopy and joint photometry+spectroscopy fits, not
+  only photometry.** Every channel tengri fits is linear in the total stellar mass, so
+  the exact `chi2(M) = chi2_min + A*(M - M*)^2` quadratic (`tengri.inference.mass_profile`)
+  holds over the FULL data vector, not just the photometric one: `A` and `B = A*M*` are
+  now sums over whichever vector `data_type` assembles (photometry, spectroscopy, or
+  their photometry-then-spectrum concatenation for `"joint"`, the order
+  `tests/regression/bug/test_bug_1366_joint_data_record.py` pins), reusing
+  `loss_functions._build_prediction` (and its JIT-threaded SSP-grid path) so the
+  profiled statistics see exactly the vector and noise the unprofiled Gaussian
+  likelihood does. The linearity guard's two-mass probe is generalized the same way.
+  Calibration marginalization, any emission-line/line-ratio/spectral-index channel,
+  Student-t noise, a variable-noise model, and censored data remain refused
+  unconditionally (each is either its own marginalized linear block or carries its own
+  likelihood plumbing this module does not yet share); `"auto"` still steps aside
+  silently for them and an explicit `profile_mass=True` still raises naming the guard.
+  Behavioral change for spectroscopy/joint fits that satisfy every other guard: they
+  now profile the mass under `profile_mass="auto"` where they previously always sampled
+  it.
 - **The default inference method is `mcmc_nuts_fast`** (was `vi`): four NUTS
   chains, 150 warmup steps, no separate burn-in, 300 draws, target acceptance
   0.8, on the mass-profiled posterior with the dense metric and, when the CPU
@@ -653,6 +671,41 @@
   explicit-law rule.
 
 ### Fixed
+- Four AGN sites integrated over the descending frequency grid by reversing
+  both trapezoid operands (``polar_dust.py``'s anisotropic polar luminosity,
+  ``adaf.py``'s float32 and float64 normalization integrals, ``unified.py``'s
+  disc L_bol). On Apple GPU via jax-mps under default MLX compile a reversed
+  array beside a broadcast scalar is silently zeroed past element 0
+  (jax-mps#232), and ``jnp.trapezoid`` multiplies by 0.5 internally, so the
+  torus lost its far-IR graybody entirely (measured x0.067 at 100 um in the
+  Herschel 250 band). Each site now integrates over the descending ``nu``
+  directly and negates the scalar result -- float64 moves only by summation
+  order (measured <= 2.2e-16 per site), MPS forward probes and the recorded
+  gradient probe match CPU exactly, and a source scan forbids reversed
+  trapezoid operands anywhere in ``src/tengri`` (#2295). The Apple-GPU
+  recipe's ``MLX_DISABLE_COMPILE=1`` rule stays until jax-mps#232 closes:
+  VJPs elsewhere still emit ``lax.rev``.
+- The nebular component's DIG mixing no longer evaluates the DIG branch when
+  the spec pins ``neb_dig_frac`` at the declared ``Fixed(0.0)`` default. A
+  build-time predicate ``_dig_may_be_active(spec)`` resolves to a frozen
+  ``dig_active`` config field, threaded to all seven mixing call sites (exact
+  path: cue + cloudy/cb19 continuum/lines; grid path: photometry + restband
+  reconstructions in ``apply``, plus ``predict_line_fluxes``'s own
+  line-luminosity reconstruction call), so a default model evaluates the
+  nebular backend once per channel instead of two, both the exact and the
+  fast-grid path. When ``dig_active=False``, the mixing core skips the second
+  evaluation entirely, returning the HII result unconditionally, not a
+  zero-weighted one. Measured gradient FLOPs of ``predict_photometry`` on the
+  #2195 fixture: the declared default is 147,434,528 against 159,926,608
+  forced active (159,926,608 / 147,434,528 = 1.085x), well short of a flat
+  50% -- the removed DIG evaluation is a small share of a
+  photometry gradient once dust attenuation and emission are in the graph, so
+  the saving scales with how much of the graph the nebular backend is, not a
+  fixed fraction. Because ``dig_active`` is resolved once from the spec at
+  build time, a call-time override of a spec-pinned ``neb_dig_frac`` (e.g.
+  passing a nonzero value through ``params`` at predict time) is not honored
+  on this path; declare the fraction ``FREE`` or ``Fixed`` at the intended
+  nonzero value instead (#2296) (#2262).
 - The nebular component's four DIG-mixing call sites (cue continuum, cloudy/cb19
   continuum, cue lines, cloudy/cb19 lines) now call the one implementation in
   ``dig.py`` -- ``mix_dig_emission`` for the continuum, ``mix_dig_line_luminosities``

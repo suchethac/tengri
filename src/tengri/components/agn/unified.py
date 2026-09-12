@@ -1302,8 +1302,10 @@ def relagn_agn(
 
     # Derive disc L_bol by integrating L_ν over ν (trapezoid in JAX)
     nu = _C_AA / wavelength  # decreasing
-    # Sort ascending for trapezoid
-    lbol_disc_erg = jnp.trapezoid(jnp.flip(l_disc_full), jnp.flip(nu))
+    # ``nu`` is descending: negate the trapezoid instead of flipping the
+    # operands (reversed operands are silently zeroed under MLX compile on
+    # Apple GPU: jax-mps#232, #2295).
+    lbol_disc_erg = -jnp.trapezoid(l_disc_full, nu)
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
 
     # Torus re-emits agn_torus_frac of disc L_bol

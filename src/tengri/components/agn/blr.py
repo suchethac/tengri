@@ -47,6 +47,7 @@ from tengri.utils.physics_constants import (
     C_AA as _C_AA,
     C_KM_S as _C_LIGHT_KMS,
 )
+from tengri.utils.scale import representable_denominator
 
 # ── BLR emission-line template ────────────────────────────────────
 
@@ -320,7 +321,11 @@ def _blr_l_hbeta(
     strength_sum = jnp.sum(device_table(_BLR_LINE_STRENGTHS))
     l_intercepted = covering_fraction * l_disc_bol_erg
     l_lines_total = line_efficiency * l_intercepted
-    l_hbeta = hbeta_strength * l_lines_total / jnp.maximum(strength_sum, 1e-30)
+    l_hbeta = (
+        hbeta_strength
+        * l_lines_total
+        / jnp.maximum(strength_sum, representable_denominator(1e-30))
+    )
     return l_hbeta
 
 
@@ -416,7 +421,9 @@ def compute_blr_sed(
 
     line_spectra = vmap(_single_line)(device_table(_BLR_LINES))
     strength_sum = jnp.sum(device_table(_BLR_LINE_STRENGTHS))
-    l_nu_blr = jnp.sum(line_spectra, axis=0) / jnp.maximum(strength_sum, 1e-30)
+    l_nu_blr = jnp.sum(line_spectra, axis=0) / jnp.maximum(
+        strength_sum, representable_denominator(1e-30)
+    )
 
     # Fe II pseudo-continuum (scaled relative to H-beta luminosity)
     l_hbeta = _blr_l_hbeta(l_disc_bol_erg, covering_fraction, line_efficiency)

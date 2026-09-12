@@ -639,8 +639,11 @@ def anisotropic_polar_luminosity(
     # Integrate over frequency: convert wavelength integral to frequency integral
     # dnu = -c/lambda^2 dlambda, so |dnu| = c/lambda^2 |dlambda|
     nu = _C_AA / wavelength
-    # Use trapezoidal rule on frequency grid (descending order)
-    l_total = jnp.trapezoid(l_nu_absorbed[::-1], nu[::-1])
+    # ``nu`` is descending, so the trapezoid integral is negative; negate for
+    # the physical absorbed power. Never reverse the operands: reversed-array
+    # times broadcast scalar is silently zeroed under MLX compile on Apple
+    # GPU (jax-mps#232, #2295), and ``jnp.trapezoid`` multiplies by 0.5.
+    l_total = -jnp.trapezoid(l_nu_absorbed, nu)
 
     # Apply anisotropic geometry factor
     l_total = aniso_factor * l_total
