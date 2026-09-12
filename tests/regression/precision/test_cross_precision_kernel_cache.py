@@ -148,7 +148,7 @@ def _gradient(ssp, obs, x64, dtype):
         # The mock must be built at the same precision as the model that fits it.
         mock = model.mock(truth, snr=30.0, key=jax.random.PRNGKey(0))
         flux, noise = mock.flux_obs, mock.noise
-        ctx = InferenceContext.from_target(Fitter(model, flux, noise))
+        ctx = InferenceContext.from_target(Fitter(model, flux, noise, profile_mass=False))
         data_args = ctx.data_args
         keys = sorted(ctx.initial_params(jax.random.PRNGKey(1)))
         point = {k: jnp.asarray(0.0, dtype=dtype) for k in keys}

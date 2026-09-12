@@ -392,6 +392,7 @@ class SKIRTORTorus(SEDModelComponent):
             polar_dust_emission,
             polar_dust_extinction,
         )
+        from tengri.utils.scale import representable_denominator
 
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
@@ -459,7 +460,7 @@ class SKIRTORTorus(SEDModelComponent):
         shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
         # Re-tilt factor (unit-area / lambda-vs-nu normalizations cancel in the
         # ratio). Floor the denominator to stay finite where the disc is ~0.
-        retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
+        retilt = shape_sel / jnp.maximum(shape_ref, representable_denominator(1e-100))
         sed_disc = sed_disc_template * retilt
         # Restore the disc bolometric luminosity (shape-only change).
         L_retilt_safe = bolometric_integral_nu(sed_disc, nu, floor=1e-100)

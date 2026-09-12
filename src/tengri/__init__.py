@@ -94,6 +94,25 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     _os.environ.setdefault("ABSL_LOG_LEVEL", "ERROR")
 
+# Host-device fan-out for CPU chain parallelism (jax.pmap over MCMC chains --
+# see chain_parallel="pmap" on run_nuts / _parallel_chains in
+# inference/backends/mcmc/_shared.py). JAX only exposes multiple CPU
+# "devices" via the XLA flag --xla_force_host_platform_device_count, and that
+# flag must be set BEFORE the first `import jax` below: device count is fixed
+# at backend initialization and cannot be changed afterwards.
+# TENGRI_HOST_DEVICES=<n> is the documented shortcut so a user need not know
+# the XLA_FLAGS spelling; it is a no-op when XLA_FLAGS already requests a host
+# device count of its own (an explicit XLA_FLAGS wins).
+_host_devices = _os.environ.get("TENGRI_HOST_DEVICES")
+if _host_devices and "xla_force_host_platform_device_count" not in _os.environ.get(
+    "XLA_FLAGS", ""
+):
+    _os.environ["XLA_FLAGS"] = (
+        f"{_os.environ.get('XLA_FLAGS', '')} "
+        f"--xla_force_host_platform_device_count={int(_host_devices)}"
+    ).strip()
+del _host_devices
+
 # Enable float64 by DEFAULT: required for cosmological distance calculations
 # (dL^2 at z>0.01 overflows float32).
 #
