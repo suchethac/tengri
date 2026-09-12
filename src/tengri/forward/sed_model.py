@@ -91,7 +91,7 @@ from tengri.forward.sed_model_types import (
 )
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
-from tengri.parameters.resolve import merge_fixed_params
+from tengri.parameters.resolve import merge_fixed_params, refuse_fixed_overrides
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
@@ -3903,16 +3903,28 @@ class SEDModel:
         # a deterministic key to get reasonable values for all free parameters.
         params = spec.sample(jax.random.PRNGKey(0))
 
-        # Override with the specific values for measurement
+        # Override with the specific values for measurement. ``agn_log_lbol`` /
+        # ``agn_ir_frac`` may be Fixed on THIS spec (that is the whole point of
+        # the R55 branch above): a plain params dict can no longer carry a
+        # Fixed key at all (#2296), so this probe cannot go through
+        # ``_predict_rest_sed`` -> ``predict_state(params)``, which would
+        # refuse it as an override. Call ``predict_state`` directly with
+        # ``fixed_values=`` instead: that branch merges
+        # ``{**fixed_values, **params}`` with no refusal, which is exactly
+        # "probe at this value regardless of what the spec pinned" -- the
+        # measurement this build-time check exists to make.
         params_lo = {**params, "agn_log_lbol": lo, "agn_ir_frac": frac_mid}
         params_hi = {**params, "agn_log_lbol": hi, "agn_ir_frac": frac_mid}
+        fixed_values = dict(self.spec.get_fixed_values())
 
-        # Evaluate the rest-frame SED at both bounds. Use _predict_rest_sed, which
-        # is the lowest-level forward entry that needs no Observation, so it works
-        # for filterless and spectroscopy-only builds alike. Per #2069 brief:
-        # "if the forward cannot be evaluated at build, raise -- do not fall back".
-        sed_lo = self._predict_rest_sed(params_lo)
-        sed_hi = self._predict_rest_sed(params_hi)
+        # Evaluate the rest-frame SED at both bounds. Per #2069 brief: "if the
+        # forward cannot be evaluated at build, raise -- do not fall back".
+        from tengri.forward.result import SEDResult
+
+        state_lo = self.predict_state(params_lo, fixed_values=fixed_values)
+        state_hi = self.predict_state(params_hi, fixed_values=fixed_values)
+        sed_lo = SEDResult(wavelength=state_lo.wave, sed=state_lo.sed_intrinsic)
+        sed_hi = SEDResult(wavelength=state_hi.wave, sed=state_hi.sed_intrinsic)
 
         # F1: Check for non-finite values (NaN, Inf). If either SED contains non-finite
         # values, the measurement cannot be made and the model must be fixed.
@@ -4807,6 +4819,12 @@ class SEDModel:
         if grid not in ("linear", "native"):
             raise ValueError(f"grid must be 'linear' or 'native', got {grid!r}")
 
+        # Refuse any Fixed key in params (#2296). ``get_internal_params``
+        # (called via ``_get_internal_params`` below) fills an OMITTED Fixed
+        # value in from the spec correctly, but silently accepts and uses a
+        # PRESENT one at whatever value the caller passed -- the override-wins
+        # bug this issue closes.
+        refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
 
@@ -6898,6 +6916,14 @@ class SEDModel:
             sfr_10 = float(sfh_q.sfr_10myr)
             sfr_10 = max(sfr_10, 1e-10)
             return float(_L_HBETA_PER_SFR * sfr_10)
+        except ParameterError:
+            # A Fixed-key override (#2296) or an unknown/missing free
+            # parameter is a caller mistake, not "invalid params" the safe
+            # fallback below is for -- ``ParameterError`` is a ``ValueError``
+            # subclass, so it must be caught and re-raised ahead of the
+            # broad clause, or it would be silently swallowed into a fake
+            # 1 Lsun answer instead of telling the caller what they did wrong.
+            raise
         except (AttributeError, TypeError, ValueError):
             # AttributeError: predict_sfh_quantities doesn't exist or sfr_10myr missing
             # TypeError: float() conversion failed (JAX tracer or wrong type)
@@ -7281,6 +7307,10 @@ class SEDModel:
             compute_mass_weighted_metallicity,
         )
 
+        # Refuse any Fixed key in params (#2296), same reasoning as
+        # :meth:`predict_sfh`: ``get_internal_params`` below would otherwise
+        # silently accept and use a present-but-overridden Fixed value.
+        refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
 
@@ -8170,8 +8200,15 @@ class SEDModel:
             # Refuse any Fixed key present in params (#2296)
             full_params = merge_fixed_params(self.spec, params)
         else:
-            # JIT runtime override path: caller provides both fixed and free values,
-            # so skip the refusal check (it has already happened at the entry point).
+            # JIT runtime override path: caller provides both fixed and free values.
+            # The refusal is skipped here because it already ran, on this SAME
+            # ``params``, in the caller that built ``fixed_values``:
+            # ``predict_observables`` and ``predict_observables_jit`` both call
+            # ``refuse_fixed_overrides(self.spec, params)`` before threading
+            # ``self.spec.get_fixed_values()`` in as a JIT runtime input (#2296).
+            # Re-checking here would be redundant, not wrong, for those two
+            # callers; do not add a third caller of this branch without giving
+            # it the same upstream check.
             full_params = {**fixed_values, **params}
 
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
@@ -8230,6 +8267,12 @@ class SEDModel:
                 "predict_observables requires an Observation. Build the "
                 "model with ``observation=`` set."
             )
+
+        # Refuse any Fixed key in params before it reaches the cached ``_impl``
+        # closure, which threads ``self.spec.get_fixed_values()`` in as
+        # ``fixed_values`` and so takes ``predict_state``'s no-refusal branch
+        # (#2296). A static, pre-trace key-set check: safe and cheap here.
+        refuse_fixed_overrides(self.spec, params)
 
         # Eager (non-JIT) forward + projection. Runs the SAME ``_impl`` closure
         # that :meth:`predict_observables_jit` wraps in ``jax.jit``, one
@@ -8308,6 +8351,11 @@ class SEDModel:
         # ...and free params with no value, which would otherwise surface as
         # a bare KeyError deep inside a component.
         check_missing_free_params(params, self.spec, self._param_map)
+        # Refuse any Fixed key in params before it reaches the jitted closure,
+        # which threads ``self.spec.get_fixed_values()`` in as ``fixed_values``
+        # and so takes ``predict_state``'s no-refusal branch (#2296). A static
+        # key-set check on the un-traced dict, safe and free under jit.
+        refuse_fixed_overrides(self.spec, params)
         return self._get_or_build_predict_observables_jit()(
             params,
             self.spec.get_fixed_values(),

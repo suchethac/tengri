@@ -899,6 +899,9 @@ class Catalog:
                 "#1312 lands."
             )
 
+        # Free-only (#2296): predict_photometry and predict_properties below
+        # both self-merge the spec's Fixed values internally and refuse a
+        # Fixed key of their own; see _prediction_columns's docstring.
         columns, n_galaxies = self._prediction_columns(None)
         photometry = self._map_chunks(
             self.fwd.predict_photometry,
@@ -916,11 +919,15 @@ class Catalog:
             def _measure(params):
                 return self.fwd.measure_line_fluxes(params, line_defs, approx=True)
 
+            # approx=True routes through the window-LUT path, which reads
+            # Fixed values straight out of the dict with no merge of its own
+            # -- the one consumer that needs _prediction_columns_with_fixed.
+            merged_columns, _ = self._prediction_columns_with_fixed(None)
             # The tag carries the line set: a different set is a different
             # program, and reusing one cache entry across them would be wrong.
             measured = self._map_chunks(
                 _measure,
-                columns,
+                merged_columns,
                 n_galaxies,
                 chunk_size,
                 tag=f"lines:{','.join(d.name for d in line_defs)}",
@@ -958,13 +965,18 @@ class Catalog:
     def _prediction_columns(self, param_table):
         """Resolve the columns to predict from, explicit table, or the stored one.
 
-        Fixed parameter values are broadcast in as ``(N,)`` columns. Not every
-        consumer merges them for itself: ``predict_photometry`` does, but the
-        window-LUT line path reaches ``compute_joint_weights``, which reads
-        ``params["met_logzsol"]`` directly and raises ``KeyError`` on a dict
-        carrying only the free parameters. Merging once here keeps every channel
-        (photometry, lines, properties) seeing the same complete dict. Caller
-        columns win, so a per-galaxy ``redshift`` still overrides a fixed one.
+        Refuses any Fixed key present in the caller's columns (#2296), then
+        returns the columns exactly as supplied (free parameters, plus
+        anything else the caller named -- e.g. a per-galaxy ``redshift``
+        column on a catalog with a runtime-z LUT). Most consumers
+        (``predict_photometry``, ``predict_properties``, ``predict_state``)
+        self-merge the spec's Fixed values internally and refuse a Fixed key
+        of their own; handing them an already-merged dict would trip that
+        refusal on values THIS method injected, not on anything the caller
+        overrode -- the same hazard :class:`~tengri.forward.prediction.Prediction`
+        avoids by keeping a free-only ``_free_params`` alongside its merged
+        ``_params``. Use :meth:`_prediction_columns_with_fixed` for the one
+        consumer that needs the merged form.
         """
         if param_table is None:
             if self._history_columns is None:
@@ -981,6 +993,22 @@ class Catalog:
         # Refuse any Fixed key in columns (#2296)
         refuse_fixed_overrides(self.fwd.spec, columns)
 
+        return columns, n_galaxies
+
+    def _prediction_columns_with_fixed(self, param_table):
+        """Same as :meth:`_prediction_columns`, with Fixed values merged in.
+
+        Fixed parameter values are broadcast in as ``(N,)`` columns. Not every
+        consumer self-merges: the window-LUT line path
+        (``measure_line_fluxes(approx=True)``) reaches ``compute_joint_weights``,
+        which reads ``params["met_logzsol"]`` directly and raises ``KeyError``
+        on a dict carrying only the free parameters. This is the ONE consumer
+        that needs the merged form; every other caller wants
+        :meth:`_prediction_columns` instead (see its docstring for why).
+        Caller columns win, so a per-galaxy ``redshift`` still overrides a
+        fixed one.
+        """
+        columns, n_galaxies = self._prediction_columns(param_table)
         fixed = {
             name: np.broadcast_to(np.asarray(value), (n_galaxies,)).copy()
             for name, value in self.fwd.spec.get_fixed_values().items()

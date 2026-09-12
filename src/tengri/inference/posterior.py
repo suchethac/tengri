@@ -29,7 +29,6 @@ import numpy as np
 
 from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri._mapping import ReadOnlyPropertyMapping
-from tengri.parameters.resolve import merge_fixed_params
 
 logger = logging.getLogger(__name__)
 
@@ -482,19 +481,31 @@ class Posterior:
 
     @property
     def fixed_values(self) -> dict:
-        """Fixed parameter values from the model spec (#2296).
+        """Fixed parameter values actually used by this fit (#2296).
 
         Returns a dict of parameter name → pinned value for every parameter
         the spec declared Fixed. Use this for display/diagnostics; ``params``
         and ``samples`` carry free parameters only and are safe to feed back
         into ``model.predict(...)``.
 
+        When this posterior carries a ``_fitter`` back-reference (set by
+        ``model.fit(...)`` / ``fitter.run(...)``), the values come from
+        ``fitter._fixed_values`` -- the spec's declared values merged with
+        any ``Fitter(params_override=...)`` re-pin (#1329), which is the
+        sanctioned way to fit at a *different* Fixed value for one fit.
+        Reading straight off ``self._model.spec`` instead would silently
+        report the spec's original value even when the fit actually ran at
+        the override. Falls back to the spec when there is no fitter
+        (a hand-built ``Posterior``).
+
         Returns
         -------
         dict
             Fixed parameter name → value. Empty dict if the posterior has no
-            model (hand-built posteriors).
+            model and no fitter (hand-built posteriors).
         """
+        if self._fitter is not None:
+            return dict(self._fitter._fixed_values)
         if self._model is None:
             return {}
         return dict(self._model.spec.get_fixed_values())
@@ -990,9 +1001,13 @@ class Posterior:
         def _one(p: dict) -> dict:
             from tengri.forward.component_factory import state_to_sed_components
 
-            # Refuse any Fixed key in p (#2296)
-            full_p = merge_fixed_params(self._model.spec, p)
-            state = self._model.predict_state(full_p)
+            # predict_state self-merges the spec's Fixed values and refuses a
+            # Fixed key of its own (#2296); merging here first would hand it
+            # an already-merged dict and trip that refusal on values THIS
+            # call injected, not on anything the caller overrode -- the same
+            # hazard Prediction/Catalog avoid by keeping a free-only params
+            # dict alongside the merged one.
+            state = self._model.predict_state(p)
             return state_to_sed_components(state)
 
         if self.samples is None:
@@ -1906,16 +1921,27 @@ class Posterior:
             raise RuntimeError("This model has no photometry to evaluate.")
 
         draws = self._draws_for_lift(n_draws=n_draws, key=key)
+        # ``draws`` carries every Fixed value merged in (``_draws_for_lift``'s
+        # whole reason to exist, #1124/#1127: the exact projector below reads
+        # ``redshift`` straight out of its params dict). ``predict_photometry``
+        # / ``predict_state`` refuse a Fixed key of their own (#2296), so the
+        # branches below strip the merged-in names back out before calling
+        # into either -- the same free-only/merged split
+        # :class:`~tengri.forward.prediction.Prediction` keeps.
+        fixed_names = set(model.spec.fixed_params)
 
         if approx:
             # The lean hot-loop path: honors whatever `approx=` the model was
             # built with. Faster, and an approximation.
-            fn = model.predict_photometry
+            def fn(p):
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                return model.predict_photometry(free_p)
         else:
             # The canonical exact projector, the same kernel Prediction.photometry()
             # uses, so a posterior band and a Prediction band answer the same question.
             def fn(p):
-                return project_photometry(model.predict_state(p), p, phot)
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                return project_photometry(model.predict_state(free_p), p, phot)
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)
 
@@ -2007,15 +2033,25 @@ class Posterior:
                     "approx=SpectrumPrecomp() and try again."
                 )
 
+            fixed_names = set(model.spec.fixed_params)
+
             def fn(p):
-                return model.predict_spectrum(p, wave_obs=wave_obs)
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                return model.predict_spectrum(free_p, wave_obs=wave_obs)
         else:
             # Exact, and the same kernel Prediction.spectrum uses:
             # Observation.predict calls project_spectrum (#1052) and applies the flux
             # calibration (#1086), so a posterior spectrum and the likelihood's
             # spec_fnu answer the same question by construction.
+            #
+            # ``p`` here is ``draws`` from _draws_for_lift, Fixed values already
+            # merged in for the exact projector; predict_state refuses a Fixed
+            # key of its own (#2296), so it gets the free-only subset instead.
+            fixed_names = set(model.spec.fixed_params)
+
             def fn(p):
-                out = model.observation.predict(model.predict_state(p), p, wave_obs=wave_obs)
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                out = model.observation.predict(model.predict_state(free_p), p, wave_obs=wave_obs)
                 return out["spec_fnu"]
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)
