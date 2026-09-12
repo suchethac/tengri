@@ -88,6 +88,7 @@ from tengri.components.dust.laws._registry import (
     resolve_dust_law as resolve_dust_law,
     select_law_kwargs as select_law_kwargs,
 )
+from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import V_BAND_ANGSTROM
 
 # ── Attenuation curves ────────────────────────────────────────────
@@ -556,17 +557,17 @@ def _pei92_curve(
 
 
 # Pei 1992 Table 4: SMC Bar (6 components, R_V = 2.93, no 2175 A bump)
-_SMC_LAM = jnp.array([0.042, 0.08, 0.22, 9.7, 18.0, 25.0])
-_SMC_A = jnp.array([185.0, 27.0, 0.005, 0.010, 0.012, 0.030])
-_SMC_B = jnp.array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
-_SMC_N = jnp.array([2.0, 4.0, 2.0, 2.0, 2.0, 2.0])
+_SMC_LAM = host_array([0.042, 0.08, 0.22, 9.7, 18.0, 25.0])
+_SMC_A = host_array([185.0, 27.0, 0.005, 0.010, 0.012, 0.030])
+_SMC_B = host_array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
+_SMC_N = host_array([2.0, 4.0, 2.0, 2.0, 2.0, 2.0])
 _SMC_RV = 2.93
 
 # Pei 1992 Table 4: LMC (6 components, R_V = 3.16, weak 2175 A bump)
-_LMC_LAM = jnp.array([0.046, 0.08, 0.22, 9.7, 18.0, 25.0])
-_LMC_A = jnp.array([175.0, 19.0, 0.023, 0.005, 0.006, 0.020])
-_LMC_B = jnp.array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
-_LMC_N = jnp.array([2.0, 4.5, 2.0, 2.0, 2.0, 2.0])
+_LMC_LAM = host_array([0.046, 0.08, 0.22, 9.7, 18.0, 25.0])
+_LMC_A = host_array([175.0, 19.0, 0.023, 0.005, 0.006, 0.020])
+_LMC_B = host_array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
+_LMC_N = host_array([2.0, 4.5, 2.0, 2.0, 2.0, 2.0])
 _LMC_RV = 3.16
 
 
@@ -606,7 +607,14 @@ def smc(
     P. G. Pei, "Interstellar Dust from the Ultraviolet to the Infrared,"
     ApJ, 395, 130 (1992).
     """
-    return _pei92_curve(wavelength, _SMC_LAM, _SMC_A, _SMC_B, _SMC_N, _SMC_RV)
+    return _pei92_curve(
+        wavelength,
+        device_table(_SMC_LAM),
+        device_table(_SMC_A),
+        device_table(_SMC_B),
+        device_table(_SMC_N),
+        _SMC_RV,
+    )
 
 
 @register_dust_law(
@@ -642,7 +650,14 @@ def lmc(
     P. G. Pei, "Interstellar Dust from the Ultraviolet to the Infrared,"
     ApJ, 395, 130 (1992).
     """
-    return _pei92_curve(wavelength, _LMC_LAM, _LMC_A, _LMC_B, _LMC_N, _LMC_RV)
+    return _pei92_curve(
+        wavelength,
+        device_table(_LMC_LAM),
+        device_table(_LMC_A),
+        device_table(_LMC_B),
+        device_table(_LMC_N),
+        _LMC_RV,
+    )
 
 
 @register_dust_law(
@@ -1293,12 +1308,12 @@ def tea(
 # check this hand-copy against it.
 
 #: Redshifts at which Narayanan et al. (2018) publish a median attenuation curve.
-_NARAYANAN_Z_NODES = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+_NARAYANAN_Z_NODES = host_array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
 
 #: Kriek & Conroy (2013) slope :math:`\delta` fitted to each published median.
 #: Full precision, so that this table and the JSON the script writes are the
 #: same numbers and a golden pinned against either holds against both.
-_NARAYANAN_DELTA = jnp.array(
+_NARAYANAN_DELTA = host_array(
     [
         -0.5555790140809852,
         -0.2910618326689639,
@@ -1313,7 +1328,7 @@ _NARAYANAN_DELTA = jnp.array(
 #: Multiplier on the KC13 bump amplitude fitted to each published median. The
 #: implied :math:`E_b = m\,(0.85 - 1.9\,\delta)` is 6.36, 2.77, 5.08, 5.36,
 #: 5.37, 1.98, 1.96 at z = 0 to 6.
-_NARAYANAN_BUMP_STRENGTH = jnp.array(
+_NARAYANAN_BUMP_STRENGTH = host_array(
     [
         3.336277843127103,
         1.9767528352381496,
@@ -1417,8 +1432,10 @@ def narayanan_z(
     # ``jnp.interp`` holds the end node outside the tabulated range, which is
     # the clip to 0 <= z <= 6 the fit range calls for; no separate clip.
     z = jnp.asarray(redshift)
-    delta_z = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_DELTA)
-    bump_z = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_BUMP_STRENGTH)
+    delta_z = jnp.interp(z, device_table(_NARAYANAN_Z_NODES), device_table(_NARAYANAN_DELTA))
+    bump_z = jnp.interp(
+        z, device_table(_NARAYANAN_Z_NODES), device_table(_NARAYANAN_BUMP_STRENGTH)
+    )
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 

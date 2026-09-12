@@ -161,7 +161,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/151796",  # disc.py +1
         "10.1086/159815",  # balmer.py
         "10.1086/161102",  # xray.py
-        "10.1086/162189",  # dig.py
         "10.1086/162686",  # attenuation.py
         "10.1086/171637",  # attenuation.py
         "10.1086/174330",  # spectral.py
