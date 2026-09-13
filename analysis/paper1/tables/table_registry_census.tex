@@ -1,0 +1,33 @@
+\begin{table*}
+\caption{Registry census generated from the tengri registries at commit 6f52fb3 (2026-08-30). Available = production status (inference: primary tier); Other = experimental or unvalidated; aliases and the \texttt{none} sentinel are excluded. The generated component reference in the documentation lists every entry.}
+\label{tab:registry_census}
+\begin{tabular}{lrrll}
+\toprule
+Component block & Available & Other & Build key & Example \\
+\midrule
+SSP grid format & 4 & 0 & \texttt{(shipped)} & \texttt{4 libraries} \\
+SFH -- parametric & 19 & 4 & \texttt{sfh['type']} & \texttt{dpl} \\
+SFH -- nonparametric & 5 & 2 & \texttt{sfh['type']} & \texttt{continuity} \\
+SFH -- stochastic (field) & 1 & 0 & \texttt{sfh['type']} & \texttt{field} \\
+Metallicity modes & 10 & 0 & \texttt{met['type']} & \texttt{delta} \\
+Dust attenuation laws & 21 & 0 & \texttt{dust\_attenuation['law']} & \texttt{calzetti} \\
+Dust emission models & 12 & 5 & \texttt{dust\_emission['type']} & \texttt{dl07} \\
+Dust attenuation structure (screen / two-component / WG00 radiative transfer) & 3 & 0 & \texttt{dust\_attenuation['type']} & \texttt{two\_component} \\
+Nebular emission (photoionization) & 4 & 2 & \texttt{neb['type']} & \texttt{cue} \\
+Shock (MAPPINGS V) + DIG mixing & 1 & 0 & \texttt{shock['type']} & \texttt{mappings} \\
+AGN disc & 13 & 0 & \texttt{agn.disc=} & \texttt{skirtor} \\
+AGN torus & 11 & 0 & \texttt{agn.torus=} & \texttt{skirtor} \\
+AGN NLR & 4 & 2 & \texttt{agn.nlr=} & \texttt{analytic} \\
+AGN BLR & 5 & 0 & \texttt{agn.blr=} & \texttt{analytic} \\
+AGN Fe II & 3 & 0 & \texttt{agn.feii=} & \texttt{boroson\_green} \\
+AGN attenuation & 5 & 0 & \texttt{agn.atten=} & \texttt{grahsp\_biatten} \\
+Radio & 3 & 0 & \texttt{radio=} & \texttt{condon92} \\
+X-ray & 5 & 0 & \texttt{xray=} & \texttt{yang20} \\
+IGM & 5 & 0 & \texttt{igm=} & \texttt{inoue14} \\
+Photometry: bundled filter curves + custom & 447 & 0 & \texttt{(observation=)} & \texttt{photometry} \\
+Spectroscopy: LSF + calibration polynomial & 1 & 0 & \texttt{(observation=)} & \texttt{spectroscopy} \\
+Emission-line fluxes (rest \& obs frame) & 1 & 0 & \texttt{(observation=)} & \texttt{line\_list} \\
+Inference backends (primary, experimental, broken) & 8 & 7 & \texttt{method=} & \texttt{mcmc\_nuts} \\
+\bottomrule
+\end{tabular}
+\end{table*}

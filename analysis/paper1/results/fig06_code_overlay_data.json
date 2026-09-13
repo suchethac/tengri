@@ -1,0 +1,415 @@
+{
+  "figure": "Figure 6: tengri posteriors vs published codes",
+  "published_data": {
+    "13097": {
+      "BAGPIPES": {
+        "logmstar": 10.21986185515834,
+        "logmstar_lo": 10.128325485764977,
+        "logmstar_hi": 10.283668389333661,
+        "logsfr": 1.5321406481306972,
+        "logsfr_lo": 1.4348966872533684,
+        "logsfr_hi": 1.6430685788067456,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "instantaneous"
+      },
+      "BEAGLE": {
+        "logmstar": 10.456374,
+        "logmstar_lo": 10.39297,
+        "logmstar_hi": 10.509709,
+        "logsfr": 1.862733,
+        "logsfr_lo": 1.7944067,
+        "logsfr_hi": 1.9256068,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr averaged"
+      },
+      "CIGALE": {
+        "logmstar": 10.483531659666728,
+        "logmstar_lo": 10.295890515107564,
+        "logmstar_hi": 10.671172804225892,
+        "logsfr": 1.6927432324202065,
+        "logsfr_lo": 0.4600047667202216,
+        "logsfr_hi": 2.9254816981201914,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr mean"
+      },
+      "Dense_Basis": {
+        "logmstar": 10.2663298383,
+        "logmstar_lo": 10.166329838300001,
+        "logmstar_hi": 10.3663298383,
+        "logsfr": 1.83952402839,
+        "logsfr_lo": NaN,
+        "logsfr_hi": NaN,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr"
+      },
+      "Prospector": {
+        "logmstar": 10.46,
+        "logmstar_lo": 10.350000000000001,
+        "logmstar_hi": 10.540000000000001,
+        "logsfr": 1.33,
+        "logsfr_lo": 1.09,
+        "logsfr_hi": 1.6,
+        "mass_definition_note": "formed stellar mass",
+        "sfr_timescale_note": "100 Myr"
+      }
+    },
+    "15336": {
+      "BAGPIPES": {
+        "logmstar": 10.547439490542434,
+        "logmstar_lo": 10.503089666445687,
+        "logmstar_hi": 10.582370546836595,
+        "logsfr": 1.2242376082483242,
+        "logsfr_lo": 0.8002618572956653,
+        "logsfr_hi": 1.5269802301813864,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "instantaneous"
+      },
+      "BEAGLE": {
+        "logmstar": 10.66184,
+        "logmstar_lo": 10.625235,
+        "logmstar_hi": 10.691526,
+        "logsfr": 0.9868762,
+        "logsfr_lo": 0.8563492,
+        "logsfr_hi": 1.0675672,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr averaged"
+      },
+      "CIGALE": {
+        "logmstar": 11.012101103222758,
+        "logmstar_lo": 10.798193428269625,
+        "logmstar_hi": 11.22600877817589,
+        "logsfr": 2.7258935022827937,
+        "logsfr_lo": -2.4085524166058305,
+        "logsfr_hi": 7.8603394211714175,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr mean"
+      },
+      "Dense_Basis": {
+        "logmstar": 11.10226192,
+        "logmstar_lo": 11.00226192,
+        "logmstar_hi": 11.20226192,
+        "logsfr": 0.876173183943,
+        "logsfr_lo": NaN,
+        "logsfr_hi": NaN,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr"
+      },
+      "Prospector": {
+        "logmstar": 10.62,
+        "logmstar_lo": 10.5,
+        "logmstar_hi": 10.709999999999999,
+        "logsfr": 1.41,
+        "logsfr_lo": 1.19,
+        "logsfr_hi": 1.91,
+        "mass_definition_note": "formed stellar mass",
+        "sfr_timescale_note": "100 Myr"
+      }
+    },
+    "16049": {
+      "BAGPIPES": {
+        "logmstar": 9.988424304892632,
+        "logmstar_lo": 9.917054261942846,
+        "logmstar_hi": 10.062809695379123,
+        "logsfr": 1.6541966710206488,
+        "logsfr_lo": 1.5563152367582267,
+        "logsfr_hi": 1.7459750690617992,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "instantaneous"
+      },
+      "BEAGLE": {
+        "logmstar": 10.285593,
+        "logmstar_lo": 10.221382,
+        "logmstar_hi": 10.340387,
+        "logsfr": 1.8589555,
+        "logsfr_lo": 1.7792996,
+        "logsfr_hi": 1.9210196,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr averaged"
+      },
+      "CIGALE": {
+        "logmstar": 10.38967653128017,
+        "logmstar_lo": 10.123021909508415,
+        "logmstar_hi": 10.656331153051925,
+        "logsfr": 1.8289499441377715,
+        "logsfr_lo": 1.1986419924489848,
+        "logsfr_hi": 2.459257895826558,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr mean"
+      },
+      "Dense_Basis": {
+        "logmstar": 9.96393039797,
+        "logmstar_lo": 9.86393039797,
+        "logmstar_hi": 10.06393039797,
+        "logsfr": 1.97902750899,
+        "logsfr_lo": NaN,
+        "logsfr_hi": NaN,
+        "mass_definition_note": "survived stellar mass",
+        "sfr_timescale_note": "100 Myr"
+      },
+      "Prospector": {
+        "logmstar": 9.99,
+        "logmstar_lo": 9.92,
+        "logmstar_hi": 10.06,
+        "logsfr": 2.0,
+        "logsfr_lo": 1.93,
+        "logsfr_hi": 2.06,
+        "mass_definition_note": "formed stellar mass",
+        "sfr_timescale_note": "100 Myr"
+      }
+    }
+  },
+  "tengri_data": {
+    "13097": {
+      "I": {
+        "stellar_mass_survived_p16": 10.310894285521968,
+        "stellar_mass_survived_p50": 10.347567891671504,
+        "stellar_mass_survived_p84": 10.383594520285738,
+        "stellar_mass_formed_p16": 10.449397184459583,
+        "stellar_mass_formed_p50": 10.49232970190582,
+        "stellar_mass_formed_p84": 10.53248884446522,
+        "log_sfr_100myr_p16": 1.5490126060164187,
+        "log_sfr_100myr_p50": 1.5897382974055985,
+        "log_sfr_100myr_p84": 1.6270603237571288
+      },
+      "II": {
+        "stellar_mass_survived_p16": 10.347308824033025,
+        "stellar_mass_survived_p50": 10.40569942417002,
+        "stellar_mass_survived_p84": 10.472510749777706,
+        "stellar_mass_formed_p16": 10.506502971377106,
+        "stellar_mass_formed_p50": 10.570027476881489,
+        "stellar_mass_formed_p84": 10.640713453225631,
+        "log_sfr_100myr_p16": 1.3329308866824605,
+        "log_sfr_100myr_p50": 1.3786670530427183,
+        "log_sfr_100myr_p84": 1.4406170047845037
+      },
+      "III": {
+        "stellar_mass_survived_p16": 10.185058813025261,
+        "stellar_mass_survived_p50": 10.323774245649965,
+        "stellar_mass_survived_p84": 10.42506928124993,
+        "stellar_mass_formed_p16": 10.334307806891363,
+        "stellar_mass_formed_p50": 10.492678860329871,
+        "stellar_mass_formed_p84": 10.601077498565784,
+        "log_sfr_100myr_p16": 1.4411603953969345,
+        "log_sfr_100myr_p50": 1.598345545165038,
+        "log_sfr_100myr_p84": 1.8530728376093801
+      }
+    },
+    "15336": {
+      "I": {
+        "stellar_mass_survived_p16": 10.654720451756942,
+        "stellar_mass_survived_p50": 10.689132453177168,
+        "stellar_mass_survived_p84": 10.796766119658619,
+        "stellar_mass_formed_p16": 10.811942390585722,
+        "stellar_mass_formed_p50": 10.851245099005308,
+        "stellar_mass_formed_p84": 10.976122681792404,
+        "log_sfr_100myr_p16": 1.336825394745882,
+        "log_sfr_100myr_p50": 1.437422132960251,
+        "log_sfr_100myr_p84": 1.501584973200019
+      },
+      "II": {
+        "stellar_mass_survived_p16": 10.722851341145294,
+        "stellar_mass_survived_p50": 10.780601078263292,
+        "stellar_mass_survived_p84": 10.82441717194257,
+        "stellar_mass_formed_p16": 10.90678513923494,
+        "stellar_mass_formed_p50": 10.969340337541803,
+        "stellar_mass_formed_p84": 11.016194252997058,
+        "log_sfr_100myr_p16": 1.0105008715524382,
+        "log_sfr_100myr_p50": 1.1158397666701703,
+        "log_sfr_100myr_p84": 1.2444830963751503
+      },
+      "III": {
+        "stellar_mass_survived_p16": 10.701578606375952,
+        "stellar_mass_survived_p50": 10.761955011930361,
+        "stellar_mass_survived_p84": 10.813678558957262,
+        "stellar_mass_formed_p16": 10.880686350505037,
+        "stellar_mass_formed_p50": 10.947961299017432,
+        "stellar_mass_formed_p84": 11.006293301376356,
+        "log_sfr_100myr_p16": 1.2234225120182196,
+        "log_sfr_100myr_p50": 1.3628885521556124,
+        "log_sfr_100myr_p84": 1.5093019350374348
+      }
+    },
+    "16049": {
+      "I": {
+        "stellar_mass_survived_p16": 10.213135336952417,
+        "stellar_mass_survived_p50": 10.229139422450427,
+        "stellar_mass_survived_p84": 10.249733270094486,
+        "stellar_mass_formed_p16": 10.346974420115686,
+        "stellar_mass_formed_p50": 10.363937874333715,
+        "stellar_mass_formed_p84": 10.386471906432078,
+        "log_sfr_100myr_p16": 1.57539419996408,
+        "log_sfr_100myr_p50": 1.5982488261932732,
+        "log_sfr_100myr_p84": 1.6148615883094448
+      },
+      "II": {
+        "stellar_mass_survived_p16": 10.146385226950944,
+        "stellar_mass_survived_p50": 10.243279481881185,
+        "stellar_mass_survived_p84": 10.314540870721745,
+        "stellar_mass_formed_p16": 10.273616000572847,
+        "stellar_mass_formed_p50": 10.382736124624984,
+        "stellar_mass_formed_p84": 10.466596932020837,
+        "log_sfr_100myr_p16": 1.478304029080393,
+        "log_sfr_100myr_p50": 1.5545857920831794,
+        "log_sfr_100myr_p84": 1.6276260847160875
+      },
+      "III": {
+        "stellar_mass_survived_p16": 9.891907335384287,
+        "stellar_mass_survived_p50": 10.04309128290779,
+        "stellar_mass_survived_p84": 10.168339335039704,
+        "stellar_mass_formed_p16": 10.011036952262389,
+        "stellar_mass_formed_p50": 10.195530596658376,
+        "stellar_mass_formed_p84": 10.336463733826998,
+        "log_sfr_100myr_p16": 1.462089892199264,
+        "log_sfr_100myr_p50": 1.6191801994446142,
+        "log_sfr_100myr_p84": 1.7787974618270785
+      }
+    }
+  },
+  "pending_cells": [],
+  "inter_code_ranges": {
+    "13097": {
+      "published_ranges": {
+        "logmstar": {
+          "min": 10.21986185515834,
+          "max": 10.483531659666728,
+          "range": 0.2636698045083872,
+          "min_code": "BAGPIPES",
+          "max_code": "CIGALE"
+        },
+        "logsfr": {
+          "min": 1.33,
+          "max": 1.862733,
+          "range": 0.5327329999999999,
+          "min_code": "Prospector",
+          "max_code": "BEAGLE"
+        }
+      },
+      "tengri_inter_configuration_range": {
+        "stellar_mass_survived": 0.08192517852005565,
+        "log_sfr_100myr": 0.2196784921223196
+      },
+      "configurations": {
+        "I": {
+          "stellar_mass_survived_median": 10.347567891671504,
+          "log_sfr_100myr_median": 1.5897382974055985,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": true
+          }
+        },
+        "II": {
+          "stellar_mass_survived_median": 10.40569942417002,
+          "log_sfr_100myr_median": 1.3786670530427183,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": true
+          }
+        },
+        "III": {
+          "stellar_mass_survived_median": 10.323774245649965,
+          "log_sfr_100myr_median": 1.598345545165038,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": true
+          }
+        }
+      }
+    },
+    "15336": {
+      "published_ranges": {
+        "logmstar": {
+          "min": 10.547439490542434,
+          "max": 11.10226192,
+          "range": 0.5548224294575661,
+          "min_code": "BAGPIPES",
+          "max_code": "Dense_Basis"
+        },
+        "logsfr": {
+          "min": 0.876173183943,
+          "max": 2.7258935022827937,
+          "range": 1.8497203183397937,
+          "min_code": "Dense_Basis",
+          "max_code": "CIGALE"
+        }
+      },
+      "tengri_inter_configuration_range": {
+        "stellar_mass_survived": 0.09146862508612408,
+        "log_sfr_100myr": 0.32158236629008075
+      },
+      "configurations": {
+        "I": {
+          "stellar_mass_survived_median": 10.689132453177168,
+          "log_sfr_100myr_median": 1.437422132960251,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": true
+          }
+        },
+        "II": {
+          "stellar_mass_survived_median": 10.780601078263292,
+          "log_sfr_100myr_median": 1.1158397666701703,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": true
+          }
+        },
+        "III": {
+          "stellar_mass_survived_median": 10.761955011930361,
+          "log_sfr_100myr_median": 1.3628885521556124,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": true
+          }
+        }
+      }
+    },
+    "16049": {
+      "published_ranges": {
+        "logmstar": {
+          "min": 9.96393039797,
+          "max": 10.38967653128017,
+          "range": 0.4257461333101702,
+          "min_code": "Dense_Basis",
+          "max_code": "CIGALE"
+        },
+        "logsfr": {
+          "min": 1.6541966710206488,
+          "max": 2.0,
+          "range": 0.3458033289793512,
+          "min_code": "BAGPIPES",
+          "max_code": "Prospector"
+        }
+      },
+      "tengri_inter_configuration_range": {
+        "stellar_mass_survived": 0.2001881989733949,
+        "log_sfr_100myr": 0.06459440736143485
+      },
+      "configurations": {
+        "I": {
+          "stellar_mass_survived_median": 10.229139422450427,
+          "log_sfr_100myr_median": 1.5982488261932732,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": false
+          }
+        },
+        "II": {
+          "stellar_mass_survived_median": 10.243279481881185,
+          "log_sfr_100myr_median": 1.5545857920831794,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": false
+          }
+        },
+        "III": {
+          "stellar_mass_survived_median": 10.04309128290779,
+          "log_sfr_100myr_median": 1.6191801994446142,
+          "median_inside_published_range": {
+            "logmstar": true,
+            "logsfr": false
+          }
+        }
+      }
+    }
+  }
+}

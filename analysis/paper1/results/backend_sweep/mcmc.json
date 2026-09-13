@@ -1,0 +1,16 @@
+{
+  "method": "mcmc",
+  "dispatched_to": "NUTS (BlackJAX)",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 245.27419266701327,
+  "wall_time_warm_s": 187.5457620419911,
+  "n_params": 8,
+  "ess_min": 245.15028015038123,
+  "s_per_ess_cold": 1.0005054553335857,
+  "s_per_ess_warm": 0.7650236496851887,
+  "rhat_max": 1.0014704689587388,
+  "log_stellar_mass": 10.560847550371125,
+  "log_sfr_100myr": 1.3847297294938223,
+  "dust_tau": 0.620897193006166
+}

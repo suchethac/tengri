@@ -1,0 +1,223 @@
+{
+  "selected_galaxies": [
+    {
+      "id": 79,
+      "z": 1.012,
+      "n_detected": 13,
+      "median_snr": 83.52125615969264,
+      "color_proxy": 1.1610000000000014,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    },
+    {
+      "id": 267,
+      "z": 1.08444,
+      "n_detected": 14,
+      "median_snr": 22.504338465250516,
+      "color_proxy": 1.3569999999999993,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    },
+    {
+      "id": 4171,
+      "z": 1.032,
+      "n_detected": 13,
+      "median_snr": 135.72204125950054,
+      "color_proxy": 1.1010000000000026,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    },
+    {
+      "id": 7837,
+      "z": 1.095,
+      "n_detected": 16,
+      "median_snr": 155.11090429657204,
+      "color_proxy": 0.38400000000000034,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Ranked in top candidates by S/N in blue_star_forming class"
+    },
+    {
+      "id": 9884,
+      "z": 1.048,
+      "n_detected": 16,
+      "median_snr": 128.18192785619496,
+      "color_proxy": 0.129999999999999,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Ranked in top candidates by S/N in blue_star_forming class"
+    },
+    {
+      "id": 13097,
+      "z": 1.097,
+      "n_detected": 16,
+      "median_snr": 244.29967426710095,
+      "color_proxy": 0.3769999999999989,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Ranked in top candidates by S/N in blue_star_forming class"
+    },
+    {
+      "id": 13601,
+      "z": 1.022,
+      "n_detected": 15,
+      "median_snr": 180.96272167933404,
+      "color_proxy": 0.5479999999999983,
+      "color_proxy_note": "F160W-IRAC1",
+      "type_label": "intermediate_dusty",
+      "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
+    },
+    {
+      "id": 14099,
+      "z": 1.09279,
+      "n_detected": 16,
+      "median_snr": 109.67437677535398,
+      "color_proxy": 0.2010000000000005,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Ranked in top candidates by S/N in blue_star_forming class"
+    },
+    {
+      "id": 15336,
+      "z": 1.036,
+      "n_detected": 15,
+      "median_snr": 155.11090429657204,
+      "color_proxy": 1.0079999999999991,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    },
+    {
+      "id": 15775,
+      "z": 1.097,
+      "n_detected": 16,
+      "median_snr": 186.13308515588645,
+      "color_proxy": 0.7199999999999989,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "intermediate_dusty",
+      "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
+    },
+    {
+      "id": 16049,
+      "z": 1.047,
+      "n_detected": 16,
+      "median_snr": 244.29967426710095,
+      "color_proxy": 0.4569999999999972,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "intermediate_dusty",
+      "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
+    },
+    {
+      "id": 16435,
+      "z": 1.094,
+      "n_detected": 16,
+      "median_snr": 186.13308515588645,
+      "color_proxy": 0.7340000000000018,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "intermediate_dusty",
+      "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
+    },
+    {
+      "id": 16455,
+      "z": 1.087,
+      "n_detected": 16,
+      "median_snr": 217.15526601520085,
+      "color_proxy": 0.2289999999999992,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Ranked in top candidates by S/N in blue_star_forming class"
+    },
+    {
+      "id": 17376,
+      "z": 1.038,
+      "n_detected": 15,
+      "median_snr": 120.64181445288938,
+      "color_proxy": 0.2289999999999992,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Ranked in top candidates by S/N in blue_star_forming class"
+    },
+    {
+      "id": 18160,
+      "z": 1.095,
+      "n_detected": 16,
+      "median_snr": 226.20340209916756,
+      "color_proxy": 0.6679999999999993,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "intermediate_dusty",
+      "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
+    },
+    {
+      "id": 22173,
+      "z": 1.037,
+      "n_detected": 14,
+      "median_snr": 155.11090429657204,
+      "color_proxy": 0.32099999999999795,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Ranked in top candidates by S/N in blue_star_forming class"
+    },
+    {
+      "id": 23250,
+      "z": 1.049,
+      "n_detected": 11,
+      "median_snr": 8.482627578718784,
+      "color_proxy": 1.1920000000000002,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    },
+    {
+      "id": 25206,
+      "z": 1.042,
+      "n_detected": 14,
+      "median_snr": 128.18192785619496,
+      "color_proxy": 1.1380000000000017,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    },
+    {
+      "id": 25489,
+      "z": 1.071,
+      "n_detected": 12,
+      "median_snr": 39.49583211255307,
+      "color_proxy": 1.027000000000001,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    },
+    {
+      "id": 26398,
+      "z": 1.036,
+      "n_detected": 11,
+      "median_snr": 60.32090722644469,
+      "color_proxy": 1.2029999999999994,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+    }
+  ],
+  "selection_criteria": {
+    "clean_flags": "flg1 == 0",
+    "min_detected_bands": 10,
+    "present_in_all_codes": true,
+    "agn_screen": "exclude rising IRAC colors (m_CH1 - m_CH3 > 0.3 or m_CH1 - m_CH4 > 0.5 AB mag), a rest 2-4 um power law no stellar configuration fits",
+    "agn_screened_count": 7,
+    "ranked_by": "median_SNR_within_color_class",
+    "codes": [
+      "BAGPIPES",
+      "BEAGLE",
+      "CIGALE",
+      "Dense_Basis",
+      "Prospector"
+    ],
+    "target_count": 20,
+    "blue_per_class": 7,
+    "red_per_class": 8,
+    "intermediate_per_class": 5
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "method": "laplace",
+  "dispatched_to": "Laplace",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 1.1693590420181863,
+  "wall_time_warm_s": null,
+  "n_params": 8,
+  "ess_min": 1455.3126242976452,
+  "s_per_ess_cold": 0.0008035105464590715,
+  "rhat_max": 1.0003715203253005,
+  "log_stellar_mass": 10.52732324916218,
+  "log_sfr_100myr": 1.3872864472852584,
+  "dust_tau": 0.6439041431804053
+}

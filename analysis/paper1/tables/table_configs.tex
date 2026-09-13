@@ -1,0 +1,23 @@
+\begin{table*}
+\centering
+\caption{%
+SED model configurations spanning the component registry. These six configurations
+are illustrative points in the parameter space of available SFH families, SSP libraries,
+dust attenuation laws, dust emission models, and nebular treatments. No configuration is
+a default, recommendation, or fiducial. All use the CANDELS GOODS-South filter set at
+redshift z~1 with the Inoue+14 IGM model.
+}
+\label{tab:configs}
+\begin{tabular}{llllllll}
+\hline
+Config & SFH Family & SSP Library & Dust Attenuation & Dust Emission & Nebular & Free Params \\
+\hline
+I & delayed-$\tau$ & BC03 Chabrier & Calzetti single & Dale+14 & SSP baked & 5 \\
+II & double power-law & MILES wNE & Calzetti two-comp & DL07 & SSP baked & 8 \\
+III & continuity (7 bins) & FSPS MIST & Kriek \& Conroy & DL07 & CUE & 11 \\
+IV & constant SFR & FSPS MIST & Cardelli MW & DL07 & SSP baked & 4 \\
+V & declining exp & ProGeny MIST & Salim & Casey+12 & CUE & 5 \\
+VI & exponential rise & BPASS C3K & Li+08 flexible & DL14 & CUE & 4 \\
+\hline
+\end{tabular}
+\end{table*}

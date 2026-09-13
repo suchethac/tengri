@@ -1,0 +1,15 @@
+{
+  "method": "map",
+  "dispatched_to": "MAP (L-BFGS, 8 restarts)",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 8.638584666885436,
+  "wall_time_warm_s": null,
+  "n_params": 8,
+  "log_stellar_mass": 10.54710397158082,
+  "log_stellar_mass_16": 10.54710397158082,
+  "log_stellar_mass_84": 10.54710397158082,
+  "log_sfr_100myr": 1.3618076901287401,
+  "log_sfr_100myr_16": 1.3618076901287401,
+  "log_sfr_100myr_84": 1.3618076901287401
+}
