@@ -127,6 +127,18 @@ logger = logging.getLogger(__name__)
 #: Trapezoid quadrature nodes spanning the marginalization window (measured;
 #: see the module docstring's references to ``docs/dev/inference_methods.md``).
 _QUAD_NODES = 48
+#: Quadrature nodes for reinserting the marginalized mass per-sample
+#: (issue #2350). The marginal integral is accurate at 48 nodes, but
+#: the pointwise CDF built by cumsum(softmax(...)) and inverted by
+#: jnp.interp does not converge as fast as the integral. A trapezoid
+#: integral of a smooth peaked function converges faster than the
+#: quantile function on the same grid. Measured by conditional PIT
+#: (uniformity of F(ell_i|theta_i,d) at each sample): 48 nodes fails
+#: all seeds; 192 nodes fails seeds 2,4,5; 384 nodes passes all 12
+#: (6 seeds x 2 fixtures). The reinsertion path runs once per posterior
+#: draw, off the hot loop, so extra nodes are nearly free compared to
+#: the marginal's integral in every log-posterior evaluation.
+_REINSERT_QUAD_NODES = 384
 _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: Mathematically, any log10(mass) placeholder works for the value the mass
 #: parameter is pinned to in the working spec once it is profiled out: the
@@ -642,8 +654,8 @@ def _profile_stats(
     return A, mstar, chi2_min
 
 
-def _quad_nodes(A, mstar, ell_lo: float, ell_hi: float):
-    """48-node trapezoid grid in log10(M), +/- 8 sigma around log10(M*).
+def _quad_nodes(A, mstar, ell_lo: float, ell_hi: float, quad_nodes: int = _QUAD_NODES):
+    """Trapezoid grid in log10(M), +/- 8 sigma around log10(M*).
 
     The window is centered on ``log10(M*)`` *clamped* to ``[ell_lo, ell_hi]``
     first, then widened by ``+/- 8 sigma`` and clipped to the same bounds.
@@ -653,20 +665,72 @@ def _quad_nodes(A, mstar, ell_lo: float, ell_hi: float):
     at an optimizer's first, far-from-converged evaluation: clipping the
     edges alone can otherwise invert them (``lo > hi``), turning the
     trapezoid weights negative and ``log(weight)`` into ``nan``.
+
+    Parameters
+    ----------
+    A : float or array
+        Quadratic coefficient (second derivative of log-likelihood).
+    mstar : float or array
+        Best-fit mass value.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    quad_nodes : int, optional
+        Number of trapezoid nodes. Default: ``_QUAD_NODES`` (48) for the
+        marginal integral; use ``_REINSERT_QUAD_NODES`` for per-sample mass
+        reinsertion (issue #2350).
+
+    Returns
+    -------
+    ell_nodes : ndarray
+        Node locations in log10(mass).
+    weights : ndarray
+        Trapezoid weights.
     """
     center = jnp.clip(jnp.log10(mstar), ell_lo, ell_hi)
     sigma_ell = 1.0 / (jnp.sqrt(A) * mstar * jnp.log(10.0))
     lo = jnp.maximum(ell_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
     hi = jnp.minimum(ell_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
-    ell_nodes = jnp.linspace(lo, hi, _QUAD_NODES)
-    d_ell = (hi - lo) / (_QUAD_NODES - 1)
-    weights = jnp.ones(_QUAD_NODES).at[0].set(0.5).at[-1].set(0.5) * d_ell
+    ell_nodes = jnp.linspace(lo, hi, quad_nodes)
+    d_ell = (hi - lo) / (quad_nodes - 1)
+    weights = jnp.ones(quad_nodes).at[0].set(0.5).at[-1].set(0.5) * d_ell
     return ell_nodes, weights
 
 
-def _log_quadrature_terms(A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """Node grid and its ``-0.5*A*(M-M*)^2 + log p(ell) + log(weight)`` terms."""
-    ell_nodes, weights = _quad_nodes(A, mstar, ell_lo, ell_hi)
+def _log_quadrature_terms(
+    A,
+    mstar,
+    ell_lo: float,
+    ell_hi: float,
+    mass_prior: Distribution,
+    quad_nodes: int = _QUAD_NODES,
+):
+    """Node grid and its ``-0.5*A*(M-M*)^2 + log p(ell) + log(weight)`` terms.
+
+    Parameters
+    ----------
+    A : float or array
+        Quadratic coefficient.
+    mstar : float or array
+        Best-fit mass.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    mass_prior : Distribution
+        Mass prior distribution.
+    quad_nodes : int, optional
+        Number of trapezoid nodes (default: _QUAD_NODES for marginal integral).
+
+    Returns
+    -------
+    ell_nodes : ndarray
+        Node locations.
+    log_terms : ndarray
+        Log-weighted likelihoods at each node.
+    """
+    ell_nodes, weights = _quad_nodes(A, mstar, ell_lo, ell_hi, quad_nodes=quad_nodes)
     m_values = 10.0**ell_nodes
     log_terms = (
         -0.5 * A * (m_values - mstar) ** 2 + mass_prior.log_prob(ell_nodes) + jnp.log(weights)
@@ -681,8 +745,16 @@ def _log_mass_integral(A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distr
 
 
 def _sample_log_mass(key, A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """Inverse-CDF draw of log10(M) from the exact conditional, on the same grid."""
-    ell_nodes, log_terms = _log_quadrature_terms(A, mstar, ell_lo, ell_hi, mass_prior)
+    """Inverse-CDF draw of log10(M) from the exact conditional.
+
+    Uses a finer quadrature grid (_REINSERT_QUAD_NODES) than the marginal
+    integral (_QUAD_NODES) because the pointwise CDF built by
+    cumsum(softmax(...)) and inverted by jnp.interp converges more slowly
+    than the integral (issue #2350).
+    """
+    ell_nodes, log_terms = _log_quadrature_terms(
+        A, mstar, ell_lo, ell_hi, mass_prior, quad_nodes=_REINSERT_QUAD_NODES
+    )
     probs = jax.nn.softmax(log_terms)
     cdf = jnp.cumsum(probs)
     u = jax.random.uniform(key)
