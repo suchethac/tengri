@@ -105,7 +105,20 @@ L_\nu^{\rm ff} = {} &
 $$ (eq-radio-freefree)
  where the SFR is derived from $L_{\rm IR}$ via the Kennicutt (1998) calibration. The calibration constant yields $L_\nu^{\rm ff} \approx 5.5 \times 10^{-7}\,L_\odot\,{\rm Hz}^{-1}$ per ${\rm M_\odot\,yr^{-1}}$ at $1.4\,$GHz and $T_e = 10^4\,$K, consistent with Murphy et al. (2011) Table 1.
 
-The free-free spectral index $\alpha_{\rm ff} \approx -0.1$ is nearly flat (default), in contrast to the steep synchrotron slope $\alpha_{\rm SF} \approx -0.8$. Both $T_e$ (default $10^4\,$K) and $\alpha_{\rm ff}$ are exposed as free parameters for hierarchical inference. The free-free component is enabled by default (`include_freefree=True`); it can be disabled by setting `include_freefree=False` to reproduce fits that pre-date this component.
+The free-free spectral index $\alpha_{\rm ff} \approx -0.1$ is nearly flat (default), in contrast to the steep synchrotron slope $\alpha_{\rm SF} \approx -0.8$. Both $T_e$ (default $10^4\,$K) and $\alpha_{\rm ff}$ are exposed as free parameters for hierarchical inference.
+
+#### Controlling free-free inclusion
+
+The free-free component is enabled by default. To disable it (for example, to match synchrotron-only models from other codes), pass `freefree: False` in the `radio.sf` sub-dict:
+
+```python
+radio={
+    "sf": {"type": "bell2003", "freefree": False},
+    "agn": {"type": "powerlaw"},
+}
+```
+
+Omitting the `freefree` key is equivalent to `freefree: True` for all SFR modes except `bell2003_split`, which automatically forces `freefree: False` (since that mode pre-allocates 10% of its total Bell 2003 radio luminosity to a thermal component). Explicitly passing `freefree: True` with `bell2003_split` raises an error to prevent unintended double-counting of thermal emission.
 
 ### AGN Radio Jets
 

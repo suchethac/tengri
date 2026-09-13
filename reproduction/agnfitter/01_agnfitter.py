@@ -385,16 +385,18 @@ print(
 # ## §2 Star formation history
 #
 # AGNfitter-rX's GALAXY component tabulates a declining-exponential
-# (`SFR(T) ∝ exp(-T/τ)` in cosmic time, so SFR falls monotonically from
-# galaxy formation to the present — the classic tau-model, not a
-# delayed-tau history that rises before falling). tengri's `declining_exp`
-# SFH type implements the same functional form
-# (`tengri.components.stellar.sfh.mean_sfh.declining_exponential`, cited
-# rather than imported — the notebook writes the same closed form directly
-# and cross-checks mass closure through the public `pred.sfh.stellar_mass`
-# property, since the full SFR(t) array is an internal pipeline quantity
-# with no public accessor). The AGNfitter-rX pickle's own tabulated SFR(age)
-# at the fiducial tau is overlaid, read through `galaxy_sfr`.
+# (`SFR(T) ∝ exp(-T/τ)`), so SFR falls monotonically from formation to the
+# present — the classic tau-model, not a delayed-tau history that rises
+# then falls. tengri's `declining_exp` SFH type implements the same
+# functional form (`tengri.components.stellar.sfh.mean_sfh.declining_exponential`;
+# the notebook writes the same closed form directly and cross-checks mass
+# closure through the public `pred.sfh.stellar_mass` property, since the
+# full SFR(t) array is an internal pipeline quantity with no public
+# accessor). The AGNfitter-rX pickle's own tabulated SFR(age) at the
+# fiducial tau is overlaid, read through `galaxy_sfr`. §1's 0.024 dex
+# residual is the age grid's nearest-node snap, the two BC03 editions'
+# differing resolution (1221 vs 6900 points), and the shared 5500 Å
+# normalization anchor — not a form mismatch.
 #
 # **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
