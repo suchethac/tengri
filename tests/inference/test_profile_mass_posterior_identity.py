@@ -51,7 +51,11 @@ from tengri import (
     SEDModel,
     recipes,
 )
-from tengri.inference.mass_profile import _log_quadrature_terms, _profile_stats
+from tengri.inference.mass_profile import (
+    _REINSERT_QUAD_NODES,
+    _log_quadrature_terms,
+    _profile_stats,
+)
 from tengri.observation import Observation, Photometry
 
 pytestmark = pytest.mark.contract
@@ -76,6 +80,7 @@ def _sparse_model(ssp_data):
 def _mock(model, *, seed: int, snr: float = 30.0):
     """Generate mock data and ground truth at a given seed and SNR."""
     from tengri import generate_mock
+
     key_truth, key_mock = jax.random.split(jax.random.PRNGKey(seed))
     truth = model.spec.sample(key_truth)
     mock = generate_mock(model, truth, key=key_mock, snr=snr)
@@ -90,16 +95,23 @@ def _thin_by_ess(samples, max_thinned_count=500):
     samples : ndarray, shape (n_draws,)
         MCMC samples, potentially autocorrelated.
     max_thinned_count : int, optional
-        Keep only the first max_thinned_count independent samples.
+        Maximum number of independent samples to keep.
 
     Returns
     -------
     thinned : ndarray
-        Approximately independent samples.
+        Approximately independent samples, thinned to roughly min(ess,
+        max_thinned_count) samples.
     n_kept : int
         Number of samples kept.
     ess_per_draw : float
         ESS / n_draws ratio (autocorrelation penalty).
+
+    Notes
+    -----
+    The step size is computed as ceil(n / min(ess, max_thinned_count)) to
+    ensure that the thinned array contains approximately the effective
+    sample size worth of independent samples (capped at max_thinned_count).
     """
     # samples are shape (n_chains * n_samples,) = (n,)
     # Reshape for ESS computation if needed (ESS expects (n_chains, n_per_chain))
@@ -117,7 +129,11 @@ def _thin_by_ess(samples, max_thinned_count=500):
 
     ess = float(effective_sample_size(jnp.asarray(samples_2d)))
     ess_per_draw = ess / float(n)
-    step = max(1, int(float(n) / min(ess, max_thinned_count)))
+    # Thin to roughly min(ess, max_thinned_count) independent samples.
+    # Use ceiling division to ensure we actually thin: e.g., if n=200 and
+    # ess=150, step = ceil(200/150) = 2, keeping 100 truly independent samples.
+    target_count = min(ess, max_thinned_count)
+    step = max(1, -(-int(float(n)) // int(target_count)))  # Ceiling division
     thinned = samples[::step]
     return thinned, len(thinned), ess_per_draw
 
@@ -147,8 +163,8 @@ def _evaluate_cdf_at_sample(sample_mass, sample_params, model, forward, flux, no
         The CDF value at sample_mass. Should be uniform [0, 1] if conditional
         is correct.
     """
-    # Call _profile_stats to get the quadrature parameters A, mstar, chi2_min
-    A, mstar, chi2_min = _profile_stats(
+    # Call _profile_stats to get the quadrature parameters A, mstar
+    A, mstar, _chi2_min = _profile_stats(
         model, _MASS_NAME, sample_params, flux, noise, data_type=data_type
     )
 
@@ -156,8 +172,10 @@ def _evaluate_cdf_at_sample(sample_mass, sample_params, model, forward, flux, no
     mass_prior = model.spec.get_distribution(_MASS_NAME)
     ell_lo, ell_hi = mass_prior.bounds
 
-    # Build quadrature terms
-    ell_nodes, log_terms = _log_quadrature_terms(A, mstar, ell_lo, ell_hi, mass_prior)
+    # Build quadrature terms using the same finer grid as _sample_log_mass
+    ell_nodes, log_terms = _log_quadrature_terms(
+        A, mstar, ell_lo, ell_hi, mass_prior, quad_nodes=_REINSERT_QUAD_NODES
+    )
 
     # Form normalized CDF from softmax + cumsum (same as _sample_log_mass)
     probs = jax.nn.softmax(log_terms)
@@ -193,7 +211,7 @@ class TestProfileMassPosteriorIdentityPIT:
         """
         model = _minimal_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
-        truth, flux, noise = _mock(model, seed=seed, snr=30.0)
+        _truth, flux, noise = _mock(model, seed=seed, snr=30.0)
 
         # One unprofiled fit
         fit_kw = dict(
@@ -221,14 +239,14 @@ class TestProfileMassPosteriorIdentityPIT:
             # Reconstruct physical params from the sample
             # Get free params (excluding mass)
             sample_params = {}
-            for name in post.samples.keys():
+            for name in post.samples:
                 if name != _MASS_NAME:
                     sample_params[name] = float(post.samples[name].flatten()[i])
 
             # Get fixed values from the model
             fixed_vals = model.spec.get_fixed_values()
             for name, val in fixed_vals.items():
-                sample_params[name] = float(val) if hasattr(val, '__float__') else val
+                sample_params[name] = float(val) if hasattr(val, "__float__") else val
 
             # Add dummy mass value (required by model.predict but not used by _profile_stats)
             sample_params[_MASS_NAME] = 0.0
@@ -268,7 +286,7 @@ class TestProfileMassPosteriorIdentityPIT:
         """
         model = _sparse_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
-        truth, flux, noise = _mock(model, seed=seed, snr=10.0)
+        _truth, flux, noise = _mock(model, seed=seed, snr=10.0)
 
         fit_kw = dict(
             method="mcmc_nuts",
@@ -292,14 +310,14 @@ class TestProfileMassPosteriorIdentityPIT:
         for i, m_i in enumerate(mass_samples):
             # Reconstruct physical params from the sample
             sample_params = {}
-            for name in post.samples.keys():
+            for name in post.samples:
                 if name != _MASS_NAME:
                     sample_params[name] = float(post.samples[name].flatten()[i])
 
             # Get fixed values from the model
             fixed_vals = model.spec.get_fixed_values()
             for name, val in fixed_vals.items():
-                sample_params[name] = float(val) if hasattr(val, '__float__') else val
+                sample_params[name] = float(val) if hasattr(val, "__float__") else val
 
             # Add dummy mass value (required by model.predict but not used by _profile_stats)
             sample_params[_MASS_NAME] = 0.0
@@ -350,7 +368,7 @@ class TestProfileMassPosteriorIdentitySmoke:
         """
         model = _minimal_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
-        truth, flux, noise = _mock(model, seed=seed, snr=30.0)
+        _truth, flux, noise = _mock(model, seed=seed, snr=30.0)
 
         fit_kw = dict(
             method="mcmc_nuts",
@@ -370,7 +388,7 @@ class TestProfileMassPosteriorIdentitySmoke:
         mass_on = np.asarray(post_on.samples[_MASS_NAME]).flatten()
 
         # Two-sample KS test
-        ks_stat, ks_pvalue = stats.ks_2samp(mass_off, mass_on)
+        _ks_stat, ks_pvalue = stats.ks_2samp(mass_off, mass_on)
 
         # Percentile agreement (16, 50, 84)
         perc_off = np.percentile(mass_off, [16, 50, 84])
