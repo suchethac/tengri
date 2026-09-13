@@ -642,7 +642,12 @@ def test_profile_mass_float32_end_to_end(ssp_data_fsps):
             assert grad_leaf.dtype == jnp.float32, (
                 f"Gradient {name} is {grad_leaf.dtype}, expected float32"
             )
-            assert jnp.isfinite(grad_leaf).all(), f"Gradient {name} contains non-finite values"
+            assert jnp.isfinite(grad_leaf).all(), (
+                f"Gradient {name} contains non-finite values; float32 marginal NaN not fixed"
+            )
+            assert jnp.any(grad_leaf != 0.0), (
+                f"Gradient {name} is identically zero; marginal became inert in float32"
+            )
 
 
 def test_profile_mass_laplace_rejects_float32(ssp_data_fsps):
