@@ -593,3 +593,84 @@ def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
     g = _Fitter()
     with pytest.raises(ValueError, match="profile_mass=True"):
         resolve_profile_mass_for_method(g, "vi", True)
+
+
+@pytest.mark.contract
+def test_profile_mass_float32_end_to_end(ssp_data_fsps):
+    """Verify float32 support end-to-end: construction, inference, finite gradients.
+
+    Regression test for float32 support: the dimensionless rewrite of
+    profile_mass allows float32 at construction time. This test verifies the
+    entire pipeline works and produces finite values and gradients in float32.
+    """
+    with jax.enable_x64(False):
+        # Verify we're in float32
+        assert jnp.result_type(float) == jnp.float32
+
+        # Build the model INSIDE the context, matching the shape in the task
+        model = _minimal_model(ssp_data_fsps)
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+
+        key_t, key_m = jax.random.split(jax.random.PRNGKey(42))
+        truth = model.spec.sample(key_t)
+        mock = generate_mock(model, truth, key=key_m, snr=30.0)
+        flux = jnp.asarray(mock["flux_obs"])
+        noise = jnp.asarray(mock["noise"])
+
+        forward = ForwardModel.build(sed=model, observation=obs)
+        fitter = Fitter(forward, flux, noise, profile_mass="auto")
+
+        # Assert float32 no longer refused at construction
+        assert fitter._profile_mass is True
+
+        # Build context and test inference
+        ctx = InferenceContext.from_target(fitter)
+        xi = {n: jnp.asarray(0.1) for n in fitter._free_names}
+
+        # Forward pass
+        val = ctx.neg_log_posterior_fn(xi, ctx.data_args)
+
+        # Check dtype and finiteness of value
+        assert val.dtype == jnp.float32, f"Expected float32, got {val.dtype}"
+        assert jnp.isfinite(val), f"Value is not finite: {val}"
+
+        # Gradient pass
+        grads = jax.grad(lambda p: ctx.neg_log_posterior_fn(p, ctx.data_args))(xi)
+
+        # Check every gradient leaf is float32 and finite
+        for name, grad_leaf in grads.items():
+            assert grad_leaf.dtype == jnp.float32, (
+                f"Gradient {name} is {grad_leaf.dtype}, expected float32"
+            )
+            assert jnp.isfinite(grad_leaf).all(), f"Gradient {name} contains non-finite values"
+
+
+def test_profile_mass_laplace_rejects_float32(ssp_data_fsps):
+    """Verify laplace method rejects float32 due to Hessian NaN.
+
+    Guard test: float32 refusal for laplace occurs at method resolution time
+    (resolve_profile_mass_for_method), not at Fitter construction. This reflects
+    the true cause: the SED model's Hessian NaN is a forward-model seam,
+    not a profiling defect.
+    """
+    with jax.enable_x64(False):
+        model = _minimal_model(ssp_data_fsps)
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+
+        key_t, key_m = jax.random.split(jax.random.PRNGKey(42))
+        truth = model.spec.sample(key_t)
+        mock = generate_mock(model, truth, key=key_m, snr=30.0)
+        flux = jnp.asarray(mock["flux_obs"])
+        noise = jnp.asarray(mock["noise"])
+
+        forward = ForwardModel.build(sed=model, observation=obs)
+        fitter = Fitter(forward, flux, noise, profile_mass="auto")
+
+        # profile_mass=True at construction (profiling is allowed in float32)
+        assert fitter._profile_mass is True
+
+        # But laplace method should refuse at resolution time
+        from tengri.inference.mass_profile import resolve_profile_mass_for_method
+
+        with pytest.raises(ValueError, match="float32 mode"):
+            resolve_profile_mass_for_method(fitter, "laplace", "auto")

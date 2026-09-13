@@ -190,7 +190,9 @@ def _mass_prior_bounds(dist: Distribution) -> tuple[float, float]:
     return float(lo), float(hi)
 
 
-def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, float]:
+def _linearity_max_deviation(
+    fitter: Fitter, mass_name: str, mass_prior_bounds: tuple[float, float]
+) -> tuple[float, float]:
     """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` at a representative theta.
 
     Probes the model's own physics, not the declared prior's support: two
@@ -203,6 +205,12 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     mass-independent additive term is caught exactly as a photometric one is.
     Catches a mass-independent additive component (e.g. an AGN continuum)
     that the exact chi^2(M) quadratic cannot marginalize.
+
+    The probe masses are derived from the prior bounds, not hardcoded: the
+    midpoint of the prior's log10-space support, plus one dex above it, so the
+    one-dex separation the ``- 10.0`` comparison assumes is preserved, and the
+    probe evaluates the model at scales near its actual use rather than at
+    arbitrary fixed values.
 
     The tolerance scales with the *actual* dtype the prediction returned
     (``jax.enable_x64`` may be off process-wide, silently downcasting every
@@ -221,6 +229,29 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     stays far below a genuine non-linearity (a mass-independent component
     like an unmasked AGN continuum), which perturbs the ratio at the
     O(1) scale, not the O(1e3 * eps) one.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter under construction.
+    mass_name : str
+        The name of the mass parameter.
+    mass_prior_bounds : tuple[float, float]
+        The (lo, hi) log10-mass bounds from the prior's support.
+
+    Returns
+    -------
+    max_dev : float
+        The maximum deviation observed.
+    tol : float
+        The tolerance for the deviation.
+
+    Raises
+    ------
+    ValueError
+        When no valid band carries a finite, strictly-positive prediction at
+        either mass, meaning the model cannot be assessed for linearity (all
+        bands zero, fully absorbed, or underflowed in float32).
     """
     spec = fitter.spec
     phys: dict[str, Any] = {}
@@ -233,20 +264,43 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     if getattr(spec, "stochastic", False):
         phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
 
+    # Derive probe masses from prior bounds: midpoint and midpoint+1 dex
+    ell_lo, ell_hi = mass_prior_bounds
+    mass_midpoint = 0.5 * (ell_lo + ell_hi)
+    ell_a = mass_midpoint
+    ell_b = mass_midpoint + 1.0
+
     use_components = bool(getattr(fitter, "use_components", False))
     pred_a = _predict_full_vector(
         fitter.model,
         fitter.data_type,
-        {**phys, mass_name: jnp.asarray(9.0)},
+        {**phys, mass_name: jnp.asarray(ell_a)},
         use_components=use_components,
     )
     pred_b = _predict_full_vector(
         fitter.model,
         fitter.data_type,
-        {**phys, mass_name: jnp.asarray(10.0)},
+        {**phys, mass_name: jnp.asarray(ell_b)},
         use_components=use_components,
     )
-    max_dev = float(jnp.max(jnp.abs(pred_b / pred_a - 10.0)))
+
+    # Restrict comparison to entries where pred_a is finite and strictly positive
+    # (zero throughput, fully absorbed, or float32 underflow). Use where-dummy
+    # pattern to keep gradients finite.
+    valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
+    if not bool(jnp.any(valid)):
+        raise ValueError(
+            f"linearity probe: no valid bands (all predictions zero, fully absorbed, "
+            f"or underflowed at mass {ell_a}); cannot assess linearity"
+        )
+
+    # Compute ratio only where valid; substitute 10.0 elsewhere (the target ratio).
+    # This keeps the shape gradient-safe even though this function runs at construction
+    # time and its result is converted to float(), not differentiated. The benign
+    # substitution avoids NaN propagation if anyone ever traces through the probe.
+    ratio = jnp.where(valid, pred_b / pred_a, 10.0)
+    max_dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+
     tol = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
     return max_dev, tol
 
@@ -270,13 +324,6 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     if not hasattr(spec, "_distributions"):
         return f"parameter spec {type(spec).__name__} is not a plain Parameters (unsupported)", {}
 
-    # The marginal's curvature in flux units (A ~ 1e-13 at fluxes ~1e-30) and the
-    # per-band cotangent scales its reverse-mode gradient needs are outside
-    # float32's range: measured on 2026-09-11 (bench/reports/2026-09-11_profile_mass_20s.md,
-    # Finding 8), the float64 gradient is finite where the float32 one is NaN on
-    # the same fixture. Profiling is a float64 feature until that seam is closed.
-    if not jax.config.jax_enable_x64:
-        return "float32 mode (jax_enable_x64 is off); profiling needs float64", {}
 
     candidates = [n for n in spec.free_params if n.endswith("log_total_mass")]
     if len(candidates) != 1:
@@ -319,7 +366,11 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     if fitter.data_mask is not None and bool(jnp.any(jnp.asarray(fitter.data_mask) != 0)):
         return "censored data (upper/lower limits) is present", {}
 
-    max_dev, tol = _linearity_max_deviation(fitter, mass_name)
+    try:
+        max_dev, tol = _linearity_max_deviation(fitter, mass_name, bounds)
+    except ValueError as exc:
+        return str(exc), {}
+
     if not (max_dev < tol):
         return (
             f"photometry is not exactly linear in '{mass_name}' "
@@ -454,6 +505,17 @@ PROFILE_MASS_BACKENDS = frozenset(
     }
 )
 
+#: Backends that take a Hessian of the objective function and therefore trigger
+#: the known float32 NaN failure in the SED model's photometry Hessian
+#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). The Hessian is computed
+#: via ``jax.hessian`` (laplace backend) or via preconditioning's ``negative_hessian_metric``
+#: (optional metric whitening for Hamiltonian samplers). Note that preconditioning is
+#: **opt-in** (``precondition=`` must be truthy), so float32 refusal is scoped to the
+#: backends listed here. The float32 NaN is **not** specific to ``profile_mass`` — it
+#: reproduces on the plain objective with ``profile_mass=False`` — so float32 refusal
+#: names which objective this is, not which fitting path triggered it.
+HESSIAN_BACKEND_SET = frozenset({"laplace"})
+
 
 def disable_profile_mass(fitter: Fitter, reason: str) -> None:
     """Undo the working-spec rewrite so the fitter samples the mass again.
@@ -484,7 +546,31 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
     is the constructor's ``profile_mass`` argument: an explicit ``True`` on an
     unsupported backend is an error, ``"auto"`` steps aside with a logged
     reason, ``False`` was never engaged.
+
+    Also enforces float32 refusal on backends that take a Hessian of the
+    objective, where the SED model's photometry Hessian evaluates to all-NaN
+    at the converged MAP in float32 due to a JAX forward-over-reverse seam
+    in the model's differentiable code (bench/reports/2026-09-11_profile_mass_20s.md,
+    Finding 8). The failure is not specific to profiling — it reproduces with
+    ``profile_mass=False`` — so this guard names which objective (not which
+    fitting path) blocks float32.
     """
+    # Check float32 refusal for Hessian-taking backends
+    if method in HESSIAN_BACKEND_SET:
+        dtype = jnp.result_type(float)
+        if dtype == jnp.float32:
+            reason = (
+                "float32 mode; the SED model's photometry Hessian is all-NaN in float32 "
+                "at the converged MAP (a forward-over-reverse seam in the model), "
+                "not specific to profiling (reproduces with profile_mass=False). "
+                "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
+            )
+            if getattr(fitter, "_profile_mass", False):
+                if requested is True:
+                    raise ValueError(f"profile_mass=True but {reason}")
+                disable_profile_mass(fitter, f"auto-disabled: {reason}")
+            raise ValueError(f"method={method!r}: {reason}")
+
     if not getattr(fitter, "_profile_mass", False) or method in PROFILE_MASS_BACKENDS:
         return
     reason = (
