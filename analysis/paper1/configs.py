@@ -113,7 +113,7 @@ def config_III(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "tau_diff": Uniform(0.5, 3.0),
         },
         dust_emission={"type": "dl07", "all_params": Fixed(DEFAULT)},
-        neb={"type": "ssp"},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Uniform(-4.0, -1.0)},
         redshift=Fixed(z),
         igm={"type": "inoue"},
         approx=WavePrecomp(),
