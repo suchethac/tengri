@@ -175,6 +175,12 @@ class RadioSEDComponentConfig(SEDComponentConfig):
             raise ValueError(
                 f"Unknown sfr_mode {self.sfr_mode!r}. Choose one of {SF_RADIO_MODELS}."
             )
+        # Validate include_freefree is bool or None
+        if self.include_freefree is not None and not isinstance(self.include_freefree, bool):
+            raise TypeError(
+                f"include_freefree must be bool or None, "
+                f"got {type(self.include_freefree).__name__}"
+            )
         # bell2003_split already allocates a thermal fraction of the Bell
         # (2003) TOTAL (radio_sfr_bell2003_split); adding the independently
         # normalized radio_freefree term on top double-counts the thermal

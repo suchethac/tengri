@@ -60,10 +60,10 @@ casing. :func:`build_profiled_loss_fn` then supplies the marginal
 log-likelihood above in place of the ordinary chi-squared term, and
 :func:`finalize_profile_mass` reinserts the mass into the ``Posterior`` once
 inference is done: an exact conditional draw ``p(log10(M) | theta, d)`` per
-posterior sample (inverse-CDF on the same quadrature grid, mapped to the
-sampler's standardized coordinate via the prior's own
-``standardize``/``unstandardize`` pushforward) for sample-based backends, or
-the conditional mode :math:`\\ell^* = \\log_{10} M^*` for ``method="map"``.
+posterior sample (inverse-CDF on the same quadrature grid) for sample-based
+backends, or the conditional mode :math:`\\ell^* = \\log_{10} M^*` for
+``method="map"``. The returned mass is in physical coordinates (log10(M)),
+merged directly into the posterior samples alongside the other free parameters.
 
 **Guards.** The exact quadratic in :math:`M` (and hence this whole module)
 requires: ``data_type`` one of ``"photometry"``, ``"spectroscopy"``, or
@@ -323,7 +323,6 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     spec = fitter.spec
     if not hasattr(spec, "_distributions"):
         return f"parameter spec {type(spec).__name__} is not a plain Parameters (unsupported)", {}
-
 
     candidates = [n for n in spec.free_params if n.endswith("log_total_mass")]
     if len(candidates) != 1:
@@ -784,7 +783,9 @@ def _quad_nodes(
     ``+/- 8 sigma`` and clipped to the same bounds. Clamping the center
     (rather than clamping each edge independently) guarantees
     ``lo <= center <= hi`` however far outside the prior's support the
-    unconstrained best-fit amplitude falls.
+    unconstrained best-fit amplitude falls: clipping the edges independently
+    can otherwise invert them (``lo > hi``), turning the trapezoid weights
+    negative and ``log(weight)`` into ``nan``.
 
     Parameters
     ----------
