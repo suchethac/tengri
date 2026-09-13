@@ -107,6 +107,7 @@ import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
 from tengri.parameters.priors import Fixed
+from tengri.utils.scale import pow10, whiten
 
 if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
@@ -590,7 +591,7 @@ def _profile_stats(
     jit_inputs: dict | None = None,
     threaded_impl=None,
 ):
-    """``(A, M*, chi2_min)`` of ``chi2(M) = chi2_min + A * (M - M*)**2``.
+    """``(A_ref, a_star, chi2_min, ell_ref)`` of the dimensionless quadratic.
 
     Exact whenever the ``data_type`` data vector (:func:`_predict_full_vector`
     -- photometry, spectroscopy, or their photometry-then-spectrum
@@ -600,6 +601,27 @@ def _profile_stats(
     10**phys[mass_name]`` divides out whatever mass the prediction was made
     at, so this is safe to call with the placeholder-fixed value used during
     inference or a real posterior-sample mass used post hoc.
+
+    Returns
+    -------
+    A_ref : float or array
+        Dimensionless quadratic coefficient (the second derivative of the
+        log-likelihood in the reference frame).
+    a_star : float or array
+        Dimensionless best-fit mass amplitude ``B_ref / A_ref``, unitless
+        and order-1 in magnitude. Related to the physical mass as
+        ``M* = a_star * 10**ell_ref`` (not formed to avoid underflow).
+    chi2_min : float or array
+        Minimum chi-squared in the residual form (no catastrophic
+        cancellation). Satisfies
+        ``chi2(a) = chi2_min + A_ref * (a - a_star)^2`` for dimensionless
+        amplitude ``a = M / 10**ell_ref``.
+    ell_ref : float or array
+        The reference log10(mass) at which the prediction was evaluated.
+        A Python float constant on every live path (prior-derived, never
+        data-derived). Bridge to physical coordinates: ``sigma_ell =
+        1 / (sqrt(A_ref) * a_star * ln(10))``, and neither ``M*`` nor
+        ``sigma_ell`` is formed here.
     """
     pred = _predict_full_vector(
         model,
@@ -609,13 +631,15 @@ def _profile_stats(
         jit_inputs=jit_inputs,
         threaded_impl=threaded_impl,
     )
-    placeholder_mass = 10.0 ** phys[mass_name]
+    ell_ref = jnp.asarray(phys[mass_name])
+
     # Divide by noise *before* squaring/multiplying (every chi^2 in tengri
     # does, see ``likelihoods.gaussian.standardized_residual``), AND divide
     # ``pred`` by the mass placeholder only *after* that -- not ``f =
-    # pred / placeholder_mass`` up front, then ``f / noise``.
+    # pred / placeholder_mass`` up front, then ``f / noise``. Use ``whiten``
+    # to prevent reordering: the two orderings are exact in real arithmetic
+    # but not in float32.
     #
-    # The two orderings are exact in real arithmetic but not in float32.
     # ``pred`` at the placeholder mass and its per-band noise are each
     # individually tiny for a faint band (measured: ~3e-30 and ~1e-31 on a
     # far-IR band ~1e3x fainter than the others, tests/regression/precision's
@@ -627,55 +651,67 @@ def _profile_stats(
     # computation to exactly 0.0 -- which is fine for the forward value (that
     # band's contribution to A/B is negligible) but starves the reverse-mode
     # cotangent reaching the prediction (``predict_photometry`` /
-    # ``predict_spectrum``): dividing by
-    # ``placeholder_mass`` *before* the noise normalization multiplies the
-    # local Jacobian by an extra ``1/placeholder_mass`` on the way back,
-    # weakening the cotangent by that same large factor (measured: enough to
-    # zero out d(pred)/d(theta) entirely in float32, though the same
-    # derivative is finite -- if tiny -- in float64). Deferring the
-    # ``/ placeholder_mass`` rescaling to the aggregate sums below (themselves
-    # ordinary-magnitude numbers) never revisits either extreme and restores
-    # the same reverse-mode scale the rest of tengri's chi^2 gradients get.
-    snr_pred = pred / noise
-    snr_d = data / noise
+    # ``predict_spectrum``): dividing by ``placeholder_mass`` *before* the
+    # noise normalization multiplies the local Jacobian by an extra
+    # ``1/placeholder_mass`` on the way back, weakening the cotangent by that
+    # same large factor (measured: enough to zero out d(pred)/d(theta) entirely
+    # in float32, though the same derivative is finite -- if tiny -- in float64).
+    # The dimensionless form naturally avoids this: mass factors cancel
+    # algebraically, so neither is formed.
+    snr_pred = whiten(pred, noise)
+    snr_d = whiten(data, noise)
+
     if presence is not None:
         # The same rule as ``likelihoods.gaussian``: an absent band (presence 0)
         # contributes exactly zero to every sum and to its gradient, so the
         # mass marginal never sees a band the ordinary likelihood does not.
         snr_pred = presence * snr_pred
         snr_d = presence * snr_d
-    sum_pred2 = jnp.sum(snr_pred**2)
-    sum_data_pred = jnp.sum(snr_d * snr_pred)
-    A = sum_pred2 / placeholder_mass**2
-    B = sum_data_pred / placeholder_mass
-    mstar = B / A
-    d2_sum = jnp.sum(snr_d**2)
-    chi2_min = d2_sum - B**2 / A
-    return A, mstar, chi2_min
+
+    A_ref = jnp.sum(snr_pred**2)
+    B_ref = jnp.sum(snr_d * snr_pred)
+    a_star = B_ref / A_ref
+
+    # Residual form: chi2(a) = sum((snr_d - a*snr_pred)^2) expands to
+    # chi2(a) = chi2_min + A_ref*(a - a_star)^2. The residual form avoids
+    # catastrophic cancellation: chi2_min = d2_sum - B_ref^2/A_ref is
+    # the difference of large terms (each about N*SNR^2) whose relative error
+    # under that formula is about eps*SNR^2. Instead, evaluating at the
+    # stationary point a_star gives a form whose error is second-order:
+    # perturbing a_star changes chi2 only quadratically, so relative error
+    # is about eps, independent of SNR.
+    chi2_min = jnp.sum((snr_d - a_star * snr_pred) ** 2)
+
+    return A_ref, a_star, chi2_min, ell_ref
 
 
-def _quad_nodes(A, mstar, ell_lo: float, ell_hi: float, quad_nodes: int = _QUAD_NODES):
-    """Trapezoid grid in log10(M), +/- 8 sigma around log10(M*).
+def _quad_nodes(
+    A_ref, a_star, ell_lo: float, ell_hi: float, ell_ref: float, quad_nodes: int = _QUAD_NODES
+):
+    """Trapezoid grid in log10(M) offset from reference, +/- 8 sigma around log10(a*).
 
-    The window is centered on ``log10(M*)`` *clamped* to ``[ell_lo, ell_hi]``
-    first, then widened by ``+/- 8 sigma`` and clipped to the same bounds.
-    Clamping the center (rather than clamping each edge of the unclamped
-    window independently) guarantees ``lo <= center <= hi`` however far
-    outside the prior's support the unconstrained best-fit mass falls, e.g.
-    at an optimizer's first, far-from-converged evaluation: clipping the
-    edges alone can otherwise invert them (``lo > hi``), turning the
-    trapezoid weights negative and ``log(weight)`` into ``nan``.
+    Builds the grid in the dimensionless ``u = ell - ell_ref`` coordinate
+    to avoid relative errors in node spacing (subtracting per-node, which
+    injects ulp(ell_ref)/spacing noise). The window is centered on the
+    log10 amplitude ``log10(a_star)`` *clamped* to
+    ``[ell_lo - ell_ref, ell_hi - ell_ref]`` first, then widened by
+    ``+/- 8 sigma`` and clipped to the same bounds. Clamping the center
+    (rather than clamping each edge independently) guarantees
+    ``lo <= center <= hi`` however far outside the prior's support the
+    unconstrained best-fit amplitude falls.
 
     Parameters
     ----------
-    A : float or array
-        Quadratic coefficient (second derivative of log-likelihood).
-    mstar : float or array
-        Best-fit mass value.
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
     ell_lo : float
-        Log10 prior lower bound.
+        Log10 prior lower bound (on absolute ell).
     ell_hi : float
-        Log10 prior upper bound.
+        Log10 prior upper bound (on absolute ell).
+    ell_ref : float
+        Reference log10(mass), the evaluation point of the prediction.
     quad_nodes : int, optional
         Number of trapezoid nodes. Default: ``_QUAD_NODES`` (48) for the
         marginal integral; use ``_REINSERT_QUAD_NODES`` for per-sample mass
@@ -683,82 +719,141 @@ def _quad_nodes(A, mstar, ell_lo: float, ell_hi: float, quad_nodes: int = _QUAD_
 
     Returns
     -------
-    ell_nodes : ndarray
-        Node locations in log10(mass).
+    u_nodes : ndarray
+        Node locations in ``ell - ell_ref`` (dimensionless offset).
     weights : ndarray
         Trapezoid weights.
     """
-    center = jnp.clip(jnp.log10(mstar), ell_lo, ell_hi)
-    sigma_ell = 1.0 / (jnp.sqrt(A) * mstar * jnp.log(10.0))
-    lo = jnp.maximum(ell_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
-    hi = jnp.minimum(ell_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
-    ell_nodes = jnp.linspace(lo, hi, quad_nodes)
-    d_ell = (hi - lo) / (quad_nodes - 1)
-    weights = jnp.ones(quad_nodes).at[0].set(0.5).at[-1].set(0.5) * d_ell
-    return ell_nodes, weights
+    u_lo = ell_lo - ell_ref
+    u_hi = ell_hi - ell_ref
+    center = jnp.clip(jnp.log10(a_star), u_lo, u_hi)
+    sigma_u = 1.0 / (jnp.sqrt(A_ref) * a_star * jnp.log(10.0))
+    lo = jnp.maximum(u_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
+    hi = jnp.minimum(u_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
+    u_nodes = jnp.linspace(lo, hi, quad_nodes)
+    d_u = (hi - lo) / (quad_nodes - 1)
+    weights = jnp.ones(quad_nodes).at[0].set(0.5).at[-1].set(0.5) * d_u
+    return u_nodes, weights
 
 
 def _log_quadrature_terms(
-    A,
-    mstar,
+    A_ref,
+    a_star,
     ell_lo: float,
     ell_hi: float,
     mass_prior: Distribution,
+    ell_ref: float,
     quad_nodes: int = _QUAD_NODES,
 ):
-    """Node grid and its ``-0.5*A*(M-M*)^2 + log p(ell) + log(weight)`` terms.
+    """Node grid and its log-weighted terms in the dimensionless form.
 
     Parameters
     ----------
-    A : float or array
-        Quadratic coefficient.
-    mstar : float or array
-        Best-fit mass.
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
     ell_lo : float
-        Log10 prior lower bound.
+        Log10 prior lower bound (on absolute ell).
     ell_hi : float
-        Log10 prior upper bound.
+        Log10 prior upper bound (on absolute ell).
     mass_prior : Distribution
         Mass prior distribution.
+    ell_ref : float
+        Reference log10(mass).
     quad_nodes : int, optional
         Number of trapezoid nodes (default: _QUAD_NODES for marginal integral).
 
     Returns
     -------
-    ell_nodes : ndarray
-        Node locations.
+    u_nodes : ndarray
+        Node locations in ``ell - ell_ref`` (dimensionless offset).
     log_terms : ndarray
         Log-weighted likelihoods at each node.
     """
-    ell_nodes, weights = _quad_nodes(A, mstar, ell_lo, ell_hi, quad_nodes=quad_nodes)
-    m_values = 10.0**ell_nodes
+    u_nodes, weights = _quad_nodes(A_ref, a_star, ell_lo, ell_hi, ell_ref, quad_nodes=quad_nodes)
+    # Reconstruct absolute ell for the prior evaluation and the quadratic term.
+    # The clip protects boundary nodes: (ell_lo - ell_ref) + ell_ref may not
+    # round back exactly to ell_lo due to floating-point error, and a node
+    # one ULP outside a Uniform's support scores -inf, silently dropping
+    # half a node's weight from the sum.
+    ell_nodes = jnp.clip(u_nodes + ell_ref, ell_lo, ell_hi)
+    a_values = pow10(u_nodes)
     log_terms = (
-        -0.5 * A * (m_values - mstar) ** 2 + mass_prior.log_prob(ell_nodes) + jnp.log(weights)
+        -0.5 * A_ref * (a_values - a_star) ** 2 + mass_prior.log_prob(ell_nodes) + jnp.log(weights)
     )
-    return ell_nodes, log_terms
+    return u_nodes, log_terms
 
 
-def _log_mass_integral(A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """``log integral(exp(-0.5*A*(M(ell)-M*)**2) * p(ell) dell)``, quadrature."""
-    _, log_terms = _log_quadrature_terms(A, mstar, ell_lo, ell_hi, mass_prior)
+def _log_mass_integral(
+    A_ref, a_star, ell_lo: float, ell_hi: float, mass_prior: Distribution, ell_ref: float
+):
+    """``log integral(exp(-0.5*A_ref*(a-a*)**2) * p(ell) dell)``, quadrature.
+
+    Parameters
+    ----------
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    mass_prior : Distribution
+        Mass prior.
+    ell_ref : float
+        Reference log10(mass).
+
+    Returns
+    -------
+    float or array
+        Log of the marginal integral.
+    """
+    _, log_terms = _log_quadrature_terms(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
     return logsumexp(log_terms)
 
 
-def _sample_log_mass(key, A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
+def _sample_log_mass(
+    key, A_ref, a_star, ell_lo: float, ell_hi: float, mass_prior: Distribution, ell_ref: float
+):
     """Inverse-CDF draw of log10(M) from the exact conditional.
 
     Uses a finer quadrature grid (_REINSERT_QUAD_NODES) than the marginal
     integral (_QUAD_NODES) because the pointwise CDF built by
     cumsum(softmax(...)) and inverted by jnp.interp converges more slowly
     than the integral (issue #2350).
+
+    Parameters
+    ----------
+    key : jax.Array
+        PRNG key.
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    mass_prior : Distribution
+        Mass prior.
+    ell_ref : float
+        Reference log10(mass).
+
+    Returns
+    -------
+    float or array
+        Sampled log10(M) (absolute, not offset from reference).
     """
-    ell_nodes, log_terms = _log_quadrature_terms(
-        A, mstar, ell_lo, ell_hi, mass_prior, quad_nodes=_REINSERT_QUAD_NODES
+    u_nodes, log_terms = _log_quadrature_terms(
+        A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref, quad_nodes=_REINSERT_QUAD_NODES
     )
     probs = jax.nn.softmax(log_terms)
     cdf = jnp.cumsum(probs)
     u = jax.random.uniform(key)
-    return jnp.interp(u, cdf / cdf[-1], ell_nodes)
+    u_sample = jnp.interp(u, cdf / cdf[-1], u_nodes)
+    return u_sample + ell_ref
 
 
 # ── The profiled loss (drop-in for Fitter._build_loss_fn) ───────────────────
@@ -815,7 +910,7 @@ def build_profiled_loss_fn(fitter: Fitter):
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
 
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -827,7 +922,9 @@ def build_profiled_loss_fn(fitter: Fitter):
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
         )
-        loglik = -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        loglik = -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
         return -loglik + standardized_neg_log_prior(
             params_unbounded,
@@ -874,7 +971,7 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
         )
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -886,7 +983,9 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
         )
-        return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        return -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
     return loglik_unbounded
 
@@ -920,7 +1019,7 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
         params = spec.resolve_mirrors(params)
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -932,7 +1031,9 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
         )
-        return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        return -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
     return loglikelihood_fn
 
@@ -984,10 +1085,10 @@ def _reinsert_mass_fn(fitter: Fitter):
                 use_components=use_components,
             )
 
-        A_all, mstar_all, _ = jax.vmap(stats_one)(samples_no_mass)
-        return jax.vmap(lambda k, a, m: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior))(
-            draw_keys, A_all, mstar_all
-        )
+        A_ref_all, a_star_all, _, ell_ref_all = jax.vmap(stats_one)(samples_no_mass)
+        return jax.vmap(
+            lambda k, a, m, r: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior, r)
+        )(draw_keys, A_ref_all, a_star_all, ell_ref_all)
 
     fn = jax.jit(_reinsert)
     cache[cache_key] = fn
@@ -1050,7 +1151,7 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
     else:
         phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
-        _, mstar, _ = _profile_stats(
+        _, a_star, _, ell_ref = _profile_stats(
             model,
             mass_name,
             phys,
@@ -1060,6 +1161,6 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
             data_type=data_type,
             use_components=use_components,
         )
-        posterior.params = {**posterior.params, mass_name: jnp.log10(mstar)}
+        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
 
     return posterior

@@ -156,11 +156,12 @@ def _assert_profiled_matches_brute_force(
         for name, val in fitter_off._fixed_values.items():
             phys[name] = jnp.asarray(val)
         phys[_MASS_NAME] = jnp.asarray(0.0)
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model, _MASS_NAME, phys, flux, noise, data_type=data_type
         )
         profiled_log_z = float(
-            -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+            -0.5 * chi2_min
+            + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
         )
 
         rel_diff = abs(profiled_log_z - brute_force_log_z) / abs(brute_force_log_z)
@@ -445,6 +446,103 @@ class TestAutoDefault:
         fitter = Fitter(forward, data=data, noise=noise, data_type="joint", profile_mass="auto")
         assert fitter._profile_mass is True
         assert fitter._profile_mass_resolved is True
+
+
+class TestReferenceInvariance:
+    """Marginal log-likelihood is invariant to the mass reference frame.
+
+    The dimensionless formulation of _profile_stats cancels mass factors
+    algebraically, so the returned marginal integral must not depend on
+    the reference point ``phys[mass_name]`` at which the prediction is
+    evaluated. This test sweeps the reference over the prior bounds plus
+    ±1 dex outside and verifies the marginal log-likelihood is unchanged.
+    """
+
+    def test_reference_invariance_photometry(self, ssp_data_fsps):
+        """Profiled marginal is the same at different reference masses."""
+        model = _minimal_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        fitter_off = Fitter(forward, data=flux, noise=noise, profile_mass=False)
+        mass_prior = fitter_off.spec.get_distribution(_MASS_NAME)
+        ell_lo, ell_hi = mass_prior.bounds
+
+        # Reference points: lo, midpoint, hi, and ±1 dex outside
+        ell_refs = [
+            ell_lo - 1.0,
+            ell_lo,
+            0.5 * (ell_lo + ell_hi),
+            ell_hi,
+            ell_hi + 1.0,
+        ]
+
+        # Compute profiled marginal at each reference
+        other_names = [n for n in fitter_off._free_names if n != _MASS_NAME]
+        phys_base = {
+            name: fitter_off.spec.get_distribution(name).unstandardize(0.0) for name in other_names
+        }
+        for name, val in fitter_off._fixed_values.items():
+            phys_base[name] = jnp.asarray(val)
+
+        log_z_vals = []
+        for ell_ref in ell_refs:
+            phys = {**phys_base, _MASS_NAME: jnp.asarray(ell_ref)}
+            A_ref, a_star, chi2_min, ell_ref_out = _profile_stats(
+                model, _MASS_NAME, phys, flux, noise, data_type="photometry"
+            )
+            log_z = float(
+                -0.5 * chi2_min
+                + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref_out)
+            )
+            log_z_vals.append(log_z)
+
+        # All values should be identical (within numerical precision)
+        log_z_vals = np.array(log_z_vals)
+        rel_error = np.abs(np.diff(log_z_vals)) / np.abs(log_z_vals[:-1] + 1e-10)
+        assert np.all(rel_error < 1e-5), f"Relative errors: {rel_error}"
+
+    def test_reference_invariance_spectroscopy(self, ssp_data_fsps):
+        """Profiled marginal is the same at different reference masses (spectroscopy)."""
+        model = _spectroscopy_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _spectroscopy_mock(model, seed=1)
+
+        fitter_off = Fitter(
+            forward, data=flux, noise=noise, data_type="spectroscopy", profile_mass=False
+        )
+        mass_prior = fitter_off.spec.get_distribution(_MASS_NAME)
+        ell_lo, ell_hi = mass_prior.bounds
+
+        # Reference points: lo, midpoint, hi
+        ell_refs = [
+            ell_lo,
+            0.5 * (ell_lo + ell_hi),
+            ell_hi,
+        ]
+
+        other_names = [n for n in fitter_off._free_names if n != _MASS_NAME]
+        phys_base = {
+            name: fitter_off.spec.get_distribution(name).unstandardize(0.0) for name in other_names
+        }
+        for name, val in fitter_off._fixed_values.items():
+            phys_base[name] = jnp.asarray(val)
+
+        log_z_vals = []
+        for ell_ref in ell_refs:
+            phys = {**phys_base, _MASS_NAME: jnp.asarray(ell_ref)}
+            A_ref, a_star, chi2_min, ell_ref_out = _profile_stats(
+                model, _MASS_NAME, phys, flux, noise, data_type="spectroscopy"
+            )
+            log_z = float(
+                -0.5 * chi2_min
+                + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref_out)
+            )
+            log_z_vals.append(log_z)
+
+        log_z_vals = np.array(log_z_vals)
+        rel_error = np.abs(np.diff(log_z_vals)) / np.abs(log_z_vals[:-1] + 1e-10)
+        assert np.all(rel_error < 1e-5), f"Relative errors: {rel_error}"
 
 
 def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
