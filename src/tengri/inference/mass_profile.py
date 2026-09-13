@@ -60,10 +60,10 @@ casing. :func:`build_profiled_loss_fn` then supplies the marginal
 log-likelihood above in place of the ordinary chi-squared term, and
 :func:`finalize_profile_mass` reinserts the mass into the ``Posterior`` once
 inference is done: an exact conditional draw ``p(log10(M) | theta, d)`` per
-posterior sample (inverse-CDF on the same quadrature grid, mapped to the
-sampler's standardized coordinate via the prior's own
-``standardize``/``unstandardize`` pushforward) for sample-based backends, or
+posterior sample (inverse-CDF on the same quadrature grid) for sample-based backends, or
 the conditional mode :math:`\\ell^* = \\log_{10} M^*` for ``method="map"``.
+The returned mass is in physical coordinates (log10(M)), merged directly
+into the posterior samples alongside the other free parameters.
 
 **Guards.** The exact quadratic in :math:`M` (and hence this whole module)
 requires: ``data_type`` one of ``"photometry"``, ``"spectroscopy"``, or
