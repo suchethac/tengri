@@ -1188,10 +1188,10 @@ class Fitter:
         parameter named ``*_log_total_mass``) instead of sampling it, so
         inference runs on the remaining ``D - 1`` parameters and the mass is
         drawn from its exact conditional posterior afterward (or set to its
-        conditional mode for ``method="map"``). Requires photometry-only data
-        with a Gaussian likelihood, exactly one free ``*_log_total_mass``
-        parameter with a bounded-support prior, and photometry that is
-        numerically linear in that parameter; see
+        conditional mode for ``method="map"``). Supports photometry, spectroscopy,
+        or joint photometry + spectroscopy data with a Gaussian likelihood, exactly
+        one free ``*_log_total_mass`` parameter with a bounded-support prior, and
+        data that is numerically linear in that parameter; see
         :func:`tengri.inference.mass_profile.configure_profile_mass` for the
         full guard list and the marginalization math. Default ``"auto"``:
         engages only when every guard passes, otherwise falls back to

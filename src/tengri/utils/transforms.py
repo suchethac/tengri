@@ -3,7 +3,7 @@
 
 Inspired by diffsky's utility_funcs.py pattern: all physical parameters
 live in bounded space, but samplers/optimizers work in unbounded space.
-Sigmoid transforms connect the two, with well-defined gradients everywhere.
+The Gaussian CDF (probit) connects the two, with well-defined gradients everywhere.
 
 This is the same idea as NIFTy's standardization: the sampler explores
 xi ~ N(0, I) in unbounded space, and the forward model maps to physical
