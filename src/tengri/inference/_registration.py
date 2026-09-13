@@ -555,10 +555,10 @@ register_backend(
 
 register_backend(
     "nss",
-    tier="experimental",
+    tier="primary",
     short_doc=(
-        "Nested sampling, slow (cold ~240s at D=6, timeout >600s at D=7); "
-        "use for evidence/model comparison, not point estimates"
+        "Vectorized nested sampling: returns Bayesian evidence (log Z) and posterior samples. "
+        "Efficient sampler suitable for model comparison and point estimate inference."
     ),
     legacy_fitter=False,
 )(_ctx_run_nss)

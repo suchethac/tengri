@@ -7,7 +7,7 @@
 - **MCMC (NUTS)**: cold ~90s at D=6 DPL; warmup blows past 5 min on D=7+ dense_basis SFH
 - **VI (geoVI)**: cold ~100s at D=6–7, ~20 GB RSS peak (memory-heavy)
 - **MCMC (HMC)**: cold ~21s at D=6–7 (faster than NUTS on high-D, recommended for D≥7)
-- **NSS**: cold ~240s at D=6, timeout >600s at D=7 (nested sampling; experimental)
+- **NSS**: cold ~37s at D=8 (vectorized nested sampling; primary)
 
 ## JIT Compilation (One-Time Cost)
 
@@ -172,14 +172,13 @@ mocks (validated 2026-05-22). Use `vi` (NIFTy geoVI) for science instead.
 
 ## Nested Sampling (NSS)
 
-**Experimental — slow; use for evidence or model comparison only.**
+**Primary backend — vectorized nested sampling for evidence and posterior inference.**
 
-- **Cold (D=6)**: ~240s
-- **Cold (D=7)**: timeout >600s (not recommended)
+- **Cold (D=8)**: ~37s (measured on real data)
 
 NSS computes log-evidence (Bayesian model comparison) alongside posteriors.
-The long runtime and experimental tier make it unsuitable for exploratory fits.
-Use `map`, `mcmc_nuts`, or `vi` for point estimates or credible regions instead.
+Use for model comparison, Bayesian model averaging, and posterior inference.
+Alternative primary backends for point estimates or quick exploration: `map`, `mcmc_nuts`, `vi`, or `mcmc_hmc`.
 
 ## Performance Tuning
 
@@ -206,7 +205,7 @@ Use `map`, `mcmc_nuts`, or `vi` for point estimates or credible regions instead.
 | Full posterior, low-D | NUTS | ≤6 | ~90s cold (D=6 DPL) |
 | Full posterior, mid-D | HMC | 6–20 | ~21s cold (D=6–7) |
 | Full posterior, high-D | geoVI or raytrace | ≥20 | ~100s (geoVI), O(1) steps (raytrace) |
-| Model comparison / evidence | NSS | ≤6 | ~240s cold (experimental) |
+| Model comparison / evidence | NSS | ≤8 | ~37s cold (D=8) |
 
 ## Known Performance Issues
 
