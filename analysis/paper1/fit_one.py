@@ -667,7 +667,14 @@ def run_fit(
         t_start = time.perf_counter()
 
         try:
-            posterior = forward.fit(data, key=key, **nuts_kwargs)
+            # profile_mass=False until tengri#2356 lands. The mass reinsertion in
+            # finalize_profile_mass jax.vmaps a full forward prediction over every
+            # draw at once (mass_profile.py:1175), allocating
+            # n_draws x n_age x n_wave x 8 bytes. For this grid that is 21-32 GB on
+            # the four large-grid configurations, and it SIGKILLs the process after
+            # the fit has already converged. Sampling the mass instead is slower and
+            # worse-conditioned in that direction, but the cell completes and writes.
+            posterior = forward.fit(data, key=key, profile_mass=False, **nuts_kwargs)
             t_elapsed = time.perf_counter() - t_start
 
             # Extract diagnostics
