@@ -682,13 +682,29 @@ def run_fit(
         t_start = time.perf_counter()
 
         try:
-            # profile_mass=False until tengri#2356 lands. The mass reinsertion in
-            # finalize_profile_mass jax.vmaps a full forward prediction over every
-            # draw at once (mass_profile.py:1175), allocating
-            # n_draws x n_age x n_wave x 8 bytes. For this grid that is 21-32 GB on
-            # the four large-grid configurations, and it SIGKILLs the process after
-            # the fit has already converged. Sampling the mass instead is slower and
-            # worse-conditioned in that direction, but the cell completes and writes.
+            # profile_mass=False, and this is the expensive choice, taken
+            # deliberately. Profiling is 4.1x faster (cell 79/I, same seed:
+            # 470 s profiled against 1941 s sampled) with far better geometry,
+            # so this costs the grid roughly 24.5 h instead of 6.0 h.
+            #
+            # tengri#2358 (merged 77a202be) fixed the unbounded allocation of
+            # #2356 -- mass_profile.py here is grafted from that commit and its
+            # 21 tests pass against this pinned tree -- and the fix works: the
+            # two worst cells fell from a predicted 21.3 and 32.3 GB to measured
+            # peaks of 10.56 and 11.90 GB. But both were still SIGKILLed after
+            # converging at 0/2400 divergences, so the acceptance test failed.
+            #
+            # The binding constraint moved rather than closing. Chunking bounded
+            # the post-fit SPIKE to about 3.5 GB, but the profiled path's
+            # steady-state footprint is ~8.5 GB against ~2.2 GB unprofiled, and
+            # this box runs with ~4.7 GB free and ~12.5 GB held by the memory
+            # compressor. An 8.5 GB floor does not fit, whatever the spike does.
+            #
+            # So the choice here is not about the fix being wrong. Unprofiled
+            # cells peak near 4 GB and complete; profiled cells are faster and
+            # die. Flip this back to True on a machine with real headroom, and
+            # re-run the two acceptance cells (9884/IV, 9884/V) before trusting
+            # a full grid to it.
             posterior = forward.fit(data, key=key, profile_mass=False, **nuts_kwargs)
             t_elapsed = time.perf_counter() - t_start
 

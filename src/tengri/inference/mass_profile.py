@@ -60,10 +60,10 @@ casing. :func:`build_profiled_loss_fn` then supplies the marginal
 log-likelihood above in place of the ordinary chi-squared term, and
 :func:`finalize_profile_mass` reinserts the mass into the ``Posterior`` once
 inference is done: an exact conditional draw ``p(log10(M) | theta, d)`` per
-posterior sample (inverse-CDF on the same quadrature grid) for sample-based backends, or
-the conditional mode :math:`\\ell^* = \\log_{10} M^*` for ``method="map"``.
-The returned mass is in physical coordinates (log10(M)), merged directly
-into the posterior samples alongside the other free parameters.
+posterior sample (inverse-CDF on the same quadrature grid) for sample-based
+backends, or the conditional mode :math:`\\ell^* = \\log_{10} M^*` for
+``method="map"``. The returned mass is in physical coordinates (log10(M)),
+merged directly into the posterior samples alongside the other free parameters.
 
 **Guards.** The exact quadratic in :math:`M` (and hence this whole module)
 requires: ``data_type`` one of ``"photometry"``, ``"spectroscopy"``, or
@@ -107,6 +107,7 @@ import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
 from tengri.parameters.priors import Fixed
+from tengri.utils.scale import pow10, whiten
 
 if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
@@ -127,6 +128,18 @@ logger = logging.getLogger(__name__)
 #: Trapezoid quadrature nodes spanning the marginalization window (measured;
 #: see the module docstring's references to ``docs/dev/inference_methods.md``).
 _QUAD_NODES = 48
+#: Quadrature nodes for reinserting the marginalized mass per-sample
+#: (issue #2350). The marginal integral is accurate at 48 nodes, but
+#: the pointwise CDF built by cumsum(softmax(...)) and inverted by
+#: jnp.interp does not converge as fast as the integral. A trapezoid
+#: integral of a smooth peaked function converges faster than the
+#: quantile function on the same grid. Measured by conditional PIT
+#: (uniformity of F(ell_i|theta_i,d) at each sample): 48 nodes fails
+#: all seeds; 192 nodes fails seeds 2,4,5; 384 nodes passes all 12
+#: (6 seeds x 2 fixtures). The reinsertion path runs once per posterior
+#: draw, off the hot loop, so extra nodes are nearly free compared to
+#: the marginal's integral in every log-posterior evaluation.
+_REINSERT_QUAD_NODES = 384
 _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: Mathematically, any log10(mass) placeholder works for the value the mass
 #: parameter is pinned to in the working spec once it is profiled out: the
@@ -177,7 +190,9 @@ def _mass_prior_bounds(dist: Distribution) -> tuple[float, float]:
     return float(lo), float(hi)
 
 
-def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, float]:
+def _linearity_max_deviation(
+    fitter: Fitter, mass_name: str, mass_prior_bounds: tuple[float, float]
+) -> tuple[float, float]:
     """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` at a representative theta.
 
     Probes the model's own physics, not the declared prior's support: two
@@ -190,6 +205,12 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     mass-independent additive term is caught exactly as a photometric one is.
     Catches a mass-independent additive component (e.g. an AGN continuum)
     that the exact chi^2(M) quadratic cannot marginalize.
+
+    The probe masses are derived from the prior bounds, not hardcoded: the
+    midpoint of the prior's log10-space support, plus one dex above it, so the
+    one-dex separation the ``- 10.0`` comparison assumes is preserved, and the
+    probe evaluates the model at scales near its actual use rather than at
+    arbitrary fixed values.
 
     The tolerance scales with the *actual* dtype the prediction returned
     (``jax.enable_x64`` may be off process-wide, silently downcasting every
@@ -208,6 +229,29 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     stays far below a genuine non-linearity (a mass-independent component
     like an unmasked AGN continuum), which perturbs the ratio at the
     O(1) scale, not the O(1e3 * eps) one.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter under construction.
+    mass_name : str
+        The name of the mass parameter.
+    mass_prior_bounds : tuple[float, float]
+        The (lo, hi) log10-mass bounds from the prior's support.
+
+    Returns
+    -------
+    max_dev : float
+        The maximum deviation observed.
+    tol : float
+        The tolerance for the deviation.
+
+    Raises
+    ------
+    ValueError
+        When no valid band carries a finite, strictly-positive prediction at
+        either mass, meaning the model cannot be assessed for linearity (all
+        bands zero, fully absorbed, or underflowed in float32).
     """
     spec = fitter.spec
     phys: dict[str, Any] = {}
@@ -220,20 +264,43 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     if getattr(spec, "stochastic", False):
         phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
 
+    # Derive probe masses from prior bounds: midpoint and midpoint+1 dex
+    ell_lo, ell_hi = mass_prior_bounds
+    mass_midpoint = 0.5 * (ell_lo + ell_hi)
+    ell_a = mass_midpoint
+    ell_b = mass_midpoint + 1.0
+
     use_components = bool(getattr(fitter, "use_components", False))
     pred_a = _predict_full_vector(
         fitter.model,
         fitter.data_type,
-        {**phys, mass_name: jnp.asarray(9.0)},
+        {**phys, mass_name: jnp.asarray(ell_a)},
         use_components=use_components,
     )
     pred_b = _predict_full_vector(
         fitter.model,
         fitter.data_type,
-        {**phys, mass_name: jnp.asarray(10.0)},
+        {**phys, mass_name: jnp.asarray(ell_b)},
         use_components=use_components,
     )
-    max_dev = float(jnp.max(jnp.abs(pred_b / pred_a - 10.0)))
+
+    # Restrict comparison to entries where pred_a is finite and strictly positive
+    # (zero throughput, fully absorbed, or float32 underflow). Use where-dummy
+    # pattern to keep gradients finite.
+    valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
+    if not bool(jnp.any(valid)):
+        raise ValueError(
+            f"linearity probe: no valid bands (all predictions zero, fully absorbed, "
+            f"or underflowed at mass {ell_a}); cannot assess linearity"
+        )
+
+    # Compute ratio only where valid; substitute 10.0 elsewhere (the target ratio).
+    # This keeps the shape gradient-safe even though this function runs at construction
+    # time and its result is converted to float(), not differentiated. The benign
+    # substitution avoids NaN propagation if anyone ever traces through the probe.
+    ratio = jnp.where(valid, pred_b / pred_a, 10.0)
+    max_dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+
     tol = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
     return max_dev, tol
 
@@ -256,14 +323,6 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     spec = fitter.spec
     if not hasattr(spec, "_distributions"):
         return f"parameter spec {type(spec).__name__} is not a plain Parameters (unsupported)", {}
-
-    # The marginal's curvature in flux units (A ~ 1e-13 at fluxes ~1e-30) and the
-    # per-band cotangent scales its reverse-mode gradient needs are outside
-    # float32's range: measured on 2026-09-11 (bench/reports/2026-09-11_profile_mass_20s.md,
-    # Finding 8), the float64 gradient is finite where the float32 one is NaN on
-    # the same fixture. Profiling is a float64 feature until that seam is closed.
-    if not jax.config.jax_enable_x64:
-        return "float32 mode (jax_enable_x64 is off); profiling needs float64", {}
 
     candidates = [n for n in spec.free_params if n.endswith("log_total_mass")]
     if len(candidates) != 1:
@@ -306,7 +365,11 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     if fitter.data_mask is not None and bool(jnp.any(jnp.asarray(fitter.data_mask) != 0)):
         return "censored data (upper/lower limits) is present", {}
 
-    max_dev, tol = _linearity_max_deviation(fitter, mass_name)
+    try:
+        max_dev, tol = _linearity_max_deviation(fitter, mass_name, bounds)
+    except ValueError as exc:
+        return str(exc), {}
+
     if not (max_dev < tol):
         return (
             f"photometry is not exactly linear in '{mass_name}' "
@@ -441,6 +504,17 @@ PROFILE_MASS_BACKENDS = frozenset(
     }
 )
 
+#: Backends that take a Hessian of the objective function and therefore trigger
+#: the known float32 NaN failure in the SED model's photometry Hessian
+#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). The Hessian is computed
+#: via ``jax.hessian`` (laplace backend) or via preconditioning's ``negative_hessian_metric``
+#: (optional metric whitening for Hamiltonian samplers). Note that preconditioning is
+#: **opt-in** (``precondition=`` must be truthy), so float32 refusal is scoped to the
+#: backends listed here. The float32 NaN is **not** specific to ``profile_mass`` — it
+#: reproduces on the plain objective with ``profile_mass=False`` — so float32 refusal
+#: names which objective this is, not which fitting path triggered it.
+HESSIAN_BACKEND_SET = frozenset({"laplace"})
+
 
 def disable_profile_mass(fitter: Fitter, reason: str) -> None:
     """Undo the working-spec rewrite so the fitter samples the mass again.
@@ -471,7 +545,31 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
     is the constructor's ``profile_mass`` argument: an explicit ``True`` on an
     unsupported backend is an error, ``"auto"`` steps aside with a logged
     reason, ``False`` was never engaged.
+
+    Also enforces float32 refusal on backends that take a Hessian of the
+    objective, where the SED model's photometry Hessian evaluates to all-NaN
+    at the converged MAP in float32 due to a JAX forward-over-reverse seam
+    in the model's differentiable code (bench/reports/2026-09-11_profile_mass_20s.md,
+    Finding 8). The failure is not specific to profiling — it reproduces with
+    ``profile_mass=False`` — so this guard names which objective (not which
+    fitting path) blocks float32.
     """
+    # Check float32 refusal for Hessian-taking backends
+    if method in HESSIAN_BACKEND_SET:
+        dtype = jnp.result_type(float)
+        if dtype == jnp.float32:
+            reason = (
+                "float32 mode; the SED model's photometry Hessian is all-NaN in float32 "
+                "at the converged MAP (a forward-over-reverse seam in the model), "
+                "not specific to profiling (reproduces with profile_mass=False). "
+                "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
+            )
+            if getattr(fitter, "_profile_mass", False):
+                if requested is True:
+                    raise ValueError(f"profile_mass=True but {reason}")
+                disable_profile_mass(fitter, f"auto-disabled: {reason}")
+            raise ValueError(f"method={method!r}: {reason}")
+
     if not getattr(fitter, "_profile_mass", False) or method in PROFILE_MASS_BACKENDS:
         return
     reason = (
@@ -578,7 +676,7 @@ def _profile_stats(
     jit_inputs: dict | None = None,
     threaded_impl=None,
 ):
-    """``(A, M*, chi2_min)`` of ``chi2(M) = chi2_min + A * (M - M*)**2``.
+    """``(A_ref, a_star, chi2_min, ell_ref)`` of the dimensionless quadratic.
 
     Exact whenever the ``data_type`` data vector (:func:`_predict_full_vector`
     -- photometry, spectroscopy, or their photometry-then-spectrum
@@ -588,6 +686,27 @@ def _profile_stats(
     10**phys[mass_name]`` divides out whatever mass the prediction was made
     at, so this is safe to call with the placeholder-fixed value used during
     inference or a real posterior-sample mass used post hoc.
+
+    Returns
+    -------
+    A_ref : float or array
+        Dimensionless quadratic coefficient (the second derivative of the
+        log-likelihood in the reference frame).
+    a_star : float or array
+        Dimensionless best-fit mass amplitude ``B_ref / A_ref``, unitless
+        and order-1 in magnitude. Related to the physical mass as
+        ``M* = a_star * 10**ell_ref`` (not formed to avoid underflow).
+    chi2_min : float or array
+        Minimum chi-squared in the residual form (no catastrophic
+        cancellation). Satisfies
+        ``chi2(a) = chi2_min + A_ref * (a - a_star)^2`` for dimensionless
+        amplitude ``a = M / 10**ell_ref``.
+    ell_ref : float or array
+        The reference log10(mass) at which the prediction was evaluated.
+        A Python float constant on every live path (prior-derived, never
+        data-derived). Bridge to physical coordinates: ``sigma_ell =
+        1 / (sqrt(A_ref) * a_star * ln(10))``, and neither ``M*`` nor
+        ``sigma_ell`` is formed here.
     """
     pred = _predict_full_vector(
         model,
@@ -597,13 +716,15 @@ def _profile_stats(
         jit_inputs=jit_inputs,
         threaded_impl=threaded_impl,
     )
-    placeholder_mass = 10.0 ** phys[mass_name]
+    ell_ref = jnp.asarray(phys[mass_name])
+
     # Divide by noise *before* squaring/multiplying (every chi^2 in tengri
     # does, see ``likelihoods.gaussian.standardized_residual``), AND divide
     # ``pred`` by the mass placeholder only *after* that -- not ``f =
-    # pred / placeholder_mass`` up front, then ``f / noise``.
+    # pred / placeholder_mass`` up front, then ``f / noise``. Use ``whiten``
+    # to prevent reordering: the two orderings are exact in real arithmetic
+    # but not in float32.
     #
-    # The two orderings are exact in real arithmetic but not in float32.
     # ``pred`` at the placeholder mass and its per-band noise are each
     # individually tiny for a faint band (measured: ~3e-30 and ~1e-31 on a
     # far-IR band ~1e3x fainter than the others, tests/regression/precision's
@@ -615,78 +736,211 @@ def _profile_stats(
     # computation to exactly 0.0 -- which is fine for the forward value (that
     # band's contribution to A/B is negligible) but starves the reverse-mode
     # cotangent reaching the prediction (``predict_photometry`` /
-    # ``predict_spectrum``): dividing by
-    # ``placeholder_mass`` *before* the noise normalization multiplies the
-    # local Jacobian by an extra ``1/placeholder_mass`` on the way back,
-    # weakening the cotangent by that same large factor (measured: enough to
-    # zero out d(pred)/d(theta) entirely in float32, though the same
-    # derivative is finite -- if tiny -- in float64). Deferring the
-    # ``/ placeholder_mass`` rescaling to the aggregate sums below (themselves
-    # ordinary-magnitude numbers) never revisits either extreme and restores
-    # the same reverse-mode scale the rest of tengri's chi^2 gradients get.
-    snr_pred = pred / noise
-    snr_d = data / noise
+    # ``predict_spectrum``): dividing by ``placeholder_mass`` *before* the
+    # noise normalization multiplies the local Jacobian by an extra
+    # ``1/placeholder_mass`` on the way back, weakening the cotangent by that
+    # same large factor (measured: enough to zero out d(pred)/d(theta) entirely
+    # in float32, though the same derivative is finite -- if tiny -- in float64).
+    # The dimensionless form naturally avoids this: mass factors cancel
+    # algebraically, so neither is formed.
+    snr_pred = whiten(pred, noise)
+    snr_d = whiten(data, noise)
+
     if presence is not None:
         # The same rule as ``likelihoods.gaussian``: an absent band (presence 0)
         # contributes exactly zero to every sum and to its gradient, so the
         # mass marginal never sees a band the ordinary likelihood does not.
         snr_pred = presence * snr_pred
         snr_d = presence * snr_d
-    sum_pred2 = jnp.sum(snr_pred**2)
-    sum_data_pred = jnp.sum(snr_d * snr_pred)
-    A = sum_pred2 / placeholder_mass**2
-    B = sum_data_pred / placeholder_mass
-    mstar = B / A
-    d2_sum = jnp.sum(snr_d**2)
-    chi2_min = d2_sum - B**2 / A
-    return A, mstar, chi2_min
+
+    A_ref = jnp.sum(snr_pred**2)
+    B_ref = jnp.sum(snr_d * snr_pred)
+    a_star = B_ref / A_ref
+
+    # Residual form: chi2(a) = sum((snr_d - a*snr_pred)^2) expands to
+    # chi2(a) = chi2_min + A_ref*(a - a_star)^2. The residual form avoids
+    # catastrophic cancellation: chi2_min = d2_sum - B_ref^2/A_ref is
+    # the difference of large terms (each about N*SNR^2) whose relative error
+    # under that formula is about eps*SNR^2. Instead, evaluating at the
+    # stationary point a_star gives a form whose error is second-order:
+    # perturbing a_star changes chi2 only quadratically, so relative error
+    # is about eps, independent of SNR.
+    chi2_min = jnp.sum((snr_d - a_star * snr_pred) ** 2)
+
+    return A_ref, a_star, chi2_min, ell_ref
 
 
-def _quad_nodes(A, mstar, ell_lo: float, ell_hi: float):
-    """48-node trapezoid grid in log10(M), +/- 8 sigma around log10(M*).
+def _quad_nodes(
+    A_ref, a_star, ell_lo: float, ell_hi: float, ell_ref: float, quad_nodes: int = _QUAD_NODES
+):
+    """Trapezoid grid in log10(M) offset from reference, +/- 8 sigma around log10(a*).
 
-    The window is centered on ``log10(M*)`` *clamped* to ``[ell_lo, ell_hi]``
-    first, then widened by ``+/- 8 sigma`` and clipped to the same bounds.
-    Clamping the center (rather than clamping each edge of the unclamped
-    window independently) guarantees ``lo <= center <= hi`` however far
-    outside the prior's support the unconstrained best-fit mass falls, e.g.
-    at an optimizer's first, far-from-converged evaluation: clipping the
-    edges alone can otherwise invert them (``lo > hi``), turning the
-    trapezoid weights negative and ``log(weight)`` into ``nan``.
+    Builds the grid in the dimensionless ``u = ell - ell_ref`` coordinate
+    to avoid relative errors in node spacing (subtracting per-node, which
+    injects ulp(ell_ref)/spacing noise). The window is centered on the
+    log10 amplitude ``log10(a_star)`` *clamped* to
+    ``[ell_lo - ell_ref, ell_hi - ell_ref]`` first, then widened by
+    ``+/- 8 sigma`` and clipped to the same bounds. Clamping the center
+    (rather than clamping each edge independently) guarantees
+    ``lo <= center <= hi`` however far outside the prior's support the
+    unconstrained best-fit amplitude falls: clipping the edges independently
+    can otherwise invert them (``lo > hi``), turning the trapezoid weights
+    negative and ``log(weight)`` into ``nan``.
+
+    Parameters
+    ----------
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound (on absolute ell).
+    ell_hi : float
+        Log10 prior upper bound (on absolute ell).
+    ell_ref : float
+        Reference log10(mass), the evaluation point of the prediction.
+    quad_nodes : int, optional
+        Number of trapezoid nodes. Default: ``_QUAD_NODES`` (48) for the
+        marginal integral; use ``_REINSERT_QUAD_NODES`` for per-sample mass
+        reinsertion (issue #2350).
+
+    Returns
+    -------
+    u_nodes : ndarray
+        Node locations in ``ell - ell_ref`` (dimensionless offset).
+    weights : ndarray
+        Trapezoid weights.
     """
-    center = jnp.clip(jnp.log10(mstar), ell_lo, ell_hi)
-    sigma_ell = 1.0 / (jnp.sqrt(A) * mstar * jnp.log(10.0))
-    lo = jnp.maximum(ell_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
-    hi = jnp.minimum(ell_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
-    ell_nodes = jnp.linspace(lo, hi, _QUAD_NODES)
-    d_ell = (hi - lo) / (_QUAD_NODES - 1)
-    weights = jnp.ones(_QUAD_NODES).at[0].set(0.5).at[-1].set(0.5) * d_ell
-    return ell_nodes, weights
+    u_lo = ell_lo - ell_ref
+    u_hi = ell_hi - ell_ref
+    center = jnp.clip(jnp.log10(a_star), u_lo, u_hi)
+    sigma_u = 1.0 / (jnp.sqrt(A_ref) * a_star * jnp.log(10.0))
+    lo = jnp.maximum(u_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
+    hi = jnp.minimum(u_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
+    u_nodes = jnp.linspace(lo, hi, quad_nodes)
+    d_u = (hi - lo) / (quad_nodes - 1)
+    weights = jnp.ones(quad_nodes).at[0].set(0.5).at[-1].set(0.5) * d_u
+    return u_nodes, weights
 
 
-def _log_quadrature_terms(A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """Node grid and its ``-0.5*A*(M-M*)^2 + log p(ell) + log(weight)`` terms."""
-    ell_nodes, weights = _quad_nodes(A, mstar, ell_lo, ell_hi)
-    m_values = 10.0**ell_nodes
+def _log_quadrature_terms(
+    A_ref,
+    a_star,
+    ell_lo: float,
+    ell_hi: float,
+    mass_prior: Distribution,
+    ell_ref: float,
+    quad_nodes: int = _QUAD_NODES,
+):
+    """Node grid and its log-weighted terms in the dimensionless form.
+
+    Parameters
+    ----------
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound (on absolute ell).
+    ell_hi : float
+        Log10 prior upper bound (on absolute ell).
+    mass_prior : Distribution
+        Mass prior distribution.
+    ell_ref : float
+        Reference log10(mass).
+    quad_nodes : int, optional
+        Number of trapezoid nodes (default: _QUAD_NODES for marginal integral).
+
+    Returns
+    -------
+    u_nodes : ndarray
+        Node locations in ``ell - ell_ref`` (dimensionless offset).
+    log_terms : ndarray
+        Log-weighted likelihoods at each node.
+    """
+    u_nodes, weights = _quad_nodes(A_ref, a_star, ell_lo, ell_hi, ell_ref, quad_nodes=quad_nodes)
+    # Reconstruct absolute ell for the prior evaluation and the quadratic term.
+    # The clip protects boundary nodes: (ell_lo - ell_ref) + ell_ref may not
+    # round back exactly to ell_lo due to floating-point error, and a node
+    # one ULP outside a Uniform's support scores -inf, silently dropping
+    # half a node's weight from the sum.
+    ell_nodes = jnp.clip(u_nodes + ell_ref, ell_lo, ell_hi)
+    a_values = pow10(u_nodes)
     log_terms = (
-        -0.5 * A * (m_values - mstar) ** 2 + mass_prior.log_prob(ell_nodes) + jnp.log(weights)
+        -0.5 * A_ref * (a_values - a_star) ** 2 + mass_prior.log_prob(ell_nodes) + jnp.log(weights)
     )
-    return ell_nodes, log_terms
+    return u_nodes, log_terms
 
 
-def _log_mass_integral(A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """``log integral(exp(-0.5*A*(M(ell)-M*)**2) * p(ell) dell)``, quadrature."""
-    _, log_terms = _log_quadrature_terms(A, mstar, ell_lo, ell_hi, mass_prior)
+def _log_mass_integral(
+    A_ref, a_star, ell_lo: float, ell_hi: float, mass_prior: Distribution, ell_ref: float
+):
+    """``log integral(exp(-0.5*A_ref*(a-a*)**2) * p(ell) dell)``, quadrature.
+
+    Parameters
+    ----------
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    mass_prior : Distribution
+        Mass prior.
+    ell_ref : float
+        Reference log10(mass).
+
+    Returns
+    -------
+    float or array
+        Log of the marginal integral.
+    """
+    _, log_terms = _log_quadrature_terms(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
     return logsumexp(log_terms)
 
 
-def _sample_log_mass(key, A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """Inverse-CDF draw of log10(M) from the exact conditional, on the same grid."""
-    ell_nodes, log_terms = _log_quadrature_terms(A, mstar, ell_lo, ell_hi, mass_prior)
+def _sample_log_mass(
+    key, A_ref, a_star, ell_lo: float, ell_hi: float, mass_prior: Distribution, ell_ref: float
+):
+    """Inverse-CDF draw of log10(M) from the exact conditional.
+
+    Uses a finer quadrature grid (_REINSERT_QUAD_NODES) than the marginal
+    integral (_QUAD_NODES) because the pointwise CDF built by
+    cumsum(softmax(...)) and inverted by jnp.interp converges more slowly
+    than the integral (issue #2350).
+
+    Parameters
+    ----------
+    key : jax.Array
+        PRNG key.
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    mass_prior : Distribution
+        Mass prior.
+    ell_ref : float
+        Reference log10(mass).
+
+    Returns
+    -------
+    float or array
+        Sampled log10(M) (absolute, not offset from reference).
+    """
+    u_nodes, log_terms = _log_quadrature_terms(
+        A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref, quad_nodes=_REINSERT_QUAD_NODES
+    )
     probs = jax.nn.softmax(log_terms)
     cdf = jnp.cumsum(probs)
     u = jax.random.uniform(key)
-    return jnp.interp(u, cdf / cdf[-1], ell_nodes)
+    u_sample = jnp.interp(u, cdf / cdf[-1], u_nodes)
+    return u_sample + ell_ref
 
 
 # ── The profiled loss (drop-in for Fitter._build_loss_fn) ───────────────────
@@ -743,7 +997,7 @@ def build_profiled_loss_fn(fitter: Fitter):
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
 
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -755,7 +1009,9 @@ def build_profiled_loss_fn(fitter: Fitter):
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
         )
-        loglik = -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        loglik = -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
         return -loglik + standardized_neg_log_prior(
             params_unbounded,
@@ -802,7 +1058,7 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
         )
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -814,7 +1070,9 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
         )
-        return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        return -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
     return loglik_unbounded
 
@@ -848,7 +1106,7 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
         params = spec.resolve_mirrors(params)
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -860,24 +1118,186 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
         )
-        return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        return -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
     return loglikelihood_fn
 
 
 # ── Reinserting the mass once inference is done ──────────────────────────────
+#
+# Memory safety: _reinsert_mass_fn chunks the vmapped forward model to bound peak
+# allocation. The original single-vmap path (issue #2356) built a jitted program
+# vmapping the entire forward prediction over n_draws at once. Every intermediate
+# in _profile_stats acquires a leading (n_draws,) axis, so memory scales with the
+# working set size: that can be tens of gigabytes for large SSP grids and high
+# draw counts. Measured in #2356 (29 runs across 5 SSP configurations, 2400 draws):
+#
+#  SSP grid          | n_age | n_wave | Status
+#  pgny_mist_c3k     | 107   | 16902  | 0/5 completed, 5/5 OOM killed
+#  bc03_pdva_stelib  | 221   | 6900   | 0/5 completed, 5/5 OOM killed
+#  fsps_mist_c3k_a   | 107   | 11149  | 0/5 completed, 5/5 OOM killed
+#  prsc_miles_wNE    | 93    | 5994   | 5/5 PASSED (only large config to pass)
+#  bpss_stars_c3k_a  | 51    | 1221   | 3/4 passed
+#
+# (Note: these runs did not vary grid and recipe independently, so they do not
+# isolate which drives cost. The recipe table below does.)
+#
+# Scratch memory is driven by model richness (how many components the forward
+# model evaluates), not by SSP grid dimensions. Measured on bc03_pdva_stelib
+# (13 photometric bands) by XLA memory_analysis().temp_size_in_bytes on the
+# real per-chunk program:
+#
+#  recipe                    n_free   scratch/draw   @2400 draws   derived chunk
+#  mock_recovery_minimal        6        0.34 MB       0.83 GB        2899
+#  quiescent_z0                 5        1.7  MB       4.05 GB         590
+#  star_forming_photometry      8       25.9  MB      62    GB          38
+#  stochastic_sfh_jwst         10       26.4  MB      63    GB          37
+#
+# That is why chunk size is measured from the compiled program rather than
+# derived from dimensions.
+#
+# Memory scaling verification (star_forming_photometry / bc03_pdva_stelib / 13 bands):
+#
+#  n_draws   unchunked    chunked    ratio
+#      100     2.60 GB    2.24 GB     1.2x
+#      400    10.35 GB    2.14 GB     4.8x
+#     1200    31.02 GB    2.19 GB    14.2x
+#     2400    62.03 GB    1.80 GB    34.5x
+#
+# Solution: use jax.lax.map to chunk draws into bounded-size groups, scanning
+# across chunks with vmap within each chunk. Peak scales with chunk_size rather
+# than n_draws. Chunk size is computed at fit construction time by XLA memory
+# analysis of a reference program (described in _compute_reinsertion_chunk_size),
+# targeting a ~1 GB budget for the per-chunk vmap working set. The compiled
+# program overhead (model constants, scan buffers) roughly doubles this: realized
+# scratch was measured at 1.80-2.24 GB, flat across draw counts. When
+# chunk_size >= n_draws the map degenerates to a single vmap, bit-identical to
+# the unchunked reference; when chunking engages, results agree to one ulp (max
+# relative difference 1.43e-16 measured at widths 1, 7, 38, 64 vs float64 eps
+# 2.22e-16). Each draw uses its corresponding PRNG key, unaffected by chunk
+# boundaries.
+#
+# Wall-clock cost: chunking is free when not needed (bit-identical degeneration)
+# and costs ~1.9x wall time when it engages. Measured warm (best of three),
+# relative to unchunked:
+#   mock_recovery_minimal, 1000 draws, width 2899 (no chunking): 1.03x
+#   star_forming_photometry, 200 draws, width 38 (chunking): 1.86x
+# The latter configuration otherwise cannot run (unchunked 62 GB at 2400 draws).
+# Do not optimize away chunking on benchmarks that only exercise the fast path.
+
+
+def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
+    """Chunk size for mass reinsertion vmaps, targeting ~1 GB per-chunk vmap scratch.
+
+    Derives chunk size via XLA's own memory analysis of the compiled per-chunk
+    program. This measures scratch memory directly (temp_size_in_bytes) rather
+    than modeling the forward pass, adapting automatically to WavePrecomp,
+    float32/64, and model structure.
+
+    Procedure:
+    1. Compile the per-chunk jitted program at a reference chunk size (100).
+    2. Query XLA's memory_analysis() for the scratch memory that size requires.
+    3. Scale to the target budget (~1 GB vmap working set) and return the derived size.
+
+    This is conservative: if scratch > 1 GB at chunk_size=100, we reduce the
+    chunk size further; if scratch is small, we increase it. The realized program
+    overhead roughly doubles this estimate: compiled scratch is typically 1.80-2.24 GB.
+
+    Clamps to >= 1 so one draw is always valid (``jax.lax.map`` clamps the
+    upper bound at call time). Fallback: 100 draws if XLA memory analysis is
+    unavailable (preserves safe behavior).
+
+    Returns
+    -------
+    int
+        Number of draws to vmap per chunk.
+    """
+    target_bytes = 1e9
+    reference_chunk_size = 100
+
+    # Build a reference per-chunk jitted function to measure scratch memory.
+    # The reference program is the real per-chunk vmap compiled at a fixed
+    # reference width (100), with placeholder data and noise: only the shapes
+    # and the model structure affect scratch memory (verified to match the
+    # real program's per-draw bytes to five significant figures).
+    try:
+        mass_name = fitter._profile_mass_name
+        mass_prior = fitter._profile_mass_prior
+        ell_lo, ell_hi = fitter._profile_mass_bounds
+        fixed_values = fitter._fixed_values
+        data_type = fitter.data_type
+        use_components = bool(getattr(fitter, "use_components", False))
+        model = fitter.model
+
+        def _stats_one(sample_dict):
+            phys = {**fixed_values, **sample_dict}
+            return _profile_stats(
+                model,
+                mass_name,
+                phys,
+                jnp.zeros(1),  # placeholder data
+                jnp.ones(1),  # placeholder noise
+                presence=None,
+                data_type=data_type,
+                use_components=use_components,
+            )
+
+        def _reference_chunk(samples_chunk, keys_chunk):
+            """Reference per-chunk program for memory analysis."""
+            A_ref_chunk, a_star_chunk, _, ell_ref_chunk = jax.vmap(_stats_one)(samples_chunk)
+            return jax.vmap(
+                lambda k, a, m, r: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior, r)
+            )(keys_chunk, A_ref_chunk, a_star_chunk, ell_ref_chunk)
+
+        # Compile at the reference chunk size with dummy arguments
+        samples_ref = {name: jnp.zeros((reference_chunk_size,)) for name in fitter._free_names}
+        keys_ref = jax.random.split(jax.random.PRNGKey(0), reference_chunk_size)
+
+        jitted_fn = jax.jit(_reference_chunk)
+        lowered = jitted_fn.lower(samples_ref, keys_ref)
+        compiled = lowered.compile()
+        scratch_bytes = compiled.memory_analysis().temp_size_in_bytes
+
+        # Scale: if scratch is X bytes at reference_chunk_size, then at
+        # chunk_size it will be ~(chunk_size / reference_chunk_size) * X
+        per_chunk_overhead = scratch_bytes / reference_chunk_size
+        derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
+
+        logger.debug(
+            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
+            derived_chunk_size,
+            scratch_bytes / reference_chunk_size / 1e6,
+            target_bytes / 1e9,
+        )
+        return derived_chunk_size
+    except Exception as exc:
+        # Fallback: use a conservative fixed size if XLA analysis fails
+        # (e.g., on some hardware or JAX versions where memory_analysis is unavailable)
+        logger.warning(
+            "reinsertion chunk size: XLA memory analysis failed, using fallback %d; exception: %r",
+            reference_chunk_size,
+            exc,
+            exc_info=True,
+        )
+        return reference_chunk_size
 
 
 def _reinsert_mass_fn(fitter: Fitter):
     """The compiled draws -> conditional-mass-draws map, cached on the model.
 
-    One ``jax.vmap`` over 1200 draws of a forward prediction is ~1.2 s when
-    dispatched eagerly (op-by-op under batching) and ~5 s the first time in a
-    process; under ``jax.jit`` it is one program. The jitted function closes
-    over the model, the fixed values and the mass prior -- everything the
-    fitter's engine cache key already covers -- and takes the draws, the
-    keys, the data, the noise and the presence mask as traced arguments, so
-    it is keyed by ``_engine_cache_key`` alone and reused across fits on the
+    Uses ``jax.lax.map`` to vmap within each chunk and scan across chunks,
+    bounding peak allocation proportional to chunk_size rather than n_draws
+    (issue #2356). When chunk_size is at least n_draws, the map degenerates
+    to a single vmap, bit-identical to the unchunked path, so models that do
+    not need chunking pay nothing. When chunking engages, results agree to one
+    ulp (max relative difference 1.43e-16 measured at widths 1, 7, 38, 64).
+    Each draw uses its corresponding PRNG key, unaffected by chunk boundaries.
+
+    The whole function is jitted and closes over the model, fixed values and
+    mass prior -- everything the fitter's engine cache key already covers --
+    and is keyed by ``_engine_cache_key`` alone, reused across fits on the
     same model, whatever the galaxy.
     """
     from tengri.inference._model_cache import _default_owner as _model_cache_owner
@@ -897,11 +1317,22 @@ def _reinsert_mass_fn(fitter: Fitter):
     fixed_values = fitter._fixed_values
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
+    chunk_size = _compute_reinsertion_chunk_size(fitter)
 
     def _reinsert(samples_no_mass, draw_keys, data, noise, presence):
-        def stats_one(sample_dict):
+        """Map the per-draw conditional-mass draw over the posterior.
+
+        ``jax.lax.map(..., batch_size=chunk_size)`` vmaps within each chunk and
+        scans across chunks, so peak scratch scales with ``chunk_size`` rather
+        than with the number of draws (issue #2356). When ``chunk_size`` is at
+        least ``n_draws`` it degenerates to a single vmap, bit-identical to the
+        unchunked path, so a model that does not need chunking pays nothing.
+        """
+
+        def one_draw(draw):
+            sample_dict, key = draw
             phys = {**fixed_values, **sample_dict}
-            return _profile_stats(
+            A_ref, a_star, _, ell_ref = _profile_stats(
                 model,
                 mass_name,
                 phys,
@@ -911,11 +1342,9 @@ def _reinsert_mass_fn(fitter: Fitter):
                 data_type=data_type,
                 use_components=use_components,
             )
+            return _sample_log_mass(key, A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
 
-        A_all, mstar_all, _ = jax.vmap(stats_one)(samples_no_mass)
-        return jax.vmap(lambda k, a, m: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior))(
-            draw_keys, A_all, mstar_all
-        )
+        return jax.lax.map(one_draw, (samples_no_mass, draw_keys), batch_size=chunk_size)
 
     fn = jax.jit(_reinsert)
     cache[cache_key] = fn
@@ -978,7 +1407,7 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
     else:
         phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
-        _, mstar, _ = _profile_stats(
+        _, a_star, _, ell_ref = _profile_stats(
             model,
             mass_name,
             phys,
@@ -988,6 +1417,6 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
             data_type=data_type,
             use_components=use_components,
         )
-        posterior.params = {**posterior.params, mass_name: jnp.log10(mstar)}
+        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
 
     return posterior
