@@ -1339,7 +1339,7 @@ _win_9c0 = V.window_rows(cases_9c0, lo=1e4, hi=1e6)
 V.print_window_table(_win_9c0, ref_name="AGNfitter-rX", title="§9c″ S04 log N_H and NK08 inclination")
 
 # %% [markdown]
-# ### §9c⁵ SKIRTOR (oa, incl, τ) nodes
+# ### §9c-5 SKIRTOR (oa, incl, τ) nodes
 #
 # `skirtor_agnfitter` (node-exact match to AGNfitter-RX's averaged
 # `SKIRTOR_mean_3p`) at four `(oa, incl, τ)` index triples off
@@ -1362,19 +1362,19 @@ for oi, ii, ti in sk_triples:
     w_t, L_t = tengri_torus("skirtor_agnfitter", oa_skirtor=oa, incl_skirtor=incl, tv_skirtor=tau)
     label = f"SKIRTOR ({oi},{ii},{ti})"
     a_n, t_n = norm_peak(L_a), norm_peak(L_t)
-    _assert_comparable(a_n, t_n, name=f"§9c⁵ {label}")
+    _assert_comparable(a_n, t_n, name=f"§9c-5 {label}")
     cases_9c5.append((label, w_a, a_n, w_t, t_n))
     if (oi, ii, ti) == (3, 3, 2):
         w_ref, L_ref, w_af, L_af = w_a, a_n, w_t, t_n  # fiducial node (peak-norm), reused by §9c‴ below
 
 w_xc, L_xc_raw = tengri_torus("skirtor", cos_inc=float(np.cos(np.deg2rad(30.0))), oa_skirtor=40.0, tau_skirtor=7.0)
 L_xc = norm_peak(L_xc_raw)
-_assert_comparable(L_ref, L_xc, name="§9c⁵ SKIRTOR full grid @ fiducial")
+_assert_comparable(L_ref, L_xc, name="§9c-5 SKIRTOR full grid @ fiducial")
 cases_9c5.append(("SKIRTOR full grid @ fiducial", w_ref, L_ref, w_xc, L_xc))
 
 plt.rcParams["figure.dpi"] = 100  # keep the rendered notebook under the figure-size budget
 fig, (ax, ax_r), _ratios_9c5 = V.sweep_fig(
-    cases_9c5, ref_label="AGNfitter-rX", title="§9c⁵ SKIRTOR (oa, incl, τ) nodes",
+    cases_9c5, ref_label="AGNfitter-rX", title="§9c-5 SKIRTOR (oa, incl, τ) nodes",
     xlim=(8e3, 3e6), xlabel=r"$\lambda$ [Å]", ylabel=r"$L_\nu$ (norm. at peak)",
     cmap=None,
 )
@@ -1383,14 +1383,14 @@ save_fig("agnfitter_09c5_skirtor_nodes.png")
 plt.rcParams["figure.dpi"] = 150
 
 _win_9c5 = V.window_rows(cases_9c5, lo=1e4, hi=1e6)
-V.print_window_table(_win_9c5, ref_name="AGNfitter-rX", title="§9c⁵ SKIRTOR (oa, incl, τ) nodes")
+V.print_window_table(_win_9c5, ref_name="AGNfitter-rX", title="§9c-5 SKIRTOR (oa, incl, τ) nodes")
 
 # %% [markdown]
 # ### §9c‴ SKIRTOR: two reductions
 #
 # `skirtor_agnfitter` (node-exact match to AGNfitter-RX's averaged
 # `SKIRTOR_mean_3p`) vs `skirtor` (the full unaveraged X-CIGALE grid), at
-# the same (oa 40°, incl 30°, τ 7) fiducial plotted in §9c⁵ above — the
+# the same (oa 40°, incl 30°, τ 7) fiducial plotted in §9c-5 above — the
 # panel there already shows both curves, so only the IR peak wavelengths
 # are printed here.
 
@@ -2281,7 +2281,7 @@ print(
 # |-------|---|-------|----------------------------|-------|
 # | SN12 + KD18 disc nodes | §9a″ | 8 | 1.008× (0.8%) | Fig. 09a1 |
 # | S04 + NK08 torus nodes | §9c″ | 10 | 1.39× (39%) | Fig. 09c0 |
-# | SKIRTOR (oa, incl, τ) nodes | §9c⁵ | 5 | 1.22× (22%) node-exact | Fig. 09c5 |
+# | SKIRTOR (oa, incl, τ) nodes | §9c-5 | 5 | 1.22× (22%) node-exact | Fig. 09c5 |
 # | CAT3D-Wind extended nodes | §9c⁗ | 8 | 1.36× (36%, `cat3d_wind_lowfwd`) | Fig. 09c3 |
 # | Cold dust: S17 nodes + DH02 log L_IR | §6 | 8 | 0.242 dex (DH02, node-exact) | Fig. 06 |
 # | X-ray corona Δα_ox × Γ grid | §10 | 7 | 1.094× (9.4%), flat across the grid | Fig. 10a |

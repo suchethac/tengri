@@ -59,8 +59,10 @@ line luminosities [erg/s].
 
 from pathlib import Path
 
+import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 
 __all__ = [
     "BROAD_FILTERS",
@@ -1017,6 +1019,66 @@ def print_line_table(
 # Above this ratio between the largest and smallest swept value, ramp
 # positions are taken in log space so the pale end does not collapse.
 _RAMP_LOG_SPAN = 5.0
+# The ratio panel ignores points where the reference is below this fraction of
+# its own peak, and never opens wider than these bounds.
+_RATIO_SIGNAL_FLOOR = 1e-3
+_RATIO_YLIM_BOUND = (0.05, 20.0)
+
+def _marker_subsample(x, n=26, window=None):
+    """Indices of about ``n`` points spread evenly across ``x`` for a marker overlay.
+
+    Parameters
+    ----------
+    x : array_like, shape (n_pts,)
+        Ascending plot abscissa.
+    n : int, optional
+        Target number of markers. Default 26 -- dense enough to trace a curve,
+        sparse enough that several cases can share one axis.
+    window : tuple of float | None, optional
+        ``(lo, hi)`` axis limits. Markers are spread across this range rather
+        than across the whole array, which usually extends past the frame.
+
+    Returns
+    -------
+    ndarray
+        Integer indices into ``x``.
+    """
+    x = np.asarray(x)
+    keep = np.isfinite(x)
+    if window is not None:
+        keep &= (x >= window[0]) & (x <= window[1])
+        if not np.any(keep):
+            keep = np.isfinite(x)
+    idx = np.flatnonzero(keep)
+    if idx.size <= n:
+        return idx
+    xv = x[idx]
+    if np.all(xv > 0):
+        coord = np.log10(xv)
+    else:
+        coord = xv
+    targets = np.linspace(coord[0], coord[-1], n)
+    picks = np.searchsorted(coord, targets)
+    return np.unique(idx[np.clip(picks, 0, idx.size - 1)])
+
+
+def _code_style_handles(ref_label):
+    """Two proxy artists naming which mark belongs to which code."""
+    return [
+        Line2D(
+            [],
+            [],
+            color="0.30",
+            marker="o",
+            markerfacecolor="none",
+            markeredgewidth=1.3,
+            markersize=6.0,
+            linestyle="none",
+            label=ref_label,
+        ),
+        Line2D([], [], color="0.30", linestyle="-", linewidth=1.8, label="tengri"),
+    ]
+
 
 def _ascending(x, y):
     """Return ``(x, y)`` reordered so ``x`` increases.
@@ -1057,14 +1119,14 @@ def sweep_fig(
     title: str,
     xlim: tuple[float, float] | None = None,
     x_of_wave=None,
-    xlabel: str = r"wavelength [$\mu$m]",
+    xlabel: str = r"$\lambda$ [Å]",
     ylabel: str = r"$L_\nu$ [erg/s/Hz]",
     ratio_ylim: tuple[float, float] = (0.5, 1.5),
     band: tuple[float, float] = (0.9, 1.1),
     logy: bool = True,
     dyn_range: float = 1e-5,
     figsize: tuple[float, float] = (8.5, 6.0),
-    cmap: str | None = "Blues",
+    cmap: str | None = None,
     values: list[float] | None = None,
     param_label: str | None = None,
 ) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes], dict[str, np.ndarray]]:
@@ -1161,6 +1223,8 @@ def sweep_fig(
     )
 
     ratios: dict[str, np.ndarray] = {}
+    _plotted: list[tuple[np.ndarray, np.ndarray]] = []
+    _r_sig: list[np.ndarray] = []
 
     # Determine colours
     n_cases = len(cases)
@@ -1202,6 +1266,11 @@ def sweep_fig(
         L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
         ratio = np.divide(L_t_on_ref, L_ref, where=(L_ref > 0), out=np.full_like(L_ref, np.nan))
         ratios[label] = ratio
+        # Where the reference is a tiny fraction of its own peak, the quotient is
+        # division by noise. Those points stay in the returned array (the tables
+        # window them themselves) but must not set the panel's scale.
+        _sig = L_ref > (L_ref.max() * _RATIO_SIGNAL_FLOOR) if L_ref.size else np.zeros(0, bool)
+        _r_sig.append(ratio[_sig & np.isfinite(ratio)])
 
         # Check that both arms have overlapping positive region
         pos_ref = L_ref > 0
@@ -1218,42 +1287,74 @@ def sweep_fig(
         # Transform x-axis if needed
         x_ref = w_ref if x_of_wave is None else x_of_wave(w_ref)
 
-        # Top panel: reference solid line, tengri dashed line (both in case colour)
+        # The reference is a wide pale band and tengri a narrow saturated line on
+        # top of it, both in the case colour. Two same-width lines in one colour
+        # read as a single line wherever they agree, which is most of the axis and
+        # is exactly where the reader needs to see that they agree.
+        _xr, _yr = x_ref[pos_ref], L_ref[pos_ref]
+        _mk = _marker_subsample(_xr, window=xlim)
         ax.plot(
-            x_ref[pos_ref],
-            L_ref[pos_ref],
+            _xr[_mk],
+            _yr[_mk],
             color=color,
-            linestyle="-",
-            linewidth=2.2,
-            alpha=0.45,
+            linestyle="none",
+            marker="o",
+            markerfacecolor="none",
+            markeredgewidth=1.3,
+            markersize=5.6,
+            zorder=3,
         )
         ax.plot(
             x_ref[pos_t],
             L_t_on_ref[pos_t],
             color=color,
-            linestyle="--",
-            linewidth=1.0,
+            linestyle="-",
+            linewidth=1.7,
             label=label,
+            zorder=2,
+            path_effects=[pe.Stroke(linewidth=3.0, foreground="white"), pe.Normal()],
         )
+        _plotted.append((x_ref[pos_ref], L_ref[pos_ref]))
+        _plotted.append((x_ref[pos_t], L_t_on_ref[pos_t]))
 
-        # Ratio panel
-        ax_r.plot(x_ref, ratio, color=color, linestyle="-", linewidth=1.0)
+        # Ratio panel, over the overlap and only where the reference carries
+        # signal. At an emission-line pixel where the reference is a fraction of
+        # its own peak the quotient is division by noise, and those spikes bury
+        # the few-percent structure the panel exists to show.
+        _r_plot = np.where(overlap_positive & _sig, ratio, np.nan)
+        ax_r.plot(
+            x_ref,
+            _r_plot,
+            color=color,
+            linestyle="-",
+            linewidth=1.3,
+            path_effects=[pe.Stroke(linewidth=2.4, foreground="white"), pe.Normal()],
+        )
 
     # Configure top panel
     ax.set_xscale("log")
-    if logy:
-        ax.set_yscale("log")
-        _finite = [
-            v
-            for _, _, L_ref_i, _, L_t_i in cases
-            for v in (np.asarray(L_ref_i), np.asarray(L_t_i))
-        ]
-        _pos = np.concatenate([a[np.isfinite(a) & (a > 0)].ravel() for a in _finite])
-        if _pos.size:
-            _ymx = float(_pos.max())
-            ax.set_ylim(_ymx * dyn_range, _ymx * 2.0)
     if xlim is not None:
         ax.set_xlim(*xlim)
+    if logy:
+        ax.set_yscale("log")
+        _vals = []
+        for _x, _y in _plotted:
+            _keep = np.isfinite(_y) & (_y > 0)
+            if xlim is not None:
+                _keep &= (_x >= xlim[0]) & (_x <= xlim[1])
+            if np.any(_keep):
+                _vals.append(_y[_keep])
+        if _vals:
+            _pos = np.concatenate(_vals)
+            _ymx, _ymn = float(_pos.max()), float(_pos.min())
+            # Two bounds, whichever is higher: a fixed fraction of the peak, and
+            # just under the smallest value drawn. The second is what keeps a
+            # sweep covering three decades off an axis spanning eighteen.
+            # The peak can be a single line pixel; scale the head of the axis on
+            # the 99.5th percentile so a narrow spike does not push every
+            # continuum curve into the lower half of the frame.
+            _ytop = float(np.percentile(_pos, 99.5))
+            ax.set_ylim(max(_ymx * dyn_range, _ymn * 0.5), max(_ytop * 3.0, _ymn * 10.0))
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
@@ -1275,23 +1376,41 @@ def sweep_fig(
         cbar = plt.colorbar(sm, ax=ax, label=param_label, pad=0.02)
         cbar.ax.tick_params(labelsize=8)
     else:
-        # Per-case legend
+        # Per-case legend; the code legend below is separate so that which mark
+        # belongs to which code never depends on reading a colour.
         handles, labels = ax.get_legend_handles_labels()
         if handles:
-            ax.legend(
-                handles,
-                labels,
-                fontsize=9,
-                loc="best",
-                title=f"solid = {ref_label}, dashed = tengri",
-                title_fontsize=8,
-            )
+            _case_leg = ax.legend(handles, labels, fontsize=9, loc="upper left")
+            ax.add_artist(_case_leg)
+
+    fig.legend(
+        handles=_code_style_handles(ref_label),
+        fontsize=8,
+        loc="upper right",
+        bbox_to_anchor=(0.995, 0.998),
+        ncol=2,
+        frameon=False,
+        handletextpad=0.4,
+        columnspacing=1.2,
+    )
 
     # Configure ratio panel
     ax_r.axhspan(*band, color="0.85", zorder=0)
     ax_r.axhline(1.0, color="0.5", linewidth=0.8)
     ax_r.set_xscale("log")
-    ax_r.set_ylim(*ratio_ylim)
+    _fin = [a for a in _r_sig if a.size]
+    if _fin:
+        # ratio_ylim is a floor on the window, not a crop: a case sitting at 0.45
+        # was drawn against the bottom edge and read as "0.5 or less". Widen to
+        # hold the signal-region spread, bounded so one spike cannot flatten the
+        # panel everyone else lives in.
+        _lo_d, _hi_d = np.percentile(np.concatenate(_fin), [2.0, 98.0])
+        ax_r.set_ylim(
+            float(np.clip(min(ratio_ylim[0], _lo_d * 0.95), _RATIO_YLIM_BOUND[0], 1.0)),
+            float(np.clip(max(ratio_ylim[1], _hi_d * 1.05), 1.0, _RATIO_YLIM_BOUND[1])),
+        )
+    else:
+        ax_r.set_ylim(*ratio_ylim)
     ax_r.set_xlabel(xlabel)
     ax_r.set_ylabel("tengri / ref", fontsize=9)
     ax_r.grid(True, alpha=0.3)
@@ -1643,11 +1762,32 @@ def overlay_ratio_fig(
         gridspec_kw={"height_ratios": [3, 1]},
     )
 
-    # Top panel: reference and tengri curves
-    pos_ref = L_ref > 0
-    ax.plot(x[pos_ref], L_ref[pos_ref], "C0-", linewidth=2.2, alpha=0.45, label=ref_label)
-    pos_t = L_t_on_ref > 0
-    ax.plot(x[pos_t], L_t_on_ref[pos_t], "C1--", linewidth=1.0, label=label_t)
+    # The reference is a wide pale band, tengri a narrow saturated line over it.
+    # Two same-width curves read as one wherever they agree, which is most of the
+    # axis and is where the reader needs to see that they agree.
+    _xr, _yr = x[pos_ref], L_ref[pos_ref]
+    _mk = _marker_subsample(_xr, n=34, window=xlim)
+    ax.plot(
+        _xr[_mk],
+        _yr[_mk],
+        color="C0",
+        linestyle="none",
+        marker="o",
+        markerfacecolor="none",
+        markeredgewidth=1.4,
+        markersize=6.0,
+        zorder=3,
+        label=ref_label,
+    )
+    ax.plot(
+        x[pos_t],
+        L_t_on_ref[pos_t],
+        color="C3",
+        linewidth=1.7,
+        label=label_t,
+        zorder=2,
+        path_effects=[pe.Stroke(linewidth=3.0, foreground="white"), pe.Normal()],
+    )
 
     # Configure top panel
     ax.set_xscale("log")
@@ -1657,7 +1797,18 @@ def overlay_ratio_fig(
     _ymx_ref = float(np.nanmax(L_ref[pos_ref])) if pos_ref.any() else 1.0
     _ymx_t = float(np.nanmax(L_t_on_ref[pos_t])) if pos_t.any() else 1.0
     ymx = max(_ymx_ref, _ymx_t)
-    ax.set_ylim(ymx * dyn_range, ymx * 2.0)
+    _win = np.ones_like(x, dtype=bool) if xlim is None else (x >= xlim[0]) & (x <= xlim[1])
+    _p = np.concatenate(
+        [
+            L_ref[pos_ref & _win],
+            L_t_on_ref[pos_t & _win],
+        ]
+    )
+    _p = _p[np.isfinite(_p) & (_p > 0)]
+    if _p.size:
+        ax.set_ylim(max(float(_p.max()) * dyn_range, float(_p.min()) * 0.5), float(_p.max()) * 2.0)
+    else:
+        ax.set_ylim(ymx * dyn_range, ymx * 2.0)
     ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
     ax.set_title(title)
     ax.legend(fontsize=10)
