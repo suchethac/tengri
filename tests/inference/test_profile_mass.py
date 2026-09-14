@@ -679,3 +679,99 @@ def test_profile_mass_laplace_rejects_float32(ssp_data_fsps):
 
         with pytest.raises(ValueError, match="float32 mode"):
             resolve_profile_mass_for_method(fitter, "laplace", "auto")
+
+
+def test_reinsertion_scratch_is_bounded_by_chunk_size(ssp_data_fsps, monkeypatch):
+    """Chunking must bound reinsertion scratch: 4x the draws is not 4x the memory.
+
+    The ratchet for #2356. It measures the compiled program's scratch at two
+    draw counts twice over -- once with the chunk width pinned small, and once
+    with the width above ``n_draws`` so the map degenerates to a single vmap,
+    which is what ``main`` does. The unchunked arm is *measured, not assumed*,
+    so the test cannot pass vacuously on a model whose constant overhead
+    happens to dominate: it requires the unchunked arm to really grow before
+    it asserts the chunked arm does not. Replacing ``jax.lax.map`` with a
+    plain ``jax.vmap`` turns it red.
+    """
+    from tengri.inference import mass_profile
+    from tengri.inference._model_cache import _default_owner
+
+    model = _minimal_model(ssp_data_fsps)
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    _, flux, noise = _mock(model, seed=42)
+    fitter = Fitter(
+        ForwardModel.build(sed=model, observation=obs), flux, noise, profile_mass="auto"
+    )
+    assert fitter._profile_mass is True
+    names = [n for n in fitter._free_names if n != fitter._profile_mass_name]
+
+    def scratch_bytes(n_draws, width):
+        monkeypatch.setattr(mass_profile, "_compute_reinsertion_chunk_size", lambda _fitter: width)
+        _default_owner.get_or_compile_model(fitter.model).pop("profile_mass_reinsert", None)
+        fn = mass_profile._reinsert_mass_fn(fitter)
+        samples = {name: jnp.zeros((n_draws,)) for name in names}
+        keys = jax.random.split(jax.random.PRNGKey(0), n_draws)
+        compiled = fn.lower(samples, keys, flux, noise, None).compile()
+        return compiled.memory_analysis().temp_size_in_bytes
+
+    unchunked = scratch_bytes(256, 257) / scratch_bytes(64, 65)
+    chunked = scratch_bytes(256, 16) / scratch_bytes(64, 16)
+
+    assert unchunked > 3.0, (
+        f"unchunked scratch grew only {unchunked:.2f}x over 64->256 draws; the test "
+        "model no longer exercises the linear path, so the chunked assertion below "
+        "would be vacuous"
+    )
+    assert chunked < 1.25, (
+        f"chunked scratch grew {chunked:.2f}x over 64->256 draws (unchunked grew "
+        f"{unchunked:.2f}x); peak must be set by chunk width, not draw count"
+    )
+
+
+def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, monkeypatch):
+    """Chunk width must not change the answer beyond reduction-reordering noise.
+
+    Two claims, both measured. With the width at or above ``n_draws`` the map
+    degenerates to a single vmap and the draws are *bit-identical*, so a model
+    that does not need chunking pays nothing at all. With the width biting, the
+    draws agree to about one ulp -- the chunk boundary reorders reductions but
+    the per-draw PRNG keys are untouched.
+    """
+    from tengri.inference import mass_profile
+    from tengri.inference._model_cache import _default_owner
+
+    model = _minimal_model(ssp_data_fsps)
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    _, flux, noise = _mock(model, seed=42)
+    fitter = Fitter(
+        ForwardModel.build(sed=model, observation=obs), flux, noise, profile_mass="auto"
+    )
+    assert fitter._profile_mass is True
+    names = [n for n in fitter._free_names if n != fitter._profile_mass_name]
+
+    n_draws = 64
+    rng = np.random.default_rng(3)
+    samples = {
+        name: model.spec.get_distribution(name).unstandardize(
+            jnp.asarray(rng.normal(size=n_draws))
+        )
+        for name in names
+    }
+    keys = jax.random.split(jax.random.PRNGKey(11), n_draws)
+
+    def draws_at(width):
+        monkeypatch.setattr(mass_profile, "_compute_reinsertion_chunk_size", lambda _fitter: width)
+        _default_owner.get_or_compile_model(fitter.model).pop("profile_mass_reinsert", None)
+        return np.asarray(mass_profile._reinsert_mass_fn(fitter)(samples, keys, flux, noise, None))
+
+    reference = draws_at(n_draws + 1)
+    assert np.all(np.isfinite(reference))
+
+    assert np.array_equal(draws_at(n_draws), reference), (
+        "width == n_draws must degenerate to a single vmap and be bit-identical"
+    )
+
+    for width in (16, 7, 1):
+        chunked = draws_at(width)
+        rel = np.max(np.abs((chunked - reference) / reference))
+        assert rel < 1e-15, f"chunk width {width} moved draws by {rel:.3e} relative"

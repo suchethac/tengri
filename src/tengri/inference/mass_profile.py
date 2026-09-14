@@ -1126,18 +1126,178 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
 
 
 # ── Reinserting the mass once inference is done ──────────────────────────────
+#
+# Memory safety: _reinsert_mass_fn chunks the vmapped forward model to bound peak
+# allocation. The original single-vmap path (issue #2356) built a jitted program
+# vmapping the entire forward prediction over n_draws at once. Every intermediate
+# in _profile_stats acquires a leading (n_draws,) axis, so memory scales with the
+# working set size: that can be tens of gigabytes for large SSP grids and high
+# draw counts. Measured in #2356 (29 runs across 5 SSP configurations, 2400 draws):
+#
+#  SSP grid          | n_age | n_wave | Status
+#  pgny_mist_c3k     | 107   | 16902  | 0/5 completed, 5/5 OOM killed
+#  bc03_pdva_stelib  | 221   | 6900   | 0/5 completed, 5/5 OOM killed
+#  fsps_mist_c3k_a   | 107   | 11149  | 0/5 completed, 5/5 OOM killed
+#  prsc_miles_wNE    | 93    | 5994   | 5/5 PASSED (only large config to pass)
+#  bpss_stars_c3k_a  | 51    | 1221   | 3/4 passed
+#
+# (Note: these runs did not vary grid and recipe independently, so they do not
+# isolate which drives cost. The recipe table below does.)
+#
+# Scratch memory is driven by model richness (how many components the forward
+# model evaluates), not by SSP grid dimensions. Measured on bc03_pdva_stelib
+# (13 photometric bands) by XLA memory_analysis().temp_size_in_bytes on the
+# real per-chunk program:
+#
+#  recipe                    n_free   scratch/draw   @2400 draws   derived chunk
+#  mock_recovery_minimal        6        0.34 MB       0.83 GB        2899
+#  quiescent_z0                 5        1.7  MB       4.05 GB         590
+#  star_forming_photometry      8       25.9  MB      62    GB          38
+#  stochastic_sfh_jwst         10       26.4  MB      63    GB          37
+#
+# That is why chunk size is measured from the compiled program rather than
+# derived from dimensions.
+#
+# Memory scaling verification (star_forming_photometry / bc03_pdva_stelib / 13 bands):
+#
+#  n_draws   unchunked    chunked    ratio
+#      100     2.60 GB    2.24 GB     1.2x
+#      400    10.35 GB    2.14 GB     4.8x
+#     1200    31.02 GB    2.19 GB    14.2x
+#     2400    62.03 GB    1.80 GB    34.5x
+#
+# Solution: use jax.lax.map to chunk draws into bounded-size groups, scanning
+# across chunks with vmap within each chunk. Peak scales with chunk_size rather
+# than n_draws. Chunk size is computed at fit construction time by XLA memory
+# analysis of a reference program (described in _compute_reinsertion_chunk_size),
+# targeting a ~1 GB budget for the per-chunk vmap working set. The compiled
+# program overhead (model constants, scan buffers) roughly doubles this: realized
+# scratch was measured at 1.80-2.24 GB, flat across draw counts. When
+# chunk_size >= n_draws the map degenerates to a single vmap, bit-identical to
+# the unchunked reference; when chunking engages, results agree to one ulp (max
+# relative difference 1.43e-16 measured at widths 1, 7, 38, 64 vs float64 eps
+# 2.22e-16). Each draw uses its corresponding PRNG key, unaffected by chunk
+# boundaries.
+#
+# Wall-clock cost: chunking is free when not needed (bit-identical degeneration)
+# and costs ~1.9x wall time when it engages. Measured warm (best of three),
+# relative to unchunked:
+#   mock_recovery_minimal, 1000 draws, width 2899 (no chunking): 1.03x
+#   star_forming_photometry, 200 draws, width 38 (chunking): 1.86x
+# The latter configuration otherwise cannot run (unchunked 62 GB at 2400 draws).
+# Do not optimize away chunking on benchmarks that only exercise the fast path.
+
+
+def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
+    """Chunk size for mass reinsertion vmaps, targeting ~1 GB per-chunk vmap scratch.
+
+    Derives chunk size via XLA's own memory analysis of the compiled per-chunk
+    program. This measures scratch memory directly (temp_size_in_bytes) rather
+    than modeling the forward pass, adapting automatically to WavePrecomp,
+    float32/64, and model structure.
+
+    Procedure:
+    1. Compile the per-chunk jitted program at a reference chunk size (100).
+    2. Query XLA's memory_analysis() for the scratch memory that size requires.
+    3. Scale to the target budget (~1 GB vmap working set) and return the derived size.
+
+    This is conservative: if scratch > 1 GB at chunk_size=100, we reduce the
+    chunk size further; if scratch is small, we increase it. The realized program
+    overhead roughly doubles this estimate: compiled scratch is typically 1.80-2.24 GB.
+
+    Clamps to >= 1 so one draw is always valid (``jax.lax.map`` clamps the
+    upper bound at call time). Fallback: 100 draws if XLA memory analysis is
+    unavailable (preserves safe behavior).
+
+    Returns
+    -------
+    int
+        Number of draws to vmap per chunk.
+    """
+    target_bytes = 1e9
+    reference_chunk_size = 100
+
+    # Build a reference per-chunk jitted function to measure scratch memory.
+    # The reference program is the real per-chunk vmap compiled at a fixed
+    # reference width (100), with placeholder data and noise: only the shapes
+    # and the model structure affect scratch memory (verified to match the
+    # real program's per-draw bytes to five significant figures).
+    try:
+        mass_name = fitter._profile_mass_name
+        mass_prior = fitter._profile_mass_prior
+        ell_lo, ell_hi = fitter._profile_mass_bounds
+        fixed_values = fitter._fixed_values
+        data_type = fitter.data_type
+        use_components = bool(getattr(fitter, "use_components", False))
+        model = fitter.model
+
+        def _stats_one(sample_dict):
+            phys = {**fixed_values, **sample_dict}
+            return _profile_stats(
+                model,
+                mass_name,
+                phys,
+                jnp.zeros(1),  # placeholder data
+                jnp.ones(1),  # placeholder noise
+                presence=None,
+                data_type=data_type,
+                use_components=use_components,
+            )
+
+        def _reference_chunk(samples_chunk, keys_chunk):
+            """Reference per-chunk program for memory analysis."""
+            A_ref_chunk, a_star_chunk, _, ell_ref_chunk = jax.vmap(_stats_one)(samples_chunk)
+            return jax.vmap(
+                lambda k, a, m, r: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior, r)
+            )(keys_chunk, A_ref_chunk, a_star_chunk, ell_ref_chunk)
+
+        # Compile at the reference chunk size with dummy arguments
+        samples_ref = {name: jnp.zeros((reference_chunk_size,)) for name in fitter._free_names}
+        keys_ref = jax.random.split(jax.random.PRNGKey(0), reference_chunk_size)
+
+        jitted_fn = jax.jit(_reference_chunk)
+        lowered = jitted_fn.lower(samples_ref, keys_ref)
+        compiled = lowered.compile()
+        scratch_bytes = compiled.memory_analysis().temp_size_in_bytes
+
+        # Scale: if scratch is X bytes at reference_chunk_size, then at
+        # chunk_size it will be ~(chunk_size / reference_chunk_size) * X
+        per_chunk_overhead = scratch_bytes / reference_chunk_size
+        derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
+
+        logger.debug(
+            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
+            derived_chunk_size,
+            scratch_bytes / reference_chunk_size / 1e6,
+            target_bytes / 1e9,
+        )
+        return derived_chunk_size
+    except Exception as exc:
+        # Fallback: use a conservative fixed size if XLA analysis fails
+        # (e.g., on some hardware or JAX versions where memory_analysis is unavailable)
+        logger.warning(
+            "reinsertion chunk size: XLA memory analysis failed, using fallback %d; exception: %r",
+            reference_chunk_size,
+            exc,
+            exc_info=True,
+        )
+        return reference_chunk_size
 
 
 def _reinsert_mass_fn(fitter: Fitter):
     """The compiled draws -> conditional-mass-draws map, cached on the model.
 
-    One ``jax.vmap`` over 1200 draws of a forward prediction is ~1.2 s when
-    dispatched eagerly (op-by-op under batching) and ~5 s the first time in a
-    process; under ``jax.jit`` it is one program. The jitted function closes
-    over the model, the fixed values and the mass prior -- everything the
-    fitter's engine cache key already covers -- and takes the draws, the
-    keys, the data, the noise and the presence mask as traced arguments, so
-    it is keyed by ``_engine_cache_key`` alone and reused across fits on the
+    Uses ``jax.lax.map`` to vmap within each chunk and scan across chunks,
+    bounding peak allocation proportional to chunk_size rather than n_draws
+    (issue #2356). When chunk_size is at least n_draws, the map degenerates
+    to a single vmap, bit-identical to the unchunked path, so models that do
+    not need chunking pay nothing. When chunking engages, results agree to one
+    ulp (max relative difference 1.43e-16 measured at widths 1, 7, 38, 64).
+    Each draw uses its corresponding PRNG key, unaffected by chunk boundaries.
+
+    The whole function is jitted and closes over the model, fixed values and
+    mass prior -- everything the fitter's engine cache key already covers --
+    and is keyed by ``_engine_cache_key`` alone, reused across fits on the
     same model, whatever the galaxy.
     """
     from tengri.inference._model_cache import _default_owner as _model_cache_owner
@@ -1157,11 +1317,22 @@ def _reinsert_mass_fn(fitter: Fitter):
     fixed_values = fitter._fixed_values
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
+    chunk_size = _compute_reinsertion_chunk_size(fitter)
 
     def _reinsert(samples_no_mass, draw_keys, data, noise, presence):
-        def stats_one(sample_dict):
+        """Map the per-draw conditional-mass draw over the posterior.
+
+        ``jax.lax.map(..., batch_size=chunk_size)`` vmaps within each chunk and
+        scans across chunks, so peak scratch scales with ``chunk_size`` rather
+        than with the number of draws (issue #2356). When ``chunk_size`` is at
+        least ``n_draws`` it degenerates to a single vmap, bit-identical to the
+        unchunked path, so a model that does not need chunking pays nothing.
+        """
+
+        def one_draw(draw):
+            sample_dict, key = draw
             phys = {**fixed_values, **sample_dict}
-            return _profile_stats(
+            A_ref, a_star, _, ell_ref = _profile_stats(
                 model,
                 mass_name,
                 phys,
@@ -1171,11 +1342,9 @@ def _reinsert_mass_fn(fitter: Fitter):
                 data_type=data_type,
                 use_components=use_components,
             )
+            return _sample_log_mass(key, A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
 
-        A_ref_all, a_star_all, _, ell_ref_all = jax.vmap(stats_one)(samples_no_mass)
-        return jax.vmap(
-            lambda k, a, m, r: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior, r)
-        )(draw_keys, A_ref_all, a_star_all, ell_ref_all)
+        return jax.lax.map(one_draw, (samples_no_mass, draw_keys), batch_size=chunk_size)
 
     fn = jax.jit(_reinsert)
     cache[cache_key] = fn
