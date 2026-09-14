@@ -1,6 +1,17 @@
 ## [Unreleased]
 
 
+### Fixed
+
+- Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
+  flat-form builds (e.g. `Parameters(lgmet_scatter=0.3)`), the kwarg now sets
+  the registered `met_logzsol_scatter` Fixed value at the parameter registry
+  seam, so the stellar component receives the instance-specific scatter width
+  instead of always falling back to the global default (issue #2255). Grammar
+  builds (with explicit `met_logzsol_scatter` as parameter name) remain
+  unchanged; both spellings cannot be passed together (raises if shadowing is
+  detected).
+
 ### Added
 
 - Each non-stellar emission source now picks its own dust screen: the
