@@ -91,14 +91,29 @@ RETUNE_TARGET_ACCEPT_2 = 0.99
 DEFAULT_RETUNE_ATTEMPTS = 3
 
 #: Per-configuration override of ``DEFAULT_RETUNE_ATTEMPTS`` (ruling R60).
-#: Config III's ``met_logzsol`` ceiling (+0.5) sits at the SSP grid extent --
-#: an immovable edge, unlike Config II's movable prior edge. Edge-mass
-#: diagnostics on the best-so-far draws showed grid-edge pile-up (frac_hi
-#: 0.107 on 13097/III, 0.149 on 15336/III, both at max R-hat ~1.002): the
-#: divergences are well-mixed, irreducible edge geometry, not a step-size
-#: problem. Raising ``target_accept_rate`` to 0.99 cannot clear a structural
-#: edge and cost 13097/III its entire 21600 s cell timeout for nothing, so
-#: III's ladder caps at the 0.95 rung (2 attempts) (#2089).
+#: Edge-mass diagnostics on the best-so-far draws showed pile-up against
+#: Config III's ``met_logzsol`` ceiling (frac_hi 0.107 on 13097/III, 0.149 on
+#: 15336/III, both at max R-hat ~1.002): the divergences are well-mixed,
+#: irreducible edge geometry, not a step-size problem. Raising
+#: ``target_accept_rate`` to 0.99 cannot clear boundary geometry and cost
+#: 13097/III its entire 21600 s cell timeout for nothing, so III's ladder caps
+#: at the 0.95 rung (2 attempts) (#2089).
+#:
+#: Corrected 2026-09-14. This note used to say the ceiling "sits at the SSP
+#: grid extent -- an immovable edge, unlike Config II's movable prior edge".
+#: That is wrong, and the ceiling it quoted (+0.5) is not the one in configs.py
+#: (+0.48) either. Scanning ``met_logzsol`` from -3.0 to +2.0 and watching the
+#: predicted photometry respond puts the real grid edge near +0.75: the
+#: response is healthy through +0.50, decays across +0.60 to +0.70, and is
+#: exactly flat from +0.80 up. So III's ceiling sits about 0.27 dex INSIDE the
+#: grid and is as movable as II's.
+#:
+#: The capped ladder is still right -- target_accept cannot fix a boundary
+#: whether prior or grid imposes it -- but the pile-up is prior truncation with
+#: headroom available, not an immovable grid limit. That is a modeling question
+#: (a truncated metallicity posterior propagates into correlated quantities
+#: such as stellar mass), not a sampler question, and it is deliberately left
+#: to the owner rather than changed silently mid-grid.
 RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2}
 
 #: Keys the NPZ carries beside the sampled parameters, one array each.
