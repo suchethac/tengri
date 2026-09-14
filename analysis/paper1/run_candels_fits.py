@@ -334,11 +334,11 @@ def run_fit_cells_concurrent(
     # Initialize: try to start up to max_jobs cells
     for _ in range(min(max_jobs, total_cells)):
         try:
-            next_cell = next(cells_iter)
+            cell = next(cells_iter)
         except StopIteration:
             break
 
-        gal_id, config_key = next_cell
+        gal_id, config_key = cell
         cell_json = results_dir / f"{gal_id}_{config_key}.json"
 
         # Check --only-missing predicate
@@ -383,6 +383,20 @@ def run_fit_cells_concurrent(
             failed_fits.append((gal_id, config_key))
             completed_count += 1
 
+    # The initial fill above consumed cells from the iterator into its own
+    # local, so next_cell is still None here. Advance it to the first cell the
+    # fill did NOT launch before entering the main loop.
+    #
+    # This line is the fix for a real bug. The fill used to assign straight to
+    # next_cell, leaving it pointing at the LAST cell it had just launched, so
+    # the first refill re-examined a cell that was already running or just
+    # finished. When that cell happened to be adopted the only symptom was a
+    # double-count ("skipping 79/II: adopted" one millisecond after
+    # "SUCCESS: galaxy 79 config II"). When it was NOT adopted the refill would
+    # LAUNCH it again -- and if a slower sibling freed the slot first, that is a
+    # second process writing the same cell's JSON and npz concurrently.
+
+    next_cell = next(cells_iter, None)
     # Main loop: wait for jobs to finish, launch more as slots free
     while running or next_cell is not None:
         # Poll for finished jobs

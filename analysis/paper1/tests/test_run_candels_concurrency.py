@@ -37,10 +37,14 @@ def make_stub_worker_script(max_concurrent_file: Path, cell_marker_dir: Path) ->
     Returns:
         Python code as a string
     """
+    marker_dir_str = str(cell_marker_dir)
+    max_concurrent_str = str(max_concurrent_file)
+
     return f'''
 import sys
 import time
 import json
+import os
 from pathlib import Path
 
 gal_id = sys.argv[1]
@@ -48,21 +52,24 @@ config_key = sys.argv[2]
 fail_config = sys.argv[3] if len(sys.argv) > 3 else None
 results_dir_arg = sys.argv[4] if len(sys.argv) > 4 else None
 work_duration = 0.5
+pid = os.getpid()
 
-marker_dir = Path("{cell_marker_dir}")
+marker_dir = Path("{marker_dir_str}")
 marker_dir.mkdir(parents=True, exist_ok=True)
-max_concurrent_file = Path("{max_concurrent_file}")
+max_concurrent_file = Path("{max_concurrent_str}")
 
-# Write start marker
-start_file = marker_dir / f"{{gal_id}}_{{config_key}}_start.json"
-start_file.write_text(json.dumps({{"gal_id": gal_id, "config": config_key, "start": time.time()}}))
+# Write start marker with process ID to detect duplicate launches
+start_file = marker_dir / f"{{gal_id}}_{{config_key}}_{{pid}}_start.json"
+start_file.write_text(json.dumps({{"gal_id": gal_id, "config": config_key, "pid": pid, "start": time.time()}}))
 
 # Count concurrent by reading all start files minus ended ones
-starts = list(marker_dir.glob("*_start.json"))
-ends = list(marker_dir.glob("*_end.json"))
-running = {{Path(f).stem.rsplit("_start", 1)[0] for f in starts}}
-ended = {{Path(f).stem.rsplit("_end", 1)[0] for f in ends}}
-concurrent = len(running - ended)
+# Each launch (even duplicates of the same cell) gets its own start file with the PID
+starts = list(marker_dir.glob("*_*_start.json"))
+ends = list(marker_dir.glob("*_*_end.json"))
+# Extract cell ID (gal_id_config_key) from the filename
+running_cells = {{Path(f).stem.rsplit("_", 1)[0] for f in starts}}  # drops the pid_start suffix
+ended_cells = {{Path(f).stem.rsplit("_", 1)[0] for f in ends}}      # drops the pid_end suffix
+concurrent = len(running_cells - ended_cells)
 
 # Update max concurrent seen
 if max_concurrent_file.exists():
@@ -76,9 +83,9 @@ max_concurrent_file.write_text(json.dumps(data))
 # Simulate work
 time.sleep(work_duration)
 
-# Write end marker
-end_file = marker_dir / f"{{gal_id}}_{{config_key}}_end.json"
-end_file.write_text(json.dumps({{"gal_id": gal_id, "config": config_key}}))
+# Write end marker (with PID to match the start marker)
+end_file = marker_dir / f"{{gal_id}}_{{config_key}}_{{pid}}_end.json"
+end_file.write_text(json.dumps({{"gal_id": gal_id, "config": config_key, "pid": pid}}))
 
 # Write dummy diagnostics JSON for production code to read
 # (production code expects this file for successful cells)
@@ -240,16 +247,40 @@ def test_all_cells_run_exactly_once_production() -> None:
             cell_command=stub_cmd,
         )
 
-        # Count executed cells by reading marker directory
-        executed = set()
-        for end_file in cell_marker_dir.glob("*_end.json"):
-            cell_id = end_file.stem.rsplit("_end", 1)[0]
-            executed.add(cell_id)
+        # Count executed launches by reading marker directory
+        # Each launch (even if the same cell is launched twice) creates a separate start marker with PID
+        start_markers = list(cell_marker_dir.glob("*_*_*_start.json"))
+        total_launches = len(start_markers)
 
+        # Extract cell IDs (gal_id_config_key) from marker filenames, keeping duplicates
+        launched_cells = []
+        for start_file in start_markers:
+            # Filename format: {gal_id}_{config_key}_{pid}_start.json
+            # Remove the _pid_start suffix: rsplit with maxsplit=2 to remove the last 2 parts
+            stem = start_file.stem  # e.g., "1_I_12345_start"
+            # Remove "_start" first, then remove "_pid"
+            without_suffix = stem.replace("_start", "")  # "1_I_12345"
+            cell_id = without_suffix.rsplit("_", 1)[0]   # "1_I"
+            launched_cells.append(cell_id)
+
+        # Assert: total launches equals total cells (no duplicates, every cell runs once)
+        assert total_launches == len(cells), (
+            f"Expected {len(cells)} launches, got {total_launches}. "
+            f"This indicates duplicate cell launches or missing cells."
+        )
+
+        # Assert: each cell was launched exactly once
+        for gal_id, config_key in cells:
+            cell_name = f"{gal_id}_{config_key}"
+            launch_count = launched_cells.count(cell_name)
+            assert launch_count == 1, (
+                f"Cell {cell_name} was launched {launch_count} times. "
+                f"Expected exactly 1 launch per cell."
+            )
+
+        # Assert: all queued cells ran
         expected = {f"{gal}_{cfg}" for gal, cfg in cells}
-
-        assert len(executed) == len(cells), f"Expected {len(cells)} cells, got {len(executed)}"
-        assert executed == expected, "Cells executed do not match input list"
+        assert set(launched_cells) == expected, "Cells launched do not match input list"
 
 
 def test_failed_cell_no_abort_production() -> None:
@@ -294,7 +325,11 @@ def test_failed_cell_no_abort_production() -> None:
         # Verify all cells ran
         executed = set()
         for end_file in cell_marker_dir.glob("*_end.json"):
-            cell_id = end_file.stem.rsplit("_end", 1)[0]
+            # Markers carry the worker pid so a duplicate launch cannot
+            # overwrite its own file: "1_I_12345_end". Strip "_end", then
+            # strip the pid, to recover the cell id.
+            without_suffix = end_file.stem.rsplit("_end", 1)[0]
+            cell_id = without_suffix.rsplit("_", 1)[0]
             executed.add(cell_id)
 
         expected = {f"{gal}_{cfg}" for gal, cfg in cells}
