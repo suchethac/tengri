@@ -775,3 +775,65 @@ def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, mon
         chunked = draws_at(width)
         rel = np.max(np.abs((chunked - reference) / reference))
         assert rel < 1e-15, f"chunk width {width} moved draws by {rel:.3e} relative"
+
+
+def test_reinsertion_logs_the_chunk_width_and_whether_chunking_engaged(
+    ssp_data_fsps, monkeypatch, caplog
+):
+    """Verify chunking log messages report width and whether chunking engaged.
+
+    The mechanism silently degenerates to an unchunked vmap when chunk_size >= n_draws,
+    so the reporter of #2356 could not tell from a failed run whether chunking had
+    engaged or not. This test ensures the log messages clearly report the chunk width
+    and whether chunking is active (fewer chunks) or degenerated (single vmap).
+    """
+    import logging
+
+    from tengri.inference import mass_profile
+    from tengri.inference._model_cache import _default_owner
+
+    model = _minimal_model(ssp_data_fsps)
+    forward = ForwardModel.build(sed=model)
+    _, flux, noise = _mock(model, seed=42)
+
+    fitter = Fitter(forward, flux, noise, profile_mass="auto")
+    assert fitter._profile_mass is True
+
+    # Get the module's logger name
+    logger_name = "tengri.inference.mass_profile"
+    caplog.set_level(logging.INFO, logger=logger_name)
+
+    # Helper to get the free parameter names (excluding the mass)
+    free_names = [n for n in fitter._free_names if n != fitter._profile_mass_name]
+
+    def run_arm(width):
+        """Run reinsertion with a patched chunk width and return captured logs."""
+        # Patch the chunk size computation to return the test width
+        monkeypatch.setattr(mass_profile, "_compute_reinsertion_chunk_size", lambda _f: width)
+        # Clear the cached program so it recompiles with the new width
+        _default_owner.get_or_compile_model(fitter.model).pop("profile_mass_reinsert", None)
+
+        # Clear captured records for this arm
+        caplog.clear()
+
+        # Build test data: 64 draws, placeholder data
+        samples = {name: jnp.zeros((64,)) for name in free_names}
+        keys = jax.random.split(jax.random.PRNGKey(0), 64)
+
+        # Call the reinsertion function; this triggers _reinsert which logs the message
+        _fn = mass_profile._reinsert_mass_fn(fitter)
+        _fn(samples, keys, flux, noise, None)
+
+        return caplog.text
+
+    # Arm A: width 16, which is less than 64 draws, so chunking engages (4 chunks)
+    text_a = run_arm(16)
+    assert "64" in text_a and "draws" in text_a  # 64 draws logged
+    assert "4" in text_a and "chunks" in text_a  # 4 chunks logged
+    assert "16" in text_a  # chunk width logged
+
+    # Arm B: width 128, which exceeds 64 draws, so no chunking (single vmap)
+    text_b = run_arm(128)
+    assert "64" in text_b and "draws" in text_b  # 64 draws logged
+    assert "single vmap" in text_b or "bit-identical" in text_b  # Single vmap logged
+    assert "128" in text_b  # chunk width logged
