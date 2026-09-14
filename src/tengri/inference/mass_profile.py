@@ -372,9 +372,14 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
 
     if not (max_dev < tol):
         return (
-            f"photometry is not exactly linear in '{mass_name}' "
-            f"(max|flux_ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}); "
-            "likely a mass-independent component (e.g. an AGN continuum)"
+            f"the {fitter.data_type} prediction is not linear in '{mass_name}' "
+            f"at the probe point (max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}). "
+            "The probe evaluates one parameter set -- every other free parameter at its prior "
+            "median, stochastic field latents at zero -- so this measures linearity there, not "
+            "everywhere. A deviation of order 1 indicates a mass-independent additive component "
+            "such as an AGN continuum; a deviation within a few orders of the tolerance more "
+            "often indicates conditioning in the mass direction, which a stochastic SFH can "
+            "produce without any additive component being present."
         ), {}
 
     return None, {"mass_name": mass_name, "mass_prior": mass_prior, "bounds": bounds}

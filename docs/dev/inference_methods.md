@@ -1692,10 +1692,13 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
 - Gaussian likelihood only (`noise_dof == 0`, not Student-t);
 - no variable-noise model (`noise_frac_cal` not configured);
 - no censored data (upper/lower limits);
-- the full data vector numerically linear in `M` (two masses one dex apart, all else fixed,
-  have `max|flux_ratio(+1 dex) - 10| < max(1e-8, 1e4 * eps(dtype))`); a mass-independent
-  additive component (e.g. an unmasked AGN continuum, on either channel) fails this and
-  disables profiling.
+- the full data vector numerically linear in `M` (probe: two masses one dex apart, every
+  other free parameter at its prior median, stochastic field latents at zero; requires
+  `max|ratio(+1 dex) - 10| < max(1e-8, 1e4 * eps(dtype))`). A deviation of order 1
+  indicates a mass-independent additive component (e.g. an unmasked AGN continuum on
+  either channel); a deviation within a few orders of the tolerance more often indicates
+  conditioning in the mass direction, which a stochastic SFH can produce without any
+  additive component.
 
 Additionally, at `Fitter.run()` (lines 467–483 of
 `src/tengri/inference/mass_profile.py:resolve_profile_mass_for_method`):

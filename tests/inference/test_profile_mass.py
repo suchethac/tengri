@@ -274,6 +274,54 @@ class TestGuards:
         assert fitter._profile_mass is False
         assert "emission-line" in fitter._profile_mass_reason
 
+    def test_linearity_refusal_names_the_data_type_and_does_not_assert_an_agn_cause(
+        self, ssp_data_fsps
+    ):
+        """Linearity refusal message names data_type and presents both candidate causes.
+
+        Issue #2359: the refusal message previously hardcoded 'photometry' regardless
+        of fitter.data_type (spectroscopy or joint fits were misdiagnosed), and always
+        blamed an AGN continuum even when the stochastic SFH was the real cause. The
+        measured deviations do not distinguish the two: O(1) for a mass-independent
+        component, O(1e-8) for stochastic-SFH conditioning. The probe evaluates only
+        one parameter set (every other free parameter at its prior median, stochastic
+        field latents at zero), so the message must say so and present both causes
+        rather than naming one confidently.
+        """
+        model = _agn_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        # The fitter refuses profiling because of linearity, not because of an AGN
+        # in the recipe (this fixture HAS an AGN, but we're testing that the message
+        # itself is properly qualified). Use profile_mass="auto" to get the reason
+        # without raising, so we can inspect it.
+        fitter = Fitter(forward, data=flux, noise=noise, profile_mass="auto")
+        assert fitter._profile_mass is False
+        reason = fitter._profile_mass_reason
+
+        # 1. The reason must contain the fitter's actual data_type string.
+        assert fitter.data_type in reason, (
+            f"reason does not mention data_type '{fitter.data_type}': {reason}"
+        )
+
+        # 2. The reason must NOT contain the old hardcoded assertion.
+        assert "likely a mass-independent component" not in reason, (
+            f"reason contains old hardcoded blame phrase: {reason}"
+        )
+
+        # 3. The reason must mention BOTH candidate causes: AGN continuum and conditioning.
+        assert "AGN continuum" in reason, f"reason does not mention AGN continuum: {reason}"
+        assert "conditioning" in reason, (
+            f"reason does not mention conditioning in the mass direction: {reason}"
+        )
+
+        # 4. The reason must still report the measured number and tolerance.
+        assert "max|ratio(+1 dex) - 10|" in reason, (
+            f"reason does not report the measurement: {reason}"
+        )
+        assert "need <" in reason, f"reason does not report the tolerance: {reason}"
+
 
 class TestMapParity:
     """method='map' with and without profile_mass agree on theta and mass."""
