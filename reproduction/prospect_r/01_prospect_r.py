@@ -457,6 +457,7 @@ fig, (ax, ax_r), _ratios2 = V.sweep_fig(
     ref_label="ProSpect",
     title="§2 cont'd — dtau, snorm_burst, snorm_trunc",
     x_of_wave=lambda w: w / 1e9,
+    cmap=None,
     xlabel="lookback time [Gyr]",
     ylabel=r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]",
     xlim=(0.05, 13.7),
@@ -939,6 +940,7 @@ fig, (ax, ax_r), _ratios_dust = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     xlabel=r"$\lambda$ [$\mu$m]",
     xlim=(0.1, 3.0),
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_05cont_dust_applied_sweep.png")
@@ -1091,6 +1093,8 @@ fig, (ax, ax_r), _ratios_dale = V.sweep_fig(
     title="§6 cont'd — Dale 2014 α sweep",
     x_of_wave=lambda w: w / 1e4,
     xlim=(1.0, 1e3),
+    values=[float(_label.split("=")[1]) for _label, _, _, _, _ in cases_dale],
+    param_label="spectral index α",
 )
 fig.tight_layout()
 save_fig("prospect_r_06cont_dale_alpha.png")
@@ -1195,6 +1199,8 @@ fig, (ax, ax_r), _ratios_igm = V.sweep_fig(
     xlim=(850.0, 1216.0),
     ratio_ylim=(0.9, 1.1),
     logy=False,
+    values=[float(_label.split("=")[1]) for _label, _, _, _, _ in cases_igm_z],
+    param_label="redshift z",
 )
 fig.tight_layout()
 save_fig("prospect_r_12cont_igm_z_sweep.png")
@@ -1393,6 +1399,7 @@ fig, (ax, ax_r), _ratios_neb = V.sweep_fig(
     xlabel=r"$\lambda$ [Å]",
     xlim=(1000.0, 7000.0),
     logy=True,
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_08cont_nebular_params.png")
@@ -1594,6 +1601,7 @@ fig, (ax, ax_r), _ratios_sk = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     ylabel=r"$L_\nu$ (peak-normalized)",
     xlim=(1e-1, 1e3),
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_09cont_skirtor_nodes.png")
@@ -1679,6 +1687,7 @@ fig, (ax, ax_r), _ratios_fr = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     ylabel=r"$L_\nu$ (peak-normalized)",
     xlim=(1e-1, 1e3),
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_09cont_fritz.png")

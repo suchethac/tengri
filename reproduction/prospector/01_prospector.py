@@ -76,6 +76,11 @@ except NameError:
 
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
+# The inline figures are what the page displays, and their base64 PNGs are what
+# the repository size limit measures. This notebook carries 24 of them, so the
+# inline resolution sits below the style default; save_fig writes the separate
+# _figs/ copy at full resolution.
+plt.rcParams["figure.dpi"] = 130
 
 # Unit-sanity guard: FSPS returns L_ν in L⊙/Hz, which the driver scales
 # by FSPS' own L⊙ to reach erg/s/Hz. Every panel below claims
@@ -405,6 +410,7 @@ fig, (ax, ax_r), _p1_ratios = V.sweep_fig(
     ylabel=r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]",
     xlim=(1e-3, 13.7),
     ratio_ylim=(0.5, 1.5),
+    cmap=None,
 )
 save_fig("prospector_02cont_sfh_families.png")
 
@@ -978,6 +984,9 @@ fig, (ax, ax_r), _p3b_ratios = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     xlim=(0.1, 2.5),
     ratio_ylim=(0.5, 1.5),
+    cmap="Blues",
+    values=[-1.0, -0.5, 0.0, 0.2],
+    param_label="logzsol",
 )
 save_fig("prospector_03b_met_logzsol.png")
 
@@ -1164,6 +1173,7 @@ fig, (ax, ax_r), _p2_ratios = V.sweep_fig(
     xlim=(0.1, 2.5),
     ratio_ylim=(0.5, 1.5),
     logy=True,
+    cmap=None,
 )
 save_fig("prospector_04b_dust_types.png")
 
@@ -1344,6 +1354,7 @@ fig, (ax, ax_r), _p3_ratios = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     xlim=(0.1, 3.0),
     ratio_ylim=(0.5, 1.5),
+    cmap=None,
 )
 save_fig("prospector_05b_dust_av_bc.png")
 
@@ -1580,6 +1591,7 @@ fig, (ax, ax_r), _p4_ratios = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     xlim=(1.0, 1e3),
     ratio_ylim=(0.5, 1.5),
+    cmap=None,
 )
 save_fig("prospector_06b_dust_ir_grid.png")
 
@@ -1936,11 +1948,18 @@ print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t
 # The Nenkova torus optical depth across `agn_tau ∈ {5, 10, 30, 80, 150}` at
 # fixed `f_AGN = 0.5`, both sides isolated the same way as above (AGN on
 # minus AGN off), tengri built once with `agn_tau` free and evaluated at each
-# value. Mid-IR peak wavelength prints alongside the broadband ratios. The
-# peak location tracks FSPS at every `agn_tau`; the bolometric normalization
-# is the outlier — tengri's torus carries close to half of the `agn_log_lbol`
-# it is given, a factor-of-two gap independent of `agn_tau`, unlike the §9
-# fiducial's peak-only check above.
+# value. Mid-IR peak wavelength prints alongside the broadband ratios.
+#
+# `agn_torus_frac` is pinned to 1.0 here: it is a covering factor, and FSPS
+# reprocesses the absorbed luminosity over the full sphere, so its 0.5 default
+# would halve the tengri arm at every node.
+#
+# The peak wavelength agrees to the printed digit from `agn_tau = 30` upward.
+# What remains is a trend with optical depth rather than a normalization
+# offset: tengri is 1.32× at `agn_tau = 5`, crosses unity near 30-80, and falls
+# to 0.95× at 150. An optically thin clumpy torus distributes its emission over
+# fewer, hotter sightlines, and the two codes integrate that geometry
+# differently; the disagreement is in the shape, not in the energy budget.
 
 # %%
 _m_agn_grid = SEDModel.build(
@@ -1963,7 +1982,15 @@ _m_agn_grid = SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "none"},
-        "torus": {"type": "nenkova", "agn_tau": Uniform(5.0, 150.0, default=30.0), "all_params": Fixed(DEFAULT)},
+        # agn_torus_frac is a covering factor. FSPS's add_agn_dust emits the
+        # reprocessed luminosity over the full sphere, so the comparison pins it
+        # to 1.0; its 0.5 default would halve the tengri arm.
+        "torus": {
+            "type": "nenkova",
+            "agn_tau": Uniform(5.0, 150.0, default=30.0),
+            "agn_torus_frac": Fixed(1.0),
+            "all_params": Fixed(DEFAULT),
+        },
         "agn_log_lbol": Fixed(_agn_log_lbol),
         "all_params": Fixed(DEFAULT),
     },
@@ -1999,6 +2026,9 @@ fig, (ax, ax_r), _p9_ratios = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     xlim=(1.0, 1e3),
     ratio_ylim=(0.5, 1.5),
+    cmap="Oranges",
+    values=[5.0, 10.0, 30.0, 80.0, 150.0],
+    param_label="agn_tau",
 )
 save_fig("prospector_09b_agn_tau.png")
 
@@ -2072,6 +2102,9 @@ fig, (ax, ax_r), _p12_ratios = V.sweep_fig(
     xlim=(700, 1300),
     ratio_ylim=(0.5, 1.5),
     logy=False,
+    cmap="Greens",
+    values=[2.0, 3.0, 4.0, 6.0],
+    param_label="redshift z",
 )
 save_fig("prospector_12b_igm_z.png")
 
@@ -2187,7 +2220,7 @@ plt.show()
 # | A_V + birth cloud | §5b | 5 | 0.78× (birth cloud) | UV-to-NIR bands |
 # | DL07 grid | §6b | 4 | 0.89× | broadband, 3.4-863 µm |
 # | gas_logU × gas_logZ | §8b | 9 | 0.45× ([O III]/Hβ) | line ratios to Hβ |
-# | agn_tau | §9b | 5 | 0.45× (bolometric norm.) | mid/far-IR bands |
+# | agn_tau | §9b | 5 | 1.32×→0.95× with optical depth | mid/far-IR bands |
 # | IGM z sweep | §12b | 4 | 1.035× | T(λ), 850-1216 Å |
 #
 # At matched parameters, FSPS-via-Prospector and tengri agree wherever they
