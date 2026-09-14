@@ -1274,7 +1274,7 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
         per_chunk_overhead = scratch_bytes / reference_chunk_size
         derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
 
-        logger.debug(
+        logger.info(
             "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
             derived_chunk_size,
             scratch_bytes / reference_chunk_size / 1e6,
@@ -1352,6 +1352,27 @@ def _reinsert_mass_fn(fitter: Fitter):
                 use_components=use_components,
             )
             return _sample_log_mass(key, A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
+
+        # Log chunk width and whether chunking engaged at trace time (once per compiled shape,
+        # not once per call). This runs at trace time, not call time, so the n_draws read is
+        # static under jitting and costs nothing; it forces no trace-time value.
+        n_draws = next(iter(samples_no_mass.values())).shape[0]
+        if chunk_size >= n_draws:
+            logger.info(
+                "profile_mass reinsertion: %d draws in a single vmap "
+                "(chunk width %d >= n_draws, so no chunking is needed and the "
+                "result is bit-identical to the unchunked path)",
+                n_draws,
+                chunk_size,
+            )
+        else:
+            logger.info(
+                "profile_mass reinsertion: %d draws in %d chunks of %d "
+                "(peak scratch is set by the chunk width, not the draw count)",
+                n_draws,
+                -(-n_draws // chunk_size),
+                chunk_size,
+            )
 
         return jax.lax.map(one_draw, (samples_no_mass, draw_keys), batch_size=chunk_size)
 
