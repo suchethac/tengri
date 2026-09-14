@@ -472,5 +472,125 @@ def test_filter_rows_native_matches_filter_rows_on_a_shared_grid():
             raise AssertionError(f"Row {i}: one ratio is NaN, the other is not")
 
 
+def test_overlay_ratio_fig_ratio_computation_different_grids():
+    """overlay_ratio_fig computes ratio correctly when grids differ."""
+    from reproduction._validation import overlay_ratio_fig
+
+    # Reference on a coarse grid
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+
+    # Tengri on a finer grid
+    w_t = np.linspace(1000.0, 4000.0, 10)
+    L_t = np.interp(w_t, w_ref, L_ref)  # Same function, finer grid
+
+    fig, _ax, _ax_r, ratio = overlay_ratio_fig(w_ref, L_ref, w_t, L_t)
+
+    # Ratio should be regridded tengri / reference = interp(L_t onto w_ref) / L_ref
+    expected_ratio = np.interp(w_ref, w_t, L_t) / L_ref
+    np.testing.assert_allclose(ratio[L_ref > 0], expected_ratio[L_ref > 0], rtol=1e-10)
+
+    plt.close(fig)
+
+
+def test_overlay_ratio_fig_ylim_and_band_on_axis():
+    """overlay_ratio_fig applies ratio_ylim and band correctly."""
+    from reproduction._validation import overlay_ratio_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    w_t = w_ref  # Same grid
+    L_t = L_ref
+
+    ratio_ylim = (0.4, 1.6)
+    band = (0.85, 1.15)
+
+    fig, _ax, ax_r, _ratio = overlay_ratio_fig(
+        w_ref, L_ref, w_t, L_t, ratio_ylim=ratio_ylim, band=band
+    )
+
+    # Check ratio axis limits
+    assert ax_r.get_ylim() == ratio_ylim
+
+    # Check that an axhspan (shaded band) exists on the ratio axis
+    # axhspan creates a Rectangle patch
+    patches = ax_r.patches
+    assert len(patches) > 0, "No shaded band found on ratio panel"
+    # The first patch should be the shaded band (zorder=0, others have default zorder)
+    band_patch = [p for p in patches if hasattr(p, "get_zorder") and p.get_zorder() == 0]
+    assert len(band_patch) > 0, "No band patch found with zorder=0"
+
+    plt.close(fig)
+
+
+def test_overlay_ratio_fig_x_of_wave_transforms_both_axes():
+    """overlay_ratio_fig applies x_of_wave transformation to both panels."""
+    from reproduction._validation import overlay_ratio_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    w_t = w_ref
+    L_t = L_ref
+
+    # Transform: convert Angstrom to micrometers
+    def x_of_wave(w):
+        return w / 1e4
+
+    fig, ax, ax_r, _ratio = overlay_ratio_fig(
+        w_ref, L_ref, w_t, L_t, x_of_wave=x_of_wave, xlabel="wavelength [µm]"
+    )
+
+    # Get plotted x data from both axes
+    top_lines = ax.get_lines()
+    ratio_lines = ax_r.get_lines()
+
+    # Top panel should have two lines (reference and tengri)
+    assert len(top_lines) == 2
+    top_x_data_0 = top_lines[0].get_xdata()
+    top_x_data_1 = top_lines[1].get_xdata()
+
+    # Ratio panel should have at least one line (the ratio curve; axhline at 1.0 is a line too)
+    assert len(ratio_lines) >= 1
+    # Use the first line as the ratio data (there may be the axhline at 1.0 too)
+    ratio_x_data = ratio_lines[0].get_xdata()
+
+    # All x data should be transformed (in micrometers, not Angstrom)
+    # Expected transformed values
+    expected_x = x_of_wave(w_ref[L_ref > 0])
+
+    # Check that plotted x values match the transformation
+    np.testing.assert_allclose(top_x_data_0, expected_x, rtol=1e-10)
+    np.testing.assert_allclose(top_x_data_1[L_ref[w_ref > 0] > 0], expected_x, rtol=1e-10)
+
+    # Both axes should share the same x scale (log)
+    assert ax.get_xscale() == "log"
+    assert ax_r.get_xscale() == "log"
+
+    plt.close(fig)
+
+
+def test_overlay_ratio_fig_reference_with_zeros_no_inf():
+    """overlay_ratio_fig returns nan where reference is not positive."""
+    from reproduction._validation import overlay_ratio_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0, 5000.0])
+    # Reference with some zeros
+    L_ref = np.array([1.0, 0.0, 1.5, 0.0, 0.5])
+    w_t = w_ref
+    L_t = np.array([1.0, 0.5, 1.5, 0.3, 0.5])
+
+    fig, _ax, _ax_r, ratio = overlay_ratio_fig(w_ref, L_ref, w_t, L_t)
+
+    # Where L_ref > 0, ratio should be finite
+    mask_positive = L_ref > 0
+    assert np.all(np.isfinite(ratio[mask_positive]))
+
+    # Where L_ref <= 0, ratio should be nan
+    mask_nonpositive = L_ref <= 0
+    assert np.all(np.isnan(ratio[mask_nonpositive]))
+
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

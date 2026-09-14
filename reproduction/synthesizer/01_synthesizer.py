@@ -465,24 +465,15 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_s3, s_stellar.sed_intrinsic, name="§3 stellar")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="Synthesizer  delayed-τ + test_grid",
-    label_r="tengri  sfh.delayed + same SSP",
-)
-ax_l.plot(w_s3, L_s3, "C0-", linewidth=1.5)
-ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-# Floor the y-range to the stellar continuum: the repackaged grid is clipped at 1e8 Å,
-# so the SED drops to ~0 at the long-λ edge — without a floor the log axis would
-# stretch across ~50 empty decades down to that cliff.
 _s3pk = max(float(np.nanmax(L_s3)), float(np.nanmax(np.asarray(s_stellar.sed_intrinsic))))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e6)
-    ax.set_ylim(_s3pk * 1e-5, _s3pk * 2)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
+fig, ax, ax_ratio, ratio = V.overlay_ratio_fig(
+    w_s3, L_s3, np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic),
+    title="§3 Stellar SED: delayed-τ model",
+    ref_label="Synthesizer",
+    xlim=(1e2, 1e6),
+    ratio_ylim=(0.9, 1.1),
+)
+ax.set_ylim(_s3pk * 1e-5, _s3pk * 2)
 save_fig("synthesizer_03_stellar_sed.png")
 
 _mask_opt = (w_s3 >= 3000) & (w_s3 <= 10000)
@@ -530,8 +521,9 @@ _law_pairs = [
 # against tengri's `wd01_smcbar`, `wd01_mwrv31`, `d03_mwrv31`, `hd23_mwrv31` —
 # both read the same `dust_extinction` grain tables, so agreement is
 # near-exact. `MWN18` (fixed Milky Way curve) against `narayanan_z` at
-# z = 0, 2 — tengri's law evolves with redshift while Synthesizer's does not,
-# so the residual grows with z by construction. `ParametricLi08` against
+# z = 0, 2, 6 — tengri's law evolves with redshift while Synthesizer's does not,
+# so the residual grows with z by construction, reaching 2× at 0.1 µm (far-UV)
+# at z = 0 while all other cases stay within ±10 %. `ParametricLi08` against
 # `li08`, both at a Calzetti-like node — independent parameterizations of
 # the same functional family. `Calzetti2000(ampl=...)` against `noll09` at
 # matched bump amplitude 0.5, 1. Worst window deviation printed below.
@@ -558,7 +550,7 @@ for syn_name, syn_kw, tengri_fn, tengri_kw, label in (
     A_t4 = np.asarray(tengri_fn(wave_law, **tengri_kw))
     _atten_cases.append((label, w_s4, _norm_AV(w_s4, A_s4), wave_law, _norm_AV(wave_law, A_t4)))
 
-for z in (0.0, 2.0):
+for z in (0.0, 2.0, 6.0):
     w_s4, A_s4 = S.attenuation_curve("MWN18", wave_aa=wave_law)
     A_t4 = np.asarray(narayanan_z(wave_law, redshift=z))
     _atten_cases.append(
@@ -588,8 +580,9 @@ fig, (ax, ax_r), _ = V.sweep_fig(
     ylabel=r"$A_\lambda/A_V$",
     logy=True,
     xlim=(0.1, 3.0),
-    ratio_ylim=(0.4, 2.2),
+    ratio_ylim=(0.8, 2.0),
 )
+ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
 save_fig("synthesizer_04b_atten_laws.png")
 
 V.print_window_table(
@@ -605,7 +598,9 @@ V.print_window_table(
 # The fiducial galaxy with and without dust. Synthesizer applies Calzetti
 # screen at A_V = 1; tengri matches with full A_V on the diffuse component
 # (attenuates all ages equally), birth-cloud off — the single-screen mapping
-# from Prospector/BAGPIPES notebooks.
+# from Prospector/BAGPIPES notebooks. Two rows compare the same quantities on
+# each side (intrinsic in top, attenuated in bottom); the 2×2 layout shows both
+# in one figure for pedagogical clarity.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL — Attenuation law library
@@ -726,13 +721,12 @@ print(f"§6 dust IR far-IR peak: Synthesizer {_pk_s / 1e4:.0f} µm, tengri {_pk_
 # via `draine_li2014` (`total_emission(..., alpha=...)` against
 # `draine_li2014 {..., alpha_dl14}`), all through `S.total_emission` at the
 # §6 fiducial screen. `S.dust_emission_named` supplies three standalone
-# analytic shapes — `Blackbody` (T = 30, 50 K) against `mbb {T, beta_ir}`,
+# analytic shapes — `Blackbody` against `mbb {T, beta_ir=0}` (plain Planck),
 # `Greybody` against `graybody {T, beta_ir, lambda_0_um}`, `Casey12` against
 # `casey2012 {T, beta_ir, alpha_mir, lambda_0_um}` — each scaled to the §6
 # fiducial's absorbed luminosity so both sides carry the same bolometric
-# power; `mbb`'s β_ir modification blueshifts its peak relative to
-# Synthesizer's unmodified blackbody, `casey2012`'s two forms agree almost
-# exactly. Worst `IR_BANDS` ratio for each case is printed below.
+# power; `casey2012`'s two forms agree almost exactly. Worst `IR_BANDS` ratio
+# for each case is printed below.
 
 # %%
 # umin capped at 20 -- tengri's DL07/DL14 grid extent is [0.1, 20] (Synthesizer's own
@@ -865,13 +859,13 @@ for T_bb in (30.0, 50.0):
             "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "mbb", "T": Fixed(T_bb), "beta_ir": Fixed(1.5), "all_params": Fixed(DEFAULT)},
+        dust_emission={"type": "mbb", "T": Fixed(T_bb), "beta_ir": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         neb=NEB_FIDUCIAL,
         redshift=Fixed(0.0),
     )
     s6 = m.predict_state({})
     _analytic_cases.append(
-        (f"mbb T={T_bb:g}K", w_s6, L_s6 * _L_abs, np.asarray(s6.wave), np.asarray(s6.derived["sed_dust_ir"]))
+        (f"mbb T={T_bb:g}K β=0 (plain Planck)", w_s6, L_s6 * _L_abs, np.asarray(s6.wave), np.asarray(s6.derived["sed_dust_ir"]))
     )
 
 for T_gb, beta_gb in ((30.0, 1.5), (45.0, 2.0)):
@@ -1024,16 +1018,16 @@ _sed_full_t = (
     + np.asarray(s_full.derived["sed_nebular"])
 )
 
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(ax_l, ax_r, label_l="Synthesizer  total", label_r="tengri  panchromatic")
-ax_l.plot(w_full_s, L_full_s, "C0-", linewidth=1.5)
-ax_r.plot(s_full.wave, _sed_full_t, "C1-", linewidth=1.5)
 _fpk = max(float(np.nanmax(L_full_s)), float(np.nanmax(_sed_full_t)))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e7)
-    ax.set_ylim(_fpk * 1e-5, _fpk * 3)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
+fig, ax, ax_ratio, ratio = V.overlay_ratio_fig(
+    w_full_s, L_full_s, np.asarray(s_full.wave), _sed_full_t,
+    title="§7 Panchromatic SED: stellar + nebular + dust",
+    ref_label="Synthesizer",
+    xlim=(1e2, 1e7),
+    ratio_ylim=(0.9, 1.1),
+    figsize=(9.0, 6.5),
+)
+ax.set_ylim(_fpk * 1e-5, _fpk * 3)
 save_fig("synthesizer_07_panchromatic.png")
 
 
@@ -1359,7 +1353,8 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
 # power-law disc (Feltre et al. 2016) for context. tengri's disc inner
 # temperature follows Novikov-Thorne theory at given $M_{\rm BH}$ and
 # $\lambda_{\rm Edd}$; the test grid runs cooler. Shape comparison at
-# matched bolometric luminosity.
+# matched bolometric luminosity; the right panel shows two tengri model families
+# together so both can be assessed against Synthesizer's single incumbent model.
 
 # %%
 w_disc_s, L_disc_s = agn["disc"]
@@ -2261,9 +2256,9 @@ plt.show()
 # | Block | § | Cases | Worst tengri/Synthesizer | Where |
 # |---|---|---|---|---|
 # | Parametric SFH | §2b | 7 | 37.0 % of peak (LogNormal tail, different functional form) | SFR(t) window |
-# | Attenuation laws | §4b | 9 | 2.04x (MWN18 vs the z-evolving narayanan_z at z=0) | A(λ)/A_V window |
+# | Attenuation laws | §4b | 11 | 2.043x (MWN18 vs narayanan_z at z=0; far-UV only) | A(λ)/A_V window; other cases ±10% |
 # | DL07/DL14 grid | §6b | 6 | 1.23x median (qpah=2.5%, Umin=5) | IR_BANDS |
-# | Analytic emitters | §6b | 6 | 170x at WISE W1 (mbb's β_ir vs an unmodified blackbody) | IR_BANDS |
+# | Analytic emitters | §6b | 6 | 1.236x (Greybody T=30 K, β=1.5) | IR_BANDS |
 # | Nebular logU/Z/f_esc | §8b | 12 | 3.98x ([O III]/Hβ, Z=0.004, logU=-1.5) | line ratios |
 # | AGN torus temperature | §9i | 3 | 0.24x median (normalization offset, shape tracks T) | IR_BANDS |
 # | AGN NLR covering factor | §9i | 3 | 1.0x ([O III]/Hβ, covering fraction is ratio-invariant) | line ratio |

@@ -679,25 +679,26 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_p3, s_stellar.sed_intrinsic, name="§3 stellar")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="ProSpect  snorm + BC03", label_r="tengri  snorm + BC03")
-ax_l.plot(w_p3, L_p3, "C0-", linewidth=1.5)
-ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-# This BC03 grid does not carry a surviving-mass column, so log_mstar is NaN;
-# report the formed mass (what both codes are normalized to) instead.
 m_formed = 10.0 ** float(s_stellar.derived["log_mstar_formed"])
-ax_r.text(
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    w_p3, L_p3, np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic),
+    title="BC03 stellar SED",
+    ref_label="ProSpect",
+    label_t="tengri",
+    xlim=(1e2, 1e6),
+    ratio_ylim=(0.9, 1.1),
+)
+ax.text(
     0.05,
     0.95,
     rf"$M_\star = {m_formed:.2e}\,M_\odot$ formed",
-    transform=ax_r.transAxes,
+    transform=ax.transAxes,
     fontsize=10,
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e6)
-    ax.grid(True, alpha=0.3)
+ax.grid(True, alpha=0.3)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_03_stellar_sed.png")
 
@@ -1110,14 +1111,17 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dale:
 # **Verification Status:** CROSSVAL — Photometry projection
 
 # %%
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(ax_l, ax_r, label_l="ProSpect  panchromatic", label_r="tengri  panchromatic")
-ax_l.plot(w_p6, L_p6, "C0-", linewidth=1.5)
-ax_r.plot(s_ir.wave, sed_full_t, "C1-", linewidth=1.5)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e7)
-    ax.set_ylim(1e22, 1e31)
-    ax.grid(True, alpha=0.3)
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    w_p6, L_p6, np.asarray(s_ir.wave), sed_full_t,
+    title="Panchromatic SED (UV–far-IR)",
+    ref_label="ProSpect",
+    label_t="tengri",
+    xlim=(1e2, 1e7),
+    ratio_ylim=(0.95, 1.05),
+)
+ax.set_ylim(1e22, 1e31)
+ax.grid(True, alpha=0.3)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_07_panchromatic.png")
 
@@ -1750,27 +1754,25 @@ s_radio = m_radio.predict_state({})
 w_t11 = np.asarray(s_radio.wave)
 L_t11 = np.asarray(s_radio.sed_intrinsic)
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="ProSpect  + radio (free-free + sync)",
-    label_r="tengri  bell2003_split (free-free + synchrotron)",
-)
-ax_l.plot(w_p11, L_p11, "C0-", linewidth=1.5)
-ax_r.plot(w_t11, L_t11, "C1-", linewidth=1.5)
 # Span the full SED in view (dust-IR peak through the radio tail) so the FIR bump
 # is not clipped at the top of the frame.
 _w_lo, _w_hi = 1e5, 2e9
 _m_p11 = (w_p11 >= _w_lo) & (w_p11 <= _w_hi)
 _m_t11 = (w_t11 >= _w_lo) & (w_t11 <= _w_hi)
 _ymax11 = max(float(np.nanmax(L_p11[_m_p11])), float(np.nanmax(L_t11[_m_t11])))
-for ax in (ax_l, ax_r):
-    # Cap at ProSpect's output-grid edge (~2e9 Å) so its grid cutoff is not
-    # shown as a spurious feature against tengri's wider grid.
-    ax.set_xlim(_w_lo, _w_hi)
-    ax.set_ylim(_ymax11 * 1e-7, _ymax11 * 3)
-    ax.grid(True, alpha=0.3)
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    w_p11, L_p11, w_t11, L_t11,
+    title="Radio continuum (free-free + synchrotron)",
+    ref_label="ProSpect",
+    label_t="tengri  bell2003_split",
+    xlim=(_w_lo, _w_hi),
+    ratio_ylim=(0.5, 1.5),
+)
+# Cap at ProSpect's output-grid edge (~2e9 Å) so its grid cutoff is not
+# shown as a spurious feature against tengri's wider grid.
+ax.set_ylim(_ymax11 * 1e-7, _ymax11 * 3)
+ax.grid(True, alpha=0.3)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_11_radio.png")
 

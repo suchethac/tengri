@@ -104,7 +104,7 @@ if _CIGALE_DALE_PATH.is_file():
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("default", module=r"tengri(\.|$)")
 tengri.plot.setup_style()
-plt.rcParams["figure.dpi"] = 100  # 22 inline figures must keep the executed notebook under the 4 MiB file cap
+plt.rcParams["figure.dpi"] = 120  # 22 inline figures, 4 MiB cap; ×1.44 scaling
 
 # Unit-sanity guard: every panel below claims percent-level agreement,
 # which rests on the CIGALE-W/nm → tengri-erg/s/Hz converter in
@@ -487,23 +487,20 @@ def _sfr_shape_report(label, t_c_yr, sfr_c_arr, t_t_yr, sfr_t_arr, age_gyr):
 
 _sfr_shape_report("§2 delayed", t_c, sfr_c, t_t, sfr_t, age_gyr)
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, "pcigale.sed_modules.sfhdelayed (τ=1 Gyr, age=5 Gyr)"),
-    (ax_r, "tengri pipeline sfr_history (n_grid=256 log-lbt)"),
-):
-    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-    ax.set_xlim(0, 5)
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title)
-ax_l.plot(t_c / 1e9, sfr_c, "C0-", linewidth=2.0)
-ax_l.axvline(1.0, color="gray", linestyle=":", alpha=0.6, label=r"$\tau$ = 1 Gyr")
-ax_l.legend(fontsize=9)
-ax_r.plot(t_t / 1e9, sfr_t, "C1-", linewidth=2.0)
-ax_r.axvline(1.0, color="gray", linestyle=":", alpha=0.6, label=r"$\tau$ = 1 Gyr")
-ax_r.legend(fontsize=9)
-
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    t_c / 1e9,
+    sfr_c,
+    t_t / 1e9,
+    sfr_t,
+    xlabel="Cosmic age since SF onset [Gyr]",
+    title="§2 τ-delayed SFH (τ=1 Gyr, age=5 Gyr)",
+    ref_label="pcigale",
+    label_t="tengri",
+    xlim=(0, 5),
+)
+ax.axvline(1.0, color="gray", linestyle=":", alpha=0.6, label=r"$\tau$ = 1 Gyr")
+ax.legend(fontsize=9)
+ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
 fig.tight_layout()
 save_fig("cigale_02_sfh_tau.png")
 
@@ -586,24 +583,22 @@ _mass_2exp = float(np.trapezoid(_sfr_2exp[_idx2], _t_2exp[_idx2]))
 print(f"tengri pipeline ∫SFR dt = {_mass_2exp:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
 _sfr_shape_report("§2 sfh2exp", t_c2, sfr_c2, _t_2exp, _sfr_2exp, _age_gyr_2exp)
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, "pcigale.sed_modules.sfh2exp (main + burst)"),
-    (ax_r, "tengri pipeline sfr_history (sfh2exp)"),
-):
-    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-    ax.set_xlim(0, 10)
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title)
-ax_l.plot(t_c2 / 1e9, sfr_c2, "C0-", linewidth=2.0)
-ax_l.axvline(_age_gyr_2exp - 0.3, color="gray", linestyle=":", alpha=0.6, label="burst onset")
-ax_l.legend(fontsize=9)
-ax_r.plot(_t_2exp / 1e9, _sfr_2exp, "C1-", linewidth=2.0)
-ax_r.axvline(_age_gyr_2exp - 0.3, color="gray", linestyle=":", alpha=0.6, label="burst onset")
-ax_r.legend(fontsize=9)
-ax_l.set_ylim(bottom=0.0)
-ax_r.set_ylim(bottom=0.0)
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    t_c2 / 1e9,
+    sfr_c2,
+    _t_2exp / 1e9,
+    _sfr_2exp,
+    xlabel="Cosmic age since SF onset [Gyr]",
+    title="§2 sfh2exp (main + burst, age=10 Gyr)",
+    ref_label="pcigale",
+    label_t="tengri",
+    xlim=(0, 10),
+    ratio_ylim=(0.8, 1.2),
+)
+ax.axvline(_age_gyr_2exp - 0.3, color="gray", linestyle=":", alpha=0.6, label="burst onset")
+ax.legend(fontsize=9)
+ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+ax.set_ylim(bottom=0.0)
 fig.tight_layout()
 save_fig("cigale_02_sfh2exp.png")
 
@@ -1680,7 +1675,12 @@ def _band_median(ratio, wave_aa, lo_um, hi_um):
     return float(np.median(ratio[m])) if m.any() else float("nan")
 
 
-fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.4))
+fig = plt.figure(figsize=(11, 6.5))
+gs = fig.add_gridspec(2, 2, height_ratios=[3, 1], hspace=0.3)
+ax_l, ax_r = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
+ax_lr, ax_rr = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])
+ax_lr.sharex(ax_l)
+ax_rr.sharex(ax_r)
 
 # Where the two codes agree, a thin pcigale line simply disappears under
 # tengri's — the panel then reads as though only one code were plotted, which
@@ -1691,6 +1691,7 @@ fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.4))
 _REF_KW = dict(lw=4.0, alpha=0.35, solid_capstyle="round")
 _TNG_LW = 1.4
 _peaks = []
+_ratios_l, _ratios_r = [], []
 
 # LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
 m_frac = _knob_model("dale2014_cigale", alpha_dale=Fixed(2.0))
@@ -1707,6 +1708,7 @@ for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     ax_l.loglog(w_t, nl_t, color=c, lw=_TNG_LW, label=rf"$f_{{\rm AGN}}={f}$")
     _peaks.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    _ratios_l.append((c, w_c, _rk))
     print(
         f"    f_AGN = {f}:  3–8 µm {_band_median(_rk, w_c, 3.0, 8.0):.4f}×"
         f"   8–1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×"
@@ -1715,11 +1717,11 @@ ax_l.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_l.plot([], [], "k-", lw=_TNG_LW, label="tengri")
 ax_l.set(
     xlim=(1e4, 1e7),
-    xlabel=r"$\lambda$ [Å]",
     ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
     title="Dale 2014 AGN fraction",
 )
 ax_l.legend(fontsize=8, frameon=False, ncol=2)
+ax_l.tick_params(labelbottom=False)
 
 # RIGHT — THEMIS slope alpha, matched qhac=0.17, umin=1.0, gamma=0.1.
 m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1), dust_qhac=Fixed(0.17))
@@ -1742,18 +1744,34 @@ for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     ax_r.loglog(w_t, nl_t, color=c, lw=_TNG_LW, label=rf"$\alpha={a}$")
     _peaks.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    _ratios_r.append((c, w_c, _rk))
     print(
         f"    α = {a}:  8–30 µm {_band_median(_rk, w_c, 8.0, 30.0):.4f}×"
         f"   8–1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×"
     )
 ax_r.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_r.set(xlim=(3e4, 1e7), xlabel=r"$\lambda$ [Å]", title=r"THEMIS radiation-field slope $\alpha$")
+ax_r.set(xlim=(3e4, 1e7), title=r"THEMIS radiation-field slope $\alpha$")
 ax_r.legend(fontsize=8, frameon=False, ncol=2)
+ax_r.tick_params(labelbottom=False)
 
-# Five decades below the peak: at alpha = 1 the radiation field is hot enough
-# that the FIR bump falls away steeply, and a shallower floor cuts the curve
-# off mid-decline as though the model had stopped.
+# Ratio panels
+for c, w, ratio in _ratios_l:
+    pos = w > 0
+    ax_lr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
+ax_lr.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_lr.axhline(1.0, color="0.5", linewidth=0.8)
+ax_lr.set(xlim=(1e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_lr.grid(True, alpha=0.3)
+
+for c, w, ratio in _ratios_r:
+    pos = w > 0
+    ax_rr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
+ax_rr.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_rr.axhline(1.0, color="0.5", linewidth=0.8)
+ax_rr.set(xlim=(3e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_rr.grid(True, alpha=0.3)
+
 _ypk = max(_peaks)
 for ax in (ax_l, ax_r):
     ax.set_ylim(_ypk * 1e-5, _ypk * 2.0)
@@ -1770,15 +1788,26 @@ plt.show()
 # single-screen Calzetti attenuation; the §3 energy-anchor offset sits under
 # every ratio). `dl2007` (qpah, umin, γ) at three grid points, cold to warm;
 # `dl2014` at α ∈ {1, 2, 3}; `casey2012` at T ∈ {25, 35, 50} K (β=1.6,
-# α_mir=2.0); `schreiber2016` at the same three T; `dale2014` (CIGALE's own
-# grid, via `dale2014_cigale`) at α ∈ {0.5, 2, 4}. One tengri build per
+# α_mir=2.0); `schreiber2016` at T ∈ {25, 35, 50} K (supported range 15–60 K);
+# `dale2014` (CIGALE's own grid, via `dale2014_cigale`) at α ∈ {0.5, 2, 4}. One tengri build per
 # family, swept knob(s) free, via `predict_rest_sed`. `IR_BANDS` rows plus
-# the 8–1000 µm L_ν ratio locate each family's shape. Worst case:
-# schreiber2016 at T = 25 K, 2.484× (`f_pah` matches CIGALE's 0.05 default).
+# the 8–1000 µm L_ν ratio locate each family's shape. The integrated 8–1000 µm luminosity
+# matches to well under a percent because both implementations are normalized on the same
+# absorbed stellar energy (`L_absorbed`), while the peak wavelength and the mid-infrared
+# trough differ between them — a shape difference visible in the ratio panel (`f_pah` matches
+# CIGALE's 0.05 default). Schreiber 2016 presents the starkest discrepancy: at T=25 K, the
+# filter-by-filter ratio reaches a worst case of 2.485×, with every band deviating beyond 5%,
+# reflecting different template peak wavelengths despite the flux integral remaining within 0.5%.
 
 # %%
 _peaks_6c = []
-fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.4))
+fig = plt.figure(figsize=(11, 6.5))
+gs = fig.add_gridspec(2, 2, height_ratios=[3, 1], hspace=0.3)
+ax_l, ax_r = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
+ax_lr, ax_rr = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])
+ax_lr.sharex(ax_l)
+ax_rr.sharex(ax_r)
+ax_rr.sharey(ax_lr)
 
 print("§6c dl2007 grid (tengri / CIGALE, median in 8-1000 µm band):")
 m_dl07 = _knob_model(
@@ -1789,6 +1818,7 @@ m_dl07 = _knob_model(
 )
 p_dl07 = dict(m_dl07.spec.sample(jax.random.PRNGKey(0)))
 _dl07_cases = []
+_ratios_6c_l, _ratios_6c_r = [], []
 for (_qpah, _umin, _gamma), _c in zip([(0.47, 0.1, 0.01), (2.5, 1.0, 0.1), (4.58, 10.0, 0.5)], ["C0", "C1", "C3"]):
     sed = C.run_chain(
         [_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dl2007", dict(qpah=_qpah, umin=_umin, gamma=_gamma))]
@@ -1803,14 +1833,16 @@ for (_qpah, _umin, _gamma), _c in zip([(0.47, 0.1, 0.01), (2.5, 1.0, 0.1), (4.58
     ax_l.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"qpah={_qpah:g}, umin={_umin:g}")
     _peaks_6c.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    _ratios_6c_l.append((_c, w_c, _rk))
     print(f"    qpah={_qpah:g} umin={_umin:g} gamma={_gamma:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _dl07_cases.append(
         (f"dl2007 qpah={_qpah:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
     )
 ax_l.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_l.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_l.set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]", ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Draine & Li 2007")
+ax_l.set(xlim=(1e4, 1e7), ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Draine & Li 2007")
 ax_l.legend(fontsize=8, frameon=False)
+ax_l.tick_params(labelbottom=False)
 
 print("§6c dl2014 grid (tengri / CIGALE, median in 8-1000 µm band):")
 m_dl14 = _knob_model(
@@ -1834,17 +1866,40 @@ for _alpha, _c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     ax_r.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"$\alpha$={_alpha:g}")
     _peaks_6c.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    _ratios_6c_r.append((_c, w_c, _rk))
     print(f"    alpha={_alpha:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _dl14_cases.append(
         (f"dl2014 α={_alpha:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
     )
 ax_r.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_r.set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]", title="Draine & Li 2014")
+ax_r.set(xlim=(1e4, 1e7), title="Draine & Li 2014")
 ax_r.legend(fontsize=8, frameon=False)
+ax_r.tick_params(labelbottom=False)
+
 _ypk6c = max(_peaks_6c)
 for ax in (ax_l, ax_r):
     ax.set_ylim(_ypk6c * 1e-5, _ypk6c * 2.0)
+
+# Ratio panels for dl2007 (restrict to dust-dominated range above 10^5 Å to avoid nebular line spikes)
+for c, w, ratio in _ratios_6c_l:
+    pos = (w >= 1e5) & (w > 0)
+    ax_lr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
+ax_lr.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_lr.axhline(1.0, color="0.5", linewidth=0.8)
+ax_lr.set(xlim=(1e5, 1e7), ylim=(0.5, 2.0), xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_lr.grid(True, alpha=0.3)
+
+# Ratio panels for dl2014 (restrict to dust-dominated range above 10^5 Å to avoid nebular line spikes)
+for c, w, ratio in _ratios_6c_r:
+    pos = (w >= 1e5) & (w > 0)
+    ax_rr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
+ax_rr.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_rr.axhline(1.0, color="0.5", linewidth=0.8)
+ax_rr.set(xlim=(1e5, 1e7), ylim=(0.5, 2.0), xlabel=r"$\lambda$ [Å]")
+ax_rr.tick_params(labelleft=False)
+ax_rr.grid(True, alpha=0.3)
+
 fig.tight_layout()
 save_fig("cigale_06c_dl07_dl14.png")
 
@@ -1853,13 +1908,22 @@ for _name, _cases in (("dl2007", _dl07_cases), ("dl2014", _dl14_cases)):
         _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
         V.print_filter_table(_rows, ref_name="CIGALE", title=f"§6c {_label}", compact=True)
 
-fig, (ax_a, ax_b, ax_c) = plt.subplots(1, 3, figsize=(13.5, 4.2))
+fig = plt.figure(figsize=(13.5, 6.5))
+gs = fig.add_gridspec(2, 3, height_ratios=[3, 1], hspace=0.3)
+ax_a, ax_b, ax_c = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[0, 2])
+ax_ar, ax_br, ax_cr = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1]), fig.add_subplot(gs[1, 2])
+ax_ar.sharex(ax_a)
+ax_br.sharex(ax_b)
+ax_cr.sharex(ax_c)
+ax_br.sharey(ax_ar)
+ax_cr.sharey(ax_ar)
 _peaks_6d = []
 
 print("§6c casey2012 T sweep (tengri / CIGALE, median in 8-1000 µm band):")
 m_cas = _knob_model("casey2012", T=Uniform(10.0, 80.0, default=35.0), beta_ir=Fixed(1.6), alpha_mir=Fixed(2.0))
 p_cas = dict(m_cas.spec.sample(jax.random.PRNGKey(0)))
 _cas_cases = []
+_ratios_6d_a = []
 for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("casey2012", dict(temperature=_T, beta=1.6, alpha=2.0))])
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
@@ -1870,19 +1934,22 @@ for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     ax_a.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"T={_T:g} K")
     _peaks_6d.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    _ratios_6d_a.append((_c, w_c, _rk))
     print(f"    T={_T:g} K: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _cas_cases.append(
         (f"casey2012 T={_T:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
     )
 ax_a.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_a.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_a.set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]", ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Casey 2012")
+ax_a.set(xlim=(1e4, 1e7), ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Casey 2012")
 ax_a.legend(fontsize=8, frameon=False)
+ax_a.tick_params(labelbottom=False)
 
 print("§6c schreiber2016 T sweep (tengri / CIGALE, median in 8-1000 µm band):")
-m_sch = _knob_model("schreiber2016", T=Uniform(10.0, 80.0, default=20.0))
+m_sch = _knob_model("schreiber2016", T=Uniform(15.0, 60.0, default=30.0))
 p_sch = dict(m_sch.spec.sample(jax.random.PRNGKey(0)))
 _sch_cases = []
+_ratios_6d_b = []
 for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("schreiber2016", dict(tdust=_T))])
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
@@ -1893,19 +1960,22 @@ for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     ax_b.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"T={_T:g} K")
     _peaks_6d.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    _ratios_6d_b.append((_c, w_c, _rk))
     print(f"    T={_T:g} K: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _sch_cases.append(
         (f"schreiber2016 T={_T:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
     )
 ax_b.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_b.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_b.set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]", title="Schreiber 2016")
+ax_b.set(xlim=(1e4, 1e7), title="Schreiber 2016")
 ax_b.legend(fontsize=8, frameon=False)
+ax_b.tick_params(labelbottom=False)
 
 print("§6c dale2014 alpha sweep (tengri / CIGALE, median in 8-1000 µm band):")
 m_dale = _knob_model("dale2014_cigale", alpha_dale=Uniform(0.0625, 4.0, default=2.0))
 p_dale = dict(m_dale.spec.sample(jax.random.PRNGKey(0)))
 _dale_cases = []
+_ratios_6d_c = []
 for _alpha, _c in zip([0.5, 2.0, 4.0], ["C0", "C1", "C3"]):
     sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dale2014", dict(alpha=_alpha))])
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
@@ -1916,17 +1986,48 @@ for _alpha, _c in zip([0.5, 2.0, 4.0], ["C0", "C1", "C3"]):
     ax_c.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"$\alpha$={_alpha:g}")
     _peaks_6d.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    _ratios_6d_c.append((_c, w_c, _rk))
     print(f"    alpha={_alpha:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _dale_cases.append(
         (f"dale2014 α={_alpha:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
     )
 ax_c.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_c.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_c.set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]", title="Dale 2014 (CIGALE grid)")
+ax_c.set(xlim=(1e4, 1e7), title="Dale 2014 (CIGALE grid)")
 ax_c.legend(fontsize=8, frameon=False)
+ax_c.tick_params(labelbottom=False)
+
 _ypk6d = max(_peaks_6d)
 for ax in (ax_a, ax_b, ax_c):
     ax.set_ylim(_ypk6d * 1e-5, _ypk6d * 2.0)
+
+# Ratio panels (restrict to dust-dominated range above 10^5 Å to avoid nebular line spikes)
+for c, w, ratio in _ratios_6d_a:
+    pos = (w >= 1e5) & (w > 0)
+    ax_ar.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
+ax_ar.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_ar.axhline(1.0, color="0.5", linewidth=0.8)
+ax_ar.set(xlim=(1e5, 1e7), ylim=(0.5, 2.0), xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_ar.grid(True, alpha=0.3)
+
+for c, w, ratio in _ratios_6d_b:
+    pos = (w >= 1e5) & (w > 0)
+    ax_br.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
+ax_br.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_br.axhline(1.0, color="0.5", linewidth=0.8)
+ax_br.set(xlim=(1e5, 1e7), ylim=(0.5, 2.0), xlabel=r"$\lambda$ [Å]")
+ax_br.tick_params(labelleft=False)
+ax_br.grid(True, alpha=0.3)
+
+for c, w, ratio in _ratios_6d_c:
+    pos = (w >= 1e5) & (w > 0)
+    ax_cr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
+ax_cr.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_cr.axhline(1.0, color="0.5", linewidth=0.8)
+ax_cr.set(xlim=(1e5, 1e7), ylim=(0.5, 2.0), xlabel=r"$\lambda$ [Å]")
+ax_cr.tick_params(labelleft=False)
+ax_cr.grid(True, alpha=0.3)
+
 fig.tight_layout()
 save_fig("cigale_06d_casey_schreiber_dale.png")
 
@@ -1987,21 +2088,18 @@ for _lo, _hi, _wname in (
     else:
         print(f"    {_wname}: tengri's grid does not reach this band ({_n_c} CIGALE points)")
 
-fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
-U.panel(
-    ax_l, ax_r, label_l="pcigale  fiducial chain", label_r="tengri  sfh.delayed + dust.dale2014"
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    w_c_ir,
+    L_c_ir,
+    np.asarray(s_ir.wave),
+    np.asarray(s_ir.sed_intrinsic),
+    xlabel=r"$\lambda$ [Å]",
+    title="§7 panchromatic SED (τ=1 Gyr, age=5 Gyr, with Dale+2014 dust IR)",
+    ref_label="pcigale",
+    label_t="tengri",
+    xlim=(1e2, 3e6),
 )
-ax_l.plot(w_c_ir, L_c_ir, "C0-", linewidth=1.5)
-ax_r.plot(s_ir.wave, s_ir.sed_intrinsic, "C1-", linewidth=1.5)
-# Frame the y-axis on the SED peak. Without this the panchromatic SED cliffs
-# to ~0 at the grid edges and the shared log axis autoscales across ~170
-# decades, crushing the real SED into a flat line at the top (it spans only
-# ~6 decades). Match the peak-anchored framing used by the other §-panels.
-_ymax_p = float(max(np.nanmax(L_c_ir), np.nanmax(np.asarray(s_ir.sed_intrinsic))))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(2e2, 1e10)
-    ax.set_ylim(_ymax_p * 1e-6, _ymax_p * 2.0)
-    ax.grid(True, alpha=0.3)
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_07_panchromatic_full.png"), dpi=150, bbox_inches="tight")
 plt.show()

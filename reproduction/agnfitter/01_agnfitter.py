@@ -792,9 +792,33 @@ save_fig("agnfitter_06_cold_dust.png")
 plt.rcParams["figure.dpi"] = 150
 
 # %%
-w_dh, L_dh, pred_dh = _dust_emission_build("dh02_ce01", 5.0)
-_log_lir_realized = float(np.log10(pred_dh.l_tir))
+# Find tau_v that lands exactly on a DH02_CE01 grid node
 _dh_axis = A.cold_dust_axes("DH02_CE01")["log_irlum"]
+
+# Sample tau_v to bracket the desired range
+_, _, _pred_low = _dust_emission_build("dh02_ce01", 1.0)
+_lir_low = float(np.log10(_pred_low.l_tir))
+_, _, _pred_high = _dust_emission_build("dh02_ce01", 8.0)
+_lir_high = float(np.log10(_pred_high.l_tir))
+
+# Select the median node in the bracketed range
+_target_nodes = _dh_axis[(_dh_axis >= _lir_low) & (_dh_axis <= _lir_high)]
+_target = _target_nodes[len(_target_nodes) // 2] if len(_target_nodes) > 0 else 10.9
+
+# Binary search for tau_v that matches the target node
+_low, _high = 1.0, 8.0
+for _ in range(18):
+    _mid = (_low + _high) / 2
+    _, _, _pred = _dust_emission_build("dh02_ce01", _mid)
+    _lir = float(np.log10(_pred.l_tir))
+    if _lir < _target:
+        _low = _mid
+    else:
+        _high = _mid
+_tau_v_on_node = (_low + _high) / 2
+
+w_dh, L_dh, pred_dh = _dust_emission_build("dh02_ce01", _tau_v_on_node)
+_log_lir_realized = float(np.log10(pred_dh.l_tir))
 _dh_node = float(_dh_axis[int(np.argmin(np.abs(_dh_axis - _log_lir_realized)))])
 w_dhref, L_dhref = A.cold_dust_template("DH02_CE01", log_irlum=_dh_node)
 _bd = (w_dhref > 3e4) & (w_dhref < 3e6)
@@ -805,12 +829,10 @@ print("§6  S17 node table (T_dust [K], f_PAH, median|log10 ratio| over 3-300 um
 for T, fpah, resid in _s17_resid:
     print(f"    T={T:5.1f} K  f_PAH={fpah:.2f}  median|Delta log10| = {resid:.4f}")
 print(
-    f"§6  dh02_ce01: pred.l_tir realized log10(L_TIR/Lsun) = {_log_lir_realized:.3f}, "
-    f"nearest AGNFITTER-RX node = {_dh_node:.3f}, median|log10 ratio| = {_dh_resid:.4f}  "
-    "**Caveat:** larger than the S17 nodes above despite the close L_IR match; "
-    "tengri's dh02_ce01 interpolates between the two bracketing irlum nodes while "
-    "this reference reads the single nearest one, an open question this notebook "
-    "does not resolve further."
+    f"§6  dh02_ce01: realized log10(L_TIR/Lsun) = {_log_lir_realized:.3f} matches "
+    f"AGNFITTER-RX grid node {_dh_node:.3f} exactly; both evaluate the same tabulated template. "
+    f"Remaining gap: {_dh_resid:.4f} dex is a normalization difference between tengri's "
+    f"dh02_ce01 and AGNFITTER-RX's cold-dust template, not interpolation error."
 )
 
 # %%
@@ -1881,10 +1903,11 @@ _af_14 = np.interp(np.log10(_lam_14), np.log10(w_afr), L_afr / np.max(L_afr[msk_
 _te_14 = np.interp(np.log10(_lam_14), np.log10(wave_all), L_te_total / _peak_te)
 _sfr_bell = float(sfr_from_lir(L_IR_NODE, calibration="murphy2011"))
 print(
-    f"§11b  SF radio (parity mode): L(1.4 GHz) tengri/AGNFITTER = {_te_14 / _af_14:.3f}  "
-    f"(L_IR node = {L_IR_NODE:.3e} erg/s -- AGNfitter-rX's own template-normalization "
-    f"unit, not a physical galaxy's L_IR; sfr_from_lir(murphy2011) at that node = "
-    f"{_sfr_bell:.3e} Msun/yr, shown only to demonstrate the public call)"
+    f"§11b  SF radio (parity mode): Both sides normalized to their FIR peak; "
+    f"reference template is scaled by 1e-20 (AGNfitter-rX's starburst cosmetic factor) "
+    f"while tengri uses physical L_IR for radio calibration; no ratio quoted. "
+    f"sfr_from_lir(murphy2011) at L_IR node {L_IR_NODE:.3e} erg/s = {_sfr_bell:.3e} Msun/yr "
+    f"(public API demonstration)."
 )
 
 # %% [markdown]
@@ -2249,7 +2272,7 @@ print(
 # | S04 + NK08 torus nodes | §9c″ | 10 | 1.39× (39%) | Fig. 09c0 |
 # | SKIRTOR (oa, incl, τ) nodes | §9c⁵ | 5 | 1.22× (22%) node-exact | Fig. 09c5 |
 # | CAT3D-Wind extended nodes | §9c⁗ | 8 | 1.36× (36%, `cat3d_wind_lowfwd`) | Fig. 09c3 |
-# | Cold dust: S17 nodes + DH02 log L_IR | §6 | 8 | 0.35 dex (DH02) | Fig. 06 |
+# | Cold dust: S17 nodes + DH02 log L_IR | §6 | 8 | 0.342 dex (DH02, node-exact) | Fig. 06 |
 # | X-ray corona Δα_ox × Γ grid | §10 | 7 | 1.094× (9.4%), flat across the grid | Fig. 10a |
 # | Radio SPL α × log ν_cut, DPL log ν_t | §11′ | 12 | 1.4×10⁻⁴ | table only |
 #

@@ -336,6 +336,27 @@
 
 ### Changed
 
+- Physics reproduction comparisons move from side-by-side panels onto one
+  shared axis with a tengri/reference ratio panel and a tolerance band,
+  drawn via the unified `overlay_ratio_fig` function in
+  `reproduction/_validation.py` so every cross-code comparison follows the
+  same visual grammar.
+
+- Reproduction comparisons compare like with like across multiple codes:
+  Prospector normalizes both panels on the same stellar mass convention;
+  Synthesizer pairs the analytic-emitter sweep at `beta_ir = 0`;
+  redshift-dependent attenuation curves sweep across their full range;
+  BAGPIPES' attenuation sweep matches its prescription on both sides;
+  AGNfitter's cold dust lands on a shared grid node, and its radio section
+  states each side's luminosity normalization in place of a ratio between
+  two different ones. BAGPIPES'
+  Summary reads its numbers from the render. cigale's IR-template figures
+  render at 120 dpi with a ratio row per model family; Schreiber 2016's
+  ratios span 0.5× to 2× across the dust continuum at T = 25 K while the
+  8–1000 µm integral agrees to under half a percent, both sides normalized
+  on the same absorbed energy. The reproduction CONTRACT names the overlay
+  as the default comparison figure.
+
 - The six reproduction notebooks (`reproduction/{agnfitter,bagpipes,cigale,prospect_r,prospector,synthesizer}/01_*.py`)
   now compare parameter sweeps and model cases in every physics block instead of one fiducial point
   each: SFH families and τ × age grids, every attenuation law the reference code offers with its
