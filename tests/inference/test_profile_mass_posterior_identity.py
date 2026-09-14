@@ -163,8 +163,8 @@ def _evaluate_cdf_at_sample(sample_mass, sample_params, model, forward, flux, no
         The CDF value at sample_mass. Should be uniform [0, 1] if conditional
         is correct.
     """
-    # Call _profile_stats to get the quadrature parameters A, mstar
-    A, mstar, _chi2_min = _profile_stats(
+    # Call _profile_stats to get the quadrature parameters A_ref, a_star
+    A_ref, a_star, _chi2_min, ell_ref = _profile_stats(
         model, _MASS_NAME, sample_params, flux, noise, data_type=data_type
     )
 
@@ -173,9 +173,12 @@ def _evaluate_cdf_at_sample(sample_mass, sample_params, model, forward, flux, no
     ell_lo, ell_hi = mass_prior.bounds
 
     # Build quadrature terms using the same finer grid as _sample_log_mass
-    ell_nodes, log_terms = _log_quadrature_terms(
-        A, mstar, ell_lo, ell_hi, mass_prior, quad_nodes=_REINSERT_QUAD_NODES
+    u_nodes, log_terms = _log_quadrature_terms(
+        A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref, quad_nodes=_REINSERT_QUAD_NODES
     )
+
+    # Reconstruct absolute ell nodes from offset and reference
+    ell_nodes = u_nodes + ell_ref
 
     # Form normalized CDF from softmax + cumsum (same as _sample_log_mass)
     probs = jax.nn.softmax(log_terms)
@@ -387,8 +390,16 @@ class TestProfileMassPosteriorIdentitySmoke:
         mass_off = np.asarray(post_off.samples[_MASS_NAME]).flatten()
         mass_on = np.asarray(post_on.samples[_MASS_NAME]).flatten()
 
+        # Thin by ESS to approximate independence. MCMC draws are autocorrelated;
+        # the two-sample KS test assumes independent samples. Thinning to roughly
+        # the effective sample size validates the statistic.
+        mass_off_thinned, n_off_thinned, ess_off_ratio = _thin_by_ess(
+            mass_off, max_thinned_count=500
+        )
+        mass_on_thinned, n_on_thinned, ess_on_ratio = _thin_by_ess(mass_on, max_thinned_count=500)
+
         # Two-sample KS test
-        _ks_stat, ks_pvalue = stats.ks_2samp(mass_off, mass_on)
+        _ks_stat, ks_pvalue = stats.ks_2samp(mass_off_thinned, mass_on_thinned)
 
         # Percentile agreement (16, 50, 84)
         perc_off = np.percentile(mass_off, [16, 50, 84])
@@ -397,6 +408,10 @@ class TestProfileMassPosteriorIdentitySmoke:
 
         print(
             f"\nSeed {seed}: Smoke test, both fits in {elapsed:.1f}s.\n"
+            f"  Unprofiled: raw={len(mass_off)}, "
+            f"ESS ratio={ess_off_ratio:.3f}, thinned={n_off_thinned}.\n"
+            f"  Profiled:   raw={len(mass_on)}, "
+            f"ESS ratio={ess_on_ratio:.3f}, thinned={n_on_thinned}.\n"
             f"  Unprofiled percentiles [16, 50, 84]: {perc_off}.\n"
             f"  Profiled percentiles:                {perc_on}.\n"
             f"  Difference:                          {perc_diff}.\n"

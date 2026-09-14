@@ -156,11 +156,12 @@ def _assert_profiled_matches_brute_force(
         for name, val in fitter_off._fixed_values.items():
             phys[name] = jnp.asarray(val)
         phys[_MASS_NAME] = jnp.asarray(0.0)
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model, _MASS_NAME, phys, flux, noise, data_type=data_type
         )
         profiled_log_z = float(
-            -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+            -0.5 * chi2_min
+            + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
         )
 
         rel_diff = abs(profiled_log_z - brute_force_log_z) / abs(brute_force_log_z)
@@ -447,6 +448,103 @@ class TestAutoDefault:
         assert fitter._profile_mass_resolved is True
 
 
+class TestReferenceInvariance:
+    """Marginal log-likelihood is invariant to the mass reference frame.
+
+    The dimensionless formulation of _profile_stats cancels mass factors
+    algebraically, so the returned marginal integral must not depend on
+    the reference point ``phys[mass_name]`` at which the prediction is
+    evaluated. This test sweeps the reference over the prior bounds plus
+    ±1 dex outside and verifies the marginal log-likelihood is unchanged.
+    """
+
+    def test_reference_invariance_photometry(self, ssp_data_fsps):
+        """Profiled marginal is the same at different reference masses."""
+        model = _minimal_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        fitter_off = Fitter(forward, data=flux, noise=noise, profile_mass=False)
+        mass_prior = fitter_off.spec.get_distribution(_MASS_NAME)
+        ell_lo, ell_hi = mass_prior.bounds
+
+        # Reference points: lo, midpoint, hi, and ±1 dex outside
+        ell_refs = [
+            ell_lo - 1.0,
+            ell_lo,
+            0.5 * (ell_lo + ell_hi),
+            ell_hi,
+            ell_hi + 1.0,
+        ]
+
+        # Compute profiled marginal at each reference
+        other_names = [n for n in fitter_off._free_names if n != _MASS_NAME]
+        phys_base = {
+            name: fitter_off.spec.get_distribution(name).unstandardize(0.0) for name in other_names
+        }
+        for name, val in fitter_off._fixed_values.items():
+            phys_base[name] = jnp.asarray(val)
+
+        log_z_vals = []
+        for ell_ref in ell_refs:
+            phys = {**phys_base, _MASS_NAME: jnp.asarray(ell_ref)}
+            A_ref, a_star, chi2_min, ell_ref_out = _profile_stats(
+                model, _MASS_NAME, phys, flux, noise, data_type="photometry"
+            )
+            log_z = float(
+                -0.5 * chi2_min
+                + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref_out)
+            )
+            log_z_vals.append(log_z)
+
+        # All values should be identical (within numerical precision)
+        log_z_vals = np.array(log_z_vals)
+        rel_error = np.abs(np.diff(log_z_vals)) / np.abs(log_z_vals[:-1] + 1e-10)
+        assert np.all(rel_error < 1e-5), f"Relative errors: {rel_error}"
+
+    def test_reference_invariance_spectroscopy(self, ssp_data_fsps):
+        """Profiled marginal is the same at different reference masses (spectroscopy)."""
+        model = _spectroscopy_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _spectroscopy_mock(model, seed=1)
+
+        fitter_off = Fitter(
+            forward, data=flux, noise=noise, data_type="spectroscopy", profile_mass=False
+        )
+        mass_prior = fitter_off.spec.get_distribution(_MASS_NAME)
+        ell_lo, ell_hi = mass_prior.bounds
+
+        # Reference points: lo, midpoint, hi
+        ell_refs = [
+            ell_lo,
+            0.5 * (ell_lo + ell_hi),
+            ell_hi,
+        ]
+
+        other_names = [n for n in fitter_off._free_names if n != _MASS_NAME]
+        phys_base = {
+            name: fitter_off.spec.get_distribution(name).unstandardize(0.0) for name in other_names
+        }
+        for name, val in fitter_off._fixed_values.items():
+            phys_base[name] = jnp.asarray(val)
+
+        log_z_vals = []
+        for ell_ref in ell_refs:
+            phys = {**phys_base, _MASS_NAME: jnp.asarray(ell_ref)}
+            A_ref, a_star, chi2_min, ell_ref_out = _profile_stats(
+                model, _MASS_NAME, phys, flux, noise, data_type="spectroscopy"
+            )
+            log_z = float(
+                -0.5 * chi2_min
+                + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref_out)
+            )
+            log_z_vals.append(log_z)
+
+        log_z_vals = np.array(log_z_vals)
+        rel_error = np.abs(np.diff(log_z_vals)) / np.abs(log_z_vals[:-1] + 1e-10)
+        assert np.all(rel_error < 1e-5), f"Relative errors: {rel_error}"
+
+
 def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
     """A NIFTy VI fit must sample the mass itself: it never sees the profiled loss.
 
@@ -495,3 +593,89 @@ def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
     g = _Fitter()
     with pytest.raises(ValueError, match="profile_mass=True"):
         resolve_profile_mass_for_method(g, "vi", True)
+
+
+@pytest.mark.contract
+def test_profile_mass_float32_end_to_end(ssp_data_fsps):
+    """Verify float32 support end-to-end: construction, inference, finite gradients.
+
+    Regression test for float32 support: the dimensionless rewrite of
+    profile_mass allows float32 at construction time. This test verifies the
+    entire pipeline works and produces finite values and gradients in float32.
+    """
+    with jax.enable_x64(False):
+        # Verify we're in float32
+        assert jnp.result_type(float) == jnp.float32
+
+        # Build the model INSIDE the context, matching the shape in the task
+        model = _minimal_model(ssp_data_fsps)
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+
+        key_t, key_m = jax.random.split(jax.random.PRNGKey(42))
+        truth = model.spec.sample(key_t)
+        mock = generate_mock(model, truth, key=key_m, snr=30.0)
+        flux = jnp.asarray(mock["flux_obs"])
+        noise = jnp.asarray(mock["noise"])
+
+        forward = ForwardModel.build(sed=model, observation=obs)
+        fitter = Fitter(forward, flux, noise, profile_mass="auto")
+
+        # Assert float32 no longer refused at construction
+        assert fitter._profile_mass is True
+
+        # Build context and test inference
+        ctx = InferenceContext.from_target(fitter)
+        xi = {n: jnp.asarray(0.1) for n in fitter._free_names}
+
+        # Forward pass
+        val = ctx.neg_log_posterior_fn(xi, ctx.data_args)
+
+        # Check dtype and finiteness of value
+        assert val.dtype == jnp.float32, f"Expected float32, got {val.dtype}"
+        assert jnp.isfinite(val), f"Value is not finite: {val}"
+
+        # Gradient pass
+        grads = jax.grad(lambda p: ctx.neg_log_posterior_fn(p, ctx.data_args))(xi)
+
+        # Check every gradient leaf is float32 and finite
+        for name, grad_leaf in grads.items():
+            assert grad_leaf.dtype == jnp.float32, (
+                f"Gradient {name} is {grad_leaf.dtype}, expected float32"
+            )
+            assert jnp.isfinite(grad_leaf).all(), (
+                f"Gradient {name} contains non-finite values; float32 marginal NaN not fixed"
+            )
+            assert jnp.any(grad_leaf != 0.0), (
+                f"Gradient {name} is identically zero; marginal became inert in float32"
+            )
+
+
+def test_profile_mass_laplace_rejects_float32(ssp_data_fsps):
+    """Verify laplace method rejects float32 due to Hessian NaN.
+
+    Guard test: float32 refusal for laplace occurs at method resolution time
+    (resolve_profile_mass_for_method), not at Fitter construction. This reflects
+    the true cause: the SED model's Hessian NaN is a forward-model seam,
+    not a profiling defect.
+    """
+    with jax.enable_x64(False):
+        model = _minimal_model(ssp_data_fsps)
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+
+        key_t, key_m = jax.random.split(jax.random.PRNGKey(42))
+        truth = model.spec.sample(key_t)
+        mock = generate_mock(model, truth, key=key_m, snr=30.0)
+        flux = jnp.asarray(mock["flux_obs"])
+        noise = jnp.asarray(mock["noise"])
+
+        forward = ForwardModel.build(sed=model, observation=obs)
+        fitter = Fitter(forward, flux, noise, profile_mass="auto")
+
+        # profile_mass=True at construction (profiling is allowed in float32)
+        assert fitter._profile_mass is True
+
+        # But laplace method should refuse at resolution time
+        from tengri.inference.mass_profile import resolve_profile_mass_for_method
+
+        with pytest.raises(ValueError, match="float32 mode"):
+            resolve_profile_mass_for_method(fitter, "laplace", "auto")
