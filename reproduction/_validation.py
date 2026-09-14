@@ -75,6 +75,7 @@ __all__ = [
     "filter_rows_native",
     "line_rows",
     "load_filter",
+    "overlay_ratio_fig",
     "pivot_wavelength",
     "print_filter_table",
     "print_line_table",
@@ -1378,3 +1379,140 @@ def print_window_table(
             print(f"  {label:<26} {median:>12.3f}x {max_dev * 100:>14.1f}% {x_max:>15.2f}{flag}")
         else:
             print(f"  {label:<26} {'--':>12} {'--':>15} {'--':>15}{flag}")
+
+
+def overlay_ratio_fig(
+    wave_ref: np.ndarray,
+    L_ref: np.ndarray,
+    wave_t: np.ndarray,
+    L_t: np.ndarray,
+    *,
+    x_of_wave=None,
+    xlabel: str = r"$\lambda$ [Å]",
+    title: str = "",
+    ref_label: str = "reference",
+    label_t: str = "tengri",
+    xlim: tuple[float, float] | None = None,
+    ratio_ylim: tuple[float, float] = (0.5, 1.5),
+    band: tuple[float, float] = (0.9, 1.1),
+    dyn_range: float = 1e-5,
+    figsize: tuple[float, float] = (9.0, 6.5),
+) -> tuple[plt.Figure, plt.Axes, plt.Axes, np.ndarray]:
+    r"""Overlay two SEDs on ONE shared axis with a ratio panel.
+
+    Both codes are displayed on a single log-log axis, with tengri regridded
+    onto the reference wavelength grid. A lower ratio panel shows tengri/reference
+    with a shaded tolerance band. The x-axis can be transformed away from
+    wavelength (e.g., photon energy for X-ray, frequency for radio) via
+    ``x_of_wave``.
+
+    Parameters
+    ----------
+    wave_ref : array_like, shape (n_wave,)
+        Reference wavelength grid [Å].
+    L_ref : array_like, shape (n_wave,)
+        Reference L_ν [erg/s/Hz] on wave_ref.
+    wave_t : array_like, shape (n_wave_t,)
+        Tengri wavelength grid [Å].
+    L_t : array_like, shape (n_wave_t,)
+        Tengri L_ν [erg/s/Hz]; regridded onto wave_ref.
+    x_of_wave : callable, optional
+        Maps the Å grid to the plotted abscissa (e.g., ``lambda w: 12.398 / w``
+        for keV). Identity (wavelength in Å) when ``None``.
+    xlabel : str, optional
+        x-axis label. Default: r"$\lambda$ [Å]".
+    title : str, optional
+        Panel title. Default: empty string.
+    ref_label : str, optional
+        Legend label for the reference curve. Default: "reference".
+    label_t : str, optional
+        Legend label for the tengri curve. Default: "tengri".
+    xlim : tuple of float, optional
+        x-limits in the plotted abscissa units. Default: None (auto).
+    ratio_ylim : tuple of float, optional
+        y-limits on the ratio panel. Default: (0.5, 1.5).
+    band : tuple of float, optional
+        Shaded tolerance band (lo, hi) on the ratio panel. Default: (0.9, 1.1).
+    dyn_range : float, optional
+        Top-panel y floor as a fraction of the peak. Default: 1e-5.
+    figsize : tuple of float, optional
+        Figure size (width, height). Default: (9.0, 6.5).
+
+    Returns
+    -------
+    fig : plt.Figure
+        The figure.
+    ax : plt.Axes
+        Top (main SED) axis.
+    ax_ratio : plt.Axes
+        Bottom (ratio) axis.
+    ratio : ndarray, shape (n_wave,)
+        The tengri/reference ratio array on wave_ref. Where L_ref <= 0,
+        the ratio is ``np.nan``.
+
+    Notes
+    -----
+    Tengri is regridded onto the reference wavelength grid using linear
+    interpolation in (wave, L) space via :func:`np.interp`. Where the
+    reference is zero or negative, the ratio is set to ``np.nan`` rather
+    than ``inf``.
+    """
+    wave_ref = np.asarray(wave_ref)
+    L_ref = np.asarray(L_ref)
+    wave_t = np.asarray(wave_t)
+    L_t = np.asarray(L_t)
+
+    # Regrid tengri onto reference grid using linear interpolation
+    L_t_on_ref = np.interp(wave_ref, wave_t, L_t, left=0.0, right=0.0)
+
+    # Compute ratio: NaN where reference is not positive
+    ratio = np.divide(
+        L_t_on_ref,
+        L_ref,
+        where=(L_ref > 0),
+        out=np.full_like(L_ref, np.nan),
+    )
+
+    # Transform x-axis if needed
+    x = wave_ref if x_of_wave is None else x_of_wave(wave_ref)
+
+    # Create figure with 3:1 height ratio
+    fig, (ax, ax_r) = plt.subplots(
+        2,
+        1,
+        figsize=figsize,
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 1]},
+    )
+
+    # Top panel: reference and tengri curves
+    pos_ref = L_ref > 0
+    ax.plot(x[pos_ref], L_ref[pos_ref], "C0-", linewidth=2.2, alpha=0.45, label=ref_label)
+    pos_t = L_t_on_ref > 0
+    ax.plot(x[pos_t], L_t_on_ref[pos_t], "C1--", linewidth=1.0, label=label_t)
+
+    # Configure top panel
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    _ymx_ref = float(np.nanmax(L_ref[pos_ref])) if pos_ref.any() else 1.0
+    _ymx_t = float(np.nanmax(L_t_on_ref[pos_t])) if pos_t.any() else 1.0
+    ymx = max(_ymx_ref, _ymx_t)
+    ax.set_ylim(ymx * dyn_range, ymx * 2.0)
+    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+    ax.set_title(title)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+
+    # Ratio panel: shaded band, line at 1.0, ratio curve
+    ax_r.axhspan(*band, color="0.85", zorder=0)
+    ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+    ax_r.plot(x[pos_ref], ratio[pos_ref], "C1-", linewidth=1.0)
+    ax_r.set_xscale("log")
+    ax_r.set_ylim(*ratio_ylim)
+    ax_r.set_xlabel(xlabel)
+    ax_r.set_ylabel(f"tengri / {ref_label}", fontsize=9)
+    ax_r.grid(True, alpha=0.3)
+
+    return fig, ax, ax_r, ratio
