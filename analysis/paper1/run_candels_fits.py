@@ -1,12 +1,14 @@
 """Run 20×6 grid of NUTS fits: 20 galaxies × 6 SED configurations.
 
-CLI: python run_candels_fits.py [--only-missing]
+CLI: python run_candels_fits.py [--only-missing] [--jobs N]
 
 ``--only-missing`` is the second pass: it skips a cell whose JSON already records
 ``adoption_pass: true`` and reuses that JSON for the summary. Without it every cell
 runs, as before.
 
-Spawns one subprocess per fit (sequential; never two JAX processes at once).
+``--jobs`` sets the maximum number of concurrent fit_one subprocesses (default 3).
+Stagger launches with ~20s delay to avoid compile-phase collisions.
+
 Logs output to results/fits/<ID>_<config>.log.
 Aggregates diagnostics into results/fit_summary.json.
 Prints summary table.
@@ -20,6 +22,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -265,6 +268,252 @@ def run_fit_subprocess(
         return None
 
 
+def run_fit_cells_concurrent(
+    cells: list[tuple[int, str]],
+    results_dir: Path,
+    max_jobs: int = 3,
+    only_missing: bool = False,
+    stagger_seconds: float = 20.0,
+    cell_command: list[str] | None = None,
+) -> tuple[list[dict], list[tuple[int, str]], list[tuple[int, str]]]:
+    """Run fit cells concurrently with at most max_jobs subprocesses alive at once.
+
+    Stagger launches to avoid compile-phase collisions.
+
+    Args:
+        cells: List of (gal_id, config_key) tuples to run
+        results_dir: Output directory for results
+        max_jobs: Maximum number of concurrent subprocesses
+        only_missing: If True, skip adopted cells
+        stagger_seconds: Delay (seconds) between the initial fill's launches, so
+            max_jobs JIT compilations do not land on the box simultaneously
+            (default 20). Not applied to refills; see the note at the refill
+            launch site.
+        cell_command: Custom command template for subprocess. If None, uses fit_one.
+            Template should contain {gal_id} and {config_key} placeholders.
+            E.g. ["python", "stub.py", "{gal_id}", "{config_key}"]
+
+    Returns:
+        (all_diagnostics, failed_fits, skipped_fits) where each is a list of results
+    """
+    all_diagnostics = []
+    failed_fits = []
+    skipped_fits = []
+
+    # Build command builder function
+    def build_command(gal_id: int, config_key: str) -> list[str]:
+        """Build subprocess command for a cell."""
+        if cell_command is not None:
+            # Use custom command template
+            return [c.format(gal_id=gal_id, config_key=config_key) for c in cell_command]
+        else:
+            # Default: use fit_one
+            return [
+                sys.executable,
+                "-m",
+                "analysis.paper1.fit_one",
+                "--galaxy",
+                str(gal_id),
+                "--config",
+                config_key,
+                "--method",
+                "mcmc_nuts_fast",
+                "--out",
+                str(results_dir),
+                "--seed",
+                str(42),
+            ]
+
+    # Track running subprocesses: list of (gal_id, config_key, Popen, start_time)
+    running = []
+    cells_iter = iter(cells)
+    next_cell = None
+    total_cells = len(cells)
+    completed_count = 0
+
+    # Initialize: try to start up to max_jobs cells
+    for _ in range(min(max_jobs, total_cells)):
+        try:
+            next_cell = next(cells_iter)
+        except StopIteration:
+            break
+
+        gal_id, config_key = next_cell
+        cell_json = results_dir / f"{gal_id}_{config_key}.json"
+
+        # Check --only-missing predicate
+        if only_missing and cell_is_adopted(cell_json):
+            logger.info(f"skipping {gal_id}/{config_key}: adopted")
+            skipped_fits.append((gal_id, config_key))
+            diagnostics = read_cell_json(cell_json)
+            if diagnostics is not None:
+                all_diagnostics.append(diagnostics)
+            completed_count += 1
+            continue
+
+        # Launch subprocess
+        log_file = results_dir / f"{gal_id}_{config_key}.log"
+        cmd = build_command(gal_id, config_key)
+
+        env = os.environ.copy()
+        worktree_root = Path(__file__).parent.parent.parent
+        env["PYTHONPATH"] = str(worktree_root / "src")
+        env["JAX_PLATFORMS"] = "cpu"
+        env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
+
+        try:
+            with open(log_file, "w") as f:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    cwd=worktree_root,
+                )
+            running.append((gal_id, config_key, proc, time.time()))
+            logger.info(
+                f"Started job {len(running)}/{max_jobs}: galaxy {gal_id} config {config_key} "
+                f"(cells: {completed_count}/{total_cells} completed)"
+            )
+
+            # Stagger launches to avoid compile-phase collisions
+            time.sleep(stagger_seconds)
+        except Exception as e:
+            logger.error(f"Error starting subprocess for {gal_id}/{config_key}: {e}")
+            failed_fits.append((gal_id, config_key))
+            completed_count += 1
+
+    # Main loop: wait for jobs to finish, launch more as slots free
+    while running or next_cell is not None:
+        # Poll for finished jobs
+        still_running = []
+        for gal_id, config_key, proc, start_time in running:
+            ret = proc.poll()
+            if ret is None:
+                # Still running
+                still_running.append((gal_id, config_key, proc, start_time))
+            else:
+                # Job finished
+                elapsed = time.time() - start_time
+                log_file = results_dir / f"{gal_id}_{config_key}.log"
+                json_file = results_dir / f"{gal_id}_{config_key}.json"
+
+                if ret != 0:
+                    logger.error(
+                        f"fit_one.py exited with code {ret} for {gal_id}_{config_key} "
+                        f"(wall time: {elapsed:.1f}s)"
+                    )
+                    logger.error(f"See log: {log_file}")
+                    failed_fits.append((gal_id, config_key))
+                elif not json_file.exists():
+                    logger.error(f"Diagnostics file not found: {json_file}")
+                    failed_fits.append((gal_id, config_key))
+                else:
+                    try:
+                        with open(json_file) as f:
+                            diagnostics = json.load(f)
+                        all_diagnostics.append(diagnostics)
+                        logger.info(
+                            f"✓ SUCCESS: galaxy {gal_id} config {config_key} "
+                            f"({elapsed:.1f}s)"
+                        )
+                    except (OSError, json.JSONDecodeError) as e:
+                        logger.error(f"Error reading diagnostics for {gal_id}/{config_key}: {e}")
+                        failed_fits.append((gal_id, config_key))
+
+                completed_count += 1
+                logger.info(
+                    f"Completed: {completed_count}/{total_cells} "
+                    f"(running: {len(still_running)}/{max_jobs})"
+                )
+
+        running = still_running
+
+        # Start a new job if there's room and cells left
+        if len(running) < max_jobs and next_cell is not None:
+            gal_id, config_key = next_cell
+            cell_json = results_dir / f"{gal_id}_{config_key}.json"
+
+            # Check --only-missing predicate
+            if only_missing and cell_is_adopted(cell_json):
+                logger.info(f"skipping {gal_id}/{config_key}: adopted")
+                skipped_fits.append((gal_id, config_key))
+                diagnostics = read_cell_json(cell_json)
+                if diagnostics is not None:
+                    all_diagnostics.append(diagnostics)
+                completed_count += 1
+                logger.info(
+                    f"Completed: {completed_count}/{total_cells} "
+                    f"(running: {len(running)}/{max_jobs})"
+                )
+
+                # Try to get next cell
+                try:
+                    next_cell = next(cells_iter)
+                except StopIteration:
+                    next_cell = None
+            else:
+                # Launch subprocess
+                log_file = results_dir / f"{gal_id}_{config_key}.log"
+                cmd = build_command(gal_id, config_key)
+
+                env = os.environ.copy()
+                worktree_root = Path(__file__).parent.parent.parent
+                env["PYTHONPATH"] = str(worktree_root / "src")
+                env["JAX_PLATFORMS"] = "cpu"
+                env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
+
+                try:
+                    with open(log_file, "w") as f:
+                        proc = subprocess.Popen(
+                            cmd,
+                            stdout=f,
+                            stderr=subprocess.STDOUT,
+                            env=env,
+                            cwd=worktree_root,
+                        )
+                    running.append((gal_id, config_key, proc, time.time()))
+                    logger.info(
+                        f"Started job {len(running)}/{max_jobs}: galaxy {gal_id} config {config_key} "
+                        f"(cells: {completed_count}/{total_cells} completed)"
+                    )
+
+                    # No stagger on refill. The stagger exists so the initial
+                    # fill does not put max_jobs compile phases on the box at
+                    # once (compile peaks near 4.4 GB against 2.2 GB steady).
+                    # Refills arrive one at a time as cells finish, already
+                    # spread out by their own runtimes, so sleeping here buys
+                    # nothing -- and it costs: time.sleep blocks this polling
+                    # loop, so a slot freed during the sleep sits idle. Over
+                    # the ~117 refills of a 120-cell grid that was ~39 minutes
+                    # of dead time on a projected 6 h run.
+
+                    # Try to get next cell
+                    try:
+                        next_cell = next(cells_iter)
+                    except StopIteration:
+                        next_cell = None
+                except Exception as e:
+                    logger.error(f"Error starting subprocess for {gal_id}/{config_key}: {e}")
+                    failed_fits.append((gal_id, config_key))
+                    completed_count += 1
+                    logger.info(
+                        f"Completed: {completed_count}/{total_cells} "
+                        f"(running: {len(running)}/{max_jobs})"
+                    )
+
+                    # Try to get next cell
+                    try:
+                        next_cell = next(cells_iter)
+                    except StopIteration:
+                        next_cell = None
+        elif len(running) > 0:
+            # Wait a bit before polling again
+            time.sleep(5)
+
+    return all_diagnostics, failed_fits, skipped_fits
+
+
 def print_summary_table(summary_data: list[dict]) -> None:
     """Print formatted summary table of all fits."""
     print("\n" + "=" * 140)
@@ -344,6 +593,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     ``--summary-only`` rebuilds fit_summary.json from the cell JSONs on disk
     without running any fits.
+
+    ``--jobs`` sets the maximum number of concurrent cell subprocesses (default 3).
     """
     parser = argparse.ArgumentParser(description="Run the 3x3 grid of CANDELS NUTS fits")
     parser.add_argument(
@@ -359,11 +610,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=("Rebuild fit_summary.json from the cell JSONs on disk without running fits"),
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=3,
+        help="Maximum number of concurrent fit_one subprocesses (default 3)",
+    )
     args = parser.parse_args(argv)
 
     # Mutual exclusion: --summary-only and --only-missing cannot be used together
     if args.summary_only and args.only_missing:
         parser.error("--summary-only and --only-missing are mutually exclusive")
+
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
 
     return args
 
@@ -392,34 +652,16 @@ def main(argv: list[str] | None = None):
         logger.info(f"\nSummary saved to {summary_json}")
         return 0
 
-    # Run all fits
-    all_diagnostics = []
-    failed_fits = []
-    skipped_fits = []
+    # Build list of all cells to run
+    all_cells = [(gal_id, config_key) for gal_id in GALAXIES for config_key in CONFIGS]
 
-    for gal_id in GALAXIES:
-        for config_key in CONFIGS:
-            cell_json = results_dir / f"{gal_id}_{config_key}.json"
-            previous = read_cell_json(cell_json) if args.only_missing else None
-            if previous is not None and cell_is_adopted(cell_json):
-                # The adopted cell's own diagnostics stand in for a re-run.
-                logger.info(f"skipping {gal_id}/{config_key}: adopted")
-                skipped_fits.append((gal_id, config_key))
-                all_diagnostics.append(previous)
-                continue
-
-            logger.info(f"\n{'=' * 60}")
-            logger.info(f"Fitting galaxy {gal_id} with config {config_key}")
-            logger.info(f"{'=' * 60}")
-
-            diagnostics = run_fit_subprocess(gal_id, config_key, results_dir)
-
-            if diagnostics is None:
-                logger.error(f"✗ FAILED: galaxy {gal_id} config {config_key}")
-                failed_fits.append((gal_id, config_key))
-            else:
-                logger.info(f"✓ SUCCESS: galaxy {gal_id} config {config_key}")
-                all_diagnostics.append(diagnostics)
+    # Run all fits concurrently
+    all_diagnostics, failed_fits, skipped_fits = run_fit_cells_concurrent(
+        all_cells,
+        results_dir,
+        max_jobs=args.jobs,
+        only_missing=args.only_missing,
+    )
 
     # Print summary table
     print_summary_table(all_diagnostics)
