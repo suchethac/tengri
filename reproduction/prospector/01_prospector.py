@@ -277,23 +277,21 @@ _idx = np.argsort(_lbt_yr)
 _mass_t = float(np.trapezoid(_sfr_history[_idx], _lbt_yr[_idx]))
 print(f"§2 ∫SFR dt: FSPS = {_mass_p:.4f} M⊙, tengri pipeline = {_mass_t:.4f} M⊙ (target 1.0000)")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, "FSPS delayed-τ (τ=1 Gyr, age=5 Gyr)"),
-    (ax_r, "tengri pipeline sfr_history (log-lbt grid)"),
-):
-    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-    ax.set_xlim(0, 5)
-    ax.set_yscale("linear")
-    ax.set_xscale("linear")
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title)
-    ax.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
-ax_l.plot(t_p_cosmic_gyr, sfr_p, "C0-", linewidth=2.0, label=rf"$\tau$ = {TAU_GYR_FIDUCIAL:g} Gyr")
-ax_l.legend(fontsize=9)
-ax_r.plot(t_t_cosmic_gyr, _sfr_history, "C1-", linewidth=2.0)
-fig.tight_layout()
+fig, ax, ax_ratio, ratio = V.overlay_ratio_fig(
+    t_p_cosmic_gyr, sfr_p, t_t_cosmic_gyr, _sfr_history,
+    xlabel="Cosmic age since SF onset [Gyr]",
+    title=f"Star formation history: delayed-τ (τ={TAU_GYR_FIDUCIAL:.1f} Gyr, age={AGE_GYR_FIDUCIAL:.1f} Gyr)",
+    ref_label="FSPS",
+    label_t="tengri",
+    xlim=(0, 5),
+    ratio_ylim=(0.9, 1.1),
+    figsize=(9.0, 6.5),
+)
+ax.set_xscale("linear")
+ax.set_yscale("linear")
+ax_ratio.set_xscale("linear")
+ax.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
+ax_ratio.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
 
 
 # %% [markdown]
@@ -886,37 +884,36 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_p, s_stellar.sed_intrinsic, name="§3 stellar")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l, ax_r, label_l="Prospector  delayed-τ + FSPS", label_r="tengri  sfh.delayed + FSPS SSP"
+fig, ax, ax_ratio, ratio = V.overlay_ratio_fig(
+    w_p, L_p, np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic),
+    xlabel=r"$\lambda$ [Å]",
+    title=f"Intrinsic stellar SED, delayed-τ (τ={TAU_GYR_FIDUCIAL:.1f} Gyr, age={AGE_GYR_FIDUCIAL:.1f} Gyr, M★={10.0**LOG_MASS_FIDUCIAL:.2e} M⊙ formed)",
+    ref_label="Prospector",
+    label_t="tengri",
+    xlim=(1e2, 1e6),
+    ratio_ylim=(0.95, 1.05),
+    band=(0.99, 1.01),
 )
-ax_l.plot(w_p, L_p, "C0-", linewidth=1.5)
-ax_l.text(
-    0.05,
-    0.95,
-    rf"$M_\star = 10^{{{LOG_MASS_FIDUCIAL:.0f}}}\,M_\odot$ formed",
-    transform=ax_l.transAxes,
-    fontsize=10,
-    va="top",
+m_star_surviving = 10.0 ** float(s_stellar.derived["log_mstar"])
+ax.text(
+    0.98, 0.05,
+    f"tengri M★ surviving: {m_star_surviving:.2e} M⊙",
+    transform=ax.transAxes,
+    fontsize=9,
+    ha="right",
+    va="bottom",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-m_star = 10.0 ** float(s_stellar.derived["log_mstar"])
-ax_r.text(
-    0.05,
-    0.95,
-    rf"$M_\star = {m_star:.2e}\,M_\odot$ surviving",
-    transform=ax_r.transAxes,
-    fontsize=10,
-    va="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e6)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
 save_fig("prospector_03_stellar_sed.png")
 
+
+# %% [markdown]
+# The overlay shows the stellar continuum agrees to better than 1 % across the optical–near-IR.
+# Visible disagreement is in emission-line features: tengri's lines are narrow spikes at grid
+# resolution (Cue), while Prospector's are broader (Byler+2017), and the ratio panel spikes
+# where the two codes sample lines differently.
+
+# %%
 _mask_opt = (w_p >= 3000) & (w_p <= 10000)
 _t_on_p = U.regrid(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), w_p)
 _ratios = _t_on_p[_mask_opt] / L_p[_mask_opt]
@@ -1428,32 +1425,28 @@ print(
     f"§6 tengri energy balance: L_abs = {_L_abs:.3e}, L_IR = {_L_ir:.3e}, resid = {_eb_resid:.2e}"
 )
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="Prospector  Calzetti + DL07",
-    label_r="tengri  Calzetti + DL07 (energy-balanced)",
-)
-ax_l.plot(w_p_ir, L_p_ir, "C0-", linewidth=1.5)
 sed_full_t = np.asarray(s_ir.derived["sed_dust_attenuated"]) + np.asarray(
     s_ir.derived["sed_dust_ir"]
 )
-ax_r.plot(s_ir.wave, sed_full_t, "C1-", linewidth=1.5)
-ax_r.text(
+fig, ax, ax_ratio, ratio = V.overlay_ratio_fig(
+    w_p_ir, L_p_ir, np.asarray(s_ir.wave), sed_full_t,
+    xlabel=r"$\lambda$ [Å]",
+    title="Dust attenuation + IR re-emission (Calzetti + DL07)",
+    ref_label="Prospector",
+    label_t="tengri",
+    xlim=(1e3, 1e7),
+    ratio_ylim=(0.8, 1.2),
+)
+ax.set_ylim(1e24, 1e32)
+ax.text(
     0.05,
-    0.95,
-    rf"$|L_{{IR}} - L_{{abs}}| / L_{{abs}}$ = {_eb_resid:.1e}",
-    transform=ax_r.transAxes,
-    fontsize=10,
-    va="top",
+    0.08,
+    rf"Energy balance: $|L_{{IR}} - L_{{abs}}| / L_{{abs}}$ = {_eb_resid:.1e}",
+    transform=ax.transAxes,
+    fontsize=9,
+    va="bottom",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e3, 1e7)
-    ax.set_ylim(1e24, 1e32)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
 
 # Far-IR peak location, a robust scalar diagnostic.
 _p_fir = w_p_ir[(w_p_ir > 1e5) & (w_p_ir < 1e7)]
@@ -1652,20 +1645,23 @@ m_full = SEDModel.build(
 )
 s_full = m_full.predict_state({})
 
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(ax_l, ax_r, label_l="Prospector  panchromatic", label_r="tengri  panchromatic")
-ax_l.plot(w_p_full, L_p_full, "C0-", linewidth=1.5)
 _sed_full_t = (
     np.asarray(s_full.derived["sed_dust_attenuated"])
     + np.asarray(s_full.derived["sed_dust_ir"])
     + np.asarray(s_full.derived["sed_nebular"])
 )
-ax_r.plot(s_full.wave, _sed_full_t, "C1-", linewidth=1.5)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e7)
-    ax.set_ylim(1e22, 1e31)
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
+fig, ax, ax_ratio, ratio = V.overlay_ratio_fig(
+    w_p_full, L_p_full, np.asarray(s_full.wave), _sed_full_t,
+    xlabel=r"$\lambda$ [Å]",
+    title="Panchromatic SED (dust attenuation + IR re-emission + nebular)",
+    ref_label="Prospector",
+    label_t="tengri",
+    xlim=(1e2, 1e7),
+    ratio_ylim=(0.8, 1.2),
+    band=(0.93, 1.07),
+    figsize=(9.0, 6.5),
+)
+ax.set_ylim(1e22, 1e31)
 save_fig("prospector_07_panchromatic.png")
 
 
@@ -1813,26 +1809,26 @@ for logu in (-3.0, -2.0, -1.0):
             f"{r_p_o3:>15.3f} {r_t_o3:>8.3f}   {r_p_o2:>14.3f} {r_t_o2:>8.3f}"
         )
 
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="Prospector  Byler+2017 (logU=-2, logZ=0)",
-    label_r="tengri  Cue (logU=-2, logZ=0)",
-)
 _st8_fid = _m_neb_grid.predict_state({"neb_logU": -2.0, "neb_logZ_gas": 0.0})
 _w_p8_fid, _L_p8_fid = P.isolate(
     dict(sfh=1, const=1.0, tage=NEB_AGE, add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0),
     dict(sfh=1, const=1.0, tage=NEB_AGE),
 )
 _L_p8_fid = np.clip(_L_p8_fid, 0.0, None) * 10.0**9.0
-ax_l.plot(_w_p8_fid, _L_p8_fid, "C0-", linewidth=1.0)
-ax_r.plot(_st8_fid.wave, np.asarray(_st8_fid.derived["sed_nebular"]), "C1-", linewidth=1.0)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(900, 7000)
-    ax.set_xscale("linear")
-    ax.grid(True, alpha=0.3)
-fig.tight_layout()
+fig, ax, ax_ratio, ratio = V.overlay_ratio_fig(
+    _w_p8_fid, _L_p8_fid, np.asarray(_st8_fid.wave), np.asarray(_st8_fid.derived["sed_nebular"]),
+    xlabel=r"$\lambda$ [Å]",
+    title="Nebular emission (logU=−2, logZ=0)",
+    ref_label="Prospector (Byler+2017)",
+    label_t="tengri (Cue)",
+    xlim=(900, 7000),
+    ratio_ylim=(0.5, 1.5),
+    band=(0.83, 1.17),
+    figsize=(9.0, 6.5),
+    dyn_range=1e-5,
+)
+ax.set_xscale("linear")
+ax_ratio.set_xscale("linear")
 save_fig("prospector_08b_neb_logu_logz.png")
 
 
