@@ -372,9 +372,18 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
 
     if not (max_dev < tol):
         return (
-            f"photometry is not exactly linear in '{mass_name}' "
-            f"(max|flux_ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}); "
-            "likely a mass-independent component (e.g. an AGN continuum)"
+            f"the {fitter.data_type} prediction is not linear in '{mass_name}' "
+            f"at the probe point (max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}). "
+            "The probe evaluates one parameter set -- every other free parameter at its prior "
+            "median, stochastic field latents at zero -- so this measures linearity there, not "
+            "everywhere. A deviation of order 1 indicates a mass-independent additive component "
+            "such as an AGN continuum; a deviation within a few orders of the tolerance more "
+            'often indicates the coarse age kernel instead. Setting age_kernel="dsps" '
+            "integrates the SFH on the SSP lookback grid rather than a refined one (the default "
+            '"cic" is 16x-refined). That costs mass-linearity -- typically well below 1e-5, but '
+            "reaching roughly 1e-3 at the sharpest SFH shapes in the prior. Setting field=True "
+            "forces that kernel (issue #1470), so a stochastic SFH reaches it without asking. A "
+            "refusal at this magnitude does not by itself imply any additive component."
         ), {}
 
     return None, {"mass_name": mass_name, "mass_prior": mass_prior, "bounds": bounds}
