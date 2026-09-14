@@ -1284,6 +1284,18 @@ def sweep_fig(
                 f"After regridding, no points have both L_ref > 0 and L_t > 0."
             )
 
+        # Check that both arms have overlapping positive region
+        pos_ref = L_ref > 0
+        pos_t = L_t_on_ref > 0
+        overlap_positive = pos_ref & pos_t
+        if not np.any(overlap_positive):
+            raise ValueError(
+                f"No overlapping positive region for case {label!r}. "
+                f"Reference range: [{w_ref.min():.4e}, {w_ref.max():.4e}], "
+                f"Tengri range: [{w_t.min():.4e}, {w_t.max():.4e}]. "
+                f"After regridding, no points have both L_ref > 0 and L_t > 0."
+            )
+
         # Transform x-axis if needed
         x_ref = w_ref if x_of_wave is None else x_of_wave(w_ref)
 

@@ -158,12 +158,15 @@ _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: instead pins the mass at the prior's own bounds midpoint, so
 #: ``predict_photometry`` always runs at a realistic mass scale regardless of
 #: dtype.
-#: Floor for the two-mass linearity probe's tolerance (physical flux ratio one
-#: dex apart), tuned for float64 roundoff. :func:`_linearity_max_deviation`
-#: takes ``max(_LINEARITY_TOL, 1e4 * eps(dtype))`` so the same exactly-linear
-#: model is not refused under float32 roundoff alone -- see that function's
-#: docstring.
-_LINEARITY_TOL = 1e-8
+#: Structural tolerance for the two-mass linearity probe (physical flux ratio
+#: one dex apart): not a roundoff-level guarantee but a check for a
+#: mass-independent additive component. :func:`_linearity_max_deviation` takes
+#: ``max(_LINEARITY_TOL, 1e4 * eps(dtype))`` so the same exactly-linear model
+#: is not refused under float32 roundoff alone. Set from measured separation
+#: between worst benign case (coarse ``dsps`` kernel, 6.097e-04 across prior)
+#: and genuine structural failure (mass-independent additive component, ~8.85):
+#: 1e-2 sits 16.4x above worst benign and 885x below genuine failure.
+_LINEARITY_TOL = 1e-2
 
 #: ``fitter.data_type`` values the exact chi^2(M) quadratic covers: photometry
 #: alone, spectroscopy alone, or their concatenation (photometry-then-spectrum,
@@ -193,24 +196,31 @@ def _mass_prior_bounds(dist: Distribution) -> tuple[float, float]:
 def _linearity_max_deviation(
     fitter: Fitter, mass_name: str, mass_prior_bounds: tuple[float, float]
 ) -> tuple[float, float]:
-    """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` at a representative theta.
+    """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` worst over 9 thetas.
 
-    Probes the model's own physics, not the declared prior's support: two
-    mass values one dex apart, held fixed, with every other free parameter at
-    its prior median (``unstandardize(0.0)``, matching
-    ``forward.forward_model._central_params``) and every fixed parameter at
-    its declared value. The prediction probed is the fitter's own data-vector
-    assembly for its ``data_type`` (:func:`_predict_full_vector`), photometry,
-    spectroscopy, or their concatenation, so a spectroscopy channel with a
-    mass-independent additive term is caught exactly as a photometric one is.
-    Catches a mass-independent additive component (e.g. an AGN continuum)
-    that the exact chi^2(M) quadratic cannot marginalize.
+    Evaluates linearity at nine deterministic parameter sets, drawn with fixed
+    PRNG seed for reproducibility:
+    - One at the prior median (``unstandardize(0.0)`` for every free parameter);
+    - Eight additional draws from the prior's own distribution.
 
-    The probe masses are derived from the prior bounds, not hardcoded: the
-    midpoint of the prior's log10-space support, plus one dex above it, so the
-    one-dex separation the ``- 10.0`` comparison assumes is preserved, and the
-    probe evaluates the model at scales near its actual use rather than at
-    arbitrary fixed values.
+    At each theta, computes the maximum fractional flux-ratio deviation from
+    the target ratio of 10.0 (one dex mass increase), and returns the worst
+    across all nine evaluations. Stochastic field latents (if present) are
+    kept at zero for the prior-median theta and drawn from their declared
+    prior N(0, I) for the eight draws, so the returned worst-case is
+    representative: the prior median is the smoothest SFH in the prior,
+    and a coarse age integrand costs least exactly there, which is a
+    structural bias in the probe and the reason one theta is insufficient.
+
+    The prediction probed is the fitter's own data-vector assembly for its
+    ``data_type`` (:func:`_predict_full_vector`), photometry, spectroscopy,
+    or their concatenation, so a spectroscopy channel with a mass-independent
+    additive term is caught exactly as a photometric one is.
+
+    The probe masses are derived from the prior bounds: the midpoint of the
+    prior's log10-space support, plus one dex above it. Catches a
+    mass-independent additive component (e.g. an AGN continuum) that the exact
+    chi^2(M) quadratic cannot marginalize.
 
     The tolerance scales with the *actual* dtype the prediction returned
     (``jax.enable_x64`` may be off process-wide, silently downcasting every
@@ -220,15 +230,20 @@ def _linearity_max_deviation(
     not necessarily what a caller asked for): a fixed ``_LINEARITY_TOL``
     tuned for float64 roundoff (~1e-13 measured) is unreachable under float32
     roundoff on the exact same, exactly-linear model (~4.3e-05 measured on a
-    4-band stellar+dust seam, tests/regression/precision), which used to make
-    "auto" engage under float64 and silently refuse under float32 for
-    identical configurations -- a defect this module exists to be free of,
-    caught by ``test_float32_fitting_path_seams.py`` reporting the resulting
-    posteriors as different *dimensionality* (mass profiled out on one arm,
-    not the other) rather than merely different values. The scaled floor
-    stays far below a genuine non-linearity (a mass-independent component
-    like an unmasked AGN continuum), which perturbs the ratio at the
-    O(1) scale, not the O(1e3 * eps) one.
+    4-band stellar+dust seam, ``tests/regression/precision/
+    test_float32_fitting_path_seams.py``), which used to make "auto" engage
+    under float64 and silently refuse under float32 for identical
+    configurations -- a defect caught by reporting posteriors of different
+    *dimensionality* (mass profiled out on one arm, not the other) rather than
+    merely different values. The scaled floor ``1e4 * eps`` stays far below a
+    genuine non-linearity (a mass-independent component like an unmasked AGN
+    continuum), which perturbs the ratio at the O(1) scale, not the O(1e3 *
+    eps) one. This is a structural check, not a roundoff-level guarantee.
+
+    No caching: the probe costs ~15 ms per forward call, so 18 calls is ~0.25 s
+    per Fitter construction, against fits that take minutes. Caching would be
+    keyed on fixed values and params_override (both of which can differ between
+    fitters on one model), risking silent correctness bugs for a 0.2% saving.
 
     Parameters
     ----------
@@ -242,67 +257,117 @@ def _linearity_max_deviation(
     Returns
     -------
     max_dev : float
-        The maximum deviation observed.
+        The maximum deviation observed across all nine thetas.
     tol : float
         The tolerance for the deviation.
 
     Raises
     ------
     ValueError
-        When no valid band carries a finite, strictly-positive prediction at
-        either mass, meaning the model cannot be assessed for linearity (all
-        bands zero, fully absorbed, or underflowed in float32).
+        When no theta yields a valid band (all predictions zero, fully
+        absorbed, or underflowed in float32), meaning the model cannot be
+        assessed for linearity at that point. If fewer than nine thetas
+        succeed, logs a warning with the count and the first exception's repr.
+        Raises if all nine fail with the reason from the first one that did.
     """
     spec = fitter.spec
-    phys: dict[str, Any] = {}
-    for name in spec.free_params:
-        if name != mass_name:
-            phys[name] = spec.get_distribution(name).unstandardize(0.0)
-    for name, val in spec.get_fixed_values().items():
-        if name != mass_name:
-            phys[name] = jnp.asarray(val)
-    if getattr(spec, "stochastic", False):
-        phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
-
-    # Derive probe masses from prior bounds: midpoint and midpoint+1 dex
+    use_components = bool(getattr(fitter, "use_components", False))
     ell_lo, ell_hi = mass_prior_bounds
     mass_midpoint = 0.5 * (ell_lo + ell_hi)
     ell_a = mass_midpoint
     ell_b = mass_midpoint + 1.0
 
-    use_components = bool(getattr(fitter, "use_components", False))
-    pred_a = _predict_full_vector(
-        fitter.model,
-        fitter.data_type,
-        {**phys, mass_name: jnp.asarray(ell_a)},
-        use_components=use_components,
-    )
-    pred_b = _predict_full_vector(
-        fitter.model,
-        fitter.data_type,
-        {**phys, mass_name: jnp.asarray(ell_b)},
-        use_components=use_components,
-    )
+    # Fixed PRNG seed for reproducible draws across Fitter constructions.
+    probe_key = jax.random.PRNGKey(2359)
 
-    # Restrict comparison to entries where pred_a is finite and strictly positive
-    # (zero throughput, fully absorbed, or float32 underflow). Use where-dummy
-    # pattern to keep gradients finite.
-    valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
-    if not bool(jnp.any(valid)):
-        raise ValueError(
-            f"linearity probe: no valid bands (all predictions zero, fully absorbed, "
-            f"or underflowed at mass {ell_a}); cannot assess linearity"
+    max_dev_overall = 0.0
+    tol_ref = None
+    n_valid = 0
+    first_error = None
+
+    # Evaluate at prior median (xi = 0) plus 8 draws from the prior.
+    for i in range(9):
+        phys: dict[str, Any] = {}
+
+        if i == 0:
+            # Prior median: every free parameter at unstandardize(0.0),
+            # field latents at zero (the documented representative point).
+            for name in spec.free_params:
+                if name != mass_name:
+                    phys[name] = spec.get_distribution(name).unstandardize(0.0)
+            if getattr(spec, "stochastic", False):
+                phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
+        else:
+            # Draw from the prior using a folded seed.
+            key = jax.random.fold_in(probe_key, i - 1)
+            sample = spec.sample(key)
+            for name in spec.free_params:
+                if name != mass_name:
+                    phys[name] = sample[name]
+            # spec.sample() already includes sfh_field_xi for stochastic specs.
+
+        # Fixed parameters always included.
+        for name, val in spec.get_fixed_values().items():
+            if name != mass_name:
+                phys[name] = jnp.asarray(val)
+
+        # Evaluate the two masses and compute the deviation at this theta.
+        try:
+            pred_a = _predict_full_vector(
+                fitter.model,
+                fitter.data_type,
+                {**phys, mass_name: jnp.asarray(ell_a)},
+                use_components=use_components,
+            )
+            pred_b = _predict_full_vector(
+                fitter.model,
+                fitter.data_type,
+                {**phys, mass_name: jnp.asarray(ell_b)},
+                use_components=use_components,
+            )
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+            continue
+
+        # Restrict comparison to valid bands (finite and strictly positive).
+        valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
+        if not bool(jnp.any(valid)):
+            if first_error is None:
+                first_error = ValueError(
+                    f"linearity probe at theta {i}: no valid bands (all predictions zero, "
+                    f"fully absorbed, or underflowed at mass {ell_a})"
+                )
+            continue
+
+        # Compute the deviation at this theta.
+        ratio = jnp.where(valid, pred_b / pred_a, 10.0)
+        dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+        max_dev_overall = max(max_dev_overall, dev)
+        n_valid += 1
+
+        # Cache the tolerance from the first valid evaluation.
+        if tol_ref is None:
+            tol_ref = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
+
+    # If fewer than nine thetas succeeded, log a warning.
+    if n_valid < 9 and first_error is not None:
+        logger.warning(
+            "linearity probe: %d of 9 thetas produced valid bands; first error: %r",
+            n_valid,
+            first_error,
         )
 
-    # Compute ratio only where valid; substitute 10.0 elsewhere (the target ratio).
-    # This keeps the shape gradient-safe even though this function runs at construction
-    # time and its result is converted to float(), not differentiated. The benign
-    # substitution avoids NaN propagation if anyone ever traces through the probe.
-    ratio = jnp.where(valid, pred_b / pred_a, 10.0)
-    max_dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+    # If no theta produced a valid result, raise with the first error seen.
+    if n_valid == 0:
+        if first_error is not None:
+            raise first_error
+        raise ValueError(
+            "linearity probe: no valid parameter set found (all nine evaluations failed)"
+        )
 
-    tol = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
-    return max_dev, tol
+    tol = tol_ref
+    return max_dev_overall, tol
 
 
 def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | None, dict]:
@@ -314,8 +379,8 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         ``None`` if every guard passes; otherwise a human-readable reason
         naming the first one that failed.
     context : dict
-        ``{"mass_name", "mass_prior", "bounds"}`` when ``reason is None``,
-        else ``{}``.
+        ``{"mass_name", "mass_prior", "bounds", "max_dev", "tol"}`` when
+        ``reason is None``, else ``{}``.
     """
     from tengri.inference.fitter import _has_line_adjacent_channel
     from tengri.observation.noise import has_noise_model, uses_student_t
@@ -372,12 +437,25 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
 
     if not (max_dev < tol):
         return (
-            f"photometry is not exactly linear in '{mass_name}' "
-            f"(max|flux_ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}); "
-            "likely a mass-independent component (e.g. an AGN continuum)"
+            f"the {fitter.data_type} prediction is not linear in '{mass_name}' "
+            f"(worst-of-9-thetas: max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}). "
+            "The worst is the prior median plus eight prior draws. A deviation of order 1 "
+            "indicates a mass-independent additive component such as an AGN continuum. At "
+            "magnitudes within a few orders of the tolerance, conditioning in the mass "
+            "direction is often the cause, typically from the coarse age kernel (set "
+            'age_kernel="dsps", which integrates on the SSP lookback grid rather than a '
+            'refined one; the default "cic" is 16x-refined). With that kernel, mass-linearity '
+            "costs up to roughly 1e-3 at the sharpest SFH shapes, so a refusal at this "
+            "magnitude alone does not imply a mass-independent additive component."
         ), {}
 
-    return None, {"mass_name": mass_name, "mass_prior": mass_prior, "bounds": bounds}
+    return None, {
+        "mass_name": mass_name,
+        "mass_prior": mass_prior,
+        "bounds": bounds,
+        "max_dev": max_dev,
+        "tol": tol,
+    }
 
 
 def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_override) -> None:
@@ -441,7 +519,14 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
             reason, ctx = f"guard check raised {exc!r}", {}
         engage = reason is None
         if engage:
-            resolved_reason = "auto-enabled: every guard passed"
+            max_dev = ctx.get("max_dev")
+            tol = ctx.get("tol")
+            if max_dev is not None and tol is not None:
+                resolved_reason = (
+                    f"auto-enabled: every guard passed (linearity {max_dev:.3e} < {tol:.0e})"
+                )
+            else:
+                resolved_reason = "auto-enabled: every guard passed"
         else:
             resolved_reason = f"auto-disabled: {reason}"
             logger.info("profile_mass='auto': disabled (%s).", reason)
@@ -1265,7 +1350,7 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
         per_chunk_overhead = scratch_bytes / reference_chunk_size
         derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
 
-        logger.debug(
+        logger.info(
             "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
             derived_chunk_size,
             scratch_bytes / reference_chunk_size / 1e6,
@@ -1343,6 +1428,27 @@ def _reinsert_mass_fn(fitter: Fitter):
                 use_components=use_components,
             )
             return _sample_log_mass(key, A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
+
+        # Log chunk width and whether chunking engaged at trace time (once per compiled shape,
+        # not once per call). This runs at trace time, not call time, so the n_draws read is
+        # static under jitting and costs nothing; it forces no trace-time value.
+        n_draws = next(iter(samples_no_mass.values())).shape[0]
+        if chunk_size >= n_draws:
+            logger.info(
+                "profile_mass reinsertion: %d draws in a single vmap "
+                "(chunk width %d >= n_draws, so no chunking is needed and the "
+                "result is bit-identical to the unchunked path)",
+                n_draws,
+                chunk_size,
+            )
+        else:
+            logger.info(
+                "profile_mass reinsertion: %d draws in %d chunks of %d "
+                "(peak scratch is set by the chunk width, not the draw count)",
+                n_draws,
+                -(-n_draws // chunk_size),
+                chunk_size,
+            )
 
         return jax.lax.map(one_draw, (samples_no_mass, draw_keys), batch_size=chunk_size)
 
