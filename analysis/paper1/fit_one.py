@@ -3,7 +3,8 @@
 CLI: python fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out DIR
      [--seed N] [--n-warmup N] [--n-samples N] [--n-chains N]
 
-``--n-warmup`` / ``--n-samples`` / ``--n-chains`` default to the paper's 600 / 600 / 4;
+``--n-warmup`` / ``--n-samples`` / ``--n-chains`` default to 150 / 300 / 4, the recipe
+``mcmc_nuts_fast`` advertises;
 they exist so the pipeline can be smoke-tested at a small budget. Every run writes the
 NPZ and the JSON: an attempt that clears the adoption bar is adopted immediately, and
 otherwise the best of DEFAULT_RETUNE_ATTEMPTS attempts (fewest divergences, then lowest
@@ -70,8 +71,18 @@ PPD_N_DRAWS = 200
 #: The paper's canonical NUTS budget (quickstart notebook). The CLI exposes all
 #: three so the save path can be exercised end to end at a tiny budget without
 #: editing this file; the defaults are the paper's and are what the grid runs.
-DEFAULT_N_WARMUP = 600
-DEFAULT_N_SAMPLES = 600
+#: The recipe ``mcmc_nuts_fast`` actually advertises: 4 chains x (150 warmup +
+#: 300 draws). This script drove 600 + 600 until 2026-09-14 -- four times the
+#: documented work -- which made the demonstration quietly disagree with the
+#: registry entry the paper cites for it, and put the full grid past 130 h.
+#:
+#: Owner's decision 2026-09-14, taken over relaxing the adoption bar or cutting
+#: the sample: demonstrate the documented settings. Min ESS falls from ~341
+#: (measured on 79/II at 600 + 600) to roughly 170, which is still adequate for
+#: the reported posteriors, and the adoption bar is untouched at 0 divergences
+#: and max split R-hat < 1.01.
+DEFAULT_N_WARMUP = 150
+DEFAULT_N_SAMPLES = 300
 DEFAULT_N_CHAINS = 4
 
 #: NUTS step-size adaptation targets. A retune raises the target rather than
@@ -114,27 +125,28 @@ DEFAULT_RETUNE_ATTEMPTS = 3
 #: (a truncated metallicity posterior propagates into correlated quantities
 #: such as stellar mass), not a sampler question, and it is deliberately left
 #: to the owner rather than changed silently mid-grid.
-RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2, "I": 2}
-#: Config I joined the cap on 2026-09-14, on the same evidence and the same
-#: ruling. Cell 79/I, unprofiled, same seed throughout:
+RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2}
+#: Config I is deliberately NOT capped, and the reason is worth recording
+#: because I capped it on 2026-09-14 and had to revert within the hour.
 #:
-#:     attempt 1  target 0.85   38 min   2 divergences   rhat 1.0013
-#:     attempt 2  target 0.95   50 min   4 divergences   rhat 1.0006
-#:     attempt 3  target 0.99   >92 min  (abandoned as not worth the wall clock)
+#: Cell 79/I, unprofiled, same seed throughout:
 #:
-#: Two things are visible there. Divergences are NOT monotone in
-#: target_accept -- raising it made them worse -- and each rung costs more than
-#: the last, because a smaller step size means deeper trees. So the third rung
-#: is paying roughly 2.4x attempt 1's wall clock for a quantity that is moving
-#: the wrong way. At ~3 h per exhausted cell this configuration alone projects
-#: near 60 h of the grid.
+#:     attempt 1  target 0.85   38 min    2 divergences  rhat 1.0013  FAIL
+#:     attempt 2  target 0.95   50 min    4 divergences  rhat 1.0006  FAIL
+#:     attempt 3  target 0.99   ~120 min  0 divergences  rhat 1.0044  ADOPTED
 #:
-#: This does not relax the adoption bar. A cell that clears 0 divergences and
-#: rhat < 1.01 is still adopted at whichever rung clears it -- Config II passed
-#: at rung 2 -- and a cell that clears nothing still writes its best attempt
-#: with adoption_pass=False, so nothing is lost scientifically. What is dropped
-#: is only the third attempt, which has not succeeded anywhere in this grid's
-#: data.
+#: I capped it after watching attempts 1 and 2 fail with divergences moving the
+#: WRONG way (2 then 4) while each rung cost more than the last, and wrote that
+#: the third rung "has not succeeded anywhere in this grid's data". It then
+#: succeeded on that very cell, at 0 divergences and min ESS 363, and is the
+#: only reason 79/I is adopted at all.
+#:
+#: The lesson is not about this configuration. Non-monotone divergences across
+#: the first two rungs say nothing about the third, and an attempt's cost while
+#: it is still running is not evidence about its outcome. Do not cap a rung
+#: from the shape of the rungs below it; cap it only on observed failures of
+#: that rung. Config III's cap stands because attempt 3 there was observed to
+#: exhaust a 21600 s cell timeout without clearing (R60/#2089).
 
 #: Keys the NPZ carries beside the sampled parameters, one array each.
 #: ``dust_tau`` is the configuration's dust optical depth whichever parameter
@@ -608,8 +620,8 @@ def run_fit(
             :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS, unless
             ``config_key`` has an override in RETUNE_ATTEMPTS_BY_CONFIG). An
             explicitly passed value always wins over the per-config default.
-        n_warmup: NUTS warmup draws per chain (default: the paper's 600)
-        n_samples: NUTS kept draws per chain (default: the paper's 600)
+        n_warmup: NUTS warmup draws per chain (default: 150, the advertised recipe)
+        n_samples: NUTS kept draws per chain (default: 300, the advertised recipe)
         n_chains: NUTS chains (default: the paper's 4)
 
     Returns:
