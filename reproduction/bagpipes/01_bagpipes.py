@@ -278,10 +278,15 @@ _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
 _sfr_history = np.asarray(_state_sfh.derived["sfr_history"])
 t_t = (AGE_GYR_FIDUCIAL - _lbt_yr / 1e9) * 1e9
-_idx = np.argsort(t_t)
-_mass_formed = float(np.trapezoid(_sfr_history[_idx], t_t[_idx]))
+# The SFH grid spans the full cosmic lookback; keep the epoch after formation.
+_keep_t = t_t >= 0
+t_t_valid = t_t[_keep_t]
+_sfr_history_valid = _sfr_history[_keep_t]
+assert t_t_valid.min() >= 0, f"negative cosmic age: min={t_t_valid.min()}"
+_idx = np.argsort(t_t_valid)
+_mass_formed = float(np.trapezoid(_sfr_history_valid[_idx], t_t_valid[_idx]))
 print(
-    f"tengri pipeline ∫SFR dt = {_mass_formed:.4e} M☉  (target: 1.0000e+10 from log_total_mass=10)"
+    f"tengri   ∫SFR dt = {_mass_formed:.4e} M☉  (log_total_mass=10 → 1.0000e+10)"
 )
 
 # BAGPIPES side mass check:
@@ -289,16 +294,38 @@ _idx_b = np.argsort(t_b_cosmic_gyr)
 _mass_b = float(np.trapezoid(sfr_b_keep[_idx_b], t_b_cosmic_gyr[_idx_b] * 1e9))
 print(f"BAGPIPES        ∫SFR dt = {_mass_b:.4e} M☉  (target: 1.0000e+10 from massformed=10)")
 
-fig, ax, ax_r, _ = V.overlay_ratio_fig(
-    t_b_cosmic_gyr,
-    sfr_b_keep,
-    t_t / 1e9,
-    _sfr_history,
-    xlabel="Cosmic age since SF onset [Gyr]",
-    title=r"Delayed-$\tau$ ($\tau = 1$ Gyr, age = 5 Gyr, $\log M = 10$)",
+# Ensure both arms have overlapping data: restrict to the common time range.
+# Two-pass approach to handle discrete sampling mismatches:
+# 1. Broad range based on array mins/maxes
+t_min_broad = max(t_b_cosmic_gyr.min(), (t_t_valid / 1e9).min())
+t_max_broad = min(t_b_cosmic_gyr.max(), (t_t_valid / 1e9).max())
+_keep_b_1 = (t_b_cosmic_gyr >= t_min_broad) & (t_b_cosmic_gyr <= t_max_broad)
+_keep_t_1 = (t_t_valid / 1e9 >= t_min_broad) & (t_t_valid / 1e9 <= t_max_broad)
+# 2. Recalculate from actual masked samples to align boundaries
+t_b_temp = t_b_cosmic_gyr[_keep_b_1]
+t_t_temp = (t_t_valid / 1e9)[_keep_t_1]
+t_min_aligned = max(t_b_temp.min(), t_t_temp.min())  # Both arms guaranteed to start here
+_keep_final_b = (t_b_temp >= t_min_aligned)
+_keep_final_t = (t_t_temp >= t_min_aligned)
+t_b_cosmic_gyr_overlap = t_b_temp[_keep_final_b]
+sfr_b_keep_overlap = sfr_b_keep[_keep_b_1][_keep_final_b]
+t_t_valid_overlap = t_t_valid[_keep_t_1][_keep_final_t]
+_sfr_history_valid_overlap = _sfr_history_valid[_keep_t_1][_keep_final_t]
+
+print(
+    f"  (after overlap masking) t_b range [{t_b_cosmic_gyr_overlap.min():.4f}, "
+    f"{t_b_cosmic_gyr_overlap.max():.4f}] Gyr, "
+    f"t_t range [{(t_t_valid_overlap/1e9).min():.4f}, {(t_t_valid_overlap/1e9).max():.4f}] Gyr"
+)
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    [("delayed-τ", t_b_cosmic_gyr_overlap, sfr_b_keep_overlap, t_t_valid_overlap / 1e9, _sfr_history_valid_overlap)],
     ref_label="BAGPIPES",
-    label_t="tengri",
+    title=r"Delayed-$\tau$ ($\tau = 1$ Gyr, age = 5 Gyr, $\log M = 10$)",
+    xlabel="Cosmic age since SF onset [Gyr]",
+    ylabel=r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]",
     xlim=(0, 5),
+    logy=False,
     ratio_ylim=(0.8, 1.2),
     band=(0.95, 1.05),
 )
@@ -310,8 +337,6 @@ ax.axvline(
     label=rf"$\tau$ = {TAU_GYR_FIDUCIAL:g} Gyr",
 )
 ax.legend(fontsize=9)
-ax.set_yscale("linear")
-ax_r.set_yscale("linear")
 fig.tight_layout()
 save_fig("bagpipes_02_sfh_delayed.png")
 
@@ -774,6 +799,9 @@ fig, (ax, ax_r), ratios_z = V.sweep_fig(
     xlim=(2e3, 2e4),
     ratio_ylim=(0.97, 1.03),
     band=(0.99, 1.01),
+    cmap="Blues",
+    values=[0.2, 1.0, 2.5],
+    param_label="Z / Z_sun",
 )
 fig.tight_layout()
 save_fig("bagpipes_15_metallicity_sweep.png")
@@ -840,6 +868,9 @@ fig, (ax, ax_r), ratios = V.sweep_fig(
     ref_label="BAGPIPES",
     title="§5 cont'd — Metallicity sweep (5 Gyr delayed-τ, nebular on)",
     xlim=(1e3, 1e5),
+    cmap="Blues",
+    values=[0.2, 0.5, 1.0, 1.5, 2.5],
+    param_label="Z / Z_sun",
 )
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 fig.tight_layout()

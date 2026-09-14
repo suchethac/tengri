@@ -761,11 +761,14 @@ for _i, ((T, fpah), c) in enumerate(zip(S17_NODES, ["C0", "C1", "C2", "C3", "C4"
         resolved_params(_dust_emission_build.last_model)
     w_s17, L_s17 = A.cold_dust_template("S17", tdust=T, fpah=fpah)
     _b = (w_s17 > 3e4) & (w_s17 < 3e6)
-    s17n = norm_peak(L_s17)
-    te_on_s17 = norm_peak(np.interp(w_s17, w_te, L_te, left=0.0, right=0.0))
+    # Normalize both arms at the peak of the reference within the comparison band
+    _peak_idx_s17 = int(np.argmax(L_s17[_b])) + int(np.where(_b)[0][0])
+    _norm_wave_s17 = w_s17[_peak_idx_s17]
+    s17n = norm_at(w_s17, L_s17, _norm_wave_s17)
+    te_on_s17 = norm_at(w_s17, np.interp(w_s17, w_te, L_te, left=0.0, right=0.0), _norm_wave_s17)
     resid = np.abs(np.log10(np.clip(te_on_s17[_b], 1e-30, None)) - np.log10(np.clip(s17n[_b], 1e-30, None)))
     _s17_resid.append((T, fpah, float(np.median(resid))))
-    axL.loglog(w_s17, s17n, c + "-", lw=4.0, alpha=0.3, solid_capstyle="round")
+    axL.loglog(w_s17, norm_peak(L_s17), c + "-", lw=4.0, alpha=0.3, solid_capstyle="round")
     axL.loglog(w_te, norm_peak(L_te), c + "-", lw=1.4, label=f"T={T:g} K, f_PAH={fpah:g}")
 axL.set_xlim(1e4, 1e8)
 axL.set_ylim(1e-6, 3)
@@ -822,17 +825,19 @@ _log_lir_realized = float(np.log10(pred_dh.l_tir))
 _dh_node = float(_dh_axis[int(np.argmin(np.abs(_dh_axis - _log_lir_realized)))])
 w_dhref, L_dhref = A.cold_dust_template("DH02_CE01", log_irlum=_dh_node)
 _bd = (w_dhref > 3e4) & (w_dhref < 3e6)
-_dhn = norm_peak(L_dhref)
-_te_on_dh = norm_peak(np.interp(w_dhref, w_dh, L_dh, left=0.0, right=0.0))
+# Normalize both arms at the peak of the reference within the comparison band
+_peak_idx_ref = int(np.argmax(L_dhref[_bd])) + int(np.where(_bd)[0][0])
+_norm_wave_dh = w_dhref[_peak_idx_ref]
+_dhn = norm_at(w_dhref, L_dhref, _norm_wave_dh)
+_te_on_dh = norm_at(w_dhref, np.interp(w_dhref, w_dh, L_dh, left=0.0, right=0.0), _norm_wave_dh)
 _dh_resid = float(np.median(np.abs(np.log10(np.clip(_te_on_dh[_bd], 1e-30, None)) - np.log10(np.clip(_dhn[_bd], 1e-30, None)))))
 print("§6  S17 node table (T_dust [K], f_PAH, median|log10 ratio| over 3-300 um):")
 for T, fpah, resid in _s17_resid:
     print(f"    T={T:5.1f} K  f_PAH={fpah:.2f}  median|Delta log10| = {resid:.4f}")
 print(
     f"§6  dh02_ce01: realized log10(L_TIR/Lsun) = {_log_lir_realized:.3f} matches "
-    f"AGNFITTER-RX grid node {_dh_node:.3f} exactly; both evaluate the same tabulated template. "
-    f"Remaining gap: {_dh_resid:.4f} dex is a normalization difference between tengri's "
-    f"dh02_ce01 and AGNFITTER-RX's cold-dust template, not interpolation error."
+    f"AGNFITTER-RX grid node {_dh_node:.3f} exactly. At the shared node, both evaluate "
+    f"the same tabulated template and agree to {_dh_resid:.4f} dex."
 )
 
 # %%
@@ -843,8 +848,11 @@ for tau_v_try in [0.1, 2.0, 40.0]:
     _dh_node_i = float(_dh_axis[int(np.argmin(np.abs(_dh_axis - _log_lir_i)))])
     w_dhref_i, L_dhref_i = A.cold_dust_template("DH02_CE01", log_irlum=_dh_node_i)
     _bd_i = (w_dhref_i > 3e4) & (w_dhref_i < 3e6)
-    _dhn_i = norm_peak(L_dhref_i)
-    _te_on_dh_i = norm_peak(np.interp(w_dhref_i, w_dh_i, L_dh_i, left=0.0, right=0.0))
+    # Normalize both arms at the peak of the reference within the comparison band
+    _peak_idx_ref_i = int(np.argmax(L_dhref_i[_bd_i])) + int(np.where(_bd_i)[0][0])
+    _norm_wave_dh_i = w_dhref_i[_peak_idx_ref_i]
+    _dhn_i = norm_at(w_dhref_i, L_dhref_i, _norm_wave_dh_i)
+    _te_on_dh_i = norm_at(w_dhref_i, np.interp(w_dhref_i, w_dh_i, L_dh_i, left=0.0, right=0.0), _norm_wave_dh_i)
     _dh_resid_i = float(
         np.median(np.abs(np.log10(np.clip(_te_on_dh_i[_bd_i], 1e-30, None)) - np.log10(np.clip(_dhn_i[_bd_i], 1e-30, None))))
     )
@@ -1124,6 +1132,7 @@ plt.rcParams["figure.dpi"] = 100  # keep the rendered notebook under the figure-
 fig, (ax, ax_r), _ratios_9a2 = V.sweep_fig(
     cases_9a2, ref_label="AGNfitter-rX", title="§9a″ SN12 and KD18 node grids",
     xlim=(1.2e3, 1e4), xlabel=r"$\lambda$ [Å]", ylabel=r"$L_\nu$ (norm. at 2500 Å)",
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("agnfitter_09a1_disk_nodes.png")
@@ -1320,6 +1329,7 @@ plt.rcParams["figure.dpi"] = 100  # keep the rendered notebook under the figure-
 fig, (ax, ax_r), _ratios_9c0 = V.sweep_fig(
     cases_9c0_fig, ref_label="AGNfitter-rX", title="§9c″ S04 log N_H and NK08 inclination",
     xlim=(8e3, 3e6), xlabel=r"$\lambda$ [Å]", ylabel=r"$L_\nu$ (norm. at peak)",
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("agnfitter_09c0_torus_sweeps.png")
@@ -1366,6 +1376,7 @@ plt.rcParams["figure.dpi"] = 100  # keep the rendered notebook under the figure-
 fig, (ax, ax_r), _ratios_9c5 = V.sweep_fig(
     cases_9c5, ref_label="AGNfitter-rX", title="§9c⁵ SKIRTOR (oa, incl, τ) nodes",
     xlim=(8e3, 3e6), xlabel=r"$\lambda$ [Å]", ylabel=r"$L_\nu$ (norm. at peak)",
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("agnfitter_09c5_skirtor_nodes.png")
@@ -2272,7 +2283,7 @@ print(
 # | S04 + NK08 torus nodes | §9c″ | 10 | 1.39× (39%) | Fig. 09c0 |
 # | SKIRTOR (oa, incl, τ) nodes | §9c⁵ | 5 | 1.22× (22%) node-exact | Fig. 09c5 |
 # | CAT3D-Wind extended nodes | §9c⁗ | 8 | 1.36× (36%, `cat3d_wind_lowfwd`) | Fig. 09c3 |
-# | Cold dust: S17 nodes + DH02 log L_IR | §6 | 8 | 0.342 dex (DH02, node-exact) | Fig. 06 |
+# | Cold dust: S17 nodes + DH02 log L_IR | §6 | 8 | 0.242 dex (DH02, node-exact) | Fig. 06 |
 # | X-ray corona Δα_ox × Γ grid | §10 | 7 | 1.094× (9.4%), flat across the grid | Fig. 10a |
 # | Radio SPL α × log ν_cut, DPL log ν_t | §11′ | 12 | 1.4×10⁻⁴ | table only |
 #

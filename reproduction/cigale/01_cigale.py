@@ -450,13 +450,18 @@ _sfr_history = np.asarray(_state_sfh.derived["sfr_history"])
 # CIGALE x-axis above): t_cosmic = age_gyr - lbt
 t_t = (age_gyr - _lbt_yr / 1e9) * 1e9  # yr
 sfr_t = _sfr_history
+# The SFH grid spans the full cosmic lookback; keep the epoch after formation.
+_keep_t = t_t >= 0
+t_t_valid = t_t[_keep_t]
+sfr_t_valid = sfr_t[_keep_t]
+assert t_t_valid.min() >= 0, f"negative cosmic age: min={t_t_valid.min()}"
 # Verify normalization: trapezoid of SFR over cosmic-age axis should be
 # 10**log_total_mass = 1.0 M☉ within numerical accuracy of the n_grid pipeline.
 # tengri's pipeline carries sfh_grid in decreasing lookback time, so
 # integrate against the increasing-time order.
-_idx = np.argsort(t_t)
-_mass_formed = float(np.trapezoid(sfr_t[_idx], t_t[_idx]))
-print(f"tengri pipeline ∫SFR dt = {_mass_formed:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
+_idx = np.argsort(t_t_valid)
+_mass_formed = float(np.trapezoid(sfr_t_valid[_idx], t_t_valid[_idx]))
+print(f"tengri ∫SFR dt = {_mass_formed:.4f} M☉  (log_total_mass=0 → 1.0000)")
 
 
 def _sfr_shape_report(label, t_c_yr, sfr_c_arr, t_t_yr, sfr_t_arr, age_gyr):
@@ -485,22 +490,40 @@ def _sfr_shape_report(label, t_c_yr, sfr_c_arr, t_t_yr, sfr_t_arr, age_gyr):
     )
 
 
-_sfr_shape_report("§2 delayed", t_c, sfr_c, t_t, sfr_t, age_gyr)
+_sfr_shape_report("§2 delayed", t_c, sfr_c, t_t_valid, sfr_t_valid, age_gyr)
 
-fig, ax, ax_r, ratio = V.overlay_ratio_fig(
-    t_c / 1e9,
-    sfr_c,
-    t_t / 1e9,
-    sfr_t,
-    xlabel="Cosmic age since SF onset [Gyr]",
-    title="§2 τ-delayed SFH (τ=1 Gyr, age=5 Gyr)",
+# Both arms on their common interval.
+_t_min_broad = max(t_c.min() / 1e9, t_t_valid.min() / 1e9)
+_t_max_broad = min(t_c.max() / 1e9, t_t_valid.max() / 1e9)
+_keep_c_1 = (t_c / 1e9 >= _t_min_broad) & (t_c / 1e9 <= _t_max_broad)
+_keep_t_1 = (t_t_valid / 1e9 >= _t_min_broad) & (t_t_valid / 1e9 <= _t_max_broad)
+
+_t_c_temp = (t_c / 1e9)[_keep_c_1]
+_t_t_temp = (t_t_valid / 1e9)[_keep_t_1]
+_t_min_aligned = max(_t_c_temp.min(), _t_t_temp.min())
+_keep_final_c = (_t_c_temp >= _t_min_aligned)
+_keep_final_t = (_t_t_temp >= _t_min_aligned)
+_t_c_overlap = t_c[_keep_c_1][_keep_final_c]
+_sfr_c_overlap = sfr_c[_keep_c_1][_keep_final_c]
+_t_t_valid_overlap = t_t_valid[_keep_t_1][_keep_final_t]
+_sfr_t_valid_overlap = sfr_t_valid[_keep_t_1][_keep_final_t]
+
+print(
+    f"  common interval: t_c [{_t_c_overlap.min()/1e9:.4f}, {_t_c_overlap.max()/1e9:.4f}] Gyr, "
+    f"t_t range [{_t_t_valid_overlap.min()/1e9:.4f}, {_t_t_valid_overlap.max()/1e9:.4f}] Gyr"
+)
+
+fig, (ax, ax_r), ratio = V.sweep_fig(
+    [("delayed-τ", _t_c_overlap / 1e9, _sfr_c_overlap, _t_t_valid_overlap / 1e9, _sfr_t_valid_overlap)],
     ref_label="pcigale",
-    label_t="tengri",
+    title="§2 τ-delayed SFH (τ=1 Gyr, age=5 Gyr)",
+    xlabel="Cosmic age since SF onset [Gyr]",
+    ylabel=r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]",
     xlim=(0, 5),
+    logy=False,
 )
 ax.axvline(1.0, color="gray", linestyle=":", alpha=0.6, label=r"$\tau$ = 1 Gyr")
 ax.legend(fontsize=9)
-ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
 fig.tight_layout()
 save_fig("cigale_02_sfh_tau.png")
 
@@ -578,26 +601,49 @@ _st_2exp = _m_2exp.predict_state({})
 _lbt_2exp = np.asarray(_st_2exp.derived["sfh_grid_lbt_yr"])
 _sfr_2exp = np.asarray(_st_2exp.derived["sfr_history"])
 _t_2exp = (_age_gyr_2exp - _lbt_2exp / 1e9) * 1e9  # cosmic age since SF onset [yr]
-_idx2 = np.argsort(_t_2exp)
-_mass_2exp = float(np.trapezoid(_sfr_2exp[_idx2], _t_2exp[_idx2]))
-print(f"tengri pipeline ∫SFR dt = {_mass_2exp:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
-_sfr_shape_report("§2 sfh2exp", t_c2, sfr_c2, _t_2exp, _sfr_2exp, _age_gyr_2exp)
+# Restrict to the epoch the galaxy exists: keep only samples with _t_2exp >= 0
+_keep_2exp = _t_2exp >= 0
+_t_2exp_valid = _t_2exp[_keep_2exp]
+_sfr_2exp_valid = _sfr_2exp[_keep_2exp]
+assert _t_2exp_valid.min() >= 0, f"negative cosmic age: min={_t_2exp_valid.min()}"
+_idx2 = np.argsort(_t_2exp_valid)
+_mass_2exp = float(np.trapezoid(_sfr_2exp_valid[_idx2], _t_2exp_valid[_idx2]))
+print(f"tengri ∫SFR dt = {_mass_2exp:.4f} M☉  (log_total_mass=0 → 1.0000)")
+_sfr_shape_report("§2 sfh2exp", t_c2, sfr_c2, _t_2exp_valid, _sfr_2exp_valid, _age_gyr_2exp)
 
-fig, ax, ax_r, ratio = V.overlay_ratio_fig(
-    t_c2 / 1e9,
-    sfr_c2,
-    _t_2exp / 1e9,
-    _sfr_2exp,
-    xlabel="Cosmic age since SF onset [Gyr]",
-    title="§2 sfh2exp (main + burst, age=10 Gyr)",
+# Both arms on their common interval.
+_t2_min_broad = max(t_c2.min() / 1e9, _t_2exp_valid.min() / 1e9)
+_t2_max_broad = min(t_c2.max() / 1e9, _t_2exp_valid.max() / 1e9)
+_keep2_c_1 = (t_c2 / 1e9 >= _t2_min_broad) & (t_c2 / 1e9 <= _t2_max_broad)
+_keep2_t_1 = (_t_2exp_valid / 1e9 >= _t2_min_broad) & (_t_2exp_valid / 1e9 <= _t2_max_broad)
+
+_t2_c_temp = (t_c2 / 1e9)[_keep2_c_1]
+_t2_t_temp = (_t_2exp_valid / 1e9)[_keep2_t_1]
+_t2_min_aligned = max(_t2_c_temp.min(), _t2_t_temp.min())
+_keep2_final_c = (_t2_c_temp >= _t2_min_aligned)
+_keep2_final_t = (_t2_t_temp >= _t2_min_aligned)
+_t_c2_overlap = t_c2[_keep2_c_1][_keep2_final_c]
+_sfr_c2_overlap = sfr_c2[_keep2_c_1][_keep2_final_c]
+_t_2exp_valid_overlap = _t_2exp_valid[_keep2_t_1][_keep2_final_t]
+_sfr_2exp_valid_overlap = _sfr_2exp_valid[_keep2_t_1][_keep2_final_t]
+
+print(
+    f"  common interval: t_c2 [{_t_c2_overlap.min()/1e9:.4f}, {_t_c2_overlap.max()/1e9:.4f}] Gyr, "
+    f"_t_2exp range [{_t_2exp_valid_overlap.min()/1e9:.4f}, {_t_2exp_valid_overlap.max()/1e9:.4f}] Gyr"
+)
+
+fig, (ax, ax_r), ratio = V.sweep_fig(
+    [("sfh2exp", _t_c2_overlap / 1e9, _sfr_c2_overlap, _t_2exp_valid_overlap / 1e9, _sfr_2exp_valid_overlap)],
     ref_label="pcigale",
-    label_t="tengri",
+    title="§2 sfh2exp (main + burst, age=10 Gyr)",
+    xlabel="Cosmic age since SF onset [Gyr]",
+    ylabel=r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]",
     xlim=(0, 10),
+    logy=False,
     ratio_ylim=(0.8, 1.2),
 )
 ax.axvline(_age_gyr_2exp - 0.3, color="gray", linestyle=":", alpha=0.6, label="burst onset")
 ax.legend(fontsize=9)
-ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
 ax.set_ylim(bottom=0.0)
 fig.tight_layout()
 save_fig("cigale_02_sfh2exp.png")
@@ -1404,7 +1450,10 @@ for _slope_ism in (-0.4, -0.7, -1.0):
     )
 
 fig, (ax, ax_r), _ratios_5b2 = V.sweep_fig(
-    _cases_5b_2pl, ref_label="CIGALE", title="§5b 2powerlaws slope_ISM sweep", xlim=(1e3, 1e4)
+    _cases_5b_2pl, ref_label="CIGALE", title="§5b 2powerlaws slope_ISM sweep", xlim=(1e3, 1e4),
+    cmap="Oranges",
+    values=[-0.4, -0.7, -1.0],
+    param_label="slope_ISM",
 )
 fig.tight_layout()
 save_fig("cigale_05c_2powerlaws_slope.png")

@@ -336,6 +336,33 @@
 
 ### Changed
 
+- Reproduction parameter sweeps encode the swept value in a single-hue
+  sequential colormap with a colorbar, replacing the categorical color cycle
+  that gave a temperature sweep three unrelated hues and repeated a color
+  outright past ten cases. Line style continues to carry which code is which,
+  so color is free to carry magnitude; sweeps whose cases are model families
+  rather than values of one parameter (casey / schreiber / dale) keep the
+  categorical colors, since a ramp there would imply an ordering that does not
+  exist.
+- The three star formation history comparisons drew nothing. `sfh_grid_lbt_yr`
+  spans the full cosmic lookback, so `age - lbt` ran negative for every sample
+  older than the galaxy — to -8.8 Gyr on a 5 Gyr delayed-tau — and the two arms
+  shared no interval. Both arms now sit on their common interval.
+- `sweep_fig` and `overlay_ratio_fig` refuse a case whose two arms share no
+  region where both are positive, naming both ranges, instead of plotting a
+  ratio against interpolation zero-fill. Three residuals turned out to be this
+  artefact rather than a disagreement between codes.
+- Reproduction comparisons that were not comparing like with like are matched:
+  the AGN torus covering factor `agn_torus_frac` is pinned wherever the
+  reference emits the reprocessed luminosity over the full sphere (CIGALE,
+  Synthesizer, ProSpect and now Prospector/FSPS), since its 0.5 default halves
+  the tengri arm and accounted for most of a 0.45-0.24x span; IR template
+  comparisons normalize on a common wavelength rather than each arm's own peak;
+  and off-grid sweep nodes are moved onto nodes both codes tabulate.
+- Reproduction sweep figures frame their y-axis on the data. `sweep_fig` gained
+  the `dyn_range` floor `overlay_ratio_fig` already had, so a sweep covering
+  three decades is no longer drawn on an axis spanning eighteen.
+
 - Physics reproduction comparisons move from side-by-side panels onto one
   shared axis with a tengri/reference ratio panel and a tolerance band,
   drawn via the unified `overlay_ratio_fig` function in

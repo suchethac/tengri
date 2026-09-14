@@ -1014,6 +1014,42 @@ def print_line_table(
 # ---------------------------------------------------------------------------
 
 
+# Above this ratio between the largest and smallest swept value, ramp
+# positions are taken in log space so the pale end does not collapse.
+_RAMP_LOG_SPAN = 5.0
+
+def _ascending(x, y):
+    """Return ``(x, y)`` reordered so ``x`` increases.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Sample axis — wavelength [Angstrom] or time [yr or Gyr].
+    y : array_like, shape (n,)
+        Values at ``x``.
+
+    Returns
+    -------
+    x_sorted : ndarray, shape (n,)
+        ``x`` in increasing order.
+    y_sorted : ndarray, shape (n,)
+        ``y`` permuted to match.
+
+    Notes
+    -----
+    :func:`numpy.interp` requires an increasing sample axis and does not verify
+    it; given a descending one it returns the fill value at every point. A
+    cosmic-age axis built from a lookback-time grid descends, so both arms are
+    reordered here rather than at each call site.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    if x.size > 1 and x[0] > x[-1]:
+        order = np.argsort(x)
+        return x[order], y[order]
+    return x, y
+
+
 def sweep_fig(
     cases: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
     *,
@@ -1026,7 +1062,11 @@ def sweep_fig(
     ratio_ylim: tuple[float, float] = (0.5, 1.5),
     band: tuple[float, float] = (0.9, 1.1),
     logy: bool = True,
+    dyn_range: float = 1e-5,
     figsize: tuple[float, float] = (8.5, 6.0),
+    cmap: str | None = "Blues",
+    values: list[float] | None = None,
+    param_label: str | None = None,
 ) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes], dict[str, np.ndarray]]:
     """Overlay multiple SED comparisons with a ratio panel, one figure.
 
@@ -1034,6 +1074,12 @@ def sweep_fig(
     the tengri curve as a thin dashed line. Tengri is regridded onto the
     reference wavelength grid via :func:`np.interp`. The bottom panel displays
     the tengri/reference ratio for each case, with a shaded tolerance band.
+
+    When ``cmap`` is provided, the swept parameter's value encodes the curve
+    colour as a sequential ramp (light for low, dark for high), while line
+    style (solid for reference, dashed for tengri) carries code identity.
+    The ratio curves carry the same colour as their cases. When ``values`` and
+    ``param_label`` are both given, a colourbar replaces the per-case legend.
 
     Parameters
     ----------
@@ -1067,10 +1113,30 @@ def sweep_fig(
         y-limits on the ratio panel. Default (0.5, 1.5).
     band : tuple, optional
         Shaded tolerance band (lo, hi) on the ratio panel. Default (0.9, 1.1).
+    dyn_range : float, optional
+        Fraction of the brightest plotted value at which the y-axis floor is
+        placed, so a sweep covering a few decades is not drawn on an axis
+        spanning many. Default ``1e-5``. Applies only when ``logy`` is True.
     logy : bool, optional
         Use log scale on top panel y-axis. Default True.
     figsize : tuple, optional
         Figure size (width, height). Default (8.5, 6.0).
+    cmap : str | None, optional
+        Single-hue sequential colourmap name (e.g., ``"Blues"``, ``"Oranges"``,
+        ``"Reds"``, ``"Greys"``, ``"Purples"``, ``"Greens"``), or ``None`` to
+        use matplotlib's default discrete cycle. Default: ``"Blues"``. Set to
+        ``None`` when cases are model *families* rather than values of one
+        parameter.
+    values : list of float | None, optional
+        Numeric values of the swept parameter in case order, one per case.
+        When given with ``param_label``, each case's colour is placed at its
+        value's position in the range [min, max], so unequal steps read
+        correctly. Default: ``None`` (case index used instead).
+    param_label : str | None, optional
+        Parameter name and units (e.g., ``"temperature [K]"``). When both
+        ``values`` and ``param_label`` are given, a colourbar is drawn
+        instead of a per-case legend; the colourbar becomes the legend for
+        the continuous encoding. Default: ``None``.
 
     Returns
     -------
@@ -1080,25 +1146,79 @@ def sweep_fig(
         Top (main SED) and bottom (ratio) axes.
     ratios : dict
         Mapping case label to the ratio array (tengri/reference) on w_ref.
+
+    Raises
+    ------
+    ValueError
+        If any case has no overlapping region where both arms are positive.
     """
+    from matplotlib.colors import LogNorm, Normalize
+
+    get_cmap = plt.get_cmap
+
     fig, (ax, ax_r) = plt.subplots(
         2, 1, figsize=figsize, sharex=True, gridspec_kw={"height_ratios": [3, 1]}
     )
 
     ratios: dict[str, np.ndarray] = {}
-    colors = [f"C{i}" for i in range(len(cases))]
+
+    # Determine colours
+    n_cases = len(cases)
+    if cmap is None:
+        # Use default categorical colours
+        colors = [f"C{i}" for i in range(n_cases)]
+    else:
+        # Use sequential colourmap
+        colormap_obj = get_cmap(cmap)
+        if values is not None:
+            # Map values to colour positions in [0.25, 0.95]
+            values_arr = np.asarray(values, dtype=float)
+            val_min, val_max = values_arr.min(), values_arr.max()
+            # A parameter spanning several factors is positioned by its logarithm:
+            # linear placement crushes every small value into the pale end of the
+            # ramp, where neighbours differ by less than the eye resolves.
+            log_scaled = bool(val_min > 0 and val_max / val_min >= _RAMP_LOG_SPAN)
+            if val_max > val_min:
+                if log_scaled:
+                    lo, hi = np.log10(val_min), np.log10(val_max)
+                    norm_values = (np.log10(values_arr) - lo) / (hi - lo)
+                else:
+                    norm_values = (values_arr - val_min) / (val_max - val_min)
+            else:
+                # All values identical
+                norm_values = np.full_like(values_arr, 0.5)
+            # Map to [0.25, 0.95] ramp
+            ramp_positions = 0.25 + 0.7 * norm_values
+            colors = [colormap_obj(pos) for pos in ramp_positions]
+        else:
+            # Distribute evenly in [0.25, 0.95]
+            ramp_positions = np.linspace(0.25, 0.95, n_cases)
+            colors = [colormap_obj(pos) for pos in ramp_positions]
 
     for (label, w_ref, L_ref, w_t, L_t), color in zip(cases, colors):
         # Regrid tengri onto reference wavelength grid
+        w_ref, L_ref = _ascending(w_ref, L_ref)
+        w_t, L_t = _ascending(w_t, L_t)
         L_t_on_ref = np.interp(w_ref, w_t, L_t, left=0.0, right=0.0)
         ratio = np.divide(L_t_on_ref, L_ref, where=(L_ref > 0), out=np.full_like(L_ref, np.nan))
         ratios[label] = ratio
 
+        # Check that both arms have overlapping positive region
+        pos_ref = L_ref > 0
+        pos_t = L_t_on_ref > 0
+        overlap_positive = pos_ref & pos_t
+        if not np.any(overlap_positive):
+            raise ValueError(
+                f"No overlapping positive region for case {label!r}. "
+                f"Reference range: [{w_ref.min():.4e}, {w_ref.max():.4e}], "
+                f"Tengri range: [{w_t.min():.4e}, {w_t.max():.4e}]. "
+                f"After regridding, no points have both L_ref > 0 and L_t > 0."
+            )
+
         # Transform x-axis if needed
         x_ref = w_ref if x_of_wave is None else x_of_wave(w_ref)
 
-        # Top panel: reference solid line, tengri dashed line
-        pos_ref = L_ref > 0
+        # Top panel: reference solid line, tengri dashed line (both in case colour)
         ax.plot(
             x_ref[pos_ref],
             L_ref[pos_ref],
@@ -1107,7 +1227,6 @@ def sweep_fig(
             linewidth=2.2,
             alpha=0.45,
         )
-        pos_t = L_t_on_ref > 0
         ax.plot(
             x_ref[pos_t],
             L_t_on_ref[pos_t],
@@ -1124,24 +1243,49 @@ def sweep_fig(
     ax.set_xscale("log")
     if logy:
         ax.set_yscale("log")
+        _finite = [
+            v
+            for _, _, L_ref_i, _, L_t_i in cases
+            for v in (np.asarray(L_ref_i), np.asarray(L_t_i))
+        ]
+        _pos = np.concatenate([a[np.isfinite(a) & (a > 0)].ravel() for a in _finite])
+        if _pos.size:
+            _ymx = float(_pos.max())
+            ax.set_ylim(_ymx * dyn_range, _ymx * 2.0)
     if xlim is not None:
         ax.set_xlim(*xlim)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    ax.legend(fontsize=9, loc="best")
     ax.grid(True, alpha=0.3)
 
-    # Add legend note about solid vs dashed
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        ax.legend(
-            handles,
-            labels,
-            fontsize=9,
-            loc="best",
-            title=f"solid = {ref_label}, dashed = tengri",
-            title_fontsize=8,
+    # Legend or colourbar
+    if param_label is not None and values is not None:
+        # Add a colourbar instead of a legend
+        _v = np.asarray(values, dtype=float)
+        _log_cb = bool(_v.min() > 0 and _v.max() / _v.min() >= _RAMP_LOG_SPAN)
+        sm = plt.cm.ScalarMappable(
+            cmap=get_cmap(cmap) if cmap is not None else "viridis",
+            norm=(
+                LogNorm(vmin=_v.min(), vmax=_v.max())
+                if _log_cb
+                else Normalize(vmin=_v.min(), vmax=_v.max())
+            ),
         )
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, label=param_label, pad=0.02)
+        cbar.ax.tick_params(labelsize=8)
+    else:
+        # Per-case legend
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(
+                handles,
+                labels,
+                fontsize=9,
+                loc="best",
+                title=f"solid = {ref_label}, dashed = tengri",
+                title_fontsize=8,
+            )
 
     # Configure ratio panel
     ax_r.axhspan(*band, color="0.85", zorder=0)
@@ -1463,6 +1607,8 @@ def overlay_ratio_fig(
     L_t = np.asarray(L_t)
 
     # Regrid tengri onto reference grid using linear interpolation
+    wave_ref, L_ref = _ascending(wave_ref, L_ref)
+    wave_t, L_t = _ascending(wave_t, L_t)
     L_t_on_ref = np.interp(wave_ref, wave_t, L_t, left=0.0, right=0.0)
 
     # Compute ratio: NaN where reference is not positive
@@ -1472,6 +1618,18 @@ def overlay_ratio_fig(
         where=(L_ref > 0),
         out=np.full_like(L_ref, np.nan),
     )
+
+    # Guard: check that both arms have overlapping positive region
+    pos_ref = L_ref > 0
+    pos_t = L_t_on_ref > 0
+    overlap_positive = pos_ref & pos_t
+    if not np.any(overlap_positive):
+        raise ValueError(
+            f"No overlapping positive region for overlay_ratio_fig. "
+            f"Reference wavelength range: [{wave_ref.min():.4e}, {wave_ref.max():.4e}], "
+            f"Tengri wavelength range: [{wave_t.min():.4e}, {wave_t.max():.4e}]. "
+            f"After regridding, no points have both L_ref > 0 and L_t > 0."
+        )
 
     # Transform x-axis if needed
     x = wave_ref if x_of_wave is None else x_of_wave(wave_ref)

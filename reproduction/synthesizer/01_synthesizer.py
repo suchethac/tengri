@@ -1228,6 +1228,9 @@ fig, (ax, ax_r), _ = V.sweep_fig(
     xlim=(900.0, 7000.0),
     logy=True,
     ratio_ylim=(0.0, 3.0),
+    cmap="Oranges",
+    values=[-3.0, -2.0, -1.5],
+    param_label="log U",
 )
 save_fig("synthesizer_08b_neb_logu_z_fesc.png")
 
@@ -2002,7 +2005,10 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in _torus9i_cases:
     _assert_comparable(_L_ref, _L_t, name=f"§9i torus {_label}")
 
 fig, (ax, ax_r), _ = V.sweep_fig(
-    _torus9i_cases, ref_label="Synthesizer", title="§9i Torus temperature sweep", xlim=(1e3, 1e7)
+    _torus9i_cases, ref_label="Synthesizer", title="§9i Torus temperature sweep", xlim=(1e3, 1e7),
+    cmap="Reds",
+    values=[500.0, 1000.0, 1500.0],
+    param_label="T [K]",
 )
 save_fig("synthesizer_09i_torus_temp.png")
 for label, w_ref, L_ref, w_t, L_t in _torus9i_cases:
@@ -2083,6 +2089,9 @@ fig, (ax, ax_r), _ = V.sweep_fig(
     xlim=(1000.0, 10000.0),
     logy=True,
     ratio_ylim=(0.0, 2.0),
+    cmap="Purples",
+    values=[0.05, 0.1, 0.3],
+    param_label="covering factor",
 )
 save_fig("synthesizer_09i_nlr_cf.png")
 
@@ -2162,6 +2171,7 @@ fig, (ax, ax_r), _ = V.sweep_fig(
     ylabel=r"$T(\lambda, z)$",
     logy=False,
     ratio_ylim=(0.0, 2.0),
+    cmap=None,
 )
 save_fig("synthesizer_12b_z_sweep.png")
 
