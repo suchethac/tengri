@@ -114,7 +114,27 @@ DEFAULT_RETUNE_ATTEMPTS = 3
 #: (a truncated metallicity posterior propagates into correlated quantities
 #: such as stellar mass), not a sampler question, and it is deliberately left
 #: to the owner rather than changed silently mid-grid.
-RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2}
+RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2, "I": 2}
+#: Config I joined the cap on 2026-09-14, on the same evidence and the same
+#: ruling. Cell 79/I, unprofiled, same seed throughout:
+#:
+#:     attempt 1  target 0.85   38 min   2 divergences   rhat 1.0013
+#:     attempt 2  target 0.95   50 min   4 divergences   rhat 1.0006
+#:     attempt 3  target 0.99   >92 min  (abandoned as not worth the wall clock)
+#:
+#: Two things are visible there. Divergences are NOT monotone in
+#: target_accept -- raising it made them worse -- and each rung costs more than
+#: the last, because a smaller step size means deeper trees. So the third rung
+#: is paying roughly 2.4x attempt 1's wall clock for a quantity that is moving
+#: the wrong way. At ~3 h per exhausted cell this configuration alone projects
+#: near 60 h of the grid.
+#:
+#: This does not relax the adoption bar. A cell that clears 0 divergences and
+#: rhat < 1.01 is still adopted at whichever rung clears it -- Config II passed
+#: at rung 2 -- and a cell that clears nothing still writes its best attempt
+#: with adoption_pass=False, so nothing is lost scientifically. What is dropped
+#: is only the third attempt, which has not succeeded anywhere in this grid's
+#: data.
 
 #: Keys the NPZ carries beside the sampled parameters, one array each.
 #: ``dust_tau`` is the configuration's dust optical depth whichever parameter
