@@ -283,10 +283,11 @@ class TestGuards:
         of fitter.data_type (spectroscopy or joint fits were misdiagnosed), and always
         blamed an AGN continuum even when the stochastic SFH was the real cause. The
         measured deviations do not distinguish the two: O(1) for a mass-independent
-        component, O(1e-8) for stochastic-SFH conditioning. The probe evaluates only
-        one parameter set (every other free parameter at its prior median, stochastic
-        field latents at zero), so the message must say so and present both causes
-        rather than naming one confidently.
+        component, O(1e-5) for the coarse age kernel. The alternative cause is the coarse
+        age kernel (age_kernel="dsps"), measured to cost roughly 1e-5 of mass-linearity.
+        The probe evaluates only one parameter set (every other free parameter at its prior
+        median, stochastic field latents at zero), so the message must say so and present
+        both causes rather than naming one confidently.
         """
         model = _agn_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
@@ -310,11 +311,9 @@ class TestGuards:
             f"reason contains old hardcoded blame phrase: {reason}"
         )
 
-        # 3. The reason must mention BOTH candidate causes: AGN continuum and conditioning.
+        # 3. The reason must mention BOTH candidate causes: AGN continuum and age kernel.
         assert "AGN continuum" in reason, f"reason does not mention AGN continuum: {reason}"
-        assert "conditioning" in reason, (
-            f"reason does not mention conditioning in the mass direction: {reason}"
-        )
+        assert "dsps" in reason, f"reason does not mention the coarse age kernel (dsps): {reason}"
 
         # 4. The reason must still report the measured number and tolerance.
         assert "max|ratio(+1 dex) - 10|" in reason, (

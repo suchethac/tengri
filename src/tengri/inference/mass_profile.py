@@ -378,8 +378,12 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
             "median, stochastic field latents at zero -- so this measures linearity there, not "
             "everywhere. A deviation of order 1 indicates a mass-independent additive component "
             "such as an AGN continuum; a deviation within a few orders of the tolerance more "
-            "often indicates conditioning in the mass direction, which a stochastic SFH can "
-            "produce without any additive component being present."
+            'often indicates the coarse age kernel instead. Setting age_kernel="dsps" '
+            "integrates the SFH on the SSP lookback grid rather than a refined one (the default "
+            '"cic" is 16x-refined). That costs mass-linearity -- typically well below 1e-5, but '
+            "reaching roughly 1e-3 at the sharpest SFH shapes in the prior. Setting field=True "
+            "forces that kernel (issue #1470), so a stochastic SFH reaches it without asking. A "
+            "refusal at this magnitude does not by itself imply any additive component."
         ), {}
 
     return None, {"mass_name": mass_name, "mass_prior": mass_prior, "bounds": bounds}

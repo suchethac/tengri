@@ -1697,8 +1697,11 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
   `max|ratio(+1 dex) - 10| < max(1e-8, 1e4 * eps(dtype))`). A deviation of order 1
   indicates a mass-independent additive component (e.g. an unmasked AGN continuum on
   either channel); a deviation within a few orders of the tolerance more often indicates
-  conditioning in the mass direction, which a stochastic SFH can produce without any
-  additive component.
+  the coarse age kernel instead. `age_kernel="dsps"` integrates the SFH on the SSP lookback
+  grid rather than a refined one (the default `"cic"` is 16x-refined). That costs mass-linearity:
+  typically well below 1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
+  `field=True` forces that kernel (issue #1470), so a stochastic SFH reaches it without asking.
+  A refusal at this magnitude does not by itself imply any additive component.
 
 Additionally, at `Fitter.run()` (lines 467–483 of
 `src/tengri/inference/mass_profile.py:resolve_profile_mass_for_method`):
