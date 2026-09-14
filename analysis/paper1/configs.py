@@ -121,7 +121,18 @@ def config_III(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
 
 
 def config_IV(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
-    """Config IV: Constant star formation rate, Cardelli MW extinction, DL07."""
+    """Config IV: Constant star formation rate, Cardelli MW extinction, DL07,
+    CUE nebular at fixed logU=-2.5.
+
+    Nebular emission is supplied by CUE rather than the SSP library. An earlier
+    version declared neb={"type": "ssp"}, which selects BakedInBackend -- but
+    that backend returns a zero array on the assumption the library carries the
+    emission, and fsps_mist_c3k_a_chabrier does not: its templates measure
+    H-alpha/continuum = 0.99 (slight stellar absorption) against 2.93 for the
+    wNE grid Configuration II uses. So the model had no nebular emission at all,
+    silently. The declaration that selected it is also the documented way to
+    silence BakedInBackend's only advisory, so nothing warned.
+    """
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
@@ -139,7 +150,7 @@ def config_IV(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "Rv": Uniform(2.5, 5.5),
         },
         dust_emission={"type": "dl07", "all_params": Fixed(DEFAULT)},
-        neb={"type": "ssp"},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Fixed(-2.5)},
         redshift=Fixed(z),
         igm={"type": "inoue"},
         approx=WavePrecomp(),
@@ -253,7 +264,7 @@ CONFIGS = {
     },
     "VI": {
         "key": "VI",
-        "name": "exponential rise",
+        "name": "Dirichlet nonparametric",
         "ssp_grid": "bpss_stars_c3k_a_chabrier",
         "n_free": None,
     },
