@@ -122,7 +122,7 @@ def plot_panel_a(ax, bench_data=None):
 
 
 def plot_panel_b(ax, accuracy_data):
-    """Plot LUT accuracy vs redshift (panel b) — all bands colored by effective wavelength."""
+    """Plot LUT accuracy vs redshift (panel b) — envelope of band errors with worst-case band highlighted."""
     measurements = accuracy_data.get("measurements", {})
     filters_list = accuracy_data.get("metadata", {}).get("filters", [])
 
@@ -137,28 +137,11 @@ def plot_panel_b(ax, accuracy_data):
         )
         return
 
-    # Effective wavelengths (Angstrom) for each filter
-    wave_eff = {
-        "galex_fuv": 1528,
-        "galex_nuv": 2271,
-        "sdss_u": 3540,
-        "sdss_g": 4770,
-        "sdss_r": 6231,
-        "sdss_i": 7625,
-        "sdss_z": 9134,
-        "2mass_j": 12390,
-        "2mass_h": 16496,
-        "2mass_ks": 21666,
-        "wise_w1": 33526,
-        "wise_w2": 46028,
-    }
-
     # Extract z values and organize errors by band
     z_values = sorted([float(z) for z in measurements])
     z_array = np.array(z_values)
 
     band_errors = {}
-    band_errors_32 = {}
 
     for z_str in measurements:
         z_meas = measurements[z_str]
@@ -166,92 +149,56 @@ def plot_panel_b(ax, accuracy_data):
             if band in z_meas:
                 if band not in band_errors:
                     band_errors[band] = []
-                    band_errors_32[band] = []
                 band_errors[band].append(z_meas[band].get("err_default_pct", np.nan))
-                band_errors_32[band].append(z_meas[band].get("err_n32_pct", np.nan))
 
-    # Create colormap from blue (FUV) to red (W2) based on wavelength
-    from matplotlib.colors import Normalize
+    # Compute envelope (min, median, max) across all bands at each redshift
+    all_errors_at_z = []
+    for z_idx, z_str in enumerate(sorted([float(z) for z in measurements])):
+        z_str_key = str(float(z_str))
+        errors_at_z = []
+        for band in filters_list:
+            if band in band_errors and z_idx < len(band_errors[band]):
+                err = band_errors[band][z_idx]
+                if not np.isnan(err):
+                    errors_at_z.append(err)
+        if errors_at_z:
+            all_errors_at_z.append(errors_at_z)
 
-    wavelengths = np.array([wave_eff.get(band, 0) for band in filters_list])
-    norm = Normalize(vmin=wavelengths.min(), vmax=wavelengths.max())
-    cmap = plt.get_cmap("viridis")
+    # Compute percentiles at each z
+    if all_errors_at_z:
+        min_errors = np.array([np.min(e) for e in all_errors_at_z]) / 100.0
+        median_errors = np.array([np.median(e) for e in all_errors_at_z]) / 100.0
+        max_errors = np.array([np.max(e) for e in all_errors_at_z]) / 100.0
 
-    # Find worst flux-carrying band (galex_fuv has largest errors at high z)
-    worst_band = "galex_fuv"
+        # Shaded region for envelope (min to max)
+        ax.fill_between(z_array, min_errors, max_errors, alpha=0.25, color="#4a90e2", label="Band range")
 
-    # Plot all bands as thin lines, colored by wavelength
-    plot_handles = []
-    plot_labels = []
-    for band in filters_list:
-        if band in band_errors:
-            errors = np.array(band_errors[band]) / 100.0  # Convert percent to fraction
+        # Median line
+        (line_median,) = ax.plot(z_array, median_errors, "-", linewidth=2.0, alpha=0.85, color="#2e5c8a", label="Median")
 
-            # Get color from colormap based on wavelength
-            color = cmap(norm(wave_eff.get(band, 0)))
+        # Highlight worst-case band with a darker line
+        worst_band = "galex_fuv" if "galex_fuv" in band_errors else filters_list[0]
+        if worst_band in band_errors:
+            worst_errors = np.array(band_errors[worst_band]) / 100.0
+            # Format band name for astronomers (e.g. galex_fuv -> GALEX FUV)
+            band_fmt = worst_band.replace("galex_fuv", "GALEX FUV").replace("galex_nuv", "GALEX NUV")
+            if band_fmt == worst_band:  # No replacement happened
+                band_fmt = worst_band.replace("_", " ").upper()
+            (line_worst,) = ax.plot(z_array, worst_errors, "--", linewidth=1.5, alpha=0.7, color="#e85d75", label=f"Worst: {band_fmt}")
 
-            if band == worst_band:
-                # Thicker line for worst band
-                (line,) = ax.plot(
-                    z_array,
-                    errors,
-                    "-",
-                    linewidth=2.5,
-                    alpha=0.85,
-                    color=color,
-                )
-                plot_handles.insert(0, line)
-                plot_labels.insert(0, band)
-            else:
-                # Thin lines for other bands
-                (line,) = ax.plot(
-                    z_array,
-                    errors,
-                    "-",
-                    linewidth=0.8,
-                    alpha=0.65,
-                    color=color,
-                )
-                plot_handles.append(line)
-                plot_labels.append(band)
-
-    # n_subbands=32 for worst band (dashed line, same color as default)
-    if worst_band in band_errors_32:
-        errors_32 = np.array(band_errors_32[worst_band]) / 100.0  # Convert percent to fraction
-        worst_color = cmap(norm(wave_eff.get(worst_band, 0)))
-        (line_32,) = ax.plot(
-            z_array,
-            errors_32,
-            "--",
-            linewidth=1.5,
-            alpha=0.7,
-            color=worst_color,
-        )
-        plot_handles.insert(1, line_32)
-        plot_labels.insert(1, f"{worst_band}, K=32")
-
-    # 1% reference line
-    ax.axhline(y=0.01, color="red", linestyle="--", linewidth=0.8, alpha=0.5)
+    # 1% and 0.1% reference lines
+    ax.axhline(y=0.01, color="red", linestyle="--", linewidth=0.8, alpha=0.5, label="1% threshold")
+    ax.axhline(y=0.001, color="orange", linestyle=":", linewidth=0.8, alpha=0.4, label="0.1% threshold")
 
     # Styling
     ax.set_yscale("log")
     ax.set_xlabel("Redshift", fontsize=10)
-    ax.set_ylabel(r"Relative error $|F_{\text{LUT}}/F_{\text{exact}} - 1|$", fontsize=10)
-    ax.set_xlim(-0.1, 3.2)
+    ax.set_ylabel("Relative error", fontsize=10)
+    ax.set_xlim(0.5, 3.2)
     ax.set_ylim(1e-5, 2)
 
-    # Legend with all bands, outside plot area
-    ax.legend(
-        plot_handles,
-        plot_labels,
-        fontsize=7.5,
-        loc="center left",
-        bbox_to_anchor=(1.02, 0.5),
-        framealpha=0.95,
-        ncol=1,
-        title="Band (K=default)",
-        title_fontsize=7.5,
-    )
+    # Legend
+    ax.legend(fontsize=8, loc="upper left", framealpha=0.95)
 
     ax.grid(True, alpha=0.3, which="both")
 

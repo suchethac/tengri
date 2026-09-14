@@ -28,43 +28,46 @@ jax.config.update("jax_enable_x64", True)
 
 logger = logging.getLogger(__name__)
 
-# Okabe-Ito colorblind-safe palette for samplers
+# Okabe-Ito colorblind-safe palette — five distinct colors for all backends
+# Chosen to be visually distinct and remain distinguishable in grayscale print
 SAMPLER_COLORS = {
-    "mcmc_nuts": "#56B4E9",  # Sky blue (NUTS)
-    "mcmc_hmc": "#009E73",  # Green (HMC)
-    "laplace": "#888888",  # Mid-grey
+    "laplace": "#E69F00",       # Orange (Laplace)
+    "mcmc_nuts_fast": "#56B4E9", # Sky blue (NUTS)
+    "mcmc_hmc": "#009E73",      # Green (HMC)
+    "nss": "#D55E00",           # Red-orange (NSS)
 }
+# MAP is handled separately as black dashed line
 
-# Row order for figure (excluding mcmc which is duplicate of mcmc_nuts)
-ROW_ORDER = ("map", "laplace", "mcmc_nuts", "mcmc_hmc", "mcmc_raytrace")
+# Row order for figure
+ROW_ORDER = ("map", "laplace", "mcmc_nuts_fast", "mcmc_hmc", "nss")
 
 # Sampler budgets
 BUDGETS = {
     "map": "500 steps + 8 restarts",
     "laplace": "Gaussian",
-    "mcmc_nuts": "600+600x2",
+    "mcmc_nuts_fast": "600+600x2",
     "mcmc_hmc": "200+300x4, L=50",
-    "mcmc_raytrace": "400+400x2, step=0.05",
+    "nss": "live points = 400",
 }
 
 LABELS = {
     "map": "MAP",
     "laplace": "Laplace",
-    "mcmc_nuts": "NUTS",
+    "mcmc_nuts_fast": "NUTS",
     "mcmc_hmc": "HMC",
-    "mcmc_raytrace": "Ray Tracing",
+    "nss": "NSS",
 }
 
 
 def compute_derived_quantities(
     sweep_dir: Path, output_path: Path, gal_id: int = 13097
 ) -> dict[str, np.ndarray]:
-    """Compute per-draw log M* and log SFR from sweep NPZs.
+    """Load per-draw log M* and log SFR from sweep NPZs.
 
     Parameters
     ----------
     sweep_dir : Path
-        Directory containing backend_sweep/*.npz files
+        Directory containing backend_sweep_pin/*.npz files
     output_path : Path
         Where to cache results (fig07_derived_draws.npz)
     gal_id : int
@@ -73,107 +76,36 @@ def compute_derived_quantities(
     Returns
     -------
     dict
-        Keys: "mcmc_nuts", "mcmc_hmc", "laplace", "map" -> per-draw log10 values
+        Keys: "mcmc_nuts_fast", "mcmc_hmc", "laplace", "map", "nss" -> per-draw log10 values
     """
     if output_path.exists():
         logger.info(f"Loading cached derived quantities from {output_path}")
         npz = np.load(output_path, allow_pickle=False)
         return {k: npz[k] for k in npz.files}
 
-    logger.info("Computing per-draw derived quantities (cache miss)...")
+    logger.info("Loading per-draw derived quantities from NPZ files...")
 
-    import configs
-
-    import tengri
-
-    os.environ.setdefault("TENGRI_DATA_DIR", "/Users/suchethacooray/Projects/tengri/data")
-
-    # Load Config II for galaxy 13097
-    fits_dir = sweep_dir.parent / "fits"
-    json_path = fits_dir / f"{gal_id}_II.json"
-    npz_path = fits_dir / f"{gal_id}_II.npz"
-
-    with open(json_path) as f:
-        meta = json.load(f)
-    z = meta["z"]
-
-    # Load observation metadata
-    npz_data = np.load(npz_path, allow_pickle=True)
-    filt = [str(x) for x in npz_data["filter_names"]]
-    obs = tengri.Observation(photometry=tengri.Photometry.from_names(filt))
-
-    # Build Config II model
-    ssp = configs.load_ssp_for("II")
-    model = configs.config_II(ssp, obs, z)
-
-    # Identify free parameters (exclude derived)
-    derived_keys = {
-        "stellar_mass",
-        "sfr_100myr",
-        "sfr_10myr",
-        "dust_tau",
-        "dust_tau_name",
-        "sfh_lookback_time_yr",
-        "sfh_sfr_median",
-        "sfh_sfr_p16",
-        "sfh_sfr_p84",
-        "model_photometry_median",
-        "model_photometry_p16",
-        "model_photometry_p84",
-        "obs_fnu",
-        "obs_sigma",
-        "filter_names",
-    }
-    param_keys = [k for k in npz_data.files if k not in derived_keys]
-
-    # JIT-compile predict_properties (mark names as static)
-    predict_fn = jax.jit(model.predict_properties, static_argnames=("names",))
-
-    # Compute for each backend
+    # Load directly from NPZ files (already computed)
     results = {}
 
-    for backend in ["mcmc_nuts", "mcmc_hmc", "laplace", "map"]:
+    for backend in ["mcmc_nuts_fast", "mcmc_hmc", "laplace", "map", "nss"]:
         backend_npz_path = sweep_dir / f"{backend}.npz"
         if not backend_npz_path.exists():
             logger.warning(f"Skipping {backend}: NPZ not found")
             continue
 
-        backend_npz = np.load(backend_npz_path, allow_pickle=True)
+        backend_npz = np.load(backend_npz_path, allow_pickle=False)
 
-        # Subsample parameters per-backend (each has different draw count)
-        if backend == "map":
-            # MAP: single point estimate
-            idx = [0]  # Just take the first (or only) entry
-        else:
-            # Compute indices per-backend from its own draw count
-            n_b = int(backend_npz["dust_tau_diff"].shape[0])
-            stride_b = max(1, n_b // 500)
-            idx = np.arange(0, n_b, stride_b)[:500]
+        # Extract log_stellar_mass and log_sfr_100myr (already computed)
+        log_mass = np.atleast_1d(np.asarray(backend_npz["log_stellar_mass"]))
+        log_sfr = np.atleast_1d(np.asarray(backend_npz["log_sfr_100myr"]))
 
-        log_mass_list = []
-        log_sfr_list = []
-
-        for i in idx:
-            # Extract parameters as floats
-            sample_dict = {k: float(backend_npz[k][i]) for k in param_keys}
-
-            # Compute derived quantities
-            props = predict_fn(
-                sample_dict,
-                names=("stellar_mass", "sfr_100myr"),
-            )
-            mass_formed = props["stellar_mass"]  # Linear Msun
-            sfr = props["sfr_100myr"]  # Linear Msun/yr
-
-            log_mass_list.append(np.log10(float(mass_formed)))
-            log_sfr_list.append(np.log10(float(np.maximum(sfr, 1e-10))))
-
-        results[backend] = np.array(log_mass_list)
-        results[f"{backend}_sfr"] = np.array(log_sfr_list)
+        results[backend] = log_mass
+        results[f"{backend}_sfr"] = log_sfr
 
         logger.info(
-            f"{backend}: {len(log_mass_list)} draws, "
-            f"M*={np.median(log_mass_list):.2f}, SFR={np.median(log_sfr_list):.2f}"
+            f"{backend}: {log_mass.shape[0]} draws, "
+            f"M*={np.median(log_mass):.2f}, SFR={np.median(log_sfr):.2f}"
         )
 
     # Cache results
@@ -184,7 +116,7 @@ def compute_derived_quantities(
     return results
 
 
-def load_results(sweep_dir: Path) -> dict[str, dict[str, Any]]:
+def load_results(sweep_dir: Path) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Load all method JSONs from sweep directory."""
     results = {}
     pending = []
@@ -208,7 +140,6 @@ def build_figure(
     pending: list[str],
     derived: dict[str, np.ndarray],
     tau_draws: dict[str, np.ndarray],
-    exclude_raytrace: bool = False,
     out_dir: Path | None = None,
 ):
     """Build two-column figure with marginals (KDE) and timing panel."""
@@ -221,99 +152,107 @@ def build_figure(
         r"$\tau_{\rm diff}$",
     ]
     x_axis_labels = [
-        r"$\log M_* / M_\odot$",
-        r"$\log {\rm SFR} / M_\odot\,{\rm yr}^{-1}$",
+        r"$\log_{10}(M_\star / M_\odot)$",
+        r"$\log_{10}({\rm SFR}_{100\,{\rm Myr}} / M_\odot\,{\rm yr}^{-1})$",
         r"$\tau_{\rm diff}$",
     ]
 
-    # Create figure with more space for x-labels and legend
-    fig = plt.figure(figsize=(7.0, 4.0))
-    gs = fig.add_gridspec(3, 2, width_ratios=[1, 0.9], hspace=0.65, wspace=0.35)
+    # Create figure with space for legend outside panels
+    fig = plt.figure(figsize=(8.0, 4.0))
+    gs = fig.add_gridspec(3, 2, width_ratios=[1, 1], hspace=0.65, wspace=0.4)
 
     axes_marginals = [fig.add_subplot(gs[i, 0]) for i in range(3)]
     ax_timing = fig.add_subplot(gs[:, 1])
 
-    # ========== Left: Marginal panels with KDE ==========
+    # ========== Left: Marginal panels with error bars (forest plot style) ==========
     for ax, qty, _label, x_label in zip(axes_marginals, quantities, q_labels, x_axis_labels):
         methods_in_order = [m for m in ROW_ORDER if m in results]
-        # Always exclude raytrace from marginals
-        methods_in_order = [m for m in methods_in_order if m != "mcmc_raytrace"]
-
-        # For log M* and SFR, we have computed per-draw values
-        # For tau_diff, load from original NPZ
+        y_positions = np.arange(len(methods_in_order))
 
         if qty == "log_stellar_mass":
-            # Plot KDE for each backend
-            for backend in ["mcmc_nuts", "mcmc_hmc", "laplace"]:
-                if backend not in derived:
-                    continue
+            # Collect data for axis limits
+            medians = []
+            lower_errors = []
+            upper_errors = []
 
-                draws = derived[backend]
-                if len(draws) == 0:
-                    continue
+            for backend in methods_in_order:
+                median = results[backend].get("log_stellar_mass")
+                p16 = results[backend].get("log_stellar_mass_16")
+                p84 = results[backend].get("log_stellar_mass_84")
+                if median is not None and p16 is not None and p84 is not None:
+                    medians.append(median)
+                    lower_errors.append(median - p16)
+                    upper_errors.append(p84 - median)
 
-                color = SAMPLER_COLORS.get(backend, "gray")
-                label = LABELS[backend]
+            if medians:
+                lo = np.min(medians) - np.max(lower_errors) - 0.05
+                hi = np.max(medians) + np.max(upper_errors) + 0.05
+            else:
+                lo, hi = 10.4, 10.7
 
-                # Compute KDE
-                kde = gaussian_kde(draws)
-                x_range = np.linspace(draws.min() - 0.3, draws.max() + 0.3, 200)
-                density = kde(x_range)
+            # Plot horizontal error bars
+            for i, backend in enumerate(methods_in_order):
+                median = results[backend].get("log_stellar_mass")
+                p16 = results[backend].get("log_stellar_mass_16")
+                p84 = results[backend].get("log_stellar_mass_84")
+                if median is not None and p16 is not None and p84 is not None:
+                    color = "black" if backend == "map" else SAMPLER_COLORS.get(backend, "gray")
+                    linestyle = "--" if backend == "map" else "-"
+                    linewidth = 2.0
+                    label = LABELS[backend]
+                    # Horizontal error bar: xerr is (lower_error, upper_error)
+                    ax.errorbar(median, i, xerr=[[median - p16], [p84 - median]],
+                               fmt='o', color=color, linestyle=linestyle, linewidth=linewidth,
+                               markersize=6, capsize=4, capthick=1.5, label=label)
 
-                ax.plot(x_range, density, color=color, linewidth=1.5, label=label)
-                ax.fill_between(x_range, density, alpha=0.2, color=color)
-
-            # MAP as vertical dashed line
-            if "map" in results:
-                value = results["map"].get("log_stellar_mass")
-                if value is not None:
-                    ax.axvline(value, color="black", linestyle="--", linewidth=1.5, label="MAP")
+            ax.set_yticks(y_positions)
+            ax.set_yticklabels([LABELS[m] for m in methods_in_order], fontsize=9)
+            ax.set_xlim(lo, hi)
 
         elif qty == "log_sfr_100myr":
-            # Compute x-range from SAMPLER draws only (mcmc_nuts + mcmc_hmc)
-            sampler_draws = []
-            for backend in ["mcmc_nuts", "mcmc_hmc"]:
-                sfr_key = f"{backend}_sfr"
-                if sfr_key in derived:
-                    sampler_draws.extend(derived[sfr_key])
-            if sampler_draws:
-                sampler_draws = np.array(sampler_draws)
-                lo, hi = np.percentile(sampler_draws, [0.2, 99.8])
-                margin = 0.1 * (hi - lo)
-                lo_window, hi_window = lo - margin, hi + margin
+            # Collect data for axis limits
+            medians = []
+            lower_errors = []
+            upper_errors = []
+
+            for backend in methods_in_order:
+                median = results[backend].get("log_sfr_100myr")
+                p16 = results[backend].get("log_sfr_100myr_16")
+                p84 = results[backend].get("log_sfr_100myr_84")
+                if median is not None and p16 is not None and p84 is not None:
+                    medians.append(median)
+                    lower_errors.append(median - p16)
+                    upper_errors.append(p84 - median)
+
+            if medians:
+                lo = np.min(medians) - np.max(lower_errors) - 0.1
+                hi = np.max(medians) + np.max(upper_errors) + 0.1
             else:
-                lo_window, hi_window = 0.5, 2.0
+                lo, hi = 0.8, 1.8
 
-            # Plot KDE for each backend on fixed window
-            for backend in ["mcmc_nuts", "mcmc_hmc", "laplace"]:
-                sfr_key = f"{backend}_sfr"
-                if sfr_key not in derived:
-                    continue
+            # Plot horizontal error bars
+            for i, backend in enumerate(methods_in_order):
+                median = results[backend].get("log_sfr_100myr")
+                p16 = results[backend].get("log_sfr_100myr_16")
+                p84 = results[backend].get("log_sfr_100myr_84")
+                if median is not None and p16 is not None and p84 is not None:
+                    color = "black" if backend == "map" else SAMPLER_COLORS.get(backend, "gray")
+                    linestyle = "--" if backend == "map" else "-"
+                    linewidth = 2.0
+                    label = LABELS[backend]
+                    # Horizontal error bar: xerr is (lower_error, upper_error)
+                    ax.errorbar(median, i, xerr=[[median - p16], [p84 - median]],
+                               fmt='o', color=color, linestyle=linestyle, linewidth=linewidth,
+                               markersize=6, capsize=4, capthick=1.5, label=label)
 
-                draws = derived[sfr_key]
-                if len(draws) == 0:
-                    continue
-
-                color = SAMPLER_COLORS.get(backend, "gray")
-                label = LABELS[backend]
-
-                kde = gaussian_kde(draws)
-                x_range = np.linspace(lo_window, hi_window, 200)
-                density = kde(x_range)
-
-                ax.plot(x_range, density, color=color, linewidth=1.5, label=label)
-                ax.fill_between(x_range, density, alpha=0.2, color=color)
-
-            # MAP as vertical dashed line
-            if "map" in results:
-                value = results["map"].get("log_sfr_100myr")
-                if value is not None:
-                    ax.axvline(value, color="black", linestyle="--", linewidth=1.5, label="MAP")
-            ax.set_xlim(lo_window, hi_window)
+            ax.set_yticks(y_positions)
+            ax.set_yticklabels([LABELS[m] for m in methods_in_order], fontsize=9)
+            ax.set_xlim(lo, hi)
 
         else:  # dust_tau
-            # Plot KDE densities for tau_diff (mirrors M* branch)
-            for backend in ["mcmc_nuts", "mcmc_hmc", "laplace"]:
+            # Plot tau_diff as KDE densities (has per-draw data)
+            # All four sampled backends have per-draw dust_tau_diff values
+            for backend in ["laplace", "mcmc_nuts_fast", "mcmc_hmc", "nss"]:
                 if backend not in tau_draws:
                     continue
 
@@ -337,45 +276,37 @@ def build_figure(
                 ax.axvline(value, color="black", linestyle="--", linewidth=1.5, label="MAP")
 
         ax.set_xlabel(x_label, fontsize=10)
-        if qty == quantities[0]:
+        # Only tau_diff is a density; M* and SFR show point estimates with intervals
+        if qty == "dust_tau":
             ax.set_ylabel("Density", fontsize=10)
-            # Add legend to top marginal (upper left to avoid density peak)
-            ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
-        ax.set_ylim(bottom=0)
-        ax.grid(True, alpha=0.2)
-        # Hide y-tick numbers
-        ax.set_yticklabels([])
+            ax.set_ylim(bottom=0)
+            ax.grid(True, alpha=0.2)
+            ax.set_yticklabels([])
+        else:
+            # M* and SFR panels: forest plot style with backend labels on y-axis
+            ax.grid(True, alpha=0.2, axis='x')
 
     # ========== Right: Timing panel ==========
     methods_in_order = [m for m in ROW_ORDER if m in results]
-    if exclude_raytrace:
-        methods_in_order = [m for m in methods_in_order if m != "mcmc_raytrace"]
     y_pos = np.arange(len(methods_in_order))
 
     wall_times = np.array([results[m].get("wall_time_cold_s", np.nan) for m in methods_in_order])
 
     s_per_ess_vals = [results[m].get("s_per_ess_cold") for m in methods_in_order]
 
-    # Plot bars
+    # Plot bars — use consistent colors from SAMPLER_COLORS
     colors_bars = []
     for method in methods_in_order:
         if method == "map":
             colors_bars.append("black")
-        elif method == "laplace":
-            colors_bars.append("#CCCCCC")
         else:
             colors_bars.append(SAMPLER_COLORS.get(method, "gray"))
 
     ax_timing.barh(y_pos, wall_times, color=colors_bars, alpha=0.7, height=0.5)
 
-    # Annotate s/ESS or "did not mix" for raytrace
+    # Annotate s/ESS for samplers
     for i, (method, s_per_ess) in enumerate(zip(methods_in_order, s_per_ess_vals)):
-        rhat_max = results[method].get("rhat_max")
-        if method == "mcmc_raytrace" and rhat_max is not None and rhat_max > 1.1:
-            ax_timing.text(
-                wall_times[i] * 1.1, i, "did not mix", va="center", fontsize=8, style="italic"
-            )
-        elif s_per_ess is not None and method not in ("map", "laplace"):
+        if s_per_ess is not None and method not in ("map", "laplace"):
             ax_timing.text(
                 wall_times[i] * 1.1, i, f"{s_per_ess:.3f} s/ESS", va="center", fontsize=8
             )
@@ -390,23 +321,32 @@ def build_figure(
     ax_timing.set_xlabel("Wall time (s, cold)", fontsize=10)
     ax_timing.set_xscale("log")
 
+    # Add left margin for category labels
+    ax_timing.margins(x=0)
+    ax_timing.set_xlim(left=0.1)
+
     # Major log ticks only
     ax_timing.xaxis.set_major_locator(ticker.LogLocator(base=10, numticks=10))
     ax_timing.xaxis.set_major_formatter(ticker.LogFormatterMathtext(base=10))
     ax_timing.xaxis.set_minor_locator(ticker.NullLocator())
 
     ax_timing.grid(True, which="major", alpha=0.2, axis="x")
-    ax_timing.set_xlim(left=0.1)
 
-    # Title
-    gal_id = results[ROW_ORDER[0]]["gal_id"]
-    config = results[ROW_ORDER[0]]["config"]
-    n_params = results[ROW_ORDER[0]]["n_params"]
-    fig.suptitle(
-        f"Galaxy {gal_id}, Configuration {config} ({n_params} free parameters)",
-        fontsize=10,
-        weight="bold",
-    )
+    # Add legend outside the panels (above the figure)
+    methods_in_order = [m for m in ROW_ORDER if m in results]
+    handles = []
+    labels_list = []
+    for backend in methods_in_order:
+        color = "black" if backend == "map" else SAMPLER_COLORS.get(backend, "gray")
+        linestyle = "--" if backend == "map" else "-"
+        line = plt.Line2D([0], [0], color=color, linestyle=linestyle, linewidth=2, label=LABELS[backend])
+        handles.append(line)
+        labels_list.append(LABELS[backend])
+
+    fig.legend(handles, labels_list, loc="upper center", bbox_to_anchor=(0.5, 1.02),
+               ncol=5, fontsize=9, framealpha=0.95, borderpad=0.3)
+
+    # Note: title removed for paper figure (caption supplied by LaTeX)
 
     return fig
 
@@ -418,7 +358,7 @@ def main():
         "--sweep-dir",
         type=Path,
         default=Path(
-            "/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/backend_sweep"
+            "/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/backend_sweep_pin"
         ),
         help="Sweep results directory",
     )
@@ -447,7 +387,7 @@ def main():
 
     # Load tau_diff draws directly from NPZs (already per-draw, no compute needed)
     tau_draws = {}
-    for backend in ["mcmc_nuts", "mcmc_hmc", "laplace"]:
+    for backend in ["mcmc_nuts_fast", "mcmc_hmc", "laplace", "nss"]:
         npz_path = args.sweep_dir / f"{backend}.npz"
         if npz_path.exists():
             npz = np.load(npz_path, allow_pickle=False)
@@ -456,21 +396,15 @@ def main():
     map_npz = np.load(args.sweep_dir / "map.npz", allow_pickle=False)
     tau_draws["map"] = float(map_npz["dust_tau_diff"][0])
 
-    # Build both variants
-    fig1 = build_figure(
-        results, pending, derived, tau_draws, exclude_raytrace=False, out_dir=args.out_dir
-    )
-    fig2 = build_figure(
-        results, pending, derived, tau_draws, exclude_raytrace=True, out_dir=args.out_dir
-    )
+    # Build figure
+    fig = build_figure(results, pending, derived, tau_draws, out_dir=args.out_dir)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
-    for fig, suffix in [(fig1, ""), (fig2, "_no_raytrace")]:
-        for fmt in ["pdf", "png"]:
-            out_file = args.out_dir / f"fig07_backends{suffix}.{fmt}"
-            fig.savefig(out_file, dpi=150 if fmt == "png" else None, bbox_inches="tight")
-            logger.info(f"Saved {out_file}")
+    for fmt in ["pdf", "png"]:
+        out_file = args.out_dir / f"fig07_backends.{fmt}"
+        fig.savefig(out_file, dpi=150 if fmt == "png" else None, bbox_inches="tight")
+        logger.info(f"Saved {out_file}")
 
     return 0
 
