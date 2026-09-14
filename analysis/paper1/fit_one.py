@@ -705,6 +705,17 @@ def run_fit(
             # die. Flip this back to True on a machine with real headroom, and
             # re-run the two acceptance cells (9884/IV, 9884/V) before trusting
             # a full grid to it.
+            #
+            # One caution when flipping it: profile_mass=True RAISES if the
+            # linearity guard refuses the model, it does not fall back to
+            # sampling the mass. So enabling it is not purely "the same fits,
+            # faster" -- a configuration the guard rejects fails its cell
+            # outright. These six should be safe, because the guard's failures
+            # trace to the coarse dsps age kernel and all six take the
+            # cloud-in-cell default (tengri#2368 measures cic at 1.2e-13
+            # against a 1e-8 tolerance, four orders inside it), but verify
+            # rather than assume if a configuration is ever added or its age
+            # kernel changed.
             posterior = forward.fit(data, key=key, profile_mass=False, **nuts_kwargs)
             t_elapsed = time.perf_counter() - t_start
 
