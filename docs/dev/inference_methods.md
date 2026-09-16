@@ -1683,18 +1683,34 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
 - the mass prior has bounded support (checked via `_mass_prior_bounds`);
 - `data_type` one of `"photometry"`, `"spectroscopy"`, or `"joint"` (any concatenation
   of these fitter data types, scored via `loss_functions._build_prediction`);
-- no emission-line channel (marginalized, fitted, or measured line fluxes -- a spectrum's
-  line fluxes are linear in `M` too, but that channel carries its own likelihood plumbing
-  and is not yet wired into this module);
+- no emission-line channel whose *amplitudes* are nuisance parameters -- either already
+  marginalized (`eline_marginalize`) or free (`eline_mode="fitted"`). A **measured**
+  line-flux channel is admitted (#2360): its prediction is proportional to `M` by the same
+  structure photometry is, since the nebular grid tabulates luminosity per ionizing photon
+  and multiplies by `Q_H` afterwards with `neb_logU` an independent grid axis, so
+  `L_line = Q_H * l(met, logU, logZ_gas)`. The block concatenates onto the photometry
+  vector because `A` and `B` are additive across independent Gaussian blocks. Each of the
+  three cases refuses (or engages) under its own name, so a refusal says which fired;
+- a measured line-flux channel is still refused when it carries **censored** limits
+  (`LineFluxData.is_upper_limit` / `is_lower_limit`), which score as
+  `ln Phi((F_lim - F_model)/sigma)` rather than a chi-square -- note the censored-data
+  entry below reads `fitter.data_mask` and covers the photometry/spectroscopy vector only,
+  so it cannot see this -- or when a **user-supplied likelihood** owns the data, which the
+  profiler cannot inspect to confirm the block is scored as a plain Gaussian;
 - no line-ratio or spectral-index channel;
 - no calibration marginalization (another block of linear parameters marginalized separately,
   not this module's math);
 - Gaussian likelihood only (`noise_dof == 0`, not Student-t);
 - no variable-noise model (`noise_frac_cal` not configured);
 - no censored data (upper/lower limits);
-- the full data vector numerically linear in `M` (probe: two masses one dex apart, every
-  other free parameter at its prior median, stochastic field latents at zero; requires
-  `max|ratio(+1 dex) - 10| < max(1e-8, 1e4 * eps(dtype))`). A deviation of order 1
+- the full data vector numerically linear in `M` (probe: two masses one dex apart, at the
+  **worst of nine parameter sets** -- the prior median with stochastic field latents at zero,
+  plus eight prior draws with the latents drawn, seed 2359; requires
+  `max|ratio(+1 dex) - 10| < max(1e-2, 1e4 * eps(dtype))`). The single prior-median point and
+  the roundoff-tight `1e-8` threshold this bullet used to describe were both replaced in
+  #2370: the prior median is the *smoothest* history the prior allows and so the cheapest
+  place for a coarse age kernel, measuring 7.527e-10 against 2.879e-06 for the worst of nine
+  on one fixture -- a factor of 3,800. A deviation of order 1
   indicates a mass-independent additive component (e.g. an unmasked AGN continuum on
   either channel); a deviation within a few orders of the tolerance more often indicates
   the coarse age kernel instead. `age_kernel="dsps"` integrates the SFH on the SSP lookback
@@ -1702,6 +1718,37 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
   typically well below 1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
   `field=True` forces that kernel (issue #1470), so a stochastic SFH reaches it without asking.
   A refusal at this magnitude does not by itself imply any additive component.
+
+#### What engaging on a measured line channel changes
+
+Two consequences of admitting the line-flux channel (#2360), both expected
+behavior and both measured, recorded here so they are not rediscovered as bugs.
+
+**Channel coupling makes the objective sensitive to the line block.** The
+profiled quadratic fits one amplitude `a_star = B/A` across the concatenated
+photometry and line vectors, so a perturbation confined to the line entries
+moves the residuals of every entry. One consequence is that the
+`FeaturePrecomp` line LUT becomes observable in the objective for the first
+time: measured on the wNE grid, the LUT's line fluxes differ from the exact
+ones by **4.8e-05 to 1.0e-03** relative, and the profiled objective moves
+4.3e-05 where the unprofiled objective moved 4.7e-08. The unprofiled figure was
+not evidence that the LUT is accurate -- it was evidence that the objective
+barely depended on the quantity the LUT approximates. This is not a fidelity
+problem for inference (1e-4 against 5% line errors is 0.002 sigma), but a
+LUT-versus-exact comparison must now say which objective it is measuring
+through.
+
+**Marginalizing the mass removes discrimination that came from the amplitude.**
+Comparing two galaxies' log-posteriors at one fixed theta, the between-galaxy
+difference on the two-galaxy contract fixture is -300,335 / +75,646 with the
+mass fixed and +1,229.7 / +131.4 with it marginalized -- a factor of ~250, and
+the sign no longer flips when the strong Halpha is swapped between them. That
+is correct: the fixed-mass difference was dominated by the galaxies' amplitude
+mismatch, and what survives marginalization is the shape comparison. Line
+fluxes still carry real weight in the profiled objective (swapping Halpha moves
+it by ~9x here), they simply no longer determine the ordering on their own.
+Note `catalog_fitter` pins `profile_mass=False` for every vmapped engine
+(#2254), so the batched catalog path is unaffected either way.
 
 Additionally, at `Fitter.run()` (lines 467–483 of
 `src/tengri/inference/mass_profile.py:resolve_profile_mass_for_method`):

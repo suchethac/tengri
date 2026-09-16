@@ -1357,6 +1357,16 @@ class Fitter:
         # into the user likelihood if needed.
         self._user_likelihood = likelihood
         self._auto_protocol_likelihood = auto_protocol_likelihood
+        #: Whether ``likelihood=`` was supplied by the caller, recorded here
+        #: rather than inferred later. ``_user_likelihood`` is *overwritten*
+        #: with the auto-built adapter cohort further down ``__init__``, so
+        #: after that point it no longer answers "did the user supply one".
+        #: ``mass_profile._check_guards`` needs that distinction and runs
+        #: before the overwrite, so reading the attribute there happens to
+        #: work today -- and would silently start refusing every line-flux
+        #: fit if the auto-build were ever moved earlier. Recording the fact
+        #: where it is known removes the dependence on statement order.
+        self._likelihood_is_user_supplied = likelihood is not None
 
         # ── Orchestrator opt-in (2026-05) ───────────────────────────
         # When True, route forward predictions through
