@@ -197,6 +197,7 @@ _FACILITY_FROM_PREFIX: dict[str, str] = {
     "lsst": "LSST/Rubin",
     "ps1": "Pan-STARRS",
     "des": "DES/DECam",
+    "skymapper": "SkyMapper",
     "megacam": "CFHT/MegaCam",
     "hsc": "Subaru/HSC",
     "suprime": "Subaru/SuprimeCam",

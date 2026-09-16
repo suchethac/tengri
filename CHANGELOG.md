@@ -3,6 +3,23 @@
 
 ### Added
 
+- SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
+  `skymapper_g`, `skymapper_r`, `skymapper_i`, `skymapper_z`, with their
+  curves tracked under `data/filters/` so they load offline like the rest of
+  the registry (425 -> 431 aliases). SkyMapper observes in **six** bands,
+  `uvgriz`, not the `ugriz` five that `sdss_*` / `lsst_*` / `ps1_*` establish
+  as the shape of an optical survey pack; the extra `v` is a violet band at
+  3838 A between `u` and `g`. Note that band letter: the registry already
+  holds `johnson_v` and `xmm_v`, both Johnson V near 5500 A, so `*_v` now
+  means two different bands depending on the prefix. The alias still takes
+  its letter from the SVO identifier, as every other alias does, and
+  `tests/components/observation/test_skymapper_filters.py` pins the
+  wavelength rather than relying on the name — including the `u`/`v` pair,
+  whose nominal pivots are 9.43% apart and whose bandpasses genuinely
+  overlap, which is what caps the pack's pivot tolerance at 1%. All six
+  curves agree with the published effective wavelengths (Wolf et al. 2018)
+  to within 0.21%.
+
 - Each non-stellar emission source now picks its own dust screen: the
   `dust_attenuation` group gains `nebular_screen` (governs the nebular
   continuum, the line catalog, and the fast-nebular fallback grid; default
