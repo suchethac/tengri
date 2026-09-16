@@ -109,7 +109,7 @@ class TestLineFluxBlockMeasurement:
         met_idx = int(np.argmin(np.abs(lgmet - LOG10_ZSUN)))
 
         def halpha_over_continuum(age_idx: int) -> float:
-            """Halpha peak over neighbouring continuum for one (met, age) template."""
+            """Halpha peak over neighboring continuum for one (met, age) template."""
             sed = ssp_flux[met_idx, age_idx, :]
             peak = np.max(sed[(wave >= 6562.8 - 8.0) & (wave <= 6562.8 + 8.0)])
             cont_blue = np.mean(sed[(wave >= 6400) & (wave <= 6500)])
