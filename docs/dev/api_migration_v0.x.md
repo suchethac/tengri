@@ -949,8 +949,11 @@ Two things to take from that grid, both counter-intuitive:
    LUT**. The opt-ins are not worthless with lines — `WavePrecomp` is worth 2.19x —
    but `FeaturePrecomp` on top of it really is 1.00x here, for a reason the old
    harness could not have shown: this model is dusty, which withdraws the grid's
-   photometry saving, and a Cue line channel is served off the `predict_state` the
-   photometry channel already builds. Do not assume `approx=` is buying speed;
+   photometry saving, and the line channel is only ~8% of the fit's compiled
+   gradient to begin with (67.3M FLOPs joint against 62.3M photometry-only), so a
+   line table has little to remove. `FeaturePrecomp` in fact never reaches the
+   compiled graph at all on a Cue line-flux fit — see #2377. Do not assume
+   `approx=` is buying speed;
    measure it, and check what the fit resolved to. Notebook
    [`10_fastspecfit_joint_fit`](../../notebooks/10_fastspecfit_joint_fit.py)
    prints the resolved path per arm and re-measures on every render — with a

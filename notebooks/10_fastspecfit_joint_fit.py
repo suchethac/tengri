@@ -623,11 +623,11 @@ plt.show()
 # photoionization backend like Cue, that grid earns its keep by standing in for the
 # emulator when the broadband flux is computed — which is only possible if nothing
 # downstream needs the nebular continuum. A dust component does need it, so on a
-# dusty model that saving is unavailable. The emission lines, meanwhile, are read
-# from the same model evaluation the photometry already requires, so serving them
-# from a table separately would cost more, not less. On a dust-free fit, or one
-# without a photometry channel, the balance changes — measure it there rather than
-# carrying this result over.
+# dusty model that saving is unavailable. The emission lines, meanwhile, are cheap
+# here on their own terms: dropping the line channel and re-measuring shows the ten
+# lines account for only about 8% of this fit's cost, so even a perfect line table
+# could not remove much. On a dust-free fit, or one without a photometry channel,
+# the balance changes — measure it there rather than carrying this result over.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
@@ -661,8 +661,9 @@ print(
 # - `WavePrecomp` and `FeaturePrecomp` are lookup tables, and `fit()` runs on them by
 #   default. On this fit the compiled step is 2.2x faster than the exact wave grid,
 #   and all of it is the photometry table: the nebular grid adds nothing measurable
-#   here, because its saving is a photometry one that a dusty model cannot take, and
-#   the line fluxes ride along on the model evaluation the photometry already needs.
+#   here. Its saving is a photometry one that a dusty model cannot take, and the ten
+#   emission lines add only about 8% to the cost of the fit in the first place, so a
+#   line table has little left to remove.
 #   At catalog scale (batched `fit_batch`) the one-time build is shared across galaxies.
 # - Stellar mass and SFR are well constrained. Metallicity / dust / gas conditions
 #   degenerate along the age–dust–metallicity ridge; the posterior width is the honest

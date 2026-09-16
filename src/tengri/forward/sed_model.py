@@ -669,8 +669,9 @@ class FeaturePrecomp:
        varied) — the photometry LUT carries all 2.19x of it. The line channel
        does not rescue it either: the table-served line path is the
        measured-line route of a backend whose lines sit in the SSP templates,
-       while a Cue fit shares the one ``predict_state`` the photometry channel
-       already needs. Earlier readings of "no gain with lines" timed arms that
+       and on a Cue fit the line channel is only ~8% of the compiled gradient
+       to begin with, so the table has little to remove (see #2377). Earlier
+       readings of "no gain with lines" timed arms that
        ``fit()`` had already resolved to one configuration; see the trap
        below. Measure before assuming either way, and quote a ratio only
        against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
