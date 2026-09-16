@@ -539,7 +539,7 @@ def _fetch_from_svo(svo_id: str, short_name: str | None = None) -> tuple[np.ndar
             f"Could not fetch filter curve {name_str}from the SVO Filter Profile "
             f"Service. The network may be unavailable or SVO may be unreachable.\n\n"
             f"To use this filter offline:\n"
-            f"    python tools/download_filters.py {short_name or svo_id}\n"
+            f"    python scripts/download_filters.py --filter {short_name or svo_id}\n"
             f"to download it in advance, or set $TENGRI_DATA_DIR to a directory "
             f"containing the curve in data/filters/.\n\n"
             f"If you are in a CI/build environment, check that the filter is "
