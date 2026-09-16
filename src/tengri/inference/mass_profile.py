@@ -100,6 +100,7 @@ import logging
 import math
 import re
 import warnings
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -704,6 +705,23 @@ def suppress_placeholder_dead_fit_warning(fitter: Fitter):
 # ── The exact chi^2(M) quadratic and its marginal integral ──────────────────
 
 
+@dataclass(frozen=True)
+class _LineFluxBlock:
+    """The measured-line-flux channel the profiled quadratic scores.
+
+    Carries both halves of one Gaussian block: the observed values and errors
+    that enter the data vector, and what ``_build_prediction`` needs to produce
+    the matching model values. Held together in one object so the two cannot be
+    resolved from different sources -- the failure mode being a chi-square that
+    pairs a model line with the wrong observed line and raises nothing.
+    """
+
+    obs: jnp.ndarray
+    err: jnp.ndarray
+    waves: jnp.ndarray
+    measured_line_defs: object | None
+
+
 def _predict_full_vector(
     model,
     data_type: str,
@@ -712,6 +730,7 @@ def _predict_full_vector(
     use_components: bool = False,
     jit_inputs: dict | None = None,
     threaded_impl=None,
+    line_flux_block: _LineFluxBlock | None = None,
 ) -> jnp.ndarray:
     """The model's prediction for the fitter's FULL data vector, phot/spec/joint.
 
@@ -723,28 +742,36 @@ def _predict_full_vector(
     ``tests/regression/bug/test_bug_1366_joint_data_record.py`` pins). Reusing
     it rather than re-deriving the dispatch means the profiled statistics see
     exactly the vector (data mask, ``SpectrumPrecomp`` path, JIT-threaded SSP
-    grid included) the unprofiled likelihood does. Every emission-line /
-    line-ratio / spectral-index channel is excluded by construction: this
-    module's own guards (:func:`_check_guards`) refuse any fit carrying one,
-    so ``_build_prediction`` is always called with every feature-channel flag
-    off.
+    grid included) the unprofiled likelihood does. The emission-line-flux
+    channel is included when a ``line_flux_block`` is supplied; all other
+    emission-line / line-ratio / spectral-index channels are excluded by
+    construction since this module's own guards (:func:`_check_guards`) refuse
+    any fit carrying one.
     """
     from tengri.inference.loss_functions import _build_prediction
 
-    _, predicted, _, _ = _build_prediction(
+    has_line_fluxes = line_flux_block is not None
+    data_args = {} if line_flux_block is None else {"line_flux_waves": line_flux_block.waves}
+    measured_line_defs = None if line_flux_block is None else line_flux_block.measured_line_defs
+
+    prediction, predicted, _, _ = _build_prediction(
         model,
         phys,
         data_type,
-        has_line_fluxes=False,
+        has_line_fluxes=has_line_fluxes,
         has_indices=False,
         index_defs=None,
-        data_args={},
+        data_args=data_args,
         use_components=use_components,
         has_line_ratios=False,
-        measured_line_defs=None,
+        measured_line_defs=measured_line_defs,
         jit_inputs=jit_inputs,
         threaded_impl=threaded_impl,
     )
+
+    if line_flux_block is not None:
+        predicted = jnp.concatenate([predicted, jnp.ravel(prediction["line_fluxes"])])
+
     return predicted
 
 
@@ -760,6 +787,7 @@ def _profile_stats(
     use_components: bool = False,
     jit_inputs: dict | None = None,
     threaded_impl=None,
+    line_flux_block: _LineFluxBlock | None = None,
 ):
     """``(A_ref, a_star, chi2_min, ell_ref)`` of the dimensionless quadratic.
 
@@ -771,6 +799,12 @@ def _profile_stats(
     10**phys[mass_name]`` divides out whatever mass the prediction was made
     at, so this is safe to call with the placeholder-fixed value used during
     inference or a real posterior-sample mass used post hoc.
+
+    This function establishes BOTH halves of the photometry-then-lines
+    concatenation when a ``line_flux_block`` is supplied, deliberately in one
+    place. A mismatched order would produce a wrong chi-square with no shape
+    error to reveal it, so the two halves must not be resolved from different
+    sources.
 
     Returns
     -------
@@ -800,8 +834,28 @@ def _profile_stats(
         use_components=use_components,
         jit_inputs=jit_inputs,
         threaded_impl=threaded_impl,
+        line_flux_block=line_flux_block,
     )
     ell_ref = jnp.asarray(phys[mass_name])
+
+    # Concatenate the line-flux block if supplied, matching the data side
+    # to the prediction side. Both must be resolved here and in matching order.
+    if line_flux_block is not None:
+        if jnp.ndim(data) != 1:
+            raise ValueError(
+                f"a line-flux block requires a 1-D data vector, got ndim={jnp.ndim(data)}; "
+                "the batched per-galaxy path does not profile the mass (catalog_fitter "
+                "pins profile_mass=False for vmapped engines)"
+            )
+        data = jnp.concatenate([jnp.ravel(data), jnp.ravel(line_flux_block.obs)])
+        noise = jnp.concatenate([jnp.ravel(noise), jnp.ravel(line_flux_block.err)])
+        if presence is not None:
+            # LineFluxData has no per-line presence concept: every configured
+            # line is scored. Extend the presence mask with ones so all lines
+            # are included.
+            presence = jnp.concatenate(
+                [jnp.ravel(presence), jnp.ones_like(jnp.ravel(line_flux_block.obs))]
+            )
 
     # Divide by noise *before* squaring/multiplying (every chi^2 in tengri
     # does, see ``likelihoods.gaussian.standardized_residual``), AND divide
