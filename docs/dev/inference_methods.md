@@ -1683,9 +1683,20 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
 - the mass prior has bounded support (checked via `_mass_prior_bounds`);
 - `data_type` one of `"photometry"`, `"spectroscopy"`, or `"joint"` (any concatenation
   of these fitter data types, scored via `loss_functions._build_prediction`);
-- no emission-line channel (marginalized, fitted, or measured line fluxes -- a spectrum's
-  line fluxes are linear in `M` too, but that channel carries its own likelihood plumbing
-  and is not yet wired into this module);
+- no emission-line channel whose *amplitudes* are nuisance parameters -- either already
+  marginalized (`eline_marginalize`) or free (`eline_mode="fitted"`). A **measured**
+  line-flux channel is admitted (#2360): its prediction is proportional to `M` by the same
+  structure photometry is, since the nebular grid tabulates luminosity per ionizing photon
+  and multiplies by `Q_H` afterwards with `neb_logU` an independent grid axis, so
+  `L_line = Q_H * l(met, logU, logZ_gas)`. The block concatenates onto the photometry
+  vector because `A` and `B` are additive across independent Gaussian blocks. Each of the
+  three cases refuses (or engages) under its own name, so a refusal says which fired;
+- a measured line-flux channel is still refused when it carries **censored** limits
+  (`LineFluxData.is_upper_limit` / `is_lower_limit`), which score as
+  `ln Phi((F_lim - F_model)/sigma)` rather than a chi-square -- note the censored-data
+  entry below reads `fitter.data_mask` and covers the photometry/spectroscopy vector only,
+  so it cannot see this -- or when a **user-supplied likelihood** owns the data, which the
+  profiler cannot inspect to confirm the block is scored as a plain Gaussian;
 - no line-ratio or spectral-index channel;
 - no calibration marginalization (another block of linear parameters marginalized separately,
   not this module's math);

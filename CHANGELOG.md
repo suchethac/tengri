@@ -336,6 +336,32 @@
 
 ### Changed
 
+- `profile_mass` no longer refuses a fit that measures emission-line fluxes.
+  Guard #8 was the OR of three unrelated situations — line amplitudes already
+  analytically marginalized (`eline_marginalize`), line amplitudes as free
+  parameters (`eline_mode="fitted"`), and a **measured** line-flux data channel
+  — and refused all three with one reason that named none of them. Only the
+  third is a plain Gaussian channel whose prediction is proportional to the
+  mass amplitude, and it is the configuration users actually have (photometry
+  plus measured lines). It now engages, and the analytic marginal covers the
+  line block as well: `A = sum f^2/sigma^2` and `B = sum d f/sigma^2` are
+  additive across independent Gaussian blocks, so the line block concatenates
+  onto the photometry block with no new math. Linearity is structural rather
+  than incidental — the nebular grid tabulates luminosity per ionizing photon
+  and multiplies by `Q_H` afterwards, with `neb_logU` an independent grid axis,
+  so `L_line = Q_H * l(met, logU, logZ_gas)` with `Q_H` linear in the stellar
+  amplitude and `l` independent of it. Measured on a wNE grid with eight bands
+  and three lines, the guard's own worst-of-nine-thetas deviation is 1.705e-13
+  with the line block and 1.705e-13 without, the maximum set by a photometry
+  band either way. The other two cases still refuse, now each with its own
+  reason naming which fired. Two further refusals are new rather than relaxed:
+  **censored line fluxes** (`LineFluxData.is_upper_limit` / `is_lower_limit`),
+  which enter as `ln Phi((F_lim - F_model)/sigma)` and cannot join a quadratic
+  — the pre-existing censored-data guard cannot see them, since it reads
+  `fitter.data_mask`, which covers the photometry/spectroscopy vector only —
+  and a **user-supplied likelihood**, which the profiler cannot inspect to
+  confirm the line block is scored as a plain Gaussian. Closes #2360.
+
 - Reproduction parameter sweeps encode the swept value in a single-hue
   sequential colormap with a colorbar, replacing the categorical color cycle
   that gave a temperature sweep three unrelated hues and repeated a color
