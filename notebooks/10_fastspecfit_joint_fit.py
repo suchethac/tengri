@@ -332,8 +332,10 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # so the mass matrix must be dense and fixed-trajectory HMC is more efficient
 # than NUTS. We run four sequential chains (each reuses one compiled kernel,
 # keeping memory at one chain's footprint) for 3000 warmup and 1000 samples,
-# reaching R-hat ≈ 1.24 with no divergences: the four chains move freely but do not agree, which is well short of the R-hat < 1.01 you would want before quoting an interval in a paper, so treat this sector's widths as approximate. Truth lands inside the 68%
-# interval for 5 of 6 parameters.
+# reaching R-hat ≈ 1.01 with a handful of divergences: close to the R-hat < 1.01 you
+# would want before quoting an interval in a paper, though the divergences say the
+# sampler is still working against the curvature of this degenerate sector. Truth
+# lands inside the 68% interval for 5 of 6 parameters.
 
 # %%
 # Fixed-length HMC on the precomputed model. Every gradient here goes through the
@@ -615,6 +617,17 @@ plt.show()
 # **`compiled step`** (`post.wall_time_s`): optimization loop time after compile.
 # This is the per-galaxy compute that a catalog pays after amortizing the compile via `fit_batch`.
 # It is the only metric where the fit path affects performance.
+#
+# The attribution below is worth reading closely: the photometry lookup carries the
+# whole speed-up, and adding the nebular grid on top changes nothing. For a
+# photoionization backend like Cue, that grid earns its keep by standing in for the
+# emulator when the broadband flux is computed — which is only possible if nothing
+# downstream needs the nebular continuum. A dust component does need it, so on a
+# dusty model that saving is unavailable. The emission lines, meanwhile, are read
+# from the same model evaluation the photometry already requires, so serving them
+# from a table separately would cost more, not less. On a dust-free fit, or one
+# without a photometry channel, the balance changes — measure it there rather than
+# carrying this result over.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
@@ -646,9 +659,11 @@ print(
 #   (Gaussian on continuum-subtracted spectrum) matching `FastSpecFit.LINE_FLUX`.
 #   Window integrals are different: they carry stellar absorption and mis-deblend [N II].
 # - `WavePrecomp` and `FeaturePrecomp` are lookup tables, and `fit()` runs on them by
-#   default. On this fit they make the compiled step ~4x faster than the exact wave
-#   grid, most of it from the photometry table; at catalog scale (batched `fit_batch`)
-#   the one-time build is shared across galaxies as well.
+#   default. On this fit the compiled step is 2.2x faster than the exact wave grid,
+#   and all of it is the photometry table: the nebular grid adds nothing measurable
+#   here, because its saving is a photometry one that a dusty model cannot take, and
+#   the line fluxes ride along on the model evaluation the photometry already needs.
+#   At catalog scale (batched `fit_batch`) the one-time build is shared across galaxies.
 # - Stellar mass and SFR are well constrained. Metallicity / dust / gas conditions
 #   degenerate along the age–dust–metallicity ridge; the posterior width is the honest
 #   statement of that. Tighter constraints need a full spectrum, auroral line, or UV slope.

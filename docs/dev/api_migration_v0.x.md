@@ -944,9 +944,14 @@ Two things to take from that grid, both counter-intuitive:
    read the agreement as "the opt-ins do essentially nothing with lines"; it is
    not that. Varying the **fit-time** knob instead (`fwd.fit(..., approx=None)`
    forces the exact wave grid on the single-galaxy surface) on the same model
-   gives exact 2.35 s → `WavePrecomp` 0.67 s → pair 0.59 s on the compiled MAP
-   step, ~4x overall. Do not assume `approx=` is buying speed; measure it, and
-   check what the fit resolved to. Notebook
+   gives exact 3.593 s → `WavePrecomp` 1.642 s → pair 1.647 s on the compiled MAP
+   step: **2.18x overall against a 1.00x A/A floor, every bit of it the photometry
+   LUT**. The opt-ins are not worthless with lines — `WavePrecomp` is worth 2.19x —
+   but `FeaturePrecomp` on top of it really is 1.00x here, for a reason the old
+   harness could not have shown: this model is dusty, which withdraws the grid's
+   photometry saving, and a Cue line channel is served off the `predict_state` the
+   photometry channel already builds. Do not assume `approx=` is buying speed;
+   measure it, and check what the fit resolved to. Notebook
    [`10_fastspecfit_joint_fit`](../../notebooks/10_fastspecfit_joint_fit.py)
    prints the resolved path per arm and re-measures on every render — with a
    rotated arm order and an A/A control, because timing several arms in one
@@ -961,9 +966,10 @@ fitted under the `"auto"` policy of the day, which resolved both to `WavePrecomp
 and the ratio is noise, as the 1.23x floor says. The exact photometry-only arm was
 never timed in this grid, and the **7x** is `WavePrecomp` → pair, not exact → pair.
 On the with-lines fit, where the fit-time knob was varied, `WavePrecomp` alone is
-worth ~3.5x over exact and the pair a further ~1.1x (the notebook). Whether the
-emulator or the filter integration dominates a photometry-only Cue fit remains
-unmeasured.
+worth 2.19x over exact and the pair a further 1.00x (the notebook) — on a dusty
+model fitting both channels, the filter integration is the whole story. Whether the
+emulator or the filter integration dominates a *dust-free* photometry-only Cue fit
+remains unmeasured on this surface.
 
 For the **baked-in / wNE** backend the saving really is line-only, because there
 the lookup is a per-line window LUT rather than a replacement for a forward.
