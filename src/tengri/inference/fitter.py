@@ -622,6 +622,46 @@ def fast_nebular_can_engage(model) -> bool:
     return not any(_nebular_continuum_consumers(chain) for chain in chains)
 
 
+def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:
+    """Whether appending ``FeaturePrecomp`` can change this fit's compiled graph.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model about to be topped up.
+    serves_line_channel : bool, keyword-only
+        Whether this fit actually has a line-flux channel for the LUT to serve.
+
+    Returns
+    -------
+    bool
+        True when either lever is available.
+
+    Notes
+    -----
+    The two levers answer to different conditions, and four call sites used to
+    encode that separately (#2377).
+
+    * The **window LUT** supplies line fluxes directly, so the likelihood need not
+      rebuild the full-grid SED. Dust does not touch it -- 4.77x on a dusty
+      line-flux fit (#1770). Available only where
+      :func:`~tengri.forward.sed_model.feature_lut_serves_line_channel` is True.
+    * The **per-Q_H grid** stands in for a Cue-like emulator in the photometry
+      channel, which requires that nothing downstream read ``sed_nebular``; any
+      dust component disarms it (#1281/#1748).
+
+    A Cue model therefore has exactly one lever, the photometry one, whatever
+    channels the fit carries. Treating its line channel as a second lever attached
+    a grid worth 0 compiled FLOPs on every dusty Cue line-flux fit, at a measured
+    7.2 s build and a duplicate ``compile_signature()`` (#2377).
+    """
+    from tengri.forward.sed_model import feature_lut_serves_line_channel
+
+    if serves_line_channel and feature_lut_serves_line_channel(model):
+        return True
+    return fast_nebular_can_engage(model)
+
+
 def _observation_serves_line_channel(model) -> bool:
     """Whether the model's own Observation carries a measured line-flux channel.
 
@@ -915,11 +955,13 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # dusty catalog fit that carries line fluxes kept refusing the LUT that
             # the same model got as a single-galaxy fit. ``data_type`` names the
             # primary data array here, not the channel set, so "photometry" does
-            # not mean "no lines" (#1770).
+            # not mean "no lines" (#1770). (#2377)
             if (
                 not has_feature
                 and not _has_line_adjacent_channel(model)
-                and (_observation_serves_line_channel(model) or fast_nebular_can_engage(model))
+                and _feature_precomp_can_pay(
+                    model, serves_line_channel=_observation_serves_line_channel(model)
+                )
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
@@ -1778,7 +1820,11 @@ class Fitter:
         # fluxes come from the table instead of ``needs_state=True`` forcing a
         # full-grid ``predict_state`` per likelihood, dust does not touch that.
         # Gating it here cost a measured 4.77x on every dusty line-flux fit.
-        wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
+        wants_lut = (
+            self._fits_lines(model)
+            and not _has_line_adjacent_channel(model)
+            and _feature_precomp_can_pay(model, serves_line_channel=True)
+        )
         return (base, FeaturePrecomp()) if wants_lut else base
 
     def _add_feature_precomp(
@@ -1846,8 +1892,8 @@ class Fitter:
         # three line fluxes, gradient FLOPs of the fit objective:
         # WavePrecomp 1,933,823 -> WavePrecomp+FeaturePrecomp 405,825, a 4.77x
         # reduction, against a dust-free control that is identical to the digit
-        # (251,783 either way) because the top-up has already happened there.
-        if not serves_line_channel and not fast_nebular_can_engage(model):
+        # (251,783 either way) because the top-up has already happened there. (#2377)
+        if not _feature_precomp_can_pay(model, serves_line_channel=serves_line_channel):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
@@ -1982,11 +2028,17 @@ class Fitter:
             # remedy that cannot be applied, and advice you cannot act on reads
             # as a defect in the caller's model.
             return
-        # No ``fast_nebular_can_engage`` gate (#1770). It was added here on the
-        # reading that a dusty model gains nothing from the LUT, true of the
-        # photometry shortcut, false of this channel, where the saving is the
-        # ``predict_state`` rebuild rather than the nebular grid. On a dusty
-        # line-flux fit the advice IS actionable: 4.77x in gradient FLOPs.
+        if not _feature_precomp_can_pay(model, serves_line_channel=True):
+            # The remedy this warning names measures 1.00x here: a Cue backend's
+            # FeaturePrecomp has no line lever, and its photometry grid is disarmed
+            # (#2377). Advice you cannot act on reads as a defect in the caller's model.
+            return
+        # Still no BARE ``fast_nebular_can_engage`` gate (#1770): on the window-LUT
+        # backend the saving is the ``predict_state`` rebuild rather than the nebular
+        # grid, so dust does not disarm it and the advice IS actionable there,
+        # 4.77x in gradient FLOPs. The gate above is that predicate wrapped in the
+        # backend question #1770 did not ask (#2377), so the #1770 case still warns
+        # while a Cue model, which has no line lever at all, no longer does.
         state = getattr(model, "approx", None)
         if state is not None and state.feature_precomp:
             return
