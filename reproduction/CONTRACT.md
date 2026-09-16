@@ -20,8 +20,11 @@ installs, `SPS_HOME`, template downloads).
 
 Each section sweeps one physics block — SFH, attenuation, IR emission,
 nebular, AGN, IGM — with the same SSP on both sides and matched
-parameters. The external code plots in `C0` solid, tengri in `C1`, on
-shared axes in erg/s/Hz via `units.panel` / `units.two_panel_fig`.
+parameters. Comparison figures place the reference in `C0` solid and tengri
+in `C1` on shared axes in erg/s/Hz. A single-pair comparison uses
+`V.overlay_ratio_fig` (one overlay panel with ratio panel below); a
+multi-case sweep uses `V.sweep_fig`. For cases where the two codes measure
+different quantities, use `units.panel` / `units.two_panel_fig`.
 State where the two codes agree, where they disagree, and why; a
 residual without an explanation is an open question, not a result.
 
@@ -34,6 +37,20 @@ reference codes themselves differ there. `save_fig` uses the single
 `_FIG_DPI`; comparisons assert with `_assert_comparable(arr_ref,
 arr_t, *, name)`. If you improve a shared helper, propagate it to every
 comparison in the same PR.
+
+Comparison figures use helpers from `reproduction/_validation.py`: `overlay_ratio_fig`
+for single-pair overlays, `sweep_fig` for multi-case sweeps, and `window_rows` +
+`print_window_table` for tabulating windows. Three metric rules follow from what
+the tables showed: a curve that reaches zero (SFR(t) tails and onset, IGM
+transmission in the forest) is compared with `window_rows(..., rel_to="peak")` —
+SFR(t) as a fraction of the window's peak over 2–95 % of the age, transmission
+with `peak=1.0` over 850–1210 Å, clear of the Lyα step; SFR(t)-only builds pass
+`n_grid=4096`, since `derived["sfr_history"]` otherwise sits on a 256-point
+log-lookback grid (0.39 Gyr at 10 Gyr) that the table would measure instead of
+the form; and band ladders on spectra that carry emission lines use
+`filter_rows_native`, which integrates each spectrum on its own grid —
+interpolating tengri's lines onto a coarse reference grid before band-averaging
+aliases (a 2× g band on BAGPIPES' grid).
 
 ## 3a. Matched inputs, asserted
 
@@ -144,6 +161,9 @@ the validation. Never write that a tengri component was ported or
 copied from the reference code. External template and SSP data files
 used as matched inputs are "repackaged" into tengri's formats, and
 that is the word to use.
+
+Notebook prose carries no issue numbers and no account of what was tried;
+the investigation trail belongs in the pull request.
 
 ## 7. Rendering
 

@@ -122,7 +122,17 @@ def _spectrum(sp, tage: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _apply_sfh(
-    sp, *, sfh: int, tau: float, tage: float, logzsol: float, const: float = 0.0
+    sp,
+    *,
+    sfh: int,
+    tau: float,
+    tage: float,
+    logzsol: float,
+    const: float = 0.0,
+    sf_start: float = 0.0,
+    sf_trunc: float = 0.0,
+    fburst: float = 0.0,
+    tburst: float = 11.0,
 ) -> None:
     """Set the SFH block. ``sfh=0`` is a single SSP (``tage`` = SSP age).
 
@@ -135,10 +145,10 @@ def _apply_sfh(
     if sfh != 0:
         sp.params["tau"] = tau
         sp.params["const"] = const
-        sp.params["sf_start"] = 0.0
-        sp.params["sf_trunc"] = 0.0
-        sp.params["tburst"] = 0.0
-        sp.params["fburst"] = 0.0
+        sp.params["sf_start"] = sf_start
+        sp.params["sf_trunc"] = sf_trunc
+        sp.params["tburst"] = tburst
+        sp.params["fburst"] = fburst
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +214,61 @@ def sfh_curve(
     t_lookback_yr = (tage - t_since_start) * 1e9
     order = np.argsort(t_lookback_yr)
     return t_lookback_yr[order], sfr[order]
+
+
+def sfh_sfr_avg(
+    *,
+    sfh: int,
+    tau: float,
+    tage: float,
+    t_lookback_yr: np.ndarray,
+    const: float = 0.0,
+    sf_start: float = 0.0,
+    logzsol: float = 0.0,
+    dt_gyr: float = 0.05,
+) -> np.ndarray:
+    """FSPS's own SFR(t) via ``sfr_avg`` — exact for ``sfh=1`` or ``sfh=4``.
+
+    ``sfr_avg`` is FSPS' closed-form SFH statistic (gamma functions, not a
+    finite difference), so it is exact rather than approximate for the two
+    families it supports. Sampling different ``tage`` values directly would
+    silently change the family (FSPS renormalizes mass to the queried
+    ``tage`` and, for ``sfh=1``, references ``sf_trunc`` from it too), so
+    this holds ``tage`` fixed and asks for SFR at each cosmic time instead.
+
+    Parameters
+    ----------
+    sfh : int
+        FSPS SFH flag: 1 (declining-τ) or 4 (delayed-τ). Any other value is
+        rejected upstream by FSPS itself.
+    tau : float
+        e-folding timescale [Gyr].
+    tage : float
+        Galaxy age at observation [Gyr] — the family's fixed final age.
+    t_lookback_yr : array_like, shape (n,)
+        Lookback times [yr] at which to evaluate SFR.
+    const : float
+        FSPS constant-SFR mass fraction. Default 0.
+    sf_start : float
+        SFH onset lookback [Gyr]. Default 0.
+    logzsol : float
+        Stellar metallicity [dex]. Default 0.
+    dt_gyr : float
+        Averaging window [Gyr] passed to ``sfr_avg``. Default 0.05 (50 Myr).
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        SFR [Msun/yr] at each ``t_lookback_yr``, normalized so 1 Msun forms
+        by ``tage``.
+    """
+    sp = _get_sp()
+    _reset(sp)
+    _apply_sfh(sp, sfh=sfh, tau=tau, tage=tage, logzsol=logzsol, const=const, sf_start=sf_start)
+    sp.get_spectrum(tage=tage, peraa=False)  # lock in the family's final age
+    cosmic_gyr = tage - np.asarray(t_lookback_yr, dtype=np.float64) / 1e9
+    cosmic_gyr = np.clip(cosmic_gyr, sf_start + dt_gyr + 1e-6, tage)
+    return np.asarray(sp.sfr_avg(times=cosmic_gyr, dt=dt_gyr), dtype=np.float64)
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +530,16 @@ def csp_lnu(
     av: float = 0.0,
     dust_type: int = 2,
     dust_index: float = 0.0,
+    dust1: float = 0.0,
+    dust1_index: float = -1.0,
+    mwr: float = 3.1,
+    uvb: float = 1.0,
+    wgp1: int = 1,
+    wgp2: int = 1,
+    sf_start: float = 0.0,
+    sf_trunc: float = 0.0,
+    fburst: float = 0.0,
+    tburst: float = 11.0,
     add_dust_emission: bool = False,
     duste_qpah: float = 2.5,
     duste_umin: float = 1.0,
@@ -493,6 +568,24 @@ def csp_lnu(
         FSPS dust law (2 = Calzetti, 4 = Kriek & Conroy, 0 = power law).
     dust_index : float
         Power-law / Kriek-Conroy slope modifier.
+    dust1 : float
+        Birth cloud optical depth (V-band). Default 0.
+    dust1_index : float
+        Birth cloud power-law slope. Default -1.
+    mwr : float
+        MW-like dust R_V (Cardelli law parameter). Default 3.1.
+    uvb : float
+        UV bump strength (Cardelli law parameter). Default 1.
+    wgp1, wgp2 : int
+        Weingartner & Draine dust grain parameters. Default 1 each.
+    sf_start : float
+        SFH start time [Gyr from onset]. Default 0.
+    sf_trunc : float
+        SFH truncation time [Gyr from onset]. Default 0.
+    fburst : float
+        Burst mass fraction. Default 0.
+    tburst : float
+        Burst age [Gyr]. Default 11.
     add_dust_emission : bool
         Attach the Draine & Li (2007) IR templates.
     duste_qpah, duste_umin, duste_gamma : float
@@ -519,10 +612,27 @@ def csp_lnu(
     """
     sp = _get_sp()
     _reset(sp)
-    _apply_sfh(sp, sfh=sfh, tau=tau, tage=tage, logzsol=logzsol, const=const)
+    _apply_sfh(
+        sp,
+        sfh=sfh,
+        tau=tau,
+        tage=tage,
+        logzsol=logzsol,
+        const=const,
+        sf_start=sf_start,
+        sf_trunc=sf_trunc,
+        fburst=fburst,
+        tburst=tburst,
+    )
     sp.params["dust_type"] = dust_type
+    sp.params["dust1"] = dust1
+    sp.params["dust1_index"] = dust1_index
     sp.params["dust2"] = av / 1.086
     sp.params["dust_index"] = dust_index
+    sp.params["mwr"] = mwr
+    sp.params["uvb"] = uvb
+    sp.params["wgp1"] = wgp1
+    sp.params["wgp2"] = wgp2
     if add_dust_emission:
         sp.params["add_dust_emission"] = True
         sp.params["duste_qpah"] = duste_qpah

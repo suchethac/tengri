@@ -7,15 +7,13 @@
   `dust_attenuation` group gains `nebular_screen` (governs the nebular
   continuum, the line catalog, and the fast-nebular fallback grid; default
   `"birth_cloud"`), `shock_screen` (governs the MAPPINGS V shock SED; default
-  `"diffuse"`), and `agn_screen` (default, and today the only accepted value,
-  `"none"` — the AGN component runs after dust and carries its own
-  polar-dust screen). Each accepts `"birth_cloud"`, `"diffuse"`, `"none"`, or
-  the synonym `"off"`; flat spellings `dust_nebular_screen` /
-  `dust_shock_screen` / `dust_agn_screen` mirror `dust_law_bc` /
-  `dust_law_neb`. One validator
+  `"diffuse"`), and `agn_screen` (default `"none"` — the AGN component runs
+  after dust and carries its own polar-dust screen). Each accepts
+  `"birth_cloud"`, `"diffuse"`, `"none"`, or the synonym `"off"`; flat
+  spellings `dust_nebular_screen` / `dust_shock_screen` / `dust_agn_screen`
+  mirror `dust_law_bc` / `dust_law_neb`. One validator
   (`tengri.parameters._dust_keys.resolve_screen_choices`) backs both
-  surfaces: an unknown value names the three choices; `agn_screen` other
-  than `none`/`off` is refused with the deferral reason above;
+  surfaces: an unknown value names the three choices;
   `single_component` dust refuses any value other than `none`/`off` or the
   source's own default (a single screen has no birth-cloud/diffuse
   distinction); `wg00`/`off` dust refuse the keys outright, like the other
@@ -33,6 +31,11 @@
   unconditionally with the birth-cloud form — and by snapping (see Fixed,
   below).
 
+- `agn_screen` is functional: `birth_cloud` / `diffuse` put AGN light
+  through the galaxy's dust screens with the absorbed power joining the
+  energy balance; refused with `agn={'norm': 'cigale_joint'}`, which reads
+  that balance.
+
 - `neb_hbfrac` (CB_19's HbFrac axis, matter- vs radiation-bounded escape
   proxy) now declares `free_prior=Uniform(0.0, 1.0, default=1.0)`, so
   `neb={'type': 'cb19', 'all_params': FREE}` and `neb={'type': 'cb19',
@@ -47,6 +50,12 @@
   `check_cb19_free_params` against the current shipped grid rather than
   silently inert (#2213).
 
+- `radio={'sf': {'type': ..., 'freefree': False}}` turns the star-forming
+  block's Murphy+2011 thermal free-free term off (synchrotron only — what
+  pcigale's `radio` module emits); omitted, it stays on except for
+  `bell2003_split`, which carries its own thermal fraction. Reaches
+  `RadioSEDComponentConfig.include_freefree`; documented in
+  `docs/model_reference/xray_radio.md`.
 
 - `run_nuts`/`run_dynamic_hmc` (and, via the same `_vmap_chains` seam,
   `mcmc_hmc`'s existing `chain_method="parallel"`) accept
@@ -326,6 +335,72 @@
 
 
 ### Changed
+
+- Reproduction parameter sweeps encode the swept value in a single-hue
+  sequential colormap with a colorbar, replacing the categorical color cycle
+  that gave a temperature sweep three unrelated hues and repeated a color
+  outright past ten cases. Line style continues to carry which code is which,
+  so color is free to carry magnitude; sweeps whose cases are model families
+  rather than values of one parameter (casey / schreiber / dale) keep the
+  categorical colors, since a ramp there would imply an ordering that does not
+  exist.
+- The three star formation history comparisons drew nothing. `sfh_grid_lbt_yr`
+  spans the full cosmic lookback, so `age - lbt` ran negative for every sample
+  older than the galaxy — to -8.8 Gyr on a 5 Gyr delayed-tau — and the two arms
+  shared no interval. Both arms now sit on their common interval.
+- `sweep_fig` and `overlay_ratio_fig` refuse a case whose two arms share no
+  region where both are positive, naming both ranges, instead of plotting a
+  ratio against interpolation zero-fill. Three residuals turned out to be this
+  artefact rather than a disagreement between codes.
+- Reproduction comparisons that were not comparing like with like are matched:
+  the AGN torus covering factor `agn_torus_frac` is pinned wherever the
+  reference emits the reprocessed luminosity over the full sphere (CIGALE,
+  Synthesizer, ProSpect and now Prospector/FSPS), since its 0.5 default halves
+  the tengri arm and accounted for most of a 0.45-0.24x span; IR template
+  comparisons normalize on a common wavelength rather than each arm's own peak;
+  and off-grid sweep nodes are moved onto nodes both codes tabulate.
+- Reproduction sweep figures frame their y-axis on the data. `sweep_fig` gained
+  the `dyn_range` floor `overlay_ratio_fig` already had, so a sweep covering
+  three decades is no longer drawn on an axis spanning eighteen.
+
+- Physics reproduction comparisons move from side-by-side panels onto one
+  shared axis with a tengri/reference ratio panel and a tolerance band,
+  drawn via the unified `overlay_ratio_fig` function in
+  `reproduction/_validation.py` so every cross-code comparison follows the
+  same visual grammar.
+
+- Reproduction comparisons compare like with like across multiple codes:
+  Prospector normalizes both panels on the same stellar mass convention;
+  Synthesizer pairs the analytic-emitter sweep at `beta_ir = 0`;
+  redshift-dependent attenuation curves sweep across their full range;
+  BAGPIPES' attenuation sweep matches its prescription on both sides;
+  AGNfitter's cold dust lands on a shared grid node, and its radio section
+  states each side's luminosity normalization in place of a ratio between
+  two different ones. BAGPIPES'
+  Summary reads its numbers from the render. cigale's IR-template figures
+  render at 120 dpi with a ratio row per model family; Schreiber 2016's
+  ratios span 0.5× to 2× across the dust continuum at T = 25 K while the
+  8–1000 µm integral agrees to under half a percent, both sides normalized
+  on the same absorbed energy. The reproduction CONTRACT names the overlay
+  as the default comparison figure.
+
+- The six reproduction notebooks (`reproduction/{agnfitter,bagpipes,cigale,prospect_r,prospector,synthesizer}/01_*.py`)
+  now compare parameter sweeps and model cases in every physics block instead of one fiducial point
+  each: SFH families and τ × age grids, every attenuation law the reference code offers with its
+  slope / bump / R_V knobs and an A_V ladder, dust-emission library nodes (DL07, DL14, Casey 2012,
+  Schreiber 2016, Dale 2014, analytic emitters), nebular logU × Z_gas × f_esc grids, AGN disc and
+  torus node grids, IGM redshift sweeps, X-ray corona and radio grids — each new section is one
+  ratio-panel figure plus one printed table, and every Summary table is assembled from the render's
+  own printed numbers. Every model on every page now carries nebular emission on both sides (tengri:
+  Cue at the matched logU / Z_gas / f_esc; the reference code: its own nebular module), except the
+  raw-SSP check and AGNfitter-rX's host, which has no nebular term. Shared helpers in
+  `reproduction/_validation.py`: `sweep_fig` (overlay + ratio panel), `window_rows` (with a
+  peak-relative deviation for curves that reach zero, so SFR(t) tables no longer flag exact matches)
+  and `print_window_table` (unit and scale of the x column), and `filter_rows_native` (band
+  averages on each spectrum's own grid, since interpolating tengri's emission lines onto a coarse
+  reference grid before band-averaging aliases). The bagpipes driver aliases `np.trapz`
+  to `np.trapezoid` for NumPy ≥ 2, and ProSpect's `massfunc_dtau` is compared on its recent branch,
+  the only part that is a delayed-τ.
 
 - `dust_frac_agn` is now declared with a `free_prior` of `Uniform(0.0, 0.99)`,
   making it wildcard-reachable (`all_params: FREE`) exactly on
@@ -799,6 +874,7 @@
 
 ### Fixed
 
+- **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
   fixed: it was scoped to ``dust/emission/`` only, and it never saw negative

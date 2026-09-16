@@ -103,12 +103,16 @@ print(result.diagnostics)       # chi2_dof, n_iterations, etc.
 
 All inference in tengri operates in **standardized latent coordinates** where every
 parameter has prior xi ~ N(0, I). Physical parameters with bounded priors (e.g.,
-Uniform(lo, hi)) are mapped to unbounded space via a sigmoid transform:
+Uniform(lo, hi)) are mapped to unbounded space via the Gaussian CDF (probit):
 
 ```
 u = to_unbounded(x, lo, hi)    # physical -> unbounded
 x = to_bounded(u, lo, hi)      # unbounded -> physical
 ```
+
+This Gaussian-CDF standardization (rather than logistic sigmoid) ensures that an N(0,1)
+latent yields a genuinely uniform prior on the bounded interval, avoiding the midpoint-peaked
+prior that a sigmoid would introduce.
 
 The GP latent vector `psd_xi` is already standardized (prior N(0, I)) and needs no
 transform.
@@ -1650,10 +1654,10 @@ the surviving `D - 1` xi's; the mass's own N(0, 1) prior term does not appear, b
 the integral above already accounts for it.
 
 Once inference on `theta` is done, the mass is reinserted: an exact conditional draw
-`p(log10(M) | theta, d)` per posterior sample (inverse-CDF on the same quadrature grid,
-mapped to the sampler's standardized coordinate via the mass prior's own
-`standardize`/`unstandardize` pushforward) for sample-based backends, or the
-conditional mode `ell* = log10(M*)` for `method="map"`. The reinsertion is one
+`p(log10(M) | theta, d)` per posterior sample (inverse-CDF on the same quadrature grid)
+for sample-based backends, or the conditional mode `ell* = log10(M*)` for `method="map"`.
+The returned mass is in physical coordinates (log10(M)), merged directly into the
+posterior samples alongside the other free parameters. The reinsertion is one
 `jax.jit` program, cached on the model per engine key and taking the draws, keys,
 data, noise and presence mask as traced arguments: it costs the forward model once
 per draw (0.4 s for 1200 draws on a 14-band model) and is reused across galaxies.
@@ -1664,25 +1668,51 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
 
 ### Guards
 
-`profile_mass` requires, checked at `Fitter` construction:
+`profile_mass` requires, checked at `Fitter` construction (lines 257–315 of
+`src/tengri/inference/mass_profile.py:_check_guards`):
 
-- `data_type` one of `"photometry"`, `"spectroscopy"`, or `"joint"` -- any
-  concatenation these fitter data types assemble (photometry, spectroscopy, or their
-  photometry-then-spectrum concatenation), scored via the same prediction the
-  unprofiled Gaussian likelihood uses (`loss_functions._build_prediction`);
-- no emission-line channel (marginalized, fitted, or measured line fluxes), no
-  line-ratio or spectral-index channel -- a spectrum's line fluxes are linear in `M`
-  too, but that channel carries its own likelihood plumbing and is not yet wired into
-  this module;
-- no calibration marginalization -- another block of linear parameters marginalized
-  separately, not this module's math;
-- a Gaussian likelihood (`noise_dof == 0`, no variable-noise `noise_frac_cal` model);
+- the parameter spec exposes `_distributions` (a plain `Parameters` instance, not a subclass
+  or wrapper that lacks this interface);
+- float64 precision enabled (`jax_enable_x64=True`); the marginal's curvature in flux units
+  and the per-band cotangent scales of reverse-mode gradients fall outside float32's range
+  (measured 2026-09-11, `bench/reports/2026-09-11_profile_mass_20s.md` Finding 8: float64
+  gradient is finite where float32 returns NaN on the same fixture);
+- exactly one free parameter named `*_log_total_mass`;
+- at least two free parameters total (so profiling would not leave zero others to sample);
+- the mass parameter is not pinned via `params_override` (cannot be both profiled and pinned);
+- the mass prior has bounded support (checked via `_mass_prior_bounds`);
+- `data_type` one of `"photometry"`, `"spectroscopy"`, or `"joint"` (any concatenation
+  of these fitter data types, scored via `loss_functions._build_prediction`);
+- no emission-line channel (marginalized, fitted, or measured line fluxes -- a spectrum's
+  line fluxes are linear in `M` too, but that channel carries its own likelihood plumbing
+  and is not yet wired into this module);
+- no line-ratio or spectral-index channel;
+- no calibration marginalization (another block of linear parameters marginalized separately,
+  not this module's math);
+- Gaussian likelihood only (`noise_dof == 0`, not Student-t);
+- no variable-noise model (`noise_frac_cal` not configured);
 - no censored data (upper/lower limits);
-- exactly one free `*_log_total_mass` parameter, with a bounded-support prior; and
-- the full data vector numerically linear in that parameter (two masses one dex apart,
-  all else fixed, agree to `max|ratio - 10| < 1e-8`) -- a mass-independent additive
-  component (e.g. an unmasked AGN continuum, on either channel) fails this and disables
-  profiling.
+- the full data vector numerically linear in `M` (probe: two masses one dex apart, every
+  other free parameter at its prior median, stochastic field latents at zero; requires
+  `max|ratio(+1 dex) - 10| < max(1e-8, 1e4 * eps(dtype))`). A deviation of order 1
+  indicates a mass-independent additive component (e.g. an unmasked AGN continuum on
+  either channel); a deviation within a few orders of the tolerance more often indicates
+  the coarse age kernel instead. `age_kernel="dsps"` integrates the SFH on the SSP lookback
+  grid rather than a refined one (the default `"cic"` is 16x-refined). That costs mass-linearity:
+  typically well below 1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
+  `field=True` forces that kernel (issue #1470), so a stochastic SFH reaches it without asking.
+  A refusal at this magnitude does not by itself imply any additive component.
+
+Additionally, at `Fitter.run()` (lines 467–483 of
+`src/tengri/inference/mass_profile.py:resolve_profile_mass_for_method`):
+
+- the inference method is one of `PROFILE_MASS_BACKENDS` (backends that build their objective
+  from the `Fitter`'s loss and thus can see the profiled marginal): `map`, `laplace`,
+  `mcmc`, `mcmc_nuts`, `mcmc_nuts_fast`, `mcmc_hmc`, `mcmc_dynamic_hmc`, `mcmc_ghmc`,
+  `mcmc_chees`, `mcmc_mclmc`, `mcmc_adjusted_mclmc`, `mcmc_barker`, `mcmc_mala`,
+  `mcmc_hmc_lowrank`, `mcmc_smc`, `hmc_is`. Under `profile_mass=True`, an unsupported
+  method raises `ValueError`; under `"auto"`, profiling is silently disabled with a
+  logged reason.
 
 `profile_mass="auto"` (the default on `Fitter` and `ForwardModel.fit`) engages
 profiling only when every guard passes, falling back to ordinary sampling with one

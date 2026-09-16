@@ -2507,6 +2507,7 @@ class SEDModel:
             uses_xray=self._uses_xray,
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
+            radio_include_freefree=getattr(self, "_radio_include_freefree", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
             param_map=self._param_map,
@@ -3436,8 +3437,10 @@ class SEDModel:
         self._dust_law_neb = getattr(spec, "dust_law_neb", None)
         # Per-source dust-screen choice (#2234 replacement): which
         # screen attenuates the nebular continuum + line catalog, the shock
-        # SED, and (validated by `Parameters`/`parse_groups` to stay "none")
-        # AGN light. Consumed by `DustSEDComponent` via `build_components`.
+        # SED, and (#2260) the AGN SED when `agn_screen != "none"` -- AGN
+        # then runs before dust in the component chain. `"none"` (the
+        # default) leaves AGN after dust, unattenuated. Consumed by
+        # `DustSEDComponent` via `build_components`.
         self._dust_nebular_screen = getattr(spec, "dust_nebular_screen", "birth_cloud")
         self._dust_shock_screen = getattr(spec, "dust_shock_screen", "diffuse")
         self._dust_agn_screen = getattr(spec, "dust_agn_screen", "none")
@@ -4016,6 +4019,7 @@ class SEDModel:
             # in _build_param_map (Step B).
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
+            self._radio_include_freefree = getattr(spec, "radio_include_freefree", None)
 
         self._uses_xray = getattr(spec, "xray", False)
         self._xray_model = getattr(spec, "xray_model", "yang20")
@@ -9341,6 +9345,7 @@ class SEDModel:
             use_radio=bool(getattr(self, "_uses_radio", False)),
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
+            radio_include_freefree=getattr(self, "_radio_include_freefree", None),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
             use_igm=bool(getattr(self, "_uses_igm", False)),

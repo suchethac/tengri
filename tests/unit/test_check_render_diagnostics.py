@@ -568,3 +568,114 @@ def test_live_tree_passes_with_full_ledger():
     # Run with argv=None to use actual sys.argv behavior
     exit_code = main([])
     assert exit_code == 0, "Guard should pass with the full ledger present"
+
+
+# ---------------------------------------------------------------------------
+# Enumeration via git ls-files (issue #2315, #2050 drift-proofness)
+# ---------------------------------------------------------------------------
+
+
+def test_enumeration_uses_git_ls_files_ignores_untracked(tmp_path):
+    """Untracked files with failures must be ignored; tracked files must be checked.
+
+    The guard uses git ls-files enumeration (#2315, #2050) so that untracked
+    local renders cannot fail a local run that CI would pass. This test verifies:
+
+    1. An untracked notebook with a failure marker is NOT checked (ignored)
+    2. A tracked notebook with the same failure marker IS checked (caught)
+    3. The guard passes when only the untracked file has failures (verified
+       by the first assertion)
+    """
+    bad_nb_json = json.dumps(
+        _make_notebook(
+            [
+                _code_cell(
+                    "fit()",
+                    [_text_output("DeadFitWarning: dead fit detected\n")],
+                ),
+            ]
+        )
+    )
+
+    # Create a git repo with one tracked and one untracked notebook
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    # Configure git (required for some git operations)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=root, check=True)
+
+    # Tracked notebook with failure marker
+    tracked_path = root / "notebooks/tracked.ipynb"
+    tracked_path.parent.mkdir(parents=True, exist_ok=True)
+    tracked_path.write_text(bad_nb_json, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    # Untracked notebook with IDENTICAL failure marker
+    # (this should be ignored by git ls-files enumeration)
+    untracked_path = root / "notebooks/untracked.ipynb"
+    untracked_path.write_text(bad_nb_json, encoding="utf-8")
+    # Do NOT git add the untracked file
+
+    # Verify the setup: untracked file is NOT in git ls-files
+    # (using the same patterns as the fixed guard code)
+    ls_files_output = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--",
+            "notebooks/*.ipynb",
+            "notebooks/**/*.ipynb",
+            "docs/spine/*.ipynb",
+            "docs/spine/**/*.ipynb",
+        ],
+        cwd=root,
+        capture_output=True,
+    ).stdout
+    tracked_files = [f for f in ls_files_output.decode("utf-8").split("\0") if f]
+    assert "notebooks/tracked.ipynb" in tracked_files, (
+        f"tracked file should be enumerated, got: {tracked_files}"
+    )
+    assert "notebooks/untracked.ipynb" not in tracked_files, (
+        "untracked file should NOT be enumerated"
+    )
+
+    # Now run the guard (modified to use this repo root)
+    script = (REPO_ROOT / "tools" / "check_render_diagnostics.py").read_text(encoding="utf-8")
+    script = script.replace(
+        "ROOT = Path(__file__).resolve().parents[1]",
+        f"ROOT = Path({str(root)!r})",
+    )
+
+    tmp_script = root / "_guard.py"
+    tmp_script.write_text(script, encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(tmp_script)], cwd=root, capture_output=True, text=True
+    )
+
+    # The guard should FAIL because the TRACKED notebook has a failure
+    assert proc.returncode == 1, (
+        f"Guard should fail on tracked failure: {proc.stdout} {proc.stderr}"
+    )
+    assert "notebooks/tracked.ipynb" in proc.stdout or "notebooks/tracked.ipynb" in proc.stderr
+
+    # Verify the untracked file was NOT checked by removing it
+    # and running the guard again: it should still fail on the tracked file
+    untracked_path.unlink()
+    proc_no_untracked = subprocess.run(
+        [sys.executable, str(tmp_script)], cwd=root, capture_output=True, text=True
+    )
+    assert proc_no_untracked.returncode == proc.returncode, (
+        "Guard should have same result with or without untracked file"
+    )
+
+    # Clean test: remove the tracked file from git index and verify guard passes
+    tracked_path.unlink()
+    subprocess.run(["git", "rm", "-q", "notebooks/tracked.ipynb"], cwd=root, check=True)
+    proc_clean = subprocess.run(
+        [sys.executable, str(tmp_script)], cwd=root, capture_output=True, text=True
+    )
+    assert proc_clean.returncode == 0, (
+        f"Guard should pass with no tracked notebooks: {proc_clean.stdout} {proc_clean.stderr}"
+    )

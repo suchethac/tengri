@@ -156,11 +156,12 @@ def _assert_profiled_matches_brute_force(
         for name, val in fitter_off._fixed_values.items():
             phys[name] = jnp.asarray(val)
         phys[_MASS_NAME] = jnp.asarray(0.0)
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model, _MASS_NAME, phys, flux, noise, data_type=data_type
         )
         profiled_log_z = float(
-            -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+            -0.5 * chi2_min
+            + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
         )
 
         rel_diff = abs(profiled_log_z - brute_force_log_z) / abs(brute_force_log_z)
@@ -272,6 +273,53 @@ class TestGuards:
         )
         assert fitter._profile_mass is False
         assert "emission-line" in fitter._profile_mass_reason
+
+    def test_linearity_refusal_names_the_data_type_and_does_not_assert_an_agn_cause(
+        self, ssp_data_fsps
+    ):
+        """Linearity refusal message names data_type and presents both candidate causes.
+
+        Issue #2359: the refusal message previously hardcoded 'photometry' regardless
+        of fitter.data_type (spectroscopy or joint fits were misdiagnosed), and always
+        blamed an AGN continuum even when the stochastic SFH was the real cause. The
+        measured deviations do not distinguish the two: O(1) for a mass-independent
+        component, O(1e-5) for the coarse age kernel. The alternative cause is the coarse
+        age kernel (age_kernel="dsps"), measured to cost roughly 1e-5 of mass-linearity.
+        The probe evaluates only one parameter set (every other free parameter at its prior
+        median, stochastic field latents at zero), so the message must say so and present
+        both causes rather than naming one confidently.
+        """
+        model = _agn_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        # The fitter refuses profiling because of linearity, not because of an AGN
+        # in the recipe (this fixture HAS an AGN, but we're testing that the message
+        # itself is properly qualified). Use profile_mass="auto" to get the reason
+        # without raising, so we can inspect it.
+        fitter = Fitter(forward, data=flux, noise=noise, profile_mass="auto")
+        assert fitter._profile_mass is False
+        reason = fitter._profile_mass_reason
+
+        # 1. The reason must contain the fitter's actual data_type string.
+        assert fitter.data_type in reason, (
+            f"reason does not mention data_type '{fitter.data_type}': {reason}"
+        )
+
+        # 2. The reason must NOT contain the old hardcoded assertion.
+        assert "likely a mass-independent component" not in reason, (
+            f"reason contains old hardcoded blame phrase: {reason}"
+        )
+
+        # 3. The reason must mention BOTH candidate causes: AGN continuum and age kernel.
+        assert "AGN continuum" in reason, f"reason does not mention AGN continuum: {reason}"
+        assert "dsps" in reason, f"reason does not mention the coarse age kernel (dsps): {reason}"
+
+        # 4. The reason must still report the measured number and tolerance.
+        assert "max|ratio(+1 dex) - 10|" in reason, (
+            f"reason does not report the measurement: {reason}"
+        )
+        assert "need <" in reason, f"reason does not report the tolerance: {reason}"
 
 
 class TestMapParity:
@@ -447,6 +495,103 @@ class TestAutoDefault:
         assert fitter._profile_mass_resolved is True
 
 
+class TestReferenceInvariance:
+    """Marginal log-likelihood is invariant to the mass reference frame.
+
+    The dimensionless formulation of _profile_stats cancels mass factors
+    algebraically, so the returned marginal integral must not depend on
+    the reference point ``phys[mass_name]`` at which the prediction is
+    evaluated. This test sweeps the reference over the prior bounds plus
+    ±1 dex outside and verifies the marginal log-likelihood is unchanged.
+    """
+
+    def test_reference_invariance_photometry(self, ssp_data_fsps):
+        """Profiled marginal is the same at different reference masses."""
+        model = _minimal_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        fitter_off = Fitter(forward, data=flux, noise=noise, profile_mass=False)
+        mass_prior = fitter_off.spec.get_distribution(_MASS_NAME)
+        ell_lo, ell_hi = mass_prior.bounds
+
+        # Reference points: lo, midpoint, hi, and ±1 dex outside
+        ell_refs = [
+            ell_lo - 1.0,
+            ell_lo,
+            0.5 * (ell_lo + ell_hi),
+            ell_hi,
+            ell_hi + 1.0,
+        ]
+
+        # Compute profiled marginal at each reference
+        other_names = [n for n in fitter_off._free_names if n != _MASS_NAME]
+        phys_base = {
+            name: fitter_off.spec.get_distribution(name).unstandardize(0.0) for name in other_names
+        }
+        for name, val in fitter_off._fixed_values.items():
+            phys_base[name] = jnp.asarray(val)
+
+        log_z_vals = []
+        for ell_ref in ell_refs:
+            phys = {**phys_base, _MASS_NAME: jnp.asarray(ell_ref)}
+            A_ref, a_star, chi2_min, ell_ref_out = _profile_stats(
+                model, _MASS_NAME, phys, flux, noise, data_type="photometry"
+            )
+            log_z = float(
+                -0.5 * chi2_min
+                + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref_out)
+            )
+            log_z_vals.append(log_z)
+
+        # All values should be identical (within numerical precision)
+        log_z_vals = np.array(log_z_vals)
+        rel_error = np.abs(np.diff(log_z_vals)) / np.abs(log_z_vals[:-1] + 1e-10)
+        assert np.all(rel_error < 1e-5), f"Relative errors: {rel_error}"
+
+    def test_reference_invariance_spectroscopy(self, ssp_data_fsps):
+        """Profiled marginal is the same at different reference masses (spectroscopy)."""
+        model = _spectroscopy_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _spectroscopy_mock(model, seed=1)
+
+        fitter_off = Fitter(
+            forward, data=flux, noise=noise, data_type="spectroscopy", profile_mass=False
+        )
+        mass_prior = fitter_off.spec.get_distribution(_MASS_NAME)
+        ell_lo, ell_hi = mass_prior.bounds
+
+        # Reference points: lo, midpoint, hi
+        ell_refs = [
+            ell_lo,
+            0.5 * (ell_lo + ell_hi),
+            ell_hi,
+        ]
+
+        other_names = [n for n in fitter_off._free_names if n != _MASS_NAME]
+        phys_base = {
+            name: fitter_off.spec.get_distribution(name).unstandardize(0.0) for name in other_names
+        }
+        for name, val in fitter_off._fixed_values.items():
+            phys_base[name] = jnp.asarray(val)
+
+        log_z_vals = []
+        for ell_ref in ell_refs:
+            phys = {**phys_base, _MASS_NAME: jnp.asarray(ell_ref)}
+            A_ref, a_star, chi2_min, ell_ref_out = _profile_stats(
+                model, _MASS_NAME, phys, flux, noise, data_type="spectroscopy"
+            )
+            log_z = float(
+                -0.5 * chi2_min
+                + _log_mass_integral(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref_out)
+            )
+            log_z_vals.append(log_z)
+
+        log_z_vals = np.array(log_z_vals)
+        rel_error = np.abs(np.diff(log_z_vals)) / np.abs(log_z_vals[:-1] + 1e-10)
+        assert np.all(rel_error < 1e-5), f"Relative errors: {rel_error}"
+
+
 def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
     """A NIFTy VI fit must sample the mass itself: it never sees the profiled loss.
 
@@ -495,3 +640,378 @@ def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
     g = _Fitter()
     with pytest.raises(ValueError, match="profile_mass=True"):
         resolve_profile_mass_for_method(g, "vi", True)
+
+
+@pytest.mark.contract
+def test_profile_mass_float32_end_to_end(ssp_data_fsps):
+    """Verify float32 support end-to-end: construction, inference, finite gradients.
+
+    Regression test for float32 support: the dimensionless rewrite of
+    profile_mass allows float32 at construction time. This test verifies the
+    entire pipeline works and produces finite values and gradients in float32.
+    """
+    with jax.enable_x64(False):
+        # Verify we're in float32
+        assert jnp.result_type(float) == jnp.float32
+
+        # Build the model INSIDE the context, matching the shape in the task
+        model = _minimal_model(ssp_data_fsps)
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+
+        key_t, key_m = jax.random.split(jax.random.PRNGKey(42))
+        truth = model.spec.sample(key_t)
+        mock = generate_mock(model, truth, key=key_m, snr=30.0)
+        flux = jnp.asarray(mock["flux_obs"])
+        noise = jnp.asarray(mock["noise"])
+
+        forward = ForwardModel.build(sed=model, observation=obs)
+        fitter = Fitter(forward, flux, noise, profile_mass="auto")
+
+        # Assert float32 no longer refused at construction
+        assert fitter._profile_mass is True
+
+        # Build context and test inference
+        ctx = InferenceContext.from_target(fitter)
+        xi = {n: jnp.asarray(0.1) for n in fitter._free_names}
+
+        # Forward pass
+        val = ctx.neg_log_posterior_fn(xi, ctx.data_args)
+
+        # Check dtype and finiteness of value
+        assert val.dtype == jnp.float32, f"Expected float32, got {val.dtype}"
+        assert jnp.isfinite(val), f"Value is not finite: {val}"
+
+        # Gradient pass
+        grads = jax.grad(lambda p: ctx.neg_log_posterior_fn(p, ctx.data_args))(xi)
+
+        # Check every gradient leaf is float32 and finite
+        for name, grad_leaf in grads.items():
+            assert grad_leaf.dtype == jnp.float32, (
+                f"Gradient {name} is {grad_leaf.dtype}, expected float32"
+            )
+            assert jnp.isfinite(grad_leaf).all(), (
+                f"Gradient {name} contains non-finite values; float32 marginal NaN not fixed"
+            )
+            assert jnp.any(grad_leaf != 0.0), (
+                f"Gradient {name} is identically zero; marginal became inert in float32"
+            )
+
+
+def test_profile_mass_laplace_rejects_float32(ssp_data_fsps):
+    """Verify laplace method rejects float32 due to Hessian NaN.
+
+    Guard test: float32 refusal for laplace occurs at method resolution time
+    (resolve_profile_mass_for_method), not at Fitter construction. This reflects
+    the true cause: the SED model's Hessian NaN is a forward-model seam,
+    not a profiling defect.
+    """
+    with jax.enable_x64(False):
+        model = _minimal_model(ssp_data_fsps)
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+
+        key_t, key_m = jax.random.split(jax.random.PRNGKey(42))
+        truth = model.spec.sample(key_t)
+        mock = generate_mock(model, truth, key=key_m, snr=30.0)
+        flux = jnp.asarray(mock["flux_obs"])
+        noise = jnp.asarray(mock["noise"])
+
+        forward = ForwardModel.build(sed=model, observation=obs)
+        fitter = Fitter(forward, flux, noise, profile_mass="auto")
+
+        # profile_mass=True at construction (profiling is allowed in float32)
+        assert fitter._profile_mass is True
+
+        # But laplace method should refuse at resolution time
+        from tengri.inference.mass_profile import resolve_profile_mass_for_method
+
+        with pytest.raises(ValueError, match="float32 mode"):
+            resolve_profile_mass_for_method(fitter, "laplace", "auto")
+
+
+def test_reinsertion_scratch_is_bounded_by_chunk_size(ssp_data_fsps, monkeypatch):
+    """Chunking must bound reinsertion scratch: 4x the draws is not 4x the memory.
+
+    The ratchet for #2356. It measures the compiled program's scratch at two
+    draw counts twice over -- once with the chunk width pinned small, and once
+    with the width above ``n_draws`` so the map degenerates to a single vmap,
+    which is what ``main`` does. The unchunked arm is *measured, not assumed*,
+    so the test cannot pass vacuously on a model whose constant overhead
+    happens to dominate: it requires the unchunked arm to really grow before
+    it asserts the chunked arm does not. Replacing ``jax.lax.map`` with a
+    plain ``jax.vmap`` turns it red.
+    """
+    from tengri.inference import mass_profile
+    from tengri.inference._model_cache import _default_owner
+
+    model = _minimal_model(ssp_data_fsps)
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    _, flux, noise = _mock(model, seed=42)
+    fitter = Fitter(
+        ForwardModel.build(sed=model, observation=obs), flux, noise, profile_mass="auto"
+    )
+    assert fitter._profile_mass is True
+    names = [n for n in fitter._free_names if n != fitter._profile_mass_name]
+
+    def scratch_bytes(n_draws, width):
+        monkeypatch.setattr(mass_profile, "_compute_reinsertion_chunk_size", lambda _fitter: width)
+        _default_owner.get_or_compile_model(fitter.model).pop("profile_mass_reinsert", None)
+        fn = mass_profile._reinsert_mass_fn(fitter)
+        samples = {name: jnp.zeros((n_draws,)) for name in names}
+        keys = jax.random.split(jax.random.PRNGKey(0), n_draws)
+        compiled = fn.lower(samples, keys, flux, noise, None).compile()
+        return compiled.memory_analysis().temp_size_in_bytes
+
+    unchunked = scratch_bytes(256, 257) / scratch_bytes(64, 65)
+    chunked = scratch_bytes(256, 16) / scratch_bytes(64, 16)
+
+    assert unchunked > 3.0, (
+        f"unchunked scratch grew only {unchunked:.2f}x over 64->256 draws; the test "
+        "model no longer exercises the linear path, so the chunked assertion below "
+        "would be vacuous"
+    )
+    assert chunked < 1.25, (
+        f"chunked scratch grew {chunked:.2f}x over 64->256 draws (unchunked grew "
+        f"{unchunked:.2f}x); peak must be set by chunk width, not draw count"
+    )
+
+
+def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, monkeypatch):
+    """Chunk width must not change the answer beyond reduction-reordering noise.
+
+    Two claims, both measured. With the width at or above ``n_draws`` the map
+    degenerates to a single vmap and the draws are *bit-identical*, so a model
+    that does not need chunking pays nothing at all. With the width biting, the
+    draws agree to about one ulp -- the chunk boundary reorders reductions but
+    the per-draw PRNG keys are untouched.
+    """
+    from tengri.inference import mass_profile
+    from tengri.inference._model_cache import _default_owner
+
+    model = _minimal_model(ssp_data_fsps)
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    _, flux, noise = _mock(model, seed=42)
+    fitter = Fitter(
+        ForwardModel.build(sed=model, observation=obs), flux, noise, profile_mass="auto"
+    )
+    assert fitter._profile_mass is True
+    names = [n for n in fitter._free_names if n != fitter._profile_mass_name]
+
+    n_draws = 64
+    rng = np.random.default_rng(3)
+    samples = {
+        name: model.spec.get_distribution(name).unstandardize(
+            jnp.asarray(rng.normal(size=n_draws))
+        )
+        for name in names
+    }
+    keys = jax.random.split(jax.random.PRNGKey(11), n_draws)
+
+    def draws_at(width):
+        monkeypatch.setattr(mass_profile, "_compute_reinsertion_chunk_size", lambda _fitter: width)
+        _default_owner.get_or_compile_model(fitter.model).pop("profile_mass_reinsert", None)
+        return np.asarray(mass_profile._reinsert_mass_fn(fitter)(samples, keys, flux, noise, None))
+
+    reference = draws_at(n_draws + 1)
+    assert np.all(np.isfinite(reference))
+
+    assert np.array_equal(draws_at(n_draws), reference), (
+        "width == n_draws must degenerate to a single vmap and be bit-identical"
+    )
+
+    for width in (16, 7, 1):
+        chunked = draws_at(width)
+        rel = np.max(np.abs((chunked - reference) / reference))
+        assert rel < 1e-15, f"chunk width {width} moved draws by {rel:.3e} relative"
+
+
+def test_reinsertion_logs_the_chunk_width_and_whether_chunking_engaged(
+    ssp_data_fsps, monkeypatch, caplog
+):
+    """Verify chunking log messages report width and whether chunking engaged.
+
+    The mechanism silently degenerates to an unchunked vmap when chunk_size >= n_draws,
+    so the reporter of #2356 could not tell from a failed run whether chunking had
+    engaged or not. This test ensures the log messages clearly report the chunk width
+    and whether chunking is active (fewer chunks) or degenerated (single vmap).
+    """
+    import logging
+
+    from tengri.inference import mass_profile
+    from tengri.inference._model_cache import _default_owner
+
+    model = _minimal_model(ssp_data_fsps)
+    forward = ForwardModel.build(sed=model)
+    _, flux, noise = _mock(model, seed=42)
+
+    fitter = Fitter(forward, flux, noise, profile_mass="auto")
+    assert fitter._profile_mass is True
+
+    # Get the module's logger name
+    logger_name = "tengri.inference.mass_profile"
+    caplog.set_level(logging.INFO, logger=logger_name)
+
+    # Helper to get the free parameter names (excluding the mass)
+    free_names = [n for n in fitter._free_names if n != fitter._profile_mass_name]
+
+    def run_arm(width):
+        """Run reinsertion with a patched chunk width and return captured logs."""
+        # Patch the chunk size computation to return the test width
+        monkeypatch.setattr(mass_profile, "_compute_reinsertion_chunk_size", lambda _f: width)
+        # Clear the cached program so it recompiles with the new width
+        _default_owner.get_or_compile_model(fitter.model).pop("profile_mass_reinsert", None)
+
+        # Clear captured records for this arm
+        caplog.clear()
+
+        # Build test data: 64 draws, placeholder data
+        samples = {name: jnp.zeros((64,)) for name in free_names}
+        keys = jax.random.split(jax.random.PRNGKey(0), 64)
+
+        # Call the reinsertion function; this triggers _reinsert which logs the message
+        _fn = mass_profile._reinsert_mass_fn(fitter)
+        _fn(samples, keys, flux, noise, None)
+
+        return caplog.text
+
+    # Arm A: width 16, which is less than 64 draws, so chunking engages (4 chunks)
+    text_a = run_arm(16)
+    assert "64" in text_a and "draws" in text_a  # 64 draws logged
+    assert "4" in text_a and "chunks" in text_a  # 4 chunks logged
+    assert "16" in text_a  # chunk width logged
+
+    # Arm B: width 128, which exceeds 64 draws, so no chunking (single vmap)
+    text_b = run_arm(128)
+    assert "64" in text_b and "draws" in text_b  # 64 draws logged
+    assert "single vmap" in text_b or "bit-identical" in text_b  # Single vmap logged
+    assert "128" in text_b  # chunk width logged
+
+
+class TestLinearityProbeMultiTheta:
+    """Tests for the multi-theta linearity probe (issue #2359)."""
+
+    def test_linearity_probe_evaluates_more_than_the_prior_median_theta(self, ssp_data_fsps):
+        """Worst-of-nine must exceed the prior-median-only deviation (#2359).
+
+        The prior median of the shape parameters is the smoothest SFH the prior
+        allows, so a coarse age integrand costs least exactly there. That is a
+        structural bias in the probe, not seed luck, and it is why one theta is
+        the wrong instrument. This test computes the single-theta value itself
+        rather than trusting the function, so reverting to one theta turns it red.
+        """
+        from tengri.inference.mass_profile import (
+            _linearity_max_deviation,
+            _mass_prior_bounds,
+            _predict_full_vector,
+        )
+
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+        model = SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=obs,
+            sfh={"type": ["dpl", "field"], "all_params": FREE, "age_kernel": "dsps"},
+            dust_attenuation=builders.dust.two_component(all_params=FREE, law="calzetti"),
+            neb=builders.neb.none(),
+            redshift=Fixed(0.05),
+        )
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        # profile_mass=False keeps the mass free in the working spec, so the
+        # probe sees exactly what the guard sees before pinning.
+        fitter = Fitter(forward, data=flux, noise=noise, profile_mass=False)
+        spec = fitter.spec
+        mass_name = next(n for n in spec.free_params if n.endswith("log_total_mass"))
+        bounds = _mass_prior_bounds(spec.get_distribution(mass_name))
+
+        # The probe's own i=0 point, reconstructed here independently.
+        phys = {
+            n: spec.get_distribution(n).unstandardize(0.0)
+            for n in spec.free_params
+            if n != mass_name
+        }
+        phys.update(
+            {n: jnp.asarray(v) for n, v in spec.get_fixed_values().items() if n != mass_name}
+        )
+        if getattr(spec, "stochastic", False):
+            phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
+
+        mid = 0.5 * (bounds[0] + bounds[1])
+        pred_a = _predict_full_vector(
+            fitter.model, fitter.data_type, {**phys, mass_name: jnp.asarray(mid)}
+        )
+        pred_b = _predict_full_vector(
+            fitter.model, fitter.data_type, {**phys, mass_name: jnp.asarray(mid + 1.0)}
+        )
+        valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
+        assert bool(jnp.any(valid))
+        ratio = jnp.where(valid, pred_b / pred_a, 10.0)
+        single_theta_dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+
+        probe_dev, _tol = _linearity_max_deviation(fitter, mass_name, bounds)
+
+        assert probe_dev > single_theta_dev, (
+            f"worst-of-nine ({probe_dev:.3e}) did not exceed the prior-median-only "
+            f"deviation ({single_theta_dev:.3e}); the probe is not sampling more "
+            "than one theta"
+        )
+
+    def test_coarse_age_kernel_no_longer_refuses_profiling(self, ssp_data_fsps):
+        """A dsps model engages profiling after the tolerance relaxes to 1e-2.
+
+        Issue #2359: ``stochastic_sfh_jwst`` recipe was refused at 2.853e-08
+        with tolerance 1e-8, losing profiling (measured 4.1x wall-clock on
+        real fits). With tolerance 1e-2 and worst-of-9-thetas, it should
+        engage. This is measured as a recipe-level integration test.
+        """
+        # stochastic_sfh_jwst is mock_recovery_minimal + stochastic field.
+        obs = Observation(photometry=Photometry.from_names(_FILTERS))
+        model = SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=obs,
+            sfh={"type": ["dpl", "field"], "all_params": FREE},
+            dust_attenuation=builders.dust.two_component(all_params=FREE, law="calzetti"),
+            neb=builders.neb.none(),
+            redshift=Fixed(0.05),
+        )
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        fitter = Fitter(forward, data=flux, noise=noise, profile_mass="auto")
+        assert fitter._profile_mass is True, (
+            f"expected profiling to engage; reason: {fitter._profile_mass_reason}"
+        )
+
+    def test_engage_reason_reports_the_measured_deviation(self, ssp_data_fsps):
+        """Engagement reason includes the measured linearity deviation and tolerance.
+
+        Issue #2359: on engagement, the reason should report the measured
+        deviation and tolerance so a user can tell whether they engaged at
+        1e-13 (very tight margin) or at 1e-04 (worse but still safe).
+        """
+        model = _minimal_model(ssp_data_fsps)
+        forward = ForwardModel.build(sed=model)
+        _, flux, noise = _mock(model, seed=0)
+
+        fitter = Fitter(forward, data=flux, noise=noise, profile_mass="auto")
+        assert fitter._profile_mass is True, (
+            f"fixture should engage profiling; reason: {fitter._profile_mass_reason}"
+        )
+
+        reason = fitter._profile_mass_reason
+        assert "linearity" in reason.lower(), (
+            f"engagement reason should mention linearity: {reason}"
+        )
+        assert "<" in reason, f"engagement reason should include comparison: {reason}"
+
+        # Extract and parse the deviation number from the reason string.
+        # Format: "auto-enabled: every guard passed (linearity X.XXeYY < Z.XXeYY)"
+        import re
+
+        match = re.search(r"linearity\s+([\d.e+-]+)\s*<\s*([\d.e+-]+)", reason)
+        assert match is not None, f"could not parse linearity values from reason: {reason}"
+        measured_dev = float(match.group(1))
+        tolerance = float(match.group(2))
+
+        assert measured_dev < tolerance, (
+            f"measured deviation {measured_dev:.3e} should be below tolerance {tolerance:.3e}"
+        )
