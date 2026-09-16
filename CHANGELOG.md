@@ -891,6 +891,26 @@
 
 ### Fixed
 
+- The offline filter remedy is now a command that runs. `load_filter`'s
+  network-unavailable error hands the user one instruction, and it was wrong
+  three ways at once: it named `tools/download_filters.py` while the script
+  lives under `scripts/`, it passed the filter name positionally where the
+  script requires `--filter NAME`, and the script carried its own copy of the
+  registry behind a "keep in sync" comment that had drifted to 250 of 431
+  entries — ALHAMBRA, J-PAS, J-PLUS, SHARDS, HAWK-I and SkyMapper were all
+  absent, so for 181 filters it would have refused the name even when invoked
+  correctly. `scripts/download_filters.py` now reads
+  `src/tengri/observation/data/filters_registry.json` with stdlib `json`,
+  which keeps the constraint the copy existed for ("avoid importing tengri so
+  the script works in bare envs" — reading a data file is not importing the
+  package) while removing 288 lines of duplicated data and the drift class
+  with them. Three contract tests in `test_filter_offline_mode.py` now assert
+  the recommended path resolves to a real file, that the command carries the
+  flag the script requires, and that the script holds no inline
+  alias-to-SVO-id pairs, so a reintroduced duplicate goes red. A
+  recommendation living in an f-string is executed by nothing, which is why
+  none of the three had anything to report it.
+
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
