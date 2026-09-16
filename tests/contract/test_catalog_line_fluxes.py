@@ -138,11 +138,27 @@ def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide, synthetic_tophat_obs)
     ca_swap = cat_swap._catalog_arrays
 
     # Likelihood differences (g0 - g1)
+    # profile_mass=False is load-bearing here, not incidental. Since #2360 the
+    # mass is marginalized on a measured line-flux fit, and this test reads its
+    # answer off the SIGN of a between-galaxy difference taken at one fixed
+    # theta -- a sign that came from the two galaxies' amplitude mismatch
+    # (differences of order 1e5). Marginalizing removes exactly that mismatch,
+    # collapsing the difference to order 1e3 and leaving it same-signed. The
+    # shape comparison that survives is covered by
+    # test_line_fluxes_still_separate_galaxies_when_the_mass_is_profiled.
     fitter_orig_g0 = Fitter(
-        cat_orig.fwd, ca_orig.flux[0], ca_orig.noise[0], data_type="photometry"
+        cat_orig.fwd,
+        ca_orig.flux[0],
+        ca_orig.noise[0],
+        data_type="photometry",
+        profile_mass=False,
     )
     fitter_orig_g1 = Fitter(
-        cat_orig.fwd, ca_orig.flux[1], ca_orig.noise[1], data_type="photometry"
+        cat_orig.fwd,
+        ca_orig.flux[1],
+        ca_orig.noise[1],
+        data_type="photometry",
+        profile_mass=False,
     )
 
     nlp_fn_orig_g0 = fitter_orig_g0._get_or_build_logdensity_fn()
@@ -163,10 +179,18 @@ def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide, synthetic_tophat_obs)
 
     # Same computation with swapped
     fitter_swap_g0 = Fitter(
-        cat_swap.fwd, ca_swap.flux[0], ca_swap.noise[0], data_type="photometry"
+        cat_swap.fwd,
+        ca_swap.flux[0],
+        ca_swap.noise[0],
+        data_type="photometry",
+        profile_mass=False,
     )
     fitter_swap_g1 = Fitter(
-        cat_swap.fwd, ca_swap.flux[1], ca_swap.noise[1], data_type="photometry"
+        cat_swap.fwd,
+        ca_swap.flux[1],
+        ca_swap.noise[1],
+        data_type="photometry",
+        profile_mass=False,
     )
 
     nlp_fn_swap_g0 = fitter_swap_g0._get_or_build_logdensity_fn()
@@ -202,3 +226,59 @@ def test_line_column_count_must_match_the_observation(synthetic_ssp_wide, synthe
             ssp=synthetic_ssp_wide,
             obs_base=synthetic_tophat_obs,
         )
+
+
+def test_line_fluxes_still_separate_galaxies_when_the_mass_is_profiled(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
+    """With the mass marginalized, line fluxes still move the objective a lot.
+
+    The sibling above holds the mass unprofiled so its sign criterion keeps
+    meaning what it meant. This one covers the configuration the default fit
+    surface actually produces, since ``profile_mass="auto"`` engages on a
+    measured line-flux channel since #2360.
+
+    The claim here is deliberately NOT a sign flip. Marginalizing the mass
+    removes the amplitude mismatch that the sign was reading -- measured on this
+    fixture, the between-galaxy difference goes from -300,335 / +75,646
+    unprofiled to +1,229.7 / +131.4 profiled, a factor of ~250 -- because each
+    galaxy's amplitude is now fitted to its own data and only the shape
+    disagreement survives. What must remain true is that the line fluxes are
+    still doing work: swapping which galaxy carries the strong Halpha has to
+    change the objective substantially, even if it no longer reverses the
+    ordering.
+
+    Asserting the magnitude rather than the sign is the honest form of the
+    claim. A sign assertion here would be asserting the amplitude mismatch, and
+    the amplitude is precisely what has been integrated out.
+    """
+    from tengri.inference.fitter import Fitter
+    from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
+
+    def difference(halpha):
+        cat, truth = build_two_galaxy_catalog(
+            halpha=halpha, ssp=synthetic_ssp_wide, obs_base=synthetic_tophat_obs
+        )
+        ca = cat._catalog_arrays
+        out = []
+        for g in (0, 1):
+            fitter = Fitter(cat.fwd, ca.flux[g], ca.noise[g], data_type="photometry")
+            assert fitter._profile_mass, (
+                "this test is about the profiled objective; profiling did not engage, "
+                f"reason: {fitter._profile_mass_reason!r}"
+            )
+            data_args = dict(fitter._data_args)
+            data_args["line_flux_obs"] = ca.line_flux_obs[g]
+            data_args["line_flux_err"] = ca.line_flux_err[g]
+            out.append(float(fitter._get_or_build_logdensity_fn()(truth, data_args)))
+        return out[0] - out[1]
+
+    d_orig = difference((1.0e-16, 4.0e-16))
+    d_swap = difference((4.0e-16, 1.0e-16))
+
+    # The line channel must still carry real weight in the profiled objective.
+    assert abs(d_orig - d_swap) > 1.0, (
+        f"swapping Halpha between the two galaxies moved the profiled objective "
+        f"difference by only {abs(d_orig - d_swap):.4f} ({d_orig:.4f} -> {d_swap:.4f}); "
+        f"the measured line fluxes are barely reaching the marginalized objective"
+    )
