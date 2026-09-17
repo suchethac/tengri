@@ -50,8 +50,20 @@ class TestBareBackendGradients:
         This assertion must pass in float64 precision (jax.enable_x64 is forced
         on in tests/conftest.py). The cotangent underflow happens in float32,
         not in the backward pass itself, so float64 is the correctness gate.
+        Under pure float32 (jax_enable_x64=False), the coordinate dtype remains
+        float32 either way (behavior unchanged).
         """
         import jax
+
+        from tengri.components.nebular.cloudy_cb19 import _frac_idx
+
+        # Verify coordinate dtype behavior under float32 is unchanged
+        with jax.enable_x64(False):
+            grid_f32 = jnp.array([0.0, 1.0, 2.0, 3.0], dtype=jnp.float32)
+            coord_f32 = _frac_idx(1.5, grid_f32)
+            assert coord_f32.dtype == jnp.float32, (
+                f"Coordinate should remain float32 under x64=False, got {coord_f32.dtype}"
+            )
 
         # Enable x64 to force float64 computation
         with jax.enable_x64(True):
