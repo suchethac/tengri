@@ -2125,12 +2125,48 @@ class Posterior:
                         hi=float(np.max(vals)),
                     )
 
-        # Copy settings from original spec
+        # Reconstruct the full structural groups from the model spec,
+        # then inject the posterior's parameter distributions.
+        # This preserves the SFH type, dust law, nebular backend, etc.
         if self._model is not None:
-            kwargs["stochastic"] = self._model.spec.stochastic
-            kwargs["n_grid"] = self._model.spec.n_grid
+            from tengri.parameters.groups import parse_groups
 
-        return Parameters(**kwargs)
+            # Start with the model's structure
+            groups = self._model.spec.to_groups()
+
+            # Inject posterior parameter distributions into the groups
+            for group_name, group_dict in groups.items():
+                if isinstance(group_dict, dict) and "type" in group_dict:
+                    # This is a component group (e.g., sfh, dust_attenuation, neb, etc.)
+                    for param_name, param_dist in kwargs.items():
+                        # Match param_name against group's parameters
+                        # e.g., sfh_dpl_alpha -> inject into sfh group as 'alpha'
+                        prefix = f"{group_name}_"
+                        if param_name.startswith(prefix):
+                            short_name = param_name[len(prefix):]
+                            # Skip structural parameters and prefixes
+                            sfh_types = ("dpl_", "delayed_", "field_", "tsnorm_")
+                            if not short_name.startswith(sfh_types):
+                                continue
+                            # Extract the parameter name after the SFH type
+                            for sfh_type in ["dpl", "delayed", "field", "tsnorm"]:
+                                sfh_prefix = f"{group_name}_{sfh_type}_"
+                                if param_name.startswith(sfh_prefix):
+                                    short_name = param_name[len(sfh_prefix):]
+                                    group_dict[short_name] = param_dist
+                                    break
+
+            # Convert groups back to Parameters
+            spec = parse_groups(**groups)
+            # Now apply the posterior distributions to the spec
+            for name, dist in kwargs.items():
+                if name in spec._distributions:
+                    spec._distributions[name] = dist
+            return spec
+        else:
+            # Fallback: create Parameters with only the parameter distributions
+            # This will fail if structural information is missing
+            return Parameters(**kwargs)
 
     def to_arviz(self):
         """Convert to ArviZ InferenceData for diagnostics.
@@ -3090,9 +3126,51 @@ class Posterior:
                 "Posterior.validate() requires a back-reference to its Fitter. "
                 "Use model.fit() or fitter.run() to produce this Posterior."
             )
+
+        # Validation requires samples to compare histograms against
+        if self.samples is None:
+            raise ValueError(
+                f"This is a {self.method!r} fit with no samples; validation requires a "
+                "posterior with samples to compare against. Use a sampling method like "
+                "'mcmc_nuts' or 'mcmc_raytrace', not 'map' or 'laplace'."
+            )
+
         d = self._fitter.spec.n_free
         mcmc_method = "mcmc_nuts" if d <= 20 else "mcmc_raytrace"
-        mcmc_result = self._fitter.run(mcmc_method, init_from=self, n_steps=n_steps, **kwargs)
+
+        # Dispatch based on the MCMC method to pass only valid kwargs
+        # NUTS uses: n_warmup, n_burnin, n_samples, n_chains, ...
+        # Ray Tracing uses: n_steps, n_chains, ...
+        # We need to convert n_steps (MAP argument) to the correct argument for the method
+        import inspect
+
+        # Get the backend function to introspect its signature
+        from tengri.inference._backend_registry import BACKEND_REGISTRY
+        backend_fn = BACKEND_REGISTRY.get(mcmc_method)
+        if backend_fn is not None:
+            sig = inspect.signature(backend_fn)
+            valid_params = set(sig.parameters.keys()) - {"context", "key", "init_from"}
+
+            # Build kwargs for this method
+            mcmc_kwargs = {"init_from": self}
+
+            # Convert n_steps to the method's preferred parameter
+            if mcmc_method == "mcmc_nuts" and "n_samples" in valid_params:
+                # NUTS: use n_steps to set n_samples
+                mcmc_kwargs["n_samples"] = n_steps
+            elif mcmc_method == "mcmc_raytrace" and "n_steps" in valid_params:
+                # Ray Tracing: use n_steps directly
+                mcmc_kwargs["n_steps"] = n_steps
+
+            # Add any other provided kwargs that are valid for this method
+            for key, value in kwargs.items():
+                if key in valid_params:
+                    mcmc_kwargs[key] = value
+
+            mcmc_result = self._fitter.run(mcmc_method, **mcmc_kwargs)
+        else:
+            # Fallback if registry lookup fails
+            mcmc_result = self._fitter.run(mcmc_method, init_from=self, n_steps=n_steps, **kwargs)
 
         # Compute per-parameter marginal overlap (histogram intersection)
         overlap: dict[str, float] = {}
