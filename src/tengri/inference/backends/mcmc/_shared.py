@@ -3204,21 +3204,24 @@ def _resolve_chain_parallel(chain_parallel: str, n_chains: int) -> bool:
         return False
     if chain_parallel == "pmap":
         if n_dev < n_chains:
-            hint_suffix = ""
-            if not _pmap_hint_applies():
-                hint_suffix = (
-                    "\n  Note: on CPU, vmap is faster than pmap; "
-                    "consider chain_parallel='auto' or 'vmap' instead."
+            if _pmap_hint_applies():
+                # GPU/TPU platform: suggest TENGRI_HOST_DEVICES
+                error_msg = (
+                    f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
+                    f"devices, found {n_dev}. Set the TENGRI_HOST_DEVICES environment "
+                    f"variable to {n_chains} (or more) before the first `import jax` "
+                    "-- tengri reads it at import time and appends "
+                    "--xla_force_host_platform_device_count to XLA_FLAGS for you -- "
+                    "or pass chain_parallel='vmap' / 'auto'."
                 )
-            raise ValueError(
-                f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
-                f"devices, found {n_dev}. Set the TENGRI_HOST_DEVICES environment "
-                f"variable to {n_chains} (or more) before the first `import jax` "
-                "-- tengri reads it at import time and appends "
-                "--xla_force_host_platform_device_count to XLA_FLAGS for you -- "
-                "or pass chain_parallel='vmap' / 'auto'."
-                + hint_suffix
-            )
+            else:
+                # CPU platform: vmap is faster
+                error_msg = (
+                    f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
+                    f"devices, found {n_dev}. On CPU, vmap is faster than pmap "
+                    "(issue #2361); pass chain_parallel='auto' or 'vmap' instead."
+                )
+            raise ValueError(error_msg)
         return True
     if chain_parallel == "auto":
         return n_chains > 1 and n_dev >= n_chains

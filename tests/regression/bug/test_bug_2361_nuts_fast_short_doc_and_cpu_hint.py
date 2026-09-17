@@ -78,3 +78,48 @@ def test_nuts_fast_non_cpu_hint_applies_with_predicate(monkeypatch):
     assert _shared._pmap_hint_applies(), (
         "On non-CPU platform, _pmap_hint_applies() should return True"
     )
+
+
+def test_pmap_error_message_cpu_platform():
+    """Assert pmap error message does not mention TENGRI_HOST_DEVICES on CPU."""
+    if jax.devices()[0].platform != "cpu":
+        pytest.skip(f"Test requires CPU platform, got {jax.devices()[0].platform}")
+
+    from tengri.inference.backends.mcmc._shared import _resolve_chain_parallel
+
+    try:
+        _resolve_chain_parallel("pmap", n_chains=4)
+        pytest.fail("Should raise ValueError for pmap with insufficient devices")
+    except ValueError as e:
+        error_msg = str(e)
+        assert "TENGRI_HOST_DEVICES" not in error_msg, (
+            f"Error message should not mention TENGRI_HOST_DEVICES on CPU; got: {error_msg}"
+        )
+        assert "vmap is faster than pmap" in error_msg, (
+            f"Error message should mention vmap is faster on CPU; got: {error_msg}"
+        )
+
+
+def test_pmap_error_message_gpu_platform(monkeypatch):
+    """Assert pmap error message mentions TENGRI_HOST_DEVICES on non-CPU."""
+
+    class FakeDevice:
+        platform = "gpu"
+
+    # Monkeypatch to simulate GPU platform
+    monkeypatch.setattr(jax, "devices", lambda: [FakeDevice()])
+    monkeypatch.setattr(jax, "device_count", lambda: 1)
+
+    from tengri.inference.backends.mcmc._shared import _resolve_chain_parallel
+
+    try:
+        _resolve_chain_parallel("pmap", n_chains=4)
+        pytest.fail("Should raise ValueError for pmap with insufficient devices")
+    except ValueError as e:
+        error_msg = str(e)
+        assert "TENGRI_HOST_DEVICES" in error_msg, (
+            f"Error message should mention TENGRI_HOST_DEVICES on GPU; got: {error_msg}"
+        )
+        assert "vmap is faster than pmap" not in error_msg, (
+            f"Error message should not mention vmap speed comparison on GPU; got: {error_msg}"
+        )

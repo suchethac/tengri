@@ -172,11 +172,15 @@ def test_tengri_host_devices_env_gives_four_cpu_devices():
 
 
 def test_pmap_without_enough_devices_raises_value_error():
-    """``chain_parallel='pmap'`` on a single-device process names the env hook."""
+    """``chain_parallel='pmap'`` on single device: CPU advises vmap, GPU advises TENGRI_HOST_DEVICES."""
     out = _run("pmap_needs_devices", host_devices=None)
     assert out["raised"] is True
-    assert "TENGRI_HOST_DEVICES" in out["message"]
     assert "n_chains=4" in out["message"]
+    # Platform-aware: CPU says "vmap is faster", GPU says "TENGRI_HOST_DEVICES"
+    # This subprocess runs on the test platform (CPU), so we expect the CPU message
+    assert ("vmap is faster than pmap" in out["message"]) or ("TENGRI_HOST_DEVICES" in out["message"]), (
+        f"Error message should mention either vmap or TENGRI_HOST_DEVICES; got: {out['message']}"
+    )
 
 
 def test_pmap_and_vmap_agree_on_shapes_and_means():

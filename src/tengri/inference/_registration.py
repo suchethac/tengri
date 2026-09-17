@@ -49,6 +49,7 @@ from tengri.inference.backends.mcmc import (
     run_raytrace as _ctx_run_raytrace,
     run_smc as _ctx_run_smc,
 )
+from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
@@ -280,8 +281,6 @@ def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
 
     import jax
 
-    from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
-
     if (
         int(kw.get("n_chains", 4)) > 1
         and len(jax.devices()) < int(kw.get("n_chains", 4))
@@ -305,8 +304,8 @@ register_backend(
     "mcmc_nuts_fast",
     tier="primary",
     short_doc=(
-        "NUTS at the 20 s photometry recipe: 4 chains x (150 warmup + 300 draws), "
-        "no burn-in, target 0.8; mass profiled, dense metric, "
+        "NUTS photometry recipe: 4 chains x (150 warmup + 300 draws), no burn-in, target 0.8; "
+        "mass profiled, dense metric, "
         "vmapped chains on one device; pmapped when the platform exposes at least n_chains devices"
     ),
     requires=("blackjax",),

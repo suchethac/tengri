@@ -3,12 +3,15 @@
 
 ### Fixed
 
-- `mcmc_nuts_fast` registry row: removed false claim "pmapped chains by default",
-  now states "vmapped chains on one device; pmapped when the platform exposes at
-  least n_chains devices". The TENGRI_HOST_DEVICES hint is now gated to GPU/TPU
-  platforms only; on CPU, vmap is 8% faster than pmap and the hint was
-  counterproductive. Same seed, same 5-param broadband photometry fit: 418.3 s
-  (vmap) vs 451.5 s (pmap) for 600-iteration warmup (#2361).
+- `mcmc_nuts_fast` registry row and pmap hint: removed false claim "pmapped chains
+  by default", now states "vmapped chains on one device; pmapped when the platform
+  exposes at least n_chains devices". The TENGRI_HOST_DEVICES hint is now gated
+  to GPU/TPU platforms only; on CPU, vmap is 8% faster than pmap and the hint was
+  counterproductive (418.3 s vmap vs 451.5 s pmap, same 5-param broadband fit).
+  Removed "20 s" from short_doc: timing varies widely by model (15 s–30+ min),
+  not a property of the recipe alone. Error message for `chain_parallel='pmap'`
+  is now platform-aware: suggests TENGRI_HOST_DEVICES on GPU/TPU, recommends
+  vmap/auto on CPU (#2361).
 
 ### Added
 
