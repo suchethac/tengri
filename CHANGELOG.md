@@ -1,6 +1,17 @@
 ## [Unreleased]
 
 
+### Fixed
+
+- Float32 refusal on Hessian-based inference now names the dtype in both
+  Laplace and preconditioning routes, clarifying that non-finiteness is a
+  float32 artifact (the SED model's photometry Hessian is all-NaN in float32)
+  rather than a diverged MAP initialization or genuine curvature failure. The
+  disable-profile-mass-then-raise anti-pattern at the float32 check no longer
+  silently mutates a `Fitter` on an exception path, preserving the invariant
+  that reuse-after-exception is safe (#2378).
+
+
 ### Added
 
 - Each non-stellar emission source now picks its own dust screen: the

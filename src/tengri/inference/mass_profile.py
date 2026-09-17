@@ -655,13 +655,14 @@ PROFILE_MASS_BACKENDS = frozenset(
 
 #: Backends that take a Hessian of the objective function and therefore trigger
 #: the known float32 NaN failure in the SED model's photometry Hessian
-#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). The Hessian is computed
-#: via ``jax.hessian`` (laplace backend) or via preconditioning's ``negative_hessian_metric``
-#: (optional metric whitening for Hamiltonian samplers). Note that preconditioning is
-#: **opt-in** (``precondition=`` must be truthy), so float32 refusal is scoped to the
-#: backends listed here. The float32 NaN is **not** specific to ``profile_mass`` — it
-#: reproduces on the plain objective with ``profile_mass=False`` — so float32 refusal
-#: names which objective this is, not which fitting path triggered it.
+#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). Currently laplace only.
+#: Preconditioning's ``negative_hessian_metric`` (optional metric whitening for
+#: Hamiltonian samplers) takes a Hessian under float32 but is caught downstream by
+#: the metric's non-finiteness check (see ``preconditioning.py``'s
+#: ``FLOAT32_METRIC_CLAUSE``), with the dtype named in the error message. The float32
+#: NaN is **not** specific to ``profile_mass`` — it reproduces on the plain objective
+#: with ``profile_mass=False`` — so float32 refusal names which objective this is, not
+#: which fitting path triggered it.
 HESSIAN_BACKEND_SET = frozenset({"laplace"})
 
 
@@ -703,7 +704,8 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
     ``profile_mass=False`` — so this guard names which objective (not which
     fitting path) blocks float32.
     """
-    # Check float32 refusal for Hessian-taking backends
+    # Check float32 refusal for Hessian-taking backends.
+    # Raise before any Fitter state mutation to keep reuse-after-exception safe.
     if method in HESSIAN_BACKEND_SET:
         dtype = jnp.result_type(float)
         if dtype == jnp.float32:
@@ -713,10 +715,8 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
                 "not specific to profiling (reproduces with profile_mass=False). "
                 "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
             )
-            if getattr(fitter, "_profile_mass", False):
-                if requested is True:
-                    raise ValueError(f"profile_mass=True but {reason}")
-                disable_profile_mass(fitter, f"auto-disabled: {reason}")
+            if requested is True and getattr(fitter, "_profile_mass", False):
+                raise ValueError(f"profile_mass=True but {reason}")
             raise ValueError(f"method={method!r}: {reason}")
 
     if not getattr(fitter, "_profile_mass", False) or method in PROFILE_MASS_BACKENDS:
