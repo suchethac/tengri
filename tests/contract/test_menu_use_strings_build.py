@@ -76,22 +76,46 @@ def test_production_row_use_string_builds(
     """Every production menu row's use string must build or be marked not-buildable."""
     use_str = row.get("use", "")
     marker_prefix = "[not builder-available:"
+    short_doc = row.get("short_doc", "")
+    is_marked = marker_prefix in short_doc
 
-    # Rows marked as "not builder-available" carry a composable form in `use`
-    # and must build. Verify they are marked unvalidated (status != production).
-    if marker_prefix in use_str:
+    # Rows marked as "not builder-available" in short_doc carry a composable form in `use`
+    # and must not be production status.
+    if is_marked:
         assert row.get("status") != "production", (
-            f"{entry_name} has marker but status={row.get('status')}"
+            f"{entry_name} has marker in short_doc but status={row.get('status')}"
         )
-        assert marker_prefix in row.get("short_doc", ""), (
-            f"{entry_name} marker in use but not in short_doc"
-        )
-        # These rows should build; fall through to verify.
+        # Marked rows can have either a SEDModel.build(..., ) string OR a dotted path
+        if use_str.startswith("SEDModel.build(..., "):
+            # Will be validated below as a build form
+            pass
+        elif "." in use_str and not use_str.startswith("SEDModel.build"):
+            # Dotted path form: validate it can be imported
+            # Extract the function path (everything before the first parenthesis)
+            func_path = use_str.split("(")[0].strip()
+            module_path, func_name = func_path.rsplit(".", 1)
+            try:
+                import importlib
 
-    # Require the use string to start with SEDModel.build
-    assert use_str.startswith("SEDModel.build(..., "), (
-        f"{entry_name} use string does not start with SEDModel.build(..., : {use_str[:60]}"
-    )
+                mod = importlib.import_module(module_path)
+                assert hasattr(mod, func_name), (
+                    f"{entry_name}: function {func_name} not found in {module_path}"
+                )
+            except (ImportError, ValueError) as e:
+                pytest.fail(
+                    f"{entry_name}: marked row with dotted path failed to import:"
+                    f" {use_str}\nError: {e}"
+                )
+            # Dotted path forms are considered valid for marked rows; skip build verification
+            return
+        else:
+            pytest.fail(f"{entry_name}: marked row has invalid use format: {use_str}")
+
+    # Production rows must require the use string to start with SEDModel.build
+    if not is_marked:
+        assert use_str.startswith("SEDModel.build(..., "), (
+            f"{entry_name} use string does not start with SEDModel.build(..., : {use_str[:60]}"
+        )
 
     # Extract everything between SEDModel.build(..., and the closing )
     start_idx = use_str.find("SEDModel.build(..., ")

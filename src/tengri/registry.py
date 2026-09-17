@@ -1126,15 +1126,18 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
     },
     "pah_drude": {
-        "status": "production",
+        "status": "unvalidated",
         "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
         # Stays listed on purpose: it is a real, validated PAH template that
         # composes into custom models, and delisting it would hide it the way
         # #1120 hid the unvalidated SFH types. What the row must not do is read
         # like a model you can select — standalone it re-emits a measured
         # 1.8925e-04 of L_ir, and SEDModel.build refuses it.
-        "short_doc": "Drude-profile PAH emission features (building block; not selectable standalone)",  # noqa: E501
-        "use": "SEDModel.build(..., dust_attenuation={'law': 'calzetti'})",
+        "short_doc": "[not builder-available: PAH building block; composes through the dust-emission grid API] Drude-profile PAH emission features",  # noqa: E501
+        "use": (
+            "tengri.components.dust.dust_analytic_precompute.precompute("
+            "model='pah_drude', ...)"
+        ),
     },
     "energy_balance_split": {
         "status": "experimental",
