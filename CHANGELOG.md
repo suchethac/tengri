@@ -3,11 +3,10 @@
 
 ### Fixed
 
-- Radio preset menu rows printed a `use` that `SEDModel.build` rejects, and
-  `smc_prevot` printed the wrong grammar. Rows are now marked not-builder-available
-  with the `[not builder-available: ...]` marker and corrected `use` text, or a `use`
-  that builds correctly. Every production row's `use` is validated by a contract test
-  (#2201).
+- Radio preset rows kept their buildable composable `use` and carry the
+  not-builder-available marker in `short_doc`, so the menu's `name` column types
+  and every production row's `use` is built by a contract test. The marker is
+  defined as a module constant; `list_sfh_models` uses it at a second site (#2201).
 
 ### Added
 

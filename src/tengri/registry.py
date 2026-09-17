@@ -655,6 +655,17 @@ def _component_entry(name: str, *, kind: str) -> dict:
 #: the worst possible answer to "show me everything".
 ALL = "all"
 
+#: Prefix marker for rows that carry a buildable hint in ``use`` but are not
+#: the dispatch key a user types into the build grammar. When a ``short_doc``
+#: contains this, the row is unvalidated — the ``use`` string is a workaround
+#: (a composable form, a call to a sibling menu) rather than a direct call on
+#: the row's name. Used by :func:`list_sfh_models` for DSPS-unvalidated kinds,
+#: and by :func:`list_radio_models` for retired preset names. When ``use`` is
+#: grafted into a notebook, this marker and its context must be present so the
+#: user sees the explanation and does not mistake the workaround for the
+#: canonical path (a silent-failure symptom #2201).
+_NOT_BUILDER_AVAILABLE_PREFIX = "[not builder-available:"
+
 
 @functools.cache
 def _menu_vocabulary(column: str) -> tuple[str, ...]:
@@ -885,10 +896,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             if cat == "attenuation" and name == "smc_prevot":
                 use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}) "
             else:
-                use_str = (
-                    f"SEDModel.build(..., agn={{"
-                    f"'{group_key}': {{'type': '{name}'}}}})  "
-                )
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}})  "
             entry_dict = {
                 "name": name,
                 "category": cat,
@@ -1199,8 +1207,8 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
     for m in out:
         if m["name"] in UNVALIDATED_SFH_TYPES:
             m["status"] = "unvalidated"
-            if "not builder-available" not in m["short_doc"]:
-                suffix = " [not builder-available: registered, not yet DSPS-validated]"
+            if _NOT_BUILDER_AVAILABLE_PREFIX not in m["short_doc"]:
+                suffix = f" {_NOT_BUILDER_AVAILABLE_PREFIX} registered, not yet DSPS-validated]"
                 m["short_doc"] = f"{m['short_doc']}{suffix}"
             # The status said "unvalidated" while ``use:`` still advertised
             # ``SEDModel.build(..., sfh={'type': X})``: a copy-pasteable call
@@ -1321,17 +1329,15 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     # radio={'sf': {...}, 'agn': {...}} form (list_radio_blocks).
     for m in out:
         m["status"] = "unvalidated"
-        if "not builder-available" not in m["short_doc"]:
+        if _NOT_BUILDER_AVAILABLE_PREFIX not in m["short_doc"]:
             suffix = (
-                " [not builder-available: legacy radio={'type':...} form retired; "
-                "use composable radio={'sf'/'agn': ...} form]"
+                f" {_NOT_BUILDER_AVAILABLE_PREFIX} legacy radio={{'type':...}} form "
+                "retired; use the composable form radio={'sf'/'agn': ...} form]"
             )
             m["short_doc"] = f"{m['short_doc']}{suffix}"
-        m["use"] = (
-            "not builder-available: legacy radio={'type': ...} form is retired; "
-            "use the composable form radio={'sf': {...}, 'agn': {...}} instead, "
-            "listed by list_radio_blocks()"
-        )
+        # Restore the buildable composable form from _usage_hint so the menu
+        # row carries the actual call the builder accepts, not a generic error.
+        m["use"] = _usage_hint(m["name"], "radio_model")
     out = _filter_menu(out, "status", status, listing="list_radio_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
