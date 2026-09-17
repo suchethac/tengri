@@ -1582,13 +1582,16 @@ jobs:
       # tests/inference and tests/integration: those five trees are not auto-marked
       # slow by path, so `-m slow` (not `-m 'not crossval'`) selects only the
       # individually-decorated tests.
+      #
+      # Run under python -X faulthandler so seg faults print stack traces instead
+      # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
-            pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
           else
-            pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1677,7 +1680,7 @@ jobs:
           status=0
           while IFS= read -r f; do
             b=$(basename "$f" .py)
-            pytest "$f" -q --no-header -m 'crossval and not oom' -n 0 -rE \
+            pytest "$f" -q --no-header -m 'crossval and not oom' -n 0 -rfE \
               --junit-xml="crossval-results/${b}.xml" || rc=$?
             rc=${rc:-0}
             # 0 = green, 5 = nothing selected in this file (all deselected):
