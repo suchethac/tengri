@@ -48,12 +48,15 @@ attenuation)::
 
 from __future__ import annotations
 
-import math
 import warnings
 
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._lbol_reference import (
+    reference_evaluation,
+    rescale,
+)
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
     describe_clipping,
@@ -74,20 +77,6 @@ from tengri.components.agn.blocks.torus_screen import (
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import SKIRTORBundle, skirtor_disc_dust_ratio
 from tengri.config.exceptions import AdvisoryWarning
-from tengri.utils.physics_constants import L_SUN
-from tengri.utils.scale import apply_log10_scale
-
-#: log10 of the solar luminosity [dex], for folding the AGN bolometric scale
-#: into log space (float32 safety, #1206). L_SUN ~3.828e33 erg/s.
-_LOG10_L_SUN: float = math.log10(L_SUN)
-
-#: Reference AGN ``agn_log_lbol`` (= log10(L_bol/L_sun)) at which every block is
-#: evaluated for the float32 factoring (#1206). Chosen so L_bol = 1e10 erg/s: low
-#: enough that the *squares* of the internal bolometric integrals stay in float32
-#: range (``(1e10)**2 = 1e20 << 3.4e38``), yet high enough that the runner's
-#: ``max(faceon/L_sun, 1e-30)`` zero-protection floor never engages (faceon/L_sun
-#: ~1e-23, seven decades clear). The true 10^agn_log_lbol is re-applied afterward.
-_AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -516,45 +505,6 @@ def _agn_sed_components(
     }
 
 
-def _apply_float32_reference_evaluation(
-    agn_log_lbol: float,
-    wave_dtype: jnp.dtype,
-) -> tuple[float, bool, float]:
-    r"""Apply float32 reference evaluation guard to AGN bolometric luminosity.
-
-    When operating in pure float32, an erg/s-scale luminosity overflows before
-    the log-domain path is reached. This guard evaluates the composable runner
-    at a reference ``agn_log_lbol`` value (low enough that all integrals stay
-    finite in float32), then rescales in log space afterward.
-
-    Parameters
-    ----------
-    agn_log_lbol : float
-        Input AGN bolometric luminosity :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    wave_dtype : jnp.dtype
-        The dtype of the wavelength array (used to detect float32 mode).
-
-    Returns
-    -------
-    agn_log_lbol_eval : float or array
-        The luminosity to pass to composable blocks for evaluation. When float32
-        is enabled, this is ``_AGN_LBOL_REF``; otherwise the true value.
-    use_ref : bool
-        Whether reference evaluation is active (True in float32 mode).
-    log_scale_offset : float or array
-        The log10-space offset to apply afterward: ``agn_log_lbol - _AGN_LBOL_REF``
-        when ``use_ref`` is True, else 0.
-    """
-    use_ref = wave_dtype == jnp.float32
-    if use_ref:
-        agn_log_lbol_eval = _AGN_LBOL_REF
-        log_scale_offset = agn_log_lbol - _AGN_LBOL_REF
-    else:
-        agn_log_lbol_eval = agn_log_lbol
-        log_scale_offset = 0.0
-    return agn_log_lbol_eval, use_ref, log_scale_offset
-
-
 def compose_l_nu(
     wavelength: Array,
     agn_log_lbol: float,
@@ -652,11 +602,11 @@ agn_torus_block, agn_attenuation_block : str
 
     # Apply float32 reference evaluation guard (#1206, #2321): when operating
     # in pure float32, pass a reference luminosity to blocks to avoid overflow,
-    # then rescale in log space afterward. This is the SAME block as
-    # SEDModel.predict does at `:component.py:569-610`, now shared here so both
-    # entry points (direct call and via SEDModel) use one implementation.
-    agn_log_lbol_eval, _use_ref, _log_scale_offset = _apply_float32_reference_evaluation(
-        agn_log_lbol, wave.dtype
+    # then rescale in log space afterward. The factoring lives in
+    # components/agn/_lbol_reference.py and is shared with the AGNSEDComponent's
+    # monolithic branch.
+    agn_log_lbol_eval, _use_ref, _log_scale_offset = reference_evaluation(
+        agn_log_lbol, wave
     )
 
     # When evaluating at reference luminosity, hand the disc its TRUE L_bol for
@@ -1188,17 +1138,17 @@ agn_torus_block, agn_attenuation_block : str
     )
 
     # Apply float32 rescaling in log space if reference evaluation was active.
-    # See :func:`_apply_float32_reference_evaluation` — blocks were evaluated at
-    # ``_AGN_LBOL_REF``; we rescale the magnitude now in log10 space so the
-    # true ``agn_log_lbol`` luminosity is recovered without overflow.
+    # Blocks were evaluated at ``_AGN_LBOL_REF``; we rescale the magnitude now
+    # in log10 space so the true ``agn_log_lbol`` luminosity is recovered
+    # without overflow.
     if _use_ref:
-        L_nu_final = apply_log10_scale(L_nu_result, _log_scale_offset)
-        L_2500_final = apply_log10_scale(L_2500_intrinsic, _log_scale_offset)
-        L_4400_final = apply_log10_scale(L_4400_intrinsic, _log_scale_offset)
+        L_nu_final = rescale(L_nu_result, _log_scale_offset)
+        L_2500_final = rescale(L_2500_intrinsic, _log_scale_offset)
+        L_4400_final = rescale(L_4400_intrinsic, _log_scale_offset)
         components_final = (
-            None
-            if components is None
-            else {k: apply_log10_scale(v, _log_scale_offset) for k, v in components.items()}
+            rescale(components, _log_scale_offset)
+            if components is not None
+            else None
         )
     else:
         L_nu_final = L_nu_result

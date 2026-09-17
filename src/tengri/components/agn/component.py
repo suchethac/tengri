@@ -41,13 +41,17 @@ read directly from ``params`` as an independent free parameter.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.agn._lbol_reference import (
+    _LOG10_L_SUN,
+    reference_evaluation,
+    rescale,
+)
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.unified import resolve_agn_model
@@ -61,19 +65,6 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.utils.physics_constants import L_SUN
-
-#: log10 of the solar luminosity [dex], for folding the AGN bolometric scale
-#: into log space (float32 safety, #1206). L_SUN ~3.828e33 erg/s.
-_LOG10_L_SUN: float = math.log10(L_SUN)
-
-#: Reference AGN ``agn_log_lbol`` (= log10(L_bol/L_sun)) at which every block is
-#: evaluated for the float32 factoring (#1206). Chosen so L_bol = 1e10 erg/s: low
-#: enough that the *squares* of the internal bolometric integrals stay in float32
-#: range (``(1e10)**2 = 1e20 << 3.4e38``), yet high enough that the runner's
-#: ``max(faceon/L_sun, 1e-30)`` zero-protection floor never engages (faceon/L_sun
-#: ~1e-23, seven decades clear). The true 10^agn_log_lbol is re-applied afterward.
-_AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
 
 __all__ = [
     "AGNSEDComponent",
@@ -535,14 +526,12 @@ class AGNSEDComponent(TemplateThreading):
         # (X-ray falls back to L_bol BC or SKIRTOR's published L_2500_30deg;
         # radio falls back to L_bol bolometric correction).
         #
-        # Float32 boundary (#1206). Evaluating every AGN block at the true
-        # ``agn_log_lbol`` overflows float32: the CIGALE-joint disc renorm forms
-        # Float32 reference evaluation is now implemented inside the composable
-        # runner (blocks/runner.py:_apply_float32_reference_evaluation) so both
-        # entry points (direct call and via SEDModel) share ONE implementation.
-        # (#1206, #2321) The runner evaluates at a reference L_bol in float32,
-        # then rescales in log space to recover the true L_bol, and hand-off
-        # agn_log_lbol_shape for disc shape calculation. Call the runner directly.
+        # Float32 reference evaluation (#1206, #2321): when operating in pure
+        # float32, evaluating every AGN block at the true ``agn_log_lbol``
+        # overflows. Both paths evaluate at a reference L_bol in float32 and
+        # rescale in log space to recover the true L_bol. The factoring lives
+        # in components/agn/_lbol_reference.py and is called by the composable
+        # runner and the monolithic branch here.
         if self.config.model == "composable":
             L_agn, L_2500_intrinsic, L_4400_intrinsic, agn_components = agn_fn(
                 wave,
@@ -552,7 +541,9 @@ class AGNSEDComponent(TemplateThreading):
                 **agn_kwargs,
             )
         else:
-            L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
+            lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, wave)
+            L_agn_unit = agn_fn(wave, agn_log_lbol=lbol_eval, **agn_kwargs)
+            L_agn = rescale(L_agn_unit, offset) if use_ref else L_agn_unit
             L_2500_intrinsic = jnp.asarray(0.0)
             L_4400_intrinsic = jnp.asarray(0.0)
             agn_components = None
