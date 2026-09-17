@@ -895,10 +895,25 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         stays exact, never break a fit that worked, only make its cost
         visible.
     """
-    if approx is None:
-        return model
     if getattr(model, "with_approx", None) is None:
         return model
+    if approx is None:
+        # #2377: force the exact path here too, mirroring the ``None`` branch of
+        # ``Fitter._resolve_fit_approx``, whose docstring is explicit that ``None``
+        # "overrides a build-time approx" and "means exact and stays exact". This
+        # returned ``model`` untouched, so a catalog or population fit built with
+        # ``approx=(WavePrecomp(), FeaturePrecomp())`` kept BOTH tables on after the
+        # caller asked, in the documented spelling, for the exact path. One word
+        # meant two opposite things depending on which fitter you reached for, and
+        # the surface that kept the approximation is the one whose fits are largest.
+        #
+        # Not a speed regression to protect: it is the contract being honored. It
+        # also makes the advice in ``PrecompBiasWarning`` actionable -- that warning
+        # tells the reader "for final inference at this SNR, rerun with approx=None
+        # (the exact path)", which on these surfaces previously changed nothing.
+        # #1671 is precisely about WavePrecomp's forward bias entering the posterior
+        # gradient multiplied by SNR, so a reference run is exactly where it bites.
+        return _memoized_approx_clone(model, None)
 
     if isinstance(approx, str):
         if approx != "auto":
