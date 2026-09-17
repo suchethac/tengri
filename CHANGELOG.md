@@ -799,6 +799,17 @@
 
 ### Fixed
 
+- Both unwired guards are wired and the class is closed (#2326):
+  `tools/check_harness_parity.py` (benchmark-fixture provenance) and
+  `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
+  confusable codepoints; warn-only until a docs cleanup clears its 24 standing
+  findings) now run in CI, and `tools/check_ci_pr_coverage.py` fails on any
+  `tools/check_*.py` invoked by no file under `.github/workflows/` — scanning
+  every workflow, since three guards run from `docs.yml`/`notebooks.yml`.
+  Rot found on restoration, fixed: a stale `%%`-block entry in
+  `check_docs_voice.py` named a checker that does not exist, so reaching it
+  raised `NameError` instead of reporting (the code-cell path at its real
+  call site is untouched).
 - The energy-balance-split closure's docstring tagged its luminosity arguments
   `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
   supplies both in `erg/s` (component_factory.py:346). The docstring is now
