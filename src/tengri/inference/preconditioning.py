@@ -58,7 +58,6 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 
 __all__ = [
     "DEFAULT_WHITENING_STRENGTH",
-    "FLOAT32_METRIC_CLAUSE",
     "MAX_METRIC_CONDITION",
     "PRECONDITION_MAX_DIM",
     "LinearPreconditioner",
@@ -79,14 +78,13 @@ __all__ = [
 #: needing the residual Jacobian.
 PRIOR_METRIC_FLOOR: float = 1.0
 
-#: Float32 diagnostic clause for non-finite metric errors. The SED model's photometry
-#: Hessian is all-NaN in float32 due to a JAX forward-over-reverse seam in the
-#: differentiable code, so non-finiteness under float32 is a candidate cause.
-FLOAT32_METRIC_CLAUSE: str = (
+#: Shared float32 Hessian artifact note for non-finite metric errors. The SED model's
+#: photometry Hessian is all-NaN in float32 due to a JAX forward-over-reverse seam,
+#: so non-finiteness under float32 is a candidate cause.
+FLOAT32_HESSIAN_NAN_NOTE: str = (
     "float32 mode; the SED model's photometry Hessian is all-NaN in float32 "
-    "at the converged MAP (a forward-over-reverse seam in the model), "
-    "not specific to profiling (reproduces with profile_mass=False). "
-    "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
+    "at the converged MAP (a forward-over-reverse seam in the model); "
+    "bench/reports/2026-09-11_profile_mass_20s.md, Finding 8"
 )
 
 #: Default whitening strength :math:`\alpha` in :math:`A A^\top = G^{-\alpha}`.
@@ -333,7 +331,7 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
     if not bool(jnp.all(jnp.isfinite(metric))):
         dtype_clause = ""
         if jnp.result_type(float) == jnp.float32:
-            dtype_clause = f" ({FLOAT32_METRIC_CLAUSE})"
+            dtype_clause = f" ({FLOAT32_HESSIAN_NAN_NOTE})"
         raise ValueError(
             "metric is non-finite (NaN or inf), so it cannot be factorized. This "
             "is an upstream failure, not a curvature one: the metric is built at "
@@ -448,7 +446,7 @@ def _reject_nonfinite_expansion_point(init_flat: jnp.ndarray) -> None:
         n_bad = int(jnp.sum(~jnp.isfinite(init_flat)))
         dtype_clause = ""
         if jnp.result_type(float) == jnp.float32:
-            dtype_clause = f" ({FLOAT32_METRIC_CLAUSE})"
+            dtype_clause = f" ({FLOAT32_HESSIAN_NAN_NOTE})"
         raise ValueError(
             f"the expansion point is non-finite ({n_bad} of {init_flat.size} "
             "coordinates are NaN or inf), so no metric can be built at it. This "

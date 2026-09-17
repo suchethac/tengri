@@ -107,6 +107,7 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
+from tengri.inference.preconditioning import FLOAT32_HESSIAN_NAN_NOTE
 from tengri.parameters.priors import Fixed
 from tengri.utils.scale import pow10, whiten
 
@@ -710,8 +711,7 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
         dtype = jnp.result_type(float)
         if dtype == jnp.float32:
             reason = (
-                "float32 mode; the SED model's photometry Hessian is all-NaN in float32 "
-                "at the converged MAP (a forward-over-reverse seam in the model), "
+                f"{FLOAT32_HESSIAN_NAN_NOTE}, "
                 "not specific to profiling (reproduces with profile_mass=False). "
                 "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
             )
