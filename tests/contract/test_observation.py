@@ -275,7 +275,7 @@ class TestSpectroscopy:
         # Inject non-monotone step at index 63 (inside R segment)
         wave_bad = wave.at[63].set(wave[62])  # Make wave[63] == wave[62]
 
-        with pytest.raises(ValueError, match="strictly increasing within R segment"):
+        with pytest.raises(ValueError, match=r"wave_obs segment 1.*must be strictly increasing"):
             Spectroscopy(wave_obs=wave_bad, wave_obs_segment_sizes=(50, 50))
 
     def test_segment_size_sum_mismatch_raises(self):

@@ -33,6 +33,11 @@ class Spectroscopy:
     ----------
     wave_obs : jnp.ndarray
         Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
+    wave_obs_segment_sizes : tuple[int, ...] or None
+        Pixel counts for each camera segment. Multi-camera spectrographs
+        (e.g., DESI) concatenate camera grids that overlap at seams;
+        segment sizes enable per-camera monotonicity checks while allowing
+        wavelength overlaps between cameras. Default: None.
     resolution : float, jnp.ndarray, or None
         Spectral resolution ``R = lambda / delta_lambda``.
         Scalar for constant R, per-pixel array for wavelength-dependent,
@@ -165,6 +170,12 @@ class Spectroscopy:
         if self.wave_obs_segment_sizes is not None:
             self._validate_segment_sizes(w)
 
+        # Check if entirely descending (applies regardless of segments)
+        if len(w) > 1 and np.all(np.diff(w) < 0.0):
+            raise ValueError(
+                "wave_obs is descending; reverse wave_obs and the matching flux and error arrays."
+            )
+
         result = first_invalid_wavelength(w)
         if result is not None:
             idx, reason = result
@@ -173,21 +184,15 @@ class Spectroscopy:
             elif reason == "non-positive":
                 raise ValueError(f"wave_obs must be strictly positive; index {idx} is {w[idx]}")
             elif reason == "non-increasing":
-                # When segments are provided, check per-segment monotonicity
+                # Check per-segment monotonicity if segments are provided
                 if self.wave_obs_segment_sizes is not None:
                     self._validate_segments_monotonicity(w)
                 else:
-                    # No segments: check global monotonicity
-                    if len(w) > 1 and np.all(np.diff(w) < 0.0):
-                        raise ValueError(
-                            "wave_obs is descending; reverse wave_obs and the "
-                            "matching flux and error arrays."
-                        )
-                    else:
-                        raise ValueError(
-                            f"wave_obs must be strictly increasing; index {idx} "
-                            f"({w[idx]}) >= index {idx + 1} ({w[idx + 1]})"
-                        )
+                    # No segments: report global monotonicity error
+                    raise ValueError(
+                        f"wave_obs must be strictly increasing; index {idx} "
+                        f"({w[idx]}) >= index {idx + 1} ({w[idx + 1]})"
+                    )
 
         # Validate other fields
         if self.calibration_order < 0:
@@ -266,7 +271,7 @@ class Spectroscopy:
         """Check that wave_obs is strictly increasing within each segment.
 
         Multi-camera spectrographs (e.g., DESI) concatenate camera grids that may
-        overlap at seams. Segment sizes specify the wavelength extent of each camera.
+        overlap at seams. Segment sizes specify the pixel count of each camera.
         This validator enforces strict monotonicity within each camera's grid while
         allowing overlaps between cameras.
 
@@ -284,33 +289,24 @@ class Spectroscopy:
             return
 
         seg_sizes = self.wave_obs_segment_sizes
-
-        # Check if entirely descending
-        if len(w) > 1 and np.all(np.diff(w) < 0.0):
-            raise ValueError(
-                "wave_obs is descending; reverse wave_obs and the matching flux and error arrays."
-            )
-
-        # Check monotonicity within each segment
-        segment_names = ["B", "R", "Z"]
         boundaries = np.cumsum(seg_sizes)
 
+        # Check monotonicity within each segment using the shared predicate
         start = 0
         for seg_idx, seg_end in enumerate(boundaries):
             w_seg = w[start:seg_end]
-            seg_name = (
-                segment_names[seg_idx] if seg_idx < len(segment_names) else f"segment_{seg_idx}"
-            )
 
-            if len(w_seg) > 1:
-                diffs = np.diff(w_seg)
-                bad_idx = np.where(diffs <= 0.0)[0]
-                if len(bad_idx) > 0:
-                    abs_idx = start + bad_idx[0]
-                    raise ValueError(
-                        f"wave_obs must be strictly increasing within {seg_name} segment; "
-                        f"index {abs_idx} ({w[abs_idx]}) >= index {abs_idx + 1} ({w[abs_idx + 1]})"
-                    )
+            result = first_invalid_wavelength(w_seg)
+            if result is not None and result[1] == "non-increasing":
+                # Translate segment-relative index back to global index
+                idx, _ = result
+                abs_idx = start + idx
+                pixel_range = f"pixels {start}–{seg_end - 1}"
+                raise ValueError(
+                    f"wave_obs segment {seg_idx} ({pixel_range}) must be strictly "
+                    f"increasing; index {abs_idx} ({w[abs_idx]}) >= "
+                    f"index {abs_idx + 1} ({w[abs_idx + 1]})"
+                )
 
             start = seg_end
 
