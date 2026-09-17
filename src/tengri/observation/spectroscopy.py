@@ -163,13 +163,9 @@ class Spectroscopy:
         if result is not None:
             idx, reason = result
             if reason == "non-finite":
-                raise ValueError(
-                    f"wave_obs contains non-finite value at index {idx}: {w[idx]}"
-                )
+                raise ValueError(f"wave_obs contains non-finite value at index {idx}: {w[idx]}")
             elif reason == "non-positive":
-                raise ValueError(
-                    f"wave_obs must be strictly positive; index {idx} is {w[idx]}"
-                )
+                raise ValueError(f"wave_obs must be strictly positive; index {idx} is {w[idx]}")
             elif reason == "non-increasing":
                 if len(w) > 1 and np.all(np.diff(w) < 0.0):
                     raise ValueError(
