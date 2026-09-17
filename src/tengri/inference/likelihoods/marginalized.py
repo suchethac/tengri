@@ -498,13 +498,14 @@ class CalibrationELineMarginalizedLikelihood:
     discarded. This means the likelihood understates the uncertainty
     contribution from the line amplitudes, in a data-dependent manner.
 
-    Exact marginalization of both blocks is available as a future option
-    (see #2354 for discussion). The exact pieces are
-    :func:`marginalize_emission_lines` (:mod:`tengri.observation.eline_marginalization`)
-    and :func:`marginalize_calibration`
-    (:mod:`tengri.observation.calibration`); this class skips the
-    line-block's log-determinant term after solving for the MAP
-    amplitudes â under the chosen prior.
+    An exact composition exists in principle — condition one block on the
+    other and integrate in the right order, at the cost of a solve per
+    node — but is not implemented; #2354 tracks that decision. The exact
+    pieces are :func:`marginalize_emission_lines`
+    (:mod:`tengri.observation.eline_marginalization`) and
+    :func:`marginalize_calibration` (:mod:`tengri.observation.calibration`);
+    this class skips the line-block's log-determinant term after solving
+    for the MAP amplitudes â under the chosen prior.
 
     Sequential composition:
 
