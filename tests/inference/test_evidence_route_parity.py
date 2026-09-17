@@ -5,6 +5,14 @@ Tests verify that nss (calibrated reference), laplace (seconds-fast), and
 hmc_is (HMC + importance sampling) produce consistent evidence estimates and
 BMA weights on a shared smooth parametric model.
 
+FIXTURE DESIGN (#2364):
+  model_b_and_fitter is designed to disfavor the shared data structurally:
+  sfh_dpl_beta is Fixed(3.0), far from the truth (1.0), ensuring ΔlogZ ≥ 5σ
+  on all routes. Both models fit the SAME data; a ranking flip here is a route
+  disagreement, not a statistical artifact. If separation fails (<2σ), the
+  fixture has regressed and test_bma_weights_ranking_agreement will fail (not
+  skip), signalling a rebuild is needed.
+
 Requires SSP data. Marked as slow integration tests.
 """
 
@@ -281,19 +289,23 @@ class TestNSSFastVsAccurate:
 
 @pytest.fixture(scope="module")
 def model_b_and_fitter(shared_mock):
-    """Second model for BMA testing: 6-param variant with beta parameter.
+    """Model B for BMA testing: D=5, disfavors shared data by structural design.
+
+    Model B is identical to model A in all parameters EXCEPT sfh_dpl_beta, which is
+    pinned at Fixed(3.0) — far from the truth (beta=1.0). This structural difference
+    ensures ΔlogZ ≥ 5σ on all evidence routes (NSS, HMC+IS, Laplace), so the fixture
+    cannot accidentally lose separability due to Occam-factor nesting. Same D=5 so
+    Occam penalty is from the wrong fixed value only, not parameter count.
 
     Uses the shared_mock data (same as model A, generated from model A's truth).
-    This fixture's truth dict (with beta=1.5) is irrelevant to the data; only
-    the model structure (6 free params, beta not fixed) matters. Both model A
-    and model B fitters now score the SAME observed data, making BMA ranking
+    Both model A and model B fitters score the SAME observed data, making BMA ranking
     comparison valid (#2364).
     """
     from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform, load_filter_set, load_ssp_data
 
     spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
-        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_beta=Fixed(3.0),  # Wrong value (truth is 1.0); disfavors shared data decisively
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
         sfh_dpl_age_gyr=Fixed(13.0),
         sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
@@ -436,24 +448,23 @@ class TestBMAWeightsAgreement:
         sep_lap = abs(logz_lap_a - logz_lap_b)
         # Laplace reported as point estimate (no error)
 
-        # Check separation: skip if models are too close to distinguish
+        # Check separation: fixture must ensure ΔlogZ ≥ 2σ on all routes (#2364)
+        # If this fails, the fixture lost separability (regression); fail loudly, not skip.
         print(f"\nNSS: ΔlogZ={sep_nss:.4f}, σ={sigma_nss:.4f}, thresh=2σ={2 * sigma_nss:.4f}")
         print(f"HMC+IS: ΔlogZ={sep_hmc:.4f}, σ={sigma_hmc:.4f}, thresh=2σ={2 * sigma_hmc:.4f}")
         print(f"Laplace: ΔlogZ={sep_lap:.4f} (point estimate)")
         if sep_nss < 2.0 * sigma_nss:
-            pytest.skip(
-                f"near-tie NSS: ΔlogZ={sep_nss:.4f} vs σ={sigma_nss:.4f} "
-                f"(logZ_A={logz_nss_a:.3f}±{err_nss_a:.4f}, "
-                f"logZ_B={logz_nss_b:.3f}±{err_nss_b:.4f}) — "
-                f"ranking flip here is not a route disagreement (#2364)"
+            pytest.fail(
+                f"fixture regression (NSS): ΔlogZ={sep_nss:.4f} < 2σ={2 * sigma_nss:.4f} — "
+                f"models no longer separated (#2364). Design model B to disfavor data decisively. "
+                f"logZ_A={logz_nss_a:.3f}±{err_nss_a:.4f}, logZ_B={logz_nss_b:.3f}±{err_nss_b:.4f}"
             )
 
         if sep_hmc < 2.0 * sigma_hmc:
-            pytest.skip(
-                f"near-tie HMC+IS: ΔlogZ={sep_hmc:.4f} vs σ={sigma_hmc:.4f} "
-                f"(logZ_A={logz_hmc_a:.3f}±{err_hmc_a:.4f}, "
-                f"logZ_B={logz_hmc_b:.3f}±{err_hmc_b:.4f}) — "
-                f"ranking flip here is not a route disagreement (#2364)"
+            pytest.fail(
+                f"fixture regression (HMC+IS): ΔlogZ={sep_hmc:.4f} < 2σ={2 * sigma_hmc:.4f} — "
+                f"models no longer separated (#2364). Design model B to disfavor data decisively. "
+                f"logZ_A={logz_hmc_a:.3f}±{err_hmc_a:.4f}, logZ_B={logz_hmc_b:.3f}±{err_hmc_b:.4f}"
             )
 
         # All should agree on which model is better
