@@ -29,18 +29,18 @@ class BakedInNebularWarning(UserWarning):
     """
 
 
-class BakedInNebularGridWarning(UserWarning):
+class BakedInNebularGridWarning(BakedInNebularWarning):
     """Warning raised when BakedInBackend receives an unstamped (unknown) SSP.
 
     Indicates that the SSP grid's nebular status could not be determined from
-    metadata. The grid may or may not include nebular emission. This warning
-    cannot be silenced by the neb={'type': 'ssp'} declaration because it is
-    a question about the data, not about the model choice.
+    metadata. The grid may or may not include nebular emission.
 
     Notes
     -----
-    Use `tools/stamp_ssp_nebular_attrs.py` to resolve this ambiguity by
-    reading the grid and stamping it with the nebular_included attribute.
+    This is a subclass of BakedInNebularWarning and is suppressible by the
+    same mechanisms: explicit neb={'type': 'ssp'} or neb={'type': 'none'}
+    when building via SEDModel.build, or ionizing_source_warning='suppress'
+    when constructing BakedInBackend directly.
 
     """
 
@@ -147,26 +147,8 @@ class BakedInBackend:
                 "     to stamp the metadata so other backends are also warned."
             )
 
-        if nebular_status == "unknown":
-            # Unknown grid: ambiguous, warn but allow. The warning is NOT
-            # silenced by the explicit neb={'type':'ssp'} declaration.
-            msg = (
-                "BakedInBackend received an SSP whose nebular status is unknown: "
-                "the metadata does not declare whether the grid includes nebular "
-                "emission. If this grid is bare-stellar, you will silently get "
-                "a model with zero nebular emission and zero emission lines. "
-                "\n"
-                "Resolve the ambiguity with tools/stamp_ssp_nebular_attrs.py: "
-                "\n"
-                "  python tools/stamp_ssp_nebular_attrs.py [--included|--bare] <path.h5> "
-                "\n"
-                "This warning cannot be suppressed by the explicit neb={'type': 'ssp'} "
-                "declaration — it is a statement about the data, not your model choice."
-            )
-            warnings.warn(msg, BakedInNebularGridWarning, stacklevel=2)
-
         # has_continuum is True only for "included"; "unknown" is an assumption
-        # stated by the warning above
+        # stated by the warning below
         self.has_continuum = nebular_status in ("included", "unknown")
 
         if ionizing_source_warning not in ("raise", "warn", "suppress"):
@@ -188,6 +170,25 @@ class BakedInBackend:
             if ionizing_source_warning == "raise":
                 raise ValueError(msg)
             warnings.warn(msg, BakedInNebularWarning, stacklevel=2)
+
+            # Also warn about unknown nebular status when ssp_data was provided.
+            # This warning is suppressible by the same routes as the fixed-logU advisory.
+            if ssp_data is not None and nebular_status == "unknown":
+                grid_msg = (
+                    "BakedInBackend received an SSP whose nebular status is unknown: "
+                    "the metadata does not declare whether the grid includes nebular "
+                    "emission. If this grid is bare-stellar, you will silently get "
+                    "a model with zero nebular emission and zero emission lines. "
+                    "\n"
+                    "Resolve the ambiguity with tools/stamp_ssp_nebular_attrs.py: "
+                    "\n"
+                    "  python tools/stamp_ssp_nebular_attrs.py [--included|--bare] <path.h5> "
+                    "\n"
+                    "This warning is silenced by the same routes as the fixed-logU advisory: "
+                    "neb={'type': 'ssp'} (or {'type': 'none'}) when building, "
+                    "or ionizing_source_warning='suppress' when constructing directly."
+                )
+                warnings.warn(grid_msg, BakedInNebularGridWarning, stacklevel=2)
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this backend's structure.

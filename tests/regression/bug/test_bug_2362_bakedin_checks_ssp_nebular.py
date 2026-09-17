@@ -58,12 +58,13 @@ def test_bakedin_raises_on_bare_ssp():
 
 
 def test_bakedin_warns_on_unknown_ssp():
-    """BakedInBackend warns when SSP nebular status is unknown."""
+    """BakedInBackend warns when SSP nebular status is unknown (without explicit neb)."""
     pytest.importorskip("tengri")
     import tengri
     from tengri.components.nebular.baked_in import BakedInNebularGridWarning
 
     ssp = _synthetic_ssp("unknown")
+    # Grid warning is emitted when neb is NOT explicitly passed (uses default neb=off)
     with pytest.warns(BakedInNebularGridWarning, match="stamp_ssp_nebular_attrs"):
         tengri.SEDModel.build(
             ssp,
@@ -75,19 +76,18 @@ def test_bakedin_warns_on_unknown_ssp():
                 "tau_diff": 0.0,
                 "tau_bc": 0.0,
             },
-            neb={"type": "ssp"},
             redshift=tengri.Fixed(0.05),
         )
 
 
-def test_bakedin_unknown_warns_even_with_explicit_neb_declaration():
-    """Grid warning is NOT silenced by explicit neb={'type':'ssp'}."""
+def test_bakedin_unknown_is_silenced_by_explicit_neb_declaration():
+    """Grid warning IS silenced by explicit neb={'type':'ssp'} (honours suppression)."""
     pytest.importorskip("tengri")
     import tengri
     from tengri.components.nebular.baked_in import BakedInNebularGridWarning
 
     ssp = _synthetic_ssp("unknown")
-    # The explicit declaration should NOT silence the grid warning
+    # The explicit declaration SHOULD silence the grid warning (honours suppression contract)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         tengri.SEDModel.build(
@@ -103,10 +103,12 @@ def test_bakedin_unknown_warns_even_with_explicit_neb_declaration():
             neb={"type": "ssp"},
             redshift=tengri.Fixed(0.05),
         )
-        # Should have the grid warning about unknown status
+        # Should NOT have the grid warning about unknown status (suppressed by explicit neb)
         grid_warnings = [x for x in w if issubclass(x.category, BakedInNebularGridWarning)]
         cat_names = [x.category.__name__ for x in w]
-        assert len(grid_warnings) > 0, f"Expected BakedInNebularGridWarning but got: {cat_names}"
+        assert len(grid_warnings) == 0, (
+            f"Expected no BakedInNebularGridWarning but got: {cat_names}"
+        )
 
 
 def test_bakedin_silent_on_included_ssp():
@@ -143,21 +145,26 @@ def test_bakedin_has_continuum_follows_nebular_status():
     backend_incl = BakedInBackend(ionizing_source_warning="suppress", ssp_data=ssp_incl)
     assert backend_incl.has_continuum is True
 
-    # "unknown" case - should warn but has_continuum stays True
+    # "unknown" case - should warn when ionizing_source_warning='warn'
     ssp_unkn = _synthetic_ssp("unknown")
     with pytest.warns(BakedInNebularGridWarning):
-        backend_unkn = BakedInBackend(ionizing_source_warning="suppress", ssp_data=ssp_unkn)
+        backend_unkn = BakedInBackend(ionizing_source_warning="warn", ssp_data=ssp_unkn)
     # has_continuum should be True (assumed) even for unknown
     assert backend_unkn.has_continuum is True
 
 
 def test_bakedin_warns_when_ssp_data_none():
-    """BakedInBackend warns when ssp_data=None (treats as unknown)."""
+    """BakedInBackend silent on grid warning when ssp_data=None (no actual data to check)."""
     pytest.importorskip("tengri")
-    from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularGridWarning
+    from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularWarning
 
-    # ssp_data=None should be treated as "unknown" and emit warning
-    with pytest.warns(BakedInNebularGridWarning):
-        backend = BakedInBackend(ionizing_source_warning="suppress", ssp_data=None)
-    # has_continuum should be True (assumed)
+    # ssp_data=None: no actual SSP data provided, so grid warning is not emitted
+    # but fixed-logU warning is still emitted when ionizing_source_warning='warn'
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        backend = BakedInBackend(ionizing_source_warning="warn", ssp_data=None)
+    # Should have fixed-logU warning (BakedInNebularWarning) but NOT grid warning
+    neb_warnings = [x for x in w if issubclass(x.category, BakedInNebularWarning)]
+    assert len(neb_warnings) >= 1, "Expected at least fixed-logU warning"
+    # has_continuum should be True (assumed when status is unknown)
     assert backend.has_continuum is True

@@ -922,9 +922,9 @@
   (`ssp_data.nebular == "bare"`), it raises `BakedInNebularBareError`
   immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
   `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
-  disambiguation. The grid warning is not silenced by the explicit
-  `neb={'type': 'ssp'}` declaration — it is a statement about the data, not
-  the model choice (#2362).
+  disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
+  and honours `suppress` and an explicit `neb` declaration; only the bare-grid
+  refusal bypasses them (#2362).
 
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
