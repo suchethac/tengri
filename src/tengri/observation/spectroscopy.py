@@ -155,9 +155,15 @@ class Spectroscopy:
     eline_broad_fwhm_min_kms: float = 500.0
     covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
+    wave_obs_segment_sizes: tuple[int, ...] | None = dataclasses.field(default=None, hash=False)
 
     def __post_init__(self) -> None:
+        # Validate wave_obs first (finite, positive, monotonic)
         w = np.asarray(self.wave_obs, dtype=np.float64)
+
+        # Validate segment sizes early (if provided, before checking monotonicity)
+        if self.wave_obs_segment_sizes is not None:
+            self._validate_segment_sizes(w)
 
         result = first_invalid_wavelength(w)
         if result is not None:
@@ -167,17 +173,23 @@ class Spectroscopy:
             elif reason == "non-positive":
                 raise ValueError(f"wave_obs must be strictly positive; index {idx} is {w[idx]}")
             elif reason == "non-increasing":
-                if len(w) > 1 and np.all(np.diff(w) < 0.0):
-                    raise ValueError(
-                        "wave_obs is descending; reverse wave_obs and the "
-                        "matching flux and error arrays."
-                    )
+                # When segments are provided, check per-segment monotonicity
+                if self.wave_obs_segment_sizes is not None:
+                    self._validate_segments_monotonicity(w)
                 else:
-                    raise ValueError(
-                        f"wave_obs must be strictly increasing; index {idx} "
-                        f"({w[idx]}) >= index {idx + 1} ({w[idx + 1]})"
-                    )
+                    # No segments: check global monotonicity
+                    if len(w) > 1 and np.all(np.diff(w) < 0.0):
+                        raise ValueError(
+                            "wave_obs is descending; reverse wave_obs and the "
+                            "matching flux and error arrays."
+                        )
+                    else:
+                        raise ValueError(
+                            f"wave_obs must be strictly increasing; index {idx} "
+                            f"({w[idx]}) >= index {idx + 1} ({w[idx + 1]})"
+                        )
 
+        # Validate other fields
         if self.calibration_order < 0:
             raise ValueError(
                 f"calibration_order must be non-negative, got {self.calibration_order}"
@@ -186,9 +198,11 @@ class Spectroscopy:
         _valid_modes = ("off", "fixed", "marginalized", "fitted")
         if self.eline_mode not in _valid_modes:
             raise ValueError(f"eline_mode must be one of {_valid_modes}, got {self.eline_mode!r}")
+
         _valid_resample = ("point", "conserving", "auto")
         if self.resample not in _valid_resample:
             raise ValueError(f"resample must be one of {_valid_resample}, got {self.resample!r}")
+
         if self.resolution is not None and not isinstance(self.resolution, (int, float)):
             res_arr = jnp.asarray(self.resolution)
             if res_arr.ndim > 0 and res_arr.shape[0] != len(self.wave_obs):
@@ -196,6 +210,8 @@ class Spectroscopy:
                     f"resolution array length {res_arr.shape[0]} does not match "
                     f"wave_obs length {len(self.wave_obs)}"
                 )
+
+        # Set up covariance inverse
         if self.covariance is not None:
             cov = jnp.asarray(self.covariance)
             n = len(self.wave_obs)
@@ -206,6 +222,8 @@ class Spectroscopy:
             object.__setattr__(self, "_cov_inv", jnp.linalg.inv(cov))
         else:
             object.__setattr__(self, "_cov_inv", None)
+
+        # Validate resolution matrix
         if self.resolution_matrix is not None:
             data = jnp.asarray(self.resolution_matrix.data)
             if data.shape[1] != len(self.wave_obs):
@@ -213,6 +231,88 @@ class Spectroscopy:
                     f"resolution_matrix has {data.shape[1]} columns but wave_obs "
                     f"has length {len(self.wave_obs)}"
                 )
+
+    def _validate_segment_sizes(self, w: np.ndarray) -> None:
+        """Validate segment size structure.
+
+        Parameters
+        ----------
+        w : ndarray, shape (n,)
+            The wavelength grid [Angstrom].
+
+        Raises
+        ------
+        ValueError
+            If segment sizes are invalid.
+        """
+        if self.wave_obs_segment_sizes is None:
+            return
+
+        seg_sizes = self.wave_obs_segment_sizes
+
+        # Validate segment sizes: all >= 1
+        for i, size in enumerate(seg_sizes):
+            if size < 1:
+                raise ValueError(f"wave_obs_segment_sizes[{i}] must be >= 1, got {size}")
+
+        # Validate segment sizes sum to len(wave_obs)
+        total_size = sum(seg_sizes)
+        if total_size != len(w):
+            raise ValueError(
+                f"sum(wave_obs_segment_sizes)={total_size} does not match len(wave_obs)={len(w)}"
+            )
+
+    def _validate_segments_monotonicity(self, w: np.ndarray) -> None:
+        """Check that wave_obs is strictly increasing within each segment.
+
+        Multi-camera spectrographs (e.g., DESI) concatenate camera grids that may
+        overlap at seams. Segment sizes specify the wavelength extent of each camera.
+        This validator enforces strict monotonicity within each camera's grid while
+        allowing overlaps between cameras.
+
+        Parameters
+        ----------
+        w : ndarray, shape (n,)
+            The wavelength grid [Angstrom] (concatenated camera grids).
+
+        Raises
+        ------
+        ValueError
+            If monotonicity is violated within a segment.
+        """
+        if self.wave_obs_segment_sizes is None:
+            return
+
+        seg_sizes = self.wave_obs_segment_sizes
+
+        # Check if entirely descending
+        if len(w) > 1 and np.all(np.diff(w) < 0.0):
+            raise ValueError(
+                "wave_obs is descending; reverse wave_obs and the matching flux and error arrays."
+            )
+
+        # Check monotonicity within each segment
+        segment_names = ["B", "R", "Z"]
+        boundaries = np.cumsum(seg_sizes)
+
+        start = 0
+        for seg_idx, seg_end in enumerate(boundaries):
+            w_seg = w[start:seg_end]
+            seg_name = (
+                segment_names[seg_idx] if seg_idx < len(segment_names) else f"segment_{seg_idx}"
+            )
+
+            if len(w_seg) > 1:
+                diffs = np.diff(w_seg)
+                bad_idx = np.where(diffs <= 0.0)[0]
+                if len(bad_idx) > 0:
+                    abs_idx = start + bad_idx[0]
+                    raise ValueError(
+                        f"wave_obs must be strictly increasing within {seg_name} segment; "
+                        f"index {abs_idx} ({w[abs_idx]}) >= index {abs_idx + 1} ({w[abs_idx + 1]})"
+                    )
+
+            start = seg_end
 
     # ── Properties ────────────────────────────────────────────────
 

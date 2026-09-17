@@ -6,7 +6,11 @@
 - `Spectroscopy` now validates `wave_obs` at construction time, refusing grids
   that are non-finite (NaN/inf), non-positive, or non-increasing, with
   descending grids raising a hint to reverse them alongside the flux and error
-  arrays. `calibration_order` is also checked to be non-negative. (#2172)
+  arrays. `calibration_order` is also checked to be non-negative. When
+  `wave_obs_segment_sizes` is set (by the DESI loader for multi-camera spectra),
+  monotonicity is enforced per camera segment, allowing overlaps at seams
+  where adjacent cameras meet. Segment sizes must be positive and sum to the
+  wavelength grid length. (#2172)
 
 ### Added
 
