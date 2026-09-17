@@ -238,7 +238,7 @@ def build_from_config():
             ssp_data,
             sfh="dpl",
             dust_attenuation_law="calzetti",
-            nebular="none",
+            nebular=None,
             filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
             redshift=0.1,
             approx=WavePrecomp(),
