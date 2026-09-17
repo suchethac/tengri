@@ -2685,6 +2685,9 @@ class StellarSEDComponent:
         # are byte-unchanged). The sigma -> 0 limit recovers the delta-in-Z SSP
         # weighting. Threaded into both the delta and per-age-metallicity DSPS
         # calls below so the two paths stay consistent.
+        # On the flat-form path, lgmet_scatter kwarg sets the Fixed default for
+        # met_logzsol_scatter in the parameter registry (#2255), so self.config.lgmet_scatter
+        # carries the instance-specific value.
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
         _used_cic = False
@@ -3439,6 +3442,9 @@ class StellarSEDComponent:
                 )
             sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
 
+        # On the flat-form path, lgmet_scatter kwarg sets the Fixed default for
+        # met_logzsol_scatter in the parameter registry (#2255), so self.config.lgmet_scatter
+        # carries the instance-specific value.
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
         _age_kernel = _resolve_age_kernel(self.config)
