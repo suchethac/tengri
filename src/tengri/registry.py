@@ -1134,6 +1134,7 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         # like a model you can select — standalone it re-emits a measured
         # 1.8925e-04 of L_ir, and SEDModel.build refuses it.
         "short_doc": "Drude-profile PAH emission features (building block; not selectable standalone)",  # noqa: E501
+        "use": "SEDModel.build(..., dust_attenuation={'law': 'calzetti'})",
     },
     "energy_balance_split": {
         "status": "experimental",
@@ -1179,7 +1180,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
         entry = {
             "name": name,
             **meta,
-            "use": _usage_hint(name, "dust_emission"),
+            "use": meta.get("use") or _usage_hint(name, "dust_emission"),
             "kind": "dust_emission",
         }
         out.append(entry)
@@ -1646,7 +1647,7 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
             "status": st,
             "citation": "hearin2021" if name == "dsps" else "",
             "short_doc": doc,
-            "use": f"SEDModel.build(sfh={{'age_kernel': {name!r}}})",
+            "use": f"SEDModel.build(..., sfh={{'age_kernel': {name!r}}})",
         }
         for name, st, doc in _AGE_KERNELS
     ]
