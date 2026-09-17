@@ -27,19 +27,15 @@ whether the two numbers currently happen to match.
 
 Scope
 -----
-``src/tengri/components/dust/emission/`` by default (pass ``--scope`` to
-widen). The disease is not confined to dust emission:
-``components/dust/emission_templates.py`` -- one directory above the default
-scope, despite its name -- holds 20 literal copies of its own
+``src/tengri/components/dust/`` by default, widened from the earlier
+``emission/`` scope (#2265). A no-argument run now covers the full dust tree:
+emission models, attenuation laws, and their shared parameter table
+``_params.py``. The narrower ``emission/`` scope addressed template closures
 (``dl07_tabulated``, ``dale2014_emission_lnu``, ``schreiber2018_tabulated``,
-``themis_emission`` and siblings each repeat a ``dust_umin`` / ``dust_qpah`` /
-``dust_alpha_dale`` / ... default as a bare numeral); and
-``attenuation.py``'s ``kriek_conroy`` law repeats
-``dust_bump_strength: float = 1.0`` against a declared ``Fixed(0.0)`` in
-``ATTENUATION_PARAMS`` (plausibly deliberate -- KC13's own published value --
-but still an unguarded second copy). Widening this guard to those two files
-and beyond is tracked as a follow-up to #2241; see the PR body for the count
-and sites a ``--scope src/tengri/components`` run turns up today.
+``themis_emission`` and siblings); #2265 extends the sweep to ``attenuation.py``
+(e.g. ``kriek_conroy``, ``tea``), ``component.py``, ``_apply.py``, ``two_component.py``,
+``energy_balance_precompute.py``, and other aggregation points. Pass ``--scope``
+to target a different tree.
 
 How the declared-name set is built
 -----------------------------------
@@ -109,11 +105,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 #: Default scopes: the trees already swept clean of literal copies (#2241's
-#: dust emission; #2265's radio, stellar, igm). A no-argument run covers all
-#: of them and must report zero sites; the remaining component trees join
-#: this tuple as #2297's per-tree rulings land and their sweeps go in.
+#: dust emission, #2265's dust tree widening, #2265's radio, stellar, igm).
+#: A no-argument run covers all of them and must report zero sites; the
+#: remaining component trees join this tuple as #2297's per-tree decisions
+#: land and their sweeps go in.
 DEFAULT_SCOPES: tuple[Path, ...] = (
-    ROOT / "src" / "tengri" / "components" / "dust" / "emission",
+    ROOT / "src" / "tengri" / "components" / "dust",
     ROOT / "src" / "tengri" / "components" / "radio",
     ROOT / "src" / "tengri" / "components" / "stellar",
     ROOT / "src" / "tengri" / "components" / "igm",
