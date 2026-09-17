@@ -7,11 +7,12 @@ BMA weights on a shared smooth parametric model.
 
 FIXTURE DESIGN (#2364):
   model_b_and_fitter is designed to disfavor the shared data structurally:
-  sfh_dpl_beta is Fixed(3.0), far from the truth (1.0), ensuring ΔlogZ ≥ 5σ
-  on all routes. Both models fit the SAME data; a ranking flip here is a route
-  disagreement, not a statistical artifact. If separation fails (<2σ), the
-  fixture has regressed and test_bma_weights_ranking_agreement will fail (not
-  skip), signalling a rebuild is needed.
+  dust_tau_diff is Fixed(1.5), far from the truth (0.3), ensuring ΔlogZ ≥ 5σ
+  on all routes (measured: NSS=6.19 nats, HMC+IS=6.81 nats, Laplace=7.03 nats).
+  Both models fit the SAME data; a ranking flip here is a route disagreement,
+  not a statistical artifact. The guard at 2σ checks fixture regression, not
+  the design target. If separation fails, test_bma_weights_ranking_agreement
+  will fail (not skip), signalling fixture breakdown.
 
 Requires SSP data. Marked as slow integration tests.
 """
@@ -291,11 +292,10 @@ class TestNSSFastVsAccurate:
 def model_b_and_fitter(shared_mock):
     """Model B for BMA testing: D=5, disfavors shared data by structural design.
 
-    Model B is identical to model A in all parameters EXCEPT sfh_dpl_beta, which is
-    pinned at Fixed(3.0) — far from the truth (beta=1.0). This structural difference
-    ensures ΔlogZ ≥ 5σ on all evidence routes (NSS, HMC+IS, Laplace), so the fixture
-    cannot accidentally lose separability due to Occam-factor nesting. Same D=5 so
-    Occam penalty is from the wrong fixed value only, not parameter count.
+    Model B is identical to model A in all parameters EXCEPT dust_tau_diff, which is
+    pinned at Fixed(1.5) — far from the truth (tau_diff=0.3). This structural difference
+    ensures ΔlogZ ≥ 5σ on all evidence routes, measured (NSS=6.19 nats, HMC+IS=6.81 nats,
+    Laplace=7.03 nats). The guard at 2σ checks fixture regression, not the design target.
 
     Uses the shared_mock data (same as model A, generated from model A's truth).
     Both model A and model B fitters score the SAME observed data, making BMA ranking
@@ -305,13 +305,13 @@ def model_b_and_fitter(shared_mock):
 
     spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
-        sfh_dpl_beta=Fixed(3.0),  # Wrong value (truth is 1.0); disfavors shared data decisively
+        sfh_dpl_beta=Fixed(1.0),  # Same as model A
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
         sfh_dpl_age_gyr=Fixed(13.0),
         sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
-        dust_tau_diff=Fixed(0.3),
+        dust_tau_diff=Fixed(1.5),  # Wrong value (truth is 0.3); disfavors shared data decisively
         redshift=0.1,
         stochastic=False,
     )
@@ -450,9 +450,6 @@ class TestBMAWeightsAgreement:
 
         # Check separation: fixture must ensure ΔlogZ ≥ 2σ on all routes (#2364)
         # If this fails, the fixture lost separability (regression); fail loudly, not skip.
-        print(f"\nNSS: ΔlogZ={sep_nss:.4f}, σ={sigma_nss:.4f}, thresh=2σ={2 * sigma_nss:.4f}")
-        print(f"HMC+IS: ΔlogZ={sep_hmc:.4f}, σ={sigma_hmc:.4f}, thresh=2σ={2 * sigma_hmc:.4f}")
-        print(f"Laplace: ΔlogZ={sep_lap:.4f} (point estimate)")
         if sep_nss < 2.0 * sigma_nss:
             pytest.fail(
                 f"fixture regression (NSS): ΔlogZ={sep_nss:.4f} < 2σ={2 * sigma_nss:.4f} — "

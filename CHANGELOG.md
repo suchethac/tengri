@@ -918,9 +918,10 @@
 ### Fixed
 
 - `test_bma_weights_ranking_agreement` now uses a shared mock fixture so both
-  models score identical data, and adds a separation guard: skips when
-  `|ΔlogZ| < 2σ` to avoid counting near-tie ranking flips as route disagreement
-  (#2364).
+  models score identical data. Model B is model A with `dust_tau_diff` pinned
+  at 1.5 (measured ΔlogZ ≈ 6–7 nats across NSS, HMC+IS, Laplace), designed to
+  separate decisively. The ranking guard fails (not skips) on separation loss
+  below 2σ, treating fixture regression as a test failure (#2364).
 
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
