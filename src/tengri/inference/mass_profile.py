@@ -712,8 +712,7 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
         if dtype == jnp.float32:
             reason = (
                 f"{FLOAT32_HESSIAN_NAN_NOTE}, "
-                "not specific to profiling (reproduces with profile_mass=False). "
-                "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
+                "not specific to profiling (reproduces with profile_mass=False)."
             )
             if requested is True and getattr(fitter, "_profile_mass", False):
                 raise ValueError(f"profile_mass=True but {reason}")
