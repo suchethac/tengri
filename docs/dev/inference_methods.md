@@ -1668,8 +1668,8 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
 
 ### Guards
 
-`profile_mass` requires, checked at `Fitter` construction (lines 257–315 of
-`src/tengri/inference/mass_profile.py:_check_guards`):
+`profile_mass` requires, checked at `Fitter` construction
+(`src/tengri/inference/mass_profile.py:_check_guards`):
 
 - the parameter spec exposes `_distributions` (a plain `Parameters` instance, not a subclass
   or wrapper that lacks this interface);
@@ -1719,6 +1719,47 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
   `field=True` forces that kernel (issue #1470), so a stochastic SFH reaches it without asking.
   A refusal at this magnitude does not by itself imply any additive component.
 
+#### The probe answers three questions, not two (2026-09-17)
+
+`_linearity_max_deviation` returns `kind in {"proportional", "affine", "nonlinear"}`.
+The middle value is not a nicety: for an affine prediction
+`d = M f(theta) + g(theta)` with `g` independent of the mass, `chi2(M)` is **still
+exactly quadratic** -- the same algebra with `d -> d - g` -- so such a model is
+marginalizable as soon as the offset is known, whereas a nonlinear one never is. A
+two-way proportional-or-not check cannot separate them and labels affine as whichever
+end it happened to test for.
+
+The classification costs one further forward evaluation, taken **only on the refusal
+branch**: the proportionality probe already produced two masses, two points determine an
+affine model exactly, so `_classify_nonproportional` solves `f` and `g` from that pair
+and asks whether they predict a third mass to the same roundoff-scaled tolerance. The
+`"proportional"` fast path -- every SFH that renormalizes to the mass, and so eight of
+the nine shipped recipes -- therefore costs exactly what it did before this existed.
+
+Measured on 2026-09-17: the composable-AGN photometry fixture is **affine** (8.421e+00),
+and `dense_basis` is **nonlinear** (1.002e+00). That difference is the point. The AGN
+case is #2347's, and an affine verdict says the offset could in principle be removed;
+`dense_basis` puts the mass into the SFH *shape* (`_build_quantile_points` builds its GP
+knots from `sfr_inst*age/M`), and no offset subtraction can fix that.
+
+The refusal message is phrased from the measurement rather than from a guess. It used to
+assert that an order-1 deviation "indicates a mass-independent additive component such as
+an AGN continuum" **on every model**, which is wrong exactly where it matters: a
+`dense_basis` photometry fit carrying no AGN block at all refuses at order 1, and the
+message sent the reader looking for a contaminant that is not there. It now names the
+measured kind, and names an additive component only when the chain actually holds one
+(walked through `model.populations[0].sed` -- `ForwardModel` does not delegate
+`_build_component_chain`, so reading it off `fitter.model` finds nothing and would report
+"no additive component" for every model).
+
+**Only `dense_basis` leaks.** Audited on 2026-09-17 across every registered SFH carrying
+a `log_total_mass`: the 20 that build measure 9e-15 to 1.3e-14 -- the roundoff floor --
+because `mean_sfh._renormalize_to_mass` divides the dimensionless shape by its own
+integral before scaling, making proportionality structural rather than incidental. Four
+(`db`, `dbp`, `gaussian_burst`, `top_hat`) are refused as not yet validated against the
+DSPS forward path and could not be measured. So the amplitude assumption holds for every
+analytic SFH in the registry, and `dense_basis` is the single exception.
+
 #### What engaging on a measured line channel changes
 
 Two consequences of admitting the line-flux channel (#2360), both expected
@@ -1757,9 +1798,31 @@ Additionally, at `Fitter.run()` (lines 467–483 of
   from the `Fitter`'s loss and thus can see the profiled marginal): `map`, `laplace`,
   `mcmc`, `mcmc_nuts`, `mcmc_nuts_fast`, `mcmc_hmc`, `mcmc_dynamic_hmc`, `mcmc_ghmc`,
   `mcmc_chees`, `mcmc_mclmc`, `mcmc_adjusted_mclmc`, `mcmc_barker`, `mcmc_mala`,
-  `mcmc_hmc_lowrank`, `mcmc_smc`, `hmc_is`. Under `profile_mass=True`, an unsupported
+  `mcmc_hmc_lowrank`, `mcmc_smc`, `hmc_is`, `nss`, `mcmc_raytrace`, `mcmc_ess`,
+  `pathfinder`, `vi_fullrank`, `vi_meanfield`. Under `profile_mass=True`, an unsupported
   method raises `ValueError`; under `"auto"`, profiling is silently disabled with a
   logged reason.
+
+  **The last six were added on 2026-09-17** after auditing every registered backend against
+  that seam one at a time. Each had been absent, so profiling was disabled before it ran --
+  silently, because an omission from an allowlist is indistinguishable from a deliberate
+  exclusion. `nss` is the case worth remembering: `build_profiled_loglikelihood_fn` exists
+  *for* nested sampling and says so in its own docstring, but with `"nss"` missing from the
+  set that override was unreachable, so every NSS evidence run scored its live points at the
+  mass placeholder -- precisely the failure the docstring warns about. `vi_fullrank` and
+  `vi_meanfield` are the BlackJAX Gaussian VI backends (`backends/vi/gaussian.py`, which
+  calls `_get_flat_logdensity`) and are *not* covered by the NIFTy/native-VI exclusion below.
+  The set is now pinned by `tests/inference/test_profile_mass_backend_coverage.py` as a
+  **partition** -- registry == allowlist | excluded-with-reason -- so a newly registered
+  backend fails that test until someone classifies it. A membership list would have stayed
+  green through all six omissions.
+
+  Still excluded, and correctly: `vi`, `vi_nonlinear`, `vi_nonlinear_fast`, `vi_linear`,
+  `vi_linear_fast` (NIFTy geoVI/MGVI) and `native_vi_linear` / `native_vi_nonlinear`, all of
+  which build their objective from the model and its spec directly rather than from the
+  `Fitter`'s loss, and so under profiling would fit with the mass frozen at its placeholder
+  (measured 2026-09-12, ctl-dpl seed 7, geoVI: mass 10.24 against the NUTS reference 11.96,
+  age 0.5 Gyr against 5.2).
 
 `profile_mass="auto"` (the default on `Fitter` and `ForwardModel.fit`) engages
 profiling only when every guard passes, falling back to ordinary sampling with one

@@ -261,6 +261,14 @@ def _linearity_max_deviation(
         The maximum deviation observed across all nine thetas.
     tol : float
         The tolerance for the deviation.
+    kind : {"proportional", "affine", "nonlinear"}
+        Which of the three the prediction is in the mass. ``"proportional"``
+        whenever ``max_dev < tol``; otherwise a third mass is evaluated at the
+        worst theta and :func:`_classify_nonproportional` separates an exactly
+        affine prediction (``M f(theta) + g(theta)``, still exactly
+        marginalizable once ``g`` is known) from a genuinely nonlinear one.
+        The three are not interchangeable, and a two-way check cannot tell the
+        middle one from whichever end it tested for.
 
     Raises
     ------
@@ -306,6 +314,11 @@ def _linearity_max_deviation(
     tol_ref = None
     n_valid = 0
     first_error = None
+    #: ``(phys, pred_a, pred_b, valid)`` of the theta that set ``max_dev_overall``.
+    #: Kept so the affine retest below can reuse it instead of re-probing all
+    #: nine: the classification only matters at the worst theta, which is the
+    #: one that decides the refusal.
+    worst = None
 
     # Evaluate at prior median (xi = 0) plus 8 draws from the prior.
     for i in range(9):
@@ -367,6 +380,8 @@ def _linearity_max_deviation(
         # Compute the deviation at this theta.
         ratio = jnp.where(valid, pred_b / pred_a, 10.0)
         dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+        if dev > max_dev_overall or worst is None:
+            worst = (phys, pred_a, pred_b, valid)
         max_dev_overall = max(max_dev_overall, dev)
         n_valid += 1
 
@@ -391,7 +406,146 @@ def _linearity_max_deviation(
         )
 
     tol = tol_ref
-    return max_dev_overall, tol
+
+    # Proportional is the common case (every SFH that renormalizes to the mass,
+    # so dpl/dexp/tsnorm/delayed and hence eight of nine shipped recipes). It
+    # needs no further evaluation, which is why the third probe point below is
+    # taken only on the refusal branch: the fast path costs exactly what it did
+    # before this classification existed.
+    if max_dev_overall < tol:
+        return max_dev_overall, tol, "proportional"
+
+    kind = _classify_nonproportional(
+        fitter,
+        mass_name,
+        worst,
+        ell_a=ell_a,
+        ell_b=ell_b,
+        use_components=use_components,
+        line_flux_block=probe_block,
+    )
+    return max_dev_overall, tol, kind
+
+
+def _classify_nonproportional(
+    fitter: Fitter,
+    mass_name: str,
+    worst,
+    *,
+    ell_a: float,
+    ell_b: float,
+    use_components: bool,
+    line_flux_block,
+) -> str:
+    """``"affine"`` or ``"nonlinear"`` for a prediction that failed proportionality.
+
+    The distinction is load-bearing, not cosmetic: ``chi2(M)`` stays *exactly*
+    quadratic for an affine prediction ``d = M f(theta) + g(theta)`` -- the same
+    algebra with ``d -> d - g`` -- so an affine model is marginalizable once the
+    offset is known, while a nonlinear one never is. A two-way
+    proportional-or-not check cannot tell them apart and labels affine as
+    whichever side it happened to test for.
+
+    Two evaluations already exist from the proportionality probe, and two points
+    determine an affine model exactly. So the test is a *third* mass: solve
+    ``f``, ``g`` from the pair and ask whether they predict the third point. One
+    extra forward evaluation, on the refusal branch only.
+
+    Returns ``"nonlinear"`` when the third evaluation cannot be made or produces
+    no valid band -- the conservative answer, since every caller treats
+    ``"nonlinear"`` as "refuse".
+    """
+    if worst is None:
+        return "nonlinear"
+    phys, pred_a, pred_b, valid = worst
+
+    ell_c = ell_b + 1.0
+    try:
+        pred_c = _predict_full_vector(
+            fitter.model,
+            fitter.data_type,
+            {**phys, mass_name: jnp.asarray(ell_c)},
+            use_components=use_components,
+            line_flux_block=line_flux_block,
+        )
+    except Exception:
+        return "nonlinear"
+
+    m_a, m_b, m_c = 10.0**ell_a, 10.0**ell_b, 10.0**ell_c
+    # f and g from the two points already in hand: pred = M f + g.
+    f = (pred_b - pred_a) / (m_b - m_a)
+    g = pred_a - m_a * f
+    predicted_c = m_c * f + g
+
+    both_valid = valid & jnp.isfinite(pred_c) & (jnp.abs(pred_c) > 0.0)
+    if not bool(jnp.any(both_valid)):
+        return "nonlinear"
+    rel = jnp.where(both_valid, jnp.abs(predicted_c / pred_c - 1.0), 0.0)
+    worst_rel = float(jnp.max(rel))
+
+    # The same roundoff-scaled floor the proportionality test uses: an exactly
+    # affine model reproduces the third point to arithmetic precision, and a
+    # merely-locally-linear one misses it by orders of magnitude (measured on
+    # dense_basis, whose two-point affine fit extrapolates 1.5e-1 to 1.3e+1
+    # relative).
+    affine_tol = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
+    return "affine" if worst_rel < affine_tol else "nonlinear"
+
+
+def _additive_component_names(model) -> tuple[str, ...]:
+    """Names of chain components that ADD to the SED, for the refusal message.
+
+    Only used to phrase a diagnosis, never to decide one, so it degrades to
+    ``()`` rather than raising if the chain cannot be read.
+    """
+    # ``fitter.model`` is a ForwardModel, and ``_build_component_chain`` is NOT
+    # in its ``_DELEGATED_TO_INNER_SED`` list, so it has to be reached through
+    # the populations. Checked rather than assumed: a plain
+    # ``getattr(model, "_build_component_chain", None)`` returns None here and
+    # would silently report "no additive component" for every model.
+    seds = []
+    if hasattr(model, "_build_component_chain") or hasattr(model, "_cached_component_chain"):
+        seds.append(model)
+    for population in getattr(model, "populations", ()) or ():
+        sed = getattr(population, "sed", None)
+        if sed is not None:
+            seds.append(sed)
+
+    found: list[str] = []
+    for sed in seds:
+        chain = getattr(sed, "_cached_component_chain", None)
+        if chain is None:
+            builder = getattr(sed, "_build_component_chain", None)
+            if builder is None:
+                continue
+            try:
+                chain = builder()
+            except Exception:
+                continue
+        for component in chain or ():
+            name = str(getattr(component, "name", ""))
+            if name in _ADDITIVE_COMPONENT_NAMES:
+                found.append(name)
+    return tuple(found)
+
+
+#: Chain components that contribute ADDITIVELY to the SED and are not
+#: themselves scaled by the stellar mass, so their presence is what makes a
+#: mass-independent offset physically plausible. Used only to phrase the
+#: refusal message: naming "an AGN continuum" on a model with no AGN sends the
+#: reader hunting for a contaminant they do not have.
+_ADDITIVE_COMPONENT_NAMES = frozenset({"agn", "radio", "xray", "shock"})
+
+#: How :func:`_linearity_refusal_reason` spells each of those in prose. "an AGN
+#: continuum" is the established wording (#2359) and several tests read it, so
+#: it is kept verbatim -- the fix there was never to stop saying it, only to
+#: stop saying it about models that have no AGN.
+_ADDITIVE_COMPONENT_PHRASES = {
+    "agn": "an AGN continuum",
+    "radio": "a radio component",
+    "xray": "an X-ray component",
+    "shock": "a shock component",
+}
 
 
 def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | None, dict]:
@@ -495,23 +649,12 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         return "censored data (upper/lower limits) is present", {}
 
     try:
-        max_dev, tol = _linearity_max_deviation(fitter, mass_name, bounds)
+        max_dev, tol, kind = _linearity_max_deviation(fitter, mass_name, bounds)
     except ValueError as exc:
         return str(exc), {}
 
-    if not (max_dev < tol):
-        return (
-            f"the {fitter.data_type} prediction is not linear in '{mass_name}' "
-            f"(worst-of-9-thetas: max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}). "
-            "The worst is the prior median plus eight prior draws. A deviation of order 1 "
-            "indicates a mass-independent additive component such as an AGN continuum. At "
-            "magnitudes within a few orders of the tolerance, conditioning in the mass "
-            "direction is often the cause, typically from the coarse age kernel (set "
-            'age_kernel="dsps", which integrates on the SSP lookback grid rather than a '
-            'refined one; the default "cic" is 16x-refined). With that kernel, mass-linearity '
-            "costs up to roughly 1e-3 at the sharpest SFH shapes, so a refusal at this "
-            "magnitude alone does not imply a mass-independent additive component."
-        ), {}
+    if kind != "proportional":
+        return _linearity_refusal_reason(fitter, mass_name, max_dev, tol, kind), {}
 
     return None, {
         "mass_name": mass_name,
@@ -519,7 +662,75 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         "bounds": bounds,
         "max_dev": max_dev,
         "tol": tol,
+        "kind": kind,
     }
+
+
+def _linearity_refusal_reason(
+    fitter: Fitter, mass_name: str, max_dev: float, tol: float, kind: str
+) -> str:
+    """Phrase the linearity refusal around what was actually measured.
+
+    Until 2026-09-17 this said a deviation of order 1 "indicates a
+    mass-independent additive component such as an AGN continuum", on every
+    model. Measured on a ``dense_basis`` photometry fit with no AGN block at
+    all, the deviation is 8.3 and the cause is a mass-dependent SFH *shape*:
+    ``_build_quantile_points`` builds the GP knots from ``sfr_inst*age/M``, so
+    ``log_total_mass`` acts as a shape parameter rather than an amplitude. The
+    message sent the reader hunting for a contaminant they do not have.
+
+    Two things fixed here: the diagnosis names which of the three kinds was
+    measured (they are not interchangeable -- an affine prediction is exactly
+    marginalizable once its offset is known, a nonlinear one never is), and an
+    additive component is named only when the model actually has one.
+    """
+    additive = _additive_component_names(fitter.model)
+    # The phrase "mass-linearity" is load-bearing, not decoration: callers and
+    # tests match on "linear"/"linearity" to recognize this refusal, and the
+    # word "affine" does not contain either.
+    head = (
+        f"the {fitter.data_type} prediction fails the mass-linearity guard: it is {kind} "
+        f"in '{mass_name}', not proportional (worst-of-9-thetas: "
+        f"max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}; the thetas are the "
+        "prior median plus eight prior draws)"
+    )
+
+    named = ", ".join(_ADDITIVE_COMPONENT_PHRASES[n] for n in sorted(set(additive)))
+
+    if kind == "affine":
+        why = (
+            ". Affine means the prediction is 'M * f(theta) + g(theta)' with a "
+            "mass-independent offset g"
+        )
+        why += (
+            f" -- consistent with the additive component(s) this model carries: {named}."
+            if additive
+            else ", though this model carries no additive non-stellar component, so the "
+            "offset most likely comes from the SFH itself."
+        )
+    elif additive:
+        why = (
+            ". A nonlinear (not merely additive) dependence, so it is not the plain "
+            f"additive contribution of {named} alone: some term changes SHAPE with the "
+            "mass."
+        )
+    else:
+        why = (
+            ". This model carries no additive non-stellar component (no AGN, radio, X-ray or "
+            "shock block), so the mass is most likely entering the SFH SHAPE rather than "
+            "acting as an amplitude -- dense_basis does exactly this, building its GP knots "
+            "from sfr_inst*age/M, and is refused here for that reason and not for any "
+            "contaminant."
+        )
+
+    tail = (
+        " At magnitudes within a few orders of the tolerance the cause is usually "
+        "conditioning in the mass direction instead, typically the coarse age kernel (set "
+        'age_kernel="dsps", which integrates on the SSP lookback grid rather than a refined '
+        'one; the default "cic" is 16x-refined), which costs up to roughly 1e-3 at the '
+        "sharpest SFH shapes."
+    )
+    return head + why + tail
 
 
 def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_override) -> None:
@@ -632,6 +843,14 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
 #: measured on 2026-09-12 (ctl-dpl seed 7, geoVI: mass 10.24 against the NUTS
 #: reference 11.96, age 0.5 Gyr against 5.2). Anything not listed here runs
 #: unprofiled; add a backend only after checking it reads the Fitter's loss.
+#:
+#: This set is pinned against the live backend registry by
+#: ``tests/inference/test_profile_mass_backend_coverage.py``: every registered
+#: backend must be listed here or named in that test's excluded set with a
+#: reason. An omission is otherwise indistinguishable from a deliberate
+#: exclusion, which is how ``nss`` came to have a profiled log-likelihood
+#: builder written for it (:func:`build_profiled_loglikelihood_fn`) that
+#: ``resolve_profile_mass_for_method`` then made unreachable.
 PROFILE_MASS_BACKENDS = frozenset(
     {
         "map",
@@ -650,6 +869,46 @@ PROFILE_MASS_BACKENDS = frozenset(
         "mcmc_hmc_lowrank",
         "mcmc_smc",
         "hmc_is",
+        # Added 2026-09-17 after auditing every registered backend against the
+        # seam above, one at a time. Each was previously absent, so
+        # ``resolve_profile_mass_for_method`` disabled profiling before the
+        # backend ran -- silently, because the omission reads as a deliberate
+        # exclusion rather than a gap.
+        #
+        #   nss           -- ``backends/evidence.py:93`` calls
+        #                    ``fitter._get_or_build_loglikelihood_fn()``, which
+        #                    IS the profiled builder under profiling. The
+        #                    override :func:`build_profiled_loglikelihood_fn`
+        #                    was written for this backend and says so in its
+        #                    docstring, but the omission here meant it was
+        #                    unreachable: every NSS evidence run scored its live
+        #                    points at the mass placeholder.
+        #   mcmc_raytrace -- ``backends/mcmc/raytrace.py:906`` calls
+        #                    ``_get_flat_logdensity``.
+        #   mcmc_ess      -- ``backends/mcmc/elliptical_slice.py:185`` calls
+        #                    ``_build_loglikelihood_unbounded_fn``; the profiled
+        #                    dispatch lives in that raw builder
+        #                    (``fitter.py:2954``), not only in the
+        #                    ``_get_or_build_`` wrapper, so ESS sees it. ESS
+        #                    supplies its own N(0, I) prior over the sampled
+        #                    coordinates, which is correct at D-1: the mass's
+        #                    own prior is already inside the profiled marginal.
+        #   pathfinder    -- registered to ``map_dispatch.run_pathfinder``
+        #                    (NOT ``backends/pathfinder.py``), which calls
+        #                    ``_get_flat_logdensity`` at ``map_dispatch.py:1166``.
+        #   vi_fullrank /
+        #   vi_meanfield  -- both route to ``backends/vi/gaussian.py``
+        #                    (``_run_fullrank_vi`` / ``_run_meanfield_vi`` in
+        #                    ``_registration.py``), which calls
+        #                    ``_get_flat_logdensity`` at ``vi/gaussian.py:285``.
+        #                    These are the BlackJAX Gaussian VI backends and are
+        #                    NOT what the NIFTy/native exclusion above refers to.
+        "nss",
+        "mcmc_raytrace",
+        "mcmc_ess",
+        "pathfinder",
+        "vi_fullrank",
+        "vi_meanfield",
     }
 )
 
