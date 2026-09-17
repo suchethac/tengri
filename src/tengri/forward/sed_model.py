@@ -6809,8 +6809,19 @@ class SEDModel:
         chain = self._feature_chain()
         stellar = self._require_feature_fast_eligible(chain)
 
+        # ``compute_joint_weights`` / ``compute_transmission`` are direct
+        # component-level calls, bypassing the model's own merge boundary
+        # (``predict_state``, which merges ``{**fixed_values, **params}``
+        # before any component runs) -- so this fast (approx=True) path must
+        # do that merge itself, exactly as ``predict_line_fluxes``'s FAST
+        # (grid) branch does for the same reason (#2296). Without it, a
+        # Fixed redshift (or any other Fixed value these two calls read
+        # directly) is silently absent here even though it is legally
+        # omitted from ``params`` on every ordinary predict_* surface.
+        full_params = merge_fixed_params(self.spec, params)
+
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
-        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
         scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
 
         pc = self._index_window_precomp(index_defs)
@@ -6821,12 +6832,15 @@ class SEDModel:
         if dust is None:
             transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
         else:
-            transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+            transmission = dust.compute_transmission(full_params, pc.window_centers, ssp_ages_yr)
 
         values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
+        # ``_predict_rest_sed`` self-merges via ``predict_state`` internally and
+        # refuses a Fixed key of its own (#2296): pass the original free-only
+        # ``params`` here, not ``full_params`` (which would then be refused).
         if pc.has_slope:
             rest = self._predict_rest_sed(params)
             slots = pc.index_slots
