@@ -1,6 +1,18 @@
 ## [Unreleased]
 
 
+### Fixed
+
+- (#2363) The slow inference tier runs as three file-partitioned legs, each
+  printing a pytest summary and its 30 slowest tests inside its budget; a
+  labeled PR whose slow or crossval job is skipped fails ci-ok instead of
+  reading as approval.
+- (#2386) The coverage jobs carry the per-test `--timeout=600
+  --timeout-method=thread` again and their own budgets (1.5× the test
+  shard's), so a hung test is named instead of an anonymous budget kill; the
+  two `Resolve test paths` steps are one script, `tools/ci_split_paths.py`,
+  whose empty-list floor is fixed.
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,

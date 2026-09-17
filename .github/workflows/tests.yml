@@ -1204,6 +1204,7 @@ jobs:
           CI_OK_RESULTS: ${{ toJSON(needs) }}
           CI_OK_EVENT: ${{ github.event_name }}
           CI_OK_BASE_REF: ${{ github.base_ref }}
+          CI_OK_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
 
   # Alert on nightly schedule run failure. Opens or updates a deduplicated
   # issue when ci-ok fails on schedule events, so red nightly runs are never
@@ -1361,7 +1362,7 @@ jobs:
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
-            coverage_budget: 75
+            coverage_budget: 105
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
@@ -1444,7 +1445,8 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: ${{ matrix.coverage_budget if matrix.coverage_budget else matrix.budget }}
+        # regression-a mirror: test job at 70 min, coverage at 1.5x = 105 min
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 105 || matrix.coverage_budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
@@ -1480,16 +1482,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Per-suite step budgets sized to the measured serial runtimes:
-        # inference ≈ 51 min; integration has grown from ≈ 93 min to 114–118
-        # min on recent main runs (b11f4d36/21b41836/44725252) and timed out
-        # at 120 on #955 — budget re-sized with headroom. The real fix is
-        # pruning/parallelizing the integration tier, not more budget.
-        # Kept serial (no xdist) for OOM safety, so each suite needs a budget
-        # above its own runtime rather than a shared 40-min cap.
+        # Measured serial inference ≈ 51 min on a full run; the tier has died
+        # before its summary line (#2363). Three contiguous file legs at 45 min
+        # each print `--durations=30` so the legs are rebalanced from measured
+        # durations, not static counts. integration still single-leg (114–118 min).
         include:
           - suite: inference
-            timeout: 60
+            part: 1
+            of: 3
+            timeout: 45
+          - suite: inference
+            part: 2
+            of: 3
+            timeout: 45
+          - suite: inference
+            part: 3
+            of: 3
+            timeout: 45
           - suite: integration
             timeout: 180
           # Every other @pytest.mark.slow test outside the two trees above.
@@ -1565,15 +1574,21 @@ jobs:
       # but the sampler-heavy tests peak at several GB each and xdist workers
       # would OOM the 16 GB runner (the reason this tier was never parallelized).
       #
-      # The third matrix entry (`matrix.paths` set) covers @pytest.mark.slow
-      # tests living outside tests/inference and tests/integration: those five
-      # trees are not auto-marked slow by path, so `-m slow` (not
-      # `-m 'not crossval'`) selects only the individually-decorated tests.
+      # `matrix.of` partitions the inference tree into N file-legs, each with its
+      # own pytest invocation and `--durations=30` report, enabling rebalancing
+      # from measured durations rather than static counts.
+      #
+      # The `matrix.paths` entry covers @pytest.mark.slow tests living outside
+      # tests/inference and tests/integration: those five trees are not auto-marked
+      # slow by path, so `-m slow` (not `-m 'not crossval'`) selects only the
+      # individually-decorated tests.
       - run: |
-          if [ -n "${{ matrix.paths }}" ]; then
+          if [ -n "${{ matrix.of }}" ]; then
+            pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+          elif [ -n "${{ matrix.paths }}" ]; then
             pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
           else
-            pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
+            pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
