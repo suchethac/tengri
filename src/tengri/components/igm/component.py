@@ -30,7 +30,15 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
-from tengri.components.igm._params import PARAMS as _IGM_PARAMS
+from tengri.components.igm._params import (
+    DEFAULT_DLA_B_TURB,
+    DEFAULT_DLA_LOG_N_HI,
+    DEFAULT_DLA_TEMP,
+    DEFAULT_DLA_Z,
+    DEFAULT_IGM_BUBBLE_MPC,
+    DEFAULT_IGM_X_HI,
+    PARAMS as _IGM_PARAMS,
+)
 from tengri.components.igm.igm import igm_absorption
 from tengri.components.template_threading import TemplateThreading
 from tengri.protocols.component import (
@@ -592,19 +600,19 @@ class IGMSEDComponent(TemplateThreading):
         # Single flat dispatch honoring the configured mean-IGM model and DLA
         # (was hardcoded to Inoue with no DLA, so the observed-frame
         # photometry/spectroscopy projection silently ignored both: #932).
-        dla_z = params.get("dla_z", 0.0)
+        dla_z = params.get("dla_z", DEFAULT_DLA_Z)
         T = igm_absorption(
             wave_obs,
             z,
-            igm_x_HI=params.get("igm_x_HI", 0.0),
-            igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
+            igm_x_HI=params.get("igm_x_HI", DEFAULT_IGM_X_HI),
+            igm_bubble_mpc=params.get("igm_bubble_mpc", DEFAULT_IGM_BUBBLE_MPC),
             igm_patchy=self.config.igm_patchy,
             igm_model=self.config.igm_model,
             use_dla=self.config.use_dla,
             dla_z=dla_z,
-            dla_log_n_hi=params.get("dla_log_n_hi", 20.0),
-            dla_temp=params.get("dla_temp", 1e4),
-            dla_b_turb=params.get("dla_b_turb", 0.0),
+            dla_log_n_hi=params.get("dla_log_n_hi", DEFAULT_DLA_LOG_N_HI),
+            dla_temp=params.get("dla_temp", DEFAULT_DLA_TEMP),
+            dla_b_turb=params.get("dla_b_turb", DEFAULT_DLA_B_TURB),
         )
 
         # The LUT photometry path consumes ``igm_phot_factor`` (n_filters,) rather
@@ -667,15 +675,15 @@ class IGMSEDComponent(TemplateThreading):
         t_nodes = igm_absorption(
             node_waves.reshape(-1) * (1.0 + z),
             z,
-            igm_x_HI=params.get("igm_x_HI", 0.0),
-            igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
+            igm_x_HI=params.get("igm_x_HI", DEFAULT_IGM_X_HI),
+            igm_bubble_mpc=params.get("igm_bubble_mpc", DEFAULT_IGM_BUBBLE_MPC),
             igm_patchy=self.config.igm_patchy,
             igm_model=self.config.igm_model,
             use_dla=self.config.use_dla,
             dla_z=dla_z,
-            dla_log_n_hi=params.get("dla_log_n_hi", 20.0),
-            dla_temp=params.get("dla_temp", 1e4),
-            dla_b_turb=params.get("dla_b_turb", 0.0),
+            dla_log_n_hi=params.get("dla_log_n_hi", DEFAULT_DLA_LOG_N_HI),
+            dla_temp=params.get("dla_temp", DEFAULT_DLA_TEMP),
+            dla_b_turb=params.get("dla_b_turb", DEFAULT_DLA_B_TURB),
         ).reshape(node_waves.shape)
         return derived.with_(stellar_phot_lnu_per_age_subband_igm_precomp=sub_per_age * t_nodes)
 

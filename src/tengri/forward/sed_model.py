@@ -660,12 +660,22 @@ class FeaturePrecomp:
        evaluation. Measured on a 10-parameter Cue model with free ``neb_logU``
        / ``neb_logZ_gas``, against an A/A control whose noise floor was 1.23x:
        a photometry-only fit's compiled MAP step goes 0.645 s to 0.093 s
-       (**7x**) on adding this. With a line channel present the same model
-       already sits near 0.16 s and neither opt-in resolves at all.
-       :class:`WavePrecomp` alone does not resolve either (1.07x, under the
-       floor). Measure before assuming either way, and quote a ratio only
+       (**7x**) on adding this to :class:`WavePrecomp`. That saving needs a
+       model with **no** ``sed_nebular`` consumer, so dust withdraws it. On a
+       *dusty* Cue model also fitting a line channel, the pair is worth nothing
+       over :class:`WavePrecomp` alone: measured 1.642 s to 1.647 s against a
+       1.00x A/A floor, where the exact wave grid is 3.593 s (notebook
+       ``10_fastspecfit_joint_fit``, compiled MAP step, fit-time ``approx=``
+       varied) — the photometry LUT carries all 2.19x of it. The line channel
+       does not rescue it either: the table-served line path is the
+       measured-line route of a backend whose lines sit in the SSP templates,
+       and on a Cue fit the line channel is only ~8% of the compiled gradient
+       to begin with, so the table has little to remove (see #2377). Earlier
+       readings of "no gain with lines" timed arms that
+       ``fit()`` had already resolved to one configuration; see the trap
+       below. Measure before assuming either way, and quote a ratio only
        against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
-       the full grid.
+       the grid.
 
        That a photometry-only fit was *slower* than the same fit with an extra
        data channel was a defect, not a property of the method, #1596, fixed:
@@ -1869,6 +1879,66 @@ def _init_keywords(cls: type) -> frozenset[str]:
     return frozenset(params) - {"self", "spec", "ssp_data"}
 
 
+def _is_q_h_linear_backend(backend) -> bool:
+    """Whether the nebular backend gives ``L_line = Q_H x l(theta)``.
+
+    Parameters
+    ----------
+    backend : object or None
+        The model's ``_nebular_backend``.
+
+    Returns
+    -------
+    bool
+        True when a per-Q_H grid can replace the backend's forward call.
+    """
+    return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+
+
+def feature_lut_serves_line_channel(model) -> bool:
+    """Whether ``FeaturePrecomp`` has any lever for this model's LINE channel.
+
+    Mirrors :meth:`SEDModel._resolve_feature_precomp`'s dispatch, which is why it
+    lives beside it: the two must not drift.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model a caller is about to top up with ``FeaturePrecomp``.
+
+    Returns
+    -------
+    bool
+        True only on the SSP-window-LUT branch -- the one that sets
+        ``_fast_line_measurement``, so the likelihood can skip the full-grid
+        ``predict_state`` rebuild.
+
+    Notes
+    -----
+    A Cue-like backend returns **False**. Its ``FeaturePrecomp`` builds the per-Q_H
+    grid, whose only consumer is the photometry shortcut; the line fluxes still go
+    through ``predict_line_fluxes``, which rebuilds the state either way. Callers
+    that want to know whether a Cue model gains anything must ask
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. Measured on a
+    dusty Cue model with 4 bands and 3 line fluxes: appending ``FeaturePrecomp``
+    leaves the objective's gradient at 58,497,272 FLOPs either way -- and the two
+    lowerings are *byte-identical*, the same SHA-256 over 4,206,172 characters of
+    StableHLO and again over the optimized HLO, so this is not FLOP-count
+    coincidence but the same program. It is not free: the attachment costs a 7.2 s
+    ``enable_fast_nebular`` build, and :meth:`SEDModel.compile_signature` differs on
+    ``_approx_config_feature`` and ``_nebular_grid_table`` where the graph does not,
+    forcing an in-process re-trace. The on-disk JAX cache keys on the HLO, so it
+    dedupes rather than storing a second entry. Measured 1.565 s -> 4.276 s of
+    ``fit()`` wall clock on a 60-step MAP fit, for an identical 0.019 s compiled
+    step.
+    """
+    backend = getattr(model, "_nebular_backend", None)
+    if _is_q_h_linear_backend(backend):
+        return False
+    has_catalog = getattr(model, "_has_line_catalog", None)
+    return not (callable(has_catalog) and has_catalog())
+
+
 class SEDModel:
     """Differentiable SED forward model with modular physics and clean API.
 
@@ -2504,6 +2574,7 @@ class SEDModel:
             uses_xray=self._uses_xray,
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
+            radio_include_freefree=getattr(self, "_radio_include_freefree", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
             param_map=self._param_map,
@@ -2640,7 +2711,7 @@ class SEDModel:
 
         backend = self._nebular_backend
         # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
-        cue_like = backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+        cue_like = _is_q_h_linear_backend(backend)
 
         lines = cfg.lines
         if lines is None:
@@ -3433,8 +3504,10 @@ class SEDModel:
         self._dust_law_neb = getattr(spec, "dust_law_neb", None)
         # Per-source dust-screen choice (#2234 replacement): which
         # screen attenuates the nebular continuum + line catalog, the shock
-        # SED, and (validated by `Parameters`/`parse_groups` to stay "none")
-        # AGN light. Consumed by `DustSEDComponent` via `build_components`.
+        # SED, and (#2260) the AGN SED when `agn_screen != "none"` -- AGN
+        # then runs before dust in the component chain. `"none"` (the
+        # default) leaves AGN after dust, unattenuated. Consumed by
+        # `DustSEDComponent` via `build_components`.
         self._dust_nebular_screen = getattr(spec, "dust_nebular_screen", "birth_cloud")
         self._dust_shock_screen = getattr(spec, "dust_shock_screen", "diffuse")
         self._dust_agn_screen = getattr(spec, "dust_agn_screen", "none")
@@ -4013,6 +4086,7 @@ class SEDModel:
             # in _build_param_map (Step B).
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
+            self._radio_include_freefree = getattr(spec, "radio_include_freefree", None)
 
         self._uses_xray = getattr(spec, "xray", False)
         self._xray_model = getattr(spec, "xray_model", "yang20")
@@ -9338,6 +9412,7 @@ class SEDModel:
             use_radio=bool(getattr(self, "_uses_radio", False)),
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
+            radio_include_freefree=getattr(self, "_radio_include_freefree", None),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
             use_igm=bool(getattr(self, "_uses_igm", False)),

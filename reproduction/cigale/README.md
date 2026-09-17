@@ -89,3 +89,10 @@ directly, tengri the HDF5 this script writes from them.
 §5 attenuated stellar SED · §6 dust IR + energy balance ·
 §7 panchromatic · §8 nebular · §9 AGN · §10 X-ray · §11 radio ·
 §12 IGM.
+
+Six sections sweep a physics block across several parameter values
+instead of one point: §2c (`delayed_bq`, `periodic`, `buat08` SFHs),
+§3b (τ × age grid), §5b (`dustatt_modified_starburst` and
+`dustatt_2powerlaws` knobs), §6c (`dl2007`, `dl2014`, `casey2012`,
+`schreiber2016`, `dale2014` IR templates), §8b (Cue logU × Z_gas ×
+f_esc), and §9e (SKIRTOR τ/oa/i and Fritz 2006 torus grids).

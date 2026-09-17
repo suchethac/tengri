@@ -936,22 +936,43 @@ Two things to take from that grid, both counter-intuitive:
    16.1x. Those were **bare-gradient** ratios, measured without a control; across
    a whole MAP step a fixed per-step optimizer cost dilutes them to the figures
    above. The 4x is the one a user feels.)
-2. **With a line channel present the opt-ins do essentially nothing** — all three
-   rows agree to within run-to-run noise. Do not assume `approx=` is buying
-   speed; measure it. Notebook
+2. **The two with-lines rows agree because they are one configuration.** Every
+   arm was fitted through `fit()` under the default `approx="auto"`, and with a
+   line channel that policy resolves build-time `None`, `WavePrecomp()` and the
+   pair alike to `(WavePrecomp, FeaturePrecomp)` — the arms differed in what they
+   *predict* with, not in what they *fit* with. An earlier revision of this item
+   read the agreement as "the opt-ins do essentially nothing with lines"; it is
+   not that. Varying the **fit-time** knob instead (`fwd.fit(..., approx=None)`
+   forces the exact wave grid on the single-galaxy surface) on the same model
+   gives exact 3.593 s → `WavePrecomp` 1.642 s → pair 1.647 s on the compiled MAP
+   step: **2.18x overall against a 1.00x A/A floor, every bit of it the photometry
+   LUT**. The opt-ins are not worthless with lines — `WavePrecomp` is worth 2.19x —
+   but `FeaturePrecomp` on top of it really is 1.00x here, for a reason the old
+   harness could not have shown: this model is dusty, which withdraws the grid's
+   photometry saving, and the line channel is only ~8% of the fit's compiled
+   gradient to begin with (67.3M FLOPs joint against 62.3M photometry-only), so a
+   line table has little to remove. `FeaturePrecomp` in fact never reaches the
+   compiled graph at all on a Cue line-flux fit — see #2377. Do not assume
+   `approx=` is buying speed;
+   measure it, and check what the fit resolved to. Notebook
    [`10_fastspecfit_joint_fit`](../../notebooks/10_fastspecfit_joint_fit.py)
-   re-measures the three arms on every render for exactly this reason — with a
+   prints the resolved path per arm and re-measures on every render — with a
    rotated arm order and an A/A control, because timing several arms in one
    process otherwise measures which arm ran first. Before that harness landed,
    that notebook published this same ratio as 18.6x, 12.6x, 1.0x and 3.2x on
    unchanged code.
 
-**`WavePrecomp` alone does not resolve on a Cue model** — 1.07x, under the 1.23x
-A/A floor, so it should not be quoted as a number at all. (An earlier revision of
-this page called it "~1.1x either way". That figure came from an uncontrolled
-run; against its own noise floor there is nothing there to measure.) The reading
-still stands qualitatively: the emulator, not the filter integration, is what
-dominates a Cue model.
+**The 1.07x for `WavePrecomp` alone is not a measurement of `WavePrecomp`.** The
+two photometry-only rows it compares, `approx=None` and `WavePrecomp()`, were
+fitted under the `"auto"` policy of the day, which resolved both to `WavePrecomp`
+(the build-time top-up to the pair came with #1683), so they are one configuration
+and the ratio is noise, as the 1.23x floor says. The exact photometry-only arm was
+never timed in this grid, and the **7x** is `WavePrecomp` → pair, not exact → pair.
+On the with-lines fit, where the fit-time knob was varied, `WavePrecomp` alone is
+worth 2.19x over exact and the pair a further 1.00x (the notebook) — on a dusty
+model fitting both channels, the filter integration is the whole story. Whether the
+emulator or the filter integration dominates a *dust-free* photometry-only Cue fit
+remains unmeasured on this surface.
 
 For the **baked-in / wNE** backend the saving really is line-only, because there
 the lookup is a per-line window LUT rather than a replacement for a forward.

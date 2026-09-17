@@ -249,13 +249,17 @@ class DustSEDComponentConfig(SEDComponentConfig):
         birth cloud the young-star screen models), or ``"none"``. One of
         ``tengri.parameters._dust_keys.SCREEN_CHOICES``.
     agn_screen : str
-        Which screen attenuates AGN light. ``"none"`` (default, and today the
-        only accepted value -- see ``resolve_screen_choices``): the AGN
-        component runs after dust in the pipeline (stellar, nebular, shock,
-        dust, AGN, radio, X-ray, IGM) and carries its own polar-dust screen,
-        matching the CIGALE convention that AGN light is never attenuated by
-        the galaxy's own dust. Galaxy screening of AGN light is a later
-        change.
+        Which screen attenuates AGN light (#2260). ``"none"`` (default): the
+        AGN component runs after dust in the pipeline (stellar, nebular,
+        shock, dust, AGN, radio, X-ray, IGM), unattenuated, and carries its
+        own polar-dust screen, matching the CIGALE convention. ``"birth_cloud"``
+        or ``"diffuse"``: AGN runs BEFORE dust instead (this component then
+        declares ``sed_agn`` an optional input, moving AGN earlier in the
+        topological sort), so the galaxy's own dust screens attenuate the AGN
+        SED and the absorbed AGN power joins the energy balance below.
+        Refused together with ``agn_norm="cigale_joint"`` (see the cycle-rule
+        check in ``Parameters.__init__``), which already reads that same
+        energy balance to normalize the AGN torus.
     """
 
     # Defaults are a low-level construction convenience only (component
@@ -275,8 +279,9 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: the pre-#2234 behavior for ``nebular_screen`` (young-limit screen,
     #: unconditional) and are a NEW default for ``shock_screen`` (previously
     #: unconditionally birth_cloud too; now diffuse-only, #1434 re-baseline).
-    #: ``agn_screen`` is validated (``resolve_screen_choices``) to stay
-    #: ``"none"``: no call site in :meth:`apply` reads it yet.
+    #: ``agn_screen`` defaults to ``"none"`` (unscreened, CIGALE convention);
+    #: ``"birth_cloud"`` / ``"diffuse"`` are read in :meth:`apply` §2e
+    #: (#2260) and refused together with ``agn_norm="cigale_joint"``.
     nebular_screen: str = "birth_cloud"
     shock_screen: str = "diffuse"
     agn_screen: str = "none"
@@ -457,22 +462,18 @@ class DustSEDComponent(TemplateThreading):
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
-        """Nebular continuum read, if a photoionized backend published one.
+        """Optional cross-component reads (nebular, shock, AGN).
 
-        Declaring ``sed_nebular`` as an optional input makes the pipeline
-        topological sort (ADR-0006) place the nebular component *before* dust,
-        so dust can redden the nebular continuum with the same birth-cloud +
-        diffuse screen as the youngest stars (Charlot & Fall 2000; matches the
-        emission-line treatment). Backends that bake nebular into the SSP
-        (BakedIn) publish ``sed_nebular`` as zeros, so this is a no-op there.
+        Declaring these as optional inputs makes the pipeline topological sort
+        (ADR-0006) place upstream components in the correct order: nebular
+        before dust (so dust can redden it), shock before dust (so dust can
+        redden it), and AGN before dust (when AGN is screened, so dust can
+        redden it).
 
-        Also reads ``lyc_transmission``: the stellar Lyman-continuum survival
-        fraction ``where(λ<912, neb_fesc, 1)`` published by a photoionized
-        backend. Applied to the per-age stellar reconstruction so the fesc
-        absorption is honored on the ``lnu_age`` path (see :meth:`apply` §2a
-        and #824). Absent for BakedIn -> LyC passes through unchanged.
+        When a source is not screened (screen choice is "none"), its optional
+        input is omitted, allowing it to run after dust in the pipeline.
         """
-        return (
+        keys: list[DerivedKey] = [
             DerivedKey(
                 "sed_nebular",
                 "erg/s/Hz",
@@ -500,7 +501,20 @@ class DustSEDComponent(TemplateThreading):
                 "runs before DustSEDComponent. Undeclared reads of state.derived keys are "
                 "invisible to topological_sort and can silently return None, defeating the fix.",
             ),
-        )
+        ]
+        # AGN SED: declare as optional input only when screened, so AGN runs
+        # before dust when a screen is active. When agn_screen == "none" this
+        # is omitted, and AGN runs after dust (pre-PR-D2 behavior).
+        if self.config.agn_screen != "none":
+            keys.append(
+                DerivedKey(
+                    "sed_agn",
+                    "erg/s/Hz",
+                    "AGN SED to attenuate; creates topological edge so AGNSEDComponent "
+                    "runs before DustSEDComponent when agn_screen != 'none'.",
+                )
+            )
+        return tuple(keys)
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns (attenuation-only).
@@ -1063,6 +1077,26 @@ class DustSEDComponent(TemplateThreading):
             f_obsc=_f_obsc,
         )
 
+        # ── 2e. AGN SED attenuation (#2260, PR-D2) ──────────────────────────
+        # #2260: ``agn_screen`` picks which screen reddens the AGN SED. When
+        # agn_screen != "none", AGNSEDComponent runs before DustSEDComponent
+        # (via topological_sort edge from optional_inputs above), so the AGN
+        # light can be attenuated by the galaxy's dust. When screened, the
+        # absorbed AGN power enters the energy-balance integral below. The
+        # screening must be refused together with agn_norm="cigale_joint"
+        # (see cycle rule in parse_groups / Parameters._init_dust_config), so
+        # dust-agn power coupling and galaxy dust-agn screening never compete.
+        sed_agn_unatt = state.derived.get("sed_agn")
+        sed_agn = jnp.zeros_like(wave) if sed_agn_unatt is None else jnp.asarray(sed_agn_unatt)
+        sed_agn_attenuated = sed_agn * _screen_transmission(
+            self.config.agn_screen,
+            k_bc=k_bc_neb,
+            k_diff=k_diff_neb,
+            tau_bc=_tau_bc,
+            tau_diff=_tau_diff,
+            f_obsc=_f_obsc,
+        )
+
         # ── 3. Energy balance: ∫ (L_nu_intrinsic - L_nu_attenuated) dν ──
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
         # negative signed area; abs() recovers the positive erg/s.
@@ -1078,19 +1112,15 @@ class DustSEDComponent(TemplateThreading):
         # value, only the dust energy-balance integral excludes those
         # photons.
         nu = C_AA / wave
-        # Stellar + nebular + shock absorbed light all feed the dust IR
-        # re-emission pool (energy balance): the nebular continuum (§2b) and
-        # the shock SED (§2d) reddened above are absorbed by the same grains.
-        # Before this PR the shock term was omitted here entirely (#1434 left
-        # the shock SED's absorbed power out of L_absorbed even though the
-        # shock SED was itself attenuated) -- a pre-existing energy-balance
-        # gap, not a behavior this PR is choosing to change: a source that is
-        # attenuated but never counted as absorbed leaks energy out of the
-        # SED with no compensating IR re-emission. A source whose
-        # ``*_screen`` choice is ``"none"`` is unattenuated
-        # (``sed_*_attenuated == sed_*`` bit-for-bit, see
-        # :func:`_screen_transmission`), so it contributes exactly zero to
-        # this integral automatically: no separate on/off branch is needed.
+        # Stellar + nebular + shock + AGN absorbed light all feed the dust IR
+        # re-emission pool (energy balance): the nebular continuum (§2b),
+        # shock SED (§2d), and AGN SED (§2e) reddened above are absorbed by the
+        # same grains. Before #1434 the shock term was omitted entirely (a
+        # pre-existing energy-balance gap). Before PR-D2 the AGN term was
+        # omitted when screened. A source whose ``*_screen`` choice is ``"none"``
+        # is unattenuated (``sed_*_attenuated == sed_*`` bit-for-bit, see
+        # :func:`_screen_transmission`), so it contributes exactly zero to this
+        # integral automatically: no separate on/off branch is needed.
         eb_lut = None
         if isinstance(template_data, dict):
             _dir = template_data.get("dust_ir")
@@ -1126,26 +1156,26 @@ class DustSEDComponent(TemplateThreading):
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
             )
-            # Nebular + shock combined into ONE integral (rather than two
-            # log10_add terms) so no intermediate sign has to be invented for
-            # a partial sum: bolometric_absorbed_log10 already returns the
-            # sign of ITS integral, exactly like the stellar term does.
+            # Nebular + shock + AGN combined into ONE integral (rather than
+            # multiple log10_add terms) so no intermediate sign has to be
+            # invented for a partial sum: bolometric_absorbed_log10 already
+            # returns the sign of ITS integral, exactly like the stellar term does.
             log_neb, sign_neb = bolometric_absorbed_log10(
-                sed_neb + sed_shock,
-                sed_neb_attenuated + sed_shock_attenuated,
+                sed_neb + sed_shock + sed_agn,
+                sed_neb_attenuated + sed_shock_attenuated + sed_agn_attenuated,
                 nu,
                 wave=wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
-            # Signed log-space sum: reproduces abs(stellar + neb + shock)
+            # Signed log-space sum: reproduces abs(stellar + neb + shock + agn)
             # exactly, including the case where the terms carry opposite signs.
             log_L_absorbed = log10_add(log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb)
         else:
             from tengri.forward.energy_balance import bolometric_absorbed_log10
 
             log_L_absorbed, _ = bolometric_absorbed_log10(
-                sed_intrinsic_stellar + sed_neb + sed_shock,
-                sed_attenuated + sed_neb_attenuated + sed_shock_attenuated,
+                sed_intrinsic_stellar + sed_neb + sed_shock + sed_agn,
+                sed_attenuated + sed_neb_attenuated + sed_shock_attenuated + sed_agn_attenuated,
                 nu,
                 wave=wave,
                 lyman_cutoff_aa=_eb_cutoff,
@@ -1201,12 +1231,19 @@ class DustSEDComponent(TemplateThreading):
             non_stellar_pre_dust = state.sed_intrinsic - sed_intrinsic_stellar
         # The nebular continuum (sed_neb) is part of non_stellar_pre_dust but is
         # reddened per its ``nebular_screen`` choice (§2b). Shock (§2d) is reddened
-        # per its own ``shock_screen`` choice, independently (#2234). AGN/radio/xray
-        # stay unattenuated by stellar dust (``agn_screen`` is validated to stay
-        # ``"none"`` today -- see ``resolve_screen_choices``). Swap the bare nebular
-        # and shock for their already-computed attenuated forms (§2b, §2d).
-        non_stellar_other = non_stellar_pre_dust - sed_neb - sed_shock
-        sed_total = non_stellar_other + sed_neb_attenuated + sed_shock_attenuated + sed_attenuated
+        # per its own ``shock_screen`` choice (#2234). AGN (§2e) is optionally
+        # reddened per its own ``agn_screen`` choice (#2260, PR-D2); when unscreened
+        # it runs after dust (pre-PR-D2 behavior). Radio/X-ray are unattenuated by
+        # stellar dust. Swap the bare nebular, shock, and AGN for their
+        # already-computed attenuated forms (§2b, §2d, §2e).
+        non_stellar_other = non_stellar_pre_dust - sed_neb - sed_shock - sed_agn
+        sed_total = (
+            non_stellar_other
+            + sed_neb_attenuated
+            + sed_shock_attenuated
+            + sed_agn_attenuated
+            + sed_attenuated
+        )
 
         # Per-filter LUTs for two-component attenuation.
         # T(a, λ) factorizes as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
@@ -1352,6 +1389,31 @@ class DustSEDComponent(TemplateThreading):
                         fw_pad,
                         ft_pad,
                         z_shock,
+                    )
+                )
+            # AGN photometry attenuated by dust (PR-D2): parallel to shock.
+            # sed_agn_unatt and sed_agn_attenuated are computed in §2e above.
+            # Gate on agn_screen != "none" and presence of intrinsic AGN.
+            if sed_agn_unatt is not None and self.config.agn_screen != "none":
+                from tengri.components._band_projection import (
+                    project_additive_onto_photometry,
+                )
+                from tengri.parameters.resolve import require_redshift
+
+                z_agn = jnp.asarray(
+                    require_redshift(params, "components.dust.two_component.apply")
+                )
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                derived_overrides["agn_phot_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,
+                        sed_agn_attenuated,
+                        wave,
+                        filter_eff,
+                        fw_pad,
+                        ft_pad,
+                        z_agn,
                     )
                 )
             # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no

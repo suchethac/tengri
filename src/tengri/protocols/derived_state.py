@@ -418,6 +418,11 @@ class DerivedState:
     # Published by the two-component dust component under WavePrecomp when shock
     # is present. Observed by predict_via_precomp in the dust-attenuable bucket.
     shock_phot_lnu_attenuated_precomp: jnp.ndarray | None = None
+    # AGN photometry attenuated by dust (PR-D2): rest-frame Lν per filter,
+    # dust-reddened by the appropriate dust screen when agn_screen != 'none'.
+    # Published by the two-component dust component under WavePrecomp when AGN
+    # is present and screened. Observed by predict_via_precomp.
+    agn_phot_lnu_attenuated_precomp: jnp.ndarray | None = None
 
     # Spectrum LUT (published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component

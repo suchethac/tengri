@@ -337,7 +337,7 @@ class InferenceContext:
     # ── Likelihood-shape configuration ───────────────────────────────────
     @property
     def calibration_marginalize(self) -> bool:
-        """Whether to marginalize an additive calibration polynomial."""
+        """Whether to marginalize a multiplicative calibration polynomial."""
         return self.fitter._calibration_marginalize
 
     @property

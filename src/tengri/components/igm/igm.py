@@ -20,7 +20,14 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
-from tengri.components.igm._params import DEFAULT_DLA_LOG_N_HI
+from tengri.components.igm._params import (
+    DEFAULT_DLA_B_TURB,
+    DEFAULT_DLA_LOG_N_HI,
+    DEFAULT_DLA_TEMP,
+    DEFAULT_DLA_Z,
+    DEFAULT_IGM_BUBBLE_MPC,
+    DEFAULT_IGM_X_HI,
+)
 from tengri.components.igm.dla import _A_LYA, _F_LYA, _NU_LYA, _WL_LYA
 from tengri.cosmology import PLANCK18
 from tengri.utils.host_array import device_table, host_array
@@ -995,15 +1002,15 @@ def igm_absorption(
     wave_obs: jnp.ndarray,
     z: float,
     *,
-    igm_x_HI: float = 0.0,
-    igm_bubble_mpc: float = 10.0,
+    igm_x_HI: float = DEFAULT_IGM_X_HI,
+    igm_bubble_mpc: float = DEFAULT_IGM_BUBBLE_MPC,
     igm_patchy: bool = False,
     igm_model: str = "inoue",
     use_dla: bool = False,
-    dla_z: float = 0.0,
+    dla_z: float = DEFAULT_DLA_Z,
     dla_log_n_hi: float = DEFAULT_DLA_LOG_N_HI,
-    dla_temp: float = 1e4,
-    dla_b_turb: float = 0.0,
+    dla_temp: float = DEFAULT_DLA_TEMP,
+    dla_b_turb: float = DEFAULT_DLA_B_TURB,
 ) -> jnp.ndarray:
     r"""Total observed-frame absorption: the single flat dispatch.
 

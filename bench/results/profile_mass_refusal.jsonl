@@ -1,0 +1,29 @@
+{"name": "recipe_agn_panchromatic", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_composable_agn", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_dust_demo", "construction_status": "guard_refuse", "guard_reason": "guard_3_wrong_mass_name", "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_high_z", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_mock_recovery_minimal", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_photoz", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_quiescent_z0", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_star_forming_photometry", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_stochastic_sfh_jwst", "construction_status": "ok", "guard_reason": null, "method_incompatible": false, "source": "recipe"}
+{"name": "recipe_unified_agn", "construction_status": "could_not_construct", "guard_reason": "TengriIOError: Synthesizer AGN NLR grid 'test_grid_agn-nlr.hdf5' not found.\n\nFix (one of):\n  1. Download the Synthe", "method_incompatible": false, "source": "recipe"}
+{"name": "notebook_00_quickstart", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_01_why_jax", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_02_sed_anatomy", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_03_discovering_the_menu", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_04_building_models", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_05_adding_a_model", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_05_fitting_photometry", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_06_fitting_spectroscopy", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_07_joint_photo_spec", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_10_fastspecfit_joint_fit", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_11_catalog_fits", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_12_simulation_populations", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_19_joint_spec_phot", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_apple_mps", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_custom_filters_7dt", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_jwst_nonparametric_fits", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_multimodel_bma_candels", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_nvidia_cuda", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}
+{"name": "notebook_stochastic_sfh_recovery", "construction_status": "not_measured", "guard_reason": "parsing notebooks requires jupytext AST analysis; deferred", "method_incompatible": false, "source": "notebook"}

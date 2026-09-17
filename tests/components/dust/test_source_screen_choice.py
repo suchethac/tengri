@@ -341,15 +341,29 @@ def test_unknown_value_names_the_three_choices():
         assert choice in message, f"{choice!r} missing from error message: {message}"
 
 
-# ── (8) agn_screen != 'none' raises the deferral message ───────────────────
+# ── (8) agn_screen != 'none' raises cycle rule when paired with cigale_joint ──
 
 
-def test_agn_screen_non_none_raises_deferral_message():
-    with pytest.raises(ParameterError, match="polar-dust screen"):
-        Parameters(dust_agn_screen="diffuse", redshift=Fixed(0.1))
-    with pytest.raises(ParameterError, match="polar-dust screen"):
+def test_agn_screen_non_none_raises_cycle_rule():
+    """With the default agn_norm='cigale_joint', agn_screen != 'none' raises.
+
+    PR-D2 implements the agn_screen feature, but the cycle rule prevents
+    pairing it with cigale_joint (both read the dust budget). The error
+    message names the valid alternatives. Test both grammar (parse_groups)
+    and flat (Parameters) surfaces.
+    """
+    # Flat surface: requires an AGN model
+    with pytest.raises(ParameterError, match="incompatible with agn_norm"):
+        Parameters(
+            agn_model="composable",
+            dust_agn_screen="diffuse",
+            redshift=Fixed(0.1),
+        )
+    # Grammar surface: requires an AGN group
+    with pytest.raises(ParameterError, match="incompatible with agn_norm"):
         parse_groups(
             dust_attenuation={"type": "two_component", "law": "calzetti", "agn_screen": "diffuse"},
+            agn={"type": "composable"},
             redshift=Fixed(0.1),
         )
 

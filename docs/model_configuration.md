@@ -265,7 +265,7 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 - `'law_neb'` — Nebular dust law (the curve for the nebular channel; which screen that channel passes through is `'nebular_screen'`).
 - `'nebular_screen'` — Which dust screen the nebular continuum, the line catalog and the fast-nebular fallback pass through: `'birth_cloud'` (default: the young-star screen, birth cloud + diffuse), `'diffuse'` (the old-star screen) or `'none'` (`'off'` is a synonym). Two-component only; `'single_component'` accepts only `'none'`.
 - `'shock_screen'` — Which screen the shock SED passes through; same values; default `'diffuse'` (AGN-outflow shocks sit outside the birth clouds).
-- `'agn_screen'` — Galaxy screen on AGN light; `'none'` (default) is the only accepted value today, since the AGN component runs after dust and carries its own polar-dust screen.
+- `'agn_screen'` — Screen choice for AGN continuum attenuation: `'birth_cloud'`, `'diffuse'`, or `'none'` (default). Two-component only. Incompatible with `agn_norm='cigale_joint'` (both read the dust budget); use `agn_norm='independent'` or `'conserving'` instead.
 - `'dust_curve'` — WG00 dust curve selector (only for `type='wg00'`).
 - `'geometry'` — WG00 geometry ('slab', 'sphere', etc.) (only for `type='wg00'`).
 - `'structure'` — WG00 structure ('clumpy', 'homogeneous', etc.) (only for `type='wg00'`).

@@ -4149,6 +4149,14 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
                 suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                 raise ValueError(f"Unknown radio sf type '{sf_variant}'.{suggest_str}")
+            # Handle optional 'freefree' boolean key in the sf sub-dict
+            if "freefree" in sf_dict:
+                freefree_val = sf_dict["freefree"]
+                if not isinstance(freefree_val, bool):
+                    raise TypeError(
+                        f"radio['sf']['freefree'] must be bool, got {type(freefree_val).__name__}"
+                    )
+                result["radio_include_freefree"] = freefree_val
         else:
             raise TypeError(f"radio['sf'] must be a dict, got {type(sf_dict).__name__}.")
 
@@ -4468,7 +4476,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
-    "radio.sf": frozenset({"type", "*", "all_params"}),
+    "radio.sf": frozenset({"type", "*", "all_params", "freefree"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
     "agn": frozenset({"type", "*", "all_params", "norm"}) | _AGN_SUBBLOCK_KEYS,
@@ -4669,6 +4677,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("patchy", "igm_patchy", False),
     ),
     "agn": (_Structural("norm", "agn_norm", "cigale_joint"),),
+    "radio.sf": (_Structural("freefree", "radio_include_freefree", None),),
     "foreground": (
         # The MW screen declares no fitted parameters, so its group never
         # entered the per-group emit loop at all: see the no-parameter pass

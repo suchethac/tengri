@@ -245,6 +245,17 @@ ENGINE_POLICY: KeyPolicy = {
         "gates whether a Likelihood is auto-built at construction; the resulting "
         "_user_likelihood is already keyed below, this is cheap defense in depth"
     ),
+    "_likelihood_is_user_supplied": content(
+        "whether likelihood= was passed by the caller, recorded at the constructor "
+        "because _user_likelihood is later OVERWRITTEN with the auto-built adapter "
+        "cohort and so stops answering that question (#2360). Read by "
+        "mass_profile._check_guards, which refuses to profile the mass against a line "
+        "block it cannot verify is a plain Gaussian; the refusal changes which "
+        "parameters are free, so it is engine-relevant. Keyed by content rather than "
+        "excluded as a derived boolean: it is NOT recoverable from _user_likelihood's "
+        "own row, precisely because that attribute no longer holds the user's object "
+        "by the time this key is computed"
+    ),
     "_user_likelihood": content(
         "a custom Likelihood replaces the entire chi-squared dispatch (#2163: the old "
         "hand key never included this at all, so two Fitters with different custom "
@@ -383,6 +394,7 @@ FINGERPRINT_POLICY: KeyPolicy = {
         "too, see that ledger's reason"
     ),
     "_auto_protocol_likelihood": exclude(_STRUCTURE_REASON),
+    "_likelihood_is_user_supplied": exclude(_STRUCTURE_REASON),
     "_user_likelihood": exclude(_STRUCTURE_REASON),
     "_calibration_marginalize": exclude(_STRUCTURE_REASON),
     "_profile_mass": exclude(_STRUCTURE_REASON),
