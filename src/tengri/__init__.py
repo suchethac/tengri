@@ -89,6 +89,8 @@ written down here, which can only go stale.
 # catches anything that slips through. Users who want them back can
 # set ``TENGRI_VERBOSE_JAX=1``.
 import os as _os
+import tomllib
+from importlib.metadata import PackageNotFoundError, version as _get_metadata_version
 from pathlib import Path as _Path
 
 if not _os.environ.get("TENGRI_VERBOSE_JAX"):
@@ -293,23 +295,24 @@ if _os.environ.get("TENGRI_DISABLE_JIT", "").lower() in ("1", "true", "yes"):
 # The canonical version lives in pyproject.toml. This tries to read it via
 # importlib.metadata (available after installation), and falls back to reading
 # pyproject.toml directly for source-tree installations (e.g., pip install -e).
-try:
-    from importlib.metadata import PackageNotFoundError, version
-    __version__ = version("astro-tengri")
-except PackageNotFoundError:
-    # Fallback for source-tree installations not yet in site-packages.
-    import tomllib
-    _pyproject_path = _Path(__file__).resolve().parents[2] / "pyproject.toml"
-    if _pyproject_path.exists():
-        with open(_pyproject_path, "rb") as _f:
-            _pyproject = tomllib.load(_f)
-        __version__ = _pyproject.get("project", {}).get("version", "unknown")
-    else:
+# Try reading from the running source tree's pyproject.toml first (authoritative after a bump),
+# then fall back to importlib.metadata for installed wheels (frozen at install time).
+_pyproject_path = _Path(__file__).resolve().parents[2] / "pyproject.toml"
+if _pyproject_path.exists():
+    # Source-tree installation: read directly for freshness after a version bump.
+    with open(_pyproject_path, "rb") as _f:
+        _pyproject_data = tomllib.load(_f)
+    __version__ = _pyproject_data["project"]["version"]
+else:
+    # Installed wheel: read from package metadata.
+    try:
+        __version__ = _get_metadata_version("astro-tengri")
+    except PackageNotFoundError as _e:
         raise RuntimeError(
-            f"Cannot determine tengri version: "
-            f"importlib.metadata.version('astro-tengri') failed with PackageNotFoundError, "
-            f"and pyproject.toml not found at {_pyproject_path}"
-        )
+            "Cannot determine tengri version: "
+            f"pyproject.toml not found at {_pyproject_path}, "
+            "and importlib.metadata.version('astro-tengri') failed"
+        ) from _e
 
 # --- Exception hierarchy ---
 # --- New high-level API ---

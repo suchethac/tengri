@@ -24,9 +24,8 @@ import argparse
 import re
 import sys
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
