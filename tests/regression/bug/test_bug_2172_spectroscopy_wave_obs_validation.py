@@ -26,6 +26,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.observation.spectroscopy import Spectroscopy
+from tengri.observation.spectrum import _is_log_uniform, _require_log_uniform_grid
 
 pytestmark = pytest.mark.regression_bug
 
@@ -90,7 +91,11 @@ def test_clean_wave_obs():
 
 
 def test_wave_obs_two_point_grid():
-    """Two-point grids are accepted (guards allow size < 3 to pass through)."""
+    """Spectroscopy imposes no minimum size; the resamplers' minimum lives in spectrum.py."""
     wave_obs = jnp.array([4000.0, 7000.0])
     spec = Spectroscopy(wave_obs=wave_obs)
     assert spec.n_pixels == 2
+
+    # Pin the guards' minimum-size branch: w.size < 3 returns early without raising.
+    assert _is_log_uniform(wave_obs) is True
+    _require_log_uniform_grid(wave_obs, "test")  # returns None, does not raise
