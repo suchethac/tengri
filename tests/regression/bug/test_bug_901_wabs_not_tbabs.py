@@ -14,7 +14,6 @@ import warnings
 
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 
 def test_wabs_transmission_importable():
@@ -30,7 +29,7 @@ def test_wabs_transmission_bit_identical_to_tbabs():
     Tests bit-identity using np.array_equal (not allclose) to ensure
     they take the same code path.
     """
-    from tengri.components.xray.xray import wabs_transmission, tbabs_transmission
+    from tengri.components.xray.xray import tbabs_transmission, wabs_transmission
 
     # Suppress deprecation warning for this test
     with warnings.catch_warnings():
@@ -76,3 +75,22 @@ def test_tbabs_transmission_emits_deprecation_warning():
             f"Warning message should mention 'Wilms': {msg}"
         assert "wabs_transmission" in msg, \
             f"Warning message should name the new function: {msg}"
+
+
+def test_xray_log_nh_registry_description_mentions_wabs():
+    """The xray_log_nh parameter description in registry mentions wabs convention."""
+    from tengri.components.xray._params import PARAMS
+
+    # Find the xray_log_nh parameter declaration
+    xray_log_nh_decl = None
+    for param in PARAMS:
+        if param.name == "xray_log_nh":
+            xray_log_nh_decl = param
+            break
+
+    assert xray_log_nh_decl is not None, "xray_log_nh not found in xray PARAMS"
+
+    # Check that the description mentions wabs
+    description = xray_log_nh_decl.description
+    assert "wabs" in description.lower(), \
+        f"xray_log_nh description should mention 'wabs': {description}"

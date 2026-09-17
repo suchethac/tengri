@@ -203,6 +203,8 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     The photoelectric screen is the Morrison & McCammon (1983) wabs cross-section,
     not the Wilms+2000 tbabs. Will be removed in tengri v1.0.
     For differences, see :func:`wabs_transmission`.
+
+    Emits Python's standard DeprecationWarning on invocation.
     """
     import warnings
     warnings.warn(
