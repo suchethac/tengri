@@ -97,8 +97,7 @@ class TestBareBackendGradients:
 
             # Assert finite and nonzero (the #2100/#2178 convention)
             assert np.isfinite(grad_value), (
-                f"Gradient is not finite: {grad_value}; "
-                "float32 underflow in coordinate cast?"
+                f"Gradient is not finite: {grad_value}; float32 underflow in coordinate cast?"
             )
             assert grad_value != 0.0, (
                 f"Gradient is exactly zero: {grad_value}; "
@@ -135,8 +134,7 @@ class TestBareBackendGradients:
             grad_value = float(grad_fn(np.float64(0.5)))
 
             assert np.isfinite(grad_value), (
-                f"Gradient is not finite: {grad_value}; "
-                "float32 underflow in coordinate cast?"
+                f"Gradient is not finite: {grad_value}; float32 underflow in coordinate cast?"
             )
             assert grad_value != 0.0, (
                 f"Gradient is exactly zero: {grad_value}; "
@@ -182,7 +180,5 @@ class TestBareBackendGradients:
         val_high = np.asarray(jnp.sum(lum_high), dtype=np.float64)
 
         assert val_low != val_high, (
-            f"Forward value does not change when neb_co changes; "
-            f"expected {val_low} != {val_high}"
+            f"Forward value does not change when neb_co changes; expected {val_low} != {val_high}"
         )
-
