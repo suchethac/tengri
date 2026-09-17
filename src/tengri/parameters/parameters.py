@@ -2009,11 +2009,14 @@ class Parameters:
         return new_spec
 
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
-        """Draw one random sample from all parameter prior distributions.
+        """Draw one random sample from free parameter prior distributions.
 
-        Samples all free parameters from their priors, returns fixed parameters
-        at their fixed values, and (if stochastic) generates the latent field
-        ξ ~ N(0,I). Mirrors are resolved (target ← source value).
+        Samples free parameters from their priors and (if stochastic) generates
+        the latent field ξ ~ N(0,I). Fixed parameters are **not** included.
+        Mirrors are resolved (target ← source value).
+
+        A params dict carries free parameters only (#2296); fixed parameters
+        are read from :meth:`get_fixed_values` or :attr:`Posterior.fixed_values`.
 
         Parameters
         ----------
@@ -2023,11 +2026,10 @@ class Parameters:
         Returns
         -------
         dict[str, ndarray]
-            Parameter name → sampled value. Free parameters are sampled from
-            their prior distributions. Fixed parameters return their constant
-            value (as float or string). If stochastic, ``sfh_field_xi`` is an
-            array of shape ``(n_grid,)``. Dictionary is immutable-ready (no
-            direct mutation of values).
+            Free parameter name → sampled value. Sampled from their prior
+            distributions. If stochastic, ``sfh_field_xi`` is an array of
+            shape ``(n_grid,)``. Dictionary is immutable-ready (no direct
+            mutation of values).
 
         Notes
         -----
@@ -2041,16 +2043,16 @@ class Parameters:
         Examples
         --------
         >>> import jax.random
-        >>> from tengri import Parameters, Uniform
+        >>> from tengri import Parameters, Uniform, Fixed
         >>> spec = Parameters(
         ...     sfh_dpl_alpha=Uniform(0.5, 3.0),
         ...     sfh_dpl_beta=Uniform(0.5, 3.0),
-        ...     redshift=0.1,
+        ...     redshift=Fixed(0.1),
         ... )
         >>> key = jax.random.PRNGKey(42)
         >>> samples = spec.sample(key)
         >>> print(sorted(samples.keys()))
-        ['redshift', 'sfh_dpl_alpha', 'sfh_dpl_beta']
+        ['sfh_dpl_alpha', 'sfh_dpl_beta']
 
         Per-parameter substreams
         ------------------------
@@ -2070,7 +2072,8 @@ class Parameters:
         reproducible across processes.
         """
         params = {}
-        for name in sorted(self._distributions.keys()):
+        # Only sample free parameters; fixed parameters are omitted.
+        for name in sorted(self.free_params):
             subkey = jax.random.fold_in(key, _stable_param_seed(name))
             params[name] = self._distributions[name].sample(subkey)
 

@@ -104,7 +104,6 @@ def _mock(model):
     """A valid full parameter set: a prior draw with a few values pinned."""
     drawn = model.spec.sample(jax.random.PRNGKey(0))
     params = {
-        **model.spec.get_fixed_values(),
         **drawn,
         **{k: jnp.array(v) for k, v in OVERRIDES.items() if k in drawn},
     }
