@@ -375,16 +375,21 @@ class TestBMAWeightsAgreement:
         assert np.allclose(np.sum(weights), 1.0)
         assert np.all(weights >= 0)
 
-    def test_shared_mock_is_used(self, shared_mock):
-        """Verify shared_mock fixture exists and is valid (#2364 mutation).
+    def test_shared_mock_identical_flux(self, model_and_fitter, model_b_and_fitter):
+        """Verify both fitters hold one mock (#2364 mutation).
 
-        Reverting to separate mocks per model breaks this test: the fixture
-        would cease to exist or would be shadowed by per-model mocks.
+        When fixture sharing is reverted, model_b_and_fitter builds its own
+        mock and this assertion fails: fitter_a.data != fitter_b.data.
         """
-        assert shared_mock.flux_obs is not None
-        assert shared_mock.noise is not None
-        assert len(shared_mock.flux_obs) > 0
-        assert len(shared_mock.noise) > 0
+        _, fitter_a = model_and_fitter
+        _, fitter_b = model_b_and_fitter
+
+        assert np.array_equal(fitter_a.data, fitter_b.data), (
+            "Fitter A and B must hold identical flux arrays: fixture sharing broken"
+        )
+        assert np.array_equal(fitter_a.noise, fitter_b.noise), (
+            "Fitter A and B must hold identical noise arrays: fixture sharing broken"
+        )
 
     def test_bma_weights_ranking_agreement(
         self,
@@ -409,8 +414,8 @@ class TestBMAWeightsAgreement:
         logz_nss_a = float(nss_ref.log_evidence)
         logz_nss_b = float(model_b_nss_ref.log_evidence)
         sep_nss = abs(logz_nss_a - logz_nss_b)
-        err_nss_a = float(nss_ref.diagnostics.get("log_evidence_err", 0.01))
-        err_nss_b = float(model_b_nss_ref.diagnostics.get("log_evidence_err", 0.01))
+        err_nss_a = float(nss_ref.diagnostics["log_evidence_err"])
+        err_nss_b = float(model_b_nss_ref.diagnostics["log_evidence_err"])
         sigma_nss = np.sqrt(err_nss_a**2 + err_nss_b**2)
 
         # HMC+IS: compute evidence separation and error
@@ -419,8 +424,8 @@ class TestBMAWeightsAgreement:
         logz_hmc_a = float(hmc_is_result.log_evidence)
         logz_hmc_b = float(model_b_hmc_is.log_evidence)
         sep_hmc = abs(logz_hmc_a - logz_hmc_b)
-        err_hmc_a = float(hmc_is_result.diagnostics.get("log_evidence_err", 0.01))
-        err_hmc_b = float(model_b_hmc_is.diagnostics.get("log_evidence_err", 0.01))
+        err_hmc_a = float(hmc_is_result.diagnostics["log_evidence_err"])
+        err_hmc_b = float(model_b_hmc_is.diagnostics["log_evidence_err"])
         sigma_hmc = np.sqrt(err_hmc_a**2 + err_hmc_b**2)
 
         # Laplace: no error estimate; treat as point estimate
