@@ -1135,8 +1135,7 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         # 1.8925e-04 of L_ir, and SEDModel.build refuses it.
         "short_doc": "[not builder-available: PAH building block; composes through the dust-emission grid API] Drude-profile PAH emission features",  # noqa: E501
         "use": (
-            "tengri.components.dust.dust_analytic_precompute.precompute("
-            "model='pah_drude', ...)"
+            "tengri.components.dust.dust_analytic_precompute.precompute(model='pah_drude', ...)"
         ),
     },
     "energy_balance_split": {
