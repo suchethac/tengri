@@ -961,8 +961,13 @@ def parse_groups(**kwargs) -> Parameters:
     # range as a defect after that range has already been fixed (#1586).
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", AdvisoryWarning)
-        # structural_kwargs has registry defaults; bypass validation (not user-provided)
-        structural_params = Parameters(**structural_kwargs, _grammar_validated=True)
+        # structural_kwargs has registry defaults; bypass validation (not user-provided).
+        # Defer resource-path resolution (e.g., cloudy grid) so key validation can run
+        # before grid-file existence check, allowing bogus keys to be reported before
+        # "missing grid" errors (#2328).
+        structural_params = Parameters(
+            **structural_kwargs, _grammar_validated=True, _defer_resource_paths=True
+        )
 
     # Partition declared params by owning group. ``met_*`` lands in
     # ``"stellar"`` when the user opted into the new top-level slot
