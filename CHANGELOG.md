@@ -351,6 +351,11 @@
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
 
+### Fixed
+
+- Four fail-open probes for never-assigned attributes are resolved. `SEDModel.hybrid` property (dead accessor for `_hybrid` never assigned) is removed; `SEDModel.wave_obs` property's dead `_wave_obs` cache probe is removed; `sed_model.py` dust-emission detection's legacy `dust.config.emission_model` probe (unreachable after component migration) is removed; `profiling/pipeline.py`'s dead `_compositional` probe is removed; `profiling/memory.py`'s `_weights` probe is fixed to use the correct `weights` attribute on `CueBackend` (#1240).
+
+
 ### Changed
 
 - `profile_mass` no longer refuses a fit that measures emission-line fluxes.
