@@ -214,14 +214,14 @@ def test_dh02_shape_follows_the_real_l_ir(two_l_ir_values):
 
 
 def test_dh02_energy_balance_through_apply(ssp):
-    """Verify energy balance through SEDModel.build path; tests factors_l_ir flag.
+    """Verify energy balance through SEDModel.build path; guards normalization.
 
-    This test goes through the full model build and predict_state path, which
-    uses apply() to implement factors_l_ir. The component's factors_l_ir=False
-    setting means apply() passes the real L_ir to predict(), not unit luminosity.
-    When mutated to factors_l_ir=True, apply() would substitute L_ir=1, apply()
-    re-scale the result by the real L_ir — amplitude double-counted — and
-    energy_balance assertion goes red (integral would be L_ir^2, not L_ir).
+    The test builds a full SEDModel (triggering apply() and predict_state()),
+    extracting sed_dust_ir and L_ir from the forward state. It verifies that
+    the dust SED integrates to the budget (integral/L_ir ≈ 1.0). The
+    factors_l_ir=False flag declares non-linearity to the framework; the
+    closure normalizes in erg/s regardless, so numeric results are independent
+    of the flag. This test guards the integration contract, not the flag.
     """
     import jax
 
