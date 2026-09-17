@@ -87,3 +87,10 @@ def test_clean_wave_obs():
     wave_obs = jnp.linspace(4000.0, 7000.0, 50)
     spec = Spectroscopy(wave_obs=wave_obs)
     assert spec.n_pixels == 50
+
+
+def test_wave_obs_two_point_grid():
+    """Two-point grids are accepted (guards allow size < 3 to pass through)."""
+    wave_obs = jnp.array([4000.0, 7000.0])
+    spec = Spectroscopy(wave_obs=wave_obs)
+    assert spec.n_pixels == 2

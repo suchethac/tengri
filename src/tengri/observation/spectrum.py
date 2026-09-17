@@ -169,7 +169,7 @@ def _is_log_uniform(wave) -> bool:
     if isinstance(wave, jax.core.Tracer):
         return True
     w = np.asarray(wave, dtype=np.float64)
-    if first_invalid_wavelength(w) is not None:
+    if w.size < 3 or first_invalid_wavelength(w) is not None:
         return True  # not a grid this helper can speak about; let the caller fail
     dln = np.diff(np.log(w))
     mean = float(np.mean(dln))
@@ -855,7 +855,7 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
     if isinstance(wave, jax.core.Tracer):
         return
     w = np.asarray(wave, dtype=np.float64)
-    if first_invalid_wavelength(w) is not None:
+    if w.size < 3 or first_invalid_wavelength(w) is not None:
         return  # not a grid this check can speak about; let the caller fail
     dln = np.diff(np.log(w))
     mean = float(np.mean(dln))
