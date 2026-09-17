@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+### Fixed
+
+- **Direct composable runner calls in float32 now stay finite** (#2321). The
+  runner is a public entry point (`tengri.components.agn.blocks.runner`); when
+  called directly with `agn_log_lbol`, it was evaluating blocks at the linear
+  power value, which overflows float32 before the log-domain path was reached.
+  Moved the reference-evaluation guard from `SEDModel.predict` into
+  `compose_l_nu` so both entry points (direct + via SEDModel) share ONE float32
+  hardening implementation: evaluate at `_AGN_LBOL_REF` (low enough to keep all
+  integrals finite), then rescale in log space to recover the true magnitude.
+  Direct calls now return finite luminosities instead of inf. Related: #1206
+  (float32 safety), #1439 (NaN gradient), #1388 (carry SED in scaled form).
 
 ### Added
 

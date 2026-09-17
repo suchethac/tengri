@@ -537,80 +537,25 @@ class AGNSEDComponent(TemplateThreading):
         #
         # Float32 boundary (#1206). Evaluating every AGN block at the true
         # ``agn_log_lbol`` overflows float32: the CIGALE-joint disc renorm forms
-        # ``trapz(L_torus)`` and ``trapz(L_disc)`` ~ L_bol (~1e44 erg/s, past
-        # float32 max 3.4e38) at ``blocks/runner.py``. So in **float32 only** we
-        # evaluate every block at a low reference L_bol (``_AGN_LBOL_REF`` →
-        # 1e10 erg/s, comfortably in range) and re-apply the
-        # ``10^(agn_log_lbol − _AGN_LBOL_REF)`` scale in log space via
-        # apply_log10_scale. That output factoring is EXACT for shape-invariant
-        # blocks, the SKIRTOR torus template and the power-law disc scale
-        # linearly with L_bol: and, since the ``agn_log_lbol_shape`` hand-off
-        # below, exact for the multicolor disc too: the true L_bol drives the
-        # temperature and geometry while only the MAGNITUDE is factored, and the
-        # magnitude is linear by construction. Measured in float64, where float32
-        # round-off cannot mask a shape error: max relative deviation from a
-        # direct evaluation at the true L_bol is 2.2e-16 (one ulp) at
-        # log L_bol = 11-14. Without the shape hand-off the same comparison is
-        # off by 100% at log L_bol = 11 and 3685% at 14; that is what this
-        # comment used to describe. In **float64** we evaluate at the true
-        # ``agn_log_lbol`` and
-        # publish the block outputs unchanged, the reference implementation,
-        # bit-for-bit identical to pre-#1206 main for every disc type.
-        from tengri.utils.scale import apply_log10_scale
-
-        # Every registered composable AGN disc block is float32-safe as of
-        # #1206 §D (the last holdout, ``grahsp_sbpl``, was blocked on a
-        # linear erg/s *parameter* rather than a kernel overflow, and is
-        # fixed by the log-space ``agn_grahsp_log_l5100``): the
-        # ``Float32UnsafeAGNWarning`` escape hatch that used to live here is
-        # removed rather than kept dormant. See
-        # ``docs/dev/float32-tier-b-boundary.md`` §8 and
-        # ``tests/regression/precision/test_agn_disc_float32_inventory.py``.
-        _use_ref = wave.dtype == jnp.float32
-        _lbol_eval = (
-            jnp.full_like(jnp.asarray(agn_log_lbol, dtype=wave.dtype), _AGN_LBOL_REF)
-            if _use_ref
-            else agn_log_lbol
-        )
-        if _use_ref:
-            # Multicolor-disc shape depends on L_bol (temperature), so evaluating
-            # the whole runner at the reference L_bol would give the WRONG disc
-            # shape. Hand the disc its TRUE L_bol for the temperature/geometry
-            # (``agn_log_lbol_shape``) while everything else: including the disc's
-            # output MAGNITUDE: stays on the reference so the runner's L_lambda
-            # arithmetic stays in float32 range. Shape-invariant blocks (torus
-            # template, power-law disc) ignore the kwarg. The disc's internals are
-            # float32-hardened (log-space) so the true-L_bol temperature computes
-            # without overflow. (#1206)
-            agn_kwargs = {**agn_kwargs, "agn_log_lbol_shape": agn_log_lbol}
+        # Float32 reference evaluation is now implemented inside the composable
+        # runner (blocks/runner.py:_apply_float32_reference_evaluation) so both
+        # entry points (direct call and via SEDModel) share ONE implementation.
+        # (#1206, #2321) The runner evaluates at a reference L_bol in float32,
+        # then rescales in log space to recover the true L_bol, and hand-off
+        # agn_log_lbol_shape for disc shape calculation. Call the runner directly.
         if self.config.model == "composable":
-            L_agn_unit, L_2500_unit, L_4400_unit, agn_components_unit = agn_fn(
+            L_agn, L_2500_intrinsic, L_4400_intrinsic, agn_components = agn_fn(
                 wave,
-                agn_log_lbol=_lbol_eval,
+                agn_log_lbol=agn_log_lbol,
                 return_l2500=True,
                 return_components=True,
                 **agn_kwargs,
             )
         else:
-            L_agn_unit = agn_fn(wave, agn_log_lbol=_lbol_eval, **agn_kwargs)
-            L_2500_unit = jnp.asarray(0.0)
-            L_4400_unit = jnp.asarray(0.0)
-            agn_components_unit = None
-        if _use_ref:
-            _offset = agn_log_lbol - _AGN_LBOL_REF
-            L_agn = apply_log10_scale(L_agn_unit, _offset)
-            L_2500_intrinsic = apply_log10_scale(L_2500_unit, _offset)
-            L_4400_intrinsic = apply_log10_scale(L_4400_unit, _offset)
-            agn_components = (
-                None
-                if agn_components_unit is None
-                else {k: apply_log10_scale(v, _offset) for k, v in agn_components_unit.items()}
-            )
-        else:
-            L_agn = L_agn_unit
-            L_2500_intrinsic = L_2500_unit
-            L_4400_intrinsic = L_4400_unit
-            agn_components = agn_components_unit
+            L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
+            L_2500_intrinsic = jnp.asarray(0.0)
+            L_4400_intrinsic = jnp.asarray(0.0)
+            agn_components = None
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
