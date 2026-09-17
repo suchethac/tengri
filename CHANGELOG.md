@@ -1,6 +1,14 @@
 ## [Unreleased]
 
 
+### Fixed
+
+- Radio preset menu rows printed a `use` that `SEDModel.build` rejects, and
+  `smc_prevot` printed the wrong grammar. Rows are now marked not-builder-available
+  with the `[not builder-available: ...]` marker and corrected `use` text, or a `use`
+  that builds correctly. Every production row's `use` is validated by a contract test
+  (#2201).
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,

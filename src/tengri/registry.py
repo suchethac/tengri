@@ -883,9 +883,12 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             meta = AGN_BLOCK_META.get((cat, name), {})
             # Special handling for atten/smc_prevot: use law key instead of type
             if cat == "attenuation" and name == "smc_prevot":
-                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}"
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}) "
             else:
-                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}}"
+                use_str = (
+                    f"SEDModel.build(..., agn={{"
+                    f"'{group_key}': {{'type': '{name}'}}}})  "
+                )
             entry_dict = {
                 "name": name,
                 "category": cat,
@@ -1313,6 +1316,22 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
         else _component_entry(n, kind="radio_model")
         for n in _valid_radio_types()
     ]
+    # Mark all radio menu rows as not builder-available: the legacy
+    # radio={'type': ...} form is retired in favor of the composable
+    # radio={'sf': {...}, 'agn': {...}} form (list_radio_blocks).
+    for m in out:
+        m["status"] = "unvalidated"
+        if "not builder-available" not in m["short_doc"]:
+            suffix = (
+                " [not builder-available: legacy radio={'type':...} form retired; "
+                "use composable radio={'sf'/'agn': ...} form]"
+            )
+            m["short_doc"] = f"{m['short_doc']}{suffix}"
+        m["use"] = (
+            "not builder-available: legacy radio={'type': ...} form is retired; "
+            "use the composable form radio={'sf': {...}, 'agn': {...}} instead, "
+            "listed by list_radio_blocks()"
+        )
     out = _filter_menu(out, "status", status, listing="list_radio_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
