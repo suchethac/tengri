@@ -1074,34 +1074,12 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          HALF_SEL="${{ matrix.bug_half }}"
-          if [ -z "$HALF_SEL" ]; then
+          if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Newline-separated + head/tail rather than `mapfile`, so this same
-          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
-          # which has no mapfile). Paths here never contain spaces; assert it
-          # rather than trust it, since word-splitting would silently drop files.
-          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
-          N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
-          if [ "$N" -lt 2 ]; then
-            echo "::error::expected >=2 files under tests/regression/bug, found $N"
-            exit 1
-          fi
-          if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
-            echo "::error::a test path contains whitespace; the split would drop files"
-            exit 1
-          fi
-          HALF=$(( (N + 1) / 2 ))
-          if [ "$HALF_SEL" = "1" ]; then
-            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
           else
-            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 2 --join 2>&1) || exit 1
+            echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
-          COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
-          echo "bug/ half $HALF_SEL: $COUNT of $N files"
-          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
@@ -1323,6 +1301,11 @@ jobs:
         # this job is off the PR feedback path by construction. Interim
         # measure: #1362 (chunked fast-grid build) shrinks the underlying
         # allocation; revisit -n 2 once it lands.
+        #
+        # coverage_budget is 1.5 × budget rounded up to the next 5, because
+        # --cov adds 30-50% memory and wall-clock overhead (measured 2026-08-13:
+        # regression-a at 18m40s vs 40m00s with coverage on the same SHA).
+        # The matrix literal is required: GitHub expressions have no arithmetic.
         include:
           # 70, not 50, for the same reason as the test job's contract row
           # above: pool congestion alone moved the same-SHA contract shard
@@ -1332,6 +1315,7 @@ jobs:
             paths: tests/contract
             nproc: 2
             budget: 70
+            coverage_budget: 105
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
           # #148 rehome emptied the tree and the matrix was rewritten around the
           # physics-first trees without it, so anything landing back in
@@ -1345,6 +1329,7 @@ jobs:
             paths: tests/components tests/unit
             nproc: 2
             budget: 50
+            coverage_budget: 75
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
           # for two different problems:
           #
@@ -1376,6 +1361,7 @@ jobs:
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
+            coverage_budget: 75
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
@@ -1386,15 +1372,18 @@ jobs:
             bug_half: "1"
             nproc: 1
             budget: 50
+            coverage_budget: 75
           - shard: regression-b2
             paths: ""
             bug_half: "2"
             nproc: 1
             budget: 50
+            coverage_budget: 75
           - shard: regression-c
             paths: tests/regression/paper tests/regression/agn
             nproc: 1
             budget: 50
+            coverage_budget: 75
           # The top-level files only — every subdirectory above is excluded so no
           # test runs twice. This shard holds the memory-heaviest files
           # (test_field_latents_reach_likelihood.py at 4.06 GB).
@@ -1408,10 +1397,12 @@ jobs:
               --ignore=tests/regression/paper
             nproc: 1
             budget: 50
+            coverage_budget: 75
           - shard: physics
             paths: tests/physics
             nproc: 2
             budget: 50
+            coverage_budget: 75
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -1438,43 +1429,22 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          HALF_SEL="${{ matrix.bug_half }}"
-          if [ -z "$HALF_SEL" ]; then
+          if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Newline-separated + head/tail rather than `mapfile`, so this same
-          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
-          # which has no mapfile). Paths here never contain spaces; assert it
-          # rather than trust it, since word-splitting would silently drop files.
-          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
-          N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
-          if [ "$N" -lt 2 ]; then
-            echo "::error::expected >=2 files under tests/regression/bug, found $N"
-            exit 1
-          fi
-          if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
-            echo "::error::a test path contains whitespace; the split would drop files"
-            exit 1
-          fi
-          HALF=$(( (N + 1) / 2 ))
-          if [ "$HALF_SEL" = "1" ]; then
-            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
           else
-            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 2 --join 2>&1) || exit 1
+            echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
-          COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
-          echo "bug/ half $HALF_SEL: $COUNT of $N files"
-          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
+            --timeout=600 --timeout-method=thread \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: ${{ matrix.budget }}
+        timeout-minutes: ${{ matrix.coverage_budget if matrix.coverage_budget else matrix.budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
@@ -1690,9 +1660,9 @@ jobs:
         run: |
           mkdir -p crossval-results
           status=0
-          for f in $(ls -1 tests/crossval/test_*.py | sort); do
+          while IFS= read -r f; do
             b=$(basename "$f" .py)
-            pytest "$f" -q --no-header -m 'crossval and not oom' -n 0 -rf \
+            pytest "$f" -q --no-header -m 'crossval and not oom' -n 0 -rE \
               --junit-xml="crossval-results/${b}.xml" || rc=$?
             rc=${rc:-0}
             # 0 = green, 5 = nothing selected in this file (all deselected):
@@ -1703,7 +1673,7 @@ jobs:
               status=1
             fi
             unset rc
-          done
+          done < <(find tests/crossval -maxdepth 1 -name 'test_*.py' | sort)
           exit $status
         env:
           JAX_PLATFORMS: cpu
