@@ -149,3 +149,15 @@ def test_bakedin_has_continuum_follows_nebular_status():
         backend_unkn = BakedInBackend(ionizing_source_warning="suppress", ssp_data=ssp_unkn)
     # has_continuum should be True (assumed) even for unknown
     assert backend_unkn.has_continuum is True
+
+
+def test_bakedin_warns_when_ssp_data_none():
+    """BakedInBackend warns when ssp_data=None (treats as unknown)."""
+    pytest.importorskip("tengri")
+    from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularGridWarning
+
+    # ssp_data=None should be treated as "unknown" and emit warning
+    with pytest.warns(BakedInNebularGridWarning):
+        backend = BakedInBackend(ionizing_source_warning="suppress", ssp_data=None)
+    # has_continuum should be True (assumed)
+    assert backend.has_continuum is True

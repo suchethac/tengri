@@ -112,11 +112,11 @@ class BakedInBackend:
         self.has_free_params = False
 
         # Check SSP nebular status and emit appropriate warnings/errors
-        # Only check if ssp_data is actually provided
+        # Read directly: missing attribute is a bug to surface, not default
         if ssp_data is None:
-            nebular_status = None
+            nebular_status = "unknown"
         else:
-            nebular_status = getattr(ssp_data, "nebular", "unknown")
+            nebular_status = ssp_data.nebular
 
         if nebular_status == "bare":
             # Bare grid: unambiguously wrong. Raise immediately.
@@ -165,13 +165,9 @@ class BakedInBackend:
             )
             warnings.warn(msg, BakedInNebularGridWarning, stacklevel=2)
 
-        # has_continuum = True only if nebular is explicitly "included";
-        # for "unknown" keep it True but the warning above says it is assumed.
-        # When ssp_data is None, default to True (conservative assumption).
-        if nebular_status is None:
-            self.has_continuum = True
-        else:
-            self.has_continuum = nebular_status == "included" or nebular_status == "unknown"
+        # has_continuum is True only for "included"; "unknown" is an assumption
+        # stated by the warning above
+        self.has_continuum = nebular_status in ("included", "unknown")
 
         if ionizing_source_warning not in ("raise", "warn", "suppress"):
             raise ValueError("ionizing_source_warning must be 'raise', 'warn', or 'suppress'")
