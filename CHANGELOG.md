@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+### Fixed
+
+- Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
 
 ### Added
 
