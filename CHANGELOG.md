@@ -923,10 +923,7 @@
   sampler's variations, producing a silent mismatch: the likelihood never
   observes the freed dimensions while the posterior reports only the prior.
   Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
-  naming the offenders and the remedy (pin them or skip fast-nebular). When a
-  freed optional axis is held frozen at reference by the fast-nebular grid
-  while the sampler freely varies it, the freed dimension returns only its
-  prior, silently decoupling the likelihood from the sampler. Closes #2307.
+  naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
 
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong

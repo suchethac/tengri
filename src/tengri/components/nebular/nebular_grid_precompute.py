@@ -46,6 +46,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
+from tengri.components.nebular.component import _BACKEND_OPTIONAL_PARAMS
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.translate import LOG10_ZSUN
@@ -435,13 +436,13 @@ def _refuse_tabulated_metallicity(model):
 
 
 def _refuse_freed_optional_axes(spec):
-    """Refuse CB19 optional axes freed but baked into the per-Q_H grid (#2307).
+    """Refuse optional axes freed but baked into the per-Q_H grid (#2307).
 
-    CB19's optional parameters (``neb_log_nH``, ``neb_co``, ``neb_dno``,
+    Optional parameters (``neb_log_nH``, ``neb_co``, ``neb_dno``,
     ``neb_hbfrac``) are not grid axes in the per-Q_H table — they are baked
     in at reference values. A fit that frees one silently samples a parameter
     the likelihood cannot see: the fast grid holds it at its reference value
-    while the sampler explores it freely. This test refuses the mismatch.
+    while the sampler explores it freely. This guard refuses the mismatch.
 
     Parameters
     ----------
@@ -451,10 +452,8 @@ def _refuse_freed_optional_axes(spec):
     Raises
     ------
     ValueError
-        When any CB19 optional parameter is free.
+        When any optional parameter is freed.
     """
-    from tengri.components.nebular.component import _BACKEND_OPTIONAL_PARAMS
-
     # Optional params that are free in the spec
     offenders = sorted(
         name for name in _BACKEND_OPTIONAL_PARAMS if name in spec.free_params
@@ -462,19 +461,21 @@ def _refuse_freed_optional_axes(spec):
     if not offenders:
         return
 
+    # Convert full names to short dict-grammar keys by stripping "neb_" prefix
+    short_keys = [name.removeprefix("neb_") for name in offenders]
     detail = ", ".join(offenders)
+
     raise ValueError(
-        f"enable_fast_nebular refuses to proceed with the following parameters "
-        f"free: {detail}. The per-Q_H grid bakes these CB19 optional axes at "
-        f"their reference values and cannot respond to variations you are free "
-        f"to propose in the sampler. This results in a silent mismatch: the "
-        f"likelihood never observes the freed dimensions while the posterior "
-        f"reports only the prior.\n"
+        f"enable_fast_nebular refuses to proceed with freed optional parameters: "
+        f"{detail}. The per-Q_H grid bakes these axes at their reference values "
+        f"and is held at its reference value while the sampler varies it. "
+        f"This results in a silent mismatch: the likelihood never observes "
+        f"the freed dimensions while the posterior reports only the prior.\n"
         f"Fix (one of):\n"
         f"  1. Pin the parameters instead: "
-        f"neb={{'type': 'cb19', '{offenders[0]}': Fixed(value)}}.\n"
-        f"  2. Disable fast-nebular and use the exact path, which handles "
-        f"all CB19 parameters uniformly."
+        f"neb={{'type': 'cb19', '{short_keys[0]}': Fixed(value)}}.\n"
+        f"  2. Do not call enable_fast_nebular; the exact line path takes "
+        f"every backend parameter."
     )
 
 
