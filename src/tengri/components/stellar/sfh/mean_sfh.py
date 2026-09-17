@@ -16,7 +16,7 @@ Canonical names (short name alias in parentheses):
   Most flexible smooth model, 5 params: peak location, width, skew, truncation.
 - **skewnormal** (snorm): ``truncated_skewnormal`` without truncation (4 params).
 - **gaussian** (norm): ``skewnormal`` with skew=0 (3 params).
-- **lognormal** (lnorm): Gaussian in log10(age) space (3 params).
+- **lognormal** (lnorm): Lognormal in cosmic time since formation with 1/T Jacobian (3 params).
 - **dpl** (canonical): Carnall+2018 BAGPIPES parameterization with log_total_mass (4 params).
 - **double_powerlaw**: Low-level implementation used by ``dpl``.
 - **dpl_lookback**: the same algebra as ``dpl`` applied to the stellar age rather
