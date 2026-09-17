@@ -257,7 +257,7 @@ register_backend(
 
 
 def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
-    """``mcmc_nuts_fast``: the 20 s photometry recipe as a named method.
+    """``mcmc_nuts_fast``: NUTS photometry recipe as a named method.
 
     NUTS with the settings ``bench/reports/2026-09-11_profile_mass_20s.md``
     measured at 9.5-17.2 s per galaxy on eight logical CPU cores across twelve
