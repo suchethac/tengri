@@ -3756,7 +3756,9 @@ class SEDModel:
             # distinguishes "the user said no nebular emission" from
             # "the user never mentioned nebular emission at all".
             warning_mode = "suppress" if getattr(spec, "_nebular_explicit", False) else "warn"
-            self._nebular_backend = BakedInBackend(ionizing_source_warning=warning_mode)
+            self._nebular_backend = BakedInBackend(
+                ionizing_source_warning=warning_mode, ssp_data=ssp_data
+            )
 
         return delta
 

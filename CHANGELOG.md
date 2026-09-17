@@ -917,6 +917,15 @@
 
 ### Fixed
 
+- `BakedInBackend` now checks whether the SSP grid has nebular emission before
+  silently returning zero nebular flux. On bare-stellar grids
+  (`ssp_data.nebular == "bare"`), it raises `BakedInNebularBareError`
+  immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
+  `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
+  disambiguation. The grid warning is not silenced by the explicit
+  `neb={'type': 'ssp'}` declaration — it is a statement about the data, not
+  the model choice (#2362).
+
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
   three ways at once: it named `tools/download_filters.py` while the script
