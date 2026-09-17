@@ -159,8 +159,12 @@ def test_freefree_false_drops_the_thermal_term(synthetic_radio_ssp, synthetic_to
     state_default = model_default.predict_state(params_default)
 
     L_ir = float(state_no_ff.derived["L_ir"])
-    q_ir = float(params_no_ff["radio_q_ir"])
-    alpha_sf = float(params_no_ff["radio_alpha_sf"])
+    # radio_q_ir / radio_alpha_sf are Fixed (see _build_radio_model), so they
+    # are absent from spec.sample()'s free-only output (#2296); read the
+    # pinned values directly.
+    fixed_no_ff = model_no_ff.spec.get_fixed_values()
+    q_ir = float(fixed_no_ff["radio_q_ir"])
+    alpha_sf = float(fixed_no_ff["radio_alpha_sf"])
     wave = np.asarray(state_no_ff.wave)
     sed_radio_no_ff = np.asarray(state_no_ff.derived["sed_radio"])
 

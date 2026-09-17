@@ -109,7 +109,10 @@ def test_sed_fit_params_reaches_params_override(model, mock_data):
 
     post = model.fit(flux, err, method="map", n_steps=3, params={"met_logzsol": -0.5})
 
-    assert abs(float(post.params["met_logzsol"]) - (-0.5)) < 1e-12
+    # ``params={...}`` routes to ``Fitter(params_override=...)`` -- a re-pin,
+    # so ``met_logzsol`` is Fixed for this fit and reachable through
+    # ``Posterior.fixed_values``, not ``Posterior.params`` (free-only, #2296).
+    assert abs(float(post.fixed_values["met_logzsol"]) - (-0.5)) < 1e-12
 
 
 def test_unknown_kwargs_still_fail_loudly(model, mock_data):
