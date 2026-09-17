@@ -1879,6 +1879,66 @@ def _init_keywords(cls: type) -> frozenset[str]:
     return frozenset(params) - {"self", "spec", "ssp_data"}
 
 
+def _is_q_h_linear_backend(backend) -> bool:
+    """Whether the nebular backend gives ``L_line = Q_H x l(theta)``.
+
+    Parameters
+    ----------
+    backend : object or None
+        The model's ``_nebular_backend``.
+
+    Returns
+    -------
+    bool
+        True when a per-Q_H grid can replace the backend's forward call.
+    """
+    return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+
+
+def feature_lut_serves_line_channel(model) -> bool:
+    """Whether ``FeaturePrecomp`` has any lever for this model's LINE channel.
+
+    Mirrors :meth:`SEDModel._resolve_feature_precomp`'s dispatch, which is why it
+    lives beside it: the two must not drift.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model a caller is about to top up with ``FeaturePrecomp``.
+
+    Returns
+    -------
+    bool
+        True only on the SSP-window-LUT branch -- the one that sets
+        ``_fast_line_measurement``, so the likelihood can skip the full-grid
+        ``predict_state`` rebuild.
+
+    Notes
+    -----
+    A Cue-like backend returns **False**. Its ``FeaturePrecomp`` builds the per-Q_H
+    grid, whose only consumer is the photometry shortcut; the line fluxes still go
+    through ``predict_line_fluxes``, which rebuilds the state either way. Callers
+    that want to know whether a Cue model gains anything must ask
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. Measured on a
+    dusty Cue model with 4 bands and 3 line fluxes: appending ``FeaturePrecomp``
+    leaves the objective's gradient at 58,497,272 FLOPs either way -- and the two
+    lowerings are *byte-identical*, the same SHA-256 over 4,206,172 characters of
+    StableHLO and again over the optimized HLO, so this is not FLOP-count
+    coincidence but the same program. It is not free: the attachment costs a 7.2 s
+    ``enable_fast_nebular`` build, and :meth:`SEDModel.compile_signature` differs on
+    ``_approx_config_feature`` and ``_nebular_grid_table`` where the graph does not,
+    forcing an in-process re-trace. The on-disk JAX cache keys on the HLO, so it
+    dedupes rather than storing a second entry. Measured 1.565 s -> 4.276 s of
+    ``fit()`` wall clock on a 60-step MAP fit, for an identical 0.019 s compiled
+    step.
+    """
+    backend = getattr(model, "_nebular_backend", None)
+    if _is_q_h_linear_backend(backend):
+        return False
+    has_catalog = getattr(model, "_has_line_catalog", None)
+    return not (callable(has_catalog) and has_catalog())
+
+
 class SEDModel:
     """Differentiable SED forward model with modular physics and clean API.
 
@@ -2651,7 +2711,7 @@ class SEDModel:
 
         backend = self._nebular_backend
         # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
-        cue_like = backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+        cue_like = _is_q_h_linear_backend(backend)
 
         lines = cfg.lines
         if lines is None:
