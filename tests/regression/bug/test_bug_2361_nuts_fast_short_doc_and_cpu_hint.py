@@ -25,6 +25,8 @@ and vmap/pmap performance are platform-dependent; the hint should not emit on CP
 import jax
 import pytest
 
+pytestmark = pytest.mark.regression_bug
+
 
 def test_nuts_fast_short_doc_no_pmapped_claims():
     """Assert short_doc for mcmc_nuts_fast does not falsely claim pmap."""
@@ -35,14 +37,12 @@ def test_nuts_fast_short_doc_no_pmapped_claims():
 
     # Should NOT contain the false claim
     assert "pmapped chains by default" not in short_doc, (
-        f"mcmc_nuts_fast short_doc contains false 'pmapped chains by default'; "
-        f"got: {short_doc}"
+        f"mcmc_nuts_fast short_doc contains false 'pmapped chains by default'; got: {short_doc}"
     )
 
     # Should state the device-conditional truth
     assert "vmapped chains on one device; pmapped when the platform exposes" in short_doc, (
-        f"mcmc_nuts_fast short_doc does not state device-conditional rule; "
-        f"got: {short_doc}"
+        f"mcmc_nuts_fast short_doc does not state device-conditional rule; got: {short_doc}"
     )
 
 
