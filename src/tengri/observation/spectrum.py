@@ -30,6 +30,37 @@ SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
 }
 
 
+def _first_invalid_wavelength(
+    w: np.ndarray,
+) -> tuple[int, str] | None:
+    """Return the first offending wavelength index and the violation rule.
+
+    Checks for non-finite, non-positive, and non-increasing violations in order.
+
+    Parameters
+    ----------
+    w : ndarray, shape (n,)
+        Wavelength grid [Angstrom].
+
+    Returns
+    -------
+    tuple[int, str] | None
+        (first_offending_index, rule_violated) or None if valid. Rules are
+        "non-finite" (NaN/inf), "non-positive" (<=0), "non-increasing" (not
+        strictly monotonic).
+    """
+    if not np.all(np.isfinite(w)):
+        idx = int(np.where(~np.isfinite(w))[0][0])
+        return idx, "non-finite"
+    if np.any(w <= 0.0):
+        idx = int(np.where(w <= 0.0)[0][0])
+        return idx, "non-positive"
+    if len(w) > 1 and not np.all(np.diff(w) > 0.0):
+        idx = int(np.where(np.diff(w) <= 0.0)[0][0])
+        return idx, "non-increasing"
+    return None
+
+
 # ── Speed of light ────────────────────────────────────────────────
 _C_KM_S = 299792.458  # km/s
 _FWHM_TO_SIGMA = 2.354820045030949  # 2*sqrt(2*ln(2))

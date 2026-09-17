@@ -35,8 +35,10 @@ def test_wave_obs_with_nan():
     wave_obs = jnp.linspace(4000.0, 7000.0, 50)
     wave_obs = wave_obs.at[25].set(jnp.nan)
 
-    with pytest.raises(ValueError, match=r"(NaN|nan|index 25|non-finite)"):
+    with pytest.raises(ValueError) as excinfo:
         Spectroscopy(wave_obs=wave_obs)
+    assert "index 25" in str(excinfo.value)
+    assert "non-finite" in str(excinfo.value)
 
 
 def test_wave_obs_with_negative():
@@ -44,8 +46,10 @@ def test_wave_obs_with_negative():
     wave_obs = jnp.linspace(4000.0, 7000.0, 50)
     wave_obs = wave_obs.at[10].set(-500.0)
 
-    with pytest.raises(ValueError, match=r"(negative|positive|index 10|non-positive)"):
+    with pytest.raises(ValueError) as excinfo:
         Spectroscopy(wave_obs=wave_obs)
+    assert "index 10" in str(excinfo.value)
+    assert "positive" in str(excinfo.value)
 
 
 def test_wave_obs_unsorted():
@@ -55,15 +59,18 @@ def test_wave_obs_unsorted():
     swapped = jnp.array([wave_obs[26], wave_obs[25]])
     wave_obs = jnp.concatenate([wave_obs[:25], swapped, wave_obs[27:]])
 
-    with pytest.raises(ValueError, match=r"(increasing|sorted|index|order)"):
+    with pytest.raises(ValueError) as excinfo:
         Spectroscopy(wave_obs=wave_obs)
+    assert "index 25" in str(excinfo.value)
+    assert "strictly increasing" in str(excinfo.value)
+    assert "reverse" not in str(excinfo.value)
 
 
 def test_wave_obs_descending():
     """Fully descending wavelength grid raises ValueError with hint to reverse."""
     wave_obs = jnp.linspace(7000.0, 4000.0, 50)  # Descending
 
-    with pytest.raises(ValueError, match=r"(reverse|ascending|increasing)"):
+    with pytest.raises(ValueError, match=r"reverse"):
         Spectroscopy(wave_obs=wave_obs)
 
 
