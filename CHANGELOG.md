@@ -1,5 +1,20 @@
 ## [Unreleased]
 
+### Fixed
+
+- Data locator hermeticity (#2329): a nested worktree's test run found untracked
+  data (CLOUDY grids, Cue weights) in the main checkout via the locator's
+  ancestor-directory walk, so suites passed locally and failed in CI. A new
+  `TENGRI_DATA_NO_ANCESTOR_WALK` env var pins `data_dirs()` to `$TENGRI_DATA_DIR`
+  plus the repository under test, and `tests/conftest.py` sets it unconditionally
+  (the precomp-cache precedent), so pytest always sees what CI sees. The
+  measured flip-list was six tests: two hand-rolled parent-walking data probes
+  (`requires_cloudy`, `requires_cue`) now route through the canonical locator so
+  they skip under the pin exactly where CI skips instead of running into a build
+  that cannot see the grid, and the two locator-contract tests (#1209, #1431)
+  lift the pin explicitly to keep testing the default walk, whose pinned side is
+  owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
+  unless the env var is set (see `tests/TESTING.md`).
 
 ### Added
 
