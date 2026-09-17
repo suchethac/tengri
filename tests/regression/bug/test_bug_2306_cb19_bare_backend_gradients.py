@@ -17,9 +17,8 @@ for grid-axis parameters at the float64 precision level, using the (#2100/#2178)
 assertion convention.
 
 Mutation checks:
-1. (Remedy A) Revert the float64-preserving coordinate cast in ``_frac_idx``.
-2. (Remedy B) Revert moving ``_lum_scale`` outside the interpolation.
-Both should make the test fail (nonzero assertion fails).
+1. re-add `.astype(jnp.float32)` to `_frac_idx`'s return: gradient tests fail
+   'Gradient is exactly zero'; forward-value test passes (2026-09-17).
 """
 
 from __future__ import annotations

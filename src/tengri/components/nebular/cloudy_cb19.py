@@ -636,11 +636,9 @@ def _frac_idx(val: float, grid: jnp.ndarray) -> jnp.ndarray:
     idx = jnp.clip(idx, 0, n - 2)
     dx = grid[idx + 1] - grid[idx]
     frac = jnp.where(dx > 0, (val_clipped - grid[idx]) / dx, 0.0)
-    # Keep interpolation coordinate in the grid's native dtype to prevent cotangent
-    # underflow when scaled by tiny _lum_scale (~1.25e-46 without ssp_data). A float32
-    # coordinate scaled by 1.25e-46 has a float32 cotangent that underflows to exactly
-    # 0.0 in the backward pass, silencing all gradients. The grid is float64 by default
-    # in JAX with x64 enabled, matching the #1568 data-protection pattern (#2306).
+    # Keep the coordinate in float64 throughout. Casting it to float32 made the
+    # ~1e-46 _lum_scale cotangent underflow to exactly 0.0 in the backward pass,
+    # silencing every grid-axis gradient on a bare backend (#2306; #1568 pattern).
     return idx + frac
 
 

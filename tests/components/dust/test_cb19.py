@@ -781,9 +781,8 @@ class TestHbFracWiring:
         ``synthetic_ssp_wide`` reaches down to the Lyman limit, giving Q_H (and
         so ``_lum_scale``) its normal ~O(1-1e20) production-path scale, which
         matches how ``SEDModel.build`` always constructs this backend
-        (``CB19Backend(ssp_data=ssp_data)``, never bare). This test verifies the
-        forward-backward invariant under both bare-backend (#2306) and normal
-        SEDModel paths.
+        (``CB19Backend(ssp_data=ssp_data)``, never bare). The bare-backend arm
+        lives in tests/regression/bug/test_bug_2306_cb19_bare_backend_gradients.py.
         """
         from tengri.components.nebular.cloudy_cb19 import CB19Backend
         from tests._cb19_grid import write_synthetic_cb19_grid
