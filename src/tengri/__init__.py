@@ -292,9 +292,6 @@ if _os.environ.get("TENGRI_DISABLE_JIT", "").lower() in ("1", "true", "yes"):
     jax.config.update("jax_disable_jit", True)
 
 # --- Version ---
-# The canonical version lives in pyproject.toml. This tries to read it via
-# importlib.metadata (available after installation), and falls back to reading
-# pyproject.toml directly for source-tree installations (e.g., pip install -e).
 # Try reading from the running source tree's pyproject.toml first (authoritative after a bump),
 # then fall back to importlib.metadata for installed wheels (frozen at install time).
 _pyproject_path = _Path(__file__).resolve().parents[2] / "pyproject.toml"
