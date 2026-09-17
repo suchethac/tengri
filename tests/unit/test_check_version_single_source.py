@@ -121,3 +121,37 @@ def test_version_derivation_fallback_with_metadata():
     # Since the import succeeded, at least one path worked.
     # Verify it matches the expected value from either source.
     assert tengri.__version__ == "0.1.0"
+
+
+def test_dunder_version_matches_pyproject():
+    """tengri.__version__ matches the source tree's pyproject.toml version."""
+    import tomllib
+
+    import tengri
+    from tengri._data_setup import source_tree_root
+
+    root = source_tree_root()
+    assert root is not None, "source_tree_root() must return a path when running from source"
+
+    pyproject_path = root / "pyproject.toml"
+    assert pyproject_path.exists(), f"pyproject.toml not found at {pyproject_path}"
+
+    with open(pyproject_path, "rb") as f:
+        pyproject_data = tomllib.load(f)
+
+    pyproject_version = pyproject_data["project"]["version"]
+    assert tengri.__version__ == pyproject_version
+
+
+def test_source_tree_root_names_the_checkout():
+    """source_tree_root() returns the repository root when running from source."""
+    from tengri._data_setup import source_tree_root
+
+    root = source_tree_root()
+    assert root is not None, "source_tree_root() must return a path when running from source"
+    assert (root / "pyproject.toml").exists(), (
+        "source_tree_root() must point to a directory with pyproject.toml"
+    )
+    assert (root / "src" / "tengri").exists(), (
+        "source_tree_root() must point to the repository root"
+    )

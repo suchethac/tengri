@@ -294,23 +294,32 @@ if _os.environ.get("TENGRI_DISABLE_JIT", "").lower() in ("1", "true", "yes"):
 # --- Version ---
 # Always prefer importlib.metadata: it works for both editable installs and wheels,
 # and is the official source of truth after package installation.
-# Only fall back to source-tree pyproject.toml for uninstalled checkouts.
+# Only fall back to source-tree pyproject.toml (via _data_setup's sanctioned anchor)
+# for uninstalled checkouts.
 try:
     __version__ = _get_metadata_version("astro-tengri")
 except PackageNotFoundError:
-    # Uninstalled source tree: read directly from package root, not walked parents.
-    # This is the only case we anchor on __file__ without walking depth.
-    _source_root = _Path(__file__).resolve().parent.parent.parent  # src/tengri -> src -> .
-    _pyproject_path = _source_root / "pyproject.toml"
-    if _pyproject_path.exists():
-        with open(_pyproject_path, "rb") as _f:
-            _pyproject_data = tomllib.load(_f)
-        __version__ = _pyproject_data["project"]["version"]
+    # Uninstalled source tree: use _data_setup's sanctioned package anchor.
+    from tengri import _data_setup as _ds
+
+    _source_root = _ds.source_tree_root()
+    if _source_root is not None:
+        _pyproject_path = _source_root / "pyproject.toml"
+        if _pyproject_path.exists():
+            with open(_pyproject_path, "rb") as _f:
+                _pyproject_data = tomllib.load(_f)
+            __version__ = _pyproject_data["project"]["version"]
+        else:
+            raise RuntimeError(
+                "Cannot determine tengri version: "
+                "importlib.metadata.version('astro-tengri') failed, and "
+                f"pyproject.toml not found at {_pyproject_path}"
+            ) from None
     else:
         raise RuntimeError(
             "Cannot determine tengri version: "
             "importlib.metadata.version('astro-tengri') failed, and "
-            f"pyproject.toml not found at {_source_root / 'pyproject.toml'}"
+            "source tree root not found"
         ) from None
 
 # --- Exception hierarchy ---

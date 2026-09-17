@@ -25,6 +25,7 @@ __all__ = [
     "find_ssp_files",
     "list_available_ssps",
     "list_known_ssps",
+    "source_tree_root",
 ]
 
 #: Environment variable naming tengri's data directory. Governs both where
@@ -198,6 +199,43 @@ def package_data_dirs() -> list[Path]:
     pkg_root = Path(__file__).resolve().parent  # <src>/tengri
     source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
     return [source_root / "data", source_root]
+
+
+def source_tree_root() -> Path | None:
+    """The repository root when running from an uninstalled source tree, else None.
+
+    Returns
+    -------
+    pathlib.Path or None
+        The repository root (the directory holding ``pyproject.toml``) when
+        tengri is running from a source checkout without pip installation; None
+        when imported from an installed wheel or site-packages.
+
+    Notes
+    -----
+    **This is the ONE sanctioned package anchor for non-data module-level
+    initialization** (#1431, #2103). It is anchored on ``__file__`` of this
+    module (``src/tengri/_data_setup.py``), so the path is fixed no matter
+    which component calls it. Never use ``.parents[N]`` subscripts elsewhere
+    in the codebase — always route through this function.
+
+    Use this to find ``pyproject.toml`` or other repository-relative files
+    when the source tree is uninstalled. For installed wheels, return None and
+    use ``importlib.metadata`` instead.
+
+    Examples
+    --------
+    >>> from tengri._data_setup import source_tree_root
+    >>> root = source_tree_root()
+    >>> if root is not None:
+    ...     pyproject = root / "pyproject.toml"
+    """
+    pkg_root = Path(__file__).resolve().parent  # <src>/tengri
+    source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
+    # Only return the root if it's actually a source tree (has pyproject.toml)
+    if (source_root / "pyproject.toml").exists():
+        return source_root
+    return None
 
 
 def download_dir() -> Path:
