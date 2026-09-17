@@ -1,6 +1,15 @@
 ## [Unreleased]
 
 
+### Fixed
+
+- `mcmc_nuts_fast` registry row: removed false claim "pmapped chains by default",
+  now states "vmapped chains on one device; pmapped when the platform exposes at
+  least n_chains devices". The TENGRI_HOST_DEVICES hint is now gated to GPU/TPU
+  platforms only; on CPU, vmap is 8% faster than pmap and the hint was
+  counterproductive. Same seed, same 5-param broadband photometry fit: 418.3 s
+  (vmap) vs 451.5 s (pmap) for 600-iteration warmup (#2361).
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,

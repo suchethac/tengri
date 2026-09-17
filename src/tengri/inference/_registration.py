@@ -268,7 +268,9 @@ def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
     the fitter's and ``run_nuts``'s own defaults, so this wrapper adds only
     the draw budget and one hint: without host devices the chains run under
     ``vmap`` and the sampling phase is ~4x longer, which is what
-    ``TENGRI_HOST_DEVICES=4`` (set before ``import tengri``) fixes.
+    ``TENGRI_HOST_DEVICES=4`` (set before ``import tengri``) fixes on GPU/TPU.
+    On CPU, vmap is faster than pmap (8% faster, issue #2361), so the hint
+    emits only on non-CPU platforms.
 
     Every setting is overridable through ``**kw``; ``defaults.toml``'s
     ``[inference.mcmc_nuts_fast]`` section carries the draw budget so
@@ -278,7 +280,13 @@ def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
 
     import jax
 
-    if int(kw.get("n_chains", 4)) > 1 and len(jax.devices()) < int(kw.get("n_chains", 4)):
+    from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
+
+    if (
+        int(kw.get("n_chains", 4)) > 1
+        and len(jax.devices()) < int(kw.get("n_chains", 4))
+        and _pmap_hint_applies()
+    ):
         logging.getLogger(__name__).info(
             "mcmc_nuts_fast: %d JAX device(s) for %d chains, so the chains run under vmap; "
             "export TENGRI_HOST_DEVICES=%d before importing tengri to pmap them.",
@@ -298,7 +306,8 @@ register_backend(
     tier="primary",
     short_doc=(
         "NUTS at the 20 s photometry recipe: 4 chains x (150 warmup + 300 draws), "
-        "no burn-in, target 0.8; mass profiled, dense metric, pmapped chains by default"
+        "no burn-in, target 0.8; mass profiled, dense metric, "
+        "vmapped chains on one device; pmapped when the platform exposes at least n_chains devices"
     ),
     requires=("blackjax",),
     legacy_fitter=False,

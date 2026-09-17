@@ -227,6 +227,28 @@ def _check_blackjax_floor():
 
 
 # ---------------------------------------------------------------------------
+# Platform detection for chain parallelism hint
+# ---------------------------------------------------------------------------
+
+
+def _pmap_hint_applies() -> bool:
+    """Decide whether the pmap hint should be emitted on this platform.
+
+    The TENGRI_HOST_DEVICES hint is counterproductive on CPU: vmap on a single
+    device that owns all cores beats pmapping across starved logical devices.
+    Same seed, same chain, same box: 418.3 s (vmap) vs 451.5 s (pmap) for a
+    600-iteration warmup (issue #2361). Hint only on platforms where pmap is
+    expected to help (GPU/TPU, not CPU).
+
+    Returns
+    -------
+    bool
+        True if TENGRI_HOST_DEVICES hint should be emitted; False on CPU.
+    """
+    return jax.devices()[0].platform != "cpu"
+
+
+# ---------------------------------------------------------------------------
 # Kernel getters (cached in Python so we don't rebuild on every JIT call)
 # ---------------------------------------------------------------------------
 
@@ -3182,6 +3204,12 @@ def _resolve_chain_parallel(chain_parallel: str, n_chains: int) -> bool:
         return False
     if chain_parallel == "pmap":
         if n_dev < n_chains:
+            hint_suffix = ""
+            if not _pmap_hint_applies():
+                hint_suffix = (
+                    "\n  Note: on CPU, vmap is faster than pmap; "
+                    "consider chain_parallel='auto' or 'vmap' instead."
+                )
             raise ValueError(
                 f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
                 f"devices, found {n_dev}. Set the TENGRI_HOST_DEVICES environment "
@@ -3189,6 +3217,7 @@ def _resolve_chain_parallel(chain_parallel: str, n_chains: int) -> bool:
                 "-- tengri reads it at import time and appends "
                 "--xla_force_host_platform_device_count to XLA_FLAGS for you -- "
                 "or pass chain_parallel='vmap' / 'auto'."
+                + hint_suffix
             )
         return True
     if chain_parallel == "auto":
