@@ -38,6 +38,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import tengri
 from tengri.components.dust.emission.templates.dh02_ce01 import DH02CE01IRSEDComponent
 from tengri.protocols.component import ForwardState
 from tengri.utils.sed_quantities import LOG10_L_SUN
@@ -123,6 +124,40 @@ def _max_relative_shape_difference(norm_lo: np.ndarray, norm_hi: np.ndarray) -> 
     return float(np.max(np.abs(norm_hi[mask] - norm_lo[mask]) / scale[mask]))
 
 
+@pytest.fixture(scope="module")
+def ssp():
+    """The packaged default SSP grid, or a skip if unavailable."""
+    try:
+        return tengri.load_ssp()
+    except FileNotFoundError as exc:
+        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
+
+
+def _build_dh02_model(ssp_data, dust_log_l_ir: float | None = None):
+    """A minimal model with dh02_ce01 dust emission."""
+    import tengri
+
+    kwargs = {
+        "ssp_data": ssp_data,
+        "sfh": {
+            "type": "tsnorm",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        },
+        "dust_attenuation": {
+            "type": "two_component",
+            "law": "power_law",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "tau_diff": 0.5,
+            "tau_bc": 0.5,
+        },
+        "dust_emission": {"type": "dh02_ce01", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "redshift": tengri.Fixed(0.1),
+    }
+    if dust_log_l_ir is not None:
+        kwargs["dust_emission"]["dust_log_L_ir"] = tengri.Fixed(dust_log_l_ir)
+    return tengri.SEDModel.build(**kwargs)
+
+
 def test_dh02_shape_follows_the_real_l_ir(two_l_ir_values):
     """DH02_CE01's normalized shape must differ materially at two well-separated L_ir values.
 
@@ -176,3 +211,37 @@ def test_dh02_shape_follows_the_real_l_ir(two_l_ir_values):
         assert abs(ratio - 1.0) < 1.0e-6, (
             f"{label}: integral(sed_dust_ir)/L_ir = {ratio:.8f}, expected ~1.0"
         )
+
+
+def test_dh02_energy_balance_through_apply(ssp):
+    """Verify energy balance through SEDModel.build path; tests factors_l_ir flag.
+
+    This test goes through the full model build and predict_state path, which
+    uses apply() to implement factors_l_ir. The component's factors_l_ir=False
+    setting means apply() passes the real L_ir to predict(), not unit luminosity.
+    When mutated to factors_l_ir=True, apply() would substitute L_ir=1, apply()
+    re-scale the result by the real L_ir — amplitude double-counted — and
+    energy_balance assertion goes red (integral would be L_ir^2, not L_ir).
+    """
+    import jax
+
+    import tengri
+
+    model = _build_dh02_model(ssp)
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    state = model.predict_state(params)
+
+    l_ir = float(np.asarray(state.derived["L_ir"]))
+    sed_dust_ir = np.asarray(state.derived["sed_dust_ir"], dtype=np.float64)
+    wave = np.asarray(state.wave, dtype=np.float64)
+
+    # Energy balance: integral of sed_dust_ir over frequency must equal L_ir.
+    nu = _C_AA_PER_S / wave
+    integral = float(-np.trapezoid(sed_dust_ir, nu))
+    ratio = integral / l_ir
+
+    assert abs(ratio - 1.0) < 1.0e-2, (
+        f"Energy balance violated: integral(sed_dust_ir)/L_ir = {ratio:.8f}, "
+        f"expected ~1.0. With factors_l_ir=True mutation this becomes ~{l_ir:.3e}"
+        f" (amplitude double-counted)."
+    )

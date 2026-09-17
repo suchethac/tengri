@@ -99,10 +99,13 @@ def _tengri_dh02_ce01(wavelength_aa: np.ndarray, log_lir: float) -> np.ndarray:
         Peak-normalized L_nu.
     """
     from tengri.components.dust.emission_templates import create_dh02_ce01_from_grid
+    from tengri.utils.sed_quantities import LOG10_L_SUN
 
     fn = create_dh02_ce01_from_grid(str(_GRID_PATH))
     # Return L_nu normalized to L_absorbed=1 (peak normalization applied below)
-    return np.asarray(fn(jnp.asarray(wavelength_aa), 1.0, dust_log_lir=log_lir))
+    # Convert log_lir from L_sun to erg/s for the closure's log_L_ir parameter
+    log_lir_ergs = log_lir + LOG10_L_SUN
+    return np.asarray(fn(jnp.asarray(wavelength_aa), 1.0, log_L_ir=log_lir_ergs))
 
 
 @pytest.mark.parametrize("log_lir", [10.0, 11.0, 12.0])
