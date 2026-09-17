@@ -3153,18 +3153,27 @@ print(
 
 
 # %% [markdown]
-# ### §9e Torus grids: SKIRTOR (τ, oa, i) and Fritz
+# ### §9e AGN dust grids: SKIRTOR (τ, oa, i) and Fritz
 #
-# SKIRTOR: τ_9.7 ∈ {3, 7, 11}, oa ∈ {20°, 40°, 60°}, i ∈ {0°, 30°, 70°},
-# each varied one at a time from §9's fiducial (7, 40°, 30°) — 7 cases,
-# one tengri build with `tau_skirtor`/`oa_skirtor`/`cos_inc` free,
-# evaluated per case via `predict_rest_sed`. Fritz 2006: (τ, opening
-# angle, ψ) ∈ {(1, 60°, 0.001°), (1, 100°, 40.1°), (6, 60°, 89.99°)},
-# r_ratio=60, β=−0.5, γ=4, Schartmann disc, fracAGN=0.3, EBV=0.03 —
-# CIGALE's opening angle maps to tengri's half-angle via
-# `agn_fritz_oa = (180 − opening_angle) / 2`. `IR_BANDS` rows for both.
-# Worst case: Fritz τ=1, oa=60°, ψ=0.001° (edge-on), 0.094× — SKIRTOR's
-# worst is 1.761× (oa=20°).
+# Each panel compares AGN dust emission, torus plus polar screen summed. The sum
+# is independent of how each code partitions the two: pcigale subtracts the polar
+# re-emission from the torus dust, while tengri rescales the torus against a
+# shared budget and carries the polar term separately.
+#
+# SKIRTOR: τ_9.7 ∈ {3, 7, 11}, oa ∈ {20°, 40°, 60°}, i ∈ {0°, 30°, 70°}, each
+# varied one at a time from §9's fiducial (7, 40°, 30°). Optical depth and
+# inclination leave the residual flat — median 0.899×, 0.898×, 0.900× across the
+# three optical depths, and 0.895× and 0.923× at i = 0° and 70° — while the
+# opening angle carries a 1.8× swing: 0.824× at 20°, 0.898× at 40°, 1.485× at
+# 60°. The opening angle is the axis to reconcile; the other two agree.
+#
+# Fritz 2006: (τ, opening angle, ψ) ∈ {(1, 60°, 0.001°), (1, 100°, 40.1°),
+# (6, 60°, 89.99°)}, with r_ratio=60, β=−0.5, γ=4, a Schartmann disc,
+# fracAGN=0.3 and EBV=0.03. CIGALE's opening angle is the full angle and maps to
+# tengri's half-angle via `agn_fritz_oa = (180 − opening_angle) / 2`. Band medians
+# run 0.095×–0.195×, and the spread inside a single node — median 0.195× against
+# 0.040× at its worst band, oa = 100° — places the difference in the spectral
+# distribution rather than in one scale factor.
 
 # %%
 _AGN_SFH_9E = {
@@ -3223,8 +3232,10 @@ _skirtor_grid = [(3, 40, 30), (7, 40, 30), (11, 40, 30), (7, 20, 30), (7, 60, 30
 _cases_9e_sk = []
 for _tau, _oa, _i in _skirtor_grid:
     _sed_c9e = _cigale_skirtor_sed(_tau, _oa, _i)
-    _w_c9e, _L_c9e = C.to_lnu(_sed_c9e)
-    _o_9e = m_skirtor_sweep.predict_rest_sed(
+    _w_c9e, _L_torus_c9e = C.to_lnu_contribution(_sed_c9e, "agn.SKIRTOR2016_torus")
+    _, _L_polar_c9e = C.to_lnu_contribution(_sed_c9e, "agn.SKIRTOR2016_polar_dust")
+    _L_c9e = _L_torus_c9e + _L_polar_c9e  # Sum torus + polar (partition-independent)
+    _pred_9e = m_skirtor_sweep.predict(
         {
             **p_sk_sweep,
             "agn_tau_skirtor": jnp.float64(_tau),
@@ -3232,10 +3243,14 @@ for _tau, _oa, _i in _skirtor_grid:
             "agn_cos_inc": jnp.float64(np.cos(np.deg2rad(_i))),
         }
     )
+    _w_t_9e = np.asarray(_pred_9e.sed.components["wavelength"])
+    _L_torus_t_9e = np.asarray(_pred_9e.sed.components["sed_agn_torus"])
+    _L_polar_t_9e = np.asarray(_pred_9e.sed.components["sed_agn_polar"])
+    _L_t_9e = _L_torus_t_9e + _L_polar_t_9e  # Sum torus + polar
     _cases_9e_sk.append(
-        (f"τ={_tau}, oa={_oa}°, i={_i}°", _w_c9e, _L_c9e, np.asarray(_o_9e.wavelength), np.asarray(_o_9e.sed))
+        (f"τ={_tau}, oa={_oa}°, i={_i}°", _w_c9e, _L_c9e, _w_t_9e, _L_t_9e)
     )
-    _assert_comparable(_L_c9e, np.asarray(_o_9e.sed), name=f"§9e skirtor {_tau},{_oa},{_i}")
+    _assert_comparable(_L_c9e, _L_t_9e, name=f"§9e skirtor {_tau},{_oa},{_i}")
 
 fig, (ax, ax_r), _ratios_9e_sk = V.sweep_fig(
     _cases_9e_sk, ref_label="CIGALE", title="§9e SKIRTOR (τ, oa, i) grid", xlim=(1e3, 1e7)
@@ -3306,9 +3321,11 @@ _fritz_grid = [(1.0, 60.0, 0.001), (1.0, 100.0, 40.1), (6.0, 60.0, 89.99)]
 _cases_9e_fr = []
 for _tau, _oa, _psy in _fritz_grid:
     _sed_c9f = _cigale_fritz_sed(_tau, _oa, _psy)
-    _w_c9f, _L_c9f = C.to_lnu(_sed_c9f)
+    _w_c9f, _L_torus_c9f = C.to_lnu_contribution(_sed_c9f, "agn.fritz2006_torus")
+    _, _L_polar_c9f = C.to_lnu_contribution(_sed_c9f, "agn.fritz2006_polar_dust")
+    _L_c9f = _L_torus_c9f + _L_polar_c9f  # Sum torus + polar (partition-independent)
     _oa_half = (180.0 - _oa) / 2.0
-    _o_9f = m_fritz_sweep.predict_rest_sed(
+    _pred_9f = m_fritz_sweep.predict(
         {
             **p_fritz_sweep,
             "agn_fritz_tau": jnp.float64(_tau),
@@ -3316,10 +3333,14 @@ for _tau, _oa, _psy in _fritz_grid:
             "agn_fritz_psy": jnp.float64(_psy),
         }
     )
+    _w_t_9f = np.asarray(_pred_9f.sed.components["wavelength"])
+    _L_torus_t_9f = np.asarray(_pred_9f.sed.components["sed_agn_torus"])
+    _L_polar_t_9f = np.asarray(_pred_9f.sed.components["sed_agn_polar"])
+    _L_t_9f = _L_torus_t_9f + _L_polar_t_9f  # Sum torus + polar
     _cases_9e_fr.append(
-        (f"τ={_tau}, oa={_oa}°, ψ={_psy}°", _w_c9f, _L_c9f, np.asarray(_o_9f.wavelength), np.asarray(_o_9f.sed))
+        (f"τ={_tau}, oa={_oa}°, ψ={_psy}°", _w_c9f, _L_c9f, _w_t_9f, _L_t_9f)
     )
-    _assert_comparable(_L_c9f, np.asarray(_o_9f.sed), name=f"§9e fritz {_tau},{_oa},{_psy}")
+    _assert_comparable(_L_c9f, _L_t_9f, name=f"§9e fritz {_tau},{_oa},{_psy}")
 
 fig, (ax, ax_r), _ratios_9e_fr = V.sweep_fig(
     _cases_9e_fr, ref_label="CIGALE", title="§9e Fritz 2006 (τ, opening angle, ψ) grid", xlim=(1e3, 1e7)
