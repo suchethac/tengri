@@ -1133,7 +1133,7 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         # #1120 hid the unvalidated SFH types. What the row must not do is read
         # like a model you can select — standalone it re-emits a measured
         # 1.8925e-04 of L_ir, and SEDModel.build refuses it.
-        "short_doc": "[not builder-available: PAH building block; composes through the dust-emission grid API] Drude-profile PAH emission features",  # noqa: E501
+        "short_doc": f"{_NOT_BUILDER_AVAILABLE_PREFIX} PAH building block; composes through the dust-emission grid API] Drude-profile PAH emission features",  # noqa: E501
         "use": (
             "tengri.components.dust.dust_analytic_precompute.precompute(model='pah_drude', ...)"
         ),
