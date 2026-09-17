@@ -287,9 +287,7 @@ def test_predict_photometry_batch_refuses_fixed_keys(
     n_filters = len(model.observation.photometry.filters)
     assert result.shape == (n, n_filters)
 
-    fixed_batch = {
-        name: jnp.full((n,), val) for name, val in params_with_fixed_override.items()
-    }
+    fixed_batch = {name: jnp.full((n,), val) for name, val in params_with_fixed_override.items()}
     with pytest.raises(ParameterError) as exc_info:
         model.predict_photometry_batch(fixed_batch)
 
