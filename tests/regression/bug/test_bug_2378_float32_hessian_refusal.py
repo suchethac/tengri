@@ -42,6 +42,8 @@ from tengri.inference.fitter import Fitter
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.observation import Observation, Photometry
 
+pytestmark = pytest.mark.regression_bug
+
 
 class TestFloat32HessianRefusal:
     """Float32 refusal names the dtype in both laplace and preconditioning routes."""
