@@ -209,7 +209,9 @@ DPL = {"sfh_dpl_alpha": 2.0, "sfh_dpl_beta": 1.5, "sfh_dpl_age_gyr": 12.0, "sfh_
 truth = {
     **spec.sample(jax.random.PRNGKey(SEED)),  # a field realization, xi ~ N(0, I)
     **{k: jnp.array(v) for k, v in DPL.items()},
-    "met_logzsol": jnp.array(-0.3),
+    # met_logzsol is Fixed(-0.3) in build() above -- this key was a no-op
+    # restating that exact pin, and #2296 now refuses any Fixed key's
+    # presence regardless of value, so it is dropped rather than kept.
     "dust_tau_bc": jnp.array(0.3),
     "dust_tau_diff": jnp.array(0.15),
     "sfh_field_psd_sigma": jnp.array(0.4),

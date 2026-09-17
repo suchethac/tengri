@@ -44,7 +44,15 @@ def _build(t_dust=None, beta=None):
         "tau_diff": 0.5,
         "tau_bc": 1.0,
     }
-    dust_emission = {"type": "modified_blackbody", "all_params": tengri.Fixed(tengri.DEFAULT)}
+    # ``dust_T``/``dust_beta_ir`` are overridden per grid point below (#2296:
+    # a params-dict key the spec declared Fixed is refused), so both must be
+    # free; bounds pad the T_grid (20-60 K) / beta_grid (1.0-2.5) sweeps.
+    dust_emission = {
+        "type": "modified_blackbody",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "T": tengri.Uniform(10.0, 80.0),
+        "beta_ir": tengri.Uniform(0.5, 3.0),
+    }
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 11.13},
