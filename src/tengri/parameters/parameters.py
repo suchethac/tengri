@@ -2487,6 +2487,11 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_distributions": exclude(
         "prior bounds and values are runtime inputs of the Fitter engine (#1972)"
     ),
+    "_lgmet_scatter_for_fix": exclude(
+        "construction-time stash of the lgmet_scatter kwarg (#2255); lgmet_scatter "
+        "(content) mirrors every behavioral state -- None and an explicit 0.1 both "
+        "yield lgmet_scatter=0.1 with the same registered met_logzsol_scatter default"
+    ),
     "_param_registry": exclude(
         "registry is a pure function of parameter names (keyed) and installed registry"
     ),
