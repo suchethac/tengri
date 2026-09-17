@@ -292,24 +292,26 @@ if _os.environ.get("TENGRI_DISABLE_JIT", "").lower() in ("1", "true", "yes"):
     jax.config.update("jax_disable_jit", True)
 
 # --- Version ---
-# Try reading from the running source tree's pyproject.toml first (authoritative after a bump),
-# then fall back to importlib.metadata for installed wheels (frozen at install time).
-_pyproject_path = _Path(__file__).resolve().parents[2] / "pyproject.toml"
-if _pyproject_path.exists():
-    # Source-tree installation: read directly for freshness after a version bump.
-    with open(_pyproject_path, "rb") as _f:
-        _pyproject_data = tomllib.load(_f)
-    __version__ = _pyproject_data["project"]["version"]
-else:
-    # Installed wheel: read from package metadata.
-    try:
-        __version__ = _get_metadata_version("astro-tengri")
-    except PackageNotFoundError as _e:
+# Always prefer importlib.metadata: it works for both editable installs and wheels,
+# and is the official source of truth after package installation.
+# Only fall back to source-tree pyproject.toml for uninstalled checkouts.
+try:
+    __version__ = _get_metadata_version("astro-tengri")
+except PackageNotFoundError:
+    # Uninstalled source tree: read directly from package root, not walked parents.
+    # This is the only case we anchor on __file__ without walking depth.
+    _source_root = _Path(__file__).resolve().parent.parent.parent  # src/tengri -> src -> .
+    _pyproject_path = _source_root / "pyproject.toml"
+    if _pyproject_path.exists():
+        with open(_pyproject_path, "rb") as _f:
+            _pyproject_data = tomllib.load(_f)
+        __version__ = _pyproject_data["project"]["version"]
+    else:
         raise RuntimeError(
             "Cannot determine tengri version: "
-            f"pyproject.toml not found at {_pyproject_path}, "
-            "and importlib.metadata.version('astro-tengri') failed"
-        ) from _e
+            "importlib.metadata.version('astro-tengri') failed, and "
+            f"pyproject.toml not found at {_source_root / 'pyproject.toml'}"
+        ) from None
 
 # --- Exception hierarchy ---
 # --- New high-level API ---

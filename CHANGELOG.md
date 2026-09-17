@@ -31,7 +31,9 @@
 
 - Release version now has a single source: `pyproject.toml`. `src/tengri/__init__.py`
   derives `__version__` via `importlib.metadata`, with a fallback for source-tree
-  installs. `docs/conf.py` derives `release` from the imported `tengri.__version__`.
+  installs: in an uninstalled checkout, it reads `pyproject.toml` from the package
+  root directly (not walked via parent directories, preserving environment isolation).
+  `docs/conf.py` derives `release` from the imported `tengri.__version__`.
   `CITATION.cff` remains a manual copy, but `tools/check_version_single_source.py`
   (wired to the `lint` job) ensures it never drifts from `pyproject.toml`. Removes
   the inert `setuptools-scm` requirement and the false assertion in `publish.yml`
