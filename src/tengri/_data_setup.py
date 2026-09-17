@@ -174,15 +174,16 @@ def data_dirs() -> list[Path]:
     return [d for d in out if not (d in seen or seen.add(d))]
 
 
-def source_tree_root() -> Path | None:
-    """The repository root when running from an uninstalled source tree, else None.
+def source_tree_root() -> Path:
+    """The repository root computed from this module's location.
 
     Returns
     -------
-    pathlib.Path or None
-        The repository root (the directory holding ``pyproject.toml``) when
-        tengri is running from a source checkout without pip installation; None
-        when imported from an installed wheel or site-packages.
+    pathlib.Path
+        The repository root (two levels up from ``src/tengri``). When
+        ``pyproject.toml`` exists there, tengri is running from a source
+        checkout. For installed wheels, the path exists above ``site-packages``
+        and simply will not contain the files.
 
     Notes
     -----
@@ -193,22 +194,20 @@ def source_tree_root() -> Path | None:
     in the codebase — always route through this function.
 
     Use this to find ``pyproject.toml`` or other repository-relative files
-    when the source tree is uninstalled. For installed wheels, return None and
-    use ``importlib.metadata`` instead.
+    when the source tree is uninstalled. Check for file existence (e.g.
+    ``if (source_tree_root() / "pyproject.toml").exists()``) to detect
+    source tree vs. installed wheel.
 
     Examples
     --------
     >>> from tengri._data_setup import source_tree_root
     >>> root = source_tree_root()
-    >>> if root is not None:
-    ...     pyproject = root / "pyproject.toml"
+    >>> if (root / "pyproject.toml").exists():
+    ...     # Running from source
     """
     pkg_root = Path(__file__).resolve().parent  # <src>/tengri
     source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
-    # Only return the root if it's actually a source tree (has pyproject.toml)
-    if (source_root / "pyproject.toml").exists():
-        return source_root
-    return None
+    return source_root
 
 
 def package_data_dirs() -> list[Path]:
@@ -233,18 +232,11 @@ def package_data_dirs() -> list[Path]:
     so the path is fixed no matter which component calls it. That is the
     property the per-module ``parents[N]`` locators lacked.
     """
-    # Obtain source root via source_tree_root(), which holds the anchor.
-    # For installed wheels, source_tree_root returns None but we still need
-    # to return the computed path (which exists above site-packages).
+    # Obtain source root via source_tree_root(), which holds the one anchor.
+    # Whether or not pyproject.toml exists, we return the path (callers test
+    # file existence to detect source tree vs. installed wheel).
     root = source_tree_root()
-    if root is not None:
-        return [root / "data", root]
-    # For installed wheel: return the computed source root even though
-    # pyproject.toml doesn't exist (callers test file existence). The anchor
-    # computation is in source_tree_root; we cannot avoid re-computing here.
-    pkg_root = Path(__file__).resolve().parent  # <src>/tengri
-    source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
-    return [source_root / "data", source_root]
+    return [root / "data", root]
 
 
 def download_dir() -> Path:

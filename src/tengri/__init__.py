@@ -303,23 +303,16 @@ except PackageNotFoundError:
     from tengri import _data_setup as _ds
 
     _source_root = _ds.source_tree_root()
-    if _source_root is not None:
-        _pyproject_path = _source_root / "pyproject.toml"
-        if _pyproject_path.exists():
-            with open(_pyproject_path, "rb") as _f:
-                _pyproject_data = tomllib.load(_f)
-            __version__ = _pyproject_data["project"]["version"]
-        else:
-            raise RuntimeError(
-                "Cannot determine tengri version: "
-                "importlib.metadata.version('astro-tengri') failed, and "
-                f"pyproject.toml not found at {_pyproject_path}"
-            ) from None
+    _pyproject_path = _source_root / "pyproject.toml"
+    if _pyproject_path.exists():
+        with open(_pyproject_path, "rb") as _f:
+            _pyproject_data = tomllib.load(_f)
+        __version__ = _pyproject_data["project"]["version"]
     else:
         raise RuntimeError(
             "Cannot determine tengri version: "
             "importlib.metadata.version('astro-tengri') failed, and "
-            "source tree root not found"
+            f"pyproject.toml not found at {_pyproject_path}"
         ) from None
 
 # --- Exception hierarchy ---
