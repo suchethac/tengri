@@ -467,10 +467,10 @@ def _refuse_freed_optional_axes(spec):
 
     raise ValueError(
         f"enable_fast_nebular refuses to proceed with freed optional parameters: "
-        f"{detail}. The per-Q_H grid bakes these axes at their reference values "
-        f"and is held at its reference value while the sampler varies it. "
-        f"This results in a silent mismatch: the likelihood never observes "
-        f"the freed dimensions while the posterior reports only the prior.\n"
+        f"{detail}. The fast grid's axes are {', '.join(_CANDIDATE_AXES)} only; "
+        f"every other backend parameter is baked in at its reference value, so a "
+        f"freed one is held fixed by the grid while the sampler varies it, and "
+        f"the likelihood never sees the freed dimension.\n"
         f"Fix (one of):\n"
         f"  1. Pin the parameters instead: "
         f"neb={{'type': 'cb19', '{short_keys[0]}': Fixed(value)}}.\n"
