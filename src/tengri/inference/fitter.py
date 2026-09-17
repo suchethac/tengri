@@ -898,6 +898,17 @@ def _resolve_batch_fit_approx(model, approx, data_type):
     if getattr(model, "with_approx", None) is None:
         return model
     if approx is None:
+        # Nothing attached is already the exact path, and cloning to strip an
+        # absent LUT is "a clone that buys nothing" — the thing
+        # ``test_a_model_already_carrying_the_lut_is_not_rewrapped`` exists to
+        # forbid. Strip only when there is something to strip.
+        _state = getattr(model, "approx", None)
+        if _state is None or not (
+            getattr(_state, "wave_precomp", False)
+            or getattr(_state, "spectrum_precomp", False)
+            or getattr(_state, "feature_precomp", False)
+        ):
+            return model
         # #2377: force the exact path here too, mirroring the ``None`` branch of
         # ``Fitter._resolve_fit_approx``, whose docstring is explicit that ``None``
         # "overrides a build-time approx" and "means exact and stays exact". This

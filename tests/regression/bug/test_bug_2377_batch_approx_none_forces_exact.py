@@ -127,7 +127,7 @@ def test_auto_is_unchanged_on_the_batch_surface(ssp_data_fsps):
     )
 
 
-def test_an_explicit_config_is_still_honoured_on_the_batch_surface(ssp_data_fsps):
+def test_an_explicit_config_is_still_honored_on_the_batch_surface(ssp_data_fsps):
     """An explicit config is used exactly as given, with no implicit top-up."""
     from tengri import WavePrecomp
     from tengri.inference.fitter import _resolve_batch_fit_approx
