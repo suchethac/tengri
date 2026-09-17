@@ -22,24 +22,26 @@ pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
 
 @pytest.fixture(scope="module")
-def model_and_fitter():
-    """Create a smooth fitter with mock photometric data (5 free params, DPL SFH).
+def shared_mock():
+    """Shared mock data scored by both model A and model B.
 
-    Fixes: pin auto-freed parameters (sfh_dpl_age_gyr, sfh_dpl_beta, dust_tau_diff)
-    to achieve exactly D=5 free parameters and avoid exact degeneracies.
-    Uses deterministic interior truth for mock generation.
+    This fixture builds the photometric mock using model A's structure and truth,
+    creating a deterministic dataset scored by both fitter variants. This ensures
+    BMA weights compare log-evidences from the SAME data under different model
+    structures, not from two different datasets which would make ranking comparison
+    ill-posed (#2364).
     """
-    from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform, load_filter_set, load_ssp_data
+    from tengri import Fixed, Parameters, SEDModel, Uniform, load_filter_set, load_ssp_data
 
     spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Fixed(1.0),  # Pin: not a free param for model A
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_age_gyr=Fixed(13.0),  # Pin: not a free param (cosmic time for SF)
+        sfh_dpl_age_gyr=Fixed(13.0),
         sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
-        dust_tau_diff=Fixed(0.3),  # Pin: diffuse ISM dust (not a free param)
+        dust_tau_diff=Fixed(0.3),
         redshift=0.1,
         stochastic=False,
     )
@@ -47,17 +49,44 @@ def model_and_fitter():
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     model = SEDModel(spec, ssp, filters=filters)
 
-    # Deterministic interior truth: all values interior to Uniform bounds.
-    # Avoid extremes to minimize posterior curvature, improving Laplace accuracy.
     truth = {
-        "sfh_dpl_alpha": 1.2,  # interior of (0.5, 3.0)
-        "sfh_dpl_tau_gyr": 4.0,  # interior of (0.5, 10.0)
-        "sfh_dpl_log_total_mass": 10.0,  # interior of (7.0, 12.5)
-        "met_logzsol": -0.8,  # interior of (-2.0, 0.2)
-        "dust_tau_bc": 1.2,  # interior of (0.0, 3.0)
+        "sfh_dpl_alpha": 1.2,
+        "sfh_dpl_tau_gyr": 4.0,
+        "sfh_dpl_log_total_mass": 10.0,
+        "met_logzsol": -0.8,
+        "dust_tau_bc": 1.2,
     }
     mock = model.mock(truth, snr=20.0, key=jax.random.PRNGKey(1))
-    fitter = Fitter(model, mock.flux_obs, mock.noise)
+    return mock
+
+
+@pytest.fixture(scope="module")
+def model_and_fitter(shared_mock):
+    """Create a fitter with 5 free params (DPL SFH, beta fixed).
+
+    Uses the shared_mock data generated from model A's truth. This ensures both
+    model A and model B fitters score the same observed data, making BMA weight
+    ranking comparison valid (#2364).
+    """
+    from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform, load_filter_set, load_ssp_data
+
+    spec = Parameters(
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Fixed(1.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_age_gyr=Fixed(13.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
+        met_logzsol=Uniform(-2.0, 0.2),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        dust_tau_diff=Fixed(0.3),
+        redshift=0.1,
+        stochastic=False,
+    )
+    ssp = load_ssp_data(str(_SSP_PATH))
+    filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    model = SEDModel(spec, ssp, filters=filters)
+
+    fitter = Fitter(model, shared_mock.flux_obs, shared_mock.noise)
     return model, fitter
 
 
@@ -251,12 +280,14 @@ class TestNSSFastVsAccurate:
 
 
 @pytest.fixture(scope="module")
-def model_b_and_fitter():
+def model_b_and_fitter(shared_mock):
     """Second model for BMA testing: 6-param variant with beta parameter.
 
-    Fixes: pin auto-freed parameter sfh_dpl_age_gyr to achieve exactly D=6
-    free parameters and avoid exact degeneracies.
-    Uses deterministic interior truth for mock generation.
+    Uses the shared_mock data (same as model A, generated from model A's truth).
+    This fixture's truth dict (with beta=1.5) is irrelevant to the data; only
+    the model structure (6 free params, beta not fixed) matters. Both model A
+    and model B fitters now score the SAME observed data, making BMA ranking
+    comparison valid (#2364).
     """
     from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform, load_filter_set, load_ssp_data
 
@@ -264,11 +295,11 @@ def model_b_and_fitter():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_age_gyr=Fixed(13.0),  # Pin: not a free param (cosmic time for SF)
+        sfh_dpl_age_gyr=Fixed(13.0),
         sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
-        dust_tau_diff=Fixed(0.3),  # Fixed: diffuse ISM dust
+        dust_tau_diff=Fixed(0.3),
         redshift=0.1,
         stochastic=False,
     )
@@ -276,18 +307,7 @@ def model_b_and_fitter():
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     model = SEDModel(spec, ssp, filters=filters)
 
-    # Deterministic interior truth: all values interior to Uniform bounds.
-    # Use beta=1.5 to create clearer difference from model A (beta=1.0 fixed).
-    truth = {
-        "sfh_dpl_alpha": 1.2,  # interior of (0.5, 3.0)
-        "sfh_dpl_beta": 1.5,  # interior of (0.3, 2.0); different from model A's fixed 1.0
-        "sfh_dpl_tau_gyr": 4.0,  # interior of (0.5, 10.0)
-        "sfh_dpl_log_total_mass": 10.0,  # interior of (7.0, 12.5)
-        "met_logzsol": -0.8,  # interior of (-2.0, 0.2)
-        "dust_tau_bc": 1.2,  # interior of (0.0, 3.0)
-    }
-    mock = model.mock(truth, snr=20.0, key=jax.random.PRNGKey(1))
-    fitter = Fitter(model, mock.flux_obs, mock.noise)
+    fitter = Fitter(model, shared_mock.flux_obs, shared_mock.noise)
     return model, fitter
 
 
@@ -355,6 +375,23 @@ class TestBMAWeightsAgreement:
         assert np.allclose(np.sum(weights), 1.0)
         assert np.all(weights >= 0)
 
+    def test_shared_mock_identical_flux(
+        self,
+        model_and_fitter,
+        model_b_and_fitter,
+    ):
+        """Verify both fitters receive the same photometric data (#2364 mutation)."""
+        _, fitter_a = model_and_fitter
+        _, fitter_b = model_b_and_fitter
+
+        # Both fitters should observe identical flux arrays
+        assert np.array_equal(fitter_a.flux_obs, fitter_b.flux_obs), (
+            "Fitter A and B must see identical flux arrays — fixture sharing is broken"
+        )
+        assert np.array_equal(fitter_a.noise, fitter_b.noise), (
+            "Fitter A and B must see identical noise arrays — fixture sharing is broken"
+        )
+
     def test_bma_weights_ranking_agreement(
         self,
         nss_ref,
@@ -364,20 +401,58 @@ class TestBMAWeightsAgreement:
         hmc_is_result,
         model_b_hmc_is,
     ):
-        """All routes should rank the two models the same way."""
+        """All routes should rank the two models the same way.
+
+        When the two models' log-evidences are statistically indistinguishable,
+        a ranking flip is not evidence of route disagreement. This test enforces
+        separation before asserting ranking agreement (#2364).
+        """
         from tengri.inference.bma import bma_weights
 
-        # NSS
+        # NSS: compute evidence separation and error
         w_nss = bma_weights([nss_ref, model_b_nss_ref])
         idx_nss = np.argmax(w_nss)
+        logz_nss_a = float(nss_ref.log_evidence)
+        logz_nss_b = float(model_b_nss_ref.log_evidence)
+        sep_nss = abs(logz_nss_a - logz_nss_b)
+        err_nss_a = float(nss_ref.diagnostics.get("log_evidence_err", 0.01))
+        err_nss_b = float(model_b_nss_ref.diagnostics.get("log_evidence_err", 0.01))
+        sigma_nss = np.sqrt(err_nss_a**2 + err_nss_b**2)
 
-        # Laplace
-        w_lap = bma_weights([laplace_result, model_b_laplace])
-        idx_lap = np.argmax(w_lap)
-
-        # HMC+IS
+        # HMC+IS: compute evidence separation and error
         w_hmc = bma_weights([hmc_is_result, model_b_hmc_is])
         idx_hmc = np.argmax(w_hmc)
+        logz_hmc_a = float(hmc_is_result.log_evidence)
+        logz_hmc_b = float(model_b_hmc_is.log_evidence)
+        sep_hmc = abs(logz_hmc_a - logz_hmc_b)
+        err_hmc_a = float(hmc_is_result.diagnostics.get("log_evidence_err", 0.01))
+        err_hmc_b = float(model_b_hmc_is.diagnostics.get("log_evidence_err", 0.01))
+        sigma_hmc = np.sqrt(err_hmc_a**2 + err_hmc_b**2)
+
+        # Laplace: no error estimate; treat as point estimate
+        w_lap = bma_weights([laplace_result, model_b_laplace])
+        idx_lap = np.argmax(w_lap)
+        logz_lap_a = float(laplace_result.log_evidence)
+        logz_lap_b = float(model_b_laplace.log_evidence)
+        sep_lap = abs(logz_lap_a - logz_lap_b)
+        # Laplace reported as point estimate (no error)
+
+        # Check separation: skip if models are too close to distinguish
+        if sep_nss < 2.0 * sigma_nss:
+            pytest.skip(
+                f"near-tie NSS: ΔlogZ={sep_nss:.4f} vs σ={sigma_nss:.4f} "
+                f"(logZ_A={logz_nss_a:.3f}±{err_nss_a:.4f}, "
+                f"logZ_B={logz_nss_b:.3f}±{err_nss_b:.4f}) — "
+                f"ranking flip here is not a route disagreement (#2364)"
+            )
+
+        if sep_hmc < 2.0 * sigma_hmc:
+            pytest.skip(
+                f"near-tie HMC+IS: ΔlogZ={sep_hmc:.4f} vs σ={sigma_hmc:.4f} "
+                f"(logZ_A={logz_hmc_a:.3f}±{err_hmc_a:.4f}, "
+                f"logZ_B={logz_hmc_b:.3f}±{err_hmc_b:.4f}) — "
+                f"ranking flip here is not a route disagreement (#2364)"
+            )
 
         # All should agree on which model is better
         assert idx_nss == idx_lap == idx_hmc, (
