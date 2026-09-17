@@ -21,7 +21,7 @@ from tengri._cache_keys import (
     exclude,
     shape,
 )
-from tengri.observation.spectrum import _first_invalid_wavelength
+from tengri.observation.spectrum import first_invalid_wavelength
 from tengri.parameters.priors import Distribution, Gaussian
 
 
@@ -159,7 +159,7 @@ class Spectroscopy:
     def __post_init__(self) -> None:
         w = np.asarray(self.wave_obs, dtype=np.float64)
 
-        result = _first_invalid_wavelength(w)
+        result = first_invalid_wavelength(w)
         if result is not None:
             idx, reason = result
             if reason == "non-finite":
