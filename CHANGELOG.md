@@ -3,6 +3,23 @@
 
 ### Added
 
+- SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
+  `skymapper_g`, `skymapper_r`, `skymapper_i`, `skymapper_z`, with their
+  curves tracked under `data/filters/` so they load offline like the rest of
+  the registry (425 -> 431 aliases). SkyMapper observes in **six** bands,
+  `uvgriz`, not the `ugriz` five that `sdss_*` / `lsst_*` / `ps1_*` establish
+  as the shape of an optical survey pack; the extra `v` is a violet band at
+  3838 A between `u` and `g`. Note that band letter: the registry already
+  holds `johnson_v` and `xmm_v`, both Johnson V near 5500 A, so `*_v` now
+  means two different bands depending on the prefix. The alias still takes
+  its letter from the SVO identifier, as every other alias does, and
+  `tests/components/observation/test_skymapper_filters.py` pins the
+  wavelength rather than relying on the name — including the `u`/`v` pair,
+  whose nominal pivots are 9.43% apart and whose bandpasses genuinely
+  overlap, which is what caps the pack's pivot tolerance at 1%. All six
+  curves agree with the published effective wavelengths (Wolf et al. 2018)
+  to within 0.21%.
+
 - Each non-stellar emission source now picks its own dust screen: the
   `dust_attenuation` group gains `nebular_screen` (governs the nebular
   continuum, the line catalog, and the fast-nebular fallback grid; default
@@ -925,6 +942,26 @@
 
 
 ### Fixed
+
+- The offline filter remedy is now a command that runs. `load_filter`'s
+  network-unavailable error hands the user one instruction, and it was wrong
+  three ways at once: it named `tools/download_filters.py` while the script
+  lives under `scripts/`, it passed the filter name positionally where the
+  script requires `--filter NAME`, and the script carried its own copy of the
+  registry behind a "keep in sync" comment that had drifted to 250 of 431
+  entries — ALHAMBRA, J-PAS, J-PLUS, SHARDS, HAWK-I and SkyMapper were all
+  absent, so for 181 filters it would have refused the name even when invoked
+  correctly. `scripts/download_filters.py` now reads
+  `src/tengri/observation/data/filters_registry.json` with stdlib `json`,
+  which keeps the constraint the copy existed for ("avoid importing tengri so
+  the script works in bare envs" — reading a data file is not importing the
+  package) while removing 288 lines of duplicated data and the drift class
+  with them. Three contract tests in `test_filter_offline_mode.py` now assert
+  the recommended path resolves to a real file, that the command carries the
+  flag the script requires, and that the script holds no inline
+  alias-to-SVO-id pairs, so a reintroduced duplicate goes red. A
+  recommendation living in an f-string is executed by nothing, which is why
+  none of the three had anything to report it.
 
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
