@@ -2100,7 +2100,6 @@ class Posterior:
         >>> # Use as starting point for next fit
         >>> refined = fitter.run("mcmc_nuts", init_from=posterior_params)
         """
-        from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed, Gaussian
 
         kwargs = {}
@@ -2125,48 +2124,55 @@ class Posterior:
                         hi=float(np.max(vals)),
                     )
 
-        # Reconstruct the full structural groups from the model spec,
-        # then inject the posterior's parameter distributions.
-        # This preserves the SFH type, dust law, nebular backend, etc.
+        # Reconstruct groups from the model spec and inject posterior distributions
+        # through the grammar, avoiding hardcoded allowlists and mutations.
         if self._model is not None:
-            from tengri.parameters.groups import parse_groups
+            from tengri.parameters.groups import (
+                _extract_short_name,
+                _partition_by_group,
+                parse_groups,
+            )
 
-            # Start with the model's structure
+            # Start with the model's structural groups
             groups = self._model.spec.to_groups()
 
-            # Inject posterior parameter distributions into the groups
-            for group_name, group_dict in groups.items():
-                if isinstance(group_dict, dict) and "type" in group_dict:
-                    # This is a component group (e.g., sfh, dust_attenuation, neb, etc.)
-                    for param_name, param_dist in kwargs.items():
-                        # Match param_name against group's parameters
-                        # e.g., sfh_dpl_alpha -> inject into sfh group as 'alpha'
-                        prefix = f"{group_name}_"
-                        if param_name.startswith(prefix):
-                            short_name = param_name[len(prefix):]
-                            # Skip structural parameters and prefixes
-                            sfh_types = ("dpl_", "delayed_", "field_", "tsnorm_")
-                            if not short_name.startswith(sfh_types):
-                                continue
-                            # Extract the parameter name after the SFH type
-                            for sfh_type in ["dpl", "delayed", "field", "tsnorm"]:
-                                sfh_prefix = f"{group_name}_{sfh_type}_"
-                                if param_name.startswith(sfh_prefix):
-                                    short_name = param_name[len(sfh_prefix):]
-                                    group_dict[short_name] = param_dist
-                                    break
+            # Route each posterior param through the grammar's partition helpers
+            partition = _partition_by_group(
+                list(kwargs.keys()),
+                dust_emission_active="dust.emission" in groups,
+            )
 
-            # Convert groups back to Parameters
-            spec = parse_groups(**groups)
-            # Now apply the posterior distributions to the spec
-            for name, dist in kwargs.items():
-                if name in spec._distributions:
-                    spec._distributions[name] = dist
-            return spec
+            for param_name, param_dist in kwargs.items():
+                group_path = partition[param_name]
+
+                if group_path == "_toplevel":
+                    # Top-level params like 'redshift'
+                    groups[param_name] = param_dist
+                elif "." in group_path:
+                    # Nested group like "dust.emission"
+                    base, sub = group_path.split(".", 1)
+                    if base in groups and isinstance(groups[base], dict):
+                        if sub not in groups[base]:
+                            groups[base][sub] = {}
+                        if isinstance(groups[base][sub], dict):
+                            short = _extract_short_name(param_name, groups[base][sub])
+                            groups[base][sub][short] = param_dist
+                else:
+                    # Flat group like "sfh"
+                    if group_path in groups and isinstance(groups[group_path], dict):
+                        short = _extract_short_name(param_name, groups[group_path])
+                        groups[group_path][short] = param_dist
+
+            return parse_groups(**groups)
         else:
-            # Fallback: create Parameters with only the parameter distributions
-            # This will fail if structural information is missing
-            return Parameters(**kwargs)
+            # Posterior without a model cannot reconstruct the structure.
+            raise ValueError(
+                "This Posterior has no model reference, so to_param_spec() cannot "
+                "reconstruct the structural model spec. Posteriors from Fitter.run() "
+                "have _model set. A saved-and-reloaded Posterior has no model (models "
+                "are runtime objects, not serialized). Use "
+                "Posterior.load(path, model=model) to reattach it."
+            )
 
     def to_arviz(self):
         """Convert to ArviZ InferenceData for diagnostics.
