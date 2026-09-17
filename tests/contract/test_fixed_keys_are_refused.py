@@ -87,6 +87,7 @@ DIRECT_METHODS = [
     "predict_properties",
     "predict_line_fluxes",
     "predict_state",
+    "predict_observables",
     "predict_observables_jit",
 ]
 
@@ -328,5 +329,25 @@ def test_predict_line_fluxes_fast_branch_refuses_fixed_keys(fast_nebular_model):
 
     with pytest.raises(ParameterError) as exc_info:
         model.predict_line_fluxes({**free, "redshift": 0.05})
+
+    _assert_is_a_fixed_key_refusal(exc_info.value, "redshift", 0.05)
+
+
+def test_model_mock_refuses_fixed_keys(
+    model_with_fixed_redshift, free_params_dict, params_with_fixed_override
+):
+    """``model.mock`` (mock photometric observation generation) refuses a
+    Fixed key the same way every other params-dict entry point does (#2296):
+    it is auto-discovered by ``test_fixed_params_reach_every_entry_point.py``'s
+    sweep too (its second positional arg is named ``params``), but that sweep
+    only ever checks the ``redshift`` axis against one model; pin it here
+    explicitly alongside the rest of this file's surfaces."""
+    model = model_with_fixed_redshift
+
+    mock = model.mock(free_params_dict, snr=10.0, key=jr.PRNGKey(4))
+    assert mock is not None
+
+    with pytest.raises(ParameterError) as exc_info:
+        model.mock(params_with_fixed_override, snr=10.0, key=jr.PRNGKey(4))
 
     _assert_is_a_fixed_key_refusal(exc_info.value, "redshift", 0.05)
