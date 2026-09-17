@@ -660,12 +660,22 @@ class FeaturePrecomp:
        evaluation. Measured on a 10-parameter Cue model with free ``neb_logU``
        / ``neb_logZ_gas``, against an A/A control whose noise floor was 1.23x:
        a photometry-only fit's compiled MAP step goes 0.645 s to 0.093 s
-       (**7x**) on adding this. With a line channel present the same model
-       already sits near 0.16 s and neither opt-in resolves at all.
-       :class:`WavePrecomp` alone does not resolve either (1.07x, under the
-       floor). Measure before assuming either way, and quote a ratio only
+       (**7x**) on adding this to :class:`WavePrecomp`. That saving needs a
+       model with **no** ``sed_nebular`` consumer, so dust withdraws it. On a
+       *dusty* Cue model also fitting a line channel, the pair is worth nothing
+       over :class:`WavePrecomp` alone: measured 1.642 s to 1.647 s against a
+       1.00x A/A floor, where the exact wave grid is 3.593 s (notebook
+       ``10_fastspecfit_joint_fit``, compiled MAP step, fit-time ``approx=``
+       varied) — the photometry LUT carries all 2.19x of it. The line channel
+       does not rescue it either: the table-served line path is the
+       measured-line route of a backend whose lines sit in the SSP templates,
+       and on a Cue fit the line channel is only ~8% of the compiled gradient
+       to begin with, so the table has little to remove (see #2377). Earlier
+       readings of "no gain with lines" timed arms that
+       ``fit()`` had already resolved to one configuration; see the trap
+       below. Measure before assuming either way, and quote a ratio only
        against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
-       the full grid.
+       the grid.
 
        That a photometry-only fit was *slower* than the same fit with an extra
        data channel was a defect, not a property of the method, #1596, fixed:
