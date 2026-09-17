@@ -1,6 +1,15 @@
 ## [Unreleased]
 
 
+### Changed
+
+- **X-ray absorption nomenclature**: `tbabs_transmission()` renamed to
+  `wabs_transmission()` to accurately reflect the Morrison & McCammon (1983)
+  cross-section convention it implements, not Wilms et al. (2000) tbabs. The
+  function behavior is unchanged; `tbabs_transmission` remains available as a
+  deprecated alias. The soft-band difference between wabs and tbabs (10–30%
+  below ~1 keV) is now documented in the docstring. (#901)
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
