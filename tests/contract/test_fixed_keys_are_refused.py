@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import warnings
 
+import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
 import pytest
@@ -245,3 +246,89 @@ def test_fixed_key_in_params_override_channel_still_works(
     result = fitter.run("map", n_steps=30, verbose=False, key=jr.PRNGKey(3))
     assert result is not None
     assert result.fixed_values["redshift"] == pytest.approx(0.2)
+
+
+def test_fitter_params_override_refuses_a_free_key(model_with_fixed_redshift):
+    """Fitter(params_override=...) is a re-pin channel for FIXED parameters
+    only. Naming a FREE parameter would corrupt inference (silently taking it
+    out of the fit while the returned params still claim it was sampled), so
+    construction refuses it -- the mirror image of the params-dict refusal,
+    checked at a different seam (construction-time key validation against
+    ``self._free_names``, not ``refuse_fixed_overrides``).
+    """
+    from tengri.inference.fitter import Fitter
+
+    model = model_with_fixed_redshift
+    free_name = next(iter(model.spec.free_params))
+
+    with pytest.raises(ValueError, match=free_name):
+        Fitter(
+            model,
+            np.ones(len(model.observation.photometry.filters)),
+            np.ones(len(model.observation.photometry.filters)),
+            params_override={free_name: 0.5},
+        )
+
+
+# ── Batch and fast-nebular surfaces ──────────────────────────────────────
+
+
+def test_predict_photometry_batch_refuses_fixed_keys(
+    model_with_fixed_redshift, free_params_dict, params_with_fixed_override
+):
+    """``predict_photometry_batch`` (vmap over ``predict_photometry``) refuses
+    a Fixed key the same way the scalar surface does -- the key-set check is a
+    static Python-level membership test, safe (and cheap) even though the call
+    it guards runs under ``jax.vmap`` (#2296)."""
+    model = model_with_fixed_redshift
+    n = 4
+    free_batch = {name: jnp.full((n,), val) for name, val in free_params_dict.items()}
+    result = model.predict_photometry_batch(free_batch)
+    n_filters = len(model.observation.photometry.filters)
+    assert result.shape == (n, n_filters)
+
+    fixed_batch = {
+        name: jnp.full((n,), val) for name, val in params_with_fixed_override.items()
+    }
+    with pytest.raises(ParameterError) as exc_info:
+        model.predict_photometry_batch(fixed_batch)
+
+    _assert_is_a_fixed_key_refusal(exc_info.value, "redshift", 0.05)
+
+
+@pytest.fixture
+def fast_nebular_model(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Same recipe as ``model_with_fixed_redshift``, but with the per-Q_H fast
+    line grid enabled (#950), so ``predict_line_fluxes`` takes the FAST
+    (grid-reconstruction) branch instead of the exact ``predict_state`` one.
+    Function-scoped and built fresh (not reusing the module-scoped fixture)
+    because ``enable_fast_nebular`` mutates the model in place.
+    """
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl", "alpha": FREE, "beta": FREE},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.05),
+    )
+    target_wavelengths = np.asarray([6564.61, 4862.68])  # Halpha, Hbeta (vacuum)
+    model.enable_fast_nebular(target_wavelengths, n_grid=8)
+    return model
+
+
+def test_predict_line_fluxes_fast_branch_refuses_fixed_keys(fast_nebular_model):
+    """``predict_line_fluxes``' FAST grid-reconstruction branch (#950) merges
+    Fixed values via ``merge_fixed_params`` exactly like the exact branch
+    (sed_model.py, the ``if grid is not None:`` arm) -- verify the fast branch
+    specifically, not just whichever branch the other parametrized tests
+    happen to exercise."""
+    model = fast_nebular_model
+    free = {name: 0.5 for name in model.spec.free_params}
+
+    result = model.predict_line_fluxes(free)
+    assert result is not None
+
+    with pytest.raises(ParameterError) as exc_info:
+        model.predict_line_fluxes({**free, "redshift": 0.05})
+
+    _assert_is_a_fixed_key_refusal(exc_info.value, "redshift", 0.05)
