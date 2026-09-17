@@ -174,33 +174,6 @@ def data_dirs() -> list[Path]:
     return [d for d in out if not (d in seen or seen.add(d))]
 
 
-def package_data_dirs() -> list[Path]:
-    """Data directories beside the installed package, independent of the cwd.
-
-    Returns
-    -------
-    list of pathlib.Path
-        ``<source-root>/data`` and the bare ``<source-root>``, where the source
-        root is resolved from this module's own location. For a ``src/`` layout
-        checkout that is the repository root; for an installed wheel it is
-        whatever sits above ``site-packages/tengri`` and simply will not
-        contain the files, which is harmless; callers test the file they want.
-
-    Notes
-    -----
-    This is the cwd-independent half of :func:`data_dirs`. It matters when the
-    process runs from an unrelated working directory: the ancestor walk finds
-    nothing, but a source checkout still has its ``data/`` beside the package.
-
-    Anchored on ``__file__`` of this module (``src/tengri/_data_setup.py``), so
-    the two hops to the source root are fixed no matter which component calls
-    it. That is the property the per-module ``parents[N]`` locators lacked.
-    """
-    pkg_root = Path(__file__).resolve().parent  # <src>/tengri
-    source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
-    return [source_root / "data", source_root]
-
-
 def source_tree_root() -> Path | None:
     """The repository root when running from an uninstalled source tree, else None.
 
@@ -236,6 +209,42 @@ def source_tree_root() -> Path | None:
     if (source_root / "pyproject.toml").exists():
         return source_root
     return None
+
+
+def package_data_dirs() -> list[Path]:
+    """Data directories beside the installed package, independent of the cwd.
+
+    Returns
+    -------
+    list of pathlib.Path
+        ``<source-root>/data`` and the bare ``<source-root>``, where the source
+        root is resolved from this module's own location. For a ``src/`` layout
+        checkout that is the repository root; for an installed wheel it is
+        whatever sits above ``site-packages/tengri`` and simply will not
+        contain the files, which is harmless; callers test the file they want.
+
+    Notes
+    -----
+    This is the cwd-independent half of :func:`data_dirs`. It matters when the
+    process runs from an unrelated working directory: the ancestor walk finds
+    nothing, but a source checkout still has its ``data/`` beside the package.
+
+    Anchored via :func:`source_tree_root` (the one sanctioned package anchor),
+    so the path is fixed no matter which component calls it. That is the
+    property the per-module ``parents[N]`` locators lacked.
+    """
+    # Obtain source root via source_tree_root(), which holds the anchor.
+    # For installed wheels, source_tree_root returns None but we still need
+    # to return the computed path (which exists above site-packages).
+    root = source_tree_root()
+    if root is not None:
+        return [root / "data", root]
+    # For installed wheel: return the computed source root even though
+    # pyproject.toml doesn't exist (callers test file existence). The anchor
+    # computation is in source_tree_root; we cannot avoid re-computing here.
+    pkg_root = Path(__file__).resolve().parent  # <src>/tengri
+    source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
+    return [source_root / "data", source_root]
 
 
 def download_dir() -> Path:
