@@ -110,6 +110,26 @@ def _df_wave_lum(df) -> tuple[np.ndarray, np.ndarray]:
     return U.lsun_per_aa_to_erg_per_hz(wave, lum)
 
 
+def z2q(Z: float) -> float:
+    r"""Convert metallicity to ionization parameter via ProSpect's Z2q.
+
+    ProSpect's ``Z2q`` maps absolute metallicity (metal mass fraction) to an
+    ionization parameter through a physical model (Orsi 2014), returning the
+    characteristic ``q`` [cm/s] for which to evaluate emission-line ratios.
+
+    Parameters
+    ----------
+    Z : float
+        Absolute metallicity (metal mass fraction).
+
+    Returns
+    -------
+    float
+        Ionization parameter [cm/s].
+    """
+    return float(_np(_rfn("Z2q")(Z))[0])
+
+
 # ---------------------------------------------------------------------------
 # §1 — single stellar populations (direct speclib slice)
 # ---------------------------------------------------------------------------
@@ -461,7 +481,7 @@ def nebular_lnu(
 # §9 — AGN torus (raw SKIRTOR / Fritz template, no dust reprocessing)
 # ---------------------------------------------------------------------------
 def agn_torus_lnu(
-    *, model: str = "SKIRTOR", lum_erg: float = 1e44
+    *, model: str = "SKIRTOR", lum_erg: float = 1e44, **node: Any
 ) -> tuple[np.ndarray, np.ndarray, float]:
     r"""Return the raw ProSpect AGN template SED :math:`L_\nu` [erg/s/Hz].
 
@@ -478,6 +498,12 @@ def agn_torus_lnu(
         AGN template library.
     lum_erg : float
         AGN bolometric luminosity [erg/s].
+    **node : float
+        Additional parameters passed to SKIRTOR_interp or Fritz_interp.
+        SKIRTOR: ct (opening angle), rm (radial scale), an (inclination),
+        ta (optical depth), p, q.
+        Fritz: ct, rm, an, ta, al (alpha), be (beta).
+        Defaults use ProSpect's default values.
 
     Returns
     -------
@@ -490,7 +516,7 @@ def agn_torus_lnu(
     """
     fn = _rfn(f"{model}_interp")
     template = _data(model)
-    res = fn(lum=lum_erg, **{model: template})
+    res = fn(lum=lum_erg, **{model: template}, **node)
     wave = _np(_listget(res, "wave"))
     # ProSpect's AGN templates carry L_λ in erg/s/Å (cgs), not L⊙/Å like the
     # stellar libraries — so the L⊙ factor must NOT be applied here. Convert with

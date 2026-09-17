@@ -34,6 +34,7 @@ import warnings
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -139,9 +140,11 @@ def _build_one_category(ssp_data, observation, category, block_type, *, all_para
 
 
 #: PR-tier sample: one type per category, chosen as the type each category's
-#: own fixtures already exercise elsewhere. The exhaustive 50-case sweep runs
-#: in the slow tier -- 50 measured `SEDModel.build`s cost ~3 minutes of PR-gate
-#: wall clock, and the contract is per-category, not per-type.
+#: own fixtures already exercise elsewhere. The exhaustive sweep over every
+#: registered (category, type) pair -- 50 cases -- runs in the slow tier: one
+#: compiled gradient per case, ~20 s for the sweep on an M-series laptop and
+#: ~5 min on a GitHub runner. The contract is per-category, not per-type, so
+#: the PR tier keeps one type per category.
 _SMOKE_CASES = tuple(
     (category, block_type)
     for category, block_type in _ALL_CASES
@@ -205,20 +208,27 @@ def _assert_owned_and_live_are_freed(ssp, obs, category, block_type):
     # 0 would silently hide a real declared-reads gap -- so "live at ANY
     # seed" is the correct, not merely a cautious, criterion.
     _SEEDS = (0, 1, 2, 3, 4)
+
+    names = sorted(n for n in not_freed if n in dict(model.spec.sample(jax.random.PRNGKey(0))))
+    if not names:
+        return  # all names are absent from this build (never registered)
+
+    def obj_vec(v, p):
+        pd = {**p, **{n: v[i] for i, n in enumerate(names)}}
+        return jnp.log(jnp.sum(model.predict_photometry(pd)) + 1e-300)
+
+    grad_vec = jax.jit(jax.grad(obj_vec))
+
     live_but_excluded = []
-    for name in sorted(not_freed):
-        live_at_any_seed = False
-        for seed in _SEEDS:
-            p = dict(model.spec.sample(jax.random.PRNGKey(seed)))
-            if name not in p:
-                break  # not a parameter of this build at all (never registered)
-            v0 = jnp.asarray(p[name])
-            g = float(jax.grad(lambda v, name=name, p=p: obj({**p, name: v}))(v0))
-            if g != 0.0:
-                live_at_any_seed = True
-                break
-        if live_at_any_seed:
-            live_but_excluded.append(name)
+    live = np.zeros(len(names), dtype=bool)
+    for seed in _SEEDS:
+        p = dict(model.spec.sample(jax.random.PRNGKey(seed)))
+        v0 = jnp.asarray([p[n] for n in names])
+        g = grad_vec(v0, p)
+        live |= g != 0.0
+        if np.all(live):
+            break
+    live_but_excluded = [n for n, l in zip(names, live) if l]
     assert not live_but_excluded, (
         f"{category}/{block_type}: {live_but_excluded} are owned by agn.{category} "
         f"(per _AGN_PARTITION) and measurably move predict_photometry (nonzero at "

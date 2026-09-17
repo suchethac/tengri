@@ -80,6 +80,7 @@ class SFHBeyondSSPGridWarning(UserWarning):
     """
 
 
+from tengri.components.stellar._params import ALPHA_FE_PARAMS
 from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
     massmap_box_metallicity,
@@ -103,6 +104,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_mass_remaining,
 )
 from tengri.parameters.translate import LOG10_ZSUN
+from tengri.protocols.component import declared_default
 from tengri.utils.scale import _not_computable, log10_magnitude, pow10, representable_denominator
 
 # Default time bins for ``metallicity_model="bins"`` /
@@ -121,6 +123,9 @@ VALID_AGE_KERNELS = ("cic", "dsps")
 #: optical CSP +1.2 % vs FSPS / bagpipes / a dense reference (#964). Flipping
 #: this one name changes the default for every non-field model.
 DEFAULT_AGE_KERNEL = "cic"
+
+#: Declared default alpha-element enhancement [alpha/Fe]
+_ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
 
 
 def _resolve_age_kernel(config) -> str:
@@ -2391,7 +2396,7 @@ class StellarSEDComponent:
         # ``ssp_flux`` that DSPS sees differs.
         _alpha_collapse_active = has_alpha_grid(ssp)
         if _alpha_collapse_active:
-            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", 0.0))
+            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
             ssp_flux_for_csp = interpolate_alpha_only(
                 ssp.ssp_flux, ssp.ssp_alpha_fe, _alpha_fe_value
             )
@@ -2405,7 +2410,7 @@ class StellarSEDComponent:
             # For 4D α-grid SSPs the α axis has already been collapsed
             # above, so we use ``met_logzsol`` directly without the
             # effective-Z approximation.
-            alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
+            alpha_fe = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
             if _alpha_collapse_active:
                 log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
             else:
@@ -3447,7 +3452,7 @@ class StellarSEDComponent:
                 params, self.config, ssp.ssp_lg_age_gyr, _tab_lbt_yr, _tab_order
             )
         else:
-            alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
+            alpha_fe = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
             log_z_abs_scalar = (
                 effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
             )

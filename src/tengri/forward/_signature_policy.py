@@ -189,13 +189,10 @@ SIGNATURE_POLICY: KeyPolicy = {
     ),
     # ── Radio / X-ray / shock ──────────────────────────────────────────
     "_uses_radio": content("whether radio emission is attached"),
-    # No ``_radio_include_freefree`` row, deliberately: a 2026-09 citation audit
-    # deleted that attribute. It was read from a ``spec.radio_include_freefree``
-    # the public grammar never set, fed only the old hand-written signature
-    # tuple, and never reached ``RadioSEDComponentConfig`` -- the object
-    # ``radio_freefree`` actually gates on, which ``component_factory`` never
-    # accepted it for. 100% dead, so its removal changes no model's compiled
-    # HLO and is intentionally not replaced with anything here.
+    "_radio_include_freefree": content(
+        "thermal free-free on/off changes the emitted radio SED; set by the grammar's "
+        "radio.sf.freefree key and routed to RadioSEDComponentConfig.include_freefree"
+    ),
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),

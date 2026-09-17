@@ -113,6 +113,12 @@ X-ray and radio are skipped — Prospector has no counterpart. The
 section numbering keeps the gap (§10 X-ray, §11 radio) so it lines up
 with the CIGALE master sequence; see `reproduction/cigale/` for those.
 
+Each of the sections above also carries a sweep across the parameter
+combinations FSPS exposes: §2 cont'd (FSPS `sfh` = 1, 4, constant; τ ×
+age), §3b (`logzsol`), §4b (every FSPS `dust_type`, plus slope and
+R_V), §5b (`A_V` and birth-cloud dust), §6b (the DL07 grid), §8b
+(`gas_logu` × `gas_logz`), §9b (`agn_tau`), and §12b (redshift).
+
 ## What the comparison found
 
 The per-section scalars printed by the notebook (residuals, ratios,

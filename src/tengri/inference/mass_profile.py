@@ -60,10 +60,10 @@ casing. :func:`build_profiled_loss_fn` then supplies the marginal
 log-likelihood above in place of the ordinary chi-squared term, and
 :func:`finalize_profile_mass` reinserts the mass into the ``Posterior`` once
 inference is done: an exact conditional draw ``p(log10(M) | theta, d)`` per
-posterior sample (inverse-CDF on the same quadrature grid, mapped to the
-sampler's standardized coordinate via the prior's own
-``standardize``/``unstandardize`` pushforward) for sample-based backends, or
-the conditional mode :math:`\\ell^* = \\log_{10} M^*` for ``method="map"``.
+posterior sample (inverse-CDF on the same quadrature grid) for sample-based
+backends, or the conditional mode :math:`\\ell^* = \\log_{10} M^*` for
+``method="map"``. The returned mass is in physical coordinates (log10(M)),
+merged directly into the posterior samples alongside the other free parameters.
 
 **Guards.** The exact quadratic in :math:`M` (and hence this whole module)
 requires: ``data_type`` one of ``"photometry"``, ``"spectroscopy"``, or
@@ -100,6 +100,7 @@ import logging
 import math
 import re
 import warnings
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -107,6 +108,7 @@ import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
 from tengri.parameters.priors import Fixed
+from tengri.utils.scale import pow10, whiten
 
 if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
@@ -127,6 +129,18 @@ logger = logging.getLogger(__name__)
 #: Trapezoid quadrature nodes spanning the marginalization window (measured;
 #: see the module docstring's references to ``docs/dev/inference_methods.md``).
 _QUAD_NODES = 48
+#: Quadrature nodes for reinserting the marginalized mass per-sample
+#: (issue #2350). The marginal integral is accurate at 48 nodes, but
+#: the pointwise CDF built by cumsum(softmax(...)) and inverted by
+#: jnp.interp does not converge as fast as the integral. A trapezoid
+#: integral of a smooth peaked function converges faster than the
+#: quantile function on the same grid. Measured by conditional PIT
+#: (uniformity of F(ell_i|theta_i,d) at each sample): 48 nodes fails
+#: all seeds; 192 nodes fails seeds 2,4,5; 384 nodes passes all 12
+#: (6 seeds x 2 fixtures). The reinsertion path runs once per posterior
+#: draw, off the hot loop, so extra nodes are nearly free compared to
+#: the marginal's integral in every log-posterior evaluation.
+_REINSERT_QUAD_NODES = 384
 _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: Mathematically, any log10(mass) placeholder works for the value the mass
 #: parameter is pinned to in the working spec once it is profiled out: the
@@ -145,12 +159,15 @@ _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: instead pins the mass at the prior's own bounds midpoint, so
 #: ``predict_photometry`` always runs at a realistic mass scale regardless of
 #: dtype.
-#: Floor for the two-mass linearity probe's tolerance (physical flux ratio one
-#: dex apart), tuned for float64 roundoff. :func:`_linearity_max_deviation`
-#: takes ``max(_LINEARITY_TOL, 1e4 * eps(dtype))`` so the same exactly-linear
-#: model is not refused under float32 roundoff alone -- see that function's
-#: docstring.
-_LINEARITY_TOL = 1e-8
+#: Structural tolerance for the two-mass linearity probe (physical flux ratio
+#: one dex apart): not a roundoff-level guarantee but a check for a
+#: mass-independent additive component. :func:`_linearity_max_deviation` takes
+#: ``max(_LINEARITY_TOL, 1e4 * eps(dtype))`` so the same exactly-linear model
+#: is not refused under float32 roundoff alone. Set from measured separation
+#: between worst benign case (coarse ``dsps`` kernel, 6.097e-04 across prior)
+#: and genuine structural failure (mass-independent additive component, ~8.85):
+#: 1e-2 sits 16.4x above worst benign and 885x below genuine failure.
+_LINEARITY_TOL = 1e-2
 
 #: ``fitter.data_type`` values the exact chi^2(M) quadratic covers: photometry
 #: alone, spectroscopy alone, or their concatenation (photometry-then-spectrum,
@@ -177,19 +194,34 @@ def _mass_prior_bounds(dist: Distribution) -> tuple[float, float]:
     return float(lo), float(hi)
 
 
-def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, float]:
-    """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` at a representative theta.
+def _linearity_max_deviation(
+    fitter: Fitter, mass_name: str, mass_prior_bounds: tuple[float, float]
+) -> tuple[float, float]:
+    """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` worst over 9 thetas.
 
-    Probes the model's own physics, not the declared prior's support: two
-    mass values one dex apart, held fixed, with every other free parameter at
-    its prior median (``unstandardize(0.0)``, matching
-    ``forward.forward_model._central_params``) and every fixed parameter at
-    its declared value. The prediction probed is the fitter's own data-vector
-    assembly for its ``data_type`` (:func:`_predict_full_vector`), photometry,
-    spectroscopy, or their concatenation, so a spectroscopy channel with a
-    mass-independent additive term is caught exactly as a photometric one is.
-    Catches a mass-independent additive component (e.g. an AGN continuum)
-    that the exact chi^2(M) quadratic cannot marginalize.
+    Evaluates linearity at nine deterministic parameter sets, drawn with fixed
+    PRNG seed for reproducibility:
+    - One at the prior median (``unstandardize(0.0)`` for every free parameter);
+    - Eight additional draws from the prior's own distribution.
+
+    At each theta, computes the maximum fractional flux-ratio deviation from
+    the target ratio of 10.0 (one dex mass increase), and returns the worst
+    across all nine evaluations. Stochastic field latents (if present) are
+    kept at zero for the prior-median theta and drawn from their declared
+    prior N(0, I) for the eight draws, so the returned worst-case is
+    representative: the prior median is the smoothest SFH in the prior,
+    and a coarse age integrand costs least exactly there, which is a
+    structural bias in the probe and the reason one theta is insufficient.
+
+    The prediction probed is the fitter's own data-vector assembly for its
+    ``data_type`` (:func:`_predict_full_vector`), photometry, spectroscopy,
+    or their concatenation, so a spectroscopy channel with a mass-independent
+    additive term is caught exactly as a photometric one is.
+
+    The probe masses are derived from the prior bounds: the midpoint of the
+    prior's log10-space support, plus one dex above it. Catches a
+    mass-independent additive component (e.g. an AGN continuum) that the exact
+    chi^2(M) quadratic cannot marginalize.
 
     The tolerance scales with the *actual* dtype the prediction returned
     (``jax.enable_x64`` may be off process-wide, silently downcasting every
@@ -199,43 +231,167 @@ def _linearity_max_deviation(fitter: Fitter, mass_name: str) -> tuple[float, flo
     not necessarily what a caller asked for): a fixed ``_LINEARITY_TOL``
     tuned for float64 roundoff (~1e-13 measured) is unreachable under float32
     roundoff on the exact same, exactly-linear model (~4.3e-05 measured on a
-    4-band stellar+dust seam, tests/regression/precision), which used to make
-    "auto" engage under float64 and silently refuse under float32 for
-    identical configurations -- a defect this module exists to be free of,
-    caught by ``test_float32_fitting_path_seams.py`` reporting the resulting
-    posteriors as different *dimensionality* (mass profiled out on one arm,
-    not the other) rather than merely different values. The scaled floor
-    stays far below a genuine non-linearity (a mass-independent component
-    like an unmasked AGN continuum), which perturbs the ratio at the
-    O(1) scale, not the O(1e3 * eps) one.
+    4-band stellar+dust seam, ``tests/regression/precision/
+    test_float32_fitting_path_seams.py``), which used to make "auto" engage
+    under float64 and silently refuse under float32 for identical
+    configurations -- a defect caught by reporting posteriors of different
+    *dimensionality* (mass profiled out on one arm, not the other) rather than
+    merely different values. The scaled floor ``1e4 * eps`` stays far below a
+    genuine non-linearity (a mass-independent component like an unmasked AGN
+    continuum), which perturbs the ratio at the O(1) scale, not the O(1e3 *
+    eps) one. This is a structural check, not a roundoff-level guarantee.
+
+    No caching: the probe costs ~15 ms per forward call, so 18 calls is ~0.25 s
+    per Fitter construction, against fits that take minutes. Caching would be
+    keyed on fixed values and params_override (both of which can differ between
+    fitters on one model), risking silent correctness bugs for a 0.2% saving.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter under construction.
+    mass_name : str
+        The name of the mass parameter.
+    mass_prior_bounds : tuple[float, float]
+        The (lo, hi) log10-mass bounds from the prior's support.
+
+    Returns
+    -------
+    max_dev : float
+        The maximum deviation observed across all nine thetas.
+    tol : float
+        The tolerance for the deviation.
+
+    Raises
+    ------
+    ValueError
+        When no theta yields a valid band (all predictions zero, fully
+        absorbed, or underflowed in float32), meaning the model cannot be
+        assessed for linearity at that point. If fewer than nine thetas
+        succeed, logs a warning with the count and the first exception's repr.
+        Raises if all nine fail with the reason from the first one that did.
     """
     spec = fitter.spec
-    phys: dict[str, Any] = {}
-    for name in spec.free_params:
-        if name != mass_name:
-            phys[name] = spec.get_distribution(name).unstandardize(0.0)
-    for name, val in spec.get_fixed_values().items():
-        if name != mass_name:
-            phys[name] = jnp.asarray(val)
-    if getattr(spec, "stochastic", False):
-        phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
-
     use_components = bool(getattr(fitter, "use_components", False))
-    pred_a = _predict_full_vector(
-        fitter.model,
-        fitter.data_type,
-        {**phys, mass_name: jnp.asarray(9.0)},
-        use_components=use_components,
+    ell_lo, ell_hi = mass_prior_bounds
+    mass_midpoint = 0.5 * (ell_lo + ell_hi)
+    ell_a = mass_midpoint
+    ell_b = mass_midpoint + 1.0
+
+    # Fixed PRNG seed for reproducible draws across Fitter constructions.
+    probe_key = jax.random.PRNGKey(2359)
+
+    # Probe the vector the profiled quadratic will actually score, line block
+    # included. Only the prediction side is read here -- the two masses are
+    # compared against each other, never against data -- so placeholder values
+    # suffice, but the channel set must match or the guard would certify a
+    # different vector than the one it is admitting.
+    #
+    # Measured on a wNE grid with 8 bands and three measured lines: worst of the
+    # nine thetas is 1.705e-13 with the block and 1.705e-13 without, the maximum
+    # set by a photometry band either way. Line entries are the per-theta worst
+    # in four of nine, at 8e-14 to 1.7e-13 -- the same roundoff scale as the
+    # bands. So including them changes no decision on that configuration; it is
+    # done because the probe must agree with the objective by construction
+    # rather than by luck.
+    _probe_schema = _line_flux_schema(fitter)
+    _probe_n_lines = 0 if _probe_schema is None else int(jnp.asarray(_probe_schema[0]).shape[0])
+    probe_block = _block_for(
+        _probe_schema,
+        jnp.zeros(_probe_n_lines) if _probe_schema is not None else None,
+        jnp.ones(_probe_n_lines) if _probe_schema is not None else None,
     )
-    pred_b = _predict_full_vector(
-        fitter.model,
-        fitter.data_type,
-        {**phys, mass_name: jnp.asarray(10.0)},
-        use_components=use_components,
-    )
-    max_dev = float(jnp.max(jnp.abs(pred_b / pred_a - 10.0)))
-    tol = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
-    return max_dev, tol
+
+    max_dev_overall = 0.0
+    tol_ref = None
+    n_valid = 0
+    first_error = None
+
+    # Evaluate at prior median (xi = 0) plus 8 draws from the prior.
+    for i in range(9):
+        phys: dict[str, Any] = {}
+
+        if i == 0:
+            # Prior median: every free parameter at unstandardize(0.0),
+            # field latents at zero (the documented representative point).
+            for name in spec.free_params:
+                if name != mass_name:
+                    phys[name] = spec.get_distribution(name).unstandardize(0.0)
+            if getattr(spec, "stochastic", False):
+                phys["sfh_field_xi"] = jnp.zeros(spec.n_grid)
+        else:
+            # Draw from the prior using a folded seed.
+            key = jax.random.fold_in(probe_key, i - 1)
+            sample = spec.sample(key)
+            for name in spec.free_params:
+                if name != mass_name:
+                    phys[name] = sample[name]
+            # spec.sample() already includes sfh_field_xi for stochastic specs.
+
+        # Fixed parameters always included.
+        for name, val in spec.get_fixed_values().items():
+            if name != mass_name:
+                phys[name] = jnp.asarray(val)
+
+        # Evaluate the two masses and compute the deviation at this theta.
+        try:
+            pred_a = _predict_full_vector(
+                fitter.model,
+                fitter.data_type,
+                {**phys, mass_name: jnp.asarray(ell_a)},
+                use_components=use_components,
+                line_flux_block=probe_block,
+            )
+            pred_b = _predict_full_vector(
+                fitter.model,
+                fitter.data_type,
+                {**phys, mass_name: jnp.asarray(ell_b)},
+                use_components=use_components,
+                line_flux_block=probe_block,
+            )
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+            continue
+
+        # Restrict comparison to valid bands (finite and strictly positive).
+        valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
+        if not bool(jnp.any(valid)):
+            if first_error is None:
+                first_error = ValueError(
+                    f"linearity probe at theta {i}: no valid bands (all predictions zero, "
+                    f"fully absorbed, or underflowed at mass {ell_a})"
+                )
+            continue
+
+        # Compute the deviation at this theta.
+        ratio = jnp.where(valid, pred_b / pred_a, 10.0)
+        dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+        max_dev_overall = max(max_dev_overall, dev)
+        n_valid += 1
+
+        # Cache the tolerance from the first valid evaluation.
+        if tol_ref is None:
+            tol_ref = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
+
+    # If fewer than nine thetas succeeded, log a warning.
+    if n_valid < 9 and first_error is not None:
+        logger.warning(
+            "linearity probe: %d of 9 thetas produced valid bands; first error: %r",
+            n_valid,
+            first_error,
+        )
+
+    # If no theta produced a valid result, raise with the first error seen.
+    if n_valid == 0:
+        if first_error is not None:
+            raise first_error
+        raise ValueError(
+            "linearity probe: no valid parameter set found (all nine evaluations failed)"
+        )
+
+    tol = tol_ref
+    return max_dev_overall, tol
 
 
 def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | None, dict]:
@@ -247,8 +403,8 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         ``None`` if every guard passes; otherwise a human-readable reason
         naming the first one that failed.
     context : dict
-        ``{"mass_name", "mass_prior", "bounds"}`` when ``reason is None``,
-        else ``{}``.
+        ``{"mass_name", "mass_prior", "bounds", "max_dev", "tol"}`` when
+        ``reason is None``, else ``{}``.
     """
     from tengri.inference.fitter import _has_line_adjacent_channel
     from tengri.observation.noise import has_noise_model, uses_student_t
@@ -256,14 +412,6 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     spec = fitter.spec
     if not hasattr(spec, "_distributions"):
         return f"parameter spec {type(spec).__name__} is not a plain Parameters (unsupported)", {}
-
-    # The marginal's curvature in flux units (A ~ 1e-13 at fluxes ~1e-30) and the
-    # per-band cotangent scales its reverse-mode gradient needs are outside
-    # float32's range: measured on 2026-09-11 (bench/reports/2026-09-11_profile_mass_20s.md,
-    # Finding 8), the float64 gradient is finite where the float32 one is NaN on
-    # the same fixture. Profiling is a float64 feature until that seam is closed.
-    if not jax.config.jax_enable_x64:
-        return "float32 mode (jax_enable_x64 is off); profiling needs float64", {}
 
     candidates = [n for n in spec.free_params if n.endswith("log_total_mass")]
     if len(candidates) != 1:
@@ -293,8 +441,48 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
             f"data_type={fitter.data_type!r} (profile_mass requires one of "
             f"{sorted(_SUPPORTED_DATA_TYPES)})"
         ), {}
-    if fitter._fits_lines(fitter.model):
-        return "an emission-line channel is configured (marginalized, fitted, or measured)", {}
+    # Guard #8, as three cases rather than one. ``Fitter._fits_lines`` is the OR
+    # of three unrelated situations and only the third is a plain data channel
+    # with a mass-proportional prediction, so refusing them together refused a
+    # configuration that is admissible (#2360). A refusal now names which case
+    # fired, because "an emission-line channel is configured" gave a user no way
+    # to tell an unsupportable likelihood from a supportable one.
+    if getattr(fitter, "_eline_marginalize", False):
+        return (
+            "an emission-line channel with marginalized amplitudes is configured "
+            "(eline_marginalize=True): those amplitudes are already analytically "
+            "marginalized, and two interacting marginals need their own analysis (#2354)"
+        ), {}
+    if getattr(fitter, "_eline_fitted", False):
+        return (
+            "an emission-line channel with fitted amplitudes is configured "
+            "(eline_mode='fitted'), so those free amplitudes absorb the mass scale in the "
+            "line channel"
+        ), {}
+    if fitter._fits_line_fluxes(fitter.model):
+        # A measured line-flux channel IS linear in the mass amplitude: the grid
+        # tabulates luminosity per ionizing photon and multiplies by Q_H
+        # afterwards, so L_line = Q_H * l(met, logU, logZ_gas) with Q_H linear in
+        # the stellar amplitude and l independent of it. What has to be checked
+        # is not the physics but the *likelihood* that owns the block, since the
+        # profiled quadratic can only absorb a plain Gaussian chi-square.
+        _lf = fitter._resolved_line_fluxes()
+        _limit_mask = getattr(_lf, "limit_mask", None) if _lf is not None else None
+        if _limit_mask is not None and bool(jnp.any(jnp.asarray(_limit_mask) != 0)):
+            return (
+                "the measured emission-line fluxes include censored upper/lower limits, "
+                "which enter as ln Phi((F_lim - F_model)/sigma) rather than a Gaussian "
+                "chi-square and so cannot join the profiled quadratic. Note the "
+                "censored-data guard above cannot catch this: it reads fitter.data_mask, "
+                "which covers the photometry/spectroscopy vector only, never "
+                "LineFluxData's own mask"
+            ), {}
+        if getattr(fitter, "_likelihood_is_user_supplied", False):
+            return (
+                "a user-supplied likelihood owns the data, so the profiled quadratic cannot "
+                "verify that the measured emission-line block is scored as a plain Gaussian "
+                "chi-square over (line_flux_obs, line_flux_err)"
+            ), {}
     if _has_line_adjacent_channel(fitter.model):
         return "a line-ratio or spectral-index channel is configured", {}
     if fitter._calibration_marginalize:
@@ -306,15 +494,32 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
     if fitter.data_mask is not None and bool(jnp.any(jnp.asarray(fitter.data_mask) != 0)):
         return "censored data (upper/lower limits) is present", {}
 
-    max_dev, tol = _linearity_max_deviation(fitter, mass_name)
+    try:
+        max_dev, tol = _linearity_max_deviation(fitter, mass_name, bounds)
+    except ValueError as exc:
+        return str(exc), {}
+
     if not (max_dev < tol):
         return (
-            f"photometry is not exactly linear in '{mass_name}' "
-            f"(max|flux_ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}); "
-            "likely a mass-independent component (e.g. an AGN continuum)"
+            f"the {fitter.data_type} prediction is not linear in '{mass_name}' "
+            f"(worst-of-9-thetas: max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}). "
+            "The worst is the prior median plus eight prior draws. A deviation of order 1 "
+            "indicates a mass-independent additive component such as an AGN continuum. At "
+            "magnitudes within a few orders of the tolerance, conditioning in the mass "
+            "direction is often the cause, typically from the coarse age kernel (set "
+            'age_kernel="dsps", which integrates on the SSP lookback grid rather than a '
+            'refined one; the default "cic" is 16x-refined). With that kernel, mass-linearity '
+            "costs up to roughly 1e-3 at the sharpest SFH shapes, so a refusal at this "
+            "magnitude alone does not imply a mass-independent additive component."
         ), {}
 
-    return None, {"mass_name": mass_name, "mass_prior": mass_prior, "bounds": bounds}
+    return None, {
+        "mass_name": mass_name,
+        "mass_prior": mass_prior,
+        "bounds": bounds,
+        "max_dev": max_dev,
+        "tol": tol,
+    }
 
 
 def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_override) -> None:
@@ -378,7 +583,14 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
             reason, ctx = f"guard check raised {exc!r}", {}
         engage = reason is None
         if engage:
-            resolved_reason = "auto-enabled: every guard passed"
+            max_dev = ctx.get("max_dev")
+            tol = ctx.get("tol")
+            if max_dev is not None and tol is not None:
+                resolved_reason = (
+                    f"auto-enabled: every guard passed (linearity {max_dev:.3e} < {tol:.0e})"
+                )
+            else:
+                resolved_reason = "auto-enabled: every guard passed"
         else:
             resolved_reason = f"auto-disabled: {reason}"
             logger.info("profile_mass='auto': disabled (%s).", reason)
@@ -441,6 +653,17 @@ PROFILE_MASS_BACKENDS = frozenset(
     }
 )
 
+#: Backends that take a Hessian of the objective function and therefore trigger
+#: the known float32 NaN failure in the SED model's photometry Hessian
+#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). The Hessian is computed
+#: via ``jax.hessian`` (laplace backend) or via preconditioning's ``negative_hessian_metric``
+#: (optional metric whitening for Hamiltonian samplers). Note that preconditioning is
+#: **opt-in** (``precondition=`` must be truthy), so float32 refusal is scoped to the
+#: backends listed here. The float32 NaN is **not** specific to ``profile_mass`` — it
+#: reproduces on the plain objective with ``profile_mass=False`` — so float32 refusal
+#: names which objective this is, not which fitting path triggered it.
+HESSIAN_BACKEND_SET = frozenset({"laplace"})
+
 
 def disable_profile_mass(fitter: Fitter, reason: str) -> None:
     """Undo the working-spec rewrite so the fitter samples the mass again.
@@ -471,7 +694,31 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
     is the constructor's ``profile_mass`` argument: an explicit ``True`` on an
     unsupported backend is an error, ``"auto"`` steps aside with a logged
     reason, ``False`` was never engaged.
+
+    Also enforces float32 refusal on backends that take a Hessian of the
+    objective, where the SED model's photometry Hessian evaluates to all-NaN
+    at the converged MAP in float32 due to a JAX forward-over-reverse seam
+    in the model's differentiable code (bench/reports/2026-09-11_profile_mass_20s.md,
+    Finding 8). The failure is not specific to profiling — it reproduces with
+    ``profile_mass=False`` — so this guard names which objective (not which
+    fitting path) blocks float32.
     """
+    # Check float32 refusal for Hessian-taking backends
+    if method in HESSIAN_BACKEND_SET:
+        dtype = jnp.result_type(float)
+        if dtype == jnp.float32:
+            reason = (
+                "float32 mode; the SED model's photometry Hessian is all-NaN in float32 "
+                "at the converged MAP (a forward-over-reverse seam in the model), "
+                "not specific to profiling (reproduces with profile_mass=False). "
+                "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
+            )
+            if getattr(fitter, "_profile_mass", False):
+                if requested is True:
+                    raise ValueError(f"profile_mass=True but {reason}")
+                disable_profile_mass(fitter, f"auto-disabled: {reason}")
+            raise ValueError(f"method={method!r}: {reason}")
+
     if not getattr(fitter, "_profile_mass", False) or method in PROFILE_MASS_BACKENDS:
         return
     reason = (
@@ -521,6 +768,68 @@ def suppress_placeholder_dead_fit_warning(fitter: Fitter):
 # ── The exact chi^2(M) quadratic and its marginal integral ──────────────────
 
 
+@dataclass(frozen=True)
+class _LineFluxBlock:
+    """The measured-line-flux channel the profiled quadratic scores.
+
+    Carries both halves of one Gaussian block: the observed values and errors
+    that enter the data vector, and what ``_build_prediction`` needs to produce
+    the matching model values. Held together in one object so the two cannot be
+    resolved from different sources -- the failure mode being a chi-square that
+    pairs a model line with the wrong observed line and raises nothing.
+    """
+
+    obs: jnp.ndarray
+    err: jnp.ndarray
+    waves: jnp.ndarray
+    measured_line_defs: object | None
+
+
+def _line_flux_schema(fitter: Fitter):
+    """``(waves, measured_line_defs)`` for this fit's measured line channel, or ``None``.
+
+    Model-level only: *which* lines the observation declares, never their
+    measured values. That split is load-bearing rather than tidy.
+    :func:`_reinsert_mass_fn` caches its compiled program on the **model**,
+    keyed by ``_engine_cache_key()`` alone, and reuses it "across fits on the
+    same model, whatever the galaxy" -- which is why ``data``/``noise``/
+    ``presence`` reach the inner function as arguments instead of through the
+    closure. A :class:`_LineFluxBlock` carries both kinds of field at once, so
+    closing over a whole block there would bake one galaxy's line fluxes into a
+    program reused for every other galaxy: wrong results, and no shape error to
+    reveal it. The schema is safe to close over; the values are not.
+
+    Returns ``None`` when no measured line-flux channel is configured, which is
+    also what the guards enforce for every other line channel.
+    """
+    from tengri.inference.loss_functions import _resolve_measured_line_defs
+
+    if not fitter._fits_line_fluxes(fitter.model):
+        return None
+    lf = fitter._resolved_line_fluxes()
+    if lf is None:
+        return None
+    return (
+        jnp.asarray(lf.wavelengths),
+        _resolve_measured_line_defs(fitter.model, has_line_fluxes=True),
+    )
+
+
+def _block_for(schema, line_obs, line_err) -> _LineFluxBlock | None:
+    """Pair a model-level line schema with one galaxy's measured values.
+
+    ``None`` whenever either half is absent, so a fit with no line channel and a
+    fit whose values were not threaded both take the photometry-only path rather
+    than half-forming a block.
+    """
+    if schema is None or line_obs is None or line_err is None:
+        return None
+    waves, measured_line_defs = schema
+    return _LineFluxBlock(
+        obs=line_obs, err=line_err, waves=waves, measured_line_defs=measured_line_defs
+    )
+
+
 def _predict_full_vector(
     model,
     data_type: str,
@@ -529,6 +838,7 @@ def _predict_full_vector(
     use_components: bool = False,
     jit_inputs: dict | None = None,
     threaded_impl=None,
+    line_flux_block: _LineFluxBlock | None = None,
 ) -> jnp.ndarray:
     """The model's prediction for the fitter's FULL data vector, phot/spec/joint.
 
@@ -540,28 +850,36 @@ def _predict_full_vector(
     ``tests/regression/bug/test_bug_1366_joint_data_record.py`` pins). Reusing
     it rather than re-deriving the dispatch means the profiled statistics see
     exactly the vector (data mask, ``SpectrumPrecomp`` path, JIT-threaded SSP
-    grid included) the unprofiled likelihood does. Every emission-line /
-    line-ratio / spectral-index channel is excluded by construction: this
-    module's own guards (:func:`_check_guards`) refuse any fit carrying one,
-    so ``_build_prediction`` is always called with every feature-channel flag
-    off.
+    grid included) the unprofiled likelihood does. The emission-line-flux
+    channel is included when a ``line_flux_block`` is supplied; all other
+    emission-line / line-ratio / spectral-index channels are excluded by
+    construction since this module's own guards (:func:`_check_guards`) refuse
+    any fit carrying one.
     """
     from tengri.inference.loss_functions import _build_prediction
 
-    _, predicted, _, _ = _build_prediction(
+    has_line_fluxes = line_flux_block is not None
+    data_args = {} if line_flux_block is None else {"line_flux_waves": line_flux_block.waves}
+    measured_line_defs = None if line_flux_block is None else line_flux_block.measured_line_defs
+
+    prediction, predicted, _, _ = _build_prediction(
         model,
         phys,
         data_type,
-        has_line_fluxes=False,
+        has_line_fluxes=has_line_fluxes,
         has_indices=False,
         index_defs=None,
-        data_args={},
+        data_args=data_args,
         use_components=use_components,
         has_line_ratios=False,
-        measured_line_defs=None,
+        measured_line_defs=measured_line_defs,
         jit_inputs=jit_inputs,
         threaded_impl=threaded_impl,
     )
+
+    if line_flux_block is not None:
+        predicted = jnp.concatenate([predicted, jnp.ravel(prediction["line_fluxes"])])
+
     return predicted
 
 
@@ -577,8 +895,9 @@ def _profile_stats(
     use_components: bool = False,
     jit_inputs: dict | None = None,
     threaded_impl=None,
+    line_flux_block: _LineFluxBlock | None = None,
 ):
-    """``(A, M*, chi2_min)`` of ``chi2(M) = chi2_min + A * (M - M*)**2``.
+    """``(A_ref, a_star, chi2_min, ell_ref)`` of the dimensionless quadratic.
 
     Exact whenever the ``data_type`` data vector (:func:`_predict_full_vector`
     -- photometry, spectroscopy, or their photometry-then-spectrum
@@ -588,6 +907,33 @@ def _profile_stats(
     10**phys[mass_name]`` divides out whatever mass the prediction was made
     at, so this is safe to call with the placeholder-fixed value used during
     inference or a real posterior-sample mass used post hoc.
+
+    This function establishes BOTH halves of the photometry-then-lines
+    concatenation when a ``line_flux_block`` is supplied, deliberately in one
+    place. A mismatched order would produce a wrong chi-square with no shape
+    error to reveal it, so the two halves must not be resolved from different
+    sources.
+
+    Returns
+    -------
+    A_ref : float or array
+        Dimensionless quadratic coefficient (the second derivative of the
+        log-likelihood in the reference frame).
+    a_star : float or array
+        Dimensionless best-fit mass amplitude ``B_ref / A_ref``, unitless
+        and order-1 in magnitude. Related to the physical mass as
+        ``M* = a_star * 10**ell_ref`` (not formed to avoid underflow).
+    chi2_min : float or array
+        Minimum chi-squared in the residual form (no catastrophic
+        cancellation). Satisfies
+        ``chi2(a) = chi2_min + A_ref * (a - a_star)^2`` for dimensionless
+        amplitude ``a = M / 10**ell_ref``.
+    ell_ref : float or array
+        The reference log10(mass) at which the prediction was evaluated.
+        A Python float constant on every live path (prior-derived, never
+        data-derived). Bridge to physical coordinates: ``sigma_ell =
+        1 / (sqrt(A_ref) * a_star * ln(10))``, and neither ``M*`` nor
+        ``sigma_ell`` is formed here.
     """
     pred = _predict_full_vector(
         model,
@@ -596,14 +942,36 @@ def _profile_stats(
         use_components=use_components,
         jit_inputs=jit_inputs,
         threaded_impl=threaded_impl,
+        line_flux_block=line_flux_block,
     )
-    placeholder_mass = 10.0 ** phys[mass_name]
+    ell_ref = jnp.asarray(phys[mass_name])
+
+    # Concatenate the line-flux block if supplied, matching the data side
+    # to the prediction side. Both must be resolved here and in matching order.
+    if line_flux_block is not None:
+        if jnp.ndim(data) != 1:
+            raise ValueError(
+                f"a line-flux block requires a 1-D data vector, got ndim={jnp.ndim(data)}; "
+                "the batched per-galaxy path does not profile the mass (catalog_fitter "
+                "pins profile_mass=False for vmapped engines)"
+            )
+        data = jnp.concatenate([jnp.ravel(data), jnp.ravel(line_flux_block.obs)])
+        noise = jnp.concatenate([jnp.ravel(noise), jnp.ravel(line_flux_block.err)])
+        if presence is not None:
+            # LineFluxData has no per-line presence concept: every configured
+            # line is scored. Extend the presence mask with ones so all lines
+            # are included.
+            presence = jnp.concatenate(
+                [jnp.ravel(presence), jnp.ones_like(jnp.ravel(line_flux_block.obs))]
+            )
+
     # Divide by noise *before* squaring/multiplying (every chi^2 in tengri
     # does, see ``likelihoods.gaussian.standardized_residual``), AND divide
     # ``pred`` by the mass placeholder only *after* that -- not ``f =
-    # pred / placeholder_mass`` up front, then ``f / noise``.
+    # pred / placeholder_mass`` up front, then ``f / noise``. Use ``whiten``
+    # to prevent reordering: the two orderings are exact in real arithmetic
+    # but not in float32.
     #
-    # The two orderings are exact in real arithmetic but not in float32.
     # ``pred`` at the placeholder mass and its per-band noise are each
     # individually tiny for a faint band (measured: ~3e-30 and ~1e-31 on a
     # far-IR band ~1e3x fainter than the others, tests/regression/precision's
@@ -615,78 +983,211 @@ def _profile_stats(
     # computation to exactly 0.0 -- which is fine for the forward value (that
     # band's contribution to A/B is negligible) but starves the reverse-mode
     # cotangent reaching the prediction (``predict_photometry`` /
-    # ``predict_spectrum``): dividing by
-    # ``placeholder_mass`` *before* the noise normalization multiplies the
-    # local Jacobian by an extra ``1/placeholder_mass`` on the way back,
-    # weakening the cotangent by that same large factor (measured: enough to
-    # zero out d(pred)/d(theta) entirely in float32, though the same
-    # derivative is finite -- if tiny -- in float64). Deferring the
-    # ``/ placeholder_mass`` rescaling to the aggregate sums below (themselves
-    # ordinary-magnitude numbers) never revisits either extreme and restores
-    # the same reverse-mode scale the rest of tengri's chi^2 gradients get.
-    snr_pred = pred / noise
-    snr_d = data / noise
+    # ``predict_spectrum``): dividing by ``placeholder_mass`` *before* the
+    # noise normalization multiplies the local Jacobian by an extra
+    # ``1/placeholder_mass`` on the way back, weakening the cotangent by that
+    # same large factor (measured: enough to zero out d(pred)/d(theta) entirely
+    # in float32, though the same derivative is finite -- if tiny -- in float64).
+    # The dimensionless form naturally avoids this: mass factors cancel
+    # algebraically, so neither is formed.
+    snr_pred = whiten(pred, noise)
+    snr_d = whiten(data, noise)
+
     if presence is not None:
         # The same rule as ``likelihoods.gaussian``: an absent band (presence 0)
         # contributes exactly zero to every sum and to its gradient, so the
         # mass marginal never sees a band the ordinary likelihood does not.
         snr_pred = presence * snr_pred
         snr_d = presence * snr_d
-    sum_pred2 = jnp.sum(snr_pred**2)
-    sum_data_pred = jnp.sum(snr_d * snr_pred)
-    A = sum_pred2 / placeholder_mass**2
-    B = sum_data_pred / placeholder_mass
-    mstar = B / A
-    d2_sum = jnp.sum(snr_d**2)
-    chi2_min = d2_sum - B**2 / A
-    return A, mstar, chi2_min
+
+    A_ref = jnp.sum(snr_pred**2)
+    B_ref = jnp.sum(snr_d * snr_pred)
+    a_star = B_ref / A_ref
+
+    # Residual form: chi2(a) = sum((snr_d - a*snr_pred)^2) expands to
+    # chi2(a) = chi2_min + A_ref*(a - a_star)^2. The residual form avoids
+    # catastrophic cancellation: chi2_min = d2_sum - B_ref^2/A_ref is
+    # the difference of large terms (each about N*SNR^2) whose relative error
+    # under that formula is about eps*SNR^2. Instead, evaluating at the
+    # stationary point a_star gives a form whose error is second-order:
+    # perturbing a_star changes chi2 only quadratically, so relative error
+    # is about eps, independent of SNR.
+    chi2_min = jnp.sum((snr_d - a_star * snr_pred) ** 2)
+
+    return A_ref, a_star, chi2_min, ell_ref
 
 
-def _quad_nodes(A, mstar, ell_lo: float, ell_hi: float):
-    """48-node trapezoid grid in log10(M), +/- 8 sigma around log10(M*).
+def _quad_nodes(
+    A_ref, a_star, ell_lo: float, ell_hi: float, ell_ref: float, quad_nodes: int = _QUAD_NODES
+):
+    """Trapezoid grid in log10(M) offset from reference, +/- 8 sigma around log10(a*).
 
-    The window is centered on ``log10(M*)`` *clamped* to ``[ell_lo, ell_hi]``
-    first, then widened by ``+/- 8 sigma`` and clipped to the same bounds.
-    Clamping the center (rather than clamping each edge of the unclamped
-    window independently) guarantees ``lo <= center <= hi`` however far
-    outside the prior's support the unconstrained best-fit mass falls, e.g.
-    at an optimizer's first, far-from-converged evaluation: clipping the
-    edges alone can otherwise invert them (``lo > hi``), turning the
-    trapezoid weights negative and ``log(weight)`` into ``nan``.
+    Builds the grid in the dimensionless ``u = ell - ell_ref`` coordinate
+    to avoid relative errors in node spacing (subtracting per-node, which
+    injects ulp(ell_ref)/spacing noise). The window is centered on the
+    log10 amplitude ``log10(a_star)`` *clamped* to
+    ``[ell_lo - ell_ref, ell_hi - ell_ref]`` first, then widened by
+    ``+/- 8 sigma`` and clipped to the same bounds. Clamping the center
+    (rather than clamping each edge independently) guarantees
+    ``lo <= center <= hi`` however far outside the prior's support the
+    unconstrained best-fit amplitude falls: clipping the edges independently
+    can otherwise invert them (``lo > hi``), turning the trapezoid weights
+    negative and ``log(weight)`` into ``nan``.
+
+    Parameters
+    ----------
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound (on absolute ell).
+    ell_hi : float
+        Log10 prior upper bound (on absolute ell).
+    ell_ref : float
+        Reference log10(mass), the evaluation point of the prediction.
+    quad_nodes : int, optional
+        Number of trapezoid nodes. Default: ``_QUAD_NODES`` (48) for the
+        marginal integral; use ``_REINSERT_QUAD_NODES`` for per-sample mass
+        reinsertion (issue #2350).
+
+    Returns
+    -------
+    u_nodes : ndarray
+        Node locations in ``ell - ell_ref`` (dimensionless offset).
+    weights : ndarray
+        Trapezoid weights.
     """
-    center = jnp.clip(jnp.log10(mstar), ell_lo, ell_hi)
-    sigma_ell = 1.0 / (jnp.sqrt(A) * mstar * jnp.log(10.0))
-    lo = jnp.maximum(ell_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
-    hi = jnp.minimum(ell_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_ell)
-    ell_nodes = jnp.linspace(lo, hi, _QUAD_NODES)
-    d_ell = (hi - lo) / (_QUAD_NODES - 1)
-    weights = jnp.ones(_QUAD_NODES).at[0].set(0.5).at[-1].set(0.5) * d_ell
-    return ell_nodes, weights
+    u_lo = ell_lo - ell_ref
+    u_hi = ell_hi - ell_ref
+    center = jnp.clip(jnp.log10(a_star), u_lo, u_hi)
+    sigma_u = 1.0 / (jnp.sqrt(A_ref) * a_star * jnp.log(10.0))
+    lo = jnp.maximum(u_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
+    hi = jnp.minimum(u_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
+    u_nodes = jnp.linspace(lo, hi, quad_nodes)
+    d_u = (hi - lo) / (quad_nodes - 1)
+    weights = jnp.ones(quad_nodes).at[0].set(0.5).at[-1].set(0.5) * d_u
+    return u_nodes, weights
 
 
-def _log_quadrature_terms(A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """Node grid and its ``-0.5*A*(M-M*)^2 + log p(ell) + log(weight)`` terms."""
-    ell_nodes, weights = _quad_nodes(A, mstar, ell_lo, ell_hi)
-    m_values = 10.0**ell_nodes
+def _log_quadrature_terms(
+    A_ref,
+    a_star,
+    ell_lo: float,
+    ell_hi: float,
+    mass_prior: Distribution,
+    ell_ref: float,
+    quad_nodes: int = _QUAD_NODES,
+):
+    """Node grid and its log-weighted terms in the dimensionless form.
+
+    Parameters
+    ----------
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound (on absolute ell).
+    ell_hi : float
+        Log10 prior upper bound (on absolute ell).
+    mass_prior : Distribution
+        Mass prior distribution.
+    ell_ref : float
+        Reference log10(mass).
+    quad_nodes : int, optional
+        Number of trapezoid nodes (default: _QUAD_NODES for marginal integral).
+
+    Returns
+    -------
+    u_nodes : ndarray
+        Node locations in ``ell - ell_ref`` (dimensionless offset).
+    log_terms : ndarray
+        Log-weighted likelihoods at each node.
+    """
+    u_nodes, weights = _quad_nodes(A_ref, a_star, ell_lo, ell_hi, ell_ref, quad_nodes=quad_nodes)
+    # Reconstruct absolute ell for the prior evaluation and the quadratic term.
+    # The clip protects boundary nodes: (ell_lo - ell_ref) + ell_ref may not
+    # round back exactly to ell_lo due to floating-point error, and a node
+    # one ULP outside a Uniform's support scores -inf, silently dropping
+    # half a node's weight from the sum.
+    ell_nodes = jnp.clip(u_nodes + ell_ref, ell_lo, ell_hi)
+    a_values = pow10(u_nodes)
     log_terms = (
-        -0.5 * A * (m_values - mstar) ** 2 + mass_prior.log_prob(ell_nodes) + jnp.log(weights)
+        -0.5 * A_ref * (a_values - a_star) ** 2 + mass_prior.log_prob(ell_nodes) + jnp.log(weights)
     )
-    return ell_nodes, log_terms
+    return u_nodes, log_terms
 
 
-def _log_mass_integral(A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """``log integral(exp(-0.5*A*(M(ell)-M*)**2) * p(ell) dell)``, quadrature."""
-    _, log_terms = _log_quadrature_terms(A, mstar, ell_lo, ell_hi, mass_prior)
+def _log_mass_integral(
+    A_ref, a_star, ell_lo: float, ell_hi: float, mass_prior: Distribution, ell_ref: float
+):
+    """``log integral(exp(-0.5*A_ref*(a-a*)**2) * p(ell) dell)``, quadrature.
+
+    Parameters
+    ----------
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    mass_prior : Distribution
+        Mass prior.
+    ell_ref : float
+        Reference log10(mass).
+
+    Returns
+    -------
+    float or array
+        Log of the marginal integral.
+    """
+    _, log_terms = _log_quadrature_terms(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
     return logsumexp(log_terms)
 
 
-def _sample_log_mass(key, A, mstar, ell_lo: float, ell_hi: float, mass_prior: Distribution):
-    """Inverse-CDF draw of log10(M) from the exact conditional, on the same grid."""
-    ell_nodes, log_terms = _log_quadrature_terms(A, mstar, ell_lo, ell_hi, mass_prior)
+def _sample_log_mass(
+    key, A_ref, a_star, ell_lo: float, ell_hi: float, mass_prior: Distribution, ell_ref: float
+):
+    """Inverse-CDF draw of log10(M) from the exact conditional.
+
+    Uses a finer quadrature grid (_REINSERT_QUAD_NODES) than the marginal
+    integral (_QUAD_NODES) because the pointwise CDF built by
+    cumsum(softmax(...)) and inverted by jnp.interp converges more slowly
+    than the integral (issue #2350).
+
+    Parameters
+    ----------
+    key : jax.Array
+        PRNG key.
+    A_ref : float or array
+        Dimensionless quadratic coefficient.
+    a_star : float or array
+        Dimensionless best-fit amplitude.
+    ell_lo : float
+        Log10 prior lower bound.
+    ell_hi : float
+        Log10 prior upper bound.
+    mass_prior : Distribution
+        Mass prior.
+    ell_ref : float
+        Reference log10(mass).
+
+    Returns
+    -------
+    float or array
+        Sampled log10(M) (absolute, not offset from reference).
+    """
+    u_nodes, log_terms = _log_quadrature_terms(
+        A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref, quad_nodes=_REINSERT_QUAD_NODES
+    )
     probs = jax.nn.softmax(log_terms)
     cdf = jnp.cumsum(probs)
     u = jax.random.uniform(key)
-    return jnp.interp(u, cdf / cdf[-1], ell_nodes)
+    u_sample = jnp.interp(u, cdf / cdf[-1], u_nodes)
+    return u_sample + ell_ref
 
 
 # ── The profiled loss (drop-in for Fitter._build_loss_fn) ───────────────────
@@ -734,6 +1235,7 @@ def build_profiled_loss_fn(fitter: Fitter):
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
     threaded_impl = _threaded_predict_impl(model, use_components)
+    line_schema = _line_flux_schema(fitter)
 
     def loss_fn(params_unbounded, data_args):
         """-log p(d | xi) with the mass profiled out, plus 1/2 xi^T xi on the rest."""
@@ -743,7 +1245,7 @@ def build_profiled_loss_fn(fitter: Fitter):
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
 
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -754,8 +1256,15 @@ def build_profiled_loss_fn(fitter: Fitter):
             use_components=use_components,
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
+            line_flux_block=_block_for(
+                line_schema,
+                data_args.get("line_flux_obs"),
+                data_args.get("line_flux_err"),
+            ),
         )
-        loglik = -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        loglik = -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
         return -loglik + standardized_neg_log_prior(
             params_unbounded,
@@ -794,6 +1303,7 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
     threaded_impl = _threaded_predict_impl(model, use_components)
+    line_schema = _line_flux_schema(fitter)
 
     def loglik_unbounded(params_unbounded, data_args):
         """log p(d | xi) with the mass profiled out; no prior term."""
@@ -802,7 +1312,7 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
         )
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -813,8 +1323,15 @@ def build_profiled_loglikelihood_unbounded_fn(fitter: Fitter):
             use_components=use_components,
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
+            line_flux_block=_block_for(
+                line_schema,
+                data_args.get("line_flux_obs"),
+                data_args.get("line_flux_err"),
+            ),
         )
-        return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        return -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
     return loglik_unbounded
 
@@ -839,6 +1356,7 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
     threaded_impl = _threaded_predict_impl(model, use_components)
+    line_schema = _line_flux_schema(fitter)
 
     def loglikelihood_fn(free_params, data_args):
         """log p(d | params), physical params, mass profiled out, no prior."""
@@ -848,7 +1366,7 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
         params = spec.resolve_mirrors(params)
         if "redshift" in data_args:
             params = {**params, "redshift": data_args["redshift"]}
-        A, mstar, chi2_min = _profile_stats(
+        A_ref, a_star, chi2_min, ell_ref = _profile_stats(
             model,
             mass_name,
             params,
@@ -859,25 +1377,215 @@ def build_profiled_loglikelihood_fn(fitter: Fitter):
             use_components=use_components,
             jit_inputs=data_args.get("_jit_inputs"),
             threaded_impl=threaded_impl,
+            line_flux_block=_block_for(
+                line_schema,
+                data_args.get("line_flux_obs"),
+                data_args.get("line_flux_err"),
+            ),
         )
-        return -0.5 * chi2_min + _log_mass_integral(A, mstar, ell_lo, ell_hi, mass_prior)
+        return -0.5 * chi2_min + _log_mass_integral(
+            A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref
+        )
 
     return loglikelihood_fn
 
 
 # ── Reinserting the mass once inference is done ──────────────────────────────
+#
+# Memory safety: _reinsert_mass_fn chunks the vmapped forward model to bound peak
+# allocation. The original single-vmap path (issue #2356) built a jitted program
+# vmapping the entire forward prediction over n_draws at once. Every intermediate
+# in _profile_stats acquires a leading (n_draws,) axis, so memory scales with the
+# working set size: that can be tens of gigabytes for large SSP grids and high
+# draw counts. Measured in #2356 (29 runs across 5 SSP configurations, 2400 draws):
+#
+#  SSP grid          | n_age | n_wave | Status
+#  pgny_mist_c3k     | 107   | 16902  | 0/5 completed, 5/5 OOM killed
+#  bc03_pdva_stelib  | 221   | 6900   | 0/5 completed, 5/5 OOM killed
+#  fsps_mist_c3k_a   | 107   | 11149  | 0/5 completed, 5/5 OOM killed
+#  prsc_miles_wNE    | 93    | 5994   | 5/5 PASSED (only large config to pass)
+#  bpss_stars_c3k_a  | 51    | 1221   | 3/4 passed
+#
+# (Note: these runs did not vary grid and recipe independently, so they do not
+# isolate which drives cost. The recipe table below does.)
+#
+# Scratch memory is driven by model richness (how many components the forward
+# model evaluates), not by SSP grid dimensions. Measured on bc03_pdva_stelib
+# (13 photometric bands) by XLA memory_analysis().temp_size_in_bytes on the
+# real per-chunk program:
+#
+#  recipe                    n_free   scratch/draw   @2400 draws   derived chunk
+#  mock_recovery_minimal        6        0.34 MB       0.83 GB        2899
+#  quiescent_z0                 5        1.7  MB       4.05 GB         590
+#  star_forming_photometry      8       25.9  MB      62    GB          38
+#  stochastic_sfh_jwst         10       26.4  MB      63    GB          37
+#
+# That is why chunk size is measured from the compiled program rather than
+# derived from dimensions.
+#
+# Memory scaling verification (star_forming_photometry / bc03_pdva_stelib / 13 bands):
+#
+#  n_draws   unchunked    chunked    ratio
+#      100     2.60 GB    2.24 GB     1.2x
+#      400    10.35 GB    2.14 GB     4.8x
+#     1200    31.02 GB    2.19 GB    14.2x
+#     2400    62.03 GB    1.80 GB    34.5x
+#
+# Solution: use jax.lax.map to chunk draws into bounded-size groups, scanning
+# across chunks with vmap within each chunk. Peak scales with chunk_size rather
+# than n_draws. Chunk size is computed at fit construction time by XLA memory
+# analysis of a reference program (described in _compute_reinsertion_chunk_size),
+# targeting a ~1 GB budget for the per-chunk vmap working set. The compiled
+# program overhead (model constants, scan buffers) roughly doubles this: realized
+# scratch was measured at 1.80-2.24 GB, flat across draw counts. When
+# chunk_size >= n_draws the map degenerates to a single vmap, bit-identical to
+# the unchunked reference; when chunking engages, results agree to one ulp (max
+# relative difference 1.43e-16 measured at widths 1, 7, 38, 64 vs float64 eps
+# 2.22e-16). Each draw uses its corresponding PRNG key, unaffected by chunk
+# boundaries.
+#
+# Wall-clock cost: chunking is free when not needed (bit-identical degeneration)
+# and costs ~1.9x wall time when it engages. Measured warm (best of three),
+# relative to unchunked:
+#   mock_recovery_minimal, 1000 draws, width 2899 (no chunking): 1.03x
+#   star_forming_photometry, 200 draws, width 38 (chunking): 1.86x
+# The latter configuration otherwise cannot run (unchunked 62 GB at 2400 draws).
+# Do not optimize away chunking on benchmarks that only exercise the fast path.
+
+
+def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
+    """Chunk size for mass reinsertion vmaps, targeting ~1 GB per-chunk vmap scratch.
+
+    Derives chunk size via XLA's own memory analysis of the compiled per-chunk
+    program. This measures scratch memory directly (temp_size_in_bytes) rather
+    than modeling the forward pass, adapting automatically to WavePrecomp,
+    float32/64, and model structure.
+
+    Procedure:
+    1. Compile the per-chunk jitted program at a reference chunk size (100).
+    2. Query XLA's memory_analysis() for the scratch memory that size requires.
+    3. Scale to the target budget (~1 GB vmap working set) and return the derived size.
+
+    This is conservative: if scratch > 1 GB at chunk_size=100, we reduce the
+    chunk size further; if scratch is small, we increase it. The realized program
+    overhead roughly doubles this estimate: compiled scratch is typically 1.80-2.24 GB.
+
+    Clamps to >= 1 so one draw is always valid (``jax.lax.map`` clamps the
+    upper bound at call time). Fallback: 100 draws if XLA memory analysis is
+    unavailable (preserves safe behavior).
+
+    Returns
+    -------
+    int
+        Number of draws to vmap per chunk.
+    """
+    target_bytes = 1e9
+    reference_chunk_size = 100
+
+    # Build a reference per-chunk jitted function to measure scratch memory.
+    # The reference program is the real per-chunk vmap compiled at a fixed
+    # reference width (100), with placeholder data and noise: only the shapes
+    # and the model structure affect scratch memory (verified to match the
+    # real program's per-draw bytes to five significant figures).
+    try:
+        mass_name = fitter._profile_mass_name
+        mass_prior = fitter._profile_mass_prior
+        ell_lo, ell_hi = fitter._profile_mass_bounds
+        fixed_values = fitter._fixed_values
+        data_type = fitter.data_type
+        use_components = bool(getattr(fitter, "use_components", False))
+        model = fitter.model
+
+        line_schema = _line_flux_schema(fitter)
+        n_lines = 0 if line_schema is None else int(jnp.asarray(line_schema[0]).shape[0])
+        # Placeholder line values, sized from the schema. The line channel adds a
+        # real measurement call to the traced program, so omitting it here would
+        # size the chunk against a cheaper program than the one that runs.
+        ref_block = _block_for(
+            line_schema,
+            jnp.zeros(n_lines) if line_schema is not None else None,
+            jnp.ones(n_lines) if line_schema is not None else None,
+        )
+
+        # Placeholder data at the REAL length, not length 1. The original
+        # length-1 placeholder worked only by broadcasting against the
+        # prediction; once a line block concatenates onto both sides, a
+        # (1 + n_lines) data vector no longer broadcasts against an
+        # (n_bands + n_lines) prediction, and the TypeError is swallowed by this
+        # function's own ``except Exception`` -- so the chunk width degrades to
+        # the fallback with nothing but a warning to say the measurement stopped
+        # happening. Shapes are what this program exists to measure anyway.
+        ref_data = jnp.zeros_like(jnp.asarray(fitter.data))
+        ref_noise = jnp.ones_like(jnp.asarray(fitter.noise))
+
+        def _stats_one(sample_dict):
+            phys = {**fixed_values, **sample_dict}
+            return _profile_stats(
+                model,
+                mass_name,
+                phys,
+                ref_data,
+                ref_noise,
+                presence=None,
+                data_type=data_type,
+                use_components=use_components,
+                line_flux_block=ref_block,
+            )
+
+        def _reference_chunk(samples_chunk, keys_chunk):
+            """Reference per-chunk program for memory analysis."""
+            A_ref_chunk, a_star_chunk, _, ell_ref_chunk = jax.vmap(_stats_one)(samples_chunk)
+            return jax.vmap(
+                lambda k, a, m, r: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior, r)
+            )(keys_chunk, A_ref_chunk, a_star_chunk, ell_ref_chunk)
+
+        # Compile at the reference chunk size with dummy arguments
+        samples_ref = {name: jnp.zeros((reference_chunk_size,)) for name in fitter._free_names}
+        keys_ref = jax.random.split(jax.random.PRNGKey(0), reference_chunk_size)
+
+        jitted_fn = jax.jit(_reference_chunk)
+        lowered = jitted_fn.lower(samples_ref, keys_ref)
+        compiled = lowered.compile()
+        scratch_bytes = compiled.memory_analysis().temp_size_in_bytes
+
+        # Scale: if scratch is X bytes at reference_chunk_size, then at
+        # chunk_size it will be ~(chunk_size / reference_chunk_size) * X
+        per_chunk_overhead = scratch_bytes / reference_chunk_size
+        derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
+
+        logger.info(
+            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
+            derived_chunk_size,
+            scratch_bytes / reference_chunk_size / 1e6,
+            target_bytes / 1e9,
+        )
+        return derived_chunk_size
+    except Exception as exc:
+        # Fallback: use a conservative fixed size if XLA analysis fails
+        # (e.g., on some hardware or JAX versions where memory_analysis is unavailable)
+        logger.warning(
+            "reinsertion chunk size: XLA memory analysis failed, using fallback %d; exception: %r",
+            reference_chunk_size,
+            exc,
+            exc_info=True,
+        )
+        return reference_chunk_size
 
 
 def _reinsert_mass_fn(fitter: Fitter):
     """The compiled draws -> conditional-mass-draws map, cached on the model.
 
-    One ``jax.vmap`` over 1200 draws of a forward prediction is ~1.2 s when
-    dispatched eagerly (op-by-op under batching) and ~5 s the first time in a
-    process; under ``jax.jit`` it is one program. The jitted function closes
-    over the model, the fixed values and the mass prior -- everything the
-    fitter's engine cache key already covers -- and takes the draws, the
-    keys, the data, the noise and the presence mask as traced arguments, so
-    it is keyed by ``_engine_cache_key`` alone and reused across fits on the
+    Uses ``jax.lax.map`` to vmap within each chunk and scan across chunks,
+    bounding peak allocation proportional to chunk_size rather than n_draws
+    (issue #2356). When chunk_size is at least n_draws, the map degenerates
+    to a single vmap, bit-identical to the unchunked path, so models that do
+    not need chunking pay nothing. When chunking engages, results agree to one
+    ulp (max relative difference 1.43e-16 measured at widths 1, 7, 38, 64).
+    Each draw uses its corresponding PRNG key, unaffected by chunk boundaries.
+
+    The whole function is jitted and closes over the model, fixed values and
+    mass prior -- everything the fitter's engine cache key already covers --
+    and is keyed by ``_engine_cache_key`` alone, reused across fits on the
     same model, whatever the galaxy.
     """
     from tengri.inference._model_cache import _default_owner as _model_cache_owner
@@ -897,11 +1605,35 @@ def _reinsert_mass_fn(fitter: Fitter):
     fixed_values = fitter._fixed_values
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
+    chunk_size = _compute_reinsertion_chunk_size(fitter)
+    line_schema = _line_flux_schema(fitter)
 
-    def _reinsert(samples_no_mass, draw_keys, data, noise, presence):
-        def stats_one(sample_dict):
+    def _reinsert(samples_no_mass, draw_keys, data, noise, presence, line_obs, line_err):
+        """Map the per-draw conditional-mass draw over the posterior.
+
+        ``jax.lax.map(..., batch_size=chunk_size)`` vmaps within each chunk and
+        scans across chunks, so peak scratch scales with ``chunk_size`` rather
+        than with the number of draws (issue #2356). When ``chunk_size`` is at
+        least ``n_draws`` it degenerates to a single vmap, bit-identical to the
+        unchunked path, so a model that does not need chunking pays nothing.
+
+        ``line_obs``/``line_err`` are arguments, not closure values, for the same
+        reason ``data``/``noise`` are: this program is cached on the model and
+        reused for every galaxy, so baking one galaxy's line fluxes in would
+        return another galaxy's conditional mass with nothing raising. The
+        *schema* (which lines) is model-level and is closed over.
+
+        The channels scored here must match those the objective scored -- the
+        three ``build_profiled_*`` closures -- because this draws the mass from
+        that objective's conditional. A block here without one there, or the
+        reverse, is a mass drawn from a different posterior than the one
+        sampled, again silently.
+        """
+
+        def one_draw(draw):
+            sample_dict, key = draw
             phys = {**fixed_values, **sample_dict}
-            return _profile_stats(
+            A_ref, a_star, _, ell_ref = _profile_stats(
                 model,
                 mass_name,
                 phys,
@@ -910,12 +1642,32 @@ def _reinsert_mass_fn(fitter: Fitter):
                 presence=presence,
                 data_type=data_type,
                 use_components=use_components,
+                line_flux_block=_block_for(line_schema, line_obs, line_err),
+            )
+            return _sample_log_mass(key, A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
+
+        # Log chunk width and whether chunking engaged at trace time (once per compiled shape,
+        # not once per call). This runs at trace time, not call time, so the n_draws read is
+        # static under jitting and costs nothing; it forces no trace-time value.
+        n_draws = next(iter(samples_no_mass.values())).shape[0]
+        if chunk_size >= n_draws:
+            logger.info(
+                "profile_mass reinsertion: %d draws in a single vmap "
+                "(chunk width %d >= n_draws, so no chunking is needed and the "
+                "result is bit-identical to the unchunked path)",
+                n_draws,
+                chunk_size,
+            )
+        else:
+            logger.info(
+                "profile_mass reinsertion: %d draws in %d chunks of %d "
+                "(peak scratch is set by the chunk width, not the draw count)",
+                n_draws,
+                -(-n_draws // chunk_size),
+                chunk_size,
             )
 
-        A_all, mstar_all, _ = jax.vmap(stats_one)(samples_no_mass)
-        return jax.vmap(lambda k, a, m: _sample_log_mass(k, a, m, ell_lo, ell_hi, mass_prior))(
-            draw_keys, A_all, mstar_all
-        )
+        return jax.lax.map(one_draw, (samples_no_mass, draw_keys), batch_size=chunk_size)
 
     fn = jax.jit(_reinsert)
     cache[cache_key] = fn
@@ -963,6 +1715,14 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     model = fitter.model
     data, noise = fitter.data, fitter.noise
     presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
+    # The measured line channel, sourced the same way: straight off the fitter
+    # rather than out of ``_data_args``. Both the draw path and the point
+    # estimate below score the same channels the objective did -- a mass drawn
+    # or set against a different channel set than the one sampled would be a
+    # different posterior, with nothing raising to say so.
+    _line_cfg = fitter._resolved_line_fluxes()
+    line_obs = None if _line_cfg is None else jnp.asarray(_line_cfg.fluxes)
+    line_err = None if _line_cfg is None else jnp.asarray(_line_cfg.errors)
     fixed_values = fitter._fixed_values
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
@@ -972,13 +1732,24 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
         n_draws = next(iter(samples_no_mass.values())).shape[0]
         mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
         draw_keys = jax.random.split(mass_key, n_draws)
-        ell_samples = _reinsert_mass_fn(fitter)(samples_no_mass, draw_keys, data, noise, presence)
+        ell_samples = _reinsert_mass_fn(fitter)(
+            samples_no_mass,
+            draw_keys,
+            data,
+            noise,
+            presence,
+            line_obs,
+            line_err,
+        )
 
         posterior.samples = {**posterior.samples, mass_name: ell_samples}
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
     else:
         phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
-        _, mstar, _ = _profile_stats(
+        # Same channel set as the objective and the draw path: a point estimate
+        # taken against a different set of channels would disagree with the
+        # samples beside it in the same Posterior.
+        _, a_star, _, ell_ref = _profile_stats(
             model,
             mass_name,
             phys,
@@ -987,7 +1758,8 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
             presence=presence,
             data_type=data_type,
             use_components=use_components,
+            line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
         )
-        posterior.params = {**posterior.params, mass_name: jnp.log10(mstar)}
+        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
 
     return posterior

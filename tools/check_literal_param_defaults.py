@@ -108,7 +108,16 @@ from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_SCOPE = ROOT / "src" / "tengri" / "components" / "dust" / "emission"
+#: Default scopes: the trees already swept clean of literal copies (#2241's
+#: dust emission; #2265's radio, stellar, igm). A no-argument run covers all
+#: of them and must report zero sites; the remaining component trees join
+#: this tuple as #2297's per-tree rulings land and their sweeps go in.
+DEFAULT_SCOPES: tuple[Path, ...] = (
+    ROOT / "src" / "tengri" / "components" / "dust" / "emission",
+    ROOT / "src" / "tengri" / "components" / "radio",
+    ROOT / "src" / "tengri" / "components" / "stellar",
+    ROOT / "src" / "tengri" / "components" / "igm",
+)
 _DUST_TREE = ROOT / "src" / "tengri" / "components" / "dust"
 
 #: The dust component's own shared table. Sits one directory above the
@@ -284,6 +293,25 @@ def _resolve_declared_name(local_name: str, declared: set[str], prefix: str | No
     return None
 
 
+def _is_numeric_literal(node: ast.expr) -> bool:
+    """Check if node is a numeric literal, including UnaryOp(USub/UAdd, Constant).
+
+    Handles:
+    - ast.Constant(value=int|float) for positive literals like 3.0
+    - UnaryOp(USub, Constant(value=int|float)) for negative literals like -3.0
+    - UnaryOp(UAdd, Constant(value=int|float)) for explicit positive like +3.0
+    """
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int | float)
+        and not isinstance(node.value, bool)
+    ):
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub | ast.UAdd):
+        return _is_numeric_literal(node.operand)
+    return False
+
+
 def _signature_default_sites(tree: ast.Module, declared: set[str], prefix: str | None):
     """Yield ``(source_name, matched_name, lineno, func_name, is_literal, repr)``
     for every default whose parameter name (as spelled, or resolved through
@@ -307,11 +335,7 @@ def _signature_default_sites(tree: ast.Module, declared: set[str], prefix: str |
             matched = _resolve_declared_name(arg.arg, declared, prefix)
             if matched is None:
                 continue
-            is_numeric_literal = (
-                isinstance(default, ast.Constant)
-                and isinstance(default.value, int | float)
-                and not isinstance(default.value, bool)
-            )
+            is_numeric_literal = _is_numeric_literal(default)
             yield (
                 arg.arg,
                 matched,
@@ -344,11 +368,7 @@ def _get_fallback_sites(tree: ast.Module, declared: set[str], prefix: str | None
         matched = _resolve_declared_name(source_name, declared, prefix)
         if matched is None:
             continue
-        is_numeric_literal = (
-            isinstance(default_arg, ast.Constant)
-            and isinstance(default_arg.value, int | float)
-            and not isinstance(default_arg.value, bool)
-        )
+        is_numeric_literal = _is_numeric_literal(default_arg)
         yield (
             source_name,
             matched,
@@ -362,13 +382,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scope",
-        default=str(DEFAULT_SCOPE),
-        help="Directory to scan (default: src/tengri/components/dust/emission).",
+        default=None,
+        help=(
+            "Directory to scan. Default: every swept tree -- dust/emission, "
+            "radio, stellar, igm (#2265)."
+        ),
     )
     parser.add_argument(
         "--list", action="store_true", help="Print every site with its OK/FAIL verdict."
     )
     args = parser.parse_args(argv)
+
+    if args.scope is None:
+        # No explicit scope: one pass per swept tree (#2265). Worst exit code
+        # wins, so a violation in any tree fails the run.
+        rc = 0
+        for default_scope in DEFAULT_SCOPES:
+            forwarded = ["--scope", str(default_scope)]
+            if args.list:
+                forwarded.append("--list")
+            rc = max(rc, main(forwarded))
+        return rc
 
     scope = Path(args.scope)
     if not scope.is_absolute():

@@ -137,4 +137,24 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
 #: "DLA" was a sub-DLA.
 DEFAULT_DLA_LOG_N_HI = declared_default(DLA_PARAMS, "dla_log_n_hi")
 
-__all__ = ["DEFAULT_DLA_LOG_N_HI", "DLA_PARAMS", "PARAMS", "PATCHY_PARAMS"]
+#: Default patchy reionization parameters (ADR-0011), read from declarations
+#: to prevent independent drift in call sites.
+DEFAULT_IGM_X_HI = declared_default(PATCHY_PARAMS, "igm_x_HI")
+DEFAULT_IGM_BUBBLE_MPC = declared_default(PATCHY_PARAMS, "igm_bubble_mpc")
+
+#: Default DLA absorber parameters (ADR-0011), read from declarations.
+DEFAULT_DLA_Z = declared_default(DLA_PARAMS, "dla_z")
+DEFAULT_DLA_TEMP = declared_default(DLA_PARAMS, "dla_temp")
+DEFAULT_DLA_B_TURB = declared_default(DLA_PARAMS, "dla_b_turb")
+
+__all__ = [
+    "DEFAULT_DLA_B_TURB",
+    "DEFAULT_DLA_LOG_N_HI",
+    "DEFAULT_DLA_TEMP",
+    "DEFAULT_DLA_Z",
+    "DEFAULT_IGM_BUBBLE_MPC",
+    "DEFAULT_IGM_X_HI",
+    "DLA_PARAMS",
+    "PARAMS",
+    "PATCHY_PARAMS",
+]

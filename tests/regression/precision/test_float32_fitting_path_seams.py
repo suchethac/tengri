@@ -219,11 +219,10 @@ def _gradients(ssp, obs, model, build_approx, fit_approx, zspec, flux, noise, *,
                 jnp.asarray(noise, dtype=dtype),
                 approx=fit_approx,
                 # The two precisions must sample the SAME parameter vector for
-                # their gradients to be comparable. profile_mass="auto" engages
-                # only under float64 (the mass marginal is measured NaN in
-                # float32 on this file's stellar_dust/exact_fixedz seam), so it
-                # is pinned off here: these seams are the forward model's and
-                # the likelihood's, not the marginalization's.
+                # their gradients to be comparable. Pinning profile_mass=False
+                # ensures both arms sample identical parameters (dimensionality
+                # test); the seams being validated here are the forward model's
+                # and the likelihood's, not the marginalization's.
                 profile_mass=False,
             )
         )

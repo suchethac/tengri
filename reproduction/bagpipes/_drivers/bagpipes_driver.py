@@ -22,6 +22,10 @@ from typing import Any
 
 import numpy as np
 
+# NumPy >= 2.0 renamed np.trapz to np.trapezoid; BAGPIPES 1.3.5 still calls the old name.
+if not hasattr(np, "trapz"):
+    np.trapz = np.trapezoid  # type: ignore[attr-defined]
+
 from . import units as U
 
 

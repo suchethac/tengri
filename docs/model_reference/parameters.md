@@ -43,7 +43,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | *Dust Screen Selectors* |  |  |  |  |  |
 | `dust_nebular_screen` | --- | `"birth_cloud"` | 3 choices | --- | Screen for the nebular continuum + line catalog |
 | `dust_shock_screen` | --- | `"diffuse"` | 3 choices | --- | Screen for the MAPPINGS V shock SED |
-| `dust_agn_screen` | --- | `"none"` | 3 choices | --- | Screen for AGN light (today only `"none"` is accepted) |
+| `dust_agn_screen` | --- | `"none"` | 3 choices | --- | Screen for AGN light: `"birth_cloud"` / `"diffuse"` / `"none"` (default); refused with `agn_norm="cigale_joint"` |
 | *AGN Core Parameters* |  |  |  |  |  |
 | `agn_frac` | $f_{\rm AGN}$ | Fixed(0) | $[0, 1]$ | --- | AGN bolometric luminosity fraction |
 | `agn_log_lbol` | $\log L_{\rm bol}$ | Fixed(10) | $[40, 48]$ | $\log({\rm erg\,s}^{-1})$ | AGN bolometric luminosity (direct) |

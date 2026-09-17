@@ -1531,9 +1531,20 @@ jobs:
           # ones. Timeout sized from a one-file-per-process measurement of
           # all 12 currently-slow files here (~546 s serial, all passing);
           # 30 min leaves >3x headroom for a slower CI runner plus growth.
+          # As of this change, test_agn_wildcard_measured_liveness.py (#2291)
+          # is excluded and runs in its own entry below.
           - suite: components-unit-regression-contract-physics
             paths: tests/components tests/unit tests/regression tests/contract tests/physics
+            ignore: --ignore=tests/contract/test_agn_wildcard_measured_liveness.py
             timeout: 30
+          # The exhaustive AGN wildcard liveness sweep (#2291): 130 (category,
+          # type) pairs plus the polar atten x torus sweep, each paying a full
+          # composable SEDModel.build (~30 s on a runner) and no gradient on a
+          # green tree. Its own entry so its budget is its own; the third entry
+          # ignores the file (see `ignore` above).
+          - suite: agn-wildcard-liveness
+            paths: tests/contract/test_agn_wildcard_measured_liveness.py
+            timeout: 90
     # Own concurrency group per suite: do NOT inherit the workflow-level
     # `cancel-in-progress: true` (which kills slow whenever main moves).
     # `cancel-in-progress: false` means newer slow triggers queue behind
@@ -1590,7 +1601,7 @@ jobs:
       # `-m 'not crossval'`) selects only the individually-decorated tests.
       - run: |
           if [ -n "${{ matrix.paths }}" ]; then
-            pytest ${{ matrix.paths }} -q -m slow -n 0
+            pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
           else
             pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
           fi

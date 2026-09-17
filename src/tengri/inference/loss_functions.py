@@ -325,20 +325,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         obs_for_idx = getattr(model, "observation", None)
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
-    # Line-flux channel: backends with no discrete catalog (BakedIn) can't run
-    # predict_line_fluxes, measure the fluxes off the spectrum instead. Build the
-    # continuum windows ONCE from the observation's concrete line centers (never
-    # from traced data_args) so the jitted loss sees a static LineDef set.
-    measured_line_defs = None
-    if has_line_fluxes and not model._has_line_catalog():
-        obs_for_lines = getattr(model, "observation", None)
-        lf = getattr(obs_for_lines, "line_fluxes", None) if obs_for_lines is not None else None
-        if lf is not None:
-            import numpy as _np
-
-            from tengri.observation.line_measurement import default_line_defs
-
-            measured_line_defs = default_line_defs(_np.asarray(lf.wavelengths), tuple(lf.names))
+    measured_line_defs = _resolve_measured_line_defs(model, has_line_fluxes=has_line_fluxes)
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
     # Build-time signature check: the internal adapter cohort accepts
@@ -493,6 +480,35 @@ def _build_data_neg_log_likelihood_fn(fitter):
         return e_lh
 
     return neg_log_lik
+
+
+def _resolve_measured_line_defs(model, *, has_line_fluxes: bool):
+    """Continuum-window line definitions for backends with no discrete catalog.
+
+    BakedIn nebular backends cannot run ``predict_line_fluxes``, so the fluxes
+    are measured off the model spectrum instead; these are the windows that
+    measurement uses. Built from the observation's concrete line centers (never
+    from traced ``data_args``) so a jitted loss sees a static ``LineDef`` set.
+
+    Returns ``None`` when the model has a discrete line catalog, in which case
+    the caller uses ``predict_line_fluxes`` directly.
+
+    Shared with :mod:`tengri.inference.mass_profile`, which must resolve the
+    same windows the loss does: the profiled quadratic scores its line block
+    against the loss's own prediction, so two derivations that could disagree
+    would silently score different quantities.
+    """
+    measured_line_defs = None
+    if has_line_fluxes and not model._has_line_catalog():
+        obs_for_lines = getattr(model, "observation", None)
+        lf = getattr(obs_for_lines, "line_fluxes", None) if obs_for_lines is not None else None
+        if lf is not None:
+            import numpy as _np
+
+            from tengri.observation.line_measurement import default_line_defs
+
+            measured_line_defs = default_line_defs(_np.asarray(lf.wavelengths), tuple(lf.names))
+    return measured_line_defs
 
 
 def build_loss_fn(fitter):
