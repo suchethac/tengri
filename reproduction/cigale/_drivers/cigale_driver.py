@@ -138,6 +138,38 @@ def to_lnu(sed):
     return U.wnm_to_erg_per_hz_per_aa(sed.wavelength_grid, sed.luminosity)
 
 
+def to_lnu_contribution(sed, contribution_name):
+    """Convert a named contribution to erg/s/Hz on Angstrom wavelength grid.
+
+    Parameters
+    ----------
+    sed : pcigale.sed.SED
+        SED object with luminosities dict and wavelength_grid (nm).
+    contribution_name : str
+        Name of the contribution (e.g., 'agn.fritz2006_torus',
+        'agn.SKIRTOR2016_torus').
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n_wave,)
+        Wavelength in Angstroms.
+    L_nu_erg_per_hz : ndarray, shape (n_wave,)
+        Luminosity density in erg/s/Hz for the named contribution.
+    """
+    if not hasattr(sed, 'luminosities') or contribution_name not in sed.luminosities:
+        available = (
+            list(sed.luminosities.keys())
+            if hasattr(sed, 'luminosities')
+            else 'none'
+        )
+        raise KeyError(
+            f"Contribution '{contribution_name}' not found in SED. "
+            f"Available: {available}"
+        )
+    luminosity_contribution = sed.luminosities[contribution_name]
+    return U.wnm_to_erg_per_hz_per_aa(sed.wavelength_grid, luminosity_contribution)
+
+
 def attenuation_curve(law_name, wave_aa, **params):
     """A(λ)/A_V from a pcigale dust law's own analytic curve function.
 
