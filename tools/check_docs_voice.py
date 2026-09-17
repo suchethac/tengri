@@ -872,7 +872,10 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                 ("dev_detail", _check_dev_detail_leakage),
                 ("unicode_norm", _check_unicode_normalization),
                 ("notation_canon", _check_notation_canon),
-                ("hardcoded_const", lambda t: _check_hardcoded_constants(t, constants)),
+                # hardcoded_const runs on notebook CODE cells only (below):
+                # a stale entry here named a checker that does not exist, so
+                # any %% block reaching it raised NameError instead of
+                # reporting (#2326 -- what an unwired guard rots into).
             ]:
                 for msg in check_fn(masked_block):
                     violations.append(

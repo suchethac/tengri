@@ -1209,9 +1209,9 @@ def salim_sbl18(
 
     References
     ----------
-    .. [1] S. Salim, M. Boquien, and J. C. Lee, "CANDELS: Constraining the AGN
-       Contribution to the Star Formation Rate Density at z > 1,"
-       ApJ, 859, 11 (2018).
+    .. [1] S. Salim, M. Boquien, and J. C. Lee, "Dust Attenuation Curves in the
+       Local Universe: Demographics and New Laws for Star-forming Galaxies and
+       High-redshift Analogs," ApJ, 859, 11 (2018). arXiv:1804.05850.
        https://doi.org/10.3847/1538-4357/aabf3c
     """
     wave_um = wavelength / 1e4
