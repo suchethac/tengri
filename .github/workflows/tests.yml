@@ -1530,7 +1530,7 @@ jobs:
     # an existing one — slow always runs to completion, never aborted by
     # an unrelated main push. See issue #160.
     concurrency:
-      group: tests-slow-${{ matrix.suite }}-${{ github.ref }}
+      group: tests-slow-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ github.ref }}
       cancel-in-progress: false
     if: |
       github.event_name == 'schedule'
@@ -1564,9 +1564,9 @@ jobs:
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          key: tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
           restore-keys: |
-            tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-
+            tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ hashFiles('pyproject.toml') }}-
       # `-m 'not crossval'` overrides the default addopts selector, which
       # deselects the `slow` marker that conftest auto-applies to exactly these
       # two trees — without it this job would collect everything and run nothing.
