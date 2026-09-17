@@ -1578,8 +1578,9 @@ class Fitter:
                     raise ValueError(
                         f"params_override names {key!r}, but this model's likelihood does not "
                         f"read it: noise parameters are only consumed when declared in the spec "
-                        f"(free, or Fixed at a nonzero value). Declare via "
-                        f"Observation(noise=NoiseModel(calibration_floor=...)) instead of fitting."
+                        f"(free, or Fixed at a nonzero value). Declare it via "
+                        f"Observation(noise=NoiseModel(calibration_floor=...)) instead of "
+                        f"overriding it at fit time."
                     )
             # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
