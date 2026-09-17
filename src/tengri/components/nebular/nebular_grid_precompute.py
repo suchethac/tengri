@@ -455,9 +455,7 @@ def _refuse_freed_optional_axes(spec):
         When any optional parameter is freed.
     """
     # Optional params that are free in the spec
-    offenders = sorted(
-        name for name in _BACKEND_OPTIONAL_PARAMS if name in spec.free_params
-    )
+    offenders = sorted(name for name in _BACKEND_OPTIONAL_PARAMS if name in spec.free_params)
     if not offenders:
         return
 

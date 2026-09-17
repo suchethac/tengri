@@ -6323,6 +6323,7 @@ class SEDModel:
             )
 
         from tengri.components.nebular.nebular_grid_precompute import _refuse_freed_optional_axes
+
         _refuse_freed_optional_axes(self.spec)
 
         target_wavelengths = jnp.asarray(target_wavelengths)

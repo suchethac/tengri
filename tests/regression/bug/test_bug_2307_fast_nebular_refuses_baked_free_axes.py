@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Refuse freed CB19 optional axes when enabling fast-nebular (#2307)."""
+
 from __future__ import annotations
 
 import pytest
