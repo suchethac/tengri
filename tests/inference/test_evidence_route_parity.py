@@ -437,6 +437,9 @@ class TestBMAWeightsAgreement:
         # Laplace reported as point estimate (no error)
 
         # Check separation: skip if models are too close to distinguish
+        print(f"\nNSS: ΔlogZ={sep_nss:.4f}, σ={sigma_nss:.4f}, thresh=2σ={2 * sigma_nss:.4f}")
+        print(f"HMC+IS: ΔlogZ={sep_hmc:.4f}, σ={sigma_hmc:.4f}, thresh=2σ={2 * sigma_hmc:.4f}")
+        print(f"Laplace: ΔlogZ={sep_lap:.4f} (point estimate)")
         if sep_nss < 2.0 * sigma_nss:
             pytest.skip(
                 f"near-tie NSS: ΔlogZ={sep_nss:.4f} vs σ={sigma_nss:.4f} "
