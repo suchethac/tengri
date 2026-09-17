@@ -23,7 +23,6 @@ OIII_5007 17.5% wrong, NII_6584 5.3%. That is refused, not warned about.
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -32,18 +31,21 @@ pytestmark = [pytest.mark.regression_bug]
 
 
 def _find_data_file(name):
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "data" / name
-        if candidate.is_file():
-            return candidate
-    return None
+    """The file via the canonical locator, or None (honors the #2329 pin)."""
+    from tengri._data_setup import find_data
+
+    return find_data(name)
 
 
 # Cue needs its trained weights and a bare-stellar SSP; both are gitignored, so
-# the model-level arms skip on CI and run wherever the grids are present.
+# the model-level arms skip on CI and run wherever the grids are present. The
+# probe goes through the canonical locator, not a hand-rolled ancestor walk:
+# a walk finds the main checkout's weights from a nested worktree while the
+# model build (which honors the #2329 hermeticity pin) cannot, and the two
+# then disagree about whether the arm can run.
 requires_cue = pytest.mark.skipif(
     _find_data_file("cue_weights.npz") is None,
-    reason="Cue weights not found in any parent data/",
+    reason="Cue weights not on the data search path",
 )
 
 _N_T = 40

@@ -808,6 +808,20 @@ jobs:
       # same reason as its sibling: it reads priors from the registry, so it
       # needs tengri installed, and `lint` installs only ruff.
       - run: python tools/check_float32_scale_seams.py
+      # Every benchmark fixture in bench/scripts/ must declare a provenance block
+      # that proves it matches the notebook it claims to mirror (kind="mirrors"),
+      # is a deliberate historical snapshot (kind="historical"), or is a control
+      # (kind="standalone"). #2096 caught two silent drifts — nb05 rewrote law_bc
+      # to law and nb00 simplified the model — and both kept their notebook label.
+      # This guard prevents the drift from going unnoticed again.
+      - run: python tools/check_harness_parity.py
+      # Docs-prose voice guard (#2326): the enforcement NAMING_CONTRACT names
+      # for confusable codepoints in published docs, plus notation canon and
+      # dev-detail leakage. Runs in its default warn-only mode (exit 0): the
+      # tree currently carries 24 violations, so --strict waits on a docs
+      # cleanup; wiring it makes the report visible and keeps the guard from
+      # rotting unrun, which is the defect #2326 is about.
+      - run: python tools/check_docs_voice.py
       # Every test module in EVERY tier must still import. `check_test_paths_covered`
       # proves a tree is named by some job; it cannot see whether the files in it
       # collect. Those are independent failures, and the second one is invisible
