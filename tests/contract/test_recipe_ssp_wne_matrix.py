@@ -161,10 +161,12 @@ class TestRecipeSspMatrixWithWNE:
 
         This ensures the error message is user-friendly with clear remedies.
         """
-        with pytest.raises(TengriIOError):
+        with pytest.raises(TengriIOError) as exc_info:
             recipe = recipes.unified_agn()
             recipe["neb"] = {"type": "cue"}  # unified_agn requires Cue with bare SSP
             SEDModel.build(ssp_data=bare_ssp, observation=obs, **recipe)
+        # Must error about unified_agn's own Synthesizer grid, not another component
+        assert "synthesizer" in str(exc_info.value).lower()
 
     def test_unified_agn_error_names_env_var(self, obs, bare_ssp):
         """unified_agn error must name the exact environment variable."""

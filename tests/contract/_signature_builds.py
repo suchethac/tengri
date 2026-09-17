@@ -223,6 +223,8 @@ def build_per_screen_laws_themis():
 
 def build_from_config():
     """Build F: from_config (deprecated config path)."""
+    import warnings
+
     # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
@@ -230,17 +232,17 @@ def build_from_config():
         ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
         ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
     )
-    obs = Observation(
-        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    )
-    return SEDModel.build(
-        ssp_data=ssp_data,
-        observation=obs,
-        approx=WavePrecomp(),
-        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-        neb={"type": "none"},
-        redshift=Fixed(0.1),
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return SEDModel.from_config(
+            ssp_data,
+            sfh="dpl",
+            dust_attenuation_law="calzetti",
+            nebular="none",
+            filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
+            redshift=0.1,
+            approx=WavePrecomp(),
+        )
 
 
 # ── G: new representative (#2163) ──────────────────────────────────────────
