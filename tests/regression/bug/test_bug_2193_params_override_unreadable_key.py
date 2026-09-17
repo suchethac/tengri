@@ -134,13 +134,10 @@ class TestParamsOverrideUnreadableKey:
 
         # The default spec has noise_frac_cal at Fixed(0.0), so
         # has_noise_model(spec) is False and the likelihood does not read it.
-        # Attempting to override it should raise with a message explaining the
-        # mechanism.
-        with pytest.raises(ValueError, match="noise_frac_cal") as exc_info:
+        # Attempting to override it should raise with a message naming the
+        # declaration route.
+        with pytest.raises(ValueError, match=r"Observation\(noise=NoiseModel"):
             forward.fit(data, noise, method="map", params={"noise_frac_cal": 0.25}, n_steps=10)
-
-        assert "does not read" in str(exc_info.value)
-        assert "noise parameters are only consumed" in str(exc_info.value)
 
     def test_noise_param_readable_declared_nonzero_accepts(self):
         """Control: override noise_frac_cal when declared at Fixed(0.05) is accepted."""

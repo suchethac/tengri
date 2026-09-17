@@ -77,7 +77,7 @@ from tengri.inference.loss_functions import (
     build_logprior_fn,
     build_loss_fn,
 )
-from tengri.observation.noise import has_noise_model
+from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
 
 # ── Method name validation ────────────────────────────────────────────
@@ -1574,12 +1574,12 @@ class Fitter:
                 # Noise parameters are only wired into the likelihood when
                 # has_noise_model(spec) is True. If not, a noise_* override is
                 # silently accepted but has no effect on the fit (issue #2193).
-                if key.startswith("noise_") and not has_noise_model(self.spec):
+                if is_noise_parameter(key) and not has_noise_model(self.spec):
                     raise ValueError(
                         f"params_override names {key!r}, but this model's likelihood does not "
                         f"read it: noise parameters are only consumed when declared in the spec "
-                        f"(free, or Fixed at a nonzero value). Declare it in the model rather "
-                        f"than overriding it at fit time."
+                        f"(free, or Fixed at a nonzero value). Declare via "
+                        f"Observation(noise=NoiseModel(calibration_floor=...)) instead of fitting."
                     )
             # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
