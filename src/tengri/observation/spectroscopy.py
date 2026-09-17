@@ -155,6 +155,45 @@ class Spectroscopy:
     resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
 
     def __post_init__(self) -> None:
+        # Validate wave_obs
+        import numpy as np
+        w = np.asarray(self.wave_obs, dtype=np.float64)
+
+        # Check for finite values (no NaN/inf)
+        non_finite_mask = ~np.isfinite(w)
+        if np.any(non_finite_mask):
+            idx = int(np.where(non_finite_mask)[0][0])
+            raise ValueError(
+                f"wave_obs contains non-finite value at index {idx}: {w[idx]}"
+            )
+
+        # Check for strictly positive values
+        non_positive_mask = w <= 0.0
+        if np.any(non_positive_mask):
+            idx = int(np.where(non_positive_mask)[0][0])
+            raise ValueError(
+                f"wave_obs must be strictly positive; index {idx} is {w[idx]}"
+            )
+
+        # Check for strictly increasing order
+        if len(w) > 1:
+            diffs = np.diff(w)
+            non_increasing_mask = diffs <= 0.0
+            if np.any(non_increasing_mask):
+                idx = int(np.where(non_increasing_mask)[0][0])
+                raise ValueError(
+                    f"wave_obs must be strictly increasing; index {idx} ({w[idx]}) "
+                    f">= index {idx + 1} ({w[idx + 1]}). "
+                    f"If your grid is descending, reverse wave_obs and the "
+                    f"corresponding flux and error arrays."
+                )
+
+        # Validate calibration_order
+        if self.calibration_order < 0:
+            raise ValueError(
+                f"calibration_order must be non-negative, got {self.calibration_order}"
+            )
+
         _valid_modes = ("off", "fixed", "marginalized", "fitted")
         if self.eline_mode not in _valid_modes:
             raise ValueError(f"eline_mode must be one of {_valid_modes}, got {self.eline_mode!r}")
