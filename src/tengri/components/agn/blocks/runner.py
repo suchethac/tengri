@@ -53,6 +53,10 @@ import warnings
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._lbol_reference import (
+    reference_evaluation,
+    rescale,
+)
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
     describe_clipping,
@@ -596,6 +600,21 @@ agn_torus_block, agn_attenuation_block : str
     """
     wave = jnp.asarray(wavelength)
 
+    # Apply float32 reference evaluation guard (#1206, #2321): when operating
+    # in pure float32, pass a reference luminosity to blocks to avoid overflow,
+    # then rescale in log space afterward. The factoring lives in
+    # components/agn/_lbol_reference.py and is shared with the AGNSEDComponent's
+    # monolithic branch.
+    agn_log_lbol_eval, _use_ref, _log_scale_offset = reference_evaluation(
+        agn_log_lbol, wave
+    )
+
+    # When evaluating at reference luminosity, hand the disc its TRUE L_bol for
+    # shape (temperature) calculation so shapes are correct. Shape-invariant
+    # blocks (power-law, template-based tori) ignore the kwarg.
+    if _use_ref:
+        params = {**params, "agn_log_lbol_shape": agn_log_lbol}
+
     # Pre-loaded template libraries are forwarded to each stage under a stable
     # kwarg name blocks recognize (``templates``). The lookup is PER STAGE:
     # every block family has its own library, so handing the same bundle to
@@ -622,7 +641,7 @@ agn_torus_block, agn_attenuation_block : str
     disc_fn = resolve_agn_block("disc", agn_disc_block)
     L_lambda_disc = disc_fn(
         wave,
-        agn_log_lbol=agn_log_lbol,
+        agn_log_lbol=agn_log_lbol_eval,
         templates=disc_templates,
         **params,
     )
@@ -800,7 +819,7 @@ agn_torus_block, agn_attenuation_block : str
     nlr_aniso, nlr_iso = split_lines_result(
         nlr_fn(
             wave,
-            agn_log_lbol=agn_log_lbol,
+            agn_log_lbol=agn_log_lbol_eval,
             l5100_disc=l5100_disc,
             templates=_templates_for("nlr", agn_nlr_block),
             **params,
@@ -811,7 +830,7 @@ agn_torus_block, agn_attenuation_block : str
     blr_aniso, blr_iso = split_lines_result(
         blr_fn(
             wave,
-            agn_log_lbol=agn_log_lbol,
+            agn_log_lbol=agn_log_lbol_eval,
             l5100_disc=l5100_disc,
             templates=_templates_for("blr", agn_blr_block),
             **params,
@@ -824,7 +843,7 @@ agn_torus_block, agn_attenuation_block : str
     feii_fn = resolve_agn_block("feii", agn_feii_block)
     L_lambda_feii = feii_fn(
         wave,
-        agn_log_lbol=agn_log_lbol,
+        agn_log_lbol=agn_log_lbol_eval,
         l5100_disc=l5100_disc,
         templates=_templates_for("feii", agn_feii_block),
         **params,
@@ -852,7 +871,7 @@ agn_torus_block, agn_attenuation_block : str
     torus_fn = resolve_agn_block("torus", agn_torus_block)
     L_lambda_torus = torus_fn(
         wave,
-        agn_log_lbol=agn_log_lbol,
+        agn_log_lbol=agn_log_lbol_eval,
         l5100_disc=l5100_disc,
         templates=_templates_for("torus", agn_torus_block),
         **params,
@@ -1118,16 +1137,35 @@ agn_torus_block, agn_attenuation_block : str
         else None
     )
 
+    # Apply float32 rescaling in log space if reference evaluation was active.
+    # Blocks were evaluated at ``_AGN_LBOL_REF``; we rescale the magnitude now
+    # in log10 space so the true ``agn_log_lbol`` luminosity is recovered
+    # without overflow.
+    if _use_ref:
+        L_nu_final = rescale(L_nu_result, _log_scale_offset)
+        L_2500_final = rescale(L_2500_intrinsic, _log_scale_offset)
+        L_4400_final = rescale(L_4400_intrinsic, _log_scale_offset)
+        components_final = (
+            rescale(components, _log_scale_offset)
+            if components is not None
+            else None
+        )
+    else:
+        L_nu_final = L_nu_result
+        L_2500_final = L_2500_intrinsic
+        L_4400_final = L_4400_intrinsic
+        components_final = components
+
     # Return with optional L_2500_intrinsic/L_4400_intrinsic and per-sub-block
     # components tuples.
     if return_l2500 and return_components:
-        return (L_nu_result, L_2500_intrinsic, L_4400_intrinsic, components)
+        return (L_nu_final, L_2500_final, L_4400_final, components_final)
     elif return_l2500:
-        return (L_nu_result, L_2500_intrinsic, L_4400_intrinsic)
+        return (L_nu_final, L_2500_final, L_4400_final)
     elif return_components:
-        return (L_nu_result, components)
+        return (L_nu_final, components_final)
     else:
-        return L_nu_result
+        return L_nu_final
 
 
 def composable_agn_l_nu(
