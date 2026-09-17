@@ -61,7 +61,7 @@ def get_citation_version(root: Path) -> str | None:
 
     content = citation_path.read_text(encoding="utf-8")
     # Match the version line in CITATION.cff
-    match = re.search(r'^\s*version:\s*(\S+)', content, re.MULTILINE)
+    match = re.search(r"^\s*version:\s*(\S+)", content, re.MULTILINE)
     return match.group(1) if match else None
 
 
@@ -80,9 +80,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     if pyproject_version == citation_version:
-        print(
-            f"OK: pyproject.toml and CITATION.cff versions match ({pyproject_version})"
-        )
+        print(f"OK: pyproject.toml and CITATION.cff versions match ({pyproject_version})")
         return 0
 
     print(

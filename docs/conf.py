@@ -52,6 +52,7 @@ copyright = "2026, Suchetha Cooray"
 
 # Import tengri to get the version
 import tengri
+
 release = tengri.__version__
 
 # -- General configuration ---------------------------------------------------

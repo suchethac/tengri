@@ -16,16 +16,16 @@ def test_check_version_matching():
         tmppath = Path(tmpdir)
 
         # Create pyproject.toml
-        pyproject_content = '''[project]
+        pyproject_content = """[project]
 name = "test-pkg"
 version = "1.2.3"
-'''
+"""
         (tmppath / "pyproject.toml").write_text(pyproject_content)
 
         # Create CITATION.cff with matching version
-        citation_content = '''cff-version: 1.2.0
+        citation_content = """cff-version: 1.2.0
 version: 1.2.3
-'''
+"""
         (tmppath / "CITATION.cff").write_text(citation_content)
 
         # Should return 0
@@ -40,16 +40,16 @@ def test_check_version_mismatch():
         tmppath = Path(tmpdir)
 
         # Create pyproject.toml
-        pyproject_content = '''[project]
+        pyproject_content = """[project]
 name = "test-pkg"
 version = "1.2.3"
-'''
+"""
         (tmppath / "pyproject.toml").write_text(pyproject_content)
 
         # Create CITATION.cff with different version
-        citation_content = '''cff-version: 1.2.0
+        citation_content = """cff-version: 1.2.0
 version = 1.2.4
-'''
+"""
         (tmppath / "CITATION.cff").write_text(citation_content)
 
         # Should return 1
@@ -64,9 +64,9 @@ def test_check_version_missing_pyproject():
         tmppath = Path(tmpdir)
 
         # Only create CITATION.cff
-        citation_content = '''cff-version: 1.2.0
+        citation_content = """cff-version: 1.2.0
 version: 1.2.3
-'''
+"""
         (tmppath / "CITATION.cff").write_text(citation_content)
 
         # Should return 1
@@ -81,15 +81,15 @@ def test_check_version_argv_convention():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmppath = Path(tmpdir)
 
-        pyproject_content = '''[project]
+        pyproject_content = """[project]
 name = "test-pkg"
 version = "1.2.3"
-'''
+"""
         (tmppath / "pyproject.toml").write_text(pyproject_content)
 
-        citation_content = '''cff-version: 1.2.0
+        citation_content = """cff-version: 1.2.0
 version: 1.2.3
-'''
+"""
         (tmppath / "CITATION.cff").write_text(citation_content)
 
         # Call with explicit argv
