@@ -1,6 +1,16 @@
 ## [Unreleased]
 
 
+### Fixed
+
+- Release version now has a single source: `pyproject.toml`. `src/tengri/__init__.py`
+  derives `__version__` via `importlib.metadata`, with a fallback for source-tree
+  installs. `docs/conf.py` derives `release` from the imported `tengri.__version__`.
+  `CITATION.cff` remains a manual copy, but `tools/check_version_single_source.py`
+  (wired to the `lint` job) ensures it never drifts from `pyproject.toml`. Removes
+  the inert `setuptools-scm` requirement and the false assertion in `publish.yml`
+  that full history is needed (#2103).
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,

@@ -423,6 +423,10 @@ jobs:
       # Non-strict: most comparisons predate the stamp, so an unstamped
       # render only warns; a stamped-but-stale one always fails.
       - run: python tools/check_repro_render_fresh.py
+      # Verify version consistency between pyproject.toml and CITATION.cff.
+      # The canonical version lives in pyproject.toml; CITATION.cff must match.
+      # Turns a silent version mismatch into a red PR (#2103).
+      - run: python tools/check_version_single_source.py
       # Census: verify every check_*.py is wired or explicitly declared not wired (#2050).
       - run: python tools/check_guard_wiring.py
       # The same hazard one directory over: a gallery example that catches

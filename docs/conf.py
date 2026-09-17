@@ -48,8 +48,11 @@ _ensure_nbconvert_templates_visible()
 
 project = "tengri"
 author = "Suchetha Cooray"
-release = "0.1.0"
 copyright = "2026, Suchetha Cooray"
+
+# Import tengri to get the version
+import tengri
+release = tengri.__version__
 
 # -- General configuration ---------------------------------------------------
 
