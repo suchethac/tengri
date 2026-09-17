@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+### Fixed
+
+- Data locator hermeticity (#2329): a nested worktree's test run found untracked
+  data (CLOUDY grids, Cue weights) in the main checkout via the locator's
+  ancestor-directory walk, so suites passed locally and failed in CI. A new
+  `TENGRI_DATA_NO_ANCESTOR_WALK` env var pins `data_dirs()` to `$TENGRI_DATA_DIR`
+  plus the repository under test, and `tests/conftest.py` sets it unconditionally
+  (the precomp-cache precedent), so pytest always sees what CI sees. The
+  measured flip-list was six tests: two hand-rolled parent-walking data probes
+  (`requires_cloudy`, `requires_cue`) now route through the canonical locator so
+  they skip under the pin exactly where CI skips instead of running into a build
+  that cannot see the grid, and the two locator-contract tests (#1209, #1431)
+  lift the pin explicitly to keep testing the default walk, whose pinned side is
+  owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
+  unless the env var is set (see `tests/TESTING.md`).
+
+### Fixed
+
+- Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
+  flat-form builds (e.g. `Parameters(lgmet_scatter=0.3)`), the kwarg now sets
+  the registered `met_logzsol_scatter` Fixed value at the parameter registry
+  seam, so the stellar component receives the instance-specific scatter width
+  instead of always falling back to the global default (issue #2255). Grammar
+  builds (with explicit `met_logzsol_scatter` as parameter name) remain
+  unchanged; both spellings cannot be passed together (raises if shadowing is
+  detected).
 
 ### Added
 
@@ -352,6 +378,22 @@
 
 
 ### Changed
+
+- The cigale reproduction's two §9e torus panels compare AGN dust emission
+  instead of the full SED. Both took their ratio over stellar + host dust +
+  disc + polar screen + torus through IR filters while their headings named a
+  torus library, so they reported a whole-SED difference under an AGN heading.
+  Each arm is now the torus plus polar screen summed, which is independent of
+  how the two codes partition those components — pcigale subtracts the polar
+  re-emission from the torus dust, tengri rescales the torus against a shared
+  budget and carries polar separately. `cigale_driver.to_lnu_contribution`
+  reads one named pcigale contribution out of `sed.luminosities`, mirroring the
+  `sed.components["sed_agn_torus"]` accessor the agnfitter page already uses.
+  The SKIRTOR panel now separates its axes: the residual holds flat against
+  optical depth (0.899×, 0.898×, 0.900×) and inclination (0.895×, 0.923×) and
+  swings 1.8× across the opening angle (0.824× / 0.898× / 1.485×), so one axis
+  carries the disagreement. Both blocks also drop the deprecated
+  `predict_rest_sed` for `predict`.
 
 - `profile_mass` no longer refuses a fit that measures emission-line fluxes.
   Guard #8 was the OR of three unrelated situations — line amplitudes already
@@ -825,6 +867,16 @@
   any type-menu validation.
 
 
+### Fixed
+
+- The `lognormal` SFH's entry in the `mean_sfh` module index described it as a
+  Gaussian in log10(age). The function is a lognormal in cosmic time since
+  formation, `T = age − t_lookback`, with a 1/T Jacobian and
+  `sigma = width × ln(10)` — age and cosmic time since formation run in
+  opposite directions, and the one-line summary contradicted the function's
+  own docstring.
+
+
 ### Deprecated
 
 
@@ -925,6 +977,17 @@
   Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
   naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
 
+- Both unwired guards are wired and the class is closed (#2326):
+  `tools/check_harness_parity.py` (benchmark-fixture provenance) and
+  `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
+  confusable codepoints; warn-only until a docs cleanup clears its 24 standing
+  findings) now run in CI, and `tools/check_ci_pr_coverage.py` fails on any
+  `tools/check_*.py` invoked by no file under `.github/workflows/` — scanning
+  every workflow, since three guards run from `docs.yml`/`notebooks.yml`.
+  Rot found on restoration, fixed: a stale `%%`-block entry in
+  `check_docs_voice.py` named a checker that does not exist, so reaching it
+  raised `NameError` instead of reporting (the code-cell path at its real
+  call site is untouched).
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
   three ways at once: it named `tools/download_filters.py` while the script
@@ -944,7 +1007,6 @@
   alias-to-SVO-id pairs, so a reintroduced duplicate goes red. A
   recommendation living in an f-string is executed by nothing, which is why
   none of the three had anything to report it.
-
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both

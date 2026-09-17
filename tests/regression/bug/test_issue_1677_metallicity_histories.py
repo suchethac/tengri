@@ -31,7 +31,6 @@ the advice-message regression that #1678 fixed is in
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -49,25 +48,33 @@ pytestmark = [pytest.mark.regression_bug]
 # gitignored (data/.gitignore), so CI has none and these skip there. Cue is not
 # an option: it refuses the wNE-shaped synthetic fixture by design.
 #
-# Resolved by walking parents for a ``data/`` holding the file, the same way
-# ``load_ssp`` resolves grids — a git worktree is a fresh checkout without the
-# ignored data, so a path fixed to the repo root would skip locally too and the
-# arm would never be seen to run at all.
+# Resolved through the canonical locator, which honors the #2329 hermeticity
+# pin: under pytest the arm runs only where $TENGRI_DATA_DIR or the checkout's
+# own data/ provides the grid, and skips everywhere else -- the same verdict CI
+# reaches. (It previously walked parent directories so a nested worktree could
+# borrow the main checkout's grid; that made the probe say "run" while the
+# pinned model build could not see the file, and the arm failed instead of
+# skipping.)
 _CLOUDY_GRID_NAME = "cloudy_grid_prsc.h5"
 
 
 def _find_data_file(name):
-    """The nearest ``data/<name>`` walking up from this file, or None."""
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "data" / name
-        if candidate.is_file():
-            return candidate
-    return None
+    """The grid via the canonical locator, or None.
+
+    Not a hand-rolled ancestor walk: that found the main checkout's grid from
+    a nested worktree while ``SEDModel.build`` (which honors the #2329
+    hermeticity pin) could not, so the probe said "run" and the build raised.
+    Routing through the locator keeps the probe and the build in agreement in
+    every environment -- pinned local runs skip exactly where CI skips.
+    """
+    from tengri._data_setup import find_data
+
+    return find_data(name)
 
 
 requires_cloudy = pytest.mark.skipif(
     _find_data_file(_CLOUDY_GRID_NAME) is None,
-    reason=f"CLOUDY nebular grid {_CLOUDY_GRID_NAME} not found in any parent data/",
+    reason=f"CLOUDY nebular grid {_CLOUDY_GRID_NAME} not on the data search path",
 )
 
 _Z_OBS = 0.05
