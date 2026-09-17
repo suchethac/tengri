@@ -336,6 +336,22 @@
 
 ### Changed
 
+- The cigale reproduction's two §9e torus panels compare AGN dust emission
+  instead of the full SED. Both took their ratio over stellar + host dust +
+  disc + polar screen + torus through IR filters while their headings named a
+  torus library, so they reported a whole-SED difference under an AGN heading.
+  Each arm is now the torus plus polar screen summed, which is independent of
+  how the two codes partition those components — pcigale subtracts the polar
+  re-emission from the torus dust, tengri rescales the torus against a shared
+  budget and carries polar separately. `cigale_driver.to_lnu_contribution`
+  reads one named pcigale contribution out of `sed.luminosities`, mirroring the
+  `sed.components["sed_agn_torus"]` accessor the agnfitter page already uses.
+  The SKIRTOR panel now separates its axes: the residual holds flat against
+  optical depth (0.899×, 0.898×, 0.900×) and inclination (0.895×, 0.923×) and
+  swings 1.8× across the opening angle (0.824× / 0.898× / 1.485×), so one axis
+  carries the disagreement. Both blocks also drop the deprecated
+  `predict_rest_sed` for `predict`.
+
 - `profile_mass` no longer refuses a fit that measures emission-line fluxes.
   Guard #8 was the OR of three unrelated situations — line amplitudes already
   analytically marginalized (`eline_marginalize`), line amplitudes as free
@@ -806,6 +822,16 @@
   place the off-switch vocabulary is defined; every one of the eight groups'
   translators calls it immediately after reading its raw `type` value, before
   any type-menu validation.
+
+
+### Fixed
+
+- The `lognormal` SFH's entry in the `mean_sfh` module index described it as a
+  Gaussian in log10(age). The function is a lognormal in cosmic time since
+  formation, `T = age − t_lookback`, with a 1/T Jacobian and
+  `sigma = width × ln(10)` — age and cosmic time since formation run in
+  opposite directions, and the one-line summary contradicted the function's
+  own docstring.
 
 
 ### Deprecated
