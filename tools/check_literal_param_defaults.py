@@ -27,22 +27,25 @@ whether the two numbers currently happen to match.
 
 Scope
 -----
-``src/tengri/components/dust/`` by default, widened from the earlier
-``emission/`` scope (#2265). A no-argument run now covers the full dust tree:
-emission models, attenuation laws, and their shared parameter table
-``_params.py``. The narrower ``emission/`` scope addressed template closures
-(``dl07_tabulated``, ``dale2014_emission_lnu``, ``schreiber2018_tabulated``,
-``themis_emission`` and siblings); #2265 extends the sweep to ``attenuation.py``
-(e.g. ``kriek_conroy``, ``tea``), ``component.py``, ``_apply.py``, ``two_component.py``,
-``energy_balance_precompute.py``, and other aggregation points. Pass ``--scope``
-to target a different tree.
+Four trees by default (``DEFAULT_SCOPES``): ``src/tengri/components/dust/``,
+``.../radio/``, ``.../stellar/``, ``.../igm/``. A no-argument run makes one pass
+per tree and covers all four; the dust pass alone covers emission models,
+attenuation laws, and their shared parameter table ``_params.py``, widened
+from the earlier ``dust/emission/``-only scope (#2265). That narrower scope
+addressed template closures (``dl07_tabulated``, ``dale2014_emission_lnu``,
+``schreiber2018_tabulated``, ``themis_emission`` and siblings); #2265 extends
+the dust sweep to ``attenuation.py`` (e.g. ``kriek_conroy``, ``tea``),
+``component.py``, ``_apply.py``, ``two_component.py``,
+``energy_balance_precompute.py``, and other aggregation points. Pass
+``--scope`` to target a single different tree instead of all four.
 
 How the declared-name set is built
 -----------------------------------
 1. Every ``ParamDeclaration("<name>", ...)`` string literal found by walking
    every ``_params.py`` file inside ``--scope``, plus the dust component's
-   own ``components/dust/_params.py`` (which sits one directory above the
-   default scope and would otherwise never be seen).
+   own ``components/dust/_params.py``, read explicitly so a narrower
+   ``--scope .../emission`` run (one directory below it) still sees the names
+   it declares.
 2. Every class-level attribute assignment inside ``--scope`` whose value is a
    call to a known :class:`~tengri.parameters.priors.Distribution`
    constructor (``Fixed``, ``Uniform``, ``LogNormal``, ``LogUniform``,
@@ -117,11 +120,11 @@ DEFAULT_SCOPES: tuple[Path, ...] = (
 )
 _DUST_TREE = ROOT / "src" / "tengri" / "components" / "dust"
 
-#: The dust component's own shared table. Sits one directory above the
-#: default scope, so a narrow ``--scope`` run would otherwise never see the
-#: ``ParamDeclaration`` names it owns (``dust_T_warm``, ``dust_f_cold``, ...,
-#: read by ``energy_balance_split``, which declares nothing on its own class
-#: -- see that component's docstring).
+#: The dust component's own shared table. Read explicitly regardless of
+#: ``--scope`` so a narrower ``--scope .../emission`` run (one directory below
+#: it) still sees the ``ParamDeclaration`` names it owns (``dust_T_warm``,
+#: ``dust_f_cold``, ..., read by ``energy_balance_split``, which declares
+#: nothing on its own class -- see that component's docstring).
 _DUST_PARAMS_FILE = _DUST_TREE / "_params.py"
 
 #: The ONLY bare-name fallback prefix this guard knows, and only for a file

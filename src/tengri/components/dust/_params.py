@@ -56,7 +56,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_T",
         # Analytic templates split on this value (#2265, #2261): graybody and
         # casey2012 declare Fixed(35.0); modified_blackbody and schreiber2016
-        # declare Fixed(30.0). This table stays at 35.0 (the majority) and the
+        # declare Fixed(30.0); Schreiber2018IRSEDComponent declares Fixed(25.0).
+        # This table stays at 35.0, left unchanged pending #2261, and the
         # MBB/schreiber2016 closures read their own constants
         # (``MBB_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``) instead of the table.
         # Schreiber2018IRSEDComponent reads its own ``SCHREIBER2018_T_K_DEFAULT
@@ -76,10 +77,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "dust_beta_ir",
-        # Every analytic template (modified_blackbody, graybody, casey2012,
-        # schreiber2016) declares Fixed(1.8), not the old table value 1.6 (#2265,
-        # #2261). Corrected to match all four templates; ``ANALYTIC_BETA_IR_DEFAULT
-        # = 1.8`` below is shared across all closures and components.
+        # Three analytic classes (ModifiedBlackbodyIRSEDComponent,
+        # GraybodyIRSEDComponent, Casey2012IRSEDComponent) declare Fixed(1.8),
+        # not the old table value 1.6 (#2265, #2261). Corrected to match those
+        # three; ``ANALYTIC_BETA_IR_DEFAULT = 1.8`` below is shared across their
+        # closures and components. Schreiber2016AnalyticIRSEDComponent declares
+        # no ``dust_beta_ir`` at all -- its closure pins beta=1.5 internally
+        # (``emission/analytic/_closures.py``'s ``schreiber2016``), so it never
+        # reads this entry.
         Fixed(1.8),
         "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo >= 0,
@@ -431,22 +436,25 @@ DEFAULT_DUST_LOG_SSFR = declared_default(PARAMS, "dust_log_ssfr")
 DEFAULT_DUST_QHAC = declared_default(PARAMS, "dust_qhac")
 DEFAULT_DUST_ALPHA = declared_default(PARAMS, "dust_alpha")
 
-# ``dust_T`` / ``dust_beta_ir`` are deliberately NOT declared_default(PARAMS,
-# ...) candidates (#2241, follow-up #2261): this table's own Fixed(35.0) /
-# Fixed(1.6) disagree with what every analytic template's own class-level
-# declaration actually defaults to (modified_blackbody/schreiber2016 use
-# T=30.0 K; every template uses beta_ir=1.8), so reading them off PARAMS
-# would silently CHANGE those templates' defaults -- a behavior change this
-# fix must not make. These four names are each template's own value today,
-# shared between its closure's signature default and its component's
-# class-level declaration so the two cannot drift from EACH OTHER, even
-# while both remain out of step with the table above until #2261 resolves
-# which value is correct.
+# ``dust_T`` is deliberately NOT a declared_default(PARAMS, ...) candidate
+# (#2241, follow-up #2261): this table's own Fixed(35.0) disagrees with what
+# some analytic templates' own class-level declaration actually defaults to
+# (modified_blackbody/schreiber2016 use T=30.0 K; schreiber2018 uses 25.0 K),
+# so reading it off PARAMS would silently CHANGE those templates' defaults --
+# a behavior change this fix must not make. These four T constants are each
+# template's own value today, shared between its closure's signature default
+# and its component's class-level declaration so the two cannot drift from
+# EACH OTHER, even while some remain out of step with the table above until
+# #2261 resolves which value is correct. ``dust_beta_ir`` now agrees with the
+# table (both 1.8, #2265); ``ANALYTIC_BETA_IR_DEFAULT`` stays a named constant
+# shared by the three classes that declare it (Casey2012IRSEDComponent,
+# GraybodyIRSEDComponent, ModifiedBlackbodyIRSEDComponent) and their closures,
+# for the same no-cross-drift reason as the T constants.
 MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
 SCHREIBER_T_K_DEFAULT = 30.0  # schreiber2016 analytic component
 SCHREIBER2018_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent tabulated
-ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012, schreiber2016
+ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
 
 # ── Attenuation-law-own defaults (#2265) ──────────────────────────────
 # ``kriek_conroy``/``tea`` are plain functions, not ``SEDModelComponent``

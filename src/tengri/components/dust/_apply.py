@@ -15,7 +15,13 @@ from collections.abc import Callable, Mapping
 import jax
 import jax.numpy as jnp
 
-from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
+from tengri.components.dust._params import (
+    DEFAULT_DUST_BUMP_STRENGTH,
+    DEFAULT_DUST_DELTA,
+    DEFAULT_DUST_F_OBSCURATION,
+    DEFAULT_DUST_RV,
+    DEFAULT_DUST_SLOPE,
+)
 from tengri.components.dust.laws._registry import (
     reject_unread_law_kwargs,
     resolve_dust_law,
@@ -100,12 +106,14 @@ def precompute_dust_age_mask(
 
 #: Two-component attenuation-law parameters that may be set per-component.
 #: Maps the law-function keyword to ``(flat_param_name, default)``. The
-#: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``.
+#: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``. Defaults
+#: are read off ``ATTENUATION_PARAMS`` (``components/dust/_params.py``) rather
+#: than repeated as bare literals here.
 _TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
-    ("dust_slope", "dust_slope", -0.7),
-    ("dust_bump_strength", "dust_bump_strength", 0.0),
-    ("dust_delta", "dust_delta", 0.0),
-    ("dust_Rv", "dust_Rv", 3.1),
+    ("dust_slope", "dust_slope", DEFAULT_DUST_SLOPE),
+    ("dust_bump_strength", "dust_bump_strength", DEFAULT_DUST_BUMP_STRENGTH),
+    ("dust_delta", "dust_delta", DEFAULT_DUST_DELTA),
+    ("dust_Rv", "dust_Rv", DEFAULT_DUST_RV),
 )
 
 #: User-facing per-component short name -> attenuation-law kwarg. Used by the
