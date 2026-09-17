@@ -917,6 +917,17 @@
 
 ### Fixed
 
+- `enable_fast_nebular` now refuses when a CB19 optional parameter
+  (`neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is freed. The per-Q_H
+  grid bakes these axes at their reference values and cannot respond to the
+  sampler's variations, producing a silent mismatch: the likelihood never
+  observes the freed dimensions while the posterior reports only the prior.
+  Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
+  naming the offenders and the remedy (pin them or skip fast-nebular). Measured
+  on a grid with real variation on all four axes: each produces exactly 0.0
+  flux change when freed against the per-Q_H grid, and ~17% when freed against
+  the exact path. Closes #2307.
+
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
   three ways at once: it named `tools/download_filters.py` while the script

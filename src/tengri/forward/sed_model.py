@@ -6322,6 +6322,9 @@ class SEDModel:
                 f"{type(self._nebular_backend).__name__ if self._nebular_backend else 'none'}."
             )
 
+        from tengri.components.nebular.nebular_grid_precompute import _refuse_freed_optional_axes
+        _refuse_freed_optional_axes(self.spec)
+
         target_wavelengths = jnp.asarray(target_wavelengths)
         # Snap each target within 0.5 A of a true backend catalog line to
         # that line's exact wavelength (#2235): the fast grid built

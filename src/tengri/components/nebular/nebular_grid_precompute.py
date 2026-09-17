@@ -434,6 +434,50 @@ def _refuse_tabulated_metallicity(model):
     )
 
 
+def _refuse_freed_optional_axes(spec):
+    """Refuse CB19 optional axes freed but baked into the per-Q_H grid (#2307).
+
+    CB19's optional parameters (``neb_log_nH``, ``neb_co``, ``neb_dno``,
+    ``neb_hbfrac``) are not grid axes in the per-Q_H table — they are baked
+    in at reference values. A fit that frees one silently samples a parameter
+    the likelihood cannot see: the fast grid holds it at its reference value
+    while the sampler explores it freely. This test refuses the mismatch.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter specification.
+
+    Raises
+    ------
+    ValueError
+        When any CB19 optional parameter is free.
+    """
+    from tengri.components.nebular.component import _BACKEND_OPTIONAL_PARAMS
+
+    # Optional params that are free in the spec
+    offenders = sorted(
+        name for name in _BACKEND_OPTIONAL_PARAMS if name in spec.free_params
+    )
+    if not offenders:
+        return
+
+    detail = ", ".join(offenders)
+    raise ValueError(
+        f"enable_fast_nebular refuses to proceed with the following parameters "
+        f"free: {detail}. The per-Q_H grid bakes these CB19 optional axes at "
+        f"their reference values and cannot respond to variations you are free "
+        f"to propose in the sampler. This results in a silent mismatch: the "
+        f"likelihood never observes the freed dimensions while the posterior "
+        f"reports only the prior.\n"
+        f"Fix (one of):\n"
+        f"  1. Pin the parameters instead: "
+        f"neb={{'type': 'cb19', '{offenders[0]}': Fixed(value)}}.\n"
+        f"  2. Disable fast-nebular and use the exact path, which handles "
+        f"all CB19 parameters uniformly."
+    )
+
+
 def _dig_may_be_active(spec) -> bool:
     """True if DIG mixing may be active: ``neb_dig_frac`` free, or fixed non-zero.
 
