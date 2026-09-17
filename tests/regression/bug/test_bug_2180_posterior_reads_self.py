@@ -67,29 +67,20 @@ class TestPosteriorReadsItself:
         """validate() must dispatch on self.method, not always assume mcmc_nuts."""
         post = minimal_map_with_delayed_sfh
 
-        # The posterior was fit with MAP, so it should not error about n_steps
-        # (n_steps is a MAP argument, not a NUTS argument)
-        # We call validate() which internally calls run("mcmc_nuts", n_steps=n_steps, ...)
-        # If it tries to pass n_steps to mcmc_nuts, it will fail
-        # The fix ensures it only passes n_steps to MAP, not to mcmc_nuts.
+        # The posterior was fit with MAP, so it should not error about missing samples
+        # validate() internally calls run("mcmc_nuts", n_samples=n_samples, ...)
+        # For a MAP fit with no samples, validate() should raise ValueError about needing samples
 
-        # For a MAP fit with no samples, validate() should either:
-        # - Raise with a helpful message about needing samples, OR
-        # - Use the posterior's method (MAP) and not try to run NUTS at all
-        # Let's check that it doesn't crash with TypeError about mcmc_nuts
+        # Let's check that it doesn't crash with TypeError or signature mismatch
         try:
-            # MAP fits have no samples, so validate() might raise ValueError about that
-            # But it should NOT raise TypeError about mcmc_nuts not accepting n_steps
-            post.validate(n_steps=10)
+            # MAP fits have no samples, so validate() should raise ValueError about that
+            post.validate(n_samples=10)
         except ValueError as e:
             # This is OK — MAP has no samples to validate
             assert "sample" in str(e).lower()
         except TypeError as e:
-            # This is the bug we're fixing
-            if "mcmc_nuts" in str(e) and "n_steps" in str(e):
-                pytest.fail(f"validate() passed n_steps to mcmc_nuts: {e}")
-            # Other TypeErrors should still fail
-            raise
+            # Unexpected TypeError should still fail
+            pytest.fail(f"Unexpected TypeError in validate(): {e}")
 
     def test_non_dpl_sfh_types_round_trip(self, ssp_data_wne, simple_observation):
         """Multiple SFH types must round-trip through to_param_spec."""

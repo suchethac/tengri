@@ -2145,23 +2145,56 @@ class Posterior:
             for param_name, param_dist in kwargs.items():
                 group_path = partition[param_name]
 
-                if group_path == "_toplevel":
+                if group_path == "_structural":
+                    # Skip structural metadata parameters like noise_dof
+                    continue
+                elif group_path == "_toplevel":
                     # Top-level params like 'redshift'
                     groups[param_name] = param_dist
                 elif "." in group_path:
                     # Nested group like "dust.emission"
                     base, sub = group_path.split(".", 1)
-                    if base in groups and isinstance(groups[base], dict):
-                        if sub not in groups[base]:
-                            groups[base][sub] = {}
-                        if isinstance(groups[base][sub], dict):
-                            short = _extract_short_name(param_name, groups[base][sub])
-                            groups[base][sub][short] = param_dist
+                    if base not in groups:
+                        raise ValueError(
+                            f"Parameter {param_name!r} belongs to group {base!r}, "
+                            f"which is not active in this model. The reference model "
+                            f"does not have {base!r}. Use Posterior.load(path, model=model) "
+                            f"to provide a compatible model."
+                        )
+                    if not isinstance(groups[base], dict):
+                        raise ValueError(
+                            f"Parameter {param_name!r} expects {base!r} to be a dict "
+                            f"group, but got {type(groups[base]).__name__}. The posterior "
+                            f"and model are structurally incompatible."
+                        )
+                    if sub not in groups[base]:
+                        groups[base][sub] = {}
+                    if isinstance(groups[base][sub], dict):
+                        short = _extract_short_name(param_name, groups[base][sub])
+                        groups[base][sub][short] = param_dist
+                    else:
+                        raise ValueError(
+                            f"Parameter {param_name!r} expects {base}.{sub} to be a dict, "
+                            f"but got {type(groups[base][sub]).__name__}. The posterior "
+                            f"and model are structurally incompatible."
+                        )
                 else:
                     # Flat group like "sfh"
-                    if group_path in groups and isinstance(groups[group_path], dict):
-                        short = _extract_short_name(param_name, groups[group_path])
-                        groups[group_path][short] = param_dist
+                    if group_path not in groups:
+                        raise ValueError(
+                            f"Parameter {param_name!r} belongs to group {group_path!r}, "
+                            f"which is not active in this model. The reference model "
+                            f"does not have {group_path!r}. Use Posterior.load(path, model=model) "
+                            f"to provide a compatible model."
+                        )
+                    if not isinstance(groups[group_path], dict):
+                        raise ValueError(
+                            f"Parameter {param_name!r} expects {group_path!r} to be a dict "
+                            f"group, but got {type(groups[group_path]).__name__}. The posterior "
+                            f"and model are structurally incompatible."
+                        )
+                    short = _extract_short_name(param_name, groups[group_path])
+                    groups[group_path][short] = param_dist
 
             return parse_groups(**groups)
         else:
@@ -3082,18 +3115,18 @@ class Posterior:
             )
         return self._fitter.run(method, init_from=self, **kwargs)
 
-    def validate(self, n_steps: int = 200, **kwargs):
+    def validate(self, n_samples: int = 200, **kwargs):
         """Run a short MCMC check and return a validation summary.
 
-        Runs ``n_steps`` of Ray Tracing (or NUTS for D≤20) from this
-        posterior's MAP estimate, then computes the marginal overlap
-        between this posterior and the MCMC check posterior for each
-        parameter.
+        Compares this posterior's samples against a fresh MCMC run from the
+        posterior's MAP estimate. Runs ``n_samples`` of Ray Tracing (or NUTS
+        for D≤20), then computes the marginal overlap between this posterior
+        and the MCMC check posterior for each parameter.
 
         Parameters
         ----------
-        n_steps : int
-            Number of MCMC steps. Default 200 (quick sanity check).
+        n_samples : int
+            Number of MCMC samples. Default 200 (quick sanity check).
         **kwargs
             Forwarded to the MCMC run.
 
@@ -3122,7 +3155,7 @@ class Posterior:
         Examples
         --------
         >>> result_vi = model.fit(flux, noise, method="vi")
-        >>> val = result_vi.validate(n_steps=500)
+        >>> val = result_vi.validate(n_samples=500)
         >>> print(f"Validation passed: {val['passed']}")
         >>> for param, ov in val["overlap"].items():
         ...     print(f"{param}: overlap={ov:.3f}")
@@ -3144,39 +3177,9 @@ class Posterior:
         d = self._fitter.spec.n_free
         mcmc_method = "mcmc_nuts" if d <= 20 else "mcmc_raytrace"
 
-        # Dispatch based on the MCMC method to pass only valid kwargs
-        # NUTS uses: n_warmup, n_burnin, n_samples, n_chains, ...
-        # Ray Tracing uses: n_steps, n_chains, ...
-        # We need to convert n_steps (MAP argument) to the correct argument for the method
-        import inspect
-
-        # Get the backend function to introspect its signature
-        from tengri.inference._backend_registry import BACKEND_REGISTRY
-        backend_fn = BACKEND_REGISTRY.get(mcmc_method)
-        if backend_fn is not None:
-            sig = inspect.signature(backend_fn)
-            valid_params = set(sig.parameters.keys()) - {"context", "key", "init_from"}
-
-            # Build kwargs for this method
-            mcmc_kwargs = {"init_from": self}
-
-            # Convert n_steps to the method's preferred parameter
-            if mcmc_method == "mcmc_nuts" and "n_samples" in valid_params:
-                # NUTS: use n_steps to set n_samples
-                mcmc_kwargs["n_samples"] = n_steps
-            elif mcmc_method == "mcmc_raytrace" and "n_steps" in valid_params:
-                # Ray Tracing: use n_steps directly
-                mcmc_kwargs["n_steps"] = n_steps
-
-            # Add any other provided kwargs that are valid for this method
-            for key, value in kwargs.items():
-                if key in valid_params:
-                    mcmc_kwargs[key] = value
-
-            mcmc_result = self._fitter.run(mcmc_method, **mcmc_kwargs)
-        else:
-            # Fallback if registry lookup fails
-            mcmc_result = self._fitter.run(mcmc_method, init_from=self, n_steps=n_steps, **kwargs)
+        mcmc_result = self._fitter.run(
+            mcmc_method, init_from=self, n_samples=n_samples, **kwargs
+        )
 
         # Compute per-parameter marginal overlap (histogram intersection)
         overlap: dict[str, float] = {}
