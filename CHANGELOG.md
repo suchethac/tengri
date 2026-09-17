@@ -969,6 +969,17 @@
 
 ### Fixed
 
+- Both unwired guards are wired and the class is closed (#2326):
+  `tools/check_harness_parity.py` (benchmark-fixture provenance) and
+  `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
+  confusable codepoints; warn-only until a docs cleanup clears its 24 standing
+  findings) now run in CI, and `tools/check_ci_pr_coverage.py` fails on any
+  `tools/check_*.py` invoked by no file under `.github/workflows/` — scanning
+  every workflow, since three guards run from `docs.yml`/`notebooks.yml`.
+  Rot found on restoration, fixed: a stale `%%`-block entry in
+  `check_docs_voice.py` named a checker that does not exist, so reaching it
+  raised `NameError` instead of reporting (the code-cell path at its real
+  call site is untouched).
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
   three ways at once: it named `tools/download_filters.py` while the script
@@ -988,7 +999,6 @@
   alias-to-SVO-id pairs, so a reintroduced duplicate goes red. A
   recommendation living in an f-string is executed by nothing, which is why
   none of the three had anything to report it.
-
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
