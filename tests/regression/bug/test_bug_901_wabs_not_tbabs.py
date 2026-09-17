@@ -14,6 +14,9 @@ import warnings
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
+
+pytestmark = pytest.mark.regression_bug
 
 
 def test_wabs_transmission_importable():
@@ -40,14 +43,16 @@ def test_wabs_transmission_bit_identical_to_tbabs():
         # Test at log_nh = 21
         result_wabs_21 = wabs_transmission(E_grid, 21.0)
         result_tbabs_21 = tbabs_transmission(E_grid, 21.0)
-        assert np.array_equal(result_wabs_21, result_tbabs_21), \
+        assert np.array_equal(result_wabs_21, result_tbabs_21), (
             "wabs_transmission and tbabs_transmission differ at log_nh=21"
+        )
 
         # Test at log_nh = 23
         result_wabs_23 = wabs_transmission(E_grid, 23.0)
         result_tbabs_23 = tbabs_transmission(E_grid, 23.0)
-        assert np.array_equal(result_wabs_23, result_tbabs_23), \
+        assert np.array_equal(result_wabs_23, result_tbabs_23), (
             "wabs_transmission and tbabs_transmission differ at log_nh=23"
+        )
 
 
 def test_tbabs_transmission_emits_deprecation_warning():
@@ -64,17 +69,15 @@ def test_tbabs_transmission_emits_deprecation_warning():
         assert len(w) == 1, f"Expected 1 warning, got {len(w)}"
 
         # Check it's a DeprecationWarning
-        assert issubclass(w[0].category, DeprecationWarning), \
+        assert issubclass(w[0].category, DeprecationWarning), (
             f"Expected DeprecationWarning, got {w[0].category}"
+        )
 
         # Check message contains 'wabs' and 'Wilms' (mentioning the convention)
         msg = str(w[0].message)
-        assert "wabs" in msg.lower(), \
-            f"Warning message should mention 'wabs': {msg}"
-        assert "wilms" in msg.lower(), \
-            f"Warning message should mention 'Wilms': {msg}"
-        assert "wabs_transmission" in msg, \
-            f"Warning message should name the new function: {msg}"
+        assert "wabs" in msg.lower(), f"Warning message should mention 'wabs': {msg}"
+        assert "wilms" in msg.lower(), f"Warning message should mention 'Wilms': {msg}"
+        assert "wabs_transmission" in msg, f"Warning message should name the new function: {msg}"
 
 
 def test_xray_log_nh_registry_description_mentions_wabs():
@@ -92,5 +95,6 @@ def test_xray_log_nh_registry_description_mentions_wabs():
 
     # Check that the description mentions wabs
     description = xray_log_nh_decl.description
-    assert "wabs" in description.lower(), \
+    assert "wabs" in description.lower(), (
         f"xray_log_nh description should mention 'wabs': {description}"
+    )

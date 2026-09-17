@@ -207,6 +207,7 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     Emits Python's standard DeprecationWarning on invocation.
     """
     import warnings
+
     warnings.warn(
         "`tbabs_transmission` is deprecated and will be removed in tengri v1.0; "
         "use `wabs_transmission` instead. The implementation uses the wabs convention "
