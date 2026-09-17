@@ -28,19 +28,12 @@ def test_agn_grahsp_a_bc_description_names_correct_anchor():
     assert record is not None, "agn_grahsp_a_bc not found in registry"
 
     desc = record.description
-    assert "3000 nm" not in desc, (
-        f"Description incorrectly names 3000 nm. "
-        f"Got: {desc!r}"
-    )
-    assert "3000 Å" not in desc, (
-        f"Description incorrectly names 3000 Å. "
-        f"Got: {desc!r}"
-    )
+    assert "3000 nm" not in desc, f"Description incorrectly names 3000 nm. Got: {desc!r}"
+    assert "3000 Å" not in desc, f"Description incorrectly names 3000 Å. Got: {desc!r}"
 
     # Check that the correct anchor is mentioned
     assert "5100" in desc or "510" in desc, (
-        f"Description does not name the 5100 Å (510 nm) anchor. "
-        f"Got: {desc!r}"
+        f"Description does not name the 5100 Å (510 nm) anchor. Got: {desc!r}"
     )
 
 
@@ -64,10 +57,7 @@ def test_agn_grahsp_a_bc_description_matches_implementation_constant():
     elif nm_match:
         anchor_nm = float(nm_match.group(1))
 
-    assert anchor_nm is not None, (
-        f"Could not extract wavelength from description. "
-        f"Got: {desc!r}"
-    )
+    assert anchor_nm is not None, f"Could not extract wavelength from description. Got: {desc!r}"
 
     assert abs(anchor_nm - LAMBDA_5100_NM) < 0.1, (
         f"Description names {anchor_nm} nm, but LAMBDA_5100_NM = {LAMBDA_5100_NM} nm. "
