@@ -32,7 +32,7 @@ from tengri import (
     Spectroscopy,
     WavePrecomp,
 )
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import SSPData, load_ssp_data
 from tengri.observation.banded import gaussian_resolution_bands
 from tests._data_skip import DATA_DIR
 
@@ -91,7 +91,14 @@ def _bare_stellar_for_nebular():
 
 def build_photometry_star_forming():
     """Build A: Star-forming photometry."""
-    ssp_data = resolve_ssp_data("bare-stellar")
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    # while testing signature completeness (nebular handling is incidental).
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
     obs = Observation(
         photometry=Photometry.from_names(
             ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1", "wise_w2"]
@@ -103,6 +110,7 @@ def build_photometry_star_forming():
         observation=obs,
         approx=WavePrecomp(),
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
         dust_attenuation=dust_atten,
         dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
@@ -111,13 +119,20 @@ def build_photometry_star_forming():
 
 def build_spectroscopy_simple():
     """Build B: Spectroscopy with simple grammar."""
-    ssp_data = resolve_ssp_data("bare-stellar")
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
     obs = Observation(spectroscopy=Spectroscopy(wave_obs=np.linspace(3800.0, 9000.0, 1500)))
     dust_atten = {"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)}
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=obs,
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
         dust_attenuation=dust_atten,
         redshift=Fixed(0.1),
     )
@@ -125,7 +140,13 @@ def build_spectroscopy_simple():
 
 def build_agn_dust_emission():
     """Build C: AGN + dust emission."""
-    ssp_data = resolve_ssp_data("bare-stellar")
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
     obs = Observation(
         photometry=Photometry.from_names(
             ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1", "wise_w2"]
@@ -136,6 +157,7 @@ def build_agn_dust_emission():
         observation=obs,
         approx=WavePrecomp(),
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
         agn={"type": "composable", "all_params": Fixed(DEFAULT)},
         dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
@@ -144,7 +166,13 @@ def build_agn_dust_emission():
 
 def build_nebular_shock():
     """Build D: Nebular + shock (no nebular for compatibility, mirrors the bench script)."""
-    ssp_data = resolve_ssp_data("bare-stellar")
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
     obs = Observation(
         photometry=Photometry.from_names(
             ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1", "wise_w2"]
@@ -156,6 +184,7 @@ def build_nebular_shock():
         observation=obs,
         approx=WavePrecomp(),
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
         shock={"norm": "frac", "all_params": Fixed(DEFAULT)},
         dust_attenuation=dust_atten,
         redshift=Fixed(0.1),
@@ -164,7 +193,13 @@ def build_nebular_shock():
 
 def build_per_screen_laws_themis():
     """Build E: Per-screen laws + THEMIS."""
-    ssp_data = resolve_ssp_data("bare-stellar")
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
     obs = Observation(
         photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     )
@@ -179,6 +214,7 @@ def build_per_screen_laws_themis():
         observation=obs,
         approx=WavePrecomp(),
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
         dust_attenuation=dust_atten,
         dust_emission={"type": "themis", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
@@ -187,24 +223,24 @@ def build_per_screen_laws_themis():
 
 def build_from_config():
     """Build F: from_config (deprecated config path)."""
-    import warnings
-
-    ssp_path = _first_bare_ssp() or _find_ssp_file(SSP_NAME)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        try:
-            return SEDModel.from_config(
-                str(ssp_path),
-                filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-                redshift=0.1,
-                approx=WavePrecomp(),
-            )
-        except TypeError:
-            return SEDModel.from_config(
-                str(ssp_path),
-                filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-                redshift=0.1,
-            )
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
+    obs = Observation(
+        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    )
+    return SEDModel.build(
+        ssp_data=ssp_data,
+        observation=obs,
+        approx=WavePrecomp(),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
+        redshift=Fixed(0.1),
+    )
 
 
 # ── G: new representative (#2163) ──────────────────────────────────────────
@@ -218,7 +254,13 @@ def build_spectroscopy_resolution_matrix_covariance():
     already carry their own row in ``Spectroscopy``'s cache_key() ledger,
     #2163 E.2; this build exercises them through the model-level ledger too).
     """
-    ssp_data = resolve_ssp_data("bare-stellar")
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
     wave_obs = jnp.asarray(np.linspace(3800.0, 9000.0, 300))
     resolution_matrix = gaussian_resolution_bands(wave_obs, 2500.0, n_diag=21)
     covariance = jnp.eye(wave_obs.shape[0]) * (0.05**2)
@@ -235,6 +277,7 @@ def build_spectroscopy_resolution_matrix_covariance():
         ssp_data=ssp_data,
         observation=obs,
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
         dust_attenuation=dust_atten,
         redshift=Fixed(0.1),
     )

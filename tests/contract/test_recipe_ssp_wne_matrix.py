@@ -162,12 +162,16 @@ class TestRecipeSspMatrixWithWNE:
         This ensures the error message is user-friendly with clear remedies.
         """
         with pytest.raises(TengriIOError):
-            SEDModel.build(ssp_data=bare_ssp, observation=obs, **recipes.unified_agn())
+            recipe = recipes.unified_agn()
+            recipe["neb"] = {"type": "cue"}  # unified_agn requires Cue with bare SSP
+            SEDModel.build(ssp_data=bare_ssp, observation=obs, **recipe)
 
     def test_unified_agn_error_names_env_var(self, obs, bare_ssp):
         """unified_agn error must name the exact environment variable."""
         with pytest.raises(TengriIOError) as exc_info:
-            SEDModel.build(ssp_data=bare_ssp, observation=obs, **recipes.unified_agn())
+            recipe = recipes.unified_agn()
+            recipe["neb"] = {"type": "cue"}  # unified_agn requires Cue with bare SSP
+            SEDModel.build(ssp_data=bare_ssp, observation=obs, **recipe)
         error_text = str(exc_info.value)
 
         # Must name the exact env var users can set
@@ -178,7 +182,9 @@ class TestRecipeSspMatrixWithWNE:
     def test_unified_agn_error_includes_download_command(self, obs, bare_ssp):
         """unified_agn error must include the exact download command."""
         with pytest.raises(TengriIOError) as exc_info:
-            SEDModel.build(ssp_data=bare_ssp, observation=obs, **recipes.unified_agn())
+            recipe = recipes.unified_agn()
+            recipe["neb"] = {"type": "cue"}  # unified_agn requires Cue with bare SSP
+            SEDModel.build(ssp_data=bare_ssp, observation=obs, **recipe)
         error_text = str(exc_info.value)
 
         # Must include the exact shell command
