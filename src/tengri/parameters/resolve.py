@@ -50,9 +50,7 @@ def refuse_fixed_overrides(spec, params):
 
     offending = sorted(set(params) & set(spec.fixed_params))
     if offending:
-        detail = "; ".join(
-            f"{k!r} (pinned {spec.fixed_value(k)!r})" for k in offending
-        )
+        detail = "; ".join(f"{k!r} (pinned {spec.fixed_value(k)!r})" for k in offending)
         raise ParameterError(
             f"params overrides Fixed parameter(s): {detail}. "
             "Call-time overrides of a Fixed parameter are not supported (#2296); "

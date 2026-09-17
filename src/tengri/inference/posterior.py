@@ -200,8 +200,10 @@ class Posterior:
     ----------
     samples : dict or None
         Posterior samples in physical parameter space (optional, set by inference).
+        Free parameters only (#2296); Fixed values are on :attr:`fixed_values`.
     params : dict
-        Best-fit or posterior mean parameters.
+        Best-fit or posterior mean parameters. Free parameters only (#2296);
+        Fixed values are on :attr:`fixed_values`, not merged into this dict.
     method : str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
     wall_time_s : float
@@ -239,11 +241,15 @@ class Posterior:
         Posterior samples in physical parameter space. Each value has shape
         (n_samples, ...). Keys are parameter names (e.g., ``"stellar_mass"``,
         ``"age_gyr"``, ``"psd_xi"``). ``None`` for point estimates (MAP, Laplace,
-        Pathfinder).
+        Pathfinder). Free parameters only (#2296): a key the spec declared
+        ``Fixed`` never appears here, see :attr:`fixed_values`.
 
     params : dict
         Best-fit (MAP for point estimation) or posterior mean parameters in
-        physical space. Same keys as ``samples`` (without ``"psd_xi"`` latent field).
+        physical space. Same keys as ``samples`` (without ``"psd_xi"`` latent
+        field). Free parameters only (#2296): safe to feed straight back into
+        ``model.predict(posterior.params)`` on the SAME model, which fills
+        Fixed values in internally.
 
     method : str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).

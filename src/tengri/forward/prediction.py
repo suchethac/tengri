@@ -1952,9 +1952,9 @@ class Prediction:
 
     __slots__ = (
         "_cache",
+        "_free_params",
         "_model",
         "_params",
-        "_free_params",
         "_photometry_cache",
         "ionizing",
         "lines",

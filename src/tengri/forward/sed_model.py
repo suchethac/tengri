@@ -5063,7 +5063,16 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        rest_result = self._predict_rest_sed(params, wave=wave)
+        # ``params`` may already be fully merged here (Prediction._obs_sed_on
+        # passes its own merged self._params, so the IGM/DLA reads below get
+        # real Fixed values via plain .get() rather than silently defaulting).
+        # _predict_rest_sed self-merges via predict_state internally and
+        # refuses a Fixed key of its own (#2296), so it gets the free-only
+        # subset regardless of what shape ``params`` arrived in.
+        _free_names = set(self.spec.free_params)
+        rest_result = self._predict_rest_sed(
+            {k: v for k, v in params.items() if k in _free_names}, wave=wave
+        )
         z = self._get_redshift(params)
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
@@ -5121,7 +5130,9 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values using public parameter names.
+            Free parameters only, using public parameter names; a key the
+            spec declared ``Fixed`` is refused with ``ParameterError``
+            (#2296), not merged or silently overridden.
 
         Returns
         -------
@@ -5319,9 +5330,10 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values using public parameter names (e.g.,
+            Free parameters only, using public parameter names (e.g.,
             ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
-            See :class:`Parameters` for canonical names.
+            See :class:`Parameters` for canonical names. A key the spec
+            declared ``Fixed`` is refused with ``ParameterError`` (#2296).
         ssp_data : SSPData | None, keyword-only, optional
             SSP grid to thread in as a traced argument. ``None`` (default) uses
             ``self.ssp_data``, which is correct for every ordinary call. Pass it
@@ -5829,7 +5841,8 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
+            Free parameters only (public names). A key the spec declared
+            ``Fixed`` is refused with ``ParameterError`` (#2296).
         target_wavelengths : array, shape (n_target,), optional
             Rest-frame vacuum wavelengths (Angstrom) of lines to predict.
             Each wavelength is matched to the nearest backend line.
@@ -5927,6 +5940,12 @@ class SEDModel:
         log_all_lums = None
         all_lums = None
         grid = getattr(self, "_nebular_grid_table", None)
+        # Lazily merged the FIRST time either branch below actually needs it
+        # (#2296): a build-time probe (precompute_nebular_grid's per-node
+        # forward) calls this with grid=None, state=given, redden=False --
+        # neither branch nor the redden step touches params, so it must not
+        # be refused for carrying a deliberately-overridden Fixed key.
+        full_params = None
         if grid is not None:
             # FAST path (#950): reconstruct intrinsic line luminosities from the
             # per-Q_H grid, no Cue forward. Q_H is the stellar-published ``nion``
@@ -5951,6 +5970,7 @@ class SEDModel:
             # any model whose Fixed pin differs from the default -- measured
             # 9.3e-1 (neb_logU) / 4.0e-1 (neb_dig_frac) relative error on the
             # returned line fluxes (review I1, #2222).
+            full_params = merge_fixed_params(self.spec, params)
             from tengri.components.nebular.dig import mix_dig_grid_reconstruction
             from tengri.components.nebular.nebular_grid_precompute import (
                 _dig_may_be_active,
@@ -5978,8 +5998,6 @@ class SEDModel:
             # JAX array here (never a Python literal), so the zero-fraction
             # short-circuit never fires on this path -- both lookups always
             # run, even at the declared ``Fixed(0.0)`` default (#2262).
-            # Refuse any Fixed key in params (#2296)
-            full_params = merge_fixed_params(self.spec, params)
             log_all_lums = mix_dig_grid_reconstruction(
                 reconstruct_nebular_line_log_lums,
                 log_nion,
@@ -6050,8 +6068,14 @@ class SEDModel:
                 state.derived.get("log_line_lums_attenuated") if state is not None else None
             )
             if _log_atten is None:
+                # _attenuate_line_catalog reads params["dust_tau_bc"] etc.
+                # directly, no merge of its own (#2296): merge here if the
+                # grid branch above did not already (grid is None on this
+                # call).
+                if full_params is None:
+                    full_params = merge_fixed_params(self.spec, params)
                 if log_all_lums is None:
-                    all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
+                    all_lums = self._attenuate_line_catalog(full_params, all_waves, all_lums)
                 else:
                     # Attenuation is a pure multiplicative screen
                     # (``attenuate_emission`` is ``sed * exp(-tau_bc k_bc) *
@@ -6060,7 +6084,7 @@ class SEDModel:
                     # this surface on the ONE screen #1867 single-sourced, rather
                     # than growing a second copy of the dust law here.
                     screen = self._attenuate_line_catalog(
-                        params, all_waves, jnp.ones_like(jnp.asarray(all_waves))
+                        full_params, all_waves, jnp.ones_like(jnp.asarray(all_waves))
                     )
                     log_all_lums = log_all_lums + jnp.log10(screen)
             else:
@@ -6351,7 +6375,12 @@ class SEDModel:
         stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
         if stellar is None:
             raise ValueError("No StellarSEDComponent in the chain, cannot compute Q_H.")
-        sliced = slice_params_for_component(stellar, params)
+        # compute_log_nion -> compute_joint_weights reads params["redshift"]
+        # directly (require_redshift, no fallback): merge the spec's Fixed
+        # values in first (#2296), same as every other exact-projector-style
+        # consumer this file routes through merge_fixed_params.
+        full_params = merge_fixed_params(self.spec, params)
+        sliced = slice_params_for_component(stellar, full_params)
         return stellar.compute_log_nion(sliced, ssp_data=self.ssp_data)
 
     def predict_line_ratios(self, params, line_ratio_data, *, state=None):
@@ -6810,15 +6839,23 @@ class SEDModel:
         if approx:
             from tengri.components.dust.two_component import DustSEDComponent
 
+            # compute_joint_weights / compute_transmission are exact-projector-
+            # style consumers (require_redshift, raw dict reads with no
+            # fallback): they need the MERGED dict, unlike the exact branch
+            # below which self-merges inside predict_state/_predict_rest_sed.
+            # Refuses any Fixed key present (#2296) and fills in the rest.
+            full_params = merge_fixed_params(self.spec, params)
             chain = self._feature_chain()
             stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
-            joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+            joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
             pc = self._line_window_precomp(line_defs)
             dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
             if dust is None:
                 transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
             else:
-                transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+                transmission = dust.compute_transmission(
+                    full_params, pc.window_centers, ssp_ages_yr
+                )
             return measure_line_fluxes_from_window_lut(
                 joint_weights, total_mass, transmission, pc, log10_4pi_dl2
             )
@@ -7060,7 +7097,9 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values using public parameter names.
+            Free parameters only, using public parameter names. A key the
+            spec declared ``Fixed`` is refused with ``ParameterError``
+            (#2296).
         names : tuple[str] or list[str], optional
             Property names to compute. If None, computes all available
             properties. Each name must be in :attr:`available_properties`,
@@ -7911,7 +7950,11 @@ class SEDModel:
             # (dust off/wg00): the SAME no-state screen `predict_line_fluxes`
             # falls back to (#2223), so this deprecated surface cannot drift
             # from its replacement even off that published-catalog fast path.
-            atten_lums = self._attenuate_line_catalog(params, lines.all_waves, lines.all_lums)
+            # _attenuate_line_catalog reads params["dust_tau_bc"] etc. with no
+            # merge of its own (#2296), so it needs the merged form here too.
+            atten_lums = self._attenuate_line_catalog(
+                merge_fixed_params(self.spec, params), lines.all_waves, lines.all_lums
+            )
 
         # Re-extract the headline scalars from the attenuated catalog
         # so EmissionLines.halpha / .hbeta / etc. reflect dust.

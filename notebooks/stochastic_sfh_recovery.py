@@ -188,7 +188,6 @@ def build(observation, n_grid=N_GRID, approx=FAST_PATH):
 # and the dense metric. The table takes about a second to build.
 model = {k: build(v) for k, v in OBSERVATION.items()}
 spec = model["B"].spec
-fixed_values = spec.get_fixed_values()
 print(
     f"SFH dimension: {spec.n_grid} field latents + {spec.n_free} physical "
     f"= D {spec.n_grid + spec.n_free}"
@@ -217,18 +216,16 @@ truth = {
     "sfh_field_psd_tau_myr": jnp.array(120.0),
     "sfh_dpl_log_total_mass": jnp.array(11.0),
 }
-_sfh = model["B"].predict_sfh({**fixed_values, **truth})
+_sfh = model["B"].predict_sfh(truth)
 _now = int(np.argmin(np.asarray(_sfh["t_gyr"])))  # present = smallest lookback time
 truth["sfh_dpl_log_total_mass"] = jnp.array(
     11.0 + np.log10(20.0 / float(np.asarray(_sfh["sfr_mean"])[_now]))
 )
-truth_full = {**fixed_values, **truth}
-
 # Score on the model's OWN log-age nodes, not the default linear resampling: the
 # linear grid steps by age_max / n_linear = 13.8 Myr, so only 2 of its samples fall
 # below 15 Myr while 5 of the 16 log-age nodes do. Scoring on the linear grid
 # weights every megayear equally and lets 15-500 Myr swamp the young bins.
-nodes = model["B"].predict_sfh(truth_full, grid="native")
+nodes = model["B"].predict_sfh(truth, grid="native")
 t_node = np.asarray(nodes["t_gyr"])
 sfr_true = np.asarray(nodes["sfr_full"])
 
@@ -250,7 +247,7 @@ print(
 
 # %%
 mock = model["A"].mock(
-    {**model["A"].spec.get_fixed_values(), **truth},
+    truth,
     snr=PHOT_SNR,
     key=jax.random.PRNGKey(SEED + 10_000),
 )
@@ -259,16 +256,14 @@ flux_phot, err_phot = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 # measure_line_fluxes needs its line_defs passed explicitly. Left out, it falls
 # back to a built-in DESI set of five lines -- not the eight this Observation
 # declares -- and the returned array would silently describe different lines.
-lf_true = np.asarray(model["B"].measure_line_fluxes(truth_full, line_defs))
+lf_true = np.asarray(model["B"].measure_line_fluxes(truth, line_defs))
 assert lf_true[LINE_NAMES.index("Halpha")] > 0, "Halpha not in emission for this truth"
 err_line = np.abs(lf_true) / LINE_SNR
 flux_line = lf_true + err_line * np.random.default_rng(SEED + 20_000).standard_normal(
     lf_true.shape
 )
 
-spec_true = np.asarray(
-    model["C"].predict_spectrum({**model["C"].spec.get_fixed_values(), **truth}, wave_obs=WAVE_OBS)
-)
+spec_true = np.asarray(model["C"].predict_spectrum(truth, wave_obs=WAVE_OBS))
 err_spec = np.abs(spec_true) / SPEC_SNR
 flux_spec = spec_true + err_spec * np.random.default_rng(SEED + 30_000).normal(
     size=spec_true.shape
@@ -304,11 +299,7 @@ print(
 
 # %%
 wave_wide = jnp.linspace(1300.0, 11000.0, 3000)
-sed_wide = np.asarray(
-    model["C"].predict_spectrum(
-        {**model["C"].spec.get_fixed_values(), **truth}, wave_obs=wave_wide
-    )
-)
+sed_wide = np.asarray(model["C"].predict_spectrum(truth, wave_obs=wave_wide))
 TO_UJY = 1e29  # erg/s/cm2/Hz -> microjansky
 wave_eff = np.asarray(effective_wavelengths_um(phot)) * 1e4
 
@@ -430,8 +421,7 @@ for key in "ABC":
 # %%
 def sfr_at_nodes(key):
     """MAP star-formation rate on the native log-age nodes [Msun/yr]."""
-    p = {**model[key].spec.get_fixed_values(), **fits[key].params}
-    return np.asarray(model[key].predict_sfh(p, grid="native")["sfr_full"])
+    return np.asarray(model[key].predict_sfh(fits[key].params, grid="native")["sfr_full"])
 
 
 def rms_dex(pred, mask):
@@ -606,7 +596,7 @@ print(f"max R-hat {max_rhat:.3f}")
 ax = plot_sfh(
     model["B"],
     posterior,
-    true_params=truth_full,
+    true_params=truth,
     method="HMC",
     xscale="log",
     label="posterior (case B)",

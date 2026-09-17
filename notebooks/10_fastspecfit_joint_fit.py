@@ -193,10 +193,7 @@ _seed_lines = LineFluxData(
     wavelengths=LINE_WAVES,
 )
 model_truth = build(_seed_lines, approx=None)
-truth_full = {
-    **model_truth.spec.get_fixed_values(),
-    **{k: jnp.asarray(v) for k, v in TRUTH.items()},
-}
+truth_full = {k: jnp.asarray(v) for k, v in TRUTH.items()}
 
 p_phot = np.asarray(model_truth.predict_photometry(truth_full))
 p_line = np.asarray(model_truth.predict_line_fluxes(truth_full, target_wavelengths=LINE_WAVES))
@@ -462,8 +459,7 @@ plt.show()
 # %%
 N_DRAW = 80
 _sidx = np.linspace(0, len(next(iter(posterior.samples.values()))) - 1, N_DRAW).astype(int)
-_fixed = model_fast.spec.get_fixed_values()
-draws = [{**_fixed, **{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()}} for i in _sidx]
+draws = [{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()} for i in _sidx]
 
 # Effective wavelength of each band (transmission-weighted), for placing the points.
 wave_eff_um = effective_wavelengths_um(phot_obs)

@@ -92,7 +92,7 @@ KNOWN: frozenset[tuple[str, str]] = frozenset(
         # entry point is listed in RAISES_ON_BARE_PARAMS and the type matches.
         (
             "contract/test_fixed_params_reach_every_entry_point.py",
-            "test_entry_point_honors_a_fixed_redshift",
+            "test_entry_point_refuses_an_explicit_fixed_redshift",
         ),
         ("contract/test_presets.py", "test_preset_can_sample"),
         ("crossval/test_full_sed_crossval.py", "test_tengri_nonparametric_color_trend"),

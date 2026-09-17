@@ -56,7 +56,7 @@ def _model(ssp, obs):
             "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        redshift=Fixed(0.1),
+        redshift=0.1,  # FREE, allowing tests to override at call-time
     )
 
 

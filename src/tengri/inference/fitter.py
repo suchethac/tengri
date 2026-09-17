@@ -1183,6 +1183,17 @@ class Fitter:
         Compile modes are passed to ``compile(modes=...)`` and determine which
         inference engines are pre-JIT-compiled before the first ``run()`` call.
         See ``compile()`` docstring for valid mode names.
+    params_override : dict or None, optional
+        The sanctioned way to pin a Fixed parameter at a *different* value for
+        this one fit (e.g. a per-galaxy redshift), without rebuilding the
+        model (#1329). Validated at construction: every key must name a
+        parameter the spec declared ``Fixed`` (a free parameter raises
+        ``ValueError``, naming the free parameters instead). This is NOT the
+        same channel as a ``params`` dict handed to a predict surface --
+        those refuse a Fixed key outright (#2296) and never accept an
+        override; ``params_override`` is the one place a Fixed value can be
+        re-pinned, and it is checked, not merged silently. Default ``None``
+        (use the spec's declared Fixed values unchanged).
     profile_mass : bool or "auto", optional
         Analytically marginalize the total-stellar-mass amplitude (the free
         parameter named ``*_log_total_mass``) instead of sampling it, so

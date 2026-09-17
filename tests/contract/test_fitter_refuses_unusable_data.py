@@ -87,8 +87,7 @@ def _build(ssp, bands):
 @pytest.fixture(scope="module")
 def clean(ssp_data_fsps):
     model, obs = _build(ssp_data_fsps, _BANDS)
-    truth = dict(model.spec.get_fixed_values())
-    truth["sfh_delayed_log_total_mass"] = 10.0
+    truth = {"sfh_delayed_log_total_mass": 10.0}
     flux = np.asarray(model.predict_photometry(truth))
     return model, obs, flux, 0.05 * flux
 

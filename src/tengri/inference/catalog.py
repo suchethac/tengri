@@ -919,15 +919,15 @@ class Catalog:
             def _measure(params):
                 return self.fwd.measure_line_fluxes(params, line_defs, approx=True)
 
-            # approx=True routes through the window-LUT path, which reads
-            # Fixed values straight out of the dict with no merge of its own
-            # -- the one consumer that needs _prediction_columns_with_fixed.
-            merged_columns, _ = self._prediction_columns_with_fixed(None)
+            # approx=True's window-LUT path merges Fixed values in internally
+            # (SEDModel.measure_line_fluxes, #2296) before it reaches
+            # compute_joint_weights -- so this call site hands it the SAME
+            # free-only columns as every other consumer.
             # The tag carries the line set: a different set is a different
             # program, and reusing one cache entry across them would be wrong.
             measured = self._map_chunks(
                 _measure,
-                merged_columns,
+                columns,
                 n_galaxies,
                 chunk_size,
                 tag=f"lines:{','.join(d.name for d in line_defs)}",
@@ -975,8 +975,11 @@ class Catalog:
         refusal on values THIS method injected, not on anything the caller
         overrode -- the same hazard :class:`~tengri.forward.prediction.Prediction`
         avoids by keeping a free-only ``_free_params`` alongside its merged
-        ``_params``. Use :meth:`_prediction_columns_with_fixed` for the one
-        consumer that needs the merged form.
+        ``_params``. ``measure_line_fluxes(approx=True)`` used to need a
+        pre-merged form too (it reached ``compute_joint_weights`` directly,
+        with no merge of its own); that gap is closed inside
+        :meth:`~tengri.forward.sed_model.SEDModel.measure_line_fluxes` itself
+        now, so every consumer here wants the free-only columns.
         """
         if param_table is None:
             if self._history_columns is None:
@@ -994,27 +997,6 @@ class Catalog:
         refuse_fixed_overrides(self.fwd.spec, columns)
 
         return columns, n_galaxies
-
-    def _prediction_columns_with_fixed(self, param_table):
-        """Same as :meth:`_prediction_columns`, with Fixed values merged in.
-
-        Fixed parameter values are broadcast in as ``(N,)`` columns. Not every
-        consumer self-merges: the window-LUT line path
-        (``measure_line_fluxes(approx=True)``) reaches ``compute_joint_weights``,
-        which reads ``params["met_logzsol"]`` directly and raises ``KeyError``
-        on a dict carrying only the free parameters. This is the ONE consumer
-        that needs the merged form; every other caller wants
-        :meth:`_prediction_columns` instead (see its docstring for why).
-        Caller columns win, so a per-galaxy ``redshift`` still overrides a
-        fixed one.
-        """
-        columns, n_galaxies = self._prediction_columns(param_table)
-        fixed = {
-            name: np.broadcast_to(np.asarray(value), (n_galaxies,)).copy()
-            for name, value in self.fwd.spec.get_fixed_values().items()
-            if np.asarray(value).ndim == 0
-        }
-        return {**fixed, **columns}, n_galaxies
 
     def _batched(self, tag, fn):
         """A memoized ``jit(vmap(fn))``, so the XLA cache survives across calls.
@@ -1186,7 +1168,10 @@ class Catalog:
             tabulated history (``sfh_t_gyr``, ``sfh_sfr``, ``met_history``) is
             ``(N, n_t)``. Every free parameter needs a column; names the model
             does not recognize are reported by the forward model's own
-            unknown-parameter check, so a typo cannot pass silently. Omit it
+            unknown-parameter check, so a typo cannot pass silently. A column
+            named for a parameter the spec declared ``Fixed`` is refused with
+            ``ParameterError`` (#2296) rather than overriding it — rebuild the
+            model with that parameter ``FREE`` instead. Omit ``param_table``
             entirely on a catalog built by :meth:`from_histories`, which
             already carries its columns.
         chunk_size : int, default 1024

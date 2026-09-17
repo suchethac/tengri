@@ -18,7 +18,7 @@ pytestmark = pytest.mark.contract
 @lru_cache(maxsize=1)
 def _build_shock_dust_model():
     """Build shock+two_component model once, reuse to avoid SSP download overhead."""
-    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
     from tengri.data import download_ssp
 
@@ -42,7 +42,7 @@ def _build_shock_dust_model():
             "tau_diff": 1.0,
         },
         neb={"type": "none"},
-        shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+        shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.5),
         approx=WavePrecomp(),
     )
@@ -66,7 +66,7 @@ class TestShockAttenuationPhysics:
         publishing the attenuated form (silently returns zeros, or
         returns unattenuated form).
         """
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -92,12 +92,12 @@ class TestShockAttenuationPhysics:
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=WavePrecomp(),
         )
 
-        params = {}
+        params = {"shock_frac": 1.0}
         state = model.predict_state(params)
 
         shock_intrinsic = state.derived.get("shock_phot_lnu_precomp")
@@ -137,7 +137,7 @@ class TestShockAttenuationPhysics:
 
         Post-fix: r_b must satisfy r_g < r_r < r_i and minimum spread > 5%.
         """
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -164,7 +164,7 @@ class TestShockAttenuationPhysics:
                 "tau_diff": 0.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
 
@@ -187,11 +187,11 @@ class TestShockAttenuationPhysics:
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
 
-        params = {}
+        params = {"shock_frac": 1.0}
         params_no_shock = {"shock_frac": 0.0}
 
         # Measure shock deltas
@@ -249,7 +249,7 @@ class TestShockAttenuationPhysics:
         Test: doctored state (missing attenuated form) raises KeyError with #1434.
         """
         model = _build_shock_dust_model()
-        params = {}
+        params = {"shock_frac": 1.0}
 
         # Get the real state with all keys intact
         state = model.predict_state(params)
@@ -265,9 +265,11 @@ class TestShockAttenuationPhysics:
         )
 
         # Control: undoctored state should complete without error
+        from tengri.parameters.resolve import resolve_fixed_params
+
         obs = model.observation
-        # predict_via_precomp requires full params including Fixed values (e.g., redshift)
-        full_params = {**model.spec.get_fixed_values(), **params}
+        # predict_via_precomp requires all params including fixed ones
+        full_params = resolve_fixed_params(model, params)
         phot_undoctored = obs.predict_via_precomp(state, full_params)  # Should not raise
         assert phot_undoctored is not None, "Control failed: undoctored predict returned None"
 
@@ -300,7 +302,7 @@ class TestShockAttenuationPhysics:
         Assertion: precomp shock delta is nonzero and scales roughly with exact
         (within 3x measured λ_eff vs exact band-integration overhead).
         """
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -326,7 +328,7 @@ class TestShockAttenuationPhysics:
                 "tau_v": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=None,
         )
@@ -349,12 +351,12 @@ class TestShockAttenuationPhysics:
                 "tau_v": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=WavePrecomp(),
         )
 
-        params = {}
+        params = {"shock_frac": 1.0}
         params_no_shock = {"shock_frac": 0.0}
 
         # Compute deltas

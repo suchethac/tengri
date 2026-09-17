@@ -48,6 +48,7 @@ import numpy as np
 from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.stellar.reference_history import reference_history_params
+from tengri.parameters.resolve import merge_fixed_params
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import interp_nd_pchip
@@ -816,6 +817,10 @@ def precompute_nebular_grid(
         ref_params = dict(spec.sample(jax.random.PRNGKey(0)))
     else:
         ref_params = dict(ref_params)
+    # spec.sample() (and any caller-supplied stand-in) is free-only (#2296):
+    # merge the spec's Fixed values in explicitly, so e.g. a Fixed redshift is
+    # actually present below rather than silently defaulting to 0.0.
+    ref_params = merge_fixed_params(spec, ref_params)
     ref_z = ref_params.get("redshift", 0.0)
     # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
     # its runtime arrays and the stellar component raises before the first row.
@@ -887,7 +892,12 @@ def precompute_nebular_grid(
         p = dict(ref_params)
         for i, name in enumerate(axis_names):
             p[name] = row[i]
-        state = model.predict_state(p)
+        # `p` is already fully resolved (ref_params was built from the spec's
+        # Fixed values + the forced neb_dig_frac=0.0 override above, #2296):
+        # `fixed_values={}` is predict_state's "already resolved, trust me"
+        # escape hatch, so this internal build-time probe is not refused for
+        # carrying a Fixed key it deliberately overrides.
+        state = model.predict_state(p, fixed_values={})
         # Q_H is ~1e53 photons/s, so the LINEAR ``nion`` is ``inf`` in float32 and
         # ``inv_qh`` is then exactly 0. The reciprocal is only ever used as a
         # divisor, so take it as a log offset instead and it never materializes

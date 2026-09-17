@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import warnings
 
-import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
 import pytest
@@ -193,7 +192,7 @@ def test_spec_sample_returns_only_free_keys(model_with_fixed_redshift):
 
     sampled = model.spec.sample(jr.PRNGKey(0))
 
-    for key in sampled.keys():
+    for key in sampled:
         assert key in model.spec.free_params, f"Sampled key {key} is not free"
     for free_key in model.spec.free_params:
         assert free_key in sampled, f"Free param {free_key} missing from sample"

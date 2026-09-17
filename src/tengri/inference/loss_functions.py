@@ -174,6 +174,23 @@ def _build_prediction(
     :func:`_build_data_neg_log_likelihood_fn`. ``use_components`` keeps its own
     component-split path (not threaded here).
     """
+    # ``params`` here is the fit machinery's own resolved physical dict (free
+    # + Fixed, mirrors merged) -- Fitter's contract for neg_log_lik / the
+    # extra_log_prior hook, and NOT a user-supplied params dict (#2296 refuses
+    # THOSE; this one is always internally consistent with the spec, so
+    # naming a Fixed key here can never disagree with the pinned value).
+    # Every public predict_*/measure_* method below refuses a Fixed key of
+    # its own regardless, so it gets the free-only subset; the merged
+    # ``params`` stays available to the caller (neg_log_lik reads
+    # ``params.get("noise_frac_cal", ...)`` and hands ``params`` to the
+    # Likelihood adapter directly).
+    _spec = getattr(model, "spec", None)
+    if _spec is not None and hasattr(_spec, "free_params"):
+        _free_names = set(_spec.free_params)
+        free_params = {k: v for k, v in params.items() if k in _free_names}
+    else:
+        free_params = params
+
     # Single threaded forward for phot/spec/joint: one orchestrator call
     # returns an Observables carrying every configured channel. ``_obs`` is
     # None when threading is unavailable (dummy models, ``use_components``) or
@@ -194,27 +211,27 @@ def _build_prediction(
         if _obs is not None:
             predicted = _obs.phot_fnu
         elif use_components:
-            predicted = model._photometry_via_state(params)
+            predicted = model._photometry_via_state(free_params)
         else:
-            predicted = model.predict_photometry(params)
+            predicted = model.predict_photometry(free_params)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
         if _obs is not None:
             predicted = _obs.spec_fnu
         elif use_components:
-            predicted = model._spectrum_via_state(params)
+            predicted = model._spectrum_via_state(free_params)
         else:
-            predicted = model.predict_spectrum(params)
+            predicted = model.predict_spectrum(free_params)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
         if _obs is not None:
             pred_phot, pred_spec = _obs.phot_fnu, _obs.spec_fnu
         elif use_components:
-            pred_phot = model._photometry_via_state(params)
-            pred_spec = model._spectrum_via_state(params)
+            pred_phot = model._photometry_via_state(free_params)
+            pred_spec = model._spectrum_via_state(free_params)
         else:
-            pred_phot = model.predict_photometry(params)
-            pred_spec = model.predict_spectrum(params)
+            pred_phot = model.predict_photometry(free_params)
+            pred_spec = model.predict_spectrum(free_params)
         predicted = jnp.concatenate([pred_phot, pred_spec])
     else:
         raise ValueError(f"Unknown data_type: {data_type}")
@@ -258,26 +275,26 @@ def _build_prediction(
             template_data=jit_inputs["template_data"],
         )
     else:
-        feature_state = model.predict_state(params)
+        feature_state = model.predict_state(free_params)
     if has_line_fluxes:
         if measured_line_defs is not None:
             # No discrete line catalog (BakedIn) → measure the fluxes off the
             # model spectrum the way a pipeline does (measure_line_fluxes). With
             # FeaturePrecomp the measurement runs against the SSP window LUT.
             prediction["line_fluxes"] = model.measure_line_fluxes(
-                params, measured_line_defs, approx=fast_lines, state=feature_state
+                free_params, measured_line_defs, approx=fast_lines, state=feature_state
             )
         else:
             prediction["line_fluxes"] = model.predict_line_fluxes(
-                params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
+                free_params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
             )
     if has_line_ratios:
         prediction["line_ratios"] = model.predict_line_ratios(
-            params, model.observation.line_ratios, state=feature_state
+            free_params, model.observation.line_ratios, state=feature_state
         )
     if has_indices:
         prediction["indices"] = model.predict_spectral_indices(
-            params, index_defs, state=feature_state
+            free_params, index_defs, state=feature_state
         )
 
     return prediction, predicted, pred_phot, pred_spec
@@ -315,6 +332,12 @@ def _build_data_neg_log_likelihood_fn(fitter):
     model = fitter.model
     data_type = fitter.data_type
     spec = fitter.spec
+    # ``neg_log_lik``'s ``params`` is the fit machinery's resolved physical
+    # dict (free + Fixed, mirrors merged) -- not a user-supplied params dict
+    # -- but the predict_* methods it calls below refuse a Fixed key of
+    # their own regardless (#2296), so the legacy censored fall-through
+    # filters to free names before calling them.
+    _free_names = set(spec.free_params)
     noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
     use_censored = fitter.data_mask is not None
     has_line_fluxes = "line_flux_waves" in fitter._data_args
@@ -462,9 +485,12 @@ def _build_data_neg_log_likelihood_fn(fitter):
         # Line-flux / spectral-index extras for the censored fall-through.
         # The user-likelihood path composes these via CompositeLikelihood;
         # the censored path needs them inlined since it bypasses the cohort.
+        # Free-only: none of these three pass ``state=``, so each would
+        # otherwise self-merge Fixed values from ``params`` and refuse (#2296).
+        _free_params = {k: v for k, v in params.items() if k in _free_names}
         if has_line_fluxes:
             model_lf = model.predict_line_fluxes(
-                params, target_wavelengths=data_args["line_flux_waves"]
+                _free_params, target_wavelengths=data_args["line_flux_waves"]
             )
             chi2_lines = jnp.sum(
                 standardized_residual(
@@ -474,7 +500,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             )
             e_lh = e_lh + 0.5 * chi2_lines
         if has_line_ratios:
-            model_lr = model.predict_line_ratios(params, model.observation.line_ratios)
+            model_lr = model.predict_line_ratios(_free_params, model.observation.line_ratios)
             chi2_ratios = jnp.sum(
                 standardized_residual(
                     data_args["line_ratio_obs"], model_lr, data_args["line_ratio_err"]
@@ -483,7 +509,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             )
             e_lh = e_lh + 0.5 * chi2_ratios
         if has_indices:
-            model_idx = model.predict_spectral_indices(params, index_defs)
+            model_idx = model.predict_spectral_indices(_free_params, index_defs)
             chi2_idx = jnp.sum(
                 standardized_residual(data_args["index_obs"], model_idx, data_args["index_err"])
                 ** 2
@@ -646,7 +672,10 @@ def build_loss_fn(fitter):
             # (not threaded through the SSP-grid fast path that neg_log_lik
             # uses, see test_loss_ssp_threading.py); only paid when this hook
             # is actually set.
-            state = model.predict_state(params)
+            # predict_state handles merging Fixed values internally (#2296).
+            # Only pass free parameters.
+            free_params_dict = {k: v for k, v in params.items() if k in free_names}
+            state = model.predict_state(free_params_dict)
             loss = loss - extra_log_prior(params, state)
         return loss
 
@@ -754,11 +783,15 @@ def build_logprior_fn(fitter):
 
     def logprior_fn(free_params):
         """Per-parameter log prior plus the user's ``extra_log_prior`` term."""
+        # predict_state handles merging Fixed values internally (#2296).
+        # Only pass free parameters.
+        state = model.predict_state(free_params)
+        # For the extra_log_prior callback, construct the full params dict
+        # (mirrors are resolved internally by predict_state)
         params = dict(free_params)
         for name, val in fixed_values.items():
             params[name] = val
         params = spec.resolve_mirrors(params)
-        state = model.predict_state(params)
         return base_logprior_fn(free_params) + extra_log_prior(params, state)
 
     return logprior_fn
