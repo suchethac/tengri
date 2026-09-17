@@ -917,6 +917,11 @@
 
 ### Fixed
 
+- `test_bma_weights_ranking_agreement` now uses a shared mock fixture so both
+  models score identical data, and adds a separation guard: skips when
+  `|ΔlogZ| < 2σ` to avoid counting near-tie ranking flips as route disagreement
+  (#2364).
+
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
   three ways at once: it named `tools/download_filters.py` while the script
