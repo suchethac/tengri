@@ -1605,7 +1605,7 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     -------
     Callable
         Model function with signature
-        ``(wavelength_aa, L_absorbed, dust_log_lir=10.0, **kw) -> L_nu``.
+        ``(wavelength_aa, L_absorbed, log_L_ir=None, **kw) -> L_nu``.
 
     Notes
     -----
@@ -1630,7 +1630,8 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     def dh02_ce01_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_log_lir: float = 10.0,
+        log_L_ir: float | None = None,
+        redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
         """DH02_CE01 dust emission from tabulated templates (Dale & Helou 2002).
@@ -1640,17 +1641,27 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
         wavelength_aa : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
         L_absorbed : float
-            Total absorbed luminosity [Lsun].
-        dust_log_lir : float
-            Log₁₀ of the infrared luminosity [log₁₀(L_IR/L_sun)].
-            Clipped to the grid range [8.3, 14.3]. Default: 10.0.
+            Total absorbed luminosity [erg/s].
+        log_L_ir : float, optional
+            ``log10(L_absorbed)`` [dex, **erg/s** -- the tengri-wide SED
+            contract], pre-computed upstream. When given, it is used in place
+            of ``jnp.log10(L_absorbed)`` for the grid-axis lookup, and (after
+            converting to the grid's own Lsun-relative axis, see below) for
+            selecting the template shape (#2366): ``L_absorbed`` is ~1e43 erg/s
+            and therefore ``inf`` in pure float32, while its log is finite, so
+            passing this avoids materializing the overflowed linear value.
+            ``None`` (the default) preserves the exact original formula for
+            callers that only have the linear value (e.g. the legacy
+            ``DUST_EMISSION_MODELS`` dispatch).
+        redshift : float
+            Source redshift (for CMB contrast correction; currently unused).
         **_kwargs
             Extra keyword arguments (ignored).
 
         Returns
         -------
         ndarray, shape (n_wave,)
-            Dust emission L_ν [Lsun/Hz].
+            Dust emission L_ν [erg/s/Hz].
 
         Notes
         -----
@@ -1658,8 +1669,31 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
         **Gradient-safe**: yes, differentiable everywhere via linear interpolation.
         """
+        # L_TIR ~ L_absorbed (energy balance). ``log_lir_ergs`` feeds the
+        # NORMALIZATION below and stays in erg/s throughout -- the delivered
+        # SED must integrate to the erg/s budget regardless of what unit the
+        # grid's own axis uses.
+        if log_L_ir is None:
+            log_lir_ergs = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
+            lir_axis = log_lir_ergs
+        else:
+            log_lir_ergs = jnp.asarray(log_L_ir)
+            # The packaged grid's axis is log10(L_TIR / Lsun) -- the
+            # Dale & Helou 2002 convention (grid spans 8.3–14.3 in Lsun) --
+            # while ``log_L_ir`` is erg/s (the tengri-wide SED contract).
+            # Convert for the AXIS LOOKUP only, via the #2273 precedent
+            # (``dust_log_L_ir + LOG10_L_SUN`` in ``components/dust/component.py``
+            # etc.): without this, any astrophysically realistic L_ir (~1e42-1e45
+            # erg/s, i.e. dex 42-45) numerically saturates the grid's ceiling
+            # node (14.3) regardless of the real budget, pinning the shape to a
+            # single (incorrect) template rather than letting it track the L_IR
+            # that the library is designed to use (#2366).
+            from tengri.utils.sed_quantities import LOG10_L_SUN
+
+            lir_axis = log_lir_ergs - LOG10_L_SUN
+
         # Clip input to grid bounds
-        lir_c = jnp.clip(dust_log_lir, irlum_axis[0], irlum_axis[-1])
+        lir_c = jnp.clip(lir_axis, irlum_axis[0], irlum_axis[-1])
 
         # Linear interpolation index and fraction
         i = jnp.clip(

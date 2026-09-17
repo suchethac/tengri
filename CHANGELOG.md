@@ -2,6 +2,23 @@
 
 ### Fixed
 
+- DH02_CE01 template shape now depends on the galaxy's infrared luminosity
+  (#2366): the Dale & Helou (2002) / Chary & Elbaz (2001) template library is
+  indexed by log₁₀(L_TIR/L_sun) and the whole point of that family is that the
+  SED shape correlates with luminosity — warmer, broader templates at higher
+  L_IR. The closure carried a hardcoded `dust_log_lir=10.0` default and inherited
+  `factors_l_ir=True` from the base class, so ``apply()`` always evaluated it at
+  unit luminosity (``log10(1) = 0``), pinning the shape lookup to a single grid
+  node regardless of the actual budget; only the amplitude was rescaled
+  afterwards. The template shape therefore never tracked the fitted luminosity.
+  Fixed by setting `factors_l_ir=False` on the component (matching BosaIRSEDComponent),
+  declaring `optional_inputs={'log_L_ir': 'dex'}`, and rewriting the closure
+  to receive the live `log_L_ir` budget, convert it to the grid's L_sun axis
+  (same precedent as #2272/#2273), and use that for the template lookup. The
+  model's total power still integrates to the absorbed luminosity exactly; the
+  shape now varies appropriately with the fitted L_IR. **Model output changes for
+  every dh02_ce01 fit** (#2366).
+
 - Data locator hermeticity (#2329): a nested worktree's test run found untracked
   data (CLOUDY grids, Cue weights) in the main checkout via the locator's
   ancestor-directory walk, so suites passed locally and failed in CI. A new
