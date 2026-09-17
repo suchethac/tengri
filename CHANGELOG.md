@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### Fixed
+
+- `agn_grahsp_a_bc` parameter description now correctly names the 5100 Å (510 nm)
+  reference wavelength, matching the implementation and upstream GRAHSP. The
+  previous description incorrectly stated 3000 nm, a wavelength at which the
+  Balmer continuum is identically zero (#2158).
 
 ### Added
 
