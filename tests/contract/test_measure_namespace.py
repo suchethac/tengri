@@ -25,7 +25,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.observation import Observation, Photometry
 from tengri.observation.line_measurement import DESI_LINES
 from tengri.observation.spectral_indices import STANDARD_INDICES
@@ -56,7 +56,11 @@ def _model(ssp, obs):
             "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        redshift=0.1,  # FREE, allowing tests to override at call-time
+        # FREE (not a bare float -- a bare value resolves to Fixed(val), #2296),
+        # so every test's own {"redshift": z} params dict is a legitimate
+        # call-time value for a free parameter, not a refused Fixed-key
+        # override.
+        redshift=FREE,
     )
 
 

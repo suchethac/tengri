@@ -417,11 +417,21 @@ def from_prediction(pred, *, indices=None, lines=None, filters=_UNSET):
     >>> measure.from_prediction(pred, indices=("Dn4000",), lines=("Halpha",))  # doctest: +SKIP
     {'Dn4000': Array(1.43, ...), 'Halpha': Array(3.1e-16, ...)}
     """
-    model, params = pred._model, pred._params
+    model = pred._model
+    # ``_predict_rest_sed`` is a public-refusing surface (#2296): it delegates
+    # to ``predict_state``, which refuses any Fixed key present in its input.
+    # ``pred._params`` legitimately carries every one of them (the merged
+    # dict this Prediction resolved once at construction), so handing THAT
+    # back in trips the refusal on values this Prediction injected, not on
+    # anything a caller overrode. Use ``pred._free_params`` for this call, and
+    # the merged ``pred._params`` only for direct value reads (e.g. redshift,
+    # which may be Fixed and thus absent from the free-only dict).
+    params = pred._params
+    free_params = pred._free_params
     out = {}
 
     if indices or lines:
-        rest = model._predict_rest_sed(params)
+        rest = model._predict_rest_sed(free_params)
         wave, lnu = rest.wavelength, rest.sed
 
     for name in indices or ():

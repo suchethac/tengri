@@ -5052,6 +5052,18 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
+        # Refuse a Fixed key BEFORE _predict_obs_sed's internal free-name
+        # filter (#2296). That filter exists so the internal merged-dict
+        # caller (Prediction._obs_sed_on, which hands in self._params --
+        # fixed+free, deliberately) can drop back to a free-only subset
+        # before delegating to _predict_rest_sed / predict_state; run
+        # against a user-supplied dict here it instead silently discards a
+        # Fixed-key override before any refusal has a chance to see it --
+        # the exact silent-ignore this issue forbids. This public alias is
+        # the only caller that hands _predict_obs_sed a dict that has not
+        # already been through Prediction's one-time refuse-then-merge, so
+        # the check belongs here, not inside _predict_obs_sed itself.
+        refuse_fixed_overrides(self.spec, params)
         return self._predict_obs_sed(params, wave=wave)
 
     def _predict_obs_sed(self, params, wave=None):
@@ -5706,6 +5718,14 @@ class SEDModel:
         from tengri.cosmology import luminosity_distance
         from tengri.observation.spectrum import project_spectrum
 
+        # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
+        # dict (both of predict_spectrum's explicit-wave_obs branches route
+        # here), so it has not been through Prediction's one-time
+        # refuse-then-merge. Without this, _predict_obs_sed's internal
+        # free-name filter would silently drop a Fixed-key override before
+        # any refusal saw it -- the same silent-ignore closed for
+        # predict_obs_sed itself.
+        refuse_fixed_overrides(self.spec, params)
         sed_obs = self._predict_obs_sed(params)
         z = self._get_redshift(params)
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
