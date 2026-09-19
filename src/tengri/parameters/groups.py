@@ -6102,7 +6102,7 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 )
 
             # Reject old law-as-type spelling: type='smc_prevot'
-            if type_key in ("smc_prevot", "prevot_smc"):
+            if type_key in _AGN_ATTEN_LAW_TYPES:
                 # Task 16 (item 9, F8): both spellings a caller might try must
                 # reach the working form in ONE message. Before this,
                 # type='prevot_smc' (reversed word order) fell through to the
@@ -6110,11 +6110,13 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 # 'smc_prevot' -- itself ALSO refused by this very check, a
                 # second hop to the same destination. Intercepting both here
                 # means either spelling reaches the fix directly.
+                law_name = _AGN_ATTEN_LAW_TYPES[type_key]
                 raise ValueError(
                     f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    "  agn={'atten': {'law': 'prevot_smc', 'attenuation_ebv': Uniform(...)}}\n"
-                    "'prevot_smc' is the only law this block implements -- it applies "
+                    f"  agn={{'atten': {{'law': {law_name!r}, "
+                    f"'attenuation_ebv': Uniform(...)}}}}\n"
+                    f"{law_name!r} is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
                     "not a new choice. 'attenuation_ebv' is the short spelling of "
                     "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
