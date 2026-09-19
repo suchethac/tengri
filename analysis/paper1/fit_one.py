@@ -483,6 +483,25 @@ def save_fit_outputs(
     # Compute derived quantities (stellar mass, SFR, dust). The dust parameter's
     # name varies by configuration; the NPZ key does not (#2089).
     dust_param = dust_parameter_name(config_key)
+
+    # Check the declared name against the model that was actually built. The
+    # consumer below is params.get(dust_param, nan), which cannot distinguish a
+    # wrong name from an absent parameter, so a mismatch is a full column of NaN
+    # and nothing raises. The declaration is a property of the attenuation
+    # family -- dust_tau_v for a single screen, dust_tau_diff for the diffuse
+    # half of a two-component model -- but it is stored per configuration ID,
+    # and an ID is a label: this suite already had one tuning rule silently
+    # reattach itself to different physics when the numerals were reassigned.
+    # Verify against the physics, here, on the machine running the fit.
+    if dust_param not in sed_model.spec.free_params:
+        raise KeyError(
+            f"Configuration {config_key} declares its dust optical depth as "
+            f"{dust_param!r}, but the model it builds has no such free "
+            f"parameter. Free parameters are {sorted(sed_model.spec.free_params)}. "
+            f"Either configs.CONFIGS[{config_key!r}]['dust_param'] is stale or "
+            f"the attenuation family changed; the derived dust column would "
+            f"otherwise be silently NaN for every draw of this cell."
+        )
     derived_samples = {key: [] for key in DERIVED_KEYS}
 
     for params in iter_draws(samples_thin, fixed_values, 500):
