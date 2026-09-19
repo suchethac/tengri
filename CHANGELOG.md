@@ -2,6 +2,22 @@
 
 ### Fixed
 
+- Unknown dict keys now name the type's accepted parameter short names (#2176):
+  when a user writes an unknown key like `sfh={'type': 'delayed', 'zzz': 1.0}`
+  with no close difflib match, the error message now includes the type's
+  parameter short names (e.g., "Parameter names this type accepts: tau_gyr,
+  age_gyr"), so the user sees what they can write instead of only the structural
+  keys. For types with many parameters (> 12), the message points to
+  `tengri.describe('<type>')` instead of listing them.
+
+- AGN attenuation did-you-mean routes law-form names to the law form (#2201):
+  when a user writes an invalid AGN atten type like `agn={'atten':
+  {'type': 'prevot'}}`, difflib may suggest `smc_prevot` (a law-mapped type).
+  Before the fix, the error message suggested using `type='smc_prevot'`, which
+  itself would be refused with "no longer supported. Use the law form instead"
+  (two hops to the same fix). The message now suggests the law form directly:
+  `law='prevot_smc'` (one hop).
+
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently

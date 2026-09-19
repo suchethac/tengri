@@ -5569,10 +5569,36 @@ def _check_dict_keys(
             else displayed_structural_keys
         )
         displayed_keys = sorted({k for k in structural_source if k != WILDCARD_KEY})
+
+        # Extract the type from the user dict to show accepted parameter names.
+        # When no close match is found, display the type's accepted parameter
+        # short names (or point to tengri.describe for large types).
+        type_value = user_dict.get("type")
+        param_hint = ""
+        if not suggestions and type_value:
+            # Extract parameter short names accepted for this type by filtering
+            # the allowed set to exclude structural keys.
+            structural_keys_set = set(displayed_keys) | {WILDCARD_KEY}
+            param_short_names = sorted(
+                {_extract_short_name(k, {}) for k in allowed if k not in structural_keys_set}
+            )
+            # Threshold: if many parameter names, point to describe instead of listing
+            _PARAM_NAMES_LIST_THRESHOLD = 12  #: max params to list before suggesting describe()
+            if param_short_names:
+                if len(param_short_names) > _PARAM_NAMES_LIST_THRESHOLD:
+                    param_hint = (
+                        f" Parameter names this type accepts: "
+                        f"use tengri.describe('{type_value}') to list them."
+                    )
+                else:
+                    param_hint = (
+                        f" Parameter names this type accepts: {', '.join(param_short_names)}."
+                    )
+
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{suggest_str} "
             f"Valid structural keys for this group are: "
-            f"{displayed_keys}."
+            f"{displayed_keys}.{param_hint}"
         )
 
 
@@ -6133,7 +6159,24 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         # Validate type
         if block_type not in valid_types:
             suggestions = difflib.get_close_matches(block_type, valid_types, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            # Special case for atten: if the suggestion is smc_prevot (a type that wraps
+            # the law form), suggest the law form instead. This prevents routing the user
+            # through a type that would itself be refused with "no longer supported".
+            if block_name == "atten" and suggestions:
+                revised_suggestions = []
+                for s in suggestions:
+                    if s == "smc_prevot":
+                        # smc_prevot is a type that wraps the prevot_smc law; suggest the law form
+                        revised_suggestions.append("law='prevot_smc'")
+                    else:
+                        revised_suggestions.append(s)
+                suggest_str = (
+                    f" Did you mean: {', '.join(revised_suggestions)}?"
+                    if revised_suggestions
+                    else ""
+                )
+            else:
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown agn_{block_name}_block type '{block_type}'.{suggest_str}")
 
         result[block_to_kwarg[block_name]] = block_type
