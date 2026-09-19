@@ -979,6 +979,14 @@
 
 ### Fixed
 
+- `enable_fast_nebular` now refuses when a CB19 optional parameter
+  (`neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is freed. The per-Q_H
+  grid bakes these axes at their reference values and cannot respond to the
+  sampler's variations, producing a silent mismatch: the likelihood never
+  observes the freed dimensions while the posterior reports only the prior.
+  Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
+  naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
+
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
   `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
