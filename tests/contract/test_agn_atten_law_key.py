@@ -16,7 +16,7 @@ class TestAgNAttenLawKey:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
-            agn={"atten": {"law": "prevot_smc", "attenuation_ebv": Uniform(0.0, 0.5)}},
+            agn={"atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 0.5)}},
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
@@ -50,7 +50,7 @@ class TestAgNAttenLawKey:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
-            agn={"atten": {"type": "qsogen", "attenuation_ebv": 0.1}},
+            agn={"atten": {"type": "qsogen", "ebv": 0.1}},
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "qsogen"
@@ -109,7 +109,7 @@ class TestAgNAttenLawKey:
             agn={
                 "atten": {
                     "law": "prevot_smc",
-                    "attenuation_ebv": FREE,
+                    "ebv": FREE,
                 }
             },
             redshift=Fixed(0.1),
@@ -125,7 +125,7 @@ class TestAgNAttenLawKey:
             agn={
                 "atten": {
                     "law": "prevot_smc",
-                    "attenuation_ebv": Fixed(0.2),
+                    "ebv": Fixed(0.2),
                 }
             },
             redshift=Fixed(0.1),
@@ -139,7 +139,7 @@ class TestAgNAttenLawKey:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
-            agn={"atten": {"law": "prevot_smc", "attenuation_ebv": 0.1}},
+            agn={"atten": {"law": "prevot_smc", "ebv": 0.1}},
             redshift=Fixed(0.1),
         )
         groups = model.spec.to_groups()
@@ -169,7 +169,7 @@ class TestAgNAttenLawKey:
         """Test that roundtrip preserves parameters through grammar."""
         original_groups = {
             "redshift": Fixed(0.1),
-            "agn": {"atten": {"law": "prevot_smc", "attenuation_ebv": 0.15}},
+            "agn": {"atten": {"law": "prevot_smc", "ebv": 0.15}},
         }
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,

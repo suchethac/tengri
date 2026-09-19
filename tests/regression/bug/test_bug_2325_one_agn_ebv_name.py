@@ -132,6 +132,28 @@ def test_agn_ebv_survives_qsogen_block(synthetic_ssp_wide, synthetic_tophat_obs)
     assert sed is not None and len(sed) > 0
 
 
+def test_attenuation_ebv_short_spelling_refused(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Building with the retired short dict spelling 'attenuation_ebv' raises.
+
+    The short form under agn={'atten': {...}} used 'attenuation_ebv' (old),
+    but the surviving name is 'ebv' (short form) or 'agn_ebv' (full name).
+    The error must name agn_ebv (the surviving parameter) and reference #2325.
+    """
+    with pytest.raises(ValueError, match=r"attenuation_ebv.*agn_ebv.*2325"):
+        SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            redshift=Fixed(0.0),
+            agn={
+                "type": "composable",
+                "atten": {
+                    "law": "prevot_smc",
+                    "attenuation_ebv": 0.3,  # Old short dict spelling
+                },
+            },
+        )
+
+
 def test_agn_attenuation_ebv_absent_from_src():
     """Verify the retired name does not appear in any src/ consumer code.
 

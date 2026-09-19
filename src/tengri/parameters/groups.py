@@ -5455,7 +5455,9 @@ def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
 #: under. Both ``smc_prevot`` and ``qsogen`` attenuation blocks now read the single
 #: surviving name ``agn_ebv``. The retired spelling is intercepted before the
 #: generic key resolver reaches it, in every group.
-_RETIRED_AGN_ATTEN_EBV: frozenset[str] = frozenset({"agn_attenuation_ebv"})
+_RETIRED_AGN_ATTEN_EBV: frozenset[str] = frozenset(
+    {"agn_attenuation_ebv", "attenuation_ebv"}  # flat + short dict spelling
+)
 
 
 def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
