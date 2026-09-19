@@ -254,9 +254,24 @@ def config_III(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
         },
+        # Charlot & Fall (2000) is a power law with a steeper birth-cloud screen
+        # than diffuse: tau ~ lambda^-1.3 in the birth cloud, lambda^-0.7 in the
+        # ISM. The registry has no law named "charlot_fall2000" and never did --
+        # that string is a CITATION key, and resolve.py maps it to this law
+        # ("power_law": "charlot_fall2000"). An earlier revision took the
+        # citation key for a registry key because grepping the source found the
+        # string; being present in the source is not being registered.
+        #
+        # The slopes are scalars rather than priors because per-screen law
+        # shapes are build-time constants folded into the compile signature.
+        # That suits this model: Charlot & Fall fix both exponents, so there is
+        # nothing here that wants sampling.
         dust_attenuation={
             "type": "two_component",
-            "law": "charlot_fall2000",
+            "law_bc": "power_law",
+            "slope_bc": -1.3,
+            "law_diff": "power_law",
+            "slope_diff": -0.7,
             "all_params": Fixed(DEFAULT),
             "tau_bc": Uniform(0.0, 3.0),
             "tau_diff": Uniform(0.5, 3.0),
