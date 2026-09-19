@@ -308,6 +308,22 @@ class WavePrecomp:
         instead of one compile per row. Compile time amortizes across
         the catalog; runtime cost per fit is the ztable interpolation
         (~µs).
+    igm_fold : str, default "node"
+        How to integrate IGM transmission into sub-band photometry.
+
+        ``"node"`` (default)
+            Evaluate the transmission at the sub-band quadrature node
+            and multiply. Fast and exact for smooth transmission, but
+            forms <S><T> when transmission varies inside a band (GALEX FUV
+            near Lyman break). Measured error: ~10% GALEX FUV at z=1.5,
+            ~83% at z=3.
+
+        ``"exact"``
+            Integrate transmission inside the bandpass integral:
+            ∫ S·T_IGM·T_b·w dλ. Slower build (recomputes sub-band integrals
+            per redshift node), cost amortized over inference. Exact when
+            T_IGM(λ, z) is tabulated. Fails loudly if free parameters
+            (patchy reionization, DLAs) make transmission non-tabulated.
 
     Examples
     --------
@@ -356,6 +372,7 @@ class WavePrecomp:
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
+    igm_fold: str = "node"
 
     band_integration: str | None = None
     """How the multiplicative dust screen is integrated through each bandpass.
@@ -457,6 +474,7 @@ class WavePrecomp:
         "taylor",
         "effective_wavelength",
     )
+    _VALID_IGM_FOLD: ClassVar[tuple[str, ...]] = ("node", "exact")
 
     def __post_init__(self):
         """Resolve the band-integration scheme once, in one place.
@@ -566,6 +584,15 @@ class WavePrecomp:
         object.__setattr__(self, "band_integration", scheme)
         object.__setattr__(self, "n_subbands", n_sub)
         object.__setattr__(self, "taylor_correction", taylor)
+
+        # Validate IGM fold mode
+        if self.igm_fold not in self._VALID_IGM_FOLD:
+            raise ValueError(
+                f"igm_fold={self.igm_fold!r} is not a legal value. "
+                f"Choose one of {', '.join(map(repr, self._VALID_IGM_FOLD))}. "
+                "'node' (the default) evaluates transmission at sub-band nodes; "
+                "'exact' integrates transmission inside the bandpass integral."
+            )
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this configuration, field by field.
@@ -1704,41 +1731,198 @@ def _state_has_content(state) -> bool:
     return any(getattr(state, f.name, None) is not None for f in fields if f.name != "name")
 
 
-def _fold_igm_into_subbands(igm_comp, stellar_state):
-    r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
+def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, redshift_spec):
+    r"""Rebuild the sub-band weights with IGM transmission inside the integrand.
 
-    The photometry LUT's IGM band factor :math:`\langle T \rangle_f` averages the
-    transmission *alone*, unweighted by the spectrum, so it forms
-    :math:`\langle S \rangle \langle T \rangle` where the flux needs
-    :math:`\langle S T \rangle`. Where :math:`T` varies strongly *inside* a
-    bandpass (GALEX FUV at :math:`z \approx 0.8`, where it runs from ~1 to ~0),
-    that covariance term reaches −9.5 %.
-
-    The sub-band quadrature already carries the machinery to fix it: evaluate
-    :math:`T` at the same nodes the dust screen uses and multiply it into the
-    weights,
+    The node fold of :func:`_fold_igm_into_subbands` evaluates the transmission
+    once per sub-band, at the node wavelength, and multiplies:
 
     .. math::
+        \Phi^{\rm IGM}_{ijbk} = \Phi_{ijbk}\,
+            T_{\rm IGM}(\lambda^{\star}_{ijbk}(1+z),\, z).
 
-        \Phi^{\rm IGM}[m, a, f, k] = \Phi[m, a, f, k]\;
-        T_{\rm IGM}\!\left(\lambda^*[m, a, f, k]\,(1 + z),\; z\right)
+    That forms :math:`\langle S\rangle\langle T\rangle` where the flux needs
+    :math:`\langle S\,T\rangle`, which is accurate while :math:`T` is smooth
+    across the sub-band and wrong when a Lyman break falls inside it. The exact
+    fold puts the transmission in the integrand instead:
 
-    Both factors are build-time constants, so the product is too and the runtime
-    einsum is unchanged in shape and cost, the correction is free.
+    .. math::
+        \Phi^{\rm IGM}_{ijbk}(z) = \frac{\int_{\mathcal{B}_{bk}}
+            F_\nu^{\rm SSP}(Z_i,t_j,\lambda)\,
+            T_{\rm IGM}(\lambda(1+z), z)\,T_b(\lambda)\,w(\lambda)\,d\lambda}
+           {\int T_b(\lambda)\,w(\lambda)\,d\lambda}.
 
-    The fold happens on the **metallicity axis**, before the SSP grid is
-    contracted, and that is load-bearing. The node published at runtime is a
-    met-weighted average whose weights move with the free ``met_logzsol``, so
-    :math:`T` at "the node" is a function of :math:`(z, Z)`, not of :math:`z`
-    alone: across the SSP grid the node shifts by up to 68 % of a sub-band width
-    and :math:`T` there by up to 1.3 % in GALEX FUV. Folding first is exact.
+    Implemented as a *ratio* against the same quadrature run without
+    transmission, applied to the sub-band tensor the caller already holds. Two
+    properties follow that a standalone reimplementation would not have. Any
+    constant of the quadrature -- luminosity distance, flux scale -- cancels,
+    so this cannot disagree with the caller's normalization. And when
+    :math:`T_{\rm IGM}\equiv 1` the ratio is exactly one, so an IGM-free model
+    is bit-identical to no fold at all rather than merely close.
 
     Parameters
     ----------
     igm_comp : IGMSEDComponent
-        Supplies :meth:`~IGMSEDComponent.subband_node_transmission` and the gate.
+        Supplies the transmission and the fixed-function gate.
+    stellar_state : StellarSEDComponentState
+        Carrying the fixed-z photometry LUT.
+    ssp_data : SSPData
+        Template grid, shape ``(n_met, n_age, n_wave)`` [erg/s/Hz/Msun].
+    filters : sequence of (wave, trans) pairs
+        Filter curves [Angstrom], [dimensionless].
+    redshift_spec : dict or None
+        Redshift specification; only a fixed redshift is supported.
+
+    Returns
+    -------
+    StellarSEDComponentState
+        With the exact-folded sub-band tensor attached, or unchanged when there
+        is nothing to fold.
+
+    Notes
+    -----
+    **Build-time only**; the runtime contraction is untouched in shape and
+    cost. The build pays in proportion to the number of redshift nodes.
+
+    :math:`T_{\rm IGM}` is a function of OBSERVED-frame wavelength. The SSP grid
+    is rest-frame, so the conversion happens exactly once, at the single call
+    below. Applying it twice is not caught by any shape or dtype check and
+    leaves a transmission that still varies plausibly with redshift.
+    """
+    from dataclasses import replace as _replace
+
+    import numpy as np
+
+    from tengri.components.igm import igm_absorption
+    from tengri.utils.grid_interp import preintegrate_grid
+
+    if stellar_state is None or ssp_data is None or not filters:
+        return stellar_state
+
+    cfg = getattr(igm_comp, "config", None)
+    if getattr(cfg, "igm_patchy", False) or getattr(cfg, "use_dla", False):
+        raise ValueError(
+            "igm_fold='exact' needs a transmission that is a fixed function of "
+            "(wavelength, redshift), so it can be folded in at build time. "
+            "Patchy reionization and discrete DLAs read free parameters and "
+            "change every call. Use igm_fold='node' (the default) for those."
+        )
+
+    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
+    if ztable is not None and ztable.ssp_subband_phot_table is not None:
+        raise NotImplementedError(
+            "igm_fold='exact' is implemented for a fixed redshift only. A free "
+            "redshift would need the sub-band tensor rebuilt at every node of "
+            "the z table. Use igm_fold='node' or fix the redshift."
+        )
+
+    lut = getattr(stellar_state, "ssp_phot_lut", None)
+    if lut is None or lut.ssp_subband_phot is None:
+        return stellar_state
+
+    subband = np.asarray(lut.ssp_subband_phot)
+    n_subbands = int(subband.shape[-1])
+    if n_subbands <= 0:
+        return stellar_state
+
+    z = float(redshift_spec.get("value", 0.0)) if redshift_spec else float(lut.redshift)
+
+    wave_rest = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
+    templates = np.asarray(ssp_data.ssp_flux, dtype=np.float64)
+
+    # The one frame conversion. T_IGM takes observed-frame wavelength; the SSP
+    # grid is rest-frame. Everything downstream stays in the rest frame, which
+    # is what preintegrate_grid expects, so this must not be applied again.
+    transmission = np.asarray(
+        igm_absorption(
+            wave_rest * (1.0 + z),
+            z,
+            igm_patchy=False,
+            igm_model=getattr(cfg, "igm_model", None),
+            use_dla=False,
+        ),
+        dtype=np.float64,
+    )
+
+    filter_waves = [np.asarray(fw, dtype=np.float64) for fw, _ in filters]
+    filter_trans = [np.asarray(ft, dtype=np.float64) for _, ft in filters]
+    axes = (
+        np.asarray(ssp_data.ssp_lgmet),
+        np.asarray(ssp_data.ssp_lg_age_gyr),
+    )
+
+    def _quadrature(templates_in):
+        # dl_cm is arbitrary and identical across the pair: it is a constant
+        # factor of the integral and cancels in the ratio below.
+        return np.asarray(
+            preintegrate_grid(
+                templates=templates_in,
+                wave_rest=wave_rest,
+                filter_waves=filter_waves,
+                filter_trans=filter_trans,
+                redshift=z,
+                dl_cm=1.0,
+                axes=axes,
+                taylor=False,
+                n_subbands=n_subbands,
+            ).subband_phot,
+            dtype=np.float64,
+        )
+
+    without_igm = _quadrature(templates)
+    with_igm = _quadrature(templates * transmission)
+
+    # Where the bare quadrature is zero the band carries no flux and the ratio
+    # is undefined; the folded tensor is zero there either way.
+    ratio = np.where(
+        without_igm != 0.0, with_igm / np.where(without_igm != 0.0, without_igm, 1.0), 0.0
+    )
+
+    return _replace(
+        stellar_state,
+        ssp_phot_lut=lut._replace(ssp_subband_phot_igm=subband * ratio),
+    )
+
+
+def _fold_igm_into_subbands(
+    igm_comp, stellar_state, igm_fold="node", ssp_data=None, filters=None, redshift_spec=None
+):
+    r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
+
+    Two modes are supported:
+
+    **Node fold** (``igm_fold="node"``):
+        Evaluates transmission at the sub-band quadrature nodes and multiplies.
+        Fast and exact for smooth transmission, but forms :math:`\langle S \rangle
+        \langle T \rangle` when transmission varies inside a band.
+
+    **Exact fold** (``igm_fold="exact"``):
+        Integrates transmission inside the bandpass integral,
+        :math:`\int S \cdot T_{\text{IGM}} \cdot T_b \cdot w \, d\lambda`. Slower
+        at build time (recomputes sub-band integrals per redshift node), but exact
+        when transmission is a function of wavelength and redshift alone.
+
+    The fold happens on the **metallicity axis**, before the SSP grid is
+    contracted. The node published at runtime is a met-weighted average whose
+    weights move with the free ``met_logzsol``, so :math:`T` at "the node" is
+    a function of :math:`(z, Z)`, not of :math:`z` alone: across the SSP grid
+    the node shifts by up to 68 % of a sub-band width and :math:`T` there by
+    up to 1.3 % in GALEX FUV. Folding on the met axis first is exact.
+
+    Parameters
+    ----------
+    igm_comp : IGMSEDComponent
+        Supplies transmission evaluation and configuration.
     stellar_state : StellarSEDComponentState
         Carrying the fixed-z photometry LUT or the free-z z-table.
+    igm_fold : str, default "node"
+        Fold mode: "node" (evaluate at nodes) or "exact" (integrate inside integral).
+    ssp_data : SSPData, optional
+        SSP templates, required for "exact" fold.
+    filters : tuple, optional
+        Filter data, required for "exact" fold.
+    redshift_spec : dict, optional
+        Redshift specification, required for "exact" fold.
 
     Returns
     -------
@@ -1752,14 +1936,21 @@ def _fold_igm_into_subbands(igm_comp, stellar_state):
 
     Returns the state untouched when the sub-band quadrature is off
     (``WavePrecomp(n_subbands=0)``) or when the transmission is not a function of
-    :math:`(\lambda, z)` alone, patchy reionization and DLAs read free
-    parameters. Those keep the live per-call evaluation, so the gate fails safe.
+    wavelength and redshift alone (patchy reionization, DLAs). Those keep the
+    live per-call evaluation, so the gate fails safe.
     """
     from dataclasses import replace as _replace
 
     if stellar_state is None:
         return stellar_state
 
+    # Dispatch to node or exact fold
+    if igm_fold == "exact":
+        return _fold_igm_exact_into_subbands(
+            igm_comp, stellar_state, ssp_data, filters, redshift_spec
+        )
+
+    # Default: node fold (fast, exact for smooth transmission)
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         trans = igm_comp.subband_node_transmission(lut.ssp_subband_waves_rest, [lut.redshift])
@@ -9535,9 +9726,20 @@ class SEDModel:
                     state = igm_state
                     # Fold IGM transmission into stellar subbands
                     if isinstance(chain[0], StellarSEDComponent):
+                        # Get igm_fold mode and filter data from WavePrecomp
+                        igm_fold_mode = "node"
+                        if self._approx_config_wave is not None:
+                            igm_fold_mode = self._approx_config_wave.igm_fold
                         chain[0] = replace(
                             chain[0],
-                            _state=_fold_igm_into_subbands(comp, chain[0]._state),
+                            _state=_fold_igm_into_subbands(
+                                comp,
+                                chain[0]._state,
+                                igm_fold=igm_fold_mode,
+                                ssp_data=chain[0].ssp_data,
+                                filters=filters,
+                                redshift_spec=redshift_spec,
+                            ),
                         )
 
             # Spectrum_precomp augmentation: build spectrum LUTs

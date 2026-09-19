@@ -41,7 +41,7 @@ import jax
 import numpy as np
 
 import tengri
-from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, SEDModel, WavePrecomp
 
 jax.config.update("jax_enable_x64", True)
 
@@ -98,6 +98,12 @@ def main(argv=None) -> int:
         default="igm_fold",
         help="WavePrecomp keyword selecting the fold (default: igm_fold)",
     )
+    parser.add_argument(
+        "--redshifts",
+        default=None,
+        help="Comma-separated subset of redshifts (default: the full probe set). "
+        "Each redshift costs three model builds, so a subset is the cheap first look.",
+    )
     parser.add_argument("--node-value", default="node")
     parser.add_argument("--exact-value", default="exact")
     args = parser.parse_args(argv)
@@ -107,11 +113,14 @@ def main(argv=None) -> int:
 
     print(f"SSP {SSP_GRID}; bands {PROBE_FILTERS}")
     print(f"selecting the fold with WavePrecomp({args.flag}=...)\n")
+    redshifts = (
+        [float(x) for x in args.redshifts.split(",")] if args.redshifts else PROBE_REDSHIFTS
+    )
     print(f"{'z':>5}  {'band':<10} {'node err %':>11} {'exact err %':>12}  verdict")
     print("-" * 62)
 
     worse_at = []
-    for z in PROBE_REDSHIFTS:
+    for z in redshifts:
         ref_model = build(ssp, obs, z, None)
         params = ref_model.spec.sample(key=jax.random.PRNGKey(0))
         reference = np.asarray(ref_model.predict_photometry(params))
