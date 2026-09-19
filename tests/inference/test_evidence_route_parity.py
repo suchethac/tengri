@@ -12,7 +12,7 @@ FIXTURE DESIGN (#2364):
   Both models fit the SAME data; a ranking flip here is a route disagreement,
   not a statistical artifact. The guard at 2σ checks fixture regression, not
   the design target. If separation fails, test_bma_weights_ranking_agreement
-  will fail (not skip), signalling fixture breakdown.
+  will fail (not skip), signaling fixture breakdown.
 
 Requires SSP data. Marked as slow integration tests.
 """
