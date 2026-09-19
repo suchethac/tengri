@@ -558,11 +558,9 @@ class TestAGNEbvMigration:
             f"-- {key!r} resolved to the wrong parameter"
         )
         dist = params.get_distribution("agn_ebv")
-        assert dist.bounds == (0.0, 1.0)
-        # agn_ebv (the unrelated qsogen_smc knob) must stay at its own
-        # registry default, untouched by the atten-level key.
-        agn_ebv_dist = params.get_distribution("agn_ebv")
-        assert agn_ebv_dist.is_fixed
+        assert dist.bounds == (0.0, 1.0), (
+            f"agn_ebv should have the bounds specified in the migration message"
+        )
 
     def test_short_keys_stay_distinct_between_the_two_ebv_parameters(self):
         """Each name keeps its own prefix-stripped short spelling.

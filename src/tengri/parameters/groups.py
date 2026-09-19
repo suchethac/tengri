@@ -5483,8 +5483,8 @@ def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
         f"'smc_prevot' and 'qsogen' blocks), while a third block 'qsogen_smc' "
         f"read 'agn_ebv'. Consolidated to the single surviving name 'agn_ebv' "
         f"(QSOgen SMC reddening):\n"
-        f"  agn={{'type': 'composable', 'atten': {{'type': 'smc_prevot', "
-        f"'agn_ebv': Uniform(0.0, 1.0)}}}}"
+        f"  agn={{'type': 'composable', 'atten': {{'law': 'prevot_smc', "
+        f"'ebv': Uniform(0.0, 1.0)}}}}"
     )
 
 
