@@ -9,9 +9,7 @@ read the old name.
 
 import pytest
 
-import jax.numpy as jnp
-from tengri import SEDModel, Fixed, Uniform, Parameters, DEFAULT
-
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.regression_bug
 
@@ -34,7 +32,9 @@ def test_agn_attenuation_ebv_flat_form_refused(synthetic_ssp_wide, synthetic_top
         )
 
 
-def test_agn_attenuation_ebv_dict_form_atten_subblock_refused(synthetic_ssp_wide, synthetic_tophat_obs):
+def test_agn_attenuation_ebv_dict_form_atten_subblock_refused(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
     """Building with the retired agn_attenuation_ebv in dict form (atten sub-block) raises.
 
     The error must name agn_ebv (the surviving parameter) and reference #2325.
@@ -144,16 +144,21 @@ def test_agn_attenuation_ebv_absent_from_src():
 
     # Locate the retirement block boundaries in groups.py
     groups_py = Path("src/tengri/parameters/groups.py")
-    with open(groups_py, "r") as f:
+    with open(groups_py) as f:
         lines = f.readlines()
 
-    # Find the block boundaries: from first _RETIRED_AGN_ATTEN_EBV to end of _agn_atten_ebv_retired_error
+    # Find retirement block: from first _RETIRED_AGN_ATTEN_EBV to end
+    # of _agn_atten_ebv_retired_error
     retirement_block_start = None
     retirement_block_end = None
 
     for i, line in enumerate(lines):
         # Find FIRST occurrence of the frozenset definition (not later uses)
-        if "_RETIRED_AGN_ATTEN_EBV" in line and "frozenset" in line and retirement_block_start is None:
+        if (
+            "_RETIRED_AGN_ATTEN_EBV" in line
+            and "frozenset" in line
+            and retirement_block_start is None
+        ):
             retirement_block_start = i
         # Find the function definition
         if "_agn_atten_ebv_retired_error" in line and "def " in line:
@@ -161,7 +166,9 @@ def test_agn_attenuation_ebv_absent_from_src():
             base_indent = len(line) - len(line.lstrip())
             for j in range(i + 1, len(lines)):
                 next_line = lines[j]
-                if next_line.strip() and (next_line.startswith("def ") or next_line.startswith("class ")):
+                if next_line.strip() and (
+                    next_line.startswith("def ") or next_line.startswith("class ")
+                ):
                     next_indent = len(next_line) - len(next_line.lstrip())
                     if next_indent <= base_indent:
                         retirement_block_end = j
@@ -173,7 +180,7 @@ def test_agn_attenuation_ebv_absent_from_src():
     offenders = []
     src_root = Path("src/tengri")
     for py_file in sorted(src_root.rglob("*.py")):
-        with open(py_file, "r") as f:
+        with open(py_file) as f:
             file_lines = f.readlines()
 
         for line_num, line_content in enumerate(file_lines, start=1):
@@ -188,15 +195,17 @@ def test_agn_attenuation_ebv_absent_from_src():
                 continue
 
             # Check if this line is inside the retirement block (only skip if in groups.py)
-            if py_file.name == "groups.py" and retirement_block_start is not None:
-                if retirement_block_start <= (line_num - 1) < retirement_block_end:
-                    continue
+            if (
+                py_file.name == "groups.py"
+                and retirement_block_start is not None
+                and retirement_block_start <= (line_num - 1) < retirement_block_end
+            ):
+                continue
 
             # Record the offender
             offenders.append(f"{py_file}:{line_num}: {line_content.rstrip()}")
 
-    assert (
-        not offenders
-    ), f"Found {len(offenders)} unexpected references to agn_attenuation_ebv in src/:\n" + "\n".join(
-        offenders
+    assert not offenders, (
+        f"Found {len(offenders)} unexpected references to agn_attenuation_ebv in src/:\n"
+        + "\n".join(offenders)
     )

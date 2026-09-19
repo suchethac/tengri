@@ -683,8 +683,7 @@ def test_agn_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat_obs)
     )
     max_rel_diff = float(np.nanmax(rel_diff))
     assert max_rel_diff > 1e-6, (
-        f"agn_ebv parameter had no effect on SED: "
-        f"max relative change = {max_rel_diff:.2e}"
+        f"agn_ebv parameter had no effect on SED: max relative change = {max_rel_diff:.2e}"
     )
 
 

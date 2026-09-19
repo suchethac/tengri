@@ -372,13 +372,9 @@ def _assert_polar_ownership(ssp, obs, torus_type: str, atten_type: str) -> None:
         )
 
     if atten_type in _ATTENUATION_EBV_TYPES:
-        assert "agn_ebv" in free, (
-            f"{torus_type}/{atten_type}: agn_ebv not freed, expected live"
-        )
+        assert "agn_ebv" in free, f"{torus_type}/{atten_type}: agn_ebv not freed, expected live"
     else:
-        assert "agn_ebv" not in free, (
-            f"{torus_type}/{atten_type}: agn_ebv unexpectedly freed"
-        )
+        assert "agn_ebv" not in free, f"{torus_type}/{atten_type}: agn_ebv unexpectedly freed"
 
 
 @pytest.mark.parametrize("atten_type", _ALL_ATTEN_TYPES)

@@ -37,6 +37,12 @@
   unchanged; both spellings cannot be passed together (raises if shadowing is
   detected).
 
+### Changed
+
+- `agn_attenuation_ebv` is retired; every AGN attenuation block (`smc_prevot`,
+  `qsogen`) reads `agn_ebv`, the precompute-axis name; the retired spelling —
+  flat or under `agn={'atten': {...}}` — is refused with a rename hint (#2325).
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
