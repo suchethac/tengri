@@ -16,7 +16,7 @@ export JAX_PLATFORMS=cpu
 
 `JAX_PLATFORMS=cpu` is not negotiable on a single-galaxy fit. NUTS is serial per
 leapfrog step, and `bench/reports/2026-08-20-cuda-device-matrix.md` measured this
-exact CPU/GPU pair at 33x in the CPU's favour for one galaxy; the GPU only wins
+exact CPU/GPU pair at 33x in the CPU's favor for one galaxy; the GPU only wins
 between roughly 128 and 512 galaxies batched.
 
 ## 2. Stellar libraries
@@ -33,12 +33,37 @@ The suite spans five grids. Three are usually already present; **two are new**:
 
 Configuration IV wants the bare MILES grid and supplies nebular emission from
 Cloudy. The `wNE` grid carries nebular emission baked into the templates; using
-it here would double-count the lines. Do not substitute a near neighbour for any
+it here would double-count the lines. Do not substitute a near neighbor for any
 of these — a silent library swap is what gave a previous run a configuration
 with no nebular emission at all.
 
 Writing to `.part` and moving into place is the right instinct; there is no
 checksum manifest.
+
+## 2a. Filters — the two U bands are now fit
+
+`CTIO/MosaicII.U` and `Paranal/VIMOS.U` were added to the filter registry on
+2026-09-20 and their curves are committed, so nothing needs to reach SVO at run
+time. Both catalog U columns now enter the likelihood.
+
+They had been omitted because the registry held neither curve, and substituting
+another telescope's U was rightly declined. But the effect was to silently drop
+the two bluest measurements in the catalog: at z ~ 1 those sample the rest-frame
+ultraviolet near 1500 A, which is where the unobscured young stars and most of
+the attenuation leverage live. Nineteen of the twenty galaxies have both U bands
+detected and all twenty have at least one, so this is real information the fits
+were discarding, not a marginal addition.
+
+Both are kept rather than one, unlike the Ks pair. They are different bandpasses
+from different telescopes (MosaicII peaks at 3644 A spanning 3044-4139 A; VIMOS
+at 3851 A spanning 3329-4004 A), so they are two independent measurements.
+ISAAC_KS and HAWKI_KS are the opposite case — both resolve to the same VISTA Ks
+stand-in curve, so fitting both would enter one response twice with correlated
+errors, and the driver takes the first detected one only.
+
+Consequences for what you will see: **16 distinct filters** across 17 catalog
+columns, and 11-15 detected bands per galaxy (mean 14.2 over the sample), up
+from 13-14 before. A band count below 17 is expected, not a parsing fault.
 
 ## 3. Run
 
@@ -117,21 +142,25 @@ The node fold differs from the exact fold only where a Lyman break falls
 Ly-alpha, 1216 A. At this sample's maximum redshift, z = 1.098, that lands at
 2551 A observed, with the Lyman limit at 1913 A.
 
-The catalog's bluest columns are CTIO_U and VIMOS_U, but **neither is fit**:
-`CANDELS_TO_TENGRI` omits both on purpose, because the registry carries no CTIO
-or VIMOS U curve and one from another telescope was not adopted for them. The
-bluest band actually fit is therefore ACS F435W, measured from its own curve at
-a 1%-of-peak blue edge of 3606 A, and 3526 A at any nonzero transmission at all.
+Both U bands are now fit (see §2a), so the bluest response in the likelihood is
+CTIO MosaicII U, not ACS F435W. Measured from the curves themselves:
 
-That is 1055 A clear of the break at the 1% threshold and 975 A clear at the
-absolute floor. No band in this fit sees IGM attenuation, so the two folds agree
-here. The margin does not depend on the shape of any U response, since no U band
-enters the likelihood.
+| band | nonzero from | 1% of peak from |
+|---|---|---|
+| `ctio_u` | 3044 A | 3059 A |
+| `vimos_u` | 3329 A | 3329 A |
+| `hst_f435w` | 3526 A | 3606 A |
 
-The fix remains required before the mock figure (z = 1 with GALEX FUV, where the
-break *is* inside the bandpass, which is where the appendix FUV spike comes
+That leaves 509 A of margin at the 1% threshold and 494 A at the absolute
+floor. Half what it was before the U bands were added, and still unambiguous:
+nothing straddles the break, so no band in this fit sees IGM attenuation and
+the two folds agree here.
+
+The fix remains required before the mock figure (z = 1 with GALEX FUV, where
+the break *is* inside the bandpass, which is where the appendix FUV spike comes
 from) and before any high-redshift claim. It is not a prerequisite for these
 120 cells.
+
 
 ## 5. What changed versus the 3 x 3
 

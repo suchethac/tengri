@@ -212,7 +212,7 @@ def plot_photometry_panel(ax, result_manager, gal_id: int, z: float):
 
     # Print band table for verification (cell 13097_I only)
     if gal_id == 13097:
-        print("\nPhotometry for galaxy 13097_I (13 bands):")
+        print(f"\nPhotometry for galaxy 13097_I ({len(filter_names)} bands):")
         print("Filter Name       | Lambda_eff (µm) | Flux (µJy) | Sigma (µJy)")
         print("-" * 62)
         for i, fname in enumerate(filter_names):

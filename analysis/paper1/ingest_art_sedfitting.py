@@ -147,7 +147,7 @@ def parse_cigale_z1() -> list[dict]:
 
 def parse_beagle_z1() -> list[dict]:
     """Parse BEAGLE results."""
-    filepath = CODE_OUTPUTS / "BEAGLE_summary_catalogue_z1.fits"
+    filepath = CODE_OUTPUTS / "BEAGLE_summary_catalog_z1.fits"
     if not filepath.exists():
         print(f"Skipping BEAGLE: {filepath} not found")
         return []

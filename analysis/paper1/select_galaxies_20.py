@@ -99,7 +99,7 @@ def load_art_results() -> dict:
 
 # The three mid-infrared AGN candidates carried by the demonstration sample.
 # Locked by the paper (tab:candels_galaxies): IRAC-rising objects that survive
-# the workshop IRAC flags. Colour used for the cut is IRAC1 - IRAC3.
+# the workshop IRAC flags. Color used for the cut is IRAC1 - IRAC3.
 AGN_CANDIDATE_IDS = (1826, 4056, 24786)
 
 

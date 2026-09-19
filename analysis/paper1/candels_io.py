@@ -122,12 +122,24 @@ def ab_mag_to_fnu(mag, mag_err):
 
 
 #: Catalog column -> tengri filter name; every value is in ``tengri.list_filters()``.
-#: ISAAC_KS and HAWKI_KS use the VISTA Ks curve as a stand-in (the registry
-#: carries no ISAAC and no broadband HAWK-I curve). CTIO_U and VIMOS_U are left
-#: out on purpose: the registry has no CTIO or VIMOS U curve, and a curve from a
-#: different telescope was not adopted for them. Order matters: the Ks columns
+#:
+#: CTIO_U and VIMOS_U carry their own curves as of 2026-09-20 (CTIO/MosaicII.U
+#: and Paranal/VIMOS.U, the two GOODS-S U-band sources). They were previously
+#: omitted because the registry held neither, and substituting another
+#: telescope's U was rightly declined -- but that dropped the two bluest
+#: measurements in the catalog, which at z ~ 1 are the rest-frame ultraviolet
+#: and so the ones carrying most of the young-star and attenuation information.
+#:
+#: Both are kept, unlike the Ks pair. They are genuinely different bandpasses
+#: from different telescopes (MosaicII peaks at 3644 A over 3044-4139 A, VIMOS
+#: at 3851 A over 3329-4004 A), so they are two independent measurements rather
+#: than one measurement twice. ISAAC_KS and HAWKI_KS are the opposite case: both
+#: resolve to the same VISTA Ks stand-in curve, so fitting both would enter one
+#: response twice with correlated errors. Order matters for those two -- they
 #: are taken in this order and the first detected one wins.
 CANDELS_TO_TENGRI = {
+    "CTIO_U": "ctio_u",
+    "VIMOS_U": "vimos_u",
     "ACS_F435W": "hst_f435w",
     "ACS_F606W": "hst_f606w",
     "ACS_F775W": "hst_f775w",

@@ -423,5 +423,7 @@
   "xmm_uvm2": "XMM/OM.UVM2",
   "xmm_uvw1": "XMM/OM.UVW1",
   "xmm_uvw2": "XMM/OM.UVW2",
-  "xmm_v": "XMM/OM.V"
+  "xmm_v": "XMM/OM.V",
+  "ctio_u": "CTIO/MosaicII.U",
+  "vimos_u": "Paranal/VIMOS.U"
 }
