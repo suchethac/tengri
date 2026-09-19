@@ -37,6 +37,13 @@
   unchanged; both spellings cannot be passed together (raises if shadowing is
   detected).
 
+### Fixed
+
+- Radio preset rows kept their buildable composable `use` and carry the
+  not-builder-available marker in `short_doc`, so the menu's `name` column types
+  and every production row's `use` is built by a contract test. The marker is
+  defined as a module constant; `list_sfh_models` uses it at a second site (#2201).
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
