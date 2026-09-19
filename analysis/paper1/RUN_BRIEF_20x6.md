@@ -115,14 +115,23 @@ reason is checkable rather than a judgement call.
 The node fold differs from the exact fold only where a Lyman break falls
 *inside* a bandpass. IGM absorption acts on rest wavelengths blueward of
 Ly-alpha, 1216 A. At this sample's maximum redshift, z = 1.098, that lands at
-2550 A observed, and the Lyman limit at 1912 A. The bluest bands in the catalog
-are CTIO_U and VIMOS_U, whose transmission is entirely redward of ~3000 A --
-several hundred Angstrom clear of the break, with no band straddling it.
+2551 A observed, with the Lyman limit at 1913 A.
 
-So no band in this fit sees IGM attenuation at all, and the two folds agree to
-machine precision here. The fix remains required before the mock figure (z = 1
-with GALEX FUV, where the break *is* inside the bandpass) and before any
-high-redshift claim. It is not a prerequisite for these 120 cells.
+The catalog's bluest columns are CTIO_U and VIMOS_U, but **neither is fit**:
+`CANDELS_TO_TENGRI` omits both on purpose, because the registry carries no CTIO
+or VIMOS U curve and one from another telescope was not adopted for them. The
+bluest band actually fit is therefore ACS F435W, measured from its own curve at
+a 1%-of-peak blue edge of 3606 A, and 3526 A at any nonzero transmission at all.
+
+That is 1055 A clear of the break at the 1% threshold and 975 A clear at the
+absolute floor. No band in this fit sees IGM attenuation, so the two folds agree
+here. The margin does not depend on the shape of any U response, since no U band
+enters the likelihood.
+
+The fix remains required before the mock figure (z = 1 with GALEX FUV, where the
+break *is* inside the bandpass, which is where the appendix FUV spike comes
+from) and before any high-redshift claim. It is not a prerequisite for these
+120 cells.
 
 ## 5. What changed versus the 3 x 3
 
