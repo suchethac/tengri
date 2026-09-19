@@ -387,6 +387,17 @@
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
 
+### Fixed
+
+- `params_override` now rejects a noise parameter the built likelihood cannot
+  read. Noise parameters are only consumed when declared in the spec (free or
+  Fixed at nonzero); with the default spec (noise_frac_cal at Fixed(0.0)), the
+  likelihood is plain Gaussian and ignores any noise_* override. The override
+  was silently accepted, reporting success while having zero effect. It now
+  raises with a message that explains the mechanism and suggests declaring it
+  in the spec. (#2193).
+
+
 ### Changed
 
 - The cigale reproduction's two §9e torus panels compare AGN dust emission
