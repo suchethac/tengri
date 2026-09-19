@@ -979,6 +979,12 @@
 
 ### Fixed
 
+- `test_bma_weights_ranking_agreement` now uses a shared mock fixture so both
+  models score identical data. Model B is model A with `dust_tau_diff` pinned
+  at 1.5 (measured ΔlogZ ≈ 6–7 nats across NSS, HMC+IS, Laplace), designed to
+  separate decisively. The ranking guard fails (not skips) on separation loss
+  below 2σ, treating fixture regression as a test failure (#2364).
+
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
   `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
