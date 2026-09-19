@@ -104,8 +104,6 @@ def _minimal_model(*, chain_raises: bool = False, chain=None):
     model.precomputed.photometry = None
     model.precomputed.spectroscopy = None
     model.precomputed.photometry_ztable = None
-    model.hybrid.photometry = None
-    model._compositional.photometry = None
     model._dust_emission_model = None
     model._agn_model = None
     model._uses_igm = False
