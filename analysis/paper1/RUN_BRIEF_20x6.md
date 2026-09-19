@@ -42,9 +42,24 @@ checksum manifest.
 
 ## 3. Run
 
+Run **a configuration at a time**, not the whole grid in one call:
+
 ```bash
-python -m paper1.run_candels_fits --jobs 3 --only-missing
+python -m paper1.run_candels_fits --configs I --jobs 1               # measure the row
+python -m paper1.run_candels_fits --configs I --jobs N --only-missing # then widen
 ```
+
+Without `--configs` the driver builds all 120 cells galaxy-major under one
+global `--jobs`, so the first fill is one galaxy crossed with every row and the
+configurations interleave from the start. Concurrency has to be sized per row
+(see §4), and that cannot be measured from a mixture.
+
+`aggregate_summary` iterates the full sample regardless, so a per-row run writes
+a summary in which every not-yet-run cell reads as failed. Rebuild it once at
+the end with `--summary-only`; the intermediate ones are not a scoreboard.
+
+`--only-missing` keys on `adoption_pass`, not on presence, so re-running a row
+picks up cells that ran but missed the bar.
 
 `results/fits/` must be **empty** before the first launch. Cells are named
 `{galaxy}_{config}.json` and `--only-missing` keys on that filename, which is
@@ -70,9 +85,25 @@ payload peaks highest — a small per-draw payload yields a wide chunk and so a
 big working set.
 
 Those numbers were measured on different configurations than these, so treat
-them as a warning about shape, not as a table to schedule against. Watch the
-first cell of each configuration and size concurrency off the observed peak,
-not off steady state. Do not raise the OOM watchdog ceiling to make a cell fit.
+them as a warning about shape, not as a table to schedule against. Every row's
+physics changed, so which row is heaviest is unknown.
+
+Size each row against **N simultaneous reinsertion peaks of that row**, not one
+peak plus N-1 steady states. The launch stagger (`stagger_seconds`, 20 s) is
+applied only to the initial fill, deliberately — it exists to keep N JIT
+compilations off the box at startup. Refills are not staggered, so when a cell
+finishes its replacement starts immediately and its compile can land on top of
+another cell's reinsertion peak at an arbitrary point hours in. Nothing spaces
+those, and that overlap is what killed two cells on the previous grid.
+
+Do not raise the OOM watchdog ceiling to make a cell fit. If a row's peak makes
+even two concurrent cells uncomfortable, run that row at `--jobs 1` and widen
+the cheap rows instead.
+
+Report the free-parameter count per configuration from the cell JSONs.
+`get_config_dimensions` carries measured values for I, IV, V and VI; II and III
+report 0 because their libraries were absent from the machine that measured the
+others, and 0 is a placeholder rather than a number to quote.
 
 ## 5. What changed versus the 3 x 3
 
