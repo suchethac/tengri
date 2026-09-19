@@ -14,16 +14,15 @@
   also materialized L_absorbed (~1e43 erg/s, inf in pure float32) as a linear
   value, leaving the SED entirely inf/NaN. Fixed by setting `factors_l_ir=False`
   on the component (matching BosaIRSEDComponent), declaring
-  `optional_inputs={'log_L_ir': 'dex'}`, and rewriting the closure to: (1)
-  receive the live `log_L_ir` budget and use it for the grid-axis lookup after
-  converting to L_sun (same precedent as #2272/#2273), and (2) employ log-domain
-  rescaling for normalization when `log_L_ir` is provided, avoiding materialization
-  of the overflow-prone linear L_absorbed value. The dual-path normalization
-  (finite L_absorbed → linear formula; inf L_absorbed → log-domain formula)
-  handles both pipeline calls with float32 overflow and direct closure calls from
-  tests. The model's total power still integrates to the absorbed luminosity
-  exactly; the shape now varies appropriately with the fitted L_IR. **Model
-  output changes for every dh02_ce01 fit** (#2366).
+  `optional_inputs={'log_L_ir': 'dex'}`, and rewriting the closure as a SINGLE
+  code path (no dtype-gated branches) that: (1) uses live `log_L_ir` for the
+  grid-axis lookup after converting to L_sun (same precedent as #2272/#2273),
+  and (2) applies log-domain rescaling via ``apply_log10_scale()`` when
+  `log_L_ir` is provided, never materializing L_absorbed. Mirrors
+  bosa_emission exactly — one arithmetic path works in both float32 and float64.
+  The model's total power still integrates to the absorbed luminosity exactly;
+  the shape now varies appropriately with the fitted L_IR. **Model output
+  changes for every dh02_ce01 fit** (#2366).
 
 - Data locator hermeticity (#2329): a nested worktree's test run found untracked
   data (CLOUDY grids, Cue weights) in the main checkout via the locator's
