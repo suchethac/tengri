@@ -81,13 +81,13 @@ def test_bakedin_warns_on_unknown_ssp():
 
 
 def test_bakedin_unknown_is_silenced_by_explicit_neb_declaration():
-    """Grid warning IS silenced by explicit neb={'type':'ssp'} (honours suppression)."""
+    """Grid warning IS silenced by explicit neb={'type':'ssp'} (honors suppression)."""
     pytest.importorskip("tengri")
     import tengri
     from tengri.components.nebular.baked_in import BakedInNebularGridWarning
 
     ssp = _synthetic_ssp("unknown")
-    # The explicit declaration SHOULD silence the grid warning (honours suppression contract)
+    # The explicit declaration SHOULD silence the grid warning (honors suppression contract)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         tengri.SEDModel.build(
