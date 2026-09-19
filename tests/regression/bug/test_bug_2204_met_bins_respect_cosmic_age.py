@@ -27,10 +27,9 @@ https://github.com/suchethac/tengri/issues/2204
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import pytest
 
-from tengri import SEDModel, Fixed, Uniform, DEFAULT
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.config.exceptions import ParameterError
 from tengri.utils.cosmology import age_at_z
 
