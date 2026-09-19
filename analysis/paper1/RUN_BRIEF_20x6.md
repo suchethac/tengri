@@ -105,6 +105,25 @@ Report the free-parameter count per configuration from the cell JSONs.
 report 0 because their libraries were absent from the machine that measured the
 others, and 0 is a placeholder rather than a number to quote.
 
+## 4a. The IGM precompute fix does not gate this grid
+
+The writing plan says to land the exact IGM fold before remaking anything that
+depends on `WavePrecomp` photometry at z >~ 1, and every configuration here uses
+`WavePrecomp` at z ~ 1. That ordering does not bind for this sample, and the
+reason is checkable rather than a judgement call.
+
+The node fold differs from the exact fold only where a Lyman break falls
+*inside* a bandpass. IGM absorption acts on rest wavelengths blueward of
+Ly-alpha, 1216 A. At this sample's maximum redshift, z = 1.098, that lands at
+2550 A observed, and the Lyman limit at 1912 A. The bluest bands in the catalog
+are CTIO_U and VIMOS_U, whose transmission is entirely redward of ~3000 A --
+several hundred Angstrom clear of the break, with no band straddling it.
+
+So no band in this fit sees IGM attenuation at all, and the two folds agree to
+machine precision here. The fix remains required before the mock figure (z = 1
+with GALEX FUV, where the break *is* inside the bandpass) and before any
+high-redshift claim. It is not a prerequisite for these 120 cells.
+
 ## 5. What changed versus the 3 x 3
 
 Everything about the models. The six configurations are a new suite — SFH,
