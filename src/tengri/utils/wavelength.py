@@ -25,6 +25,8 @@ XRAY_WAVE_MIN: float = 0.0413  # ~300 keV hard X-ray (matches corona E_cut)
 XRAY_WAVE_MAX: float = 100.0  # ~0.12 keV soft X-ray
 RADIO_WAVE_MIN: float = 1e5  # 10 μm: overlap with SSP IR tail
 RADIO_WAVE_MAX: float = 3e11  # ~1 MHz radio
+# 1 m (300 MHz): declared reach of a tabulated nebular continuum's free-free tail (#2346)
+NEBULAR_CONTINUUM_WAVE_MAX: float = 1e10
 
 
 def make_union_grid(

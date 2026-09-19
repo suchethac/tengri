@@ -879,6 +879,22 @@
 
 ### Fixed
 
+- The nebular continuum (Cue, CloudyGrid) no longer stops at its 1 cm table
+  edge but continues as optically thin free-free (L_nu ∝ nu^-0.1, anchored at
+  the last node) to the grid end, and a Cue model without a radio block now
+  declares wavelength nodes to 1 m. The radio block's Murphy+2011 free-free
+  term defaults to off when the nebular backend carries a free-free continuum
+  (implementation: `interp_continuum_with_freefree_tail` in
+  `tengri.components.nebular._shared`, index `NEBULAR_FREEFREE_TAIL_ALPHA_NU =
+  -0.1` in `tengri.components.nebular._constants`, wavelength ceiling
+  `NEBULAR_CONTINUUM_WAVE_MAX = 1e10` Å, auto-rule
+  `nebular_backend_carries_freefree` in `tengri.components.nebular._models`),
+  so the default Cue/CloudyGrid + radio model carries exactly one thermal term
+  (was 1.64 to 1.71 times the correct total between 1 mm and 1 cm, and zero
+  beyond 1 cm). Explicit `radio.sf.freefree: True/False` always overrides;
+  CB19 and baked-in SSP are unchanged. Validation against pcigale surfaced
+  this. Closes #2346.
+
 - The `lognormal` SFH's entry in the `mean_sfh` module index described it as a
   Gaussian in log10(age). The function is a lognormal in cosmic time since
   formation, `T = age − t_lookback`, with a 1/T Jacobian and
