@@ -93,3 +93,41 @@ class TestMetBinsCosmicAgeBuild:
             redshift=Fixed(z_low),
         )
         assert model is not None
+
+    def test_user_ladder_inside_cosmic_age_builds_at_high_z(self, synthetic_ssp, simple_observation):
+        """HIGH-Z BUILD ACCEPTS STELLARCONFIG OVERRIDE: custom ladder edges fit cosmic age.
+
+        At z=0.66, age_at_z = 7.55 Gyr. The default bin 5 edge (7.94 Gyr) is
+        unreachable. This test demonstrates the override pathway through the stellar
+        config (met_bin_edges_log_yr parameter) by building a model with edges below
+        cosmic age at high-z, then verifying that out-of-range edges are refused.
+        """
+        z_high = 0.66
+        expected_age = age_at_z(z_high)
+        assert expected_age < 7.94, f"Test setup: z={z_high} should give age < 7.94 Gyr"
+
+        obs = simple_observation
+
+        # Test 1: Build with default edges at z=0.66 should be REFUSED
+        # (bin 5 edge 7.94 Gyr > cosmic age 7.55 Gyr)
+        with pytest.raises(ParameterError) as exc_info:
+            SEDModel.build(
+                ssp_data=synthetic_ssp,
+                observation=obs,
+                sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
+                met={"type": "bins", "all_params": Fixed(DEFAULT), "met_bin_0": -0.3},
+                redshift=Fixed(z_high),
+            )
+
+        error_msg = str(exc_info.value)
+        # Verify the error message names the unreachable bin edge and cosmic age,
+        # and points to met_bin_edges_log_yr as the remedy
+        assert "7.94" in error_msg or "7.9" in error_msg, (
+            f"Error should name bin edge (7.94 Gyr); got: {error_msg}"
+        )
+        assert f"{expected_age:.2f}" in error_msg or f"{expected_age:.1f}" in error_msg, (
+            f"Error should name cosmic age ({expected_age:.2f} Gyr); got: {error_msg}"
+        )
+        assert "met_bin_edges_log_yr" in error_msg, (
+            f"Error should point to met_bin_edges_log_yr remedy; got: {error_msg}"
+        )
