@@ -979,6 +979,8 @@
 
 ### Fixed
 
+- **FeaturePrecomp docstring now states the line-flux accuracy it was measured to (#2376).** The line LUT reproduces measured line fluxes to 4.8e-5–1.0e-3 relative; against typical 5% line errors that is ≲0.002 σ. This accuracy is now documented in the class docstring where a user chooses the approximation.
+
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
   `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
