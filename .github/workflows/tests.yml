@@ -1607,8 +1607,12 @@ jobs:
       # reports its own outcome. `!cancelled()` keeps the run-on-failure
       # behavior that matters (the step above going red must not skip this
       # tier) while letting a cancellation actually cancel.
-      - if: ${{ !cancelled() && matrix.suite == 'inference' }}
-        run: pytest tests/contract -q -m 'slow and not crossval' -n 0
+      # The slow contract sweep rides on the inference suite; since this PR
+      # splits inference into three matrix legs (part: 1/2/3), run it on leg 1
+      # only to avoid redundant execution. The condition keeps working if the
+      # split is ever removed.
+      - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always()
