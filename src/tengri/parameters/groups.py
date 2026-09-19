@@ -5450,6 +5450,42 @@ def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+#: Retired E(B-V) spellings for AGN attenuation blocks (R52, #2325): the duplicate
+#: declaration and the short form the sub-block grammar would have resolved it
+#: under. Both ``smc_prevot`` and ``qsogen`` attenuation blocks now read the single
+#: surviving name ``agn_ebv``. The retired spelling is intercepted before the
+#: generic key resolver reaches it, in every group.
+_RETIRED_AGN_ATTEN_EBV: frozenset[str] = frozenset({"agn_attenuation_ebv"})
+
+
+def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``agn_attenuation_ebv`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.atten'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, the consolidation rationale, and the one
+        parameter name that survives (both flat and dict-grammar spellings).
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'agn_ebv' (#2325): "
+        f"the E(B-V) attenuation-stage reddening was duplicated under two names "
+        f"(declared under the old 'agn_attenuation_ebv' spelling and read by "
+        f"'smc_prevot' and 'qsogen' blocks), while a third block 'qsogen_smc' "
+        f"read 'agn_ebv'. Consolidated to the single surviving name 'agn_ebv' "
+        f"(QSOgen SMC reddening):\n"
+        f"  agn={{'type': 'composable', 'atten': {{'type': 'smc_prevot', "
+        f"'agn_ebv': Uniform(0.0, 1.0)}}}}"
+    )
+
+
 def _check_dict_keys(
     group: str,
     user_dict: dict,
@@ -5499,6 +5535,12 @@ def _check_dict_keys(
         # silently inert dimension.
         if key in _ALPHA_ION_KEYS:
             raise _alpha_ion_retired_error(group, str(key))
+
+        # R52 (#2325): the retired agn_attenuation_ebv is intercepted in every
+        # group before the generic resolver reaches it. The E(B-V) parameter
+        # was consolidated to the single surviving name agn_ebv.
+        if key in _RETIRED_AGN_ATTEN_EBV:
+            raise _agn_atten_ebv_retired_error(group, str(key))
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),

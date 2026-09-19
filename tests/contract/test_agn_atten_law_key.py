@@ -20,7 +20,7 @@ class TestAgNAttenLawKey:
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
-        assert "agn_attenuation_ebv" in model.spec.free_params
+        assert "agn_ebv" in model.spec.free_params
 
     def test_atten_law_key_invalid_dust_law_raises(self, synthetic_ssp_wide, simple_observation):
         """Test that invalid law name raises with suggestion."""
@@ -115,7 +115,7 @@ class TestAgNAttenLawKey:
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
-        assert "agn_attenuation_ebv" in model.spec.free_params
+        assert "agn_ebv" in model.spec.free_params
 
     def test_atten_params_fixed_with_law_key(self, synthetic_ssp_wide, simple_observation):
         """Test that Fixed params work with law key."""
@@ -132,7 +132,7 @@ class TestAgNAttenLawKey:
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
         # Fixed params should not be in free_params
-        assert "agn_attenuation_ebv" not in model.spec.free_params
+        assert "agn_ebv" not in model.spec.free_params
 
     def test_roundtrip_emits_law_key_for_smc_prevot(self, synthetic_ssp_wide, simple_observation):
         """Test that roundtrip emits law key for smc_prevot."""

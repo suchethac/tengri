@@ -24,7 +24,7 @@ never by calling the scoping function a second time:
    ``atten='polar_dust'`` is selected, for EVERY torus type. Parametrized
    over (torus type x atten type) -- literal encoding of F2/F3 as amended
    by R22, not the pre-R22 leak those facts originally measured. Also
-   encodes F3's ``agn_attenuation_ebv`` fact: read only by the two atten
+   encodes F3's ``agn_ebv`` fact: read only by the two atten
    types whose own signature names it (``qsogen``, ``smc_prevot``).
 """
 
@@ -244,7 +244,7 @@ _ALL_ATTEN_TYPES = _registered_types("atten")
 #: R22 (task13 fix-round-1): the ONE polar-dust mechanism's own names.
 _POLAR_NAMES = frozenset({"agn_polar_ebv", "agn_polar_oa", "agn_polar_T", "agn_polar_beta"})
 
-#: F3: agn_attenuation_ebv is read only by the atten types whose own
+#: F3: agn_ebv is read only by the atten types whose own
 #: signature names it (smc_prevot_block, qsogen_quasar_ext_block).
 _ATTENUATION_EBV_TYPES = frozenset({"qsogen", "smc_prevot"})
 
@@ -319,7 +319,7 @@ def _assert_polar_ownership(ssp, obs, torus_type: str, atten_type: str) -> None:
 
     ``agn_polar_ebv``/``oa``/``T``/``beta`` are freed AND measurably live under
     ``atten='polar_dust'``, and absent from the freed set under every other
-    atten type, whatever torus is selected. ``agn_attenuation_ebv`` is freed
+    atten type, whatever torus is selected. ``agn_ebv`` is freed
     only under the two atten types whose own signature reads it (``qsogen``,
     ``smc_prevot``).
     """
@@ -372,12 +372,12 @@ def _assert_polar_ownership(ssp, obs, torus_type: str, atten_type: str) -> None:
         )
 
     if atten_type in _ATTENUATION_EBV_TYPES:
-        assert "agn_attenuation_ebv" in free, (
-            f"{torus_type}/{atten_type}: agn_attenuation_ebv not freed, expected live"
+        assert "agn_ebv" in free, (
+            f"{torus_type}/{atten_type}: agn_ebv not freed, expected live"
         )
     else:
-        assert "agn_attenuation_ebv" not in free, (
-            f"{torus_type}/{atten_type}: agn_attenuation_ebv unexpectedly freed"
+        assert "agn_ebv" not in free, (
+            f"{torus_type}/{atten_type}: agn_ebv unexpectedly freed"
         )
 
 

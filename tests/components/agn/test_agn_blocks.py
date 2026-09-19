@@ -206,13 +206,13 @@ def test_smc_prevot_block_matches_redden_disc():
     .. [2] AGNfitter BBBred_Prevot in MODEL_AGNfitter.py.
     """
     wave_aa = jnp.logspace(3.0, 5.0, 200)  # 1000 Å – 100 µm
-    agn_attenuation_ebv = 0.3
+    agn_ebv = 0.3
 
     # Block interface: returns L_lambda [erg/s/Å] multiplicative factor
-    factor_block = smc_prevot_block(wave_aa, agn_attenuation_ebv=agn_attenuation_ebv)
+    factor_block = smc_prevot_block(wave_aa, agn_ebv=agn_ebv)
 
     # Reference: redden_disc applied to a unit disc SED
-    factor_redden = redden_disc(wave_aa, jnp.ones_like(wave_aa), agn_attenuation_ebv)
+    factor_redden = redden_disc(wave_aa, jnp.ones_like(wave_aa), agn_ebv)
 
     # They must be bitwise identical (both delegate to the same prevot_smc + R_V)
     np.testing.assert_array_equal(np.asarray(factor_block), np.asarray(factor_redden))
@@ -221,12 +221,12 @@ def test_smc_prevot_block_matches_redden_disc():
     from tengri.components.dust.attenuation import prevot_smc
 
     wave_test = jnp.array([1500.0])
-    factor_at_1500 = float(np.asarray(redden_disc(wave_test, jnp.ones(1), agn_attenuation_ebv))[0])
+    factor_at_1500 = float(np.asarray(redden_disc(wave_test, jnp.ones(1), agn_ebv))[0])
     # A(1500 Å) = -2.5 * log10(factor)
     a_1500 = -2.5 * np.log10(factor_at_1500)
     # Expected: k_norm(1500) * R_V * E(B-V)
     k_norm_1500 = float(np.asarray(prevot_smc(wave_test))[0])
-    expected_a_1500 = k_norm_1500 * 2.72 * agn_attenuation_ebv
+    expected_a_1500 = k_norm_1500 * 2.72 * agn_ebv
     # Within 2% due to numerical rounding
     np.testing.assert_allclose(a_1500, expected_a_1500, rtol=0.02)
 
@@ -588,24 +588,20 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
 
 
 @pytest.mark.contract
-def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat_obs):
-    """agn_attenuation_ebv (atten sub-block) must be settable and change predict_state.
+def test_agn_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat_obs):
+    """agn_ebv (atten sub-block) must be settable and change predict_state.
 
-    Regression: agn_attenuation_ebv had no ParamDeclaration and no partition
+    Regression: the E(B-V) parameter had no ParamDeclaration and no partition
     entry, so ``atten={'type': 'smc_prevot'}`` built a block pinned at
     E(B−V)=0 — a silent no-op. It now lowers via the agn.atten sub-block.
-    Updated to use law='prevot_smc' syntax (new form). Both the short key
-    'attenuation_ebv' and the full name 'agn_attenuation_ebv' resolve here
-    (R30); the full name is used below because this test is about the
-    parameter's effect on predict_state, not about key resolution --
-    tests/contract/test_agn_atten_law_key.py owns the short-key contract.
+    Consolidated to single name agn_ebv (R52, #2325).
     """
     from tengri import DEFAULT, Fixed, SEDModel
 
     obs = synthetic_tophat_obs
     ssp = synthetic_ssp_wide
 
-    # Build two models: one with agn_attenuation_ebv=0.0, one with 0.5
+    # Build two models: one with agn_ebv=0.0, one with 0.5
     # Use smc_prevot attenuation block via law='prevot_smc'; fix all parameters
     model_no_atten = SEDModel.build(
         ssp_data=ssp,
@@ -632,7 +628,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "blr": {"type": "none"},
             "atten": {
                 "law": "prevot_smc",
-                "agn_attenuation_ebv": Fixed(0.0),
+                "agn_ebv": Fixed(0.0),
                 "all_params": Fixed(DEFAULT),
             },
             "agn_log_lbol": Fixed(11.0),
@@ -665,7 +661,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "blr": {"type": "none"},
             "atten": {
                 "law": "prevot_smc",
-                "agn_attenuation_ebv": Fixed(0.5),
+                "agn_ebv": Fixed(0.5),
                 "all_params": Fixed(DEFAULT),
             },
             "agn_log_lbol": Fixed(11.0),
@@ -687,18 +683,17 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
     )
     max_rel_diff = float(np.nanmax(rel_diff))
     assert max_rel_diff > 1e-6, (
-        f"agn_attenuation_ebv parameter had no effect on SED: "
+        f"agn_ebv parameter had no effect on SED: "
         f"max relative change = {max_rel_diff:.2e}"
     )
 
 
 @pytest.mark.contract
-def test_agn_attenuation_ebv_at_top_level_raises_with_nesting_advice():
+def test_agn_ebv_at_top_level_raises_with_nesting_advice():
     """Task 16 (item 11): placing an 'agn.atten'-owned parameter FLAT at the
     ``agn`` top level (rather than nested under ``agn={'atten': {...}}``) is
     the D1 guard's intended refusal (Task 12), not merely absorbed and
-    ignored. This is the failure mode
-    test_agn_attenuation_ebv_settable_via_sedbuild and
+    ignored. This is the failure mode test_agn_ebv_settable_via_sedbuild and
     test_qsogen_extinction.py::test_end_to_end_through_build hit at this
     branch's base -- both rewritten to the nested form; this is the
     complementary NEGATIVE case proving the top-level spelling really does
@@ -714,7 +709,7 @@ def test_agn_attenuation_ebv_at_top_level_raises_with_nesting_advice():
                 "type": "composable",
                 "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
                 "atten": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
-                "agn_attenuation_ebv": Fixed(0.3),  # top-level: should raise
+                "agn_ebv": Fixed(0.3),  # top-level: should raise
                 "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.1),
