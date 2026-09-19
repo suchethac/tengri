@@ -246,7 +246,7 @@ def test_cloudy_grid_continuum_carries_the_same_tail(ssp_data_fsps):
 
 
 def test_tail_is_differentiable(ssp_data_bc03):
-    """Gradient of sed_nebular w.r.t. neb_logU is finite at 1e9 Å.
+    """Gradient of sed_nebular w.r.t. neb_logU is finite and non-zero at 1e9 Å.
 
     The helper function interp_continuum_with_freefree_tail must be
     gradient-safe: jax.grad should work through it.
@@ -280,6 +280,12 @@ def test_tail_is_differentiable(ssp_data_bc03):
     assert np.isfinite(grad_val), (
         f"Gradient of sed_nebular w.r.t. {free_param_name} is {grad_val} (not finite). "
         "interp_continuum_with_freefree_tail must be gradient-safe (#2346)."
+    )
+    assert grad_val != 0.0, (
+        f"Gradient of sed_nebular w.r.t. {free_param_name} at 1e9 Å is exactly zero. "
+        "neb_logU sets the continuum amplitude at the emulator's last node, which the "
+        "tail is anchored to, so a zero gradient would mean the tail was detached from "
+        "the emulator output (#2346)."
     )
 
 
