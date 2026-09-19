@@ -14,6 +14,8 @@ import inspect
 
 import pytest
 
+pytestmark = pytest.mark.contract
+
 
 class TestCalibrationELineMarginalizedLikelihoodDisclosure:
     """Contract test on the docstring of CalibrationELineMarginalizedLikelihood."""
