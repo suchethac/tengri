@@ -493,11 +493,12 @@ class Parameters:
         # propagates through to :meth:`SEDModel._init_igm` (#344, #440).
         self.igm_model = kwargs.pop("igm_model", "inoue")
 
-        # Pop private grammar flag before any user-facing bookkeeping
+        # Pop private grammar flags before any user-facing bookkeeping
         grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+        defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
 
         # ── Nebular emission ──────────────────────────────────────
-        self._init_nebular_config(kwargs)
+        self._init_nebular_config(kwargs, defer_resource_paths=defer_resource_paths)
 
         # ── Dust ──────────────────────────────────────────────────
         self._init_dust_config(kwargs, validate_flat=not grammar_validated)
@@ -870,7 +871,7 @@ class Parameters:
         # --- Validate physical bounds ---
         self._validate_bounds()
 
-    def _init_nebular_config(self, kwargs):
+    def _init_nebular_config(self, kwargs, *, defer_resource_paths=False):
         """Resolve nebular emission backend from kwargs."""
         # R49: presence, not value, of any of the three neb-group kwargs
         # means the caller explicitly stated a nebular disposition -- via
@@ -979,7 +980,11 @@ class Parameters:
             self.nebular_mode = "mappings_agn"
         elif nebular:
             self.nebular_mode = "cloudy"
-            if self.cloudy_grid_path is None:
+            if self.cloudy_grid_path is None and not defer_resource_paths:
+                # Skip grid resolution during enumeration-spec construction (pass 2 of
+                # parse_groups) to allow _check_dict_keys to validate keys before the
+                # grid-file existence check. The real construction (pass 2's final spec)
+                # is untouched and still raises if no grid is reachable (#2328).
                 default_grid = self._default_cloudy_grid()
                 if default_grid is None:
                     self._raise_missing_grid_path()
