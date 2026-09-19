@@ -45,6 +45,8 @@ Two priors carry a deliberate choice and are documented where they are set:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import jax
 
 import tengri
@@ -75,6 +77,66 @@ SSP_FOR_CONFIG = {
 }
 
 N_SFH_BINS = 7
+
+#: Photoionization grid for Configuration IV, named rather than discovered.
+#:
+#: Left unset, the Cloudy backend searches the data directory and takes what it
+#: finds. On a machine holding several grids that is a silent choice: measured
+#: 2026-09-20, Configuration IV resolved to ``cloudy_grid_mist.h5`` -- an MIST
+#: grid under a PARSEC/MILES configuration, exactly the isochrone mismatch the
+#: backend's own error text warns against. Nothing raised, and the free
+#: parameter count was unchanged, so the mismatch was invisible to every check
+#: that did not look at the resolved path.
+#:
+#: The grid is derived, not distributed: ``data/.gitignore`` excludes
+#: ``cloudy_grid_*.h5`` and they are built by
+#: ``scripts/convert_fsps_cloudy_grid.py --isoc prsc`` from the FSPS
+#: ``ZAU_ND_prsc.lines``/``.cont`` files in ``$SPS_HOME/nebular/`` or
+#: ``data/cloudy_raw/``. Naming it here turns a missing grid into a loud
+#: failure at build time rather than a quiet substitution.
+CLOUDY_GRID_NAME_FOR_IV = "cloudy_grid_prsc.h5"
+
+
+def cloudy_grid_for_iv() -> str:
+    """Absolute path to Configuration IV's PARSEC photoionization grid.
+
+    Resolved explicitly rather than left to the backend's directory search,
+    which takes whatever it finds first and gave an MIST grid to this
+    PARSEC/MILES configuration without raising.
+
+    Raises:
+        FileNotFoundError: naming the command that builds the grid. It is
+            derived rather than distributed, so a missing file is a setup step
+            that has not been run, not a broken install -- and saying so beats
+            a search that silently succeeds with the wrong isochrone.
+    """
+    import os
+
+    candidates = []
+    env_dir = os.environ.get("TENGRI_DATA_DIR")
+    if env_dir:
+        candidates.append(Path(env_dir) / CLOUDY_GRID_NAME_FOR_IV)
+    here = Path(__file__).resolve()
+    # analysis/paper1/configs.py -> paper1 -> analysis -> repo root, then any
+    # ancestor: a worktree's data/ is often the main checkout's.
+    for parent in here.parents:
+        candidates.append(parent / "data" / CLOUDY_GRID_NAME_FOR_IV)
+
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+
+    raise FileNotFoundError(
+        f"Configuration IV needs {CLOUDY_GRID_NAME_FOR_IV}, which is derived rather "
+        f"than distributed (data/.gitignore excludes cloudy_grid_*.h5). Build it "
+        f"with:\n\n"
+        f"    python scripts/convert_fsps_cloudy_grid.py --sps-home --isoc prsc\n"
+        f"    # or, from local FSPS ASCII files:\n"
+        f"    python scripts/convert_fsps_cloudy_grid.py --input-dir data/cloudy_raw --isoc prsc\n\n"
+        f"It must be the PARSEC grid: Configuration IV is FSPS PARSEC/MILES, and "
+        f"an MIST-derived grid pairs the wrong ionizing spectrum with the "
+        f"stellar library. Searched: {[str(c) for c in candidates[:4]]}"
+    )
 
 
 def load_ssp_for(key: str) -> tengri.SSPData:
@@ -237,6 +299,7 @@ def config_IV(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         dust_emission={"type": "casey2012", "all_params": Fixed(DEFAULT)},
         neb={
             "type": "cloudy",
+            "grid": cloudy_grid_for_iv(),
             "all_params": Fixed(DEFAULT),
             "neb_logU": Uniform(-4.0, -1.0),
         },
