@@ -3,13 +3,15 @@
 ``3-mock-galaxy.tex`` prints a ``SEDModel.build`` call as the worked example of
 the framework's central claim: that one call composes a panchromatic joint fit.
 A reader copies that block. Nothing in CI ran it, and on 2026-09-20 it carried
-seven defects -- four names that do not exist, one retired API form, one prior
-that admits negative luminosity, and one declaration that builds cleanly and
-raises only at prediction.
+eight defects: four names that do not exist, one retired API form, one prior
+that admits negative luminosity, one declaration that builds cleanly and raises
+only at prediction, and one that inverts the observation/data separation.
 
 This script is the missing check. It builds the listing as corrected and
-asserts the model predicts finite positive photometry. Run it whenever the
-listing or the grammar changes.
+asserts the model predicts finite positive photometry AND a finite positive
+spectrum: the section's claim is joint inference, so a check that exercised
+only photometry would pass while the demonstrated thing was broken. Run it
+whenever the listing or the grammar changes.
 
 The defects found, recorded so a future edit does not reintroduce them:
 
@@ -28,6 +30,10 @@ The defects found, recorded so a future edit does not reintroduce them:
                                                  admits negative L_IR
  7   ``met={"type": "table"}``                   needs an actual Z(t) table; omit
                                                  it or use ``{"logzsol": ...}``
+ 8   ``Observation(spectrum=Spectrum(wave=,     ``Observation(spectroscopy=
+     fnu=, fnu_err=, resolution=))``             Spectroscopy(wave_obs=,
+                                                 resolution=))`` and the fluxes
+                                                 go to ``Data``, not here
 ===  ==========================================  ==================================
 
 Defect 3 is not a transcription error. The writing plan locks "two-component
@@ -35,6 +41,15 @@ with free shapes", and the grammar cannot express that: ``dust_law_overrides``
 is ``dict[str, dict[str, float]]`` and those values are folded into the compile
 key. Either the paper drops per-screen free shapes or the framework grows them.
 This script uses fixed per-screen shapes because that is what runs today.
+
+Defect 8 is the one that misrepresents the design rather than misspelling it.
+``Observation`` is the observation *model* -- which filters, what wavelength
+grid, what resolution -- and ``Data`` carries the *measurements*. ``Photometry``
+has no ``fnu`` parameter at all. The listing puts fluxes inside both observation
+objects, which collapses a separation the framework maintains deliberately:
+one ``Observation`` can be reused across many galaxies, each with its own
+``Data``. That is what makes the catalog path possible, so the example teaching
+joint fitting inverts the thing the section is demonstrating.
 """
 
 from __future__ import annotations
@@ -45,11 +60,13 @@ import numpy as np
 import tengri
 from tengri import (
     FREE,
+    Data,
     Fixed,
     Gaussian,
     Observation,
     Photometry,
     SEDModel,
+    Spectroscopy,
     Uniform,
     WavePrecomp,
 )
@@ -121,9 +138,26 @@ def build_mock_model(ssp, observation, z=REDSHIFT):
     )
 
 
+#: SDSS-like optical coverage for the spectroscopic channel.
+SPEC_WAVE_OBS = np.linspace(3800.0, 9200.0, 1500)
+SPEC_RESOLUTION = 2000.0
+
+
+def build_joint_observation():
+    """One ``Observation`` carrying both channels, as the section claims.
+
+    The measurements do not live here. ``Data`` carries those, which is why one
+    ``Observation`` serves a whole catalog.
+    """
+    return Observation(
+        photometry=Photometry.from_names(MOCK_FILTERS),
+        spectroscopy=Spectroscopy(wave_obs=SPEC_WAVE_OBS, resolution=SPEC_RESOLUTION),
+    )
+
+
 def main() -> int:
     ssp = tengri.load_ssp("fsps_mist_c3k_a_chabrier")
-    obs = Observation(photometry=Photometry.from_names(MOCK_FILTERS))
+    obs = build_joint_observation()
     model = build_mock_model(ssp, obs)
 
     free = sorted(model.spec.free_params)
@@ -141,7 +175,24 @@ def main() -> int:
     print(
         f"\npredicts {len(phot)} bands, finite and positive ({phot.min():.2e} to {phot.max():.2e})"
     )
-    print("[ok] the corrected listing executes")
+
+    # The section's actual claim is JOINT inference, so a check that exercises
+    # only photometry would pass while the thing being demonstrated is broken.
+    spectrum = np.asarray(model.predict(params).spectrum())
+    assert spectrum.shape == (SPEC_WAVE_OBS.size,), f"shape {spectrum.shape}"
+    assert np.all(np.isfinite(spectrum)), "non-finite spectrum"
+    assert (spectrum > 0).all(), "non-positive spectrum"
+    print(f"predicts {spectrum.size} spectral pixels, finite and positive")
+
+    # Measurements are a separate object from the observation model. Building
+    # one here keeps the distinction that defect 8 collapsed under test.
+    data = Data(
+        photometry=(phot, 0.05 * phot),
+        spectrum=(spectrum, 0.05 * spectrum),
+    )
+    assert data is not None
+    print("Data carries the measurements; Observation carries the model")
+    print("[ok] the corrected listing executes, both channels")
     return 0
 
 
