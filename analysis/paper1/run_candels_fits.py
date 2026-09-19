@@ -71,22 +71,35 @@ GALAXIES, GALAXY_LABELS = load_selected_galaxies()
 # Six model configurations, derived from configs registry
 CONFIGS = sorted(CONFIGS_REGISTRY.keys())
 
+
 # Model dimensions: derive from configs.CONFIGS if available, otherwise use known values
 def get_config_dimensions() -> dict[str, int]:
     """Get free parameter count per configuration, with fallback to known values."""
     dimensions = {}
-    # Measured 2026-09-14 at z=1.097 by building each configuration. For the
-    # nonparametric families (III continuity, VI dirichlet) the count depends on the
-    # age bins, which are built from each galaxy's redshift, so these are indicative
-    # rather than exact.
-    known_dimensions = {"I": 5, "II": 8, "III": 10, "IV": 4, "V": 5, "VI": 9}
+    # Measured 2026-09-20 at z=1.0 against the locked suite by building each
+    # configuration and reading spec.free_params. II and III are None because
+    # their libraries (fsps_prsc_c3k_a_chabrier, fsps_mist_miles_chabrier) were
+    # not on the machine that measured the rest; a cell JSON carries the real
+    # count, so the summary should be rebuilt from disk once the grid has run
+    # rather than trusting this table. The previous literals here were carried
+    # over from the superseded suite and were wrong for every row.
+    known_dimensions: dict[str, int | None] = {
+        "I": 10,
+        "II": None,
+        "III": None,
+        "IV": 11,
+        "V": 6,
+        "VI": 11,
+    }
 
     for cfg_key in CONFIGS:
         if CONFIGS_REGISTRY[cfg_key]["n_free"] is not None:
             dimensions[cfg_key] = CONFIGS_REGISTRY[cfg_key]["n_free"]
         else:
-            # Fallback to known values; will be updated if configs.CONFIGS are populated
-            dimensions[cfg_key] = known_dimensions.get(cfg_key, 0)
+            # Fallback to the measured table. 0 for a row nobody has measured:
+            # a wrong integer reads as a real dimension in the summary and in
+            # anything that quotes it, where a 0 is visibly a placeholder.
+            dimensions[cfg_key] = known_dimensions.get(cfg_key) or 0
 
     return dimensions
 
@@ -428,8 +441,7 @@ def run_fit_cells_concurrent(
                             diagnostics = json.load(f)
                         all_diagnostics.append(diagnostics)
                         logger.info(
-                            f"✓ SUCCESS: galaxy {gal_id} config {config_key} "
-                            f"({elapsed:.1f}s)"
+                            f"✓ SUCCESS: galaxy {gal_id} config {config_key} ({elapsed:.1f}s)"
                         )
                     except (OSError, json.JSONDecodeError) as e:
                         logger.error(f"Error reading diagnostics for {gal_id}/{config_key}: {e}")
@@ -610,7 +622,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     ``--jobs`` sets the maximum number of concurrent cell subprocesses (default 3).
     """
-    parser = argparse.ArgumentParser(description="Run the 3x3 grid of CANDELS NUTS fits")
+    parser = argparse.ArgumentParser(description="Run the 20x6 grid of CANDELS NUTS fits")
     parser.add_argument(
         "--only-missing",
         action="store_true",
@@ -630,6 +642,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=3,
         help="Maximum number of concurrent fit_one subprocesses (default 3)",
     )
+    parser.add_argument(
+        "--configs",
+        type=str,
+        default=None,
+        metavar="I,II,...",
+        help=(
+            "Restrict the run to these configurations (comma-separated). Without "
+            "it every configuration runs, interleaved galaxy-major. Concurrency is "
+            "one global --jobs, but the configurations do not cost the same memory: "
+            "the reinsertion peak is set by chunk width, so the lightest per-draw "
+            "payload can hold the widest chunk and the largest working set. Run a "
+            "row at a time to measure its own peak and size --jobs against N "
+            "simultaneous peaks of THAT row"
+        ),
+    )
+    parser.add_argument(
+        "--galaxies",
+        type=str,
+        default=None,
+        metavar="ID,ID,...",
+        help="Restrict the run to these galaxy IDs (comma-separated)",
+    )
     args = parser.parse_args(argv)
 
     # Mutual exclusion: --summary-only and --only-missing cannot be used together
@@ -638,6 +672,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")
+
+    # Resolve the cell restrictions here, before any mode branches, so a typo is
+    # rejected whatever else was asked for. An unrecognized name that quietly
+    # selected nothing would look exactly like a finished run in the log.
+    run_configs = list(CONFIGS)
+    if args.configs is not None:
+        requested = [c.strip() for c in args.configs.split(",") if c.strip()]
+        unknown = [c for c in requested if c not in CONFIGS]
+        if unknown:
+            parser.error(f"unknown configuration(s) {unknown}; known: {list(CONFIGS)}")
+        run_configs = requested
+
+    run_galaxies = list(GALAXIES)
+    if args.galaxies is not None:
+        try:
+            requested_ids = [int(g.strip()) for g in args.galaxies.split(",") if g.strip()]
+        except ValueError:
+            parser.error(f"--galaxies must be integer IDs, got {args.galaxies!r}")
+        unknown_ids = [g for g in requested_ids if g not in GALAXIES]
+        if unknown_ids:
+            parser.error(f"galaxy ID(s) {unknown_ids} are not in the selected sample")
+        run_galaxies = requested_ids
+
+    if not run_configs or not run_galaxies:
+        parser.error("no cells selected")
+
+    # Carry the resolved selection on the namespace: these are locals of
+    # parse_args, and main() is a separate function.
+    args.run_configs = run_configs
+    args.run_galaxies = run_galaxies
 
     return args
 
@@ -666,8 +730,15 @@ def main(argv: list[str] | None = None):
         logger.info(f"\nSummary saved to {summary_json}")
         return 0
 
-    # Build list of all cells to run
-    all_cells = [(gal_id, config_key) for gal_id in GALAXIES for config_key in CONFIGS]
+    # Cell restrictions were resolved and validated at parse time.
+    run_galaxies = args.run_galaxies
+    run_configs = args.run_configs
+    all_cells = [(gal_id, config_key) for gal_id in run_galaxies for config_key in run_configs]
+    logger.info(
+        f"Running {len(all_cells)} cells: "
+        f"{len(run_galaxies)} galaxies x {len(run_configs)} configurations "
+        f"{list(run_configs)} at --jobs {args.jobs}"
+    )
 
     # Run all fits concurrently
     all_diagnostics, failed_fits, skipped_fits = run_fit_cells_concurrent(
