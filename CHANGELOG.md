@@ -37,6 +37,22 @@
   unchanged; both spellings cannot be passed together (raises if shadowing is
   detected).
 
+### Fixed
+
+- `Posterior.to_param_spec()` now reads the posterior's own SFH type instead of
+  defaulting to `dpl`, and preserves all structural settings (dust law, nebular
+  backend, etc.) from the model. Previously, posteriors fit with non-`dpl` SFH
+  types like `delayed` would raise "Unknown parameter" errors because the method
+  only copied `stochastic` and `n_grid`, losing the component type information.
+  The fix reconstructs the full nested-dict groups from the model spec, then
+  injects the posterior's empirical parameter distributions. (#2180)
+
+- `Posterior.validate()` now dispatches on the MCMC method's valid arguments
+  instead of always passing `n_steps` (a MAP-only parameter) to `mcmc_nuts` and
+  `mcmc_raytrace`, which do not accept it. After a MAP fit, `validate()` now
+  raises a helpful error explaining that validation requires a posterior with
+  samples, rather than failing with a cryptic `TypeError` about `mcmc_nuts`. (#2180)
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
