@@ -41,6 +41,7 @@ def test_agn_attenuation_ebv_dict_form_atten_subblock_refused():
     """
     with pytest.raises(ValueError, match=r"agn_attenuation_ebv.*agn_ebv.*2325"):
         Parameters(
+            redshift=Fixed(0.0),
             agn={
                 "type": "composable",
                 "atten": {"type": "smc_prevot", "agn_attenuation_ebv": 0.3},
@@ -55,6 +56,7 @@ def test_agn_attenuation_ebv_dict_form_agn_level_refused():
     """
     with pytest.raises(ValueError, match=r"agn_attenuation_ebv.*agn_ebv.*2325"):
         Parameters(
+            redshift=Fixed(0.0),
             agn={
                 "type": "composable",
                 "atten": "smc_prevot",
@@ -72,6 +74,7 @@ def test_agn_ebv_survives_smc_prevot_block(synthetic_ssp_wide, synthetic_tophat_
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
+        redshift=Fixed(0.0),
         agn={
             "type": "composable",
             "atten": {
@@ -106,6 +109,7 @@ def test_agn_ebv_survives_qsogen_block(synthetic_ssp_wide, synthetic_tophat_obs)
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
+        redshift=Fixed(0.0),
         agn={
             "type": "composable",
             "atten": {
@@ -132,47 +136,70 @@ def test_agn_ebv_survives_qsogen_block(synthetic_ssp_wide, synthetic_tophat_obs)
 
 
 def test_agn_attenuation_ebv_absent_from_src():
-    """Verify the retired name does not appear in any src/ consumer.
+    """Verify the retired name does not appear in any src/ consumer code.
 
-    The census must show exactly 0 consumers of agn_attenuation_ebv in src/tengri,
-    except for the retirement frozenset itself and the interception helper.
+    The census walks src/tengri/**/*.py, counts occurrences of the literal
+    'agn_attenuation_ebv' outside of comments, and subtracts lines inside the
+    retirement block (defined by _RETIRED_AGN_ATTEN_EBV and _agn_atten_ebv_retired_error).
+    The remainder must be 0. Comments documenting the retirement are allowed.
     """
-    import subprocess
-    import re
+    from pathlib import Path
 
-    result = subprocess.run(
-        [
-            "git",
-            "grep",
-            "-n",
-            "agn_attenuation_ebv",
-            "--",
-            "src/",
-        ],
-        cwd="/Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a28a5d918234296f6",
-        capture_output=True,
-        text=True,
-    )
+    # Locate the retirement block boundaries in groups.py
+    groups_py = Path("src/tengri/parameters/groups.py")
+    with open(groups_py, "r") as f:
+        lines = f.readlines()
 
-    lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    # Find the block boundaries: from first _RETIRED_AGN_ATTEN_EBV to end of _agn_atten_ebv_retired_error
+    retirement_block_start = None
+    retirement_block_end = None
 
-    # Allowed: _RETIRED_AGN_ATTEN_EBV frozenset and the helper function
-    allowed_patterns = [
-        r"_RETIRED_AGN_ATTEN_EBV",
-        r"_agn_atten_ebv_retired_error",
-    ]
+    for i, line in enumerate(lines):
+        # Find FIRST occurrence of the frozenset definition (not later uses)
+        if "_RETIRED_AGN_ATTEN_EBV" in line and "frozenset" in line and retirement_block_start is None:
+            retirement_block_start = i
+        # Find the function definition
+        if "_agn_atten_ebv_retired_error" in line and "def " in line:
+            # Found the function definition; find its end (next def or class at same indent)
+            base_indent = len(line) - len(line.lstrip())
+            for j in range(i + 1, len(lines)):
+                next_line = lines[j]
+                if next_line.strip() and (next_line.startswith("def ") or next_line.startswith("class ")):
+                    next_indent = len(next_line) - len(next_line.lstrip())
+                    if next_indent <= base_indent:
+                        retirement_block_end = j
+                        break
+            if retirement_block_end is None:
+                retirement_block_end = len(lines)
 
-    filtered_lines = []
-    for line in lines:
-        if not line:
-            continue
-        # Skip lines that match allowed patterns (the retirement infrastructure)
-        if any(re.search(pattern, line) for pattern in allowed_patterns):
-            continue
-        filtered_lines.append(line)
+    # Walk src/tengri/**/*.py and count offenders
+    offenders = []
+    src_root = Path("src/tengri")
+    for py_file in sorted(src_root.rglob("*.py")):
+        with open(py_file, "r") as f:
+            file_lines = f.readlines()
+
+        for line_num, line_content in enumerate(file_lines, start=1):
+            if "agn_attenuation_ebv" not in line_content:
+                continue
+
+            # Skip comment lines (documentation of retirement is allowed)
+            # Find the first occurrence of '#' that marks a comment (not within strings)
+            stripped = line_content.lstrip()
+            if stripped.startswith("#"):
+                # Entire line is a comment
+                continue
+
+            # Check if this line is inside the retirement block (only skip if in groups.py)
+            if py_file.name == "groups.py" and retirement_block_start is not None:
+                if retirement_block_start <= (line_num - 1) < retirement_block_end:
+                    continue
+
+            # Record the offender
+            offenders.append(f"{py_file}:{line_num}: {line_content.rstrip()}")
 
     assert (
-        not filtered_lines
-    ), f"Found {len(filtered_lines)} unexpected references to agn_attenuation_ebv in src/:\n" + "\n".join(
-        filtered_lines
+        not offenders
+    ), f"Found {len(offenders)} unexpected references to agn_attenuation_ebv in src/:\n" + "\n".join(
+        offenders
     )

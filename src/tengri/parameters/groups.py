@@ -6120,14 +6120,11 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 raise ValueError(
                     f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    "  agn={'atten': {'law': 'prevot_smc', 'attenuation_ebv': Uniform(...)}}\n"
+                    "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
                     "'prevot_smc' is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
-                    "not a new choice. 'attenuation_ebv' is the short spelling of "
-                    "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
-                    "the unrelated, pre-existing agn_ebv parameter (the separate "
-                    "qsogen_smc attenuation block's own reddening knob), whose short "
-                    "spelling is 'ebv'."
+                    "not a new choice. 'ebv' (the short spelling of agn_ebv) is the "
+                    "E(B-V) parameter for the attenuation stage."
                 )
 
             if law_key is not None:
