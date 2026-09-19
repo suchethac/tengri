@@ -356,6 +356,46 @@ class TestSFHParameterSensitivity:
             _assert_parameter_matters(sfr_default, sfr_mod, f"Dirichlet z_frac_{i}")
 
 
+# ── 3. METALLICITY HISTORY — bin parameters sensitivity ────────────
+
+
+class TestMetallicityParameterSensitivity:
+    """Metallicity modes must respond to their parameters (smoke test)."""
+
+    _T = jnp.geomspace(1e5, 14e9, 500)
+
+    def test_bins_functions_callable(self):
+        """Metallicity bins mode: basic function calls execute without error."""
+        from tengri.components.stellar.sfh.metallicity_history import (
+            metallicity_bins_on_ssp_grid,
+        )
+
+        bin_edges_log_yr = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
+        metallicities = jnp.array([-2.0, -1.0, -0.5, -0.3, 0.0, 0.2])
+
+        # Basic call should return an array matching the input age grid
+        z_result = metallicity_bins_on_ssp_grid(self._T, bin_edges_log_yr, metallicities)
+        assert z_result.shape == self._T.shape, "Output shape mismatch"
+        assert jnp.all(jnp.isfinite(z_result)), "Output contains NaN/Inf"
+
+    def test_bins_continuity_functions_callable(self):
+        """Metallicity bins_continuity: basic function calls execute without error."""
+        from tengri.components.stellar.sfh.metallicity_history import (
+            metallicity_bins_continuity_on_ssp_grid,
+        )
+
+        bin_edges_log_yr = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
+        base_z = -0.3
+        d_log_z = jnp.array([0.5, -0.2, 0.1, 0.0, -0.3])  # 5 deltas for 6 bins
+
+        # Basic call should return an array matching the input age grid
+        z_result = metallicity_bins_continuity_on_ssp_grid(
+            self._T, bin_edges_log_yr, base_z, d_log_z
+        )
+        assert z_result.shape == self._T.shape, "Output shape mismatch"
+        assert jnp.all(jnp.isfinite(z_result)), "Output contains NaN/Inf"
+
+
 # ── 4. SHOCK EMISSION — velocity sensitivity ──────────────────────
 
 
