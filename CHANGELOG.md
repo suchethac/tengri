@@ -2,6 +2,28 @@
 
 ### Fixed
 
+- DH02_CE01 template shape and float32 safety (#2366): the Dale & Helou (2002) /
+  Chary & Elbaz (2001) template library is indexed by log₁₀(L_TIR/L_sun) and
+  the whole point of that family is that the SED shape correlates with
+  luminosity — warmer, broader templates at higher L_IR. The closure carried a
+  hardcoded `dust_log_lir=10.0` default and inherited `factors_l_ir=True` from
+  the base class, so ``apply()`` always evaluated it at unit luminosity
+  (``log10(1) = 0``), pinning the shape lookup to a single grid node regardless
+  of the actual budget; only the amplitude was rescaled afterwards. The template
+  shape therefore never tracked the fitted luminosity. The normalization path
+  also materialized L_absorbed (~1e43 erg/s, inf in pure float32) as a linear
+  value, leaving the SED entirely inf/NaN. Fixed by setting `factors_l_ir=False`
+  on the component (matching BosaIRSEDComponent), declaring
+  `optional_inputs={'log_L_ir': 'dex'}`, and rewriting the closure as a SINGLE
+  code path (no dtype-gated branches) that: (1) uses live `log_L_ir` for the
+  grid-axis lookup after converting to L_sun (same precedent as #2272/#2273),
+  and (2) applies log-domain rescaling via ``apply_log10_scale()`` when
+  `log_L_ir` is provided, never materializing L_absorbed. Mirrors
+  bosa_emission exactly — one arithmetic path works in both float32 and float64.
+  The model's total power still integrates to the absorbed luminosity exactly;
+  the shape now varies appropriately with the fitted L_IR. **Model output
+  changes for every dh02_ce01 fit** (#2366).
+
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently
