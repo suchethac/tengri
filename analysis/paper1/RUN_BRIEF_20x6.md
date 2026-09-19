@@ -156,6 +156,23 @@ floor. Half what it was before the U bands were added, and still unambiguous:
 nothing straddles the break, so no band in this fit sees IGM attenuation and
 the two folds agree here.
 
+**The rule, not the number.** A band is affected when its blue edge lies
+blueward of observed Ly-alpha:
+
+    1216 * (1 + z_max)  >  blue edge of the bluest fitted band
+
+Stated as a threshold redshift that has to be restated whenever the filter set
+or the sample changes, and both changed here. Stated as the inequality it
+re-derives itself, so the driver now checks it at startup rather than trusting
+this paragraph: `candels_io.assert_igm_node_fold_adequate` raises if the break
+has moved inside any fitted band, and `run_candels_fits` logs the headroom
+before the first cell. Run `python -m paper1.candels_io` to see the table.
+
+For the current band set the binding band is CTIO U, which admits the break at
+**z = 1.503** — not 1.4, which was a conservative guess before the curve was
+measured. The other edges fall at z = 1.738 (VIMOS U), 1.900 (F435W) and 2.757
+(F606W).
+
 The fix remains required before the mock figure (z = 1 with GALEX FUV, where
 the break *is* inside the bandpass, which is where the appendix FUV spike comes
 from) and before any high-redshift claim. It is not a prerequisite for these

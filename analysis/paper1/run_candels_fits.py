@@ -733,6 +733,21 @@ def main(argv: list[str] | None = None):
     # Cell restrictions were resolved and validated at parse time.
     run_galaxies = args.run_galaxies
     run_configs = args.run_configs
+
+    # The WavePrecomp node fold is only adequate while the Lyman break stays
+    # outside every fitted band. That is one inequality over the band set and
+    # the sample -- not a fixed redshift threshold -- and both sides of it have
+    # already moved once (13 bands to 16 when the U curves landed). Check it
+    # here rather than restating a number that goes stale silently.
+    from .candels_io import CANDELS_TO_TENGRI, assert_igm_node_fold_adequate, load_candels_z1
+
+    _cat = load_candels_z1()
+    _z_max = float(_cat["z"][np.isin(_cat["id"], run_galaxies)].max())
+    _bluest, _z_bite = assert_igm_node_fold_adequate(list(CANDELS_TO_TENGRI.values()), _z_max)
+    logger.info(
+        f"IGM node fold adequate: sample z_max={_z_max:.4f}, bluest band {_bluest} "
+        f"would admit the Lyman break at z={_z_bite:.3f}"
+    )
     all_cells = [(gal_id, config_key) for gal_id in run_galaxies for config_key in run_configs]
     logger.info(
         f"Running {len(all_cells)} cells: "

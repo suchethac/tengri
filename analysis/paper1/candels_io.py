@@ -202,8 +202,81 @@ def photometry_for_row(
     return names, np.array(fnu), np.array(fnu_err)
 
 
+#: Rest wavelength of Lyman alpha [A]. Blueward of this the intergalactic medium
+#: absorbs; redward of it, at these redshifts, it does not.
+LYMAN_ALPHA_REST_A = 1216.0
+
+
+def igm_break_margins(filter_names: list[str], z_max: float) -> list[tuple[str, float, float]]:
+    """Per-band clearance between the observed Lyman break and the band's blue edge.
+
+    The production ``WavePrecomp`` path folds IGM transmission at one wavelength
+    per sub-band. That is adequate while the transmission is smooth across the
+    band and wrong when a Lyman break falls *inside* it, which is the error the
+    exact fold (``eq:igm_exact_fold``) removes.
+
+    Whether that distinction matters is not a property of the survey, the
+    configuration, or the redshift alone -- it is one inequality over the band
+    set actually being fit:
+
+        1216 * (1 + z_max)  >  blue edge of the bluest fitted band
+
+    Stated as a threshold redshift it has to be restated every time the filter
+    set or the sample changes, and both changed here (13 bands to 16 when the
+    two U curves landed). Stated as the inequality it re-derives itself.
+
+    Args:
+        filter_names: tengri filter names actually entering the likelihood.
+        z_max: Highest redshift in the sample.
+
+    Returns:
+        ``(name, blue_edge_A, z_at_which_the_break_reaches_it)`` per band,
+        bluest first. A margin is negative when the break is already inside.
+    """
+    import tengri
+
+    rows = []
+    for f in tengri.Photometry.from_names(sorted(set(filter_names))).filters:
+        wave = np.asarray(f.wave)
+        trans = np.asarray(f.trans)
+        blue_edge = float(wave[trans > 0].min())
+        z_bite = blue_edge / LYMAN_ALPHA_REST_A - 1.0
+        rows.append((f.name, blue_edge, z_bite))
+    rows.sort(key=lambda r: r[1])
+    return rows
+
+
+def assert_igm_node_fold_adequate(filter_names: list[str], z_max: float) -> tuple[str, float]:
+    """Raise if the Lyman break falls inside any fitted band at ``z_max``.
+
+    Returns the bluest band and the redshift at which it would start to bite,
+    so a caller can log the headroom rather than merely not crash.
+    """
+    rows = igm_break_margins(filter_names, z_max)
+    name, blue_edge, z_bite = rows[0]
+    if z_max >= z_bite:
+        raise ValueError(
+            f"IGM break is inside the fitted band set: at z_max={z_max:.4f} "
+            f"Lyman alpha lands at {LYMAN_ALPHA_REST_A * (1 + z_max):.0f} A, "
+            f"but {name} transmits from {blue_edge:.0f} A (bites at z={z_bite:.3f}). "
+            f"The WavePrecomp node fold is no longer adequate; the exact fold "
+            f"(eq:igm_exact_fold) is required before these fits mean anything."
+        )
+    return name, z_bite
+
+
 if __name__ == "__main__":
     cat = load_candels_z1()
     print(f"Loaded {len(cat['id'])} galaxies")
     print(f"Redshift range: {cat['z'].min():.3f} - {cat['z'].max():.3f}")
     print(f"Photometric bands: {len(cat['bands'])}")
+
+    z_max = float(cat["z"].max())
+    print(
+        f"\nIGM node-fold headroom at z_max={z_max:.4f} "
+        f"(Lyman alpha at {LYMAN_ALPHA_REST_A * (1 + z_max):.0f} A):"
+    )
+    for name, blue_edge, z_bite in igm_break_margins(list(CANDELS_TO_TENGRI.values()), z_max)[:4]:
+        print(f"  {name:<12} blue edge {blue_edge:7.0f} A   bites at z={z_bite:.3f}")
+    bluest, z_bite = assert_igm_node_fold_adequate(list(CANDELS_TO_TENGRI.values()), z_max)
+    print(f"[ok] node fold adequate; {bluest} sets the limit at z={z_bite:.3f}")
