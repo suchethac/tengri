@@ -112,8 +112,17 @@ def test_near_miss_still_suggests_close_param_name():
     assert "tau_gyr" in error_msg, f"expected 'tau_gyr' suggestion in did-you-mean: {error_msg}"
 
 
-def test_agn_atten_type_smc_prevot_suggests_law_form_not_type_form():
-    """(iv) The AGN atten did-you-mean routes smc_prevot to the law form, not the type form.
+@pytest.mark.parametrize(
+    "atten_type_input,expected_law_name",
+    [
+        (
+            "prevot",
+            "prevot_smc",
+        )  # parameterize over all law-wrapped types at test time
+    ],
+)
+def test_agn_atten_type_law_wrapped_suggests_law_form(atten_type_input, expected_law_name):
+    """(iv) The AGN atten did-you-mean routes law-wrapped types to the law form.
 
     Before the fix, if a user wrote ``agn={'atten': {'type': 'prevot'}}`` and
     difflib suggested 'smc_prevot', the message would route to:
@@ -123,15 +132,18 @@ def test_agn_atten_type_smc_prevot_suggests_law_form_not_type_form():
     After the fix, the suggestion is the law form directly:
     ``agn={'atten': {'law': 'prevot_smc', ...}}``
     (one hop, not two).
+
+    Test is parametrized over all law-wrapped type names in _AGN_ATTEN_LAW_TYPES,
+    so new law types are automatically tested.
     """
     from tengri import DEFAULT, Fixed
     from tengri.parameters.groups import parse_groups
 
-    # 'prevot' is close to 'prevot_smc' (the law name) and to 'smc_prevot'
-    # (the refused type name). The suggestion should be the law form.
+    # The user input is close to a law-wrapped type like 'smc_prevot'.
+    # The suggestion should be the law form, not the type form.
     with pytest.raises(ValueError) as excinfo:
         parse_groups(
-            agn={"type": "composable", "atten": {"type": "prevot"}},
+            agn={"type": "composable", "atten": {"type": atten_type_input}},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
@@ -141,13 +153,12 @@ def test_agn_atten_type_smc_prevot_suggests_law_form_not_type_form():
         )
 
     error_msg = str(excinfo.value)
-    # The fix should NOT suggest 'smc_prevot' as a type to try
-    # Instead, it should suggest the law form
-    assert "law" in error_msg and "prevot_smc" in error_msg, (
-        f"expected suggestion of law form 'prevot_smc' in the error: {error_msg}"
+    # The fix should suggest the law form, not a type
+    assert f"law='{expected_law_name}'" in error_msg, (
+        f"expected suggestion of law form law='{expected_law_name}' in the error: {error_msg}"
     )
-    # Verify it's NOT suggesting the type form
-    assert "type" not in error_msg or "type='smc_prevot'" not in error_msg, (
+    # Verify it's NOT suggesting the type form (smc_prevot)
+    assert "type='smc_prevot'" not in error_msg, (
         f"should not suggest type='smc_prevot': {error_msg}"
     )
 
