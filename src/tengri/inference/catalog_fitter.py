@@ -12,6 +12,7 @@ on-device.
 from __future__ import annotations
 
 import functools
+import logging
 import math
 import time
 import types
@@ -31,6 +32,7 @@ from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
 from tengri.inference.backends.mcmc.catalog import CATALOG_CHEES_ENSEMBLE, DEFAULT_MAP_INIT_STEPS
+from tengri.inference.mass_profile import ObservedChannels, finalize_profile_mass
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
 """Percentile levels used when ``percentiles=`` is not given."""
@@ -939,7 +941,7 @@ class _CatalogFitterOriginal:
         self._pre_approx_model = model if self.model is not model else None
         self._lut_bias_checked = False
         self.data_type = data_type
-        self._dummy_fitter = None
+        self._dummy_fitters: dict[bool, object] = {}
         self._catalog_linear_engine = None
         self._catalog_nonlinear_engine = None
         # Create a single CompileCache for all per-galaxy Fitter instances.
@@ -1426,8 +1428,25 @@ class _CatalogFitterOriginal:
     # Internal: native vmapped path
     # ------------------------------------------------------------------
 
-    def _get_dummy_fitter(self):
-        if self._dummy_fitter is None:
+    def _get_dummy_fitter(self, *, profile_mass: bool | str = False):
+        """The shared Fitter whose compiled kernels every vmapped galaxy uses.
+
+        ``profile_mass`` defaults to ``False`` and every caller that does not
+        reinsert the marginalized mass must leave it there. The kernels
+        (``loss_fn``, ``_free_names``, ``init``) are shared across galaxies via
+        ``jax.vmap`` and this fitter's own ``.run()`` -- the one place
+        ``finalize_profile_mass`` fires on the single-galaxy path -- is never
+        called, so a caller that engages profiling takes on the reinsertion
+        itself, per galaxy, against that galaxy's own data. ``_run_native_mcmc``
+        does exactly that (#2254 lifted).
+
+        Cached per flag: the profiled and unprofiled fitters sample ``D-1`` and
+        ``D`` parameters respectively and so compile to different programs;
+        one slot would hand a caller the wrong dimensionality.
+        """
+        key = bool(profile_mass) if profile_mass is not True else True
+        cached = self._dummy_fitters.get(key)
+        if cached is None:
             from tengri.inference.fitter import Fitter
 
             g = self.galaxies[0]
@@ -1436,25 +1455,17 @@ class _CatalogFitterOriginal:
             # noise 0.0 (both via np.nan_to_num), so without the mask this
             # fitter sees a zero uncertainty and is refused by the data guard —
             # a catalog with a masked band in galaxy 0 would fail to build.
-            self._dummy_fitter = Fitter(
+            cached = Fitter(
                 self.model,
                 g["flux_obs"],
                 g["noise"],
                 data_type=self.data_type,
                 presence=g.get("presence", None),
                 cache=self.cache,
-                # Profiling is not implemented for the vectorized catalog
-                # engines: this dummy fitter's compiled kernels (loss_fn,
-                # _free_names, init) are shared across every galaxy via
-                # jax.vmap, and its own ``.run()`` -- the one place
-                # ``finalize_profile_mass`` reinserts the marginalized mass
-                # -- is never called (the native/vmap engines read the
-                # kernels directly). "auto" would silently engage on a
-                # single-galaxy-shaped dummy, fix the mass at a placeholder
-                # for every galaxy, and never draw it back in. See #2254.
-                profile_mass=False,
+                profile_mass=profile_mass,
             )
-        return self._dummy_fitter
+            self._dummy_fitters[key] = cached
+        return cached
 
     def _catalog_z_range(self):
         """The model's ``catalog_z_range`` (the runtime-redshift LUT span), or None.
@@ -1899,7 +1910,43 @@ class _CatalogFitterOriginal:
         n_pad_extra = n_padded - n_gal
         n_data = self._validate_uniform_data()
 
-        fitter = self._get_dummy_fitter()
+        # ``"auto"`` here, matching the single-galaxy default: the guards decide,
+        # and this engine reinserts the marginalized mass per galaxy in the
+        # posterior loop below. Every guard that could differ between galaxies is
+        # either uniform across a catalog (data_type, the model, the parameter
+        # spec, the linearity probe) or already forces the sequential engine --
+        # ``line_censor`` is restricted to SEQUENTIAL in the capability table, so
+        # censored data cannot reach this path at all. That is what makes reading
+        # eligibility off a galaxy-0-shaped dummy sound here, which it would not
+        # otherwise be (#2254).
+        # ...except when the caller hands us a raw ARRAY of starting points.
+        # That form is documented as "already in the flat unconstrained space"
+        # (:meth:`_init_from_user`), so its width is the flat dimension, and
+        # profiling changes that dimension from D to D-1. A width-D array would
+        # either raise a shape error or, worse, be silently reinterpreted with
+        # every parameter shifted by one position -- a wrong starting point that
+        # no downstream diagnostic reports. The dict forms name their
+        # parameters and so are unaffected; only the positional form is
+        # ambiguous, and only it stands profiling down.
+        _init_is_positional_array = (
+            init_from is not None
+            and not isinstance(init_from, str)
+            and not isinstance(init_from, dict)
+            and not (
+                isinstance(init_from, (list, tuple))
+                and init_from
+                and isinstance(init_from[0], dict)
+            )
+        )
+        if _init_is_positional_array:
+            logging.getLogger(__name__).info(
+                "profile_mass: not engaged on this catalog fit because init_from is a "
+                "positional array in the flat unconstrained space, whose width is the "
+                "un-profiled dimension. Pass parameter dicts instead to keep profiling."
+            )
+        fitter = self._get_dummy_fitter(
+            profile_mass=False if _init_is_positional_array else "auto"
+        )
         # Per-galaxy redshift override (#1337 phase 2): only when the catalog actually
         # carries a per-galaxy Fixed redshift. Free / shared-redshift catalogs leave
         # thread_redshift False, so the compiled program is unchanged.
@@ -2167,6 +2214,29 @@ class _CatalogFitterOriginal:
                 loss_history=None,
                 _model=self.model,
             )
+            # Reinsert the analytically marginalized mass for THIS galaxy,
+            # before ``_attach_summaries`` runs: derived properties are computed
+            # from the samples, and a stellar mass still sitting at its
+            # placeholder would propagate into every one of them.
+            #
+            # The shared dummy fitter carries galaxy 0's data, so the channels
+            # are passed explicitly. ``_reinsert_mass_fn`` takes them as traced
+            # arguments and is cached on the model, so all ``n_gal`` calls reuse
+            # ONE compiled program rather than compiling per galaxy.
+            if getattr(fitter, "_profile_mass", False):
+                post_i = finalize_profile_mass(
+                    fitter,
+                    post_i,
+                    key=jax.random.fold_in(key, i),
+                    observed=ObservedChannels(
+                        data=all_data_orig[i],
+                        noise=all_noise_orig[i],
+                        presence=all_presence_orig[i],
+                        line_obs=all_line_flux_orig[i] if per_galaxy_lines else None,
+                        line_err=all_line_err_orig[i] if per_galaxy_lines else None,
+                    ),
+                )
+
             _attach_summaries(post_i, store, percentiles, reducers, properties)
             posteriors.append(post_i)
 

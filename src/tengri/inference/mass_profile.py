@@ -101,7 +101,7 @@ import math
 import re
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -116,6 +116,7 @@ if TYPE_CHECKING:
     from tengri.parameters.priors import Distribution
 
 __all__ = [
+    "ObservedChannels",
     "build_profiled_loglikelihood_fn",
     "build_profiled_loglikelihood_unbounded_fn",
     "build_profiled_loss_fn",
@@ -1933,7 +1934,35 @@ def _reinsert_mass_fn(fitter: Fitter):
     return fn
 
 
-def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Posterior:
+class ObservedChannels(NamedTuple):
+    """The per-galaxy data the mass reinsertion scores against.
+
+    Exists for the batched catalog engines. Those share ONE dummy ``Fitter``
+    across every galaxy (``catalog_fitter._get_dummy_fitter``), so
+    ``fitter.data`` / ``.noise`` / ``.presence`` carry galaxy 0's values, and
+    reinserting from them would hand every galaxy galaxy 0's mass. The
+    single-galaxy path passes ``None`` and reads the fitter, unchanged.
+
+    The jitted reinsertion (:func:`_reinsert_mass_fn`) already takes these as
+    *traced* arguments and is cached per model, so ONE compiled program serves
+    every galaxy: no recompile per galaxy, which is what makes the catalog
+    path cheap rather than N times the cost.
+    """
+
+    data: Any
+    noise: Any
+    presence: Any = None
+    line_obs: Any = None
+    line_err: Any = None
+
+
+def finalize_profile_mass(
+    fitter: Fitter,
+    posterior: Posterior,
+    *,
+    key,
+    observed: ObservedChannels | None = None,
+) -> Posterior:
     """Record the resolved ``profile_mass`` choice, and reinsert the mass if engaged.
 
     Called once from ``Fitter.run()``, immediately after the backend runner
@@ -1972,16 +2001,27 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
 
     mass_name = fitter._profile_mass_name
     model = fitter.model
-    data, noise = fitter.data, fitter.noise
-    presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
-    # The measured line channel, sourced the same way: straight off the fitter
-    # rather than out of ``_data_args``. Both the draw path and the point
-    # estimate below score the same channels the objective did -- a mass drawn
-    # or set against a different channel set than the one sampled would be a
-    # different posterior, with nothing raising to say so.
-    _line_cfg = fitter._resolved_line_fluxes()
-    line_obs = None if _line_cfg is None else jnp.asarray(_line_cfg.fluxes)
-    line_err = None if _line_cfg is None else jnp.asarray(_line_cfg.errors)
+    if observed is None:
+        data, noise = fitter.data, fitter.noise
+        presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
+        # The measured line channel, sourced the same way: straight off the fitter
+        # rather than out of ``_data_args``. Both the draw path and the point
+        # estimate below score the same channels the objective did -- a mass drawn
+        # or set against a different channel set than the one sampled would be a
+        # different posterior, with nothing raising to say so.
+        _line_cfg = fitter._resolved_line_fluxes()
+        line_obs = None if _line_cfg is None else jnp.asarray(_line_cfg.fluxes)
+        line_err = None if _line_cfg is None else jnp.asarray(_line_cfg.errors)
+    else:
+        # Batched catalog path: the caller supplies THIS galaxy's channels,
+        # because the shared dummy fitter carries galaxy 0's. The same
+        # channel-set rule as above applies and the caller owns it -- pass the
+        # line block the fit actually scored, or the reinserted mass belongs to
+        # a different posterior than the samples beside it.
+        data, noise = observed.data, observed.noise
+        presence = None if observed.presence is None else jnp.asarray(observed.presence)
+        line_obs = None if observed.line_obs is None else jnp.asarray(observed.line_obs)
+        line_err = None if observed.line_err is None else jnp.asarray(observed.line_err)
     fixed_values = fitter._fixed_values
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))

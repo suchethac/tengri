@@ -1788,8 +1788,27 @@ is correct: the fixed-mass difference was dominated by the galaxies' amplitude
 mismatch, and what survives marginalization is the shape comparison. Line
 fluxes still carry real weight in the profiled objective (swapping Halpha moves
 it by ~9x here), they simply no longer determine the ordering on their own.
-Note `catalog_fitter` pins `profile_mass=False` for every vmapped engine
-(#2254), so the batched catalog path is unaffected either way.
+**Catalogs.** The sequential engine has always profiled: `_run_sequential` builds a real
+per-galaxy `Fitter` with no `profile_mass` argument, so `"auto"` applies, and it calls
+`.run()`, so `finalize_profile_mass` fires. The **vmapped** engines used to pin
+`profile_mass=False` (#2254), because their shared dummy fitter's `.run()` is never called
+and the mass would have stayed at its placeholder for every galaxy.
+
+Since 2026-09-17 the vmapped MCMC engine profiles too. The reinsertion is lifted out of
+`Fitter.run()` and called per galaxy in the posterior-assembly loop, with that galaxy's own
+channels passed through `mass_profile.ObservedChannels` -- necessary because the shared dummy
+fitter carries **galaxy 0's** data, and reinserting from it would hand every galaxy galaxy 0's
+mass. `_reinsert_mass_fn` already takes data/noise/presence as *traced* arguments and is
+cached on the model, so all `n_gal` calls reuse one compiled program. The call sits *before*
+`_attach_summaries`, since derived properties are computed from the samples and a placeholder
+mass would propagate into every one of them.
+
+Reading eligibility off a galaxy-0-shaped dummy is sound here for a reason worth stating:
+every guard that could differ between galaxies is either catalog-uniform (`data_type`, the
+model, the parameter spec, the linearity probe) or already forces the sequential engine --
+`line_censor` is restricted to `SEQUENTIAL` in the capability table, so censored data cannot
+reach the vmapped path at all. `_get_dummy_fitter` caches profiled and unprofiled fitters
+separately, since they sample `D-1` and `D` parameters and compile to different programs.
 
 Additionally, at `Fitter.run()` (lines 467–483 of
 `src/tengri/inference/mass_profile.py:resolve_profile_mass_for_method`):
