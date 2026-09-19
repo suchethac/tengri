@@ -125,7 +125,21 @@ DEFAULT_RETUNE_ATTEMPTS = 3
 #: (a truncated metallicity posterior propagates into correlated quantities
 #: such as stellar mass), not a sampler question, and it is deliberately left
 #: to the owner rather than changed silently mid-grid.
-RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2}
+#: CLEARED on 2026-09-20 with the locked six-configuration suite. The entry
+#: above capped "III" because *that* Configuration III was a continuity history
+#: whose metallicity posterior piled up against a hardcoded ceiling. Under the
+#: locked tab:configs, III is delayed-tau on FSPS MIST/MILES with Charlot+2000
+#: attenuation and THEMIS dust -- it shares no component with the model the
+#: ruling examined. A cap keyed by roman numeral does not follow the physics it
+#: was written about, so leaving it would throttle a model nobody has measured.
+#:
+#: The pathology it described is also addressed at the source: every
+#: configuration now takes its metallicity prior from its own library's grid,
+#: held inside the outermost node, so the truncation-with-headroom this comment
+#: describes no longer exists to diagnose (configs.met_prior_for).
+#:
+#: Restore a cap only from a measurement on the current suite.
+RETUNE_ATTEMPTS_BY_CONFIG: dict[str, int] = {}
 #: Config I is deliberately NOT capped, and the reason is worth recording
 #: because I capped it on 2026-09-14 and had to revert within the hour.
 #:
