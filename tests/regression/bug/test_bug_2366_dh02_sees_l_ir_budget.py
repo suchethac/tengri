@@ -225,7 +225,6 @@ def test_dh02_energy_balance_through_apply(ssp):
     """
     import jax
 
-
     model = _build_dh02_model(ssp)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     state = model.predict_state(params)
@@ -264,7 +263,6 @@ def test_dh02_float32_agrees_with_float64(ssp):
     atol=1e-6 (~4× the measured 2.7e-7 max absolute difference).
     """
     import jax
-
 
     model = _build_dh02_model(ssp)
     params_float64 = dict(model.spec.sample(jax.random.PRNGKey(42)))
