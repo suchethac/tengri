@@ -356,6 +356,62 @@ class TestSFHParameterSensitivity:
             _assert_parameter_matters(sfr_default, sfr_mod, f"Dirichlet z_frac_{i}")
 
 
+# ── 3. METALLICITY HISTORY — bin parameters sensitivity ────────────
+
+
+class TestMetallicityParameterSensitivity:
+    """Metallicity modes must respond to their parameters."""
+
+    _T = jnp.geomspace(1e5, 14e9, 500)
+
+    def test_met_bin_edges_not_ignored(self):
+        """Metallicity bins function accepts and processes bin edges."""
+        import numpy as np
+
+        from tengri.components.stellar.sfh.metallicity_history import (
+            metallicity_bins_on_ssp_grid,
+        )
+
+        # Verify function executes with different bin edge configurations
+        bin_edges_1 = jnp.array([6.0, 7.0, 8.0, 8.5, 9.0, 9.5, 10.0])
+        bin_edges_2 = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.8, 10.0])
+        metallicities = jnp.array([-2.0, -1.0, -0.5, -0.3, 0.0, 0.1])
+
+        z_1 = metallicity_bins_on_ssp_grid(self._T, bin_edges_1, metallicities)
+        z_2 = metallicity_bins_on_ssp_grid(self._T, bin_edges_2, metallicities)
+
+        a = np.asarray(z_1)
+        b = np.asarray(z_2)
+        assert a.shape == b.shape
+        assert not np.allclose(a, b, rtol=1e-6, atol=0.0), (
+            "met_bin_edges_log_yr ignored: two different ladders produced identical output"
+        )
+
+    def test_met_bin_values_not_ignored(self):
+        """Metallicity bins function accepts and processes metallicity values."""
+        import numpy as np
+
+        from tengri.components.stellar.sfh.metallicity_history import (
+            metallicity_bins_on_ssp_grid,
+        )
+
+        bin_edges = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.0])
+        z_baseline = jnp.array([-0.3, -0.3, -0.3, -0.3, -0.3, -0.3])
+        z_modified = jnp.array([-2.0, -1.5, -0.5, 0.0, 0.2, 0.3])
+
+        result_baseline = metallicity_bins_on_ssp_grid(self._T, bin_edges, z_baseline)
+        result_modified = metallicity_bins_on_ssp_grid(
+            self._T, bin_edges, z_modified
+        )
+
+        a = np.asarray(result_baseline)
+        b = np.asarray(result_modified)
+        assert a.shape == b.shape
+        assert not np.allclose(a, b, rtol=1e-6, atol=0.0), (
+            "metallicity bin values ignored: changing one bin's value left the output identical"
+        )
+
+
 # ── 4. SHOCK EMISSION — velocity sensitivity ──────────────────────
 
 

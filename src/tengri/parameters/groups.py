@@ -1273,6 +1273,7 @@ def parse_groups(**kwargs) -> Parameters:
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _narrow_free_priors_to_z(resolved_kwargs, provenance)
+    _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
     # Fill in provenance for params not touched by user/wildcard
@@ -1637,6 +1638,111 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
             default=default,
         )
         provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+
+
+def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
+    """Refuse metallicity bins with edges older than the cosmic age at redshift.
+
+    The ``met={'type': 'bins'}`` mode assigns metallicity in fixed lookback-time
+    bins. The hard-coded z=0 ladder has edges spanning 1 Myr to 13.8 Gyr. At
+    high redshifts where ``age_at_z(z) < max_edge``, bins beyond cosmic time
+    become unreachable (they lie before the Big Bang), making those bins'
+    parameters identically inert with zero gradient. This check refuses the
+    build and names the unreachable edges, pointing to ``met_bin_edges_log_yr``
+    as the remedy.
+
+    Mutates nothing; raises instead of silently accepting an invalid config.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, containing the
+        final redshift (or None if absent).
+    kwargs : dict
+        Original groups input from ``parse_groups``, containing the ``met``
+        block (or omitted for default met='delta').
+
+    Raises
+    ------
+    ParameterError
+        If the metallicity mode is 'bins' or 'bins_continuity', the redshift
+        is fixed or free (both checked), and any bin edge exceeds ``age_at_z(z)``.
+        The message names the unreachable edges (in Gyr) and cosmic age,
+        pointing to ``met_bin_edges_log_yr`` as the remedy.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+
+    Called after parameter resolution so redshift is known and ``met`` is
+    expanded to its full group dict (structural keys + parameter values).
+
+    Only 'bins' and 'bins_continuity' metallicity modes are checked. Other
+    modes ('delta', 'table', 'ramp') do not use lookback-time bins.
+
+    Unlike :func:`_narrow_free_priors_to_z`, this function does NOT widen
+    or modify a prior. It only refuses (raises) when the configuration is
+    physically impossible.
+    """
+    from tengri.components.stellar.component import _DEFAULT_MET_BIN_EDGES_LOG_YR
+    from tengri.utils.cosmology import age_at_z
+
+    met_block = kwargs.get("met", {})
+    if not isinstance(met_block, dict):
+        return  # Met is off or not a dict (e.g. a bare value)
+
+    met_type = met_block.get("type", "delta")
+    if met_type not in ("bins", "bins_continuity"):
+        return  # No lookback-time bins to check
+
+    # Read bin edges from config, or use default
+    bin_edges_log_yr = met_block.get("met_bin_edges_log_yr")
+    if bin_edges_log_yr is None:
+        bin_edges_log_yr = _DEFAULT_MET_BIN_EDGES_LOG_YR
+    else:
+        # Ensure it's a list-like
+        try:
+            bin_edges_log_yr = list(bin_edges_log_yr)
+        except TypeError:
+            return  # Not iterable; let later validation catch it
+
+    # Convert log10(yr) to Gyr: 10^x yr = 10^(x-9) Gyr
+    bin_edges_gyr = [10.0 ** (log_yr - 9.0) for log_yr in bin_edges_log_yr]
+
+    # Get redshift distribution and compute floor (as _narrow_free_priors_to_z does)
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None:
+        return  # No redshift yet (introspection caller); skip check
+
+    try:
+        z_floor = redshift_dist.bounds[0]
+    except (AttributeError, NotImplementedError):
+        return  # Not a Distribution with bounds; cannot check
+
+    if z_floor is None:
+        return  # No floor; unable to check
+
+    # Compute cosmic age at redshift floor
+    cosmic_age_gyr = float(age_at_z(float(z_floor)))
+
+    # Find unreachable bin edges (those exceeding cosmic age)
+    unreachable_edges = [edge for edge in bin_edges_gyr if edge > cosmic_age_gyr]
+    if not unreachable_edges:
+        return  # All edges reachable; no error
+
+    # Format error message, naming unreachable edges and cosmic age
+    edges_str = ", ".join(f"{edge:.2f}" for edge in unreachable_edges)
+    raise ParameterError(
+        f"metallicity-history bins mode (met={{'type': '{met_type}'}}) has "
+        f"lookback-time edges older than the universe at redshift {z_floor:g}: "
+        f"cosmic age is {cosmic_age_gyr:.4g} Gyr, but bin edges reach "
+        f"{edges_str} Gyr. These bins are unreachable (lie before the Big Bang) "
+        f"and their parameters will be identically inert.\n\n"
+        f"Remedy: pass met={{'type': '{met_type}', "
+        f"'met_bin_edges_log_yr': [...]}} with edges fitting inside the cosmic "
+        f"age, or use a lower redshift where all bins are reachable. "
+        f"See issue #2204."
+    )
 
 
 def _z_narrowed_onset_params(spec) -> frozenset[str]:
