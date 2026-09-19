@@ -1716,33 +1716,25 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
         nu = _C_CGS / wave_cm
         integral = -jnp.trapezoid(sed, nu)
 
-        # Normalization: when L_absorbed is finite, use it directly (original
-        # formula); when it overflows to inf in float32, use log-domain math
-        # with log_L_ir to avoid materializing the large value.
+        # Single log-domain normalization path: when log_L_ir is provided,
+        # apply log10-space rescaling to avoid materializing L_absorbed (~1e43,
+        # inf in float32). The amplitude is applied via log-domain math, never
+        # as a linear multiplication. This mirrors bosa_emission (#2272, #2366).
         if log_L_ir is None:
             # Original linear-division formula (kept bit-exact on purpose:
             # it is a shape-reference contract for the golden fixture).
             norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
             return norm * sed
 
-        # When log_L_ir is provided, check if L_absorbed is finite. If yes,
-        # normalize to L_absorbed (original direct path). If no (inf in float32),
-        # use log-domain rescale with log_L_ir. This dual-path approach handles:
-        # - Direct closure calls with finite L_absorbed (tests, legacy code)
-        # - Pipeline calls with inf L_absorbed in float32 (#2272, #2366)
+        # log-domain rescale: equal to (L_absorbed / integral) * sed to fp
+        # roundoff, but never materializes L_absorbed (~1e43, inf in float32).
+        # Uses log_lir_ergs (the log of L_absorbed in erg/s) directly for
+        # normalization, same as bosa_emission.
         from tengri.utils.scale import apply_log10_scale, representable_floor
 
-        # Use linear formula if L_absorbed is finite enough
-        is_l_absorbed_finite = jnp.isfinite(L_absorbed) & (L_absorbed > 0.0)
-        norm_linear = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
-
-        # Use log-domain formula if L_absorbed is not finite
         log_integral = jnp.log10(jnp.clip(jnp.abs(integral), representable_floor(1.0e-300), None))
         log_norm = jnp.where(integral > 0.0, log_lir_ergs - log_integral, -jnp.inf)
-        sed_log_scaled = apply_log10_scale(sed, log_norm)
-
-        # Choose the appropriate formula based on L_absorbed
-        return jnp.where(is_l_absorbed_finite, norm_linear * sed, sed_log_scaled)
+        return apply_log10_scale(sed, log_norm)
 
     return dh02_ce01_tabulated
 
