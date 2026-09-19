@@ -950,7 +950,7 @@ class TestLinearityProbeMultiTheta:
         ratio = jnp.where(valid, pred_b / pred_a, 10.0)
         single_theta_dev = float(jnp.max(jnp.abs(ratio - 10.0)))
 
-        probe_dev, _tol = _linearity_max_deviation(fitter, mass_name, bounds)
+        probe_dev, _tol, _kind = _linearity_max_deviation(fitter, mass_name, bounds)
 
         assert probe_dev > single_theta_dev, (
             f"worst-of-nine ({probe_dev:.3e}) did not exceed the prior-median-only "
