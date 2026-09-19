@@ -93,7 +93,7 @@ class TestSubblockComponentsPresentForComposable:
         cfg = AGNSEDComponentConfig(
             **{**_COMPOSABLE_CONFIG.__dict__, "agn_attenuation_block": "smc_prevot"}
         )
-        state = _apply(cfg, {**_PARAMS, "agn_attenuation_ebv": jnp.asarray(0.2)})
+        state = _apply(cfg, {**_PARAMS, "agn_ebv": jnp.asarray(0.2)})
         polar = np.asarray(state.derived["sed_agn_polar"])
         assert np.all(polar == 0.0)
         sed_agn = np.asarray(state.derived["sed_agn"])

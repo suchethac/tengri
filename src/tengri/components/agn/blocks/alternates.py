@@ -190,7 +190,7 @@ def two_temperature_torus_block(
 def smc_prevot_block(
     wavelength: Array,
     *,
-    agn_attenuation_ebv: float = 0.0,
+    agn_ebv: float = 0.0,
     **_params,
 ) -> Array:
     r"""Prevot 1984 SMC attenuation curve as an attenuation-stage block.
@@ -221,7 +221,7 @@ def smc_prevot_block(
     ----------
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_attenuation_ebv : float, optional
+    agn_ebv : float, optional
         :math:`E(B-V)` extinction [mag]. Default ``0.0`` (no attenuation).
 
     References
@@ -231,7 +231,7 @@ def smc_prevot_block(
     """
     wave_aa = jnp.asarray(wavelength)
     # Single source of truth: redden_disc on a unit SED IS the factor.
-    return redden_disc(wave_aa, jnp.ones_like(wave_aa), agn_attenuation_ebv)
+    return redden_disc(wave_aa, jnp.ones_like(wave_aa), agn_ebv)
 
 
 @register_agn_block(
@@ -244,7 +244,7 @@ def smc_prevot_block(
 def qsogen_quasar_ext_block(
     wavelength: Array,
     *,
-    agn_attenuation_ebv: float = 0.0,
+    agn_ebv: float = 0.0,
     **_params,
 ) -> Array:
     r"""Temple+2021 empirical *quasar* extinction as an attenuation-stage block.
@@ -276,7 +276,7 @@ def qsogen_quasar_ext_block(
     ----------
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_attenuation_ebv : float, optional
+    agn_ebv : float, optional
         Quasar color excess :math:`E(B-V)` [mag]. Default ``0.0`` (no
         attenuation, a no-op, :math:`10^0 = 1`).
 
@@ -292,4 +292,4 @@ def qsogen_quasar_ext_block(
     """
     wave_aa = jnp.asarray(wavelength)
     a_over_ebv = qsogen_quasar_extinction(wave_aa)
-    return jnp.power(10.0, -0.4 * a_over_ebv * agn_attenuation_ebv)
+    return jnp.power(10.0, -0.4 * a_over_ebv * agn_ebv)

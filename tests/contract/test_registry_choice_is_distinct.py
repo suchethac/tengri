@@ -483,7 +483,7 @@ def _type_cfg(group: str, name: str) -> dict:
 _SELECTOR_SURFACES = {
     ("agn_atten", "law"): (
         "tengri.parameters.groups._VALID_AGN_ATTEN_LAWS",
-        "agn_attenuation_ebv",
+        "agn_ebv",
     ),
     ("foreground", "law"): (
         "tengri.parameters.groups._VALID_FOREGROUND_LAWS",
@@ -799,7 +799,7 @@ def test_selector_surface_control_is_load_bearing(group: str) -> None:
             "type": "composable",
             "all_params": Fixed(DEFAULT),
             "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
-            "atten": {"law": name, "attenuation_ebv": 0.4},
+            "atten": {"law": name, "ebv": 0.4},
         }
     elif group == "foreground":
         actual_group_on, _ = _config_for_selector(group, name)

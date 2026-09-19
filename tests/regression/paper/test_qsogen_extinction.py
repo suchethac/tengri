@@ -90,14 +90,14 @@ class TestBlock:
 
     def test_zero_ebv_is_noop(self):
         wav = jnp.array([1500.0, 2500.0, 5500.0])
-        factor = qsogen_quasar_ext_block(wav, agn_attenuation_ebv=0.0)
+        factor = qsogen_quasar_ext_block(wav, agn_ebv=0.0)
         np.testing.assert_allclose(np.asarray(factor), np.ones(3), atol=1e-12)
 
     def test_factor_matches_formula(self):
         """Block factor = 10^(-0.4 * (curve+R) * E(B-V))."""
         wav = jnp.array(list(_EXPECTED_A_OVER_EBV.keys()))
         ebv = 0.3
-        factor = np.asarray(qsogen_quasar_ext_block(wav, agn_attenuation_ebv=ebv))
+        factor = np.asarray(qsogen_quasar_ext_block(wav, agn_ebv=ebv))
         expected = 10.0 ** (-0.4 * np.array(list(_EXPECTED_A_OVER_EBV.values())) * ebv)
         np.testing.assert_allclose(factor, expected, rtol=1e-4)
 
@@ -109,8 +109,8 @@ class TestBlock:
         """
         wav = jnp.array([1500.0, 2500.0, 5500.0])
         ebv = 0.3
-        q = np.asarray(qsogen_quasar_ext_block(wav, agn_attenuation_ebv=ebv))
-        p = np.asarray(smc_prevot_block(wav, agn_attenuation_ebv=ebv))
+        q = np.asarray(qsogen_quasar_ext_block(wav, agn_ebv=ebv))
+        p = np.asarray(smc_prevot_block(wav, agn_ebv=ebv))
         # V-band attenuation: qsogen uses R=3.1, Prevot R_V=2.72 -> distinct.
         assert not np.allclose(q, p, rtol=1e-2)
         av_q = -2.5 * np.log10(q[-1]) / ebv  # A_V/E(B-V)
@@ -125,7 +125,7 @@ class TestBlock:
     reason="needs a BC03 SSP grid",
 )
 def test_end_to_end_through_build(ssp_data_bc03):
-    """agn_attenuation_ebv with atten='qsogen' reddens the AGN SED through
+    """agn_ebv with atten='qsogen' reddens the AGN SED through
     SEDModel.build (not a silent no-op), matching 10^(-0.4*(curve+R)*ebv)."""
     from tengri import DEFAULT, Fixed, SEDModel
 
@@ -152,7 +152,7 @@ def test_end_to_end_through_build(ssp_data_bc03):
                 "torus": {"type": "none"},
                 "lines": {"type": "none"},
                 "feii": {"type": "none"},
-                "atten": {"type": "qsogen", "agn_attenuation_ebv": Fixed(ebv)},
+                "atten": {"type": "qsogen", "agn_ebv": Fixed(ebv)},
                 "agn_log_lbol": Fixed(11.0),
                 # agn_polar_ebv removed (Task 16, item 11): it is an
                 # 'agn.atten'-owned parameter (placing it flat at the top
@@ -170,7 +170,7 @@ def test_end_to_end_through_build(ssp_data_bc03):
     wave = np.asarray(s0.wave)
     sed0 = np.asarray(s0.derived["sed_agn"])
     sed3 = np.asarray(s3.derived["sed_agn"])
-    assert not np.allclose(sed0, sed3), "agn_attenuation_ebv had no effect (silent no-op)"
+    assert not np.allclose(sed0, sed3), "agn_ebv had no effect (silent no-op)"
 
     def at(arr, lam):
         ok = arr > 0

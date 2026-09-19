@@ -502,21 +502,15 @@ class TestAGNValidBlockTypes:
 
 
 class TestAGNEbvMigration:
-    """D1 (task-12 public-API audit): the migration message this repo's own
-    error raises for the retired ``type='smc_prevot'`` spelling must recommend
-    a spelling that frees the parameter the user asked for.
+    """R52 (#2325): the migration message for retired ``agn_attenuation_ebv`` must
+    recommend the short spelling that frees the surviving ``agn_ebv`` parameter.
 
-    Two ``agn_*`` names end in ``ebv`` and each keeps its own prefix-stripped
-    short name: ``agn_attenuation_ebv`` -> ``'attenuation_ebv'`` (the atten
-    block's own E(B-V)) and ``agn_ebv`` -> ``'ebv'`` (the unrelated,
-    pre-existing ``qsogen_smc`` reddening knob). D1's symptom was the message
-    advertising ``'ebv'``: following it verbatim froze
-    ``agn_attenuation_ebv`` at ``Fixed(0.0)`` and freed ``agn_ebv`` instead.
-
-    R30 fixes that at the message rather than by aliasing ``'ebv'`` onto the
-    other name -- one short spelling per parameter, no dual spellings, and the
-    two names stay distinguishable. So the contract is: the message's own
-    recommended key, taken verbatim, frees the live ``agn_attenuation_ebv``.
+    The two E(B-V) parameters are now unified under one name ``agn_ebv``.
+    The short dict spelling is ``'ebv'`` (under ``agn.atten``).
+    The retired flat spelling ``agn_attenuation_ebv`` and the retired short
+    spelling ``'attenuation_ebv'`` both raise with the migration message
+    advertising the working key ``'ebv'``, so that following it verbatim frees
+    the surviving ``agn_ebv``.
     """
 
     def _recommended_atten_key(self) -> str:
@@ -543,11 +537,11 @@ class TestAGNEbvMigration:
         return recipe.group(1)
 
     def test_migration_message_recommends_the_working_short_key(self):
-        """The advertised key frees ``agn_attenuation_ebv``, not ``agn_ebv``."""
+        """The advertised key frees ``agn_ebv``."""
         key = self._recommended_atten_key()
-        assert key == "attenuation_ebv", (
-            f"the migration message advertises {key!r}; 'ebv' is agn_ebv's own "
-            f"short name and freeing it is exactly the D1 defect"
+        assert key == "ebv", (
+            f"the migration message should advertise {key!r} as the working "
+            f"short spelling for agn_ebv"
         )
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -559,22 +553,20 @@ class TestAGNEbvMigration:
             redshift=Fixed(0.1),
         )
         free_agn = {p for p in params.free_params if p.startswith("agn_")}
-        assert free_agn == {"agn_attenuation_ebv"}, (
-            f"expected exactly {{'agn_attenuation_ebv'}}, got {sorted(free_agn)} "
+        assert free_agn == {"agn_ebv"}, (
+            f"expected exactly {{'agn_ebv'}}, got {sorted(free_agn)} "
             f"-- {key!r} resolved to the wrong parameter"
         )
-        dist = params.get_distribution("agn_attenuation_ebv")
-        assert dist.bounds == (0.0, 1.0)
-        # agn_ebv (the unrelated qsogen_smc knob) must stay at its own
-        # registry default, untouched by the atten-level key.
-        agn_ebv_dist = params.get_distribution("agn_ebv")
-        assert agn_ebv_dist.is_fixed
+        dist = params.get_distribution("agn_ebv")
+        assert dist.bounds == (0.0, 1.0), (
+            f"agn_ebv should have the bounds specified in the migration message"
+        )
 
     def test_short_keys_stay_distinct_between_the_two_ebv_parameters(self):
         """Each name keeps its own prefix-stripped short spelling.
 
         ``'ebv'`` under ``atten`` is ``agn_ebv``'s short name and resolves
-        there; it is not a second spelling of ``agn_attenuation_ebv``.
+        there; it is not a second spelling of ``agn_ebv``.
         """
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -587,7 +579,7 @@ class TestAGNEbvMigration:
         )
         free_agn = {p for p in params.free_params if p.startswith("agn_")}
         assert free_agn == {"agn_ebv"}, sorted(free_agn)
-        assert params.get_distribution("agn_attenuation_ebv").is_fixed
+        assert params.get_distribution("agn_ebv").is_fixed
 
     def test_prevot_smc_ebv_is_live_not_dead(self, synthetic_ssp_wide, synthetic_tophat_obs):
         """The freed parameter must be the LIVE one: jax.grad != 0 on a band
@@ -614,7 +606,7 @@ class TestAGNEbvMigration:
             agn={
                 "type": "composable",
                 "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
-                "atten": {"law": "prevot_smc", "attenuation_ebv": Uniform(0.0, 1.0)},
+                "atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 1.0)},
                 "all_params": Fixed(DEFAULT),
                 "agn_log_lbol": Fixed(12.0),
                 "norm": "independent",
@@ -622,19 +614,19 @@ class TestAGNEbvMigration:
             redshift=Fixed(1.0),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        v0 = jnp.asarray(p["agn_attenuation_ebv"])
+        v0 = jnp.asarray(p["agn_ebv"])
 
         def obj(v):
-            pd = {**p, "agn_attenuation_ebv": v}
+            pd = {**p, "agn_ebv": v}
             return jnp.log(jnp.sum(model.predict_photometry(pd)) + 1e-300)
 
         grad = float(jax.grad(obj)(v0))
         assert jnp.isfinite(grad), (
-            f"d(log sum photometry)/d(agn_attenuation_ebv) is {grad}. `nan != 0.0` "
+            f"d(log sum photometry)/d(agn_ebv) is {grad}. `nan != 0.0` "
             "is True, so the liveness assertion below cannot see a non-finite "
             "gradient on its own (#2178)."
         )
-        assert grad != 0.0, "agn_attenuation_ebv is dead -- the D1 fix regressed"
+        assert grad != 0.0, "agn_ebv is dead -- the D1 fix regressed"
 
 
 class TestAGNComplexScenarios:
@@ -1411,7 +1403,7 @@ class TestAGNRoundTrip:
                     "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
                     "torus": {"type": "skirtor", "all_params": FREE},
                     "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
-                    "atten": {"law": "prevot_smc", "attenuation_ebv": Uniform(0.0, 1.0)},
+                    "atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 1.0)},
                     "all_params": Fixed(DEFAULT),
                     "agn_log_lbol": Fixed(12.0),
                     "norm": "independent",
