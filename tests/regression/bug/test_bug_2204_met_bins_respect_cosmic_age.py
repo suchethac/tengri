@@ -27,6 +27,7 @@ https://github.com/suchethac/tengri/issues/2204
 
 from __future__ import annotations
 
+import jax.numpy as jnp
 import pytest
 
 from tengri import SEDModel, Fixed, Uniform, DEFAULT
@@ -39,7 +40,7 @@ pytestmark = pytest.mark.regression_bug
 class TestMetBinsCosmicAgeBuild:
     """Metallicity-history bins must fit within age_at_z at the model redshift."""
 
-    def test_met_bins_refused_at_high_z_buildi(self, synthetic_ssp, simple_observation):
+    def test_met_bins_refused_at_high_z_build(self, synthetic_ssp, simple_observation):
         """HIGH-Z BUILD REFUSES: bins unreachable at z=0.66 (age=7.55 Gyr).
 
         Bin 5 spans lookback 7.94-13.8 Gyr. At z=0.66, age_at_z=7.55 Gyr,
