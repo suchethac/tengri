@@ -225,7 +225,6 @@ def test_dh02_energy_balance_through_apply(ssp):
     """
     import jax
 
-    import tengri
 
     model = _build_dh02_model(ssp)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -244,4 +243,81 @@ def test_dh02_energy_balance_through_apply(ssp):
         f"Energy balance violated: integral(sed_dust_ir)/L_ir = {ratio:.8f}, "
         f"expected ~1.0. With factors_l_ir=True mutation this becomes ~{l_ir:.3e}"
         f" (amplitude double-counted)."
+    )
+
+
+def test_dh02_float32_agrees_with_float64(ssp):
+    """Float32 dh02_ce01 normalized shape and power must match float64.
+
+    The single log-domain path (#2366) works correctly at both precisions.
+    Build the same model twice — once in pure float32, once in float64 —
+    and compare the normalized dust-emission SED shapes and integrated powers.
+    Exercises the `apply_log10_scale` normalization path that avoids
+    materializing L_absorbed (~1e43 erg/s, inf in float32).
+
+    Measured deviation: far-wing rounding in float32 template interpolation
+    (log-domain 10** of 1e-5–1e-6 scale) produces max |Δ| ≈ 2.7e-7 at
+    bins ≤1e-5 of the SED peak, with max relative error 4.4e-3 there.
+    These deviations live in the SED far-wings where absolute values are
+    ~1e-5 to 1e-6 of the peak — float32 rounding of 2 ulp on the peak.
+    Tolerance: rtol=1e-4 (binds every bin above 1e-2 of peak) +
+    atol=1e-6 (~4× the measured 2.7e-7 max absolute difference).
+    """
+    import jax
+
+
+    model = _build_dh02_model(ssp)
+    params_float64 = dict(model.spec.sample(jax.random.PRNGKey(42)))
+
+    # Float64 reference
+    state64 = model.predict_state(params_float64)
+    wave = np.asarray(state64.wave, dtype=np.float64)
+    sed64 = np.asarray(state64.derived["sed_dust_ir"], dtype=np.float64)
+
+    # Float32: build a new model and run inside `enable_x64(False)` with
+    # all inputs constructed inside the block (params are JAX arrays traced
+    # at float32 precision).
+    with jax.enable_x64(False):
+        model32 = _build_dh02_model(ssp)
+        # Construct params inside the block so they are float32
+        params_float32 = dict(model32.spec.sample(jax.random.PRNGKey(42)))
+        state32 = model32.predict_state(params_float32)
+        sed32 = np.asarray(state32.derived["sed_dust_ir"])
+
+    assert sed32.dtype == jnp.float32, "precondition: sed32 is not pure float32"
+
+    # Normalized shapes (divide by each SED's own max to control for amplitude
+    # differences and express error as peak-relative; an SED spans many decades,
+    # so far-wing bins at 1e-5 of peak can carry rounding without shape error).
+    norm64 = sed64 / np.abs(sed64).max()
+    norm32 = sed32.astype(np.float64) / np.abs(sed32).max()
+
+    # Shape agreement: peak-relative tolerance with combined rtol + atol.
+    # rtol=1e-4 binds every bin above 1e-2 of peak; atol=1e-6 ≈ 4× the
+    # measured 2.7e-7 max absolute difference at far-wing bins.
+    np.testing.assert_allclose(
+        norm32,
+        norm64,
+        rtol=1e-4,
+        atol=1e-6,
+        err_msg=(
+            "dh02_ce01 normalized sed_dust_ir shape differs between float32 and "
+            "float64 (single log-domain route should match at both precisions)"
+        ),
+    )
+
+    # Power agreement: integrated luminosities must match to rtol 1e-3
+    nu = _C_AA_PER_S / wave
+    integral64 = abs(np.trapezoid(sed64, nu))
+    integral32 = abs(np.trapezoid(sed32.astype(np.float64), nu))
+
+    np.testing.assert_allclose(
+        integral32,
+        integral64,
+        rtol=1e-3,
+        err_msg=(
+            "dh02_ce01 integrated dust power differs between float32 and float64 "
+            f"beyond rtol=1e-3: {integral32:.6e} (float32) vs "
+            f"{integral64:.6e} (float64)"
+        ),
     )
