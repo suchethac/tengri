@@ -37,6 +37,16 @@
   unchanged; both spellings cannot be passed together (raises if shadowing is
   detected).
 
+### Fixed
+
+- **Docs**: `CalibrationELineMarginalizedLikelihood` states in the class
+  docstring that the emission-line block is handled via a plug-in point
+  estimate rather than marginalized, that the log-determinant volume term is
+  not included, and that this understates the uncertainty the line amplitudes
+  contribute. The exact nesting of the two marginalizers is a separate design
+  decision. (#2354)
+
+
 ### Added
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
