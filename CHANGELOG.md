@@ -6,6 +6,15 @@
   reference wavelength, matching the implementation and upstream GRAHSP. The
   previous description incorrectly stated 3000 nm, a wavelength at which the
   Balmer continuum is identically zero (#2158).
+- Unknown key validation now precedes grid-file resolution for CLOUDY nebular
+  configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
+  supplied and no CLOUDY grid is on disk, a typo in the group was silently
+  misreported as "missing grid file", because the throwaway enumeration spec
+  that key validation derives its parameter census from hit the grid check
+  first. The enumeration spec now defers resource-path resolution (private
+  `_defer_resource_paths` flag), so unknown keys are reported first. The real
+  Parameters construction is untouched — a valid group without an on-disk grid
+  still raises the same grid message.
 - Data locator hermeticity (#2329): a nested worktree's test run found untracked
   data (CLOUDY grids, Cue weights) in the main checkout via the locator's
   ancestor-directory walk, so suites passed locally and failed in CI. A new
@@ -19,9 +28,6 @@
   lift the pin explicitly to keep testing the default walk, whose pinned side is
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
-
-### Fixed
-
 - Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
   flat-form builds (e.g. `Parameters(lgmet_scatter=0.3)`), the kwarg now sets
   the registered `met_logzsol_scatter` Fixed value at the parameter registry
