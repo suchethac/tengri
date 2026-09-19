@@ -387,6 +387,11 @@
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
 
 
+### Fixed
+
+- A bare `CB19Backend` (without `ssp_data`, so `_lum_scale ≈ 1.25e-46`) returned silently exact-zero gradients for every grid-axis parameter (`neb_co`, `neb_hbfrac`, …) while forward values changed correctly. Traced to the interpolation coordinate being cast to float32 by `_frac_idx` and the tiny cotangent underflowing to exactly 0.0 in the backward pass. The fix keeps the coordinate in float64 throughout (matching the #1568 data-protection pattern), so the cotangent stays in range. On the normal `SEDModel.build` path (with `ssp_data`), the float64 forward outputs move by ≈2e-8 relative (max 1.9e-8 measured on the AGN-inventory build; the regression pin is rtol=1e-7, five times that): the old float32-rounded coordinate had been rounding the interpolation weights, so this is a small precision gain, not a change of model. Not reachable via `SEDModel.build` (which always supplies `ssp_data`); the hazard was direct-backend use only. (#2306)
+
+
 ### Changed
 
 - The cigale reproduction's two §9e torus panels compare AGN dust emission
