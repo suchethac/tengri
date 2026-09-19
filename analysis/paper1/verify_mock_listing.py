@@ -44,7 +44,6 @@ import numpy as np
 
 import tengri
 from tengri import (
-    DEFAULT,
     FREE,
     Fixed,
     Gaussian,
