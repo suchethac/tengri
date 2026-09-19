@@ -97,13 +97,26 @@ def load_art_results() -> dict:
     return {"sfr_by_id": sfr_by_id, "codes": sorted(codes_found)}
 
 
+# The three mid-infrared AGN candidates carried by the demonstration sample.
+# Locked by the paper (tab:candels_galaxies): IRAC-rising objects that survive
+# the workshop IRAC flags. Colour used for the cut is IRAC1 - IRAC3.
+AGN_CANDIDATE_IDS = (1826, 4056, 24786)
+
+
 def select_z1_galaxies_expanded(
     target_count: int = 20,
     blue_per_class: int = 7,
-    red_per_class: int = 8,
-    intermediate_per_class: int = 5,
+    red_per_class: int = 7,
+    intermediate_per_class: int = 3,
+    agn_per_class: int = 3,
 ) -> dict:
-    """Select ~20 representative z~1 galaxies with diversity in color and S/N."""
+    """Select the twenty demonstration galaxies: 7 blue, 7 red, 3 dusty, 3 AGN.
+
+    The mid-infrared AGN candidates are a *class*, not a reject pile. An earlier
+    revision screened rising-IRAC objects out of the sample entirely, which is
+    the right call for a host-only suite but removes exactly the objects
+    Configuration VI's disc and torus exist to fit.
+    """
     # Load CANDELS photometry
     candels = load_candels_z1()
     ids = candels["id"]
@@ -208,30 +221,33 @@ def select_z1_galaxies_expanded(
         if color is None or n_detected < 10:
             continue
 
-        # AGN screen: exclude rising IRAC colors
-        ch1_ch3 = compute_color_safe(irac36, eirac36, irac58, eirac58)
-        ch1_ch4 = compute_color_safe(irac36, eirac36, irac80, eirac80)
-        if has_rising_irac_colors(ch1_ch3, ch1_ch4):
-            agn_screened.append({"id": int(gal_id), "ch1_ch3": ch1_ch3, "ch1_ch4": ch1_ch4})
-            continue
-
         # SFR from ART results
         sfr_vals = sfr_by_id.get(gal_id, [])
         sfr = np.mean(sfr_vals) if sfr_vals else np.nan
 
         color_note = "F160W-Ks" if ks_mag == isaac_ks else "F160W-IRAC1"
 
-        candidates.append(
-            {
-                "id": gal_id,
-                "z": z[idx],
-                "n_detected": n_detected,
-                "median_snr": median_snr,
-                "color": color,
-                "color_note": color_note,
-                "sfr": sfr,
-            }
-        )
+        record = {
+            "id": gal_id,
+            "z": z[idx],
+            "n_detected": n_detected,
+            "median_snr": median_snr,
+            "color": color,
+            "color_note": color_note,
+            "sfr": sfr,
+        }
+
+        # Mid-infrared AGN screen. Rising IRAC colors mark a rest 2-4 um power
+        # law that no host-only configuration fits; those objects go to their
+        # own class rather than out of the sample, and are held back from the
+        # color classes below so an AGN cannot also be counted as a red galaxy.
+        ch1_ch3 = compute_color_safe(irac36, eirac36, irac58, eirac58)
+        ch1_ch4 = compute_color_safe(irac36, eirac36, irac80, eirac80)
+        if has_rising_irac_colors(ch1_ch3, ch1_ch4):
+            agn_screened.append({**record, "ch1_ch3": ch1_ch3, "ch1_ch4": ch1_ch4})
+            continue
+
+        candidates.append(record)
 
     print(f"\nCandidates with n_detected >= 10: {len(candidates)}")
     print(f"AGN-screened (rising IRAC colors CH1-CH3 > 0.3 or CH1-CH4 > 0.5): {len(agn_screened)}")
@@ -260,13 +276,25 @@ def select_z1_galaxies_expanded(
     print(f"  Red (color > 1.0): {len(red_candidates)}")
     print(f"  Intermediate (0.4-1.0): {len(intermediate_candidates)}")
 
-    # Ensure we keep the required three galaxies
-    required_ids = {13097, 15336, 16049}
+    # The AGN class is named, not ranked: these three IDs are locked by the
+    # paper, so take them by identity and fail loudly if the catalog no longer
+    # yields one. Silently shipping nineteen galaxies, or substituting the next
+    # IRAC-rising object, would leave the manuscript's table describing a sample
+    # that was never fit.
+    agn_by_id = {int(c["id"]): c for c in agn_screened}
+    agn_selected = []
+    for want in AGN_CANDIDATE_IDS:
+        if want not in agn_by_id:
+            raise ValueError(
+                f"Locked AGN candidate {want} did not survive selection. It is "
+                f"either absent from the catalog, below the detection-count "
+                f"floor, or no longer IRAC-rising under the current cut. "
+                f"Available IRAC-rising IDs: {sorted(agn_by_id)}. Resolve this "
+                f"against tab:candels_galaxies before running the grid."
+            )
+        agn_selected.append(agn_by_id[want])
 
-    # Adjust counts if needed
     selected_list = []
-
-    # Select from each class
     for cand in blue_candidates[:blue_per_class]:
         selected_list.append((cand, "blue_star_forming"))
 
@@ -276,12 +304,16 @@ def select_z1_galaxies_expanded(
     for cand in intermediate_candidates[:intermediate_per_class]:
         selected_list.append((cand, "intermediate_dusty"))
 
-    # Verify all required galaxies are present
-    selected_ids = {int(gal["id"]) for gal, _ in selected_list}
-    missing_ids = required_ids - selected_ids
-    if missing_ids:
-        print(f"\nWarning: required galaxies {missing_ids} not in top ranks!")
-        print("Adjusting selection to include required galaxies...")
+    for cand in agn_selected:
+        selected_list.append((cand, "mir_agn_candidate"))
+
+    if len(selected_list) != target_count:
+        raise ValueError(
+            f"Selected {len(selected_list)} galaxies, expected {target_count} "
+            f"({blue_per_class} blue + {red_per_class} red + "
+            f"{intermediate_per_class} dusty + {agn_per_class} AGN). A color "
+            f"class ran short of candidates."
+        )
 
     selected_list.sort(key=lambda x: int(x[0]["id"]))
 

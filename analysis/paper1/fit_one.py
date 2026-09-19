@@ -160,8 +160,24 @@ DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "dust_tau")
 
 
 def dust_parameter_name(config_key: str) -> str:
-    """Name of the free parameter carrying this configuration's dust optical depth."""
-    return "dust_tau_v" if config_key == "I" else "dust_tau_diff"
+    """Name of the free parameter carrying this configuration's dust optical depth.
+
+    Read off the configuration table rather than inferred from the key. Which
+    name applies is a property of the attenuation family -- ``dust_tau_v`` for a
+    single screen, ``dust_tau_diff`` for the diffuse half of a two-component
+    model -- and the suite mixes both, in an order that has already changed once.
+    The consumer is ``params.get(name, np.nan)``, which cannot tell a wrong name
+    from a genuinely absent parameter: a stale mapping writes a full column of
+    NaN into the derived quantities and nothing raises.
+    """
+    try:
+        return CONFIGS[config_key]["dust_param"]
+    except KeyError as exc:  # pragma: no cover - configuration wiring error
+        raise KeyError(
+            f"No dust_param declared for configuration {config_key!r}. "
+            f"Every row of configs.CONFIGS must name the free parameter carrying "
+            f"its dust optical depth; known rows: {sorted(CONFIGS)}."
+        ) from exc
 
 
 def retune_settings(attempt: int, base: dict) -> dict:

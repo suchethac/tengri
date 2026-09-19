@@ -21,6 +21,26 @@
       "reason": "Ranked in top candidates by S/N in red_quiescent class"
     },
     {
+      "id": 1826,
+      "z": 1.065,
+      "n_detected": 15,
+      "median_snr": 20.10696907548156,
+      "color_proxy": -0.3059999999999974,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "mir_agn_candidate",
+      "reason": "Ranked in top candidates by S/N in mir_agn_candidate class"
+    },
+    {
+      "id": 4056,
+      "z": 1.071,
+      "n_detected": 15,
+      "median_snr": 14.672653109135192,
+      "color_proxy": -0.5720000000000027,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "mir_agn_candidate",
+      "reason": "Ranked in top candidates by S/N in mir_agn_candidate class"
+    },
+    {
       "id": 4171,
       "z": 1.032,
       "n_detected": 13,
@@ -61,16 +81,6 @@
       "reason": "Ranked in top candidates by S/N in blue_star_forming class"
     },
     {
-      "id": 13601,
-      "z": 1.022,
-      "n_detected": 15,
-      "median_snr": 180.96272167933404,
-      "color_proxy": 0.5479999999999983,
-      "color_proxy_note": "F160W-IRAC1",
-      "type_label": "intermediate_dusty",
-      "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
-    },
-    {
       "id": 14099,
       "z": 1.09279,
       "n_detected": 16,
@@ -106,16 +116,6 @@
       "n_detected": 16,
       "median_snr": 244.29967426710095,
       "color_proxy": 0.4569999999999972,
-      "color_proxy_note": "F160W-Ks",
-      "type_label": "intermediate_dusty",
-      "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
-    },
-    {
-      "id": 16435,
-      "z": 1.094,
-      "n_detected": 16,
-      "median_snr": 186.13308515588645,
-      "color_proxy": 0.7340000000000018,
       "color_proxy_note": "F160W-Ks",
       "type_label": "intermediate_dusty",
       "reason": "Ranked in top candidates by S/N in intermediate_dusty class"
@@ -161,14 +161,14 @@
       "reason": "Ranked in top candidates by S/N in blue_star_forming class"
     },
     {
-      "id": 23250,
-      "z": 1.049,
-      "n_detected": 11,
-      "median_snr": 8.482627578718784,
-      "color_proxy": 1.1920000000000002,
+      "id": 24786,
+      "z": 1.043,
+      "n_detected": 15,
+      "median_snr": 38.77772607414301,
+      "color_proxy": 0.013999999999999346,
       "color_proxy_note": "F160W-Ks",
-      "type_label": "red_quiescent",
-      "reason": "Ranked in top candidates by S/N in red_quiescent class"
+      "type_label": "mir_agn_candidate",
+      "reason": "Ranked in top candidates by S/N in mir_agn_candidate class"
     },
     {
       "id": 25206,
@@ -217,7 +217,7 @@
     ],
     "target_count": 20,
     "blue_per_class": 7,
-    "red_per_class": 8,
-    "intermediate_per_class": 5
+    "red_per_class": 7,
+    "intermediate_per_class": 3
   }
 }
