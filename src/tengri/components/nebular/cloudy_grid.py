@@ -662,10 +662,15 @@ class CloudyGridBackend:
         # Age-0 anchor templates (BC03, Stelib) have log10(age/Gyr) = -inf, which
         # converts to -inf in log10(yr) space. This causes Q_H interpolation weights
         # to become NaN when bracketing a finite query age between -inf and the
-        # next node. Floor at log10(100 kyr) = 5.0 in log10(yr), matching the
-        # stellar path's convention in surviving_mstar (dsps_wrapper.py #1016).
+        # next node. Floor at log10(100 kyr) in log10(yr) units (= -4.0 in log10(Gyr)),
+        # matching the stellar path's convention in surviving_mstar (dsps_wrapper.py #1016).
         # No star has died at age 0, so this is physically reasonable (#2418).
-        ssp_lg_age_gyr_floored = jnp.maximum(ssp_data.ssp_lg_age_gyr, -4.0)  # -4.0 Gyr = 100 kyr
+        from tengri.components.stellar.sps.dsps_wrapper import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
+
+        ssp_lg_age_gyr_floored = jnp.maximum(
+            ssp_data.ssp_lg_age_gyr,
+            ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR - 9.0,  # convert from log10(yr) to log10(Gyr)
+        )
 
         # Compute Q_H for each (met, age): vectorized, in the log domain and
         # stored normalized by its own peak (#1568). Q_H reaches ~1e46

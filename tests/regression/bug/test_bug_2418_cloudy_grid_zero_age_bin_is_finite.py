@@ -88,8 +88,8 @@ def _make_synthetic_cloudy_grid():
     )
 
 
-def test_bug_2418_cloudy_grid_zero_age_bin_produces_nan():
-    """RED: SSP with -inf age produces all-NaN sed_nebular before the fix."""
+def test_bug_2418_cloudy_grid_zero_age_bin_axis_is_finite_after_construction():
+    """GREEN: zero-age SSP bin is floored; Q_H axis is finite after construction."""
     from unittest.mock import patch
 
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
@@ -99,11 +99,7 @@ def test_bug_2418_cloudy_grid_zero_age_bin_produces_nan():
     # Mock the grid loader so we don't need real data
     mock_grid = _make_synthetic_cloudy_grid()
 
-    # Before the fix, creating CloudyGridBackend should compute a Q_H table
-    # with NaN values (or inf values that sanitize_qh_table converts to 0).
-    # But the real bug is in the interpolation layer: when we query Q_H at
-    # an age between -inf and 5.1, we get NaN weights.
-
+    # After the fix, CloudyGridBackend floors the -inf age to a finite value.
     with patch("tengri.components.nebular.cloudy_grid.load_cloudy_grid", return_value=mock_grid):
         backend = CloudyGridBackend(
             grid_path="dummy_path.h5",
@@ -111,77 +107,61 @@ def test_bug_2418_cloudy_grid_zero_age_bin_produces_nan():
             ionizing_source_warning="suppress",
         )
 
-    # Check that the Q_H table has non-finite entries (before fix)
-    # or verify later that it's finite (after fix)
-    # For now, just check construction doesn't crash
-    assert backend._qh_table is not None
-
-    # The real test: if we interpolate Q_H at an age between -inf and the next node
-    # we should get NaN (before fix) or finite (after fix).
-    # This happens internally when computing nebular emission.
-
-    # Test the interpolation directly
-    from tengri.components.nebular._shared import _qh_bilinear
-
-    # Query at an age between -inf and the second node
-    query_log_age_yr = 5.05  # Between [-inf, 5.1]
-    query_log_z = -1.5
-
-    qh = _qh_bilinear(
-        backend._qh_table,
-        backend._qh_log_met,
-        backend._qh_log_age,
-        query_log_z,
-        query_log_age_yr,
-        missing=0.0,
+    # Check that the Q_H log age axis is finite after construction (fix applied)
+    assert jnp.all(jnp.isfinite(backend._qh_log_age)), (
+        f"Q_H age axis should be finite after construction, got: {backend._qh_log_age}"
     )
 
-    # Before fix: qh should be NaN (because the weight calculation fails)
-    # After fix: qh should be finite
-    # For the test to work both before and after, we check that the interpolation
-    # on the _qh_log_age axis should not produce NaN weights
-
-    # Check that Q_H log age axis has no -inf (after fix)
-    has_inf = jnp.any(~jnp.isfinite(backend._qh_log_age))
-
-    # This assertion will FAIL before the fix (has_inf=True)
-    # and PASS after the fix (has_inf=False)
-    assert not has_inf, f"Q_H age axis contains non-finite values: {backend._qh_log_age}"
+    # Check that Q_H log metallicity axis is also finite
+    assert jnp.all(jnp.isfinite(backend._qh_log_met)), (
+        f"Q_H met axis should be finite, got: {backend._qh_log_met}"
+    )
 
 
-def test_bug_2418_guard_refuses_non_finite_age_after_construction():
-    """Test that CloudyGridBackend refuses non-finite age/met axes after construction."""
+def test_bug_2418_guard_refuses_non_finite_metallicity():
+    """YELLOW: Guard fires and names the axis/index/value when met axis has NaN."""
     from unittest.mock import patch
 
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+    from tengri.components.stellar.sps import SSPData
 
-    ssp = _make_synthetic_ssp_with_zero_age()
+    # Create SSP with NaN in the metallicity axis (past the age floor)
+    n_age = 5
+    ssp_lg_age_gyr = jnp.array([-3.90, -3.85, -3.0, -2.0, 0.0])
+    # Inject NaN at metallicity index 1
+    ssp_lgmet = jnp.array([-3.0, jnp.nan, 0.0])
+    ssp_wave = jnp.logspace(2.0, 5.0, 100)
+    ssp_flux = jnp.ones((3, n_age, 100))
+
+    ssp = SSPData(
+        ssp_wave=ssp_wave,
+        ssp_flux=ssp_flux,
+        ssp_lg_age_gyr=ssp_lg_age_gyr,
+        ssp_lgmet=ssp_lgmet,
+        ssp_mass_remaining=None,
+        ssp_alpha_fe=None,
+        imf="chabrier",
+        source="test_synthetic_nan_met",
+        nebular="bare",
+    )
+
     mock_grid = _make_synthetic_cloudy_grid()
 
-    # After the fix, CloudyGridBackend should refuse if the SSP still has non-finite ages
-    # (This test verifies the guard is in place)
-    with patch("tengri.components.nebular.cloudy_grid.load_cloudy_grid", return_value=mock_grid):
-        # If the fix is NOT applied, this should pass construction
-        # If the fix IS applied AND floors the age, this should also pass
-        # If the fix IS applied but somehow -inf remains, this should RAISE
-        try:
-            backend = CloudyGridBackend(
-                grid_path="dummy_path.h5",
-                ssp_data=ssp,
-                ionizing_source_warning="suppress",
-            )
-            # If we get here, either:
-            # 1. The fix was applied and floored the age (OK)
-            # 2. The fix was NOT applied (OK for old code)
-            assert backend._qh_table is not None
-        except ValueError as e:
-            # If we get a ValueError with a message about non-finite age, the guard works
-            if "non-finite" in str(e).lower() and "age" in str(e).lower():
-                pytest.skip(
-                    "Guard correctly refuses non-finite age axis (should not happen after fix)"
-                )
-            else:
-                raise
+    # The guard should fire with a ValueError naming the axis, index, and value
+    with patch(
+        "tengri.components.nebular.cloudy_grid.load_cloudy_grid", return_value=mock_grid
+    ), pytest.raises(ValueError) as exc_info:
+        CloudyGridBackend(
+            grid_path="dummy_path.h5",
+            ssp_data=ssp,
+            ionizing_source_warning="suppress",
+        )
+
+    # Verify the error message names the axis, index, and value
+    error_msg = str(exc_info.value)
+    assert "metallicity" in error_msg.lower(), "Error should name the metallicity axis"
+    assert "index" in error_msg.lower(), "Error should include the index"
+    assert "non-finite" in error_msg.lower(), "Error should indicate non-finite value"
 
 
 def test_bug_2418_finite_age_ssp_works():
