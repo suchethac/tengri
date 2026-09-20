@@ -1,0 +1,39 @@
+2026-09-14 23:05:46,829 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.901e-30 erg/s/cm2/Hz
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/src/tengri/components/stellar/sps/dsps_wrapper.py:384: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only: adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+  return load_ssp_data(str(candidate))
+2026-09-14 23:05:57,094 - __main__ - INFO - Galaxy 267 (z=1.084): 12 detected bands
+2026-09-14 23:05:57,095 - __main__ - INFO - Config II: 8 free parameters
+2026-09-14 23:05:57,095 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-14 23:06:00,193 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 23:06:02,448 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 8 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-14 23:06:26,120 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (23.7s). Step size: 0.0477. Divergent in the final warmup window: 0%
+2026-09-14 23:07:10,669 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 68.1s. Divergences: 8/1200 (0.7%). Tree depth: mean 6.4, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-14 23:07:10,679 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=8, rhat_max=1.0235
+2026-09-14 23:07:46,353 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_II.npz
+2026-09-14 23:07:46,355 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_II.json
+2026-09-14 23:07:46,356 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=8) before retuning
+2026-09-14 23:07:46,356 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
+2026-09-14 23:07:46,487 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 23:07:46,489 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 8 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-14 23:08:11,561 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (25.1s). Step size: 0.0255. Divergent in the final warmup window: 0%
+2026-09-14 23:09:20,325 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 93.8s. Divergences: 1/1200 (0.1%). Tree depth: mean 7.1, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-14 23:09:20,329 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=1, rhat_max=1.0116
+2026-09-14 23:09:56,146 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_II.npz
+2026-09-14 23:09:56,148 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_II.json
+2026-09-14 23:09:56,149 - __main__ - INFO - Saved the best attempt so far (attempt 2 of 2, divergences=1) before retuning
+2026-09-14 23:09:56,149 - __main__ - INFO - Attempt 3/3: target_accept 0.99, warmup 150, diagonal mass
+2026-09-14 23:09:56,313 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 23:09:56,316 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 8 parameters, 150 warmup, 300 samples, target_accept=0.99
+2026-09-14 23:10:33,124 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (36.8s). Step size: 0.0069. Divergent in the final warmup window: 0%
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/src/tengri/inference/_registration.py:291: NUTSTreeDepthWarning: NUTS hit its tree-depth cap on 27% of post-burnin iterations at max_num_doublings=10; each such iteration paid up to 1023 gradient evaluations on a trajectory the U-turn criterion never terminated. On SED posteriors this is the signature of heavy-tailed priors or strong parameter correlations (the nonparametric-SFH StudentT ratio priors are the measured case). Check the model before the sampler: a nonparametric SFH whose bin edges run past the age of the universe at the fit redshift leaves bins with no likelihood, sampling a heavy-tailed prior that nothing constrains. Fixing that on a D=9 continuity fit at z=1.5 cut the wall from 174 s to 69 s on its own. After that, trajectory LENGTH is the lever: mcmc_hmc with n_leapfrog_steps=150 measured a median min-ESS of 118 over six seeds against 119 for this sampler, and never fell below 64 where 80 steps returned 31 and 60 steps 23 on their worst seed. dense_mass_matrix=True is not a safe default here: it measured 12 divergences per run on that fit (77 per 400 draws before the bins were fixed) against 2 for the diagonal, so check n_divergent before trusting its higher speed. Lowering max_num_doublings bounds the wall instead, at a real ESS cost (cap 6 measured min-ESS 5 on the same fit); quick looks only. See posterior.diagnostics['tree_depth_mean'/'frac_max_depth'].
+  return _ctx_run_nuts(
+2026-09-14 23:14:57,019 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 300.7s. Divergences: 1/1200 (0.1%). Tree depth: mean 9.1, at cap on 27% of iterations (max_num_doublings=10)
+2026-09-14 23:14:57,023 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=1, rhat_max=1.0015
+2026-09-14 23:15:23,301 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_II.npz
+2026-09-14 23:15:23,302 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_II.json
+2026-09-14 23:15:23,303 - __main__ - WARNING - No attempt cleared the adoption bar for galaxy 267 config II; keeping attempt 3 of 3 (divergences=1, rhat_max=1.0015) with adoption_pass=False
+2026-09-14 23:15:23,304 - __main__ - INFO - ✓ Fit complete for galaxy 267 config II
+  MAP initialization (1000 steps)...
+  MAP init done (loss=4.91)
+  MAP initialization: reusing cached MAP point
+  MAP initialization: reusing cached MAP point

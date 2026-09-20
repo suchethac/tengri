@@ -1,0 +1,94 @@
+{
+  "gal_id": 25489,
+  "config": "IV",
+  "z": 1.071,
+  "n_free": 4,
+  "n_bands": 10,
+  "filter_names": [
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f850lp",
+    "hst_f098m",
+    "hst_f125w",
+    "hst_f160w",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80"
+  ],
+  "n_warmup": 150,
+  "n_samples": 300,
+  "n_chains": 4,
+  "dense_mass_matrix": false,
+  "target_accept_rate": 0.85,
+  "max_tree_depth": null,
+  "divergences": 0,
+  "rhat_max": 1.0014862088070153,
+  "rhat_dict": {
+    "dust_Rv": 1.0007913694078083,
+    "dust_tau_v": 1.000035758987609,
+    "met_logzsol": 0.9997404306552433,
+    "sfh_const_log_total_mass": 1.0014862088070153
+  },
+  "ess_min": 316.9843022242836,
+  "ess_dict": {
+    "dust_Rv": 528.3472138073963,
+    "dust_tau_v": 316.9843022242836,
+    "met_logzsol": 382.69924649837,
+    "sfh_const_log_total_mass": 438.6742979398558
+  },
+  "wall_time_s": 390.71347216703,
+  "systematic_floor_frac": 0.05,
+  "systematic_floor_mean_erg": 7.274693429918268e-30,
+  "adoption_pass": true,
+  "retune_attempt": 1,
+  "best_attempt": 1,
+  "attempts": [
+    {
+      "gal_id": 25489,
+      "config": "IV",
+      "z": 1.071,
+      "n_free": 4,
+      "n_bands": 10,
+      "filter_names": [
+        "hst_f606w",
+        "hst_f775w",
+        "hst_f850lp",
+        "hst_f098m",
+        "hst_f125w",
+        "hst_f160w",
+        "irac_36",
+        "irac_45",
+        "irac_58",
+        "irac_80"
+      ],
+      "n_warmup": 150,
+      "n_samples": 300,
+      "n_chains": 4,
+      "dense_mass_matrix": false,
+      "target_accept_rate": 0.85,
+      "max_tree_depth": null,
+      "divergences": 0,
+      "rhat_max": 1.0014862088070153,
+      "rhat_dict": {
+        "dust_Rv": 1.0007913694078083,
+        "dust_tau_v": 1.000035758987609,
+        "met_logzsol": 0.9997404306552433,
+        "sfh_const_log_total_mass": 1.0014862088070153
+      },
+      "ess_min": 316.9843022242836,
+      "ess_dict": {
+        "dust_Rv": 528.3472138073963,
+        "dust_tau_v": 316.9843022242836,
+        "met_logzsol": 382.69924649837,
+        "sfh_const_log_total_mass": 438.6742979398558
+      },
+      "wall_time_s": 390.71347216703,
+      "systematic_floor_frac": 0.05,
+      "systematic_floor_mean_erg": 7.274693429918268e-30,
+      "adoption_pass": true,
+      "retune_attempt": 1
+    }
+  ],
+  "retune_history": []
+}

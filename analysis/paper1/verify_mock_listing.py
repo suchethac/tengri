@@ -75,9 +75,35 @@ jax.config.update("jax_enable_x64", True)
 
 REDSHIFT = 1.0
 
-#: Ultraviolet through mid-infrared. The listing also names X-ray and radio,
-#: which enter as model components rather than as filters.
+#: X-ray through millimetre: seven decades in wavelength, 4 Angstrom to 3 mm.
+#:
+#: The two Chandra bands are not decoration. ``xray={"type": "yang20",
+#: "all_params": FREE}`` frees ``xray_log_nh``, and photoelectric absorption is
+#: strongly energy-dependent -- it eats the soft band and spares the hard one --
+#: so the soft/hard *ratio* is the only observable that carries column density.
+#: With a UV-through-MIR filter set the model still declared an X-ray component
+#: and MAP recovered ``xray_log_nh`` 2.04 dex from truth, because nothing
+#: constrained it. One X-ray band would have pinned the luminosity and left the
+#: column prior-driven; the pair is what closes it.
+#:
+#: The millimetre bands sit on the Rayleigh-Jeans tail of ``draine_li2014`` and
+#: constrain the cold dust mass that ``dust_eta_balance`` controls. Band 3 is
+#: included knowing it is a non-detection at a realistic depth: it bounds the
+#: long-wavelength end from above rather than measuring it.
+#:
+#: **There is no radio band, and this is a limitation, not a choice.** The
+#: registry's longest-wavelength entries are millimetre (ALMA, ACT, SPT,
+#: TolTEC); it holds no VLA or LOFAR curve, so the centimetre regime is not
+#: expressible today. The ``radio`` block still enters the forward model and
+#: still emits, but every one of its parameters (``radio_q_ir``,
+#: ``radio_alpha_sf``, ``radio_alpha_ff``, ``radio_T_e``) is ``Fixed(DEFAULT)``,
+#: so none of them is a free parameter the data would have to constrain. The
+#: model predicts a radio luminosity; the mock does not claim to measure one.
 MOCK_FILTERS = [
+    # X-ray: the soft/hard pair, which is what constrains N_H.
+    "chandra_soft",
+    "chandra_hard",
+    # Ultraviolet through mid-infrared.
     "galex_nuv",
     "sdss_u",
     "sdss_g",
@@ -89,6 +115,10 @@ MOCK_FILTERS = [
     "wise_w2",
     "wise_w3",
     "wise_w4",
+    # Submillimetre and millimetre: the cold-dust Rayleigh-Jeans tail.
+    "alma_band7",
+    "alma_band6",
+    "alma_band3",
 ]
 
 

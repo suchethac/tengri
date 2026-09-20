@@ -1,0 +1,5 @@
+2026-09-16 04:00:28,765 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.950e-30 erg/s/cm2/Hz
+2026-09-16 04:00:33,919 - __main__ - INFO - Galaxy 22173 (z=1.037): 12 detected bands
+2026-09-16 04:00:33,919 - __main__ - INFO - Config I: 5 free parameters
+2026-09-16 04:00:33,919 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-16 04:00:48,852 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.

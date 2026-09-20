@@ -75,7 +75,17 @@ DESIGNED_TRUTH = {
 #: Per-filter 1-sigma depth [erg/s/cm2/Hz]. Rough but honest: deep-field optical
 #: and near-infrared, shallower in the ultraviolet and mid-infrared, which is
 #: the ordering any real panchromatic dataset has.
+#:
+#: The X-ray depths are the 2 Ms Chandra Deep Field South limits converted out
+#: of the integrated band: roughly 1e-17 erg/s/cm2 over 0.5-2 keV and 6e-17 over
+#: 2-8 keV, divided by the bandwidth in frequency. The millimetre depths are a
+#: deep pointed ALMA continuum observation, about 1 uJy rms. ALMA band 3 is
+#: listed knowing the source falls under it -- a non-detection at the long-
+#: wavelength end is the honest outcome there, and exercising the upper-limit
+#: path is worth more than inventing a detection.
 BAND_DEPTH = {
+    "chandra_soft": 3.0e-35,
+    "chandra_hard": 4.0e-35,
     "galex_nuv": 3.0e-31,
     "sdss_u": 1.0e-31,
     "sdss_g": 5.0e-32,
@@ -87,11 +97,27 @@ BAND_DEPTH = {
     "wise_w2": 3.0e-31,
     "wise_w3": 2.0e-30,
     "wise_w4": 1.0e-29,
+    "alma_band7": 1.0e-29,
+    "alma_band6": 5.0e-30,
+    "alma_band3": 1.0e-29,
 }
 
 #: Fractional calibration term added in quadrature with the depth, so bright
 #: bands are calibration-limited rather than infinitely precise.
+#:
+#: This is per-band because a single global value would have written "3 per cent
+#: X-ray photometry" into the paper. Chandra's absolute effective-area
+#: calibration is at the ten-per-cent level and degrades with the contamination
+#: model at soft energies; ALMA quotes 10 per cent in band 3 through 7. The
+#: optical and infrared 3 per cent is the ordinary broadband figure.
 CALIBRATION_FRAC = 0.03
+CALIBRATION_FRAC_BY_BAND = {
+    "chandra_soft": 0.15,
+    "chandra_hard": 0.15,
+    "alma_band7": 0.10,
+    "alma_band6": 0.10,
+    "alma_band3": 0.10,
+}
 SPEC_FRAC = 0.10
 DETECTION_SIGMA = 3.0
 
@@ -111,9 +137,22 @@ def designed_truth(model, key):
 
 
 def photometric_errors(flux, filters):
-    """1-sigma errors from depth and calibration, and the detection mask."""
+    """1-sigma errors from depth and calibration, and the detection mask.
+
+    A band with no declared depth is refused rather than defaulted. A default
+    would give a new filter the noise properties of whichever band the author
+    last thought about, and the whole point of the depth table is that a flat
+    error invents detections six decades below the brightest band.
+    """
+    missing = [f for f in filters if f not in BAND_DEPTH]
+    if missing:
+        raise KeyError(
+            f"no depth declared for {missing}; add them to BAND_DEPTH. "
+            f"Declared: {sorted(BAND_DEPTH)}"
+        )
     depth = np.array([BAND_DEPTH[f] for f in filters])
-    sigma = np.hypot(depth, CALIBRATION_FRAC * flux)
+    calib = np.array([CALIBRATION_FRAC_BY_BAND.get(f, CALIBRATION_FRAC) for f in filters])
+    sigma = np.hypot(depth, calib * flux)
     detected = flux > DETECTION_SIGMA * depth
     return sigma, detected, depth
 

@@ -1,0 +1,14 @@
+2026-09-16 05:18:32,569 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 8.133e-31 erg/s/cm2/Hz
+2026-09-16 05:18:38,460 - __main__ - INFO - Galaxy 23250 (z=1.049): 9 detected bands
+2026-09-16 05:18:38,461 - __main__ - INFO - Config V: 5 free parameters
+2026-09-16 05:18:38,461 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-16 05:19:10,403 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-16 05:20:03,671 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-16 05:29:51,460 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (587.8s). Step size: 0.0353. Divergent in the final warmup window: 7%
+2026-09-16 05:53:42,542 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2018.8s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.4, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-16 05:53:42,553 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0047
+2026-09-16 05:56:22,263 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/23250_V.npz
+2026-09-16 05:56:22,264 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/23250_V.json
+2026-09-16 05:56:22,265 - __main__ - INFO - ✓ Fit complete for galaxy 23250 config V
+  MAP initialization (1000 steps)...
+  MAP init done (loss=2.52)

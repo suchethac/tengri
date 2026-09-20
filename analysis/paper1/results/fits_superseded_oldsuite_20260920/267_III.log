@@ -1,0 +1,25 @@
+2026-09-14 23:15:26,801 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.901e-30 erg/s/cm2/Hz
+2026-09-14 23:15:37,644 - __main__ - INFO - Galaxy 267 (z=1.084): 12 detected bands
+2026-09-14 23:15:37,644 - __main__ - INFO - Config III: 11 free parameters
+2026-09-14 23:15:37,644 - __main__ - INFO - Attempt 1/2: target_accept 0.85, warmup 150, diagonal mass
+2026-09-14 23:15:58,676 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 23:16:32,513 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 11 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-14 23:25:18,981 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (526.5s). Step size: 0.0130. Divergent in the final warmup window: 0%
+2026-09-15 00:09:05,044 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 3152.4s. Divergences: 11/1200 (0.9%). Tree depth: mean 8.6, at cap on 2% of iterations (max_num_doublings=10)
+2026-09-15 00:09:05,055 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=11, rhat_max=1.0043
+2026-09-15 00:11:55,988 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_III.npz
+2026-09-15 00:11:55,989 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_III.json
+2026-09-15 00:11:55,993 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=11) before retuning
+2026-09-15 00:11:55,993 - __main__ - INFO - Attempt 2/2: target_accept 0.95, warmup 150, diagonal mass
+2026-09-15 00:11:56,473 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-15 00:11:56,477 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 11 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-15 00:21:52,023 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (595.5s). Step size: 0.0129. Divergent in the final warmup window: 0%
+2026-09-15 01:03:14,813 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 3078.2s. Divergences: 7/1200 (0.6%). Tree depth: mean 8.3, at cap on 1% of iterations (max_num_doublings=10)
+2026-09-15 01:03:14,820 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=7, rhat_max=1.0047
+2026-09-15 01:05:42,835 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_III.npz
+2026-09-15 01:05:42,836 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/267_III.json
+2026-09-15 01:05:42,837 - __main__ - WARNING - No attempt cleared the adoption bar for galaxy 267 config III; keeping attempt 2 of 2 (divergences=7, rhat_max=1.0047) with adoption_pass=False
+2026-09-15 01:05:42,838 - __main__ - INFO - ✓ Fit complete for galaxy 267 config III
+  MAP initialization (1000 steps)...
+  MAP init done (loss=3.25)
+  MAP initialization: reusing cached MAP point
