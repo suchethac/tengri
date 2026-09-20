@@ -40,7 +40,12 @@ import numpy as np
 from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_digest
 from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
-from tengri.utils.grid_interp import preintegrate_grid, subband_quadrature
+from tengri.utils.grid_interp import (
+    _cumtrapz_rows,
+    _interp_rows,
+    preintegrate_grid,
+    subband_quadrature,
+)
 from tengri.utils.physics_constants import TEN_PC_CM
 from tengri.utils.scale import (
     apply_log10_scale,
@@ -1020,7 +1025,8 @@ def _compute_photometry_ztable(
             # on the observed-frame grid.
             lyc_wave_obs = 912.0 * (1.0 + z_val)
             if np.any(grid < lyc_wave_obs):
-                cum_integrand = _cumtrapz_rows(integrand, grid[None, :])  # (n_met*n_age, len(grid))
+                # (n_met*n_age, len(grid))
+                cum_integrand = _cumtrapz_rows(integrand, grid[None, :])
                 # Reshape to (n_met, n_age, len(grid)) for later use
                 cum_integrand_reshaped = cum_integrand.reshape(n_met, n_age, -1)
                 # Interpolate cumulative integral at the Lyman limit

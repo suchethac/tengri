@@ -2,6 +2,23 @@
 
 ### Fixed
 
+- WavePrecomp photometry now applies the nebular Lyman-continuum mask
+  (`neb_fesc`) that the exact path applies below rest-frame 912 Å (#2439,
+  #2427): `predict_via_precomp` summed the stellar photometric LUT with no
+  such correction, so any band whose observed passband sampled rest λ < 912 Å
+  carried the full, unabsorbed stellar Lyman continuum regardless of
+  `neb_fesc`, K-invariant. Measured on the issue's model (Cue nebular,
+  default `neb_fesc=0.0`, no dust): z=2 GALEX NUV +915 %, z=3 SDSS u +69 %;
+  #2427's Inoue-IGM rows (z=0.8-3.0) are the same defect. The whole-band
+  stellar LUT (`stellar_phot_lnu_precomp`) now carries an exact algebraic
+  split of the SSP × filter integral at the 912 Å edge
+  (`stellar_phot_lnu_precomp_lyc`), collapsing the residual to the
+  pre-existing WavePrecomp floor. The K-node sub-band tensors that a dusty
+  `two_component` model and a dust-free model with a precomputable mean IGM
+  both reconstruct from get the same mask, flat across age (an approximation
+  of the dense path's y(age)-graded birth-cloud formula, since the age
+  weighting is not available until dust runs, downstream of nebular).
+
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
   (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
   cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2

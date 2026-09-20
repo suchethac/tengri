@@ -1006,6 +1006,33 @@ class Observation:
           :math:`\tau_{\rm diff} \le 2`, :math:`z \le 1`. **This is the floor
           for the whole path**, no other channel can do better than the
           bucket that dominates the broadband.
+        - **Lyman continuum, under a photoionized nebular backend** (#2439,
+          #2427): *exact* for the whole-band bucket. The stellar LUT's
+          ``stellar_phot_lnu_precomp`` is corrected by
+          ``NebularSEDComponent.apply`` with an exact algebraic split of the
+          SSP × filter integral at the physical 912 Å edge
+          (``stellar_phot_lnu_precomp_lyc``, built alongside the whole-band
+          tensor in ``preintegrate_grid`` / the ztable twin), mirroring the
+          dense path's ``sed_intrinsic`` mask
+          (``components/nebular/component.py``). Before this fix, any band
+          whose observed passband sampled rest λ < 912 Å carried the *full,
+          unabsorbed* stellar Lyman continuum regardless of ``neb_fesc``:
+          measured +915 % (z=2 GALEX NUV) and +69 % (z=3 SDSS u) on the
+          issue's own model, K-invariant (the bug was never a quadrature
+          question). The K-node sub-band tensors
+          (``stellar_phot_lnu_per_age_subband_precomp`` and its
+          IGM-folded twin) get the same ``neb_fesc`` mask applied flat
+          across age at each node's own rest wavelength — an approximation,
+          not the dense two-component path's y(age)-graded
+          ``lyc_absorb_all=False`` formula, since the age-weighting
+          (``dust_young_indicator``) is not computed until
+          :class:`~tengri.components.dust.two_component.DustSEDComponent`
+          runs, downstream of nebular. This is what a dusty
+          ``two_component`` model and a dust-free model with a
+          precomputable mean IGM both read
+          (``sub_per_age`` / ``sub_per_age_igm`` below), so the correction
+          lives once, upstream, rather than per consumer. See
+          ``tests/regression/bug/test_bug_2439_precomp_lyc_mask.py``.
         - **Nebular, under** ``dust_attenuation={'type': 'two_component'}``: *exact* since
           #1738. That component publishes the reddened continuum integrated
           through each band (``nebular_phot_lnu_attenuated_precomp``), so there

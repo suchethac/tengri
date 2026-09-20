@@ -1448,6 +1448,17 @@ class DustSEDComponent(TemplateThreading):
             # splat the resolved dicts now, which is what makes the claim true.
             sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
             if sub_waves is not None:
+                # Lyman-continuum escape-fraction correction (#2439, #2427):
+                # NebularSEDComponent.apply already masks
+                # ``stellar_phot_lnu_per_age_subband_precomp`` at each node's own
+                # rest wavelength before this component runs, so the sub-band
+                # tensor read here is already ``neb_fesc``-aware. Nothing to do
+                # in this branch; see ``nebular/component.py`` for the
+                # correction and why it has to live upstream of both this
+                # dust-attenuated reconstruction and the no-dust,
+                # mean-IGM-only sub-band reconstruction in
+                # ``observation.predict_via_precomp`` (neither of which reads
+                # anything two_component publishes).
                 a_bc_sub = jnp.exp(-tau_bc * law_bc_fn(sub_waves, **bc_kw))
                 a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, **diff_kw))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub

@@ -1059,6 +1059,40 @@ class NebularSEDComponent(TemplateThreading):
                 stellar_phot_corrected = stellar_phot - (1.0 - neb_fesc) * stellar_phot_lyc
                 derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_corrected
 
+        # K-node sub-band twin of the correction above (#2439, #2427). Two
+        # downstream reconstructions never read ``stellar_phot_lnu_precomp`` at
+        # all and so never saw the fix above: (1) ``two_component``'s dusty LUT
+        # rebuilds the stellar term from
+        # ``stellar_phot_lnu_per_age_subband_precomp`` node-by-node (#1122's
+        # K-point quadrature); (2) a *dust-free* model with a precomputable
+        # mean-IGM (``igm={'type': 'inoue', ...}``) also rebuilds it from the
+        # same tensor (``observation.predict_via_precomp``'s
+        # ``sub_per_age_igm is not None`` branch), purely to keep the IGM-free
+        # and IGM-folded halves partition-consistent (#1135) -- dust need not
+        # be involved for this branch to run, and it has nothing to do with
+        # dust's own attenuation LUT, so a correction living only in
+        # ``two_component.py`` cannot reach it. Both consumers read this one
+        # tensor, so masking it once here (rather than in each consumer) fixes
+        # both and cannot double-count. Flat across age, unlike the dense
+        # ``two_component`` path's y(age)-graded ``lyc_absorb_all=False``
+        # formula (birth-cloud-only absorption): there is no birth-cloud
+        # concept at the sub-band-quadrature level, and this is the same flat
+        # treatment ``sed_intrinsic`` already receives just above -- an
+        # approximation like every other sub-band channel, exact only at
+        # ``neb_fesc=1`` (a no-op) or ``neb_fesc=0`` (full absorption).
+        sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
+        sub_per_age = state.derived.get("stellar_phot_lnu_per_age_subband_precomp")
+        if sub_waves is not None and sub_per_age is not None:
+            lyc_screen_sub = jnp.where(sub_waves < 912.0, neb_fesc, jnp.ones_like(sub_waves))
+            derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
+                sub_per_age * lyc_screen_sub
+            )
+            sub_per_age_igm = state.derived.get("stellar_phot_lnu_per_age_subband_igm_precomp")
+            if sub_per_age_igm is not None:
+                derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                    sub_per_age_igm * lyc_screen_sub
+                )
+
         return state.with_(
             sed_intrinsic=(sed_intrinsic + nebular_sed)
             if sed_intrinsic is not None
