@@ -1048,6 +1048,17 @@ class NebularSEDComponent(TemplateThreading):
         if sed_intrinsic is not None:
             sed_intrinsic = jnp.where(lyc_mask, sed_intrinsic * neb_fesc, sed_intrinsic)
 
+        # ── Precomp-path Lyman-continuum mask correction (#2439, #2427) ────
+        # The dense path masks sed_intrinsic below 912 Å; the LUT path needs the same correction.
+        # Apply: stellar_phot_lnu_precomp - (1 - neb_fesc) * stellar_phot_lnu_precomp_lyc
+        stellar_phot_lyc = state.derived.get("stellar_phot_lnu_precomp_lyc")
+        if stellar_phot_lyc is not None:
+            stellar_phot = state.derived.get("stellar_phot_lnu_precomp")
+            if stellar_phot is not None:
+                # Apply the LyC mask exactly as the dense path does: absorb the (1-fesc) fraction.
+                stellar_phot_corrected = stellar_phot - (1.0 - neb_fesc) * stellar_phot_lyc
+                derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_corrected
+
         return state.with_(
             sed_intrinsic=(sed_intrinsic + nebular_sed)
             if sed_intrinsic is not None

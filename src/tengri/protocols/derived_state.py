@@ -138,6 +138,14 @@ class DerivedState:
     stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
     stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
 
+    # Stellar: Lyman continuum photometry (rest λ < 912 Å) LUT per filter
+    # (published only when ``approx=WavePrecomp()`` is set and a nebular
+    # component with ``neb_fesc`` is active). Used to apply the nebular
+    # escape-fraction mask: ``stellar_phot_lnu_precomp - (1 - neb_fesc) *
+    # stellar_phot_lnu_precomp_lyc`` (#2439, #2427). Shape (n_filter,)
+    # in units erg/s/Hz.
+    stellar_phot_lnu_precomp_lyc: jnp.ndarray | None = None
+
     # Sub-band quadrature for the multiplicative dust screen (#1122), shape
     # ``(n_age, n_filter, n_subbands)``. ``..._subband_precomp`` is the filter
     # integral restricted to each sub-band (sums over k to the per-age LUT);
