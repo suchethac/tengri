@@ -1170,6 +1170,14 @@
   default; that disagreement is left as-is and tracked separately (#2261)
   (#2241).
 
+- Unknown dict keys now name the type's accepted parameter short names (#2176):
+  when a user writes an unknown key like `sfh={'type': 'delayed', 'zzz': 1.0}`
+  with no close difflib match, the error message now includes the type's
+  parameter short names (e.g., "Parameter names this type accepts: tau_gyr,
+  age_gyr"), so the user sees what they can write instead of only the structural
+  keys. For types with many parameters (> 12), the message points to
+  `tengri.describe('<type>')` instead of listing them.
+
 - Dust tree literal defaults aligned with declarations (#2265):
   ``tools/check_literal_param_defaults.py``'s scope widens from
   ``dust/emission/`` to the whole ``dust/`` tree and reports zero
@@ -1194,6 +1202,14 @@
   structural-off 0.0. ``dust_T`` stays ``Fixed(35.0)``, left unchanged
   pending #2261, with per-class constants for the three that disagree;
   ``dust_lgU``'s table/class disagreement is tracked separately (#2261).
+
+- AGN attenuation did-you-mean routes law-form names to the law form (#2201):
+  when a user writes an invalid AGN atten type like `agn={'atten':
+  {'type': 'prevot'}}`, difflib may suggest `smc_prevot` (a law-mapped type).
+  Before the fix, the error message suggested using `type='smc_prevot'`, which
+  itself would be refused with "no longer supported. Use the law form instead"
+  (two hops to the same fix). The message now suggests the law form directly:
+  `law='prevot_smc'` (one hop).
 
 - `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
   believing it the base of the `Tracer*ConversionError` family. On jax
