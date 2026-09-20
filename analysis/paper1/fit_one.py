@@ -196,6 +196,41 @@ def dust_parameter_name(config_key: str) -> str:
         ) from exc
 
 
+def machine_load() -> dict:
+    """Load average and concurrent tengri fits, for the attempt record.
+
+    A cell's wall time is a property of what else was running: the same
+    warmup trajectory measured 1,017 s beside one other fit and 10,347 s
+    beside eight (2026-09-20, galaxy 79 configuration I, identical step
+    size to four digits). Recorded so the number on disk carries its own
+    caveat instead of depending on log archaeology.
+    """
+    try:
+        load_1m = os.getloadavg()[0]
+    except (AttributeError, OSError):
+        load_1m = None
+    n_fits = 0
+    try:
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                    cmd = fh.read()
+            except OSError:
+                continue
+            argv0 = cmd.split(b"\0", 1)[0]
+            # argv[0] must BE python: a shell whose command text mentions
+            # python would otherwise count its own child twice.
+            if argv0.endswith((b"python", b"python3")) and (
+                b"paper1.fit_" in cmd or b"paper1/fit_" in cmd
+            ):
+                n_fits += 1
+    except OSError:
+        n_fits = None
+    return {"load_avg_1m": load_1m, "n_concurrent_fits": n_fits, "n_cpus": os.cpu_count()}
+
+
 def is_chain_sampler(method: str) -> bool:
     """Whether ``method`` produces chains the NUTS adoption bar can judge.
 
@@ -897,6 +932,7 @@ def run_fit(
         fit_kwargs = sampler_kwargs_for(method, nuts_kwargs)
 
         key = jax.random.PRNGKey(seed + attempt)
+        load_at_start = machine_load()
         t_start = time.perf_counter()
 
         try:
@@ -981,6 +1017,8 @@ def run_fit(
                 "ess_min": float(ess_min) if ess_min is not None else None,
                 "ess_dict": {k: float(v) for k, v in ess_dict.items()},
                 "wall_time_s": t_elapsed,
+                "load_at_start": load_at_start,
+                "load_at_end": machine_load(),
                 "systematic_floor_frac": floor_frac,
                 "systematic_floor_mean_erg": float((floor_frac * fnu).mean()),
                 **sampler_extra,
