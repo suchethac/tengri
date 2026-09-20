@@ -745,17 +745,27 @@ def run_fit(
             # so this costs the grid roughly 24.5 h instead of 6.0 h.
             #
             # tengri#2358 (merged 77a202be) fixed the unbounded allocation of
-            # #2356 -- mass_profile.py here is grafted from that commit and its
-            # 21 tests pass against this pinned tree -- and the fix works: the
+            # #2356. This tree now carries main's mass_profile.py directly rather
+            # than a graft of it: the branch merged origin/main and took main's
+            # side, which is #2358 plus float32 support, line-flux block scoring
+            # and three linearity-guard fixes, at 26 passing tests. The fix
+            # works: the
             # two worst cells fell from a predicted 21.3 and 32.3 GB to measured
             # peaks of 10.56 and 11.90 GB. But both were still SIGKILLed after
             # converging at 0/2400 divergences, so the acceptance test failed.
             #
             # The binding constraint moved rather than closing. Chunking bounded
             # the post-fit SPIKE to about 3.5 GB, but the profiled path's
-            # steady-state footprint is ~8.5 GB against ~2.2 GB unprofiled, and
-            # this box runs with ~4.7 GB free and ~12.5 GB held by the memory
-            # compressor. An 8.5 GB floor does not fit, whatever the spike does.
+            # steady-state footprint is ~8.5 GB against ~2.2 GB unprofiled.
+            #
+            # SCOPE THAT TO ITS MACHINE. It was measured on a laptop running
+            # with ~4.7 GB free and ~12.5 GB held by the macOS memory
+            # compressor, where an 8.5 GB floor does not fit whatever the spike
+            # does. That is a fact about that laptop, not about profiling. On a
+            # workstation with real headroom the floor is unremarkable, and
+            # profiled cells have since run to adoption on one. Do not cite this
+            # paragraph as a reason the grid cannot be marginalized without
+            # first checking the memory of the machine actually running it.
             #
             # So the choice here is not about the fix being wrong. Unprofiled
             # cells peak near 4 GB and complete; profiled cells are faster and
