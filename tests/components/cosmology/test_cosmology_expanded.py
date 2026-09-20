@@ -568,7 +568,7 @@ class TestZAtLookbackTime:
 @pytest.mark.parametrize("cosmo_obj", [PLANCK18, PLANCK15, WMAP5])
 def test_age_at_z0_host_matches_dsps(cosmo_obj):
     """Verify numpy twin of dsps age_at_z0 calculation.
-    
+
     age_at_z0_host should produce results identical (within float64 rounding)
     to the DSPS implementation, using the same 512-node trapezoidal quadrature
     without importing JAX or allocating device buffers.

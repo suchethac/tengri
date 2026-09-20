@@ -62,9 +62,7 @@ __all__ = [
     "DEFAULT_COSMO",
     "DEFAULT_H0",
     "DEFAULT_OM0",
-    "PLANCK15",
     "PLANCK18",
-    "WMAP5",
     "CosmoParams",
     "age_at_z",
     "age_at_z0",
@@ -108,14 +106,24 @@ def __getattr__(name: str):
     AttributeError
         If the name is not PLANCK15 or WMAP5.
     """
-    if name in ("PLANCK15", "WMAP5"):
-        from dsps.cosmology import PLANCK15 as _dsps_planck15, WMAP5 as _dsps_wmap5
+    if name == "PLANCK15":
+        from dsps.cosmology import PLANCK15 as _dsps_planck15
 
-        if name == "PLANCK15":
-            return CosmoParams(*_dsps_planck15)
-        else:
-            return CosmoParams(*_dsps_wmap5)
+        return CosmoParams(*_dsps_planck15)
+    if name == "WMAP5":
+        from dsps.cosmology import WMAP5 as _dsps_wmap5
+
+        return CosmoParams(*_dsps_wmap5)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+#: Names served lazily by :func:`__getattr__`; they are not in ``__all__`` because they
+#: do not exist at import time (#2276), so :func:`__dir__` lists them for discovery.
+_LAZY_NAMES: tuple[str, ...] = ("PLANCK15", "WMAP5")
+
+
+def __dir__() -> list[str]:
+    return sorted([*globals(), *_LAZY_NAMES])
 
 
 def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
@@ -599,9 +607,7 @@ def age_at_z0_host(cosmo: CosmoParams = DEFAULT_COSMO) -> float:
     # E(z) = sqrt(Om0*(1+z)^3 + Ode0*rho_de_z(z))
     # where rho_de_z(z) = a^(-3*(1+w0+wa)) * exp(-3*wa*(1-a)), a = 1/(1+z)
     a_nodes = 1.0 / (1.0 + z_nodes)
-    rho_de_z = a_nodes ** (-3.0 * (1.0 + w0 + wa)) * np.exp(
-        -3.0 * wa * (1.0 - a_nodes)
-    )
+    rho_de_z = a_nodes ** (-3.0 * (1.0 + w0 + wa)) * np.exp(-3.0 * wa * (1.0 - a_nodes))
     E_z = np.sqrt(Om0 * (1.0 + z_nodes) ** 3.0 + Ode0 * rho_de_z)
 
     # Integrand: dt/dz = 1 / (H(z) * (1+z)) [in units where H0=1]
