@@ -2,6 +2,14 @@
 
 ### Fixed
 
+- Emission line mode validation unified: `Spectroscopy` and `NebularConfig`
+  now share a single legal set of modes (`ELINE_MODES`), defined in
+  `observation.constants`. The retired `"fixed"` mode is rejected with a hint
+  to use `"off"` or one of the analysis modes (`"marginalized"` / `"fitted"`).
+  The settings validator now accepts `"fitted"` (previously omitted), and the
+  dead probe read of `_spectroscopy_config` in `Fitter._init_emission_lines`
+  has been removed. (#2191)
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
