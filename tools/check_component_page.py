@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import io
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -62,6 +63,46 @@ def _load_conf():
     return module
 
 
+def _check_rst_validity(text: str) -> list[str]:
+    """Parse RST fragment with docutils and collect warnings/errors.
+
+    Returns
+    -------
+    list[str]
+        List of error messages, empty if the RST is valid.
+    """
+    try:
+        import docutils.core
+        import docutils.nodes
+    except ImportError:
+        # docutils not available in this context; skip validation
+        return []
+
+    error_stream = io.StringIO()
+    try:
+        doc = docutils.core.publish_doctree(
+            text,
+            settings_overrides={
+                "report_level": 2,  # Include warning and error messages
+                "halt_level": 5,  # Do not halt, just report
+                "warning_stream": error_stream,
+            },
+        )
+    except Exception as e:
+        return [f"RST parse exception: {e}"]
+
+    # Collect system_message nodes
+    errors = []
+    for msg_node in doc.findall(docutils.nodes.system_message):
+        level = msg_node.get("level", 0)
+        if level >= 2:  # warning or higher
+            line = msg_node.get("line", "?")
+            msg_text = msg_node.astext()
+            errors.append(f"Line {line}: {msg_text}")
+
+    return errors
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--list", action="store_true", help="print each registry and its entry count")
@@ -75,6 +116,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"FAIL: the generator wrote nothing to {GENERATED}", file=sys.stderr)
         return 1
     page = GENERATED.read_text(encoding="utf-8")
+
+    # Check RST validity
+    rst_errors = _check_rst_validity(page)
+    if rst_errors:
+        print(
+            f"FAIL: the generated RST has {len(rst_errors)} error(s):",
+            file=sys.stderr,
+        )
+        for err in rst_errors:
+            print(f"  {err}", file=sys.stderr)
+        return 1
 
     listers = [n for n in dir(tengri) if n.startswith("list_") and n != "list_all"]
     problems: list[str] = []

@@ -894,9 +894,9 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             meta = AGN_BLOCK_META.get((cat, name), {})
             # Special handling for atten/smc_prevot: use law key instead of type
             if cat == "attenuation" and name == "smc_prevot":
-                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}) "
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}})"
             else:
-                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}})  "
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}}))"
             entry_dict = {
                 "name": name,
                 "category": cat,

@@ -19,6 +19,59 @@ from tengri.config.exceptions import TengriIOError
 pytestmark = pytest.mark.contract
 
 
+def test_menu_use_strings_have_no_trailing_whitespace():
+    """Menu use/short_doc/citation strings must be stripped and contain no RST literal markers."""
+    menus_to_check = [
+        ("age_kernels", tengri.list_age_kernels()),
+        ("agn_blocks", tengri.list_agn_blocks()),
+        ("agn_models", tengri.list_agn_models()),
+        ("components", tengri.list_components()),
+        ("dust_emission_models", tengri.list_dust_emission_models()),
+        ("dust_laws", tengri.list_dust_laws()),
+        ("dust_models", tengri.list_dust_models()),
+        ("filters", tengri.list_filters()),
+        ("igm_models", tengri.list_igm_models()),
+        ("inference_methods", tengri.list_inference_methods()),
+        ("instruments", tengri.list_instruments()),
+        ("known_ssps", tengri.list_known_ssps()),
+        ("metallicity_modes", tengri.list_metallicity_modes()),
+        ("nebular_backends", tengri.list_nebular_backends()),
+        ("plots", tengri.list_plots()),
+        ("radio_blocks", tengri.list_radio_blocks()),
+        ("radio_models", tengri.list_radio_models()),
+        ("recipes", tengri.list_recipes()),
+        ("shock_models", tengri.list_shock_models()),
+        ("sfh_models", tengri.list_sfh_models()),
+        ("xray_models", tengri.list_xray_models()),
+    ]
+
+    failures = []
+    for menu_name, rows in menus_to_check:
+        for row in rows:
+            entry_name = row.get("name", "")
+            for field_name in ["use", "short_doc", "citation"]:
+                field_value = row.get(field_name, "")
+                if not field_value:
+                    continue
+
+                # Check for trailing whitespace
+                if field_value != field_value.rstrip():
+                    failures.append(
+                        f"{menu_name}/{entry_name}/{field_name}: "
+                        f"has trailing whitespace: {field_value[-20:]!r}"
+                    )
+
+                # Check for inline literal markers ("``") in use and short_doc
+                if field_name in ["use", "short_doc"] and "``" in field_value:
+                    failures.append(
+                        f"{menu_name}/{entry_name}/{field_name}: "
+                        f"contains inline literal markers (``): {field_value[:80]}"
+                    )
+
+    if failures:
+        pytest.fail("\n".join(failures))
+
+
 @pytest.fixture(scope="module")
 def bare_stellar_ssp():
     """A bare-stellar SSP for building models."""

@@ -1062,7 +1062,10 @@
 - Radio preset rows kept their buildable composable `use` and carry the
   not-builder-available marker in `short_doc`, so the menu's `name` column types
   and every production row's `use` is built by a contract test. The marker is
-  defined as a module constant; `list_sfh_models` uses it at a second site (#2201).
+  defined as a module constant; `list_sfh_models` uses it at a second site. The
+  agn-block `use` strings carried trailing whitespace that made the generated
+  component tables invalid RST; check_component_page.py now parses the generated
+  fragment with docutils (#2201).
 
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
