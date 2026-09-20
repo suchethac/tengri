@@ -9856,6 +9856,45 @@ class SEDModel:
         from tengri.components.nebular.component import NebularSEDComponent
         from tengri.components.stellar.component import StellarSEDComponent
 
+        # Does this model have a LIVE nebular Lyman-continuum mask (#2439,
+        # #2427)? A photoionized nebular backend whose ``neb_fesc`` is not
+        # pinned at exactly 1.0 (the registry default is Fixed(0.0), so most
+        # nebular models are live by default). Gates the stellar LUT's
+        # whole-band + sub-band Lyman-continuum tensors: a model without a
+        # live mask never pays their compute or the larger cache entry, and
+        # its sub-band partition stays bit-for-bit identical to before this
+        # gate existed. 0.0 is the SAME fallback the runtime correction uses
+        # (``params.get("neb_fesc", 0.0)``) if the key is somehow absent from
+        # both the free and fixed spec -- conservatively "live" rather than
+        # silently skipping the exact tensor.
+        # A NebularSEDComponent is ALWAYS in the chain once ``neb=`` is set to
+        # anything (including ``{'type': 'none'}'``, which resolves to
+        # ``backend="baked_in"`` -- "nebular emission already baked into the
+        # SSP grid, publish nothing"), so ``isinstance`` alone is not the live
+        # -mask test: ``backend="baked_in"`` and ``backend="shock"`` both
+        # return from ``NebularSEDComponent.apply`` before ever reaching the
+        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- neither
+        # publishes ``lyc_transmission``, so the stellar LUT's whole-band and
+        # sub-band LyC split would be pure, uncorrected, wasted compute for
+        # them (and, on far-IR filters whose observed-frame footprint sits
+        # nowhere near the forced 912(1+z) edge, could trip the sub-band
+        # partition's own conservation assertion for no physical reason).
+        # Only the photoionized backends run that block.
+        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+        lyc_mask_live = False
+        _live_neb = any(
+            isinstance(c, NebularSEDComponent)
+            and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+            for c in chain
+        )
+        if _live_neb:
+            free_names = self.spec.free_params
+            if "neb_fesc" in free_names:
+                lyc_mask_live = True
+            else:
+                fesc_fixed = float(self.spec.get_fixed_values().get("neb_fesc", 0.0))
+                lyc_mask_live = abs(fesc_fixed - 1.0) > 1e-12
+
         # Precompute-config state: extracted once, reused for all components
         wave_precomp_enabled = (
             self._approx.get("wave_precomp")
@@ -9979,6 +10018,7 @@ class SEDModel:
                         approx=self._approx,
                         filters=filters,
                         redshift_spec=redshift_spec,
+                        lyc_gate=lyc_mask_live,
                     )
                 elif (isinstance(comp, AGNSEDComponent) and filters is not None) or (
                     isinstance(comp, NebularSEDComponent) and filters is not None

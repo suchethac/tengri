@@ -26,7 +26,7 @@ def test_ztable_request_all_fields_change_digest():
 
     # Baseline instance
     baseline = ZTableRequest(
-        version=3,
+        version=4,
         ssp_wave=array_key(np.arange(4.0)),
         ssp_flux=array_key(np.arange(4.0)),
         filters=(
@@ -38,6 +38,7 @@ def test_ztable_request_all_fields_change_digest():
         taylor_correction=False,
         convention="bessell",
         n_subbands=0,
+        lyc_gate=False,
         cosmology=baked(DEFAULT_COSMO),
         x64=False,
         backend="cpu",
@@ -48,7 +49,9 @@ def test_ztable_request_all_fields_change_digest():
     # Every field must change the digest when perturbed
     for field in dataclasses.fields(ZTableRequest):
         if field.name == "version":
-            perturbed = dataclasses.replace(baseline, version=4)
+            perturbed = dataclasses.replace(baseline, version=5)
+        elif field.name == "lyc_gate":
+            perturbed = dataclasses.replace(baseline, lyc_gate=True)
         elif field.name == "ssp_wave":
             perturbed = dataclasses.replace(baseline, ssp_wave=array_key(np.arange(5.0)))
         elif field.name == "ssp_flux":
@@ -202,11 +205,11 @@ def test_precompute_has_one_version_constant():
     assert version_constants[0] == "_ZTABLE_CACHE_VERSION"
 
 
-def test_ztable_version_is_3():
-    """_ZTABLE_CACHE_VERSION is 3."""
+def test_ztable_version_is_4():
+    """_ZTABLE_CACHE_VERSION is 4 (bumped 3->4 for #2439/#2427's lyc_gate)."""
     from tengri.components.stellar.sps.precompute import _ZTABLE_CACHE_VERSION
 
-    assert _ZTABLE_CACHE_VERSION == 3
+    assert _ZTABLE_CACHE_VERSION == 4
 
 
 def test_subband_version_is_3():

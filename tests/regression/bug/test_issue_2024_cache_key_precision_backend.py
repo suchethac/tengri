@@ -244,9 +244,12 @@ def test_schema_version_bumps_prevent_collisions():
     """Version constants pin the current schema so an accidental change is loud.
 
     Each bump is deliberate and moves this pin with it: 2→3 for both caches when
-    the request dataclasses replaced the hand-written keys (#2163).
+    the request dataclasses replaced the hand-written keys (#2163); ztable's own
+    3→4 for #2439/#2427's ``lyc_gate`` field (a warm cache built one day earlier
+    would otherwise have satisfied an unversioned key and silently served a
+    table with no Lyman-continuum split).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 3, (
+    assert pc._ZTABLE_CACHE_VERSION == 4, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
     assert sc._CACHE_VERSION == 3, (
