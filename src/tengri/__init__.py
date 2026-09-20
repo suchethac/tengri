@@ -89,6 +89,9 @@ written down here, which can only go stale.
 # catches anything that slips through. Users who want them back can
 # set ``TENGRI_VERBOSE_JAX=1``.
 import os as _os
+import tomllib
+from importlib.metadata import PackageNotFoundError, version as _get_metadata_version
+from pathlib import Path as _Path
 
 if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
@@ -288,7 +291,29 @@ except Exception as _cache_err:  # never break import
 if _os.environ.get("TENGRI_DISABLE_JIT", "").lower() in ("1", "true", "yes"):
     jax.config.update("jax_disable_jit", True)
 
-__version__ = "0.1.0"
+# --- Version ---
+# Always prefer importlib.metadata: it works for both editable installs and wheels,
+# and is the official source of truth after package installation.
+# Only fall back to source-tree pyproject.toml (via _data_setup's sanctioned anchor)
+# for uninstalled checkouts.
+try:
+    __version__ = _get_metadata_version("astro-tengri")
+except PackageNotFoundError:
+    # Uninstalled source tree: use _data_setup's sanctioned package anchor.
+    from tengri import _data_setup as _ds
+
+    _source_root = _ds.source_tree_root()
+    _pyproject_path = _source_root / "pyproject.toml"
+    if _pyproject_path.exists():
+        with open(_pyproject_path, "rb") as _f:
+            _pyproject_data = tomllib.load(_f)
+        __version__ = _pyproject_data["project"]["version"]
+    else:
+        raise RuntimeError(
+            "Cannot determine tengri version: "
+            "importlib.metadata.version('astro-tengri') failed, and "
+            f"pyproject.toml not found at {_pyproject_path}"
+        ) from None
 
 # --- Exception hierarchy ---
 # --- New high-level API ---

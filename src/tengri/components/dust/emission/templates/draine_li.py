@@ -10,6 +10,12 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    DEFAULT_DUST_ALPHA_DL14,
+    DEFAULT_DUST_GAMMA_DL,
+    DEFAULT_DUST_QPAH,
+    DEFAULT_DUST_UMIN,
+)
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
@@ -56,9 +62,9 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
     name: str = "draine_li2007"
 
     # Free parameters (user-facing names, prefix-stripped)
-    umin = Fixed(1.0)
-    gamma_dl = Fixed(0.01)
-    qpah = Fixed(2.5)
+    umin = Fixed(DEFAULT_DUST_UMIN)
+    gamma_dl = Fixed(DEFAULT_DUST_GAMMA_DL)
+    qpah = Fixed(DEFAULT_DUST_QPAH)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("draine_li2007",)
 
@@ -165,10 +171,10 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
     name: str = "draine_li2014"
 
     # Free parameters (user-facing names, prefix-stripped)
-    umin = Fixed(1.0)
-    gamma_dl = Fixed(0.01)
-    qpah = Fixed(2.5)
-    alpha_dl14 = Fixed(2.0)
+    umin = Fixed(DEFAULT_DUST_UMIN)
+    gamma_dl = Fixed(DEFAULT_DUST_GAMMA_DL)
+    qpah = Fixed(DEFAULT_DUST_QPAH)
+    alpha_dl14 = Fixed(DEFAULT_DUST_ALPHA_DL14)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("draine2014",)
 

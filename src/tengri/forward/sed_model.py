@@ -760,6 +760,11 @@ class FeaturePrecomp:
     *not* allowed for spectral indices, where a break is a flux **ratio** and a
     smooth additive offset does not cancel.
 
+    **Accuracy.** Reproduces measured line fluxes to 4.8e-5–1.0e-3 relative
+    (max over five prior draws on the wNE grid, #2376); against typical 5 %
+    line errors that is ≲0.002 σ. The photometry half's fidelity is measured
+    separately (WavePrecomp, #1671).
+
     **DIG mixing (#2222).** Served from this same table by two lookups --
     HII at ``neb_logU``, DIG at ``neb_logU + neb_dig_delta_logU`` -- mixed by
     ``neb_dig_frac``:
@@ -6321,6 +6326,10 @@ class SEDModel:
                 "line prediction (Cue). The configured backend is "
                 f"{type(self._nebular_backend).__name__ if self._nebular_backend else 'none'}."
             )
+
+        from tengri.components.nebular.nebular_grid_precompute import _refuse_freed_optional_axes
+
+        _refuse_freed_optional_axes(self.spec)
 
         target_wavelengths = jnp.asarray(target_wavelengths)
         # Snap each target within 0.5 A of a true backend catalog line to

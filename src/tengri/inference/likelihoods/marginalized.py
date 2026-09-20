@@ -488,19 +488,35 @@ _ELINE_FITTED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
 
 @dataclass(frozen=True)
 class CalibrationELineMarginalizedLikelihood:
-    r"""Spectroscopy likelihood with BOTH the calibration polynomial AND
-    emission-line amplitudes marginalized analytically.
+    r"""Spectroscopy likelihood with calibration polynomial marginalized
+    and emission-line amplitudes handled via plug-in point estimate.
 
     Covers the most common galaxy spectroscopy configuration
-    (Prospector-style joint cal-poly + line marginalization). Sequential
-    composition:
+    (Prospector-style joint cal-poly + line fitting). The two blocks are
+    composed sequentially: the emission-line block uses a point estimate
+    (not a full marginalization), and its log-determinant volume term is
+    discarded. This means the likelihood understates the uncertainty
+    contribution from the line amplitudes, in a data-dependent manner.
+
+    An exact composition exists in principle — condition one block on the
+    other and integrate in the right order, at the cost of a solve per
+    node — but is not implemented; #2354 tracks that decision. The exact
+    pieces are :func:`marginalize_emission_lines`
+    (:mod:`tengri.observation.eline_marginalization`) and
+    :func:`marginalize_calibration` (:mod:`tengri.observation.calibration`);
+    this class skips the line-block's log-determinant term after solving
+    for the MAP amplitudes â under the chosen prior.
+
+    Sequential composition:
 
     1. Build the line design matrix ``G`` via ``design_matrix_builder``.
     2. Solve for the line amplitudes ``â`` under the chosen prior
        (flat Gaussian or Cloudy). This is a profile-likelihood step:
        we use the MAP amplitudes, not the marginal log-likelihood,
        because the cal-marg step in (4) needs the line-augmented
-       prediction.
+       prediction. The marginal log-likelihood term (containing the
+       log-determinant of the line-amplitude posterior covariance) is
+       discarded.
     3. Augment the model: ``m'(λ) = m(λ) + G â``.
     4. Run cal-poly marginalization on ``m'`` against the observed
        spectrum, returning the marginal log-likelihood.
