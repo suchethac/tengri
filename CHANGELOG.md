@@ -1105,12 +1105,23 @@
   relative difference up to ~1.0 at z=2.0 in the damped wings, smaller at
   other redshifts -- and changes nothing on the grammar path, which always
   supplied 20.3. Part of #2265.
+- (#2363) The slow inference tier runs as three file-partitioned legs, each
+  printing a pytest summary and its 30 slowest tests inside its budget; a
+  labeled PR whose slow or crossval job is skipped fails ci-ok instead of
+  reading as approval.
+
 - The energy-balance-split closure's docstring tagged its luminosity arguments
   `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
   supplies both in `erg/s` (component_factory.py:346). The docstring is now
   unit-agnostic ("as passed"), with a note that both arguments must share the
   same units, and the `dust_L_agn_ir` parameter declaration now explicitly
   states `units="erg/s"` (#2251).
+
+- (#2386) The coverage jobs carry the per-test `--timeout=600
+  --timeout-method=thread` again and their own budgets (1.5× the test
+  shard's), so a hung test is named instead of an anonymous budget kill; the
+  two `Resolve test paths` steps are one script, `tools/ci_split_paths.py`,
+  whose empty-list floor is fixed.
 
 - `finalize_profile_mass` reinserts the marginalized mass through one `jax.jit`
   program cached on the model per engine key (draws, keys, data, noise and
