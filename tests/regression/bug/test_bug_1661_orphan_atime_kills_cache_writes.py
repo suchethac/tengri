@@ -235,10 +235,17 @@ def test_doctor_is_quiet_on_a_healthy_cache(tmp_path):
 def test_orphan_breaks_a_real_jax_put_and_the_repair_fixes_it(tmp_path):
     """End-to-end through ``LRUCache`` -- the component that actually fails.
 
-    The first half pins upstream behavior. If it ever stops raising, JAX has
-    fixed ``_evict_if_needed`` and this workaround can be retired.
+    JAX < 0.11.2 raises FileNotFoundError when an orphan -atime entry is
+    present during a cache write. JAX >= 0.11.2 tolerates the condition
+    silently, accepting and writing the entry normally. This test asserts the
+    outcome in both versions, ensuring the repair path stays load-bearing on
+    older JAX (#2416).
     """
+    from packaging import version as pkg_version
+
     lru = pytest.importorskip("jax._src.lru_cache")
+    import jax
+
     cache = lru.LRUCache(str(tmp_path), max_size=8 * 1024**3)
 
     cache.put("good", b"x" * 64)
@@ -246,12 +253,21 @@ def test_orphan_breaks_a_real_jax_put_and_the_repair_fixes_it(tmp_path):
 
     _plant(tmp_path, "orphan", payload=b"y" * 64, with_atime=False)
 
-    with pytest.raises(FileNotFoundError, match="orphan-atime"):
+    jax_version = pkg_version.parse(jax.__version__)
+    jax_0_11_2 = pkg_version.parse("0.11.2")
+
+    if jax_version < jax_0_11_2:
+        # JAX < 0.11.2: orphan -atime causes put to raise
+        with pytest.raises(FileNotFoundError, match="orphan-atime"):
+            cache.put("blocked", b"z" * 64)
+        assert cache.get("blocked") is None, "the entry was silently not cached"
+    else:
+        # JAX >= 0.11.2: orphan is tolerated, put succeeds and entry is written
         cache.put("blocked", b"z" * 64)
-    assert cache.get("blocked") is None, "the entry was silently not cached"
+        assert cache.get("blocked") == b"z" * 64, "entry should be written despite orphan"
 
     jax_cache.repair_orphaned_atimes(tmp_path)
 
     cache.put("blocked", b"z" * 64)
-    assert cache.get("blocked") == b"z" * 64, "writes still broken after repair"
-    assert cache.get("orphan") == b"y" * 64, "repair cost us the orphan's artifact"
+    assert cache.get("blocked") == b"z" * 64, "writes still work after repair"
+    assert cache.get("orphan") == b"y" * 64, "repair preserves the orphan's artifact"
