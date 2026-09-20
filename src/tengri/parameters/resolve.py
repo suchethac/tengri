@@ -16,7 +16,60 @@ dict meets a projector.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
+
+#: Failures that mean "this comparison cannot be resolved under trace", not
+#: "the values differ". One entry per class rather than a scan of
+#: ``jax.errors`` at import time (#2264: ``ConcretizationTypeError`` is not
+#: the base of the ``Tracer*ConversionError`` family; a future jax release
+#: reshuffling the hierarchy must not silently start swallowing an
+#: unrelated error here).
+_NOT_CONCRETE = (
+    jax.errors.ConcretizationTypeError,
+    jax.errors.TracerArrayConversionError,
+    jax.errors.TracerBoolConversionError,
+    jax.errors.TracerIntegerConversionError,
+)
+
+
+def _mirror_value_conflicts(spec, params):
+    r"""Mirror targets present in ``params`` whose value differs from their
+    tied source's resolved value.
+
+    Returns a list of ``(target, source, supplied, resolved)`` tuples, empty
+    when every present mirror target agrees with its source (or the
+    comparison cannot be resolved under trace -- see Notes).
+
+    Notes
+    -----
+    **Jit-safety.** Unlike the plain Fixed-key membership test, this compares
+    *values*, which a traced pytree cannot always support (``bool(tracer)``
+    raises rather than answering). A well-formed params dict reaching this
+    point under ``jax.jit`` came from :meth:`Parameters.sample`'s own
+    ``resolve_mirrors``, where target and source are equal by construction,
+    so when the comparison cannot be resolved concretely this permissively
+    treats it as equal (the pre-existing behavior) rather than raising a
+    tracer error out of a caller that never asked for one.
+    """
+    mirrors = spec.mirrors
+    conflicts = []
+    for target in sorted(set(params) & set(mirrors)):
+        source = mirrors[target]
+        if source in params:
+            resolved = params[source]
+        else:
+            resolved = spec.fixed_value(source)
+        if resolved is None:
+            continue  # cannot resolve the source's value; be permissive
+        supplied = params[target]
+        try:
+            equal = bool(jnp.all(jnp.asarray(supplied) == jnp.asarray(resolved)))
+        except _NOT_CONCRETE:
+            continue
+        if not equal:
+            conflicts.append((target, source, supplied, resolved))
+    return conflicts
 
 
 def refuse_fixed_overrides(spec, params):
@@ -30,8 +83,10 @@ def refuse_fixed_overrides(spec, params):
     is present, enforcing a single rule: rebuild the model if you want to change
     a Fixed parameter.
 
-    This check is static and safe under ``jax.jit`` / ``jax.vmap``: it is a pure
-    membership test on dict keys, with no value comparison.
+    The plain Fixed-key check is static and safe under ``jax.jit`` / ``jax.vmap``:
+    a pure membership test on dict keys, with no value comparison. The mirror-
+    target check below it does compare values (see :func:`_mirror_value_conflicts`
+    for how it stays jit-safe).
 
     Parameters
     ----------
@@ -44,20 +99,29 @@ def refuse_fixed_overrides(spec, params):
     ------
     ParameterError
         If any key in ``params`` is in ``spec.fixed_params`` and is not a
-        mirror target (``spec.mirrors``).
-        Message names the key, the pinned value, and the remedy.
+        mirror target (``spec.mirrors``); message names the key, the pinned
+        value, and the remedy. Also raised if a mirror target IS present and
+        its supplied value differs from its tied source's resolved value;
+        message names the tie and the source to set instead.
 
     Notes
     -----
-    **Mirrors are exempt.** A mirror target (e.g. ``neb_logZ_gas="met_logzsol"``)
-    is stored internally as ``Fixed(0.0)`` -- a placeholder never meant to be
-    read -- and :meth:`Parameters.resolve_mirrors` overwrites it with the
-    tied source's actual sampled value. ``spec.sample()`` calls
-    ``resolve_mirrors`` before returning, so its output legitimately carries
-    the target key at the CORRECT (tied) value, not the placeholder. Refusing
-    that presence would make every mirrored spec's own ``sample()`` output
-    unusable on any predict surface -- refuse the placeholder-owning Fixed
-    key everywhere else, but never a mirror target.
+    **Mirrors are exempt, conditionally.** A mirror target (e.g.
+    ``neb_logZ_gas="met_logzsol"``) is stored internally as ``Fixed(0.0)`` --
+    a placeholder never meant to be read -- and :meth:`Parameters.resolve_mirrors`
+    overwrites it with the tied source's actual sampled value. ``spec.sample()``
+    calls ``resolve_mirrors`` before returning, so its output legitimately
+    carries the target key at the CORRECT (tied) value, not the placeholder,
+    and refusing that presence outright would make every mirrored spec's own
+    ``sample()`` output unusable on any predict surface. But exempting
+    presence unconditionally reopens the exact failure class #2296 closed
+    for ordinary Fixed keys: a caller passing ``dust_slope=-99.0`` on a spec
+    where ``dust_slope`` mirrors ``dust_delta`` (resolved value ``0.25``) had
+    that ``-99.0`` **silently discarded** -- ``resolve_mirrors`` overwrites it
+    with the source's value with no warning. The exemption therefore covers
+    only a target whose supplied value equals the resolved source value (what
+    ``sample()`` produces); a target present at a **different** value is
+    refused, naming the tie and the source to set instead.
     """
     from tengri.config.exceptions import ParameterError
 
@@ -69,6 +133,19 @@ def refuse_fixed_overrides(spec, params):
             "Call-time overrides of a Fixed parameter are not supported (#2296); "
             "rebuild the model with this parameter FREE, or with a different "
             "Fixed value, instead."
+        )
+
+    conflicts = _mirror_value_conflicts(spec, params)
+    if conflicts:
+        detail = "; ".join(
+            f"{target!r} mirrors {source!r} (supplied {supplied!r}, resolved {resolved!r})"
+            for target, source, supplied, resolved in conflicts
+        )
+        raise ParameterError(
+            f"params sets mirror target(s) at a value that differs from their "
+            f"tied source's resolved value: {detail}. A mirror target's value "
+            "is determined by its source, not by itself (#2296); set the "
+            "source parameter instead."
         )
 
 
