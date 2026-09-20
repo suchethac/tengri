@@ -7,13 +7,11 @@
 
 ### Fixed
 
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
+- The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
+  `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
+  threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
+  `StellarSEDComponentConfig`. The #2204 cosmic-age reachability check now judges the
+  configured ladder when provided and names the key in the error message (#2433).
 
 - The photoionized nebular backends floor the SSP age axis at 0.1 Myr, so an
   age-0 anchor template no longer turns every nebular output into NaN
@@ -144,14 +142,6 @@
 
 ### Fixed
 
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
-
 - Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
 
 - Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
@@ -164,14 +154,6 @@
   detected).
 
 ### Fixed
-
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
 
 - Release version now has a single source: `pyproject.toml`. `src/tengri/__init__.py`
   derives `__version__` via `importlib.metadata`, with a fallback for source-tree
@@ -554,14 +536,6 @@
 
 
 ### Fixed
-
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
 
 - `agn_grahsp_a_bc` parameter description now correctly names the 5100 Å (510 nm)
   reference wavelength, matching the implementation and upstream GRAHSP. The
@@ -1069,14 +1043,6 @@
 
 ### Fixed
 
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
-
 - The nebular continuum (Cue, CloudyGrid) no longer stops at its 1 cm table
   edge but continues as optically thin free-free (L_nu ∝ nu^-0.1, anchored at
   the last node) to the grid end, and a Cue model without a radio block now
@@ -1199,14 +1165,6 @@
 
 
 ### Fixed
-
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
 
 - **FeaturePrecomp docstring now states the line-flux accuracy it was measured to (#2376).** The line LUT reproduces measured line fluxes to 4.8e-5–1.0e-3 relative; against typical 5% line errors that is ≲0.002 σ. This accuracy is now documented in the class docstring where a user chooses the approximation.
 
@@ -2616,14 +2574,6 @@ First public preview release.
   0.5-0.7 Å, indistinguishable from a real NuSTAR band.
 
 ### Fixed
-
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
 
 - **Custom filter files advertised `.csv` but could not parse one.**
   `_load_filter_from_directory` listed `.dat`, `.txt`, `.csv` as accepted
@@ -4279,14 +4229,6 @@ physics module at a time onto this contract, slimming
 - Declared license updated from MIT to BSD-3-Clause in `pyproject.toml` and `CITATION.cff`.
 
 ### Fixed
-
-- The `met` group now accepts `met_bin_edges_log_yr` as a structural key to override
-  the default metallicity-history bin ladder (spanning 1 Myr to 13.8 Gyr) for modes
-  using lookback-time bins (`met={'type': 'bins'}` or `'bins_continuity'`). This
-  mirrors the `sfh` group's `bin_edges_gyr` pattern. The key is threaded through
-  the grammar parser, forward model, and component factory to `StellarSEDComponentConfig`.
-  The #2204 cosmic-age refusal now judges the configured ladder when provided,
-  improving the error message to suggest `met_bin_edges_log_yr=` as a solution (#2433).
 
 - (None in this release.)
 
