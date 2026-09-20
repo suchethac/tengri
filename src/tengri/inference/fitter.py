@@ -751,7 +751,7 @@ def _central_params(spec):
     return params
 
 
-def _lut_forward_bias(exact_model, lut_model, data_type):
+def _lut_forward_bias(exact_model, lut_model, data_type, redshift_value=None):
     """Per-channel relative forward bias of the LUT, ``|lut - exact| / |exact|``.
 
     One exact and one LUT forward at the central parameters. Cached on the
@@ -768,6 +768,8 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
     lut_model : SEDModel or ForwardModel
         The resolved clone.
     data_type : {"photometry", "spectroscopy"}
+    redshift_value : float or None
+        If provided, override the redshift parameter to this value.
 
     Returns
     -------
@@ -775,9 +777,11 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         Relative bias per band / pixel [dimensionless].
     """
     cache = getattr(lut_model, "_lut_forward_bias_cache", None)
-    if cache is not None and cache[0] is exact_model:
+    if redshift_value is None and cache is not None and cache[0] is exact_model:
         return cache[1]
     params = _central_params(exact_model.spec)
+    if redshift_value is not None:
+        params["redshift"] = redshift_value
     if data_type == "photometry":
         m_exact = np.asarray(exact_model.predict_photometry(params), dtype=float)
         m_lut = np.asarray(lut_model.predict_photometry(params), dtype=float)
@@ -786,9 +790,36 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         m_lut = np.asarray(lut_model.predict_spectrum(params), dtype=float)
     bias = np.abs(m_lut - m_exact) / np.maximum(np.abs(m_exact), np.finfo(float).tiny)
     # A frozen model just recomputes; the advisory still works.
-    with contextlib.suppress(Exception):
-        lut_model._lut_forward_bias_cache = (exact_model, bias)
+    if redshift_value is None:
+        with contextlib.suppress(Exception):
+            lut_model._lut_forward_bias_cache = (exact_model, bias)
     return bias
+
+
+def _get_z_grid_from_lut(lut_model):
+    """Attempt to extract the z-grid from a WavePrecomp LUT model.
+
+    Returns the z-grid array if available, otherwise None.
+    """
+    try:
+        # Try to get the z-table from the cached stellar component
+        cached = getattr(lut_model, "_cached_component_chain", None)
+        if cached is None:
+            return None
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        for component in cached:
+            if isinstance(component, StellarSEDComponent):
+                state = component._state
+                if state is not None:
+                    ztable = getattr(state, "ssp_phot_ztable", None)
+                    if ztable is not None:
+                        z_grid = getattr(ztable, "z_grid", None)
+                        if z_grid is not None:
+                            return np.asarray(z_grid, dtype=float)
+        return None
+    except Exception:
+        return None
 
 
 def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, *, surface):
@@ -825,7 +856,59 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
     if data_type not in ("photometry", "spectroscopy"):
         return
     try:
-        bias = _lut_forward_bias(exact_model, lut_model, data_type)
+        # Determine if redshift is FREE and get the prior bounds
+        spec = exact_model.spec
+        z_is_free = "redshift" in spec.free_params
+        z_prior_bounds = None
+        z_peak = None
+
+        if z_is_free:
+            try:
+                z_dist = spec.get_distribution("redshift")
+                z_prior_bounds = z_dist.bounds
+            except (KeyError, AttributeError, NotImplementedError):
+                z_is_free = False
+
+        # For free-redshift fits, evaluate bias at multiple z values
+        if z_is_free and z_prior_bounds is not None:
+            z_min, z_max = float(z_prior_bounds[0]), float(z_prior_bounds[1])
+            z_grid = _get_z_grid_from_lut(lut_model)
+
+            # Choose evaluation redshifts to span at least one table step
+            if z_grid is not None and len(z_grid) > 1:
+                # Estimate table step size
+                z_step = (z_grid[-1] - z_grid[0]) / (len(z_grid) - 1)
+                # If prior is smaller than one step, evaluate at bounds; otherwise
+                # span at least one step within the prior
+                prior_width = z_max - z_min
+                if prior_width < z_step:
+                    eval_z_values = [z_min, z_max]
+                else:
+                    # Evaluate at multiple points spanning at least one step
+                    n_eval = max(2, int(np.ceil(prior_width / z_step)) + 1)
+                    eval_z_values = np.linspace(z_min, z_max, min(n_eval, 5)).tolist()
+            else:
+                # Fall back to prior bounds if z_grid not available
+                eval_z_values = [z_min, z_max]
+
+            # Evaluate bias at each z value and find worst case
+            biases_at_z = []
+            for z_val in eval_z_values:
+                biases_at_z.append(
+                    _lut_forward_bias(
+                        exact_model, lut_model, data_type, redshift_value=float(z_val)
+                    )
+                )
+
+            # Find the z value with the worst max bias
+            max_biases = [np.nanmax(b) for b in biases_at_z]
+            worst_idx = int(np.nanargmax(max_biases))
+            z_peak = float(eval_z_values[worst_idx])
+            bias = biases_at_z[worst_idx]
+        else:
+            # Fixed redshift: single evaluation at the fiducial z
+            bias = _lut_forward_bias(exact_model, lut_model, data_type)
+
         flat_data = np.asarray(data, dtype=float).reshape(-1)
         flat_noise = np.asarray(noise, dtype=float).reshape(-1)
         n = int(bias.shape[0])
@@ -845,17 +928,35 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
     from tengri.config.exceptions import PrecompBiasWarning, warn_measured
 
     remedy = "approx=None (the exact path on every surface since #2385)"
+    if z_peak is not None:
+        msg = (
+            f"{surface}: the precompute LUT's forward bias, amplified by this "
+            f"fit's SNR, gives an estimated relative posterior-gradient error "
+            f"of {est:.0%} (worst channel {channel}: forward bias "
+            f"{bias_at:.2%} at SNR {snr_at:.0f}, peak at z={z_peak:.3f}). "
+            f"The bias is constant in SNR (invisible to any forward check) but "
+            f"enters the gradient multiplied by SNR, moves the mode, and better "
+            f"data makes it worse (#1671; spectroscopy sibling measured in #1688). "
+            f"For final inference at this SNR, rerun with {remedy} "
+            f"or compare the two posteriors. Filter PrecompBiasWarning "
+            f"if this trade is deliberate."
+        )
+    else:
+        msg = (
+            f"{surface}: the precompute LUT's forward bias, amplified by this "
+            f"fit's SNR, gives an estimated relative posterior-gradient error "
+            f"of {est:.0%} (worst channel {channel}: forward bias "
+            f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
+            f"(invisible to any forward check) but enters the gradient "
+            f"multiplied by SNR, moves the mode, and better data makes it "
+            f"worse (#1671; spectroscopy sibling measured in #1688). For "
+            f"final inference at this SNR, rerun with {remedy} "
+            f"or compare the two posteriors. Filter PrecompBiasWarning "
+            f"if this trade is deliberate."
+        )
+
     warn_measured(
-        f"{surface}: the precompute LUT's forward bias, amplified by this "
-        f"fit's SNR, gives an estimated relative posterior-gradient error "
-        f"of {est:.0%} (worst channel {channel}: forward bias "
-        f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
-        f"(invisible to any forward check) but enters the gradient "
-        f"multiplied by SNR, moves the mode, and better data makes it "
-        f"worse (#1671; spectroscopy sibling measured in #1688). For "
-        f"final inference at this SNR, rerun with {remedy} "
-        f"or compare the two posteriors. Filter PrecompBiasWarning "
-        f"if this trade is deliberate.",
+        msg,
         PrecompBiasWarning,
         stacklevel=3,
         gradient_error_estimate=est,

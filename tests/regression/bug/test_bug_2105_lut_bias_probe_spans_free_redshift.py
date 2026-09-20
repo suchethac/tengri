@@ -49,6 +49,7 @@ def _pair(rel_bias):
 
 
 def test_bias_high_snr_warns():
+    """Baseline: Fixed redshift, high bias with high SNR should warn."""
     exact, lut = _pair(2e-3)
     data = exact._flux
     noise = np.abs(data) / 100.0
@@ -57,3 +58,15 @@ def test_bias_high_snr_warns():
         _warn_if_lut_bias_amplified(exact, lut, data, noise, "photometry", surface="Fitter")
     msg = str(rec[0].message)
     assert "approx=None" in msg
+
+
+def test_bias_low_snr_no_warn():
+    """Low SNR (noise >> signal) should not trigger warning."""
+    exact, lut = _pair(2e-3)
+    data = exact._flux
+    noise = np.abs(data) / 10.0  # SNR=10, bias x SNR = 2% < 5%
+
+    with pytest.warns(None) as rec:
+        _warn_if_lut_bias_amplified(exact, lut, data, noise, "photometry", surface="Fitter")
+    precomp_warnings = [r for r in rec if "PrecompBias" in str(r.message)]
+    assert len(precomp_warnings) == 0

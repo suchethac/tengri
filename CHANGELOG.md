@@ -26,6 +26,13 @@
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
 
+- LUT-bias advisory now spans free-redshift prior (#2105): on a free-redshift
+  fit, the z-interpolation error along the LUT's z-axis is a second error term
+  invisible to a single-point forward probe. The advisory now evaluates
+  `_lut_forward_bias` at multiple redshifts spanning one table step of the LUT's
+  z-grid within the prior and takes the worst case, naming `approx=None` — the
+  exact path on every surface since #2385 — as the remedy.
+
 ### Fixed
 
 - Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
