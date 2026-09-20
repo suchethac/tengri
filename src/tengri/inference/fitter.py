@@ -77,6 +77,7 @@ from tengri.inference.loss_functions import (
     build_logprior_fn,
     build_loss_fn,
 )
+from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
 
 # ── Method name validation ────────────────────────────────────────────
@@ -895,10 +896,36 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         stays exact, never break a fit that worked, only make its cost
         visible.
     """
-    if approx is None:
-        return model
     if getattr(model, "with_approx", None) is None:
         return model
+    if approx is None:
+        # Nothing attached is already the exact path, and cloning to strip an
+        # absent LUT is "a clone that buys nothing" — the thing
+        # ``test_a_model_already_carrying_the_lut_is_not_rewrapped`` exists to
+        # forbid. Strip only when there is something to strip.
+        _state = getattr(model, "approx", None)
+        if _state is None or not (
+            getattr(_state, "wave_precomp", False)
+            or getattr(_state, "spectrum_precomp", False)
+            or getattr(_state, "feature_precomp", False)
+        ):
+            return model
+        # #2377: force the exact path here too, mirroring the ``None`` branch of
+        # ``Fitter._resolve_fit_approx``, whose docstring is explicit that ``None``
+        # "overrides a build-time approx" and "means exact and stays exact". This
+        # returned ``model`` untouched, so a catalog or population fit built with
+        # ``approx=(WavePrecomp(), FeaturePrecomp())`` kept BOTH tables on after the
+        # caller asked, in the documented spelling, for the exact path. One word
+        # meant two opposite things depending on which fitter you reached for, and
+        # the surface that kept the approximation is the one whose fits are largest.
+        #
+        # Not a speed regression to protect: it is the contract being honored. It
+        # also makes the advice in ``PrecompBiasWarning`` actionable -- that warning
+        # tells the reader "for final inference at this SNR, rerun with approx=None
+        # (the exact path)", which on these surfaces previously changed nothing.
+        # #1671 is precisely about WavePrecomp's forward bias entering the posterior
+        # gradient multiplied by SNR, so a reference run is exactly where it bites.
+        return _memoized_approx_clone(model, None)
 
     if isinstance(approx, str):
         if approx != "auto":
@@ -1568,6 +1595,18 @@ class Fitter:
                     raise ValueError(
                         f"Parameter {key!r} is not a valid parameter name. "
                         f"Valid parameters: {all_params}"
+                    )
+                # Check if the built likelihood can read this parameter.
+                # Noise parameters are only wired into the likelihood when
+                # has_noise_model(spec) is True. If not, a noise_* override is
+                # silently accepted but has no effect on the fit (issue #2193).
+                if is_noise_parameter(key) and not has_noise_model(self.spec):
+                    raise ValueError(
+                        f"params_override names {key!r}, but this model's likelihood does not "
+                        f"read it: noise parameters are only consumed when declared in the spec "
+                        f"(free, or Fixed at a nonzero value). Declare it via "
+                        f"Observation(noise=NoiseModel(calibration_floor=...)) instead of "
+                        f"overriding it at fit time."
                     )
             # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
