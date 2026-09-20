@@ -613,6 +613,64 @@ def _valid_dust_laws() -> frozenset[str]:
     return frozenset(DUST_LAWS.keys())
 
 
+def _unknown_name_error(
+    kind: str,
+    name: str,
+    valid_names: Iterable[str],
+    *,
+    keyword: str,
+    extra: str = "",
+    n_suggestions: int = 2,
+    alias_hint: str | None = None,
+) -> ValueError:
+    """Build a ValueError for an unknown name, with citation key hints.
+
+    When a user provides an unknown name (e.g., dust law), check if it's a
+    known citation key and explain which registry entry it cites. Fall back
+    to difflib suggestions if not a citation key.
+
+    Parameters
+    ----------
+    kind : str
+        Type of thing being validated (e.g., "dust law").
+    name : str
+        The unknown name the user provided.
+    valid_names : Iterable[str]
+        Valid registry names for this category.
+    keyword : str
+        The parameter keyword (e.g., "law", "law_bc").
+    extra : str
+        Extra information to append after the suggestion (e.g., " Available: ...").
+    n_suggestions : int
+        Number of difflib suggestions to show (default 2).
+    alias_hint : str | None
+        If provided and in valid_names, use this as the suggestion instead
+        of difflib. Used for alias maps like _NEBULAR_TYPE_HINTS.
+
+    Returns
+    -------
+    ValueError
+        An error message with citation hint or difflib suggestions.
+    """
+    from tengri.citations.resolve import citation_key_hint
+
+    valid_list = list(valid_names)
+    hint = citation_key_hint(name, valid_list, kind=kind, keyword=keyword)
+
+    if not hint:
+        # Fall back to alias hint or difflib suggestion
+        if alias_hint is not None and alias_hint in valid_list:
+            hint = f"Did you mean: {alias_hint}?"
+        else:
+            suggestions = difflib.get_close_matches(name, valid_list, n=n_suggestions, cutoff=0.6)
+            hint = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+
+    if hint:
+        hint = f" {hint}"
+
+    return ValueError(f"Unknown {kind} '{name}'.{hint}{extra}")
+
+
 def _agn_block_types(category: str) -> frozenset[str]:
     """Derive valid AGN block-type names for ``category`` from the registry.
 
@@ -3034,9 +3092,9 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
             if type_name not in valid:
-                suggestions = difflib.get_close_matches(type_name, valid, n=3, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
+                raise _unknown_name_error(
+                    "SFH type", type_name, valid, keyword="type", n_suggestions=3
+                )
             _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
@@ -3051,9 +3109,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         )
 
     if sfh_type not in valid:
-        suggestions = difflib.get_close_matches(sfh_type, valid, n=3, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
+        raise _unknown_name_error("SFH type", sfh_type, valid, keyword="type", n_suggestions=3)
 
     _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
@@ -3113,11 +3169,12 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
 
     valid_modes = sorted(MET_REGISTRY.keys())
     if met_mode not in MET_REGISTRY:
-        suggestions = difflib.get_close_matches(met_mode, valid_modes, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(
-            f"Unknown metallicity mode '{met_mode}' in {key}. Valid modes: "
-            f"{', '.join(valid_modes)}.{suggest_str}"
+        raise _unknown_name_error(
+            "metallicity mode",
+            met_mode,
+            valid_modes,
+            keyword="type",
+            extra=f" Valid modes: {', '.join(valid_modes)}.",
         )
 
     result["met_mode"] = met_mode
@@ -3356,9 +3413,9 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 f"to give the two screens different laws. Valid dust types are: "
                 f"{', '.join(sorted(_VALID_DUST_TYPES))}."
             )
-        suggestions = difflib.get_close_matches(dust_type, _VALID_DUST_TYPES, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown dust_attenuation type '{dust_type}'.{suggest_str}")
+        raise _unknown_name_error(
+            "dust_attenuation type", dust_type, _VALID_DUST_TYPES, keyword="type"
+        )
 
     result["dust_model"] = dust_type
 
@@ -3539,9 +3596,7 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 f"'law': 'calzetti', 'tau_v': ...}}"
             )
         if dust_law not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+            raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
         # Store law on both _bc and _diff for consistency (single screen)
         result["dust_law_bc"] = dust_law
         result["dust_law_diff"] = dust_law
@@ -3593,30 +3648,24 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         # Resolve to the two-screen form
         if has_law:
             if dust_law not in valid_laws:
-                suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+                raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
             result["dust_law_bc"] = dust_law
             result["dust_law_diff"] = dust_law
         else:
             # Both law_bc and law_diff are given (already checked above)
             if dust_law_bc not in valid_laws:
-                suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
+                raise _unknown_name_error("dust law", dust_law_bc, valid_laws, keyword="law_bc")
             if dust_law_diff not in valid_laws:
-                suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
+                raise _unknown_name_error(
+                    "dust law", dust_law_diff, valid_laws, keyword="law_diff"
+                )
             result["dust_law_bc"] = dust_law_bc
             result["dust_law_diff"] = dust_law_diff
 
     # law_neb: optional per-screen override for nebular birth cloud. None -> inherit dust_law_bc
     if dust_law_neb is not None:
         if dust_law_neb not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law_neb, valid_laws, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law_neb}'.{suggest_str}")
+            raise _unknown_name_error("dust law", dust_law_neb, valid_laws, keyword="law_neb")
         result["dust_law_neb"] = dust_law_neb
 
     # Per-component law-parameter overrides: slope_bc / slope_diff / slope_neb /
@@ -3804,11 +3853,9 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
         # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.
         valid_emission_types = _valid_dust_emission_types()
         if emission_type not in valid_emission_types:
-            suggestions = difflib.get_close_matches(
-                emission_type, valid_emission_types, n=3, cutoff=0.6
+            raise _unknown_name_error(
+                "dust_emission type", emission_type, valid_emission_types, keyword="type"
             )
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust_emission type '{emission_type}'.{suggest_str}")
         result["dust_emission"] = emission_type
 
         # Astrodust+PAH (HD23) optional configuration: spinning dust (AME)
@@ -3843,16 +3890,14 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
     # Validate type
     valid_neb = _valid_nebular_types()
     if neb_type not in valid_neb:
-        hint = _NEBULAR_TYPE_HINTS.get(str(neb_type).lower())
-        suggestions = (
-            [hint]
-            if hint in valid_neb
-            else difflib.get_close_matches(neb_type, valid_neb, n=2, cutoff=0.6)
-        )
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(
-            f"Unknown nebular type '{neb_type}'.{suggest_str} "
-            f"Available: {', '.join(sorted(valid_neb))}."
+        alias = _NEBULAR_TYPE_HINTS.get(str(neb_type).lower())
+        raise _unknown_name_error(
+            "nebular type",
+            neb_type,
+            valid_neb,
+            keyword="type",
+            alias_hint=alias,
+            extra=f" Available: {', '.join(sorted(valid_neb))}.",
         )
 
     # Map type to nebular settings
@@ -3935,9 +3980,7 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
     shock_type = _normalize_off_switch(shock_dict.get("type", "mappings"))
     valid_shock = _VALID_SHOCK_TYPES
     if shock_type not in valid_shock:
-        suggestions = difflib.get_close_matches(shock_type, valid_shock, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown shock type '{shock_type}'.{suggest_str}")
+        raise _unknown_name_error("shock type", shock_type, valid_shock, keyword="type")
 
     if shock_type == "none":
         result["shock"] = False
@@ -3982,9 +4025,7 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     # Validate type
     valid_igm = _valid_igm_types()
     if igm_type not in valid_igm:
-        suggestions = difflib.get_close_matches(igm_type, valid_igm, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
+        raise _unknown_name_error("IGM type", igm_type, valid_igm, keyword="type")
 
     # IGM is activated by the presence of the igm dict.
     # If type='none', it is explicitly deactivated.
@@ -4151,9 +4192,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
 
             valid_sf = frozenset(SF_RADIO_MODELS)
             if sf_variant not in valid_sf:
-                suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown radio sf type '{sf_variant}'.{suggest_str}")
+                raise _unknown_name_error("radio sf type", sf_variant, valid_sf, keyword="type")
             # Handle optional 'freefree' boolean key in the sf sub-dict
             if "freefree" in sf_dict:
                 freefree_val = sf_dict["freefree"]
@@ -4173,9 +4212,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
 
             valid_agn = frozenset(AGN_RADIO_MODELS)
             if agn_variant not in valid_agn:
-                suggestions = difflib.get_close_matches(agn_variant, valid_agn, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown radio agn type '{agn_variant}'.{suggest_str}")
+                raise _unknown_name_error("radio agn type", agn_variant, valid_agn, keyword="type")
         else:
             raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
 
@@ -4347,11 +4384,12 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     law = fg_dict.get("law", "cardelli")
     rv = fg_dict.get("rv", 3.1)
     if law not in _VALID_FOREGROUND_LAWS:
-        suggestions = difflib.get_close_matches(law, _VALID_FOREGROUND_LAWS, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(
-            f"Unknown foreground law {law!r}. Valid: "
-            f"{sorted(_VALID_FOREGROUND_LAWS)}.{suggest_str}"
+        raise _unknown_name_error(
+            "foreground law",
+            law,
+            _VALID_FOREGROUND_LAWS,
+            keyword="law",
+            extra=f" Valid: {sorted(_VALID_FOREGROUND_LAWS)}.",
         )
     if float(ebmv) < 0:
         raise ValueError(f"foreground.ebmv_mw must be >= 0, got {ebmv}")
@@ -4369,9 +4407,7 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     # Validate type
     valid_xray = _valid_xray_types()
     if xray_type not in valid_xray:
-        suggestions = difflib.get_close_matches(xray_type, valid_xray, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown X-ray type '{xray_type}'.{suggest_str}")
+        raise _unknown_name_error("X-ray type", xray_type, valid_xray, keyword="type")
 
     result["xray"] = xray_type != "none"
     # Thread the corona prescription (yang20 / simple / lopez24) to the
@@ -5552,12 +5588,24 @@ def _check_dict_keys(
                 f"it here would be silently ignored. Nest it: "
                 f"{group}={{{sub!r}: {{{key!r}: ...}}}}."
             )
-        suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
-        # A suggestion identical to the rejected key is noise, not help.
-        suggestions = [s for s in suggestions if s != str(key)]
-        # Filter out the internal '*' key from suggestions defensively.
-        suggestions = [s for s in suggestions if s != WILDCARD_KEY]
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        # Check if the unknown key is a citation key
+        from tengri.citations.resolve import citation_key_hint
+
+        valid_structural = list(suggestion_pool)
+        hint = citation_key_hint(
+            str(key), valid_structural, kind=f"key for group {group!r}", keyword="key"
+        )
+
+        if not hint:
+            suggestions = difflib.get_close_matches(
+                str(key), list(suggestion_pool), n=2, cutoff=0.6
+            )
+            # A suggestion identical to the rejected key is noise, not help.
+            suggestions = [s for s in suggestions if s != str(key)]
+            # Filter out the internal '*' key from suggestions defensively.
+            suggestions = [s for s in suggestions if s != WILDCARD_KEY]
+            hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+
         # Display user-facing keys only (exclude internal WILDCARD_KEY '*').
         # Base set by default; a caller with type-specific structural keys
         # (currently only the top-level 'neb' dispatch) passes the resolved
@@ -5570,7 +5618,7 @@ def _check_dict_keys(
         )
         displayed_keys = sorted({k for k in structural_source if k != WILDCARD_KEY})
         raise ValueError(
-            f"Unknown key {key!r} in group {group!r}.{suggest_str} "
+            f"Unknown key {key!r} in group {group!r}.{hint} "
             f"Valid structural keys for this group are: "
             f"{displayed_keys}."
         )
@@ -6132,9 +6180,9 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
 
         # Validate type
         if block_type not in valid_types:
-            suggestions = difflib.get_close_matches(block_type, valid_types, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown agn_{block_name}_block type '{block_type}'.{suggest_str}")
+            raise _unknown_name_error(
+                f"agn_{block_name}_block type", block_type, valid_types, keyword="type"
+            )
 
         result[block_to_kwarg[block_name]] = block_type
 
