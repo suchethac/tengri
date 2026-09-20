@@ -58,18 +58,28 @@ class TestMetBinEdgesGrammarStructuralKey:
         # Verify spec carries the ladder
         assert model.spec.met_bin_edges_log_yr == custom_edges
 
-    def test_engagement_custom_ladder_affects_stellar_config(
+    def test_default_ladder_explicit_vs_implicit_bit_identical(
         self, synthetic_ssp, simple_observation
     ):
-        """(b) Engagement: custom ladder is observed by stellar component config.
+        """(b.equiv) Equality: explicit default ladder vs implicit → bit-identical prediction.
 
-        Verify the met_bin_edges_log_yr is stored in the spec and can be retrieved.
-        The ladder structure is validated and used to interpret met_bin parameters.
+        Passing the default met_bin_edges_log_yr explicitly should yield bit-identical
+        photometry and SED to omitting the key and using the implicit default.
         """
         obs = simple_observation
-        ladder = [6.0, 8.0, 9.5]
+        default_ladder = [6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14]
 
-        model = SEDModel.build(
+        # Build model with implicit default
+        model_implicit = SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=obs,
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
+            met={"type": "bins", "all_params": Fixed(DEFAULT), "met_bin_0": -0.3},
+            redshift=Fixed(0.1),
+        )
+
+        # Build model with explicit default ladder
+        model_explicit = SEDModel.build(
             ssp_data=synthetic_ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
@@ -77,26 +87,70 @@ class TestMetBinEdgesGrammarStructuralKey:
                 "type": "bins",
                 "all_params": Fixed(DEFAULT),
                 "met_bin_0": -0.3,
-                "met_bin_edges_log_yr": ladder,
+                "met_bin_edges_log_yr": default_ladder,
+            },
+            redshift=Fixed(0.1),
+        )
+
+        # Predict with both models
+        params = {}
+        pred_implicit = model_implicit.predict(params)
+        pred_explicit = model_explicit.predict(params)
+
+        # Rest SEDs should be bit-identical
+        sed_implicit = pred_implicit.rest_sed()
+        sed_explicit = pred_explicit.rest_sed()
+        np.testing.assert_array_equal(
+            sed_implicit,
+            sed_explicit,
+            err_msg="Explicit and implicit default ladder should give identical SED",
+        )
+
+        # Photometry should also be bit-identical
+        phot_implicit = pred_implicit.photometry()
+        phot_explicit = pred_explicit.photometry()
+        np.testing.assert_array_equal(
+            phot_implicit,
+            phot_explicit,
+            err_msg="Explicit and implicit default ladder should give identical photometry",
+        )
+
+    def test_engagement_custom_ladder_is_stored_in_spec(self, synthetic_ssp, simple_observation):
+        """(b) Engagement: custom ladder structure is stored and retrieved from spec.
+
+        Build a SEDModel with met_bin_edges_log_yr and verify the ladder is
+        stored in the spec and can be retrieved for inspection and round-tripping.
+        """
+        obs = simple_observation
+        custom_ladder = [6.0, 7.0, 8.0, 8.5, 9.2, 9.8, 10.14]
+
+        # Build model with custom ladder
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=obs,
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
+            met={
+                "type": "bins",
+                "met_bin_0": -0.5,
+                "met_bin_1": -0.3,
+                "met_bin_2": -0.1,
+                "met_bin_3": 0.0,
+                "met_bin_4": 0.1,
+                "met_bin_5": 0.2,
+                "met_bin_edges_log_yr": custom_ladder,
             },
             redshift=Fixed(0.1),
         )
 
         # Verify spec carries the ladder
-        assert model.spec.met_bin_edges_log_yr == ladder
+        assert model.spec.met_bin_edges_log_yr == custom_ladder
 
-        # Predict and verify the model uses the ladder-informed stellar component
+        # Verify model can predict (structural engagement test)
         params = {}
         pred = model.predict(params)
-
-        # SED should be finite and non-zero (engagement test: model can predict)
         sed = pred.rest_sed()
-        assert np.all(np.isfinite(sed))
-        assert np.any(sed > 0), "Engagement failure: stellar SED should be non-zero"
-
-        # The stellar component should have received the ladder
-        # (no direct accessor, but the fact that the model builds and predicts
-        # with a custom ladder structure proves it was accepted and used)
+        assert np.all(np.isfinite(sed)), "SED should be finite"
+        assert np.any(sed > 0), "SED should be non-zero"
 
     def test_configured_ladder_fixes_2204_refusal(self, synthetic_ssp, simple_observation):
         """(c) #2204 remedy: configured ladder that fits cosmic age builds where default refuses.
