@@ -57,7 +57,9 @@ model_a = SEDModel.build(
         "type": "dexp",
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_gyr": 0.3,
-        "log_total_mass": 10.0,  # Will be tuned for magnitude match
+        # Tuned below by _bisect_log_total_mass over [lo, hi] = [-1, 3]
+        # (#2296: a params-dict key the spec declared Fixed is refused).
+        "log_total_mass": tengri.Uniform(-1.0, 3.0),
     },
     dust_attenuation={
         "type": "two_component",
@@ -67,13 +69,18 @@ model_a = SEDModel.build(
         "tau_diff": 0.8,
     },
     neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    # ``met_logzsol`` is overridden below to -0.1 (no ``met=`` group ->
+    # defaults to Fixed(DEFAULT) = 0.0, so this is a real change, not a
+    # no-op) (#2296: a params-dict key the spec declared Fixed is refused).
+    met={"logzsol": tengri.Uniform(-2.0, 0.2)},
     redshift=tengri.Fixed(0.5),
     igm={"type": "inoue"},
 )
 
 baseline_a = dict(model_a.spec.sample(jax.random.PRNGKey(0)))
 baseline_a["met_logzsol"] = -0.1
-baseline_a["dust_tau_diff"] = 0.8
+# dust_tau_diff=0.8 is already this build's Fixed value (see tau_diff above)
+# -- the override was a no-op; dropped rather than freed (#2296).
 
 # Scenario B: Old + clean + mid-z
 # Use a very declining SFH with long timescale (old light-weighted age)
@@ -85,7 +92,9 @@ model_b = SEDModel.build(
         "type": "dexp",
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_gyr": 8.0,
-        "log_total_mass": 10.0,  # Will be tuned
+        # Tuned below by _bisect_log_total_mass over [lo, hi] = [-1, 3]
+        # (#2296: a params-dict key the spec declared Fixed is refused).
+        "log_total_mass": tengri.Uniform(-1.0, 3.0),
     },
     dust_attenuation={
         "type": "two_component",
@@ -95,13 +104,18 @@ model_b = SEDModel.build(
         "tau_diff": 0.05,
     },
     neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    # ``met_logzsol`` is overridden below to -0.1 (no ``met=`` group ->
+    # defaults to Fixed(DEFAULT) = 0.0, so this is a real change, not a
+    # no-op) (#2296: a params-dict key the spec declared Fixed is refused).
+    met={"logzsol": tengri.Uniform(-2.0, 0.2)},
     redshift=tengri.Fixed(1.0),
     igm={"type": "inoue"},
 )
 
 baseline_b = dict(model_b.spec.sample(jax.random.PRNGKey(1)))
 baseline_b["met_logzsol"] = -0.1
-baseline_b["dust_tau_diff"] = 0.05
+# dust_tau_diff=0.05 is already this build's Fixed value (see tau_diff
+# above) -- the override was a no-op; dropped rather than freed (#2296).
 
 # Scenario C: Post-starburst + dust + high-z
 # Use log-normal peak with intermediate age at peak
@@ -114,7 +128,9 @@ model_c = SEDModel.build(
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "peak_gyr": 1.0,
         "width_gyr": 0.5,
-        "log_total_mass": 10.0,  # Will be tuned
+        # Tuned below by _bisect_log_total_mass over [lo, hi] = [-1, 3]
+        # (#2296: a params-dict key the spec declared Fixed is refused).
+        "log_total_mass": tengri.Uniform(-1.0, 3.0),
     },
     dust_attenuation={
         "type": "two_component",
@@ -124,13 +140,18 @@ model_c = SEDModel.build(
         "tau_diff": 0.3,
     },
     neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    # ``met_logzsol`` is overridden below to -0.1 (no ``met=`` group ->
+    # defaults to Fixed(DEFAULT) = 0.0, so this is a real change, not a
+    # no-op) (#2296: a params-dict key the spec declared Fixed is refused).
+    met={"logzsol": tengri.Uniform(-2.0, 0.2)},
     redshift=tengri.Fixed(1.5),
     igm={"type": "inoue"},
 )
 
 baseline_c = dict(model_c.spec.sample(jax.random.PRNGKey(2)))
 baseline_c["met_logzsol"] = -0.1
-baseline_c["dust_tau_diff"] = 0.3
+# dust_tau_diff=0.3 is already this build's Fixed value (see tau_diff above)
+# -- the override was a no-op; dropped rather than freed (#2296).
 
 
 # Bisection helper to find log_total_mass that produces target r-band magnitude

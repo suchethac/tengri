@@ -114,10 +114,10 @@ def test_forward_predict_batched_matches_per_galaxy_predict_one(
     for i in range(N):
         params_one = {name: jnp.array([0.5, 0.7])[i] for name in template.spec.free_params}
         state_one = pop.predict_one(state, params_one)
-        # Merge fixed values (which ForwardModel.predict does internally)
-        full_params = dict(template.spec.get_fixed_values())
-        full_params.update(params_one)
-        per_galaxy.append(simple_observation.predict(state_one, full_params))
+        # observation.predict needs the full params dict with Fixed values
+        full_params_one = dict(template.spec.get_fixed_values())
+        full_params_one.update(params_one)
+        per_galaxy.append(simple_observation.predict(state_one, full_params_one))
 
     phot_key = next((k for k in ("phot_fnu", "fnu_obs") if k in pred_batched), None)
     assert phot_key is not None

@@ -579,21 +579,33 @@ def _build_signal_response(fitter):
     def signal_response(primals):
         """Compute predicted data from unbounded parameters."""
         params = _primals_to_params(primals)
+        # predict_photometry / predict_spectrum / _photometry_via_state /
+        # _spectrum_via_state are all public-refusing surfaces (#2296): they
+        # merge the model's own Fixed values internally and refuse a params
+        # key the spec already declared Fixed. ``params`` here is the FULL
+        # free+fixed dict (needed by ``spec.resolve_mirrors`` above), so
+        # filter to free names before handing it to any of them -- the same
+        # pattern ``loss_functions._build_prediction`` uses. Read the free
+        # names through ``model`` (already an accounted closure ingredient,
+        # see test_baked_closure_ingredients_are_keyed.py) rather than
+        # closing over the outer ``free_names`` directly, which would bake a
+        # second, unaccounted copy of spec-dependent state into this closure.
+        free_params = {k: v for k, v in params.items() if k in model.spec.free_params}
         if data_type == "photometry":
             if use_components:
-                return model._photometry_via_state(params)
-            return model.predict_photometry(params)
+                return model._photometry_via_state(free_params)
+            return model.predict_photometry(free_params)
         elif data_type == "spectroscopy":
             if use_components:
-                return model._spectrum_via_state(params)
-            return model.predict_spectrum(params)
+                return model._spectrum_via_state(free_params)
+            return model.predict_spectrum(free_params)
         elif data_type == "joint":
             if use_components:
-                p = model._photometry_via_state(params)
-                s = model._spectrum_via_state(params)
+                p = model._photometry_via_state(free_params)
+                s = model._spectrum_via_state(free_params)
             else:
-                p = model.predict_photometry(params)
-                s = model.predict_spectrum(params)
+                p = model.predict_photometry(free_params)
+                s = model.predict_spectrum(free_params)
             return jnp.concatenate([p, s])
         raise ValueError(f"Unknown data_type: {data_type}")
 
@@ -746,23 +758,33 @@ def build_jit_engine(fitter, pos_dict):
         def signal_noise_response(primals, data_args):
             """Return (predicted, std_inv) tuple for variable noise metric."""
             params = _primals_to_params(primals)
+            # See signal_response above: filter to free names before handing
+            # to a public-refusing predict_* surface (#2296); ``params``
+            # itself (full free+fixed) stays available for the
+            # noise_frac_cal read below. Filter on ``model.spec.free_params``,
+            # not ``fitter._free_names``: under profile_mass the latter reads
+            # the fitter's WORKING spec, which pins the mass Fixed at an
+            # analytic placeholder, so it would drop a mass the model's own
+            # (user-facing) spec still declares free -- check_missing_free_
+            # params then raises inside predict_photometry/predict_spectrum.
+            free_params = {k: v for k, v in params.items() if k in model.spec.free_params}
             if data_type == "photometry":
                 if use_components:
-                    predicted = model._photometry_via_state(params)
+                    predicted = model._photometry_via_state(free_params)
                 else:
-                    predicted = model.predict_photometry(params)
+                    predicted = model.predict_photometry(free_params)
             elif data_type == "spectroscopy":
                 if use_components:
-                    predicted = model._spectrum_via_state(params)
+                    predicted = model._spectrum_via_state(free_params)
                 else:
-                    predicted = model.predict_spectrum(params)
+                    predicted = model.predict_spectrum(free_params)
             elif data_type == "joint":
                 if use_components:
-                    p = model._photometry_via_state(params)
-                    s = model._spectrum_via_state(params)
+                    p = model._photometry_via_state(free_params)
+                    s = model._spectrum_via_state(free_params)
                 else:
-                    p = model.predict_photometry(params)
-                    s = model.predict_spectrum(params)
+                    p = model.predict_photometry(free_params)
+                    s = model.predict_spectrum(free_params)
                 predicted = jnp.concatenate([p, s])
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")

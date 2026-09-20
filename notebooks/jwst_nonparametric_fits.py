@@ -168,7 +168,6 @@ build_wall = time.perf_counter() - t0
 
 MASS_KEY = next(k for k in model.spec.free_params if k.endswith("log_total_mass"))
 RATIO_KEYS = [p for p in model.spec.free_params if "ratio" in p]
-FIXED_VALUES = dict(model.spec.get_fixed_values())
 print(f"build + WavePrecomp table: {build_wall:.1f} s")
 print(f"free parameters ({model.spec.n_free}): {', '.join(model.spec.free_params)}")
 
@@ -182,7 +181,7 @@ print(f"free parameters ({model.spec.n_free}): {', '.join(model.spec.free_params
 # %%
 rng = np.random.default_rng(4)
 
-truth = dict(FIXED_VALUES)
+truth = {}
 truth[MASS_KEY] = 10.3
 truth["met_logzsol"] = -0.3
 truth["dust_tau_diff"] = 0.3
@@ -252,7 +251,14 @@ map_logm = float(map_post.params[MASS_KEY])
 print(f"MAP: {map_wall:.1f} s, log total mass = {map_logm:.2f} (truth {truth[MASS_KEY]:.2f})")
 
 t0 = time.perf_counter()
-posterior = forward.fit(flux_obs, noise, key=jax.random.PRNGKey(2), verbose=False, dense_mass_matrix=False, target_accept_rate=0.9)
+posterior = forward.fit(
+    flux_obs,
+    noise,
+    key=jax.random.PRNGKey(2),
+    verbose=False,
+    dense_mass_matrix=False,
+    target_accept_rate=0.9,
+)
 nuts_wall = time.perf_counter() - t0
 
 ess = posterior.effective_sample_size()
@@ -365,7 +371,7 @@ def draw_products(post, key):
     draws = post.resample(key, n=N_DRAWS)
     fluxes, sfrs, lbt = [], [], None
     for i in range(N_DRAWS):
-        p = {**FIXED_VALUES, **{k: float(v[i]) for k, v in draws.items()}}
+        p = {k: float(v[i]) for k, v in draws.items()}
         fluxes.append(np.asarray(model.predict_photometry(p)))
         s = model.predict_state(p)
         sfrs.append(np.asarray(s.derived["sfr_history"]))

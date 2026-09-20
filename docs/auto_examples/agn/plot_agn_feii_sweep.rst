@@ -44,7 +44,7 @@ References
    in active galactic nuclei," ApJ 641, 689–709 (2006).
    arXiv:astro-ph/0601042.
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-147
+.. GENERATED FROM PYTHON SOURCE LINES 28-158
 
 
 
@@ -107,6 +107,17 @@ References
                 "log_ledd": -1.0,
             },
             "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT), "agn_blr_cf": 0.1},
+            # ``agn_fe2_strength`` is owned by the ``feii`` sub-block, not
+            # ``blr`` (see parameters/agn_ownership.py), and is undeclared
+            # anywhere else in this build -- an undeclared feii block falls
+            # through to ``Fixed(DEFAULT)``. It is swept below (#2296: a
+            # params-dict key the spec declared Fixed is refused), so it must
+            # be free; bounds pad the 0-1.5 sweep.
+            "feii": {
+                "type": "boroson_green",
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "agn_fe2_strength": tengri.Uniform(0.0, 2.0),
+            },
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.0,
             "lum_ratio": 1.0,
@@ -182,7 +193,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.758 seconds)
+   **Total running time of the script:** (0 minutes 3.875 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_feii_sweep.py:

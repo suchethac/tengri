@@ -251,7 +251,10 @@ def test_shock_composes_in_component_chain(synthetic_ssp_wide, synthetic_tophat_
         shock={
             "norm": "frac",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "frac": tengri.Fixed(0.8),
+            # FREE (#2296): the test's whole point is comparing two explicit
+            # values (0.0 vs 0.8) of this one parameter at call time, which a
+            # Fixed declaration now refuses regardless of which value is named.
+            "frac": tengri.Uniform(0.0, 1.0),
             "velocity": tengri.Fixed(400.0),
         },
     )
@@ -272,7 +275,9 @@ def test_shock_and_photoionized_are_independent(synthetic_ssp_wide, synthetic_to
         shock={
             "norm": "frac",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "frac": tengri.Fixed(0.8),
+            # FREE (#2296): compared at two explicit values below, so a Fixed
+            # declaration would refuse the override that gives this test teeth.
+            "frac": tengri.Uniform(0.0, 1.0),
             "velocity": tengri.Fixed(400.0),
         },
     )
@@ -315,9 +320,23 @@ def test_grammar_matches_low_level_shock_flag(synthetic_ssp_wide, synthetic_toph
     )
     m_lowlevel = tengri.SEDModel(spec, synthetic_ssp_wide, observation=synthetic_tophat_obs)
 
+    # The two specs disagree about which parameters are free: the grammar
+    # build pins sfh/dust/met at their registry defaults
+    # (``all_params: Fixed(DEFAULT)``), while the low-level flat ``Parameters``
+    # escape hatch leaves them free (#2296 -- a single shared params dict can
+    # no longer serve both, since a key legally omitted for one is refused if
+    # present, and required if omitted for the other). Build each model's own
+    # free-only sample, then fill in whatever the low-level spec needs beyond
+    # that from the grammar model's Fixed defaults -- the same physical values
+    # both models used before #2296 made this split necessary.
     theta = dict(m_grammar.spec.sample(jax.random.PRNGKey(1)))
+    grammar_fixed = m_grammar.spec.get_fixed_values()
+    theta_lowlevel = {
+        **theta,
+        **{k: v for k, v in grammar_fixed.items() if k in m_lowlevel.spec.free_params},
+    }
     _, sed_g = _rest(m_grammar, theta)
-    _, sed_l = _rest(m_lowlevel, theta)
+    _, sed_l = _rest(m_lowlevel, theta_lowlevel)
     assert np.allclose(sed_g, sed_l, rtol=1e-10, atol=0.0)
 
 

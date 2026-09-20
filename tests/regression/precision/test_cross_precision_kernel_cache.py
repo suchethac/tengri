@@ -144,7 +144,11 @@ def _gradient(ssp, obs, x64, dtype):
     """Negative-log-posterior gradient at the origin of standardized space."""
     with jax.enable_x64(x64):
         model = _build(ssp, obs)
-        truth = {"sfh_delayed_log_total_mass": 10.0, "agn_log_lbol": 11.0}
+        # agn_log_lbol is Fixed(10.5) on _build's AGN block above; the mock only
+        # needs SOME luminosity to generate data from, not this specific value
+        # (the gradient below is evaluated at the standardized origin regardless
+        # of truth), so the key is dropped rather than restated (#2296).
+        truth = {"sfh_delayed_log_total_mass": 10.0}
         # The mock must be built at the same precision as the model that fits it.
         mock = model.mock(truth, snr=30.0, key=jax.random.PRNGKey(0))
         flux, noise = mock.flux_obs, mock.noise

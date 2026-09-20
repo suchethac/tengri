@@ -48,6 +48,11 @@ model = tengri.SEDModel.build(
         "tau_bc": 0.0,
         "tau_diff": 0.1,
     },
+    # ``met_alpha_fe`` is swept below (#2296: a params-dict key the spec
+    # declared Fixed is refused), so it must be free; no ``met=`` group was
+    # declared before, defaulting the whole group to ``Fixed(DEFAULT)``.
+    # Bounds exactly cover the sweep and match the grid-supported range.
+    met={"alpha_fe": tengri.Uniform(-0.2, 0.6)},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

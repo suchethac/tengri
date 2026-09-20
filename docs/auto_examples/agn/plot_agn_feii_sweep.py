@@ -73,6 +73,17 @@ model = tengri.SEDModel.build(
             "log_ledd": -1.0,
         },
         "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT), "agn_blr_cf": 0.1},
+        # ``agn_fe2_strength`` is owned by the ``feii`` sub-block, not
+        # ``blr`` (see parameters/agn_ownership.py), and is undeclared
+        # anywhere else in this build -- an undeclared feii block falls
+        # through to ``Fixed(DEFAULT)``. It is swept below (#2296: a
+        # params-dict key the spec declared Fixed is refused), so it must
+        # be free; bounds pad the 0-1.5 sweep.
+        "feii": {
+            "type": "boroson_green",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "agn_fe2_strength": tengri.Uniform(0.0, 2.0),
+        },
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_lbol": 12.0,
         "lum_ratio": 1.0,

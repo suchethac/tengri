@@ -36,7 +36,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.utils.batching import vmap_chunked
 from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
 
@@ -56,7 +56,7 @@ def _cue_fixture_available():
         pytest.skip(f"needs {_SSP_PATH} and {CUE_WEIGHTS}")
 
 
-def _build(full_catalog: bool | None):
+def _build(full_catalog: bool | None, *, one_free_param: bool = False):
     """A cue model, with an explicit ``full_catalog`` or the bare default.
 
     Parameters
@@ -65,16 +65,28 @@ def _build(full_catalog: bool | None):
         ``True``/``False`` sets the ``neb`` group's ``full_catalog`` key
         explicitly; ``None`` omits the key entirely, so the model resolves
         whatever the grammar's own default currently is.
+    one_free_param : bool, default False
+        Every group here is otherwise ``all_params: Fixed(DEFAULT)``
+        (``n_free == 0``), which every test in this file calls with an
+        empty (or all-Fixed, pre-#2296) params dict -- fine for a single
+        prediction, but ``spec.sample_batch()`` then has no free leaf for
+        ``jax.vmap``/``vmap_chunked`` to infer a batch axis from. Set this
+        for the one vmap-safety test, which needs a real (if physically
+        arbitrary) batch dimension; every other test in this file keeps
+        ``n_free == 0``.
     """
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     neb = {"type": "cue", "all_params": Fixed(DEFAULT)}
     if full_catalog is not None:
         neb["full_catalog"] = full_catalog
+    sfh = {"type": "delayed", "all_params": Fixed(DEFAULT)}
+    if one_free_param:
+        sfh["log_total_mass"] = Uniform(9.0, 11.0)
     return SEDModel.build(
         ssp_data=load_ssp_data(str(_SSP_PATH)),
         observation=Observation(photometry=Photometry.from_names(["sdss_g"])),
-        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        sfh=sfh,
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
@@ -89,7 +101,7 @@ def _build(full_catalog: bool | None):
 def test_civ_1549_warns_and_is_nan_on_the_legacy_subset(_cue_fixture_available):
     """``full_catalog: False`` -- civ_1549 warns, names the remedy, and is NaN."""
     model = _build(full_catalog=False)
-    params = dict(model.spec.get_fixed_values())
+    params = {}  # zero free params here (#2296); Fixed values merge in automatically
     with pytest.warns(UserWarning, match=r"'civ_1549'.*full_catalog"):
         value = float(model.predict(params).properties["civ_1549"])
     assert np.isnan(value), f"civ_1549 should be NaN on the legacy subset, got {value}"
@@ -99,7 +111,7 @@ def test_civ_1549_warns_and_is_nan_on_the_legacy_subset(_cue_fixture_available):
 def test_civ_1549_is_silent_and_finite_on_the_default_catalog(_cue_fixture_available):
     """No ``full_catalog`` key at all -- civ_1549 is finite and raises no warning."""
     model = _build(full_catalog=None)
-    params = dict(model.spec.get_fixed_values())
+    params = {}  # zero free params here (#2296); Fixed values merge in automatically
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("error", category=UserWarning)
         value = float(model.predict(params).properties["civ_1549"])
@@ -114,8 +126,8 @@ def test_published_catalog_size_tracks_full_catalog(_cue_fixture_available):
     """138 rows by default, 128 under the explicit legacy-subset opt-out."""
     default_model = _build(full_catalog=None)
     subset_model = _build(full_catalog=False)
-    params_default = dict(default_model.spec.get_fixed_values())
-    params_subset = dict(subset_model.spec.get_fixed_values())
+    params_default = {}  # both models are all-Fixed (n_free=0); free-only means empty (#2296)
+    params_subset = {}
 
     # No warning filter here, deliberately: reading ``.lines.all_waves`` does
     # not route through the per-line warning seam at all (that seam fires
@@ -137,7 +149,7 @@ def test_published_catalog_size_tracks_full_catalog(_cue_fixture_available):
 def test_halpha_does_not_warn_on_the_legacy_subset(_cue_fixture_available):
     """The seam must not fire for a line the 128-line subset already carries."""
     model = _build(full_catalog=False)
-    params = dict(model.spec.get_fixed_values())
+    params = {}  # zero free params here (#2296); Fixed values merge in automatically
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("error", category=UserWarning)
         value = float(model.predict(params).properties["halpha"])
@@ -170,7 +182,7 @@ def test_predict_properties_is_jit_safe_for_line_properties(_cue_fixture_availab
     """
     for full_catalog in (None, False):
         model = _build(full_catalog=full_catalog)
-        params = dict(model.spec.get_fixed_values())
+        params = {}  # zero free params here (#2296); Fixed values merge in automatically
         for name in ("halpha", "civ_1549"):
 
             @jax.jit
@@ -209,7 +221,7 @@ def test_predict_properties_is_vmap_safe_for_a_line_property(_cue_fixture_availa
     ``vmap_chunked``'s own jittability probe ever falls back to its eager
     loop, which warns (``utils/batching.py``).
     """
-    model = _build(full_catalog=None)
+    model = _build(full_catalog=None, one_free_param=True)
     params_batch = model.spec.sample_batch(jax.random.PRNGKey(0), n=4)
 
     def _single(p):
@@ -231,7 +243,7 @@ def test_predict_properties_is_vmap_safe_for_a_line_property(_cue_fixture_availa
 def test_civ_1549_warns_at_trace_time_under_jit_on_the_legacy_subset(_cue_fixture_available):
     """The warning still fires under ``jax.jit``, at trace (compile) time."""
     model = _build(full_catalog=False)
-    params = dict(model.spec.get_fixed_values())
+    params = {}  # zero free params here (#2296); Fixed values merge in automatically
 
     @jax.jit
     def _compute(p):
@@ -260,7 +272,7 @@ def test_published_line_wavelengths_matches_state_derived_line_waves(_cue_fixtur
 
     for full_catalog in (None, False):
         model = _build(full_catalog=full_catalog)
-        params = dict(model.spec.get_fixed_values())
+        params = {}  # zero free params here (#2296); Fixed values merge in automatically
         state = model.predict_state(params)
         published = np.asarray(state.derived["line_waves"])
         static = _published_line_wavelengths_static(model, model._nebular_backend)

@@ -55,6 +55,11 @@ def _model():
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
+            # Free, not the Fixed(DEFAULT) that omitting `met=` gives (#2296):
+            # every test below sweeps/overwrites met_logzsol in the sampled
+            # params dict, which is a refused presence override of a Fixed
+            # key regardless of whether the written value matches the pin.
+            met={"logzsol": FREE},
             dust_attenuation=None,
             neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.15),

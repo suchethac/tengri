@@ -136,9 +136,9 @@ truth = {
     "dust_tau_diff": jnp.array(0.25),
     "sfh_tsnorm_log_total_mass": jnp.array(10.5),
 }
-truth_full = {**sed_model.spec.get_fixed_values(), **{k: float(v) for k, v in truth.items()}}
+truth = {k: float(v) for k, v in truth.items()}
 
-p_spec = np.asarray(sed_model.predict_spectrum(truth_full, wave_obs=WAVE_OBS))
+p_spec = np.asarray(sed_model.predict_spectrum(truth, wave_obs=WAVE_OBS))
 noise = p_spec / 30.0
 flux = p_spec + np.random.default_rng(0).normal(size=p_spec.shape) * noise
 wave_um = np.asarray(WAVE_OBS) / 1e4
@@ -188,7 +188,7 @@ n_cov = 0
 for p in params:
     s = np.asarray(posterior.samples[p])
     lo, med, hi = np.percentile(s, [16, 50, 84])
-    tv = float(truth_full[p])
+    tv = float(truth[p])
     ok = lo <= tv <= hi
     n_cov += ok
     print(f"{p:<28}{tv:>9.3f}{lo:>9.3f}{med:>9.3f}{hi:>9.3f}  {'ok' if ok else 'miss'}")
@@ -200,8 +200,7 @@ print(f"\n68% coverage: {n_cov}/{len(params)}")
 # %%
 N_DRAW = 60
 idx = np.linspace(0, len(next(iter(posterior.samples.values()))) - 1, N_DRAW).astype(int)
-fixed = sed_model.spec.get_fixed_values()
-draws = [{**fixed, **{k: float(v[i]) for k, v in posterior.samples.items()}} for i in idx]
+draws = [{k: float(v[i]) for k, v in posterior.samples.items()} for i in idx]
 spec_draws = np.stack(
     [np.asarray(sed_model.predict_spectrum(p, wave_obs=WAVE_OBS)) for p in draws]
 )
@@ -240,7 +239,7 @@ labels = {
     "sfh_tsnorm_peak_lbt_gyr": r"$t_{\rm peak}$",
     "sfh_tsnorm_width_gyr": r"$\sigma_t$",
 }
-fig_corner = posterior.plot_corner(truths=truth_full, color=C_POST)
+fig_corner = posterior.plot_corner(truths=truth, color=C_POST)
 for ax_c in fig_corner.axes:  # readable axis labels in place of parameter keys
     if ax_c.get_xlabel() in labels:
         ax_c.set_xlabel(labels[ax_c.get_xlabel()], fontsize=11)

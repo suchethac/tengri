@@ -394,7 +394,7 @@ class TestModelFitIntegration:
                 tau_bc=tengri.Uniform(0, 3.0),
             ),
         )
-        true_params = {
+        all_params = {
             "sfh_dpl_alpha": 1.2,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 4.0,
@@ -409,6 +409,8 @@ class TestModelFitIntegration:
             "dust_slope": -0.7,
             "redshift": 0.1,
         }
+        # Filter to only free parameters: the new contract does not allow Fixed keys
+        true_params = {k: v for k, v in all_params.items() if k in model.spec.free_params}
         mock = model.mock(true_params, snr=10.0, key=jax.random.PRNGKey(0))
         return model, mock
 

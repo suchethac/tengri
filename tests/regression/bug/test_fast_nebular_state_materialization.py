@@ -108,7 +108,10 @@ def _at_prior_center(model):
 
 
 def _full_params(model):
-    return {**model.spec.get_fixed_values(), **_at_prior_center(model)}
+    """Free-only params (#2296): ``_at_prior_center`` already covers exactly
+    ``model.spec.free_params``; the spec merges its own Fixed values in.
+    """
+    return _at_prior_center(model)
 
 
 def _nebular(chain):

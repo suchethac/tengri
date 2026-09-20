@@ -1157,6 +1157,46 @@
   explicit-law rule.
 
 
+### Changed
+
+- **Params dicts are free-only; every entry point refuses a Fixed key
+  (#2296; breaking change).**
+  ``model.predict(params)`` and every prediction surface now refuse a `params`
+  key the spec declared ``Fixed``, raising ``ParameterError`` naming the key,
+  the pinned value, and the remedy. ``Parameters.sample(key)`` and
+  ``Posterior.params`` / ``.samples`` now carry free parameters only, not Fixed
+  ones. Fixed values are accessible through ``spec.get_fixed_values()`` or the
+  new ``Posterior.fixed_values`` property (which reflects any
+  ``Fitter(params_override=...)`` re-pin actually used by the fit, not just
+  the spec's declared value). This closes the silent physics error
+  where a Fixed-key override was honored on some specialized paths
+  (FeaturePrecomp) and dropped on others (exact), producing stealthily different
+  physics. To pin a *different* value for one fit or one galaxy, the
+  sanctioned route is still ``Fitter(params_override={...})`` (validated at
+  construction to name only Fixed parameters) or ``CatalogFitter``'s per-galaxy
+  redshift override — both unaffected by this refusal.
+
+  Neighbors of the same fix, registered here rather than as separate entries:
+  - A mirror target (e.g. ``neb_logZ_gas="met_logzsol"``) present in ``params``
+    is refused when its value differs from its resolved source; a value equal
+    to the source (what ``sample()`` produces) is still accepted.
+  - ``Catalog.from_histories`` refuses a Fixed ``met_gas=``/``redshift=`` at
+    construction, not lazily inside ``predict()``/``simulate()``.
+  - ``Posterior.fixed_values`` excludes any name free on the user's model,
+    closing a leak where a ``profile_mass``-pinned mass appeared in both
+    ``params`` (its real value) and ``fixed_values`` (a stale placeholder).
+  - ``PopulationFitter`` requires its two population-shared PSD names
+    (``sfh_field_psd_sigma``, ``sfh_field_psd_tau_myr``) free on
+    ``model_factory``'s spec, and refuses construction otherwise, naming the
+    remedy (breaking change for any ``model_factory`` that pinned them Fixed;
+    ``SEDModel.fit_population``'s own factory is updated to match).
+  - Three idioms are refused the same way everywhere they were found:
+    ``spec.get_fixed_values()`` spread into a params dict,
+    ``{**dict(spec.sample(...)), "<key>": value}`` sweeping a Fixed key, and
+    an explicit Fixed key restated at its own pinned value. Repair recipe:
+    declare the swept/restated parameter FREE in ``SEDModel.build`` instead,
+    and pass only the free (swept) keys.
+
 ### Fixed
 
 - **FeaturePrecomp docstring now states the line-flux accuracy it was measured to (#2376).** The line LUT reproduces measured line fluxes to 4.8e-5–1.0e-3 relative; against typical 5% line errors that is ≲0.002 σ. This accuracy is now documented in the class docstring where a user chooses the approximation.
