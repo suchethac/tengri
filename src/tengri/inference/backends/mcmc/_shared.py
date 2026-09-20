@@ -3380,8 +3380,20 @@ def _parallel_chains(
     per_chain_keys = jax.random.split(new_chain_key, n_chains * n_iter)
     per_chain_keys = per_chain_keys.reshape(n_chains, n_iter, 2)
     out = jax.pmap(chain_scan_fn, devices=devices)(states, per_chain_keys)
+    # Gather the draws to the host before they leave. pmap's outputs are
+    # sharded one chain per device, and every jitted consumer downstream --
+    # the whitening restore, the physical transform, and above all the
+    # profile-mass reinsertion's chunked lax.map -- would otherwise be
+    # compiled for those sharded inputs as an SPMD program across the host
+    # devices. Measured on a paper-1 III cell (4 chains, 4 host devices,
+    # 1200 draws): the reinsertion executed from sharded inputs held a
+    # 24 GB plateau for 4.5 min; the identical program on host-resident
+    # inputs peaks 1 GB above baseline in ~2 min. The draws are
+    # (n_chains, n_iter, D) floats -- kilobytes -- so the gather is free.
+    out = jax.device_get(out)
 
     def _trim_and_flatten(arr):
+        arr = jnp.asarray(arr)
         if n_burnin > 0:
             arr = arr[:, n_burnin:]
         if arr.ndim >= 3:
