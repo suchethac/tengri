@@ -75,21 +75,18 @@ def _check_rst_validity(text: str) -> list[str]:
         import docutils.core
         import docutils.nodes
     except ImportError:
-        # docutils not available in this context; skip validation
-        return []
+        # docutils not available; fail the guard
+        return ["FAIL: docutils is not importable; the RST validity check cannot run"]
 
     error_stream = io.StringIO()
-    try:
-        doc = docutils.core.publish_doctree(
-            text,
-            settings_overrides={
-                "report_level": 2,  # Include warning and error messages
-                "halt_level": 5,  # Do not halt, just report
-                "warning_stream": error_stream,
-            },
-        )
-    except Exception as e:
-        return [f"RST parse exception: {e}"]
+    doc = docutils.core.publish_doctree(
+        text,
+        settings_overrides={
+            "report_level": 2,  # Include warning and error messages
+            "halt_level": 5,  # Do not halt, just report
+            "warning_stream": error_stream,
+        },
+    )
 
     # Collect system_message nodes
     errors = []

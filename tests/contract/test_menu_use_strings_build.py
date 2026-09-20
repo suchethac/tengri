@@ -10,6 +10,8 @@ not the model they asked for. This sweep evaluates every production row's
 
 from __future__ import annotations
 
+import ast
+
 import pytest
 
 import tengri
@@ -72,6 +74,28 @@ def test_menu_use_strings_have_no_trailing_whitespace():
         pytest.fail("\n".join(failures))
 
 
+def test_use_strings_parse_as_python():
+    """Every use string that looks like a Python call must parse correctly."""
+    rows = _get_use_string_parseable_rows()
+
+    failures = []
+    for menu_name, entry_name, row in rows:
+        use_str = row.get("use", "")
+        if not use_str:
+            continue
+
+        # Replace "..." with a valid expression so ast.parse works
+        test_str = use_str.replace("...", "None")
+
+        try:
+            ast.parse(test_str, mode="eval")
+        except SyntaxError as e:
+            failures.append(f"{menu_name}/{entry_name}: {e}")
+
+    if failures:
+        pytest.fail("\n".join(failures))
+
+
 @pytest.fixture(scope="module")
 def bare_stellar_ssp():
     """A bare-stellar SSP for building models."""
@@ -86,6 +110,32 @@ def bare_stellar_ssp():
 @pytest.fixture(scope="module")
 def observation() -> Observation:
     return Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]))
+
+
+def _get_use_string_parseable_rows() -> list[tuple[str, str, dict]]:
+    """Collect all rows with SEDModel.build use strings.
+
+    Returns (menu_name, entry_name, row) tuples.
+    """
+    rows = []
+
+    # Get all list_* functions except list_all and list_filters
+    listers = [
+        n for n in dir(tengri) if n.startswith("list_") and n not in ("list_all", "list_filters")
+    ]
+
+    for lister_name in sorted(listers):
+        menu_rows = getattr(tengri, lister_name)()
+        for row in menu_rows:
+            use_str = row.get("use", "")
+            if not use_str:
+                continue
+
+            # Only validate rows where use starts with SEDModel.build(...
+            if use_str.startswith("SEDModel.build(..., "):
+                rows.append((lister_name, row.get("name", ""), row))
+
+    return rows
 
 
 def _get_production_menu_rows() -> list[tuple[str, str, dict]]:

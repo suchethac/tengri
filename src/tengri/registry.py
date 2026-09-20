@@ -896,7 +896,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             if cat == "attenuation" and name == "smc_prevot":
                 use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}})"
             else:
-                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}}))"
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}})"
             entry_dict = {
                 "name": name,
                 "category": cat,
