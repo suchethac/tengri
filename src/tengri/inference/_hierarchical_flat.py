@@ -337,7 +337,6 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     n_grid = spec.n_grid
     free_names = fitter._free_names
     physical = _physical_map(spec, free_names)
-    fixed_values = spec.get_fixed_values()
     sigma_lo, sigma_hi = fitter.psd_sigma_bounds
     tau_lo, tau_hi = fitter.psd_tau_bounds
     data_type = fitter.data_type
@@ -415,9 +414,20 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
                 )
 
     def _predict(params):
+        # predict_photometry/predict_spectrum self-merge the model's own
+        # Fixed values internally and refuse a params key the spec declared
+        # Fixed (#2296); filter to free names first, the pattern
+        # jit_engine.signal_response uses. ``params`` here already carries
+        # every genuinely free name -- the per-galaxy ones (``free_names``,
+        # via ``physical[name](...)``) plus the two population-shared PSD
+        # names (set explicitly below, free on ``model.spec`` precisely so
+        # this dict-based per-step override is legal presence, not a
+        # Fixed-key refusal) -- so this filter is a defensive no-op keyed on
+        # ``model.spec.free_params`` rather than a behavior change.
+        free_params = {k: v for k, v in params.items() if k in model.spec.free_params}
         if data_type == "photometry":
-            return model.predict_photometry(params)
-        return model.predict_spectrum(params)
+            return model.predict_photometry(free_params)
+        return model.predict_spectrum(free_params)
 
     def log_likelihood_with_data(flat_params, data_args):
         """Gaussian data term, -chi^2/2, with the data supplied as an ARGUMENT.
@@ -441,9 +451,16 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
                 # (#1651). Same convention as the per-galaxy MAP init and the
                 # single-galaxy unbounded machinery.
                 params[name] = physical[name](ub_scalars[name])
-            for name, val in fixed_values.items():
-                if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                    params[name] = val
+            # Every OTHER Fixed value (dust, met, sfh_dpl, noise, redshift,
+            # ...) is self-merged by predict_photometry/predict_spectrum
+            # internally (#2296) -- no need to spread spec.get_fixed_values()
+            # here, and doing so would be refused (a params key the spec
+            # declared Fixed is refused on presence). The two PSD names are
+            # different: they are declared FREE on ``model.spec`` (the
+            # population-shared parameters this fit actually varies), just
+            # excluded from the per-galaxy ``free_names`` set above, so
+            # setting them explicitly to this step's shared value is a plain
+            # free-key write, not an override of anything Fixed.
             params["sfh_field_psd_sigma"] = psd_sigma
             params["sfh_field_psd_tau_myr"] = psd_tau
             if stochastic:
