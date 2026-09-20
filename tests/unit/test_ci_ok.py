@@ -256,3 +256,40 @@ class TestScheduledTierMalformed:
         problems = ci_ok.decide(results, event, base)
         assert problems, f"`{job}` = {bad_result!r} on {event} must fail"
         assert any(job in p for p in problems)
+
+
+class TestLabeledPullRequestSlowCrossval:
+    """On pull requests, labeled slow/crossval opt-in makes skipped a violation."""
+
+    def test_labeled_slow_with_skipped_slow_fails(self):
+        """A PR labeled run-slow-tests must not have slow skipped."""
+        results = _all_green() | {"slow": "skipped"}
+        problems = ci_ok.decide(results, "pull_request", "main", labels="run-slow-tests")
+        assert problems, "labeled PR with skipped slow must fail"
+        assert any("slow" in p for p in problems)
+
+    def test_labeled_crossval_with_skipped_crossval_fails(self):
+        """A PR labeled run-crossval must not have crossval skipped."""
+        results = _all_green() | {"crossval": "skipped"}
+        problems = ci_ok.decide(results, "pull_request", "main", labels="run-crossval")
+        assert problems, "labeled PR with skipped crossval must fail"
+        assert any("crossval" in p for p in problems)
+
+    def test_unlabeled_pr_with_skipped_slow_passes(self):
+        """A PR without run-slow-tests label may have slow skipped."""
+        results = _all_green() | {"slow": "skipped"}
+        problems = ci_ok.decide(results, "pull_request", "main", labels="")
+        assert not problems, "unlabeled PR with skipped slow should pass"
+
+    def test_unlabeled_pr_with_skipped_crossval_passes(self):
+        """A PR without run-crossval label may have crossval skipped."""
+        results = _all_green() | {"crossval": "skipped"}
+        problems = ci_ok.decide(results, "pull_request", "main", labels="")
+        assert not problems, "unlabeled PR with skipped crossval should pass"
+
+    def test_schedule_event_with_skipped_slow_fails(self):
+        """Schedule event with skipped slow is a violation (unchanged)."""
+        results = _all_green() | {"slow": "skipped"}
+        problems = ci_ok.decide(results, "schedule", "", labels="")
+        assert problems, "schedule with skipped slow must fail"
+        assert any("slow" in p for p in problems)

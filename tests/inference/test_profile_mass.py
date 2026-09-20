@@ -758,7 +758,8 @@ def test_reinsertion_scratch_is_bounded_by_chunk_size(ssp_data_fsps, monkeypatch
         fn = mass_profile._reinsert_mass_fn(fitter)
         samples = {name: jnp.zeros((n_draws,)) for name in names}
         keys = jax.random.split(jax.random.PRNGKey(0), n_draws)
-        compiled = fn.lower(samples, keys, flux, noise, None).compile()
+        # No line channel on this fitter: the two trailing None args say so.
+        compiled = fn.lower(samples, keys, flux, noise, None, None, None).compile()
         return compiled.memory_analysis().temp_size_in_bytes
 
     unchunked = scratch_bytes(256, 257) / scratch_bytes(64, 65)
@@ -809,7 +810,9 @@ def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, mon
     def draws_at(width):
         monkeypatch.setattr(mass_profile, "_compute_reinsertion_chunk_size", lambda _fitter: width)
         _default_owner.get_or_compile_model(fitter.model).pop("profile_mass_reinsert", None)
-        return np.asarray(mass_profile._reinsert_mass_fn(fitter)(samples, keys, flux, noise, None))
+        return np.asarray(
+            mass_profile._reinsert_mass_fn(fitter)(samples, keys, flux, noise, None, None, None)
+        )
 
     reference = draws_at(n_draws + 1)
     assert np.all(np.isfinite(reference))
@@ -869,7 +872,7 @@ def test_reinsertion_logs_the_chunk_width_and_whether_chunking_engaged(
 
         # Call the reinsertion function; this triggers _reinsert which logs the message
         _fn = mass_profile._reinsert_mass_fn(fitter)
-        _fn(samples, keys, flux, noise, None)
+        _fn(samples, keys, flux, noise, None, None, None)
 
         return caplog.text
 

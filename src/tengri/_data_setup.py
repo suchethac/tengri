@@ -25,6 +25,7 @@ __all__ = [
     "find_ssp_files",
     "list_available_ssps",
     "list_known_ssps",
+    "source_tree_root",
 ]
 
 #: Environment variable naming tengri's data directory. Governs both where
@@ -131,7 +132,13 @@ def data_dirs() -> list[Path]:
     -----
     The ancestor walk exists because sphinx-gallery ``chdir``s into each
     script's directory before exec, so a hand-written ``"data/foo.h5"`` would
-    otherwise resolve under ``examples/<section>/``.
+    otherwise resolve under ``examples/<section>/``. It can be disabled by
+    setting ``$TENGRI_DATA_NO_ANCESTOR_WALK=1``, which pins discovery to the
+    repository under test (the package's own repo root + its data/) and disables
+    the ancestor walk. This is used by the pytest suite to ensure test
+    hermeticity (#2329): tests run in nested worktrees cannot find data files
+    from ancestor directories, matching the CI environment where such files are
+    absent.
 
     The last two groups exist so this function is a superset of the per-module
     grid locators it replaces (#1431). Those searched
@@ -151,16 +158,56 @@ def data_dirs() -> list[Path]:
     env = _env_data_dir()
     if env is not None:
         out.append(env)
-    out.extend(parent / "data" for parent in [Path.cwd(), *Path.cwd().parents])
-    out.append(Path.home() / "tengri" / "data")
-    # Bare working directory: covers a grid file sitting next to the script.
-    out.append(Path.cwd())
+
+    # Tier 3: Disable ancestor walk if pinned for test hermeticity (#2329).
+    if not os.environ.get("TENGRI_DATA_NO_ANCESTOR_WALK"):
+        out.extend(parent / "data" for parent in [Path.cwd(), *Path.cwd().parents])
+        out.append(Path.home() / "tengri" / "data")
+        # Bare working directory: covers a grid file sitting next to the script.
+        out.append(Path.cwd())
+
     out.extend(package_data_dirs())
     # Deduplicate, first occurrence wins so $TENGRI_DATA_DIR keeps precedence.
     # Running from the repo root makes cwd and the package root coincide, and
     # the FileNotFoundError from data_path() lists what was searched.
     seen: set[Path] = set()
     return [d for d in out if not (d in seen or seen.add(d))]
+
+
+def source_tree_root() -> Path:
+    """The repository root computed from this module's location.
+
+    Returns
+    -------
+    pathlib.Path
+        The repository root (two levels up from ``src/tengri``). When
+        ``pyproject.toml`` exists there, tengri is running from a source
+        checkout. For installed wheels, the path exists above ``site-packages``
+        and simply will not contain the files.
+
+    Notes
+    -----
+    **This is the ONE sanctioned package anchor for non-data module-level
+    initialization** (#1431, #2103). It is anchored on ``__file__`` of this
+    module (``src/tengri/_data_setup.py``), so the path is fixed no matter
+    which component calls it. Never use ``.parents[N]`` subscripts elsewhere
+    in the codebase — always route through this function.
+
+    Use this to find ``pyproject.toml`` or other repository-relative files
+    when the source tree is uninstalled. Check for file existence (e.g.
+    ``if (source_tree_root() / "pyproject.toml").exists()``) to detect
+    source tree vs. installed wheel.
+
+    Examples
+    --------
+    >>> from tengri._data_setup import source_tree_root
+    >>> root = source_tree_root()
+    >>> if (root / "pyproject.toml").exists():
+    ...     # Running from source
+    """
+    pkg_root = Path(__file__).resolve().parent  # <src>/tengri
+    source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
+    return source_root
 
 
 def package_data_dirs() -> list[Path]:
@@ -181,13 +228,15 @@ def package_data_dirs() -> list[Path]:
     process runs from an unrelated working directory: the ancestor walk finds
     nothing, but a source checkout still has its ``data/`` beside the package.
 
-    Anchored on ``__file__`` of this module (``src/tengri/_data_setup.py``), so
-    the two hops to the source root are fixed no matter which component calls
-    it. That is the property the per-module ``parents[N]`` locators lacked.
+    Anchored via :func:`source_tree_root` (the one sanctioned package anchor),
+    so the path is fixed no matter which component calls it. That is the
+    property the per-module ``parents[N]`` locators lacked.
     """
-    pkg_root = Path(__file__).resolve().parent  # <src>/tengri
-    source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
-    return [source_root / "data", source_root]
+    # Obtain source root via source_tree_root(), which holds the one anchor.
+    # Whether or not pyproject.toml exists, we return the path (callers test
+    # file existence to detect source tree vs. installed wheel).
+    root = source_tree_root()
+    return [root / "data", root]
 
 
 def download_dir() -> Path:

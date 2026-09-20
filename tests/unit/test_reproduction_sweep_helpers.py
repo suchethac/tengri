@@ -927,5 +927,78 @@ def test_ascending_helper_leaves_increasing_input_untouched():
     assert np.array_equal(y_s, y)
 
 
+def test_default_colors_are_categorical_not_a_ramp():
+    """The default must not be a sequential ramp.
+
+    A ramp asserts that the cases are ordered by magnitude. Most sweeps compare
+    model families or multi-parameter grid nodes, where that ordering does not
+    exist, so the ramp has to be asked for explicitly.
+    """
+    from reproduction._validation import sweep_fig
+
+    w = np.array([1.0, 2.0, 3.0, 4.0])
+    cases = [(f"case{i}", w, w * (i + 1.0), w, w * (i + 1.0) * 1.02) for i in range(4)]
+
+    fig, (ax, _ax_r), _ratios = sweep_fig(cases, ref_label="ref", title="t")
+    drawn = [ln.get_color() for ln in ax.get_lines()]
+    # Categorical cycle entries are distinct hues, not samples of one ramp.
+    assert len({str(c) for c in drawn}) >= 4
+    plt.close(fig)
+
+
+def test_y_floor_tracks_the_data_not_only_the_peak():
+    """A sweep covering two decades is not drawn on an axis spanning many."""
+    from reproduction._validation import sweep_fig
+
+    w = np.logspace(0, 2, 64)
+    L = np.full_like(w, 1e28)
+    L[32:] = 1e26
+    fig, (ax, _ax_r), _ = sweep_fig([("flat", w, L, w, L * 1.01)], ref_label="ref", title="t")
+    lo, hi = ax.get_ylim()
+    # Floor sits just under the smallest drawn value, not at peak * 1e-5.
+    assert lo > 1e25, f"y floor {lo:.3e} is far below the data"
+    assert hi >= 1e28
+    plt.close(fig)
+
+
+def test_ratio_window_widens_to_hold_a_real_excursion():
+    """A case sitting outside the requested window is shown, not cropped."""
+    from reproduction._validation import sweep_fig
+
+    w = np.logspace(0, 2, 64)
+    L_ref = np.full_like(w, 1e28)
+    fig, (_ax, ax_r), _ = sweep_fig(
+        [("low", w, L_ref, w, L_ref * 0.25)],
+        ref_label="ref",
+        title="t",
+        ratio_ylim=(0.5, 1.5),
+    )
+    lo, _hi = ax_r.get_ylim()
+    assert lo < 0.25, f"ratio floor {lo} crops a case at 0.25"
+    plt.close(fig)
+
+
+def test_ratio_is_not_drawn_outside_the_overlap():
+    """Where tengri has no data the regrid fills zero; that is not a ratio of zero."""
+    from reproduction._validation import sweep_fig
+
+    w_ref = np.linspace(1.0, 10.0, 64)
+    L_ref = np.full_like(w_ref, 1.0)
+    w_t = np.linspace(5.0, 10.0, 32)
+    L_t = np.full_like(w_t, 1.0)
+
+    fig, (_ax, ax_r), _ = sweep_fig(
+        [("partial", w_ref, L_ref, w_t, L_t)], ref_label="ref", title="t", logy=False
+    )
+    # get_lines()[0] is the ratio curve; later entries are the y=1 guide.
+    line = ax_r.get_lines()[0]
+    xd = np.asarray(line.get_xdata())
+    yd = np.asarray(line.get_ydata())
+    left = yd[xd < 4.0]
+    assert left.size, "no points left of the overlap to check"
+    assert np.all(~np.isfinite(left)), "ratio drawn through the zero-fill region"
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

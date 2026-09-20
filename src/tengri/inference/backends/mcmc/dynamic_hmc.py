@@ -83,7 +83,8 @@ def run_dynamic_hmc(
         :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
         rationale and the measured ``vmap`` vs ``pmap`` numbers. ``"pmap"``
         raises ``ValueError`` when fewer than ``n_chains`` JAX devices are
-        visible (set ``TENGRI_HOST_DEVICES`` to get more on CPU).
+        visible (set ``TENGRI_HOST_DEVICES`` to get more on GPU/TPU platforms;
+        vmap is faster on CPU, so the hint applies to GPU/TPU only).
     precondition : bool, float or None, default None
         Sample in metric-whitened coordinates, mapping draws back afterwards.
         A linear change of variables, so the posterior is unchanged. **Opt-in**

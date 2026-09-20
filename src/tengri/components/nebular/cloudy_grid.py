@@ -118,6 +118,7 @@ from tengri.components.nebular._shared import (
     _qh_bilinear,
     compute_qh,
     compute_qh_log10,
+    interp_continuum_with_freefree_tail,
     render_nebular_lines,
     sanitize_qh_table,
 )
@@ -1070,8 +1071,9 @@ class CloudyGridBackend:
             template_data=template_data,
         )
 
-        # Interpolate continuum onto SSP wavelength grid
-        neb_sed = jnp.interp(ssp_wave, cont_wave, cont_lum, left=0.0, right=0.0)
+        # Interpolate continuum onto SSP wavelength grid; past the table's last node (1e8 Å)
+        # continue as optically thin free-free (#2346).
+        neb_sed = interp_continuum_with_freefree_tail(ssp_wave, cont_wave, cont_lum)
 
         # Add emission lines
         neb_sed = neb_sed + render_nebular_lines(

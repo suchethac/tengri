@@ -356,6 +356,79 @@ class TestSFHParameterSensitivity:
             _assert_parameter_matters(sfr_default, sfr_mod, f"Dirichlet z_frac_{i}")
 
 
+# ── 3. METALLICITY HISTORY — bin parameters sensitivity ────────────
+
+
+class TestMetallicityParameterSensitivity:
+    """Metallicity modes must respond to their parameters."""
+
+    # Spanning age grid in log10(Gyr) from -3.1 to 1.1, covering all six metallicity bins.
+    # Bin edges are [6, 7, 8, 8.5, 9, 9.5, 10] in log10(yr), which map to
+    # [-3, -2, -1, -0.5, 0, 0.5, 1] in log10(Gyr) after the function's +9.0 transformation.
+    _T = jnp.linspace(-3.1, 1.1, 200)
+
+    def test_met_bin_edges_not_ignored(self):
+        """Bin edges must affect outputs: different ladders → different metallicities.
+
+        Sensitivity check with a spanning age grid. Two different bin-edge
+        configurations with identical metallicity values must produce different
+        outputs because the binning itself differs.
+
+        Max |difference| across the grid: 0.7 (when only the old age bins differ).
+        """
+        from tengri.components.stellar.sfh.metallicity_history import (
+            metallicity_bins_on_ssp_grid,
+        )
+
+        # Two bin-edge ladders that divide the age range differently
+        bin_edges_1 = jnp.array([6.0, 7.0, 8.0, 8.5, 9.0, 9.5, 10.0])
+        bin_edges_2 = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.8, 10.0])
+
+        # Same metallicity values for both, but different ladder structure
+        metallicities = jnp.array([-2.0, -1.5, -0.8, -0.2, 0.1, 0.3])
+
+        z_1 = metallicity_bins_on_ssp_grid(self._T, bin_edges_1, metallicities)
+        z_2 = metallicity_bins_on_ssp_grid(self._T, bin_edges_2, metallicities)
+
+        # Different bin edges must produce different outputs
+        assert not jnp.allclose(z_1, z_2, rtol=1e-6, atol=0.0), (
+            "Metallicity bins: different bin edges should change outputs"
+        )
+        max_diff = float(jnp.max(jnp.abs(z_1 - z_2)))
+        assert max_diff >= 0.1, f"Expected substantial difference; got max_diff={max_diff}"
+
+    def test_met_bin_values_not_ignored(self):
+        """Bin values must affect outputs: different metallicities → different spectra.
+
+        Sensitivity check with a spanning age grid. Changing a metallicity value
+        in a bin that the age grid lands in must produce measurably different outputs.
+
+        Max |difference|: 0.7 (full span of -0.8 to 0.5 in a bin the grid covers).
+        """
+        from tengri.components.stellar.sfh.metallicity_history import (
+            metallicity_bins_on_ssp_grid,
+        )
+
+        bin_edges = jnp.array([6.0, 7.0, 8.0, 8.5, 9.0, 9.5, 10.0])
+
+        # Baseline: uniform metallicity
+        metallicities_baseline = jnp.array([-0.2, -0.2, -0.2, -0.2, -0.2, -0.2])
+
+        # Modified: change the value in bins the spanning grid actually lands in
+        # Bin 3 (index 3) covers ages where the grid has ages that map there
+        metallicities_modified = jnp.array([-0.2, -0.2, -0.2, 0.5, -0.2, -0.2])
+
+        result_baseline = metallicity_bins_on_ssp_grid(self._T, bin_edges, metallicities_baseline)
+        result_modified = metallicity_bins_on_ssp_grid(self._T, bin_edges, metallicities_modified)
+
+        # Different metallicity values must produce different outputs
+        assert not jnp.allclose(result_baseline, result_modified, rtol=1e-6, atol=0.0), (
+            "Metallicity bins: different metallicity values should change outputs"
+        )
+        max_diff = float(jnp.max(jnp.abs(result_baseline - result_modified)))
+        assert max_diff >= 0.1, f"Expected substantial difference; got max_diff={max_diff}"
+
+
 # ── 4. SHOCK EMISSION — velocity sensitivity ──────────────────────
 
 
