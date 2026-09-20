@@ -43,9 +43,11 @@ class DH02CE01IRSEDComponent(EmissionComponent):
     matches the statement in ``components/grid_support.py``: the library's only
     grid axis is :math:`L_{\rm TIR}`, "derived from L_absorbed by energy
     balance rather than set by the user, so no prior can overhang it". The
-    closure's ``dust_log_lir`` therefore keeps its own default of 10.0, exactly
-    as the legacy dispatch has always called it: enabling the registry path
-    changes no number.
+    template *shape* tracks the realized luminosity (Dale & Helou 2002): the
+    closure receives the actual ``L_ir`` via ``optional_inputs``, converts it
+    to the grid's ``log10(L_TIR/L_sun)`` axis, and interpolates the appropriate
+    row. The normalization ensures the emitted power equals the absorbed power
+    regardless of shape selection.
 
     Notes
     -----
@@ -53,14 +55,13 @@ class DH02CE01IRSEDComponent(EmissionComponent):
 
     **Gradient-safe**: yes, differentiable via linear interpolation.
 
-    **Known limitation, not introduced here**: the *shape* selected is
-    always the :math:`\log_{10}(L_{\rm IR}/L_\odot) = 10` template, because the
-    closure's ``dust_log_lir`` default is a constant and nothing derives it
-    from ``L_ir``. The normalization does use ``L_ir``, so the emitted power is
-    right while the template shape does not track luminosity. AGNfitter-rX
-    fits ``irlum`` as a free parameter. Reconciling the two is a physics
-    change with a moved number, so it is reported rather than folded into the
-    wiring fix that gave this model an inference path at all.
+    **Template shape tracks L_ir**: the normalized SED shape depends on the
+    realized infrared luminosity (the whole point of the Dale & Helou library —
+    warmer, broader templates at higher L_IR). Before #2366, the shape was
+    pinned to a hardcoded default; it now tracks the fitted budget via the
+    ``log_L_ir`` input. Fits to existing data will report different
+    ``dust_emission`` SEDs (same total power, different shape), so the
+    component output changes for every model using dh02_ce01 (#2366).
 
     Implements the same template library as AGNfitter-rX
     (Martínez-Ramírez et al. 2024 [3]_); the grid data are repackaged from that
@@ -98,6 +99,26 @@ class DH02CE01IRSEDComponent(EmissionComponent):
 
     accepts_threaded_templates: ClassVar[bool] = True
 
+    #: DH02_CE01's template SHAPE is looked up on the grid by ``log10(L_ir)``
+    #: (see ``create_dh02_ce01`` in ``components/dust/emission_templates.py``),
+    #: so it is not merely scaled by ``L_ir`` -- it is a genuine function of
+    #: the realized luminosity. The generic apply()-level shortcut this opts
+    #: out of evaluates ``predict()`` once at unit luminosity and rescales in
+    #: log space (valid only for SED ∝ L_ir, see
+    #: ``tests/contract/test_dust_emission_l_ir_linearity.py``); for DH02 that
+    #: would pin the shape lookup at ``log10(1) = 0`` (clipped to the grid's
+    #: minimum node, 8.3) regardless of the real budget, rescaling only the
+    #: amplitude afterwards -- correct total power, wrong shape (#2366).
+    factors_l_ir: ClassVar[bool] = False
+
+    #: With ``factors_l_ir=False``, ``apply()`` now hands ``predict()`` the
+    #: REAL linear ``L_ir`` (~1e43 erg/s, ``inf`` in pure float32) instead of
+    #: unit-luminosity placeholder. ``log_L_ir`` [dex] is the float32-safe form
+    #: (published by the attenuator before the overflow-prone linear cast),
+    #: used for both the grid-axis lookup and the normalization -- mirrors
+    #: ``BosaIRSEDComponent``, which declares the same pair for the same reason.
+    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s", "log_L_ir": "dex"}
+
     def load(self, wave: jnp.ndarray | None = None):
         """Load the grid so it can be threaded as an argument, not baked.
 
@@ -126,6 +147,7 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        log_L_ir: float | None = None,
         templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute DH02_CE01 cold-dust emission.
@@ -142,6 +164,13 @@ class DH02CE01IRSEDComponent(EmissionComponent):
             Rest-frame wavelength grid [Angstrom].
         L_ir : float
             Dust-absorbed luminosity to re-radiate [erg/s].
+        log_L_ir : float, optional
+            ``log10(L_ir / (erg/s))`` [dex]. When available (the normal path
+            through ``apply()``), used in place of ``log10(L_ir)`` for the
+            grid-shape lookup after converting to the grid's own
+            log10(L_TIR/Lsun) axis -- this is what lets the shape track the
+            real budget at astrophysical scales (#2366). ``None`` preserves the
+            original linear-only, unconverted formula for direct callers.
         templates : dict, optional
             Grid threaded in as a traced argument. When ``None`` the
             module-level lazy loader is used, which captures the library as a
@@ -163,9 +192,9 @@ class DH02CE01IRSEDComponent(EmissionComponent):
             # fine, capturing a concrete array is what bakes (#1649).
             from tengri.components.dust.emission_templates import create_dh02_ce01_from_grid
 
-            sed = create_dh02_ce01_from_grid(templates)(wave, L_ir)
+            sed = create_dh02_ce01_from_grid(templates)(wave, L_ir, log_L_ir=log_L_ir)
         else:
             from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
-            sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir)
+            sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir, log_L_ir=log_L_ir)
         return sed_in + sed, {"sed_dust_ir": sed}

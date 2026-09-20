@@ -154,12 +154,30 @@ def test_topping_up_preserves_the_build_time_settings(joint_setup):
     )
 
 
-def _objective(ssp, obs, phot, approx):
+def _objective(ssp, obs, phot, approx, *, profile_mass=False):
+    """The fit objective at a fixed unconstrained point.
+
+    ``profile_mass`` defaults to **False** here, and that default is the point.
+    Since #2360 the mass is analytically marginalized on a measured line-flux
+    fit, which couples every channel through one fitted amplitude ``a_star =
+    B/A`` -- so a perturbation confined to the line block moves the residuals of
+    all channels. That makes the profiled objective sensitive to the line fluxes
+    at the scale of the LUT's own approximation error, where the unprofiled
+    objective was ~1000x less sensitive than that error.
+
+    Which means a LUT-versus-exact comparison through the profiled objective
+    measures the LUT, not the thing these tests vary. The comparison that names
+    FeaturePrecomp keeps the mass unprofiled;
+    :func:`test_the_profiled_objective_tracks_the_luts_own_line_flux_error`
+    carries the profiled case with a tolerance derived from the LUT.
+    """
     from tengri.inference.context import InferenceContext
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        ctx = InferenceContext.from_target(_fit(ssp, obs, phot, approx=approx))
+        ctx = InferenceContext.from_target(
+            _fit(ssp, obs, phot, approx=approx, profile_mass=profile_mass)
+        )
         x0 = ctx.initial_params(jax.random.PRNGKey(1))
         return float(ctx.neg_log_posterior_fn(x0, ctx.data_args))
 
@@ -215,6 +233,80 @@ def test_adding_the_line_lut_does_not_move_the_objective(ssp_data_wne, real_ssp_
 
     assert abs(v_lut - v_no_lut) / abs(v_no_lut) < 1e-6, (
         f"adding FeaturePrecomp moved the objective: {v_lut} vs {v_no_lut}"
+    )
+
+
+def test_the_profiled_objective_tracks_the_luts_own_line_flux_error(ssp_data_wne, real_ssp_only):
+    """With the mass marginalized, the LUT moves the objective -- by its own error.
+
+    The sibling above holds the mass unprofiled, which is how it measured 4.7e-08
+    and how it keeps measuring FeaturePrecomp rather than #2360. This one is the
+    profiled counterpart, and it exists because the default fit surface profiles:
+    ``profile_mass="auto"`` engages on a measured line-flux channel since #2360,
+    so the objective users actually get IS the coupled one.
+
+    The coupling is the whole content of the comparison. A profiled objective
+    fits one amplitude ``a_star = B/A`` across the concatenated photometry and
+    line blocks, so perturbing three of eleven whitened entries shifts
+    ``a_star`` and therefore the residuals of all eleven. The unprofiled
+    objective, evaluated at a fixed mass, was about a thousand times *less*
+    sensitive to the line fluxes than the LUT's error in them -- so its 4.7e-08
+    agreement recorded the objective's insensitivity, not the LUT's fidelity.
+
+    Measured directly on this grid, LUT against exact line fluxes across the
+    truth plus four prior draws: **4.8e-05 to 1.0e-03** relative. The profiled
+    objective moves 4.3e-05 relative, i.e. the same order as the input error
+    rather than an amplification of it. The bound below is set from the measured
+    line-flux error, not from the objective, so it cannot drift into asserting
+    whatever the code currently does.
+
+    None of this is a fidelity problem for inference: 1e-4 relative against line
+    errors of 5% is 0.002 sigma. It is a statement about which objective can
+    observe the approximation.
+    """
+    obs0 = Observation(photometry=Photometry.from_names(["des_g", "des_r", "des_i", "wise_w1"]))
+    base = _model(ssp_data_wne, obs0, WavePrecomp())
+    truth = base.spec.sample(jax.random.PRNGKey(0))
+    phot = np.asarray(base.predict_photometry(truth))
+    lf = np.asarray(base.measure_line_fluxes(truth, approx=False))[:3]
+    assert np.all(np.abs(lf) > 1e-20), f"setup: the line channel must be real, got {lf}"
+
+    obs = Observation(
+        photometry=obs0.photometry,
+        line_fluxes=LineFluxData(
+            names=_LINES,
+            fluxes=jnp.asarray(lf),
+            errors=jnp.asarray(np.abs(lf) * 0.05 + 1e-30),
+            wavelengths=_WAVES,
+        ),
+    )
+
+    # The LUT's error in the quantity itself, measured rather than assumed, so
+    # the objective bound below is derived from an input and not from the output
+    # it is supposed to be checking.
+    m_lut = _model(ssp_data_wne, obs, (WavePrecomp(), FeaturePrecomp()))
+    m_exact = _model(ssp_data_wne, obs, WavePrecomp())
+    a = np.asarray(m_exact.measure_line_fluxes(truth, approx=False))[:3]
+    b = np.asarray(m_lut.measure_line_fluxes(truth, approx=True))[:3]
+    lut_line_error = float(np.max(np.abs(b - a) / np.abs(a)))
+    assert lut_line_error > 1e-6, (
+        f"the LUT reproduced the line fluxes to {lut_line_error:.3e}; if it is now "
+        f"that accurate the objective comparison below is no longer measuring "
+        f"anything and the unprofiled sibling's 1e-6 bound should cover both"
+    )
+
+    lut_approx = (WavePrecomp(), FeaturePrecomp())
+    v_lut = _objective(ssp_data_wne, obs, phot, lut_approx, profile_mass=True)
+    v_exact = _objective(ssp_data_wne, obs, phot, WavePrecomp(), profile_mass=True)
+    moved = abs(v_lut - v_exact) / abs(v_exact)
+
+    # The profiled objective may track the input error; it must not amplify it
+    # by an order of magnitude, which would mean the coupling is doing something
+    # other than passing the approximation through.
+    assert moved < 10.0 * lut_line_error, (
+        f"the profiled objective moved {moved:.3e} against a measured LUT "
+        f"line-flux error of {lut_line_error:.3e}: the amplitude coupling is "
+        f"amplifying the approximation rather than tracking it"
     )
 
 

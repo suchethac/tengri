@@ -278,10 +278,15 @@ _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
 _sfr_history = np.asarray(_state_sfh.derived["sfr_history"])
 t_t = (AGE_GYR_FIDUCIAL - _lbt_yr / 1e9) * 1e9
-_idx = np.argsort(t_t)
-_mass_formed = float(np.trapezoid(_sfr_history[_idx], t_t[_idx]))
+# The SFH grid spans the full cosmic lookback; keep the epoch after formation.
+_keep_t = t_t >= 0
+t_t_valid = t_t[_keep_t]
+_sfr_history_valid = _sfr_history[_keep_t]
+assert t_t_valid.min() >= 0, f"negative cosmic age: min={t_t_valid.min()}"
+_idx = np.argsort(t_t_valid)
+_mass_formed = float(np.trapezoid(_sfr_history_valid[_idx], t_t_valid[_idx]))
 print(
-    f"tengri pipeline ∫SFR dt = {_mass_formed:.4e} M☉  (target: 1.0000e+10 from log_total_mass=10)"
+    f"tengri   ∫SFR dt = {_mass_formed:.4e} M☉  (log_total_mass=10 → 1.0000e+10)"
 )
 
 # BAGPIPES side mass check:
@@ -289,29 +294,49 @@ _idx_b = np.argsort(t_b_cosmic_gyr)
 _mass_b = float(np.trapezoid(sfr_b_keep[_idx_b], t_b_cosmic_gyr[_idx_b] * 1e9))
 print(f"BAGPIPES        ∫SFR dt = {_mass_b:.4e} M☉  (target: 1.0000e+10 from massformed=10)")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, "BAGPIPES delayed (τ=1 Gyr, age=5 Gyr, log M=10)"),
-    (ax_r, "tengri pipeline sfr_history (256-pt log-lbt)"),
-):
-    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-    ax.set_xlim(0, 5)
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title)
-ax_l.plot(t_b_cosmic_gyr, sfr_b_keep, "C0-", linewidth=2.0)
-ax_l.axvline(
+# Ensure both arms have overlapping data: restrict to the common time range.
+# Two-pass approach to handle discrete sampling mismatches:
+# 1. Broad range based on array mins/maxes
+t_min_broad = max(t_b_cosmic_gyr.min(), (t_t_valid / 1e9).min())
+t_max_broad = min(t_b_cosmic_gyr.max(), (t_t_valid / 1e9).max())
+_keep_b_1 = (t_b_cosmic_gyr >= t_min_broad) & (t_b_cosmic_gyr <= t_max_broad)
+_keep_t_1 = (t_t_valid / 1e9 >= t_min_broad) & (t_t_valid / 1e9 <= t_max_broad)
+# 2. Recalculate from actual masked samples to align boundaries
+t_b_temp = t_b_cosmic_gyr[_keep_b_1]
+t_t_temp = (t_t_valid / 1e9)[_keep_t_1]
+t_min_aligned = max(t_b_temp.min(), t_t_temp.min())  # Both arms guaranteed to start here
+_keep_final_b = (t_b_temp >= t_min_aligned)
+_keep_final_t = (t_t_temp >= t_min_aligned)
+t_b_cosmic_gyr_overlap = t_b_temp[_keep_final_b]
+sfr_b_keep_overlap = sfr_b_keep[_keep_b_1][_keep_final_b]
+t_t_valid_overlap = t_t_valid[_keep_t_1][_keep_final_t]
+_sfr_history_valid_overlap = _sfr_history_valid[_keep_t_1][_keep_final_t]
+
+print(
+    f"  (after overlap masking) t_b range [{t_b_cosmic_gyr_overlap.min():.4f}, "
+    f"{t_b_cosmic_gyr_overlap.max():.4f}] Gyr, "
+    f"t_t range [{(t_t_valid_overlap/1e9).min():.4f}, {(t_t_valid_overlap/1e9).max():.4f}] Gyr"
+)
+
+fig, (ax, ax_r), _ = V.sweep_fig(
+    [("delayed-τ", t_b_cosmic_gyr_overlap, sfr_b_keep_overlap, t_t_valid_overlap / 1e9, _sfr_history_valid_overlap)],
+    ref_label="BAGPIPES",
+    title=r"Delayed-$\tau$ ($\tau = 1$ Gyr, age = 5 Gyr, $\log M = 10$)",
+    xlabel="Cosmic age since SF onset [Gyr]",
+    ylabel=r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]",
+    xlim=(0, 5),
+    logy=False,
+    ratio_ylim=(0.8, 1.2),
+    band=(0.95, 1.05),
+)
+ax.axvline(
     TAU_GYR_FIDUCIAL,
     color="gray",
     linestyle=":",
     alpha=0.6,
     label=rf"$\tau$ = {TAU_GYR_FIDUCIAL:g} Gyr",
 )
-ax_l.legend(fontsize=9)
-ax_r.plot(t_t / 1e9, _sfr_history, "C1-", linewidth=2.0)
-ax_r.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
-ax_r.set_yscale("linear")
-ax_l.set_yscale("linear")
+ax.legend(fontsize=9)
 fig.tight_layout()
 save_fig("bagpipes_02_sfh_delayed.png")
 
@@ -677,42 +702,31 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_b, s_stellar.sed_intrinsic, name="§3 stellar")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="BAGPIPES  delayed + BC03+MILES",
-    label_r="tengri  sfh.delayed + BC03+MILES",
-)
-ax_l.plot(w_b, L_b, "C0-", linewidth=1.5)
-ax_l.text(
-    0.05,
-    0.95,
-    rf"$M_\star = 10^{{{LOG_MASS_FIDUCIAL:.0f}}}\,M_\odot$ (norm)",
-    transform=ax_l.transAxes,
-    fontsize=10,
-    va="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
-ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-m_star = 10.0 ** float(s_stellar.derived["log_mstar"])
-ax_r.text(
-    0.05,
-    0.95,
-    rf"$M_\star = {m_star:.2e}\,M_\odot$",
-    transform=ax_r.transAxes,
-    fontsize=10,
-    va="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
-# Frame y to the visible SED. Without this, matplotlib autoscales over the
-# full SSP grid (down to ~5 Å, L_nu ~ 1e8) and the panel spans ~21 dead
-# decades; the stellar continuum only occupies the top ~6.
+m_star_t = 10.0 ** float(s_stellar.derived["log_mstar"])
 _ypk = float(max(np.max(L_b), np.max(np.asarray(s_stellar.sed_intrinsic))))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e6)
-    ax.set_ylim(_ypk / 1e6, _ypk * 2.0)
-    ax.grid(True, alpha=0.3)
+
+fig, ax, ax_r, _ = V.overlay_ratio_fig(
+    w_b,
+    L_b,
+    s_stellar.wave,
+    s_stellar.sed_intrinsic,
+    xlabel=r"$\lambda$ [Å]",
+    title="Stellar continuum (BC03+MILES)",
+    ref_label="BAGPIPES",
+    label_t="tengri",
+    xlim=(1e2, 1e6),
+    ratio_ylim=(0.98, 1.02),
+    band=(0.99, 1.01),
+)
+ax.text(
+    0.05,
+    0.95,
+    rf"$M_\star = 10^{{{LOG_MASS_FIDUCIAL:.0f}}}\,M_\odot$",
+    transform=ax.transAxes,
+    fontsize=10,
+    va="top",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+)
 fig.tight_layout()
 save_fig("bagpipes_03_stellar_sed.png")
 
@@ -745,20 +759,10 @@ if _ratios.size:
 _Z_VALUES = [0.2, 1.0, 2.5]
 _logzsol_values = [float(np.log10(z)) for z in _Z_VALUES]
 
-fig, (ax_b, ax_t) = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
-ax_b.set_title("BAGPIPES — Z sweep at 5 Gyr delayed-τ")
-ax_t.set_title("tengri — Z sweep at 5 Gyr delayed-τ")
-for ax in (ax_b, ax_t):
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$\lambda_{\rm rest}$ [Å]")
-    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-    ax.set_xlim(2e3, 2e4)
-    ax.set_ylim(2e27, 8e29)
-    ax.grid(True, alpha=0.3)
 
-_colors = plt.cm.plasma(np.linspace(0.15, 0.85, len(_Z_VALUES)))
-for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
+cases_z = []
+for z, logz in zip(_Z_VALUES, _logzsol_values):
+    label = f"Z = {z:g} Z⊙"
     w_b_z, L_b_z = B.stellar_only_lnu(
         massformed=LOG_MASS_FIDUCIAL,
         metallicity=z,
@@ -766,7 +770,6 @@ for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
         tau=TAU_GYR_FIDUCIAL,
         sfh_type="delayed",
     )
-    ax_b.plot(w_b_z, L_b_z, color=color, linewidth=1.7, label=f"Z = {z:g} Z⊙")
     m_z = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(logz), "all_params": Fixed(DEFAULT)},
@@ -787,10 +790,19 @@ for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
         redshift=Fixed(0.0),
     )
     s_z = m_z.predict_state({})
-    ax_t.plot(s_z.wave, s_z.sed_intrinsic, color=color, linewidth=1.7, label=f"Z = {z:g} Z⊙")
+    cases_z.append((label, w_b_z, L_b_z, s_z.wave, s_z.sed_intrinsic))
 
-ax_b.legend(fontsize=10)
-ax_t.legend(fontsize=10)
+fig, (ax, ax_r), ratios_z = V.sweep_fig(
+    cases_z,
+    ref_label="BAGPIPES",
+    title="Metallicity sweep (stellar continuum, logU −2)",
+    xlim=(2e3, 2e4),
+    ratio_ylim=(0.97, 1.03),
+    band=(0.99, 1.01),
+    cmap="Blues",
+    values=[0.2, 1.0, 2.5],
+    param_label="Z / Z_sun",
+)
 fig.tight_layout()
 save_fig("bagpipes_15_metallicity_sweep.png")
 
@@ -856,6 +868,9 @@ fig, (ax, ax_r), ratios = V.sweep_fig(
     ref_label="BAGPIPES",
     title="§5 cont'd — Metallicity sweep (5 Gyr delayed-τ, nebular on)",
     xlim=(1e3, 1e5),
+    cmap="Blues",
+    values=[0.2, 0.5, 1.0, 1.5, 2.5],
+    param_label="Z / Z_sun",
 )
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 fig.tight_layout()
@@ -879,18 +894,20 @@ V.print_filter_table(
 # Dust laws from BAGPIPES (Calzetti+2000, Cardelli+1989, Charlot & Fall 2000,
 # Salim+2018) compared against tengri's `calzetti`, `cardelli`, `noll09`, and
 # `salim`. Both evaluate the analytic laws directly, normalized to `A(λ)/A_V`
-# at 5500 Å.
+# at 5500 Å. The Salim+2018 curve at δ = 0 coincides exactly with Calzetti+2000
+# by construction, so the two overlap in both the panel and the ratio row.
 #
 # **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
 from tengri.dust import list_laws
 
-# (BAGPIPES dust block, tengri law, label) for the four matched laws.
+# (BAGPIPES dust block, tengri law, label) for three matched single-screen laws.
+# Charlot & Fall 2000 is excluded: it is a two-component prescription in BAGPIPES
+# (birth-cloud attenuation + ISM), while tengri's noll09 is single-screen only.
 _law_pairs = [
     ({"type": "Calzetti", "Av": 1.0}, "calzetti", "Calzetti+2000"),
     ({"type": "Cardelli", "Av": 1.0}, "cardelli", "Cardelli+1989 (MW)"),
-    ({"type": "CF00", "Av": 1.0, "eta": 2.0, "n": -0.7}, "noll09", "Charlot & Fall 2000"),
     ({"type": "Salim", "Av": 1.0, "delta": 0.0, "B": 0.0}, "salim", "Salim+2018 (δ=0)"),
 ]
 _tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
@@ -902,33 +919,32 @@ def _norm_AV(wave, A):
     return A / A[np.argmin(np.abs(wave - 5500.0))]
 
 
-fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
-for ax, title in (
-    (ax_l, "bagpipes.model_galaxy attenuation laws"),
-    (ax_r, "tengri attenuation laws"),
-):
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$\lambda$ [Å]")
-    ax.set_xlim(1e3, 5e4)
-    ax.set_ylim(0.05, 20)
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
-ax_l.set_ylabel(r"$A_\lambda / A_V$")
-
+cases_laws = []
 for dust_block, tengri_law, label in _law_pairs:
     try:
         w_b, A_b = B.attenuation_curve(dust_block)
-        ax_l.plot(w_b, _norm_AV(w_b, A_b), linewidth=2.0, label=label)
+        A_b_norm = _norm_AV(w_b, A_b)
     except Exception as exc:
         print(f"  skip BAGPIPES {label!r}: {exc}")
+        continue
 
-    # tengri's law functions are JAX-native but accept array-likes; the
-    # result is wrapped back to NumPy for plotting.
     A_t = np.asarray(_tengri_laws[tengri_law](wave_law))
-    ax_r.plot(wave_law, _norm_AV(wave_law, A_t), linewidth=2.0, label=label)
-ax_l.legend(fontsize=10)
-ax_r.legend(fontsize=10)
+    A_t_norm = _norm_AV(wave_law, A_t)
+    cases_laws.append((label, w_b, A_b_norm, wave_law, A_t_norm))
+
+fig, (ax, ax_r), ratios_laws = V.sweep_fig(
+    cases_laws,
+    ref_label="BAGPIPES",
+    title="Attenuation laws (single-screen)",
+    xlabel=r"$\lambda$ [Å]",
+    ylabel=r"$A_\lambda / A_V$",
+    xlim=(1e3, 5e4),
+    logy=True,
+    ratio_ylim=(0.95, 1.05),
+    band=(0.98, 1.02),
+)
+ax.set_ylim(1e-3, 2e1)
+ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=10)
 fig.tight_layout()
 save_fig("bagpipes_04_dust_attenuation.png")
 
@@ -1355,32 +1371,31 @@ print(
     f"L_IR_emitted = {_L_ir:.3e}, resid = {_eb_resid:.2e}"
 )
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="BAGPIPES  Calzetti + DL07",
-    label_r="tengri  Calzetti + DL07 (energy-balanced)",
-)
-ax_l.plot(w_b_ir, L_b_ir, "C0-", linewidth=1.5)
 sed_full_t = s_ir.derived["sed_dust_attenuated"] + s_ir.derived["sed_dust_ir"]
-ax_r.plot(s_ir.wave, sed_full_t, "C1-", linewidth=1.5)
-ax_r.text(
+_ypk = float(max(np.max(L_b_ir), np.max(np.asarray(sed_full_t))))
+
+fig, ax, ax_r, _ = V.overlay_ratio_fig(
+    w_b_ir,
+    L_b_ir,
+    s_ir.wave,
+    sed_full_t,
+    xlabel=r"$\lambda_{\rm rest}$ [Å]",
+    title="Dust IR emission (Calzetti + DL07)",
+    ref_label="BAGPIPES",
+    label_t="tengri",
+    xlim=(1e3, 1e7),
+    ratio_ylim=(0.9, 1.1),
+    band=(0.95, 1.05),
+)
+ax.text(
     0.05,
     0.95,
     rf"$|L_{{IR}} - L_{{abs}}| / L_{{abs}}$ = {_eb_resid:.1e}",
-    transform=ax_r.transAxes,
+    transform=ax.transAxes,
     fontsize=10,
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-# Frame to the visible SED (stellar + dust IR); the fixed 1e24-1e32 window
-# left ~3 empty decades below the continuum.
-_ypk = float(max(np.max(L_b_ir), np.max(np.asarray(sed_full_t))))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e3, 1e7)
-    ax.set_ylim(_ypk / 1e5, _ypk * 2.0)
-    ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("bagpipes_06_dust_ir.png")
 
@@ -1606,19 +1621,20 @@ s_neb_off = m_neb_off.predict_state({})
 # avoid subtracting two SEDs on different wave grids.
 L_t_neb_alone = np.asarray(s_neb_on.derived["sed_nebular"])
 
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="BAGPIPES  Cloudy v25 nebular (10 Myr CSF)",
-    label_r="tengri  Cue v17 emulator (10 Myr CSF)",
+fig, ax, ax_r, _ = V.overlay_ratio_fig(
+    w_b_neb,
+    L_b_neb_alone,
+    s_neb_on.wave,
+    L_t_neb_alone,
+    xlabel=r"$\lambda$ [Å]",
+    title="Nebular emission (logU −2, solar metallicity, f_esc = 0)",
+    ref_label="BAGPIPES",
+    label_t="tengri",
+    xlim=(900, 7000),
+    ratio_ylim=(0.5, 2.0),
+    band=(1.0, 1.0),
 )
-ax_l.plot(w_b_neb, L_b_neb_alone, "C0-", linewidth=1.0)
-ax_r.plot(s_neb_on.wave, L_t_neb_alone, "C1-", linewidth=1.0)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(900, 7000)
-    ax.set_xscale("linear")
-    ax.grid(True, alpha=0.3)
+ax.set_xscale("linear")
 # Quantify the residual by integrated line luminosity (width- and grid-
 # independent). A single-bin peak ratio measures line width, not luminosity —
 # Cue broadens its lines (see §10) while BAGPIPES' grid places them at its
@@ -1813,30 +1829,20 @@ _w_t_uni = np.geomspace(_w_t_halpha[0], _w_t_halpha[-1], _n_uni)
 _L_t_uni = np.interp(_w_t_uni, _w_t_halpha, _L_t_halpha)
 L_t_lsf = np.asarray(_tng_broaden(_L_t_uni, _w_t_uni, VELDISP_KMS))
 
-fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5))
-for ax, title in (
-    (ax_l, f"BAGPIPES  veldisp = {VELDISP_KMS:.0f} km/s"),
-    (ax_r, f"tengri  velocity_broaden(σ = {VELDISP_KMS:.0f} km/s)"),
-):
-    ax.set_xlabel(r"$\lambda$ [Å]")
-    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-    ax.set_title(title)
-    ax.set_xlim(6400, 6720)
-    ax.grid(True, alpha=0.3)
-ax_l.plot(w_b_unb, L_b_unb, "lightgrey", linewidth=1.0, label="no broadening")
-ax_l.plot(w_b_lsf, L_b_lsf, "C0-", linewidth=1.8, label="veldisp = 150 km/s")
-ax_l.legend(fontsize=9)
-ax_r.plot(_w_t_uni, _L_t_uni, "lightgrey", linewidth=1.0, label="no broadening")
-ax_r.plot(_w_t_uni, L_t_lsf, "C1-", linewidth=1.8, label="velocity_broaden 150 km/s")
-ax_r.legend(fontsize=9)
-# Shared y-scale framed on the BROADENED lines so the two panels are directly
-# comparable. The gray unbroadened references are delta-function spikes whose
-# height is purely sampling-dependent; letting them drive independent autoscale
-# made BAGPIPES (1.2e32) and tengri (4.4e32) look mismatched even though the
-# broadened Hα profiles are the physical quantity of interest.
-_ymax_vb = 1.15 * float(max(np.max(L_b_lsf), np.max(L_t_lsf)))
-for ax in (ax_l, ax_r):
-    ax.set_ylim(0, _ymax_vb)
+fig, ax, ax_r, _ = V.overlay_ratio_fig(
+    w_b_lsf,
+    L_b_lsf,
+    _w_t_uni,
+    L_t_lsf,
+    xlabel=r"$\lambda$ [Å]",
+    title=rf"Hα line profile (velocity broadening $\sigma_v = {VELDISP_KMS:.0f}$ km/s)",
+    ref_label="BAGPIPES",
+    label_t="tengri",
+    xlim=(6400, 6720),
+    ratio_ylim=(0.8, 1.2),
+    band=(0.9, 1.1),
+)
+ax.set_ylim(0, None)
 fig.tight_layout()
 save_fig("bagpipes_09_lsf_velbroaden.png")
 
@@ -1928,19 +1934,25 @@ m_full = SEDModel.build(
 )
 s_full = m_full.predict_state({})
 
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(ax_l, ax_r, label_l="BAGPIPES  panchromatic", label_r="tengri  panchromatic")
-ax_l.plot(w_b_full, L_b_full, "C0-", linewidth=1.5)
 _sed_full_t = (
     np.asarray(s_full.derived["sed_dust_attenuated"])
     + np.asarray(s_full.derived["sed_dust_ir"])
     + np.asarray(s_full.derived["sed_nebular"])
 )
-ax_r.plot(s_full.wave, _sed_full_t, "C1-", linewidth=1.5)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e7)
-    ax.set_ylim(1e22, 1e31)
-    ax.grid(True, alpha=0.3)
+
+fig, ax, ax_r, _ = V.overlay_ratio_fig(
+    w_b_full,
+    L_b_full,
+    s_full.wave,
+    _sed_full_t,
+    xlabel=r"$\lambda_{\rm rest}$ [Å]",
+    title="Panchromatic SED (Calzetti + DL07 + Cue)",
+    ref_label="BAGPIPES",
+    label_t="tengri",
+    xlim=(1e2, 1e7),
+    ratio_ylim=(0.8, 1.2),
+    band=(0.9, 1.1),
+)
 fig.tight_layout()
 save_fig("bagpipes_07_panchromatic.png")
 
@@ -2537,16 +2549,16 @@ plt.show()
 #   SFH. Bit-for-bit agreement on SFR(t) at matched parameters once
 #   the bin-ordering convention is reconciled (BAGPIPES indexes
 #   oldest→youngest, tengri young→old).
-# - **§4 stellar SED.** tengri / BAGPIPES median ratio in the optical
-#   ≈ 1.010 ± 0.001 — a flat ~1 % systematic at matched SFH and SSP.
+# - **§4 stellar SED.** tengri / BAGPIPES optical (3000–10000 Å):
+#   median 1.005, P5 1.003, P95 1.006 — a flat <1 % systematic at matched SFH and SSP.
 # - **§6–§8 dust attenuation + IR.** Calzetti curves overlap; CF00 /
 #   Cardelli / Salim differ by construction. With the §7 single-screen
 #   mapping the attenuated optical matches to ~1 %, and the DL07 IR matches
 #   in shape (both peak ~130 μm; 30–100 μm and submm to ~6 %).
 # - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy v17 (Cue, tengri):
-#   tengri Hα ≈ 3.6 × BAGPIPES Hα.
+#   tengri Hα ≈ 0.98 × BAGPIPES Hα.
 # - **§10 LSF.** tengri's `velocity_broaden` matches the analytic
-#   Gaussian σ = 150 km/s FWHM to 0.7 %.
+#   Gaussian σ = 150 km/s FWHM to 0.8 %.
 # - **§11 panchromatic.** The combined picture; per-section residuals
 #   stack.
 # - **§12 IGM.** Inoue14 vs Inoue14 agrees redward of the Lyman limit
@@ -2555,11 +2567,11 @@ plt.show()
 #   damping wing (§12 cont'd, tengri-only) produces the full Totani+06
 #   damping-wing shape at z = 7.
 # - **§13 SDSS photometry.** With the §7 single-screen dust, tengri
-#   matches the BAGPIPES ugriz magnitudes to ≤ 0.02 mag in r/i/z but stays
-#   −0.11 mag (u) and −0.15 mag (g) brighter — the two bands carrying the
+#   matches the BAGPIPES ugriz magnitudes to ≤ 0.009 mag in r/i/z but differs
+#   −0.067 mag (u) and −0.048 mag (g) — the two bands carrying the
 #   strongest nebular lines ([O II] 3727 in u; Hβ + [O III] 4959/5007 in g).
 #   §13b attributes this to the §9 Cue-vs-Cloudy nebular line-strength
-#   difference: the band-averaged residual drops from ⟨Δ⟩ −0.06 → −0.01 mag
+#   difference: the band-averaged residual drops from ⟨Δ⟩ −0.020 → −0.008 mag
 #   with the nebular block removed, leaving only the ≈ 0.01 mag §4 stellar
 #   color mismatch.
 # - **§14 timing.** Both codes finish a full SED in 80–120 ms.

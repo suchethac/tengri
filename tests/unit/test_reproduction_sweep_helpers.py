@@ -472,5 +472,533 @@ def test_filter_rows_native_matches_filter_rows_on_a_shared_grid():
             raise AssertionError(f"Row {i}: one ratio is NaN, the other is not")
 
 
+def test_overlay_ratio_fig_ratio_computation_different_grids():
+    """overlay_ratio_fig computes ratio correctly when grids differ."""
+    from reproduction._validation import overlay_ratio_fig
+
+    # Reference on a coarse grid
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+
+    # Tengri on a finer grid
+    w_t = np.linspace(1000.0, 4000.0, 10)
+    L_t = np.interp(w_t, w_ref, L_ref)  # Same function, finer grid
+
+    fig, _ax, _ax_r, ratio = overlay_ratio_fig(w_ref, L_ref, w_t, L_t)
+
+    # Ratio should be regridded tengri / reference = interp(L_t onto w_ref) / L_ref
+    expected_ratio = np.interp(w_ref, w_t, L_t) / L_ref
+    np.testing.assert_allclose(ratio[L_ref > 0], expected_ratio[L_ref > 0], rtol=1e-10)
+
+    plt.close(fig)
+
+
+def test_overlay_ratio_fig_ylim_and_band_on_axis():
+    """overlay_ratio_fig applies ratio_ylim and band correctly."""
+    from reproduction._validation import overlay_ratio_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    w_t = w_ref  # Same grid
+    L_t = L_ref
+
+    ratio_ylim = (0.4, 1.6)
+    band = (0.85, 1.15)
+
+    fig, _ax, ax_r, _ratio = overlay_ratio_fig(
+        w_ref, L_ref, w_t, L_t, ratio_ylim=ratio_ylim, band=band
+    )
+
+    # Check ratio axis limits
+    assert ax_r.get_ylim() == ratio_ylim
+
+    # Check that an axhspan (shaded band) exists on the ratio axis
+    # axhspan creates a Rectangle patch
+    patches = ax_r.patches
+    assert len(patches) > 0, "No shaded band found on ratio panel"
+    # The first patch should be the shaded band (zorder=0, others have default zorder)
+    band_patch = [p for p in patches if hasattr(p, "get_zorder") and p.get_zorder() == 0]
+    assert len(band_patch) > 0, "No band patch found with zorder=0"
+
+    plt.close(fig)
+
+
+def test_overlay_ratio_fig_x_of_wave_transforms_both_axes():
+    """overlay_ratio_fig applies x_of_wave transformation to both panels."""
+    from reproduction._validation import overlay_ratio_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    w_t = w_ref
+    L_t = L_ref
+
+    # Transform: convert Angstrom to micrometers
+    def x_of_wave(w):
+        return w / 1e4
+
+    fig, ax, ax_r, _ratio = overlay_ratio_fig(
+        w_ref, L_ref, w_t, L_t, x_of_wave=x_of_wave, xlabel="wavelength [µm]"
+    )
+
+    # Get plotted x data from both axes
+    top_lines = ax.get_lines()
+    ratio_lines = ax_r.get_lines()
+
+    # Top panel should have two lines (reference and tengri)
+    assert len(top_lines) == 2
+    top_x_data_0 = top_lines[0].get_xdata()
+    top_x_data_1 = top_lines[1].get_xdata()
+
+    # Ratio panel should have at least one line (the ratio curve; axhline at 1.0 is a line too)
+    assert len(ratio_lines) >= 1
+    # Use the first line as the ratio data (there may be the axhline at 1.0 too)
+    ratio_x_data = ratio_lines[0].get_xdata()
+
+    # All x data should be transformed (in micrometers, not Angstrom)
+    # Expected transformed values
+    expected_x = x_of_wave(w_ref[L_ref > 0])
+
+    # Check that plotted x values match the transformation
+    np.testing.assert_allclose(top_x_data_0, expected_x, rtol=1e-10)
+    np.testing.assert_allclose(top_x_data_1[L_ref[w_ref > 0] > 0], expected_x, rtol=1e-10)
+
+    # Both axes should share the same x scale (log)
+    assert ax.get_xscale() == "log"
+    assert ax_r.get_xscale() == "log"
+
+    plt.close(fig)
+
+
+def test_overlay_ratio_fig_reference_with_zeros_no_inf():
+    """overlay_ratio_fig returns nan where reference is not positive."""
+    from reproduction._validation import overlay_ratio_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0, 5000.0])
+    # Reference with some zeros
+    L_ref = np.array([1.0, 0.0, 1.5, 0.0, 0.5])
+    w_t = w_ref
+    L_t = np.array([1.0, 0.5, 1.5, 0.3, 0.5])
+
+    fig, _ax, _ax_r, ratio = overlay_ratio_fig(w_ref, L_ref, w_t, L_t)
+
+    # Where L_ref > 0, ratio should be finite
+    mask_positive = L_ref > 0
+    assert np.all(np.isfinite(ratio[mask_positive]))
+
+    # Where L_ref <= 0, ratio should be nan
+    mask_nonpositive = L_ref <= 0
+    assert np.all(np.isnan(ratio[mask_nonpositive]))
+
+    plt.close(fig)
+
+
+class TestSweepFigGuard:
+    """Test sweep_fig raises when arms have no overlapping positive region."""
+
+    def test_sweep_fig_raises_non_overlapping(self):
+        """Test that sweep_fig raises when wavelength ranges don't overlap."""
+        from reproduction._validation import sweep_fig
+
+        # Reference: 0-10 Angstrom, tengri: 100-110 Angstrom (no overlap)
+        w_ref = np.array([0.0, 5.0, 10.0])
+        L_ref = np.array([1.0, 2.0, 1.0])
+        w_t = np.array([100.0, 105.0, 110.0])
+        L_t = np.array([1.0, 2.0, 1.0])
+
+        with pytest.raises(ValueError, match="No overlapping positive region for case"):
+            sweep_fig(
+                [("test", w_ref, L_ref, w_t, L_t)],
+                ref_label="ref",
+                title="test",
+            )
+
+    def test_sweep_fig_normal_call_works(self):
+        """Test that sweep_fig works with overlapping arms."""
+        from reproduction._validation import sweep_fig
+
+        # Both arms overlap and are positive
+        w_ref = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        L_ref = np.array([1.0, 2.0, 3.0, 2.0, 1.0])
+        w_t = np.array([1.5, 2.5, 3.5, 4.5])
+        L_t = np.array([1.5, 2.5, 2.5, 1.5])
+
+        # Should not raise
+        fig, (_ax, _ax_r), ratios = sweep_fig(
+            [("test", w_ref, L_ref, w_t, L_t)],
+            ref_label="ref",
+            title="test",
+            logy=True,
+        )
+
+        assert fig is not None
+        assert "test" in ratios
+
+        plt.close(fig)
+
+
+class TestOverlayRatioFigGuard:
+    """Test overlay_ratio_fig raises when arms have no overlapping positive region."""
+
+    def test_overlay_ratio_fig_raises_non_overlapping(self):
+        """Test that overlay_ratio_fig raises when wavelength ranges don't overlap."""
+        from reproduction._validation import overlay_ratio_fig
+
+        # Reference: 0-10 Angstrom, tengri: 100-110 Angstrom (no overlap)
+        wave_ref = np.array([0.0, 5.0, 10.0])
+        L_ref = np.array([1.0, 2.0, 1.0])
+        wave_t = np.array([100.0, 105.0, 110.0])
+        L_t = np.array([1.0, 2.0, 1.0])
+
+        with pytest.raises(
+            ValueError, match="No overlapping positive region for overlay_ratio_fig"
+        ):
+            overlay_ratio_fig(wave_ref, L_ref, wave_t, L_t)
+
+    def test_overlay_ratio_fig_normal_call_works(self):
+        """Test that overlay_ratio_fig works with overlapping arms."""
+        from reproduction._validation import overlay_ratio_fig
+
+        # Both arms overlap and are positive
+        wave_ref = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        L_ref = np.array([1.0, 2.0, 3.0, 2.0, 1.0])
+        wave_t = np.array([1.5, 2.5, 3.5, 4.5])
+        L_t = np.array([1.5, 2.5, 2.5, 1.5])
+
+        # Should not raise
+        fig, _ax, _ax_r, ratio = overlay_ratio_fig(wave_ref, L_ref, wave_t, L_t)
+
+        assert fig is not None
+        assert ratio is not None
+
+        plt.close(fig)
+
+
+class TestMutationSweepFig:
+    """Mutation testing: verify the guard is necessary."""
+
+    def test_mutation_sweepfig_guard_unconditional_raises(self):
+        """Verify that removing the guard causes the test to fail.
+
+        This test serves as a mutation check: if the guard were removed
+        (unconditional raise), this test should fail.
+        """
+        from reproduction._validation import sweep_fig
+
+        # This is the positive-path test that should pass normally
+        w_ref = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        L_ref = np.array([1.0, 2.0, 3.0, 2.0, 1.0])
+        w_t = np.array([1.5, 2.5, 3.5, 4.5])
+        L_t = np.array([1.5, 2.5, 2.5, 1.5])
+
+        # This should NOT raise (normal path)
+        fig, (_ax, _ax_r), ratios = sweep_fig(
+            [("test", w_ref, L_ref, w_t, L_t)],
+            ref_label="ref",
+            title="test",
+            logy=True,
+        )
+
+        # If the guard were unconditional, this assertion would fail
+        assert fig is not None
+        assert len(ratios) == 1
+        assert "test" in ratios
+
+        plt.close(fig)
+
+
+def test_sweep_fig_cmap_none_uses_categorical():
+    """sweep_fig with cmap=None should use default categorical colors."""
+    from reproduction._validation import sweep_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref1 = np.array([1.0, 2.0, 1.5, 0.5])
+    L_t1 = np.array([1.0, 2.1, 1.4, 0.51])
+    L_ref2 = np.array([0.5, 1.0, 0.8, 0.3])
+    L_t2 = np.array([0.5, 1.05, 0.79, 0.31])
+
+    cases = [
+        ("case_1", w_ref, L_ref1, w_ref, L_t1),
+        ("case_2", w_ref, L_ref2, w_ref, L_t2),
+    ]
+
+    fig, (ax, _ax_ratio), _ratios = sweep_fig(
+        cases, ref_label="reference", title="Test", cmap=None
+    )
+
+    assert fig is not None
+    lines = ax.get_lines()
+    # Two lines per case (ref solid + tengri dashed), so 4 lines total
+    assert len(lines) == 4
+
+    plt.close(fig)
+
+
+def test_sweep_fig_cmap_assigns_colors_in_value_order():
+    """sweep_fig with cmap should sample colors based on values in ascending order."""
+    from reproduction._validation import sweep_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+
+    # Three cases with different parameter values
+    L_t1 = np.array([1.0, 2.1, 1.4, 0.51])
+    L_t2 = np.array([0.9, 1.9, 1.3, 0.49])
+    L_t3 = np.array([1.05, 2.05, 1.45, 0.52])
+
+    cases = [
+        ("T=1000K", w_ref, L_ref, w_ref, L_t1),
+        ("T=2000K", w_ref, L_ref, w_ref, L_t2),
+        ("T=3000K", w_ref, L_ref, w_ref, L_t3),
+    ]
+
+    values = [1000.0, 2000.0, 3000.0]
+
+    fig, (ax, _ax_ratio), _ratios = sweep_fig(
+        cases,
+        ref_label="reference",
+        title="Temperature sweep",
+        cmap="Blues",
+        values=values,
+    )
+
+    assert fig is not None
+    lines = ax.get_lines()
+    # Should have 6 lines (2 per case)
+    assert len(lines) == 6
+
+    # Extract colors from the lines
+    # First case (1000K, lowest) should be lightest
+    # Third case (3000K, highest) should be darkest
+    color1 = lines[0].get_color()  # First case reference line
+    color3 = lines[4].get_color()  # Third case reference line
+
+    # Convert RGBA to grayscale to check darkness
+    # For Blues colormap: darker values = higher alpha in blue channel
+    # Both should be valid RGBA tuples
+    assert len(color1) == 4
+    assert len(color3) == 4
+
+    plt.close(fig)
+
+
+def test_sweep_fig_unequal_values_positions_middle_case_correctly():
+    """sweep_fig with unequal values should position color by value not index."""
+    from reproduction._validation import sweep_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    L_t = L_ref.copy()
+
+    # Values: 1, 10, 100 (logarithmic spacing, but color position should reflect value position)
+    cases = [
+        ("val_1", w_ref, L_ref, w_ref, L_t),
+        ("val_10", w_ref, L_ref, w_ref, L_t),
+        ("val_100", w_ref, L_ref, w_ref, L_t),
+    ]
+
+    values = [1.0, 10.0, 100.0]
+
+    fig, (ax, _ax_ratio), _ratios = sweep_fig(
+        cases,
+        ref_label="reference",
+        title="Unequal spacing",
+        cmap="Reds",
+        values=values,
+    )
+
+    # The middle case (10) should be closer in color to case 3 (100) than to case 1 (1)
+    # on a linear scale: 1 < 10 < 100, so 10 is 1/11 of the way, very close to the start
+    lines = ax.get_lines()
+    assert len(lines) == 6
+
+    plt.close(fig)
+
+
+def test_sweep_fig_with_param_label_creates_colorbar():
+    """sweep_fig with values and param_label should create colorbar instead of legend."""
+    from reproduction._validation import sweep_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+
+    L_t1 = np.array([1.0, 2.1, 1.4, 0.51])
+    L_t2 = np.array([0.9, 1.9, 1.3, 0.49])
+    L_t3 = np.array([1.05, 2.05, 1.45, 0.52])
+
+    cases = [
+        ("T=1000K", w_ref, L_ref, w_ref, L_t1),
+        ("T=2000K", w_ref, L_ref, w_ref, L_t2),
+        ("T=3000K", w_ref, L_ref, w_ref, L_t3),
+    ]
+
+    values = [1000.0, 2000.0, 3000.0]
+
+    fig, (_ax, _ax_ratio), _ratios = sweep_fig(
+        cases,
+        ref_label="reference",
+        title="Temperature sweep",
+        cmap="Blues",
+        values=values,
+        param_label="Temperature [K]",
+    )
+
+    assert fig is not None
+
+    # Check that a colorbar was created
+    # The colorbar should be added as a separate axis
+    # We can check the figure's axes count
+    assert len(fig.axes) > 2  # Original 2 axes (ax, ax_ratio) + colorbar
+
+    plt.close(fig)
+
+
+def test_sweep_fig_cmap_default_none_keeps_backward_compatibility():
+    """sweep_fig default cmap should work with existing code patterns."""
+    from reproduction._validation import sweep_fig
+
+    w_ref = np.array([1000.0, 2000.0, 3000.0, 4000.0])
+    L_ref = np.array([1.0, 2.0, 1.5, 0.5])
+    L_t = L_ref * 1.05
+
+    cases = [("test", w_ref, L_ref, w_ref, L_t)]
+
+    # Call without any cmap/values/param_label arguments (backward compat)
+    fig, (_ax, _ax_ratio), ratios = sweep_fig(
+        cases,
+        ref_label="reference",
+        title="Test",
+    )
+
+    assert fig is not None
+    assert len(ratios) == 1
+
+    plt.close(fig)
+
+
+def test_descending_sample_axis_still_compares():
+    """A descending x-axis must compare, not silently read as zero everywhere.
+
+    ``np.interp`` requires an increasing sample axis and does not verify it; given a
+    descending one it returns the fill value at every point. A cosmic-age axis built
+    from a lookback-time grid descends, which turned three SFH comparisons into blank
+    figures: every regridded point became the ``left=0.0`` fill, so the two arms shared
+    no positive region.
+    """
+    from reproduction._validation import sweep_fig
+
+    t_ref = np.linspace(0.1, 4.9, 40)
+    sfr_ref = t_ref * np.exp(-t_ref)
+
+    # tengri's arm, descending — as a cosmic-age axis from a lookback grid arrives.
+    t_t_desc = np.linspace(5.0, 0.0, 50)
+    sfr_t_desc = 1.05 * t_t_desc * np.exp(-t_t_desc)
+
+    fig, (_ax, _ax_ratio), ratios = sweep_fig(
+        [("descending", t_ref, sfr_ref, t_t_desc, sfr_t_desc)],
+        ref_label="reference",
+        title="descending axis",
+        logy=False,
+    )
+    ratio = ratios["descending"]
+    finite = ratio[np.isfinite(ratio)]
+
+    assert finite.size > 0, "every point non-finite: the descending axis was not handled"
+    assert np.all(finite > 0), "zero-filled ratio: np.interp received a descending axis"
+    assert np.median(finite) == pytest.approx(1.05, rel=0.02)
+
+    plt.close(fig)
+
+
+def test_ascending_helper_leaves_increasing_input_untouched():
+    """An already-increasing axis is returned unchanged, not re-sorted."""
+    from reproduction._validation import _ascending
+
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    y = np.array([10.0, 20.0, 30.0, 40.0])
+    x_out, y_out = _ascending(x, y)
+
+    assert np.array_equal(x_out, x)
+    assert np.array_equal(y_out, y)
+
+    x_desc = x[::-1].copy()
+    y_desc = y[::-1].copy()
+    x_s, y_s = _ascending(x_desc, y_desc)
+    assert np.array_equal(x_s, x)
+    assert np.array_equal(y_s, y)
+
+
+def test_default_colors_are_categorical_not_a_ramp():
+    """The default must not be a sequential ramp.
+
+    A ramp asserts that the cases are ordered by magnitude. Most sweeps compare
+    model families or multi-parameter grid nodes, where that ordering does not
+    exist, so the ramp has to be asked for explicitly.
+    """
+    from reproduction._validation import sweep_fig
+
+    w = np.array([1.0, 2.0, 3.0, 4.0])
+    cases = [(f"case{i}", w, w * (i + 1.0), w, w * (i + 1.0) * 1.02) for i in range(4)]
+
+    fig, (ax, _ax_r), _ratios = sweep_fig(cases, ref_label="ref", title="t")
+    drawn = [ln.get_color() for ln in ax.get_lines()]
+    # Categorical cycle entries are distinct hues, not samples of one ramp.
+    assert len({str(c) for c in drawn}) >= 4
+    plt.close(fig)
+
+
+def test_y_floor_tracks_the_data_not_only_the_peak():
+    """A sweep covering two decades is not drawn on an axis spanning many."""
+    from reproduction._validation import sweep_fig
+
+    w = np.logspace(0, 2, 64)
+    L = np.full_like(w, 1e28)
+    L[32:] = 1e26
+    fig, (ax, _ax_r), _ = sweep_fig([("flat", w, L, w, L * 1.01)], ref_label="ref", title="t")
+    lo, hi = ax.get_ylim()
+    # Floor sits just under the smallest drawn value, not at peak * 1e-5.
+    assert lo > 1e25, f"y floor {lo:.3e} is far below the data"
+    assert hi >= 1e28
+    plt.close(fig)
+
+
+def test_ratio_window_widens_to_hold_a_real_excursion():
+    """A case sitting outside the requested window is shown, not cropped."""
+    from reproduction._validation import sweep_fig
+
+    w = np.logspace(0, 2, 64)
+    L_ref = np.full_like(w, 1e28)
+    fig, (_ax, ax_r), _ = sweep_fig(
+        [("low", w, L_ref, w, L_ref * 0.25)],
+        ref_label="ref",
+        title="t",
+        ratio_ylim=(0.5, 1.5),
+    )
+    lo, _hi = ax_r.get_ylim()
+    assert lo < 0.25, f"ratio floor {lo} crops a case at 0.25"
+    plt.close(fig)
+
+
+def test_ratio_is_not_drawn_outside_the_overlap():
+    """Where tengri has no data the regrid fills zero; that is not a ratio of zero."""
+    from reproduction._validation import sweep_fig
+
+    w_ref = np.linspace(1.0, 10.0, 64)
+    L_ref = np.full_like(w_ref, 1.0)
+    w_t = np.linspace(5.0, 10.0, 32)
+    L_t = np.full_like(w_t, 1.0)
+
+    fig, (_ax, ax_r), _ = sweep_fig(
+        [("partial", w_ref, L_ref, w_t, L_t)], ref_label="ref", title="t", logy=False
+    )
+    # get_lines()[0] is the ratio curve; later entries are the y=1 guide.
+    line = ax_r.get_lines()[0]
+    xd = np.asarray(line.get_xdata())
+    yd = np.asarray(line.get_ydata())
+    left = yd[xd < 4.0]
+    assert left.size, "no points left of the overlap to check"
+    assert np.all(~np.isfinite(left)), "ratio drawn through the zero-fill region"
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

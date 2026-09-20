@@ -664,6 +664,12 @@ _VALID_AGN_FEII_TYPES = _agn_block_types("feii")
 #: Valid AGN attenuation block types (derived from ``AGN_BLOCKS['attenuation']``).
 _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 
+#: Mapping from AGN atten law names to the type names that wrap them.
+#: When difflib suggests a law-wrapped type (e.g., smc_prevot), we suggest
+#: the law form (e.g., law='prevot_smc') instead to avoid routing through
+#: a type that would itself be refused with "no longer supported".
+_AGN_ATTEN_LAW_TYPES: dict[str, str] = {"smc_prevot": "prevot_smc"}
+
 #: Top-level groups whose ``type`` the round-trip must be able to emit even when
 #: the group declares no parameters of its own. Exported (rather than inlined in
 #: :func:`parameters_to_groups`) so the contract test's census is *derived* from
@@ -961,8 +967,13 @@ def parse_groups(**kwargs) -> Parameters:
     # range as a defect after that range has already been fixed (#1586).
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", AdvisoryWarning)
-        # structural_kwargs has registry defaults; bypass validation (not user-provided)
-        structural_params = Parameters(**structural_kwargs, _grammar_validated=True)
+        # structural_kwargs has registry defaults; bypass validation (not user-provided).
+        # Defer resource-path resolution (e.g., cloudy grid) so key validation can run
+        # before grid-file existence check, allowing bogus keys to be reported before
+        # "missing grid" errors (#2328).
+        structural_params = Parameters(
+            **structural_kwargs, _grammar_validated=True, _defer_resource_paths=True
+        )
 
     # Partition declared params by owning group. ``met_*`` lands in
     # ``"stellar"`` when the user opted into the new top-level slot
@@ -1268,6 +1279,7 @@ def parse_groups(**kwargs) -> Parameters:
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _narrow_free_priors_to_z(resolved_kwargs, provenance)
+    _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
     # Fill in provenance for params not touched by user/wildcard
@@ -1632,6 +1644,111 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
             default=default,
         )
         provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+
+
+def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
+    """Refuse metallicity bins with edges older than the cosmic age at redshift.
+
+    The ``met={'type': 'bins'}`` mode assigns metallicity in fixed lookback-time
+    bins. The hard-coded z=0 ladder has edges spanning 1 Myr to 13.8 Gyr. At
+    high redshifts where ``age_at_z(z) < max_edge``, bins beyond cosmic time
+    become unreachable (they lie before the Big Bang), making those bins'
+    parameters identically inert with zero gradient. This check refuses the
+    build and names the unreachable edges, noting that the bin ladder is not
+    yet configurable through ``SEDModel.build()`` and pointing to issue #2433
+    for future support.
+
+    Mutates nothing; raises instead of silently accepting an invalid config.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, containing the
+        final redshift (or None if absent).
+    kwargs : dict
+        Original groups input from ``parse_groups``, containing the ``met``
+        block (or omitted for default met='delta').
+
+    Raises
+    ------
+    ParameterError
+        If the metallicity mode is 'bins' or 'bins_continuity', the redshift
+        is fixed or free (both checked), and any bin edge exceeds ``age_at_z(z)``.
+        The message names the unreachable edges (in Gyr) and cosmic age,
+        noting that the bin ladder is not yet configurable (see #2433).
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+
+    Called after parameter resolution so redshift is known and ``met`` is
+    expanded to its full group dict (structural keys + parameter values).
+
+    Only 'bins' and 'bins_continuity' metallicity modes are checked. Other
+    modes ('delta', 'table', 'ramp') do not use lookback-time bins.
+
+    Unlike :func:`_narrow_free_priors_to_z`, this function does NOT widen
+    or modify a prior. It only refuses (raises) when the configuration is
+    physically impossible.
+    """
+    from tengri.components.stellar.component import _DEFAULT_MET_BIN_EDGES_LOG_YR
+    from tengri.utils.cosmology import age_at_z
+
+    met_block = kwargs.get("met", {})
+    if not isinstance(met_block, dict):
+        return  # Met is off or not a dict (e.g. a bare value)
+
+    met_type = met_block.get("type", "delta")
+    if met_type not in ("bins", "bins_continuity"):
+        return  # No lookback-time bins to check
+
+    # Use the default bin edges (no build-time override path yet; see #2433).
+    bin_edges_log_yr = _DEFAULT_MET_BIN_EDGES_LOG_YR
+
+    # Convert log10(yr) to Gyr: 10^x yr = 10^(x-9) Gyr
+    bin_edges_gyr = [10.0 ** (log_yr - 9.0) for log_yr in bin_edges_log_yr]
+
+    # Get redshift distribution and compute floor (as _narrow_free_priors_to_z does)
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None:
+        return  # No redshift yet (introspection caller); skip check
+
+    z_floor = redshift_dist.bounds[0]
+    # Every Distribution passed here has .bounds; a missing floor must raise.
+    if z_floor is None:
+        raise ParameterError(
+            "Cannot check metallicity-history bin reachability: redshift "
+            "distribution has no lower bound."
+        )
+
+    # Compute cosmic age at redshift floor
+    cosmic_age_gyr = float(age_at_z(float(z_floor)))
+
+    # Find unreachable bins: those whose lower edge (start in lookback time)
+    # is at or beyond cosmic age. A bin is unreachable when no SSP age falls
+    # inside it; the bin's lower edge marks this threshold.
+    # bin_edges_gyr[:-1] are the starts; bin_edges_gyr[1:] are the ends.
+    bin_starts_gyr = bin_edges_gyr[:-1]
+    unreachable_bins = [
+        (bin_starts_gyr[i], bin_edges_gyr[i + 1])
+        for i in range(len(bin_starts_gyr))
+        if bin_starts_gyr[i] >= cosmic_age_gyr
+    ]
+
+    if not unreachable_bins:
+        return  # All bins reachable; no error
+
+    # Format error message, naming unreachable bins by their [start, end] intervals
+    bins_str = ", ".join(f"[{start:.2f}, {end:.2f}]" for start, end in unreachable_bins)
+    raise ParameterError(
+        f"metallicity-history bins mode (met={{'type': '{met_type}'}}) has "
+        f"lookback-time bins unreachable at redshift {z_floor:g}: cosmic age is "
+        f"{cosmic_age_gyr:.4g} Gyr, but the following bins lie before the Big Bang: "
+        f"{bins_str} Gyr. These bins' parameters will be identically inert.\n\n"
+        f"The bin ladder is not yet configurable through SEDModel.build() "
+        f"(see issue #2433 for future support). For now, use a lower redshift where "
+        f"all bins are reachable, or use a different metallicity mode. See issue #2204."
+    )
 
 
 def _z_narrowed_onset_params(spec) -> frozenset[str]:
@@ -4845,6 +4962,11 @@ def _short_names_for_registered_type(type_name: str | None) -> set[str]:
     return out
 
 
+#: Threshold for switching from listing parameter short names to pointing at
+#: `tengri.describe(type)` in error messages. Unreadable in tracebacks if longer
+#: than ~12 names; that surface is the listing mechanism.
+_PARAM_NAMES_LIST_THRESHOLD: int = 12
+
 #: Groups whose per-parameter key set is narrowed to the structural variant the
 #: group dict selected, instead of the union over every variant the group can
 #: dispatch to.
@@ -5564,10 +5686,34 @@ def _check_dict_keys(
             else displayed_structural_keys
         )
         displayed_keys = sorted({k for k in structural_source if k != WILDCARD_KEY})
+
+        # Extract the type from the user dict to show accepted parameter names.
+        # When no close match is found, display the type's accepted parameter
+        # short names (or point to tengri.describe for large types).
+        type_value = user_dict.get("type")
+        param_hint = ""
+        if not suggestions and type_value:
+            # Extract parameter short names by filtering suggestion_pool (already
+            # computed above) to exclude structural keys. Avoids re-deriving names.
+            structural_keys_set = set(displayed_keys) | {WILDCARD_KEY}
+            param_short_names = sorted(
+                {s for s in suggestion_pool if s not in structural_keys_set}
+            )
+            if param_short_names:
+                if len(param_short_names) > _PARAM_NAMES_LIST_THRESHOLD:
+                    param_hint = (
+                        f" Parameter names this type accepts: "
+                        f"use tengri.describe('{type_value}') to list them."
+                    )
+                else:
+                    param_hint = (
+                        f" Parameter names this type accepts: {', '.join(param_short_names)}."
+                    )
+
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{suggest_str} "
             f"Valid structural keys for this group are: "
-            f"{displayed_keys}."
+            f"{displayed_keys}.{param_hint}"
         )
 
 
@@ -6062,7 +6208,7 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 )
 
             # Reject old law-as-type spelling: type='smc_prevot'
-            if type_key in ("smc_prevot", "prevot_smc"):
+            if type_key in _AGN_ATTEN_LAW_TYPES:
                 # Task 16 (item 9, F8): both spellings a caller might try must
                 # reach the working form in ONE message. Before this,
                 # type='prevot_smc' (reversed word order) fell through to the
@@ -6070,11 +6216,13 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 # 'smc_prevot' -- itself ALSO refused by this very check, a
                 # second hop to the same destination. Intercepting both here
                 # means either spelling reaches the fix directly.
+                law_name = _AGN_ATTEN_LAW_TYPES[type_key]
                 raise ValueError(
                     f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    "  agn={'atten': {'law': 'prevot_smc', 'attenuation_ebv': Uniform(...)}}\n"
-                    "'prevot_smc' is the only law this block implements -- it applies "
+                    f"  agn={{'atten': {{'law': {law_name!r}, "
+                    f"'attenuation_ebv': Uniform(...)}}}}\n"
+                    f"{law_name!r} is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
                     "not a new choice. 'attenuation_ebv' is the short spelling of "
                     "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
@@ -6128,7 +6276,25 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         # Validate type
         if block_type not in valid_types:
             suggestions = difflib.get_close_matches(block_type, valid_types, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            # Special case for atten: if a suggestion is a law-wrapped type, suggest the law
+            # form instead. This prevents routing the user through a type that would itself
+            # be refused with "no longer supported".
+            if block_name == "atten" and suggestions:
+                revised_suggestions = []
+                for s in suggestions:
+                    if s in _AGN_ATTEN_LAW_TYPES:
+                        # This type wraps a law; suggest the law form instead
+                        law_name = _AGN_ATTEN_LAW_TYPES[s]
+                        revised_suggestions.append(f"law='{law_name}'")
+                    else:
+                        revised_suggestions.append(s)
+                suggest_str = (
+                    f" Did you mean: {', '.join(revised_suggestions)}?"
+                    if revised_suggestions
+                    else ""
+                )
+            else:
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown agn_{block_name}_block type '{block_type}'.{suggest_str}")
 
         result[block_to_kwarg[block_name]] = block_type

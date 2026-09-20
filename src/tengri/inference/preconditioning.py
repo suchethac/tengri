@@ -78,6 +78,15 @@ __all__ = [
 #: needing the residual Jacobian.
 PRIOR_METRIC_FLOOR: float = 1.0
 
+#: Shared float32 Hessian artifact note for non-finite metric errors. The SED model's
+#: photometry Hessian is all-NaN in float32 due to a JAX forward-over-reverse seam,
+#: so non-finiteness under float32 is a candidate cause.
+FLOAT32_HESSIAN_NAN_NOTE: str = (
+    "float32 mode; the SED model's photometry Hessian is all-NaN in float32 "
+    "at the converged MAP (a forward-over-reverse seam in the model); "
+    "bench/reports/2026-09-11_profile_mass_20s.md, Finding 8"
+)
+
 #: Default whitening strength :math:`\alpha` in :math:`A A^\top = G^{-\alpha}`.
 #:
 #: **Not 1.0, deliberately** (#1442). Write the true precision as ``H`` and the metric
@@ -320,6 +329,9 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
     # floor in ``negative_hessian_metric`` cannot help there: ``jnp.maximum(nan,
     # floor)`` is ``nan``, so the floor is a no-op exactly when it is needed.
     if not bool(jnp.all(jnp.isfinite(metric))):
+        dtype_clause = ""
+        if jnp.result_type(float) == jnp.float32:
+            dtype_clause = f" ({FLOAT32_HESSIAN_NAN_NOTE})"
         raise ValueError(
             "metric is non-finite (NaN or inf), so it cannot be factorized. This "
             "is an upstream failure, not a curvature one: the metric is built at "
@@ -327,7 +339,7 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
             "(a diverged MAP, or a log-density that is NaN at that point) "
             "propagates straight into the metric. The eigenvalue floor cannot "
             "repair it. Check the initial point is finite, or pass "
-            "precondition=False to sample without whitening."
+            f"precondition=False to sample without whitening{dtype_clause}."
         )
     lower = jnp.linalg.cholesky(metric)
     if not bool(jnp.all(jnp.isfinite(lower))):
@@ -432,12 +444,15 @@ def _reject_nonfinite_expansion_point(init_flat: jnp.ndarray) -> None:
     """
     if bool(jnp.any(~jnp.isfinite(init_flat))):
         n_bad = int(jnp.sum(~jnp.isfinite(init_flat)))
+        dtype_clause = ""
+        if jnp.result_type(float) == jnp.float32:
+            dtype_clause = f" ({FLOAT32_HESSIAN_NAN_NOTE})"
         raise ValueError(
             f"the expansion point is non-finite ({n_bad} of {init_flat.size} "
             "coordinates are NaN or inf), so no metric can be built at it. This "
             "normally means the MAP initialization diverged. Fix the starting "
             "point (pass an explicit init_from=, or adjust the MAP settings) "
-            "or pass precondition=False to sample without whitening."
+            f"or pass precondition=False to sample without whitening{dtype_clause}."
         )
 
 

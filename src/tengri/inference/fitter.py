@@ -77,6 +77,7 @@ from tengri.inference.loss_functions import (
     build_logprior_fn,
     build_loss_fn,
 )
+from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
 
 # ── Method name validation ────────────────────────────────────────────
@@ -622,6 +623,46 @@ def fast_nebular_can_engage(model) -> bool:
     return not any(_nebular_continuum_consumers(chain) for chain in chains)
 
 
+def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:
+    """Whether appending ``FeaturePrecomp`` can change this fit's compiled graph.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model about to be topped up.
+    serves_line_channel : bool, keyword-only
+        Whether this fit actually has a line-flux channel for the LUT to serve.
+
+    Returns
+    -------
+    bool
+        True when either lever is available.
+
+    Notes
+    -----
+    The two levers answer to different conditions, and four call sites used to
+    encode that separately (#2377).
+
+    * The **window LUT** supplies line fluxes directly, so the likelihood need not
+      rebuild the full-grid SED. Dust does not touch it -- 4.77x on a dusty
+      line-flux fit (#1770). Available only where
+      :func:`~tengri.forward.sed_model.feature_lut_serves_line_channel` is True.
+    * The **per-Q_H grid** stands in for a Cue-like emulator in the photometry
+      channel, which requires that nothing downstream read ``sed_nebular``; any
+      dust component disarms it (#1281/#1748).
+
+    A Cue model therefore has exactly one lever, the photometry one, whatever
+    channels the fit carries. Treating its line channel as a second lever attached
+    a grid worth 0 compiled FLOPs on every dusty Cue line-flux fit, at a measured
+    7.2 s build and a duplicate ``compile_signature()`` (#2377).
+    """
+    from tengri.forward.sed_model import feature_lut_serves_line_channel
+
+    if serves_line_channel and feature_lut_serves_line_channel(model):
+        return True
+    return fast_nebular_can_engage(model)
+
+
 def _observation_serves_line_channel(model) -> bool:
     """Whether the model's own Observation carries a measured line-flux channel.
 
@@ -855,10 +896,36 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         stays exact, never break a fit that worked, only make its cost
         visible.
     """
-    if approx is None:
-        return model
     if getattr(model, "with_approx", None) is None:
         return model
+    if approx is None:
+        # Nothing attached is already the exact path, and cloning to strip an
+        # absent LUT is "a clone that buys nothing" — the thing
+        # ``test_a_model_already_carrying_the_lut_is_not_rewrapped`` exists to
+        # forbid. Strip only when there is something to strip.
+        _state = getattr(model, "approx", None)
+        if _state is None or not (
+            getattr(_state, "wave_precomp", False)
+            or getattr(_state, "spectrum_precomp", False)
+            or getattr(_state, "feature_precomp", False)
+        ):
+            return model
+        # #2377: force the exact path here too, mirroring the ``None`` branch of
+        # ``Fitter._resolve_fit_approx``, whose docstring is explicit that ``None``
+        # "overrides a build-time approx" and "means exact and stays exact". This
+        # returned ``model`` untouched, so a catalog or population fit built with
+        # ``approx=(WavePrecomp(), FeaturePrecomp())`` kept BOTH tables on after the
+        # caller asked, in the documented spelling, for the exact path. One word
+        # meant two opposite things depending on which fitter you reached for, and
+        # the surface that kept the approximation is the one whose fits are largest.
+        #
+        # Not a speed regression to protect: it is the contract being honored. It
+        # also makes the advice in ``PrecompBiasWarning`` actionable -- that warning
+        # tells the reader "for final inference at this SNR, rerun with approx=None
+        # (the exact path)", which on these surfaces previously changed nothing.
+        # #1671 is precisely about WavePrecomp's forward bias entering the posterior
+        # gradient multiplied by SNR, so a reference run is exactly where it bites.
+        return _memoized_approx_clone(model, None)
 
     if isinstance(approx, str):
         if approx != "auto":
@@ -915,11 +982,13 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # dusty catalog fit that carries line fluxes kept refusing the LUT that
             # the same model got as a single-galaxy fit. ``data_type`` names the
             # primary data array here, not the channel set, so "photometry" does
-            # not mean "no lines" (#1770).
+            # not mean "no lines" (#1770). (#2377)
             if (
                 not has_feature
                 and not _has_line_adjacent_channel(model)
-                and (_observation_serves_line_channel(model) or fast_nebular_can_engage(model))
+                and _feature_precomp_can_pay(
+                    model, serves_line_channel=_observation_serves_line_channel(model)
+                )
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
@@ -1357,6 +1426,16 @@ class Fitter:
         # into the user likelihood if needed.
         self._user_likelihood = likelihood
         self._auto_protocol_likelihood = auto_protocol_likelihood
+        #: Whether ``likelihood=`` was supplied by the caller, recorded here
+        #: rather than inferred later. ``_user_likelihood`` is *overwritten*
+        #: with the auto-built adapter cohort further down ``__init__``, so
+        #: after that point it no longer answers "did the user supply one".
+        #: ``mass_profile._check_guards`` needs that distinction and runs
+        #: before the overwrite, so reading the attribute there happens to
+        #: work today -- and would silently start refusing every line-flux
+        #: fit if the auto-build were ever moved earlier. Recording the fact
+        #: where it is known removes the dependence on statement order.
+        self._likelihood_is_user_supplied = likelihood is not None
 
         # ── Orchestrator opt-in (2026-05) ───────────────────────────
         # When True, route forward predictions through
@@ -1516,6 +1595,18 @@ class Fitter:
                     raise ValueError(
                         f"Parameter {key!r} is not a valid parameter name. "
                         f"Valid parameters: {all_params}"
+                    )
+                # Check if the built likelihood can read this parameter.
+                # Noise parameters are only wired into the likelihood when
+                # has_noise_model(spec) is True. If not, a noise_* override is
+                # silently accepted but has no effect on the fit (issue #2193).
+                if is_noise_parameter(key) and not has_noise_model(self.spec):
+                    raise ValueError(
+                        f"params_override names {key!r}, but this model's likelihood does not "
+                        f"read it: noise parameters are only consumed when declared in the spec "
+                        f"(free, or Fixed at a nonzero value). Declare it via "
+                        f"Observation(noise=NoiseModel(calibration_floor=...)) instead of "
+                        f"overriding it at fit time."
                     )
             # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
@@ -1768,7 +1859,11 @@ class Fitter:
         # fluxes come from the table instead of ``needs_state=True`` forcing a
         # full-grid ``predict_state`` per likelihood, dust does not touch that.
         # Gating it here cost a measured 4.77x on every dusty line-flux fit.
-        wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
+        wants_lut = (
+            self._fits_lines(model)
+            and not _has_line_adjacent_channel(model)
+            and _feature_precomp_can_pay(model, serves_line_channel=True)
+        )
         return (base, FeaturePrecomp()) if wants_lut else base
 
     def _add_feature_precomp(
@@ -1836,8 +1931,8 @@ class Fitter:
         # three line fluxes, gradient FLOPs of the fit objective:
         # WavePrecomp 1,933,823 -> WavePrecomp+FeaturePrecomp 405,825, a 4.77x
         # reduction, against a dust-free control that is identical to the digit
-        # (251,783 either way) because the top-up has already happened there.
-        if not serves_line_channel and not fast_nebular_can_engage(model):
+        # (251,783 either way) because the top-up has already happened there. (#2377)
+        if not _feature_precomp_can_pay(model, serves_line_channel=serves_line_channel):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
@@ -1972,11 +2067,17 @@ class Fitter:
             # remedy that cannot be applied, and advice you cannot act on reads
             # as a defect in the caller's model.
             return
-        # No ``fast_nebular_can_engage`` gate (#1770). It was added here on the
-        # reading that a dusty model gains nothing from the LUT, true of the
-        # photometry shortcut, false of this channel, where the saving is the
-        # ``predict_state`` rebuild rather than the nebular grid. On a dusty
-        # line-flux fit the advice IS actionable: 4.77x in gradient FLOPs.
+        if not _feature_precomp_can_pay(model, serves_line_channel=True):
+            # The remedy this warning names measures 1.00x here: a Cue backend's
+            # FeaturePrecomp has no line lever, and its photometry grid is disarmed
+            # (#2377). Advice you cannot act on reads as a defect in the caller's model.
+            return
+        # Still no BARE ``fast_nebular_can_engage`` gate (#1770): on the window-LUT
+        # backend the saving is the ``predict_state`` rebuild rather than the nebular
+        # grid, so dust does not disarm it and the advice IS actionable there,
+        # 4.77x in gradient FLOPs. The gate above is that predicate wrapped in the
+        # backend question #1770 did not ask (#2377), so the #1770 case still warns
+        # while a Cue model, which has no line lever at all, no longer does.
         state = getattr(model, "approx", None)
         if state is not None and state.feature_precomp:
             return

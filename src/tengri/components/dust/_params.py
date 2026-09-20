@@ -26,12 +26,18 @@ modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
 draine2021_pah returns only ``dust_lgU``, astrodust uses a different
 ``dust_lgU`` bound, etc. The flat-builder bucket is the static superset
 registered together when ``dust_emission`` is set. The priors agree
-where they overlap for most names, but NOT for ``dust_T``/``dust_beta_ir``:
-every analytic template's own class-level declaration (30.0/35.0 K, 1.8)
-disagrees with this table's ``PARAMS`` entries (35.0 K, 1.6) -- see the
-comments on those two entries below, and #2261, filed to resolve which
-value is correct. This file remains the source of truth for the static
-superset regardless; that disagreement is a live discrepancy, not a typo.
+where they overlap for most names, but NOT for ``dust_T`` (or, before
+#2265's correction, ``dust_beta_ir``): every analytic template's own
+class-level declaration (30.0/35.0/25.0 K for ``dust_T``) disagrees with
+this table's single ``dust_T`` entry (35.0 K) -- see the comment on that
+entry below, and #2261, filed to resolve which value is correct. This
+disagreement is measured to reach ``predict_photometry`` on the
+``SEDModel.build`` grammar path too, not only the legacy flat builder: a
+``dust_emission={'type': ..., 'all_params': Fixed(DEFAULT)}`` build
+resolves shared names like ``dust_T``/``dust_beta_ir`` from THIS table,
+not from the selected class's own attribute (#2265). This file remains
+the source of truth for the static superset regardless; the ``dust_T``
+disagreement is a live discrepancy, not a typo.
 """
 
 from __future__ import annotations
@@ -48,15 +54,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # T ~ 25-45 K for local (U)LIRGs, beta = 1.60 +/- 0.38, alpha = 2.0 +/- 0.5.
     ParamDeclaration(
         "dust_T",
-        # NOT the value any analytic template actually defaults to (#2241,
-        # #2261): modified_blackbody and schreiber2016 default to T=30.0 K,
-        # and casey2012/graybody's own class-level default happens to match
-        # this 35.0 only by coincidence. Whether this table or the templates
-        # are right is an open physics/sampler-geometry question filed as
-        # #2261; ``declared_default(PARAMS, "dust_T")`` is deliberately NOT
-        # used by the closures for this reason -- see
-        # ``MBB_T_K_DEFAULT``/``CASEY_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``
-        # below, which are each template's own value, not this one.
+        # Analytic templates split on this value (#2265, #2261): graybody and
+        # casey2012 declare Fixed(35.0); modified_blackbody and schreiber2016
+        # declare Fixed(30.0); Schreiber2018IRSEDComponent declares Fixed(25.0).
+        # This table stays at 35.0, left unchanged pending #2261, and the
+        # MBB/schreiber2016 closures read their own constants
+        # (``MBB_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``) instead of the table.
+        # Schreiber2018IRSEDComponent reads its own ``SCHREIBER2018_T_K_DEFAULT
+        # = 25.0``. Closures are free to disagree with the table while class
+        # declarations internally match their corresponding closures.
         Fixed(35.0),
         "Dust temperature (K) for graybody/Casey emission",
         lambda lo, hi: lo > 0,
@@ -71,12 +77,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "dust_beta_ir",
-        # NOT the value any analytic template actually defaults to (#2241,
-        # #2261): every template (modified_blackbody, graybody, casey2012)
-        # defaults ``dust_beta_ir`` to 1.8, not this table's 1.6. See the
-        # note on ``dust_T`` above -- ``ANALYTIC_BETA_IR_DEFAULT`` below is
-        # the templates' own value, deliberately not derived from this entry.
-        Fixed(1.6),
+        # Three analytic classes (ModifiedBlackbodyIRSEDComponent,
+        # GraybodyIRSEDComponent, Casey2012IRSEDComponent) declare Fixed(1.8),
+        # not the old table value 1.6 (#2265, #2261). Corrected to match those
+        # three; ``ANALYTIC_BETA_IR_DEFAULT = 1.8`` below is shared across their
+        # closures and components. Schreiber2016AnalyticIRSEDComponent declares
+        # no ``dust_beta_ir`` at all -- its closure pins beta=1.5 internally
+        # (``emission/analytic/_closures.py``'s ``schreiber2016``), so it never
+        # reads this entry.
+        Fixed(1.8),
         "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
@@ -84,8 +93,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # models put the physical minimum, and below the widely presumed 1.5 --
         # and carried to +2.4 sigma above the mean. Relaxed to >= 0 to support
         # pure blackbody (beta=0, emissivity ~ 1 everywhere); all closures are
-        # well-defined at beta=0.
-        free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.6),
+        # well-defined at beta=0. Empirical value 1.8 from the templates.
+        free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.8),
     ),
     ParamDeclaration(
         "dust_lambda_0_um",
@@ -295,6 +304,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "dust_lgU",
+        # Found while widening this table's class/closure audit (#2265): both
+        # classes declaring ``lgU`` (AstrodustIRSEDComponent,
+        # Draine2021PAHIRSEDComponent) agree at ``default=1.0``, disagreeing
+        # with this entry's ``Fixed(0.0)``. Correcting it would change every
+        # wildcard-``Fixed(DEFAULT)`` astrodust/draine2021_pah build -- the
+        # same table-wins-over-class path ``dust_beta_ir`` took for
+        # ``casey2012`` above -- so it stays a tracked discrepancy (#2261).
+        # ``test_dust_closure_defaults.py::test_dust_params_table_consistency``
+        # carries this pair as an explicit, reasoned exception.
         Fixed(0.0),
         "log10(U) starlight intensity in mMMP units for Draine+2021 PAHspec (0..7)",
         lambda lo, hi: lo >= 0.0 and hi <= 7.0,
@@ -408,22 +426,54 @@ DEFAULT_DUST_BETA_WARM = declared_default(PARAMS, "dust_beta_warm")
 DEFAULT_DUST_BETA_COLD = declared_default(PARAMS, "dust_beta_cold")
 DEFAULT_DUST_L_AGN_IR = declared_default(PARAMS, "dust_L_agn_ir")
 DEFAULT_DUST_ETA_BALANCE = declared_default(PARAMS, "dust_eta_balance")
+DEFAULT_DUST_UMIN = declared_default(PARAMS, "dust_umin")
+DEFAULT_DUST_GAMMA_DL = declared_default(PARAMS, "dust_gamma_dl")
+DEFAULT_DUST_QPAH = declared_default(PARAMS, "dust_qpah")
+DEFAULT_DUST_ALPHA_DL14 = declared_default(PARAMS, "dust_alpha_dl14")
+DEFAULT_DUST_ALPHA_DALE = declared_default(PARAMS, "dust_alpha_dale")
+DEFAULT_DUST_FRAC_AGN = declared_default(PARAMS, "dust_frac_agn")
+DEFAULT_DUST_LOG_SSFR = declared_default(PARAMS, "dust_log_ssfr")
+DEFAULT_DUST_QHAC = declared_default(PARAMS, "dust_qhac")
+DEFAULT_DUST_ALPHA = declared_default(PARAMS, "dust_alpha")
 
-# ``dust_T`` / ``dust_beta_ir`` are deliberately NOT declared_default(PARAMS,
-# ...) candidates (#2241, follow-up #2261): this table's own Fixed(35.0) /
-# Fixed(1.6) disagree with what every analytic template's own class-level
-# declaration actually defaults to (modified_blackbody/schreiber2016 use
-# T=30.0 K; every template uses beta_ir=1.8), so reading them off PARAMS
-# would silently CHANGE those templates' defaults -- a behavior change this
-# fix must not make. These four names are each template's own value today,
-# shared between its closure's signature default and its component's
-# class-level declaration so the two cannot drift from EACH OTHER, even
-# while both remain out of step with the table above until #2261 resolves
-# which value is correct.
+# ``dust_T`` is deliberately NOT a declared_default(PARAMS, ...) candidate
+# (#2241, follow-up #2261): this table's own Fixed(35.0) disagrees with what
+# some analytic templates' own class-level declaration actually defaults to
+# (modified_blackbody/schreiber2016 use T=30.0 K; schreiber2018 uses 25.0 K),
+# so reading it off PARAMS would silently CHANGE those templates' defaults --
+# a behavior change this fix must not make. These four T constants are each
+# template's own value today, shared between its closure's signature default
+# and its component's class-level declaration so the two cannot drift from
+# EACH OTHER, even while some remain out of step with the table above until
+# #2261 resolves which value is correct. ``dust_beta_ir`` now agrees with the
+# table (both 1.8, #2265); ``ANALYTIC_BETA_IR_DEFAULT`` stays a named constant
+# shared by the three classes that declare it (Casey2012IRSEDComponent,
+# GraybodyIRSEDComponent, ModifiedBlackbodyIRSEDComponent) and their closures,
+# for the same no-cross-drift reason as the T constants.
 MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
-SCHREIBER_T_K_DEFAULT = 30.0
+SCHREIBER_T_K_DEFAULT = 30.0  # schreiber2016 analytic component
+SCHREIBER2018_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent tabulated
 ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
+
+# ── Attenuation-law-own defaults (#2265) ──────────────────────────────
+# ``kriek_conroy``/``tea`` are plain functions, not ``SEDModelComponent``
+# subclasses, so their signature defaults are not interchangeable
+# placeholders for ``ATTENUATION_PARAMS``'s shared ``dust_bump_strength``/
+# ``dust_delta`` (both ``Fixed(0.0)``, correct as the "off" value for a
+# law like ``calzetti`` that discards them structurally). Each constant
+# here is instead the LAW's OWN citation-backed value:
+# ``dust_bump_strength=1.0`` is Kriek & Conroy (2013)'s own E_b=0.85
+# fiducial (``e_b = bump_strength * (0.85 - 1.9*delta)``, this module's
+# Eq. 3 comment); ``dust_delta=-0.2`` is Haskell et al. (2024) TEA's own
+# NIHAO-SKIRT median, 0.5 < z < 2 star-forming galaxies.
+# ``resolve_bc_diff_law_params`` in ``_apply.py`` (the ``live_shape_params``
+# gate, #1833) hands a caller that omits ``bump_strength``/``delta`` --
+# including a blanket ``all_params: Fixed(DEFAULT)`` wildcard -- the LAW's
+# own default, not the shared table's; pinned by
+# ``TestKriekConroyMatchesFSPS::test_bump_excess_matches_fsps_at_delta_zero``.
+KRIEK_CONROY_BUMP_STRENGTH_DEFAULT = 1.0  # Kriek & Conroy 2013 Eq. 3, E_b = 0.85 fiducial
+TEA_DELTA_DEFAULT = -0.2  # Haskell et al. 2024 NIHAO-SKIRT median, 0.5 < z < 2 SF galaxies
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -534,6 +584,19 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
+# ── Derived defaults for direct import, attenuation table (#2265) ─────
+# No component class declares any of these five names (checked by
+# ``git grep -n "= Fixed(" -- src/tengri/components/dust/``): the attenuation
+# curves in ``attenuation.py`` are plain functions, not
+# ``SEDModelComponent`` subclasses, so ``ATTENUATION_PARAMS`` is the sole
+# declaration and these constants are read by both the closures' signature
+# defaults and the aggregation-point ``.get(...)`` fallbacks.
+DEFAULT_DUST_SLOPE = declared_default(ATTENUATION_PARAMS, "dust_slope")
+DEFAULT_DUST_F_OBSCURATION = declared_default(ATTENUATION_PARAMS, "dust_f_obscuration")
+DEFAULT_DUST_BUMP_STRENGTH = declared_default(ATTENUATION_PARAMS, "dust_bump_strength")
+DEFAULT_DUST_DELTA = declared_default(ATTENUATION_PARAMS, "dust_delta")
+DEFAULT_DUST_RV = declared_default(ATTENUATION_PARAMS, "dust_Rv")
+
 # Names within ATTENUATION_PARAMS that are skipped when
 # ``dust_model="single_component"`` (the single-screen geometry replaces
 # both Charlot-Fall optical depths with ``dust_tau_v`` from
@@ -556,19 +619,36 @@ __all__ = [
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
     "CASEY_T_K_DEFAULT",
+    "DEFAULT_DUST_ALPHA",
+    "DEFAULT_DUST_ALPHA_DALE",
+    "DEFAULT_DUST_ALPHA_DL14",
     "DEFAULT_DUST_ALPHA_MIR",
     "DEFAULT_DUST_BETA_COLD",
     "DEFAULT_DUST_BETA_WARM",
+    "DEFAULT_DUST_BUMP_STRENGTH",
+    "DEFAULT_DUST_DELTA",
     "DEFAULT_DUST_EPSILON_MBB",
     "DEFAULT_DUST_ETA_BALANCE",
+    "DEFAULT_DUST_FRAC_AGN",
     "DEFAULT_DUST_F_COLD",
+    "DEFAULT_DUST_F_OBSCURATION",
     "DEFAULT_DUST_F_PAH",
+    "DEFAULT_DUST_GAMMA_DL",
     "DEFAULT_DUST_LAMBDA_0_UM",
+    "DEFAULT_DUST_LOG_SSFR",
     "DEFAULT_DUST_L_AGN_IR",
+    "DEFAULT_DUST_QHAC",
+    "DEFAULT_DUST_QPAH",
+    "DEFAULT_DUST_RV",
+    "DEFAULT_DUST_SLOPE",
     "DEFAULT_DUST_T_COLD",
     "DEFAULT_DUST_T_WARM",
+    "DEFAULT_DUST_UMIN",
+    "KRIEK_CONROY_BUMP_STRENGTH_DEFAULT",
     "MBB_T_K_DEFAULT",
     "PARAMS",
+    "SCHREIBER2018_T_K_DEFAULT",
     "SCHREIBER_T_K_DEFAULT",
     "SINGLE_COMPONENT_PARAMS",
+    "TEA_DELTA_DEFAULT",
 ]

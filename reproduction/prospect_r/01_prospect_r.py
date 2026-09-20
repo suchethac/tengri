@@ -457,6 +457,7 @@ fig, (ax, ax_r), _ratios2 = V.sweep_fig(
     ref_label="ProSpect",
     title="§2 cont'd — dtau, snorm_burst, snorm_trunc",
     x_of_wave=lambda w: w / 1e9,
+    cmap=None,
     xlabel="lookback time [Gyr]",
     ylabel=r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]",
     xlim=(0.05, 13.7),
@@ -679,25 +680,26 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_p3, s_stellar.sed_intrinsic, name="§3 stellar")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="ProSpect  snorm + BC03", label_r="tengri  snorm + BC03")
-ax_l.plot(w_p3, L_p3, "C0-", linewidth=1.5)
-ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-# This BC03 grid does not carry a surviving-mass column, so log_mstar is NaN;
-# report the formed mass (what both codes are normalized to) instead.
 m_formed = 10.0 ** float(s_stellar.derived["log_mstar_formed"])
-ax_r.text(
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    w_p3, L_p3, np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic),
+    title="BC03 stellar SED",
+    ref_label="ProSpect",
+    label_t="tengri",
+    xlim=(1e2, 1e6),
+    ratio_ylim=(0.9, 1.1),
+)
+ax.text(
     0.05,
     0.95,
     rf"$M_\star = {m_formed:.2e}\,M_\odot$ formed",
-    transform=ax_r.transAxes,
+    transform=ax.transAxes,
     fontsize=10,
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e6)
-    ax.grid(True, alpha=0.3)
+ax.grid(True, alpha=0.3)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_03_stellar_sed.png")
 
@@ -938,6 +940,7 @@ fig, (ax, ax_r), _ratios_dust = V.sweep_fig(
     x_of_wave=lambda w: w / 1e4,
     xlabel=r"$\lambda$ [$\mu$m]",
     xlim=(0.1, 3.0),
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_05cont_dust_applied_sweep.png")
@@ -1089,7 +1092,10 @@ fig, (ax, ax_r), _ratios_dale = V.sweep_fig(
     ref_label="ProSpect",
     title="§6 cont'd — Dale 2014 α sweep",
     x_of_wave=lambda w: w / 1e4,
+    xlabel=r"$\lambda$ [$\mu$m]",
     xlim=(1.0, 1e3),
+    values=[float(_label.split("=")[1]) for _label, _, _, _, _ in cases_dale],
+    param_label="spectral index α",
 )
 fig.tight_layout()
 save_fig("prospect_r_06cont_dale_alpha.png")
@@ -1110,14 +1116,17 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dale:
 # **Verification Status:** CROSSVAL — Photometry projection
 
 # %%
-fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(ax_l, ax_r, label_l="ProSpect  panchromatic", label_r="tengri  panchromatic")
-ax_l.plot(w_p6, L_p6, "C0-", linewidth=1.5)
-ax_r.plot(s_ir.wave, sed_full_t, "C1-", linewidth=1.5)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e7)
-    ax.set_ylim(1e22, 1e31)
-    ax.grid(True, alpha=0.3)
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    w_p6, L_p6, np.asarray(s_ir.wave), sed_full_t,
+    title="Panchromatic SED (UV–far-IR)",
+    ref_label="ProSpect",
+    label_t="tengri",
+    xlim=(1e2, 1e7),
+    ratio_ylim=(0.95, 1.05),
+)
+ax.set_ylim(1e22, 1e31)
+ax.grid(True, alpha=0.3)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_07_panchromatic.png")
 
@@ -1191,6 +1200,8 @@ fig, (ax, ax_r), _ratios_igm = V.sweep_fig(
     xlim=(850.0, 1216.0),
     ratio_ylim=(0.9, 1.1),
     logy=False,
+    values=[float(_label.split("=")[1]) for _label, _, _, _, _ in cases_igm_z],
+    param_label="redshift z",
 )
 fig.tight_layout()
 save_fig("prospect_r_12cont_igm_z_sweep.png")
@@ -1389,6 +1400,7 @@ fig, (ax, ax_r), _ratios_neb = V.sweep_fig(
     xlabel=r"$\lambda$ [Å]",
     xlim=(1000.0, 7000.0),
     logy=True,
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_08cont_nebular_params.png")
@@ -1588,8 +1600,10 @@ fig, (ax, ax_r), _ratios_sk = V.sweep_fig(
     ref_label="ProSpect",
     title="§9 cont'd — SKIRTOR nodes (peak-normalized, 1-100 µm)",
     x_of_wave=lambda w: w / 1e4,
+    xlabel=r"$\lambda$ [$\mu$m]",
     ylabel=r"$L_\nu$ (peak-normalized)",
     xlim=(1e-1, 1e3),
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_09cont_skirtor_nodes.png")
@@ -1673,8 +1687,10 @@ fig, (ax, ax_r), _ratios_fr = V.sweep_fig(
     ref_label="ProSpect",
     title="§9 cont'd — Fritz+2006 nodes (peak-normalized, 1-100 µm)",
     x_of_wave=lambda w: w / 1e4,
+    xlabel=r"$\lambda$ [$\mu$m]",
     ylabel=r"$L_\nu$ (peak-normalized)",
     xlim=(1e-1, 1e3),
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("prospect_r_09cont_fritz.png")
@@ -1750,27 +1766,25 @@ s_radio = m_radio.predict_state({})
 w_t11 = np.asarray(s_radio.wave)
 L_t11 = np.asarray(s_radio.sed_intrinsic)
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="ProSpect  + radio (free-free + sync)",
-    label_r="tengri  bell2003_split (free-free + synchrotron)",
-)
-ax_l.plot(w_p11, L_p11, "C0-", linewidth=1.5)
-ax_r.plot(w_t11, L_t11, "C1-", linewidth=1.5)
 # Span the full SED in view (dust-IR peak through the radio tail) so the FIR bump
 # is not clipped at the top of the frame.
 _w_lo, _w_hi = 1e5, 2e9
 _m_p11 = (w_p11 >= _w_lo) & (w_p11 <= _w_hi)
 _m_t11 = (w_t11 >= _w_lo) & (w_t11 <= _w_hi)
 _ymax11 = max(float(np.nanmax(L_p11[_m_p11])), float(np.nanmax(L_t11[_m_t11])))
-for ax in (ax_l, ax_r):
-    # Cap at ProSpect's output-grid edge (~2e9 Å) so its grid cutoff is not
-    # shown as a spurious feature against tengri's wider grid.
-    ax.set_xlim(_w_lo, _w_hi)
-    ax.set_ylim(_ymax11 * 1e-7, _ymax11 * 3)
-    ax.grid(True, alpha=0.3)
+fig, ax, ax_r, ratio = V.overlay_ratio_fig(
+    w_p11, L_p11, w_t11, L_t11,
+    title="Radio continuum (free-free + synchrotron)",
+    ref_label="ProSpect",
+    label_t="tengri  bell2003_split",
+    xlim=(_w_lo, _w_hi),
+    ratio_ylim=(0.5, 1.5),
+)
+# Cap at ProSpect's output-grid edge (~2e9 Å) so its grid cutoff is not
+# shown as a spurious feature against tengri's wider grid.
+ax.set_ylim(_ymax11 * 1e-7, _ymax11 * 3)
+ax.grid(True, alpha=0.3)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_11_radio.png")
 

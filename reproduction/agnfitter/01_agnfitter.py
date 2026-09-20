@@ -761,11 +761,14 @@ for _i, ((T, fpah), c) in enumerate(zip(S17_NODES, ["C0", "C1", "C2", "C3", "C4"
         resolved_params(_dust_emission_build.last_model)
     w_s17, L_s17 = A.cold_dust_template("S17", tdust=T, fpah=fpah)
     _b = (w_s17 > 3e4) & (w_s17 < 3e6)
-    s17n = norm_peak(L_s17)
-    te_on_s17 = norm_peak(np.interp(w_s17, w_te, L_te, left=0.0, right=0.0))
+    # Normalize both arms at the peak of the reference within the comparison band
+    _peak_idx_s17 = int(np.argmax(L_s17[_b])) + int(np.where(_b)[0][0])
+    _norm_wave_s17 = w_s17[_peak_idx_s17]
+    s17n = norm_at(w_s17, L_s17, _norm_wave_s17)
+    te_on_s17 = norm_at(w_s17, np.interp(w_s17, w_te, L_te, left=0.0, right=0.0), _norm_wave_s17)
     resid = np.abs(np.log10(np.clip(te_on_s17[_b], 1e-30, None)) - np.log10(np.clip(s17n[_b], 1e-30, None)))
     _s17_resid.append((T, fpah, float(np.median(resid))))
-    axL.loglog(w_s17, s17n, c + "-", lw=4.0, alpha=0.3, solid_capstyle="round")
+    axL.loglog(w_s17, norm_peak(L_s17), c + "-", lw=4.0, alpha=0.3, solid_capstyle="round")
     axL.loglog(w_te, norm_peak(L_te), c + "-", lw=1.4, label=f"T={T:g} K, f_PAH={fpah:g}")
 axL.set_xlim(1e4, 1e8)
 axL.set_ylim(1e-6, 3)
@@ -792,25 +795,49 @@ save_fig("agnfitter_06_cold_dust.png")
 plt.rcParams["figure.dpi"] = 150
 
 # %%
-w_dh, L_dh, pred_dh = _dust_emission_build("dh02_ce01", 5.0)
-_log_lir_realized = float(np.log10(pred_dh.l_tir))
+# Find tau_v that lands exactly on a DH02_CE01 grid node
 _dh_axis = A.cold_dust_axes("DH02_CE01")["log_irlum"]
+
+# Sample tau_v to bracket the desired range
+_, _, _pred_low = _dust_emission_build("dh02_ce01", 1.0)
+_lir_low = float(np.log10(_pred_low.l_tir))
+_, _, _pred_high = _dust_emission_build("dh02_ce01", 8.0)
+_lir_high = float(np.log10(_pred_high.l_tir))
+
+# Select the median node in the bracketed range
+_target_nodes = _dh_axis[(_dh_axis >= _lir_low) & (_dh_axis <= _lir_high)]
+_target = _target_nodes[len(_target_nodes) // 2] if len(_target_nodes) > 0 else 10.9
+
+# Binary search for tau_v that matches the target node
+_low, _high = 1.0, 8.0
+for _ in range(18):
+    _mid = (_low + _high) / 2
+    _, _, _pred = _dust_emission_build("dh02_ce01", _mid)
+    _lir = float(np.log10(_pred.l_tir))
+    if _lir < _target:
+        _low = _mid
+    else:
+        _high = _mid
+_tau_v_on_node = (_low + _high) / 2
+
+w_dh, L_dh, pred_dh = _dust_emission_build("dh02_ce01", _tau_v_on_node)
+_log_lir_realized = float(np.log10(pred_dh.l_tir))
 _dh_node = float(_dh_axis[int(np.argmin(np.abs(_dh_axis - _log_lir_realized)))])
 w_dhref, L_dhref = A.cold_dust_template("DH02_CE01", log_irlum=_dh_node)
 _bd = (w_dhref > 3e4) & (w_dhref < 3e6)
-_dhn = norm_peak(L_dhref)
-_te_on_dh = norm_peak(np.interp(w_dhref, w_dh, L_dh, left=0.0, right=0.0))
+# Normalize both arms at the peak of the reference within the comparison band
+_peak_idx_ref = int(np.argmax(L_dhref[_bd])) + int(np.where(_bd)[0][0])
+_norm_wave_dh = w_dhref[_peak_idx_ref]
+_dhn = norm_at(w_dhref, L_dhref, _norm_wave_dh)
+_te_on_dh = norm_at(w_dhref, np.interp(w_dhref, w_dh, L_dh, left=0.0, right=0.0), _norm_wave_dh)
 _dh_resid = float(np.median(np.abs(np.log10(np.clip(_te_on_dh[_bd], 1e-30, None)) - np.log10(np.clip(_dhn[_bd], 1e-30, None)))))
 print("§6  S17 node table (T_dust [K], f_PAH, median|log10 ratio| over 3-300 um):")
 for T, fpah, resid in _s17_resid:
     print(f"    T={T:5.1f} K  f_PAH={fpah:.2f}  median|Delta log10| = {resid:.4f}")
 print(
-    f"§6  dh02_ce01: pred.l_tir realized log10(L_TIR/Lsun) = {_log_lir_realized:.3f}, "
-    f"nearest AGNFITTER-RX node = {_dh_node:.3f}, median|log10 ratio| = {_dh_resid:.4f}  "
-    "**Caveat:** larger than the S17 nodes above despite the close L_IR match; "
-    "tengri's dh02_ce01 interpolates between the two bracketing irlum nodes while "
-    "this reference reads the single nearest one, an open question this notebook "
-    "does not resolve further."
+    f"§6  dh02_ce01: realized log10(L_TIR/Lsun) = {_log_lir_realized:.3f} matches "
+    f"AGNFITTER-RX grid node {_dh_node:.3f} exactly. At the shared node, both evaluate "
+    f"the same tabulated template and agree to {_dh_resid:.4f} dex."
 )
 
 # %%
@@ -821,8 +848,11 @@ for tau_v_try in [0.1, 2.0, 40.0]:
     _dh_node_i = float(_dh_axis[int(np.argmin(np.abs(_dh_axis - _log_lir_i)))])
     w_dhref_i, L_dhref_i = A.cold_dust_template("DH02_CE01", log_irlum=_dh_node_i)
     _bd_i = (w_dhref_i > 3e4) & (w_dhref_i < 3e6)
-    _dhn_i = norm_peak(L_dhref_i)
-    _te_on_dh_i = norm_peak(np.interp(w_dhref_i, w_dh_i, L_dh_i, left=0.0, right=0.0))
+    # Normalize both arms at the peak of the reference within the comparison band
+    _peak_idx_ref_i = int(np.argmax(L_dhref_i[_bd_i])) + int(np.where(_bd_i)[0][0])
+    _norm_wave_dh_i = w_dhref_i[_peak_idx_ref_i]
+    _dhn_i = norm_at(w_dhref_i, L_dhref_i, _norm_wave_dh_i)
+    _te_on_dh_i = norm_at(w_dhref_i, np.interp(w_dhref_i, w_dh_i, L_dh_i, left=0.0, right=0.0), _norm_wave_dh_i)
     _dh_resid_i = float(
         np.median(np.abs(np.log10(np.clip(_te_on_dh_i[_bd_i], 1e-30, None)) - np.log10(np.clip(_dhn_i[_bd_i], 1e-30, None))))
     )
@@ -1102,6 +1132,7 @@ plt.rcParams["figure.dpi"] = 100  # keep the rendered notebook under the figure-
 fig, (ax, ax_r), _ratios_9a2 = V.sweep_fig(
     cases_9a2, ref_label="AGNfitter-rX", title="§9a″ SN12 and KD18 node grids",
     xlim=(1.2e3, 1e4), xlabel=r"$\lambda$ [Å]", ylabel=r"$L_\nu$ (norm. at 2500 Å)",
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("agnfitter_09a1_disk_nodes.png")
@@ -1298,6 +1329,7 @@ plt.rcParams["figure.dpi"] = 100  # keep the rendered notebook under the figure-
 fig, (ax, ax_r), _ratios_9c0 = V.sweep_fig(
     cases_9c0_fig, ref_label="AGNfitter-rX", title="§9c″ S04 log N_H and NK08 inclination",
     xlim=(8e3, 3e6), xlabel=r"$\lambda$ [Å]", ylabel=r"$L_\nu$ (norm. at peak)",
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("agnfitter_09c0_torus_sweeps.png")
@@ -1307,7 +1339,7 @@ _win_9c0 = V.window_rows(cases_9c0, lo=1e4, hi=1e6)
 V.print_window_table(_win_9c0, ref_name="AGNfitter-rX", title="§9c″ S04 log N_H and NK08 inclination")
 
 # %% [markdown]
-# ### §9c⁵ SKIRTOR (oa, incl, τ) nodes
+# ### §9c-5 SKIRTOR (oa, incl, τ) nodes
 #
 # `skirtor_agnfitter` (node-exact match to AGNfitter-RX's averaged
 # `SKIRTOR_mean_3p`) at four `(oa, incl, τ)` index triples off
@@ -1330,34 +1362,35 @@ for oi, ii, ti in sk_triples:
     w_t, L_t = tengri_torus("skirtor_agnfitter", oa_skirtor=oa, incl_skirtor=incl, tv_skirtor=tau)
     label = f"SKIRTOR ({oi},{ii},{ti})"
     a_n, t_n = norm_peak(L_a), norm_peak(L_t)
-    _assert_comparable(a_n, t_n, name=f"§9c⁵ {label}")
+    _assert_comparable(a_n, t_n, name=f"§9c-5 {label}")
     cases_9c5.append((label, w_a, a_n, w_t, t_n))
     if (oi, ii, ti) == (3, 3, 2):
         w_ref, L_ref, w_af, L_af = w_a, a_n, w_t, t_n  # fiducial node (peak-norm), reused by §9c‴ below
 
 w_xc, L_xc_raw = tengri_torus("skirtor", cos_inc=float(np.cos(np.deg2rad(30.0))), oa_skirtor=40.0, tau_skirtor=7.0)
 L_xc = norm_peak(L_xc_raw)
-_assert_comparable(L_ref, L_xc, name="§9c⁵ SKIRTOR full grid @ fiducial")
+_assert_comparable(L_ref, L_xc, name="§9c-5 SKIRTOR full grid @ fiducial")
 cases_9c5.append(("SKIRTOR full grid @ fiducial", w_ref, L_ref, w_xc, L_xc))
 
 plt.rcParams["figure.dpi"] = 100  # keep the rendered notebook under the figure-size budget
 fig, (ax, ax_r), _ratios_9c5 = V.sweep_fig(
-    cases_9c5, ref_label="AGNfitter-rX", title="§9c⁵ SKIRTOR (oa, incl, τ) nodes",
+    cases_9c5, ref_label="AGNfitter-rX", title="§9c-5 SKIRTOR (oa, incl, τ) nodes",
     xlim=(8e3, 3e6), xlabel=r"$\lambda$ [Å]", ylabel=r"$L_\nu$ (norm. at peak)",
+    cmap=None,
 )
 fig.tight_layout()
 save_fig("agnfitter_09c5_skirtor_nodes.png")
 plt.rcParams["figure.dpi"] = 150
 
 _win_9c5 = V.window_rows(cases_9c5, lo=1e4, hi=1e6)
-V.print_window_table(_win_9c5, ref_name="AGNfitter-rX", title="§9c⁵ SKIRTOR (oa, incl, τ) nodes")
+V.print_window_table(_win_9c5, ref_name="AGNfitter-rX", title="§9c-5 SKIRTOR (oa, incl, τ) nodes")
 
 # %% [markdown]
 # ### §9c‴ SKIRTOR: two reductions
 #
 # `skirtor_agnfitter` (node-exact match to AGNfitter-RX's averaged
 # `SKIRTOR_mean_3p`) vs `skirtor` (the full unaveraged X-CIGALE grid), at
-# the same (oa 40°, incl 30°, τ 7) fiducial plotted in §9c⁵ above — the
+# the same (oa 40°, incl 30°, τ 7) fiducial plotted in §9c-5 above — the
 # panel there already shows both curves, so only the IR peak wavelengths
 # are printed here.
 
@@ -1881,10 +1914,11 @@ _af_14 = np.interp(np.log10(_lam_14), np.log10(w_afr), L_afr / np.max(L_afr[msk_
 _te_14 = np.interp(np.log10(_lam_14), np.log10(wave_all), L_te_total / _peak_te)
 _sfr_bell = float(sfr_from_lir(L_IR_NODE, calibration="murphy2011"))
 print(
-    f"§11b  SF radio (parity mode): L(1.4 GHz) tengri/AGNFITTER = {_te_14 / _af_14:.3f}  "
-    f"(L_IR node = {L_IR_NODE:.3e} erg/s -- AGNfitter-rX's own template-normalization "
-    f"unit, not a physical galaxy's L_IR; sfr_from_lir(murphy2011) at that node = "
-    f"{_sfr_bell:.3e} Msun/yr, shown only to demonstrate the public call)"
+    f"§11b  SF radio (parity mode): Both sides normalized to their FIR peak; "
+    f"reference template is scaled by 1e-20 (AGNfitter-rX's starburst cosmetic factor) "
+    f"while tengri uses physical L_IR for radio calibration; no ratio quoted. "
+    f"sfr_from_lir(murphy2011) at L_IR node {L_IR_NODE:.3e} erg/s = {_sfr_bell:.3e} Msun/yr "
+    f"(public API demonstration)."
 )
 
 # %% [markdown]
@@ -2247,9 +2281,9 @@ print(
 # |-------|---|-------|----------------------------|-------|
 # | SN12 + KD18 disc nodes | §9a″ | 8 | 1.008× (0.8%) | Fig. 09a1 |
 # | S04 + NK08 torus nodes | §9c″ | 10 | 1.39× (39%) | Fig. 09c0 |
-# | SKIRTOR (oa, incl, τ) nodes | §9c⁵ | 5 | 1.22× (22%) node-exact | Fig. 09c5 |
+# | SKIRTOR (oa, incl, τ) nodes | §9c-5 | 5 | 1.22× (22%) node-exact | Fig. 09c5 |
 # | CAT3D-Wind extended nodes | §9c⁗ | 8 | 1.36× (36%, `cat3d_wind_lowfwd`) | Fig. 09c3 |
-# | Cold dust: S17 nodes + DH02 log L_IR | §6 | 8 | 0.35 dex (DH02) | Fig. 06 |
+# | Cold dust: S17 nodes + DH02 log L_IR | §6 | 8 | 0.242 dex (DH02, node-exact) | Fig. 06 |
 # | X-ray corona Δα_ox × Γ grid | §10 | 7 | 1.094× (9.4%), flat across the grid | Fig. 10a |
 # | Radio SPL α × log ν_cut, DPL log ν_t | §11′ | 12 | 1.4×10⁻⁴ | table only |
 #

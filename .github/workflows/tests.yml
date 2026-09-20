@@ -423,6 +423,10 @@ jobs:
       # Non-strict: most comparisons predate the stamp, so an unstamped
       # render only warns; a stamped-but-stale one always fails.
       - run: python tools/check_repro_render_fresh.py
+      # Verify version consistency between pyproject.toml and CITATION.cff.
+      # The canonical version lives in pyproject.toml; CITATION.cff must match.
+      # Turns a silent version mismatch into a red PR (#2103).
+      - run: python tools/check_version_single_source.py
       # Census: verify every check_*.py is wired or explicitly declared not wired (#2050).
       - run: python tools/check_guard_wiring.py
       # The same hazard one directory over: a gallery example that catches
@@ -804,6 +808,20 @@ jobs:
       # same reason as its sibling: it reads priors from the registry, so it
       # needs tengri installed, and `lint` installs only ruff.
       - run: python tools/check_float32_scale_seams.py
+      # Every benchmark fixture in bench/scripts/ must declare a provenance block
+      # that proves it matches the notebook it claims to mirror (kind="mirrors"),
+      # is a deliberate historical snapshot (kind="historical"), or is a control
+      # (kind="standalone"). #2096 caught two silent drifts — nb05 rewrote law_bc
+      # to law and nb00 simplified the model — and both kept their notebook label.
+      # This guard prevents the drift from going unnoticed again.
+      - run: python tools/check_harness_parity.py
+      # Docs-prose voice guard (#2326): the enforcement NAMING_CONTRACT names
+      # for confusable codepoints in published docs, plus notation canon and
+      # dev-detail leakage. Runs in its default warn-only mode (exit 0): the
+      # tree currently carries 24 violations, so --strict waits on a docs
+      # cleanup; wiring it makes the report visible and keeps the guard from
+      # rotting unrun, which is the defect #2326 is about.
+      - run: python tools/check_docs_voice.py
       # Every test module in EVERY tier must still import. `check_test_paths_covered`
       # proves a tree is named by some job; it cannot see whether the files in it
       # collect. Those are independent failures, and the second one is invisible
@@ -1074,34 +1092,12 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          HALF_SEL="${{ matrix.bug_half }}"
-          if [ -z "$HALF_SEL" ]; then
+          if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Newline-separated + head/tail rather than `mapfile`, so this same
-          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
-          # which has no mapfile). Paths here never contain spaces; assert it
-          # rather than trust it, since word-splitting would silently drop files.
-          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
-          N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
-          if [ "$N" -lt 2 ]; then
-            echo "::error::expected >=2 files under tests/regression/bug, found $N"
-            exit 1
-          fi
-          if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
-            echo "::error::a test path contains whitespace; the split would drop files"
-            exit 1
-          fi
-          HALF=$(( (N + 1) / 2 ))
-          if [ "$HALF_SEL" = "1" ]; then
-            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
           else
-            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 2 --join 2>&1) || exit 1
+            echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
-          COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
-          echo "bug/ half $HALF_SEL: $COUNT of $N files"
-          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
@@ -1226,6 +1222,7 @@ jobs:
           CI_OK_RESULTS: ${{ toJSON(needs) }}
           CI_OK_EVENT: ${{ github.event_name }}
           CI_OK_BASE_REF: ${{ github.base_ref }}
+          CI_OK_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
 
   # Alert on nightly schedule run failure. Opens or updates a deduplicated
   # issue when ci-ok fails on schedule events, so red nightly runs are never
@@ -1323,6 +1320,11 @@ jobs:
         # this job is off the PR feedback path by construction. Interim
         # measure: #1362 (chunked fast-grid build) shrinks the underlying
         # allocation; revisit -n 2 once it lands.
+        #
+        # coverage_budget is 1.5 × budget rounded up to the next 5, because
+        # --cov adds 30-50% memory and wall-clock overhead (measured 2026-08-13:
+        # regression-a at 18m40s vs 40m00s with coverage on the same SHA).
+        # The matrix literal is required: GitHub expressions have no arithmetic.
         include:
           # 70, not 50, for the same reason as the test job's contract row
           # above: pool congestion alone moved the same-SHA contract shard
@@ -1332,6 +1334,7 @@ jobs:
             paths: tests/contract
             nproc: 2
             budget: 70
+            coverage_budget: 105
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
           # #148 rehome emptied the tree and the matrix was rewritten around the
           # physics-first trees without it, so anything landing back in
@@ -1345,6 +1348,7 @@ jobs:
             paths: tests/components tests/unit
             nproc: 2
             budget: 50
+            coverage_budget: 75
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
           # for two different problems:
           #
@@ -1376,6 +1380,7 @@ jobs:
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
+            coverage_budget: 105
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
@@ -1386,15 +1391,18 @@ jobs:
             bug_half: "1"
             nproc: 1
             budget: 50
+            coverage_budget: 75
           - shard: regression-b2
             paths: ""
             bug_half: "2"
             nproc: 1
             budget: 50
+            coverage_budget: 75
           - shard: regression-c
             paths: tests/regression/paper tests/regression/agn
             nproc: 1
             budget: 50
+            coverage_budget: 75
           # The top-level files only — every subdirectory above is excluded so no
           # test runs twice. This shard holds the memory-heaviest files
           # (test_field_latents_reach_likelihood.py at 4.06 GB).
@@ -1408,10 +1416,12 @@ jobs:
               --ignore=tests/regression/paper
             nproc: 1
             budget: 50
+            coverage_budget: 75
           - shard: physics
             paths: tests/physics
             nproc: 2
             budget: 50
+            coverage_budget: 75
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -1438,43 +1448,23 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          HALF_SEL="${{ matrix.bug_half }}"
-          if [ -z "$HALF_SEL" ]; then
+          if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Newline-separated + head/tail rather than `mapfile`, so this same
-          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
-          # which has no mapfile). Paths here never contain spaces; assert it
-          # rather than trust it, since word-splitting would silently drop files.
-          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
-          N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
-          if [ "$N" -lt 2 ]; then
-            echo "::error::expected >=2 files under tests/regression/bug, found $N"
-            exit 1
-          fi
-          if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
-            echo "::error::a test path contains whitespace; the split would drop files"
-            exit 1
-          fi
-          HALF=$(( (N + 1) / 2 ))
-          if [ "$HALF_SEL" = "1" ]; then
-            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
           else
-            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 2 --join 2>&1) || exit 1
+            echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
-          COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
-          echo "bug/ half $HALF_SEL: $COUNT of $N files"
-          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
+            --timeout=600 --timeout-method=thread \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: ${{ matrix.budget }}
+        # regression-a mirror: test job at 70 min, coverage at 1.5x = 105 min
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 105 || matrix.coverage_budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
@@ -1510,16 +1500,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Per-suite step budgets sized to the measured serial runtimes:
-        # inference ≈ 51 min; integration has grown from ≈ 93 min to 114–118
-        # min on recent main runs (b11f4d36/21b41836/44725252) and timed out
-        # at 120 on #955 — budget re-sized with headroom. The real fix is
-        # pruning/parallelizing the integration tier, not more budget.
-        # Kept serial (no xdist) for OOM safety, so each suite needs a budget
-        # above its own runtime rather than a shared 40-min cap.
+        # Measured serial inference ≈ 51 min on a full run; the tier has died
+        # before its summary line (#2363). Three contiguous file legs at 45 min
+        # each print `--durations=30` so the legs are rebalanced from measured
+        # durations, not static counts. integration still single-leg (114–118 min).
         include:
           - suite: inference
-            timeout: 60
+            part: 1
+            of: 3
+            timeout: 45
+          - suite: inference
+            part: 2
+            of: 3
+            timeout: 45
+          - suite: inference
+            part: 3
+            of: 3
+            timeout: 45
           - suite: integration
             timeout: 180
           # Every other @pytest.mark.slow test outside the two trees above.
@@ -1551,7 +1548,7 @@ jobs:
     # an existing one — slow always runs to completion, never aborted by
     # an unrelated main push. See issue #160.
     concurrency:
-      group: tests-slow-${{ matrix.suite }}-${{ github.ref }}
+      group: tests-slow-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ github.ref }}
       cancel-in-progress: false
     if: |
       github.event_name == 'schedule'
@@ -1585,9 +1582,9 @@ jobs:
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          key: tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
           restore-keys: |
-            tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-
+            tengri-jax-${{ matrix.suite }}-${{ matrix.part && format('{0}', matrix.part) || 'all' }}-${{ hashFiles('pyproject.toml') }}-
       # `-m 'not crossval'` overrides the default addopts selector, which
       # deselects the `slow` marker that conftest auto-applies to exactly these
       # two trees — without it this job would collect everything and run nothing.
@@ -1595,15 +1592,24 @@ jobs:
       # but the sampler-heavy tests peak at several GB each and xdist workers
       # would OOM the 16 GB runner (the reason this tier was never parallelized).
       #
-      # The third matrix entry (`matrix.paths` set) covers @pytest.mark.slow
-      # tests living outside tests/inference and tests/integration: those five
-      # trees are not auto-marked slow by path, so `-m slow` (not
-      # `-m 'not crossval'`) selects only the individually-decorated tests.
+      # `matrix.of` partitions the inference tree into N file-legs, each with its
+      # own pytest invocation and `--durations=30` report, enabling rebalancing
+      # from measured durations rather than static counts.
+      #
+      # The `matrix.paths` entry covers @pytest.mark.slow tests living outside
+      # tests/inference and tests/integration: those five trees are not auto-marked
+      # slow by path, so `-m slow` (not `-m 'not crossval'`) selects only the
+      # individually-decorated tests.
+      #
+      # Run under python -X faulthandler so seg faults print stack traces instead
+      # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
-          if [ -n "${{ matrix.paths }}" ]; then
-            pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
+          if [ -n "${{ matrix.of }}" ]; then
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+          elif [ -n "${{ matrix.paths }}" ]; then
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
           else
-            pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1619,8 +1625,12 @@ jobs:
       # reports its own outcome. `!cancelled()` keeps the run-on-failure
       # behavior that matters (the step above going red must not skip this
       # tier) while letting a cancellation actually cancel.
-      - if: ${{ !cancelled() && matrix.suite == 'inference' }}
-        run: pytest tests/contract -q -m 'slow and not crossval' -n 0
+      # The slow contract sweep rides on the inference suite; since this PR
+      # splits inference into three matrix legs (part: 1/2/3), run it on leg 1
+      # only to avoid redundant execution. The condition keeps working if the
+      # split is ever removed.
+      - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always()
@@ -1690,9 +1700,9 @@ jobs:
         run: |
           mkdir -p crossval-results
           status=0
-          for f in $(ls -1 tests/crossval/test_*.py | sort); do
+          while IFS= read -r f; do
             b=$(basename "$f" .py)
-            pytest "$f" -q --no-header -m 'crossval and not oom' -n 0 -rf \
+            pytest "$f" -q --no-header -m 'crossval and not oom' -n 0 -rfE \
               --junit-xml="crossval-results/${b}.xml" || rc=$?
             rc=${rc:-0}
             # 0 = green, 5 = nothing selected in this file (all deselected):
@@ -1703,7 +1713,7 @@ jobs:
               status=1
             fi
             unset rc
-          done
+          done < <(find tests/crossval -maxdepth 1 -name 'test_*.py' | sort)
           exit $status
         env:
           JAX_PLATFORMS: cpu

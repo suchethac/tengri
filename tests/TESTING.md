@@ -1,5 +1,19 @@
 # Testing Contract
 
+**Data locator hermeticity:** The test suite pins the data locator
+(`TENGRI_DATA_NO_ANCESTOR_WALK=1`, set unconditionally in `conftest.py`), so a
+pytest run sees only `$TENGRI_DATA_DIR` and the checkout under test — never
+untracked data borrowed from an ancestor checkout — and a local run therefore
+reaches the same run/skip verdicts CI does (#2329). Code outside pytest is
+untouched: the env var is set by `conftest.py`, not exported to your shell, so
+scripts and notebooks keep the full ancestor walk. A data-availability probe in
+a test file must go through the canonical locator (`tengri._data_setup
+.find_data`), never a hand-rolled parent walk: a walk can find a grid the
+pinned model build will refuse, and the test then fails where it should skip.
+Do not verify by running tests from a `git archive` export — an export is not a
+git checkout, and repo-reading guards (`check_render_diagnostics`, #2315) raise
+there by design.
+
 This document is the contract for what counts as a meaningful test in
 `tengri`. Every new test must satisfy it. PRs that add tests outside
 this contract should be sent back at review.
