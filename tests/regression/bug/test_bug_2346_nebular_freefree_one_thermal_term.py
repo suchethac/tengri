@@ -45,14 +45,14 @@ pytestmark = pytest.mark.regression_bug
 
 
 @pytest.fixture(scope="module")
-def cue_backend(ssp_data_bc03):
-    """Build a CueBackend with BC03 bare-stellar SSP."""
+def cue_backend(ssp_data_fsps):
+    """Build a CueBackend with the git-tracked bare-stellar FSPS PRSC SSP."""
     from tengri.components.nebular.cue import CueBackend
 
     weights_path = find_data_str("cue_weights.npz")
     if weights_path is None:
         pytest.skip("cue_weights.npz not found")
-    return CueBackend(weights_path, ssp_data_bc03)
+    return CueBackend(weights_path, ssp_data_fsps)
 
 
 def _build_cue_model(ssp_data):
@@ -83,13 +83,13 @@ def _build_cue_model_free_logu(ssp_data):
     )
 
 
-def test_cue_model_grid_reaches_one_meter_without_radio(ssp_data_bc03):
+def test_cue_model_grid_reaches_one_meter_without_radio(ssp_data_fsps):
     """Cue model without radio has max wavelength >= 1 m (1e10 Å).
 
     Before the fix: max = 1e8 Å (Cue's last node).
     After the fix: max >= 1e10 Å (extended by native_wave_nebular).
     """
-    model = _build_cue_model(ssp_data_bc03)
+    model = _build_cue_model(ssp_data_fsps)
 
     # Find the actual rest wavelength attribute
     wave_rest = np.asarray(model._rest_wavelength)
@@ -120,13 +120,13 @@ def test_cue_model_grid_reaches_one_meter_without_radio(ssp_data_bc03):
         )
 
 
-def test_cue_continuum_continues_as_freefree_past_one_cm(ssp_data_bc03):
+def test_cue_continuum_continues_as_freefree_past_one_cm(ssp_data_fsps):
     """Cue's nebular continuum is positive above 1e8 Å and follows free-free slope.
 
     Before the fix: continuum = 0 everywhere above 1e8 Å (clipped by right=0.0).
     After the fix: continuum > 0, slope d(ln L)/d(ln nu) ≈ -0.1 (free-free).
     """
-    model = _build_cue_model(ssp_data_bc03)
+    model = _build_cue_model(ssp_data_fsps)
 
     # Get default parameters and predict state
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -183,6 +183,12 @@ def test_cue_continuum_continues_as_freefree_past_one_cm(ssp_data_bc03):
         )
 
 
+@pytest.mark.skipif(
+    find_data_str("cloudy_grid_prsc.h5") is None,
+    reason=(
+        "cloudy_grid_prsc.h5 is not shipped in git; set TENGRI_DATA_DIR to a checkout that has it"
+    ),
+)
 def test_cloudy_grid_continuum_carries_the_same_tail(ssp_data_fsps):
     """CloudyGrid (with radio block) continuum follows free-free above 1e8 Å.
 
@@ -194,10 +200,6 @@ def test_cloudy_grid_continuum_carries_the_same_tail(ssp_data_fsps):
     all-NaN ``sed_nebular`` on main (pre-existing, tracked separately from
     #2346).
     """
-    # CloudyGrid needs its grid file
-    cloudy_grid_path = find_data_str("cloudy_grid_prsc.h5")
-    if cloudy_grid_path is None:
-        pytest.skip("cloudy_grid_prsc.h5 not found")
 
     # CloudyGrid only makes sense with a radio block (it declares no native grid)
     # Now build a CloudyGrid model with radio
@@ -245,13 +247,13 @@ def test_cloudy_grid_continuum_carries_the_same_tail(ssp_data_fsps):
     )
 
 
-def test_tail_is_differentiable(ssp_data_bc03):
+def test_tail_is_differentiable(ssp_data_fsps):
     """Gradient of sed_nebular w.r.t. neb_logU is finite and non-zero at 1e9 Å.
 
     The helper function interp_continuum_with_freefree_tail must be
     gradient-safe: jax.grad should work through it.
     """
-    model = _build_cue_model_free_logu(ssp_data_bc03)
+    model = _build_cue_model_free_logu(ssp_data_fsps)
 
     # Get a reference parameter sample and compute the index outside the loss
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
