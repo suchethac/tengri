@@ -230,6 +230,10 @@ def config_I(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
 
 def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     """II: double power law, FSPS PARSEC/C3K, Calzetti single screen, Dale+2014, Cue."""
+    # tau_gyr is the turnover timescale: once it exceeds age_gyr, the power-law
+    # shape flattens by ~200x and tau becomes unobservable. Cap near the cosmic
+    # age to keep the turnover in the galaxy's history. See sfh_tau_conditioning.py.
+    tau_upper = age_at_z(z)
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
@@ -238,7 +242,7 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "all_params": Fixed(DEFAULT),
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
-            "tau_gyr": Uniform(0.5, 13.0),
+            "tau_gyr": Uniform(0.5, tau_upper),
             "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
@@ -353,6 +357,15 @@ def config_V(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "type": "lnorm",
             "all_params": Fixed(DEFAULT),
             "peak_gyr": Uniform(0.1, 13.0),
+            # NOT capped at the cosmic age, unlike the DPL turnover. A
+            # log-normal peak beyond the observed epoch is not a flat
+            # direction: it encodes a star formation rate still RISING at
+            # that epoch, which the data distinguish. Measured outside the
+            # age window the peak retains 0.48-2.70% band sensitivity, an
+            # inside/outside ratio of 2.96-3.26 -- better conditioned than
+            # delayed-tau (64-79) and nothing like the DPL turnover
+            # (467-121000). Capping here would delete rising-SFH solutions
+            # the fit can actually constrain.
             "width_gyr": Uniform(0.1, 5.0),
             "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
