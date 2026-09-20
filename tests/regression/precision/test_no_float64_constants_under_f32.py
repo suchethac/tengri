@@ -220,3 +220,40 @@ def test_every_module_scope_float_table_is_a_plain_contiguous_host_array():
         f"{len(plain)} module-scope float tables are not plain contiguous numpy:\n"
         + "\n".join(plain)
     )
+
+
+@pytest.mark.parametrize(
+    ("env_value", "x64"),
+    [(None, "True"), ("0", "False")],
+    ids=["float64_default", "float32_requested"],
+)
+def test_bare_import_pulls_no_dsps_or_blackjax_module(env_value, x64):
+    """#2276: a bare import tengri imports no dsps or blackjax module.
+
+    dsps.cosmology allocates a float64 device buffer at import
+    (dsps/cosmology/defaults.py:8 TODAY = age_at_z0(...)), so an x64-on import
+    fails on float64-less backends (jax-mps). Lazy-importing dsps inside the
+    functions that use it allows the import to succeed; the first use of a dsps
+    path under x64 on on MPS still fails, loudly, which is the acceptable
+    failure mode.
+
+    blackjax fails at import as well. Every other dsps import in src/ is
+    already function-local; this test verifies the cosmology imports are too.
+    """
+    out = _run(
+        env_value,
+        """
+        import sys, tengri
+        thirdparty = sorted(m for m in sys.modules if m.split(".")[0] in ("dsps", "blackjax"))
+        print("THIRDPARTY", thirdparty)
+        """,
+    )
+    thirdparty = _parse(out, "THIRDPARTY")
+    # Parse the list representation: "[]" or "['dsps.foo', ...]"
+    import ast
+
+    thirdparty_list = ast.literal_eval(thirdparty)
+    assert not thirdparty_list, (
+        f"a bare import tengri imported {len(thirdparty_list)} third-party modules "
+        f"that allocate device buffers at import: {thirdparty_list} (#2276)"
+    )
