@@ -945,6 +945,16 @@ def run_nuts(
             "n_chains": n_chains,
             "chain_parallel": chain_parallel_effective,
             "n_divergent": n_divergent,
+            # The per-draw flag behind that count, aligned with ``samples``
+            # (both are the burn-in-sliced, chain-flattened draw axis), so a
+            # caller can ask WHERE the divergences are rather than only how
+            # many. A count cannot distinguish 22 divergences spread over the
+            # posterior from 22 in one corner of it, and those have different
+            # causes and different fixes. Published as a plain bool array
+            # rather than a JAX one because every consumer so far serializes
+            # it. Additive: nothing reads this key yet, and the aggregate
+            # ``n_divergent`` above is unchanged.
+            "divergent_mask": jnp.asarray(divergent).astype(bool),
             "dense_mass_step_backoffs": dense_mass_backoffs,
             # Gradient counts, the unit bench/reports compare samplers on:
             # adaptation (0 when a cached adaptation was reused), the kept

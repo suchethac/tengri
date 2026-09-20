@@ -283,6 +283,51 @@ def build_npz_payload(samples_thin: dict, *extras: dict) -> dict:
     return payload
 
 
+def divergent_draw_payload(posterior) -> dict:
+    """The parameter values AT the divergent transitions, unthinned.
+
+    A divergence count cannot tell 22 divergences spread over the posterior
+    from 22 in one corner of it, and those have different causes: the first is
+    an integrator that is marginally too coarse everywhere, the second is a
+    region of the density the sampler cannot follow. Only the second is fixed
+    by changing the model. Nothing on disk could distinguish them, so the
+    retune ladder was the only available response and it is the wrong one --
+    on galaxy 79 configuration I it bought 3 of 14 divergences for half the
+    effective sample size (ESS 273 -> 131).
+
+    Saved UNTHINNED and separately from the thinned draws on purpose.
+    Divergences are sparse -- tens out of a thousand-odd draws -- so
+    ``thin_samples``' ``[::step]`` would discard most of exactly the draws
+    being kept for diagnosis. The full record is a few tens of floats per
+    parameter; the thinning it bypasses exists to bound a much larger array.
+
+    Returns an empty dict when the sampler published no mask, so a backend
+    that does not report one (or an older tengri) still saves.
+    """
+    mask = (posterior.diagnostics or {}).get("divergent_mask")
+    if mask is None:
+        return {}
+    mask = np.asarray(mask, dtype=bool)
+    n_draws = int(next(iter(posterior.samples.values())).shape[0])
+    if mask.shape != (n_draws,):
+        raise ValueError(
+            f"divergent_mask has shape {mask.shape} against {n_draws} flattened draws. "
+            "The mask must be the burn-in-sliced, chain-flattened draw axis, or every "
+            "parameter value selected by it belongs to a different transition."
+        )
+    n_div = (posterior.diagnostics or {}).get("n_divergent")
+    if n_div is not None and int(mask.sum()) != int(n_div):
+        raise ValueError(
+            f"divergent_mask sums to {int(mask.sum())} but n_divergent is {int(n_div)}. "
+            "One of them is counting a different set of draws -- most likely the mask "
+            "was published before the burn-in slice."
+        )
+    payload = {"divergent_mask": mask}
+    for name, values in posterior.samples.items():
+        payload[f"divergent_{name}"] = np.asarray(values)[mask]
+    return payload
+
+
 def thin_samples(samples: dict, max_draws: int = MAX_SAVED_DRAWS) -> dict:
     """Thin flattened ``(n_chains * n_samples,)`` draws to at most ``max_draws``.
 
@@ -584,7 +629,10 @@ def save_fit_outputs(
         grids["model_photometry_p84"] = model_photometry_p84
 
     # Every key the NPZ carries goes through the collision guard (#2089).
-    npz_payload = build_npz_payload(samples_thin, derived, grids)
+    # Divergent draws ride along unthinned; see divergent_draw_payload.
+    npz_payload = build_npz_payload(
+        samples_thin, derived, grids, divergent_draw_payload(best_posterior)
+    )
     # ``tmp_suffix=".npz"``: ``np.savez`` appends that suffix to a path without it.
     _atomic_replace_write(
         output_npz, lambda tmp_path: np.savez(tmp_path, **npz_payload), tmp_suffix=".npz"
