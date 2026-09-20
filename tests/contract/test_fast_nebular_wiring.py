@@ -229,13 +229,17 @@ def test_fast_joint_objective_jit_and_grad_safe():
     p = dict(m.spec.sample(jax.random.PRNGKey(3)))
     fr = list(m.spec.free_params)
     fp = {k: p[k] for k in fr}
-    fx = {k: v for k, v in p.items() if k not in fr}
+    fixed_values = dict(m.spec.get_fixed_values())
 
     def obj(q):
-        pp = {**fx, **q}
-        state = m.predict_state(pp)
-        phot = m.observation.predict_via_precomp(state, pp)
-        lines = m.predict_line_fluxes(pp, target_wavelengths=_LW, state=state)
+        # predict_state / predict_line_fluxes self-merge Fixed values and
+        # refuse an explicit one (#2296); predict_via_precomp is an exact
+        # projector that reads params["redshift"] directly, so it needs
+        # the merged form.
+        state = m.predict_state(q)
+        full_q = {**fixed_values, **q}
+        phot = m.observation.predict_via_precomp(state, full_q)
+        lines = m.predict_line_fluxes(q, target_wavelengths=_LW, state=state)
         return jnp.sum(phot["phot_fnu"]) + jnp.sum(lines)
 
     val = jax.jit(obj)(fp)
@@ -262,10 +266,10 @@ def test_fast_line_fluxes_jit_safe_without_state():
     p = dict(m.spec.sample(jax.random.PRNGKey(1)))
     fr = list(m.spec.free_params)
     fp = {k: p[k] for k in fr}
-    fx = {k: v for k, v in p.items() if k not in fr}
 
     def line_sum(q):
-        return jnp.sum(m.predict_line_fluxes({**fx, **q}, target_wavelengths=_LW))
+        # predict_line_fluxes self-merges Fixed values internally (#2296).
+        return jnp.sum(m.predict_line_fluxes(q, target_wavelengths=_LW))
 
     g = jax.jit(jax.grad(line_sum))(fp)
     assert all(np.all(np.isfinite(np.asarray(v))) for v in g.values())

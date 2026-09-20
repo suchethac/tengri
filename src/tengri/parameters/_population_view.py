@@ -155,6 +155,17 @@ class PopulationSpecView:
         """Fixed values from the template (broadcast across galaxies)."""
         return self._template.get_fixed_values()
 
+    def fixed_value(self, name: str):
+        """The fixed value of one parameter, from the template (#2296).
+
+        ``refuse_fixed_overrides`` calls this to name the pinned value in its
+        error message; without this pass-through, a hierarchical fit's
+        ``merge_fixed_params(pop.sed.spec, ...)`` raised ``AttributeError``
+        instead of the intended ``ParameterError``, hiding the real message
+        behind an unrelated one.
+        """
+        return self._template.fixed_value(name)
+
     def param_init_shape(self, name: str) -> tuple[int, ...]:
         """Initial-xi shape for one free parameter.
 

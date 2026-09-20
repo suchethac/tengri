@@ -206,7 +206,7 @@ class TestBug361B_silent_nan_warning:
                 },
                 redshift=Fixed(0.1),
             )
-        pred = m.predict({"redshift": 0.05})
+        pred = m.predict({})  # redshift is Fixed(0.1) and irrelevant here; free-only (#2296)
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -235,7 +235,7 @@ class TestBug361B_silent_nan_warning:
                 },
                 redshift=Fixed(0.1),
             )
-        pred = m.predict({"redshift": 0.05})
+        pred = m.predict({})  # redshift is Fixed(0.1) and irrelevant here; free-only (#2296)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             ha = pred.lines.halpha

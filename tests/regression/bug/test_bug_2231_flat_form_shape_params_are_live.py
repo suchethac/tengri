@@ -365,27 +365,34 @@ class TestCompileSignatureKeysLiveShapeParams:
     def test_live_and_not_live_do_not_share_a_compiled_kernel(self):
         """End to end, without any cache-clearing workaround.
 
-        Builds the not-live model first and calls ``predict_photometry``
-        once, populating the module-level structural kernel cache under its
-        ``compile_signature()``. Then builds the live model and calls
-        ``predict_photometry`` with the SAME ``params`` dict -- carrying
-        ``dust_bump_strength=3.3`` for both calls, an override the not-live
-        model's compiled kernel structurally never reads (see
-        ``DustAttenuationSEDComponent._curve``: a not-live parameter is
-        excluded from the law kwargs regardless of what is in ``params``).
-        If the two builds collided on one kernel, the live model's call
-        would silently execute the not-live model's compiled closure and
-        report the same photometry.
+        ``dust_bump_strength`` is ``Fixed`` on BOTH builds here (the flat
+        ``Parameters(...)`` escape hatch wraps every shape kwarg in
+        ``Fixed(...)``, see ``_flat_model``) -- it is baked in at
+        construction, not overridden at predict time. "Live" means the
+        kernel structurally READS an explicit value for it (baked in as
+        3.3); "not-live" means the shape kwarg was never given at
+        construction, so the kernel structurally never reads it at all
+        (see ``DustAttenuationSEDComponent._curve``) and the law falls back
+        to its own default regardless. A predict-time params dict can no
+        longer probe this (#2296 refuses naming an already-Fixed key
+        outright, on either build) -- so both calls below use the
+        free-only (here, empty) dict, and the two builds are compared by
+        their construction-time value instead. Builds the not-live model
+        first and calls ``predict_photometry`` once, populating the
+        module-level structural kernel cache under its
+        ``compile_signature()``, then builds the live model and calls
+        ``predict_photometry`` too. If the two builds collided on one
+        kernel, the live model's call would silently execute the not-live
+        model's compiled closure and report the same photometry.
         """
         ssp = _build_ssp()
         obs = _obs()
-        params = {"dust_bump_strength": 3.3}
 
         not_live = _flat_model(ssp, obs, "kriek_conroy")
-        not_live_phot = np.asarray(not_live.predict_photometry(params))
+        not_live_phot = np.asarray(not_live.predict_photometry({}))
 
         live = _flat_model(ssp, obs, "kriek_conroy", dust_bump_strength=3.3)
-        live_phot = np.asarray(live.predict_photometry(params))
+        live_phot = np.asarray(live.predict_photometry({}))
 
         nuv_idx = _FILTER_NAMES.index("galex_nuv")
         rel = abs(live_phot[nuv_idx] - not_live_phot[nuv_idx]) / abs(not_live_phot[nuv_idx])

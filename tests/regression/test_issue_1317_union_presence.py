@@ -71,6 +71,7 @@ class TestIssue1317UnionPresence:
             Observation,
             Photometry,
             SEDModel,
+            Uniform,
             load_ssp_data,
         )
         from tengri.forward.sed_model import WavePrecomp
@@ -96,7 +97,17 @@ class TestIssue1317UnionPresence:
             sed_2band = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs_2band,
-                sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "tau_gyr": Fixed(10.0)},
+                sfh={
+                    "type": "dpl",
+                    "all_params": Fixed(DEFAULT),
+                    "tau_gyr": Fixed(10.0),
+                    # A MAP fit needs something free to fit; #2296 (Posterior.params
+                    # is free-only) unmasked that this build previously left
+                    # nothing free at all, so the "2-band and 3-band MAPs agree"
+                    # assertion below was comparing one Fixed constant to itself
+                    # (vacuously true regardless of whether masking works).
+                    "log_total_mass": Uniform(8.0, 12.0),
+                },
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",
@@ -108,8 +119,11 @@ class TestIssue1317UnionPresence:
             # Wrap in ForwardModel for Catalog compatibility
             model_2band = ForwardModel.build(sed=sed_2band, observation=obs_2band)
 
-        # Generate model-scale data for galaxy 1 at the reference model point
-        reference_params = sed_2band.spec.get_fixed_values()
+        # Generate model-scale data for galaxy 1 at the reference model point.
+        # Every parameter is Fixed except sfh_dpl_log_total_mass; the free-only
+        # params dict names just that one, at the registry's own default value
+        # (10.0) so the reference photometry is unchanged (#2296).
+        reference_params = {"sfh_dpl_log_total_mass": 10.0}
         ref_phot = sed_2band.predict_photometry(reference_params)
 
         # Add small noise
@@ -142,7 +156,17 @@ class TestIssue1317UnionPresence:
             sed_3band = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs_3band,
-                sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "tau_gyr": Fixed(10.0)},
+                sfh={
+                    "type": "dpl",
+                    "all_params": Fixed(DEFAULT),
+                    "tau_gyr": Fixed(10.0),
+                    # A MAP fit needs something free to fit; #2296 (Posterior.params
+                    # is free-only) unmasked that this build previously left
+                    # nothing free at all, so the "2-band and 3-band MAPs agree"
+                    # assertion below was comparing one Fixed constant to itself
+                    # (vacuously true regardless of whether masking works).
+                    "log_total_mass": Uniform(8.0, 12.0),
+                },
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",
@@ -182,11 +206,11 @@ class TestIssue1317UnionPresence:
         post_3band = cat_3band.fit(key=jax.random.PRNGKey(0), method="map")
         map_3band = post_3band[0].params
 
-        # The 2-band MAP and 3-band MAP should agree on the stellar_mass
+        # The 2-band MAP and 3-band MAP should agree on the stellar mass
         # (the only free parameter)
         np.testing.assert_allclose(
-            map_2band["sfh_dpl_alpha"],
-            map_3band["sfh_dpl_alpha"],
+            map_2band["sfh_dpl_log_total_mass"],
+            map_3band["sfh_dpl_log_total_mass"],
             rtol=1e-5,
             err_msg="2-band and 3-band (with absent band) MAPs should agree",
         )

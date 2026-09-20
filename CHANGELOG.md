@@ -1018,6 +1018,25 @@
   explicit-law rule.
 
 
+### Changed
+
+- **Params dicts are free-only; every entry point refuses a Fixed key
+  (#2296; breaking change).**
+  ``model.predict(params)`` and every prediction surface now refuse a `params`
+  key the spec declared ``Fixed``, raising ``ParameterError`` naming the key,
+  the pinned value, and the remedy. ``Parameters.sample(key)`` and
+  ``Posterior.params`` / ``.samples`` now carry free parameters only, not Fixed
+  ones. Fixed values are accessible through ``spec.get_fixed_values()`` or the
+  new ``Posterior.fixed_values`` property (which reflects any
+  ``Fitter(params_override=...)`` re-pin actually used by the fit, not just
+  the spec's declared value). This closes the silent physics error
+  where a Fixed-key override was honored on some specialized paths
+  (FeaturePrecomp) and dropped on others (exact), producing stealthily different
+  physics. To pin a *different* value for one fit or one galaxy, the
+  sanctioned route is still ``Fitter(params_override={...})`` (validated at
+  construction to name only Fixed parameters) or ``CatalogFitter``'s per-galaxy
+  redshift override — both unaffected by this refusal.
+
 ### Fixed
 
 - `enable_fast_nebular` now refuses when a CB19 optional parameter

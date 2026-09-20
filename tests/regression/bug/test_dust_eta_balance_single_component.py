@@ -77,7 +77,12 @@ def _build(ssp, *, eta_balance, dust_emission_type: str = "schreiber2018") -> SE
 
 
 def _params(model: SEDModel) -> dict:
-    return {**model.spec.get_fixed_values()}
+    """Every parameter on these fixtures is Fixed (#2296): the free-only params
+    dict is empty, and the model merges in its own Fixed values (sfh, dust
+    attenuation, ``dust_eta_balance``, ...).
+    """
+    del model
+    return {}
 
 
 def _l_ir_integral(model: SEDModel, params: dict) -> float:
@@ -151,7 +156,10 @@ def test_grad_wrt_eta_balance_is_nonzero(synthetic_ssp_wide):
     A dead parameter has an exactly-zero gradient everywhere; a live one that
     scales L_ir linearly must not.
     """
-    model = _build(synthetic_ssp_wide, eta_balance=Fixed(DEFAULT))
+    # eta_balance must be FREE here (#2296): the test overrides it directly
+    # in the params dict passed to predict_photometry via jax.grad, which is
+    # only legal for a free parameter, not a Fixed one.
+    model = _build(synthetic_ssp_wide, eta_balance=FREE)
     base_params = _params(model)
 
     def loss(eta):

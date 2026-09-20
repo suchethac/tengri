@@ -16,9 +16,7 @@
 # %%
 import os
 
-os.environ["TENGRI_HOST_DEVICES"] = (
-    "4"  # four CPU devices, one per chain
-)
+os.environ["TENGRI_HOST_DEVICES"] = "4"  # four CPU devices, one per chain
 
 # %% [markdown]
 # # Fitting photometry
@@ -238,7 +236,7 @@ fixed = sed_model.spec.get_fixed_values()
 
 def draw_dicts(n):
     for i in range(n):
-        yield {**fixed, **{k: float(v[i]) for k, v in draws.items()}}
+        yield {k: float(v[i]) for k, v in draws.items()}
 
 
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
@@ -250,8 +248,7 @@ for p in draw_dicts(N_DRAWS):
         v = d.get(k)
         dsamples[k].append(float("nan") if v is None else float(v))
 
-truth_full = {**fixed, **truth}
-pred_truth = sed_model.predict(truth_full)
+pred_truth = sed_model.predict(truth)
 truth_derived = pred_truth.properties
 print(f"{'quantity':<14}{'truth':>14}{'p16':>14}{'p50':>14}{'p84':>14}")
 print("-" * 70)
@@ -271,7 +268,7 @@ for k in DERIVED_KEYS:
 
 # %%
 WAVE_OBS = np.geomspace(1300.0, 3e5, 1200)  # 0.13–30 μm, GALEX → WISE W4
-z_obs = float(truth_full["redshift"])
+z_obs = float(fixed["redshift"])
 dl_cm = cosmology.luminosity_distance(z_obs)
 
 
@@ -285,7 +282,7 @@ def obs_fnu(params):
 
 spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
-spec_truth = obs_fnu(truth_full)
+spec_truth = obs_fnu(truth)
 
 # Use predict_photometry (the WavePrecomp LUT path the mock was generated with)
 # for the model fluxes, so the posterior photometry is consistent with the fit
@@ -366,7 +363,7 @@ plt.show()
 # ([`06_fitting_spectroscopy`](06_fitting_spectroscopy.py)) breaks.
 
 # %%
-fig_corner = posterior.plot_corner(truths=truth_full, color=C_POST)
+fig_corner = posterior.plot_corner(truths=truth, color=C_POST)
 fig_corner.savefig(FIG_DIR / "05_corner.png", dpi=200, bbox_inches="tight")
 plt.show()
 
