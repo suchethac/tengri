@@ -660,10 +660,13 @@ def _unknown_name_error(
     if not hint:
         # Fall back to alias hint or difflib suggestion
         if alias_hint is not None and alias_hint in valid_list:
-            hint = f" Did you mean: {alias_hint}?"
+            hint = f"Did you mean: {alias_hint}?"
         else:
             suggestions = difflib.get_close_matches(name, valid_list, n=n_suggestions, cutoff=0.6)
-            hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            hint = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+
+    if hint:
+        hint = f" {hint}"
 
     return ValueError(f"Unknown {kind} '{name}'.{hint}{extra}")
 
