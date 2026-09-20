@@ -131,7 +131,13 @@ def data_dirs() -> list[Path]:
     -----
     The ancestor walk exists because sphinx-gallery ``chdir``s into each
     script's directory before exec, so a hand-written ``"data/foo.h5"`` would
-    otherwise resolve under ``examples/<section>/``.
+    otherwise resolve under ``examples/<section>/``. It can be disabled by
+    setting ``$TENGRI_DATA_NO_ANCESTOR_WALK=1``, which pins discovery to the
+    repository under test (the package's own repo root + its data/) and disables
+    the ancestor walk. This is used by the pytest suite to ensure test
+    hermeticity (#2329): tests run in nested worktrees cannot find data files
+    from ancestor directories, matching the CI environment where such files are
+    absent.
 
     The last two groups exist so this function is a superset of the per-module
     grid locators it replaces (#1431). Those searched
@@ -151,10 +157,14 @@ def data_dirs() -> list[Path]:
     env = _env_data_dir()
     if env is not None:
         out.append(env)
-    out.extend(parent / "data" for parent in [Path.cwd(), *Path.cwd().parents])
-    out.append(Path.home() / "tengri" / "data")
-    # Bare working directory: covers a grid file sitting next to the script.
-    out.append(Path.cwd())
+
+    # Tier 3: Disable ancestor walk if pinned for test hermeticity (#2329).
+    if not os.environ.get("TENGRI_DATA_NO_ANCESTOR_WALK"):
+        out.extend(parent / "data" for parent in [Path.cwd(), *Path.cwd().parents])
+        out.append(Path.home() / "tengri" / "data")
+        # Bare working directory: covers a grid file sitting next to the script.
+        out.append(Path.cwd())
+
     out.extend(package_data_dirs())
     # Deduplicate, first occurrence wins so $TENGRI_DATA_DIR keeps precedence.
     # Running from the repo root makes cwd and the package root coincide, and
