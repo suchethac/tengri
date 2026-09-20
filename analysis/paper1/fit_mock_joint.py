@@ -122,6 +122,14 @@ def main(argv=None) -> int:
     parser.add_argument("--n-samples", type=int, default=300)
     parser.add_argument("--n-chains", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--n-starts",
+        type=int,
+        default=4,
+        help="MAP restarts from independent initializations (default: 4). One "
+        "start is not enough at this dimension: a single L-BFGS reached "
+        "chi2/dof 1.69 against truth's 1.08. Ignored for samplers.",
+    )
     args = parser.parse_args(argv)
 
     if not TRUTH_NPZ.exists():
@@ -167,20 +175,44 @@ def main(argv=None) -> int:
             "n_warmup": args.n_warmup,
             "n_samples": args.n_samples,
             "n_chains": args.n_chains,
+            # Diagonal, stated rather than left to the auto-policy. At D=44 the
+            # warmup memory is dominated by the mass matrix and a dense one is
+            # O(D^2) -- measured at 20+ GB on problems this size, which OOMs
+            # rather than slows down. A diagonal metric also produced FEWER
+            # divergences than dense on a continuity SFH at D=9 (12 vs 2), so
+            # this is not a memory concession that costs sampling quality.
+            "dense_mass_matrix": False,
         }
 
     # Inference is canonically through ForwardModel, not the SEDModel directly.
     forward = ForwardModel.build(sed=model)
 
     t0 = time.perf_counter()
-    post = forward.fit(data, method=args.method, key=jax.random.PRNGKey(args.seed), **kwargs)
+    if args.method == "map":
+        # Restart from independent initializations and keep the best by chi2.
+        # Selecting by agreement with truth would be circular -- it would tune
+        # the answer to the thing being measured -- so the criterion is the fit
+        # to the data, which a real analysis also has.
+        best, best_c, chis = None, np.inf, []
+        for i in range(args.n_starts):
+            key = jax.random.PRNGKey(args.seed + 1000 * i)
+            cand = forward.fit(data, method="map", key=key).params
+            c, _ = chi2_against_data(model, cand, npz)
+            chis.append(c)
+            if c < best_c:
+                best, best_c = cand, c
+        fitted = best
+        if args.n_starts > 1:
+            # The spread across starts is a measurement of the landscape, not
+            # noise to be hidden: it says how badly one start can mislead.
+            print(
+                f"{args.n_starts} starts: chi2 min {min(chis):.1f}, "
+                f"median {float(np.median(chis)):.1f}, max {max(chis):.1f}"
+            )
+    else:
+        post = forward.fit(data, method=args.method, key=jax.random.PRNGKey(args.seed), **kwargs)
+        fitted = {k: float(np.median(np.asarray(post.samples[k]))) for k in free}
     wall = time.perf_counter() - t0
-
-    fitted = (
-        post.params
-        if args.method == "map"
-        else {k: float(np.median(np.asarray(post.samples[k]))) for k in free}
-    )
     delta = report(free, truth, fitted, wall, int((censor == UPPER_LIMIT).sum()))
 
     # Convergence check, independent of the recovery table above.
