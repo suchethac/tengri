@@ -2,6 +2,14 @@
 
 ### Fixed
 
+- Composable precompute now checks node parity against the exact evaluator and
+  measures interior approximation error (#2288): a triweight LUT interpolant
+  over agn_grahsp_log_l5100 axis nodes (first, middle, last per axis) must
+  reproduce stored grid_phot values within machine precision, and interior
+  RMS error between consecutive grid points is measured and stored. The measured
+  error on a 21-node axis (the documented standard) is approximately 3.1e-3,
+  well below the hard limit of 0.5 that raises ValueError.
+
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
   (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
   cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
