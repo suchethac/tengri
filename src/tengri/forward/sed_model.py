@@ -8356,9 +8356,9 @@ class SEDModel:
             full_params = merge_fixed_params(self.spec, params)
         else:
             # "Already resolved, trust me" escape hatch: this branch never
-            # refuses, by design, for two DIFFERENT reasons depending on the
+            # refuses, by design, for THREE DIFFERENT reasons depending on the
             # caller -- a new caller must fall into one of these, not invent
-            # a third:
+            # a fourth:
             #
             # (a) The refusal already ran, on this SAME (free-only) ``params``,
             # in the caller that built ``fixed_values``. ``predict_observables``
@@ -8379,6 +8379,20 @@ class SEDModel:
             # ``neb_dig_frac=0.0`` while sweeping the per-Q_H grid, passing
             # ``fixed_values={}`` because its ``params`` is already fully
             # resolved (merged Fixed values plus the deliberate override).
+            #
+            # (c) The fit machinery's own merged dict, internally consistent
+            # by construction rather than user-supplied.
+            # ``inference/loss_functions.py``'s feature channel (line fluxes /
+            # ratios / indices) calls
+            # ``model.predict_state(params, fixed_values=jit_inputs["fixed_values"], ...)``
+            # where ``params`` is the free-only pytree the optimizer/sampler
+            # holds and ``jit_inputs["fixed_values"]`` is
+            # ``dict(model.spec.get_fixed_values())`` optionally updated with
+            # ``Fitter._params_override`` (``fitter.py``'s per-fit override of
+            # specific Fixed names, e.g. a per-galaxy redshift under
+            # ``catalog_z_range`` -- #1329). Neither half ever passed through a
+            # raw user dict, so there is nothing here for
+            # ``refuse_fixed_overrides`` to have caught or to re-check.
             full_params = {**fixed_values, **params}
 
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
