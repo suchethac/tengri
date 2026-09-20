@@ -43,12 +43,25 @@ def refuse_fixed_overrides(spec, params):
     Raises
     ------
     ParameterError
-        If any key in ``params`` is in ``spec.fixed_params``.
+        If any key in ``params`` is in ``spec.fixed_params`` and is not a
+        mirror target (``spec.mirrors``).
         Message names the key, the pinned value, and the remedy.
+
+    Notes
+    -----
+    **Mirrors are exempt.** A mirror target (e.g. ``neb_logZ_gas="met_logzsol"``)
+    is stored internally as ``Fixed(0.0)`` -- a placeholder never meant to be
+    read -- and :meth:`Parameters.resolve_mirrors` overwrites it with the
+    tied source's actual sampled value. ``spec.sample()`` calls
+    ``resolve_mirrors`` before returning, so its output legitimately carries
+    the target key at the CORRECT (tied) value, not the placeholder. Refusing
+    that presence would make every mirrored spec's own ``sample()`` output
+    unusable on any predict surface -- refuse the placeholder-owning Fixed
+    key everywhere else, but never a mirror target.
     """
     from tengri.config.exceptions import ParameterError
 
-    offending = sorted(set(params) & set(spec.fixed_params))
+    offending = sorted((set(params) & set(spec.fixed_params)) - set(spec.mirrors))
     if offending:
         detail = "; ".join(f"{k!r} (pinned {spec.fixed_value(k)!r})" for k in offending)
         raise ParameterError(
@@ -76,12 +89,26 @@ def merge_fixed_params(spec, params):
     Returns
     -------
     dict
-        A **new** dict: ``params`` plus every numeric fixed value it omitted.
+        A **new** dict: ``params`` plus every numeric fixed value it omitted,
+        with any mirror target overwritten by its tied source's value.
 
     Raises
     ------
     ParameterError
-        If ``params`` contains a Fixed key (see :func:`refuse_fixed_overrides`).
+        If ``params`` contains a Fixed key (see :func:`refuse_fixed_overrides`);
+        a mirror target is exempt (see that function's Notes).
+
+    Notes
+    -----
+    A mirror target (``neb_logZ_gas="met_logzsol"``) is internally stored
+    ``Fixed(0.0)`` -- a placeholder never meant to be read on its own -- so
+    the fixed-value fill loop below fills it in at that placeholder like any
+    other omitted Fixed name. :meth:`Parameters.resolve_mirrors` runs last,
+    overwriting every mirror target with its tied source's actual value
+    (already present in ``merged``, either from ``params`` if the source is
+    free or from the fill loop above if the source is itself Fixed), so a
+    caller of this function never sees the placeholder -- the same guarantee
+    ``spec.sample()`` already gives its own free-only output.
     """
     refuse_fixed_overrides(spec, params)
 
@@ -93,7 +120,7 @@ def merge_fixed_params(spec, params):
         if value is None or isinstance(value, (str, bool)):
             continue
         merged[name] = jnp.asarray(value)
-    return merged
+    return spec.resolve_mirrors(merged)
 
 
 def resolve_fixed_params(model, params):
