@@ -2,6 +2,19 @@
 
 ### Fixed
 
+- CloudyGridBackend Q_H table no longer becomes all-NaN when the SSP has a
+  zero-age anchor template (#2418): BC03 and Stelib SSP grids have
+  log10(age/Gyr) = -inf at the zero-age main sequence. This converts to -inf
+  in log10(age/yr), and when Q_H interpolation brackets a finite query age
+  between -inf and the next node, `_interp_index_weight` computes
+  dx = (+inf) and weight = (-inf / inf) = NaN, propagating to every nebular
+  SED value. Measured: BC03 + PRSC CLOUDY grid gave 7955/7955 NaN; FSPS PRSC
+  SSP gave 0 NaN. The SSP age axis is now floored at log10(100 kyr) = 5.0
+  (log10(age/yr)) during CloudyGridBackend construction, matching the stellar
+  path's convention (dsps_wrapper.py #1016). A guard refuses construction if
+  any non-finite age or metallicity value remains after flooring, naming the
+  axis, index, and value, so this failure mode is not silent going forward.
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the

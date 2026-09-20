@@ -479,6 +479,34 @@ class CloudyGridBackend:
         if ssp_data is not None:
             self._precompute_qh(ssp_data)
 
+        # Guard: refuse if SSP age or metallicity axes contain non-finite values
+        # after construction. Non-finite nodes cause NaN in Q_H interpolation weights
+        # and silently produce all-NaN nebular SED. Flooring was applied above for
+        # age; if any remain, it's an upstream issue (#2418).
+        if ssp_data is not None:
+            non_finite_age_indices = np.where(~np.isfinite(np.array(self._qh_log_age)))[0]
+            if len(non_finite_age_indices) > 0:
+                for idx in non_finite_age_indices:
+                    raise ValueError(
+                        f"CloudyGridBackend: SSP age axis contains non-finite value at "
+                        f"index {idx}: {float(self._qh_log_age[idx])} "
+                        f"[log10(age/yr)]. This will cause NaN in Q_H interpolation weights, "
+                        f"making all nebular SED NaN. The age axis should be finite after "
+                        f"construction. Check the SSP loader for zero-age anchor templates "
+                        f"(log10(age/Gyr) = -inf) that need flooring. Reference: issue #2418."
+                    )
+
+            non_finite_met_indices = np.where(~np.isfinite(np.array(self._qh_log_met)))[0]
+            if len(non_finite_met_indices) > 0:
+                for idx in non_finite_met_indices:
+                    raise ValueError(
+                        f"CloudyGridBackend: SSP metallicity axis contains non-finite value at "
+                        f"index {idx}: {float(self._qh_log_met[idx])} "
+                        f"[log10(Z)]. This will cause NaN in Q_H interpolation weights, "
+                        f"making all nebular SED NaN. The metallicity axis should be finite. "
+                        f"Check the SSP loader for non-finite metallicity values."
+                    )
+
         # Photometry preintegration storage
         self._preint_continuum = None
         self._preint_lines = None
@@ -630,6 +658,15 @@ class CloudyGridBackend:
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
+        # Floor the SSP age axis to avoid -inf from zero-age anchor templates (#2418).
+        # Age-0 anchor templates (BC03, Stelib) have log10(age/Gyr) = -inf, which
+        # converts to -inf in log10(yr) space. This causes Q_H interpolation weights
+        # to become NaN when bracketing a finite query age between -inf and the
+        # next node. Floor at log10(100 kyr) = 5.0 in log10(yr), matching the
+        # stellar path's convention in surviving_mstar (dsps_wrapper.py #1016).
+        # No star has died at age 0, so this is physically reasonable (#2418).
+        ssp_lg_age_gyr_floored = jnp.maximum(ssp_data.ssp_lg_age_gyr, -4.0)  # -4.0 Gyr = 100 kyr
+
         # Compute Q_H for each (met, age): vectorized, in the log domain and
         # stored normalized by its own peak (#1568). Q_H reaches ~1e46
         # photons/s/Msun; the linear build overflowed every entry to ``inf`` in
@@ -652,7 +689,7 @@ class CloudyGridBackend:
         )
         # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
         self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
-        self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
+        self._qh_log_age = jnp.asarray(ssp_lg_age_gyr_floored + 9.0)  # log(age/yr)
 
         # Precompute indices of young SSP age bins (only these produce
         # ionizing photons and contribute to nebular emission)
