@@ -332,6 +332,7 @@ def citation_key_hint(
     *,
     kind: str,
     keyword: str | None,
+    accepted_anywhere: frozenset[str],
     fallback: str = "",
 ) -> str:
     """Error message fragment recognizing ``unknown`` as a citation key.
@@ -356,24 +357,41 @@ def citation_key_hint(
         entirely -- for call sites where ``unknown`` is a *dict key* name
         rather than a value assigned via ``keyword=``, for which
         "Use key='...'" does not parse as an instruction a caller could type.
+    accepted_anywhere : frozenset of str
+        Every name accepted by *any* routed grammar validator (see
+        :func:`tengri.parameters.groups._names_accepted_anywhere`). A
+        resolved citation-key name outside this set is filtered out before
+        it can ever be reported: several association tables key on an
+        internal/backend spelling (``"cb19_grid"``, an author-name alias
+        like ``"stalevski"``) or a name the grammar no longer accepts at
+        all (a retired selector, an *inference-backend* name like
+        ``"mcmc_nuts"`` that no ``SEDModel.build`` group validates), and
+        naming one of those is worse than the plain difflib fallback: it
+        reads as an instruction the reader could actually type, and cannot
+        be (#2429 opus review round 2, item 1).
     fallback : str
         The difflib "Did you mean: ...?" sentence (or an alias hint), already
         computed by the caller. Returned unchanged when ``unknown`` is not a
-        citation key at all; appended after the citation note (never
-        replaced) when it is a citation key but not valid here, so a real
-        typo suggestion is never lost to a true-but-unhelpful citation
-        observation (#2429 opus review M2).
+        citation key at all (nothing survives the ``accepted_anywhere``
+        filter counts as "not a citation key" here); appended after the
+        citation note (never replaced) when it is a citation key but not
+        valid here, so a real typo suggestion is never lost to a
+        true-but-unhelpful citation observation (#2429 opus review M2).
 
     Returns
     -------
     str
         The hint sentence(s), or ``fallback`` unchanged when ``unknown`` is
-        not a known citation key of any name other than itself.
+        not a known citation key of any accepted name other than itself.
 
     Examples
     --------
     >>> citation_key_hint(
-    ...     "charlot_fall2000", ["calzetti", "power_law"], kind="dust law", keyword="law"
+    ...     "charlot_fall2000",
+    ...     ["calzetti", "power_law"],
+    ...     kind="dust law",
+    ...     keyword="law",
+    ...     accepted_anywhere=frozenset({"calzetti", "power_law"}),
     ... )
     "That is a citation key for power_law (dust law). Use law='power_law'."
     """
@@ -384,6 +402,9 @@ def citation_key_hint(
     # difflib fallback for no benefit (#2429 opus review M1).
     unknown_lower = str(unknown).lower()
     names_for_key = tuple(n for n in names_for_key if n.lower() != unknown_lower)
+    # A resolved name no validator anywhere would accept is not a usable
+    # hint (#2429 opus review round 2, item 1) -- see the parameter doc.
+    names_for_key = tuple(n for n in names_for_key if n in accepted_anywhere)
     if not names_for_key:
         return fallback
 
@@ -407,7 +428,8 @@ def citation_key_hint(
             remedy += f" (or another from: {names_str})"
         return f"That is a citation key for {names_str} ({kind}). {remedy}."
 
-    # This citation key exists, but not for a name valid at this site.
+    # This citation key exists, is accepted somewhere, but not for a name
+    # valid at this site.
     first_name = names_for_key[0]
     entry_kind = _registry_namespace_kind(first_name) or "a model"
     note = f"That is a citation key for {first_name} ({entry_kind}), not a valid {kind}."
