@@ -815,6 +815,21 @@ class Catalog:
         for name, value in (params or {}).items():
             columns[name] = np.asarray(value)
 
+        # Refuse HERE, at construction, rather than lazily inside predict()/
+        # simulate() (#2296): met_gas= and redshift= write neb_logZ_gas/
+        # redshift into these per-galaxy columns, and both are Fixed on the
+        # common build (met_gas's whole point is per-galaxy gas-phase
+        # metallicity when the model's own neb_logZ_gas is pinned; redshift
+        # is Fixed on any non-catalog-z_range build). predict() calls this
+        # same check (line ~997) on every table it is handed, so a table
+        # built here that it would refuse must be refused here too, with the
+        # remedy named while the caller still has from_histories' kwargs in
+        # hand: rebuild fwd with the offending parameter(s) FREE (redshift=
+        # FREE, or neb_logZ_gas via a nebular backend whose gas-phase Z is
+        # declared FREE), not Fixed -- the same "presence, not value" rule
+        # every other predict surface enforces.
+        refuse_fixed_overrides(fwd.spec, columns)
+
         catalog = cls(fwd, None, flux_unit=flux_unit)
         # Validate the assembled columns through the same gate predict() uses,
         # so from_histories cannot accept a table predict() would then reject.
