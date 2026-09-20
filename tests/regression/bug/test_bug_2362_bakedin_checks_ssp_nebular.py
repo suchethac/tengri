@@ -168,3 +168,34 @@ def test_bakedin_warns_when_ssp_data_none():
     assert len(neb_warnings) >= 1, "Expected at least fixed-logU warning"
     # has_continuum should be True (assumed when status is unknown)
     assert backend.has_continuum is True
+
+
+def test_bakedin_bare_with_neb_none_succeeds():
+    """Bare SSP with neb={'type': 'none'} should succeed (nebular OFF).
+
+    The bare-grid refusal should not fire when nebular emission is explicitly
+    disabled. When neb={'type': 'none'}, the user is saying "I don't want
+    nebular emission", so the BakedInBackend should not complain about the
+    absence of nebular in the bare SSP.
+    """
+    pytest.importorskip("tengri")
+    import tengri
+
+    ssp = _synthetic_ssp("bare")
+    # This should NOT raise BakedInNebularBareError because neb={'type': 'none'}
+    # explicitly disables nebular emission
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
+        neb={"type": "none"},
+        redshift=tengri.Fixed(0.05),
+    )
+    assert model is not None
+    # Model built successfully with bare SSP and neb={'type': 'none'}

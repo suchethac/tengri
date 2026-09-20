@@ -1034,8 +1034,8 @@
   immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
   `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
   disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
-  and honours `suppress` and an explicit `neb` declaration; only the bare-grid
-  refusal bypasses them (#2362).
+  and honours `suppress` and an explicit `neb` declaration; the bare-grid
+  refusal does not fire when nebular emission is off (#2362).
 
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
