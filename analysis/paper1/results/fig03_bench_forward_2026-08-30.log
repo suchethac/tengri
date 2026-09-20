@@ -1,0 +1,119 @@
+START 2026-08-30 20:17:45 host=Mac.iuj.ac.jp commit=996b72ccb jax=0.11.1
+fit_procs_at_start=0
+
+tengri Forward SEDModel Benchmark
+  Platform: CPU
+  Precision: float64
+  Filters: SDSS ugriz (5)
+  Redshift: 0.1 (fixed)
+  Runs: 200 (after 5 warmup)
+  SSP: ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+  Comparison: approx=None (exact) vs approx=WavePrecomp() (LUT)
+
+==============================================================================================================
+  Forward: DPL (parametric, D=6)
+==============================================================================================================
+  Stellar only                             exact=    6610 µs  precomp=     383 µs  speedup= 17.3×  err=  0.009%
+  + nebular (baked-in SSP)                 exact=    7416 µs  precomp=     392 µs  speedup= 18.9×  err=  0.009%
+  + nebular (CLOUDY grid)                  SKIPPED (CloudyGridWNESSPError: CloudyGridBackend received an SSP flagged nebular-included ()
+  + nebular (Cue emulator)                 SKIPPED (CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n)
+  + dust IR (MBB)                          exact=   11028 µs  precomp=     613 µs  speedup= 18.0×  err=  0.009%
+  + dust IR (THEMIS)                       exact=    9486 µs  precomp=     443 µs  speedup= 21.4×  err=  0.009%
+  + dust IR (DL07)                         exact=    7945 µs  precomp=     435 µs  speedup= 18.3×  err=  0.009%
+  + dust IR (Dale 2014)                    exact=    8027 µs  precomp=     445 µs  speedup= 18.0×  err=  0.009%
+  + AGN (simple disc+torus)                SKIPPED (ValueError: Unknown AGN model 'simple'. Available: 'composable', or any )
+  + AGN (K&D 3-zone full)                  exact=   10076 µs  precomp=   11048 µs  speedup=  0.9×  err=  0.009%
+  + AGN (QSOgen)                           exact=    7285 µs  precomp=    3297 µs  speedup=  2.2×  err=  0.009%
+  + AGN (SKIRTOR torus)                    exact=    7998 µs  precomp=    9855 µs  speedup=  0.8×  err=  0.009%
+  + radio (SF + AGN)                       exact=    7017 µs  precomp=     476 µs  speedup= 14.7×  err=  0.009%
+  + X-ray (XRB + corona)                   exact=    6930 µs  precomp=    2099 µs  speedup=  3.3×  err=  0.009%
+  Typical: neb+THEMIS+radio+xray           exact=    8328 µs  precomp=    1867 µs  speedup=  4.5×  err=  0.009%
+  AGN host: neb+THEMIS+KD+radio+xray       exact=   12258 µs  precomp=    8044 µs  speedup=  1.5×  err=  0.009%
+  Cue+DL07+simple AGN                      SKIPPED (CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n)
+  Kitchen sink (all components)            exact=   12347 µs  precomp=    7946 µs  speedup=  1.6×  err=  0.009%
+
+==============================================================================================================
+  Forward: Dense Basis (D=8)
+==============================================================================================================
+  Stellar only                             exact=    6761 µs  precomp=     465 µs  speedup= 14.5×  err=  0.009%
+  + nebular (baked-in SSP)                 exact=    6718 µs  precomp=     467 µs  speedup= 14.4×  err=  0.009%
+  + nebular (CLOUDY grid)                  SKIPPED (CloudyGridWNESSPError: CloudyGridBackend received an SSP flagged nebular-included ()
+  + nebular (Cue emulator)                 SKIPPED (CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n)
+  + dust IR (MBB)                          exact=    7559 µs  precomp=     537 µs  speedup= 14.1×  err=  0.009%
+  + dust IR (THEMIS)                       exact=    8201 µs  precomp=     527 µs  speedup= 15.6×  err=  0.009%
+  + dust IR (DL07)                         exact=    8123 µs  precomp=     526 µs  speedup= 15.4×  err=  0.009%
+  + dust IR (Dale 2014)                    exact=    8372 µs  precomp=     512 µs  speedup= 16.3×  err=  0.009%
+  + AGN (simple disc+torus)                SKIPPED (ValueError: Unknown AGN model 'simple'. Available: 'composable', or any )
+  + AGN (K&D 3-zone full)                  exact=   10527 µs  precomp=   11000 µs  speedup=  1.0×  err=  0.009%
+  + AGN (QSOgen)                           exact=    7425 µs  precomp=    3666 µs  speedup=  2.0×  err=  0.009%
+  + AGN (SKIRTOR torus)                    exact=    8267 µs  precomp=    9560 µs  speedup=  0.9×  err=  0.009%
+  + radio (SF + AGN)                       exact=    6734 µs  precomp=     483 µs  speedup= 13.9×  err=  0.009%
+  + X-ray (XRB + corona)                   exact=    6701 µs  precomp=    2342 µs  speedup=  2.9×  err=  0.009%
+  Typical: neb+THEMIS+radio+xray           exact=    7919 µs  precomp=    1962 µs  speedup=  4.0×  err=  0.009%
+  AGN host: neb+THEMIS+KD+radio+xray       exact=   11977 µs  precomp=    7159 µs  speedup=  1.7×  err=  0.009%
+  Cue+DL07+simple AGN                      SKIPPED (CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n)
+  Kitchen sink (all components)            exact=   15027 µs  precomp=    7615 µs  speedup=  2.0×  err=  0.009%
+
+==============================================================================================================
+  Forward: Stochastic Field (D~137)
+==============================================================================================================
+  Stellar only                             exact=    6585 µs  precomp=     461 µs  speedup= 14.3×  err=  0.009%
+  + nebular (baked-in SSP)                 exact=    7487 µs  precomp=     485 µs  speedup= 15.4×  err=  0.009%
+  + nebular (CLOUDY grid)                  SKIPPED (CloudyGridWNESSPError: CloudyGridBackend received an SSP flagged nebular-included ()
+  + nebular (Cue emulator)                 SKIPPED (CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n)
+  + dust IR (MBB)                          exact=    7270 µs  precomp=     467 µs  speedup= 15.6×  err=  0.009%
+  + dust IR (THEMIS)                       exact=    7563 µs  precomp=     498 µs  speedup= 15.2×  err=  0.009%
+  + dust IR (DL07)                         exact=    7791 µs  precomp=     487 µs  speedup= 16.0×  err=  0.009%
+  + dust IR (Dale 2014)                    exact=    7993 µs  precomp=     492 µs  speedup= 16.2×  err=  0.009%
+  + AGN (simple disc+torus)                SKIPPED (ValueError: Unknown AGN model 'simple'. Available: 'composable', or any )
+  + AGN (K&D 3-zone full)                  exact=   10051 µs  precomp=   10351 µs  speedup=  1.0×  err=  0.009%
+  + AGN (QSOgen)                           exact=    6724 µs  precomp=    3303 µs  speedup=  2.0×  err=  0.009%
+  + AGN (SKIRTOR torus)                    exact=    8345 µs  precomp=    9832 µs  speedup=  0.8×  err=  0.009%
+  + radio (SF + AGN)                       exact=    6832 µs  precomp=     481 µs  speedup= 14.2×  err=  0.009%
+  + X-ray (XRB + corona)                   exact=    6838 µs  precomp=    2069 µs  speedup=  3.3×  err=  0.009%
+  Typical: neb+THEMIS+radio+xray           exact=    7633 µs  precomp=    1840 µs  speedup=  4.1×  err=  0.009%
+  AGN host: neb+THEMIS+KD+radio+xray       exact=   11898 µs  precomp=    7445 µs  speedup=  1.6×  err=  0.009%
+  Cue+DL07+simple AGN                      SKIPPED (CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n)
+  Kitchen sink (all components)            exact=   11657 µs  precomp=    8219 µs  speedup=  1.4×  err=  0.009%
+
+==============================================================================================================
+  Gradient: DPL (parametric, D=6)
+==============================================================================================================
+  Stellar only                             exact=    3185 µs  precomp=     313 µs  speedup= 10.2×
+  Kitchen sink (all components)            SKIPPED (ConcretizationTypeError)
+
+==============================================================================================================
+  Gradient: Dense Basis (D=8)
+==============================================================================================================
+  Stellar only                             exact=    3406 µs  precomp=     361 µs  speedup=  9.4×
+  Kitchen sink (all components)            SKIPPED (ConcretizationTypeError)
+
+==============================================================================================================
+  Gradient: Stochastic Field (D~137)
+==============================================================================================================
+  Stellar only                             exact=    3195 µs  precomp=     330 µs  speedup=  9.7×
+  Kitchen sink (all components)            SKIPPED (ConcretizationTypeError)
+
+==============================================================================================================
+  SKIPPED SECTIONS (total: 15)
+==============================================================================================================
+  + nebular (CLOUDY grid)_dpl: CloudyGridBackend received an SSP flagged nebular-included (wNE): nebu
+  + nebular (Cue emulator)_dpl: CueBackend received an SSP flagged nebular-included (wNE): nebular con
+  + AGN (simple disc+torus)_dpl: Unknown AGN model 'simple'. Available: 'composable', or any of the dep
+  Cue+DL07+simple AGN_dpl: CueBackend received an SSP flagged nebular-included (wNE): nebular con
+  + nebular (CLOUDY grid)_dense_basis: CloudyGridBackend received an SSP flagged nebular-included (wNE): nebu
+  + nebular (Cue emulator)_dense_basis: CueBackend received an SSP flagged nebular-included (wNE): nebular con
+  + AGN (simple disc+torus)_dense_basis: Unknown AGN model 'simple'. Available: 'composable', or any of the dep
+  Cue+DL07+simple AGN_dense_basis: CueBackend received an SSP flagged nebular-included (wNE): nebular con
+  + nebular (CLOUDY grid)_field: CloudyGridBackend received an SSP flagged nebular-included (wNE): nebu
+  + nebular (Cue emulator)_field: CueBackend received an SSP flagged nebular-included (wNE): nebular con
+  + AGN (simple disc+torus)_field: Unknown AGN model 'simple'. Available: 'composable', or any of the dep
+  Cue+DL07+simple AGN_field: CueBackend received an SSP flagged nebular-included (wNE): nebular con
+  Kitchen sink (all components)_grad_dpl: Abstract tracer value encountered where concrete value is expected: tr
+  Kitchen sink (all components)_grad_dense_basis: Abstract tracer value encountered where concrete value is expected: tr
+  Kitchen sink (all components)_grad_field: Abstract tracer value encountered where concrete value is expected: tr
+
+  All required sections completed. (Some optional sections skipped)
+==============================================================================================================
+EXIT=0 2026-08-30 20:21:43
+fit_procs_at_end=0

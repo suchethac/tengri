@@ -1,0 +1,104 @@
+{
+  "bands": [
+    {
+      "band": "chandra_soft",
+      "err_pct": 0.14846598440048528,
+      "err_sigma": 0.009801998338368836,
+      "detected": true
+    },
+    {
+      "band": "chandra_hard",
+      "err_pct": 0.1540469626745017,
+      "err_sigma": 0.009601019537195865,
+      "detected": true
+    },
+    {
+      "band": "galex_nuv",
+      "err_pct": 0.1092552707012188,
+      "err_sigma": 0.008071172948184262,
+      "detected": true
+    },
+    {
+      "band": "sdss_u",
+      "err_pct": 0.006763739294011692,
+      "err_sigma": 0.001982924645533632,
+      "detected": true
+    },
+    {
+      "band": "sdss_g",
+      "err_pct": 0.003611163794641906,
+      "err_sigma": 0.0011803897548136185,
+      "detected": true
+    },
+    {
+      "band": "sdss_r",
+      "err_pct": 0.0017047092604052494,
+      "err_sigma": 0.0005634446399685382,
+      "detected": true
+    },
+    {
+      "band": "sdss_i",
+      "err_pct": 0.0015152122613794586,
+      "err_sigma": 0.0005033540558820771,
+      "detected": true
+    },
+    {
+      "band": "2mass_j",
+      "err_pct": 0.0005291265458906433,
+      "err_sigma": 0.0001757948819174164,
+      "detected": true
+    },
+    {
+      "band": "2mass_ks",
+      "err_pct": 7.557667080927972e-05,
+      "err_sigma": 2.5066452780679378e-05,
+      "detected": true
+    },
+    {
+      "band": "wise_w1",
+      "err_pct": 0.0018571367788971142,
+      "err_sigma": 0.0006181997863771412,
+      "detected": true
+    },
+    {
+      "band": "wise_w2",
+      "err_pct": -0.00827070565132975,
+      "err_sigma": -0.0027433466854800037,
+      "detected": true
+    },
+    {
+      "band": "wise_w3",
+      "err_pct": -0.22070191495711936,
+      "err_sigma": -0.07262426312034326,
+      "detected": true
+    },
+    {
+      "band": "wise_w4",
+      "err_pct": -0.23268191060029897,
+      "err_sigma": -0.07325413774593043,
+      "detected": true
+    },
+    {
+      "band": "alma_band7",
+      "err_pct": -0.24094363162084254,
+      "err_sigma": -0.010402410525765708,
+      "detected": true
+    },
+    {
+      "band": "alma_band6",
+      "err_pct": -0.22316838165543676,
+      "err_sigma": -0.008303238297491519,
+      "detected": true
+    },
+    {
+      "band": "alma_band3",
+      "err_pct": -0.16559233325378325,
+      "err_sigma": -0.0013209952894616748,
+      "detected": false
+    }
+  ],
+  "worst_detected_sigma": 0.07325413774593043,
+  "spectrum_max_sigma": 0.0,
+  "chi2_added": 0.011084844581453783,
+  "tolerance_sigma": 0.25
+}

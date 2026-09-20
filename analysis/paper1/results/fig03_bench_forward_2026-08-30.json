@@ -1,0 +1,474 @@
+{
+ "metadata": {
+  "script": "bench/scripts/benchmark_forward_model.py",
+  "started": "2026-08-30 20:17:45",
+  "finished": "2026-08-30 20:21:43",
+  "host": "Mac.iuj.ac.jp",
+  "cpu": "Apple M4 Pro",
+  "n_cpu": "14",
+  "os": "macOS-26.6.2-arm64-arm-64bit",
+  "commit": "996b72ccb",
+  "jax": "0.11.1",
+  "python": "3.12.2",
+  "platform": "CPU",
+  "precision": "float64",
+  "filters": "SDSS ugriz (5)",
+  "redshift": "0.1 (fixed)",
+  "runs": "200 (after 5 warmup)",
+  "ssp": "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
+  "sfh_for_panel": "DPL (parametric, D=6)",
+  "other_fit_processes_during_run": 0,
+  "log": "analysis/paper1/results/fig03_bench_forward_2026-08-30.log"
+ },
+ "panel_a": [
+  {
+   "label": "Stellar",
+   "source_label": "Stellar only",
+   "exact_us": 6610,
+   "precomp_us": 383,
+   "speedup": 17.3
+  },
+  {
+   "label": "+ nebular (SSP)",
+   "source_label": "+ nebular (baked-in SSP)",
+   "exact_us": 7416,
+   "precomp_us": 392,
+   "speedup": 18.9
+  },
+  {
+   "label": "+ dust IR (DL07)",
+   "source_label": "+ dust IR (DL07)",
+   "exact_us": 7945,
+   "precomp_us": 435,
+   "speedup": 18.3
+  },
+  {
+   "label": "+ AGN (QSOgen)",
+   "source_label": "+ AGN (QSOgen)",
+   "exact_us": 7285,
+   "precomp_us": 3297,
+   "speedup": 2.2
+  },
+  {
+   "label": "+ AGN torus (Kubota-Done)",
+   "source_label": "+ AGN (K&D 3-zone full)",
+   "exact_us": 10076,
+   "precomp_us": 11048,
+   "speedup": 0.9
+  },
+  {
+   "label": "+ radio",
+   "source_label": "+ radio (SF + AGN)",
+   "exact_us": 7017,
+   "precomp_us": 476,
+   "speedup": 14.7
+  },
+  {
+   "label": "+ X-ray",
+   "source_label": "+ X-ray (XRB + corona)",
+   "exact_us": 6930,
+   "precomp_us": 2099,
+   "speedup": 3.3
+  },
+  {
+   "label": "Panchromatic (nebular, THEMIS, radio, X-ray)",
+   "source_label": "Typical: neb+THEMIS+radio+xray",
+   "exact_us": 8328,
+   "precomp_us": 1867,
+   "speedup": 4.5
+  },
+  {
+   "label": "All components",
+   "source_label": "Kitchen sink (all components)",
+   "exact_us": 12347,
+   "precomp_us": 7946,
+   "speedup": 1.6
+  }
+ ],
+ "all_sections": {
+  "Forward: DPL (parametric, D=6)": [
+   {
+    "label": "Stellar only",
+    "exact_us": 6610,
+    "precomp_us": 383,
+    "speedup": 17.3,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ nebular (baked-in SSP)",
+    "exact_us": 7416,
+    "precomp_us": 392,
+    "speedup": 18.9,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ nebular (CLOUDY grid)",
+    "skipped": "CloudyGridWNESSPError: CloudyGridBackend received an SSP flagged nebular-included ("
+   },
+   {
+    "label": "+ nebular (Cue emulator)",
+    "skipped": "CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n"
+   },
+   {
+    "label": "+ dust IR (MBB)",
+    "exact_us": 11028,
+    "precomp_us": 613,
+    "speedup": 18.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (THEMIS)",
+    "exact_us": 9486,
+    "precomp_us": 443,
+    "speedup": 21.4,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (DL07)",
+    "exact_us": 7945,
+    "precomp_us": 435,
+    "speedup": 18.3,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (Dale 2014)",
+    "exact_us": 8027,
+    "precomp_us": 445,
+    "speedup": 18.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (simple disc+torus)",
+    "skipped": "ValueError: Unknown AGN model 'simple'. Available: 'composable', or any "
+   },
+   {
+    "label": "+ AGN (K&D 3-zone full)",
+    "exact_us": 10076,
+    "precomp_us": 11048,
+    "speedup": 0.9,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (QSOgen)",
+    "exact_us": 7285,
+    "precomp_us": 3297,
+    "speedup": 2.2,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (SKIRTOR torus)",
+    "exact_us": 7998,
+    "precomp_us": 9855,
+    "speedup": 0.8,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ radio (SF + AGN)",
+    "exact_us": 7017,
+    "precomp_us": 476,
+    "speedup": 14.7,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ X-ray (XRB + corona)",
+    "exact_us": 6930,
+    "precomp_us": 2099,
+    "speedup": 3.3,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "Typical: neb+THEMIS+radio+xray",
+    "exact_us": 8328,
+    "precomp_us": 1867,
+    "speedup": 4.5,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "AGN host: neb+THEMIS+KD+radio+xray",
+    "exact_us": 12258,
+    "precomp_us": 8044,
+    "speedup": 1.5,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "Cue+DL07+simple AGN",
+    "skipped": "CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n"
+   },
+   {
+    "label": "Kitchen sink (all components)",
+    "exact_us": 12347,
+    "precomp_us": 7946,
+    "speedup": 1.6,
+    "max_rel_err_pct": 0.009
+   }
+  ],
+  "Forward: Dense Basis (D=8)": [
+   {
+    "label": "Stellar only",
+    "exact_us": 6761,
+    "precomp_us": 465,
+    "speedup": 14.5,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ nebular (baked-in SSP)",
+    "exact_us": 6718,
+    "precomp_us": 467,
+    "speedup": 14.4,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ nebular (CLOUDY grid)",
+    "skipped": "CloudyGridWNESSPError: CloudyGridBackend received an SSP flagged nebular-included ("
+   },
+   {
+    "label": "+ nebular (Cue emulator)",
+    "skipped": "CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n"
+   },
+   {
+    "label": "+ dust IR (MBB)",
+    "exact_us": 7559,
+    "precomp_us": 537,
+    "speedup": 14.1,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (THEMIS)",
+    "exact_us": 8201,
+    "precomp_us": 527,
+    "speedup": 15.6,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (DL07)",
+    "exact_us": 8123,
+    "precomp_us": 526,
+    "speedup": 15.4,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (Dale 2014)",
+    "exact_us": 8372,
+    "precomp_us": 512,
+    "speedup": 16.3,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (simple disc+torus)",
+    "skipped": "ValueError: Unknown AGN model 'simple'. Available: 'composable', or any "
+   },
+   {
+    "label": "+ AGN (K&D 3-zone full)",
+    "exact_us": 10527,
+    "precomp_us": 11000,
+    "speedup": 1.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (QSOgen)",
+    "exact_us": 7425,
+    "precomp_us": 3666,
+    "speedup": 2.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (SKIRTOR torus)",
+    "exact_us": 8267,
+    "precomp_us": 9560,
+    "speedup": 0.9,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ radio (SF + AGN)",
+    "exact_us": 6734,
+    "precomp_us": 483,
+    "speedup": 13.9,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ X-ray (XRB + corona)",
+    "exact_us": 6701,
+    "precomp_us": 2342,
+    "speedup": 2.9,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "Typical: neb+THEMIS+radio+xray",
+    "exact_us": 7919,
+    "precomp_us": 1962,
+    "speedup": 4.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "AGN host: neb+THEMIS+KD+radio+xray",
+    "exact_us": 11977,
+    "precomp_us": 7159,
+    "speedup": 1.7,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "Cue+DL07+simple AGN",
+    "skipped": "CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n"
+   },
+   {
+    "label": "Kitchen sink (all components)",
+    "exact_us": 15027,
+    "precomp_us": 7615,
+    "speedup": 2.0,
+    "max_rel_err_pct": 0.009
+   }
+  ],
+  "Forward: Stochastic Field (D~137)": [
+   {
+    "label": "Stellar only",
+    "exact_us": 6585,
+    "precomp_us": 461,
+    "speedup": 14.3,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ nebular (baked-in SSP)",
+    "exact_us": 7487,
+    "precomp_us": 485,
+    "speedup": 15.4,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ nebular (CLOUDY grid)",
+    "skipped": "CloudyGridWNESSPError: CloudyGridBackend received an SSP flagged nebular-included ("
+   },
+   {
+    "label": "+ nebular (Cue emulator)",
+    "skipped": "CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n"
+   },
+   {
+    "label": "+ dust IR (MBB)",
+    "exact_us": 7270,
+    "precomp_us": 467,
+    "speedup": 15.6,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (THEMIS)",
+    "exact_us": 7563,
+    "precomp_us": 498,
+    "speedup": 15.2,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (DL07)",
+    "exact_us": 7791,
+    "precomp_us": 487,
+    "speedup": 16.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ dust IR (Dale 2014)",
+    "exact_us": 7993,
+    "precomp_us": 492,
+    "speedup": 16.2,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (simple disc+torus)",
+    "skipped": "ValueError: Unknown AGN model 'simple'. Available: 'composable', or any "
+   },
+   {
+    "label": "+ AGN (K&D 3-zone full)",
+    "exact_us": 10051,
+    "precomp_us": 10351,
+    "speedup": 1.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (QSOgen)",
+    "exact_us": 6724,
+    "precomp_us": 3303,
+    "speedup": 2.0,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ AGN (SKIRTOR torus)",
+    "exact_us": 8345,
+    "precomp_us": 9832,
+    "speedup": 0.8,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ radio (SF + AGN)",
+    "exact_us": 6832,
+    "precomp_us": 481,
+    "speedup": 14.2,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "+ X-ray (XRB + corona)",
+    "exact_us": 6838,
+    "precomp_us": 2069,
+    "speedup": 3.3,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "Typical: neb+THEMIS+radio+xray",
+    "exact_us": 7633,
+    "precomp_us": 1840,
+    "speedup": 4.1,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "AGN host: neb+THEMIS+KD+radio+xray",
+    "exact_us": 11898,
+    "precomp_us": 7445,
+    "speedup": 1.6,
+    "max_rel_err_pct": 0.009
+   },
+   {
+    "label": "Cue+DL07+simple AGN",
+    "skipped": "CueWNESSPError: CueBackend received an SSP flagged nebular-included (wNE): n"
+   },
+   {
+    "label": "Kitchen sink (all components)",
+    "exact_us": 11657,
+    "precomp_us": 8219,
+    "speedup": 1.4,
+    "max_rel_err_pct": 0.009
+   }
+  ],
+  "Gradient: DPL (parametric, D=6)": [
+   {
+    "label": "Stellar only",
+    "exact_us": 3185,
+    "precomp_us": 313,
+    "speedup": 10.2
+   },
+   {
+    "label": "Kitchen sink (all components)",
+    "skipped": "ConcretizationTypeError"
+   }
+  ],
+  "Gradient: Dense Basis (D=8)": [
+   {
+    "label": "Stellar only",
+    "exact_us": 3406,
+    "precomp_us": 361,
+    "speedup": 9.4
+   },
+   {
+    "label": "Kitchen sink (all components)",
+    "skipped": "ConcretizationTypeError"
+   }
+  ],
+  "Gradient: Stochastic Field (D~137)": [
+   {
+    "label": "Stellar only",
+    "exact_us": 3195,
+    "precomp_us": 330,
+    "speedup": 9.7
+   },
+   {
+    "label": "Kitchen sink (all components)",
+    "skipped": "ConcretizationTypeError"
+   }
+  ]
+ }
+}

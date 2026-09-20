@@ -1,0 +1,12 @@
+{
+  "method": "map",
+  "dispatched_to": "MAP (ADAM, 8 restarts)",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 2.36417404198437,
+  "wall_time_warm_s": null,
+  "n_params": 8,
+  "log_stellar_mass": 10.512615793427269,
+  "log_sfr_100myr": 1.3862507567620839,
+  "dust_tau": 0.6532857311480245
+}

@@ -1,0 +1,19 @@
+{
+  "method": "mcmc_hmc",
+  "dispatched_to": "HMC (BlackJAX)",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 24.41807791707106,
+  "wall_time_warm_s": 17.021213582949713,
+  "n_params": 8,
+  "ess_min": 52.4890574308704,
+  "s_per_ess_cold": 0.46520320829213535,
+  "s_per_ess_warm": 0.32428118194667793,
+  "rhat_max": 0.9997091867828937,
+  "log_stellar_mass": 10.564439489288883,
+  "log_stellar_mass_16": 10.488313996551865,
+  "log_stellar_mass_84": 10.62557116669318,
+  "log_sfr_100myr": 1.3754204842337545,
+  "log_sfr_100myr_16": 1.3131338013402625,
+  "log_sfr_100myr_84": 1.4494235969037752
+}
