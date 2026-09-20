@@ -216,9 +216,16 @@ def resolve_bc_diff_law_params(
     for law_kw, flat_name, default in _TWO_COMPONENT_LAW_PARAMS:
         requested = live_shape_params is None or flat_name in live_shape_params
         shared = params.get(flat_name, default) if requested else None
-        for target, overrides, screen in ((bc, bc_overrides, "bc"), (diff, diff_overrides, "diff")):
+        for target, overrides, screen in (
+            (bc, bc_overrides, "bc"),
+            (diff, diff_overrides, "diff"),
+        ):
             live_key = f"{flat_name}_{screen}"
-            if live_shape_params is not None and live_key in params and live_key in live_shape_params:
+            if (
+                live_shape_params is not None
+                and live_key in params
+                and live_key in live_shape_params
+            ):
                 target[law_kw] = params[live_key]
             elif law_kw in overrides:
                 target[law_kw] = overrides[law_kw]

@@ -270,6 +270,13 @@ class TestGrammarProvenanceUnchanged:
     source change in ``Parameters.__init__`` (see the PR report), so any
     regression in ordering -- the flat-form default winning over parse_groups'
     richer map, or vice versa in a way that changes tags -- fails here.
+
+    The 12 ``dust_<stem>_<screen>`` entries (#2428) were added when per-screen
+    dust law shapes became declared parameters: this build's ``all_params:
+    Fixed(DEFAULT)`` wildcard resolves every one of them the same way it
+    already resolved the four shared shape names, ``"wildcard_fixed"`` --
+    none is named explicitly here, so none carries ``"user_prior"``/
+    ``"user_fixed"``.
     """
 
     def test_two_component_provenance_dict_is_unchanged(self):
@@ -296,10 +303,22 @@ class TestGrammarProvenanceUnchanged:
 
         expected = {
             "dust_Rv": "wildcard_fixed",
+            "dust_Rv_bc": "wildcard_fixed",
+            "dust_Rv_diff": "wildcard_fixed",
+            "dust_Rv_neb": "wildcard_fixed",
             "dust_bump_strength": "wildcard_fixed",
+            "dust_bump_strength_bc": "wildcard_fixed",
+            "dust_bump_strength_diff": "wildcard_fixed",
+            "dust_bump_strength_neb": "wildcard_fixed",
             "dust_delta": "user_prior",
+            "dust_delta_bc": "wildcard_fixed",
+            "dust_delta_diff": "wildcard_fixed",
+            "dust_delta_neb": "wildcard_fixed",
             "dust_f_obscuration": "wildcard_fixed",
             "dust_slope": "wildcard_fixed",
+            "dust_slope_bc": "wildcard_fixed",
+            "dust_slope_diff": "wildcard_fixed",
+            "dust_slope_neb": "wildcard_fixed",
             "dust_tau_bc": "user_fixed",
             "dust_tau_diff": "wildcard_fixed",
             "met_alpha_fe": "wildcard_fixed",

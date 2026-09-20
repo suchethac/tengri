@@ -6392,8 +6392,18 @@ def _resolve_value(
             "lyc_absorb_all",
             "eb_include_lyc",
         }
-        if override_key in structural_keys:
-            # These are structural keys, not parameters
+        # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying a
+        # ``Distribution`` is a live, declared ``dust_<stem>_<screen>``
+        # parameter (#2428): fall through to ordinary per-parameter resolution
+        # below instead of collapsing it to the registry default. A plain
+        # number keeps routing through the static ``dust_law_overrides``
+        # config path built by ``_translate_dust_attenuation`` untouched --
+        # it still resolves to "registry_default" here, exactly as before.
+        # Every other structural key (``type``, ``law_bc``, ...) is never a
+        # ``Distribution``, so this narrowing changes nothing for them.
+        if override_key in structural_keys and not (
+            override_key in per_screen_keys() and isinstance(val, Distribution)
+        ):
             return registry_default, "registry_default"
 
         if val is DEFAULT:
@@ -6869,8 +6879,23 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 param_names, spec, provenance, wildcard_intent
             )
         else:
-            # No wildcard; list all params explicitly
-            explicit_params = {p: spec.get_distribution(p) for p in param_names}
+            # No wildcard; list all params explicitly. Per-screen shape names
+            # (dust_slope_bc, ...) are explicit-only (#2428): `param_names`
+            # here is scope-narrowed by `_variant_scoped_param_names`, whose
+            # `group_allowed` union always re-admits every per-screen
+            # spelling as a "group-level knob" (`_GROUP_STRUCTURAL_KEYS`'s
+            # design note) independent of whether the selected law reads the
+            # stem, so re-emit one only when its own provenance says a caller
+            # actually asked for it -- the same rule `_get_explicit_overrides`
+            # applies on the wildcard branch, and just as necessary here:
+            # untouched (registry_default), never a request.
+            explicit_params = {
+                p: spec.get_distribution(p)
+                for p in param_names
+                if p not in _per_screen_full_names()
+                or _base_provenance(provenance.get(p, "registry_default"))
+                in ("user_prior", "user_fixed")
+            }
 
         # Add explicit per-param entries to the group dict FIRST.
         for full_name, distribution in explicit_params.items():
@@ -7139,6 +7164,19 @@ def _analyze_wildcard_intent(
     return None
 
 
+def _per_screen_full_names() -> frozenset[str]:
+    """Fully-prefixed per-screen dust shape names (``dust_slope_bc``, ...).
+
+    Returns
+    -------
+    frozenset of str
+        The 12 ``dust_<stem>_<screen>`` names from the ``OVERRIDE_STEMS x
+        SCREENS`` cartesian product (:func:`per_screen_keys`), prefixed via
+        :func:`short_to_full`.
+    """
+    return frozenset(short_to_full(key) for key in per_screen_keys())
+
+
 def _get_explicit_overrides(
     param_names: list[str],
     spec: Parameters,
@@ -7164,14 +7202,22 @@ def _get_explicit_overrides(
         Mapping of full param name to distribution for explicit listing.
     """
     explicit = {}
+    per_screen_names = _per_screen_full_names()
 
     for param_name in param_names:
-        # Per-screen shape names (dust_slope_bc, etc.) with wildcard_fixed_inactive
-        # provenance should NOT be emitted; they're inert under their screen's law.
         raw_tag = provenance.get(param_name, "registry_default")
-        if raw_tag == "wildcard_fixed_inactive":
-            # This is a per-screen parameter that's inactive (not read by its law)
-            # and was wildcard-pinned (not user-explicit), so skip it.
+
+        # Per-screen shape names (dust_slope_bc, dust_Rv_neb, ...) are
+        # explicit-only (#2428): emit one only when a caller actually asked
+        # for it (user_prior/user_fixed). Every other provenance -- untouched
+        # (registry_default), wildcard-pinned (wildcard_fixed(_inactive)), or
+        # wildcard-freed-but-inactive (wildcard_free_pinned) -- means nobody
+        # requested it, and re-emitting it can make the reparse raise when the
+        # selected screen's law does not read the stem (#2428).
+        if param_name in per_screen_names and _base_provenance(raw_tag) not in (
+            "user_prior",
+            "user_fixed",
+        ):
             continue
 
         # Base tag: a grid-narrowed parameter still came from the wildcard, so

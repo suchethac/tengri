@@ -148,7 +148,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from tengri.parameters._dust_keys import per_screen_keys, short_to_full
+from tengri.parameters._dust_keys import short_to_full
 from tengri.parameters.registry import registry
 
 #: Distributions whose first two positional arguments are ``(lo, hi)``. Only
@@ -182,20 +182,40 @@ def _tracked_python_files() -> list[Path]:
     return [ROOT / name for name in out.decode("utf-8").split("\0") if name]
 
 
-def _support(name: str) -> tuple[float, float] | None:
-    """The declared ``(low, high)`` support, or None if unbounded/unregistered."""
-    record = registry().get(name)
-    prior = getattr(record, "prior", None) if record else None
-    if prior is None:
+def _range_of(dist) -> tuple[float, float] | None:
+    """``(lo, hi)`` off a ``Uniform``/``LogUniform``-shaped distribution, else None."""
+    if dist is None:
         return None
-    low = getattr(prior, "lo", getattr(prior, "low", None))
-    high = getattr(prior, "hi", getattr(prior, "high", None))
+    low = getattr(dist, "lo", getattr(dist, "low", None))
+    high = getattr(dist, "hi", getattr(dist, "high", None))
     if low is None or high is None:
         return None
     low, high = float(low), float(high)
     if low != low or high != high:  # NaN
         return None
     return low, high
+
+
+def _support(name: str) -> tuple[float, float] | None:
+    """The declared ``(low, high)`` support, or None if unbounded/unregistered.
+
+    Most declared parameters register their bounded prior directly
+    (``dust_tau_bc``: ``Uniform(0.0, 4.0, default=1.0)``), so ``record.prior``
+    already carries the range. A handful -- ``dust_slope``/``dust_delta``/
+    ``dust_bump_strength``/``dust_Rv`` and, since #2428, their 12 per-screen
+    mirrors -- are ``Fixed`` by registered default with the fittable range on
+    a separate ``record.free_prior`` (the range ``FREE``/a wildcard expands
+    to). Falling back to it is what lets a call-site ``Uniform(...)`` on any
+    of those names be range-checked at all; without it ``record.prior`` is a
+    ``Fixed`` with no ``lo``/``hi``, so this returned ``None`` and every such
+    site skipped the check silently.
+    """
+    record = registry().get(name)
+    if record is None:
+        return None
+    return _range_of(getattr(record, "prior", None)) or _range_of(
+        getattr(record, "free_prior", None)
+    )
 
 
 def _literal(node: ast.expr) -> float | None:
@@ -461,11 +481,17 @@ def _dust_prior_sites(tree: ast.AST):
     (e.g., 'dust_tau_bc', 'dust_slope') by checking if they resolve in the live registry.
 
     Resolution is **scoped** to dicts :func:`_dust_scoped_dicts` identifies as a
-    ``dust_attenuation=`` block. Per-screen keys (slope_bc, Rv_diff, etc.) carry
-    static floats, not priors, so they fall out naturally.
+    ``dust_attenuation=`` block. A per-screen key (``slope_bc``, ``Rv_diff``, etc.)
+    given a plain number is a static config override, not a prior, and falls out
+    naturally (the caller only visits ``ast.Call`` values). Given a prior/``Fixed``
+    call instead, it is itself a declared ``dust_<stem>_<screen>`` parameter
+    (#2428) with the same registered support as the shared stem, so it resolves
+    and is range-checked exactly like any other declared dust parameter --
+    ``_STRUCTURAL_KEYS`` is the only carve-out now, for names that are never a
+    parameter under any value type.
     """
     scoped = _dust_scoped_dicts(tree)
-    # Structural and per-screen keys that are never prior parameters
+    # Structural keys that are never prior parameters, whatever their value.
     _STRUCTURAL_KEYS = {
         "type",
         "law",
@@ -475,12 +501,6 @@ def _dust_prior_sites(tree: ast.AST):
         "all_params",
         "other_params",
     }
-    # Per-screen parameter keys (static floats, not priors)
-    _PER_SCREEN_KEYS = per_screen_keys()
-
-    def _is_structural_key(key: str) -> bool:
-        """True if key is structural or per-screen (non-parameter)."""
-        return key in _STRUCTURAL_KEYS or key in _PER_SCREEN_KEYS
 
     def _try_resolve_dust_param(short_name: str) -> str | None:
         """Try to resolve short name to dust_<short_name> if registered."""
@@ -503,7 +523,7 @@ def _dust_prior_sites(tree: ast.AST):
                 continue
 
             short_name = key.value
-            if _is_structural_key(short_name):
+            if short_name in _STRUCTURAL_KEYS:
                 continue
 
             # Try to resolve as a dust parameter in the live registry

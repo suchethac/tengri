@@ -69,6 +69,11 @@
 
 ### Added
 
+- Per-screen dust law shape keys accept `Fixed`/priors and become declared
+  `dust_<shape>_<screen>` parameters; a plain number keeps the build-time
+  path; the flat `dust_law_overrides` dict refuses a prior with the named
+  remedy (#2428).
+
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
   `skymapper_g`, `skymapper_r`, `skymapper_i`, `skymapper_z`, with their
   curves tracked under `data/filters/` so they load offline like the rest of

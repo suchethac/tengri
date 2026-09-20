@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Per-screen dust attenuation shape priors: grammar, prediction, and gates."""
 
-import pytest
 import numpy as np
+import pytest
 
-import tengri
-from tengri import Fixed, Uniform, FREE, DEFAULT, SEDModel, Parameters
+from tengri import DEFAULT, FREE, Fixed, Parameters, SEDModel, Uniform
 from tengri.config.exceptions import ParameterError
 from tengri.parameters.groups import parse_groups
 
@@ -61,8 +60,11 @@ class TestPerScreenDustShapePriors:
         sed_bc_low = model.predict_photometry(p_slope_bc_low)
         sed_bc_high = model.predict_photometry(p_slope_bc_high)
 
-        # Sweeping slope_bc should move the SED
-        assert not np.allclose(sed_bc_low, sed_bc_high)
+        # Sweeping slope_bc should move the SED. atol=0: these synthetic
+        # fluxes sit at ~1e-12, so np.allclose's default atol=1e-8 alone
+        # would swamp any real difference and call bit-different arrays
+        # "close" -- a relative-only comparison is the correct one here.
+        assert not np.allclose(sed_bc_low, sed_bc_high, atol=0)
 
     def test_fixed_per_screen_matches_scalar_static_override(
         self, synthetic_ssp_wide, synthetic_tophat_obs
@@ -127,16 +129,12 @@ class TestPerScreenDustShapePriors:
             for sc in ["bc", "diff", "neb"]
         ]
         for name in per_screen_names:
-            assert (
-                name not in free_params
-            ), f"{name} should not be freed by wildcard"
+            assert name not in free_params, f"{name} should not be freed by wildcard"
 
     def test_flat_surface_diagnostic_rejects_per_screen_prior(self):
         """Flat surface: dust_law_overrides with prior raises ParameterError."""
-        with pytest.raises(ParameterError, match="per-screen.*override"):
-            Parameters(
-                dust_law_overrides={"bc": {"dust_slope": Uniform(-1.5, -0.3)}}
-            )
+        with pytest.raises(ParameterError, match=r"per-screen.*override"):
+            Parameters(dust_law_overrides={"bc": {"dust_slope": Uniform(-1.5, -0.3)}})
 
     def test_neb_screen_prior(self, synthetic_ssp_wide, synthetic_tophat_obs):
         """Neb screen: per-screen shape with prior works like bc/diff."""

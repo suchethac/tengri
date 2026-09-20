@@ -9241,15 +9241,18 @@ class SEDModel:
                 if base_tag in ("user_prior", "user_fixed"):
                     per_screen_reads.add(per_screen_name)
 
-        return frozenset(
-            name
-            for name in reads
-            # ``_grid`` suffixes mark a declared free prior intersected with a
-            # template grid; still a request, so match on the stem.
-            if name == "redshift"
-            or str(provenance.get(name, "registry_default")).removesuffix("_grid")
-            in self._REQUESTED_PROVENANCE
-        ) | per_screen_reads
+        return (
+            frozenset(
+                name
+                for name in reads
+                # ``_grid`` suffixes mark a declared free prior intersected with a
+                # template grid; still a request, so match on the stem.
+                if name == "redshift"
+                or str(provenance.get(name, "registry_default")).removesuffix("_grid")
+                in self._REQUESTED_PROVENANCE
+            )
+            | per_screen_reads
+        )
 
     def _requested_dust_log_L_ir(self) -> bool:
         """Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget override).
