@@ -1,14 +1,17 @@
 ## [Unreleased]
 
+### Added
+
+- The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
+
 ### Fixed
 
-- Emission line mode validation unified: `Spectroscopy` and `NebularConfig`
-  now share a single legal set of modes (`ELINE_MODES`), defined in
-  `observation.constants`. The retired `"fixed"` mode is rejected with a hint
-  to use `"off"` or one of the analysis modes (`"marginalized"` / `"fitted"`).
-  The settings validator now accepts `"fitted"` (previously omitted), and the
-  dead probe read of `_spectroscopy_config` in `Fitter._init_emission_lines`
-  has been removed. (#2191)
+- The accuracy bound of `age_kernel='dsps'` (roughly 1e-3 at the sharpest SFH
+  shapes) is now stated on the discovery surface: the registry rows for each age
+  kernel and the model configuration guide. A new advisory warns at build time when
+  `field=True` silently forces the DSPS kernel over the user's default or
+  explicit choice, so the coupling between the field path and the coarse kernel
+  is no longer invisible. (#2368)
 
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
@@ -44,6 +47,14 @@
   monotonicity is enforced per camera segment, allowing overlaps at seams
   where adjacent cameras meet. Segment sizes must be positive and sum to the
   wavelength grid length. (#2172)
+
+- Emission line mode validation unified: `Spectroscopy` and `NebularConfig`
+  now share a single legal set of modes (`ELINE_MODES`), defined in
+  `observation.constants`. The retired `"fixed"` mode is rejected with a hint
+  to use `"off"` or one of the analysis modes (`"marginalized"` / `"fitted"`).
+  The settings validator now accepts `"fitted"` (previously omitted), and the
+  dead probe read of `_spectroscopy_config` in `Fitter._init_emission_lines`
+  has been removed. (#2191)
 
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
@@ -1127,6 +1138,15 @@
   Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
   naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
 
+- `BakedInBackend` now checks whether the SSP grid has nebular emission before
+  silently returning zero nebular flux. On bare-stellar grids
+  (`ssp_data.nebular == "bare"`), it raises `BakedInNebularBareError`
+  immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
+  `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
+  disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
+  and honours `suppress` and an explicit `neb` declaration; the bare-grid
+  refusal does not fire when nebular emission is off (#2362).
+
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
   `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
@@ -1166,6 +1186,14 @@
   below 2σ, treating fixture regression as a test failure (#2364).
 
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
+- Radio preset rows kept their buildable composable `use` and carry the
+  not-builder-available marker in `short_doc`, so the menu's `name` column types
+  and every production row's `use` is built by a contract test. The marker is
+  defined as a module constant; `list_sfh_models` uses it at a second site. The
+  agn-block `use` strings carried trailing whitespace that made the generated
+  component tables invalid RST; check_component_page.py now parses the generated
+  fragment with docutils (#2201).
+
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
   fixed: it was scoped to ``dust/emission/`` only, and it never saw negative
@@ -1215,6 +1243,28 @@
   `test_nuts_split_warmup_keeps_sampling_quality` asks for 400 draws (the
   profiled fixed-key realization sat on its 1.1 R-hat bar at 200)
   (`bench/reports/2026-09-12_library_path_parity.md`).
+- DH02_CE01 template shape and float32 safety (#2366): the Dale & Helou (2002) /
+  Chary & Elbaz (2001) template library is indexed by log₁₀(L_TIR/L_sun) and
+  the whole point of that family is that the SED shape correlates with
+  luminosity — warmer, broader templates at higher L_IR. The closure carried a
+  hardcoded `dust_log_lir=10.0` default and inherited `factors_l_ir=True` from
+  the base class, so ``apply()`` always evaluated it at unit luminosity
+  (``log10(1) = 0``), pinning the shape lookup to a single grid node regardless
+  of the actual budget; only the amplitude was rescaled afterwards. The template
+  shape therefore never tracked the fitted luminosity. The normalization path
+  also materialized L_absorbed (~1e43 erg/s, inf in pure float32) as a linear
+  value, leaving the SED entirely inf/NaN. Fixed by setting `factors_l_ir=False`
+  on the component (matching BosaIRSEDComponent), declaring
+  `optional_inputs={'log_L_ir': 'dex'}`, and rewriting the closure as a SINGLE
+  code path (no dtype-gated branches) that: (1) uses live `log_L_ir` for the
+  grid-axis lookup after converting to L_sun (same precedent as #2272/#2273),
+  and (2) applies log-domain rescaling via ``apply_log10_scale()`` when
+  `log_L_ir` is provided, never materializing L_absorbed. Mirrors
+  bosa_emission exactly — one arithmetic path works in both float32 and float64.
+  The model's total power still integrates to the absorbed luminosity exactly;
+  the shape now varies appropriately with the fitted L_IR. **Model output
+  changes for every dh02_ce01 fit** (#2366).
+
 - The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
   ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
   signature defaults from the declared parameter table
@@ -1306,6 +1356,24 @@
   passing a nonzero value through ``params`` at predict time) is not honored
   on this path; declare the fraction ``FREE`` or ``Fixed`` at the intended
   nonzero value instead (#2296) (#2262).
+
+- Metallicity-history bins are now refused at build time when unreachable at the model's
+  redshift (issue #2204): the fixed z=0 lookback ladder (_DEFAULT_MET_BIN_EDGES_LOG_YR
+  spanning 1 Myr–13.8 Gyr) becomes unreachable at high redshift where cosmic age is
+  younger than a bin's lower edge (start in lookback time). When `met={'type': 'bins'}`
+  or `'bins_continuity'`, `SEDModel.build` now checks that each bin's lower edge fits
+  within `age_at_z(z_floor)`, where z_floor is the lowest redshift the prior admits
+  (the fixed value for Fixed, the minimum for a free Uniform prior). A bin is unreachable
+  only when its lower edge exceeds cosmic age at z_floor — reachability is judged by each
+  bin's start at the lowest admitted redshift. Raises `ParameterError` naming the
+  unreachable bins [start, end] and cosmic age. The refusal message points users to the
+  actual remedies: use a lower redshift where all bins are reachable, or use a different
+  metallicity mode. The bin ladder is not yet configurable through `SEDModel.build()`
+  (see issue #2433 for future support). Bins older than the universe silently become
+  identically inert (zero gradient, flat direction in the sampler) until checked; the
+  new guard makes them fail loudly at build time with guidance. The docstring claim in
+  `metallicity_history.py` that the bins mode pairs with the continuity SFH model
+  (different bin-edge sets) is now corrected.
 
 - `neb_hbfrac` was silently inert at any value: declared as a CB_19
   parameter, but `CB19Backend.__init__`'s `hbfrac` constructor argument was
