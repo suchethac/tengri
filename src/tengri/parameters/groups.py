@@ -2499,8 +2499,22 @@ def _dust_wildcard_scopes(
             ),
             frozenset(),
         )
+        # Per-screen shape names (dust_slope_bc, dust_delta_diff, etc.) are
+        # EXPLICIT-ONLY: they never participate in wildcard freeing. This
+        # ensures that a blanket `all_params: FREE` cannot accidentally
+        # double-parametrize a screen. The shared spellings (dust_slope,
+        # dust_delta, etc.) are already law-scoped by the logic above; the
+        # per-screen variants add per-screen specificity and must be requested
+        # by name.
+        per_screen_inert = set()
+        for stem in ("slope", "delta", "bump_strength", "Rv"):
+            for screen in ("bc", "diff", "neb"):
+                per_screen_name = f"dust_{stem}_{screen}"
+                if per_screen_name in dust_group_params:
+                    per_screen_inert.add(per_screen_name)
+
         scopes["dust_attenuation"] = frozenset(
-            dust_group_params - (_all_law_shape_params() - active_shape)
+            dust_group_params - (_all_law_shape_params() - active_shape) - per_screen_inert
         )
 
     return scopes
@@ -3632,7 +3646,13 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         for comp in SCREENS:
             key = f"{stem}_{comp}"
             if key in dust_atten_dict:
-                overrides.setdefault(comp, {})[short_to_full(stem)] = float(dust_atten_dict[key])
+                value = dust_atten_dict[key]
+                if isinstance(value, Distribution):
+                    # Per-screen shape with a Distribution: emit as a declared parameter
+                    result[short_to_full(key)] = value
+                else:
+                    # Per-screen shape with a plain number: static config override
+                    overrides.setdefault(comp, {})[short_to_full(stem)] = float(value)
     if overrides:
         result["dust_law_overrides"] = overrides
 
@@ -7146,9 +7166,17 @@ def _get_explicit_overrides(
     explicit = {}
 
     for param_name in param_names:
+        # Per-screen shape names (dust_slope_bc, etc.) with wildcard_fixed_inactive
+        # provenance should NOT be emitted; they're inert under their screen's law.
+        raw_tag = provenance.get(param_name, "registry_default")
+        if raw_tag == "wildcard_fixed_inactive":
+            # This is a per-screen parameter that's inactive (not read by its law)
+            # and was wildcard-pinned (not user-explicit), so skip it.
+            continue
+
         # Base tag: a grid-narrowed parameter still came from the wildcard, so
         # it must collapse back into it rather than surface as an override.
-        tag = _base_provenance(provenance.get(param_name, "registry_default"))
+        tag = _base_provenance(raw_tag)
 
         # If there's a wildcard intent, exclude params that match it
         if wildcard_intent is not None:

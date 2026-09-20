@@ -61,6 +61,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
+from tengri.config.exceptions import ParameterError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
@@ -1099,6 +1100,20 @@ class Parameters:
         # nebular birth cloud inherits the stellar birth-cloud params. Set by
         # the builder from slope_bc / delta_diff / slope_neb /…
         self.dust_law_overrides = kwargs.pop("dust_law_overrides", {}) or {}
+
+        # Check for per-screen overrides with Distribution values (not yet supported
+        # on the flat surface; they must use the declared parameter names instead)
+        for screen, overrides in self.dust_law_overrides.items():
+            for law_kwarg, value in overrides.items():
+                if isinstance(value, Distribution):
+                    raise ParameterError(
+                        f"dust_law_overrides[{screen!r}][{law_kwarg!r}] is a per-screen "
+                        f"law-shape override and cannot take a prior ({value!r} given); "
+                        f"it must be a plain number, baked into the compiled model at "
+                        f"build time. The per-screen declared parameter spelling is "
+                        f"{law_kwarg}_{screen}=..., which DOES accept a prior/Fixed. "
+                        f"See #2428."
+                    )
 
         # Validate flat-form dust shape parameters against the resolved laws.
         # The grammar passes all shape parameters at their registry defaults and has

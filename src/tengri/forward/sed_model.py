@@ -9212,11 +9212,35 @@ class SEDModel:
             except Exception:  # pragma: no cover - law not registered
                 continue
         if not reads:
-            return frozenset()
+            per_screen_reads = set()
+        else:
+            per_screen_reads = set()
+
         provenance = getattr(self.spec, "_group_provenance", None)
         if provenance is None:
             provenance = getattr(self.spec, "_flat_provenance", None)
         provenance = provenance or {}
+
+        # Check for per-screen parameters (dust_slope_bc, dust_delta_diff, etc.)
+        # Per-screen names are requested ONLY if user-explicit (user_prior/user_fixed);
+        # wildcard-pinned (including inactive) does not count as requested.
+        per_screen_names = [
+            f"dust_{stem}_{screen}"
+            for stem in ("slope", "delta", "bump_strength", "Rv")
+            for screen in ("bc", "diff", "neb")
+        ]
+        for per_screen_name in per_screen_names:
+            if per_screen_name in provenance:
+                prov_tag = provenance.get(per_screen_name, "registry_default")
+                # Only count user-explicit provenances (user_prior, user_fixed)
+                # Strip outcome markers (_grid, _pinned, _zcap, _inactive) for base comparison
+                base_tag = str(prov_tag)
+                for suffix in ("_grid", "_pinned", "_zcap", "_inactive"):
+                    if base_tag.endswith(suffix):
+                        base_tag = base_tag[: -len(suffix)]
+                if base_tag in ("user_prior", "user_fixed"):
+                    per_screen_reads.add(per_screen_name)
+
         return frozenset(
             name
             for name in reads
@@ -9225,7 +9249,7 @@ class SEDModel:
             if name == "redshift"
             or str(provenance.get(name, "registry_default")).removesuffix("_grid")
             in self._REQUESTED_PROVENANCE
-        )
+        ) | per_screen_reads
 
     def _requested_dust_log_L_ir(self) -> bool:
         """Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget override).
