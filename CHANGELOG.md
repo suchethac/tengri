@@ -2,6 +2,18 @@
 
 ### Fixed
 
+- Three reproduction pages re-rendered with their prose reconciled to the
+  measurements (#2341 rows; #2419/#2442 page follow-ups): cigale's §7/§8/§11
+  and capstone describe one thermal free-free term on the whole grid, §11 now
+  comparing the nebular tail against Murphy+2011 component-wise inside one
+  `freefree: True` build — against pcigale the 3 cm ratio moves 0.84× → 1.02×
+  and 1.4 GHz 0.95× → 1.00×, with the mm decade unchanged; bagpipes' §12b
+  names the Lyman-β edge (1025.70 Å, 0.8–11.4% over z = 1–5) and drops the
+  single-pixel 610% Lyman-α claim, and its §7 bump row closes at 2.091 vs
+  2.078 after the `salim_sbl18` normalization fix; synthesizer's §12b
+  attributes the Madau+1995 residual to line-wavelength conventions at the
+  Lyman-series edges (vacuum 1025.72 Å vs rounded 1026 Å; 14.6% at z=3,
+  21.1% at z=5, single node). The parity matrix's M4 bagpipes arm is closed.
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
