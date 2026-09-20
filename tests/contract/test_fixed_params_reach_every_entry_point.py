@@ -143,7 +143,7 @@ def test_entry_point_honors_a_fixed_redshift(model, name):
 
     try:
         got = fn(omitted)
-    except Exception as exc:
+    except NotImplementedError as exc:
         allowed = RAISES_ON_BARE_PARAMS.get(name)
         assert allowed is not None, (
             f"{name} raised {type(exc).__name__} on a bare params dict, so the "
@@ -154,6 +154,17 @@ def test_entry_point_honors_a_fixed_redshift(model, name):
         assert isinstance(exc, allowed), (
             f"{name} now raises {type(exc).__name__}, not the recorded "
             f"{allowed.__name__} — the exemption no longer describes reality"
+        )
+        pytest.skip(f"{name}: listed in RAISES_ON_BARE_PARAMS ({allowed.__name__})")
+    except (TypeError, ValueError) as exc:
+        # TypeError and ValueError can be real defects. Only allow them if explicitly
+        # listed in RAISES_ON_BARE_PARAMS — that's the legitimate signal for "not applicable".
+        allowed = RAISES_ON_BARE_PARAMS.get(name)
+        assert allowed is not None and isinstance(exc, allowed), (
+            f"{name} raised {type(exc).__name__} on a bare params dict, which may be "
+            f"a real defect in the entry point. If this is genuinely a 'not applicable' "
+            f"case, add it to RAISES_ON_BARE_PARAMS; do not let arbitrary exceptions "
+            f"exempt the surface from the fixed-redshift contract. ({exc})"
         )
         pytest.skip(f"{name}: listed in RAISES_ON_BARE_PARAMS ({allowed.__name__})")
 

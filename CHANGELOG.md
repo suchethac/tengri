@@ -49,6 +49,8 @@
   Fitted SEDs were never affected — `_shock_line_arrays` anchors on Halpha, so
   the common factor canceled — and this does not fix #2066.
 
+- 6 broad skip handlers narrowed to specific exceptions; the skip-handler ratchet is now empty (#1615). The handlers had been hiding failures #2464 and #2465.
+
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
   (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
   cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
