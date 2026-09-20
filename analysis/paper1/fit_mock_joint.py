@@ -11,7 +11,7 @@ saves the realized flux for every band including the faint ones, because that is
 what it drew. A catalog does not report that number; it reports an upper limit.
 Feeding the noisy flux with a small error bar would hand the fit a precise
 measurement of something nobody measured, and at the long-wavelength end -- where
-the only bands are millimetre and the source is genuinely faint -- that single
+the only bands are millimeter and the source is genuinely faint -- that single
 choice decides whether the dust mass is constrained or invented. The censored
 likelihood (``ln Phi((f_limit - m)/sigma)``) is what a limit actually means.
 

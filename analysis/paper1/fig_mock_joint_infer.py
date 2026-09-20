@@ -59,7 +59,6 @@ DESIGNED_TRUTH = {
     # An unobscured sightline to the disc is what makes the object Type 1.
     "agn_ebv_disc": 0.02,
     "agn_grahsp_ebv": 0.05,
-    "agn_grahsp_ebv_agn": 0.05,
     # Torus present and visible in the mid-infrared, but not dominant: the
     # prior draw put it at 0.87, which buries the disc.
     "agn_torus_frac": 0.25,
@@ -76,6 +75,15 @@ DESIGNED_TRUTH = {
     # enough to show in the mid-infrared and the X-ray pair, not so bright that
     # it buries a log M* = 10.5 host.
     "agn_log_lbol": 10.0,
+    # Two fractions of one ionizing-photon budget. Drawn independently from
+    # their priors they summed to 1.17, which clips the CIGALE k-factor to zero
+    # and left this mock with no nebular emission at all while every nebular
+    # shape parameter scored exactly 0.000 on the sensitivity sweep (#2436).
+    # A few percent LyC escape with modest dust absorption inside the HII
+    # regions is the ordinary star-forming case: k = 0.78, and nebular emission
+    # reaches 38% of the optical photometry.
+    "neb_fesc": 0.05,
+    "neb_fdust": 0.10,
 }
 
 #: Per-filter 1-sigma depth [erg/s/cm2/Hz]. Rough but honest: deep-field optical
@@ -84,7 +92,7 @@ DESIGNED_TRUTH = {
 #:
 #: The X-ray depths are the 2 Ms Chandra Deep Field South limits converted out
 #: of the integrated band: roughly 1e-17 erg/s/cm2 over 0.5-2 keV and 6e-17 over
-#: 2-8 keV, divided by the bandwidth in frequency. The millimetre depths are a
+#: 2-8 keV, divided by the bandwidth in frequency. The millimeter depths are a
 #: deep pointed ALMA continuum observation, about 1 uJy rms. ALMA band 3 is
 #: listed knowing the source falls under it -- a non-detection at the long-
 #: wavelength end is the honest outcome there, and exercising the upper-limit

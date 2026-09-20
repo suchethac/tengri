@@ -76,7 +76,7 @@ jax.config.update("jax_enable_x64", True)
 
 REDSHIFT = 1.0
 
-#: X-ray through millimetre: seven decades in wavelength, 4 Angstrom to 3 mm.
+#: X-ray through millimeter: seven decades in wavelength, 4 Angstrom to 3 mm.
 #:
 #: The two Chandra bands are not decoration. ``xray={"type": "yang20",
 #: "all_params": FREE}`` frees ``xray_log_nh``, and photoelectric absorption is
@@ -87,13 +87,13 @@ REDSHIFT = 1.0
 #: constrained it. One X-ray band would have pinned the luminosity and left the
 #: column prior-driven; the pair is what closes it.
 #:
-#: The millimetre bands sit on the Rayleigh-Jeans tail of ``draine_li2014`` and
+#: The millimeter bands sit on the Rayleigh-Jeans tail of ``draine_li2014`` and
 #: constrain the cold dust mass that ``dust_eta_balance`` controls. Band 3 is
 #: included knowing it is a non-detection at a realistic depth: it bounds the
 #: long-wavelength end from above rather than measuring it.
 #:
 #: **There is no radio band, and this is a limitation, not a choice.** The
-#: registry's longest-wavelength entries are millimetre (ALMA, ACT, SPT,
+#: registry's longest-wavelength entries are millimeter (ALMA, ACT, SPT,
 #: TolTEC); it holds no VLA or LOFAR curve, so the centimetre regime is not
 #: expressible today. The ``radio`` block still enters the forward model and
 #: still emits, but every one of its parameters (``radio_q_ir``,
@@ -116,7 +116,7 @@ MOCK_FILTERS = [
     "wise_w2",
     "wise_w3",
     "wise_w4",
-    # Submillimetre and millimetre: the cold-dust Rayleigh-Jeans tail.
+    # Submillimeter and millimeter: the cold-dust Rayleigh-Jeans tail.
     "alma_band7",
     "alma_band6",
     "alma_band3",
@@ -152,14 +152,68 @@ def build_mock_model(ssp, observation, z=REDSHIFT):
             "eta_balance": Gaussian(1.0, 0.3, lo=0.0),
             "other_params": FREE,
         },
-        neb={"type": "cue", "all_params": FREE},
+        # Nebular emission is ~38% of the optical photometry at this truth, so
+        # most of this block is measurable: neb_logU scores 5e4 on the Delta
+        # chi2 sweep, the largest of any parameter in the model.
+        #
+        # ``fesc`` and ``fdust`` are two fractions of the SAME ionizing-photon
+        # budget. The CIGALE k-factor is
+        #     k = (1 - fesc - fdust) / (1 + 0.597 (fesc + fdust)),
+        # and ``lyc_dust_escape_factor`` clips the sum at 1.0, so ANY pair
+        # summing to >= 1 makes k exactly 0 and switches nebular emission off
+        # entirely -- lines and continuum. Nothing enforces that joint
+        # constraint (#2436), and the declared Uniform(0, 1) priors put 50% of
+        # their joint volume in that dead region, where the six parameters
+        # below have exactly zero gradient. An earlier truth for this mock drew
+        # 0.708 + 0.462 = 1.17 from those priors and produced a mock with no
+        # nebular emission at all. Capping each at 0.35 holds the sum under 0.7,
+        # so neither the truth nor the sampler can reach the plateau.
+        neb={
+            "type": "cue",
+            "logU": FREE,
+            "logZ_gas": FREE,
+            "eline_sigma_kms": FREE,
+            "dig_frac": FREE,
+            "dig_delta_logU": FREE,
+            "fesc": Uniform(0.0, 0.35),
+            "fdust": Uniform(0.0, 0.35),
+            # fesc_lya stays pinned: at z=1 Ly-alpha sits at 2432 A observed,
+            # blueward of the spectrum and in the wing of GALEX NUV, so it
+            # scores 5.6 -- weak, like the other parameters this mock pins.
+            "all_params": Fixed(DEFAULT),
+        },
         agn={
             "type": "composable",
             "disc": {"type": "qsogen", "all_params": FREE},
-            "torus": {"type": "skirtor", "all_params": FREE},
+            # Four of the five SKIRTOR geometry knobs score below 1: p 0.466,
+            # tau 0.112, radius_ratio 0.0528, q 0.0150. Four WISE bands and
+            # three ALMA bands cannot determine a five-parameter torus. The
+            # opening angle (3.29e3) and the covering factor (2.36e3) survive.
+            "torus": {
+                "type": "skirtor",
+                "oa_skirtor": FREE,
+                "torus_frac": FREE,
+                "all_params": Fixed(DEFAULT),
+            },
             "nlr": {"type": "analytic", "all_params": FREE},
             "blr": {"type": "analytic", "all_params": FREE},
-            "atten": {"type": "grahsp_biatten", "all_params": FREE},
+            # One attenuation normalization on the AGN, by choice rather than
+            # by evidence. An earlier sweep scored grahsp_ebv and
+            # grahsp_ebv_agn identically to three figures and read that as an
+            # exactly degenerate pair; that sweep was taken at a truth with
+            # nebular emission switched off (#2436) and the equality did not
+            # survive re-measurement -- they now score 4.88e3 and 2.89e3. They
+            # are two distinct screens, both live, and pinning one is a
+            # modeling choice for this mock, not a redundancy result.
+            #
+            # The key is "grahsp_ebv", not "ebv". Both are accepted; "ebv"
+            # resolves to agn_ebv, a DIFFERENT parameter, so the shorter
+            # spelling silently swaps one for the other and nothing raises.
+            "atten": {
+                "type": "grahsp_biatten",
+                "grahsp_ebv": FREE,
+                "all_params": Fixed(DEFAULT),
+            },
             # The AGN's bolometric luminosity, which the Chandra pair constrains
             # through the disc-corona coupling that ``yang20`` supplies. Freeing
             # it is what makes this a recovery of AGN *energetics* rather than
@@ -175,14 +229,43 @@ def build_mock_model(ssp, observation, z=REDSHIFT):
             # everything else pinned moves the photometry by a factor of 2.4e3.
             "log_lbol": FREE,
             # cos_inc, ir_frac and lum_ratio keep their defaults. Said out loud
-            # rather than left to the wildcard's silence: all three are live too
-            # (1.4x, 12x and 1.1x on the same sweep), so this is a choice, not an
-            # absence. cos_inc in particular is degenerate with the torus opening
-            # angle, which is already free.
+            # rather than left to the wildcard's silence: all three are strongly
+            # live (3.3e3, 7.3e8 and 1.0e5 on the sweep), so this is a choice,
+            # not an absence. cos_inc in particular is degenerate with the torus
+            # opening angle, which is already free, and ir_frac and lum_ratio
+            # both re-scale AGN luminosity that agn_log_lbol already carries --
+            # a one-at-a-time sweep scores each highly and cannot see that they
+            # are the same degree of freedom three times over.
             "all_params": Fixed(DEFAULT),
         },
-        xray={"type": "yang20", "all_params": FREE},
-        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
+        # "all_params": FREE on this group never meant all of them: it frees
+        # the six that carry a declared prior and silently leaves
+        # xray_gamma_hmxb and xray_gamma_lmxb pinned. Of the six, E_cut scores
+        # 0.00724 -- it is the coronal cutoff at 100-300 keV and Chandra stops
+        # at 8 keV, so no band can see it -- and det_lmxb 2.05. The four named
+        # here are what the soft/hard pair actually determines.
+        xray={
+            "type": "yang20",
+            "log_nh": FREE,
+            "gamma_agn": FREE,
+            "det_hmxb": FREE,
+            "delta_alpha_ox": FREE,
+            "all_params": Fixed(DEFAULT),
+        },
+        # Stated, not left to the group's silence: omitting the disposition
+        # pinned all four at defaults nobody chose. They stay pinned because
+        # the mock observes no radio band -- the longest pivot in the set is
+        # ALMA band 3 at 3.1 mm -- and the sweep confirms it: radio_q_ir,
+        # radio_alpha_sf and radio_T_e all move the data by EXACTLY 0.000.
+        # That exact zero is the honest kind: nothing observes the quantity.
+        # Contrast the nebular six above, whose exact zeros came from an
+        # amplitude clamped to zero upstream (#2436) while the bands that
+        # would have seen them were right there in the filter set.
+        radio={
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(z),
         igm={"type": "inoue"},
         approx=WavePrecomp(),
