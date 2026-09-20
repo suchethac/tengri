@@ -80,17 +80,52 @@ def test_validators_agree_on_eline_modes() -> None:
 
 
 def test_fitter_spectroscopy_config_read_path() -> None:
-    """Verify dead _spectroscopy_config read path was removed from Fitter._init_emission_lines."""
-    import inspect
+    """Fitter reads eline_mode from model.observation.spectroscopy, not dead probes."""
+    jnp = pytest.importorskip("jax.numpy")
+    import types
+    import warnings
 
     from tengri.inference.fitter import Fitter
+    from tengri.observation.spectroscopy import Spectroscopy
+    from tengri.parameters.parameters import Parameters
+    from tengri.parameters.priors import Fixed, Uniform
 
-    # Read the source code of _init_emission_lines
-    source = inspect.getsource(Fitter._init_emission_lines)
+    # Build minimal Parameters
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        model_spec = Parameters(
+            mean_sfh_type="dpl",
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(0.1),
+            dust_tau_diff=Fixed(0.1),
+            redshift=Fixed(0.1),
+        )
 
-    # The dead probe getattr(model, "_spectroscopy_config", None) should NOT appear
-    # The code should directly get spectroscopy from model.observation.spectroscopy
-    assert 'getattr(model, "_spectroscopy_config"' not in source, (
-        "Dead probe read of _spectroscopy_config should be removed; "
-        "spectroscopy config is obtained via model.observation.spectroscopy"
+    # Create Spectroscopy with eline_mode='off'
+    wave = jnp.linspace(4000.0, 7000.0, 300)
+    spec = Spectroscopy(wave_obs=wave, eline_mode="off")
+
+    # Create mock model with spectroscopy
+    continuum = jnp.ones(len(wave)) * 10.0
+    model = types.SimpleNamespace(
+        spec=model_spec,
+        observation=types.SimpleNamespace(spectroscopy=spec),
+        predict_spectrum=lambda params, w=None, **kwargs: continuum,
     )
+
+    # Set a stray _spectroscopy_config attribute on the model.
+    # The dead probe getattr(model, "_spectroscopy_config", None) would pick
+    # this up; the correct code should ignore it and read from
+    # model.observation.spectroscopy instead.
+    model._spectroscopy_config = object()
+
+    # Construct the Fitter. This calls _init_emission_lines which should
+    # read model.observation.spectroscopy.eline_mode, NOT the stray attribute.
+    # Pass spectroscopy data (continuum and noise arrays).
+    noise = jnp.ones(len(wave)) * 0.1
+    fitter = Fitter(model, continuum, noise, data_type="spectroscopy")
+
+    # With eline_mode="off", both flags should be False
+    assert fitter._eline_marginalize is False
+    assert fitter._eline_fitted is False

@@ -2096,8 +2096,8 @@ class Fitter:
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
-        obs = getattr(model, "observation", None)
-        _spec_config = getattr(obs, "spectroscopy", None) if obs is not None else None
+        obs = model.observation
+        _spec_config = obs.spectroscopy if obs is not None else None
 
         # Marginalization mode
         if eline_marginalize is None:
