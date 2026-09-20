@@ -31,7 +31,7 @@ except the one that rejected them.
 Run::
 
     python -m paper1.fill_demonstration_numbers
-    python -m paper1.fill_demonstration_numbers --from-dir <other>   # not for the paper
+    python -m paper1.fill_demonstration_numbers --from-dir <dir>    # stamped if quarantined
 """
 
 from __future__ import annotations
@@ -41,11 +41,54 @@ import json
 import statistics
 import sys
 from collections import Counter, defaultdict
+from fnmatch import fnmatch
 from pathlib import Path
 
 RESULTS = Path(__file__).parent / "results"
 CANONICAL = RESULTS / "fits"
 SUPERSEDED = RESULTS / "fits_superseded_oldsuite_20260920"
+
+#: Quarantined fit directories, matched by name so that archiving a run under
+#: the existing convention brands it without editing this script.
+SUPERSEDED_GLOB = "fits_superseded_*"
+
+
+def classify_directory(directory: Path) -> str:
+    """Say what kind of fit directory this is, from the path itself.
+
+    The stamp must follow the data, not the command line. Keying it on whether
+    ``--from-dir`` was passed brands the authoritative rows the moment anyone
+    names them explicitly, and leaves a superseded directory unbranded if it is
+    ever made the default. A guard that cries wolf on good data is one people
+    learn to ignore.
+
+    Parameters
+    ----------
+    directory : Path
+        The directory of per-cell JSON being read.
+
+    Returns
+    -------
+    {'canonical', 'superseded', 'other'}
+        ``canonical`` is the directory the paper's numbers come from, whether or
+        not it was named on the command line. ``superseded`` is a quarantined
+        archive. ``other`` is any further directory: readable, and reported with
+        its path, but not assumed to be either of the first two.
+
+    Notes
+    -----
+    Quarantine is recognized by directory name, which is the signal the archive
+    convention and ``analysis/paper1/.gitignore`` both already use. A superseded
+    run stored under some other name reads as ``other``, so it is still named in
+    the output but not branded.
+    """
+    resolved = directory.resolve()
+    if resolved == CANONICAL.resolve():
+        return "canonical"
+    if fnmatch(resolved.name, SUPERSEDED_GLOB):
+        return "superseded"
+    return "other"
+
 
 #: TBDs that still need something this script does not read. The first needs the
 #: declared priors, which means rebuilding each configuration; the second needs
@@ -135,11 +178,11 @@ def main() -> int:
     args = parser.parse_args()
 
     directory = args.from_dir or CANONICAL
-    canonical = args.from_dir is None
+    kind = classify_directory(directory)
 
     if not directory.exists() or not any(directory.glob("*.json")):
         print(f"no per-cell JSON in {directory}")
-        if canonical and SUPERSEDED.exists():
+        if kind == "canonical" and SUPERSEDED.exists():
             n = len(list(SUPERSEDED.glob("*.json")))
             print(
                 f"\n{SUPERSEDED.name} holds {n} cells from an earlier suite. Those are NOT a\n"
@@ -150,10 +193,12 @@ def main() -> int:
         return 1
 
     cells = load_cells(directory)
-    if not canonical:
+    if kind == "superseded":
         print("=" * 72)
-        print("NOT FOR THE PAPER -- reading", directory.name)
+        print("NOT FOR THE PAPER -- reading the quarantined", directory.name)
         print("=" * 72)
+    elif kind == "other":
+        print(f"reading {directory} (not the canonical {CANONICAL.name}/)")
 
     adopted = [c for c in cells if c.get("adoption_pass")]
     print(f"\ncells read: {len(cells)}   adopted: {len(adopted)}   from: {directory}")
@@ -319,7 +364,7 @@ def main() -> int:
     print("\n--- still outstanding: these need more than the fits ---")
     for item in NEEDS_MORE:
         print(f"   - {item}")
-    if not canonical:
+    if kind == "superseded":
         print("\nNOT FOR THE PAPER -- see the banner above.")
     return 0
 
