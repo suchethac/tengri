@@ -308,10 +308,6 @@ def citation_key_hint(unknown: str, valid_names: list[str], *, kind: str, keywor
             )
     else:
         # This citation key exists but not for this group
-        # Report the first name it maps to
+        # Report the first name it maps to; don't suggest a remedy
         first_name = names_for_key[0]
-        return (
-            f"That is a citation key for {first_name} (a different {kind}), "
-            f"not a valid {kind}. Use {keyword}='{valid_names[0]}' or another "
-            f"from the valid list."
-        )
+        return f"That is a citation key for {first_name}, not a valid {kind}."

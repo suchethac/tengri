@@ -614,7 +614,14 @@ def _valid_dust_laws() -> frozenset[str]:
 
 
 def _unknown_name_error(
-    kind: str, name: str, valid_names: Iterable[str], *, keyword: str
+    kind: str,
+    name: str,
+    valid_names: Iterable[str],
+    *,
+    keyword: str,
+    extra: str = "",
+    n_suggestions: int = 2,
+    alias_hint: str | None = None,
 ) -> ValueError:
     """Build a ValueError for an unknown name, with citation key hints.
 
@@ -632,6 +639,13 @@ def _unknown_name_error(
         Valid registry names for this category.
     keyword : str
         The parameter keyword (e.g., "law", "law_bc").
+    extra : str
+        Extra information to append after the suggestion (e.g., " Available: ...").
+    n_suggestions : int
+        Number of difflib suggestions to show (default 2).
+    alias_hint : str | None
+        If provided and in valid_names, use this as the suggestion instead
+        of difflib. Used for alias maps like _NEBULAR_TYPE_HINTS.
 
     Returns
     -------
@@ -644,11 +658,14 @@ def _unknown_name_error(
     hint = citation_key_hint(name, valid_list, kind=kind, keyword=keyword)
 
     if not hint:
-        # Fall back to difflib suggestion
-        suggestions = difflib.get_close_matches(name, valid_list, n=2, cutoff=0.6)
-        hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        # Fall back to alias hint or difflib suggestion
+        if alias_hint is not None and alias_hint in valid_list:
+            hint = f" Did you mean: {alias_hint}?"
+        else:
+            suggestions = difflib.get_close_matches(name, valid_list, n=n_suggestions, cutoff=0.6)
+            hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
 
-    return ValueError(f"Unknown {kind} '{name}'.{hint}")
+    return ValueError(f"Unknown {kind} '{name}'.{hint}{extra}")
 
 
 def _agn_block_types(category: str) -> frozenset[str]:
@@ -3072,7 +3089,9 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
             if type_name not in valid:
-                raise _unknown_name_error("SFH type", type_name, valid, keyword="type")
+                raise _unknown_name_error(
+                    "SFH type", type_name, valid, keyword="type", n_suggestions=3
+                )
             _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
@@ -3087,7 +3106,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         )
 
     if sfh_type not in valid:
-        raise _unknown_name_error("SFH type", sfh_type, valid, keyword="type")
+        raise _unknown_name_error("SFH type", sfh_type, valid, keyword="type", n_suggestions=3)
 
     _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
@@ -3147,7 +3166,13 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
 
     valid_modes = sorted(MET_REGISTRY.keys())
     if met_mode not in MET_REGISTRY:
-        raise _unknown_name_error("metallicity mode", met_mode, valid_modes, keyword="type")
+        raise _unknown_name_error(
+            "metallicity mode",
+            met_mode,
+            valid_modes,
+            keyword="type",
+            extra=f" Valid modes: {', '.join(valid_modes)}.",
+        )
 
     result["met_mode"] = met_mode
 
@@ -3862,7 +3887,15 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
     # Validate type
     valid_neb = _valid_nebular_types()
     if neb_type not in valid_neb:
-        raise _unknown_name_error("nebular type", neb_type, valid_neb, keyword="type")
+        alias = _NEBULAR_TYPE_HINTS.get(str(neb_type).lower())
+        raise _unknown_name_error(
+            "nebular type",
+            neb_type,
+            valid_neb,
+            keyword="type",
+            alias_hint=alias,
+            extra=f" Available: {', '.join(sorted(valid_neb))}.",
+        )
 
     # Map type to nebular settings
     if neb_type == "none":
@@ -4348,7 +4381,13 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     law = fg_dict.get("law", "cardelli")
     rv = fg_dict.get("rv", 3.1)
     if law not in _VALID_FOREGROUND_LAWS:
-        raise _unknown_name_error("foreground law", law, _VALID_FOREGROUND_LAWS, keyword="law")
+        raise _unknown_name_error(
+            "foreground law",
+            law,
+            _VALID_FOREGROUND_LAWS,
+            keyword="law",
+            extra=f" Valid: {sorted(_VALID_FOREGROUND_LAWS)}.",
+        )
     if float(ebmv) < 0:
         raise ValueError(f"foreground.ebmv_mw must be >= 0, got {ebmv}")
     if float(rv) <= 0:
