@@ -120,6 +120,11 @@ composition and radiation-field minimum.
     plt.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
 
 
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.042 seconds)
+
+
 .. _sphx_glr_download_auto_examples_dust_emission_plot_themis_alpha_sweep.py:
 
 .. only:: html

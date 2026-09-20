@@ -45,7 +45,7 @@ red curve for reference.
 
  .. code-block:: none
 
-    /tengri/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:156: RuntimeWarning: divide by zero encountered in divide
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a3f3fbcc3f971ad49/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:156: RuntimeWarning: divide by zero encountered in divide
       "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
 
 
@@ -214,7 +214,7 @@ red curve for reference.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.629 seconds)
+   **Total running time of the script:** (0 minutes 11.443 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py:

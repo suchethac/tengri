@@ -155,6 +155,11 @@ projected onto a single sub-mm photometric point.
     plt.savefig("plot_mbb_temperature_beta_grid.png", dpi=150, bbox_inches="tight")
 
 
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.514 seconds)
+
+
 .. _sphx_glr_download_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py:
 
 .. only:: html

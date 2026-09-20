@@ -75,6 +75,14 @@ References
 
     Building Type 1 (face-on, BLR) model...
     Building Type 2 (edge-on, NLR) model...
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a3f3fbcc3f971ad49/examples/agn/plot_type1_type2_unified_model.py:213: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      fig2.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a3f3fbcc3f971ad49/examples/agn/plot_type1_type2_unified_model.py:214: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      plt.savefig("plot_type1_type2_unified_model_transition.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a3f3fbcc3f971ad49/examples/agn/plot_type1_type2_unified_model.py:231: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
+      fig.tight_layout(rect=[0, 0.08, 1, 1])
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a3f3fbcc3f971ad49/examples/agn/plot_type1_type2_unified_model.py:232: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      plt.savefig("plot_type1_type2_unified_model.png", dpi=150, bbox_inches="tight")
     Saved: plot_type1_type2_unified_model.png
     Saved: plot_type1_type2_unified_model_transition.png
 
@@ -295,7 +303,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 14.710 seconds)
+   **Total running time of the script:** (0 minutes 26.094 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

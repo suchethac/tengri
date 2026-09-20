@@ -41,7 +41,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:10291: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust_attenuation'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a3f3fbcc3f971ad49/src/tengri/forward/sed_model.py:10607: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust_attenuation'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust_attenuation={'dust_f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
@@ -161,7 +161,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.689 seconds)
+   **Total running time of the script:** (0 minutes 6.561 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:
