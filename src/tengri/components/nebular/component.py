@@ -27,6 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._params import PARAMS as NEB_PARAMS
 from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.nebular.dig import (
@@ -44,6 +45,7 @@ from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
     SEDComponentState,
+    declared_default,
 )
 from tengri.utils.scale import log10_magnitude
 
@@ -602,7 +604,10 @@ class NebularSEDComponent(TemplateThreading):
             # Source the Halpha luminosity normalization: prefer the
             # state.derived publication (e.g. from a future stellar
             # extension) over the param's Fixed default.
-            log_lha = state.derived.get("shock_log_lhalpha", params.get("shock_log_lhalpha", 40.0))
+            shock_default = declared_default(NEB_PARAMS, "shock_log_lhalpha")
+            log_lha = state.derived.get(
+                "shock_log_lhalpha", params.get("shock_log_lhalpha", shock_default)
+            )
             l_shock_halpha = jnp.power(10.0, jnp.asarray(log_lha))
             nebular_sed = self.backend.predict_nebular_sed(
                 wavelength=state.wave,

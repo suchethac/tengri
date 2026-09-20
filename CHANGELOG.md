@@ -6,6 +6,15 @@
 
 ### Fixed
 
+- Nebular fallback defaults now read from context-appropriate parameter
+  declarations (#2297): AGN NLR `gas_logn` fallback (lines 465, 1480 of
+  `agn_nebular.py`) reads `declared_default(AGN_PARAMS, "agn_nlr_logn")`
+  returning 3.0, not galaxy `gas_logn` (2.0); AGN NLR `neb_logU` fallback (line
+  1068 of `mappings_photo.py`) reads `declared_default(AGN_PARAMS,
+  "agn_nlr_logU")` returning -2.0, not galaxy `neb_logU` (-3.0). The fix restores
+  design comments explaining why the same parameter name (`gas_logn`, `neb_logU`)
+  means different physical quantities in AGN vs. stellar contexts, and why each
+  must read from its own declaration.
 - The photoionized nebular backends floor the SSP age axis at 0.1 Myr, so an
   age-0 anchor template no longer turns every nebular output into NaN
   (#2418): the BC03 STELIB SSP carries `ssp_lg_age_gyr[0] = -inf`, and
