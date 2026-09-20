@@ -14,11 +14,19 @@ cells from an earlier suite), and those numbers would look perfectly plausible
 in the paper. Pointing this script at them takes an explicit flag, and anything
 produced that way is stamped so it cannot be mistaken for a result.
 
-It does not estimate. Several TBDs need the posterior draws rather than the
-per-cell diagnostics JSON -- goodness of fit across the grid, per-band
-systematic residuals, where posteriors lean on prior boundaries, and everything
-sample-level. Those are listed at the end as outstanding rather than
-approximated from what is here.
+It does not estimate. Goodness of fit, per-band systematic residuals and the
+configuration-to-configuration scatter are read from the saved NPZs; the two
+that need more than the fits -- prior-boundary leaning, which needs the declared
+priors, and the published inter-code comparison, which needs the per-code
+catalog -- are named at the end as outstanding rather than approximated.
+
+It also splits the cells the bar rejected by WHY. Zero divergences and
+max split-R-hat < 1.01 is one line but two unrelated failures: divergences with
+a clean R-hat are geometry the integrator could not follow, a failing R-hat with
+no divergences is chains that did not mix. They have different causes and
+different fixes, and a single "N of 120 adopted" hides both. The report also
+counts what the zero-divergence half costs -- cells converged on every measure
+except the one that rejected them.
 
 Run::
 
@@ -92,6 +100,15 @@ def posterior_numbers(directory: Path, cells: list[dict]) -> dict | None:
                     row[label] = float(_np.log10(_np.median(vals))) if vals.size else None
             per_cell.append(row)
     return {"cells": per_cell} if per_cell else None
+
+
+#: The adoption bar's R-hat half, as fit_one applies it.
+ADOPTION_RHAT = 1.01
+
+#: At or below this many divergences, with a clean R-hat, a cell has converged on
+#: every measure except the one that rejected it. Not a second bar -- a count of
+#: what the first one costs.
+MARGINAL_DIVERGENCES = 2
 
 
 def load_cells(directory: Path) -> list[dict]:
@@ -192,9 +209,49 @@ def main() -> int:
 
     failed = [c for c in cells if not c.get("adoption_pass")]
     if failed:
+        # The bar is one line -- zero divergences AND max split-R-hat < 1.01 --
+        # but it rejects for two unrelated reasons. Divergences with a clean
+        # R-hat are geometry the integrator could not follow; a failing R-hat
+        # with zero divergences is chains that did not mix. A single
+        # "N of 120 adopted" folds them together, and they have different
+        # causes and different responses: the first is a step-size or
+        # reparameterization question, the second is a length question.
+        geometry, mixing, both_, marginal = [], [], [], []
+        for c in failed:
+            div = c.get("divergences") or 0
+            rhat = c.get("rhat_max")
+            clean = rhat is not None and rhat < ADOPTION_RHAT
+            if div > 0 and clean:
+                geometry.append(c)
+                if div <= MARGINAL_DIVERGENCES:
+                    marginal.append(c)
+            elif div == 0 and not clean:
+                mixing.append(c)
+            else:
+                both_.append(c)
+        print(f"\nnot adopted: {len(failed)} of {len(cells)}, by failure mode")
+        print(f"   divergences only, R-hat clean (geometry) : {len(geometry)}")
+        print(f"   R-hat only, zero divergences (mixing)    : {len(mixing)}")
+        print(f"   both                                     : {len(both_)}")
+        if geometry:
+            counts = sorted(c.get("divergences") or 0 for c in geometry)
+            print(
+                f"   divergence counts among geometry failures: min {counts[0]}, "
+                f"median {statistics.median(counts):g}, max {counts[-1]}"
+            )
         print(
-            f"\nnot adopted ({len(failed)}), which the section must account for rather than omit:"
+            f"\n   what the zero-divergence bar costs: {len(marginal)} cell(s) rejected with "
+            f"<= {MARGINAL_DIVERGENCES} divergences and\n"
+            f"   R-hat < {ADOPTION_RHAT}, i.e. converged on every measure except the one that "
+            f"rejected them.\n   Report those separately rather than with the genuinely "
+            f"divergent cells."
         )
+        for c in marginal:
+            print(
+                f"      {c.get('gal_id')}/{c.get('config')}  div={c.get('divergences')} "
+                f"rhat={c.get('rhat_max'):.4f} ess_min={c.get('ess_min') or 0:.0f}"
+            )
+        print("\n   worst cells by divergence count:")
         for c in sorted(failed, key=lambda c: -(c.get("divergences") or 0))[:10]:
             print(
                 f"   {c.get('gal_id')!s:>7}/{c.get('config', '?'):<4} "
