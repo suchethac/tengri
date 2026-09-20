@@ -123,7 +123,7 @@ _MM83_C2 = host_array(
 )
 
 
-def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
+def wabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     r"""Photoelectric absorption transmission ``T(E) = exp(−σ(E)·N_H)``.
 
     Implements the Morrison & McCammon (1983) ``wabs`` cross-section
@@ -162,12 +162,13 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     with respect to ``E_keV``: adequate because ``E_keV`` is the
     wavelength grid, not a free parameter.
 
-    **Convention**: matches XSPEC ``wabs``. The newer ``tbabs`` model
-    of Wilms et al. (2000) gives 30–50 % higher cross-sections in the
-    0.5–2 keV band due to updated metal abundances; we use ``wabs``
-    here because its closed-form polynomial fit is exactly
-    differentiable and the systematic is well below typical N_H
-    posterior uncertainty.
+    **Convention**: implements the XSPEC ``wabs`` model
+    (Morrison & McCammon 1983). The newer ``tbabs`` model
+    of Wilms et al. (2000) gives 10–30 % higher cross-sections in the
+    soft band (below ~1 keV) due to updated metal abundances and
+    grain/H2 treatment; we use ``wabs`` here because its closed-form
+    polynomial fit is exactly differentiable and the systematic is well
+    below typical N_H posterior uncertainty.
 
     References
     ----------
@@ -193,6 +194,29 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
 
     tau = sigma * 10.0**log_nh
     return jnp.where(in_range, jnp.exp(-jnp.maximum(tau, 0.0)), 1.0)
+
+
+# Deprecated alias for backward compatibility
+def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
+    r"""Deprecated alias for :func:`wabs_transmission`.
+
+    The photoelectric screen is the Morrison & McCammon (1983) wabs cross-section,
+    not the Wilms+2000 tbabs. Will be removed in tengri v1.0.
+    For differences, see :func:`wabs_transmission`.
+
+    Emits Python's standard DeprecationWarning on invocation.
+    """
+    import warnings
+
+    warnings.warn(
+        "`tbabs_transmission` is deprecated and will be removed in tengri v1.0; "
+        "use `wabs_transmission` instead. The implementation uses the wabs convention "
+        "(Morrison & McCammon 1983), not Wilms et al. (2000) tbabs, which differs by "
+        "10–30% at soft energies.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return wabs_transmission(E_keV, log_nh)
 
 
 # Thomson scattering cross-section per hydrogen atom (one free electron).
@@ -383,7 +407,7 @@ def pexrav_reflection(
     # −ln T is a faithful sample of σ over the full X-ray band.
     _LOG_NH_PROBE = 22.0
     sigma_phabs = (
-        -jnp.log(jnp.maximum(tbabs_transmission(E_keV, _LOG_NH_PROBE), 1e-300))
+        -jnp.log(jnp.maximum(wabs_transmission(E_keV, _LOG_NH_PROBE), 1e-300))
         / 10.0**_LOG_NH_PROBE
     )
     g_branching = _SIGMA_THOMSON_CM2 / (_SIGMA_THOMSON_CM2 + sigma_phabs)
@@ -1218,7 +1242,7 @@ def xray_agn_corona_from_disc(
     # constant scattered fraction (defaulting to 1 %).
     l_intr = l_nu
     l_nu = (
-        tbabs_transmission(E_keV, log_nh) * compton_scattering_transmission(log_nh) * l_intr
+        wabs_transmission(E_keV, log_nh) * compton_scattering_transmission(log_nh) * l_intr
         + 0.01 * l_intr
     )
 
@@ -1384,7 +1408,7 @@ def _xray_agn_corona_bolometric(
             + f_{\rm scat}\, L_\nu^{\rm intr}(E)
 
     where the line-of-sight absorber attenuates the primary continuum
-    through photoelectric absorption (:func:`tbabs_transmission`) and
+    through photoelectric absorption (:func:`wabs_transmission`) and
     Compton down-scattering (:func:`compton_scattering_transmission`),
     while a constant fraction ``scattered_frac`` of the intrinsic
     spectrum reaches the observer via warm-electron scattering on
@@ -1444,7 +1468,7 @@ def _xray_agn_corona_bolometric(
     #   scattered = scattered_frac × intrinsic
     # Applied to the AGN corona only; XRBs and hot gas are outside the
     # torus line of sight and are unobscured by host N_H.
-    T_phabs = tbabs_transmission(E_keV, log_nh)
+    T_phabs = wabs_transmission(E_keV, log_nh)
     T_cabs = compton_scattering_transmission(log_nh)
     L_nu = T_phabs * T_cabs * L_intr + scattered_frac * L_intr
 
@@ -1910,7 +1934,7 @@ def xray_agn_corona_lopez24(
     # scattering + 1 % scattered.
     l_intr = l_nu
     l_nu = (
-        tbabs_transmission(E_keV, log_nh) * compton_scattering_transmission(log_nh) * l_intr
+        wabs_transmission(E_keV, log_nh) * compton_scattering_transmission(log_nh) * l_intr
         + 0.01 * l_intr
     )
 
