@@ -87,7 +87,12 @@ def main() -> int:
         "method": "nss",
         "preset": args.preset,
         "wall_time_s": wall,
-        "diagnostics": {k: (float(v) if np.isscalar(v) else str(v)) for k, v in diag.items()},
+        # np.isscalar is True for a str, and diagnostics carry the profile_mass
+        # reason as one; float() on it lost the first run's summary.
+        "diagnostics": {
+            k: (float(v) if isinstance(v, (int, float, np.integer, np.floating)) else str(v))
+            for k, v in diag.items()
+        },
         "summary": summary,
     }
     args.out.mkdir(parents=True, exist_ok=True)
