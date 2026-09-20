@@ -1,6 +1,6 @@
 {
-  "date": "2026-08-30T14:54:02.433350",
-  "git_sha": "6f52fb3f7602a66e37be2f52684cc09064f958bd",
+  "date": "2026-09-20T12:14:12.978181",
+  "git_sha": "81065f6183854af6083965ef6cd42dbcaaeb7e51",
   "census": {
     "ssp": {
       "available": 4,
@@ -15,7 +15,7 @@
       "example": "calzetti"
     },
     "dust_emission": {
-      "available": 12,
+      "available": 13,
       "other": 5,
       "build_key": "dust_emission['type']",
       "example": "dl07"
@@ -45,7 +45,7 @@
       "example": "delta"
     },
     "sfh_parametric": {
-      "available": 19,
+      "available": 22,
       "other": 4,
       "build_key": "sfh['type']",
       "example": "dpl"
@@ -63,13 +63,13 @@
       "example": "field"
     },
     "agn_disc": {
-      "available": 13,
+      "available": 15,
       "other": 0,
       "build_key": "agn.disc=",
       "example": "skirtor"
     },
     "agn_torus": {
-      "available": 11,
+      "available": 16,
       "other": 0,
       "build_key": "agn.torus=",
       "example": "skirtor"
@@ -117,7 +117,7 @@
       "example": "inoue14"
     },
     "observation_photometry": {
-      "available": 447,
+      "available": 449,
       "other": 0,
       "build_key": "(observation=)",
       "example": "photometry"
@@ -135,8 +135,8 @@
       "example": "emission_line_fluxes"
     },
     "inference": {
-      "available": 8,
-      "other": 7,
+      "available": 10,
+      "other": 14,
       "build_key": "method=",
       "example": "laplace"
     }
@@ -153,13 +153,13 @@
   "sfh_classifications": {
     "parametric": "All SFH not in nonparametric/stochastic",
     "nonparametric": [
-      "prospector_beta",
-      "dense_basis",
-      "bursty_continuity",
       "continuity_flex",
-      "continuity",
+      "prospector_beta",
+      "dense_basis_pure",
+      "dense_basis",
       "dirichlet",
-      "dense_basis_pure"
+      "continuity",
+      "bursty_continuity"
     ],
     "stochastic": [
       "field_sfr_noise",
@@ -167,8 +167,8 @@
     ]
   },
   "refusing_entries": [
-    "mappings_photo_agn",
-    "mappings_photo_stellar"
+    "mappings_photo_stellar",
+    "mappings_photo_agn"
   ],
   "all_registries": {
     "known_ssps": [
@@ -441,7 +441,7 @@
         "kind": "dust_attenuation",
         "status": "production",
         "citation": "Narayanan et al. 2018 (ApJ 869, 70)",
-        "short_doc": "Narayanan et al. z-dependent attenuation (SIMBA)",
+        "short_doc": "Narayanan et al. z-dependent attenuation (MUFASA)",
         "use": "SEDModel.build(..., dust_attenuation={'type': 'single_component', 'law': 'narayanan_z'})"
       },
       {
@@ -647,6 +647,14 @@
         "kind": "dust_emission"
       },
       {
+        "name": "graybody",
+        "status": "production",
+        "citation": "Boquien et al. 2019 (A&A 622, A103) / Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "General-opacity graybody with free pivot (Synthesizer Greybody optically_thin=False; CIGALE mbb)",
+        "use": "SEDModel.build(..., dust_attenuation={'law': 'calzetti'}, dust_emission={'type': 'graybody'})",
+        "kind": "dust_emission"
+      },
+      {
         "name": "mbb",
         "status": "production",
         "citation": "Casey 2012 (MNRAS 425, 3094)",
@@ -666,8 +674,8 @@
         "name": "pah_drude",
         "status": "production",
         "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
-        "short_doc": "Drude-profile PAH emission features",
-        "use": "SEDModel.build(..., dust_attenuation={'law': 'calzetti'}, dust_emission={'type': 'pah_drude'})",
+        "short_doc": "Drude-profile PAH emission features (building block; not selectable standalone)",
+        "use": "building block, not a standalone model: 'pah_drude' re-emits only a fraction of L_ir. Compose it with an energy-balanced continuum model, or pick one from list_dust_emission_models()",
         "kind": "dust_emission"
       },
       {
@@ -1533,7 +1541,7 @@
         "kind": "sfh_model",
         "status": "production",
         "citation": "Leja et al. 2017 (ApJ 837, 170)",
-        "short_doc": "Non-parametric Dirichlet SFH (Leja+17); Beta(1,1) = Uniform(0,1) stick-breaking aux variables",
+        "short_doc": "Non-parametric Dirichlet SFH (Leja+17); Uniform(0,1) aux variables mapped to Beta(1, N-1-i) quantiles, stick-broken into SFR fractions with a symmetric Dirichlet(1,...,1) prior",
         "use": "SEDModel.build(..., sfh={'type': 'dirichlet'})",
         "params": [
           "sfh_dir_log_total_mass",
@@ -1619,6 +1627,54 @@
           },
           {
             "name": "sfh_dpl_log_total_mass",
+            "default": "Uniform(7.0, 12.5)",
+            "description": "log10 total stellar mass formed [Msun]"
+          }
+        ]
+      },
+      {
+        "name": "dpl_lookback",
+        "kind": "sfh_model",
+        "status": "production",
+        "citation": "Carnall et al. 2018 (MNRAS 480, 4379)",
+        "short_doc": "Double power-law SFH in lookback time (stellar age, not cosmic time since formation); beta carries the Carnall sign, so a positive beta gives an interior peak",
+        "use": "SEDModel.build(..., sfh={'type': 'dpl_lookback'})",
+        "params": [
+          "sfh_dpl_lookback_alpha",
+          "sfh_dpl_lookback_beta",
+          "sfh_dpl_lookback_peak_gyr",
+          "sfh_dpl_lookback_age_gyr",
+          "sfh_dpl_lookback_end_gyr",
+          "sfh_dpl_lookback_log_total_mass"
+        ],
+        "param_details": [
+          {
+            "name": "sfh_dpl_lookback_alpha",
+            "default": "Uniform(0.1, 5.0)",
+            "description": "DPL slope on the old side (large lookback)"
+          },
+          {
+            "name": "sfh_dpl_lookback_beta",
+            "default": "Uniform(0.1, 3.0)",
+            "description": "DPL slope on the young side (small lookback)"
+          },
+          {
+            "name": "sfh_dpl_lookback_peak_gyr",
+            "default": "Uniform(0.01, 12.0)",
+            "description": "DPL turnover lookback time (Gyr)"
+          },
+          {
+            "name": "sfh_dpl_lookback_age_gyr",
+            "default": "Uniform(0.5, 13.81)",
+            "description": "Older truncation lookback time (Gyr); set to age_of_universe(z) for a galaxy forming at the Big Bang"
+          },
+          {
+            "name": "sfh_dpl_lookback_end_gyr",
+            "default": "Fixed(0.0)",
+            "description": "Younger truncation lookback time (Gyr) (0 = star formation continues to the epoch of observation)"
+          },
+          {
+            "name": "sfh_dpl_lookback_log_total_mass",
             "default": "Uniform(7.0, 12.5)",
             "description": "log10 total stellar mass formed [Msun]"
           }
@@ -1925,11 +1981,83 @@
         ]
       },
       {
+        "name": "psb_flex",
+        "kind": "sfh_model",
+        "status": "production",
+        "citation": "Suess et al. 2022 (ApJ 935, 146); arXiv:2207.02883",
+        "short_doc": "Post-starburst non-parametric SFH with a resolved quenching zone (nflex=5, nfixed=3): youngest bin [0, tlast] + five equal-width flex bins out to tflex + three equal-width fixed old bins out to 13.7 Gyr",
+        "use": "SEDModel.build(..., sfh={'type': 'psb_flex'})",
+        "params": [
+          "sfh_psb_flex_log_total_mass",
+          "sfh_psb_flex_tlast_gyr",
+          "sfh_psb_flex_tflex_gyr",
+          "sfh_psb_flex_ratio_young",
+          "sfh_psb_flex_ratio_flex_0",
+          "sfh_psb_flex_ratio_flex_1",
+          "sfh_psb_flex_ratio_flex_2",
+          "sfh_psb_flex_ratio_flex_3",
+          "sfh_psb_flex_ratio_old_0",
+          "sfh_psb_flex_ratio_old_1"
+        ],
+        "param_details": [
+          {
+            "name": "sfh_psb_flex_log_total_mass",
+            "default": "Uniform(8.0, 12.0)",
+            "description": "log10 total stellar mass formed (Msun)"
+          },
+          {
+            "name": "sfh_psb_flex_tlast_gyr",
+            "default": "Uniform(0.01, 1.0)",
+            "description": "Quenching-onset lookback time (Gyr); width of the youngest bin"
+          },
+          {
+            "name": "sfh_psb_flex_tflex_gyr",
+            "default": "Uniform(1.0, 5.0)",
+            "description": "Upper boundary of the flexible quenching zone (Gyr); prior floor equals the tlast_gyr ceiling so the zone can never have negative width"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_young",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10(SFR_young / SFR_flex_0); large positive = recent burst"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_flex_0",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio flex bin 0/1"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_flex_1",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio flex bin 1/2"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_flex_2",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio flex bin 2/3"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_flex_3",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio flex bin 3/4"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_old_0",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio old bin 0/1"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_old_1",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio old bin 1/2"
+          }
+        ]
+      },
+      {
         "name": "psb_suess2022",
         "kind": "sfh_model",
         "status": "production",
-        "citation": "Suess et al. 2022 (ApJ 935, 146); arXiv:2207.05895",
-        "short_doc": "Post-starburst non-parametric SFH (Suess+22): youngest bin [0, tlast] + flex zone [tlast, tflex] + fixed old bins, with StudentT(0, 0.3, df=2) ratios",
+        "citation": "Suess et al. 2022 (ApJ 935, 146); arXiv:2207.02883",
+        "short_doc": "Post-starburst non-parametric SFH (Suess+22, nflex=1, nfixed=3): youngest bin [0, tlast] + a single flex bin [tlast, tflex] + three equal-width fixed old bins out to 13.7 Gyr, with StudentT(0, 0.3, df=2) ratios",
         "use": "SEDModel.build(..., sfh={'type': 'psb_suess2022'})",
         "params": [
           "sfh_psb2022_log_total_mass",
@@ -1937,8 +2065,7 @@
           "sfh_psb2022_tflex_gyr",
           "sfh_psb2022_ratio_young",
           "sfh_psb2022_ratio_old_0",
-          "sfh_psb2022_ratio_old_1",
-          "sfh_psb2022_ratio_old_2"
+          "sfh_psb2022_ratio_old_1"
         ],
         "param_details": [
           {
@@ -1953,8 +2080,8 @@
           },
           {
             "name": "sfh_psb2022_tflex_gyr",
-            "default": "Uniform(0.5, 5.0)",
-            "description": "Upper boundary of the flexible quenching zone (Gyr)"
+            "default": "Uniform(1.0, 5.0)",
+            "description": "Upper boundary of the flexible quenching zone (Gyr); prior floor equals the tlast_gyr ceiling so the zone can never have negative width"
           },
           {
             "name": "sfh_psb2022_ratio_young",
@@ -1970,11 +2097,6 @@
             "name": "sfh_psb2022_ratio_old_1",
             "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
             "description": "log10 SFR ratio old bin 1/2"
-          },
-          {
-            "name": "sfh_psb2022_ratio_old_2",
-            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
-            "description": "log10 SFR ratio old bin 2/3"
           }
         ]
       },
@@ -2155,7 +2277,7 @@
           {
             "name": "sfh_snorm_burst_burst_sfr",
             "default": "Fixed(0.0)",
-            "description": "Constant burst SFR amplitude (Msun/yr)"
+            "description": "Burst plateau amplitude relative to the smooth kernel's unit peak [dimensionless]"
           },
           {
             "name": "sfh_snorm_burst_burst_age_gyr",
@@ -2205,6 +2327,42 @@
             "name": "sfh_top_hat_smooth_width_gyr",
             "default": "Fixed(0.1)",
             "description": "Sigmoid transition width (Gyr)"
+          }
+        ]
+      },
+      {
+        "name": "trunc_exp",
+        "kind": "sfh_model",
+        "status": "production",
+        "citation": "Conroy et al. 2009 (FSPS); Carnall et al. 2018 (Bagpipes)",
+        "short_doc": "Exponential SFH truncated at both ends; declining_exp plus a young-end cutoff",
+        "use": "SEDModel.build(..., sfh={'type': 'trunc_exp'})",
+        "params": [
+          "sfh_trunc_exp_log_total_mass",
+          "sfh_trunc_exp_tau_gyr",
+          "sfh_trunc_exp_age_gyr",
+          "sfh_trunc_exp_end_gyr"
+        ],
+        "param_details": [
+          {
+            "name": "sfh_trunc_exp_log_total_mass",
+            "default": "Uniform(7.0, 12.5)",
+            "description": "log10 total stellar mass formed [Msun]"
+          },
+          {
+            "name": "sfh_trunc_exp_tau_gyr",
+            "default": "Uniform(0.1, 10.0)",
+            "description": "e-folding timescale (Gyr); positive declines in cosmic time (SFR rises with lookback age), negative rises"
+          },
+          {
+            "name": "sfh_trunc_exp_age_gyr",
+            "default": "Uniform(0.5, 13.0)",
+            "description": "Galaxy age / lookback time of formation (Gyr)"
+          },
+          {
+            "name": "sfh_trunc_exp_end_gyr",
+            "default": "Fixed(0.0)",
+            "description": "Lookback time at which SF ceases (Gyr) (0 = still forming stars)"
           }
         ]
       },
@@ -2295,7 +2453,7 @@
           {
             "name": "sfh_tsnorm_burst_burst_sfr",
             "default": "Fixed(0.0)",
-            "description": "Constant burst SFR amplitude (Msun/yr)"
+            "description": "Burst plateau amplitude relative to the smooth kernel's unit peak [dimensionless]"
           },
           {
             "name": "sfh_tsnorm_burst_burst_age_gyr",
@@ -2313,7 +2471,23 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP SMC-like broken power-law bi-attenuation",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'grahsp_biatten'}}"
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'grahsp_biatten'}}",
+        "params": [
+          "agn_grahsp_ebv",
+          "agn_grahsp_ebv_agn"
+        ],
+        "param_details": [
+          {
+            "name": "agn_grahsp_ebv",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "GRAHSP baseline E(B-V) [mag] applied to the AGN bi-attenuation (paper E(B-V)). In the upstream CIGALE pipeline this is also the galaxy E(B-V); in tengri it parameterizes only the AGN-side attenuation: galaxy attenuation is handled by the standard tengri ``dust_*`` component (configure them consistently)."
+          },
+          {
+            "name": "agn_grahsp_ebv_agn",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "GRAHSP additional AGN-only E(B-V) [mag] (paper E(B-V)-AGN). Stacks with agn_grahsp_ebv to attenuate the AGN spectrum."
+          }
+        ]
       },
       {
         "name": "none",
@@ -2331,7 +2505,35 @@
         "status": "production",
         "citation": "Pei 1992, ApJ, 395, 130",
         "short_doc": "Polar-dust extinction with Type-1-only screen",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'polar_dust'}}"
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'polar_dust'}}",
+        "params": [
+          "agn_polar_T",
+          "agn_polar_beta",
+          "agn_polar_ebv",
+          "agn_polar_oa"
+        ],
+        "param_details": [
+          {
+            "name": "agn_polar_T",
+            "default": "Uniform(50.0, 150.0)",
+            "description": "Polar dust temperature [K] (CIGALE skirtor2016 default 100 K)."
+          },
+          {
+            "name": "agn_polar_beta",
+            "default": "Uniform(1.0, 2.0)",
+            "description": "Polar dust emissivity index beta (CIGALE skirtor2016 default 1.6)."
+          },
+          {
+            "name": "agn_polar_ebv",
+            "default": "Uniform(0.0, 0.5)",
+            "description": "Polar dust reddening E(B-V) applied to AGN disc (SMC law); default 0.03 matches CIGALE skirtor2016. Set 0 to disable."
+          },
+          {
+            "name": "agn_polar_oa",
+            "default": "Uniform(10.0, 80.0)",
+            "description": "Polar dust half-opening angle [degrees]: sets covering fraction"
+          }
+        ]
       },
       {
         "name": "qsogen",
@@ -2340,7 +2542,17 @@
         "status": "production",
         "citation": "Temple, Hewett & Banerji 2021, MNRAS, 508, 737",
         "short_doc": "Temple+2021 empirical quasar extinction curve",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen'}}"
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen'}}",
+        "params": [
+          "agn_attenuation_ebv"
+        ],
+        "param_details": [
+          {
+            "name": "agn_attenuation_ebv",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "E(B-V) of the AGN attenuation-stage block (smc_prevot)"
+          }
+        ]
       },
       {
         "name": "qsogen_smc",
@@ -2349,7 +2561,17 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen SMC reddening factor",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen_smc'}}"
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen_smc'}}",
+        "params": [
+          "agn_ebv"
+        ],
+        "param_details": [
+          {
+            "name": "agn_ebv",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "QSOgen SMC reddening E(B-V) attenuation coefficient. Applied by the ``qsogen_smc`` attenuation block. Range [0, 1.0] matches SMC/Magellanic Cloud dust opacity. Default 0.0 is no reddening."
+          }
+        ]
       },
       {
         "name": "smc_prevot",
@@ -2358,7 +2580,17 @@
         "status": "production",
         "citation": "Prevot et al. 1984, A&A, 132, 389",
         "short_doc": "Prevot et al. 1984 SMC extinction curve",
-        "use": "SEDModel.build(..., agn={'atten': {'law': 'prevot_smc'}}"
+        "use": "SEDModel.build(..., agn={'atten': {'law': 'prevot_smc'}}",
+        "params": [
+          "agn_attenuation_ebv"
+        ],
+        "param_details": [
+          {
+            "name": "agn_attenuation_ebv",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "E(B-V) of the AGN attenuation-stage block (smc_prevot)"
+          }
+        ]
       },
       {
         "name": "analytic",
@@ -2367,7 +2599,29 @@
         "status": "production",
         "citation": "Krawczyk et al. 2013, ApJS, 206, 4",
         "short_doc": "Analytic broad-line region with Gaussian broadening",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'analytic'}}"
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'analytic'}}",
+        "params": [
+          "agn_blr_cf",
+          "agn_blr_line_efficiency",
+          "agn_fe2_strength"
+        ],
+        "param_details": [
+          {
+            "name": "agn_blr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "BLR covering fraction: fraction of disc luminosity intercepted by BLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          },
+          {
+            "name": "agn_blr_line_efficiency",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "BLR line radiative efficiency: fraction of intercepted disc luminosity re-emitted as broad-line luminosity. Physical bound [0, 1]; typical values 0.05-0.15."
+          },
+          {
+            "name": "agn_fe2_strength",
+            "default": "Uniform(0.0, 2.0)",
+            "description": "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)"
+          }
+        ]
       },
       {
         "name": "grahsp",
@@ -2403,7 +2657,17 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer Cloudy grid broad-line region",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer'}}"
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer'}}",
+        "params": [
+          "agn_blr_cf"
+        ],
+        "param_details": [
+          {
+            "name": "agn_blr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "BLR covering fraction: fraction of disc luminosity intercepted by BLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          }
+        ]
       },
       {
         "name": "synthesizer_spectra",
@@ -2412,7 +2676,17 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer UnifiedAGN BLR reprocessed nebular spectrum",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer_spectra'}}"
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer_spectra'}}",
+        "params": [
+          "agn_blr_cf"
+        ],
+        "param_details": [
+          {
+            "name": "agn_blr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "BLR covering fraction: fraction of disc luminosity intercepted by BLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          }
+        ]
       },
       {
         "name": "adaf",
@@ -2421,7 +2695,41 @@
         "status": "production",
         "citation": "Mahadevan 1997, ApJ, 477, 585",
         "short_doc": "Faithful Mahadevan-1997 ADAF (synchrotron + Compton + bremsstrahlung)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf'}}",
+        "params": [
+          "agn_adaf_alpha",
+          "agn_adaf_beta",
+          "agn_adaf_delta",
+          "agn_ebv_disc",
+          "agn_log_mbh"
+        ],
+        "param_details": [
+          {
+            "name": "agn_adaf_alpha",
+            "default": "Uniform(0.05, 0.5)",
+            "description": "ADAF viscosity parameter alpha"
+          },
+          {
+            "name": "agn_adaf_beta",
+            "default": "Uniform(0.1, 0.9)",
+            "description": "ADAF gas-to-total pressure ratio beta"
+          },
+          {
+            "name": "agn_adaf_delta",
+            "default": "Uniform(0.001, 0.5)",
+            "description": "ADAF electron viscous-heating fraction delta (default 0.1 = modern preference; Mahadevan 1997 fiducial is 1/2000)"
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_log_mbh",
+            "default": "Uniform(6.0, 10.0)",
+            "description": "AGN black hole mass log10(M_BH/Msun)"
+          }
+        ]
       },
       {
         "name": "adaf_lopez2024",
@@ -2430,7 +2738,23 @@
         "status": "production",
         "citation": "Lopez et al. 2024, A&A, 691, A163",
         "short_doc": "CIGALE SKIRTOR2016 ADAF-thin disc blend (disk_type=2)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf_lopez2024'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf_lopez2024'}}",
+        "params": [
+          "agn_cigale_disk_delta",
+          "agn_ebv_disc"
+        ],
+        "param_details": [
+          {
+            "name": "agn_cigale_disk_delta",
+            "default": "Uniform(-0.5, 0.5)",
+            "description": "CIGALE skirtor2016 disc slope modulator (paper delta). For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm power-law index alpha from its nominal value by -delta (positive delta -> shallower optical slope). For 'adaf_lopez2024' block: blend weight in [0, 1] interpolating from pure ADAF (0) to pure thin disc (1)."
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          }
+        ]
       },
       {
         "name": "grahsp_sbpl",
@@ -2439,7 +2763,121 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP smooth bending power-law BBB continuum",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'grahsp_sbpl'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'grahsp_sbpl'}}",
+        "params": [
+          "agn_ebv_disc",
+          "agn_grahsp_cutoff_nm",
+          "agn_grahsp_log_l5100",
+          "agn_grahsp_plbendloc_nm",
+          "agn_grahsp_plbendwidth",
+          "agn_grahsp_plslope",
+          "agn_grahsp_uvslope"
+        ],
+        "param_details": [
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_grahsp_cutoff_nm",
+            "default": "Uniform(5000.0, 20000.0)",
+            "description": "GRAHSP BBB IR cutoff [nm]; -1 disables (paper cutoff). Default 1e4."
+          },
+          {
+            "name": "agn_grahsp_log_l5100",
+            "default": "Uniform(42.0, 47.0)",
+            "description": "GRAHSP log10(lambda*L_lambda(5100\u00c5) / (erg/s)) (paper L_AGN). Sets the AGN normalization; typical 42-47 for Sy1 to QSO."
+          },
+          {
+            "name": "agn_grahsp_plbendloc_nm",
+            "default": "Uniform(50.0, 200.0)",
+            "description": "GRAHSP BBB bend wavelength lambda_break [nm] (paper plbendloc). Typical 50-200 nm."
+          },
+          {
+            "name": "agn_grahsp_plbendwidth",
+            "default": "Uniform(0.01, 100.0)",
+            "description": "GRAHSP BBB bend width Lambda (dimensionless; paper plbendwidth). Larger Lambda smooths the bend; shape deviation from a pure power law falls as ~1/Lambda -- 129% (Lambda=1), 12% (10), 1.1% (100) over 50-1000 nm rest frame. Both bounds sit where the shape stops changing: inert above ~100, saturated to a hard break below ~0.005 (and underflowing by 0.003). Brown+2019 Table 4 tabulates W_bend in dex, so Lambda = 10**W_bend; two of its three fits (0.020, 0.010) fell below the old 0.1 floor, which cost up to 5.7% in shape. Upstream declares Lambda in nm, which it is not (it divides a log ratio), and defaults to 10.0 -- the old upper bound (#2159)."
+          },
+          {
+            "name": "agn_grahsp_plslope",
+            "default": "Uniform(-2.7, -1.0)",
+            "description": "GRAHSP BBB optical power-law index alpha_2 (paper plslope). Typical -2.7 to -1; must satisfy uvslope > plslope."
+          },
+          {
+            "name": "agn_grahsp_uvslope",
+            "default": "Uniform(-1.0, 1.0)",
+            "description": "GRAHSP BBB UV power-law index alpha_1 (paper uvslope). Typical 0; must satisfy uvslope > plslope."
+          }
+        ]
+      },
+      {
+        "name": "kd18_agnfitter",
+        "category": "disc",
+        "kind": "agn_block",
+        "status": "production",
+        "citation": "Kubota & Done 2018, MNRAS, 480, 1247; Martinez-Ramirez et al. 2024, A&A, 688, A46",
+        "short_doc": "AGNfitter-rX KD18 grid-tabulated disc (log M_BH, log Edd)",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'kd18_agnfitter'}}",
+        "params": [
+          "agn_ebv_disc",
+          "agn_log_ledd",
+          "agn_log_mbh"
+        ],
+        "param_details": [
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_log_ledd",
+            "default": "Uniform(-2.0, 0.5)",
+            "description": "AGN Eddington ratio log10(L/L_Edd)"
+          },
+          {
+            "name": "agn_log_mbh",
+            "default": "Uniform(6.0, 10.0)",
+            "description": "AGN black hole mass log10(M_BH/Msun)"
+          }
+        ]
+      },
+      {
+        "name": "kd18_agnfitter_warmindex",
+        "category": "disc",
+        "kind": "agn_block",
+        "status": "production",
+        "citation": "Kubota & Done 2018, MNRAS, 480, 1247; Martinez-Ramirez et al. 2024, A&A, 688, A46",
+        "short_doc": "AGNfitter-rX KD18 grid-tabulated disc (log M_BH, log Edd, warm-zone index)",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'kd18_agnfitter_warmindex'}}",
+        "params": [
+          "agn_ebv_disc",
+          "agn_gamma_warm",
+          "agn_log_ledd",
+          "agn_log_mbh"
+        ],
+        "param_details": [
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_gamma_warm",
+            "default": "Uniform(2.0, 3.0)",
+            "description": "Warm Comptonization photon index (soft X-ray excess)"
+          },
+          {
+            "name": "agn_log_ledd",
+            "default": "Uniform(-2.0, 0.5)",
+            "description": "AGN Eddington ratio log10(L/L_Edd)"
+          },
+          {
+            "name": "agn_log_mbh",
+            "default": "Uniform(6.0, 10.0)",
+            "description": "AGN black hole mass log10(M_BH/Msun)"
+          }
+        ]
       },
       {
         "name": "kubota_done",
@@ -2448,7 +2886,65 @@
         "status": "production",
         "citation": "Kubota & Done 2018, MNRAS, 480, 1247",
         "short_doc": "Kubota & Done 2018 three-zone disc and corona",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'kubota_done'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'kubota_done'}}",
+        "params": [
+          "agn_a_spin",
+          "agn_ebv_disc",
+          "agn_f_hard",
+          "agn_gamma_hard",
+          "agn_gamma_warm",
+          "agn_kt_hot",
+          "agn_kt_warm",
+          "agn_log_mbh",
+          "agn_r_warm_ratio"
+        ],
+        "param_details": [
+          {
+            "name": "agn_a_spin",
+            "default": "Uniform(0.0, 0.998)",
+            "description": "BH spin parameter a* in [0, 0.998): controls ISCO and radiative efficiency"
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_f_hard",
+            "default": "Uniform(0.0, 0.1)",
+            "description": "Coronal luminosity fraction (fraction of disc power to hot corona)"
+          },
+          {
+            "name": "agn_gamma_hard",
+            "default": "Uniform(1.5, 2.5)",
+            "description": "Hard X-ray photon index (hot corona power law)"
+          },
+          {
+            "name": "agn_gamma_warm",
+            "default": "Uniform(2.0, 3.0)",
+            "description": "Warm Comptonization photon index (soft X-ray excess)"
+          },
+          {
+            "name": "agn_kt_hot",
+            "default": "Uniform(50.0, 300.0)",
+            "description": "Hot corona electron temperature [keV]"
+          },
+          {
+            "name": "agn_kt_warm",
+            "default": "Uniform(0.1, 1.0)",
+            "description": "Warm Comptonization electron temperature [keV]"
+          },
+          {
+            "name": "agn_log_mbh",
+            "default": "Uniform(6.0, 10.0)",
+            "description": "AGN black hole mass log10(M_BH/Msun)"
+          },
+          {
+            "name": "agn_r_warm_ratio",
+            "default": "Uniform(1.0, 5.0)",
+            "description": "Ratio R_warm / R_hot (warm Comptonization region size)"
+          }
+        ]
       },
       {
         "name": "multicolor",
@@ -2457,7 +2953,29 @@
         "status": "production",
         "citation": "Shakura & Sunyaev 1973, A&A, 24, 337",
         "short_doc": "Shakura-Sunyaev multi-color thin-disc",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'multicolor'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'multicolor'}}",
+        "params": [
+          "agn_a_spin",
+          "agn_ebv_disc",
+          "agn_log_mbh"
+        ],
+        "param_details": [
+          {
+            "name": "agn_a_spin",
+            "default": "Uniform(0.0, 0.998)",
+            "description": "BH spin parameter a* in [0, 0.998): controls ISCO and radiative efficiency"
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_log_mbh",
+            "default": "Uniform(6.0, 10.0)",
+            "description": "AGN black hole mass log10(M_BH/Msun)"
+          }
+        ]
       },
       {
         "name": "none",
@@ -2475,7 +2993,29 @@
         "status": "production",
         "citation": "",
         "short_doc": "Power-law disc with UV cutoff",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'powerlaw'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'powerlaw'}}",
+        "params": [
+          "agn_T_max",
+          "agn_alpha",
+          "agn_ebv_disc"
+        ],
+        "param_details": [
+          {
+            "name": "agn_T_max",
+            "default": "Uniform(10000.0, 1000000.0)",
+            "description": "UV cutoff temperature"
+          },
+          {
+            "name": "agn_alpha",
+            "default": "Uniform(-2.0, 0.0)",
+            "description": "AGN disc power-law slope"
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          }
+        ]
       },
       {
         "name": "qsogen",
@@ -2484,7 +3024,17 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen broken power-law continuum",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'qsogen'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'qsogen'}}",
+        "params": [
+          "agn_ebv_disc"
+        ],
+        "param_details": [
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          }
+        ]
       },
       {
         "name": "relagn",
@@ -2493,7 +3043,35 @@
         "status": "production",
         "citation": "Hagen & Done 2023, MNRAS, 521, 251",
         "short_doc": "RELAGN relativistic Kerr accretion disc (grid-backed)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'relagn'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'relagn'}}",
+        "params": [
+          "agn_astar",
+          "agn_ebv_disc",
+          "agn_log_mbh",
+          "agn_log_mdot"
+        ],
+        "param_details": [
+          {
+            "name": "agn_astar",
+            "default": "Uniform(0.0, 0.998)",
+            "description": "RELAGN black hole spin a* (prograde)"
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_log_mbh",
+            "default": "Uniform(6.0, 10.0)",
+            "description": "AGN black hole mass log10(M_BH/Msun)"
+          },
+          {
+            "name": "agn_log_mdot",
+            "default": "Uniform(-1.5, 0.3)",
+            "description": "RELAGN Eddington-scaled accretion rate log10(Mdot/Mdot_Edd)"
+          }
+        ]
       },
       {
         "name": "richards2006",
@@ -2502,7 +3080,17 @@
         "status": "production",
         "citation": "Richards et al. 2006, ApJ, 166, 470",
         "short_doc": "Richards et al. 2006 mean SDSS quasar composite SED",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'richards2006'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'richards2006'}}",
+        "params": [
+          "agn_ebv_disc"
+        ],
+        "param_details": [
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          }
+        ]
       },
       {
         "name": "schartmann2005",
@@ -2511,7 +3099,23 @@
         "status": "production",
         "citation": "Schartmann et al. 2005, A&A, 437, 861",
         "short_doc": "CIGALE SKIRTOR2016 Schartmann 2005 disc (disk_type=1)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005'}}",
+        "params": [
+          "agn_cigale_disk_delta",
+          "agn_ebv_disc"
+        ],
+        "param_details": [
+          {
+            "name": "agn_cigale_disk_delta",
+            "default": "Uniform(-0.5, 0.5)",
+            "description": "CIGALE skirtor2016 disc slope modulator (paper delta). For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm power-law index alpha from its nominal value by -delta (positive delta -> shallower optical slope). For 'adaf_lopez2024' block: blend weight in [0, 1] interpolating from pure ADAF (0) to pure thin disc (1)."
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          }
+        ]
       },
       {
         "name": "schartmann2005_skirtor_atten",
@@ -2520,7 +3124,47 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "Schartmann 2005 disc with SKIRTOR self-attenuation",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005_skirtor_atten'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005_skirtor_atten'}}",
+        "params": [
+          "agn_cigale_disk_delta",
+          "agn_ebv_disc",
+          "agn_oa_skirtor",
+          "agn_p_skirtor",
+          "agn_q_skirtor",
+          "agn_tau_skirtor"
+        ],
+        "param_details": [
+          {
+            "name": "agn_cigale_disk_delta",
+            "default": "Uniform(-0.5, 0.5)",
+            "description": "CIGALE skirtor2016 disc slope modulator (paper delta). For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm power-law index alpha from its nominal value by -delta (positive delta -> shallower optical slope). For 'adaf_lopez2024' block: blend weight in [0, 1] interpolating from pure ADAF (0) to pure thin disc (1)."
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_oa_skirtor",
+            "default": "Uniform(10.0, 80.0)",
+            "description": "SKIRTOR torus half-opening angle [degrees] (10-80)"
+          },
+          {
+            "name": "agn_p_skirtor",
+            "default": "Uniform(0.0, 1.5)",
+            "description": "SKIRTOR radial density power-law gradient (0-1.5)"
+          },
+          {
+            "name": "agn_q_skirtor",
+            "default": "Uniform(0.0, 1.5)",
+            "description": "SKIRTOR polar density power-law gradient (0-1.5)"
+          },
+          {
+            "name": "agn_tau_skirtor",
+            "default": "Uniform(3.0, 11.0)",
+            "description": "SKIRTOR 9.7 um optical depth (3-11)"
+          }
+        ]
       },
       {
         "name": "skirtor",
@@ -2529,7 +3173,23 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "CIGALE SKIRTOR2016 empirical disc (disk_type=0)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'skirtor'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'skirtor'}}",
+        "params": [
+          "agn_cigale_disk_delta",
+          "agn_ebv_disc"
+        ],
+        "param_details": [
+          {
+            "name": "agn_cigale_disk_delta",
+            "default": "Uniform(-0.5, 0.5)",
+            "description": "CIGALE skirtor2016 disc slope modulator (paper delta). For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm power-law index alpha from its nominal value by -delta (positive delta -> shallower optical slope). For 'adaf_lopez2024' block: blend weight in [0, 1] interpolating from pure ADAF (0) to pure thin disc (1)."
+          },
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          }
+        ]
       },
       {
         "name": "slone_netzer",
@@ -2538,7 +3198,29 @@
         "status": "production",
         "citation": "Slone & Netzer 2012, MNRAS, 426, 656",
         "short_doc": "Slone & Netzer 2012 alpha-disc library interpolation",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'slone_netzer'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'slone_netzer'}}",
+        "params": [
+          "agn_ebv_disc",
+          "agn_log_ledd",
+          "agn_log_mbh"
+        ],
+        "param_details": [
+          {
+            "name": "agn_ebv_disc",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)"
+          },
+          {
+            "name": "agn_log_ledd",
+            "default": "Uniform(-2.0, 0.5)",
+            "description": "AGN Eddington ratio log10(L/L_Edd)"
+          },
+          {
+            "name": "agn_log_mbh",
+            "default": "Uniform(6.0, 10.0)",
+            "description": "AGN black hole mass log10(M_BH/Msun)"
+          }
+        ]
       },
       {
         "name": "boroson_green",
@@ -2547,7 +3229,29 @@
         "status": "production",
         "citation": "Boroson & Green 1992, ApJS, 80, 109",
         "short_doc": "Boroson & Green 1992 FeII pseudo-continuum template",
-        "use": "SEDModel.build(..., agn={'feii': {'type': 'boroson_green'}}"
+        "use": "SEDModel.build(..., agn={'feii': {'type': 'boroson_green'}}",
+        "params": [
+          "agn_blr_cf",
+          "agn_blr_line_efficiency",
+          "agn_fe2_strength"
+        ],
+        "param_details": [
+          {
+            "name": "agn_blr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "BLR covering fraction: fraction of disc luminosity intercepted by BLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          },
+          {
+            "name": "agn_blr_line_efficiency",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "BLR line radiative efficiency: fraction of intercepted disc luminosity re-emitted as broad-line luminosity. Physical bound [0, 1]; typical values 0.05-0.15."
+          },
+          {
+            "name": "agn_fe2_strength",
+            "default": "Uniform(0.0, 2.0)",
+            "description": "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)"
+          }
+        ]
       },
       {
         "name": "grahsp",
@@ -2556,7 +3260,17 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP Bruhweiler & Verner 2008 FeII forest",
-        "use": "SEDModel.build(..., agn={'feii': {'type': 'grahsp'}}"
+        "use": "SEDModel.build(..., agn={'feii': {'type': 'grahsp'}}",
+        "params": [
+          "agn_grahsp_a_feii"
+        ],
+        "param_details": [
+          {
+            "name": "agn_grahsp_a_feii",
+            "default": "Uniform(0.0, 10.0)",
+            "description": "GRAHSP FeII forest strength relative to broad H-beta (paper AFeII). Typical 2-10."
+          }
+        ]
       },
       {
         "name": "none",
@@ -2574,7 +3288,17 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen Balmer continuum",
-        "use": "SEDModel.build(..., agn={'feii': {'type': 'qsogen_balmer'}}"
+        "use": "SEDModel.build(..., agn={'feii': {'type': 'qsogen_balmer'}}",
+        "params": [
+          "agn_bcnorm"
+        ],
+        "param_details": [
+          {
+            "name": "agn_bcnorm",
+            "default": "Uniform(0.0, 2.0)",
+            "description": "QSOgen Balmer continuum (Fe II pseudo-continuum) normalization. When > 0, adds the Fe II pseudo-continuum contribution to the emission (``qsogen_balmer`` block). Default 0.0 disables the Balmer continuum. Range [0, 2.0] empirically sensible."
+          }
+        ]
       },
       {
         "name": "analytic",
@@ -2583,7 +3307,23 @@
         "status": "production",
         "citation": "Richardson et al. 2014, MNRAS, 437, 2376",
         "short_doc": "Analytic NLR with Richardson+2014 line ratios and Gaussian broadening",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'analytic'}}"
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'analytic'}}",
+        "params": [
+          "agn_nlr_cf",
+          "agn_nlr_line_efficiency"
+        ],
+        "param_details": [
+          {
+            "name": "agn_nlr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "NLR Gaussian covering fraction: fraction of disc luminosity intercepted by NLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          },
+          {
+            "name": "agn_nlr_line_efficiency",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "NLR line radiative efficiency: fraction of intercepted disc luminosity re-emitted as emission-line luminosity. Physical bound [0, 1]; typical values 0.01-0.30."
+          }
+        ]
       },
       {
         "name": "cue",
@@ -2592,7 +3332,41 @@
         "status": "experimental",
         "citation": "Li, Y. et al. 2025, ApJ 986, 9 (arXiv:2405.04598), 'The Cue Nebular Emulator'; disc->Cue->NLR pipeline in the BEAGLE spirit (Feltre, Charlot & Gutkin 2016)",
         "short_doc": "Cue emulator AGN-ionized NLR (fast differentiable, BEAGLE-style)",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'cue'}}"
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'cue'}}",
+        "params": [
+          "agn_nlr_alpha_pl",
+          "agn_nlr_cf",
+          "agn_nlr_logU",
+          "agn_nlr_logZ",
+          "agn_nlr_logn"
+        ],
+        "param_details": [
+          {
+            "name": "agn_nlr_alpha_pl",
+            "default": "Uniform(-2.0, -1.2)",
+            "description": "AGN EUV ionizing power-law slope alpha (f_nu ~ nu^alpha) driving the Feltre+2016 NLR grid (alpha_axis)."
+          },
+          {
+            "name": "agn_nlr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "NLR Gaussian covering fraction: fraction of disc luminosity intercepted by NLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          },
+          {
+            "name": "agn_nlr_logU",
+            "default": "Uniform(-5.0, -1.0)",
+            "description": "NLR ionization parameter log10(U) (Feltre+2016 logU grid axis)."
+          },
+          {
+            "name": "agn_nlr_logZ",
+            "default": "Uniform(-4.0, -1.154901959985743)",
+            "description": "NLR gas metallicity log10(Z) absolute (Feltre+2016 logZ grid axis; default -1.8477 = solar, IAU 2015 Zsun=0.0142)."
+          },
+          {
+            "name": "agn_nlr_logn",
+            "default": "Uniform(2.0, 4.0)",
+            "description": "NLR gas density log10(n_H / cm^-3) (Feltre+2016 logn grid axis)."
+          }
+        ]
       },
       {
         "name": "feltre",
@@ -2601,7 +3375,53 @@
         "status": "experimental",
         "citation": "Feltre, Charlot & Gutkin 2016, MNRAS 456, 3354 (arXiv:1511.08217), 'Nuclear activity versus star formation: emission-line diagnostics at ultraviolet and optical wavelengths'; BEAGLE NLR parity (Vidal-Garc\u00eda et al. 2022, arXiv:2211.13648)",
         "short_doc": "Feltre+2016 CLOUDY photoionization NLR (BEAGLE parity)",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'feltre'}}"
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'feltre'}}",
+        "params": [
+          "agn_nlr_alpha_pl",
+          "agn_nlr_cf",
+          "agn_nlr_fwhm_kms",
+          "agn_nlr_logU",
+          "agn_nlr_logZ",
+          "agn_nlr_logn",
+          "agn_nlr_xi_d"
+        ],
+        "param_details": [
+          {
+            "name": "agn_nlr_alpha_pl",
+            "default": "Uniform(-2.0, -1.2)",
+            "description": "AGN EUV ionizing power-law slope alpha (f_nu ~ nu^alpha) driving the Feltre+2016 NLR grid (alpha_axis)."
+          },
+          {
+            "name": "agn_nlr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "NLR Gaussian covering fraction: fraction of disc luminosity intercepted by NLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          },
+          {
+            "name": "agn_nlr_fwhm_kms",
+            "default": "Uniform(100.0, 2000.0)",
+            "description": "NLR emission-line FWHM [km/s]. Applied as Gaussian broadening after the grid lookup; typical narrow-line widths 300-1000 km/s."
+          },
+          {
+            "name": "agn_nlr_logU",
+            "default": "Uniform(-5.0, -1.0)",
+            "description": "NLR ionization parameter log10(U) (Feltre+2016 logU grid axis)."
+          },
+          {
+            "name": "agn_nlr_logZ",
+            "default": "Uniform(-4.0, -1.154901959985743)",
+            "description": "NLR gas metallicity log10(Z) absolute (Feltre+2016 logZ grid axis; default -1.8477 = solar, IAU 2015 Zsun=0.0142)."
+          },
+          {
+            "name": "agn_nlr_logn",
+            "default": "Uniform(2.0, 4.0)",
+            "description": "NLR gas density log10(n_H / cm^-3) (Feltre+2016 logn grid axis)."
+          },
+          {
+            "name": "agn_nlr_xi_d",
+            "default": "Uniform(0.1, 0.5)",
+            "description": "NLR dust-to-metal mass ratio xi_d (Feltre+2016 xi_d grid axis)."
+          }
+        ]
       },
       {
         "name": "grahsp",
@@ -2628,7 +3448,17 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer Cloudy grid narrow-line region",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer'}}"
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer'}}",
+        "params": [
+          "agn_nlr_cf"
+        ],
+        "param_details": [
+          {
+            "name": "agn_nlr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "NLR Gaussian covering fraction: fraction of disc luminosity intercepted by NLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          }
+        ]
       },
       {
         "name": "synthesizer_spectra",
@@ -2637,7 +3467,17 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer UnifiedAGN NLR reprocessed nebular spectrum",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer_spectra'}}"
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer_spectra'}}",
+        "params": [
+          "agn_nlr_cf"
+        ],
+        "param_details": [
+          {
+            "name": "agn_nlr_cf",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "NLR Gaussian covering fraction: fraction of disc luminosity intercepted by NLR. Physical bound [0, 1]; typical values 0.05-0.2."
+          }
+        ]
       },
       {
         "name": "cat3d_wind",
@@ -2646,7 +3486,72 @@
         "status": "production",
         "citation": "H\u00f6nig & Kishimoto 2017, ApJ, 838, L20",
         "short_doc": "H\u00f6nig & Kishimoto 2017 CAT3D-wind torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'cat3d_wind'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'cat3d_wind'}}",
+        "params": [
+          "agn_a_cat3d",
+          "agn_fwd_cat3d",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_a_cat3d",
+            "default": "Uniform(-3.0, -1.5)",
+            "description": "CAT3D-Wind radial cloud-distribution power-law index (grid -3 to -1.5)"
+          },
+          {
+            "name": "agn_fwd_cat3d",
+            "default": "Uniform(1.0, 2.25)",
+            "description": "CAT3D-Wind polar-wind mass fraction (grid 1.0 to 2.25, AGNfitter rows-210+ set)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
+      },
+      {
+        "name": "cat3d_wind_lowfwd",
+        "category": "torus",
+        "kind": "agn_block",
+        "status": "production",
+        "citation": "H\u00f6nig & Kishimoto 2017, ApJ, 838, L20",
+        "short_doc": "H\u00f6nig & Kishimoto 2017 CAT3D-wind torus, low-wind-fraction reduction",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'cat3d_wind_lowfwd'}}",
+        "params": [
+          "agn_a_cat3d_lowfwd",
+          "agn_fwd_cat3d_lowfwd",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_a_cat3d_lowfwd",
+            "default": "Uniform(-3.0, -0.5)",
+            "description": "CAT3D-Wind low-fwd radial cloud-distribution power-law index (grid -3 to -0.5, AGNfitter rows 0-209 set; default = grid node -2.0)"
+          },
+          {
+            "name": "agn_fwd_cat3d_lowfwd",
+            "default": "Uniform(0.15, 0.75)",
+            "description": "CAT3D-Wind low-fwd polar-wind mass fraction (grid 0.15 to 0.75, AGNfitter rows 0-209 set; default = grid node 0.45)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       },
       {
         "name": "fritz",
@@ -2655,7 +3560,53 @@
         "status": "production",
         "citation": "Fritz et al. 2006, A&A, 470, 221",
         "short_doc": "Fritz et al. 2006 smooth-dust torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'fritz'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'fritz'}}",
+        "params": [
+          "agn_fritz_beta",
+          "agn_fritz_gamma",
+          "agn_fritz_oa",
+          "agn_fritz_psy",
+          "agn_fritz_r_ratio",
+          "agn_fritz_tau",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_fritz_beta",
+            "default": "Fixed(-0.5)",
+            "description": "Fritz2006 radial dust density power-law index (grid: -1, -0.75, -0.5, -0.25, 0)"
+          },
+          {
+            "name": "agn_fritz_gamma",
+            "default": "Fixed(4.0)",
+            "description": "Fritz2006 polar dust density gradient (grid: 0, 2, 4, 6)"
+          },
+          {
+            "name": "agn_fritz_oa",
+            "default": "Fixed(60.0)",
+            "description": "Fritz2006 torus half-opening angle [degrees], CIGALE database key (grid: 20, 40, 60)"
+          },
+          {
+            "name": "agn_fritz_psy",
+            "default": "Fixed(0.001)",
+            "description": "Fritz2006 viewing angle from torus axis [degrees]; 0=edge-on (type 2), 90=face-on (type 1) (grid: 0.001 ... 89.99)"
+          },
+          {
+            "name": "agn_fritz_r_ratio",
+            "default": "Fixed(60.0)",
+            "description": "Fritz2006 torus outer/inner radius ratio (grid: 10, 30, 60, 100, 150)"
+          },
+          {
+            "name": "agn_fritz_tau",
+            "default": "Fixed(1.0)",
+            "description": "Fritz2006 equatorial optical depth at 9.7 um (grid: 0.1, 0.3, 0.6, 1, 2, 3, 6, 10)"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       },
       {
         "name": "grahsp",
@@ -2664,7 +3615,53 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP infrared torus with Si feature",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'grahsp'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'grahsp'}}",
+        "params": [
+          "agn_grahsp_cool_lam_um",
+          "agn_grahsp_cool_width",
+          "agn_grahsp_fcov",
+          "agn_grahsp_hot_fcov",
+          "agn_grahsp_hot_lam_um",
+          "agn_grahsp_hot_width",
+          "agn_grahsp_si"
+        ],
+        "param_details": [
+          {
+            "name": "agn_grahsp_cool_lam_um",
+            "default": "Uniform(10.0, 30.0)",
+            "description": "GRAHSP cool dust peak wavelength [um] (paper COOLlam). Typical 10-30 um."
+          },
+          {
+            "name": "agn_grahsp_cool_width",
+            "default": "Uniform(0.2, 0.65)",
+            "description": "GRAHSP cool dust log-width [dex] (paper COOLwidth). Typical 0.2-0.65."
+          },
+          {
+            "name": "agn_grahsp_fcov",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "GRAHSP torus covering factor at 12 um (paper fcov). Typical 0.05-0.95; relates to Stalevski+2016 geometric f_cov."
+          },
+          {
+            "name": "agn_grahsp_hot_fcov",
+            "default": "Uniform(0.04, 10.0)",
+            "description": "GRAHSP hot/cool peak ratio in lambda*L_lambda (paper f_hot). Typical 0.04-10."
+          },
+          {
+            "name": "agn_grahsp_hot_lam_um",
+            "default": "Uniform(1.0, 5.5)",
+            "description": "GRAHSP hot dust peak wavelength [um] (paper HOTlam). Typical 1-5.5 um."
+          },
+          {
+            "name": "agn_grahsp_hot_width",
+            "default": "Uniform(0.2, 0.65)",
+            "description": "GRAHSP hot dust log-width [dex] (paper HOTwidth). Typical 0.2-0.65."
+          },
+          {
+            "name": "agn_grahsp_si",
+            "default": "Uniform(-4.0, 4.0)",
+            "description": "GRAHSP Si feature strength (paper Si). Negative=absorption, positive=emission. Typical -4 to +4."
+          }
+        ]
       },
       {
         "name": "nenkova",
@@ -2673,7 +3670,29 @@
         "status": "production",
         "citation": "Nenkova et al. 2008, ApJ, 685, 147",
         "short_doc": "Nenkova et al. 2008 CLUMPY radiative-transfer torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova'}}",
+        "params": [
+          "agn_tau",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_tau",
+            "default": "Uniform(5.0, 150.0)",
+            "description": "Nenkova+2008 CLUMPY torus equatorial optical depth (5-150)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       },
       {
         "name": "nenkova_agnfitter",
@@ -2682,7 +3701,91 @@
         "status": "production",
         "citation": "Nenkova et al. 2008, ApJ, 685, 160; Mart\u00ednez-Ram\u00edrez et al. 2024, A&A, 688, A46",
         "short_doc": "Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_1p templates)",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter'}}",
+        "params": [
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
+      },
+      {
+        "name": "nenkova_agnfitter_2p",
+        "category": "torus",
+        "kind": "agn_block",
+        "status": "production",
+        "citation": "Nenkova et al. 2008, ApJ, 685, 160; Mart\u00ednez-Ram\u00edrez et al. 2024, A&A, 688, A46",
+        "short_doc": "Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_2p templates)",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter_2p'}}",
+        "params": [
+          "agn_oa_nenkova",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_oa_nenkova",
+            "default": "Uniform(15.0, 70.0)",
+            "description": "NK0_mean_2p/3p (AGNfitter-rX) CLUMPY torus half-opening angle [degrees] (grid 15-70; default = grid node 40.0)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
+      },
+      {
+        "name": "nenkova_agnfitter_3p",
+        "category": "torus",
+        "kind": "agn_block",
+        "status": "production",
+        "citation": "Nenkova et al. 2008, ApJ, 685, 160; Mart\u00ednez-Ram\u00edrez et al. 2024, A&A, 688, A46",
+        "short_doc": "Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_3p templates)",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter_3p'}}",
+        "params": [
+          "agn_oa_nenkova",
+          "agn_theta_torus",
+          "agn_torus_frac",
+          "agn_tv_nenkova"
+        ],
+        "param_details": [
+          {
+            "name": "agn_oa_nenkova",
+            "default": "Uniform(15.0, 70.0)",
+            "description": "NK0_mean_2p/3p (AGNfitter-rX) CLUMPY torus half-opening angle [degrees] (grid 15-70; default = grid node 40.0)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          },
+          {
+            "name": "agn_tv_nenkova",
+            "default": "Uniform(10.0, 300.0)",
+            "description": "NK0_mean_3p (AGNfitter-rX) CLUMPY torus equatorial optical depth (grid 10-300; default = grid node 60.0)"
+          }
+        ]
       },
       {
         "name": "none",
@@ -2709,7 +3812,29 @@
         "status": "production",
         "citation": "Silva et al. 2004, MNRAS, 355, 973",
         "short_doc": "Silva et al. 2004 smooth torus model",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'silva04'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'silva04'}}",
+        "params": [
+          "agn_log_nh_silva",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_log_nh_silva",
+            "default": "Uniform(21.5, 24.45)",
+            "description": "Silva+04 torus log10(N_H / cm^-2) (grid 21.5 to 24.45)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       },
       {
         "name": "simple",
@@ -2718,7 +3843,29 @@
         "status": "production",
         "citation": "",
         "short_doc": "Single-temperature graybody torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'simple'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'simple'}}",
+        "params": [
+          "agn_T_torus",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_T_torus",
+            "default": "Uniform(100.0, 1500.0)",
+            "description": "AGN torus temperature (K)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       },
       {
         "name": "skirtor",
@@ -2726,8 +3873,48 @@
         "kind": "agn_block",
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
-        "short_doc": "Stalevski et al. 2016 SKIRTOR torus with polar dust",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor'}}"
+        "short_doc": "Stalevski et al. 2016 SKIRTOR torus",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor'}}",
+        "params": [
+          "agn_oa_skirtor",
+          "agn_p_skirtor",
+          "agn_q_skirtor",
+          "agn_radius_ratio",
+          "agn_tau_skirtor",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_oa_skirtor",
+            "default": "Uniform(10.0, 80.0)",
+            "description": "SKIRTOR torus half-opening angle [degrees] (10-80)"
+          },
+          {
+            "name": "agn_p_skirtor",
+            "default": "Uniform(0.0, 1.5)",
+            "description": "SKIRTOR radial density power-law gradient (0-1.5)"
+          },
+          {
+            "name": "agn_q_skirtor",
+            "default": "Uniform(0.0, 1.5)",
+            "description": "SKIRTOR polar density power-law gradient (0-1.5)"
+          },
+          {
+            "name": "agn_radius_ratio",
+            "default": "Uniform(10.0, 30.0)",
+            "description": "SKIRTOR torus outer/inner radius ratio R (grid: 10, 20, 30)"
+          },
+          {
+            "name": "agn_tau_skirtor",
+            "default": "Uniform(3.0, 11.0)",
+            "description": "SKIRTOR 9.7 um optical depth (3-11)"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       },
       {
         "name": "skirtor_agnfitter",
@@ -2736,7 +3923,109 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "Stalevski et al. 2016 SKIRTOR_mean_3p AGNfitter-rX torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter'}}",
+        "params": [
+          "agn_incl_skirtor",
+          "agn_oa_skirtor",
+          "agn_theta_torus",
+          "agn_torus_frac",
+          "agn_tv_skirtor"
+        ],
+        "param_details": [
+          {
+            "name": "agn_incl_skirtor",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)"
+          },
+          {
+            "name": "agn_oa_skirtor",
+            "default": "Uniform(10.0, 80.0)",
+            "description": "SKIRTOR torus half-opening angle [degrees] (10-80)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          },
+          {
+            "name": "agn_tv_skirtor",
+            "default": "Uniform(3.0, 11.0)",
+            "description": "SKIRTOR_mean_3p equatorial optical depth tau_V (grid 3-11)"
+          }
+        ]
+      },
+      {
+        "name": "skirtor_agnfitter_1p",
+        "category": "torus",
+        "kind": "agn_block",
+        "status": "production",
+        "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
+        "short_doc": "Stalevski et al. 2016 SKIRTOR_mean_1p AGNfitter-rX torus",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter_1p'}}",
+        "params": [
+          "agn_incl_skirtor",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_incl_skirtor",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
+      },
+      {
+        "name": "skirtor_agnfitter_2p",
+        "category": "torus",
+        "kind": "agn_block",
+        "status": "production",
+        "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
+        "short_doc": "Stalevski et al. 2016 SKIRTOR_mean_2p AGNfitter-rX torus",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter_2p'}}",
+        "params": [
+          "agn_incl_skirtor",
+          "agn_oa_skirtor",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_incl_skirtor",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)"
+          },
+          {
+            "name": "agn_oa_skirtor",
+            "default": "Uniform(10.0, 80.0)",
+            "description": "SKIRTOR torus half-opening angle [degrees] (10-80)"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       },
       {
         "name": "two_temperature",
@@ -2745,7 +4034,41 @@
         "status": "production",
         "citation": "",
         "short_doc": "Two-temperature (hot + warm) graybody torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'two_temperature'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'two_temperature'}}",
+        "params": [
+          "agn_T_hot",
+          "agn_T_warm",
+          "agn_frac_hot",
+          "agn_theta_torus",
+          "agn_torus_frac"
+        ],
+        "param_details": [
+          {
+            "name": "agn_T_hot",
+            "default": "Uniform(800.0, 1500.0)",
+            "description": "Two-temperature torus: hot dust component temperature [K]"
+          },
+          {
+            "name": "agn_T_warm",
+            "default": "Uniform(150.0, 500.0)",
+            "description": "Two-temperature torus: warm dust component temperature [K]"
+          },
+          {
+            "name": "agn_frac_hot",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "Two-temperature torus: hot-to-warm dust luminosity fraction [0, 1]"
+          },
+          {
+            "name": "agn_theta_torus",
+            "default": "Uniform(0.0, 90.0)",
+            "description": "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination"
+          },
+          {
+            "name": "agn_torus_frac",
+            "default": "Uniform(0.0, 1.0)",
+            "description": "AGN torus covering factor: L_AGN / L_total in a configurable band (CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg of seven composable torus blocks (fritz, nenkova, cat3d_wind, two_temperature, simple, skirtor_agnfitter, ...) and, since R17, SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, which is the AGN share of the dust *IR* specifically (#1296). ``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for this exact same quantity -- the description above previously called THIS name deprecated in ITS favor, backwards) is retired: nest under ``agn={'torus': {'torus_frac': ...}}``."
+          }
+        ]
       }
     ],
     "radio_models": [
@@ -3386,6 +4709,15 @@
         "band": "z_filter",
         "alias": "des_z",
         "use": "Photometry.from_names([\"CTIO_DECam_z_filter\"])"
+      },
+      {
+        "name": "CTIO_MosaicII_U",
+        "kind": "filter",
+        "survey": "CTIO",
+        "instrument": "MosaicII",
+        "band": "U",
+        "alias": "ctio_u",
+        "use": "Photometry.from_names([\"CTIO_MosaicII_U\"])"
       },
       {
         "name": "Euclid_NISP_H",
@@ -5926,6 +7258,15 @@
         "use": "Photometry.from_names([\"Paranal_HAWKI_NB2090\"])"
       },
       {
+        "name": "Paranal_VIMOS_U",
+        "kind": "filter",
+        "survey": "Paranal",
+        "instrument": "VIMOS",
+        "band": "U",
+        "alias": "vimos_u",
+        "use": "Photometry.from_names([\"Paranal_VIMOS_U\"])"
+      },
+      {
         "name": "Paranal_VISTA_H",
         "kind": "filter",
         "survey": "Paranal",
@@ -6962,6 +8303,17 @@
         "use": "fitter.run(\"mcmc_nuts\")"
       },
       {
+        "name": "mcmc_nuts_fast",
+        "kind": "inference_method",
+        "tier": "primary",
+        "short_doc": "NUTS at the 20 s photometry recipe: 4 chains x (150 warmup + 300 draws), no burn-in, target 0.8; mass profiled, dense metric, pmapped chains by default",
+        "requires": [
+          "blackjax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"mcmc_nuts_fast\")"
+      },
+      {
         "name": "mcmc_raytrace",
         "kind": "inference_method",
         "tier": "primary",
@@ -6969,6 +8321,15 @@
         "requires": [],
         "status": "ok",
         "use": "fitter.run(\"mcmc_raytrace\")"
+      },
+      {
+        "name": "nss",
+        "kind": "inference_method",
+        "tier": "primary",
+        "short_doc": "Vectorized nested sampling: returns Bayesian evidence (log Z) and posterior samples. Efficient sampler suitable for model comparison and point estimate inference.",
+        "requires": [],
+        "status": "ok",
+        "use": "fitter.run(\"nss\")"
       },
       {
         "name": "vi",
@@ -7015,6 +8376,28 @@
         "use": "fitter.run(\"mcmc_adjusted_mclmc\")"
       },
       {
+        "name": "mcmc_barker",
+        "kind": "inference_method",
+        "tier": "experimental",
+        "short_doc": "Barker-proposal MCMC: one gradient per step, no trajectory, no tree, and no branch anywhere in the compiled program -- two fixed-length lax.scan calls. Its published claim is robustness to a step size that is wrong for one direction's scale, which is this posterior's shape. Metric from precondition=, never estimated. Measured against its own MALA control in bench/reports/2026-08-31_blackjax_sampler_survey.md.",
+        "requires": [
+          "blackjax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"mcmc_barker\")"
+      },
+      {
+        "name": "mcmc_chees",
+        "kind": "inference_method",
+        "tier": "experimental",
+        "short_doc": "ChEES-HMC: one trajectory length learned from cross-chain statistics, so every chain still takes the same number of leapfrogs (lock-step preserved) while L comes from the posterior rather than from a hand-set constant. Metropolis-corrected dynamic HMC underneath, with the metric supplied analytically (precondition=) rather than estimated from the ensemble. Measured six seeds x four posteriors in bench/reports/2026-08-30_chees_hmc.md.",
+        "requires": [
+          "blackjax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"mcmc_chees\")"
+      },
+      {
         "name": "mcmc_dynamic_hmc",
         "kind": "inference_method",
         "tier": "experimental",
@@ -7037,13 +8420,60 @@
         "use": "fitter.run(\"mcmc_ess\")"
       },
       {
-        "name": "nss",
+        "name": "mcmc_hmc_lowrank",
         "kind": "inference_method",
         "tier": "experimental",
-        "short_doc": "Nested sampling, slow (cold ~240s at D=6, timeout >600s at D=7); use for evidence/model comparison, not point estimates",
-        "requires": [],
+        "short_doc": "Fixed-L HMC whose mass matrix is a rank-k correction to a diagonal, fitted from warmup draws AND gradients by Fisher divergence. The middle term preconditioning.py's docstring says is missing between a diagonal that cannot cover cond 1e5 and a dense one that is noisy and memory-hungry. Sampling kernel and compile cost identical to mcmc_hmc, so a head-to-head isolates the mass matrix.",
+        "requires": [
+          "blackjax"
+        ],
         "status": "ok",
-        "use": "fitter.run(\"nss\")"
+        "use": "fitter.run(\"mcmc_hmc_lowrank\")"
+      },
+      {
+        "name": "mcmc_mala",
+        "kind": "inference_method",
+        "tier": "experimental",
+        "short_doc": "MALA. Exists as the CONTROL for mcmc_barker -- same code path, same step-size-only dual averaging, same identity mass matrix, differing in the proposal alone -- so Barker's robustness claim is testable rather than asserted. Registered rather than hidden behind an edit because an ablation reachable only from source is one nobody re-runs.",
+        "requires": [
+          "blackjax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"mcmc_mala\")"
+      },
+      {
+        "name": "mcmc_smc",
+        "kind": "inference_method",
+        "tier": "experimental",
+        "short_doc": "Tempered Sequential Monte Carlo: a particle population annealed from the exact standardized N(0, I) prior to the posterior, so it never starts at the MAP and cannot inherit its basin. Every particle takes the same fixed-length inner-HMC moves at every rung, so a rung is lock-step with no ragged control flow -- but under the adaptive schedule the RUNG COUNT is data-dependent, so the raggedness moves out to the tempering while_loop rather than disappearing (pass fixed_ladder= for the fully lock-step arm). log Z comes free with the weights. NOTE: a resampled particle population is exchangeable, so the autocorrelation ESS is not a convergence count for this backend -- read min_ancestor_ess and the split R-hat across independent populations. Measured in bench/reports/2026-08-31_smc_evaluation.md.",
+        "requires": [
+          "blackjax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"mcmc_smc\")"
+      },
+      {
+        "name": "pathfinder",
+        "kind": "inference_method",
+        "tier": "experimental",
+        "short_doc": "[NARROW ERROR BARS] Pathfinder reports uncertainties up to 9x too small on a degenerate direction, silently, while looking healthy on every other parameter of the same fit: measured against a converged NUTS reference on D=8 DPL photometry, its marginal widths are 0.11-0.21x on the four degenerate SFH-shape parameters and 0.79-1.07x on the four well-constrained ones. Treat a Pathfinder error bar as a lower bound. The covariance is blackjax's lbfgs_inverse_hessian_formula_1, diag(alpha) + beta @ gamma @ beta.T: a diagonal plus a correction whose rank is however many L-BFGS steps actually ran -- but the cause is NOT the rank. Read out of a real fit, beta comes back FULL rank (8 of 8 at D=8) and 58% of the covariance's norm is off-diagonal, so the Gaussian is genuinely correlated. The cause is the ACCURACY of the quasi-Newton curvature estimate: its condition number is 8.7e3 against the analytic metric's 3.53e4 at the same point, 4x too isotropic. The clinching comparison is laplace, which fits the same family at the same expansion point with the EXACT Hessian and recovers widths at 0.94-1.05x on this fixture -- so neither the Gaussian family nor the MAP expansion point is at fault, only the estimate. Dropping the MAP seed, which blackjax's own page advises, makes it worse on 8 of 8 parameters (median 0.48 -> 0.16), so MAP seeding stays. precondition=True roughly halves the collapse (worst 0.11 -> 0.21) and does not cure it. There is also no R-hat and no divergence count to catch it, and the hierarchical seam OOM-kills it at D=18. What it is good for: a fast approximate CENTER (means within z ~ 1-11 of the same reference) and a NUTS warm start. Left tier='broken' 2026-05-22 to 2026-08-31 under 'segfaults on DPL/dense_basis photometry mocks' (#231) -- a label the harness inferred from 'child died without writing JSON' without ever reading the child's return code; re-measured on that same model family it completes on every run, including at the uncapped 200 ELBO draws that were the pre-2026-07 default. Both real defects were fixed weeks later in PRs about other things (blackjax >= 1.4 API drift, 4c1002ae7; uncapped ELBO draws at 26 GB, 8807c838d). See bench/reports/2026-08-31_vi_speed_evaluation.md.",
+        "requires": [
+          "blackjax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"pathfinder\")"
+      },
+      {
+        "name": "vi_fullrank",
+        "kind": "inference_method",
+        "tier": "experimental",
+        "short_doc": "Full-rank Gaussian VI (BlackJAX fullrank_vi): SGD on the ELBO over a Cholesky factor, so the fitted Gaussian CAN carry the age/dust/met tilt that mean-field cannot. A fixed-length scan, no ragged control flow, so the graph is small. It does not under-disperse -- at 2000 steps on D=8 DPL photometry it went UNSTABLE, returning sfh_dpl_log_total_mass as 10.37 +- 1.61 against a converged NUTS reference's 11.96 +- 0.036: the stellar mass wrong by 1.6 dex with an error bar 45x too wide, and no diagnostic in the family can report it. precondition=True is what makes it behave (worst width ratio 45x -> 1.67x) and is effectively required. Check elbo_history and the width ratios in bench/reports/2026-08-31_vi_speed_evaluation.md before quoting anything from it.",
+        "requires": [
+          "blackjax",
+          "optax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"vi_fullrank\")"
       },
       {
         "name": "vi_linear",
@@ -7066,6 +8496,18 @@
         ],
         "status": "ok",
         "use": "fitter.run(\"vi_linear_fast\")"
+      },
+      {
+        "name": "vi_meanfield",
+        "kind": "inference_method",
+        "tier": "experimental",
+        "short_doc": "Mean-field Gaussian VI (BlackJAX meanfield_vi): a DIAGONAL Gaussian, which on a posterior whose defining feature is a tilted degeneracy (cond 1e5-1e8) reports conditional widths rather than marginal ones. Measured against a converged NUTS reference on D=8 DPL photometry, its marginals are 0.07-0.62x the reference's, median 0.24x -- error bars 4x too narrow typically and 14x at worst. That is structural, not a tuning failure, and preconditioning does not fix it (median 0.21x). The cheapest member of the family and the least able to be right about an uncertainty; 'laplace' costs about the same and recovers widths to within 6%. See bench/reports/2026-08-31_vi_speed_evaluation.md.",
+        "requires": [
+          "blackjax",
+          "optax"
+        ],
+        "status": "ok",
+        "use": "fitter.run(\"vi_meanfield\")"
       }
     ]
   }

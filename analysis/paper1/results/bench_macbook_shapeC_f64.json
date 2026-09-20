@@ -1,0 +1,99 @@
+{
+  "shape": "C",
+  "device": "cpu",
+  "precision": "f64",
+  "approx": "wave_precomp",
+  "obs": "photometry",
+  "n_wave": null,
+  "build_s": 0.751,
+  "ssp_dtype": "float64",
+  "n_free": 7,
+  "env": {
+    "platform": "cpu",
+    "device": "cpu:0",
+    "n_devices": 1,
+    "jax": "0.10.0",
+    "x64": true,
+    "default_dtype": "float64",
+    "precision": "f64"
+  },
+  "sweep": [
+    {
+      "n": 1,
+      "out_dtype": "float64",
+      "forward_compile_ms": 1101.06,
+      "forward_us": 100.633,
+      "forward_us_per_gal": 100.633,
+      "forward_aa": 1.472,
+      "grad_us": 214.446,
+      "grad_us_per_gal": 214.446,
+      "grad_aa": 1.197,
+      "vram": null
+    },
+    {
+      "n": 8,
+      "out_dtype": "float64",
+      "forward_compile_ms": 395.17,
+      "forward_us": 340.763,
+      "forward_us_per_gal": 42.5954,
+      "forward_aa": 1.139,
+      "grad_us": 961.563,
+      "grad_us_per_gal": 120.1954,
+      "grad_aa": 1.063,
+      "vram": null
+    },
+    {
+      "n": 32,
+      "out_dtype": "float64",
+      "forward_compile_ms": 372.7,
+      "forward_us": 829.975,
+      "forward_us_per_gal": 25.9367,
+      "forward_aa": 1.183,
+      "grad_us": 1867.225,
+      "grad_us_per_gal": 58.3508,
+      "grad_aa": 1.075,
+      "vram": null
+    },
+    {
+      "n": 128,
+      "out_dtype": "float64",
+      "forward_compile_ms": 429.26,
+      "forward_us": 1651.079,
+      "forward_us_per_gal": 12.8991,
+      "forward_aa": 1.059,
+      "grad_us": 4799.596,
+      "grad_us_per_gal": 37.4968,
+      "grad_aa": 1.027,
+      "vram": null
+    },
+    {
+      "n": 512,
+      "out_dtype": "float64",
+      "forward_compile_ms": 483.07,
+      "forward_us": 5578.017,
+      "forward_us_per_gal": 10.8946,
+      "forward_aa": 1.361,
+      "grad_us": 19734.379,
+      "grad_us_per_gal": 38.5437,
+      "grad_aa": 1.041,
+      "vram": null
+    },
+    {
+      "n": 2048,
+      "out_dtype": "float64",
+      "forward_compile_ms": 444.61,
+      "forward_us": 28089.604,
+      "forward_us_per_gal": 13.7156,
+      "forward_aa": 1.063,
+      "grad_us": 113466.8,
+      "grad_us_per_gal": 55.4037,
+      "grad_aa": 1.036,
+      "vram": null
+    }
+  ],
+  "env_after": {
+    "x64": true
+  },
+  "_machine": "MacBook (Apple Silicon), JAX_PLATFORMS=cpu",
+  "_measured": "2026-09-20"
+}
