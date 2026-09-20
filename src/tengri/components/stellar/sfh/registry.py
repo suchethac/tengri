@@ -86,14 +86,20 @@ from tengri.components.stellar.sfh.nonparametric import (
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
-from tengri.utils.cosmology import age_at_z0
+
 
 # Age of the universe today [Gyr], from the default cosmology: never a
 # literal. Used as the prior upper bound and default for the dpl/lnorm
 # formation anchors ``sfh_*_age_gyr`` (cosmic time available for star
 # formation = lookback of formation at the Big Bang). Per-fit, users
 # override this with ``cosmology.age_at_z(z)`` at the source redshift.
-_AGE_UNIV_GYR = round(float(age_at_z0()), 3)
+@functools.cache
+def _age_univ_gyr() -> float:
+    """Return the age of the universe today [Gyr] from the default cosmology."""
+    from tengri.utils.cosmology import age_at_z0
+
+    return round(float(age_at_z0()), 3)
+
 
 # ── Data structures ───────────────────────────────────────────────
 
@@ -610,7 +616,7 @@ _lnorm_spec = SFHModelSpec(
             "set to age_of_universe(z) for BAGPIPES direction",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+            Uniform(0.5, 13.81, default=13.81),  # Age from _age_univ_gyr(), deferred
         ),
     },
     settings={},
@@ -655,7 +661,7 @@ _register(
                 "set to age_of_universe(z) for BAGPIPES parity",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                Uniform(0.5, 13.81, default=13.81),  # Age from _age_univ_gyr(), deferred
             ),
             "sfh_dpl_log_total_mass": ParamDef(
                 "log10 total stellar mass formed [Msun]",
@@ -715,7 +721,7 @@ _register(
                 "set to age_of_universe(z) for a galaxy forming at the Big Bang",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                Uniform(0.5, 13.81, default=13.81),  # Age from _age_univ_gyr(), deferred
             ),
             "sfh_dpl_lookback_end_gyr": ParamDef(
                 "Younger truncation lookback time (Gyr) "
@@ -777,7 +783,7 @@ _register(
                 # 0), AND Parameters._validate_orderings requires this
                 # parameter's floor to exceed sfh_const_end_gyr's Fixed(0.0)
                 # ceiling (g_lo > l_hi) -- so lo must be strictly positive.
-                # Upper bound is today's cosmic age (_AGE_UNIV_GYR);
+                # Upper bound is today's cosmic age (13.81 Gyr from _age_univ_gyr());
                 # parameters/groups.py's _narrow_free_priors_to_z narrows it to
                 # age_at_z(z) at parse time whenever the build's redshift floor
                 # is knowable -- same mechanism and rationale as
@@ -785,14 +791,13 @@ _register(
                 #
                 # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
                 # generic numerical safety ceiling reused from the lookback-time
-                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (13.81 Gyr, the
-                # actual age of the universe today), so it cannot double as this
-                # free_prior's default without violating its own bounds.
-                # _AGE_UNIV_GYR is used instead, following the same
-                # "default = ceiling" convention already used on
+                # clip in mean_sfh.py) sits ABOVE 13.81 Gyr (the actual age of the
+                # universe today), so it cannot double as this free_prior's default
+                # without violating its own bounds. 13.81 Gyr is used instead,
+                # following the same "default = ceiling" convention already used on
                 # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
                 # above.
-                Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                Uniform(0.01, 13.81, default=13.81),  # Age from _age_univ_gyr(), deferred
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
@@ -852,7 +857,7 @@ _register(
             # too (see their own entries below/above).
             #
             # The static declaration below uses today's cosmic age
-            # (``_AGE_UNIV_GYR``, z=0) as the ceiling -- the widest value that
+            # (13.81 Gyr from _age_univ_gyr(), z=0) as the ceiling -- the widest value that
             # is ever correct, since a declaration cannot know the source
             # redshift. ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
             # then narrows it to ``age_at_z(z)`` at parse time whenever the
@@ -871,7 +876,7 @@ _register(
                 _lo_nonneg,
                 "must have lo >= 0",
                 Fixed(0.0),
-                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
+                Uniform(0.0, 13.81, default=0.0),  # Age ceiling from _age_univ_gyr(), deferred
             ),
         },
         settings={},
@@ -911,7 +916,7 @@ _register(
                 _lo_nonneg,
                 "must have lo >= 0",
                 Fixed(0.0),
-                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
+                Uniform(0.0, 13.81, default=0.0),  # Age ceiling from _age_univ_gyr(), deferred
             ),
         },
         settings={},

@@ -2,6 +2,18 @@
 
 ### Fixed
 
+- Bare `import tengri` now succeeds on float64-less backends (jax-mps, MLX) by
+  deferring DSPS module imports until first use (#2276, #2271): DSPS modules
+  allocate float64 device buffers at module import time, causing a hard failure
+  on backends lacking float64 support. Two mechanisms defer these imports: (1)
+  all `from dsps.*` statements in `utils/cosmology.py` are now function-local,
+  deferred until the function is first called; (2) the age-of-universe constant
+  used in the SFH registry parameter definitions is now cached on first use via
+  `@functools.cache(_age_univ_gyr())` instead of module-scope evaluation. The
+  first use of a DSPS path still fails loudly on float64-less backends (the
+  expected behavior for unsupported operations), and no compatibility is altered
+  for code paths that do use DSPS.
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
