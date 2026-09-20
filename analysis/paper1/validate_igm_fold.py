@@ -21,11 +21,24 @@ What to expect if the exact fold is correct:
   <S><T> where the flux needs <S.T> -- while the exact fold's error stays at
   the quadrature floor, because the step is resolved by the integrand rather
   than sampled at a point.
-* The exact fold should never be *worse* than the node fold in any band at any
-  redshift. One that is has almost certainly evaluated the transmission in the
-  wrong frame: T_IGM takes observed-frame wavelength, so the rest-frame SSP
-  grid needs a (1+z) before the lookup, and omitting it produces a plausible
-  but wrong answer that still varies with redshift.
+* On the BARE-STELLAR control the exact fold must reproduce the exact
+  integrator to the quadrature floor. One that does not has almost certainly
+  evaluated the transmission in the wrong frame: T_IGM takes observed-frame
+  wavelength, so the rest-frame SSP grid needs a (1+z) before the lookup, and
+  omitting it produces a plausible but wrong answer that still varies with
+  redshift.
+
+What this script must NOT conclude, and once did. In a model carrying dust and
+nebular emission, BOTH folds inherit the sub-band quadrature's error on those
+spectral shapes -- a term that is not about the IGM at all and that can exceed
+the IGM error itself. The node fold's own IGM error oscillates in sign as the
+break sweeps a band, so wherever it crosses zero the two errors partially
+cancel and the node fold's *absolute* error can be the smaller one. Measured at
+z=1.0 in galex_nuv: node -0.398%, exact -0.693% in the full model, which reads
+as the exact fold losing; strip dust and nebular and it is node +0.365% against
+exact +0.0000%. Ranking the folds by absolute error in a rich model therefore
+measures a sign coincidence. The rich-model table is kept because it reports
+the magnitudes a real fit sees, but the pass/fail gate is the control.
 
 Usage::
 
@@ -61,11 +74,37 @@ PROBE_FILTERS = [
 #: FUV" to "break through FUV entirely".
 PROBE_REDSHIFTS = [0.05, 0.5, 0.8, 1.0, 1.5, 2.0, 3.0]
 
+#: Largest |error| the exact fold may show on the bare-stellar control, in
+#: percent. Measured at 0.0000% across z=0.8-1.5 on a single band, so this is
+#: three orders of headroom over what a correct fold produces, and still far
+#: below the node fold's 0.3-0.4% at the same redshifts.
+EXACT_FOLD_TOLERANCE_PCT = 0.01
+
 SSP_GRID = "fsps_mist_c3k_a_chabrier"
 
 
-def build(ssp, obs, z, approx):
-    """One model, identical in every respect but the approximation path."""
+def build(ssp, obs, z, approx, *, bare=False):
+    """One model, identical in every respect but the approximation path.
+
+    ``bare=True`` drops dust and nebular emission. That arm is the only one
+    that isolates the IGM: see :func:`igm_attributable_error`.
+    """
+    if bare:
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "tau_gyr": Fixed(2.0),
+                "age_gyr": Fixed(3.0),
+                "log_total_mass": Fixed(10.0),
+                "met_logzsol": Fixed(0.0),
+            },
+            redshift=Fixed(z),
+            igm={"type": "inoue"},
+            approx=approx,
+        )
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
@@ -116,10 +155,13 @@ def main(argv=None) -> int:
     redshifts = (
         [float(x) for x in args.redshifts.split(",")] if args.redshifts else PROBE_REDSHIFTS
     )
-    print(f"{'z':>5}  {'band':<10} {'node err %':>11} {'exact err %':>12}  verdict")
-    print("-" * 62)
+    print(
+        f"{'z':>5}  {'band':<10} {'node err %':>11} {'exact err %':>12}"
+        f" {'IGM part %':>11}  verdict"
+    )
+    print("-" * 78)
 
-    worse_at = []
+    cancelled_at = []
     for z in redshifts:
         ref_model = build(ssp, obs, z, None)
         params = ref_model.spec.sample(key=jax.random.PRNGKey(0))
@@ -139,22 +181,80 @@ def main(argv=None) -> int:
         for i, band in enumerate(PROBE_FILTERS):
             if reference[i] <= 0:
                 continue
-            e_node = 100.0 * abs(got["node"][i] - reference[i]) / reference[i]
-            e_exact = 100.0 * abs(got["exact"][i] - reference[i]) / reference[i]
+            # SIGNED, not absolute. The node fold's error oscillates in sign as
+            # the break sweeps a band, and an absolute value hides the zero
+            # crossings -- which is what made an earlier version of this script
+            # report a defect that was not one. See the module docstring.
+            e_node = 100.0 * (got["node"][i] - reference[i]) / reference[i]
+            e_exact = 100.0 * (got["exact"][i] - reference[i]) / reference[i]
+            # The IGM-attributable part of the node fold's error. Both folds
+            # carry the same sub-band quadrature error on the dust and nebular
+            # shapes; it cancels in the difference, leaving the term that is
+            # actually about the IGM.
+            e_igm = e_node - e_exact
             verdict = "ok"
-            # The exact fold must never be worse than the node fold by more
-            # than quadrature noise. Worse means a real defect, most likely a
-            # frame error on T_IGM.
-            if e_exact > e_node + 1e-6 and e_exact > 1e-4:
-                verdict = "EXACT WORSE"
-                worse_at.append((z, band, e_node, e_exact))
-            print(f"{z:>5.2f}  {band:<10} {e_node:>10.4f}% {e_exact:>11.4f}%  {verdict}")
+            if abs(e_exact) > abs(e_node) + 1e-6 and abs(e_exact) > 1e-4:
+                verdict = "node smaller (cancellation)"
+                cancelled_at.append((z, band, e_node, e_exact))
+            print(
+                f"{z:>5.2f}  {band:<10} {e_node:>+10.4f}% {e_exact:>+11.4f}%"
+                f" {e_igm:>+10.4f}%  {verdict}"
+            )
         print()
 
-    if worse_at:
-        print("FAIL: the exact fold is worse than the node fold somewhere:")
-        for z, band, en, ee in worse_at:
-            print(f"  z={z} {band}: node {en:.4f}% vs exact {ee:.4f}%")
+    # THE GATE. Everything above is a rich model, in which both folds carry the
+    # same sub-band quadrature error on the dust and nebular shapes -- a term
+    # that has nothing to do with the IGM and can be larger than the IGM error
+    # itself. Comparing the two folds' absolute errors there measures that
+    # shared term plus a sign coincidence, not correctness.
+    #
+    # Stripping dust and nebular emission removes the confounder: in a bare
+    # stellar model the ONLY approximation left between the two folds is how
+    # transmission enters the sub-band average, so an exact fold that is truly
+    # exact must reproduce the exact integrator to the quadrature floor. That is
+    # a claim with no cancellation mode, and it is the one worth failing on.
+    print("=" * 78)
+    print("CONTROL: bare stellar (no dust, no nebular) -- the IGM is the only")
+    print("approximation left, so the exact fold must read ~0 here.")
+    print(f"{'z':>5}  {'band':<10} {'node err %':>11} {'exact err %':>12}  verdict")
+    print("-" * 62)
+
+    failures = []
+    for z in redshifts:
+        ref_model = build(ssp, obs, z, None, bare=True)
+        params = ref_model.spec.sample(key=jax.random.PRNGKey(0))
+        reference = np.asarray(ref_model.predict_photometry(params))
+        got = {}
+        for label, value in ((args.node_value, "node"), (args.exact_value, "exact")):
+            model = build(ssp, obs, z, WavePrecomp(**{args.flag: label}), bare=True)
+            got[value] = np.asarray(model.predict_photometry(params))
+
+        for i, band in enumerate(PROBE_FILTERS):
+            if reference[i] <= 0:
+                continue
+            e_node = 100.0 * (got["node"][i] - reference[i]) / reference[i]
+            e_exact = 100.0 * (got["exact"][i] - reference[i]) / reference[i]
+            verdict = "ok"
+            if abs(e_exact) > EXACT_FOLD_TOLERANCE_PCT:
+                verdict = "FAIL"
+                failures.append((z, band, e_node, e_exact))
+            print(f"{z:>5.2f}  {band:<10} {e_node:>+10.4f}% {e_exact:>+11.4f}%  {verdict}")
+        print()
+
+    if cancelled_at:
+        print(
+            f"note: in {len(cancelled_at)} rich-model cell(s) the node fold's "
+            "absolute error was the smaller one. That is not evidence against "
+            "the exact fold: the node fold's error oscillates in sign, so where "
+            "it crosses zero it can sit closer to the reference than a fold "
+            "carrying only the shared quadrature term. Judge on the control."
+        )
+
+    if failures:
+        print("\nFAIL: the exact fold departs from the exact integrator with no")
+        print("dust or nebular emission present, where nothing else can explain it:")
+        for z, band, en, ee in failures:
+            print(f"  z={z} {band}: exact {ee:+.4f}% (node {en:+.4f}%)")
         print(
             "\nCheck the frame first: T_IGM takes OBSERVED-frame wavelength, so a "
             "rest-frame SSP grid needs lambda*(1+z) before the lookup. Omitting "
@@ -163,7 +263,8 @@ def main(argv=None) -> int:
         )
         return 1
 
-    print("[ok] the exact fold is nowhere worse than the node fold")
+    print("[ok] the exact fold reproduces the exact integrator on the bare-stellar")
+    print("     control at every probed redshift; the IGM fold is correct.")
     return 0
 
 
