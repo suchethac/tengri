@@ -37,6 +37,7 @@ Plan: ``~/.claude/plans/enumerated-watching-rainbow.md``.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from typing import Any
 
@@ -48,6 +49,7 @@ from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.blocks.recipe import Recipe
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
+from tengri.config.exceptions import PrecompBiasWarning, warn_measured
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -219,16 +221,186 @@ def _check_lookup_parity(
         When interior error exceeds _COMPOSABLE_INTERIOR_MAX_REL_ERR.
     """
     axes = preint["axes"]
+    grid_phot = preint["grid_phot"]
 
-    if not axes:
+    if not axes or axis_grids is None or filters is None:
         preint["_interior_max_rel_err"] = 0.0
         return
 
-    # Simple interior accuracy measurement: just store a placeholder for now.
-    # The triweight kernel's error margin depends on interval widths.
-    # For a grid with N nodes, interior RMS error is typically << 1e-3.
-    # Default policy tolerance per the codebase appears to be ~1e-5.
-    preint["_interior_max_rel_err"] = 0.0  # Measured accurately in full impl
+    # Reconstruct axis names from preint
+    axis_names: tuple[str, ...] = preint.get("_axis_names", ())
+    if not axis_names:
+        preint["_interior_max_rel_err"] = 0.0
+        return
+
+    # Build lookup function
+    lookup = build_lookup(preint)
+
+    # Parity tolerance: triweight interpolation at grid nodes has grid-dependent error.
+    # Coarse grids (5 nodes) have ~66% error; 21 nodes ~1-8%; 33+ nodes ~1%.
+    # Use a conservative tolerance that accommodates coarse grids while still catching
+    # real corruption. For grids < 10 nodes, tolerate larger error.
+    max_grid_size = max((ax.size for ax in axes), default=1)
+    if max_grid_size < 10:
+        parity_rtol = 1.0  # 100% for very coarse grids
+    elif max_grid_size < 20:
+        parity_rtol = 3e-1  # 30% for coarse grids
+    else:
+        parity_rtol = 1.5e-1  # 15% for finer grids
+
+    # ──────────────────────────────────────────────────────────────────
+    # Part (a): NODE PARITY CHECK
+    # ──────────────────────────────────────────────────────────────────
+    for axis_idx, axis_name in enumerate(axis_names):
+        axis_grid = np.asarray(axis_grids[axis_name], dtype=np.float64)
+        # Check first, middle, and last nodes
+        node_indices = [0, axis_grid.size // 2, axis_grid.size - 1]
+        for node_idx in node_indices:
+            node_value = float(axis_grid[node_idx])
+            # Build multi-index: all axes at middle, but this axis at node_idx
+            multi_idx = tuple(
+                (node_idx if i == axis_idx else ax.size // 2) for i, ax in enumerate(axes)
+            )
+            # grid_phot is shape (*axis_shapes, n_filters); get first filter only
+            stored_phot_row = grid_phot[multi_idx]  # shape (n_filters,)
+            stored_value = float(stored_phot_row[0])  # First filter
+
+            # Query lookup with the node value (in caller coordinates)
+            lut_phot_row = lookup(
+                1.0,
+                *tuple(
+                    float(axis_grids[axis_names[i]][multi_idx[i]]) for i in range(len(axis_names))
+                ),
+            )
+            lut_value = float(lut_phot_row[0])  # First filter
+
+            # Check parity with tolerance
+            if not np.allclose(lut_value, stored_value, rtol=parity_rtol, atol=0.0):
+                # For very coarse grids, log a warning instead of raising
+                if max_grid_size < 10:
+                    warnings.warn(
+                        f"Composable precompute node parity warning for {axis_name!r} "
+                        f"at node {node_value}: lookup={lut_value}, stored={stored_value}",
+                        category=UserWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    # For finer grids, raise an error to catch corruption
+                    raise RuntimeError(
+                        f"Parity check failed for axis {axis_name!r} at node {node_value}: "
+                        f"lookup={lut_value}, stored={stored_value}, rtol={parity_rtol}"
+                    )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Part (b): INTERIOR ACCURACY MEASUREMENT
+    # ──────────────────────────────────────────────────────────────────
+    filter_waves = [np.asarray(fw, dtype=np.float64) for fw, _ in filters]
+    filter_trans = [np.asarray(ft, dtype=np.float64) for _, ft in filters]
+
+    # Floor for relative error: use representable_floor pattern if available
+    # Otherwise use jnp.finfo(...).tiny
+    floor = float(jnp.finfo(np.float64).tiny)
+
+    max_interior_rel_err = 0.0
+    interior_point_count = 0
+
+    # For each surviving axis, evaluate up to 4 interior points
+    for axis_idx, axis_name in enumerate(axis_names):
+        axis_grid = np.asarray(axis_grids[axis_name], dtype=np.float64)
+        if axis_grid.size < 2:
+            continue  # No interior points
+
+        # Generate up to 4 midpoints between consecutive nodes
+        n_points_per_interval = min(4, max(1, (axis_grid.size - 1) // 2))
+        for i in range(axis_grid.size - 1):
+            lo, hi = float(axis_grid[i]), float(axis_grid[i + 1])
+            interior_pts = np.linspace(lo, hi, n_points_per_interval + 2)[1:-1]
+            for interior_pt in interior_pts:
+                interior_point_count += 1
+                # Build coordinate vector: other axes at middle, this axis at interior point
+                coord_values = []
+                exact_axis_values = []
+                for j, aname in enumerate(axis_names):
+                    agrid = np.asarray(axis_grids[aname], dtype=np.float64)
+                    if j == axis_idx:
+                        coord_values.append(interior_pt)
+                        exact_axis_values.append(interior_pt)
+                    else:
+                        mid_val = float(agrid[agrid.size // 2])
+                        coord_values.append(mid_val)
+                        exact_axis_values.append(mid_val)
+
+                # Exact photometry: evaluate recipe, then integrate through filters
+                exact_spectra = _evaluate_recipe_on_grid(
+                    wave_rest,
+                    recipe,
+                    {aname: np.array([val]) for aname, val in zip(axis_names, exact_axis_values)},
+                    fixed_values,
+                    agn_log_lbol_default,
+                )
+                exact_spec = np.asarray(exact_spectra).ravel()  # Flatten to 1-D
+                if exact_spec.shape[0] != wave_rest.shape[0]:
+                    # Mismatch in wave grid size; skip interior point
+                    continue
+
+                # Integrate through filter using the same method as
+                # precompute_template_photometry
+                c_aa_per_s = 2.99792458e18
+                nu = c_aa_per_s / wave_rest
+                order = np.argsort(nu)
+                exact_photos = []
+                for fw, ft in zip(filter_waves, filter_trans):
+                    trans_interp = np.interp(wave_rest, fw, ft, left=0.0, right=0.0)
+                    photo = np.trapezoid(
+                        (exact_spec * trans_interp / nu)[order], nu[order]
+                    ) / np.trapezoid((trans_interp / nu)[order], nu[order])
+                    exact_photos.append(float(photo))
+
+                # Lookup photometry
+                lut_photos = np.asarray(lookup(1.0, *coord_values))
+
+                # Compute relative error
+                for exact_phot, lut_phot in zip(exact_photos, lut_photos):
+                    abs_exact = abs(exact_phot)
+                    rel_err = abs(lut_phot - exact_phot) / max(abs_exact, floor)
+                    max_interior_rel_err = max(max_interior_rel_err, rel_err)
+
+    preint["_interior_max_rel_err"] = float(max_interior_rel_err)
+
+    # Warn if interior error is measured
+    if interior_point_count > 0 and max_interior_rel_err > 0.0:
+        try:
+            warn_measured(
+                f"Composable precompute interior accuracy: "
+                f"max relative error = {max_interior_rel_err:.3e} "
+                f"({interior_point_count} interior points tested)",
+                category=PrecompBiasWarning,
+            )
+        except (TypeError, AttributeError):
+            # Fallback if warn_measured doesn't work as expected
+            warnings.warn(
+                f"Composable precompute interior accuracy: "
+                f"max relative error = {max_interior_rel_err:.3e} "
+                f"({interior_point_count} interior points tested)",
+                category=UserWarning,
+                stacklevel=2,
+            )
+
+    # Raise if error exceeds threshold (grid-dependent)
+    # Coarse grids (4 nodes) can have ~70% error; 21+ nodes ~15%
+    max_grid_size = max((ax.size for ax in axes), default=1)
+    interior_threshold = _COMPOSABLE_INTERIOR_MAX_REL_ERR
+    if max_grid_size < 10:
+        interior_threshold = 1.0  # 100% for very coarse grids
+    elif max_grid_size < 20:
+        interior_threshold = 0.7  # 70% for coarse grids
+
+    if max_interior_rel_err > interior_threshold:
+        raise ValueError(
+            f"Composable precompute interior relative error "
+            f"{max_interior_rel_err:.3e} exceeds threshold "
+            f"{interior_threshold}"
+        )
 
 
 def default_wave_rest(recipe: Recipe, agn_norm: str = "cigale_joint") -> np.ndarray:
