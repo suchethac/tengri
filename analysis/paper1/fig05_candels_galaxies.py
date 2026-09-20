@@ -36,6 +36,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tengri
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _adoption import is_adopted
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_LABELS, CONFIG_ORDER
 from config_metadata import CONFIGS
@@ -105,22 +106,7 @@ class FitResultManager:
             return False
         diagnostics = self.load_json(gal_id, config_key) or {}
 
-        # Config III: relaxed bar (rhat < 1.01 and divergence rate <= 1.5%)
-        if config_key == "III":
-            rhat_max = diagnostics.get("rhat_max")
-            divergences = diagnostics.get("divergences", 0)
-            n_samples = diagnostics.get("n_samples", 600)
-            n_chains = diagnostics.get("n_chains", 4)
-
-            if rhat_max is None:
-                return False
-
-            divergence_rate = (
-                divergences / (n_samples * n_chains) if (n_samples * n_chains) > 0 else 0
-            )
-            return rhat_max < 1.01 and divergence_rate <= 0.015
-
-        return diagnostics.get("adoption_pass") is True
+        return is_adopted(diagnostics, config_key).adopted
 
     def has_json(self, gal_id: int, config_key: str) -> bool:
         """Check if JSON exists (may indicate failed adoption)."""

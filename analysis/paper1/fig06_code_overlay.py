@@ -26,7 +26,10 @@ from scipy.stats import gaussian_kde
 import tengri
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _figure_style import CONFIG_COLORS
+from _adoption import is_adopted
+from _cell_provenance import audit, banner
+from _figure_style import CONFIG_COLORS, CONFIG_ORDER
+from config_metadata import CONFIGS
 
 jax.config.update("jax_enable_x64", True)
 
@@ -73,10 +76,7 @@ def load_fit_results(
 
     Returns None if files don't exist (fit still running).
 
-    Acceptance criteria:
-    - Config I/II: adoption_pass must be True (zero-divergence bar)
-    - Config III: adoption_pass=False by design; accept if rhat_max < 1.01 and
-      divergence_rate <= 1.5%
+    Acceptance criteria are `_adoption.is_adopted`, shared with fig05.
     """
     npz_path = results_dir / f"{gal_id}_{config}.npz"
     json_path = results_dir / f"{gal_id}_{config}.json"
@@ -89,30 +89,9 @@ def load_fit_results(
         meta = json.load(f)
     z = meta["z"]
 
-    # Check acceptance criteria
-    if config in ["I", "II"]:
-        if meta.get("adoption_pass") is not True:
-            logger.info(f"Skipping {gal_id}_{config} (did not pass the adoption bar)")
-            return None
-    elif config == "III":
-        # Config III: relaxed bar (rhat < 1.01 and divergence rate <= 1.5%)
-        rhat_max = meta.get("rhat_max")
-        divergences = meta.get("divergences", 0)
-        n_samples = meta.get("n_samples", 600)
-        n_chains = meta.get("n_chains", 4)
-
-        if rhat_max is None:
-            logger.info(f"Skipping {gal_id}_{config} (missing rhat_max)")
-            return None
-
-        divergence_rate = divergences / (n_samples * n_chains) if (n_samples * n_chains) > 0 else 0
-        if not (rhat_max < 1.01 and divergence_rate <= 0.015):
-            logger.info(
-                f"Skipping {gal_id}_{config} (Config III bar not met: "
-                f"rhat_max={rhat_max:.6f}, divergence_rate={divergence_rate:.4f})"
-            )
-            return None
-    else:
+    verdict = is_adopted(meta, config)
+    if not verdict.adopted:
+        logger.info(f"Skipping {gal_id}_{config} ({verdict.reason})")
         return None
 
     # Load NPZ; the number of saved draws is whatever the driver thinned to
@@ -310,7 +289,7 @@ def plot_galaxy_overlay(
             )
 
     # tengri posteriors (colored contours + open marker)
-    for config in ["I", "II", "III"]:
+    for config in CONFIG_ORDER:
         if config not in tengri_data:
             continue
 
@@ -408,6 +387,22 @@ def main(
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Unlike fig05 and fig09, this figure rebuilds each configuration's model to
+    # recompute derived quantities, then feeds it the cell's samples. If the
+    # cells hold a different model the rebuild raises UnknownParameterError two
+    # hundred lines in, naming a parameter rather than the cause. Refuse here,
+    # with the cause.
+    mismatches, notes = audit(results_dir, CONFIGS)
+    text = banner(results_dir, mismatches, notes)
+    if text:
+        print(text, file=sys.stderr)
+    if mismatches:
+        raise SystemExit(
+            "fig06 rebuilds each configuration's model and cannot draw cells that "
+            "hold a different one. Re-run the grid, or point --results-dir at a "
+            "directory whose cells match configs.py."
+        )
+
     # Load published values
     csv_path = analysis_dir / "results" / "art_sedfitting_z1.csv"
     published_all = load_published_values(csv_path)
@@ -446,7 +441,7 @@ def main(
         json_sidecar["tengri_data"][gal_id] = {}
 
         # Try to load each configuration
-        for config in ["I", "II", "III"]:
+        for config in CONFIG_ORDER:
             data = load_fit_results(gal_id, config, results_dir, max_samples)
             if data is None:
                 json_sidecar["pending_cells"].append(f"{gal_id}_{config}")
@@ -606,7 +601,7 @@ def main(
 
     # tengri configurations in color
     tengri_handles = []
-    for config in ["I", "II", "III"]:
+    for config in CONFIG_ORDER:
         color = MARKER_COLORS[config]
         tengri_handles.append(
             plt.Line2D([0], [0], color=color, linewidth=1.5, label=f"Configuration {config}")
