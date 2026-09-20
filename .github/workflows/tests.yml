@@ -416,6 +416,8 @@ jobs:
       - run: python tools/check_figure_placement.py
       # Verify that all published notebooks have every code cell executed.
       - run: python tools/check_notebooks_executed.py
+      # Check that committed spine notebooks are not drifted from their sources.
+      - run: python scripts/sync_spine_notebooks_for_docs.py --check
       # Validate that all reproduction notebooks have valid status assertions.
       - run: python tools/check_repro_status.py
       # A committed reproduction render must still match the source it claims

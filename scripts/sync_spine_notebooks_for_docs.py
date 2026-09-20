@@ -32,6 +32,7 @@ Or via ``make -C docs spine-ipynb``.
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -336,7 +337,73 @@ def _merge_source_preserve_outputs(py_path: Path, out_ipynb: Path) -> None:
     _nbf.write(existing, str(out_ipynb))
 
 
+def _normalize_notebook_in_memory(
+    py_path: Path, out_ipynb: Path, slug: str, retitle: bool, excluded: set[str]
+) -> str:
+    """Normalize a notebook in memory and return its JSON text.
+
+    Returns the normalized notebook as a JSON string, without writing.
+    Uses the same normalization as the normal sync path, but in memory.
+    """
+    import tempfile
+
+    import jupytext as _jp
+    import nbformat as _nbf
+
+    # Generate notebook from .py source and merge with committed outputs
+    new = _jp.read(str(py_path))
+
+    if out_ipynb.is_file():
+        existing = _nbf.read(str(out_ipynb), as_version=4)
+
+        # Check if cell layout matches
+        same_layout = len(existing.cells) == len(new.cells) and all(
+            e.cell_type == n.cell_type for e, n in zip(existing.cells, new.cells)
+        )
+
+        if same_layout:
+            # Merge source from new with outputs from existing
+            for old_cell, new_cell in zip(existing.cells, new.cells):
+                old_cell.source = new_cell.source
+            new = existing
+        # else: use fresh new notebook with empty outputs
+
+    # Write to a temporary file to apply normalizations
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".ipynb", delete=False, encoding="utf-8"
+    ) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        _nbf.write(new, str(tmp_path))
+
+        # Apply the same normalizations as the normal path
+        if retitle:
+            normalize_markdown_headings(tmp_path, slug)
+        normalize_spine_links(tmp_path, excluded)
+
+        # Read and return the result
+        result_text = tmp_path.read_text(encoding="utf-8")
+        return result_text
+    finally:
+        # Clean up temp file
+        tmp_path.unlink(missing_ok=True)
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Sync spine Jupytext sources into docs/spine/*.ipynb for Sphinx + nbsphinx."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "Check mode: compare would-be output against committed files, "
+            "exit 1 on drift, write nothing."
+        ),
+    )
+    args = parser.parse_args()
+
     root = Path(__file__).resolve().parents[1]
     nb_root = root / "notebooks"
     spine_out = root / "docs" / "spine"
@@ -353,6 +420,8 @@ def main() -> int:
         for slug in EXPERIMENTAL_SLUGS
     ]
 
+    drifted_files: list[str] = []
+
     for slug, out_ipynb, retitle in targets:
         py_path = nb_root / f"{slug}.py"
 
@@ -362,31 +431,82 @@ def main() -> int:
 
         out_ipynb.parent.mkdir(parents=True, exist_ok=True)
 
-        # Preserve committed outputs (they're how nbsphinx renders figures
-        # on CI, where a freshly-generated ipynb would have none).
-        _merge_source_preserve_outputs(py_path, out_ipynb)
+        if args.check:
+            # Check mode: compute would-be output in memory
+            would_be_content = _normalize_notebook_in_memory(
+                py_path, out_ipynb, slug, retitle, excluded
+            )
 
-        if retitle:
-            normalize_markdown_headings(out_ipynb, slug)
-        n_retarget, n_delink = normalize_spine_links(out_ipynb, excluded)
+            # Compare against committed file
+            if out_ipynb.is_file():
+                committed_content = out_ipynb.read_text(encoding="utf-8")
+                if would_be_content != committed_content:
+                    drifted_files.append(str(out_ipynb.relative_to(root)))
+            else:
+                # File doesn't exist on disk, but we're in check mode
+                drifted_files.append(str(out_ipynb.relative_to(root)))
+        else:
+            # Normal mode: write files
+            # Preserve committed outputs (they're how nbsphinx renders figures
+            # on CI, where a freshly-generated ipynb would have none).
+            _merge_source_preserve_outputs(py_path, out_ipynb)
 
-        notes = []
-        if n_retarget:
-            notes.append(f"{n_retarget} link(s) retargeted to .ipynb")
-        if n_delink:
-            notes.append(f"{n_delink} link(s) de-linked (target not published)")
-        suffix = f" ({'; '.join(notes)})" if notes else ""
-        print(f"synced {slug} -> {out_ipynb.relative_to(root)}{suffix}")
+            if retitle:
+                normalize_markdown_headings(out_ipynb, slug)
+            n_retarget, n_delink = normalize_spine_links(out_ipynb, excluded)
 
-    problems = check_published_links(spine_out, excluded)
-    if problems:
-        print(
-            f"\nerror: {len(problems)} link(s) in published notebooks resolve to no built page:",
-            file=sys.stderr,
-        )
-        for p in problems:
-            print(f"  {p}", file=sys.stderr)
-        return 1
+            notes = []
+            if n_retarget:
+                notes.append(f"{n_retarget} link(s) retargeted to .ipynb")
+            if n_delink:
+                notes.append(f"{n_delink} link(s) de-linked (target not published)")
+            suffix = f" ({'; '.join(notes)})" if notes else ""
+            print(f"synced {slug} -> {out_ipynb.relative_to(root)}{suffix}")
+
+    if args.check:
+        # Check mode
+        if drifted_files:
+            print(f"error: {len(drifted_files)} spine twin(s) drifted:", file=sys.stderr)
+            for f in drifted_files:
+                print(f"  {f}", file=sys.stderr)
+            # Run the link check
+            problems = check_published_links(spine_out, excluded)
+            if problems:
+                msg = (
+                    f"error: {len(problems)} link(s) in published notebooks "
+                    "resolve to no built page:"
+                )
+                print(msg, file=sys.stderr)
+                for p in problems:
+                    print(f"  {p}", file=sys.stderr)
+            return 1
+        else:
+            # All twins are in sync
+            problems = check_published_links(spine_out, excluded)
+            if problems:
+                msg = (
+                    f"error: {len(problems)} link(s) in published notebooks "
+                    "resolve to no built page:"
+                )
+                print(msg, file=sys.stderr)
+                for p in problems:
+                    print(f"  {p}", file=sys.stderr)
+                return 1
+            n_spine = len(SPINE_SLUGS) + len(EXPERIMENTAL_SLUGS)
+            print(f"OK: {n_spine} spine twins in sync")
+            return 0
+    else:
+        # Normal mode
+        problems = check_published_links(spine_out, excluded)
+        if problems:
+            msg = (
+                f"\nerror: {len(problems)} link(s) in published notebooks "
+                "resolve to no built page:"
+            )
+            print(msg, file=sys.stderr)
+            for p in problems:
+                print(f"  {p}", file=sys.stderr)
+            return 1
 
     return 0
 

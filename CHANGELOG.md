@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
+
 ### Fixed
 
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
