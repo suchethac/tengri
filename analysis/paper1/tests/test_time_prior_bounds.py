@@ -24,6 +24,30 @@ Z_SAMPLE_MAX = 1.097
 AGE_AT_Z_MAX = age_at_z(Z_SAMPLE_MAX)
 
 
+#: Stellar libraries this file may use for parameter extraction, most preferred
+#: first. Both are tracked in the repository, so the guards run from a fresh
+#: clone. The choice does not affect any bound this file checks.
+_PROBE_LIBRARIES = ("fsps_prsc_miles_chabrier", "bpss_stars_c3k_a_chabrier")
+
+
+def _available_probe_library() -> str:
+    """The first tracked probe library that actually loads, or skip.
+
+    Skipping here is honest: no tracked library present means the environment
+    cannot build any configuration, which is different from a guard failing.
+    """
+    import tengri
+
+    for name in _PROBE_LIBRARIES:
+        try:
+            tengri.load_ssp(name)
+        except Exception:
+            continue
+        return name
+    pytest.skip(f"no tracked stellar library available; tried {list(_PROBE_LIBRARIES)}")
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 def _extract_time_bounds(config_builder, z: float) -> dict[str, tuple[float, float]]:
     """Extract all time-like prior bounds from a configuration.
 
@@ -44,8 +68,18 @@ def _extract_time_bounds(config_builder, z: float) -> dict[str, tuple[float, flo
     """
     import tengri
 
-    # Use dummy observation and SSP for parameter extraction
-    ssp = tengri.load_ssp(configs.SSP_FOR_CONFIG.get("I", "fsps_mist_c3k_a_chabrier"))
+    # Any stellar library will do for THIS question. The bounds being checked
+    # are time-like (tau, age, peak); the only prior that reads the library is
+    # met_logzsol, which this test ignores. So the library is chosen for
+    # availability rather than for fidelity to each configuration.
+    #
+    # It must be one that is TRACKED IN THE REPOSITORY, or this whole file can
+    # only run on a machine that happens to have the grid. Of the five grids the
+    # six configurations name, only fsps_prsc_miles_chabrier and
+    # bpss_stars_c3k_a_chabrier are tracked; the previous choice here,
+    # fsps_mist_c3k_a_chabrier, is not, so a fresh clone could not run any of
+    # these guards.
+    ssp = tengri.load_ssp(_available_probe_library())
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["hst_f160w"]))
 
     # Build model to inspect the spec
