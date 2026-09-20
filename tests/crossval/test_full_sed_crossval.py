@@ -2080,11 +2080,8 @@ class TestTabularSFH:
             uv = float(jnp.mean(sed[(wave > 2700.0) & (wave < 2900.0)]))
             return uv / max(v, 1e-30)
 
-        try:
-            cr = uv_over_v(sfr_rising)
-            cq = uv_over_v(sfr_quenching)
-        except Exception as exc:
-            pytest.skip(f"continuity computation failed: {exc}")
+        cr = uv_over_v(sfr_rising)
+        cq = uv_over_v(sfr_quenching)
 
         assert cr > cq, (
             f"tengri rising SFH UV/V ({cr:.3f}) not greater than quenching ({cq:.3f}). "
@@ -2601,30 +2598,27 @@ class TestCIGALESKIRTOR:
         ratio_cig = nir_cig / max(v_cig, 1e-40)
 
         # tengri: compute skirtor SED and get NIR/V ratio
-        try:
-            wave_aa = np.asarray(ssp_data.ssp_wave)
-            skirtor_result = skirtor_analytic(
-                wave_aa=wave_aa,
-                t=3,
-                pl=1.0,
-                q=1.0,
-                oa=40,
-                R=20,
-                Mcl=0.97,
-                i=30,
-                fracAGN=0.30,
-            )
-            # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalize to NIR/V
-            tengri_sed = np.asarray(skirtor_result)
-            nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 30000.0)
-            v_t_mask = (wave_aa > 5400.0) & (wave_aa < 5600.0)
-            if not nir_t_mask.any() or not v_t_mask.any():
-                pytest.skip("tengri SSP grid does not cover NIR window")
-            nir_tengri = float(np.nanmean(tengri_sed[nir_t_mask]))
-            v_tengri = float(np.nanmean(tengri_sed[v_t_mask]))
-            ratio_tengri = nir_tengri / max(v_tengri, 1e-40)
-        except Exception as exc:
-            pytest.skip(f"tengri skirtor_analytic failed: {exc}")
+        wave_aa = np.asarray(ssp_data.ssp_wave)
+        skirtor_result = skirtor_analytic(
+            wave_aa=wave_aa,
+            t=3,
+            pl=1.0,
+            q=1.0,
+            oa=40,
+            R=20,
+            Mcl=0.97,
+            i=30,
+            fracAGN=0.30,
+        )
+        # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalize to NIR/V
+        tengri_sed = np.asarray(skirtor_result)
+        nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 30000.0)
+        v_t_mask = (wave_aa > 5400.0) & (wave_aa < 5600.0)
+        if not nir_t_mask.any() or not v_t_mask.any():
+            pytest.skip("tengri SSP grid does not cover NIR window")
+        nir_tengri = float(np.nanmean(tengri_sed[nir_t_mask]))
+        v_tengri = float(np.nanmean(tengri_sed[v_t_mask]))
+        ratio_tengri = nir_tengri / max(v_tengri, 1e-40)
 
         ratio = ratio_tengri / max(ratio_cig, 1e-40)
         assert 0.80 <= ratio <= 1.20, (

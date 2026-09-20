@@ -143,7 +143,7 @@ def test_entry_point_honors_a_fixed_redshift(model, name):
 
     try:
         got = fn(omitted)
-    except Exception as exc:
+    except (TypeError, NotImplementedError, ValueError) as exc:
         allowed = RAISES_ON_BARE_PARAMS.get(name)
         assert allowed is not None, (
             f"{name} raised {type(exc).__name__} on a bare params dict, so the "
