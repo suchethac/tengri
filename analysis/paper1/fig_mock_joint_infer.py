@@ -70,6 +70,12 @@ DESIGNED_TRUTH = {
     "met_logzsol": 0.0,
     # Unobscured in X-rays too, which is what Type 1 means there.
     "xray_log_nh": 20.0,
+    # Held at the registry default the mock already used before this parameter
+    # was freed, so the truth SED is unchanged and only the inference problem
+    # gets one dimension harder. 1e10 Lsun is a Seyfert-luminosity AGN: bright
+    # enough to show in the mid-infrared and the X-ray pair, not so bright that
+    # it buries a log M* = 10.5 host.
+    "agn_log_lbol": 10.0,
 }
 
 #: Per-filter 1-sigma depth [erg/s/cm2/Hz]. Rough but honest: deep-field optical

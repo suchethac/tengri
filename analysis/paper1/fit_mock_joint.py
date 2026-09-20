@@ -69,6 +69,34 @@ def observed_photometry(truth_npz):
     return flux, sigma, censor
 
 
+def chi2_against_data(model, params, npz):
+    """Reduced chi2 of a parameter point, over detected bands and the spectrum.
+
+    The recovery table cannot see non-convergence. It prints deltas against
+    truth, and a stuck optimizer produces deltas that read as "partially
+    recovered" -- indistinguishable from an honestly wide posterior. Chi2 is
+    the independent check: the truth point of a correctly specified mock sits
+    at chi2/dof ~ 1, and a converged fit lands at or below it, because the
+    best-fit point chases the noise realization by construction.
+
+    A fit whose chi2 is ABOVE truth's never reached the basin it was aimed at.
+    That is exactly what a single-start L-BFGS did at D=44 here: chi2/dof 1.69
+    against truth's 1.08, with photometric chi2 602 where truth gives 24.
+    """
+    detected = np.array(npz["detected"], dtype=bool)
+    phot_obs = np.array(npz["phot_obs"])
+    phot_sig = np.array(npz["phot_sig"])
+    spec_obs = np.array(npz["spec_obs"])
+    spec_sig = np.array(npz["spec_sig"])
+
+    phot = np.asarray(model.predict_photometry(params))
+    spec = np.asarray(model.predict(params).spectrum())
+    c = float(np.sum(((phot_obs[detected] - phot[detected]) / phot_sig[detected]) ** 2))
+    c += float(np.sum(((spec_obs - spec) / spec_sig) ** 2))
+    n_data = int(detected.sum()) + spec_obs.size
+    return c, c / (n_data - len(npz["free_params"]))
+
+
 def report(free, truth, fitted, wall, n_censored):
     """Per-parameter recovery table, worst offender last so it is visible."""
     delta = {k: float(fitted[k]) - float(truth[k]) for k in free}
@@ -154,6 +182,19 @@ def main(argv=None) -> int:
         else {k: float(np.median(np.asarray(post.samples[k]))) for k in free}
     )
     delta = report(free, truth, fitted, wall, int((censor == UPPER_LIMIT).sum()))
+
+    # Convergence check, independent of the recovery table above.
+    c_truth, r_truth = chi2_against_data(model, truth, npz)
+    c_fit, r_fit = chi2_against_data(model, fitted, npz)
+    print(f"\nchi2/dof  truth {r_truth:.4f}   fitted {r_fit:.4f}")
+    if c_fit > c_truth:
+        print(
+            f"NOT CONVERGED: the fit is {c_fit - c_truth:.1f} worse in chi2 than "
+            f"truth, so it never reached the basin. The recovery deltas above "
+            f"measure the optimizer, not the model."
+        )
+    else:
+        print(f"converged: fits the noise realization {c_truth - c_fit:.1f} better than truth")
 
     RESULTS.mkdir(exist_ok=True)
     out = RESULTS / f"mock_joint_{args.method}.npz"

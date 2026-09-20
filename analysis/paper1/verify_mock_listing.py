@@ -59,6 +59,7 @@ import numpy as np
 
 import tengri
 from tengri import (
+    DEFAULT,
     FREE,
     Data,
     Fixed,
@@ -159,6 +160,26 @@ def build_mock_model(ssp, observation, z=REDSHIFT):
             "nlr": {"type": "analytic", "all_params": FREE},
             "blr": {"type": "analytic", "all_params": FREE},
             "atten": {"type": "grahsp_biatten", "all_params": FREE},
+            # The AGN's bolometric luminosity, which the Chandra pair constrains
+            # through the disc-corona coupling that ``yang20`` supplies. Freeing
+            # it is what makes this a recovery of AGN *energetics* rather than
+            # only of the torus geometry: left implicit it sat at the registry
+            # default of 10, and the section claimed an energy budget nothing
+            # inferred.
+            #
+            # It is genuinely the luminosity scale here, measured rather than
+            # assumed -- under the default ``cigale_joint`` normalization it was
+            # not obvious that the composable AGN would ride on ``agn_log_lbol``
+            # rather than an ``agn_power`` reference, and this configuration has
+            # no ``agn_power`` at all. Sweeping its declared prior with
+            # everything else pinned moves the photometry by a factor of 2.4e3.
+            "log_lbol": FREE,
+            # cos_inc, ir_frac and lum_ratio keep their defaults. Said out loud
+            # rather than left to the wildcard's silence: all three are live too
+            # (1.4x, 12x and 1.1x on the same sweep), so this is a choice, not an
+            # absence. cos_inc in particular is degenerate with the torus opening
+            # angle, which is already free.
+            "all_params": Fixed(DEFAULT),
         },
         xray={"type": "yang20", "all_params": FREE},
         radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
