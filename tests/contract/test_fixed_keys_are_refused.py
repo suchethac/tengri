@@ -428,14 +428,28 @@ def test_predict_state_fixed_values_kwarg_is_internal_only(
     ``test_fixed_key_refused_by_entry_points[predict_state]`` above already
     covers that this file's other predict_state cases pin it in the
     ``DIRECT_METHODS`` sweep too. This test exists to document the boundary
-    explicitly, next to the callers that legitimately reach past it
+    explicitly, next to the THREE callers that legitimately reach past it
     (``sed_model.py``'s ``predict_state`` docstring for ``fixed_values``,
-    and the comment at its call site, name them:
-    ``predict_observables``/``predict_observables_jit`` after running this
-    same refusal upstream on free-only ``params``, and two internal
-    build-time probes -- ``_check_agn_lbol_flat_direction`` and
-    ``nebular_grid_precompute._row_traced`` -- that deliberately override a
-    Fixed key's own declared value for a measurement, not a user request).
+    and the comment at its call site, name them -- a new caller must fall
+    into one of these, not invent a fourth):
+
+    (a) ``predict_observables``/``predict_observables_jit``, after running
+        this same refusal upstream on free-only ``params`` and threading
+        ``self.spec.get_fixed_values()`` in unmodified.
+    (b) Two internal build-time probes -- ``_check_agn_lbol_flat_direction``
+        and ``nebular_grid_precompute._row_traced`` -- that deliberately
+        override a Fixed key's own declared value for a measurement, not a
+        user request.
+    (c) ``inference/loss_functions.py``'s feature channel (line fluxes /
+        ratios / indices), which calls ``predict_state(params,
+        fixed_values=jit_inputs["fixed_values"], ...)`` with the fit
+        machinery's own merged dict: ``params`` is the free-only pytree the
+        optimizer/sampler holds, and ``jit_inputs["fixed_values"]`` is
+        ``dict(model.spec.get_fixed_values())`` optionally updated with
+        ``Fitter._params_override`` (a per-fit override of specific Fixed
+        names, e.g. a per-galaxy redshift under ``catalog_z_range`` --
+        #1329). Neither half ever passed through a raw user dict.
+
     A caller reaching ``predict_state`` the ordinary way (no ``fixed_values=``)
     gets the same refusal as every other entry point in this file.
     """
@@ -455,5 +469,17 @@ def test_predict_state_fixed_values_kwarg_is_internal_only(
     # NAMING_CONTRACT do not name it among the three sanctioned prediction
     # surfaces), so its lack of a refusal is not a #2296 gap; it is
     # documented here so a reviewer does not mistake it for one.
+
+    # Case (a): predict_observables_jit's own shape -- fixed_values threaded
+    # in unmodified, params free-only.
     manual = model.predict_state(free_params_dict, fixed_values=model.spec.get_fixed_values())
     assert manual is not None
+
+    # Case (c): loss_functions.py's shape -- fixed_values is
+    # get_fixed_values() with a params_override merged in (here, a
+    # different redshift than the spec's own Fixed pin -- exactly what
+    # Fitter._params_override does for a per-galaxy value), params still
+    # free-only. This must not raise: neither half is a raw user dict.
+    overridden_fixed_values = {**model.spec.get_fixed_values(), "redshift": 0.2}
+    via_override = model.predict_state(free_params_dict, fixed_values=overridden_fixed_values)
+    assert via_override is not None

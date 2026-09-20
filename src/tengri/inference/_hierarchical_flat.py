@@ -416,18 +416,22 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     def _predict(params):
         # predict_photometry/predict_spectrum self-merge the model's own
         # Fixed values internally and refuse a params key the spec declared
-        # Fixed (#2296); filter to free names first, the pattern
-        # jit_engine.signal_response uses. ``params`` here already carries
-        # every genuinely free name -- the per-galaxy ones (``free_names``,
-        # via ``physical[name](...)``) plus the two population-shared PSD
-        # names (set explicitly below, free on ``model.spec`` precisely so
-        # this dict-based per-step override is legal presence, not a
-        # Fixed-key refusal) -- so this filter is a defensive no-op keyed on
-        # ``model.spec.free_params`` rather than a behavior change.
-        free_params = {k: v for k, v in params.items() if k in model.spec.free_params}
+        # Fixed (#2296). ``params`` here already carries every genuinely
+        # free name -- the per-galaxy ones (``free_names``, via
+        # ``physical[name](...)``) plus the two population-shared PSD names
+        # (set explicitly below, free on ``model.spec``) -- plus, when the
+        # SFH is a GP field, ``sfh_field_xi``: a runtime latent array that is
+        # neither free nor Fixed on the spec (it never appears in
+        # ``model.spec.free_params``). A positive filter on
+        # ``model.spec.free_params`` silently dropped that key, and
+        # ``predict_photometry``/``predict_spectrum`` do not refuse or
+        # require it, so the loss was silent: zero gradient on every
+        # per-galaxy latent and on both PSD hyperparameters (#2296 fix-round
+        # 3). Pass ``params`` through unfiltered -- there is nothing left in
+        # it to refuse.
         if data_type == "photometry":
-            return model.predict_photometry(free_params)
-        return model.predict_spectrum(free_params)
+            return model.predict_photometry(params)
+        return model.predict_spectrum(params)
 
     def log_likelihood_with_data(flat_params, data_args):
         """Gaussian data term, -chi^2/2, with the data supplied as an ARGUMENT.

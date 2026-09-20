@@ -299,7 +299,6 @@ print(
 # %%
 N_DRAWS = 200
 draws = posterior.resample(jax.random.PRNGKey(11), n=N_DRAWS)
-fixed = sed_model.spec.get_fixed_values()
 
 
 def draw_dicts(n):
@@ -332,7 +331,7 @@ for k in DERIVED_KEYS:
 
 # %%
 WAVE_OBS = np.geomspace(1300.0, 6e4, 1200)  # 0.13–6 μm covers GALEX → WISE W2
-z_truth = float(fixed["redshift"])
+z_truth = float(sed_model._get_redshift(truth))
 dl_cm = cosmology.luminosity_distance(z_truth)
 
 

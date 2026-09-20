@@ -522,11 +522,29 @@ class PopulationFitter:
         # it exists to read the spec, and must not pay the LUT build.
         self._template = model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
         self._spec = self._template.spec
-        self._free_names = [
-            n
-            for n in self._spec.free_params
-            if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
-        ]
+
+        # Every runner (the flat seam, signal_response/_predict_cfm/
+        # _predict_single) varies the two shared PSD names by writing them
+        # into each galaxy's params dict every step -- a plain free-key
+        # write only if the factory's spec declares them free. A factory
+        # that pins either Fixed makes that write a refused presence
+        # override (#2296 fix-round 3); refuse it here, at construction,
+        # rather than lazily inside the first predict call deep in a fit.
+        _shared_names = ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
+        _not_free = [n for n in _shared_names if n not in self._spec.free_params]
+        if _not_free:
+            from tengri.config.exceptions import ParameterError
+
+            raise ParameterError(
+                f"model_factory's spec does not declare {_not_free} free: "
+                "PopulationFitter varies the shared PSD hyperparameters by "
+                "writing them into each galaxy's params dict every step, "
+                "which requires both to be free on the factory's spec. "
+                "Declare them with a prior (e.g. Uniform(*psd_sigma_prior, "
+                "default=...)) in model_factory instead of Fixed(...)."
+            )
+
+        self._free_names = [n for n in self._spec.free_params if n not in _shared_names]
 
         # Fit-time factory: every runner (per-galaxy MAP init, the flat seam,
         # geoVI, raytrace) builds its models through this, so the precompute
@@ -946,13 +964,15 @@ class PopulationFitter:
             """Predict data from parameters for single or batch mode."""
             # predict_photometry/predict_spectrum self-merge the model's
             # own Fixed values internally and refuse a params key the spec
-            # declared Fixed (#2296); filter to free names first, the
-            # pattern jit_engine.signal_response uses. The two
-            # population-shared PSD names are free on model.spec (varied
-            # per step by writing them into this dict), so this filter is
-            # a defensive no-op keyed on model.spec.free_params, not a
-            # behavior change.
-            params = {k: v for k, v in params.items() if k in model.spec.free_params}
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -1311,13 +1331,15 @@ class PopulationFitter:
             """Predict data from parameters for single or batch mode."""
             # predict_photometry/predict_spectrum self-merge the model's
             # own Fixed values internally and refuse a params key the spec
-            # declared Fixed (#2296); filter to free names first, the
-            # pattern jit_engine.signal_response uses. The two
-            # population-shared PSD names are free on model.spec (varied
-            # per step by writing them into this dict), so this filter is
-            # a defensive no-op keyed on model.spec.free_params, not a
-            # behavior change.
-            params = {k: v for k, v in params.items() if k in model.spec.free_params}
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -1654,13 +1676,15 @@ class PopulationFitter:
             """Predict data from parameters (CorrelatedFieldMaker variant)."""
             # predict_photometry/predict_spectrum self-merge the model's
             # own Fixed values internally and refuse a params key the spec
-            # declared Fixed (#2296); filter to free names first, the
-            # pattern jit_engine.signal_response uses. The two
-            # population-shared PSD names are free on model.spec (varied
-            # per step by writing them into this dict), so this filter is
-            # a defensive no-op keyed on model.spec.free_params, not a
-            # behavior change.
-            params = {k: v for k, v in params.items() if k in model.spec.free_params}
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -2043,13 +2067,15 @@ class PopulationFitter:
             """Single-galaxy forward model (for vmap)."""
             # predict_photometry/predict_spectrum self-merge the model's
             # own Fixed values internally and refuse a params key the spec
-            # declared Fixed (#2296); filter to free names first, the
-            # pattern jit_engine.signal_response uses. The two
-            # population-shared PSD names are free on model.spec (varied
-            # per step by writing them into this dict), so this filter is
-            # a defensive no-op keyed on model.spec.free_params, not a
-            # behavior change.
-            params = {k: v for k, v in params.items() if k in model.spec.free_params}
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             else:

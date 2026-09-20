@@ -40,6 +40,7 @@ to hit that guard — asserted below as its own case.
 from __future__ import annotations
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -305,3 +306,173 @@ def test_broken_tier_stays_gated_through_the_seam(population, method):
     with pytest.raises(Exception) as exc:
         fitter.run(method, key=jax.random.PRNGKey(0))
     assert method in str(exc.value) or "unvalidated" in str(exc.value).lower()
+
+
+# ── #2296 fix-round 3: the predict-side positive filter dropped sfh_field_xi ──
+
+
+def test_flat_problem_gradients_reach_the_latents_and_psd(population):
+    """d logL/d gal_xi, d logL/d psd_sigma_u, d logL/d psd_tau_u must be nonzero.
+
+    Regression for #2296 fix-round 3. ``_hierarchical_flat.py``'s ``_predict``
+    (and four siblings in ``hierarchical.py``) filtered the params dict to
+    ``model.spec.free_params`` before handing it to
+    ``predict_photometry``/``predict_spectrum``. ``sfh_field_xi`` is a
+    runtime latent array -- neither free nor Fixed on the spec -- so that
+    positive filter silently dropped it every call. Measured on this
+    fixture's shape before the fix: ``d logL/d gal_xi`` and
+    ``d logL/d psd_tau_u`` were bit-exact zero (``d logL/d psd_sigma_u`` too,
+    on a factory whose PSD is Fixed).
+
+    ``test_backend_dispatches_and_returns_a_populated_posterior`` and
+    ``test_population_spectroscopy_resolves_the_spectrum_lut_and_runs``
+    above cannot see this: "the chain moved" and "the backend returned
+    finite draws" are both satisfied by a sampler's own proposal noise
+    exploring the PRIOR alone when the likelihood gradient on a parameter is
+    exactly zero. Only measuring the actual likelihood gradient catches it.
+    """
+    from tengri.inference._hierarchical_flat import build_flat_problem
+
+    factory, galaxies = population
+    fitter = PopulationFitter(factory, galaxies)
+    problem = build_flat_problem(fitter, key=jax.random.PRNGKey(0), map_steps=5)
+
+    grad_flat = jax.grad(problem.log_likelihood)(problem.init_flat)
+    grad = problem.unravel(grad_flat)
+
+    assert "gal_xi" in grad, "fixture is not stochastic -- gal_xi must be present"
+    gal_xi_spread = float(jnp.max(jnp.abs(grad["gal_xi"])))
+    assert gal_xi_spread > 0.0, (
+        "d logL/d gal_xi is identically zero -- the per-galaxy GP-field "
+        "latent gradient is dead (sfh_field_xi dropped by the predict-side "
+        "positive filter)"
+    )
+    assert jnp.all(jnp.isfinite(grad["gal_xi"])), "d logL/d gal_xi carries non-finite entries"
+
+    psd_sigma_grad = abs(float(grad["psd_sigma_u"]))
+    psd_tau_grad = abs(float(grad["psd_tau_u"]))
+    assert psd_sigma_grad > 0.0, "d logL/d psd_sigma_u is identically zero"
+    assert psd_tau_grad > 0.0, "d logL/d psd_tau_u is identically zero"
+    assert np.isfinite(psd_sigma_grad) and np.isfinite(psd_tau_grad), (
+        f"PSD gradients not finite: sigma={psd_sigma_grad}, tau={psd_tau_grad}"
+    )
+
+
+def test_population_fitter_refuses_a_factory_with_fixed_shared_psd():
+    """A model_factory pinning the shared PSD names Fixed must be refused.
+
+    PopulationFitter varies ``sfh_field_psd_sigma``/``sfh_field_psd_tau_myr``
+    by writing them into each galaxy's params dict every step -- legal only
+    if the factory's spec declares both free. Before #2296 fix-round 3 this
+    was silently swallowed by the predict-side positive filter instead
+    (dropped, not refused); with the filter gone, a Fixed factory must be
+    refused loudly, and at construction time rather than deep inside a fit.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    ssp = tengri.load_ssp()
+    obs = Observation(photometry=Photometry.from_names(_BANDS))
+
+    def bad_factory(psd_sigma, psd_tau_myr):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(9.0, 11.0),
+                "psd_sigma": Fixed(float(psd_sigma)),
+                "psd_tau_myr": Fixed(float(psd_tau_myr)),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+
+    with pytest.raises(ParameterError, match="sfh_field_psd_sigma"):
+        PopulationFitter(bad_factory, [{"flux_obs": np.ones(5), "noise": np.ones(5) * 0.1}])
+
+
+def test_fit_population_public_factory_runs():
+    """model.fit_population's own convenience.py factory must complete a fit.
+
+    Builds the ``model`` argument the way most callers actually would: the
+    ``sfh`` group's ``all_params: Fixed(DEFAULT)`` wildcard, naming nothing
+    for ``psd_sigma``/``psd_tau_myr``. That makes them Fixed at the DEFAULT
+    value on the model this test hands to ``fit_population`` -- exactly the
+    shape ``spec.with_params`` cannot override (its contract skips any name
+    already "user-provided", and every name touched by ``SEDModel.build``,
+    wildcard-resolved or not, counts as user-provided; measured directly:
+    ``with_params(sfh_field_psd_sigma=Fixed(...))`` was a no-op whether the
+    incoming disposition was Free or Fixed). ``forward/convenience.py``'s
+    ``_model_factory`` must genuinely override the distribution regardless,
+    so the public entry point -- not this file's own hand-rolled fixture
+    factory above, which already pre-declares them free -- reaches a real
+    backend with the shared PSD names actually free and returns a posterior.
+    """
+    import warnings
+
+    ssp = tengri.load_ssp()
+    obs = Observation(photometry=Photometry.from_names(_BANDS))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        template = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(9.0, 11.0),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+    assert "sfh_field_psd_sigma" in template.spec.fixed_params, (
+        "fixture assumption broken: psd_sigma must be Fixed on the model handed "
+        "to fit_population, or this test cannot tell the override apart from a no-op"
+    )
+
+    truth = {k: 0.0 for k in template.spec.free_params}
+    truth["sfh_dpl_log_total_mass"] = 10.0
+    flux = np.asarray(template.predict_photometry(truth))
+    galaxies = [
+        {"flux_obs": flux * (1.0 + 0.02 * i), "noise": np.abs(flux) * 0.05} for i in range(2)
+    ]
+
+    posterior = template.fit_population(galaxies, method="map", key=jax.random.PRNGKey(3))
+
+    assert posterior is not None
+    assert type(posterior).__name__ == "PopulationPosterior"
+    shared = posterior.shared_samples
+    assert shared, "fit_population returned a posterior carrying no shared samples"
+    for name, draws in shared.items():
+        values = np.asarray(draws)
+        assert values.size > 0, f"{name} is empty"
+        assert np.all(np.isfinite(values)), f"{name} carries non-finite draws"
+
+    # "The backend runs" is not enough (#2296 fix-round 3): with the shared
+    # PSD write silently dropped (the dead arm this test guards), Adam's MAP
+    # update on psd_sigma_u/psd_tau_u is exactly zero every step, so the
+    # optimizer leaves both at their build_flat_problem midpoint
+    # initialization -- measured bit-exact 2.05 / 150.5 on this fixture.
+    # A fit that actually sees the data moves off that midpoint.
+    sigma_mid, tau_mid = 0.5 * (0.1 + 4.0), 0.5 * (1.0 + 300.0)
+    psd_sigma = float(np.asarray(shared["psd_sigma"]).reshape(-1)[0])
+    psd_tau = float(np.asarray(shared["psd_tau_myr"]).reshape(-1)[0])
+    assert abs(psd_sigma - sigma_mid) > 0.05, (
+        f"psd_sigma ({psd_sigma}) sits at the flat problem's init midpoint "
+        f"({sigma_mid}) -- the shared PSD write never reached predict_photometry"
+    )
+    assert abs(psd_tau - tau_mid) > 5.0, (
+        f"psd_tau_myr ({psd_tau}) sits at the flat problem's init midpoint "
+        f"({tau_mid}) -- the shared PSD write never reached predict_photometry"
+    )
