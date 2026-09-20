@@ -2078,9 +2078,11 @@ print(
 # Lyman limit. Transmission window (800–1300 Å rest) shows the Lyman-series
 # opacity stack and Lyman-continuum absorption (< 912 Å) from the DLA term.
 # The median ratio is 1.000× at every redshift; the printed max deviation
-# (4.0% at z=1, rising to 610% at z=5) is a single-pixel spike at the
-# Lyman-α edge (1215.7 Å), the same edge-sampling effect as §12, not a
-# broadband disagreement.
+# (0.8% at z=1, rising to 11.4% at z=5) sits at the Lyman-β edge (1025.70 Å):
+# BAGPIPES samples its tabulated transmission on a redshift grid, which
+# smooths the sharp Lyman-β step, while tengri evaluates the formula in
+# closed form. A single-node effect at that edge, not a broadband
+# disagreement.
 
 # %%
 from tengri import igm_transmission as _tngigm_sweep
