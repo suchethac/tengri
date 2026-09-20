@@ -35,12 +35,23 @@ _EXPECTED_KEYS = {"name", "kind", "status", "citation", "short_doc", "use"}
 
 
 def _check_entry_shape(entry: dict, expected_kind: str) -> None:
-    """Every list_* row carries the same dict shape — assert it once here."""
+    """Every list_* row carries the same dict shape — assert it once here.
+
+    The 'unvalidated' status is used for legacy radio presets (radio_dpl,
+    radio_powerlaw) that are not builder-compatible with SEDModel.build
+    (#2201).
+    """
     missing = _EXPECTED_KEYS - entry.keys()
     assert not missing, f"missing keys: {missing} in {entry!r}"
     assert entry["kind"] == expected_kind
     assert isinstance(entry["name"], str) and entry["name"]
-    assert entry["status"] in {"production", "experimental", "demo", "deprecated"}
+    assert entry["status"] in {
+        "production",
+        "experimental",
+        "demo",
+        "deprecated",
+        "unvalidated",
+    }
 
 
 class TestXRayRegistry:

@@ -25,6 +25,7 @@ not an output of a separate precompute step.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -80,6 +81,24 @@ class SFHBeyondSSPGridWarning(UserWarning):
     """
 
 
+class AgeKernelFieldWarning(UserWarning):
+    """Warning raised when field=True forces age_kernel='dsps' silently.
+
+    When a GP-field SFH is requested without an explicit age_kernel, the field
+    draw lives on a coarse lookback grid with no dense integrand, so the kernel
+    is forced to 'dsps' (the DSPS histogram kernel). This warning alerts the user
+    to that choice and states the accuracy bound.
+
+    Notes
+    -----
+    The 'dsps' kernel costs mass-proportionality accuracy: typically well below
+    1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
+
+    To silence this advisory, set age_kernel='dsps' explicitly to acknowledge
+    the choice. See #2368 for details.
+    """
+
+
 from tengri.components.stellar._params import ALPHA_FE_PARAMS
 from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
@@ -116,6 +135,14 @@ _DEFAULT_MET_BIN_EDGES_LOG_YR = host_array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14]
 #: Accepted ``age_kernel`` values: how the SFH is integrated onto the SSP age
 #: grid. See :class:`StellarSEDComponentConfig` for the accuracy/cost tradeoff.
 VALID_AGE_KERNELS = ("cic", "dsps")
+
+#: Accuracy bound of the 'dsps' age kernel relative to exact mass-proportionality.
+#: The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' integrates
+#: the SFH on the coarse SSP age grid and costs proportionality accuracy,
+#: typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes
+#: in the prior (#2368, #2370). This constant is used in registry docs, public
+#: docs (model_configuration.md), and the field=True advisory.
+AGE_KERNEL_ACCURACY_BOUND = 1e-3
 
 #: Kernel chosen on the non-field path when ``age_kernel`` is left unset
 #: (``None`` = auto). ``"cic"`` is the accuracy default: the DSPS histogram
@@ -174,7 +201,7 @@ def _resolve_age_kernel(config) -> str:
     if config.field:
         # The field draw lives on the coarse lookback grid by construction, so
         # DSPS is the only implemented kernel here. Auto-select resolves to it
-        # silently (that is today's behavior); an EXPLICIT 'cic' must not.
+        # silently; an EXPLICIT 'cic' must not.
         if kernel == "cic":
             raise NotImplementedError(
                 "age_kernel='cic' is not supported with a GP-field SFH: the "
@@ -1660,9 +1687,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     sfh_bin_edges_gyr: Any = None
 
     def __post_init__(self):
-        """Emit deprecation warning for sps_backend (issue #1470)."""
-        import warnings
-
+        """Emit deprecation warning for sps_backend and advisory for field=True."""
         self._validate_bin_edges()
 
         if self.sps_backend != "dsps":
@@ -1674,6 +1699,17 @@ class StellarSEDComponentConfig(SEDComponentConfig):
                 DeprecationWarning,
                 stacklevel=3,
             )
+
+        # Emit advisory when field=True forces 'dsps' over the default kernel
+        if self.field and self.age_kernel is None:
+            bound_str = f"{AGE_KERNEL_ACCURACY_BOUND:g}"
+            msg = (
+                f"field=True forces age_kernel='dsps', which costs mass-proportionality "
+                f"accuracy: typically well below 1e-5, but reaching roughly {bound_str} "
+                f"at the sharpest SFH shapes in the prior. To silence this advisory, "
+                f"set age_kernel='dsps' explicitly to acknowledge the choice. (#2368)"
+            )
+            warnings.warn(msg, AgeKernelFieldWarning, stacklevel=3)
 
     def bin_edges_sfh_kwarg(self) -> dict:
         """``{'bin_edges_gyr': ...}`` when the SFH takes it, else ``{}``.
