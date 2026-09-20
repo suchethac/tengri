@@ -1,6 +1,17 @@
 ## [Unreleased]
 
+### Added
+
+- The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
+
 ### Fixed
+
+- The accuracy bound of `age_kernel='dsps'` (roughly 1e-3 at the sharpest SFH
+  shapes) is now stated on the discovery surface: the registry rows for each age
+  kernel and the model configuration guide. A new advisory warns at build time when
+  `field=True` silently forces the DSPS kernel over the user's default or
+  explicit choice, so the coupling between the field path and the coarse kernel
+  is no longer invisible. (#2368)
 
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
@@ -19,6 +30,8 @@
   Fitted SEDs were never affected — `_shock_line_arrays` anchors on Halpha, so
   the common factor canceled — and this does not fix #2066.
 
+- 6 broad skip handlers narrowed to specific exceptions; the skip-handler ratchet is now empty (#1615). The handlers had been hiding failures #2464 and #2465.
+
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
   (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
   cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
@@ -36,8 +49,6 @@
   monotonicity is enforced per camera segment, allowing overlaps at seams
   where adjacent cameras meet. Segment sizes must be positive and sum to the
   wavelength grid length. (#2172)
-
-- 6 broad skip handlers narrowed to specific exceptions; the skip-handler ratchet is now empty (#1615). The handlers had been hiding failures #2464 and #2465.
 
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
@@ -1120,6 +1131,15 @@
   observes the freed dimensions while the posterior reports only the prior.
   Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
   naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
+
+- `BakedInBackend` now checks whether the SSP grid has nebular emission before
+  silently returning zero nebular flux. On bare-stellar grids
+  (`ssp_data.nebular == "bare"`), it raises `BakedInNebularBareError`
+  immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
+  `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
+  disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
+  and honours `suppress` and an explicit `neb` declaration; the bare-grid
+  refusal does not fire when nebular emission is off (#2362).
 
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and

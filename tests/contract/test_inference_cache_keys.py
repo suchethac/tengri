@@ -43,6 +43,7 @@ from tengri.observation.line_list import LineList
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import Spectroscopy
+from tests.contract._signature_builds import resolve_ssp_data
 
 pytestmark = pytest.mark.contract
 
@@ -166,8 +167,6 @@ def fitter_after_a_map_multistart_run() -> Fitter:
     ForwardModel/CatalogFitter and native VI is ``tier=broken`` (CLAUDE.md),
     neither a good fit for a fast contract test.
     """
-    from tests.contract._signature_builds import resolve_ssp_data
-
     ssp_data = resolve_ssp_data("bare-stellar")
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
     model = SEDModel.build(
@@ -185,6 +184,7 @@ def fitter_after_a_map_multistart_run() -> Fitter:
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
         },
+        neb={"type": "none"},
         redshift=Fixed(0.1),
     )
     data = jnp.array([1.2, 0.8, 0.5, 0.9])
