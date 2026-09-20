@@ -19,6 +19,7 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
+from tengri._completion import curated_dir
 from tengri.utils.physics_constants import MPC_CM
 
 
@@ -118,12 +119,11 @@ def __getattr__(name: str):
 
 
 #: Names served lazily by :func:`__getattr__`; they are not in ``__all__`` because they
-#: do not exist at import time (#2276), so :func:`__dir__` lists them for discovery.
+#: do not exist at import time (#2276), so :func:`curated_dir` lists them for discovery.
 _LAZY_NAMES: tuple[str, ...] = ("PLANCK15", "WMAP5")
 
-
-def __dir__() -> list[str]:
-    return sorted([*globals(), *_LAZY_NAMES])
+_CURATED_DIR = tuple([*__all__, *_LAZY_NAMES])
+__dir__ = curated_dir(_CURATED_DIR)
 
 
 def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
