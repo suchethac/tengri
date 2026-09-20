@@ -7166,9 +7166,17 @@ def _get_explicit_overrides(
     explicit = {}
 
     for param_name in param_names:
+        # Per-screen shape names (dust_slope_bc, etc.) with wildcard_fixed_inactive
+        # provenance should NOT be emitted; they're inert under their screen's law.
+        raw_tag = provenance.get(param_name, "registry_default")
+        if raw_tag == "wildcard_fixed_inactive":
+            # This is a per-screen parameter that's inactive (not read by its law)
+            # and was wildcard-pinned (not user-explicit), so skip it.
+            continue
+
         # Base tag: a grid-narrowed parameter still came from the wildcard, so
         # it must collapse back into it rather than surface as an override.
-        tag = _base_provenance(provenance.get(param_name, "registry_default"))
+        tag = _base_provenance(raw_tag)
 
         # If there's a wildcard intent, exclude params that match it
         if wildcard_intent is not None:

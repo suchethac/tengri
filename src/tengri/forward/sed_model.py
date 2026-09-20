@@ -9222,6 +9222,8 @@ class SEDModel:
         provenance = provenance or {}
 
         # Check for per-screen parameters (dust_slope_bc, dust_delta_diff, etc.)
+        # Per-screen names are requested ONLY if user-explicit (user_prior/user_fixed);
+        # wildcard-pinned (including inactive) does not count as requested.
         per_screen_names = [
             f"dust_{stem}_{screen}"
             for stem in ("slope", "delta", "bump_strength", "Rv")
@@ -9229,8 +9231,14 @@ class SEDModel:
         ]
         for per_screen_name in per_screen_names:
             if per_screen_name in provenance:
-                prov_tag = str(provenance.get(per_screen_name, "registry_default")).removesuffix("_grid")
-                if prov_tag in self._REQUESTED_PROVENANCE:
+                prov_tag = provenance.get(per_screen_name, "registry_default")
+                # Only count user-explicit provenances (user_prior, user_fixed)
+                # Strip outcome markers (_grid, _pinned, _zcap, _inactive) for base comparison
+                base_tag = str(prov_tag)
+                for suffix in ("_grid", "_pinned", "_zcap", "_inactive"):
+                    if base_tag.endswith(suffix):
+                        base_tag = base_tag[: -len(suffix)]
+                if base_tag in ("user_prior", "user_fixed"):
                     per_screen_reads.add(per_screen_name)
 
         return frozenset(
