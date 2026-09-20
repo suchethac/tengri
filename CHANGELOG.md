@@ -6,9 +6,12 @@
 
 ### Fixed
 
-- SKIRTOR grid caches are keyed on the process float dtype, so a float32
-  forward no longer perturbs a later float64 forward of the same model
-  (2.5e-9 measured shift) (#2275).
+- The accuracy bound of `age_kernel='dsps'` (roughly 1e-3 at the sharpest SFH
+  shapes) is now stated on the discovery surface: the registry rows for each age
+  kernel and the model configuration guide. A new advisory warns at build time when
+  `field=True` silently forces the DSPS kernel over the user's default or
+  explicit choice, so the coupling between the field path and the coarse kernel
+  is no longer invisible. (#2368)
 
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
@@ -92,6 +95,10 @@
   precision versus ~10% prior miss.
 
 ### Fixed
+
+- SKIRTOR grid caches are keyed on the process float dtype, so a float32
+  forward no longer perturbs a later float64 forward of the same model
+  (2.5e-9 measured shift) (#2275).
 
 - Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
 
