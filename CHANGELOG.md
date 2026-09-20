@@ -111,6 +111,12 @@
   while this LUT's split is exact at the true physical edge), filed as #2447
   and not fixed this round; the magnitude is SFH- and filter-dependent.
 
+  `tools/check_zero_hiding_clamps.py`'s pinned count moves 91 -> 92: the new
+  Lyman-continuum twin's `num / jnp.maximum(denom, ...)` shares its
+  denominator with the whole-band tensor's existing site and the same
+  count/scale-floor classification — the filter integral of a loaded filter
+  cannot vanish by construction.
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
