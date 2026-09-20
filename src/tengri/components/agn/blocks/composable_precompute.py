@@ -37,6 +37,7 @@ Plan: ``~/.claude/plans/enumerated-watching-rainbow.md``.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from typing import Any
 
@@ -58,7 +59,30 @@ from tengri.utils.grid_interp import (
     interp_nd_triweight,
 )
 
-__all__ = ["AXIS_PARAMS", "build_lookup", "precompute"]
+__all__ = ["AXIS_PARAMS", "PrecomputeGridExtentWarning", "build_lookup", "precompute"]
+
+
+class PrecomputeGridExtentWarning(UserWarning):
+    """Warning when a FREE parameter prior extends beyond a precompute grid axis.
+
+    Emitted at build time when a FREE (not Fixed) parameter's prior support
+    extends beyond the corresponding grid axis extent. Such queries will be
+    clamped silently to the grid edge (#1953), producing a flat likelihood
+    plateau outside the grid.
+
+    This mirrors the stellar metallicity guard (_validate_metallicity_bounds,
+    #442) extended to AGN template-grid axes in the composable precompute.
+
+    Notes
+    -----
+    Unlike runtime queries (which are JAX tracers under jit), build-time
+    validation can access the Parameters object and emit a warning. The forward
+    model's clamping behavior is unchanged; the warning makes the constraint
+    visible.
+    """
+
+    pass
+
 
 #: Per-axis reparametrization applied ONLY to the coordinate the triweight
 #: kernel interpolates over, not to the physics evaluation (#1206 follow-up,
@@ -93,6 +117,85 @@ _INTERP_AXIS_TRANSFORM_JAX: dict[str, Any] = {
 #: an empty tuple here as the contract baseline; callers always pass
 #: ``axis_grids`` explicitly to :func:`precompute`.
 AXIS_PARAMS: tuple[str, ...] = ()
+
+
+def _validate_grid_extent_against_priors(
+    axis_names: tuple[str, ...],
+    axis_grids: Mapping[str, np.ndarray],
+    parameters: Any | None,
+    transformed_axes: tuple[str, ...],
+) -> None:
+    """Warn if a FREE parameter prior exceeds the corresponding axis grid extent.
+
+    A FREE parameter whose prior support extends beyond the grid axis will be
+    clamped silently to the edge at runtime (#1953), producing a flat likelihood
+    plateau there. This check mirrors _validate_metallicity_bounds (#442).
+
+    Parameters
+    ----------
+    axis_names : tuple of str
+        Parameter names for the axes being precomputed (in axis grid order).
+    axis_grids : Mapping[str, ndarray]
+        ``{param_name: grid_values}`` per axis.
+    parameters : Parameters or None
+        The Parameters object, used to extract prior distributions. If None,
+        no check is performed.
+    transformed_axes : tuple of str
+        Axis names whose stored coordinate is a reparametrization of the
+        caller-facing value (e.g., "agn_grahsp_log_l5100"). Bounds comparison
+        happens in the STORED coordinate.
+
+    Warnings
+    --------
+    PrecomputeGridExtentWarning
+        Once per parameter, when a FREE prior exceeds the axis extent.
+        Message includes the parameter name, prior bounds, axis extent,
+        and suggestions for tightening the prior or widening the grid.
+    """
+    if parameters is None:
+        return  # No prior information to validate
+
+    distributions = getattr(parameters, "_distributions", {})
+    if not distributions:
+        return
+
+    for name in axis_names:
+        dist = distributions.get(name)
+        if dist is None or dist.is_fixed:
+            continue  # Fixed params are handled separately; skip
+
+        # Get the prior bounds.
+        bounds = dist.bounds
+        if bounds is None or bounds[0] is None or bounds[1] is None:
+            # Unbounded or unspecified prior; skip the check
+            continue
+
+        prior_lo, prior_hi = float(bounds[0]), float(bounds[1])
+
+        # Get the axis extent. If the axis is transformed for interpolation,
+        # compare in the stored (transformed) coordinate; otherwise, compare
+        # in the parameter's own coordinate.
+        raw_axis = np.asarray(axis_grids[name], dtype=np.float64)
+        if name in transformed_axes:
+            # Transform the axis to the interpolation coordinate
+            axis_data = _INTERP_AXIS_TRANSFORM[name](raw_axis)
+        else:
+            axis_data = raw_axis
+
+        grid_lo = float(axis_data.min())
+        grid_hi = float(axis_data.max())
+
+        # Check if the prior extends beyond the grid
+        if prior_lo < grid_lo or prior_hi > grid_hi:
+            warnings.warn(
+                f"{name} prior bounds [{prior_lo:.3f}, {prior_hi:.3f}] extend "
+                f"beyond the precompute grid axis extent [{grid_lo:.3f}, {grid_hi:.3f}]. "
+                f"Queries outside the grid will clamp to the edge (#1953), producing "
+                f"a flat likelihood plateau there. Tighten the prior to within the "
+                f"grid range or expand the axis grid to cover the prior support.",
+                PrecomputeGridExtentWarning,
+                stacklevel=4,
+            )
 
 
 def _build_template_state(recipe: Recipe) -> dict[str, Any] | None:
@@ -371,6 +474,9 @@ def precompute(
         for name in axis_names
         if name in _INTERP_AXIS_TRANSFORM and name not in _would_collapse
     )
+
+    # Warn if any FREE parameter's prior extends beyond its axis grid extent (#895).
+    _validate_grid_extent_against_priors(axis_names, axis_grids, parameters, _transformed_axes)
 
     def _interp_axis_values(name: str) -> np.ndarray:
         raw = np.asarray(axis_grids[name], dtype=np.float64)
