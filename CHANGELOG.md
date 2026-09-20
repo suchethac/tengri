@@ -2,21 +2,14 @@
 
 ### Fixed
 
-- Unknown dict keys now name the type's accepted parameter short names (#2176):
-  when a user writes an unknown key like `sfh={'type': 'delayed', 'zzz': 1.0}`
-  with no close difflib match, the error message now includes the type's
-  parameter short names (e.g., "Parameter names this type accepts: tau_gyr,
-  age_gyr"), so the user sees what they can write instead of only the structural
-  keys. For types with many parameters (> 12), the message points to
-  `tengri.describe('<type>')` instead of listing them.
-
-- AGN attenuation did-you-mean routes law-form names to the law form (#2201):
-  when a user writes an invalid AGN atten type like `agn={'atten':
-  {'type': 'prevot'}}`, difflib may suggest `smc_prevot` (a law-mapped type).
-  Before the fix, the error message suggested using `type='smc_prevot'`, which
-  itself would be refused with "no longer supported. Use the law form instead"
-  (two hops to the same fix). The message now suggests the law form directly:
-  `law='prevot_smc'` (one hop).
+- JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
+  (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
+  cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
+  (released 2026-09-17). Upstream tolerated the condition instead of raising
+  `FileNotFoundError`, so the test now asserts the write outcome (success and
+  entry readable) under both JAX 0.11.1 (pre-fix) and 0.11.2+ (post-fix),
+  gated on `packaging.version` comparison. The orphan-atime repair stays
+  load-bearing on JAX < 0.11.2 and remains useful for recovery on all versions.
 
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
@@ -52,6 +45,27 @@
   builds (with explicit `met_logzsol_scatter` as parameter name) remain
   unchanged; both spellings cannot be passed together (raises if shadowing is
   detected).
+
+### Fixed
+
+- `mcmc_nuts_fast` registry row and pmap hint: removed false claim "pmapped chains
+  by default", now states "vmapped chains on one device; pmapped when the platform
+  exposes at least n_chains devices". The TENGRI_HOST_DEVICES hint is now gated
+  to GPU/TPU platforms only; on CPU, vmap is 8% faster than pmap and the hint was
+  counterproductive (418.3 s vmap vs 451.5 s pmap, same 5-param broadband fit).
+  Removed "20 s" from short_doc: timing varies widely by model (15 s–30+ min),
+  not a property of the recipe alone. Error message for `chain_parallel='pmap'`
+  is now platform-aware: suggests TENGRI_HOST_DEVICES on GPU/TPU, recommends
+  vmap/auto on CPU (#2361).
+
+### Changed
+
+- **X-ray absorption nomenclature**: `tbabs_transmission()` renamed to
+  `wabs_transmission()` to accurately reflect the Morrison & McCammon (1983)
+  cross-section convention it implements, not Wilms et al. (2000) tbabs. The
+  function behavior is unchanged; `tbabs_transmission` remains available as a
+  deprecated alias. The soft-band difference between wabs and tbabs (10–30%
+  below ~1 keV) is now documented in the docstring. (#901)
 
 ### Added
 
@@ -401,6 +415,17 @@
   size, so the opening steps of every warmup diverge whatever the posterior.
 
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
+
+
+### Fixed
+
+- `params_override` now rejects a noise parameter the built likelihood cannot
+  read. Noise parameters are only consumed when declared in the spec (free or
+  Fixed at nonzero); with the default spec (noise_frac_cal at Fixed(0.0)), the
+  likelihood is plain Gaussian and ignores any noise_* override. The override
+  was silently accepted, reporting success while having zero effect. It now
+  raises with a message that explains the mechanism and suggests declaring it
+  in the spec. (#2193).
 
 
 ### Changed
@@ -995,6 +1020,14 @@
 
 ### Fixed
 
+- `enable_fast_nebular` now refuses when a CB19 optional parameter
+  (`neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is freed. The per-Q_H
+  grid bakes these axes at their reference values and cannot respond to the
+  sampler's variations, producing a silent mismatch: the likelihood never
+  observes the freed dimensions while the posterior reports only the prior.
+  Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
+  naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
+
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
   `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
@@ -1083,6 +1116,14 @@
   default; that disagreement is left as-is and tracked separately (#2261)
   (#2241).
 
+- Unknown dict keys now name the type's accepted parameter short names (#2176):
+  when a user writes an unknown key like `sfh={'type': 'delayed', 'zzz': 1.0}`
+  with no close difflib match, the error message now includes the type's
+  parameter short names (e.g., "Parameter names this type accepts: tau_gyr,
+  age_gyr"), so the user sees what they can write instead of only the structural
+  keys. For types with many parameters (> 12), the message points to
+  `tengri.describe('<type>')` instead of listing them.
+
 - `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
   believing it the base of the `Tracer*ConversionError` family. On jax
   0.11.1 that belief is false: `TracerArrayConversionError` (raised by
@@ -1092,6 +1133,14 @@
   its input with `np.asarray` raised through the handler instead of
   falling back to the eager per-draw loop. The handler now catches the
   whole family explicitly (#2264).
+
+- AGN attenuation did-you-mean routes law-form names to the law form (#2201):
+  when a user writes an invalid AGN atten type like `agn={'atten':
+  {'type': 'prevot'}}`, difflib may suggest `smc_prevot` (a law-mapped type).
+  Before the fix, the error message suggested using `type='smc_prevot'`, which
+  itself would be refused with "no longer supported. Use the law form instead"
+  (two hops to the same fix). The message now suggests the law form directly:
+  `law='prevot_smc'` (one hop).
 
 - The nebular component's DIG mixing no longer evaluates the DIG branch when
   the spec pins ``neb_dig_frac`` at the declared ``Fixed(0.0)`` default. A
