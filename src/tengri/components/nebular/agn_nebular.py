@@ -152,13 +152,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._data_setup import package_or_env_data_path
+from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import (
     _C_CGS,
     _H_PLANCK,
     _LOG10_ZSUN,
     _LSUN_ERG,
 )
-from tengri.components.nebular._params import CUE_GAS_EXTRA_PARAMS
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 from tengri.protocols.component import declared_default
 
@@ -168,11 +168,6 @@ _DEFAULT_FELTRE_GRID_PATH = package_or_env_data_path("feltre_grid.h5")
 # ── Physical constants ────────────────────────────────────────────
 _NU_LYMAN = _C_CGS / (911.76e-8)  # Lyman limit frequency [Hz]
 _RYDBERG_ERG = 2.1799e-11  # 13.6 eV in erg
-
-
-def _get_gas_logn_default():
-    """Get gas_logn default from the declared parameter (#2297)."""
-    return declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logn")
 
 
 # ── Ionizing spectrum conversion ──────────────────────────────────
@@ -462,7 +457,11 @@ def agn_nlr_cue(
 
     """
     if gas_logn is None:
-        gas_logn = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logn")
+        # gas_logn represents the AGN NLR electron density, not galaxy HII region density.
+        # The two parameters have different physical meanings and different defaults:
+        # - Galaxy Cue: gas_logn in CUE_GAS_EXTRA_PARAMS has default 2.0 (HII region)
+        # - AGN NLR: agn_nlr_logn in AGN_PARAMS has default 3.0 (NLR density)
+        gas_logn = declared_default(AGN_PARAMS, "agn_nlr_logn")
     if ionspec_params is None:
         ionspec_params = agn_ionspec_from_alpha_pl(alpha_pl)
 
@@ -1473,7 +1472,11 @@ def agn_nlr_emission(
 
     """
     if gas_logn is None:
-        gas_logn = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logn")
+        # gas_logn represents the AGN NLR electron density, not galaxy HII region density.
+        # The two parameters have different physical meanings and different defaults:
+        # - Galaxy Cue: gas_logn in CUE_GAS_EXTRA_PARAMS has default 2.0 (HII region)
+        # - AGN NLR: agn_nlr_logn in AGN_PARAMS has default 3.0 (NLR density)
+        gas_logn = declared_default(AGN_PARAMS, "agn_nlr_logn")
     if backend == "cue":
         if cue_backend is None:
             raise ValueError(

@@ -60,8 +60,8 @@ import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
+from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
-from tengri.components.nebular._params import PARAMS as NEB_PARAMS
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
@@ -1065,7 +1065,10 @@ class MappingsPhotoAGNBackend:
 
         """
         if neb_logU is None:
-            neb_logU = declared_default(NEB_PARAMS, "neb_logU")
+            # neb_logU in AGN NLR context uses agn_nlr_logU (default -2.0), not
+            # galaxy neb_logU (-3.0). This function is AGN-specific, so it reads
+            # the AGN parameter declaration.
+            neb_logU = declared_default(AGN_PARAMS, "agn_nlr_logU")
         grid = self.grid
         zo_val = _log_z_abs_to_zo(neb_logZ_gas)
 

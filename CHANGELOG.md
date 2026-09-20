@@ -2,14 +2,15 @@
 
 ### Fixed
 
-- Three nebular fallback defaults now read from the parameter declarations
-  (#2297): `gas_logn` fallback in `agn_nebular.agn_nlr_cue` and
-  `agn_nebular.agn_nlr_emission` signatures (was hardcoded 3.0, declared 2.0),
-  `shock_log_lhalpha` fallback in `component.py` (was hardcoded 40.0, declared
-  41.0), and `neb_logU` fallback in `mappings_photo.MappingsPhotoAGNBackend`
-  methods (was hardcoded -2.0, declared -3.0). The guard tool scope was widened
-  to `components/nebular/` and its negative-literal detection was verified to
-  catch these violations. (#2261)
+- Nebular fallback defaults now read from context-appropriate parameter
+  declarations (#2297): AGN NLR `gas_logn` fallback (lines 465, 1480 of
+  `agn_nebular.py`) reads `declared_default(AGN_PARAMS, "agn_nlr_logn")`
+  returning 3.0, not galaxy `gas_logn` (2.0); AGN NLR `neb_logU` fallback (line
+  1068 of `mappings_photo.py`) reads `declared_default(AGN_PARAMS,
+  "agn_nlr_logU")` returning -2.0, not galaxy `neb_logU` (-3.0). The fix restores
+  design comments explaining why the same parameter name (`gas_logn`, `neb_logU`)
+  means different physical quantities in AGN vs. stellar contexts, and why each
+  must read from its own declaration.
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
