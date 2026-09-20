@@ -45,6 +45,8 @@
 
 ### Fixed
 
+- Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
+
 - Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
   flat-form builds (e.g. `Parameters(lgmet_scatter=0.3)`), the kwarg now sets
   the registered `met_logzsol_scatter` Fixed value at the parameter registry
