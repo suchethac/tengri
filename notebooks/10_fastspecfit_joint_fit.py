@@ -67,7 +67,6 @@ from tengri import (
 )
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
-from _setup import HMC_VALIDATED
 
 plot.setup_style()
 
@@ -328,35 +327,21 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # ## Posterior on the fast path
 #
 # A point estimate is not enough for a catalog — the metallicity / dust /
-# ionization parameters are degenerate. This posterior is strongly correlated,
-# so the mass matrix must be dense and fixed-trajectory HMC is more efficient
-# than NUTS. We run four sequential chains (each reuses one compiled kernel,
-# keeping memory at one chain's footprint) for 3000 warmup and 1000 samples,
-# reaching R-hat ≈ 1.01 with a handful of divergences: close to the R-hat < 1.01 you
-# would want before quoting an interval in a paper, though the divergences say the
-# sampler is still working against the curvature of this degenerate sector. Truth
-# lands inside the 68% interval for 5 of 6 parameters.
+# ionization parameters are degenerate, and the width of that degeneracy is the
+# result. The default sampler handles it: the stellar mass is marginalized
+# analytically rather than sampled, which removes the most strongly correlated
+# direction before the sampler sees it, and the remaining parameters get a dense
+# metric. Read `max R-hat` and the divergence count below; truth lands inside the
+# 68% interval for 5 of 6 parameters.
 
 # %%
-# Fixed-length HMC on the precomputed model. Every gradient here goes through the
-# `(WavePrecomp, FeaturePrecomp)` tables built above, so an evaluation is a lookup
-# rather than a full SSP integral — which is what makes a long chain affordable.
-#
-# HMC with fixed 20-leapfrog trajectories is more efficient than NUTS here because
-# NUTS spends its budget building deep adaptive trees on the correlated degeneracy.
-# Four chains: R-hat from fewer chains understates non-convergence.
-HMC_LONG = {**HMC_VALIDATED, "n_warmup": 3000, "n_samples": 1000}
-N_CHAINS = 4
+# The default sampler on the precomputed model. Every gradient here goes through
+# the `(WavePrecomp, FeaturePrecomp)` tables built above, so an evaluation is a
+# lookup rather than a full SSP integral.
 data = Data(photometry=(flux_phot, n_phot))
 
 t0 = time.perf_counter()
-posterior = ForwardModel.build(sed=model_fast).fit(
-    data,
-    key=jax.random.PRNGKey(7),
-    n_chains=N_CHAINS,
-    chain_method="sequential",
-    **HMC_LONG,
-)
+posterior = ForwardModel.build(sed=model_fast).fit(data, key=jax.random.PRNGKey(7))
 elapsed = time.perf_counter() - t0
 rmax = max(float(v) for v in posterior.rhat().values())
 n_divergent = posterior.diagnostics.get("n_divergent", 0)
@@ -369,15 +354,13 @@ _free = model_fast.spec.free_params
 n_draw = min(np.asarray(posterior.samples[p]).size for p in _free)
 n_unique = min(np.unique(np.asarray(posterior.samples[p])).size for p in _free)
 
-print(
-    f"HMC ({N_CHAINS} chains x {HMC_LONG['n_warmup']}w+{HMC_LONG['n_samples']}s): "
-    f"{elapsed:5.0f}s   max R-hat {rmax:.3f}   divergences {n_divergent}"
-)
+print(f"Posterior: {elapsed:5.0f}s   max R-hat {rmax:.3f}   divergences {n_divergent}")
 print(f"  Mixing: worst parameter has {n_unique}/{n_draw} unique draws")
 
 # %% [markdown]
-# On a machine with more RAM, set `chain_method="parallel"` to run chains
-# concurrently, cutting wall time roughly N-fold at N-chain memory cost.
+# This is one galaxy. For a catalog, `Catalog(...).fit(...)` builds the lookup
+# tables once and reuses them for every object, so the cost above is paid at the
+# start rather than per source.
 
 # %% [markdown]
 # ## Recovery
