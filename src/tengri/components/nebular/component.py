@@ -1049,49 +1049,75 @@ class NebularSEDComponent(TemplateThreading):
             sed_intrinsic = jnp.where(lyc_mask, sed_intrinsic * neb_fesc, sed_intrinsic)
 
         # ── Precomp-path Lyman-continuum mask correction (#2439, #2427) ────
-        # The dense path masks sed_intrinsic below 912 Å; the LUT path needs the same correction.
-        # Apply: stellar_phot_lnu_precomp - (1 - neb_fesc) * stellar_phot_lnu_precomp_lyc
+        # The dense path masks sed_intrinsic below 912 Å; the LUT path needs
+        # the same correction on the whole-band bucket (R3, exact algebraic
+        # split at the physical edge, built in preintegrate_grid) AND its
+        # per-age twin (R3d): the DerivedState contract
+        # ``sum(stellar_phot_lnu_per_age_precomp, age) ==
+        # stellar_phot_lnu_precomp`` (protocols/derived_state.py) must still
+        # hold after the correction, and the Taylor/no-subband two_component
+        # path reads the per-age bucket directly.
+        # A fully-Lyman-continuum band (the whole filter support is rest λ <
+        # 912 Å, e.g. GALEX NUV at z=3) has ``full ≈ lyc``, so at fesc≈0 the
+        # true answer is ≈0 and the subtraction is a catastrophic
+        # cancellation: measured ~-1e-47 [erg/s/Hz] (floating-point noise,
+        # not physics). A physical L_ν bucket cannot be negative, and
+        # ``ab_mag_from_flux`` (log of the flux) would raise/NaN on it
+        # downstream, so clamp at zero (item 10).
         stellar_phot_lyc = state.derived.get("stellar_phot_lnu_precomp_lyc")
         if stellar_phot_lyc is not None:
             stellar_phot = state.derived.get("stellar_phot_lnu_precomp")
             if stellar_phot is not None:
-                # Apply the LyC mask exactly as the dense path does: absorb the (1-fesc) fraction.
-                stellar_phot_corrected = stellar_phot - (1.0 - neb_fesc) * stellar_phot_lyc
-                derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_corrected
-
-        # K-node sub-band twin of the correction above (#2439, #2427). Two
-        # downstream reconstructions never read ``stellar_phot_lnu_precomp`` at
-        # all and so never saw the fix above: (1) ``two_component``'s dusty LUT
-        # rebuilds the stellar term from
-        # ``stellar_phot_lnu_per_age_subband_precomp`` node-by-node (#1122's
-        # K-point quadrature); (2) a *dust-free* model with a precomputable
-        # mean-IGM (``igm={'type': 'inoue', ...}``) also rebuilds it from the
-        # same tensor (``observation.predict_via_precomp``'s
-        # ``sub_per_age_igm is not None`` branch), purely to keep the IGM-free
-        # and IGM-folded halves partition-consistent (#1135) -- dust need not
-        # be involved for this branch to run, and it has nothing to do with
-        # dust's own attenuation LUT, so a correction living only in
-        # ``two_component.py`` cannot reach it. Both consumers read this one
-        # tensor, so masking it once here (rather than in each consumer) fixes
-        # both and cannot double-count. Flat across age, unlike the dense
-        # ``two_component`` path's y(age)-graded ``lyc_absorb_all=False``
-        # formula (birth-cloud-only absorption): there is no birth-cloud
-        # concept at the sub-band-quadrature level, and this is the same flat
-        # treatment ``sed_intrinsic`` already receives just above -- an
-        # approximation like every other sub-band channel, exact only at
-        # ``neb_fesc=1`` (a no-op) or ``neb_fesc=0`` (full absorption).
-        sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
-        sub_per_age = state.derived.get("stellar_phot_lnu_per_age_subband_precomp")
-        if sub_waves is not None and sub_per_age is not None:
-            lyc_screen_sub = jnp.where(sub_waves < 912.0, neb_fesc, jnp.ones_like(sub_waves))
-            derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
-                sub_per_age * lyc_screen_sub
-            )
-            sub_per_age_igm = state.derived.get("stellar_phot_lnu_per_age_subband_igm_precomp")
-            if sub_per_age_igm is not None:
-                derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                    sub_per_age_igm * lyc_screen_sub
+                derived_overrides["stellar_phot_lnu_precomp"] = jnp.maximum(
+                    stellar_phot - (1.0 - neb_fesc) * stellar_phot_lyc, 0.0
                 )
+            per_age_lyc = state.derived.get("stellar_phot_lnu_per_age_precomp_lyc")
+            per_age = state.derived.get("stellar_phot_lnu_per_age_precomp")
+            if per_age_lyc is not None and per_age is not None:
+                derived_overrides["stellar_phot_lnu_per_age_precomp"] = jnp.maximum(
+                    per_age - (1.0 - neb_fesc) * per_age_lyc, 0.0
+                )
+
+        # ── Sub-band Lyman-continuum factor (#2439, #2427, R1/R2) ──────────
+        # Publish the per-chunk factor, not a correction applied here: two
+        # downstream reconstructions read the RAW sub-band tensors and each
+        # applies its OWN dense-path rule to this factor, so this component
+        # must not pre-apply one (R2 -- a flat correction here that
+        # ``two_component`` then re-corrected for its birth-cloud grading
+        # would double-count). (1) A *dust-free* model with a precomputable
+        # mean-IGM (``igm={'type': 'inoue', ...}``) reads it directly in
+        # ``observation.predict_via_precomp``'s ``sub_per_age_igm is not
+        # None`` branch -- flat across age, matching THIS component's own
+        # ``sed_intrinsic`` mask above, since there is no birth-cloud concept
+        # without a two_component dust screen. (2) ``DustSEDComponent``
+        # (two_component), when it runs, OVERWRITES this same key with its
+        # own y(age)-graded ``1 - y(a)(1-fesc)`` (or the flat rule under
+        # ``lyc_absorb_all=True``) -- same key, so whichever component runs
+        # last for a given model wins, by construction, and there is exactly
+        # one factor per model. When R1 forced a chunk boundary at the
+        # physical edge (912(1+z)), ``sub_waves < 912`` categorizes every
+        # chunk exactly (no chunk can straddle); when it did not (this
+        # model's mask is not live, or a filter genuinely does not straddle),
+        # the categorization is the pre-#2439 approximation, but the factor
+        # is then applied to nothing that differs from before (case #2439
+        # instances aside, sub-band accuracy is unrelated to this).
+        sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
+        if sub_waves is not None:
+            derived_overrides["stellar_subband_lyc_factor_precomp"] = jnp.where(
+                sub_waves < 912.0, neb_fesc, jnp.ones_like(sub_waves)
+            )
+
+        # ── SpectrumPrecomp: identical defect, exact per-pixel fix (#2439,
+        # #2427, item 5). A spectrum pixel IS a single rest-frame wavelength
+        # (unlike a photometric band, which integrates over many), so there
+        # is no partition to make exact here -- the elementwise mask below
+        # already matches the dense path's ``sed_intrinsic`` mask exactly,
+        # pixel for pixel. ``spec_eff`` (rest-frame) is published by
+        # StellarSEDComponent before this component runs.
+        stellar_spec = state.derived.get("stellar_spec_lnu_precomp")
+        if stellar_spec is not None and spec_eff is not None:
+            spec_lyc_mask = jnp.where(spec_eff < 912.0, neb_fesc, jnp.ones_like(spec_eff))
+            derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec * spec_lyc_mask
 
         return state.with_(
             sed_intrinsic=(sed_intrinsic + nebular_sed)

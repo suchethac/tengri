@@ -1448,21 +1448,50 @@ class DustSEDComponent(TemplateThreading):
             # splat the resolved dicts now, which is what makes the claim true.
             sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
             if sub_waves is not None:
-                # Lyman-continuum escape-fraction correction (#2439, #2427):
-                # NebularSEDComponent.apply already masks
-                # ``stellar_phot_lnu_per_age_subband_precomp`` at each node's own
-                # rest wavelength before this component runs, so the sub-band
-                # tensor read here is already ``neb_fesc``-aware. Nothing to do
-                # in this branch; see ``nebular/component.py`` for the
-                # correction and why it has to live upstream of both this
-                # dust-attenuated reconstruction and the no-dust,
-                # mean-IGM-only sub-band reconstruction in
-                # ``observation.predict_via_precomp`` (neither of which reads
-                # anything two_component publishes).
                 a_bc_sub = jnp.exp(-tau_bc * law_bc_fn(sub_waves, **bc_kw))
                 a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, **diff_kw))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
+
+                # Lyman-continuum sub-band factor (#2439, #2427, R2):
+                # overwrites NebularSEDComponent's flat publish (SAME key,
+                # ``derived_overrides`` from a later component in the chain
+                # wins) with this component's own birth-cloud-graded rule,
+                # matching the dense ``lyc_factor`` in §2a exactly:
+                # ``1 - y(a)*(1-fesc)`` under the default
+                # ``lyc_absorb_all=False`` (only birth-cloud/young stars
+                # reprocess LyC; old/diffuse stellar LyC passes through), or
+                # the flat rule under ``lyc_absorb_all=True`` (matching §2a's
+                # ``sed_attenuated = sed_attenuated * _lyc_t`` there). Gated
+                # on the SAME ``lyc_transmission`` signal §2a reads: absent ->
+                # no nebular component -> nothing to correct, and this key is
+                # not published (a model without a live mask stays
+                # bit-for-bit identical to before this fix, R1/R3(b)).
+                if _lyc_t is not None:
+                    # NOT ``params.get("neb_fesc", ...)``: this component's own
+                    # ``params`` mapping is scoped to ``dust_*`` keys plus the
+                    # bare ``redshift`` (see this method's docstring) -- "neb_fesc"
+                    # is never in it, so that read would silently and always take
+                    # the 0.0 default regardless of the model's actual escape
+                    # fraction (caught by mutation testing: the K-sweep floor at
+                    # neb_fesc=1 failed to converge, staying pinned at the
+                    # fesc=0 answer instead of shrinking with K). ``_lyc_t`` is
+                    # already the correctly-resolved ``where(λ<912, fesc, 1)``
+                    # step (state.derived, not params-scoped) on the dense
+                    # ``wave`` grid nebular built it on; interpolating it onto
+                    # the sparse per-node ``sub_waves`` reads off the same
+                    # step exactly (off the 912 Å discontinuity itself, which
+                    # R1's forced edge keeps every node off of when the mask is
+                    # live) without re-deriving fesc at all.
+                    lyc_chunk = jnp.interp(sub_waves, wave, _lyc_t)
+                    if self.config.lyc_absorb_all:
+                        lyc_factor_sub = lyc_chunk
+                    else:
+                        y_age_sub = _young_indicator(
+                            ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+                        )
+                        lyc_factor_sub = 1.0 - y_age_sub[:, None, None] * (1.0 - lyc_chunk)
+                    derived_overrides["stellar_subband_lyc_factor_precomp"] = lyc_factor_sub
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
             # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z): a

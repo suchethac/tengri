@@ -12,12 +12,54 @@
   #2427's Inoue-IGM rows (z=0.8-3.0) are the same defect. The whole-band
   stellar LUT (`stellar_phot_lnu_precomp`) now carries an exact algebraic
   split of the SSP × filter integral at the 912 Å edge
-  (`stellar_phot_lnu_precomp_lyc`), collapsing the residual to the
-  pre-existing WavePrecomp floor. The K-node sub-band tensors that a dusty
-  `two_component` model and a dust-free model with a precomputable mean IGM
-  both reconstruct from get the same mask, flat across age (an approximation
-  of the dense path's y(age)-graded birth-cloud formula, since the age
-  weighting is not available until dust runs, downstream of nebular).
+  (`stellar_phot_lnu_precomp_lyc` and its per-age twin, zero-clamped against
+  catastrophic cancellation in a fully-Lyman-continuum band), collapsing the
+  residual to the pre-existing WavePrecomp floor.
+
+  Fix round (2026-09): the K-node sub-band tensors are now matched to each
+  consumer's OWN dense-path rule instead of one flat approximation shared by
+  all three. `preintegrate_grid` forces an extra quadrature edge exactly at
+  the physical 912 Å boundary whenever a live nebular mask is present, so no
+  chunk straddles the break; `NebularSEDComponent` publishes a flat
+  `stellar_subband_lyc_factor_precomp` factor (the only rule available
+  without a birth-cloud concept — the dust-free mean-IGM branch's own case),
+  and `two_component`, when it runs, overwrites the same key with its
+  y(age)-graded `1-y(a)(1-fesc)` rule (or the flat rule under
+  `lyc_absorb_all=True`) — never both, so there is exactly one factor per
+  model. `SpectrumPrecomp` gets the identical fix as an exact per-pixel mask
+  (a spectrum pixel is a single wavelength, so there is no partition to make
+  approximate). Four conservation invariants are now asserted directly: the
+  raw partition sums to the raw whole band; `neb_fesc=1.0` is bit-for-bit
+  identical to no nebular component at all; the corrected sub-band sum
+  matches the corrected whole band to ~1e-9 relative; and the per-age split
+  sums over age to its whole-band twin. The on-disk z-table cache version was
+  bumped (a warm cache built one day earlier would otherwise have satisfied
+  an unversioned key and silently served a table with no Lyman-continuum
+  split), and a missing `ssp_phot_lyc_table` key is now treated as a cache
+  miss rather than trusted.
+
+  Also fixed, found via a BASE-vs-HEAD zero-diff probe of this fix round's
+  own changes: `lyc_mask_live` (the build-time gate above) tested only
+  `isinstance(c, NebularSEDComponent)`, but `neb={'type': 'none'}` and
+  `backend="shock"` both still put a `NebularSEDComponent` in the chain
+  (`backend="baked_in"` for `'none'`) and both return from `apply` before
+  ever reaching the `neb_fesc` masking block, so a model with either one was
+  wrongly treated as "live": pure wasted compute for most filters, and for a
+  very wide/red far-IR filter whose observed-frame footprint sits nowhere
+  near the forced 912(1+z) edge, `subband_quadrature`'s own partition-
+  conservation assertion could raise outright (measured: WISE W3 and
+  Herschel PACS green/100um on the real `fsps_prsc_miles_chabrier.h5` grid,
+  a `neb={'type': 'none'}` model that built and predicted cleanly before
+  this fix round). The gate now also checks the nebular backend is one of
+  the photoionized ones (`cue`, `cloudy_grid`, `cb19`, `mappings`).
+
+  A real-grid residual remains after this fix (measured on the real
+  `fsps_prsc_miles_chabrier.h5` + Cue grid, this round's own SFH: z=2 GALEX
+  NUV ~10 %, z=3 SDSS u ~5 %, K-invariant) — this is the EXACT path's own
+  SSP-grid-node quantization of the 912 Å edge (the dense mask cuts at
+  whichever SSP wavelength node sits just below 912 Å, not at 912 Å itself,
+  while this LUT's split is exact at the true physical edge), filed as #2447
+  and not fixed this round; the magnitude is SFH- and filter-dependent.
 
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
