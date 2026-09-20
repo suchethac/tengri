@@ -1321,6 +1321,24 @@
   on this path; declare the fraction ``FREE`` or ``Fixed`` at the intended
   nonzero value instead (#2296) (#2262).
 
+- Metallicity-history bins are now refused at build time when unreachable at the model's
+  redshift (issue #2204): the fixed z=0 lookback ladder (_DEFAULT_MET_BIN_EDGES_LOG_YR
+  spanning 1 Myr–13.8 Gyr) becomes unreachable at high redshift where cosmic age is
+  younger than a bin's lower edge (start in lookback time). When `met={'type': 'bins'}`
+  or `'bins_continuity'`, `SEDModel.build` now checks that each bin's lower edge fits
+  within `age_at_z(z_floor)`, where z_floor is the lowest redshift the prior admits
+  (the fixed value for Fixed, the minimum for a free Uniform prior). A bin is unreachable
+  only when its lower edge exceeds cosmic age at z_floor — reachability is judged by each
+  bin's start at the lowest admitted redshift. Raises `ParameterError` naming the
+  unreachable bins [start, end] and cosmic age. The refusal message points users to the
+  actual remedies: use a lower redshift where all bins are reachable, or use a different
+  metallicity mode. The bin ladder is not yet configurable through `SEDModel.build()`
+  (see issue #2433 for future support). Bins older than the universe silently become
+  identically inert (zero gradient, flat direction in the sampler) until checked; the
+  new guard makes them fail loudly at build time with guidance. The docstring claim in
+  `metallicity_history.py` that the bins mode pairs with the continuity SFH model
+  (different bin-edge sets) is now corrected.
+
 - `neb_hbfrac` was silently inert at any value: declared as a CB_19
   parameter, but `CB19Backend.__init__`'s `hbfrac` constructor argument was
   never threaded from `params`, and `load_cb19_grid` collapsed the HbFrac
