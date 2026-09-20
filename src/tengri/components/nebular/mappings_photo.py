@@ -67,6 +67,7 @@ from tengri.components.nebular._shared import (
     compute_qh,
     render_nebular_lines,
     sanitize_qh_table,
+    ssp_log_age_yr_axis,
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -522,7 +523,7 @@ class MappingsPhotoStellarBackend:
         # produce non-finite Q_H values that would poison the interpolator.
         self._qh_table = sanitize_qh_table(qh_raw, backend_name="MappingsPhotoBackend")
         self._qh_log_met = ssp_data.ssp_lgmet
-        self._qh_log_age = ssp_data.ssp_lg_age_gyr + 9.0  # log(age/yr)
+        self._qh_log_age = np.asarray(ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr))  # log(age/yr)
 
         ssp_log_ages = np.array(self._qh_log_age)
         self._young_idx = np.where(ssp_log_ages <= _MAX_NEB_LOG_AGE_YR)[0]

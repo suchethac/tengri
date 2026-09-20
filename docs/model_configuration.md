@@ -228,8 +228,8 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 ```
 
 **Gotchas:**
-- `'age_kernel': 'dsps'` is **not** a performance knob — it's 13% slower. Use `'cic'` (default) unless you need DSPS cross-code parity.
-- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`.
+- `'age_kernel': 'dsps'` is **not** a performance knob — it's 13% slower. Use `'cic'` (default) unless you need DSPS cross-code parity. The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' costs it, typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes (#2368).
+- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`. When you set `type='field'` without an explicit `age_kernel`, an advisory warns you that the field path forces 'dsps'.
 - Default `age_kernel` auto-selects: `'cic'` for parametric SFH, `'dsps'` for field.
 
 

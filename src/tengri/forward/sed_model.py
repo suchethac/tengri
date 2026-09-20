@@ -3760,8 +3760,18 @@ class SEDModel:
             # advisory still fires -- it is the only signal that
             # distinguishes "the user said no nebular emission" from
             # "the user never mentioned nebular emission at all".
-            warning_mode = "suppress" if getattr(spec, "_nebular_explicit", False) else "warn"
-            self._nebular_backend = BakedInBackend(ionizing_source_warning=warning_mode)
+            warning_mode = "suppress" if spec._nebular_explicit else "warn"
+            # When nebular_mode is 'off' and explicitly stated (neb={'type': 'none'}),
+            # don't pass ssp_data to avoid the bare-grid check. The refusal should not
+            # fire when the user explicitly disabled nebular emission. The
+            # _nebular_explicit attribute is always present and distinguishes explicit
+            # neb={'type': 'none'} from an omitted neb=.
+            ssp_data_for_backend = (
+                None if (spec.nebular_mode == "off" and spec._nebular_explicit) else ssp_data
+            )
+            self._nebular_backend = BakedInBackend(
+                ionizing_source_warning=warning_mode, ssp_data=ssp_data_for_backend
+            )
 
         return delta
 

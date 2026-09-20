@@ -76,7 +76,12 @@ from tengri.components.nebular.agn_nebular import (
     SynthesizerGridData,
     SynthesizerNLRBackend,
 )
-from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularWarning
+from tengri.components.nebular.baked_in import (
+    BakedInBackend,
+    BakedInNebularBareError,
+    BakedInNebularGridWarning,
+    BakedInNebularWarning,
+)
 from tengri.components.nebular.cloudy23_inputs import (
     Cloudy23Deck,
     build_cloudy23_deck,
@@ -171,6 +176,8 @@ __all__ = [
     "NEBULAR_MODELS",
     "_DEFAULT_CUE_WEIGHTS_PATH",
     "BakedInBackend",
+    "BakedInNebularBareError",
+    "BakedInNebularGridWarning",
     "BakedInNebularWarning",
     "CB19Backend",
     "CB19DegenerateGridError",
