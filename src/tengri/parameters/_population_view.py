@@ -221,7 +221,10 @@ class PopulationSpecView:
         """Draw one batched sample from the population.
 
         Per-galaxy free parameters get a leading ``(N_galaxies,)`` axis;
-        shared parameters stay scalar; fixed values are scalar.
+        shared free parameters stay scalar. Fixed values are omitted
+        entirely (free-only, #2296) -- ``template.sample()`` no longer
+        returns them, so neither does this batched wrapper around it; read
+        them from :meth:`get_fixed_values` instead.
 
         Implementation: ``jax.vmap(template.sample)`` over a split key
         produces ``(N, ...)`` for every name. Then overwrite shared

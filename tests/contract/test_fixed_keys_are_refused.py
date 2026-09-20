@@ -416,3 +416,44 @@ def test_posterior_fixed_values_excludes_the_profiled_mass(profile_mass_model):
     )
     # A genuine Fixed parameter is unaffected by the filter.
     assert posterior.fixed_values["redshift"] == pytest.approx(0.05)
+
+
+def test_predict_state_fixed_values_kwarg_is_internal_only(
+    model_with_fixed_redshift, free_params_dict, params_with_fixed_override
+):
+    """``predict_state``'s ``fixed_values=`` kwarg is an internal escape
+    hatch, not a public way around the refusal (#2296).
+
+    Ordinary (public) usage never passes ``fixed_values=``, and
+    ``test_fixed_key_refused_by_entry_points[predict_state]`` above already
+    covers that this file's other predict_state cases pin it in the
+    ``DIRECT_METHODS`` sweep too. This test exists to document the boundary
+    explicitly, next to the callers that legitimately reach past it
+    (``sed_model.py``'s ``predict_state`` docstring for ``fixed_values``,
+    and the comment at its call site, name them:
+    ``predict_observables``/``predict_observables_jit`` after running this
+    same refusal upstream on free-only ``params``, and two internal
+    build-time probes -- ``_check_agn_lbol_flat_direction`` and
+    ``nebular_grid_precompute._row_traced`` -- that deliberately override a
+    Fixed key's own declared value for a measurement, not a user request).
+    A caller reaching ``predict_state`` the ordinary way (no ``fixed_values=``)
+    gets the same refusal as every other entry point in this file.
+    """
+    model = model_with_fixed_redshift
+
+    result = model.predict_state(free_params_dict)
+    assert result is not None
+
+    with pytest.raises(ParameterError) as exc_info:
+        model.predict_state(params_with_fixed_override)
+
+    _assert_is_a_fixed_key_refusal(exc_info.value, "redshift", 0.05)
+
+    # The escape hatch itself is not refused -- by design, it is the
+    # "already resolved, trust me" path the three callers above use. This
+    # is not a public code path (predict_state's own docstring and the
+    # NAMING_CONTRACT do not name it among the three sanctioned prediction
+    # surfaces), so its lack of a refusal is not a #2296 gap; it is
+    # documented here so a reviewer does not mistake it for one.
+    manual = model.predict_state(free_params_dict, fixed_values=model.spec.get_fixed_values())
+    assert manual is not None
