@@ -202,7 +202,7 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: pyproject.toml
-      - run: pip install "ruff==0.15.6"
+      - run: pip install "ruff==0.15.6" "jupytext>=1.16"
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
       - run: python tools/add_spdx_headers.py --check
