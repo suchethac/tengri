@@ -18,7 +18,6 @@ Reference: GitHub issue #1512.
 import numpy as np
 import pytest
 
-
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
