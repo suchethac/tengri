@@ -1081,6 +1081,12 @@
   alias-to-SVO-id pairs, so a reintroduced duplicate goes red. A
   recommendation living in an f-string is executed by nothing, which is why
   none of the three had anything to report it.
+- `test_bma_weights_ranking_agreement` now uses a shared mock fixture so both
+  models score identical data. Model B is model A with `dust_tau_diff` pinned
+  at 1.5 (measured ΔlogZ ≈ 6–7 nats across NSS, HMC+IS, Laplace), designed to
+  separate decisively. The ranking guard fails (not skips) on separation loss
+  below 2σ, treating fixture regression as a test failure (#2364).
+
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
