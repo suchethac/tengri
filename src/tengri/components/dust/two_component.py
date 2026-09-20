@@ -46,6 +46,10 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    DEFAULT_DUST_ETA_BALANCE,
+    DEFAULT_DUST_F_OBSCURATION,
+)
 from tengri.components.dust.attenuation import (
     resolve_bc_diff_law_params,
     two_component_dust,
@@ -677,7 +681,9 @@ class DustSEDComponent(TemplateThreading):
             tau_v2=jnp.asarray(params["dust_tau_diff"]),
             law_bc=self.config.law_bc,
             law_diff=self.config.law_diff,
-            f_obscuration=jnp.asarray(params.get("dust_f_obscuration", 0.0)),
+            f_obscuration=jnp.asarray(
+                params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
+            ),
             t_birth=self.config.t_birth_yr,
             transition_width=self.config.transition_width_dex,
             bc_params={k: jnp.asarray(v) for k, v in bc_law_params.items()},
@@ -752,7 +758,7 @@ class DustSEDComponent(TemplateThreading):
             k_diff=k_diff,
             tau_bc=jnp.asarray(params["dust_tau_bc"]),
             tau_diff=jnp.asarray(params["dust_tau_diff"]),
-            f_obsc=jnp.asarray(params.get("dust_f_obscuration", 0.0)),
+            f_obsc=jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)),
         )
 
     def attenuate_line_catalog(
@@ -985,7 +991,7 @@ class DustSEDComponent(TemplateThreading):
         # ``dust_f_obscuration`` values, never re-read from ``params``.
         _tau_bc = jnp.asarray(params["dust_tau_bc"])
         _tau_diff = jnp.asarray(params["dust_tau_diff"])
-        _f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
+        _f_obsc = jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION))
         # #2234: nebular_screen picks which of the two screens (or neither)
         # reddens the continuum; the pre-#2234 behavior (unconditional
         # birth-cloud + diffuse) is the default, so an untouched model is
@@ -1197,7 +1203,7 @@ class DustSEDComponent(TemplateThreading):
 
             log_L_ir = jnp.asarray(params["dust_log_L_ir"]) + LOG10_L_SUN
         else:
-            eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
+            eta_balance = jnp.asarray(params.get("dust_eta_balance", DEFAULT_DUST_ETA_BALANCE))
             # ``eta_balance`` relaxes energy balance multiplicatively, so it is a
             # log offset. A non-positive factor means no re-emitted energy at all,
             # which is -inf in log space (and exactly 0.0 back in linear space):

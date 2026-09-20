@@ -1135,6 +1135,31 @@
   default; that disagreement is left as-is and tracked separately (#2261)
   (#2241).
 
+- Dust tree literal defaults aligned with declarations (#2265):
+  ``tools/check_literal_param_defaults.py``'s scope widens from
+  ``dust/emission/`` to the whole ``dust/`` tree and reports zero
+  literal-copy sites (previously 44); every default and ``.get`` fallback
+  now reads ``declared_default(...)`` or a named module constant. The
+  shared table's ``dust_beta_ir`` (and its free-prior default) is
+  corrected ``Fixed(1.6)`` -> ``Fixed(1.8)`` to match the three analytic
+  classes that already declared 1.8 (``Casey2012IRSEDComponent``,
+  ``GraybodyIRSEDComponent``, ``ModifiedBlackbodyIRSEDComponent`` --
+  ``Schreiber2016AnalyticIRSEDComponent`` declares no ``dust_beta_ir`` and
+  its closure pins beta=1.5 internally); on a fixture with far-IR bands
+  this reaches the wildcard-Fixed graybody, modified_blackbody and
+  casey2012 builds, up to 3.3% (max relative difference: graybody
+  3.319e-2, modified_blackbody 3.210e-2, casey2012 8.921e-3), every other
+  grammar-path build measured bit-identical. ``schreiber2018_tabulated(dust_T)``
+  30.0 -> 25.0 and ``astrodust_emission(dust_qpah)`` 3.0 -> 2.5 now match
+  their declarations (component class; shared table -- astrodust's grid
+  has no qpah axis). ``kriek_conroy``'s ``dust_bump_strength=1.0`` and
+  ``tea``'s ``dust_delta=-0.2`` keep the laws' own citation-backed values
+  as named constants: the #1833 ``live_shape_params`` gate hands a
+  wildcard caller the law's own default, not the shared table's
+  structural-off 0.0. ``dust_T`` stays ``Fixed(35.0)``, left unchanged
+  pending #2261, with per-class constants for the three that disagree;
+  ``dust_lgU``'s table/class disagreement is tracked separately (#2261).
+
 - `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
   believing it the base of the `Tracer*ConversionError` family. On jax
   0.11.1 that belief is false: `TracerArrayConversionError` (raised by
