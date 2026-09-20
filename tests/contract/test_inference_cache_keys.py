@@ -166,9 +166,14 @@ def fitter_after_a_map_multistart_run() -> Fitter:
     ForwardModel/CatalogFitter and native VI is ``tier=broken`` (CLAUDE.md),
     neither a good fit for a fast contract test.
     """
-    from tests.contract._signature_builds import resolve_ssp_data
-
-    ssp_data = resolve_ssp_data("bare-stellar")
+    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
+    # while testing cache-key contracts (nebular handling is incidental).
+    ssp_data = SSPData(
+        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
+        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
+        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
+    )
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
     model = SEDModel.build(
         ssp_data=ssp_data,
@@ -185,6 +190,7 @@ def fitter_after_a_map_multistart_run() -> Fitter:
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
         },
+        neb={"type": "none"},
         redshift=Fixed(0.1),
     )
     data = jnp.array([1.2, 0.8, 0.5, 0.9])
