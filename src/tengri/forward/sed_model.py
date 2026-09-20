@@ -3173,7 +3173,6 @@ class SEDModel:
         """
         return self._z_fixed is not None and self.filter_waves is not None
 
-
     @property
     def z_fixed(self):
         """Fixed redshift value if redshift is not a free parameter, else ``None``.

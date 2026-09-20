@@ -17,7 +17,6 @@ import pytest
 
 from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
-from tengri.components.nebular._params import SHOCK_PARAMS
 from tengri.components.nebular.agn_nebular import agn_nlr_cue, agn_nlr_emission
 from tengri.components.nebular.cue import CueBackend
 from tengri.protocols.component import declared_default
@@ -40,9 +39,7 @@ class TestNebularFallbackDefaults:
 
     def test_agn_nlr_cue_gas_logn_fallback_engages(self, cue_backend):
         """agn_nlr_cue: fallback matches explicit declared_default read."""
-        declared_gas_logn = declared_default(
-            AGN_PARAMS, "agn_nlr_logn"
-        )
+        declared_gas_logn = declared_default(AGN_PARAMS, "agn_nlr_logn")
 
         # Call without the parameter (fallback engages)
         wav_fallback, lum_fallback = agn_nlr_cue(
