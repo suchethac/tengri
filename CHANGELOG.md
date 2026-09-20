@@ -3,18 +3,21 @@
 ### Fixed
 
 - Composable AGN torus no longer collapses at the 1 mm node (#1512): the
-  composable powerlaw+skirtor path with cigale_joint normalization computes an
+  composable disc+skirtor path with cigale_joint normalization computes an
   inclination-attenuation ratio `disk(i)/disk(0)` by resampling the SKIRTOR
   template grid (136 nodes, last at 1e8 Å) onto the model grid. The SKIRTOR
-  disk template is zeroed beyond node 130 (8.71e6 Å); when the ratio falls
-  below zero, the code zeroed it to ensure physical sense. But this left
-  `incl_n = 0` at the 1e7 Å node and beyond, causing the reweighted disc
-  (`L_lambda_disc * incl_n`) to collapse to zero despite the smooth torus.
-  The ratio `sed_agn[1e7]/sed_agn[prev]` fell from 1.009 (smooth) to 3e-6
-  (catastrophic). Fixed by continuing the inclination ratio smoothly as
-  `incl_n = 1.0` (the face-on limit) where the template disk vanishes, and
-  by using `right=1.0` instead of `right=0.0` in the resampling boundary
-  condition. Measured on the probe: ratio now 1.0235 (smooth).
+  disk template is zeroed beyond node 130 (8.71e6 Å); when resampling reached
+  the boundary, `right=0.0` fill zeroed the inclination ratio, causing the
+  reweighted disc (`L_lambda_disc * incl_n`) to collapse to zero despite the
+  smooth torus. The ratio `sed_agn[1e7]/sed_agn[prev]` fell from 1.009 (smooth)
+  to 3e-6 (catastrophic) for powerlaw disc, and showed a 60% step for qsogen
+  disc. Fixed by computing the last finite inclination ratio at the template
+  edge (0.793341 for cos_inc=0.866, wavelength-independent inside template)
+  and carrying it smoothly beyond the boundary at both the fill value (line 1043
+  `incl_n`) and the resampling `right=` parameter (line 1104). Affected
+  configurations: any composable disc under cigale_joint with fracAGN set.
+  Verified on powerlaw (measured: 1.0093 ratio, <0.5% error) and qsogen
+  (measured: 1.0017 ratio, <1.0% error).
 
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return

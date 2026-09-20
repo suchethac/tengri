@@ -133,12 +133,14 @@ def test_composable_torus_no_collapse_at_1mm_vs_monolithic(ssp_data):
     mono_ratio = mono_sed[idx_1e7] / mono_sed[idx_prev]
     comp_ratio = comp_sed[idx_1e7] / comp_sed[idx_prev]
 
-    # The ratio should be approximately the same (within 5%)
+    # The ratio should be approximately the same (within 0.5%)
     # Before the fix: comp_ratio would be ~3e-6 (catastrophic collapse)
     # After the fix: comp_ratio should be ~1.009 (smooth continuation)
+    # Measured at node 130 (last finite template node): last_finite_ratio = 0.793341
+    # This allows the inclination ratio to continue smoothly beyond 1e7 Å.
     ratio_error = abs(comp_ratio - mono_ratio) / mono_ratio
 
-    assert ratio_error < 0.05, (
+    assert ratio_error < 0.005, (
         f"Composable SED ratio at 1e7 Å does not match monolithic. "
         f"Monolithic ratio: {mono_ratio:.4f}, Composable: {comp_ratio:.4f}, "
         f"Error: {ratio_error:.2%}. Before fix: expected ~3e-6 (catastrophic)."
@@ -164,6 +166,108 @@ def test_composable_torus_no_collapse_at_1mm_vs_monolithic(ssp_data):
             )
 
     print(f"Test passed:")
+    print(f"  Monolithic ratio at 1e7 Å: {mono_ratio:.4f}")
+    print(f"  Composable ratio at 1e7 Å: {comp_ratio:.4f}")
+    print(f"  Relative error: {ratio_error:.2%}")
+
+
+def test_composable_torus_with_qsogen_disc(ssp_data):
+    """Composable torus with qsogen disc also passes 1 mm continuity test.
+
+    The fix for #1512 carries the last finite inclination ratio beyond the
+    template boundary for all composable disc types that use SKIRTOR torus
+    with cigale_joint normalization. This test verifies that qsogen disc also
+    shows smooth SED continuity at 1e7 Å (not the collapse observed on
+    origin/main, which showed 0.395 ratio instead of ~0.991).
+
+    Before fix (origin/main): qsogen disc with fracAGN=0.1 showed 60% step.
+    After fix: qsogen disc should show smooth ratio matching monolithic within 0.5%.
+    """
+    obs = Observation(photometry=Photometry.from_names(["sdss_r", "wise_w3", "wise_w4"]))
+
+    # Build monolithic SKIRTOR model for reference
+    monolithic = SEDModel.build(
+        ssp_data=ssp_data,
+        observation=obs,
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": 10.0,
+            "tau_gyr": 1.0,
+            "age_gyr": 5.0,
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_diff": 0.3,
+            "tau_bc": 0.0,
+        },
+        redshift=Fixed(0.1),
+        agn={"type": "skirtor", "all_params": Fixed(DEFAULT)},
+    )
+
+    # Build composable model with qsogen disc (not powerlaw)
+    composable = SEDModel.build(
+        ssp_data=ssp_data,
+        observation=obs,
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": 10.0,
+            "tau_gyr": 1.0,
+            "age_gyr": 5.0,
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_diff": 0.3,
+            "tau_bc": 0.0,
+        },
+        redshift=Fixed(0.1),
+        agn={
+            "type": "composable",
+            "disc": {"type": "qsogen"},
+            "torus": {"type": "skirtor"},
+            "norm": "cigale_joint",
+            "fracAGN": 0.1,
+            "all_params": Fixed(DEFAULT),
+        },
+    )
+
+    # Get predictions
+    mono_pred = monolithic.predict({})
+    comp_pred = composable.predict({})
+
+    mono_sed = np.asarray(mono_pred.rest_sed())
+    comp_sed = np.asarray(comp_pred.rest_sed())
+
+    # Get wavelength grid
+    wave = np.asarray(comp_pred.wave_rest)
+
+    # Find the 1e7 Å node
+    idx_1e7 = int(np.argmin(np.abs(wave - 1e7)))
+    idx_prev = idx_1e7 - 1
+
+    # Measure the ratio in both models at 1e7 Å
+    mono_ratio = mono_sed[idx_1e7] / mono_sed[idx_prev]
+    comp_ratio = comp_sed[idx_1e7] / comp_sed[idx_prev]
+
+    # The ratio should be approximately the same (within 1.0% for qsogen)
+    # Before the fix: comp_ratio would show a sharp step (~0.395 vs 0.991)
+    # After the fix: comp_ratio should be smooth like monolithic
+    # QSOgen shows slightly larger numerical error than powerlaw, but both are
+    # well below the catastrophic pre-fix values.
+    ratio_error = abs(comp_ratio - mono_ratio) / mono_ratio
+
+    assert ratio_error < 0.01, (
+        f"Composable qsogen disc SED ratio at 1e7 Å does not match monolithic. "
+        f"Monolithic ratio: {mono_ratio:.4f}, Composable: {comp_ratio:.4f}, "
+        f"Error: {ratio_error:.2%}. Before fix: expected ~0.395 (60% step)."
+    )
+
+    print(f"Test passed (qsogen disc):")
     print(f"  Monolithic ratio at 1e7 Å: {mono_ratio:.4f}")
     print(f"  Composable ratio at 1e7 Å: {comp_ratio:.4f}")
     print(f"  Relative error: {ratio_error:.2%}")
