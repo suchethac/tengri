@@ -70,6 +70,7 @@ MET_EDGE_INSET_DEX = 0.02
 SSP_FOR_CONFIG = {
     "I": "fsps_mist_c3k_a_chabrier",
     "II": "fsps_prsc_c3k_a_chabrier",
+    "II_taucap": "fsps_prsc_c3k_a_chabrier",  # probe row, see config_II(tau_cap=True)
     "III": "fsps_mist_miles_chabrier",
     "IV": "fsps_prsc_miles_chabrier",
     "V": "bpss_stars_c3k_a_chabrier",
@@ -228,8 +229,22 @@ def config_I(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     )
 
 
-def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
-    """II: double power law, FSPS PARSEC/C3K, Calzetti single screen, Dale+2014, Cue."""
+def config_II(
+    ssp_data: tengri.SSPData, observation, z: float, *, tau_cap: bool = False
+) -> SEDModel:
+    """II: double power law, FSPS PARSEC/C3K, Calzetti single screen, Dale+2014, Cue.
+
+    ``tau_cap=True`` is the probe row ``II_taucap``: ``tau_gyr``'s upper bound
+    becomes ``age_at_z(z)`` instead of 13 Gyr, nothing else changes. The DPL's
+    ``tau`` is a turnover between two power laws, so once it passes the galaxy's
+    age the shape is ``alpha``'s alone and the likelihood goes flat in ``tau``
+    (measured: |dF/F| 0.018% outside the age window against 300-2100% inside,
+    ``sfh_tau_conditioning.py``); 59% of the committed prior sits in that flat
+    regime at z ~ 1.07. Galaxy 79 under the committed prior gave 381/1200
+    divergences with per-parameter ESS 2-7. This row tests whether the cap is
+    the fix. It is not a paper configuration.
+    """
+    tau_hi = age_at_z(z) if tau_cap else 13.0
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
@@ -238,7 +253,7 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "all_params": Fixed(DEFAULT),
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
-            "tau_gyr": Uniform(0.5, 13.0),
+            "tau_gyr": Uniform(0.5, tau_hi),
             "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": met_prior_for(ssp_data),
@@ -418,6 +433,19 @@ CONFIGS = {
         "dust_param": "dust_tau_v",
         "name": "double power law, PARSEC/C3K",
         "sfh": "double power law",
+        "library": "FSPS PARSEC/C3K",
+        "attenuation": "Calzetti, 1-comp",
+        "dust_ir": "Dale+2014",
+        "nebular": "Cue",
+        "agn": False,
+        "ssp_grid": SSP_FOR_CONFIG["II"],
+        "n_free": None,
+    },
+    "II_taucap": {
+        "key": "II_taucap",
+        "dust_param": "dust_tau_v",
+        "name": "double power law, PARSEC/C3K",
+        "sfh": "tau <= age(z); double power law",
         "library": "FSPS PARSEC/C3K",
         "attenuation": "Calzetti, 1-comp",
         "dust_ir": "Dale+2014",
