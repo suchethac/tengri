@@ -30,6 +30,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import time
 
 import jax
@@ -38,6 +39,11 @@ import numpy as np
 import tengri
 from tengri import Data, ForwardModel
 
+from ._posterior_utils import (
+    build_npz_payload,
+    divergent_draw_payload,
+    thin_samples,
+)
 from .fig_mock_joint_infer import DETECTION_SIGMA, RESULTS, TRUTH_NPZ
 from .verify_mock_listing import MOCK_FILTERS, build_joint_observation, build_mock_model
 
@@ -50,6 +56,16 @@ SSP_GRID = "fsps_mist_c3k_a_chabrier"
 #: and a boolean array is rejected by ``Data`` precisely because it inverts.
 DETECTED = 0
 UPPER_LIMIT = 1
+
+#: Draw cap for the mock's saved posterior, deliberately NOT ``fit_one``'s
+#: ``MAX_SAVED_DRAWS`` (4000) and deliberately not named the same thing. The
+#: grid caps because 120 cells x 4000 draws x D is a lot of disk; this is one
+#: fit, and its draws are the source for the paper's joint-inference figure,
+#: whose posterior predictive band and corner want every draw the sampler
+#: kept. At the recipe's 4 chains x 300 samples = 1200 draws this cap does not
+#: bind at all, which is the intent: thinning here would discard figure
+#: resolution to save megabytes.
+MOCK_MAX_SAVED_DRAWS = 10000
 
 
 def observed_photometry(truth_npz):
@@ -188,6 +204,7 @@ def main(argv=None) -> int:
     forward = ForwardModel.build(sed=model)
 
     t0 = time.perf_counter()
+    post = None
     if args.method == "map":
         # Restart from independent initializations and keep the best by chi2.
         # Selecting by agreement with truth would be circular -- it would tune
@@ -230,17 +247,167 @@ def main(argv=None) -> int:
 
     RESULTS.mkdir(exist_ok=True)
     out = RESULTS / f"mock_joint_{args.method}.npz"
-    np.savez(
-        out,
-        free_params=np.array(free, dtype=object),
-        truth_values=np.array([truth[k] for k in free]),
-        fitted_values=np.array([float(fitted[k]) for k in free]),
-        delta=np.array([delta[k] for k in free]),
-        wall_seconds=wall,
-        method=args.method,
-    )
-    print(f"\nsaved {out}")
+    out_json = RESULTS / f"mock_joint_{args.method}.json"
+
+    if args.method == "map":
+        # MAP: simple point estimate, no posterior draws
+        np.savez(
+            out,
+            free_params=np.array(free, dtype=object),
+            truth_values=np.array([truth[k] for k in free]),
+            fitted_values=np.array([float(fitted[k]) for k in free]),
+            delta=np.array([delta[k] for k in free]),
+            wall_seconds=wall,
+            method=args.method,
+        )
+        print(f"\nsaved {out}")
+    else:
+        # Sampler methods: save posterior draws and diagnostics
+        assert post is not None, "posterior should be available for sampler methods"
+        _save_sampler_results(
+            post,
+            out,
+            out_json,
+            free,
+            truth,
+            fitted,
+            delta,
+            wall,
+            args.method,
+            kwargs,
+        )
+        print(f"\nsaved {out}")
+        print(f"saved {out_json}")
+
     return 0
+
+
+def _save_sampler_results(
+    posterior,
+    out_npz,
+    out_json,
+    free,
+    truth,
+    fitted,
+    delta,
+    wall,
+    method,
+    sampler_kwargs,
+) -> None:
+    """Save sampler results: posterior draws, diagnostics to NPZ and JSON sidecar.
+
+    Persists the full posterior for Monte Carlo methods to enable posterior-predictive
+    and corner plots in the paper figures. Also writes a JSON sidecar with diagnostic
+    summaries (divergences, R-hat, ESS) for quick readability.
+
+    Args:
+        posterior: Posterior object from the inference backend.
+        out_npz: Path to write the NPZ file.
+        out_json: Path to write the JSON diagnostic sidecar.
+        free: List of free parameter names.
+        truth: Dict of truth values indexed by parameter name.
+        fitted: Dict of fitted (median) values indexed by parameter name.
+        delta: Dict of differences (fitted - truth) indexed by parameter name.
+        wall: Wall time in seconds.
+        method: Inference method name.
+        sampler_kwargs: Dict of sampler keyword arguments (n_warmup, n_samples,
+            n_chains, dense_mass_matrix).
+    """
+    samples_thin = thin_samples(posterior.samples, max_draws=MOCK_MAX_SAVED_DRAWS)
+
+    # Extract diagnostics from posterior
+    diagnostics = posterior.diagnostics or {}
+
+    # Build per-parameter diagnostics
+    rhat_dict = posterior.rhats() if hasattr(posterior, "rhats") else {}
+    rhat_max = max((float(v) for v in rhat_dict.values()), default=None)
+
+    ess_dict = (
+        posterior.effective_sample_size() if hasattr(posterior, "effective_sample_size") else {}
+    )
+    ess_min = min((float(v) for v in ess_dict.values()), default=None) if ess_dict else None
+
+    n_divergent = diagnostics.get("n_divergent", 0)
+    divergent_mask = diagnostics.get("divergent_mask")
+
+    # Check which energy/ebfmi attributes are available
+    energy = diagnostics.get("energy")
+    ebfmi_per_chain = diagnostics.get("ebfmi_per_chain")
+    ebfmi_min = diagnostics.get("ebfmi_min")
+
+    # Build NPZ payload: thinned samples + diagnostics
+    energy_payload = {}
+    if energy is not None:
+        energy_payload["energy"] = np.asarray(energy)
+
+    npz_payload = build_npz_payload(
+        samples_thin,
+        energy_payload,
+        divergent_draw_payload(posterior),
+    )
+
+    # Add per-parameter diagnostics as separate keys
+    if rhat_dict:
+        for k, v in rhat_dict.items():
+            npz_payload[f"rhat_{k}"] = float(v)
+    if rhat_max is not None:
+        npz_payload["rhat_max"] = float(rhat_max)
+
+    if ess_dict:
+        for k, v in ess_dict.items():
+            npz_payload[f"ess_{k}"] = float(v)
+    if ess_min is not None:
+        npz_payload["ess_min"] = float(ess_min)
+
+    # Add sampler metadata
+    npz_payload["truth_values"] = np.array([truth[k] for k in free])
+    npz_payload["fitted_values"] = np.array([float(fitted[k]) for k in free])
+    npz_payload["delta"] = np.array([delta[k] for k in free])
+    npz_payload["free_params"] = np.array(free, dtype=object)
+    npz_payload["method"] = method
+    npz_payload["wall_seconds"] = wall
+    npz_payload["n_chains"] = sampler_kwargs.get("n_chains")
+    npz_payload["n_warmup"] = sampler_kwargs.get("n_warmup")
+    npz_payload["n_samples"] = sampler_kwargs.get("n_samples")
+    npz_payload["divergences_count"] = int(n_divergent)
+
+    # Sentinel keys for unavailable energy/ebfmi
+    if energy is None:
+        npz_payload["_energy_unavailable"] = True
+    if ebfmi_per_chain is None:
+        npz_payload["_ebfmi_per_chain_unavailable"] = True
+    if ebfmi_min is None:
+        npz_payload["_ebfmi_min_unavailable"] = True
+
+    np.savez(out_npz, **npz_payload)
+
+    # Write JSON sidecar with diagnostic summary
+    json_payload = {
+        "divergences": int(n_divergent),
+        "rhat": rhat_dict,
+        "rhat_max": float(rhat_max) if rhat_max is not None else None,
+        "ess": ess_dict,
+        "ess_min": float(ess_min) if ess_min is not None else None,
+        "wall_seconds": wall,
+        "n_chains": sampler_kwargs.get("n_chains"),
+        "n_warmup": sampler_kwargs.get("n_warmup"),
+        "n_samples": sampler_kwargs.get("n_samples"),
+        "method": method,
+    }
+
+    # Add energy/ebfmi to JSON if available
+    if ebfmi_per_chain is not None:
+        json_payload["ebfmi_per_chain"] = [float(v) for v in ebfmi_per_chain]
+    else:
+        json_payload["ebfmi_per_chain"] = None
+
+    if ebfmi_min is not None:
+        json_payload["ebfmi_min"] = float(ebfmi_min)
+    else:
+        json_payload["ebfmi_min"] = None
+
+    with open(out_json, "w") as f:
+        json.dump(json_payload, f, indent=2)
 
 
 if __name__ == "__main__":
