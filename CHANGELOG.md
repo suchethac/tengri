@@ -2,6 +2,15 @@
 
 ### Fixed
 
+- Unknown-name errors recognize citation keys and name the registry entry they
+  cite, for every group type validated against a registry (#2429): when a user
+  provides a citation key (e.g., `charlot_fall2000`) instead of a registry name
+  (e.g., `power_law`), the error message now explains which registry entries it
+  cites, instead of falling back to difflib suggestions alone. Applied to all 19
+  validation sites: dust laws (single- and two-component), dust_emission, SFH,
+  metallicity, dust_attenuation type, nebular, shock, IGM, radio, foreground,
+  X-ray, AGN blocks, and top-level group keys.
+
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
   (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
   cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2

@@ -31,7 +31,13 @@ subsystem table covers, such as the SFH types and the always-on frameworks.
 
 from __future__ import annotations
 
-__all__ = ["NAME_TO_BIBKEY", "association_keys_for", "citation_keys_for"]
+__all__ = [
+    "NAME_TO_BIBKEY",
+    "association_keys_for",
+    "citation_key_hint",
+    "citation_keys_for",
+    "registry_names_for_citation_key",
+]
 
 #: Component name → BibTeX key, for names no association table covers.
 #:
@@ -185,3 +191,127 @@ def citation_keys_for(name: str | None) -> list[str]:
             if text.lower().endswith(suffix):
                 return citation_keys_for(text[: -len(suffix)])
     return list(dict.fromkeys(keys))
+
+
+def registry_names_for_citation_key(key: str) -> tuple[str, ...]:
+    """Registry names that cite a given BibTeX key.
+
+    Reverse of :func:`citation_keys_for`: if a registry name ``foo`` maps to
+    citation key ``bar``, then ``registry_names_for_citation_key("bar")``
+    includes ``"foo"``.
+
+    Parameters
+    ----------
+    key : str
+        A BibTeX key (e.g., ``"charlot_fall2000"``).
+
+    Returns
+    -------
+    tuple[str, ...]
+        Registry names citing this key, in the order they appear in the forward
+        maps. Empty tuple if the key is unknown.
+
+    Notes
+    -----
+    Lookup is case-insensitive to handle variation in key spelling. The reverse
+    mapping is built once per module import and cached.
+
+    Examples
+    --------
+    >>> registry_names_for_citation_key("charlot_fall2000")
+    ('power_law',)
+    >>> registry_names_for_citation_key("skirtor")
+    ('skirtor', 'stalevski', 'skirtor_agnfitter', 'schartmann2005_skirtor_atten')
+    """
+    key_lower = key.lower()
+    names: list[str] = []
+
+    # Build reverse of NAME_TO_BIBKEY
+    for name, bibkey in NAME_TO_BIBKEY.items():
+        if bibkey.lower() == key_lower:
+            names.append(name)
+
+    # Build reverse of association tables
+    from tengri.citations import associations as _assoc
+
+    for attr in sorted(dir(_assoc)):
+        if not attr.endswith("_CITATIONS"):
+            continue
+        table = getattr(_assoc, attr)
+        if isinstance(table, dict):
+            for name, keys in table.items():
+                if isinstance(keys, list):
+                    for k in keys:
+                        if k.lower() == key_lower:
+                            names.append(name)
+                elif isinstance(keys, str) and keys.lower() == key_lower:
+                    names.append(name)
+        elif isinstance(table, list):
+            # Flat tables: check if key is in the list
+            for item in table:
+                if isinstance(item, str) and item.lower() == key_lower:
+                    names.append(item)
+
+    return tuple(dict.fromkeys(names))
+
+
+def citation_key_hint(unknown: str, valid_names: list[str], *, kind: str, keyword: str) -> str:
+    """Error message fragment if unknown name is a citation key.
+
+    When a user provides a citation key (like ``"charlot_fall2000"``) instead
+    of a registry name (like ``"power_law"``), this function returns a helpful
+    message fragment explaining the confusion. If ``unknown`` is not a known
+    citation key, returns an empty string so difflib suggestions can follow.
+
+    Parameters
+    ----------
+    unknown : str
+        The unknown name the user provided.
+    valid_names : list[str]
+        List of valid registry names for this parameter.
+    kind : str
+        The type of thing being validated (e.g., ``"dust law"``).
+    keyword : str
+        The parameter keyword used (e.g., ``"law"`` or ``"law_bc"``).
+
+    Returns
+    -------
+    str
+        A sentence(s) or empty string. If non-empty, describes the citation key
+        and which registry name(s) it corresponds to.
+
+    Examples
+    --------
+    >>> citation_key_hint("charlot_fall2000", valid_names, kind="dust law", keyword="law")
+    "That is a citation key for power_law (dust law). Use law='power_law'."
+    """
+    names_for_key = registry_names_for_citation_key(unknown)
+    if not names_for_key:
+        return ""
+
+    # Filter to names that are actually valid at this site
+    valid_at_site = [n for n in names_for_key if n in valid_names]
+
+    if valid_at_site:
+        # This citation key is valid here
+        names_str = ", ".join(valid_at_site)
+        if len(valid_at_site) == 1:
+            return (
+                f"That is a citation key for {valid_at_site[0]} ({kind}). "
+                f"Use {keyword}='{valid_at_site[0]}'."
+            )
+        else:
+            return (
+                f"That is a citation key for {names_str} ({kind}). "
+                f"Use {keyword}='{valid_at_site[0]}' or {keyword}='"
+                f"{valid_at_site[1]}' (or another from: {', '.join(valid_at_site)})."
+            )
+    else:
+        # This citation key exists but not for this group
+        # Report the first name it maps to
+        first_name = names_for_key[0]
+        return (
+            f"That is a citation key for {first_name} (a different {kind}), "
+            f"not a valid {kind}. Use {keyword}='{valid_names[0]}' or another "
+            f"from the valid list."
+        )
