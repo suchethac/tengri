@@ -5032,6 +5032,28 @@ class Fitter:
                 },
                 _model=self.model,
             )
+            # See ``_fit_batch_vmap_map`` for why this batch path must
+            # reinsert the profiled mass itself (#2296): it never goes
+            # through ``Fitter.run()``'s ``finalize_profile_mass`` call, so
+            # under ``profile_mass`` the working spec's placeholder-pinned
+            # mass would otherwise never reach ``samples_phys``/``best_params``
+            # at all (free-only ``_to_physical``, #2296's own point). One call
+            # per galaxy, with that galaxy's own flux/noise -- ``self.data``/
+            # ``self.noise`` are whichever galaxy this batch Fitter happens to
+            # have been built with, not the one being finalized here.
+            if self._profile_mass:
+                from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                reinsert_profiled_mass(
+                    self,
+                    result_i,
+                    data=flux_batch[g_idx],
+                    noise=noise_batch[g_idx],
+                    presence=None,
+                    line_obs=None,
+                    line_err=None,
+                    key=gal_keys[g_idx],
+                )
             results.append(result_i)
 
         return results
@@ -5221,6 +5243,30 @@ class Fitter:
                     _model=self.model,
                     _fitter=self,
                 )
+                # ``self._to_physical`` is free-only w.r.t. the WORKING spec
+                # (#2296): under ``profile_mass`` that spec pinned the mass
+                # parameter to an analytic placeholder, so it never reaches
+                # ``bounded_i`` at all, let alone at its real value. The
+                # single-fit path closes this through ``finalize_profile_mass``
+                # (called once from ``Fitter.run()``); this vmap batch path
+                # bypasses ``run()`` entirely, so it must call the same
+                # reinsertion itself -- once per galaxy, with THAT galaxy's own
+                # data/noise (``self.data``/``self.noise`` are whichever galaxy
+                # this batch Fitter happens to have been built with, not the
+                # one being finalized here).
+                if self._profile_mass:
+                    from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                    reinsert_profiled_mass(
+                        self,
+                        result_i,
+                        data=flux_batch[g_idx],
+                        noise=noise_batch[g_idx],
+                        presence=None,
+                        line_obs=None,
+                        line_err=None,
+                        key=init_keys[g_idx],
+                    )
                 results.append(result_i)
 
             return results
@@ -5315,6 +5361,22 @@ class Fitter:
                 _model=self.model,
                 _fitter=self,
             )
+            # See the scipy/L-BFGS branch above for why this batch path must
+            # reinsert the profiled mass itself (#2296): it never goes through
+            # ``Fitter.run()``'s ``finalize_profile_mass`` call.
+            if self._profile_mass:
+                from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                reinsert_profiled_mass(
+                    self,
+                    result_i,
+                    data=flux_batch[g_idx],
+                    noise=noise_batch[g_idx],
+                    presence=None,
+                    line_obs=None,
+                    line_err=None,
+                    key=init_keys[g_idx],
+                )
             results.append(result_i)
 
         return results
