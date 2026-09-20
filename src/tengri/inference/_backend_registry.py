@@ -388,11 +388,7 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
     # generic "does not support" message.
     if kwargs.get("precondition") and entry.self_whitening:
         capable_nonsw = sorted(
-            {
-                e.name
-                for e in all_backends()
-                if not e.self_whitening and e.accepts_precondition
-            }
+            {e.name for e in all_backends() if not e.self_whitening and e.accepts_precondition}
         )
         raise ValueError(
             f"Inference method '{entry.name}' applies its own self-whitening "
