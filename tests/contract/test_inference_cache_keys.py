@@ -43,6 +43,7 @@ from tengri.observation.line_list import LineList
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import Spectroscopy
+from tests.contract._signature_builds import resolve_ssp_data
 
 pytestmark = pytest.mark.contract
 
@@ -166,14 +167,7 @@ def fitter_after_a_map_multistart_run() -> Fitter:
     ForwardModel/CatalogFitter and native VI is ``tier=broken`` (CLAUDE.md),
     neither a good fit for a fast contract test.
     """
-    # Use synthetic SSP with unknown nebular status for this test that
-    # exercises cache-key contracts, not SSP loading behavior.
-    ssp_data = SSPData(
-        ssp_wave=jnp.logspace(2.0, 7.0, 1600),
-        ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
-        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.14, 25),
-        ssp_lgmet=jnp.array([-4.0, -2.65, -1.3]),
-    )
+    ssp_data = resolve_ssp_data("bare-stellar")
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
     model = SEDModel.build(
         ssp_data=ssp_data,
