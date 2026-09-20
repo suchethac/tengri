@@ -29,6 +29,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import DEFAULT_DUST_ETA_BALANCE
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
@@ -307,7 +308,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
             # linear form carries. Default eta=1.0 makes jnp.log10(1.0) == 0,
             # so L_ir reproduces L_absorbed bit-for-bit -- this wiring changes
             # no existing default SED.
-            eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
+            eta_balance = jnp.asarray(params.get("dust_eta_balance", DEFAULT_DUST_ETA_BALANCE))
             eta_positive = eta_balance > 0
             log_l_ir = jnp.where(
                 eta_positive,

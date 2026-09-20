@@ -15,6 +15,13 @@ from collections.abc import Callable, Mapping
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    DEFAULT_DUST_BUMP_STRENGTH,
+    DEFAULT_DUST_DELTA,
+    DEFAULT_DUST_F_OBSCURATION,
+    DEFAULT_DUST_RV,
+    DEFAULT_DUST_SLOPE,
+)
 from tengri.components.dust.laws._registry import (
     reject_unread_law_kwargs,
     resolve_dust_law,
@@ -99,12 +106,14 @@ def precompute_dust_age_mask(
 
 #: Two-component attenuation-law parameters that may be set per-component.
 #: Maps the law-function keyword to ``(flat_param_name, default)``. The
-#: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``.
+#: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``. Defaults
+#: are read off ``ATTENUATION_PARAMS`` (``components/dust/_params.py``) rather
+#: than repeated as bare literals here.
 _TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
-    ("dust_slope", "dust_slope", -0.7),
-    ("dust_bump_strength", "dust_bump_strength", 0.0),
-    ("dust_delta", "dust_delta", 0.0),
-    ("dust_Rv", "dust_Rv", 3.1),
+    ("dust_slope", "dust_slope", DEFAULT_DUST_SLOPE),
+    ("dust_bump_strength", "dust_bump_strength", DEFAULT_DUST_BUMP_STRENGTH),
+    ("dust_delta", "dust_delta", DEFAULT_DUST_DELTA),
+    ("dust_Rv", "dust_Rv", DEFAULT_DUST_RV),
 )
 
 #: User-facing per-component short name -> attenuation-law kwarg. Used by the
@@ -267,7 +276,7 @@ def two_component_dust(
     tau_v2: float,
     law_bc: str = "power_law",
     law_diff: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     t_birth: float = 1e7,
     transition_width: float = 0.3,
     bc_params: dict | None = None,
@@ -417,7 +426,7 @@ def two_component_dust_separable(
     tau_v2: float,
     law_bc_fn: Callable,
     law_diff_fn: Callable,
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Optimized two-component dust attenuation with factorized age-independent term.
@@ -512,7 +521,7 @@ def two_component_dust_fast(
     tau_v2: float,
     law_bc: str = "power_law",
     law_diff: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Fast dust attenuation using precomputed age weights.
@@ -578,7 +587,7 @@ def single_component_dust(
     wavelength: jnp.ndarray,
     tau_v: float,
     law: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Single-component (uniform foreground screen) dust attenuation.
@@ -649,7 +658,7 @@ def single_component_dust_fast(
     n_ages: int,
     tau_v: float,
     law: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Single-component dust attenuation broadcast to (n_ages, n_wave).
