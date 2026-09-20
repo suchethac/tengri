@@ -1119,6 +1119,15 @@
   Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
   naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
 
+- `BakedInBackend` now checks whether the SSP grid has nebular emission before
+  silently returning zero nebular flux. On bare-stellar grids
+  (`ssp_data.nebular == "bare"`), it raises `BakedInNebularBareError`
+  immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
+  `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
+  disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
+  and honours `suppress` and an explicit `neb` declaration; the bare-grid
+  refusal does not fire when nebular emission is off (#2362).
+
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
   `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
