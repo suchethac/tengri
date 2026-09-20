@@ -40,3 +40,10 @@ _LOG_OH_OFFSET: float = _LOG_OH_SOLAR - _LOG10_ZSUN  # ≈ -1.222
 # `alpha_ff`. pcigale's tabulated nebular continuum measures -0.096 over 1 cm
 # to 1 m, so -0.1 is a reasonable nominal value for the free-free extension.
 NEBULAR_FREEFREE_TAIL_ALPHA_NU: float = -0.1
+
+# Floor of the SSP age axis in log10(age/yr) for the photoionized nebular
+# backends' Q_H tables (#2418). An age-0 anchor template (BC03 STELIB:
+# ssp_lg_age_gyr[0] = -inf) otherwise puts -inf on the interpolation axis and
+# every weight in the first interval becomes NaN. 5.0 (0.1 Myr) is the floor
+# the stellar path already applies to the anchor for surviving mass (#1016).
+LOG_AGE_YR_FLOOR: float = 5.0

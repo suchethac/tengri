@@ -2,6 +2,24 @@
 
 ### Fixed
 
+- The photoionized nebular backends floor the SSP age axis at 0.1 Myr, so an
+  age-0 anchor template no longer turns every nebular output into NaN
+  (#2418): the BC03 STELIB SSP carries `ssp_lg_age_gyr[0] = -inf`, and
+  `CloudyGridBackend`, the CB19 backend and `MappingsPhotoStellarBackend`
+  built their Q_H table's age axis as `ssp_lg_age_gyr + 9.0`, so
+  `_interp_index_weight` (`components/nebular/_shared.py`) saw an infinitely
+  wide first interval and returned NaN weights for the anchor and for every
+  query inside that interval; the per-age sum then spread the NaN to every
+  wavelength and every line, and `SEDModel.build(ssp_data=<BC03>,
+  neb={"type": "cloudy"})` returned an all-NaN `sed_nebular` at all 7955
+  master-grid nodes. `ssp_log_age_yr_axis` now applies the same 0.1 Myr floor
+  (`LOG_AGE_YR_FLOOR`) that the stellar path applies to the anchor for
+  surviving mass (#1016) — bit-identical for every grid whose youngest
+  template is already at least 0.1 Myr, which is every other shipped SSP —
+  and the shared interpolator treats a non-finite axis node as a zero-width
+  interval. The grid-family mismatch suspected in the issue was not the cause:
+  the eight shipped Cloudy grids share one (log_U, log_age, log_Z) axis set.
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
