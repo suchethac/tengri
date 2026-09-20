@@ -172,11 +172,30 @@ def test_tengri_host_devices_env_gives_four_cpu_devices():
 
 
 def test_pmap_without_enough_devices_raises_value_error():
-    """``chain_parallel='pmap'`` on a single-device process names the env hook."""
+    """``pmap`` without devices: platform-aware error (vmap on CPU, env on GPU)."""
+    from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
+
     out = _run("pmap_needs_devices", host_devices=None)
     assert out["raised"] is True
-    assert "TENGRI_HOST_DEVICES" in out["message"]
     assert "n_chains=4" in out["message"]
+
+    # Platform-strict: message must match the platform (CPU vs GPU/TPU)
+    if _pmap_hint_applies():
+        # GPU/TPU: expect TENGRI_HOST_DEVICES, not vmap comparison
+        assert "TENGRI_HOST_DEVICES" in out["message"], (
+            f"GPU platform should mention TENGRI_HOST_DEVICES; got: {out['message']}"
+        )
+        assert "vmap is faster" not in out["message"], (
+            f"GPU platform should not mention vmap comparison; got: {out['message']}"
+        )
+    else:
+        # CPU: expect vmap comparison, not TENGRI_HOST_DEVICES
+        assert "vmap is faster than pmap" in out["message"], (
+            f"CPU platform should mention vmap is faster; got: {out['message']}"
+        )
+        assert "TENGRI_HOST_DEVICES" not in out["message"], (
+            f"CPU platform should not mention TENGRI_HOST_DEVICES; got: {out['message']}"
+        )
 
 
 def test_pmap_and_vmap_agree_on_shapes_and_means():
