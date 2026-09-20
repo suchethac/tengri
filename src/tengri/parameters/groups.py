@@ -2122,6 +2122,19 @@ def _warn_silently_fixed_parameters(
         if group == "sfh" and param_name.startswith("met_") and not has_met_block:
             continue
 
+        # Per-screen dust shape names (dust_slope_bc, ...) are wildcard-INERT
+        # by design (#2428): `per_screen_inert` (`_dust_wildcard_scopes`)
+        # excludes every one of them from `all_params: FREE`'s scope
+        # unconditionally, so this warning's own remedy ("pass 'all_params':
+        # FREE'") is false for them -- naming a false remedy is worse than
+        # staying quiet about these 12, the same principle the met_* skip
+        # above already applies. A caller who wants one free must name it
+        # (``dust_attenuation={'slope_bc': FREE}``), which is not something
+        # silently defaulting at the group's wildcard-freeable population
+        # was ever going to catch anyway.
+        if param_name in _per_screen_full_names():
+            continue
+
         # Collect this parameter as silently-fixed
         value = dist.default
         default_fixed_by_group.setdefault(group, []).append((param_name, value))
@@ -5339,11 +5352,24 @@ def _validate_user_keys(
             # neb's displayed list must show the resolved type's actual
             # structural keys (e.g. cb19/cloudy/mappings/mappings_agn include
             # 'grid', cue/ssp/none do not), not just the base set 'grid' was
-            # deliberately removed from (#2220 I2). Every other group's base
-            # set is still its full displayed set, so None (the default)
-            # keeps their behavior unchanged.
+            # deliberately removed from (#2220 I2). dust_attenuation's base
+            # set (`_GROUP_STRUCTURAL_KEYS`) lists the 12 per-screen names
+            # unconditionally, but they are declared (`ATTENUATION_TWO_
+            # COMPONENT_ONLY`) only under `two_component` (#2428) --
+            # `single_component`/`wg00` refuse them (an "Unknown key" this
+            # same message reports), so advertising them there would be the
+            # same "accepts a name it then refuses" inconsistency
+            # `_variant_scoped_param_names`'s law-scoping already fixed for
+            # the two_component/per-law case. Every other group's base set
+            # is still its full displayed set, so None (the default) keeps
+            # their behavior unchanged.
             displayed_structural_keys=(
-                group_allowed | neb_type_specific_keys if top_key == "neb" else None
+                group_allowed | neb_type_specific_keys
+                if top_key == "neb"
+                else group_allowed - per_screen_keys()
+                if top_key == "dust_attenuation"
+                and getattr(structural_params, "dust_model", None) != "two_component"
+                else None
             ),
         )
 
@@ -6921,7 +6947,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
         met_group="met" if use_met_block else "sfh",
         agn_flat=agn_flat,
     )
-    provenance = getattr(spec, "_group_provenance", {})
+    # A ``parse_groups``-built spec carries ``_group_provenance``; a flat
+    # ``Parameters(dust_slope_bc=...)``-built one carries ``_flat_provenance``
+    # instead (the declared per-screen name is "fully supported on this flat
+    # surface too" -- parameters.py's own per-screen validation docstring).
+    # Falling back the same way ``SEDModel._requested_law_shape_params``
+    # already does for predict-time resolution: without it, EVERY per-screen
+    # name resolved to "registry_default" here regardless of what the flat
+    # constructor actually recorded, so both ``PER_SCREEN_REQUESTED_TAGS``
+    # filters below dropped it -- a flat-built ``dust_slope_bc: Uniform(...)``
+    # predicted correctly but round-tripped as the unrelated shared ``slope``
+    # stem at its own untouched default, silently losing the per-screen value.
+    provenance = getattr(spec, "_group_provenance", None)
+    if provenance is None:
+        provenance = getattr(spec, "_flat_provenance", None)
+    provenance = provenance or {}
 
     # Group parameters by their owning group
     groups_dict = {}
@@ -7221,8 +7261,13 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
 
         _law_kw_to_short = {v: k for k, v in TWO_COMPONENT_OVERRIDE_KEYS.items()}
-        _provenance = getattr(spec, "_group_provenance", None) or {}
-        for comp in ("bc", "diff", "neb"):
+        # Same fallback as `parameters_to_groups` above: a flat-built spec
+        # carries `_flat_provenance`, not `_group_provenance` (#2428).
+        _provenance = getattr(spec, "_group_provenance", None)
+        if _provenance is None:
+            _provenance = getattr(spec, "_flat_provenance", None)
+        _provenance = _provenance or {}
+        for comp in SCREENS:
             for law_kw, value in (getattr(spec, "dust_law_overrides", {}).get(comp) or {}).items():
                 short = _law_kw_to_short.get(law_kw)
                 if short is None:

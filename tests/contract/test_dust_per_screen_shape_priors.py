@@ -3,6 +3,7 @@
 
 import re
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -358,6 +359,95 @@ class TestPerScreenFreeRoundTrip:
         assert "dust_Rv_neb" in model2.spec.free_params
 
         params = {"dust_Rv_neb": 5.0}
+        np.testing.assert_array_equal(
+            model.predict_photometry(params), model2.predict_photometry(params)
+        )
+
+    # ── Flat-surface siblings (#2428) ───────────────────────────────────────
+    # `parameters_to_groups` (`to_groups()`'s implementation) read only
+    # `_group_provenance` -- present on a `parse_groups`-built spec, absent on
+    # a flat `Parameters(dust_slope_bc=...)`-built one, which carries
+    # `_flat_provenance` instead. Every per-screen name on such a spec fell
+    # back to "registry_default" and both `PER_SCREEN_REQUESTED_TAGS` filters
+    # dropped it: a flat `dust_slope_bc=Uniform(...)` predicted correctly
+    # (`SEDModel._requested_law_shape_params` already had the fallback) but
+    # `to_groups()` emitted the unrelated SHARED `slope` stem at its own
+    # untouched default and silently lost the per-screen value entirely --
+    # despite the flat per-screen spelling being documented as "fully
+    # supported on this flat surface too" (parameters.py). `FREE` and
+    # `Fixed(DEFAULT)` are both build-grammar-only sentinels (raise
+    # unconditionally on the flat surface, for every parameter, dust or not
+    # -- unrelated to #2428), so the flat-surface analogs of the grammar's
+    # FREE/Fixed spellings are a declared prior (``Uniform``, genuinely free)
+    # and an explicit ``Fixed(value)``.
+
+    @staticmethod
+    def _flat_roundtrip(spec, synthetic_ssp_wide, synthetic_tophat_obs):
+        model = SEDModel(spec, synthetic_ssp_wide, observation=synthetic_tophat_obs)
+        groups = model.spec.to_groups()
+        model2 = SEDModel.build(
+            ssp_data=synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups
+        )
+        return model, model2
+
+    def test_flat_prior_survives_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """A flat ``dust_slope_bc=Uniform(...)`` prior keeps its free-ness."""
+        spec = Parameters(
+            dust_model="two_component",
+            dust_law_bc="power_law",
+            dust_law_diff="power_law",
+            dust_slope_bc=Uniform(-1.5, -0.3),
+            dust_slope_diff=Fixed(-0.7),
+            redshift=Fixed(0.1),
+        )
+        model, model2 = self._flat_roundtrip(spec, synthetic_ssp_wide, synthetic_tophat_obs)
+
+        assert set(model2.spec.free_params) == set(model.spec.free_params)
+        assert "dust_slope_bc" in model2.spec.free_params
+
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        np.testing.assert_array_equal(
+            model.predict_photometry(params), model2.predict_photometry(params)
+        )
+
+    def test_flat_free_pair_survives_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """A flat ``slope_bc``/``slope_diff`` prior pair both keep free-ness."""
+        spec = Parameters(
+            dust_model="two_component",
+            dust_law_bc="power_law",
+            dust_law_diff="power_law",
+            dust_slope_bc=Uniform(-1.5, -0.3),
+            dust_slope_diff=Uniform(-1.5, -0.3),
+            redshift=Fixed(0.1),
+        )
+        model, model2 = self._flat_roundtrip(spec, synthetic_ssp_wide, synthetic_tophat_obs)
+
+        assert set(model2.spec.free_params) == set(model.spec.free_params)
+        assert {"dust_slope_bc", "dust_slope_diff"} <= set(model2.spec.free_params)
+
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        np.testing.assert_array_equal(
+            model.predict_photometry(params), model2.predict_photometry(params)
+        )
+
+    def test_flat_fixed_survives_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """A flat ``dust_slope_bc=Fixed(-1.0)`` keeps its value and
+        provenance across the round-trip (#2428, flat surface)."""
+        spec = Parameters(
+            dust_model="two_component",
+            dust_law_bc="power_law",
+            dust_law_diff="power_law",
+            dust_slope_bc=Fixed(-1.0),
+            dust_slope_diff=Fixed(-0.7),
+            redshift=Fixed(0.1),
+        )
+        model, model2 = self._flat_roundtrip(spec, synthetic_ssp_wide, synthetic_tophat_obs)
+
+        assert set(model2.spec.free_params) == set(model.spec.free_params)
+        assert "dust_slope_bc" not in model2.spec.free_params
+        assert float(model2.spec.get_fixed_values()["dust_slope_bc"]) == pytest.approx(-1.0)
+
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
         np.testing.assert_array_equal(
             model.predict_photometry(params), model2.predict_photometry(params)
         )
