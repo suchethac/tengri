@@ -1596,12 +1596,14 @@ _AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
     (
         "cic",
         "production",
-        "Cloud-in-cell on a 16x dense integrand: the accuracy default (#964)",
+        "Cloud-in-cell on a 16x dense integrand: preserves "
+        "mass-proportionality to roundoff (#964)",
     ),
     (
         "dsps",
         "comparison",
-        "DSPS histogram kernel; cross-code parity only; biases optical CSP +1.2 %",
+        "DSPS histogram kernel; cross-code parity only; costs "
+        "mass-proportionality ~1e-3 at sharpest shapes (#2368)",
     ),
 )
 
