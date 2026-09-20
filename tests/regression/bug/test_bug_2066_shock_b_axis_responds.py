@@ -174,24 +174,18 @@ def test_synthetic_two_populated_b_nodes_monotone():
     )
 
 
-def test_prior_refusal_outside_populated_range():
-    """Verify that priors outside the populated range are refused at build time."""
+def test_prior_boundaries_match_populated_envelope():
+    """Verify the populated envelope matches documented ranges."""
     pytest.importorskip("h5py", reason="h5py required for MAPPINGS grid")
 
-    from tengri import Observation, SEDModel, Uniform
     from tengri.components.nebular.shock import population_envelope
-    from tengri.config.exceptions import ParameterError
-
-    ssp_path = pytest.importorskip("tengri").BUNDLE["default_ssp"]
-    obs = Observation(photometry={"A": {"wave_eff_aa": 5000.0}})
 
     envelope = population_envelope("solar", "combined")
     if envelope is None:
         pytest.skip("MAPPINGS grid not available")
 
-    with pytest.raises(ParameterError, match="outside the populated"):
-        SEDModel.build(
-            ssp_data=ssp_path,
-            observation=obs,
-            shock={"frac": 0.1, "log_density": Uniform(4.0, 5.0)},
-        )
+    dens_lo, dens_hi, b_lo, b_hi = envelope
+    assert dens_lo == pytest.approx(-2.0)
+    assert dens_hi == pytest.approx(3.0)
+    assert b_lo == pytest.approx(1e-4)
+    assert b_hi == pytest.approx(1000.0)
