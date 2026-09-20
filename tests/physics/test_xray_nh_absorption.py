@@ -2,7 +2,7 @@
 """Physics tests for X-ray N_H photoelectric absorption (issue #292).
 
 Verifies the Morrison & McCammon (1983) ``wabs`` cross-section fit
-applied to the AGN corona via ``tbabs_transmission``. Markers:
+applied to the AGN corona via ``wabs_transmission``. Markers:
 
 * ``regression_paper`` — transmission at fixed energies matches the
   Morrison & McCammon (1983, Table 2) polynomial fit at N_H levels
@@ -23,7 +23,7 @@ import pytest
 
 from tengri.components.xray.xray import (
     compton_scattering_transmission,
-    tbabs_transmission,
+    wabs_transmission,
     # PR #329 changed the public `xray_agn_corona` to take L_2500_30deg
     # directly. The legacy L_bol-driven path (which this PR's N_H absorption
     # was originally implemented against) lives behind the
@@ -60,7 +60,7 @@ def test_tbabs_matches_morrison_mccammon(E_keV: float, sigma_ref_1e24: float) ->
     sigma_cm2 = sigma_ref_1e24 * 1e-24
     expected_trans = jnp.exp(-sigma_cm2 * 10.0**log_nh)
 
-    got = tbabs_transmission(jnp.array(E_keV), jnp.array(log_nh))
+    got = wabs_transmission(jnp.array(E_keV), jnp.array(log_nh))
 
     chex.assert_trees_all_close(got, expected_trans, rtol=1e-2)
 
@@ -133,7 +133,7 @@ def test_transmission_bounded_unit_interval() -> None:
     """
     E_grid = jnp.logspace(-1.0, 1.0, 200)  # 0.1–10 keV
     for log_nh in (18.0, 20.0, 22.0, 24.0, 25.0):
-        T = tbabs_transmission(E_grid, jnp.array(log_nh))
+        T = wabs_transmission(E_grid, jnp.array(log_nh))
         chex.assert_shape(T, (200,))
         chex.assert_tree_all_finite(T)
         assert bool(jnp.all(T >= 0.0))
@@ -148,7 +148,7 @@ def test_transmission_monotone_in_log_nh() -> None:
     absorption matters most (≲ 5 keV).
     """
     for E_keV in (0.5, 1.0, 3.0):
-        grad = jax.grad(lambda nh, E=E_keV: tbabs_transmission(jnp.array(E), nh).sum())(
+        grad = jax.grad(lambda nh, E=E_keV: wabs_transmission(jnp.array(E), nh).sum())(
             jnp.array(22.0)
         )
         assert float(grad) <= 0.0, f"E={E_keV}: dT/d(log_nh) = {float(grad)}"

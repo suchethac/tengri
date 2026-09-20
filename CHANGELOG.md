@@ -2,27 +2,14 @@
 
 ### Fixed
 
-- DH02_CE01 template shape and float32 safety (#2366): the Dale & Helou (2002) /
-  Chary & Elbaz (2001) template library is indexed by log₁₀(L_TIR/L_sun) and
-  the whole point of that family is that the SED shape correlates with
-  luminosity — warmer, broader templates at higher L_IR. The closure carried a
-  hardcoded `dust_log_lir=10.0` default and inherited `factors_l_ir=True` from
-  the base class, so ``apply()`` always evaluated it at unit luminosity
-  (``log10(1) = 0``), pinning the shape lookup to a single grid node regardless
-  of the actual budget; only the amplitude was rescaled afterwards. The template
-  shape therefore never tracked the fitted luminosity. The normalization path
-  also materialized L_absorbed (~1e43 erg/s, inf in pure float32) as a linear
-  value, leaving the SED entirely inf/NaN. Fixed by setting `factors_l_ir=False`
-  on the component (matching BosaIRSEDComponent), declaring
-  `optional_inputs={'log_L_ir': 'dex'}`, and rewriting the closure as a SINGLE
-  code path (no dtype-gated branches) that: (1) uses live `log_L_ir` for the
-  grid-axis lookup after converting to L_sun (same precedent as #2272/#2273),
-  and (2) applies log-domain rescaling via ``apply_log10_scale()`` when
-  `log_L_ir` is provided, never materializing L_absorbed. Mirrors
-  bosa_emission exactly — one arithmetic path works in both float32 and float64.
-  The model's total power still integrates to the absorbed luminosity exactly;
-  the shape now varies appropriately with the fitted L_IR. **Model output
-  changes for every dh02_ce01 fit** (#2366).
+- JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
+  (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
+  cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
+  (released 2026-09-17). Upstream tolerated the condition instead of raising
+  `FileNotFoundError`, so the test now asserts the write outcome (success and
+  entry readable) under both JAX 0.11.1 (pre-fix) and 0.11.2+ (post-fix),
+  gated on `packaging.version` comparison. The orphan-atime repair stays
+  load-bearing on JAX < 0.11.2 and remains useful for recovery on all versions.
 
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
@@ -58,6 +45,27 @@
   builds (with explicit `met_logzsol_scatter` as parameter name) remain
   unchanged; both spellings cannot be passed together (raises if shadowing is
   detected).
+
+### Fixed
+
+- `mcmc_nuts_fast` registry row and pmap hint: removed false claim "pmapped chains
+  by default", now states "vmapped chains on one device; pmapped when the platform
+  exposes at least n_chains devices". The TENGRI_HOST_DEVICES hint is now gated
+  to GPU/TPU platforms only; on CPU, vmap is 8% faster than pmap and the hint was
+  counterproductive (418.3 s vmap vs 451.5 s pmap, same 5-param broadband fit).
+  Removed "20 s" from short_doc: timing varies widely by model (15 s–30+ min),
+  not a property of the recipe alone. Error message for `chain_parallel='pmap'`
+  is now platform-aware: suggests TENGRI_HOST_DEVICES on GPU/TPU, recommends
+  vmap/auto on CPU (#2361).
+
+### Changed
+
+- **X-ray absorption nomenclature**: `tbabs_transmission()` renamed to
+  `wabs_transmission()` to accurately reflect the Morrison & McCammon (1983)
+  cross-section convention it implements, not Wilms et al. (2000) tbabs. The
+  function behavior is unchanged; `tbabs_transmission` remains available as a
+  deprecated alias. The soft-band difference between wabs and tbabs (10–30%
+  below ~1 keV) is now documented in the docstring. (#901)
 
 ### Added
 
@@ -407,6 +415,17 @@
   size, so the opening steps of every warmup diverge whatever the posterior.
 
 - `tools/check_param_restatements.py`: a new CI guard that a `ParamDeclaration` restated as a class-level `Uniform(lo, hi, ..., default=d)` literal on a `SEDModelComponent` subclass matches the canonical declaration for that parameter name in its domain's `_params.py` `PARAMS` tuple, unless allowlisted with a reason. AST-only (no `tengri` import), following `check_param_grid_extent.py`'s precedent. First run found 18 pre-existing mismatches across five legacy AGN disc/torus classes (`CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `SKIRTORAgnfitterTorus`), recorded as `docs/dev/known_bugs.md` PARITY-01 and since fixed (see Fixed, below).
+
+
+### Fixed
+
+- `params_override` now rejects a noise parameter the built likelihood cannot
+  read. Noise parameters are only consumed when declared in the spec (free or
+  Fixed at nonzero); with the default spec (noise_frac_cal at Fixed(0.0)), the
+  likelihood is plain Gaussian and ignores any noise_* override. The override
+  was silently accepted, reporting success while having zero effect. It now
+  raises with a message that explains the mechanism and suggests declaring it
+  in the spec. (#2193).
 
 
 ### Changed
@@ -1001,6 +1020,14 @@
 
 ### Fixed
 
+- `enable_fast_nebular` now refuses when a CB19 optional parameter
+  (`neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is freed. The per-Q_H
+  grid bakes these axes at their reference values and cannot respond to the
+  sampler's variations, producing a silent mismatch: the likelihood never
+  observes the freed dimensions while the posterior reports only the prior.
+  Mirror the CB19 flat-axis guard (issue #2181) to refuse at build time,
+  naming the offenders and the remedy (pin them or skip fast-nebular). (#2307)
+
 - Both unwired guards are wired and the class is closed (#2326):
   `tools/check_harness_parity.py` (benchmark-fixture provenance) and
   `tools/check_docs_voice.py` (the enforcement `NAMING_CONTRACT.md` names for
@@ -1070,6 +1097,28 @@
   `test_nuts_split_warmup_keeps_sampling_quality` asks for 400 draws (the
   profiled fixed-key realization sat on its 1.1 R-hat bar at 200)
   (`bench/reports/2026-09-12_library_path_parity.md`).
+- DH02_CE01 template shape and float32 safety (#2366): the Dale & Helou (2002) /
+  Chary & Elbaz (2001) template library is indexed by log₁₀(L_TIR/L_sun) and
+  the whole point of that family is that the SED shape correlates with
+  luminosity — warmer, broader templates at higher L_IR. The closure carried a
+  hardcoded `dust_log_lir=10.0` default and inherited `factors_l_ir=True` from
+  the base class, so ``apply()`` always evaluated it at unit luminosity
+  (``log10(1) = 0``), pinning the shape lookup to a single grid node regardless
+  of the actual budget; only the amplitude was rescaled afterwards. The template
+  shape therefore never tracked the fitted luminosity. The normalization path
+  also materialized L_absorbed (~1e43 erg/s, inf in pure float32) as a linear
+  value, leaving the SED entirely inf/NaN. Fixed by setting `factors_l_ir=False`
+  on the component (matching BosaIRSEDComponent), declaring
+  `optional_inputs={'log_L_ir': 'dex'}`, and rewriting the closure as a SINGLE
+  code path (no dtype-gated branches) that: (1) uses live `log_L_ir` for the
+  grid-axis lookup after converting to L_sun (same precedent as #2272/#2273),
+  and (2) applies log-domain rescaling via ``apply_log10_scale()`` when
+  `log_L_ir` is provided, never materializing L_absorbed. Mirrors
+  bosa_emission exactly — one arithmetic path works in both float32 and float64.
+  The model's total power still integrates to the absorbed luminosity exactly;
+  the shape now varies appropriately with the fitted L_IR. **Model output
+  changes for every dh02_ce01 fit** (#2366).
+
 - The analytic dust-emission closures (``modified_blackbody``, ``graybody``,
   ``casey2012``, ``schreiber2016``, ``energy_balance_split``) read their
   signature defaults from the declared parameter table
