@@ -45,7 +45,7 @@ red curve for reference.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a3f3fbcc3f971ad49/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:156: RuntimeWarning: divide by zero encountered in divide
+    /tengri/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:156: RuntimeWarning: divide by zero encountered in divide
       "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
 
 
