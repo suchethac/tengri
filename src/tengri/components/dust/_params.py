@@ -595,9 +595,10 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     # group can never double-parametrize a screen behind its own explicit
     # setting. When given a plain number (not a Distribution), a per-screen
     # key still routes through dust_law_overrides as a static config value,
-    # exactly as before this feature existed; a Fixed(v) or the bare scalar v
-    # resolve to the identical value, so the two mechanisms never disagree at
-    # the value level. See #2428.
+    # exactly as before this feature existed -- AND seeds the declared
+    # parameter itself at that same value (provenance user_fixed), so a
+    # Fixed(v) and the bare scalar v are indistinguishable from here on:
+    # same predicted SED, same get_fixed_values()/summary() value. See #2428.
     ParamDeclaration(
         "dust_slope_bc",
         Fixed(-0.7),

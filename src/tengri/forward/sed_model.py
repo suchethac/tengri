@@ -9198,7 +9198,12 @@ class SEDModel:
         never mentions a shape parameter still gets the law's own published
         default, bit-identical to pre-#2231.
         """
-        from tengri.parameters.groups import _base_provenance, _law_shape_params
+        from tengri.parameters.groups import (
+            PER_SCREEN_REQUESTED_TAGS,
+            _base_provenance,
+            _law_shape_params,
+            _per_screen_full_names,
+        )
 
         names = laws or (
             getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None),
@@ -9221,23 +9226,22 @@ class SEDModel:
         # requested exactly when their OWN provenance is user-explicit --
         # explicit-only by design (#2428): a wildcard can never free one
         # (per_screen_inert), so "wildcard_free" cannot appear here in
-        # practice, but reusing the full _REQUESTED_PROVENANCE set (rather
-        # than a second, hand-copied subset of it) is what keeps this in
-        # sync with the shared-stem rule two lines below instead of drifting
-        # into its own incomplete copy -- a bare ("user_prior", "user_fixed")
-        # tuple here once left out "user_free", so `slope_bc: FREE` never
-        # reached the law at predict time even though the grammar correctly
-        # froze it on its declared free_prior.
-        per_screen_names = (
-            f"dust_{stem}_{screen}"
-            for stem in ("slope", "delta", "bump_strength", "Rv")
-            for screen in ("bc", "diff", "neb")
-        )
+        # practice. Filtered against PER_SCREEN_REQUESTED_TAGS -- the same
+        # three-tag set (user_prior/user_fixed/user_free) the grammar's own
+        # round-trip emitters (`_get_explicit_overrides`,
+        # `parameters_to_groups`) use to decide whether to re-emit a
+        # per-screen name -- rather than a second, hand-copied tuple here:
+        # a bare ("user_prior", "user_fixed") tuple in all three places once
+        # left out "user_free", so `slope_bc: FREE` built and resolved
+        # correctly but vanished on the very next `to_groups()` round-trip.
+        # Names enumerated via `_per_screen_full_names()` (the canonical
+        # OVERRIDE_STEMS x SCREENS product), not a fourth hand-typed copy.
+        per_screen_names = _per_screen_full_names()
         per_screen_reads = {
             name
             for name in per_screen_names
             if name in provenance
-            and _base_provenance(str(provenance[name])) in self._REQUESTED_PROVENANCE
+            and _base_provenance(str(provenance[name])) in PER_SCREEN_REQUESTED_TAGS
         }
 
         return (

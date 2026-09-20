@@ -215,7 +215,14 @@ class TestFlatPerScreenDeclaredParamValidation:
 
     def test_single_component_refuses_per_screen_name(self):
         """dust_model='single_component' + a per-screen prior is refused: the
-        name is not even declared there (ATTENUATION_TWO_COMPONENT_ONLY)."""
+        name is not even declared there (ATTENUATION_TWO_COMPONENT_ONLY).
+
+        This pins ``ATTENUATION_TWO_COMPONENT_ONLY`` specifically, and cannot
+        fail on the pre-#2428 tree: there, ``dust_slope_bc`` was not a
+        declared parameter under any ``dust_model``, so single_component
+        refused it for an unrelated reason (the name did not exist at all,
+        not that it exists but is scoped away from this variant).
+        """
         with pytest.raises(ValueError, match="dust_slope_bc"):
             Parameters(
                 dust_model="single_component",

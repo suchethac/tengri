@@ -266,12 +266,13 @@ def merge_neb_screen_live_overrides(
 ) -> dict:
     """Layer live ``*_neb`` per-screen params on top of static neb overrides.
 
-    The nebular birth-cloud screen (:class:`DustSEDComponent`'s three call
-    sites) merges its static ``neb_law_overrides`` with the *live* per-screen
-    names (``dust_slope_neb``, ``dust_Rv_neb``, ...) the same way
-    :func:`resolve_bc_diff_law_params` does for ``bc``/``diff`` (#2428) -- a
-    ``params``-dict lookup gated on ``live_shape_params``, taking priority
-    over the static override.
+    The nebular birth-cloud screen (:class:`DustSEDComponent`'s two merge
+    call sites -- a third consumer reuses the already-merged dict rather
+    than calling this again) merges its static ``neb_law_overrides`` with
+    the *live* per-screen names (``dust_slope_neb``, ``dust_Rv_neb``, ...)
+    the same way :func:`resolve_bc_diff_law_params` does for ``bc``/``diff``
+    (#2428) -- a ``params``-dict lookup gated on ``live_shape_params``,
+    taking priority over the static override.
 
     Parameters
     ----------

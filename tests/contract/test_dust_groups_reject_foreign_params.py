@@ -196,6 +196,55 @@ class TestErrorMessageContent:
         assert "law_diff='smc'" in message
 
 
+class TestAcceptedListLawScopesPerScreenNames:
+    """The "this variant accepts:" list law-scopes the 12 per-screen names
+    (#2428), the way :func:`_reject_per_screen_keys_no_law_reads` already
+    does -- so a name this list advertises as accepted is never one that
+    then still raises when actually written.
+
+    Before this fix, the list re-admitted all 12 per-screen names (``Rv_bc``,
+    ``delta_diff``, ``bump_strength_neb``, ...) regardless of which law each
+    screen selected, because they are ``_GROUP_STRUCTURAL_KEYS``
+    "group-level knobs" independent of the law-scoping the four SHARED
+    stems (``slope``, ``Rv``, ``delta``, ``bump_strength``) already got.
+    ``power_law`` reads only ``slope`` -- of the 12 per-screen names, only
+    ``slope_bc``/``slope_diff``/``slope_neb`` should ever appear.
+    """
+
+    def test_stray_key_under_power_law(self):
+        """``Rv`` is foreign to ``power_law``; the advertised list must name
+        only the per-screen names ``power_law`` actually reads."""
+        with pytest.raises(ParameterError) as exc_info:
+            build_groups(
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "power_law",
+                    "all_params": WILDCARD,
+                    "Rv": Fixed(3.5),
+                }
+            )
+        message = str(exc_info.value)
+
+        for accepted in ("slope_bc", "slope_diff", "slope_neb"):
+            assert accepted in message, f"{accepted!r} should be listed as accepted: {message}"
+
+        for foreign in (
+            "Rv_bc",
+            "Rv_diff",
+            "Rv_neb",
+            "delta_bc",
+            "delta_diff",
+            "delta_neb",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "bump_strength_neb",
+        ):
+            assert foreign not in message, (
+                f"{foreign!r} is not read by power_law and must not be advertised "
+                f"as accepted: {message}"
+            )
+
+
 class TestOwnParametersAccepted:
     """A variant's own declared parameters stay accepted."""
 

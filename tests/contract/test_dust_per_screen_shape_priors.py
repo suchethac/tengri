@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Per-screen dust attenuation shape priors: grammar, prediction, and gates."""
 
+import re
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -99,7 +101,11 @@ class TestPerScreenDustShapePriors:
     def test_fixed_per_screen_matches_scalar_static_override(
         self, synthetic_ssp_wide, synthetic_tophat_obs
     ):
-        """Fixed per-screen param is bit-identical to scalar static override."""
+        """Fixed per-screen param is bit-identical to scalar static override
+        (#2428) -- not only in PREDICTION, but in what the declared
+        parameter itself carries: ``get_fixed_values()`` and ``summary()``
+        must show -1.0, the value actually driving the screen's law, not
+        the untouched registry default (-0.7) the bug left behind."""
 
         def build(slope_bc):
             return SEDModel.build(
@@ -126,6 +132,27 @@ class TestPerScreenDustShapePriors:
         sed_scalar = model_scalar.predict_photometry({})
 
         np.testing.assert_array_equal(sed_per_screen, sed_scalar)
+
+        # The bare-scalar spelling's declared dust_slope_bc must ALSO carry
+        # -1.0 -- not the registry default (-0.7) -- with "user_fixed"
+        # provenance, exactly like the Fixed(-1.0) spelling.
+        for model, label in ((model_scalar, "scalar"), (model_per_screen, "Fixed(v)")):
+            fixed_values = model.spec.get_fixed_values()
+            assert float(fixed_values["dust_slope_bc"]) == pytest.approx(-1.0), (
+                f"{label} spelling: get_fixed_values()['dust_slope_bc'] should be -1.0, "
+                f"got {fixed_values['dust_slope_bc']}"
+            )
+            provenance = model.spec._group_provenance
+            assert provenance["dust_slope_bc"] == "user_fixed", (
+                f"{label} spelling: dust_slope_bc provenance should be 'user_fixed', "
+                f"got {provenance['dust_slope_bc']!r}"
+            )
+
+        summary = model_scalar.spec.summary_str()
+        assert re.search(r"dust_slope_bc\s+Fixed\s+-1\b", summary), (
+            f"summary() should show dust_slope_bc Fixed at -1, not the registry "
+            f"default:\n{summary}"
+        )
 
     def test_two_component_law_defaults_gate(self, synthetic_ssp_wide, synthetic_tophat_obs):
         """Gate #1833: per-screen free names not freed by wildcard."""
@@ -210,7 +237,7 @@ class TestPerScreenDustShapePriors:
         lut_phot = np.asarray(model_fixed.predict_photometry({}))
         exact_phot = np.asarray(model_exact.predict_photometry({}))
         rel = np.abs(lut_phot - exact_phot) / np.abs(exact_phot)
-        # Measured 1.03e-4 max relative on this fixture; margin to 5e-4 keeps
+        # Measured 1.82e-4 max relative on this fixture; margin to 5e-4 keeps
         # the assertion meaningful without pinning the WavePrecomp
         # approximation's exact digit.
         assert rel.max() < 5e-4, f"LUT vs exact drifted {rel.max():.2e} (> 5e-4)"
@@ -233,6 +260,107 @@ class TestPerScreenDustShapePriors:
         dust_atten = groups["dust_attenuation"]
 
         assert "slope_bc" in dust_atten
+
+
+class TestPerScreenFreeRoundTrip:
+    """``to_groups()`` -> reparse preserves a per-screen ``FREE`` (#2428).
+
+    ``_get_explicit_overrides`` and ``parameters_to_groups``'s no-wildcard
+    branch re-emit a per-screen name only when its own provenance says a
+    caller asked for it; before this fix that check was a bare
+    ``("user_prior", "user_fixed")`` tuple, omitting ``"user_free"``. A
+    ``slope_bc: FREE`` build resolved and predicted correctly at build time,
+    but round-tripping through ``to_groups()`` silently dropped ``slope_bc``
+    from the emitted dict: the reparsed model had no free dust parameter at
+    all, and ``predict_photometry({"dust_slope_bc": ...})`` on it silently
+    accepted and ignored the value (measured 7.04e-2 max relative difference
+    from the original model's own prediction at the same value).
+    """
+
+    @staticmethod
+    def _roundtrip(model, synthetic_ssp_wide, synthetic_tophat_obs):
+        groups = model.spec.to_groups()
+        return SEDModel.build(
+            ssp_data=synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups
+        )
+
+    def test_free_slope_bc_survives_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """A lone ``slope_bc: FREE`` keeps its free-ness across a round-trip."""
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law_bc": "power_law",
+                "law_diff": "power_law",
+                "slope_bc": FREE,
+                "slope_diff": Fixed(-0.7),
+                "other_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+        model2 = self._roundtrip(model, synthetic_ssp_wide, synthetic_tophat_obs)
+
+        assert set(model2.spec.free_params) == set(model.spec.free_params)
+        assert "dust_slope_bc" in model2.spec.free_params
+
+        params = {"dust_slope_bc": -1.4}
+        np.testing.assert_array_equal(
+            model.predict_photometry(params), model2.predict_photometry(params)
+        )
+
+    def test_free_bc_diff_pair_survives_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """A ``slope_bc``/``slope_diff`` FREE pair both keep their free-ness."""
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law_bc": "power_law",
+                "law_diff": "power_law",
+                "slope_bc": FREE,
+                "slope_diff": FREE,
+                "other_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+        model2 = self._roundtrip(model, synthetic_ssp_wide, synthetic_tophat_obs)
+
+        assert set(model2.spec.free_params) == set(model.spec.free_params)
+        assert {"dust_slope_bc", "dust_slope_diff"} <= set(model2.spec.free_params)
+
+        params = {"dust_slope_bc": -1.4, "dust_slope_diff": -0.5}
+        np.testing.assert_array_equal(
+            model.predict_photometry(params), model2.predict_photometry(params)
+        )
+
+    def test_free_rv_neb_survives_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """A nebular-screen ``Rv_neb: FREE`` keeps its free-ness too."""
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "law_diff": "calzetti",
+                "law_neb": "cardelli",
+                "Rv_neb": FREE,
+                "other_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+        model2 = self._roundtrip(model, synthetic_ssp_wide, synthetic_tophat_obs)
+
+        assert set(model2.spec.free_params) == set(model.spec.free_params)
+        assert "dust_Rv_neb" in model2.spec.free_params
+
+        params = {"dust_Rv_neb": 5.0}
+        np.testing.assert_array_equal(
+            model.predict_photometry(params), model2.predict_photometry(params)
+        )
 
 
 class TestPerScreenFreeAndFixedDefault:
