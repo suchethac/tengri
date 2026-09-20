@@ -194,6 +194,48 @@ def dust_parameter_name(config_key: str) -> str:
         ) from exc
 
 
+def is_chain_sampler(method: str) -> bool:
+    """Whether ``method`` produces chains the NUTS adoption bar can judge.
+
+    The retune ladder, the divergence count and split R-hat all presuppose
+    an MCMC backend. Nested sampling (``"nss"``) returns weighted dead points
+    with an evidence and its own ESS; splitting those in half compares early
+    against late likelihood levels and reports a meaningless R-hat, so a
+    non-chain method gets one attempt and is adopted on completion (the
+    backend raises if the evidence integral is cut off, so completion is
+    the bar).
+    """
+    return method.startswith("mcmc")
+
+
+def sampler_kwargs_for(method: str, kwargs: dict) -> dict:
+    """Drop the kwargs ``method``'s runner does not declare, with a warning.
+
+    ``base_kwargs`` is written for NUTS (``n_warmup``, ``target_accept_rate``,
+    ``dense_mass_matrix``, ...). The dispatch seam refuses any name a runner
+    cannot take -- deliberately, as a typo guard (#1469) -- so ``--method nss``
+    would die there on ``n_warmup``. This is the one caller that knows it is
+    holding NUTS settings, so it filters against the runner's signature here
+    and says what it dropped; the library guard is untouched. A runner that
+    takes ``**kwargs`` receives everything.
+    """
+    import inspect
+
+    from tengri.inference._backend_registry import get_backend
+
+    sig = inspect.signature(get_backend(method).runner)
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return dict(kwargs)
+    accepted = {k: v for k, v in kwargs.items() if k in sig.parameters or k == "method"}
+    dropped = sorted(set(kwargs) - set(accepted))
+    if dropped:
+        logger.warning(
+            f"method={method!r} does not take {dropped}; running without them. "
+            f"Accepted: {sorted(k for k in accepted if k != 'method')}"
+        )
+    return accepted
+
+
 def retune_settings(attempt: int, base: dict) -> dict:
     """NUTS settings for attempt ``attempt`` (1-based) of the adoption loop.
 
@@ -704,6 +746,7 @@ def run_fit(
     n_warmup: int = DEFAULT_N_WARMUP,
     n_samples: int = DEFAULT_N_SAMPLES,
     n_chains: int = DEFAULT_N_CHAINS,
+    profile_mass: bool = False,
 ) -> dict:
     """Run a single fit for a galaxy and configuration.
 
@@ -795,17 +838,28 @@ def run_fit(
     # Posteriors parallel to ``attempts`` -- index i of one is index i of the
     # other -- so the best attempt's posterior can be saved when none passes.
     posteriors: list = []
+    chain_sampler = is_chain_sampler(method)
+    if not chain_sampler and retune_attempts != 1:
+        logger.info(
+            f"method={method!r} is not a chain sampler: one attempt, no retune ladder "
+            f"(was {retune_attempts})"
+        )
+        retune_attempts = 1
     attempt = 0
 
     while attempt < retune_attempts:
         attempt += 1
         nuts_kwargs = retune_settings(attempt, base_kwargs)
-        logger.info(
-            f"Attempt {attempt}/{retune_attempts}: "
-            f"target_accept {nuts_kwargs['target_accept_rate']}, "
-            f"warmup {nuts_kwargs['n_warmup']}, "
-            f"{'dense' if nuts_kwargs['dense_mass_matrix'] else 'diagonal'} mass"
-        )
+        if chain_sampler:
+            logger.info(
+                f"Attempt {attempt}/{retune_attempts}: "
+                f"target_accept {nuts_kwargs['target_accept_rate']}, "
+                f"warmup {nuts_kwargs['n_warmup']}, "
+                f"{'dense' if nuts_kwargs['dense_mass_matrix'] else 'diagonal'} mass"
+            )
+        else:
+            logger.info(f"Attempt {attempt}/{retune_attempts}: method {method}")
+        fit_kwargs = sampler_kwargs_for(method, nuts_kwargs)
 
         key = jax.random.PRNGKey(seed + attempt)
         t_start = time.perf_counter()
@@ -845,15 +899,30 @@ def run_fit(
             # against a 1e-8 tolerance, four orders inside it), but verify
             # rather than assume if a configuration is ever added or its age
             # kernel changed.
-            posterior = forward.fit(data, key=key, profile_mass=False, **nuts_kwargs)
+            posterior = forward.fit(data, key=key, profile_mass=profile_mass, **fit_kwargs)
             t_elapsed = time.perf_counter() - t_start
 
             # Extract diagnostics
-            rhat_dict = posterior.rhat()
-            rhat_max = max(float(v) for v in rhat_dict.values())
-            ess_dict = posterior.effective_sample_size()
-            ess_min = min(float(v) for v in ess_dict.values()) if ess_dict else None
-            n_divergent = posterior.diagnostics.get("n_divergent", 0)
+            if chain_sampler:
+                rhat_dict = posterior.rhat()
+                rhat_max = max(float(v) for v in rhat_dict.values())
+                ess_dict = posterior.effective_sample_size()
+                ess_min = min(float(v) for v in ess_dict.values()) if ess_dict else None
+                n_divergent = posterior.diagnostics.get("n_divergent", 0)
+                sampler_extra = {}
+            else:
+                # No chains to split: R-hat and per-parameter ESS are undefined.
+                # NSS publishes one ESS for the weighted set, and the evidence.
+                rhat_dict, rhat_max, ess_dict = {}, None, {}
+                ess_min = posterior.diagnostics.get("ess")
+                ess_min = float(ess_min) if ess_min is not None else None
+                n_divergent = None
+                sampler_extra = {
+                    k: (float(v) if v is not None else None)
+                    for k, v in posterior.diagnostics.items()
+                    if k
+                    in ("log_evidence", "log_evidence_err", "n_iterations", "n_dead", "n_live")
+                }
 
             diagnostics = {
                 "gal_id": gal_id,
@@ -866,38 +935,42 @@ def run_fit(
                 "n_samples": nuts_kwargs["n_samples"],
                 "n_chains": nuts_kwargs["n_chains"],
                 "dense_mass_matrix": nuts_kwargs["dense_mass_matrix"],
+                "profile_mass": profile_mass,
                 "target_accept_rate": nuts_kwargs["target_accept_rate"],
                 "max_tree_depth": nuts_kwargs.get("max_tree_depth"),
-                "divergences": int(n_divergent),
-                "rhat_max": float(rhat_max),
+                "divergences": int(n_divergent) if n_divergent is not None else None,
+                "rhat_max": float(rhat_max) if rhat_max is not None else None,
                 "rhat_dict": {k: float(v) for k, v in rhat_dict.items()},
                 "ess_min": float(ess_min) if ess_min is not None else None,
                 "ess_dict": {k: float(v) for k, v in ess_dict.items()},
                 "wall_time_s": t_elapsed,
                 "systematic_floor_frac": floor_frac,
                 "systematic_floor_mean_erg": float((floor_frac * fnu).mean()),
+                **sampler_extra,
             }
 
-            # Check adoption bar: 0 divergences and max R̂ < 1.01
-            adoption_pass = n_divergent == 0 and rhat_max < 1.01
+            # Check adoption bar: 0 divergences and max R̂ < 1.01. A non-chain
+            # sampler has neither; its backend raises when the run is cut off,
+            # so reaching here is the bar.
+            if chain_sampler:
+                adoption_pass = n_divergent == 0 and rhat_max < 1.01
+                bar = f"divergences={n_divergent}, rhat_max={rhat_max:.4f}"
+            else:
+                adoption_pass = True
+                bar = ", ".join(f"{k}={v}" for k, v in sampler_extra.items()) + f", ess={ess_min}"
             diagnostics["adoption_pass"] = adoption_pass
             diagnostics["retune_attempt"] = attempt
             attempts.append(dict(diagnostics))
             posteriors.append(posterior)
 
             if adoption_pass:
-                logger.info(
-                    f"✓ Fit passed adoption bar: "
-                    f"divergences={n_divergent}, rhat_max={rhat_max:.4f}"
-                )
+                logger.info(f"✓ Fit passed adoption bar: {bar}")
                 best_posterior = posterior
                 best_diagnostics = diagnostics
                 best_diagnostics["best_attempt"] = attempt
                 break
 
-            logger.warning(
-                f"✗ Fit failed adoption bar: divergences={n_divergent}, rhat_max={rhat_max:.4f}"
-            )
+            logger.warning(f"✗ Fit failed adoption bar: {bar}")
             retune_history.append(dict(diagnostics))
 
             # Persist this attempt before the retune starts: the driver's
@@ -1033,6 +1106,12 @@ def main():
         default=DEFAULT_N_CHAINS,
         help=f"NUTS chains (default: {DEFAULT_N_CHAINS})",
     )
+    parser.add_argument(
+        "--profile-mass",
+        action="store_true",
+        help="Profile log_total_mass analytically instead of sampling it (see the"
+        " comment above forward.fit for why the grid default is off).",
+    )
 
     args = parser.parse_args()
 
@@ -1052,6 +1131,7 @@ def main():
             n_warmup=args.n_warmup,
             n_samples=args.n_samples,
             n_chains=args.n_chains,
+            profile_mass=args.profile_mass,
         )
         logger.info(f"✓ Fit complete for galaxy {args.galaxy} config {args.config}")
         return 0

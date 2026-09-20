@@ -483,8 +483,15 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
 #: measured on 2026-09-12 (ctl-dpl seed 7, geoVI: mass 10.24 against the NUTS
 #: reference 11.96, age 0.5 Gyr against 5.2). Anything not listed here runs
 #: unprofiled; add a backend only after checking it reads the Fitter's loss.
+#: ``nss`` reads it: ``backends/evidence._get_nss_fns`` scores live points
+#: with ``Fitter._get_or_build_loglikelihood_fn()``, and
+#: :func:`build_profiled_loglikelihood_fn` exists for exactly that caller --
+#: but the name was missing here, so ``resolve_profile_mass_for_method``
+#: refused ``profile_mass=True`` and silently disabled ``"auto"`` before the
+#: profiled likelihood could ever be reached (a rule keyed to a label).
 PROFILE_MASS_BACKENDS = frozenset(
     {
+        "nss",
         "map",
         "laplace",
         "mcmc",

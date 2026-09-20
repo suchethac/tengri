@@ -560,6 +560,11 @@ def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
 
     assert "mcmc_nuts_fast" in PROFILE_MASS_BACKENDS
     assert "vi" not in PROFILE_MASS_BACKENDS
+    # NSS scores live points with ``Fitter._get_or_build_loglikelihood_fn()``,
+    # the seam ``build_profiled_loglikelihood_fn`` was written for; it was
+    # missing from the list, so the resolver refused it before the profiled
+    # likelihood could be reached.
+    assert "nss" in PROFILE_MASS_BACKENDS
 
     class _Spec:
         free_params = ("a", "m_log_total_mass")
@@ -593,6 +598,9 @@ def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
     g = _Fitter()
     with pytest.raises(ValueError, match="profile_mass=True"):
         resolve_profile_mass_for_method(g, "vi", True)
+    h = _Fitter()
+    resolve_profile_mass_for_method(h, "nss", True)
+    assert h._profile_mass is True
 
 
 @pytest.mark.contract
