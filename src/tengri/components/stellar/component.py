@@ -94,11 +94,8 @@ class AgeKernelFieldWarning(UserWarning):
     The 'dsps' kernel costs mass-proportionality accuracy: typically well below
     1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
 
-    To silence this advisory, either:
-    - Set age_kernel='dsps' explicitly (you acknowledge the choice), or
-    - Set age_kernel='cic' (which raises NotImplementedError on the field path).
-
-    See #2368 for details.
+    To silence this advisory, set age_kernel='dsps' explicitly to acknowledge
+    the choice. See #2368 for details.
     """
 
 
@@ -1705,7 +1702,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
 
         # Emit advisory when field=True forces 'dsps' over the default kernel
         if self.field and self.age_kernel is None:
-            bound_str = f"{AGE_KERNEL_ACCURACY_BOUND:.0e}"
+            bound_str = f"{AGE_KERNEL_ACCURACY_BOUND:g}"
             msg = (
                 f"field=True forces age_kernel='dsps', which costs mass-proportionality "
                 f"accuracy: typically well below 1e-5, but reaching roughly {bound_str} "

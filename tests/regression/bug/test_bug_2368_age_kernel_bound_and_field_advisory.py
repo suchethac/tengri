@@ -13,19 +13,17 @@ forces 'dsps' without warning. This suite verifies:
 
 from __future__ import annotations
 
-import re
 import warnings
 
 import pytest
 
 import tengri
-from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.component import (
     AGE_KERNEL_ACCURACY_BOUND,
     AgeKernelFieldWarning,
 )
 from tengri.observation import Observation, Photometry
-
 
 pytestmark = [pytest.mark.regression_bug]
 
@@ -50,15 +48,10 @@ def test_age_kernel_registry_rows_include_bound_sentence() -> None:
                 f"proportionality to roundoff. Got: {short_doc}"
             )
         elif kernel_name == "dsps":
-            # 'dsps' has the bound ~1e-3. Must cite it (in some form).
-            # Check for any representation of the bound value.
-            has_bound = any(
-                pattern in short_doc.lower()
-                for pattern in ["1e-3", "1e-03", "1e-03", "1e-3", "~1e-3"]
-            )
-            assert has_bound, (
+            # 'dsps' has the bound ~1e-3. Must cite it on discovery surface.
+            assert "1e-3" in short_doc, (
                 f"age_kernel='{kernel_name}' short_doc must include the accuracy bound "
-                f"(~1e-3). Got: {short_doc}"
+                f"(1e-3). Got: {short_doc}"
             )
 
 
@@ -100,9 +93,11 @@ def test_field_true_with_default_kernel_warns_advisory(synthetic_ssp) -> None:
         msg = str(age_kernel_warns[0].message)
         # Message must name the kernel and the bound.
         assert "dsps" in msg.lower(), f"Warning message must name the 'dsps' kernel. Got: {msg}"
-        # Check for any representation of the bound value.
-        has_bound = any(pattern in msg.lower() for pattern in ["1e-3", "1e-03", "~1e-3"])
-        assert has_bound, f"Warning message must include the bound (~1e-3). Got: {msg}"
+        # Check for the bound using the same format as the constant.
+        bound_str = f"{AGE_KERNEL_ACCURACY_BOUND:g}"
+        assert bound_str in msg, (
+            f"Warning message must include the bound ({bound_str}). Got: {msg}"
+        )
 
 
 def test_field_true_with_explicit_dsps_does_not_warn(synthetic_ssp) -> None:
@@ -150,7 +145,7 @@ def test_field_true_with_cic_still_raises(synthetic_ssp) -> None:
     )
 
     # field=True + explicit age_kernel='cic' must raise.
-    with pytest.raises(NotImplementedError, match="age_kernel.*cic"):
+    with pytest.raises(NotImplementedError, match=r"age_kernel.*cic"):
         SEDModel.build(
             ssp_data=synthetic_ssp,
             observation=obs,
