@@ -4561,6 +4561,7 @@ class Fitter:
             _get_ghmc_kernel,
             _get_hmc_kernel,
             _get_nuts_kernel,
+            _stabilize_dense_mass_step,
         )
 
         _check_blackjax_floor()
@@ -4689,6 +4690,42 @@ class Fitter:
             lambda: jax.jit(_run_window_adaptation),
         )
         step_size, inv_mass_matrix = _run_adapt(adapt_key, init_flats[0], first_data_args)
+
+        # Post-adaptation step size stability probe for dense mass matrix (#2157)
+        if use_dense:
+            import blackjax
+
+            initial_state = blackjax.nuts.init(
+                init_flats[0], lambda p: logdensity_flat_2arg(p, first_data_args)
+            )
+            if method == "mcmc_nuts":
+                kernel = _get_nuts_kernel()
+                max_doublings = max_num_doublings
+            elif method == "mcmc_hmc":
+                kernel = _get_hmc_kernel()
+                max_doublings = n_leapfrog_steps
+            elif method == "mcmc_dynamic_hmc":
+                kernel = _get_hmc_kernel()
+                max_doublings = 10  # match _DHMC_WARMUP_LEAPFROG_STEPS
+            else:  # mcmc_ghmc
+                kernel = _get_ghmc_kernel()
+                max_doublings = max_num_doublings
+
+            step_size, backoff_count = _stabilize_dense_mass_step(
+                kernel,
+                initial_state,
+                logdensity_flat_2arg,
+                first_data_args,
+                float(step_size),
+                inv_mass_matrix,
+                max_doublings,
+                sampler_name=method.upper().replace("_", "-"),
+            )
+            step_size = jnp.asarray(step_size)
+            if verbose and backoff_count > 0:
+                logger.info(
+                    f"  Dense-mass probe: step size backoff applied ({backoff_count} halving(s))"
+                )
 
         if verbose:
             logger.info(

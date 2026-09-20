@@ -2,6 +2,12 @@
 
 ### Fixed
 
+- The dense-mass step-size stability probe (#1999) now also runs after
+  adaptation in the dynamic-HMC backend and in `fit_batch`'s shared window
+  adaptation, so those paths refuse a step above the metric's stability limit
+  like the single-galaxy NUTS/HMC paths; the fused-scan paths remain the design
+  item in #2157 (Refs #2157).
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
