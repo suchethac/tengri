@@ -402,9 +402,15 @@ def main() -> int:
             "exit 1 on drift, write nothing."
         ),
     )
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="Root directory of the repository (default: parent of scripts/ directory).",
+    )
     args = parser.parse_args()
 
-    root = Path(__file__).resolve().parents[1]
+    root = args.root if args.root else Path(__file__).resolve().parents[1]
     nb_root = root / "notebooks"
     spine_out = root / "docs" / "spine"
     spine_out.mkdir(parents=True, exist_ok=True)
