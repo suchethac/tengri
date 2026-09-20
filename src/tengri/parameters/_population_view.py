@@ -166,6 +166,19 @@ class PopulationSpecView:
         """
         return self._template.fixed_value(name)
 
+    @property
+    def mirrors(self) -> dict[str, str]:
+        """Mirror targets ``{target_name: source_name}``, from the template (#2296).
+
+        ``refuse_fixed_overrides`` exempts mirror targets from its Fixed-key
+        presence check (a mirror target is internally Fixed(0.0), a
+        placeholder ``resolve_mirrors`` overwrites, not a real pin); without
+        this pass-through a population view over a mirrored template raised
+        ``AttributeError: 'PopulationSpecView' object has no attribute
+        'mirrors'`` instead of ever reaching that check.
+        """
+        return self._template.mirrors
+
     def param_init_shape(self, name: str) -> tuple[int, ...]:
         """Initial-xi shape for one free parameter.
 
