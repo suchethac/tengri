@@ -24,10 +24,22 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.config.exceptions import ParameterError
 from tengri.utils.cosmology import age_at_z
+from tests._data_skip import DATA_DIR
 
 pytestmark = pytest.mark.regression_bug
+
+_SSP_PATH = DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+
+
+@pytest.fixture(scope="module")
+def tracked_ssp():
+    """Load the tracked SSP grid; skip if not present."""
+    if not _SSP_PATH.is_file():
+        pytest.skip(f"Tracked SSP not present: {_SSP_PATH}")
+    return load_ssp_data(str(_SSP_PATH))
 
 
 class TestMetBinEdgesGrammarStructuralKey:
@@ -59,7 +71,7 @@ class TestMetBinEdgesGrammarStructuralKey:
         assert model.spec.met_bin_edges_log_yr == custom_edges
 
     def test_default_ladder_explicit_vs_implicit_bit_identical(
-        self, synthetic_ssp, simple_observation
+        self, tracked_ssp, simple_observation
     ):
         """(b.equiv) Equality: explicit default ladder vs implicit → bit-identical prediction.
 
@@ -71,7 +83,7 @@ class TestMetBinEdgesGrammarStructuralKey:
 
         # Build model with implicit default
         model_implicit = SEDModel.build(
-            ssp_data=synthetic_ssp,
+            ssp_data=tracked_ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
             met={"type": "bins", "all_params": Fixed(DEFAULT), "met_bin_0": -0.3},
@@ -80,7 +92,7 @@ class TestMetBinEdgesGrammarStructuralKey:
 
         # Build model with explicit default ladder
         model_explicit = SEDModel.build(
-            ssp_data=synthetic_ssp,
+            ssp_data=tracked_ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
             met={
@@ -116,13 +128,18 @@ class TestMetBinEdgesGrammarStructuralKey:
         )
 
     def test_engagement_ladder_structure_affects_predictions(
-        self, synthetic_ssp, simple_observation
+        self, tracked_ssp, simple_observation
     ):
         """(b) Engagement: ladder structure is observed in predictions.
 
         Build two models identical except for met_bin_edges_log_yr (default vs shifted ladder)
         with DIFFERENT Fixed met_bin values so the ladder matters. Predict and verify
-        the SEDs differ beyond float noise. Measured max relative difference: ~2.1%
+        the SEDs differ beyond float noise.
+
+        Measured on the tracked SSP with default vs shifted ladder, fixed metallicities,
+        delayed SFH, two-component dust, SDSS ugri + WISE W1:
+            max relative difference: 9.99e-01
+            median relative difference: 1.08e-02
         """
         obs = simple_observation
         default_ladder = [6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14]
@@ -130,7 +147,7 @@ class TestMetBinEdgesGrammarStructuralKey:
 
         # Model with default ladder and metallicities that vary by bin
         model_default = SEDModel.build(
-            ssp_data=synthetic_ssp,
+            ssp_data=tracked_ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
             met={
@@ -147,7 +164,7 @@ class TestMetBinEdgesGrammarStructuralKey:
 
         # Model with shifted ladder and same metallicity values
         model_shifted = SEDModel.build(
-            ssp_data=synthetic_ssp,
+            ssp_data=tracked_ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
             met={
@@ -164,9 +181,7 @@ class TestMetBinEdgesGrammarStructuralKey:
         )
 
         # Verify the ladders are different
-        assert (
-            model_default.spec.met_bin_edges_log_yr or default_ladder
-        ) != shifted_ladder
+        assert (model_default.spec.met_bin_edges_log_yr or default_ladder) != shifted_ladder
 
         # Predict with both and compare SEDs
         params = {}
@@ -177,16 +192,16 @@ class TestMetBinEdgesGrammarStructuralKey:
 
         # Compute max relative difference
         with np.errstate(divide="ignore", invalid="ignore"):
-            rel_diff = 2.0 * np.abs(sed_default - sed_shifted) / (
-                np.abs(sed_default) + np.abs(sed_shifted)
+            rel_diff = (
+                2.0
+                * np.abs(sed_default - sed_shifted)
+                / (np.abs(sed_default) + np.abs(sed_shifted))
             )
             rel_diff = rel_diff[np.isfinite(rel_diff)]
         max_rel_diff = np.max(rel_diff) if len(rel_diff) > 0 else 0.0
 
         # Different ladders should produce observably different SEDs
-        assert max_rel_diff > 1e-6, (
-            f"Ladder should affect SED; max rel diff = {max_rel_diff}"
-        )
+        assert max_rel_diff > 1e-3, f"Ladder should affect SED; max rel diff = {max_rel_diff}"
 
     def test_configured_ladder_fixes_2204_refusal(self, synthetic_ssp, simple_observation):
         """(c) #2204 remedy: configured ladder that fits cosmic age builds where default refuses.
