@@ -941,6 +941,13 @@
 
 ### Fixed
 
+- **Docs**: `CalibrationELineMarginalizedLikelihood` states in the class
+  docstring that the emission-line block is handled via a plug-in point
+  estimate rather than marginalized, that the log-determinant volume term is
+  not included, and that this understates the uncertainty the line amplitudes
+  contribute. The exact nesting of the two marginalizers is a separate design
+  decision. (#2354)
+
 - The `lognormal` SFH's entry in the `mean_sfh` module index described it as a
   Gaussian in log10(age). The function is a lognormal in cosmic time since
   formation, `T = age − t_lookback`, with a 1/T Jacobian and
