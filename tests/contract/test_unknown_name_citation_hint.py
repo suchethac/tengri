@@ -15,6 +15,7 @@ from tengri.citations import associations as _assoc
 from tengri.citations.resolve import (
     _REGISTRY_NAMESPACE_TABLES,
     NAME_TO_BIBKEY,
+    _registry_namespace_kind,
     citation_key_hint,
     registry_names_for_citation_key,
 )
@@ -25,12 +26,21 @@ pytestmark = pytest.mark.contract
 
 
 def _every_routed_site_menu() -> dict[str, frozenset[str]]:
-    """The 22 routed validators' own ``valid_names``, kept separate (not
-    unioned) so a sweep can check the "valid at site" branch names only
+    """21 of the 22 routed validators' own ``valid_names``, kept separate
+    (not unioned) so a sweep can check the "valid at site" branch names only
     values that site itself accepts, independent of
     :func:`_names_accepted_anywhere`'s union (#2429 opus review round 2,
     item 1's exhaustive sweep). Built from the same menu-deriving functions
     the validators call, never a hand list.
+
+    The 22nd routed site, ``_check_dict_keys`` (the per-group "Unknown key"
+    validator), is deliberately not a menu here either: its accepted set is
+    build-specific dict *key* names (structural keys plus every parameter's
+    short/full name for the particular build under test), not a fixed menu
+    of citable physics-model values, so it has no single "menu" to name
+    (#2429 opus review round 3, item 2; see
+    :func:`tengri.parameters.groups._names_accepted_anywhere` for the fuller
+    reasoning).
     """
     import tengri.parameters.groups as g
     from tengri.components.agn.unified import AGN_MODELS, monolithic_agn_model_names
@@ -289,6 +299,11 @@ class TestCitationKeyRecognition:
     def test_agn_atten_law_citation_key(self):
         """M3: agn['atten']['law'] gets the same citation-key hint as the
         byte-identical string at dust_attenuation (previously difflib-only).
+
+        The site's own kind, not the generic "dust law" (#2429 opus review
+        round 3 item 1): 'power_law' really is a dust law, just not one this
+        block implements, so the "not a valid ..." clause must name this
+        block's own restricted namespace or the sentence is self-contradictory.
         """
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
@@ -298,8 +313,10 @@ class TestCitationKeyRecognition:
                 redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
-        assert "citation key" in error_msg.lower()
-        assert "power_law" in error_msg
+        assert (
+            "That is a citation key for power_law (dust law), not a valid agn['atten'] law."
+            in error_msg
+        )
 
     def test_citation_key_with_three_valid_names_shows_parenthetical(self):
         """L5: with three or more valid names, the '(or another from: ...)'
@@ -495,3 +512,75 @@ class TestAcceptedAnywhereSweep:
             accepted_anywhere=_names_accepted_anywhere(),
         )
         assert "grahsp" in hint
+
+
+class TestRegistryNamespaceKindDisambiguation:
+    """Item 3 (round 3): six names (analytic, grahsp, mappings, none,
+    synthesizer, synthesizer_spectra) are a registered structural type in
+    more than one AGN sub-block namespace (or, for 'none'/'mappings', in a
+    namespace outside AGN entirely). ``_registry_namespace_kind`` must
+    prefer the calling site's own namespace when the name carries it, and
+    otherwise name every namespace it carries rather than guessing one.
+    """
+
+    def test_prefers_the_calling_sites_own_namespace(self):
+        """'grahsp' is both an agn.nlr and an agn.blr type; querying with
+        each site's own kind (in both spellings the two call-site shapes
+        use) must pick that site's namespace, not table-definition order.
+        """
+        assert _registry_namespace_kind("grahsp", prefer="agn.blr type") == "agn.blr type"
+        assert _registry_namespace_kind("grahsp", prefer="agn.nlr type") == "agn.nlr type"
+        # The per-block-type call site's actual kind spelling ("agn_X_block
+        # type", not "agn.X type") must normalize to the same match.
+        assert _registry_namespace_kind("grahsp", prefer="agn_blr_block type") == "agn.blr type"
+        assert _registry_namespace_kind("grahsp", prefer="agn_nlr_block type") == "agn.nlr type"
+
+    def test_names_every_namespace_when_none_matches(self):
+        """When ``prefer`` names a site that carries neither namespace,
+        naming only one would be a guess; name both instead."""
+        result = _registry_namespace_kind("grahsp", prefer="dust law")
+        assert "agn.nlr type" in result
+        assert "agn.blr type" in result
+        assert "/" in result
+
+    def test_names_every_namespace_with_no_prefer_at_all(self):
+        """The unqualified call (no calling-site context) also joins every
+        namespace rather than reporting only the first table's."""
+        result = _registry_namespace_kind("mappings")
+        assert "nebular type" in result
+        assert "shock type" in result
+
+
+def test_every_dict_citations_table_is_included_or_excluded_with_a_reason():
+    """Item 4 (round 3): a new dict-shaped ``*_CITATIONS`` table must be
+    explicitly classified, not silently invisible to the reverse lookup.
+
+    ``_REGISTRY_NAMESPACE_TABLES`` is hand-maintained, and both the reverse
+    lookup (:func:`registry_names_for_citation_key`) and this file's sweep
+    (:func:`_every_citation_key`, :func:`_every_routed_site_menu`) build
+    their universe from it -- a table that lands in neither that tuple nor
+    the explicit exclusion set below would silently drop out of every
+    citation-key guarantee this file checks.
+    """
+    from tengri.citations.resolve import _EXCLUDED_REGISTRY_NAMESPACE_TABLES
+
+    included = {attr for attr, _label in _REGISTRY_NAMESPACE_TABLES}
+    excluded = set(_EXCLUDED_REGISTRY_NAMESPACE_TABLES)
+    overlap = included & excluded
+    assert not overlap, f"table(s) both included and excluded: {sorted(overlap)}"
+
+    all_dict_tables = {
+        attr
+        for attr in dir(_assoc)
+        if attr.endswith("_CITATIONS") and isinstance(getattr(_assoc, attr), dict)
+    }
+    unclassified = all_dict_tables - included - excluded
+    assert not unclassified, (
+        f"new dict-shaped *_CITATIONS table(s) not classified as included or "
+        f"excluded: {sorted(unclassified)}"
+    )
+
+    # An exclusion entry for a table that no longer exists is a stale
+    # reference nothing would ever catch otherwise.
+    stale = excluded - all_dict_tables
+    assert not stale, f"exclusion set names table(s) that no longer exist: {sorted(stale)}"

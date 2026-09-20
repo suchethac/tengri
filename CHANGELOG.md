@@ -22,6 +22,23 @@
   Citation keys that only cite themselves (e.g. `cue`, `tengri`) are not
   reported as citation keys, since there is no other name to redirect to.
 
+- Shock line ratios are normalized over the populated grid cells, so
+  `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
+  ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
+  unpopulated MAPPINGS cells and `utils/grid_interp._tensor_contract` then
+  contracted with triweight weights that still summed to one over the whole
+  axis — so every line came back scaled by the fraction of kernel weight
+  landing on populated cells. With 3992 of 38850 cells (10.3%) populated that
+  fraction ran from 0.88 down to 0.0037, and was exactly 0 at
+  B = 100 uG / log n = -1, where every line was silently zero. `Hb_4861A`
+  read 0.7135 instead of 1.0 and Halpha/Hbeta read 2.14, below the Case B
+  recombination floor of 2.86. `_tensor_contract` now performs a normalized
+  convolution (the mask is contracted with the same weights and divides the
+  result) and returns NaN where no populated cell is in range; the unmasked
+  path, which is the only one `components/agn/disc.py` uses, is unchanged.
+  Fitted SEDs were never affected — `_shock_line_arrays` anchors on Halpha, so
+  the common factor canceled — and this does not fix #2066.
+
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
   (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
   cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
@@ -979,6 +996,22 @@
 
 
 ### Fixed
+
+- The nebular continuum (Cue, CloudyGrid) no longer stops at its 1 cm table
+  edge but continues as optically thin free-free (L_nu ∝ nu^-0.1, anchored at
+  the last node) to the grid end, and a Cue model without a radio block now
+  declares wavelength nodes to 1 m. The radio block's Murphy+2011 free-free
+  term defaults to off when the nebular backend carries a free-free continuum
+  (implementation: `interp_continuum_with_freefree_tail` in
+  `tengri.components.nebular._shared`, index `NEBULAR_FREEFREE_TAIL_ALPHA_NU =
+  -0.1` in `tengri.components.nebular._constants`, wavelength ceiling
+  `NEBULAR_CONTINUUM_WAVE_MAX = 1e10` Å, auto-rule
+  `nebular_backend_carries_freefree` in `tengri.components.nebular._models`),
+  so the default Cue/CloudyGrid + radio model carries exactly one thermal term
+  (was 1.64 to 1.71 times the correct total between 1 mm and 1 cm, and zero
+  beyond 1 cm). Explicit `radio.sf.freefree: True/False` always overrides;
+  CB19 and baked-in SSP are unchanged. Validation against pcigale surfaced
+  this. Closes #2346.
 
 - **Docs**: `CalibrationELineMarginalizedLikelihood` states in the class
   docstring that the emission-line block is handled via a plug-in point

@@ -114,7 +114,10 @@ from jax.scipy.special import logsumexp
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
-from tengri.components.nebular._shared import render_nebular_lines
+from tengri.components.nebular._shared import (
+    interp_continuum_with_freefree_tail,
+    render_nebular_lines,
+)
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.utils.host_array import device_table, host_array
 
@@ -1786,7 +1789,10 @@ class CueBackend:
 
         Supports the same high-level and low-level calling conventions
         as predict_nebular_line_luminosities. Returns the nebular continuum
-        spectrum on the Cue wavelength grid.
+        spectrum on the Cue native wavelength grid (ending at 1e8 Å); for
+        interpolation onto an arbitrary model grid that may extend further,
+        use ``predict_nebular_sed`` with ``ssp_wave`` argument, which continues
+        the continuum as an optically thin free-free tail (#2346).
 
         Parameters
         ----------
@@ -1814,17 +1820,17 @@ class CueBackend:
         Returns
         -------
         wavelength : ndarray, shape (n_wave,)
-            Wavelength grid (sorted) [Angstrom].
+            Wavelength grid (sorted, native Cue grid to 1e8 Å) [Angstrom].
         luminosity : ndarray, shape (n_wave,)
-            Nebular continuum [erg/s/Hz].
+            Nebular continuum [Lsun/Hz].
 
         Notes
         -----
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        **Wavelength grid**: Returns the Cue native grid (fixed for all calls).
-        For interpolation to an arbitrary wavelength grid, use
-        ``predict_nebular_sed`` with ``ssp_wave`` argument.
+        **Wavelength grid**: Returns the Cue native grid (fixed for all calls,
+        ending at 1e8 Å). For interpolation to an arbitrary wavelength grid,
+        use ``predict_nebular_sed`` with ``ssp_wave`` argument.
 
         **Escape fraction**: When ``neb_fesc > 0``, ionizing photons escape
         without photoionizing nebular gas. The continuum is suppressed by the
@@ -1968,8 +1974,9 @@ class CueBackend:
         k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
         cont_lum = cont_lum * k
 
-        # Interpolate continuum onto SSP grid
-        neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)
+        # Interpolate continuum onto SSP grid; past the emulator's last node (1e8 Å)
+        # continue as optically thin free-free (#2346).
+        neb_sed = interp_continuum_with_freefree_tail(ssp_wave, cont_wav, cont_lum)
 
         # Add emission lines via the shared renderer: velocity triweight when
         # ``line_sigma_kms > 0`` (Prospector-style intrinsic width), else the

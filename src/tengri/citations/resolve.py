@@ -236,6 +236,42 @@ _REGISTRY_NAMESPACE_TABLES: tuple[tuple[str, str], ...] = (
     ("SHOCK_CITATIONS", "shock type"),
 )
 
+#: Every dict-shaped ``*_CITATIONS`` table in
+#: :mod:`tengri.citations.associations` that is deliberately *not* in
+#: :data:`_REGISTRY_NAMESPACE_TABLES`, with the reason -- so a future table
+#: lands in one collection or the other, never in neither where it would go
+#: unnoticed (``test_every_dict_citations_table_is_included_or_excluded_with_a_reason``
+#: enforces this; #2429 opus review round 3, item 4). Flat-list tables
+#: (``CORE_CITATIONS``, ``RADIO_CITATIONS``, ``DLA_CITATIONS``,
+#: ``SYNTHESIZER_CITATIONS``) are a structurally different shape -- unconditional
+#: citations for a subsystem being active at all, not name -> key maps -- and
+#: are out of scope for this dict-keyed classification entirely, not merely
+#: excluded from it.
+_EXCLUDED_REGISTRY_NAMESPACE_TABLES: dict[str, str] = {
+    "IMF_CITATIONS": (
+        "keys are IMF filename tokens (chabrier, kroupa, ...), never a group's type=/law= value"
+    ),
+    "SSP_CODE_CITATIONS": (
+        "keys are SSP-grid-filename tokens (fsps, bc03, ...), never a group's type=/law= value"
+    ),
+    "SSP_ISOCHRONE_CITATIONS": (
+        "keys are SSP-grid-filename tokens and their misspelling aliases "
+        "(e.g. 'bsti' for 'basti'), never a group's type=/law= value"
+    ),
+    "SSP_LIBRARY_CITATIONS": (
+        "keys are SSP-grid-filename tokens, never a group's type=/law= value"
+    ),
+    "PHOTOMETRY_CONVENTION_CITATIONS": (
+        "keys select a FilterConvention, which parameters/groups.py does not "
+        "validate through this path"
+    ),
+    "BACKEND_CITATIONS": (
+        "keys select an inference backend (Fitter.run(backend=...)), which "
+        "parameters/groups.py does not validate through this path"
+    ),
+    "FUNCTION_CITATIONS": ("keyed by 'module.qualname' strings, not a component name at all"),
+}
+
 
 def registry_names_for_citation_key(key: str) -> tuple[str, ...]:
     """Registry names that cite a given BibTeX key.
@@ -295,8 +331,23 @@ def registry_names_for_citation_key(key: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(names))
 
 
-def _registry_namespace_kind(name: str) -> str | None:
-    """The human-readable registry namespace ``name`` belongs to, if any.
+def _normalize_kind_token(text: str) -> str:
+    """Reduce a ``kind`` string to bare alphanumerics for loose comparison.
+
+    Site ``kind`` strings and :data:`_REGISTRY_NAMESPACE_TABLES` labels for
+    the *same* namespace are not spelled identically -- the six AGN
+    per-block-type call sites say e.g. ``"agn_torus_block type"`` while the
+    table label is ``"agn.torus type"`` -- so an exact string match would
+    silently fail to recognize the correspondence. Stripping ``"_block"``
+    before dropping every non-alphanumeric character unifies both spellings
+    (and every other site/label pair, which already agree once punctuation
+    and case are ignored) without a hand-maintained site-to-label map.
+    """
+    return "".join(ch for ch in text.lower().replace("_block", "") if ch.isalnum())
+
+
+def _registry_namespace_kind(name: str, *, prefer: str | None = None) -> str | None:
+    """The human-readable registry namespace(s) ``name`` belongs to, if any.
 
     Consulted only once a citation key has resolved to a name that is *not*
     valid at the current call site, so the error can say what kind of entry
@@ -308,22 +359,46 @@ def _registry_namespace_kind(name: str) -> str | None:
     name : str
         A registry name, e.g. one returned by
         :func:`registry_names_for_citation_key`.
+    prefer : str or None
+        The calling site's own ``kind`` (e.g. ``"agn.torus type"``, or
+        ``"agn_torus_block type"`` from the per-block-type site). Six names
+        (``analytic``, ``grahsp``, ``mappings``, ``none``, ``synthesizer``,
+        ``synthesizer_spectra``) are a registered structural type in more
+        than one namespace (``grahsp`` is both an ``agn.nlr`` and an
+        ``agn.blr`` type); when one of the namespaces a name carries
+        matches ``prefer`` (via :func:`_normalize_kind_token`), that is the
+        relevant one for a message about *this* call site and wins over
+        table-definition order (#2429 opus review round 3, item 3).
 
     Returns
     -------
     str or None
-        The label from :data:`_REGISTRY_NAMESPACE_TABLES` for the first table
-        whose keys contain ``name``, or ``None`` if no table does (e.g. a name
-        known only through :data:`NAME_TO_BIBKEY`, which mixes several kinds
-        under one map and so cannot be attributed to a single one).
+        ``None`` if no table has ``name`` as a key (e.g. a name known only
+        through :data:`NAME_TO_BIBKEY`, which mixes several kinds under one
+        map and so cannot be attributed to a single one). The single
+        matching label if only one table has ``name``, or if several do and
+        ``prefer`` picks one of them. Otherwise -- several tables have
+        ``name`` and none matches ``prefer`` -- every kind it carries,
+        joined with ``"/"``, so the reader is never told a kind that does
+        not apply here rather than one that might not.
     """
     from tengri.citations import associations as _assoc
 
+    matches: list[str] = []
     for attr, label in _REGISTRY_NAMESPACE_TABLES:
         table = getattr(_assoc, attr, None)
         if isinstance(table, dict) and name in table:
-            return label
-    return None
+            matches.append(label)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+    if prefer is not None:
+        prefer_token = _normalize_kind_token(prefer)
+        for label in matches:
+            if _normalize_kind_token(label) == prefer_token:
+                return label
+    return "/".join(dict.fromkeys(matches))
 
 
 def citation_key_hint(
@@ -431,6 +506,6 @@ def citation_key_hint(
     # This citation key exists, is accepted somewhere, but not for a name
     # valid at this site.
     first_name = names_for_key[0]
-    entry_kind = _registry_namespace_kind(first_name) or "a model"
+    entry_kind = _registry_namespace_kind(first_name, prefer=kind) or "a model"
     note = f"That is a citation key for {first_name} ({entry_kind}), not a valid {kind}."
     return f"{fallback} {note}" if fallback else note

@@ -614,7 +614,7 @@ def _valid_dust_laws() -> frozenset[str]:
 
 
 def _names_accepted_anywhere() -> frozenset[str]:
-    """Union of every name accepted by any of the 22 grammar validators.
+    """Union of every value accepted by 21 of the 22 routed grammar validators.
 
     Consulted by :func:`_hint_for_unknown_name` (via
     :func:`tengri.citations.resolve.citation_key_hint`'s ``accepted_anywhere``
@@ -632,6 +632,20 @@ def _names_accepted_anywhere() -> frozenset[str]:
     :meth:`tengri.SEDModel.build` actually accepts. Looked up at call time,
     matching the "no caching" convention of the ``_valid_*`` functions it
     unions, so a newly-registered component is picked up immediately.
+
+    **Deliberately excludes the 22nd routed site**, ``_check_dict_keys``
+    (the per-group "Unknown key" validator): that site's ``valid_names`` is
+    not a fixed, enumerable menu of physics-model *values* like the other 21
+    -- it is a build-specific set of dict *key* names (structural keys such
+    as ``'type'``/``'law'`` plus every parameter's short and full name for
+    *that particular* ``SEDModel.build`` call), which varies with what the
+    caller activated and is measured in the hundreds even for one build. No
+    citation key ever targets a key name (a bibkey cites a registry
+    selector *value*, e.g. ``'power_law'``, never the string ``'law'``
+    itself), so there is nothing in that universe for this set to usefully
+    include, and unioning a build-dependent, unstable set into a
+    module-level constant-shaped union would be actively misleading (#2429
+    opus review round 3, item 2).
 
     Returns
     -------
@@ -6377,7 +6391,15 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                         if law_key in DUST_LAWS
                         else f"Unknown dust law '{law_key}'"
                     )
-                    hint = _hint_for_unknown_name("dust law", law_key, valid, keyword="law")
+                    # kind="agn['atten'] law", not "dust law" (#2429 opus
+                    # review round 3 item 1): `valid` here is this block's
+                    # own restricted set (just prevot_smc), so "not a valid
+                    # dust law" was false when the resolved name (e.g.
+                    # power_law) IS a real dust law -- just not one this
+                    # block implements.
+                    hint = _hint_for_unknown_name(
+                        "agn['atten'] law", law_key, valid, keyword="law"
+                    )
                     raise ValueError(
                         f"{detail}.{hint}\n"
                         f"Valid agn['atten'] laws: {valid}.\n"
