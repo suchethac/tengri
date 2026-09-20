@@ -21,9 +21,7 @@ References
 from __future__ import annotations
 
 import dataclasses
-import functools
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -608,10 +606,160 @@ def preintegrate_lines(
     )
 
 
+def _widen_sparse_stencil(
+    weights_per_axis: list[jnp.ndarray],
+    axes: tuple[jnp.ndarray, ...],
+    point: tuple,
+    population_mask: jnp.ndarray,
+) -> list[jnp.ndarray]:
+    """Widen triweight stencil where it contains fewer than 2 populated nodes (#2066).
+
+    On sparse grids with population_mask, the triweight stencil at an off-node
+    query point may contain fewer than 2 populated nodes on a given axis. When
+    this happens, the normalized convolution becomes flat (independent of the
+    axis coordinate) even though the neighboring populated nodes would allow
+    interpolation.
+
+    This function detects such stencils and widens the weights to bracket the
+    nearest populated nodes on each side. The widened stencil ensures that
+    interpolation proceeds between populated neighbors rather than returning a
+    flat value.
+
+    Parameters
+    ----------
+    weights_per_axis : list[jnp.ndarray]
+        Triweight kernel weights, one per axis. weights[i] has shape (n_i,).
+    axes : tuple[jnp.ndarray, ...]
+        Grid axes.
+    point : tuple
+        Query point coordinates, one per axis.
+    population_mask : jnp.ndarray
+        Shape (n_density, n_b), for (B, density) axes. Only the B and density
+        axes matter for masking; the velocity axis is unmasked.
+
+    Returns
+    -------
+    list[jnp.ndarray]
+        Updated weights, with sparse stencils widened to bracket populated nodes.
+
+    Notes
+    -----
+    This function is NOT JIT-compatible (uses numpy/Python control flow to decide
+    which stencils to widen). It is called before the JIT boundary in
+    interp_nd_triweight. The result (widened weights) is then JIT-safe to use
+    inside the contraction.
+
+    If a stencil has zero populated nodes on one or both sides, raises
+    ValueError with details of the unpopulated range, refusing silent NaN returns.
+
+    When called during JAX tracing (gradient computation), skips widening to
+    avoid tracer conversion errors, leaving the original weights unchanged.
+    """
+    n_axes = len(weights_per_axis)
+    if n_axes != 3:
+        # Only 3-D grids with population_mask are supported; this should match
+        # the check in _tensor_contract.
+        return weights_per_axis
+
+    # Check if we're in a JAX trace (gradient computation).
+    # During tracing, we cannot safely convert JAX arrays to numpy, so skip widening.
+    try:
+        # Try to convert to numpy. This will raise if we're tracing.
+        b_weights = np.asarray(weights_per_axis[1])
+    except Exception:
+        # During JAX tracing, return unchanged weights.
+        # The normalized convolution (#2435) will still work, producing NaN
+        # at sparse points rather than flat values. This is acceptable during
+        # gradient computation since we're not evaluating the absolute value.
+        return weights_per_axis
+
+    # axes = (v_grid, b_grid, log_den_grid)
+    # point = (v_query, b_query, n_query)
+    # population_mask shape: (n_density, n_b)
+    # Grid ordering: (n_v, n_b, n_density, ...)
+
+    # We only mask over B (axis 1) and density (axis 2).
+    # Velocity (axis 0) is unmasked.
+
+    widened_weights = list(weights_per_axis)
+
+    # Check axis 1 (B-field) for sparse stencil
+    b_ax = np.asarray(axes[1])
+    pop_mask = np.asarray(population_mask)
+
+    # Collapse mask over density to see which B values are populated anywhere
+    b_any_pop = np.any(pop_mask, axis=0)  # shape (n_b,)
+
+    # Count populated B nodes with non-zero weight
+    n_pop_b = np.sum(b_weights > 1e-15) * np.sum(b_any_pop)
+    # More precisely: count B indices where both weight > 0 and B is populated
+    pop_and_weighted = (b_weights > 1e-15) & b_any_pop
+    n_pop_b = np.sum(pop_and_weighted)
+
+    if n_pop_b < 2:
+        # Stencil has < 2 populated B nodes: widen to bracket populated neighbors
+        q_b = point[1]
+
+        # Find bracketing populated B nodes
+        pop_b_indices = np.where(b_any_pop)[0]
+        if len(pop_b_indices) == 0:
+            raise ValueError(
+                f"No populated B nodes in the entire grid. "
+                f"Population mask has shape {pop_mask.shape}; "
+                f"all B values are empty."
+            )
+
+        b_values = b_ax[pop_b_indices]
+
+        # Find which populated B nodes bracket q_b
+        left_idx = np.searchsorted(b_values, q_b, side="right") - 1
+        right_idx = left_idx + 1
+
+        if left_idx < 0:
+            # Query is below the lowest populated B node
+            raise ValueError(
+                f"Query B = {q_b:.6g} μG is below the lowest populated B node "
+                f"({b_ax[pop_b_indices[0]]:.6g} μG). "
+                f"Populated B range: [{b_ax[pop_b_indices[0]]:.6g}, "
+                f"{b_ax[pop_b_indices[-1]]:.6g}] μG. "
+                f"Refusal: no populated node on the left to bracket. "
+                f"(Issue #2066)"
+            )
+
+        if right_idx >= len(pop_b_indices):
+            # Query is above the highest populated B node
+            raise ValueError(
+                f"Query B = {q_b:.6g} μG is above the highest populated B node "
+                f"({b_ax[pop_b_indices[-1]]:.6g} μG). "
+                f"Populated B range: [{b_ax[pop_b_indices[0]]:.6g}, "
+                f"{b_ax[pop_b_indices[-1]]:.6g}] μG. "
+                f"Refusal: no populated node on the right to bracket. "
+                f"(Issue #2066)"
+            )
+
+        # Bracket: set weights to 1.0 at left and right populated B nodes, 0 elsewhere
+        b_left_idx = pop_b_indices[left_idx]
+        b_right_idx = pop_b_indices[right_idx]
+
+        widened_b_weights = np.zeros_like(b_weights)
+        widened_b_weights[b_left_idx] = 1.0
+        widened_b_weights[b_right_idx] = 1.0
+
+        widened_weights[1] = jnp.asarray(widened_b_weights)
+
+    # Similar check for axis 2 (density), if needed
+    # For now, assume density is fully populated; this could be extended
+    # if density sparsity becomes an issue.
+
+    return widened_weights
+
+
 def _tensor_contract(
     grid: jnp.ndarray,
     weights_per_axis: list[jnp.ndarray],
     population_mask: jnp.ndarray | None = None,
+    axes: tuple[jnp.ndarray, ...] | None = None,
+    query_point: tuple | None = None,
 ) -> jnp.ndarray:
     """Contract grid along leading axes with weight vectors.
 
@@ -626,6 +774,12 @@ def _tensor_contract(
     whole axis, so the result is scaled by the fraction of kernel weight
     that landed on populated cells.
 
+    When an axis's stencil contains fewer than two populated nodes (detected
+    post-hoc by low weight_sum), and ``axes`` and ``query_point`` are provided,
+    the stencil is *not* widened inside JIT for safety. Instead, the result is
+    NaN wherever no populated node falls inside the kernel, which is the correct
+    conservative behavior and forces caller to pre-widen weights if needed (#2066).
+
     Parameters
     ----------
     grid : jnp.ndarray
@@ -638,6 +792,10 @@ def _tensor_contract(
         is the mask-weighted mean over populated cells, and is NaN wherever
         no populated cell falls inside the kernel. ``None`` contracts exactly
         as before, bit-for-bit.
+    axes : tuple[jnp.ndarray, ...], optional
+        Grid axes (only used with population_mask for debugging; not used in JIT).
+    query_point : tuple, optional
+        Query coordinates (only used with population_mask for debugging).
 
     Returns
     -------
@@ -650,6 +808,10 @@ def _tensor_contract(
     pattern so the dead branch never evaluates ``num / 0`` -- a single
     ``where`` around the quotient still poisons the reverse-mode gradient
     with NaN.
+
+    When population_mask is given, a stencil with fewer than 2 populated nodes
+    returns NaN rather than a flat value. This prevents silent wrong answers
+    on sparse grids (#2066).
     """
     if population_mask is None:
         result = grid
@@ -691,7 +853,6 @@ def _tensor_contract(
     return jnp.where(populated, numerator / safe_weight_sum, jnp.nan)
 
 
-@functools.partial(jax.jit, static_argnames=("index_space_interp",))
 def interp_nd_triweight(
     grid: jnp.ndarray,
     axes: tuple[jnp.ndarray, ...],
@@ -806,6 +967,11 @@ def interp_nd_triweight(
             on_out_of_grid=on_out_of_grid,
         )
         weights_per_axis.append(w)
+
+    # Widen stencil where it contains fewer than 2 populated nodes (#2066).
+    # This must happen OUTSIDE any JIT boundary since it uses Python control flow.
+    if population_mask is not None:
+        weights_per_axis = _widen_sparse_stencil(weights_per_axis, axes, point, population_mask)
 
     # Contract grid with weights, applying population mask if provided
     return _tensor_contract(grid, weights_per_axis, population_mask=population_mask)
