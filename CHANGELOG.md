@@ -26,12 +26,11 @@
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
 
-- LUT-bias advisory now spans free-redshift prior (#2105): on a free-redshift
-  fit, the z-interpolation error along the LUT's z-axis is a second error term
-  invisible to a single-point forward probe. The advisory now evaluates
-  `_lut_forward_bias` at multiple redshifts spanning one table step of the LUT's
-  z-grid within the prior and takes the worst case, naming `approx=None` — the
-  exact path on every surface since #2385 — as the remedy.
+- LUT-bias advisory probes z-table midpoints on a free-redshift fit (#2105):
+  the advisory probed one redshift and so could not see the LUT's z-interpolation
+  error; it now probes the inter-node midpoints nearest the prior median (or the
+  prior bounds when no node lies inside) and names the peak redshift and
+  `approx=None`, the exact path on every surface since #2385. (#2105)
 
 ### Fixed
 
