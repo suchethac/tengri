@@ -48,6 +48,14 @@
   where adjacent cameras meet. Segment sizes must be positive and sum to the
   wavelength grid length. (#2172)
 
+- Emission line mode validation unified: `Spectroscopy` and `NebularConfig`
+  now share a single legal set of modes (`ELINE_MODES`), defined in
+  `observation.constants`. The retired `"fixed"` mode is rejected with a hint
+  to use `"off"` or one of the analysis modes (`"marginalized"` / `"fitted"`).
+  The settings validator now accepts `"fitted"` (previously omitted), and the
+  dead probe read of `_spectroscopy_config` in `Fitter._init_emission_lines`
+  has been removed. (#2191)
+
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently

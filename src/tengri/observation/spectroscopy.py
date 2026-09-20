@@ -21,6 +21,7 @@ from tengri._cache_keys import (
     exclude,
     shape,
 )
+from tengri.observation.constants import ELINE_MODES
 from tengri.observation.spectrum import first_invalid_wavelength
 from tengri.parameters.priors import Distribution, Gaussian
 
@@ -59,12 +60,13 @@ class Spectroscopy:
         Emission line fitting mode. One of:
 
         - ``"off"``: No emission line fitting (default).
-        - ``"fixed"``: Lines from nebular model only.
         - ``"marginalized"``: Analytically marginalize line amplitudes
           (recommended for spectroscopic fitting).
         - ``"fitted"``: Line amplitudes as free MCMC parameters.
 
         Default: ``"off"``.
+
+        **Retired mode:** ``"fixed"`` was accepted but unused; pass ``"off"`` instead.
     eline_catalog : LineList or None
         Line catalog. ``None`` falls back to ``LineList.default_13()`` for
         Use ``LineList.default_optical()`` for
@@ -200,9 +202,18 @@ class Spectroscopy:
                 f"calibration_order must be non-negative, got {self.calibration_order}"
             )
 
-        _valid_modes = ("off", "fixed", "marginalized", "fitted")
-        if self.eline_mode not in _valid_modes:
-            raise ValueError(f"eline_mode must be one of {_valid_modes}, got {self.eline_mode!r}")
+        if self.eline_mode not in ELINE_MODES:
+            if self.eline_mode == "fixed":
+                raise ValueError(
+                    f"eline_mode='fixed' is no longer supported. "
+                    f"Pass 'off' for no emission line fitting, or "
+                    f"'marginalized'/'fitted' for the analysis modes. "
+                    f"Valid modes: {ELINE_MODES}"
+                )
+            else:
+                raise ValueError(
+                    f"eline_mode must be one of {ELINE_MODES}, got {self.eline_mode!r}"
+                )
 
         _valid_resample = ("point", "conserving", "auto")
         if self.resample not in _valid_resample:
