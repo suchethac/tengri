@@ -46,6 +46,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
+from tengri.components.nebular.component import _BACKEND_OPTIONAL_PARAMS
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.resolve import merge_fixed_params
@@ -432,6 +433,48 @@ def _refuse_tabulated_metallicity(model):
         "exact line path (WavePrecomp alone is unaffected and still applies), or "
         "use a parametric metallicity: a tabulated SFH with a free met_logzsol "
         "is supported and agrees with exact to 0.3% (#1718)."
+    )
+
+
+def _refuse_freed_optional_axes(spec):
+    """Refuse optional axes freed but baked into the per-Q_H grid (#2307).
+
+    Optional parameters (``neb_log_nH``, ``neb_co``, ``neb_dno``,
+    ``neb_hbfrac``) are not grid axes in the per-Q_H table — they are baked
+    in at reference values. A fit that frees one silently samples a parameter
+    the likelihood cannot see: the fast grid holds it at its reference value
+    while the sampler explores it freely. This guard refuses the mismatch.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter specification.
+
+    Raises
+    ------
+    ValueError
+        When any optional parameter is freed.
+    """
+    # Optional params that are free in the spec
+    offenders = sorted(name for name in _BACKEND_OPTIONAL_PARAMS if name in spec.free_params)
+    if not offenders:
+        return
+
+    # Convert full names to short dict-grammar keys by stripping "neb_" prefix
+    short_keys = [name.removeprefix("neb_") for name in offenders]
+    detail = ", ".join(offenders)
+
+    raise ValueError(
+        f"enable_fast_nebular refuses to proceed with freed optional parameters: "
+        f"{detail}. The fast grid's axes are {', '.join(_CANDIDATE_AXES)} only; "
+        f"every other backend parameter is baked in at its reference value, so a "
+        f"freed one is held fixed by the grid while the sampler varies it, and "
+        f"the likelihood never sees the freed dimension.\n"
+        f"Fix (one of):\n"
+        f"  1. Pin the parameters instead: "
+        f"neb={{'type': 'cb19', '{short_keys[0]}': Fixed(value)}}.\n"
+        f"  2. Do not call enable_fast_nebular; the exact line path takes "
+        f"every backend parameter."
     )
 
 
