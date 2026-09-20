@@ -2,6 +2,15 @@
 
 ### Fixed
 
+- JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
+  (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
+  cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
+  (released 2026-09-17). Upstream tolerated the condition instead of raising
+  `FileNotFoundError`, so the test now asserts the write outcome (success and
+  entry readable) under both JAX 0.11.1 (pre-fix) and 0.11.2+ (post-fix),
+  gated on `packaging.version` comparison. The orphan-atime repair stays
+  load-bearing on JAX < 0.11.2 and remains useful for recovery on all versions.
+
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently
