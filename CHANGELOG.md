@@ -28,6 +28,15 @@
   gated on `packaging.version` comparison. The orphan-atime repair stays
   load-bearing on JAX < 0.11.2 and remains useful for recovery on all versions.
 
+- `Spectroscopy` now validates `wave_obs` at construction time, refusing grids
+  that are non-finite (NaN/inf), non-positive, or non-increasing, with
+  descending grids raising a hint to reverse them alongside the flux and error
+  arrays. `calibration_order` is also checked to be non-negative. When
+  `wave_obs_segment_sizes` is set (by the DESI loader for multi-camera spectra),
+  monotonicity is enforced per camera segment, allowing overlaps at seams
+  where adjacent cameras meet. Segment sizes must be positive and sum to the
+  wavelength grid length. (#2172)
+
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently
