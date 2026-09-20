@@ -29,6 +29,7 @@ import argparse
 import json
 import subprocess
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,19 +41,14 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _cell_provenance import audit, banner
+from _figure_style import CONFIG_COLORS, CONFIG_ORDER
+from config_metadata import CONFIGS
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_RESULTS = REPO_ROOT / "analysis" / "paper1" / "results" / "fits"
 
-CONFIG_ORDER = ["I", "II", "III", "IV", "V", "VI"]
-# Okabe-Ito, colorblind safe.
-CONFIG_COLORS = {
-    "I": "#0072B2",
-    "II": "#E69F00",
-    "III": "#009E73",
-    "IV": "#CC79A7",
-    "V": "#56B4E9",
-    "VI": "#D55E00",
-}
 
 FIGURE_WIDTH = 7.1
 FIGURE_HEIGHT = 3.6
@@ -374,15 +370,32 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     is_canonical = results_dir == CANONICAL_RESULTS.resolve()
-    provenance = None
-    if not args.no_stamp and not is_canonical:
-        provenance = (
+
+    # Do the cells hold the configurations this repository declares? A
+    # redefined configuration leaves its old cells in place under their old
+    # names, and the colors and labels below would then say Configuration IV
+    # over a model that is not Configuration IV.
+    mismatches, notes = audit(results_dir, CONFIGS)
+    audit_text = banner(results_dir, mismatches, notes)
+    if audit_text:
+        print(audit_text, file=sys.stderr)
+
+    stamp_parts: list[str] = []
+    if not is_canonical:
+        stamp_parts.append(
             f"PROVISIONAL - rendered from {results_dir.name} at {_git_describe()}; "
             "not the production grid"
         )
         print("=" * 72)
         print("NOT THE PRODUCTION GRID -- rendering from", results_dir.name)
         print("=" * 72)
+    if mismatches:
+        stamp_parts.append(
+            "CONFIGURATION LABELS ARE NOT configs.py's: "
+            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches)
+        )
+    wrapped = [line for part in stamp_parts for line in textwrap.wrap(part, 112)]
+    provenance = None if args.no_stamp else ("\n".join(wrapped) or None)
 
     fig, stats = build_figure(cells, provenance)
     args.out.parent.mkdir(parents=True, exist_ok=True)
