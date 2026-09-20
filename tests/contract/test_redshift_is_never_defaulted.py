@@ -36,13 +36,7 @@ SRC = pathlib.Path(__file__).resolve().parents[2] / "src" / "tengri"
 
 #: ``<module path>`` -> why a redshift default is correct there.
 ALLOWED: dict[str, str] = {
-    "components/nebular/line_precompute.py": (
-        "caller-supplied precompute reference params; wants a documented "
-        "reference z, not an exception"
-    ),
-    "components/nebular/nebular_grid_precompute.py": (
-        "same as line_precompute — reference params for the stored LUT"
-    ),
+    "components/nebular/nebular_grid_precompute.py": ("reference params for the stored LUT"),
     "inference/likelihood.py": (
         "chains params -> fixed_values -> 0.0, which is the correct pattern: "
         "the 0.0 is reached only if BOTH dicts lack the key"

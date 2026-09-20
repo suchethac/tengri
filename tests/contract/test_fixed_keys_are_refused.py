@@ -351,3 +351,109 @@ def test_model_mock_refuses_fixed_keys(
         model.mock(params_with_fixed_override, snr=10.0, key=jr.PRNGKey(4))
 
     _assert_is_a_fixed_key_refusal(exc_info.value, "redshift", 0.05)
+
+
+@pytest.fixture(scope="module")
+def profile_mass_model(synthetic_ssp_wide, synthetic_tophat_obs):
+    """A model shaped for profile_mass to engage: exactly one free
+    ``*log_total_mass``, a second free shape parameter, and dust/redshift
+    Fixed so the mass enters the photometry linearly (transparent dust)."""
+    return SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
+        sfh={
+            "type": "dpl",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": FREE,
+            "alpha": FREE,
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.05),
+    )
+
+
+def test_posterior_fixed_values_excludes_the_profiled_mass(profile_mass_model):
+    """Under profile_mass, fixed_values must reflect the USER's model, not
+    the internal working spec (#2296).
+
+    ``configure_profile_mass`` pins the mass parameter Fixed on the fitter's
+    WORKING spec at an analytic placeholder so the sampler explores one
+    fewer dimension; ``finalize_profile_mass`` then writes the real,
+    analytically profiled mass into ``posterior.params``. The mass is FREE
+    on ``model.spec`` throughout -- profiling is an internal re-pin, never a
+    user Fixed override -- so it must never appear in
+    ``posterior.fixed_values`` (which would otherwise report the stale
+    placeholder for a parameter ``posterior.params`` already carries the
+    real value of).
+    """
+    model = profile_mass_model
+    mass_name = next(n for n in model.spec.free_params if n.endswith("log_total_mass"))
+    truth = {mass_name: 10.0, "sfh_dpl_alpha": 1.5}
+    mock = model.mock(truth, snr=20.0, key=jr.PRNGKey(5))
+
+    posterior = model.fit(
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        profile_mass=True,
+        n_steps=40,
+        verbose=False,
+        key=jr.PRNGKey(6),
+    )
+
+    assert posterior.diagnostics["profile_mass"] is True, "profile_mass must have engaged"
+    assert mass_name in posterior.params, "the real profiled mass belongs in params"
+    assert mass_name not in posterior.fixed_values, (
+        f"{mass_name!r} is free on model.spec; fixed_values must not report "
+        "the internal profile_mass placeholder for it"
+    )
+    # A genuine Fixed parameter is unaffected by the filter.
+    assert posterior.fixed_values["redshift"] == pytest.approx(0.05)
+
+
+def test_predict_state_fixed_values_kwarg_is_internal_only(
+    model_with_fixed_redshift, free_params_dict, params_with_fixed_override
+):
+    """``predict_state``'s ``fixed_values=`` kwarg is an internal escape
+    hatch, not a public way around the refusal (#2296).
+
+    Ordinary (public) usage never passes ``fixed_values=``, and
+    ``test_fixed_key_refused_by_entry_points[predict_state]`` above already
+    covers that this file's other predict_state cases pin it in the
+    ``DIRECT_METHODS`` sweep too. This test exists to document the boundary
+    explicitly, next to the callers that legitimately reach past it
+    (``sed_model.py``'s ``predict_state`` docstring for ``fixed_values``,
+    and the comment at its call site, name them:
+    ``predict_observables``/``predict_observables_jit`` after running this
+    same refusal upstream on free-only ``params``, and two internal
+    build-time probes -- ``_check_agn_lbol_flat_direction`` and
+    ``nebular_grid_precompute._row_traced`` -- that deliberately override a
+    Fixed key's own declared value for a measurement, not a user request).
+    A caller reaching ``predict_state`` the ordinary way (no ``fixed_values=``)
+    gets the same refusal as every other entry point in this file.
+    """
+    model = model_with_fixed_redshift
+
+    result = model.predict_state(free_params_dict)
+    assert result is not None
+
+    with pytest.raises(ParameterError) as exc_info:
+        model.predict_state(params_with_fixed_override)
+
+    _assert_is_a_fixed_key_refusal(exc_info.value, "redshift", 0.05)
+
+    # The escape hatch itself is not refused -- by design, it is the
+    # "already resolved, trust me" path the three callers above use. This
+    # is not a public code path (predict_state's own docstring and the
+    # NAMING_CONTRACT do not name it among the three sanctioned prediction
+    # surfaces), so its lack of a refusal is not a #2296 gap; it is
+    # documented here so a reviewer does not mistake it for one.
+    manual = model.predict_state(free_params_dict, fixed_values=model.spec.get_fixed_values())
+    assert manual is not None

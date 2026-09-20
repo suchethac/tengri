@@ -86,8 +86,17 @@ def population():
                 "type": ["dpl", "field"],
                 "all_params": Fixed(DEFAULT),
                 "log_total_mass": Uniform(9.0, 11.0),
-                "psd_sigma": Fixed(float(psd_sigma)),
-                "psd_tau_myr": Fixed(float(psd_tau_myr)),
+                # Free, not Fixed (#2296): PopulationFitter's flat seam
+                # (_hierarchical_flat.py) varies these per MCMC step by
+                # writing a value straight into the params dict it hands
+                # predict_photometry/predict_spectrum, which is legal
+                # presence for a free key and refused presence for a Fixed
+                # one. ``psd_sigma``/``psd_tau_myr`` stay the build-time
+                # reference/default (matches the old Fixed value exactly)
+                # via ``default=``; the bounds match PopulationFitter's own
+                # psd_sigma_prior/psd_tau_prior defaults.
+                "psd_sigma": Uniform(0.1, 4.0, default=float(psd_sigma)),
+                "psd_tau_myr": Uniform(1.0, 300.0, default=float(psd_tau_myr)),
             },
             dust_attenuation={
                 "type": "two_component",
@@ -99,7 +108,23 @@ def population():
         )
 
     template = factory(1.0, 50.0)
-    truth = {k: (10.0 if "log_total_mass" in k else 0.0) for k in template.spec.free_params}
+    # psd_sigma/psd_tau_myr are free now (see the factory above); 0.0 is
+    # below both priors' lower bound and would hand the field's covariance
+    # kernel a degenerate (zero) correlation length, so give them their
+    # declared default (the same 1.0/50.0 the template was built with)
+    # instead of falling into the blanket 0.0 every other free param gets.
+    truth = {
+        k: (
+            10.0
+            if "log_total_mass" in k
+            else 1.0
+            if k == "sfh_field_psd_sigma"
+            else 50.0
+            if k == "sfh_field_psd_tau_myr"
+            else 0.0
+        )
+        for k in template.spec.free_params
+    }
     flux = np.asarray(template.predict_photometry(truth))
     galaxies = [
         {"flux_obs": flux * (1.0 + 0.02 * i), "noise": np.abs(flux) * 0.05} for i in range(2)
@@ -130,8 +155,17 @@ def spectroscopic_population():
                 "type": ["dpl", "field"],
                 "all_params": Fixed(DEFAULT),
                 "log_total_mass": Uniform(9.0, 11.0),
-                "psd_sigma": Fixed(float(psd_sigma)),
-                "psd_tau_myr": Fixed(float(psd_tau_myr)),
+                # Free, not Fixed (#2296): PopulationFitter's flat seam
+                # (_hierarchical_flat.py) varies these per MCMC step by
+                # writing a value straight into the params dict it hands
+                # predict_photometry/predict_spectrum, which is legal
+                # presence for a free key and refused presence for a Fixed
+                # one. ``psd_sigma``/``psd_tau_myr`` stay the build-time
+                # reference/default (matches the old Fixed value exactly)
+                # via ``default=``; the bounds match PopulationFitter's own
+                # psd_sigma_prior/psd_tau_prior defaults.
+                "psd_sigma": Uniform(0.1, 4.0, default=float(psd_sigma)),
+                "psd_tau_myr": Uniform(1.0, 300.0, default=float(psd_tau_myr)),
             },
             dust_attenuation={
                 "type": "two_component",
@@ -144,7 +178,23 @@ def spectroscopic_population():
         )
 
     template = factory(1.0, 50.0)
-    truth = {k: (10.0 if "log_total_mass" in k else 0.0) for k in template.spec.free_params}
+    # psd_sigma/psd_tau_myr are free now (see the factory above); 0.0 is
+    # below both priors' lower bound and would hand the field's covariance
+    # kernel a degenerate (zero) correlation length, so give them their
+    # declared default (the same 1.0/50.0 the template was built with)
+    # instead of falling into the blanket 0.0 every other free param gets.
+    truth = {
+        k: (
+            10.0
+            if "log_total_mass" in k
+            else 1.0
+            if k == "sfh_field_psd_sigma"
+            else 50.0
+            if k == "sfh_field_psd_tau_myr"
+            else 0.0
+        )
+        for k in template.spec.free_params
+    }
     flux = np.asarray(template.predict_spectrum(truth))
     galaxies = [
         {"flux_obs": flux * (1.0 + 0.02 * i), "noise": np.abs(flux) * 0.05} for i in range(2)

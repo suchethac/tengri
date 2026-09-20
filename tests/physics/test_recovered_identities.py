@@ -313,13 +313,17 @@ def test_sed_additivity():
     # Sample parameters
     key = jax.random.PRNGKey(42)
     params = dict(model_full.spec.sample(key))
+    # dust_tau_diff is Fixed at 0.5 on model_full/model_dust (and not even a
+    # valid name on model_stellar, which has no dust_attenuation group);
+    # restating it here used to be harmless (it matched the pin exactly)
+    # but is now a refused presence override regardless of value (#2296) --
+    # every predict() call below self-merges each model's own Fixed 0.5.
     params.update(
         sfh_tsnorm_peak_lbt_gyr=3.0,
         sfh_tsnorm_width_gyr=2.0,
         sfh_tsnorm_log_total_mass=10.5,
         sfh_tsnorm_skew=0.3,
         sfh_tsnorm_trunc=10.0,
-        dust_tau_diff=0.5,
     )
 
     # Get full model predictions

@@ -933,7 +933,6 @@ class PopulationFitter:
         for name in free_names:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
 
         # Precompute data
         all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
@@ -945,6 +944,15 @@ class PopulationFitter:
 
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296); filter to free names first, the
+            # pattern jit_engine.signal_response uses. The two
+            # population-shared PSD names are free on model.spec (varied
+            # per step by writing them into this dict), so this filter is
+            # a defensive no-op keyed on model.spec.free_params, not a
+            # behavior change.
+            params = {k: v for k, v in params.items() if k in model.spec.free_params}
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -976,9 +984,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
                 params["sfh_field_psd_sigma"] = psd_sigma
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
@@ -1293,7 +1298,6 @@ class PopulationFitter:
         for name in free_names:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
 
         # Precompute data
         all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
@@ -1305,6 +1309,15 @@ class PopulationFitter:
 
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296); filter to free names first, the
+            # pattern jit_engine.signal_response uses. The two
+            # population-shared PSD names are free on model.spec (varied
+            # per step by writing them into this dict), so this filter is
+            # a defensive no-op keyed on model.spec.free_params, not a
+            # behavior change.
+            params = {k: v for k, v in params.items() if k in model.spec.free_params}
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -1339,9 +1352,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
                 params["sfh_field_psd_sigma"] = psd_sigma
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
@@ -1635,7 +1645,6 @@ class PopulationFitter:
         for name in free_names:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
 
         # Pre-build model
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
@@ -1643,6 +1652,15 @@ class PopulationFitter:
 
         def _predict_cfm(params):
             """Predict data from parameters (CorrelatedFieldMaker variant)."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296); filter to free names first, the
+            # pattern jit_engine.signal_response uses. The two
+            # population-shared PSD names are free on model.spec (varied
+            # per step by writing them into this dict), so this filter is
+            # a defensive no-op keyed on model.spec.free_params, not a
+            # behavior change.
+            params = {k: v for k, v in params.items() if k in model.spec.free_params}
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -1730,9 +1748,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
 
                 # CFM already applies sqrt(P) * xi, so pass the full
                 # correlated field as the GP realization
@@ -1975,8 +1990,6 @@ class PopulationFitter:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
 
-        fixed_values = spec.get_fixed_values()
-
         if verbose:
             n_per_gal = len(free_names) + (n_grid if stochastic else 0)
             n_total = 2 + n_gal * n_per_gal
@@ -2028,6 +2041,15 @@ class PopulationFitter:
 
         def _predict_single(params):
             """Single-galaxy forward model (for vmap)."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296); filter to free names first, the
+            # pattern jit_engine.signal_response uses. The two
+            # population-shared PSD names are free on model.spec (varied
+            # per step by writing them into this dict), so this filter is
+            # a defensive no-op keyed on model.spec.free_params, not a
+            # behavior change.
+            params = {k: v for k, v in params.items() if k in model.spec.free_params}
             if data_type == "photometry":
                 return model.predict_photometry(params)
             else:
@@ -2050,9 +2072,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
                 params["sfh_field_psd_sigma"] = psd_sigma
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:

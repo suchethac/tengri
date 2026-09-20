@@ -8355,15 +8355,30 @@ class SEDModel:
             # Refuse any Fixed key present in params (#2296)
             full_params = merge_fixed_params(self.spec, params)
         else:
-            # JIT runtime override path: caller provides both fixed and free values.
-            # The refusal is skipped here because it already ran, on this SAME
-            # ``params``, in the caller that built ``fixed_values``:
-            # ``predict_observables`` and ``predict_observables_jit`` both call
+            # "Already resolved, trust me" escape hatch: this branch never
+            # refuses, by design, for two DIFFERENT reasons depending on the
+            # caller -- a new caller must fall into one of these, not invent
+            # a third:
+            #
+            # (a) The refusal already ran, on this SAME (free-only) ``params``,
+            # in the caller that built ``fixed_values``. ``predict_observables``
+            # / ``predict_observables_jit`` both call
             # ``refuse_fixed_overrides(self.spec, params)`` before threading
-            # ``self.spec.get_fixed_values()`` in as a JIT runtime input (#2296).
-            # Re-checking here would be redundant, not wrong, for those two
-            # callers; do not add a third caller of this branch without giving
-            # it the same upstream check.
+            # ``self.spec.get_fixed_values()`` in unmodified as a JIT runtime
+            # input (#2296) -- re-checking here would be redundant, not wrong.
+            #
+            # (b) An internal, build-time probe that deliberately overrides a
+            # Fixed key's OWN declared value and is not a user-facing params
+            # dict at all -- refusing it would refuse the measurement the
+            # probe exists to make. Two such callers:
+            # ``_check_agn_lbol_flat_direction`` (this file) sweeps
+            # ``agn_log_lbol``/``agn_ir_frac`` across their declared range to
+            # measure whether the AGN luminosity direction is flat, passing
+            # ``fixed_values=dict(self.spec.get_fixed_values())``; and
+            # ``nebular_grid_precompute._row_traced`` forces
+            # ``neb_dig_frac=0.0`` while sweeping the per-Q_H grid, passing
+            # ``fixed_values={}`` because its ``params`` is already fully
+            # resolved (merged Fixed values plus the deliberate override).
             full_params = {**fixed_values, **params}
 
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.

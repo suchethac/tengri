@@ -761,8 +761,13 @@ def build_jit_engine(fitter, pos_dict):
             # See signal_response above: filter to free names before handing
             # to a public-refusing predict_* surface (#2296); ``params``
             # itself (full free+fixed) stays available for the
-            # noise_frac_cal read below.
-            free_params = {k: v for k, v in params.items() if k in fitter._free_names}
+            # noise_frac_cal read below. Filter on ``model.spec.free_params``,
+            # not ``fitter._free_names``: under profile_mass the latter reads
+            # the fitter's WORKING spec, which pins the mass Fixed at an
+            # analytic placeholder, so it would drop a mass the model's own
+            # (user-facing) spec still declares free -- check_missing_free_
+            # params then raises inside predict_photometry/predict_spectrum.
+            free_params = {k: v for k, v in params.items() if k in model.spec.free_params}
             if data_type == "photometry":
                 if use_components:
                     predicted = model._photometry_via_state(free_params)

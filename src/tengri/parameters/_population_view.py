@@ -166,6 +166,19 @@ class PopulationSpecView:
         """
         return self._template.fixed_value(name)
 
+    @property
+    def mirrors(self) -> dict[str, str]:
+        """Mirror targets ``{target_name: source_name}``, from the template (#2296).
+
+        ``refuse_fixed_overrides`` exempts mirror targets from its Fixed-key
+        presence check (a mirror target is internally Fixed(0.0), a
+        placeholder ``resolve_mirrors`` overwrites, not a real pin); without
+        this pass-through a population view over a mirrored template raised
+        ``AttributeError: 'PopulationSpecView' object has no attribute
+        'mirrors'`` instead of ever reaching that check.
+        """
+        return self._template.mirrors
+
     def param_init_shape(self, name: str) -> tuple[int, ...]:
         """Initial-xi shape for one free parameter.
 
@@ -208,7 +221,10 @@ class PopulationSpecView:
         """Draw one batched sample from the population.
 
         Per-galaxy free parameters get a leading ``(N_galaxies,)`` axis;
-        shared parameters stay scalar; fixed values are scalar.
+        shared free parameters stay scalar. Fixed values are omitted
+        entirely (free-only, #2296) -- ``template.sample()`` no longer
+        returns them, so neither does this batched wrapper around it; read
+        them from :meth:`get_fixed_values` instead.
 
         Implementation: ``jax.vmap(template.sample)`` over a split key
         produces ``(N, ...)`` for every name. Then overwrite shared

@@ -119,9 +119,11 @@ class TestXrayLogNh:
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
             # The param must actually reach the spec (guards the silent-no-op
-            # class: declared-but-unthreaded params).
-            assert "xray_log_nh" in params
-            assert float(params["xray_log_nh"]) == pytest.approx(log_nh)
+            # class: declared-but-unthreaded params). xray_log_nh is Fixed
+            # here, so the free-only sample legitimately omits it (#2296);
+            # check the spec's own Fixed-value bookkeeping instead.
+            assert "xray_log_nh" in model.spec.fixed_params
+            assert float(model.spec.fixed_value("xray_log_nh")) == pytest.approx(log_nh)
             state = model.predict_rest_sed(params)
             w = np.asarray(state.wavelength)
             sed = np.asarray(state.sed)
