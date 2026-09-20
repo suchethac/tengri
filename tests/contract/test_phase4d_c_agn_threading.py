@@ -67,6 +67,7 @@ def _build(ssp, obs, **groups):
                 "law": "calzetti",
                 "all_params": Fixed(DEFAULT),
             },
+            neb={"type": "none"},
             redshift=Fixed(0.1),
             **groups,
         )

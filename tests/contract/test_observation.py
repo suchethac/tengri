@@ -251,6 +251,47 @@ class TestSpectroscopy:
         assert "R=1000" in s
         assert "cal order=2" in s
 
+    def test_overlapping_multicamera_grid_builds(self, tmp_path):
+        """Multi-camera DESI spectrum with overlapping wavelength ranges builds."""
+        pytest.importorskip("astropy")
+        from tengri.io import desi_spectroscopy, read_desi_cameras
+        from tests._desi_fixture import write_desi_coadd
+
+        path = tmp_path / "coadd-test.fits"
+        built = write_desi_coadd(path)
+        cameras = read_desi_cameras(path)
+        # This should NOT raise ValueError about wave_obs monotonicity
+        spec = desi_spectroscopy(cameras)
+        assert spec.n_pixels == 3 * built["n_pix"]
+        assert spec.has_resolution_matrix
+
+    def test_nonmonotone_within_segment_raises(self):
+        """Non-monotone step INSIDE one segment is rejected with segment sizes."""
+        # Create overlapping two-segment grid (B: 50 pixels, R: 50 pixels)
+        wave_b = jnp.linspace(3600.0, 5800.0, 50)
+        wave_r = jnp.linspace(5760.0, 7620.0, 50)
+        wave = jnp.concatenate([wave_b, wave_r])
+
+        # Inject non-monotone step at index 63 (inside R segment)
+        wave_bad = wave.at[63].set(wave[62])  # Make wave[63] == wave[62]
+
+        with pytest.raises(ValueError, match=r"wave_obs segment 1.*must be strictly increasing"):
+            Spectroscopy(wave_obs=wave_bad, wave_obs_segment_sizes=(50, 50))
+
+    def test_segment_size_sum_mismatch_raises(self):
+        """Segment sizes that don't sum to len(wave_obs) are rejected."""
+        wave = jnp.linspace(3600.0, 7620.0, 100)
+
+        with pytest.raises(ValueError, match="sum\\(wave_obs_segment_sizes\\)"):
+            Spectroscopy(wave_obs=wave, wave_obs_segment_sizes=(50, 60))  # Sum is 110, not 100
+
+    def test_invalid_segment_size_raises(self):
+        """Segment size < 1 is rejected."""
+        wave = jnp.linspace(3600.0, 7620.0, 100)
+
+        with pytest.raises(ValueError, match="wave_obs_segment_sizes\\[1\\] must be >= 1"):
+            Spectroscopy(wave_obs=wave, wave_obs_segment_sizes=(50, 0))
+
 
 # ── Observation ───────────────────────────────────────────────────
 
