@@ -131,9 +131,12 @@ def run_hmc_low_rank(
         Dual-averaging target [dimensionless]. Default 0.85, HMC's, so the row
         is comparable with ``mcmc_hmc``.
     precondition : bool, float, or None, optional
-        Analytic ``J^T N^-1 J + I`` whitening strength. Composes with the
-        low-rank mass matrix: the metric is a change of variables, the mass
-        matrix lives inside it.
+        Analytic ``J^T N^-1 J + I`` whitening strength. This runner learns its
+        own low-rank metric from warmup via ``blackjax.window_adaptation_low_rank``
+        using Fisher divergence minimization, so ``precondition=`` is refused by
+        ``check_capabilities`` to prevent composing two whitenings. Measured:
+        472 divergences when both are applied (vs 0–19 with either alone,
+        #2196). Drop ``precondition=`` or choose a different backend.
     verbose : bool, optional
         Log progress. Default True.
 
