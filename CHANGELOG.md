@@ -43,6 +43,20 @@
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
 
+- `salim_sbl18` UV bump normalization (#2397): the UV bump term now normalizes
+  by the δ-dependent R_V,mod of Salim, Boquien & Lee (2018) Eq. 4 instead of
+  the fixed Calzetti R_V = 4.05, implementing the paper's own correction over
+  the pre-v0.12 CIGALE bug described in footnote 7. Both `dust_bump_strength`
+  and `dust_delta` default to `Fixed(0.0)`, so this is a no-op unless both are
+  explicitly set/freed on `salim_sbl18` specifically; `kriek_conroy` and `noll09`
+  are unaffected (neither claims Eq. 4; both correctly use fixed R_V per their
+  own papers). Any prior-declared or pinned `dust_bump_strength` on `salim_sbl18`
+  beside a nonzero `dust_delta` now maps to a different UV bump amplitude; at
+  δ = +0.3 the bump-to-base ratio at 2175 Å shifts from 0.461 to 0.311 (factor
+  R_V,Cal / R_V,mod ≈ 0.673), and A(2175) / A_V at (δ = 0.3, B = 3) from 2.317
+  to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
+  precision versus ~10% prior miss.
+
 ### Fixed
 
 - Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
