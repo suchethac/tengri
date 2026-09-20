@@ -39,16 +39,59 @@ RESULTS = Path(__file__).parent / "results"
 CANONICAL = RESULTS / "fits"
 SUPERSEDED = RESULTS / "fits_superseded_oldsuite_20260920"
 
-#: TBDs that need the posterior draws, not the diagnostics JSON. Named so the
-#: report says what is still missing instead of quietly covering fewer numbers.
-NEEDS_POSTERIORS = [
-    "goodness of fit across the grid (posterior-predictive range)",
-    "whether any band shows a systematic residual across configurations",
-    "where the posteriors lean on prior boundaries, and how many cells",
-    "the sample-level configuration-to-configuration spread",
-    "how the six configurations compare in inferred stellar mass",
-    "where the configurations fall against the published inter-code spread",
+#: TBDs that still need something this script does not read. The first needs the
+#: declared priors, which means rebuilding each configuration; the second needs
+#: the published per-code catalog. Named so the report says what is missing
+#: rather than quietly covering fewer numbers.
+NEEDS_MORE = [
+    "where the posteriors lean on prior boundaries (needs the declared priors, "
+    "so a model rebuild per configuration)",
+    "where the configurations fall against the published inter-code spread "
+    "(needs results/art_sedfitting_z1.csv joined on galaxy ID)",
 ]
+
+
+def posterior_numbers(directory: Path, cells: list[dict]) -> dict | None:
+    """The section-7 claims that live in the NPZ rather than the JSON.
+
+    Derived quantities (``stellar_mass``, ``sfr_100myr``) are stored on a
+    500-draw subsample while the sampled parameters are the full chain, so
+    anything joining the two has to say which it used. Everything here is a
+    median over the derived draws, which is what the section quotes.
+    """
+    import numpy as _np
+
+    per_cell = []
+    for cell in cells:
+        gal, cfg = cell.get("gal_id"), cell.get("config")
+        npz_path = directory / f"{gal}_{cfg}.npz"
+        if not npz_path.exists():
+            continue
+        with _np.load(npz_path, allow_pickle=True) as handle:
+            need = ("model_photometry_median", "obs_fnu", "obs_sigma", "filter_names")
+            if any(k not in handle.files for k in need):
+                continue
+            model = _np.asarray(handle["model_photometry_median"])
+            obs = _np.asarray(handle["obs_fnu"])
+            sigma = _np.asarray(handle["obs_sigma"])
+            bands = [str(b) for b in handle["filter_names"]]
+            resid = (obs - model) / _np.where(sigma > 0, sigma, _np.nan)
+            row = {
+                "gal": gal,
+                "config": cfg,
+                "adopted": bool(cell.get("adoption_pass")),
+                "chi2": float(_np.nansum(resid**2)),
+                "n_bands": len(bands),
+                "n_free": cell.get("n_free"),
+                "resid": dict(zip(bands, [float(r) for r in resid], strict=True)),
+            }
+            for key, label in (("stellar_mass", "log_mstar"), ("sfr_100myr", "log_sfr")):
+                if key in handle.files:
+                    vals = _np.asarray(handle[key])
+                    vals = vals[vals > 0]
+                    row[label] = float(_np.log10(_np.median(vals))) if vals.size else None
+            per_cell.append(row)
+    return {"cells": per_cell} if per_cell else None
 
 
 def load_cells(directory: Path) -> list[dict]:
@@ -161,8 +204,54 @@ def main() -> int:
                 else f"   {c.get('gal_id')}/{c.get('config')}"
             )
 
-    print("\n--- still outstanding: these need the posterior draws, not this JSON ---")
-    for item in NEEDS_POSTERIORS:
+    post = posterior_numbers(directory, cells)
+    if post:
+        rows = post["cells"]
+        ad = [r for r in rows if r["adopted"]] or rows
+        print(f"\n--- section 7 TBDs from the posterior NPZs ({len(rows)} cells read) ---\n")
+        ok = [r for r in ad if r["chi2"] == r["chi2"]]
+        chi2_band = [r["chi2"] / r["n_bands"] for r in ok]
+        dofs = [r["n_bands"] - (r["n_free"] or 0) for r in ok]
+        chi2_dof = [r["chi2"] / max(d, 1) for r, d in zip(ok, dofs, strict=True)]
+        print(f"posterior-predictive chi2 per band : {fmt_range(chi2_band, '', places=2)}")
+        print(f"posterior-predictive chi2 / dof    : {fmt_range(chi2_dof, '', places=2)}")
+        if dofs and min(dofs) < 8:
+            print(
+                f"   CAUTION: dof = n_bands - n_free runs from {min(dofs)} to {max(dofs)}. "
+                "At single-digit dof chi2/dof is a\n"
+                "   noisy statistic and its spread across cells is mostly that noise; "
+                "quote chi2 per band, or the\n"
+                "   residual distribution, rather than leaning on chi2/dof in the text."
+            )
+
+        band_resid = defaultdict(list)
+        for r in ad:
+            for band, value in r["resid"].items():
+                if value == value:
+                    band_resid[band].append(value)
+        print("\nper-band standardized residual, median over cells")
+        print("(a band offset the same way in every configuration is the model, not noise):")
+        for band, values in sorted(
+            band_resid.items(), key=lambda kv: -abs(statistics.median(kv[1]))
+        ):
+            med = statistics.median(values)
+            flag = "  <-- systematic" if abs(med) > 0.5 else ""
+            print(f"   {band:<14} median {med:>7.3f}  n={len(values):>3}{flag}")
+
+        by_gal = defaultdict(dict)
+        for r in ad:
+            if r.get("log_mstar") is not None:
+                by_gal[r["gal"]][r["config"]] = r["log_mstar"]
+        spreads = [max(v.values()) - min(v.values()) for v in by_gal.values() if len(v) > 1]
+        if spreads:
+            print(
+                f"\nconfiguration-to-configuration spread in log M*, per galaxy: "
+                f"{fmt_range(spreads, 'dex', places=3)} over {len(spreads)} galaxies "
+                f"with >1 configuration"
+            )
+
+    print("\n--- still outstanding: these need more than the fits ---")
+    for item in NEEDS_MORE:
         print(f"   - {item}")
     if not canonical:
         print("\nNOT FOR THE PAPER -- see the banner above.")
