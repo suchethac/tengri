@@ -48,6 +48,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import jax
+from config_metadata import CONFIGS, SSP_FOR_CONFIG
 
 import tengri
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
@@ -67,15 +68,6 @@ MET_EDGE_INSET_DEX = 0.02
 # Grid per configuration. The suite spans MIST and PARSEC isochrones crossed with
 # C3K and MILES spectral libraries, plus BPASS for binary-star evolution.
 # Configuration VI reuses Configuration I's library so the AGN is the only change.
-SSP_FOR_CONFIG = {
-    "I": "fsps_mist_c3k_a_chabrier",
-    "II": "fsps_prsc_c3k_a_chabrier",
-    "III": "fsps_mist_miles_chabrier",
-    "IV": "fsps_prsc_miles_chabrier",
-    "V": "bpss_stars_c3k_a_chabrier",
-    "VI": "fsps_mist_c3k_a_chabrier",
-}
-
 N_SFH_BINS = 7
 
 #: Photoionization grid for Configuration IV, named rather than discovered.
@@ -420,87 +412,6 @@ def config_VI(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         approx=WavePrecomp(),
     )
 
-
-CONFIGS = {
-    "I": {
-        "key": "I",
-        "dust_param": "dust_tau_diff",
-        "name": "continuity, MIST/C3K",
-        "sfh": "continuity, 7 bins",
-        "library": "FSPS MIST/C3K",
-        "attenuation": "Kriek+13, 2-comp",
-        "dust_ir": "Draine+2014",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["I"],
-        "n_free": None,
-    },
-    "II": {
-        "key": "II",
-        "dust_param": "dust_tau_v",
-        "name": "double power law, PARSEC/C3K",
-        "sfh": "double power law",
-        "library": "FSPS PARSEC/C3K",
-        "attenuation": "Calzetti, 1-comp",
-        "dust_ir": "Dale+2014",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["II"],
-        "n_free": None,
-    },
-    "III": {
-        "key": "III",
-        "dust_param": "dust_tau_diff",
-        "name": "delayed-tau, MIST/MILES",
-        "sfh": "delayed-tau",
-        "library": "FSPS MIST/MILES",
-        "attenuation": "Charlot+2000, 2-comp",
-        "dust_ir": "THEMIS",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["III"],
-        "n_free": None,
-    },
-    "IV": {
-        "key": "IV",
-        "dust_param": "dust_tau_diff",
-        "name": "Dirichlet, PARSEC/MILES",
-        "sfh": "Dirichlet, 7 bins",
-        "library": "FSPS PARSEC/MILES",
-        "attenuation": "Kriek+13, 2-comp",
-        "dust_ir": "Casey+2012",
-        "nebular": "Cloudy, free logU",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["IV"],
-        "n_free": None,
-    },
-    "V": {
-        "key": "V",
-        "dust_param": "dust_tau_v",
-        "name": "log-normal, BPASS",
-        "sfh": "log-normal",
-        "library": "BPASS C3K",
-        "attenuation": "SMC, 1-comp",
-        "dust_ir": "Dale+2014",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["V"],
-        "n_free": None,
-    },
-    "VI": {
-        "key": "VI",
-        "dust_param": "dust_tau_diff",
-        "name": "continuity + AGN disc and torus",
-        "sfh": "continuity, 7 bins",
-        "library": "FSPS MIST/C3K",
-        "attenuation": "Kriek+13, 2-comp",
-        "dust_ir": "Draine+2014",
-        "nebular": "Cue",
-        "agn": True,
-        "ssp_grid": SSP_FOR_CONFIG["VI"],
-        "n_free": None,
-    },
-}
 
 CONFIG_KEYS = ["I", "II", "III", "IV", "V", "VI"]
 
