@@ -447,6 +447,77 @@ def thin_samples(samples: dict, max_draws: int = MAX_SAVED_DRAWS) -> dict:
     return {k: np.asarray(v)[::step] for k, v in samples.items()}
 
 
+def draw_indices(samples_thin: dict, n_draws: int) -> np.ndarray:
+    """Indices of ``n_draws`` draws strided across the whole flattened record.
+
+    The single definition of which draws the derived quantities are computed
+    from, shared by :func:`iter_draws` and the batched evaluators so the eager
+    and vmapped paths never pick different draws.
+    """
+    n_available = int(next(iter(samples_thin.values())).shape[0])
+    n_take = min(n_draws, n_available)
+    if n_take <= 0:
+        return np.zeros(0, dtype=int)
+    return np.linspace(0, n_available - 1, n_take).round().astype(int)
+
+
+#: Draws per vmapped forward pass in the derived-quantity evaluators. The
+#: exact-wave-grid state vmapped over a chunk allocates (chunk, n_age, n_wave)
+#: intermediates, so the chunk bounds the peak, not the number of draws.
+DERIVED_CHUNK = 25
+
+
+def _chunked_vmap(fn: Callable, samples_thin: dict, idx: np.ndarray, chunk: int = DERIVED_CHUNK):
+    """Apply a jitted ``vmap(fn)`` to the selected draws, ``chunk`` draws at a time.
+
+    ``fn`` maps one dict of sampled scalars to a pytree; the result is the
+    same pytree with a leading draw axis, as numpy arrays. Chunks are padded
+    to ``chunk`` by repeating the last draw so every call hits one compiled
+    program; the padding is sliced off.
+    """
+    sampled = {k: np.asarray(v)[idx] for k, v in samples_thin.items()}
+    batched = jax.jit(jax.vmap(fn))
+    pieces = []
+    for start in range(0, idx.shape[0], chunk):
+        sel = {k: v[start : start + chunk] for k, v in sampled.items()}
+        n_real = next(iter(sel.values())).shape[0]
+        pad = chunk - n_real
+        if pad:
+            sel = {k: np.concatenate([v, np.repeat(v[-1:], pad)]) for k, v in sel.items()}
+        out = batched(sel)
+        pieces.append(jax.tree_util.tree_map(lambda a, n=n_real: np.asarray(a)[:n], out))
+    return jax.tree_util.tree_map(lambda *a: np.concatenate(a), *pieces)
+
+
+def derived_over_draws(sed_model, samples_thin: dict, fixed_values: dict, n_draws: int) -> dict:
+    """Stellar mass and SFRs for ``n_draws`` strided draws, via the jit/vmap surface.
+
+    Uses :meth:`SEDModel.predict_properties`, the documented jit/vmap surface
+    for derived quantities (NAMING_CONTRACT §4b). A property the model does
+    not publish is a NaN column, as the eager ``props.get(name, nan)`` was.
+    """
+    idx = draw_indices(samples_thin, n_draws)
+    wanted = ("stellar_mass", "sfr_100myr", "sfr_10myr")
+    available = tuple(n for n in wanted if n in sed_model.available_properties)
+
+    def one(sample):
+        return sed_model.predict_properties({**fixed_values, **sample}, names=available)
+
+    got = _chunked_vmap(one, samples_thin, idx) if available else {}
+    return {n: got[n] if n in got else np.full(idx.shape[0], np.nan) for n in wanted}
+
+
+def sfh_over_draws(sed_model, samples_thin: dict, fixed_values: dict, n_draws: int):
+    """Per-draw SFH grids ``(lookback time [yr], SFR [Msun/yr])`` for ``n_draws`` strided draws."""
+    idx = draw_indices(samples_thin, n_draws)
+
+    def one(sample):
+        state = sed_model.predict_state({**fixed_values, **sample})
+        return state.derived["sfh_grid_lbt_yr"], state.derived["sfr_history"]
+
+    return _chunked_vmap(one, samples_thin, idx)
+
+
 def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
     """Yield parameter dicts (fixed values merged) for ``n_draws`` draws spanning the record.
 
@@ -457,12 +528,7 @@ def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
     early-draw estimate (#2089). ``n_draws >= n_available`` yields every draw in
     order.
     """
-    n_available = int(next(iter(samples_thin.values())).shape[0])
-    n_take = min(n_draws, n_available)
-    if n_take <= 0:
-        return
-    idx = np.linspace(0, n_available - 1, n_take).round().astype(int)
-    for i in idx:
+    for i in draw_indices(samples_thin, n_draws):
         yield {**fixed_values, **{k: float(v[i]) for k, v in samples_thin.items()}}
 
 
@@ -654,31 +720,21 @@ def save_fit_outputs(
             f"the attenuation family changed; the derived dust column would "
             f"otherwise be silently NaN for every draw of this cell."
         )
-    derived_samples = {key: [] for key in DERIVED_KEYS}
-
-    for params in iter_draws(samples_thin, fixed_values, 500):
-        pred = sed_model.predict(params)
-        props = pred.properties
-
-        derived_samples["stellar_mass"].append(float(props.get("stellar_mass", np.nan)))
-        derived_samples["sfr_100myr"].append(float(props.get("sfr_100myr", np.nan)))
-        derived_samples["sfr_10myr"].append(float(props.get("sfr_10myr", np.nan)))
-        derived_samples["dust_tau"].append(float(params.get(dust_param, np.nan)))
+    # One jitted, vmapped pass per chunk of draws (#2089's eager per-draw
+    # ``sed_model.predict`` took 28 min for 700 draws on a loaded box -- twice
+    # the fit itself once the sampling ran under pmap). Same draws, same
+    # quantities, same NPZ keys; only the evaluation path changed.
+    derived_samples = derived_over_draws(sed_model, samples_thin, fixed_values, 500)
+    derived_samples["dust_tau"] = np.asarray(
+        [float(v) for v in samples_thin[dust_param][draw_indices(samples_thin, 500)]]
+    )
 
     # Compute SFH posteriors on a common grid
     t_lbt_yr = np.logspace(6, 10.1, 100)  # 100 points, 1 Myr to ~13 Gyr
-    sfr_posterior = []
-
-    for params in iter_draws(samples_thin, fixed_values, 200):
-        state = sed_model.predict_state(params)
-        t_lbt_grid = np.asarray(state.derived["sfh_grid_lbt_yr"])
-        sfr_grid = np.asarray(state.derived["sfr_history"])
-
-        # Interpolate SFR onto common grid
-        sfr_interp = np.interp(t_lbt_yr, t_lbt_grid, sfr_grid)
-        sfr_posterior.append(sfr_interp)
-
-    sfr_posterior = np.stack(sfr_posterior)
+    t_lbt_grid, sfr_grid = sfh_over_draws(sed_model, samples_thin, fixed_values, 200)
+    sfr_posterior = np.stack(
+        [np.interp(t_lbt_yr, t, s) for t, s in zip(t_lbt_grid, sfr_grid, strict=True)]
+    )
     sfr_median = np.median(sfr_posterior, axis=0)
     sfr_p16 = np.percentile(sfr_posterior, 16, axis=0)
     sfr_p84 = np.percentile(sfr_posterior, 84, axis=0)
