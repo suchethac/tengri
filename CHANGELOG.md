@@ -20,6 +20,26 @@
   attributes the Madau+1995 residual to line-wavelength conventions at the
   Lyman-series edges (vacuum 1025.72 Å vs rounded 1026 Å; 14.6% at z=3,
   21.1% at z=5, single node). The parity matrix's M4 bagpipes arm is closed.
+- Unknown-name errors recognize citation keys and name the registry entry they
+  cite (#2429): when a user provides a citation key (e.g., `charlot_fall2000`)
+  instead of a registry name (e.g., `power_law`), the error message now
+  explains which registry entry it cites -- appended after the usual difflib
+  "Did you mean...?" suggestion whenever the key names an entry from another
+  group, and standing in for it when the key names an entry valid at that
+  very site (where the difflib guess would only distract from the exact
+  remedy). The hint can also never name a value no group's grammar would
+  accept (an internal backend spelling, an author-name alias, an
+  inference-backend name): it is filtered down to the union of every
+  routed validator's accepted names first, falling back to plain difflib
+  when nothing in that union survives. Applied to the 22 sites validated
+  against a registry: dust laws (single- and two-component, foreground, and
+  the AGN `atten` block's own law check), dust_emission, SFH, metallicity
+  mode, dust_attenuation type, nebular, shock, IGM, radio, X-ray, AGN blocks
+  (per sub-block type and the top-level `agn['type']` model selector), the
+  generic per-group "unknown key" checker, and the top-level group-key list.
+  Citation keys that only cite themselves (e.g. `cue`, `tengri`) are not
+  reported as citation keys, since there is no other name to redirect to.
+
 - The photoionized nebular backends floor the SSP age axis at 0.1 Myr, so an
   age-0 anchor template no longer turns every nebular output into NaN
   (#2418): the BC03 STELIB SSP carries `ssp_lg_age_gyr[0] = -inf`, and
@@ -101,6 +121,16 @@
   Parameters construction is untouched — a valid group without an on-disk grid
   still raises the same grid message.
 
+- Self-whitening backends (MCLMC and low-rank HMC) now refuse to compose with
+  the analytic metric when `precondition=` is supplied (#2196). Two whitenings
+  multiply to produce catastrophic degradation (measured as 472 divergences on a
+  stochastic-field posterior where either alone gave 0–19). Backends that learn a
+  metric from warmup (via `diagonal_preconditioning=True` or
+  `blackjax.window_adaptation_low_rank`) now declare `self_whitening=True` and
+  raise `ValueError` before sampling when both conditions hold, rather than
+  silently degrading. The analytic metric and a backend's own whitening cannot be
+  composed; choose one or the other.
+
 - Float32 refusal on Hessian-based inference now names the dtype in both
   Laplace and preconditioning routes, clarifying that non-finiteness is a
   float32 artifact (the SED model's photometry Hessian is all-NaN in float32)
@@ -138,6 +168,10 @@
   precision versus ~10% prior miss.
 
 ### Fixed
+
+- SKIRTOR grid caches are keyed on the process float dtype, so a float32
+  forward no longer perturbs a later float64 forward of the same model
+  (2.5e-9 measured shift) (#2275).
 
 - Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
 
