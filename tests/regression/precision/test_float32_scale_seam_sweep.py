@@ -505,26 +505,29 @@ _AGN_MBH_DUST = {
 #: which this branch changed on purpose (rtol=1e-8; see
 #: :func:`test_agn_black_hole_mass_float64_is_unchanged_by_the_2210_regrouping`
 #: for the tolerance derivation and #2225).
+#: ``rest_sed_last`` (the far-IR end of the grid) was re-taken on the #1512 fix, which
+#: carries the composable disc's inclination ratio past the 1e7 Å template edge instead
+#: of zeroing it; the other keys were unchanged to 3e-11.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
         "rest_sed_sum": 1.5215528515600546e32,
         "rest_sed_0": 2.1618471431580417e23,
         "rest_sed_mid": 3.05875473371805e28,
-        "rest_sed_last": 8.774849241417516e21,
+        "rest_sed_last": 8.775513568033312e21,
         "photometry": (1.0983673139689911e-27, 1.5708275749214437e-27, 1.7644186709543538e-27),
     },
     8.0: {
         "rest_sed_sum": 1.558679481783208e32,
         "rest_sed_0": 2.621597865262484e24,
         "rest_sed_mid": 3.1456552202309087e28,
-        "rest_sed_last": 8.774849241417516e21,
+        "rest_sed_last": 8.823791474594601e21,
         "photometry": (1.1316992005358205e-27, 1.572334550170324e-27, 1.764867493766874e-27),
     },
     10.0: {
         "rest_sed_sum": 1.5745233941627343e32,
         "rest_sed_0": 2.0084485779608986e24,
         "rest_sed_mid": 3.175461013264611e28,
-        "rest_sed_last": 8.774849241417516e21,
+        "rest_sed_last": 9.02096624152618e21,
         "photometry": (1.1418353695587365e-27, 1.5787785513540968e-27, 1.7665561969074594e-27),
     },
 }
