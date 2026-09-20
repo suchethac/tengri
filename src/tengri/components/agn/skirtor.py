@@ -596,6 +596,19 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
     )
 
 
+def _fronts_cache(cached):
+    """Decorator: give a dtype-keyed wrapper the ``cache_clear``/``cache_info`` surface of
+    the ``functools.cache`` loader it fronts, so callers that reset a loader through its
+    public name (tests, notebooks) keep working after the dtype keying (#2275)."""
+
+    def _attach(wrapper):
+        wrapper.cache_clear = cached.cache_clear
+        wrapper.cache_info = cached.cache_info
+        return wrapper
+
+    return _attach
+
+
 def _process_float_dtype_name() -> str:
     """Name of the canonical float dtype of the current process: ``'float64'`` under x64,
     ``'float32'`` otherwise.
@@ -617,6 +630,7 @@ def _load_skirtor_default_grid_for(float_dtype_name: str) -> SKIRTORGrid:
     return _load_skirtor_grid_data(_find_skirtor_grid())
 
 
+@_fronts_cache(_load_skirtor_default_grid_for)
 def _load_skirtor_default_grid() -> SKIRTORGrid:
     """Cached default SKIRTOR grid arrays, keyed on the process float dtype.
 
@@ -1165,6 +1179,7 @@ def _load_raw_disk_dust_grid_for(float_dtype_name: str) -> SkirtorDiscDustGrid |
     )
 
 
+@_fronts_cache(_load_raw_disk_dust_grid_for)
 def _load_raw_disk_dust_grid() -> SkirtorDiscDustGrid | None:
     """Cached SKIRTOR disk/dust grids, keyed on the process float dtype.
 
@@ -1369,6 +1384,7 @@ def _load_skirtor_default_for(float_dtype_name: str):
     return create_skirtor_from_grid(_find_skirtor_grid())
 
 
+@_fronts_cache(_load_skirtor_default_for)
 def _load_skirtor_default():
     """Load SKIRTOR template grid, keyed on the process float dtype.
 
@@ -1395,6 +1411,7 @@ def _load_skirtor_components_for(float_dtype_name: str):
         return None
 
 
+@_fronts_cache(_load_skirtor_components_for)
 def _load_skirtor_components():
     """Load SKIRTOR template grid, keyed on the process float dtype.
 
@@ -1589,6 +1606,7 @@ def _load_skirtor_disc_attenuation_for(float_dtype_name: str):
     return create_skirtor_disc_attenuation_from_grid(path)
 
 
+@_fronts_cache(_load_skirtor_disc_attenuation_for)
 def _load_skirtor_disc_attenuation():
     """Build SKIRTOR disc attenuation pattern, keyed on the process float dtype.
 
@@ -1629,6 +1647,7 @@ def load_skirtor_disc_atten_grid_for(float_dtype_name: str) -> SKIRTORDiscAttenG
     return _disc_atten_bundle(raw)
 
 
+@_fronts_cache(load_skirtor_disc_atten_grid_for)
 def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
     """Load the packaged SKIRTOR disc-column arrays, keyed on the process float dtype.
 
