@@ -87,6 +87,16 @@
   Parameters construction is untouched — a valid group without an on-disk grid
   still raises the same grid message.
 
+- Self-whitening backends (MCLMC and low-rank HMC) now refuse to compose with
+  the analytic metric when `precondition=` is supplied (#2196). Two whitenings
+  multiply to produce catastrophic degradation (measured as 472 divergences on a
+  stochastic-field posterior where either alone gave 0–19). Backends that learn a
+  metric from warmup (via `diagonal_preconditioning=True` or
+  `blackjax.window_adaptation_low_rank`) now declare `self_whitening=True` and
+  raise `ValueError` before sampling when both conditions hold, rather than
+  silently degrading. The analytic metric and a backend's own whitening cannot be
+  composed; choose one or the other.
+
 - Float32 refusal on Hessian-based inference now names the dtype in both
   Laplace and preconditioning routes, clarifying that non-finiteness is a
   float32 artifact (the SED model's photometry Hessian is all-NaN in float32)
