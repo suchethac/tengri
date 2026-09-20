@@ -636,7 +636,10 @@ def _frac_idx(val: float, grid: jnp.ndarray) -> jnp.ndarray:
     idx = jnp.clip(idx, 0, n - 2)
     dx = grid[idx + 1] - grid[idx]
     frac = jnp.where(dx > 0, (val_clipped - grid[idx]) / dx, 0.0)
-    return (idx + frac).astype(jnp.float32)
+    # Keep the coordinate in float64 throughout. Casting it to float32 made the
+    # ~1e-46 _lum_scale cotangent underflow to exactly 0.0 in the backward pass,
+    # silencing every grid-axis gradient on a bare backend (#2306; #1568 pattern).
+    return idx + frac
 
 
 def _interp_7d(

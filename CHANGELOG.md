@@ -19,6 +19,23 @@
   of the dense path's y(age)-graded birth-cloud formula, since the age
   weighting is not available until dust runs, downstream of nebular).
 
+- Shock line ratios are normalized over the populated grid cells, so
+  `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
+  ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
+  unpopulated MAPPINGS cells and `utils/grid_interp._tensor_contract` then
+  contracted with triweight weights that still summed to one over the whole
+  axis — so every line came back scaled by the fraction of kernel weight
+  landing on populated cells. With 3992 of 38850 cells (10.3%) populated that
+  fraction ran from 0.88 down to 0.0037, and was exactly 0 at
+  B = 100 uG / log n = -1, where every line was silently zero. `Hb_4861A`
+  read 0.7135 instead of 1.0 and Halpha/Hbeta read 2.14, below the Case B
+  recombination floor of 2.86. `_tensor_contract` now performs a normalized
+  convolution (the mask is contracted with the same weights and divides the
+  result) and returns NaN where no populated cell is in range; the unmasked
+  path, which is the only one `components/agn/disc.py` uses, is unchanged.
+  Fitted SEDs were never affected — `_shock_line_arrays` anchors on Halpha, so
+  the common factor canceled — and this does not fix #2066.
+
 - JAX 0.11.2's cache-write path no longer raises on an orphan-atime entry
   (#2416): the #1661 regression test's reproduction arm, which pinned JAX's
   cache-write failure on orphaned -atime files, became vacuous on JAX 0.11.2
@@ -38,6 +55,14 @@
   Parameters construction is untouched — a valid group without an on-disk grid
   still raises the same grid message.
 
+- Float32 refusal on Hessian-based inference now names the dtype in both
+  Laplace and preconditioning routes, clarifying that non-finiteness is a
+  float32 artifact (the SED model's photometry Hessian is all-NaN in float32)
+  rather than a diverged MAP initialization or genuine curvature failure. The
+  disable-profile-mass-then-raise anti-pattern at the float32 check no longer
+  silently mutates a `Fitter` on an exception path, preserving the invariant
+  that reuse-after-exception is safe (#2378).
+
 - Data locator hermeticity (#2329): a nested worktree's test run found untracked
   data (CLOUDY grids, Cue weights) in the main checkout via the locator's
   ancestor-directory walk, so suites passed locally and failed in CI. A new
@@ -52,7 +77,23 @@
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
 
+- `salim_sbl18` UV bump normalization (#2397): the UV bump term now normalizes
+  by the δ-dependent R_V,mod of Salim, Boquien & Lee (2018) Eq. 4 instead of
+  the fixed Calzetti R_V = 4.05, implementing the paper's own correction over
+  the pre-v0.12 CIGALE bug described in footnote 7. Both `dust_bump_strength`
+  and `dust_delta` default to `Fixed(0.0)`, so this is a no-op unless both are
+  explicitly set/freed on `salim_sbl18` specifically; `kriek_conroy` and `noll09`
+  are unaffected (neither claims Eq. 4; both correctly use fixed R_V per their
+  own papers). Any prior-declared or pinned `dust_bump_strength` on `salim_sbl18`
+  beside a nonzero `dust_delta` now maps to a different UV bump amplitude; at
+  δ = +0.3 the bump-to-base ratio at 2175 Å shifts from 0.461 to 0.311 (factor
+  R_V,Cal / R_V,mod ≈ 0.673), and A(2175) / A_V at (δ = 0.3, B = 3) from 2.317
+  to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
+  precision versus ~10% prior miss.
+
 ### Fixed
+
+- Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
 
 - Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
   flat-form builds (e.g. `Parameters(lgmet_scatter=0.3)`), the kwarg now sets
@@ -64,6 +105,17 @@
   detected).
 
 ### Fixed
+
+- Release version now has a single source: `pyproject.toml`. `src/tengri/__init__.py`
+  derives `__version__` via `importlib.metadata`, with a fallback for source-tree
+  installs: in an uninstalled checkout, the version is read from `pyproject.toml`
+  at `tengri._data_setup.source_tree_root()`, the package's one sanctioned anchor
+  for reading repository-relative files (preserving environment isolation; #1431, #2103).
+  `docs/conf.py` derives `release` from the imported `tengri.__version__`.
+  `CITATION.cff` remains a manual copy, but `tools/check_version_single_source.py`
+  (wired to the `lint` job) ensures it never drifts from `pyproject.toml`. Removes
+  the inert `setuptools-scm` requirement and the false assertion in `publish.yml`
+  that full history is needed (#2103).
 
 - `mcmc_nuts_fast` registry row and pmap hint: removed false claim "pmapped chains
   by default", now states "vmapped chains on one device; pmapped when the platform
@@ -435,6 +487,11 @@
 
 
 ### Fixed
+
+- `agn_grahsp_a_bc` parameter description now correctly names the 5100 Å (510 nm)
+  reference wavelength, matching the implementation and upstream GRAHSP. The
+  previous description incorrectly stated 3000 nm, a wavelength at which the
+  Balmer continuum is identically zero (#2158).
 
 - `params_override` now rejects a noise parameter the built likelihood cannot
   read. Noise parameters are only consumed when declared in the spec (free or
@@ -937,6 +994,13 @@
 
 ### Fixed
 
+- **Docs**: `CalibrationELineMarginalizedLikelihood` states in the class
+  docstring that the emission-line block is handled via a plug-in point
+  estimate rather than marginalized, that the log-determinant volume term is
+  not included, and that this understates the uncertainty the line amplitudes
+  contribute. The exact nesting of the two marginalizers is a separate design
+  decision. (#2354)
+
 - The `lognormal` SFH's entry in the `mean_sfh` module index described it as a
   Gaussian in log10(age). The function is a lognormal in cosmic time since
   formation, `T = age − t_lookback`, with a 1/T Jacobian and
@@ -1037,6 +1101,8 @@
 
 ### Fixed
 
+- **FeaturePrecomp docstring now states the line-flux accuracy it was measured to (#2376).** The line LUT reproduces measured line fluxes to 4.8e-5–1.0e-3 relative; against typical 5% line errors that is ≲0.002 σ. This accuracy is now documented in the class docstring where a user chooses the approximation.
+
 - `enable_fast_nebular` now refuses when a CB19 optional parameter
   (`neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is freed. The per-Q_H
   grid bakes these axes at their reference values and cannot respond to the
@@ -1056,6 +1122,8 @@
   `check_docs_voice.py` named a checker that does not exist, so reaching it
   raised `NameError` instead of reporting (the code-cell path at its real
   call site is untouched).
+- A bare `CB19Backend` (without `ssp_data`, so `_lum_scale ≈ 1.25e-46`) returned silently exact-zero gradients for every grid-axis parameter (`neb_co`, `neb_hbfrac`, …) while forward values changed correctly. Traced to the interpolation coordinate being cast to float32 by `_frac_idx` and the tiny cotangent underflowing to exactly 0.0 in the backward pass. The fix keeps the coordinate in float64 throughout (matching the #1568 data-protection pattern), so the cotangent stays in range. On the normal `SEDModel.build` path (with `ssp_data`), the float64 forward outputs move by ≈2e-8 relative (max 1.9e-8 measured on the AGN-inventory build; the regression pin is rtol=1e-7, five times that): the old float32-rounded coordinate had been rounding the interpolation weights, so this is a small precision gain, not a change of model. Not reachable via `SEDModel.build` (which always supplies `ssp_data`); the hazard was direct-backend use only. (#2306)
+
 - The offline filter remedy is now a command that runs. `load_filter`'s
   network-unavailable error hands the user one instruction, and it was wrong
   three ways at once: it named `tools/download_filters.py` while the script
@@ -1075,6 +1143,12 @@
   alias-to-SVO-id pairs, so a reintroduced duplicate goes red. A
   recommendation living in an f-string is executed by nothing, which is why
   none of the three had anything to report it.
+- `test_bma_weights_ranking_agreement` now uses a shared mock fixture so both
+  models score identical data. Model B is model A with `dust_tau_diff` pinned
+  at 1.5 (measured ΔlogZ ≈ 6–7 nats across NSS, HMC+IS, Laplace), designed to
+  separate decisively. The ranking guard fails (not skips) on separation loss
+  below 2σ, treating fixture regression as a test failure (#2364).
+
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
@@ -1093,12 +1167,23 @@
   relative difference up to ~1.0 at z=2.0 in the damped wings, smaller at
   other redshifts -- and changes nothing on the grammar path, which always
   supplied 20.3. Part of #2265.
+- (#2363) The slow inference tier runs as three file-partitioned legs, each
+  printing a pytest summary and its 30 slowest tests inside its budget; a
+  labeled PR whose slow or crossval job is skipped fails ci-ok instead of
+  reading as approval.
+
 - The energy-balance-split closure's docstring tagged its luminosity arguments
   `L_absorbed_stellar` and `L_agn_ir` as `[Lsun]`, while the component path
   supplies both in `erg/s` (component_factory.py:346). The docstring is now
   unit-agnostic ("as passed"), with a note that both arguments must share the
   same units, and the `dust_L_agn_ir` parameter declaration now explicitly
   states `units="erg/s"` (#2251).
+
+- (#2386) The coverage jobs carry the per-test `--timeout=600
+  --timeout-method=thread` again and their own budgets (1.5× the test
+  shard's), so a hung test is named instead of an anonymous budget kill; the
+  two `Resolve test paths` steps are one script, `tools/ci_split_paths.py`,
+  whose empty-list floor is fixed.
 
 - `finalize_profile_mass` reinserts the marginalized mass through one `jax.jit`
   program cached on the model per engine key (draws, keys, data, noise and
@@ -1133,6 +1218,14 @@
   default; that disagreement is left as-is and tracked separately (#2261)
   (#2241).
 
+- Unknown dict keys now name the type's accepted parameter short names (#2176):
+  when a user writes an unknown key like `sfh={'type': 'delayed', 'zzz': 1.0}`
+  with no close difflib match, the error message now includes the type's
+  parameter short names (e.g., "Parameter names this type accepts: tau_gyr,
+  age_gyr"), so the user sees what they can write instead of only the structural
+  keys. For types with many parameters (> 12), the message points to
+  `tengri.describe('<type>')` instead of listing them.
+
 - Dust tree literal defaults aligned with declarations (#2265):
   ``tools/check_literal_param_defaults.py``'s scope widens from
   ``dust/emission/`` to the whole ``dust/`` tree and reports zero
@@ -1157,6 +1250,14 @@
   structural-off 0.0. ``dust_T`` stays ``Fixed(35.0)``, left unchanged
   pending #2261, with per-class constants for the three that disagree;
   ``dust_lgU``'s table/class disagreement is tracked separately (#2261).
+
+- AGN attenuation did-you-mean routes law-form names to the law form (#2201):
+  when a user writes an invalid AGN atten type like `agn={'atten':
+  {'type': 'prevot'}}`, difflib may suggest `smc_prevot` (a law-mapped type).
+  Before the fix, the error message suggested using `type='smc_prevot'`, which
+  itself would be refused with "no longer supported. Use the law form instead"
+  (two hops to the same fix). The message now suggests the law form directly:
+  `law='prevot_smc'` (one hop).
 
 - `vmap_chunked`'s jittability probe caught only `ConcretizationTypeError`,
   believing it the base of the `Tracer*ConversionError` family. On jax
