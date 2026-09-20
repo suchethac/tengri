@@ -76,6 +76,10 @@ jax.config.update("jax_enable_x64", True)
 
 REDSHIFT = 1.0
 
+#: The SSP library this mock is built on. Named once so a figure rebuilding the
+#: same model cannot drift from the script that wrote the truth file.
+SSP_NAME = "fsps_mist_c3k_a_chabrier"
+
 #: X-ray through millimeter: seven decades in wavelength, 4 Angstrom to 3 mm.
 #:
 #: The two Chandra bands are not decoration. ``xray={"type": "yang20",
@@ -290,7 +294,7 @@ def build_joint_observation():
 
 
 def main() -> int:
-    ssp = tengri.load_ssp("fsps_mist_c3k_a_chabrier")
+    ssp = tengri.load_ssp(SSP_NAME)
     obs = build_joint_observation()
     model = build_mock_model(ssp, obs)
 
