@@ -981,6 +981,9 @@ _SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "resolution_matrix": exclude("keyed through the tail with full data content"),
     "_cov_inv": exclude("precomputed inverse of covariance, derived in __post_init__"),
+    "wave_obs_segment_sizes": exclude(
+        "per-camera segment validation; does not change predictions"
+    ),
 }
 
 
