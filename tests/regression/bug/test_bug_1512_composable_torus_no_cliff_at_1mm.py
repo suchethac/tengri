@@ -15,15 +15,14 @@ finite and non-zero at every wavelength up to the template's maximum.
 Reference: GitHub issue #1512.
 """
 
-import pytest
-import numpy as np
 import jax
+import numpy as np
+import pytest
 
 jax.config.update("jax_enable_x64", True)
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-
 
 pytestmark = pytest.mark.regression_bug
 
@@ -162,10 +161,11 @@ def test_composable_torus_no_collapse_at_1mm_vs_monolithic(ssp_data):
         if len(nonzero_torus) > 0:
             min_nonzero = np.min(nonzero_torus)
             assert min_nonzero > 0, (
-                f"sed_agn_torus contains zero or negative values. Minimum: {np.min(sed_agn_torus):.4e}"
+                "sed_agn_torus contains zero or negative values. "
+                f"Minimum: {np.min(sed_agn_torus):.4e}"
             )
 
-    print(f"Test passed:")
+    print("Test passed:")
     print(f"  Monolithic ratio at 1e7 Å: {mono_ratio:.4f}")
     print(f"  Composable ratio at 1e7 Å: {comp_ratio:.4f}")
     print(f"  Relative error: {ratio_error:.2%}")
@@ -273,7 +273,7 @@ def test_composable_torus_with_qsogen_disc(ssp_data):
         f"Error: {ratio_error:.2%}. Before fix: expected ~0.395 (60% step)."
     )
 
-    print(f"Test passed (qsogen disc):")
+    print("Test passed (qsogen disc):")
     print(f"  Monolithic ratio at 1e7 Å: {mono_ratio:.4f}")
     print(f"  Composable ratio at 1e7 Å: {comp_ratio:.4f}")
     print(f"  Relative error: {ratio_error:.2%}")

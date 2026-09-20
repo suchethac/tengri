@@ -1054,7 +1054,9 @@ def skirtor_disc_dust_ratio(
         disk_i_n[last_finite_idx] / disk_0_n[last_finite_idx],
         1.0,  # Fallback if all template nodes are zero (should not happen)
     )
-    incl_n = jnp.where(finite_mask, disk_i_n / jnp.where(finite_mask, disk_0_n, 1.0), last_finite_ratio)
+    incl_n = jnp.where(
+        finite_mask, disk_i_n / jnp.where(finite_mask, disk_0_n, 1.0), last_finite_ratio
+    )
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
     int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
