@@ -1092,17 +1092,26 @@ def _nuts_chain_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
-        """Advance NUTS one step: position, divergence flag, tree depth, leapfrogs."""
+        """Advance NUTS one step: position, divergence flag, tree depth, leapfrogs, energy."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, (
             s.position,
             info.is_divergent,
             info.num_trajectory_expansions,
             info.num_integration_steps,
+            # The Hamiltonian at the accepted state. Carried because the energy
+            # trace is what E-BFMI is computed from, and E-BFMI is the standard
+            # diagnostic for the failure this sampler actually hits on
+            # heavy-tailed priors: a chain that cannot traverse the energy
+            # distribution. A divergence count says something went wrong;
+            # E-BFMI says the geometry is why. One float per draw.
+            info.energy,
         )
 
-    _, (positions, divergent, expansions, n_leapfrog) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, expansions, n_leapfrog
+    _, (positions, divergent, expansions, n_leapfrog, energy) = jax.lax.scan(
+        _step, state, chain_keys
+    )
+    return positions, divergent, expansions, n_leapfrog, energy
 
 
 # ---------------------------------------------------------------------------
