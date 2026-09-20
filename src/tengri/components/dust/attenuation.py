@@ -1164,6 +1164,56 @@ def noll09(
     return jnp.clip(k / k_5500, 0.0)
 
 
+def _sbl18_rv_mod(dust_delta: float, rv_cal: float = 4.05) -> float:
+    r"""Delta-dependent R_V modifier for Salim, Boquien & Lee (2018) Eq. 4.
+
+    This computes R_V,mod(δ), the effective total-to-selective extinction ratio for
+    the modified Calzetti curve when a power-law slope modification δ is applied.
+    The formula is specific to SBL18 and must not be reused for kriek_conroy or
+    noll09, which fix R_V = R_V,Cal by their own papers and have no R_V,mod concept.
+
+    Parameters
+    ----------
+    dust_delta : float
+        Power-law slope modification exponent δ. [dimensionless]
+    rv_cal : float, optional
+        Calzetti R_V reference value. Default: 4.05 (Calzetti 2000).
+        [dimensionless]
+
+    Returns
+    -------
+    float
+        R_V,mod(δ), the delta-dependent total-to-selective extinction ratio.
+        [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+
+    The formula implements Eq. 4 of Salim, Boquien & Lee (2018):
+
+    .. math::
+
+        R_{V,\rm mod} = \frac{R_{V,\rm Cal}}{(R_{V,\rm Cal} + 1)
+        \left(\frac{4400}{5500}\right)^\delta - R_{V,\rm Cal}}
+
+    At δ = 0, this reduces to R_V,mod = R_V,Cal (the unmodified case).
+    For δ ≠ 0, R_V,mod differs from R_V,Cal and must be used to normalize the UV
+    bump term separately from the tilted base curve.
+
+    References
+    ----------
+    .. [1] S. Salim, M. Boquien, and J. C. Lee, "Dust Attenuation Curves in the
+       Local Universe: Demographics and New Laws for Star-forming Galaxies and
+       High-redshift Analogs," ApJ, 859, 11 (2018). arXiv:1804.05850.
+       https://doi.org/10.3847/1538-4357/aabf3c
+    """
+    # Eq. 4: R_V,mod = R_V,Cal / [(R_V,Cal + 1) * (4400/5500)^δ - R_V,Cal]
+    wl_ratio_pow_delta = (4400.0 / 5500.0) ** dust_delta
+    denominator = (rv_cal + 1.0) * wl_ratio_pow_delta - rv_cal
+    return rv_cal / denominator
+
+
 @register_dust_law(
     "salim_sbl18",
     citation="Salim et al. 2018 (ApJ 859, 11)",
@@ -1182,9 +1232,9 @@ def salim_sbl18(
     Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
     The modification order is: **(base × power_law) + bump**.
 
-    This differs from ``noll09`` which applies: ``(base + bump) × power_law``.
-    The SBL18 order is identical to ``kriek_conroy``, but SBL18 additionally
-    uses L02 in the far-UV.
+    This differs from ``noll09`` and ``kriek_conroy``, which both apply:
+    ``(base + bump) × power_law``. The SBL18 order applies the power-law tilt
+    to the base curve only, then adds the untilted UV bump.
 
     Parameters
     ----------
@@ -1202,18 +1252,44 @@ def salim_sbl18(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Attenuation curve k(λ) = k'(λ) / R_V with R_V = 4.05. [dimensionless]
+        Normalized attenuation curve k(λ), with k(5500 Å) = 1. [dimensionless]
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, implementation is safe under ``jax.jit`` and
+    ``jax.grad`` via tracer dispatch.
 
-    The attenuation is:
+    **Normalization:** The UV bump and tilted base are normalized by different
+    divisors: R_V,Cal for the tilted base, and R_V,mod(δ) (Eq. 4) for the bump.
+    This implements Salim, Boquien & Lee (2018) Eq. 3, correcting the pre-v0.12
+    CIGALE method described in footnote 7, which used a single fixed R_V for
+    both terms.
+
+    The attenuation is built from Eq. 3 and Eq. 4. Eq. 3 gives k_mod before
+    the k(5500) normalization:
 
     .. math::
 
-        k(\lambda) = \left[k_{\rm L02+C00}(\lambda) \times \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
-        + E_b D(\lambda; \lambda_0, \gamma)\right] / R_V
+        k_{\rm mod}(\lambda) = k_{\rm L02+C00}(\lambda)
+        \left(\frac{R_{V,\rm mod}}{R_{V,\rm Cal}}\right)
+        \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
+        + E_b D(\lambda; \lambda_0, \gamma)
+
+    where the slope modification exponent is δ, and
+
+    .. math::
+
+        R_{V,\rm mod} = \frac{R_{V,\rm Cal}}{(R_{V,\rm Cal} + 1)
+        \left(\frac{4400}{5500}\right)^\delta - R_{V,\rm Cal}}
+
+    with R_V,Cal = 4.05 (Calzetti 2000). Dividing Eq. 3 by R_V,mod gives the form
+    the code evaluates, ``k' = k_base * slope / R_V,Cal + bump / R_V,mod``: the
+    R_V,mod factor on the tilted base cancels, leaving R_V,Cal as its divisor,
+    while the bump keeps R_V,mod. The result is then divided by k'(5500) so that
+    k(5500 Å) = 1.
+
+    **Validity**: R_V,mod is well-defined for δ < 0.989; the denominator in Eq. 4
+    passes through zero near δ ≈ 0.989. The declared prior Uniform(-1.0, 0.4) is safe.
 
     References
     ----------
@@ -1224,6 +1300,7 @@ def salim_sbl18(
     """
     wave_um = wavelength / 1e4
     rv = 4.05
+    rv_mod = _sbl18_rv_mod(dust_delta, rv_cal=rv)
 
     # Base k'(lambda): L02 below 0.15 um, Calzetti above
     k_base = _calzetti_l02_kprime(wavelength)
@@ -1234,11 +1311,9 @@ def salim_sbl18(
     # Power law slope modification
     slope_mod = (wave_um / 0.55) ** dust_delta
 
-    # SBL18 order: (base * slope_mod) + bump
-    k_prime = k_base * slope_mod + bump
+    # SBL18 order (Eq. 3): normalize tilted base by R_V,Cal and bump by R_V,mod(δ)
+    k_prime = k_base * slope_mod / rv + bump / rv_mod
 
-    # Normalize by fixed Rv (package convention)
-    k = k_prime / rv
     # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.999479)
     # Compute k(5500): k_base(5500) uses UV formula since 5500 Å < 0.63 μm
     wave_5500 = jnp.asarray(5500.0)
@@ -1246,9 +1321,10 @@ def salim_sbl18(
     bump_5500 = dust_bump_strength * _drude_profile(
         jnp.asarray(0.55), x0=dust_bump_x0, gamma=dust_bump_gamma
     )
-    k_prime_5500 = k_base_5500 * 1.0 + bump_5500  # slope_mod(5500) = 1 for any dust_delta
-    k_5500 = k_prime_5500 / rv
-    return jnp.clip(k / k_5500, 0.0)
+    k_prime_5500 = (
+        k_base_5500 * 1.0 / rv + bump_5500 / rv_mod
+    )  # slope_mod(5500) = 1 for any dust_delta
+    return jnp.clip(k_prime / k_prime_5500, 0.0)
 
 
 @register_dust_law(

@@ -53,6 +53,7 @@ from tengri.components.dust.wg00_model import (
 # from _REGISTRY via the dispatch seam (single dispatch, #844/#845), only their
 # config dataclasses are imported. Stellar stays a direct import (the permanent
 # exception: rich SFH+SSP orchestrator, never registry-dispatched).
+from tengri.components.nebular._models import nebular_backend_carries_freefree
 from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
@@ -522,6 +523,12 @@ def build_components(
         If ``False`` no dust component is added (no attenuation, no IR).
     use_radio, use_xray, use_igm : bool
         Add the corresponding adapter to the chain.
+    radio_include_freefree : bool or None
+        Murphy+2011 thermal free-free inclusion. ``None`` (default) means "auto":
+        ``False`` when the declared nebular backend carries a free-free continuum
+        (``"cue"``, ``"cloudy_grid"``; issue #2346), otherwise the
+        :class:`RadioSEDComponentConfig` default rule (``True``; ``False`` for
+        ``sfr_mode="bell2003_split"``). Explicit ``True``/``False`` always wins.
 
     Returns
     -------
@@ -738,6 +745,14 @@ def build_components(
     if use_radio:
         from tengri.components.radio.component import RadioSEDComponentConfig
 
+        # Resolve include_freefree=None to False if the declared nebular backend
+        # carries a free-free continuum (Cue, CloudyGrid). One thermal term on
+        # the whole grid; the nebular continuum owns it when it carries free-free
+        # (issue #2346).
+        include_freefree = radio_include_freefree
+        if include_freefree is None and nebular_backend_carries_freefree(nebular_backend):
+            include_freefree = False
+
         components.append(
             _resolve_registry_component(
                 "radio",
@@ -745,7 +760,7 @@ def build_components(
                 config=RadioSEDComponentConfig(
                     sfr_mode=radio_sfr_mode,
                     agn_radio_model=radio_agn_model,
-                    include_freefree=radio_include_freefree,
+                    include_freefree=include_freefree,
                 ),
             )
         )

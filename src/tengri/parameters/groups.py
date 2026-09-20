@@ -664,6 +664,12 @@ _VALID_AGN_FEII_TYPES = _agn_block_types("feii")
 #: Valid AGN attenuation block types (derived from ``AGN_BLOCKS['attenuation']``).
 _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 
+#: Mapping from AGN atten law names to the type names that wrap them.
+#: When difflib suggests a law-wrapped type (e.g., smc_prevot), we suggest
+#: the law form (e.g., law='prevot_smc') instead to avoid routing through
+#: a type that would itself be refused with "no longer supported".
+_AGN_ATTEN_LAW_TYPES: dict[str, str] = {"smc_prevot": "prevot_smc"}
+
 #: Top-level groups whose ``type`` the round-trip must be able to emit even when
 #: the group declares no parameters of its own. Exported (rather than inlined in
 #: :func:`parameters_to_groups`) so the contract test's census is *derived* from
@@ -4850,6 +4856,11 @@ def _short_names_for_registered_type(type_name: str | None) -> set[str]:
     return out
 
 
+#: Threshold for switching from listing parameter short names to pointing at
+#: `tengri.describe(type)` in error messages. Unreadable in tracebacks if longer
+#: than ~12 names; that surface is the listing mechanism.
+_PARAM_NAMES_LIST_THRESHOLD: int = 12
+
 #: Groups whose per-parameter key set is narrowed to the structural variant the
 #: group dict selected, instead of the union over every variant the group can
 #: dispatch to.
@@ -5569,10 +5580,34 @@ def _check_dict_keys(
             else displayed_structural_keys
         )
         displayed_keys = sorted({k for k in structural_source if k != WILDCARD_KEY})
+
+        # Extract the type from the user dict to show accepted parameter names.
+        # When no close match is found, display the type's accepted parameter
+        # short names (or point to tengri.describe for large types).
+        type_value = user_dict.get("type")
+        param_hint = ""
+        if not suggestions and type_value:
+            # Extract parameter short names by filtering suggestion_pool (already
+            # computed above) to exclude structural keys. Avoids re-deriving names.
+            structural_keys_set = set(displayed_keys) | {WILDCARD_KEY}
+            param_short_names = sorted(
+                {s for s in suggestion_pool if s not in structural_keys_set}
+            )
+            if param_short_names:
+                if len(param_short_names) > _PARAM_NAMES_LIST_THRESHOLD:
+                    param_hint = (
+                        f" Parameter names this type accepts: "
+                        f"use tengri.describe('{type_value}') to list them."
+                    )
+                else:
+                    param_hint = (
+                        f" Parameter names this type accepts: {', '.join(param_short_names)}."
+                    )
+
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{suggest_str} "
             f"Valid structural keys for this group are: "
-            f"{displayed_keys}."
+            f"{displayed_keys}.{param_hint}"
         )
 
 
@@ -6067,7 +6102,7 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 )
 
             # Reject old law-as-type spelling: type='smc_prevot'
-            if type_key in ("smc_prevot", "prevot_smc"):
+            if type_key in _AGN_ATTEN_LAW_TYPES:
                 # Task 16 (item 9, F8): both spellings a caller might try must
                 # reach the working form in ONE message. Before this,
                 # type='prevot_smc' (reversed word order) fell through to the
@@ -6075,11 +6110,13 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 # 'smc_prevot' -- itself ALSO refused by this very check, a
                 # second hop to the same destination. Intercepting both here
                 # means either spelling reaches the fix directly.
+                law_name = _AGN_ATTEN_LAW_TYPES[type_key]
                 raise ValueError(
                     f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    "  agn={'atten': {'law': 'prevot_smc', 'attenuation_ebv': Uniform(...)}}\n"
-                    "'prevot_smc' is the only law this block implements -- it applies "
+                    f"  agn={{'atten': {{'law': {law_name!r}, "
+                    f"'attenuation_ebv': Uniform(...)}}}}\n"
+                    f"{law_name!r} is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
                     "not a new choice. 'attenuation_ebv' is the short spelling of "
                     "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
@@ -6133,7 +6170,25 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         # Validate type
         if block_type not in valid_types:
             suggestions = difflib.get_close_matches(block_type, valid_types, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            # Special case for atten: if a suggestion is a law-wrapped type, suggest the law
+            # form instead. This prevents routing the user through a type that would itself
+            # be refused with "no longer supported".
+            if block_name == "atten" and suggestions:
+                revised_suggestions = []
+                for s in suggestions:
+                    if s in _AGN_ATTEN_LAW_TYPES:
+                        # This type wraps a law; suggest the law form instead
+                        law_name = _AGN_ATTEN_LAW_TYPES[s]
+                        revised_suggestions.append(f"law='{law_name}'")
+                    else:
+                        revised_suggestions.append(s)
+                suggest_str = (
+                    f" Did you mean: {', '.join(revised_suggestions)}?"
+                    if revised_suggestions
+                    else ""
+                )
+            else:
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown agn_{block_name}_block type '{block_type}'.{suggest_str}")
 
         result[block_to_kwarg[block_name]] = block_type

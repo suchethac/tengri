@@ -761,6 +761,11 @@ class FeaturePrecomp:
     *not* allowed for spectral indices, where a break is a flux **ratio** and a
     smooth additive offset does not cancel.
 
+    **Accuracy.** Reproduces measured line fluxes to 4.8e-5–1.0e-3 relative
+    (max over five prior draws on the wNE grid, #2376); against typical 5 %
+    line errors that is ≲0.002 σ. The photometry half's fidelity is measured
+    separately (WavePrecomp, #1671).
+
     **DIG mixing (#2222).** Served from this same table by two lookups --
     HII at ``neb_logU``, DIG at ``neb_logU + neb_dig_delta_logU`` -- mixed by
     ``neb_dig_frac``:
