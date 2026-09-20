@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
+
 ### Fixed
 
 - Shock line ratios are normalized over the populated grid cells, so
