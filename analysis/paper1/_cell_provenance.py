@@ -137,6 +137,12 @@ def audit(results_dir: Path, configs: dict) -> tuple[list[Mismatch], list[str]]:
             continue
         found.setdefault(config, set()).add(prefix)
 
+    # A directory with no cells is not a directory that matches: reporting OK
+    # for it turns "the grid has not started" into "the grid is correct", which
+    # is the reading that costs the most to be wrong about.
+    if not counts:
+        notes.append(f"{Path(results_dir).name}: no cells read, so nothing was verified")
+
     mismatches: list[Mismatch] = []
     for config in configs:
         declared_type = configs[config].get("sfh_type")

@@ -152,3 +152,17 @@ def test_prefix_table_matches_the_live_sfh_registry():
             )
         checked += 1
     assert checked == len(SFH_PREFIX_BY_TYPE)
+
+
+def test_an_empty_directory_does_not_report_a_match(tmp_path):
+    """No cells is not the same as no mismatches.
+
+    Reporting OK for an empty directory turns "the grid has not started" into
+    "the grid is correct", and a caller that gates on the exit status would
+    read a run that produced nothing as a clean run.
+    """
+    configs = {"II": {"sfh_type": "dpl"}}
+    mismatches, notes = audit(tmp_path, configs)
+    assert mismatches == []
+    assert any("no cells read" in note for note in notes)
+    assert banner(tmp_path, mismatches, notes) is not None

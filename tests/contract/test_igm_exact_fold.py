@@ -174,3 +174,59 @@ def test_exact_fold_beats_the_node_fold_where_the_break_is_inside_the_band(ssp, 
         f"exact fold {exact_error:.3%} is not closer to the integrator than "
         f"node fold {node_error:.3%} in {STRADDLING_BAND} at z={PROBE_Z}"
     )
+
+
+def test_more_quadrature_nodes_cannot_substitute_for_the_exact_fold(ssp, observation):
+    """Raising K converges the quadrature to the node fold's answer, not the
+    integrator's.
+
+    The sub-band quadrature order and the IGM fold are separate error axes. In
+    a band whose transmission is structured, the fold sets a floor that no
+    number of quadrature nodes crosses, because the nodes converge on
+    <S><T> rather than <S*T>. Measured at z=0.5 across ten bands: K=5 exact
+    reached 6.9e-4 in GALEX NUV where K=8 node reached only 1.2e-3.
+
+    Without this, someone reading "converges as 1/K^2" reasonably concludes
+    that a stubborn band just needs more nodes, and pays build time for an
+    error that is not quadrature error.
+    """
+    truth = _photometry(_bare_stellar(ssp, observation, None))[STRADDLING]
+    coarse_exact = _photometry(
+        _bare_stellar(
+            ssp,
+            observation,
+            WavePrecomp(band_integration="quadrature", n_subbands=5, igm_fold="exact"),
+        )
+    )[STRADDLING]
+    fine_node = _photometry(
+        _bare_stellar(
+            ssp,
+            observation,
+            WavePrecomp(band_integration="quadrature", n_subbands=8, igm_fold="node"),
+        )
+    )[STRADDLING]
+
+    err_coarse_exact = abs(coarse_exact - truth) / truth
+    err_fine_node = abs(fine_node - truth) / truth
+
+    assert err_coarse_exact < err_fine_node, (
+        f"five exact-fold nodes ({err_coarse_exact:.3e}) should beat eight "
+        f"node-fold nodes ({err_fine_node:.3e}) in {STRADDLING_BAND}: if they do "
+        "not, the fold is no longer the floor and this test's premise has moved"
+    )
+
+
+def test_the_exact_fold_is_free_in_a_band_with_no_structure(ssp, observation):
+    """It must not perturb bands it has no business touching.
+
+    Across ten bands at z=0.5 only GALEX NUV moved; the other nine were
+    bit-identical between the folds. A fold that shifted flat bands too would
+    be changing the photometry for some other reason.
+    """
+    node = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="node")))
+    exact = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="exact")))
+
+    assert node[CONTROL] == exact[CONTROL], (
+        f"the folds differ by {abs(node[CONTROL] - exact[CONTROL]) / node[CONTROL]:.3e} "
+        f"in {CONTROL_BAND}, which carries no IGM structure"
+    )
