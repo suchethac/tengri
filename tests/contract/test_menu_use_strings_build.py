@@ -21,31 +21,22 @@ from tengri.config.exceptions import TengriIOError
 pytestmark = pytest.mark.contract
 
 
+def _all_menus() -> list[tuple[str, list[dict]]]:
+    """Enumerate all tengri.list_* menus for comprehensive sweeps.
+
+    Returns (menu_name, rows) tuples for all list_* functions except list_all.
+    """
+    menus = []
+    listers = [n for n in sorted(dir(tengri)) if n.startswith("list_") and n != "list_all"]
+    for lister_name in listers:
+        menu_rows = getattr(tengri, lister_name)()
+        menus.append((lister_name, menu_rows))
+    return menus
+
+
 def test_menu_use_strings_have_no_trailing_whitespace():
     """Menu use/short_doc/citation strings must be stripped and contain no RST literal markers."""
-    menus_to_check = [
-        ("age_kernels", tengri.list_age_kernels()),
-        ("agn_blocks", tengri.list_agn_blocks()),
-        ("agn_models", tengri.list_agn_models()),
-        ("components", tengri.list_components()),
-        ("dust_emission_models", tengri.list_dust_emission_models()),
-        ("dust_laws", tengri.list_dust_laws()),
-        ("dust_models", tengri.list_dust_models()),
-        ("filters", tengri.list_filters()),
-        ("igm_models", tengri.list_igm_models()),
-        ("inference_methods", tengri.list_inference_methods()),
-        ("instruments", tengri.list_instruments()),
-        ("known_ssps", tengri.list_known_ssps()),
-        ("metallicity_modes", tengri.list_metallicity_modes()),
-        ("nebular_backends", tengri.list_nebular_backends()),
-        ("plots", tengri.list_plots()),
-        ("radio_blocks", tengri.list_radio_blocks()),
-        ("radio_models", tengri.list_radio_models()),
-        ("recipes", tengri.list_recipes()),
-        ("shock_models", tengri.list_shock_models()),
-        ("sfh_models", tengri.list_sfh_models()),
-        ("xray_models", tengri.list_xray_models()),
-    ]
+    menus_to_check = _all_menus()
 
     failures = []
     for menu_name, rows in menus_to_check:
@@ -76,21 +67,31 @@ def test_menu_use_strings_have_no_trailing_whitespace():
 
 def test_use_strings_parse_as_python():
     """Every use string that looks like a Python call must parse correctly."""
-    rows = _get_use_string_parseable_rows()
-
     failures = []
-    for menu_name, entry_name, row in rows:
-        use_str = row.get("use", "")
-        if not use_str:
+
+    # Exclude list_filters from the parse test (filters have no use strings)
+    for menu_name, rows in _all_menus():
+        if menu_name == "list_filters":
             continue
 
-        # Replace "..." with a valid expression so ast.parse works
-        test_str = use_str.replace("...", "None")
+        for row in rows:
+            use_str = row.get("use", "")
+            if not use_str:
+                continue
 
-        try:
-            ast.parse(test_str, mode="eval")
-        except SyntaxError as e:
-            failures.append(f"{menu_name}/{entry_name}: {e}")
+            # Only validate rows where use starts with SEDModel.build(...
+            if not use_str.startswith("SEDModel.build(..., "):
+                continue
+
+            entry_name = row.get("name", "")
+
+            # Replace "..." with a valid expression so ast.parse works
+            test_str = use_str.replace("...", "None")
+
+            try:
+                ast.parse(test_str, mode="eval")
+            except SyntaxError as e:
+                failures.append(f"{menu_name}/{entry_name}: {e}")
 
     if failures:
         pytest.fail("\n".join(failures))
@@ -110,32 +111,6 @@ def bare_stellar_ssp():
 @pytest.fixture(scope="module")
 def observation() -> Observation:
     return Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]))
-
-
-def _get_use_string_parseable_rows() -> list[tuple[str, str, dict]]:
-    """Collect all rows with SEDModel.build use strings.
-
-    Returns (menu_name, entry_name, row) tuples.
-    """
-    rows = []
-
-    # Get all list_* functions except list_all and list_filters
-    listers = [
-        n for n in dir(tengri) if n.startswith("list_") and n not in ("list_all", "list_filters")
-    ]
-
-    for lister_name in sorted(listers):
-        menu_rows = getattr(tengri, lister_name)()
-        for row in menu_rows:
-            use_str = row.get("use", "")
-            if not use_str:
-                continue
-
-            # Only validate rows where use starts with SEDModel.build(...
-            if use_str.startswith("SEDModel.build(..., "):
-                rows.append((lister_name, row.get("name", ""), row))
-
-    return rows
 
 
 def _get_production_menu_rows() -> list[tuple[str, str, dict]]:
