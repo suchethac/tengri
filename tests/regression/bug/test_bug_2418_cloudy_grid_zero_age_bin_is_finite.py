@@ -148,9 +148,10 @@ def test_bug_2418_guard_refuses_non_finite_metallicity():
     mock_grid = _make_synthetic_cloudy_grid()
 
     # The guard should fire with a ValueError naming the axis, index, and value
-    with patch(
-        "tengri.components.nebular.cloudy_grid.load_cloudy_grid", return_value=mock_grid
-    ), pytest.raises(ValueError) as exc_info:
+    with (
+        patch("tengri.components.nebular.cloudy_grid.load_cloudy_grid", return_value=mock_grid),
+        pytest.raises(ValueError) as exc_info,
+    ):
         CloudyGridBackend(
             grid_path="dummy_path.h5",
             ssp_data=ssp,
