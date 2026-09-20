@@ -46,6 +46,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
+TOOLS_DIR = REPO_ROOT / "tools"
 
 # Jobs that run for EVERY pull request, whatever its base. Cheap enough that
 # withholding them would save little and cost the early signal that is the
@@ -175,6 +176,25 @@ def guards_off_labeled(block: str) -> bool:
     return "github.event.action != 'labeled'" not in block
 
 
+def all_guard_files() -> set[str]:
+    """All tools/check_*.py guard files in the repository."""
+    return {f.stem for f in TOOLS_DIR.glob("check_*.py")}
+
+
+def wired_guards() -> set[str]:
+    """All tools/check_*.py guards invoked by ANY workflow.
+
+    Every workflow file counts, not only tests.yml: check_component_page runs
+    in docs.yml and the two notebook guards in notebooks.yml, so a tests.yml-
+    only scan would report three wired guards as orphans.
+    """
+    pattern = r"python tools/(check_[a-z0-9_]+)\.py"
+    wired: set[str] = set()
+    for wf in sorted(WORKFLOW.parent.glob("*.yml")) + sorted(WORKFLOW.parent.glob("*.yaml")):
+        wired.update(re.findall(pattern, wf.read_text(encoding="utf-8")))
+    return wired
+
+
 def main() -> int:
     if not WORKFLOW.is_file():
         print(f"ERROR: cannot read {WORKFLOW.relative_to(REPO_ROOT)}", file=sys.stderr)
@@ -234,6 +254,21 @@ def main() -> int:
         problems.append(
             f"`{name}` is classified in {Path(__file__).name} but no longer\n"
             "exists in the workflow. Drop the stale entry."
+        )
+
+    # Every tools/check_*.py guard must be invoked by at least one workflow
+    # (any file under .github/workflows/, not only tests.yml). A guard that
+    # ships but is never run silently rots, which is the defect #2326 was
+    # opened to prevent: two guards sat unwired for months, one of them the
+    # enforcement NAMING_CONTRACT names for confusable codepoints.
+    orphaned = all_guard_files() - wired_guards()
+
+    for guard in sorted(orphaned):
+        problems.append(
+            f"`tools/{guard}.py` exists but is not invoked by any file under\n"
+            ".github/workflows/. A guard that is never run silently rots.\n"
+            f"Either add `- run: python tools/{guard}.py` to a suitable job,\n"
+            "or delete the orphaned guard and its tests."
         )
 
     if problems:
