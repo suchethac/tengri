@@ -613,6 +613,59 @@ def _valid_dust_laws() -> frozenset[str]:
     return frozenset(DUST_LAWS.keys())
 
 
+def _names_accepted_anywhere() -> frozenset[str]:
+    """Union of every name accepted by any of the 22 grammar validators.
+
+    Consulted by :func:`_hint_for_unknown_name` (via
+    :func:`tengri.citations.resolve.citation_key_hint`'s ``accepted_anywhere``
+    parameter) so an orphaned citation key's hint can never name a value no
+    validator would accept: several association tables key on an internal
+    backend spelling (``cb19_grid``), an author-name alias
+    (``stalevski``), or an inference-backend name (``mcmc_nuts``) that no
+    ``SEDModel.build`` group validates, and naming one of those reads as an
+    instruction the reader could actually type and cannot (#2429 opus review
+    round 2, item 1).
+
+    Derived from the same menu-deriving functions the validators themselves
+    call (:func:`_valid_sfh_types`, :func:`_agn_block_types`, ...), never a
+    hand-maintained list, so this set cannot drift from what
+    :meth:`tengri.SEDModel.build` actually accepts. Looked up at call time,
+    matching the "no caching" convention of the ``_valid_*`` functions it
+    unions, so a newly-registered component is picked up immediately.
+
+    Returns
+    -------
+    frozenset[str]
+        Every accepted SFH / dust-law / dust_emission / dust_attenuation /
+        nebular / shock / IGM / X-ray / radio(sf, agn) / AGN(disc, torus,
+        nlr, blr, feii, atten) / metallicity-mode / foreground-law /
+        top-level-group-key / top-level-AGN-model name, unioned.
+    """
+    from tengri.components.agn.unified import AGN_MODELS, monolithic_agn_model_names
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+
+    names: set[str] = set()
+    names |= _valid_sfh_types()
+    names |= _valid_dust_laws()
+    names |= _valid_dust_emission_types()
+    names |= _VALID_DUST_TYPES
+    names |= _valid_nebular_types()
+    names |= _VALID_SHOCK_TYPES
+    names |= _valid_igm_types()
+    names |= _valid_xray_types()
+    names |= set(SF_RADIO_MODELS)
+    names |= set(AGN_RADIO_MODELS)
+    for category in ("disc", "torus", "nlr", "blr", "feii", "atten"):
+        names |= _agn_block_types(category)
+    names |= _VALID_AGN_ATTEN_LAWS
+    names |= set(MET_REGISTRY.keys())
+    names |= {k for k in _GROUP_STRUCTURAL_KEYS if "." not in k}
+    names |= monolithic_agn_model_names() | set(AGN_MODELS) | {"none"}
+    names |= _VALID_FOREGROUND_LAWS
+    return frozenset(names)
+
+
 def _hint_for_unknown_name(
     kind: str,
     name: str,
@@ -621,6 +674,7 @@ def _hint_for_unknown_name(
     keyword: str | None,
     n_suggestions: int = 2,
     alias_hint: str | None = None,
+    suggestion_rewrite: dict[str, str] | None = None,
 ) -> str:
     """The " Did you mean: ...?" / citation-key hint fragment, leading space included.
 
@@ -634,7 +688,8 @@ def _hint_for_unknown_name(
 
     Shared by :func:`_unknown_name_error` and the handful of call sites whose
     surrounding message does not fit that function's fixed template (the AGN
-    ``atten`` law detail line, the top-level group-key list).
+    ``atten`` law detail line, the top-level group-key list, the top-level
+    AGN model selector).
 
     Parameters
     ----------
@@ -653,6 +708,12 @@ def _hint_for_unknown_name(
     alias_hint : str | None
         If provided and in valid_names, use this as the suggestion instead
         of difflib. Used for alias maps like _NEBULAR_TYPE_HINTS.
+    suggestion_rewrite : dict[str, str] | None
+        Maps a raw difflib suggestion to the display text to show instead
+        (e.g. ``{"smc_prevot": "law='prevot_smc'"}``), for a site where the
+        nearest valid *name* is itself refused and would route the reader
+        through a second hop to the same fix (#2420's AGN ``atten`` block).
+        Suggestions with no entry pass through unchanged.
 
     Returns
     -------
@@ -666,9 +727,18 @@ def _hint_for_unknown_name(
         fallback = f"Did you mean: {alias_hint}?"
     else:
         suggestions = difflib.get_close_matches(name, valid_list, n=n_suggestions, cutoff=0.6)
+        if suggestion_rewrite:
+            suggestions = [suggestion_rewrite.get(s, s) for s in suggestions]
         fallback = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
 
-    hint = citation_key_hint(name, valid_list, kind=kind, keyword=keyword, fallback=fallback)
+    hint = citation_key_hint(
+        name,
+        valid_list,
+        kind=kind,
+        keyword=keyword,
+        fallback=fallback,
+        accepted_anywhere=_names_accepted_anywhere(),
+    )
     return f" {hint}" if hint else ""
 
 
@@ -677,10 +747,11 @@ def _unknown_name_error(
     name: str,
     valid_names: Iterable[str],
     *,
-    keyword: str,
+    keyword: str | None,
     extra: str = "",
     n_suggestions: int = 2,
     alias_hint: str | None = None,
+    suggestion_rewrite: dict[str, str] | None = None,
 ) -> ValueError:
     """Build a ValueError for an unknown name, with citation key hints.
 
@@ -696,8 +767,12 @@ def _unknown_name_error(
         The unknown name the user provided.
     valid_names : Iterable[str]
         Valid registry names for this category.
-    keyword : str
-        The parameter keyword (e.g., "law", "law_bc").
+    keyword : str or None
+        The parameter keyword (e.g., "law", "law_bc"); ``None`` when ``name``
+        is one element of a list-valued field (e.g. a composition entry)
+        rather than a value a caller assigns via ``keyword=`` directly, so
+        "Use keyword='...'" would misdirect the reader into replacing the
+        whole field with a scalar.
     extra : str
         Extra information to append after the suggestion (e.g., " Available: ...").
     n_suggestions : int
@@ -705,6 +780,8 @@ def _unknown_name_error(
     alias_hint : str | None
         If provided and in valid_names, use this as the suggestion instead
         of difflib. Used for alias maps like _NEBULAR_TYPE_HINTS.
+    suggestion_rewrite : dict[str, str] | None
+        See :func:`_hint_for_unknown_name`.
 
     Returns
     -------
@@ -718,6 +795,7 @@ def _unknown_name_error(
         keyword=keyword,
         n_suggestions=n_suggestions,
         alias_hint=alias_hint,
+        suggestion_rewrite=suggestion_rewrite,
     )
     return ValueError(f"Unknown {kind} '{name}'.{hint}{extra}")
 
@@ -3150,13 +3228,21 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
             if type_name not in valid:
+                # keyword=None (#2429 opus review round 2 item 4): this name
+                # is one element of the sfh 'type' list, not a value assigned
+                # via a scalar 'type='; a "Use type='delayed'." remedy reads
+                # as an instruction to replace the WHOLE list with a scalar,
+                # which is wrong. Say where to fix it instead.
                 raise _unknown_name_error(
                     "SFH type",
                     type_name,
                     valid,
-                    keyword="type",
+                    keyword=None,
                     n_suggestions=3,
-                    extra=" This name is in composition.",
+                    extra=(
+                        " This name is in composition. Replace it inside the "
+                        "sfh 'type' list, not with a scalar 'type='."
+                    ),
                 )
             _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
@@ -3219,11 +3305,32 @@ def _translate_met(met_dict: dict, result: dict) -> None:
             "the key of the older met={'type': ...} spelling, which also "
             "still works; this mixes the two.)"
         )
-    _set_met_mode(met_dict.get("type"), result, key="met={'type': ...}")
+    _set_met_mode(met_dict.get("type"), result)
 
 
-def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
-    """Validate a metallicity mode and record it, whichever spelling supplied it."""
+def _set_met_mode(met_mode, result: dict) -> None:
+    """Validate a metallicity mode and record it.
+
+    Parameters
+    ----------
+    met_mode : str or None
+        The ``met={'type': ...}`` value. ``None`` defers to auto-inference
+        from per-param keys.
+    result : dict
+        Parameters kwargs being assembled; ``met_mode`` is written into it.
+
+    Raises
+    ------
+    ValueError
+        If ``met_mode`` is not a registered metallicity mode.
+
+    Notes
+    -----
+    Only :func:`_translate_met` calls this, always with the literal
+    ``met={'type': ...}`` spelling (#2429 opus review round 2 item 5): a
+    ``key`` parameter existed for a caller that never had another spelling
+    to pass, so it is inlined below rather than threaded through.
+    """
     from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
 
     if met_mode is None:
@@ -3237,7 +3344,9 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
             met_mode,
             valid_modes,
             keyword="type",
-            extra=f" This was given in {key}. Valid modes: {', '.join(valid_modes)}.",
+            extra=(
+                f" This was given in met={{'type': ...}}. Valid modes: {', '.join(valid_modes)}."
+            ),
         )
 
     result["met_mode"] = met_mode
@@ -5663,7 +5772,6 @@ def _check_dict_keys(
         # Check if the unknown key is a citation key
         from tengri.citations.resolve import citation_key_hint
 
-        valid_structural = list(suggestion_pool)
         suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
         # A suggestion identical to the rejected key is noise, not help.
         suggestions = [s for s in suggestions if s != str(key)]
@@ -5674,13 +5782,21 @@ def _check_dict_keys(
         # keyword=None: this validates a dict *key* name, not a value assigned
         # via ``keyword=``, so citation_key_hint's "Use key='...'" remedy
         # would not parse as an instruction a caller could type (#2429 opus
-        # review L6).
+        # review L6). valid_names=list(allowed), NOT suggestion_pool
+        # (#2429 opus review round 2 item 6): suggestion_pool unions in
+        # every short parameter name across ALL groups, for the broader
+        # "wrong group, right name" did-you-mean case below -- using that
+        # bloated pool here would report a citation key "valid here"
+        # whenever it happened to resolve to some OTHER group's parameter
+        # name. ``allowed`` is this group's own accepted key set, the true
+        # site scope.
         hint = citation_key_hint(
             str(key),
-            valid_structural,
+            list(allowed),
             kind=f"key for group {group!r}",
             keyword=None,
             fallback=fallback,
+            accepted_anywhere=_names_accepted_anywhere(),
         )
         if hint:
             hint = f" {hint}"
@@ -5960,8 +6076,11 @@ def _validate_agn_top_type(top_type: str) -> None:
             f"  agn={{'type': 'composable', {where!r}: {{'type': {top_type!r}, ...}}}}"
         )
 
-    suggestions = difflib.get_close_matches(top_type, sorted(valid), n=2, cutoff=0.6)
-    hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+    # keyword="type" (#2429 opus review round 2 item 2): a citation key
+    # given here (e.g. 'buchner2024') gets the same recognition as every
+    # other routed site -- previously this was the one top-level type
+    # selector still difflib-only.
+    hint = _hint_for_unknown_name("AGN model", top_type, sorted(valid), keyword="type")
     raise ConfigError(
         f"agn['type']={top_type!r} is not an AGN model.{hint} "
         f"Models: {sorted(valid)}. Composable block types are selected per "

@@ -359,7 +359,7 @@ def citation_key_hint(
         "Use key='...'" does not parse as an instruction a caller could type.
     accepted_anywhere : frozenset of str
         Every name accepted by *any* routed grammar validator (see
-        :func:`tengri.parameters.groups._names_accepted_anywhere`). A
+        ``tengri.parameters.groups._names_accepted_anywhere``). A
         resolved citation-key name outside this set is filtered out before
         it can ever be reported: several association tables key on an
         internal/backend spelling (``"cb19_grid"``, an author-name alias

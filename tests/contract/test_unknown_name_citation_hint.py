@@ -7,13 +7,69 @@ explain which registry entry it cites, rather than falling back to difflib
 suggestions alone.
 """
 
+import re
+
 import pytest
 
-from tengri.citations.resolve import registry_names_for_citation_key
+from tengri.citations import associations as _assoc
+from tengri.citations.resolve import (
+    _REGISTRY_NAMESPACE_TABLES,
+    NAME_TO_BIBKEY,
+    citation_key_hint,
+    registry_names_for_citation_key,
+)
 from tengri.parameters import Fixed
-from tengri.parameters.groups import parse_groups
+from tengri.parameters.groups import _names_accepted_anywhere, parse_groups
 
 pytestmark = pytest.mark.contract
+
+
+def _every_routed_site_menu() -> dict[str, frozenset[str]]:
+    """The 22 routed validators' own ``valid_names``, kept separate (not
+    unioned) so a sweep can check the "valid at site" branch names only
+    values that site itself accepts, independent of
+    :func:`_names_accepted_anywhere`'s union (#2429 opus review round 2,
+    item 1's exhaustive sweep). Built from the same menu-deriving functions
+    the validators call, never a hand list.
+    """
+    import tengri.parameters.groups as g
+    from tengri.components.agn.unified import AGN_MODELS, monolithic_agn_model_names
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+
+    menus = {
+        "SFH type": g._valid_sfh_types(),
+        "dust law": g._valid_dust_laws(),
+        "dust_emission type": g._valid_dust_emission_types(),
+        "dust_attenuation type": frozenset(g._VALID_DUST_TYPES),
+        "nebular type": g._valid_nebular_types(),
+        "shock type": frozenset(g._VALID_SHOCK_TYPES),
+        "IGM type": g._valid_igm_types(),
+        "X-ray type": g._valid_xray_types(),
+        "radio sf type": frozenset(SF_RADIO_MODELS),
+        "radio agn type": frozenset(AGN_RADIO_MODELS),
+        "dust law (agn atten)": frozenset(g._VALID_AGN_ATTEN_LAWS),
+        "metallicity mode": frozenset(MET_REGISTRY.keys()),
+        "group key": frozenset(k for k in g._GROUP_STRUCTURAL_KEYS if "." not in k),
+        "AGN model": monolithic_agn_model_names() | set(AGN_MODELS) | {"none"},
+        "foreground law": frozenset(g._VALID_FOREGROUND_LAWS),
+    }
+    for category in ("disc", "torus", "nlr", "blr", "feii", "atten"):
+        menus[f"agn.{category} type"] = g._agn_block_types(category)
+    return menus
+
+
+def _every_citation_key() -> list[str]:
+    """Every distinct BibTeX key referenced anywhere the reverse lookup
+    sweeps: :data:`NAME_TO_BIBKEY`'s values and every value list in the
+    tables :data:`_REGISTRY_NAMESPACE_TABLES` names."""
+    keys: set[str] = set(NAME_TO_BIBKEY.values())
+    for attr, _kind in _REGISTRY_NAMESPACE_TABLES:
+        table = getattr(_assoc, attr)
+        for v in table.values():
+            if isinstance(v, list):
+                keys.update(v)
+    return sorted(keys)
 
 
 class TestCitationKeyRecognition:
@@ -30,8 +86,9 @@ class TestCitationKeyRecognition:
         error_msg = str(exc_info.value)
         assert "citation key" in error_msg.lower()
         assert "power_law" in error_msg
-        # The error should use the keyword the caller used
-        assert "law=" in error_msg or "law" in error_msg
+        # The exact remedy, not merely a substring that would pass on any
+        # mention of "law" (#2429 opus review round 2 item 7).
+        assert "Use law='power_law'." in error_msg
 
     def test_dust_law_citation_key_two_component_law_bc(self):
         """Providing 'charlot_fall2000' as law_bc on two_component should explain it."""
@@ -48,8 +105,9 @@ class TestCitationKeyRecognition:
         error_msg = str(exc_info.value)
         assert "citation key" in error_msg.lower()
         assert "power_law" in error_msg
-        # Should mention the keyword used
-        assert "law_bc" in error_msg or "law" in error_msg
+        # The exact remedy, not merely a substring that would pass on any
+        # mention of "law_bc" (#2429 opus review round 2 item 7).
+        assert "Use law_bc='power_law'." in error_msg
 
     def test_dust_law_typo_unchanged(self):
         """A non-citation typo like 'calzeti' should still get difflib suggestion."""
@@ -110,8 +168,9 @@ class TestCitationKeyRecognition:
         # Should say it's a citation key for power_law (dust law)
         assert "citation key" in error_msg.lower()
         assert "power_law" in error_msg
-        # Should say it's not valid for nebular type
-        assert "not" in error_msg.lower() or "dust" in error_msg.lower()
+        # The exact "not valid" sentence, not a substring that would pass on
+        # any mention of "not" or "dust" (#2429 opus review round 2 item 7).
+        assert "power_law (dust law), not a valid nebular type." in error_msg
 
     def test_sfh_type_citation_key(self):
         """Citation key for SFH type is recognized, and lists both names it cites.
@@ -270,3 +329,169 @@ class TestCitationKeyRecognition:
             )
         error_msg = str(exc_info.value)
         assert "or another from" not in error_msg
+        # The exact remedy sentence (#2429 opus review round 2 item 7).
+        assert "Use type='dpl' or type='delayed'." in error_msg
+
+    def test_sfh_composition_site_names_composition(self):
+        """H1: a non-citation typo inside the sfh 'type' list still says so.
+
+        Pins the exact wording, unlike the scalar-site message, so a
+        regression that drops the composition context (or the caller
+        keyword) is caught (#2429 opus review round 2 item 7: H1 had no
+        pinning assert -- the test file passed on the round-1 source even
+        after this wording regressed).
+        """
+        with pytest.raises(ValueError) as exc_info:
+            parse_groups(
+                sfh={"type": ["dpl", "xyzbad"]},
+                dust_attenuation={"type": "single_component", "law": "calzetti"},
+                redshift=Fixed(0.1),
+            )
+        error_msg = str(exc_info.value)
+        assert "in composition" in error_msg
+        # keyword=None here (#2429 opus review round 2 item 4): no remedy
+        # would tell the reader to replace the whole list with a scalar.
+        assert "Use type=" not in error_msg
+
+    def test_met_mode_error_names_the_spelling(self):
+        """H2: the metallicity-mode error names the ``met={'type': ...}`` spelling.
+
+        Pins the exact wording (#2429 opus review round 2 item 7: H2 had no
+        pinning assert).
+        """
+        with pytest.raises(ValueError) as exc_info:
+            parse_groups(
+                sfh={"type": "dpl"},
+                dust_attenuation={"type": "single_component", "law": "calzetti"},
+                met={"type": "tabl"},
+                redshift=Fixed(0.1),
+            )
+        error_msg = str(exc_info.value)
+        assert "met={'type': ...}" in error_msg
+
+    def test_dust_emission_shows_three_suggestions(self):
+        """H3: the dust_emission site shows up to three difflib suggestions.
+
+        'dael2014' is close to three real dust_emission types; the round-1
+        source silently capped this site back to the default two
+        (#2429 opus review round 2 item 7: H3 had no pinning assert).
+        """
+        with pytest.raises(ValueError) as exc_info:
+            parse_groups(
+                sfh={"type": "dpl"},
+                dust_attenuation={"type": "single_component", "law": "calzetti"},
+                dust_emission={"type": "dael2014"},
+                redshift=Fixed(0.1),
+            )
+        error_msg = str(exc_info.value)
+        for name in ("dale2014", "draine_li2014", "dl14"):
+            assert name in error_msg
+
+    def test_check_dict_keys_citation_hint_has_a_space(self):
+        """H4/L6: the ``_check_dict_keys`` citation hint has a leading space.
+
+        The round-1 regression ran the closing quote of the group name
+        straight into "That is a citation key" with no space; pins the
+        space and the L6 remedy suppression together (#2429 opus review
+        round 2 item 7).
+        """
+        with pytest.raises(ValueError) as exc_info:
+            parse_groups(
+                sfh={"type": "dpl"},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "charlot_fall2000": 1,
+                },
+                redshift=Fixed(0.1),
+            )
+        error_msg = str(exc_info.value)
+        assert "'. That is" in error_msg
+        # L6: a dict *key* name has no "Use key='...'" remedy to show.
+        assert "Use key=" not in error_msg
+
+
+class TestAcceptedAnywhereSweep:
+    """Item 1 (round 2): a citation-key hint may only name a value some
+    grammar validator accepts.
+
+    Exhaustive over every citation key in the reverse-lookup universe times
+    every routed site's own menu: no message may name a value that site's
+    own validator rejects (the "valid at this site" branch is restricted to
+    ``valid_names`` by construction, so this is really checking the "not
+    valid here" branch never smuggles in a name from outside its own site
+    either), and no message may name a value *no* validator accepts
+    anywhere (the accepted-anywhere filter).
+    """
+
+    def test_no_hint_names_a_value_outside_the_accepted_anywhere_union(self):
+        """Every citation key, queried with no valid_names at all (forcing
+        the "not valid here" branch whenever it resolves to anything), must
+        never name something outside :func:`_names_accepted_anywhere`."""
+        accepted = _names_accepted_anywhere()
+        checked = 0
+        for key in _every_citation_key():
+            hint = citation_key_hint(key, [], kind="x", keyword="type", accepted_anywhere=accepted)
+            checked += 1
+            if not hint:
+                continue
+            match = re.search(r"citation key for ([^(),.]+)", hint)
+            assert match is not None, f"unexpected hint shape for {key!r}: {hint!r}"
+            for name in (n.strip() for n in match.group(1).split(",")):
+                assert name in accepted, (
+                    f"{key!r} names {name!r}, which no grammar validator accepts: {hint!r}"
+                )
+        assert checked >= 50, "sweep did not iterate the expected citation-key universe"
+
+    def test_no_hint_at_any_site_names_a_value_that_site_rejects(self):
+        """Every citation key, at every routed site's own menu, must never
+        show a remedy naming a value outside *that site's* accepted names."""
+        accepted = _names_accepted_anywhere()
+        menus = _every_routed_site_menu()
+        keys = _every_citation_key()
+        checked = 0
+        for kind, valid_names in menus.items():
+            for key in keys:
+                hint = citation_key_hint(
+                    key,
+                    list(valid_names),
+                    kind=kind,
+                    keyword="type",
+                    accepted_anywhere=accepted,
+                )
+                checked += 1
+                if not hint or "Use type=" not in hint:
+                    continue
+                for remedy_name in re.findall(r"type='([^']+)'", hint):
+                    assert remedy_name in valid_names, (
+                        f"{key!r} at site {kind!r} suggests {remedy_name!r}, "
+                        f"which that site rejects: {hint!r}"
+                    )
+        assert checked == len(menus) * len(keys)
+
+    def test_byler2017_at_neb_names_an_accepted_selector(self):
+        """The concrete "good" case: byler2017 (cited by the cb19_grid and
+        baked_in nebular backends) names a selector neb.type actually
+        accepts, not the internal backend spelling."""
+        menus = _every_routed_site_menu()
+        hint = citation_key_hint(
+            "byler2017",
+            list(menus["nebular type"]),
+            kind="nebular type",
+            keyword="type",
+            accepted_anywhere=_names_accepted_anywhere(),
+        )
+        assert "cb19" in hint or "ssp" in hint
+
+    def test_buchner2024_at_agn_names_grahsp(self):
+        """The concrete "good" case named in the ruling: buchner2024 (the
+        GRAHSP citation) names 'grahsp' at a site that accepts it."""
+        menus = _every_routed_site_menu()
+        hint = citation_key_hint(
+            "buchner2024",
+            list(menus["agn.torus type"]),
+            kind="agn.torus type",
+            keyword="type",
+            accepted_anywhere=_names_accepted_anywhere(),
+        )
+        assert "grahsp" in hint
