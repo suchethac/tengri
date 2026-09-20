@@ -1648,8 +1648,9 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     high redshifts where ``age_at_z(z) < max_edge``, bins beyond cosmic time
     become unreachable (they lie before the Big Bang), making those bins'
     parameters identically inert with zero gradient. This check refuses the
-    build and names the unreachable edges, pointing to ``met_bin_edges_log_yr``
-    as the remedy.
+    build and names the unreachable edges, noting that the bin ladder is not
+    yet configurable through ``SEDModel.build()`` and pointing to issue #2433
+    for future support.
 
     Mutates nothing; raises instead of silently accepting an invalid config.
 
@@ -1668,7 +1669,7 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
         If the metallicity mode is 'bins' or 'bins_continuity', the redshift
         is fixed or free (both checked), and any bin edge exceeds ``age_at_z(z)``.
         The message names the unreachable edges (in Gyr) and cosmic age,
-        pointing to ``met_bin_edges_log_yr`` as the remedy.
+        noting that the bin ladder is not yet configurable (see #2433).
 
     Notes
     -----
@@ -1695,16 +1696,8 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     if met_type not in ("bins", "bins_continuity"):
         return  # No lookback-time bins to check
 
-    # Read bin edges from config, or use default
-    bin_edges_log_yr = met_block.get("met_bin_edges_log_yr")
-    if bin_edges_log_yr is None:
-        bin_edges_log_yr = _DEFAULT_MET_BIN_EDGES_LOG_YR
-    else:
-        # Ensure it's a list-like
-        try:
-            bin_edges_log_yr = list(bin_edges_log_yr)
-        except TypeError:
-            return  # Not iterable; let later validation catch it
+    # Use the default bin edges (no build-time override path yet; see #2433).
+    bin_edges_log_yr = _DEFAULT_MET_BIN_EDGES_LOG_YR
 
     # Convert log10(yr) to Gyr: 10^x yr = 10^(x-9) Gyr
     bin_edges_gyr = [10.0 ** (log_yr - 9.0) for log_yr in bin_edges_log_yr]
@@ -1738,9 +1731,9 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
         f"cosmic age is {cosmic_age_gyr:.4g} Gyr, but bin edges reach "
         f"{edges_str} Gyr. These bins are unreachable (lie before the Big Bang) "
         f"and their parameters will be identically inert.\n\n"
-        f"Remedy: pass met={{'type': '{met_type}', "
-        f"'met_bin_edges_log_yr': [...]}} with edges fitting inside the cosmic "
-        f"age, or use a lower redshift where all bins are reachable. "
+        f"The bin ladder is not yet configurable through SEDModel.build() "
+        f"(see issue #2433 for future support). For now, use a lower redshift "
+        f"where all bins are reachable, or use a different metallicity mode. "
         f"See issue #2204."
     )
 

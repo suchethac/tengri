@@ -70,8 +70,10 @@ class TestMetBinsCosmicAgeBuild:
         assert f"{expected_age:.2f}" in error_msg or f"{expected_age:.1f}" in error_msg, (
             f"Error should name cosmic age ({expected_age:.2f} Gyr); got: {error_msg}"
         )
-        assert "met_bin_edges_log_yr" in error_msg, (
-            f"Error should point to met_bin_edges_log_yr as remedy; got: {error_msg}"
+        # Error should point to the real remedy and cite issue #2433
+        assert "2433" in error_msg or "not yet configurable" in error_msg, (
+            f"Error should reference issue #2433 or note that ladder is "
+            f"not yet configurable; got: {error_msg}"
         )
 
     def test_met_bins_accepted_at_low_z(self, synthetic_ssp, simple_observation):
@@ -93,22 +95,14 @@ class TestMetBinsCosmicAgeBuild:
         )
         assert model is not None
 
-    def test_user_ladder_inside_cosmic_age_builds_at_high_z(
-        self, synthetic_ssp, simple_observation
-    ):
-        """ASPIRATIONAL: user ladder override will allow rescue at high-z.
+    def test_refusal_names_the_real_remedy(self, synthetic_ssp, simple_observation):
+        """Refusal message names the actual remedy: lower redshift or different met mode.
 
-        Issue #2204 fix includes a path for users to provide custom `met_bin_edges_log_yr`
-        to rescue builds that fail at high redshift. This test documents the intended
-        behavior: at z=0.66 (age=7.55 Gyr), the default ladder fails because bin 5
-        spans 7.94-13.8 Gyr. A user-provided ladder with edges <= 7.55 would succeed.
-
-        This test is aspirational: the grammar currently does not yet accept
-        `met_bin_edges_log_yr` in the `met` group dict. Once #2204 grammar is
-        extended to support this (future work), this test will verify the override.
-
-        For now, we verify that the refusal message correctly names the remedy:
-        the error should point to `met_bin_edges_log_yr` as the solution.
+        At z=0.66 (age=7.55 Gyr), the default ladder fails because bin 5 spans
+        7.94-13.8 Gyr. The bin ladder is not configurable through SEDModel.build()
+        (see issue #2433). The refusal message should point users to the actual
+        available remedies: use a lower redshift where all bins are reachable, or
+        use a different metallicity mode (not 'bins' or 'bins_continuity').
         """
         z = 0.66
         expected_age = age_at_z(z)
@@ -118,8 +112,9 @@ class TestMetBinsCosmicAgeBuild:
 
         obs = simple_observation
 
-        # Current behavior: default ladder is refused at z=0.66.
-        # Error message should point to met_bin_edges_log_yr as the remedy.
+        # Default ladder is refused at z=0.66.
+        # Error message should point to the actual remedy: lower redshift or different mode,
+        # and cite issue #2433 for future configurability.
         with pytest.raises(ParameterError) as exc_info:
             SEDModel.build(
                 ssp_data=synthetic_ssp,
@@ -130,7 +125,8 @@ class TestMetBinsCosmicAgeBuild:
             )
 
         error_msg = str(exc_info.value)
-        # Error should name the remedy: met_bin_edges_log_yr
-        assert "met_bin_edges_log_yr" in error_msg, (
-            f"Error should point to met_bin_edges_log_yr as remedy; got: {error_msg}"
+        # Error should name the problem and point to the actual remedy
+        assert "2433" in error_msg or "not yet configurable" in error_msg, (
+            f"Error should reference issue #2433 or note that ladder is not yet configurable; "
+            f"got: {error_msg}"
         )
