@@ -596,6 +596,17 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
     )
 
 
+def _process_float_dtype_name() -> str:
+    """Name of the canonical float dtype of the current process: ``'float64'`` under x64,
+    ``'float32'`` otherwise.
+
+    The SKIRTOR grid loaders below key their ``functools.cache`` on this string so that
+    device arrays built under one x64 state are never handed to a forward running under
+    the other (#2275; the same disease as #1392 and #2024).
+    """
+    return jax.dtypes.canonicalize_dtype(float).name
+
+
 @functools.cache
 def _load_skirtor_default_grid_for(float_dtype_name: str) -> SKIRTORGrid:
     """Cached default SKIRTOR grid arrays (first grid file found on disk).
@@ -612,7 +623,7 @@ def _load_skirtor_default_grid() -> SKIRTORGrid:
     Mechanism: caches are keyed on process float dtype so a float32 arm
     never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
-    float_dtype = jax.dtypes.canonicalize_dtype(jax.numpy.float_).name
+    float_dtype = _process_float_dtype_name()
     return _load_skirtor_default_grid_for(float_dtype)
 
 
@@ -1160,7 +1171,7 @@ def _load_raw_disk_dust_grid() -> SkirtorDiscDustGrid | None:
     Mechanism: caches are keyed on process float dtype so a float32 arm
     never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
-    float_dtype = jax.dtypes.canonicalize_dtype(jax.numpy.float_).name
+    float_dtype = _process_float_dtype_name()
     return _load_raw_disk_dust_grid_for(float_dtype)
 
 
@@ -1364,7 +1375,7 @@ def _load_skirtor_default():
     Mechanism: caches are keyed on process float dtype so a float32 arm
     never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
-    float_dtype = jax.dtypes.canonicalize_dtype(jax.numpy.float_).name
+    float_dtype = _process_float_dtype_name()
     return _load_skirtor_default_for(float_dtype)
 
 
@@ -1390,7 +1401,7 @@ def _load_skirtor_components():
     Mechanism: caches are keyed on process float dtype so a float32 arm
     never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
-    float_dtype = jax.dtypes.canonicalize_dtype(jax.numpy.float_).name
+    float_dtype = _process_float_dtype_name()
     return _load_skirtor_components_for(float_dtype)
 
 
@@ -1586,7 +1597,7 @@ def _load_skirtor_disc_attenuation():
     Mechanism: caches are keyed on process float dtype so a float32 arm
     never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
-    float_dtype = jax.dtypes.canonicalize_dtype(jax.numpy.float_).name
+    float_dtype = _process_float_dtype_name()
     return _load_skirtor_disc_attenuation_for(float_dtype)
 
 
@@ -1639,7 +1650,7 @@ def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
     Mechanism: caches are keyed on process float dtype so a float32 arm
     never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
-    float_dtype = jax.dtypes.canonicalize_dtype(jax.numpy.float_).name
+    float_dtype = _process_float_dtype_name()
     return load_skirtor_disc_atten_grid_for(float_dtype)
 
 
