@@ -3053,6 +3053,14 @@ class StellarSEDComponent:
                 jnp.einsum("ma,maf->f", joint_weights, ssp_phot), total_mass
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
+            # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
+            # component to apply the neb_fesc mask (#2439, #2427).
+            ssp_phot_lyc = self._state.ssp_phot_lut.ssp_phot_lyc
+            if ssp_phot_lyc is not None:
+                stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
             # Age-resolved per-filter LUT for two-component
             # dust attenuation. Marginalize over metallicity only; preserve
             # the age axis. Shape (n_age, n_filter). Sum over age == the
@@ -3171,6 +3179,13 @@ class StellarSEDComponent:
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
+            # Lyman continuum photometry at runtime z (#2439, #2427).
+            if ztable.ssp_phot_lyc_table is not None:
+                ssp_lyc_at_z = _interp(ztable.ssp_phot_lyc_table)
+                stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_lyc_at_z), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
             # Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalized + per-age.
             if ztable.ssp_phot_moment_table is not None:

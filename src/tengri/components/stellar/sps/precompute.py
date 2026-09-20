@@ -146,6 +146,12 @@ class PhotometricPrecomputation(NamedTuple):
         The REST-frame band lives in :class:`RestBandPrecomputation`, built once by
         :func:`precompute_restband_photometry` and carried on the stellar component's
         state: one builder for the fixed-z and free-z paths alike (#1148).
+    ssp_phot_lyc : array or None, shape (n_met, n_age, n_filters)
+        SSP broadband flux restricted to rest-frame λ < 912 Ångström
+        (Lyman continuum) per metallicity, age, and filter [erg/s/Hz/Msun].
+        Used to apply the nebular ``neb_fesc`` mask in ``predict_via_precomp``:
+        ``stellar_phot_lnu_precomp - (1 - neb_fesc) * ssp_phot_lyc``. None unless
+        explicitly computed (#2439).
 
     Notes
     -----
@@ -165,6 +171,7 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_phot: "jnp.ndarray | None" = None
     ssp_subband_waves_rest: "jnp.ndarray | None" = None
     ssp_subband_phot_igm: "jnp.ndarray | None" = None
+    ssp_phot_lyc: "jnp.ndarray | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -306,6 +313,7 @@ def precompute_photometry(
         n_filters=preint.n_filters,
         ssp_subband_phot=preint.subband_phot,
         ssp_subband_waves_rest=preint.subband_waves_rest,
+        ssp_phot_lyc=preint.lyc_phot,
     )
 
 
@@ -622,6 +630,9 @@ class PhotometricZTable(NamedTuple):
     #: cache key needs no IGM term). ``None`` when the IGM is absent or reads free
     #: parameters (patchy reionization, DLAs).
     ssp_subband_phot_igm_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < 912 Å)
+    #: at each redshift (#2439, #2427). ``None`` when not explicitly computed.
+    ssp_phot_lyc_table: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -800,6 +811,11 @@ def precompute_photometry_ztable(
                         if "subband_waves_rest_table" in d.files
                         else None
                     ),
+                    ssp_phot_lyc_table=(
+                        jnp.array(d["ssp_phot_lyc_table"])
+                        if "ssp_phot_lyc_table" in d.files
+                        else None
+                    ),
                 )
 
     table = _compute_photometry_ztable(
@@ -831,6 +847,8 @@ def precompute_photometry_ztable(
         if table.ssp_subband_phot_table is not None:
             payload["ssp_subband_phot_table"] = np.asarray(table.ssp_subband_phot_table)
             payload["subband_waves_rest_table"] = np.asarray(table.subband_waves_rest_table)
+        if table.ssp_phot_lyc_table is not None:
+            payload["ssp_phot_lyc_table"] = np.asarray(table.ssp_phot_lyc_table)
         # Atomic publish: concurrent builds of the same key race benignly.
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".npz.tmp")
         try:
@@ -930,6 +948,8 @@ def _compute_photometry_ztable(
     subband_waves_all = (
         np.zeros((n_z_pts, n_met, n_age, n_filters, K), dtype=np.float64) if K > 0 else None
     )
+    # Lyman continuum photometry (rest λ < 912 Å) (#2439, #2427).
+    ssp_phot_lyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters))
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
@@ -995,6 +1015,33 @@ def _compute_photometry_ztable(
             num = _np_trapezoid(integrand, grid, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
+            # Lyman continuum photometry: rest λ < 912 Å (#2439, #2427).
+            # Use cumulative trapezoid to extract the integral over [grid_min, 912*(1+z)]
+            # on the observed-frame grid.
+            lyc_wave_obs = 912.0 * (1.0 + z_val)
+            if np.any(grid < lyc_wave_obs):
+                cum_integrand = _cumtrapz_rows(integrand, grid[None, :])  # (n_met*n_age, len(grid))
+                # Reshape to (n_met, n_age, len(grid)) for later use
+                cum_integrand_reshaped = cum_integrand.reshape(n_met, n_age, -1)
+                # Interpolate cumulative integral at the Lyman limit
+                lyc_idx = np.searchsorted(grid, lyc_wave_obs)
+                if lyc_idx > 0 and lyc_idx < len(grid):
+                    # Interpolate the cumulative integral at lyc_wave_obs
+                    cum_at_lyc = _interp_rows(
+                        np.array([lyc_wave_obs]), grid, cum_integrand_reshaped
+                    )  # (n_met, n_age, 1)
+                    lyc_num = cum_at_lyc[:, :, 0]
+                elif lyc_idx >= len(grid):
+                    # Lyman limit is beyond all grid points; take everything
+                    lyc_num = cum_integrand_reshaped[:, :, -1]
+                else:
+                    # Lyman limit is before all grid points; zero LyC
+                    lyc_num = 0.0
+                ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom, 1e-30)
+            else:
+                # No grid points below the Lyman limit; zero LyC photometry
+                ssp_phot_lyc_all[zi, :, :, f_idx] = 0.0
+
             # Taylor moment Ψ at this z and filter.
             # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
             # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
@@ -1040,6 +1087,7 @@ def _compute_photometry_ztable(
         subband_waves_rest_table=(
             jnp.array(subband_waves_all) if subband_waves_all is not None else None
         ),
+        ssp_phot_lyc_table=jnp.array(ssp_phot_lyc_all),
     )
 
 

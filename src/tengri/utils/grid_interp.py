@@ -191,6 +191,11 @@ class PreintegratedGrid:
         so it tracks the spectrum. [Ångström]
     subband_waves_rest : jnp.ndarray or None
         (*grid_dims, n_filters, n_subbands). Same nodes, rest frame. [Ångström]
+    lyc_phot : jnp.ndarray or None
+        (*grid_dims, n_filters). Filter-integrated photometry restricted to
+        rest-frame λ < 912 Ångström (Lyman continuum), or None if not computed.
+        Used to apply the nebular Lyman-continuum escape fraction mask to the
+        stellar photometric LUT.
     axes : tuple[jnp.ndarray, ...]
         One array per grid dimension, giving node coordinates.
     edges : tuple[jnp.ndarray, ...]
@@ -220,6 +225,7 @@ class PreintegratedGrid:
     subband_phot: jnp.ndarray | None = None
     subband_waves: jnp.ndarray | None = None
     subband_waves_rest: jnp.ndarray | None = None
+    lyc_phot: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -435,6 +441,7 @@ def preintegrate_grid(
     # the SAME union grid so the moment Ψ vanishes for a flat template.
     eff_waves_obs = np.zeros(n_filters)
     phot_flat = np.zeros((n_grid_points, n_filters))
+    lyc_phot_flat = np.zeros((n_grid_points, n_filters))
     moment_flat = np.zeros((n_grid_points, n_filters)) if taylor else None
     K = int(n_subbands)
     sub_phot = np.zeros((n_grid_points, n_filters, K)) if K > 0 else None
@@ -469,6 +476,35 @@ def preintegrate_grid(
         num = _np_trapezoid(integrand, grid, axis=-1)
         phot_flat[:, f_idx] = num / np.maximum(denom, representable_denominator(1e-30))
 
+        # Compute Lyman continuum photometry: restrict to rest λ < 912 Å.
+        # Use cumulative trapezoid to extract the integral over [grid_min, 912*(1+z)]
+        # on the observed-frame grid. This produces an exact split matching the dense
+        # path's masking (state.sed_intrinsic * lyc_transmission where wave < 912).
+        lyc_wave_obs = 912.0 * (1.0 + redshift)
+        if np.any(grid < lyc_wave_obs):
+            # Clamp the grid to [grid_min, lyc_wave_obs] for LyC integration
+            cum_integrand = _cumtrapz_rows(integrand, grid[None, :])  # (n_grid_points, len(grid))
+            # Interpolate cumulative integral at the Lyman limit
+            lyc_idx = np.searchsorted(grid, lyc_wave_obs)
+            if lyc_idx > 0 and lyc_idx < len(grid):
+                # Interpolate the cumulative integral at lyc_wave_obs
+                cum_at_lyc = _interp_rows(
+                    np.array([lyc_wave_obs]), grid, cum_integrand
+                )  # (n_grid_points, 1)
+                lyc_num = cum_at_lyc[:, 0]
+            elif lyc_idx >= len(grid):
+                # Lyman limit is beyond all grid points; take everything below 912
+                lyc_num = cum_integrand[:, -1]
+            else:
+                # Lyman limit is before all grid points; zero LyC
+                lyc_num = 0.0
+            lyc_phot_flat[:, f_idx] = lyc_num / np.maximum(
+                denom, representable_denominator(1e-30)
+            )
+        else:
+            # No grid points below the Lyman limit; zero LyC photometry
+            lyc_phot_flat[:, f_idx] = 0.0
+
         # Compute Taylor moment if requested
         if taylor:
             dlam = grid[None, :] - eff_waves_obs[f_idx]
@@ -489,6 +525,7 @@ def preintegrate_grid(
 
     # Reshape back to original grid dimensions
     phot = jnp.array(phot_flat.reshape(*grid_dims, n_filters))
+    lyc_phot = jnp.array(lyc_phot_flat.reshape(*grid_dims, n_filters))
     moment = jnp.array(moment_flat.reshape(*grid_dims, n_filters)) if taylor else None
     if K > 0:
         sub_phot_j = jnp.array(sub_phot.reshape(*grid_dims, n_filters, K))
@@ -521,6 +558,7 @@ def preintegrate_grid(
         subband_phot=sub_phot_j,
         subband_waves=sub_waves_j,
         subband_waves_rest=sub_waves_rest_j,
+        lyc_phot=lyc_phot,
     )
 
 
