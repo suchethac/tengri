@@ -211,3 +211,34 @@ def test_sampler_results_save_json_has_diagnostics(temp_output_dir):
 
     assert "wall_seconds" in json_data, "wall_seconds should be in JSON"
     assert "method" in json_data, "method should be in JSON"
+
+
+def test_figure_reads_the_file_the_fit_writes():
+    """The mock figure's posterior path must equal what a NUTS run produces.
+
+    These disagreed: the fit wrote ``mock_joint_mcmc_nuts.npz`` (from
+    ``mock_joint_{method}.npz`` with ``method="mcmc_nuts"``) and the figure
+    looked for ``mock_joint_nuts.npz``. Nothing raised, because a posterior
+    that is not there yet is a legitimate state -- the figure rendered its
+    truth-only variant and printed NOT FOUND, which is exactly what it prints
+    when the fit has genuinely not been run. The cost of that silence is a
+    multi-hour NUTS run whose output is never plotted.
+
+    Asserting the two literal names match would be a check that cannot fail
+    independently of the thing it checks, so this compares the READER's
+    constant against the WRITER's helper called with the method the reader
+    declares.
+    """
+    from paper1 import fig01_mock_joint_infer as figure
+    from paper1._posterior_utils import posterior_output_paths
+
+    written_npz, written_json = posterior_output_paths(
+        figure.POSTERIOR_NPZ.parent, figure.POSTERIOR_METHOD
+    )
+    assert written_npz == figure.POSTERIOR_NPZ, (
+        f"the figure reads {figure.POSTERIOR_NPZ.name} but a "
+        f"{figure.POSTERIOR_METHOD} run writes {written_npz.name}"
+    )
+    # The sidecar rides on the same stem; if the stem drifts, both move together.
+    assert written_json.stem == written_npz.stem
+    assert written_npz.name == "mock_joint_mcmc_nuts.npz"

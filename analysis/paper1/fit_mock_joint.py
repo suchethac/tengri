@@ -42,6 +42,7 @@ from tengri import Data, ForwardModel
 from ._posterior_utils import (
     build_npz_payload,
     divergent_draw_payload,
+    posterior_output_paths,
     thin_samples,
 )
 from .fig_mock_joint_infer import DETECTION_SIGMA, RESULTS, TRUTH_NPZ
@@ -246,8 +247,7 @@ def main(argv=None) -> int:
         print(f"converged: fits the noise realization {c_truth - c_fit:.1f} better than truth")
 
     RESULTS.mkdir(exist_ok=True)
-    out = RESULTS / f"mock_joint_{args.method}.npz"
-    out_json = RESULTS / f"mock_joint_{args.method}.json"
+    out, out_json = posterior_output_paths(RESULTS, args.method)
 
     if args.method == "map":
         # MAP: simple point estimate, no posterior draws

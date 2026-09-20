@@ -2,8 +2,11 @@
 """Shared utilities for persisting posterior draws and diagnostics.
 
 This module contains helpers used by fit_one.py and fit_mock_joint.py to
-serialize MCMC posteriors consistently across both drivers.
+serialize MCMC posteriors consistently across both drivers, and by
+fig01_mock_joint_infer.py to find what they wrote.
 """
+
+from pathlib import Path
 
 import numpy as np
 
@@ -80,3 +83,26 @@ def thin_samples(samples: dict, max_draws: int) -> dict:
     n_total = int(next(iter(samples.values())).shape[0])
     step = max(1, -(-n_total // max_draws))  # ceiling division: result <= max_draws
     return {k: np.asarray(v)[::step] for k, v in samples.items()}
+
+
+def posterior_output_paths(results_dir: Path, method: str) -> tuple[Path, Path]:
+    """The NPZ and JSON a sampler run writes, and that the figure reads.
+
+    One definition, imported by both the writer (``fit_mock_joint``) and the
+    reader (``fig01_mock_joint_infer``), because they disagreed. The writer
+    spelled the file ``mock_joint_{method}.npz`` with ``method="mcmc_nuts"``;
+    the reader looked for ``mock_joint_nuts.npz``. A missing posterior is a
+    legitimate state -- the fit may simply not have been run -- so the mismatch
+    could not raise. It rendered the truth-only figure and reported the
+    posterior as NOT FOUND, which is indistinguishable from not having fitted,
+    after a multi-hour NUTS run had produced a perfectly good one.
+
+    Args:
+        results_dir: Directory holding the mock's artifacts.
+        method: The ``--method`` value the fit ran under, e.g. ``"mcmc_nuts"``.
+
+    Returns:
+        ``(npz_path, json_path)``.
+    """
+    stem = f"mock_joint_{method}"
+    return results_dir / f"{stem}.npz", results_dir / f"{stem}.json"

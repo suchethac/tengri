@@ -48,6 +48,7 @@ from matplotlib.gridspec import GridSpec
 
 import tengri
 
+from ._posterior_utils import posterior_output_paths
 from .fig_mock_joint_infer import TRUTH_NPZ
 from .verify_mock_listing import (
     REDSHIFT,
@@ -57,7 +58,17 @@ from .verify_mock_listing import (
 )
 
 FIG_DIR = Path(__file__).parent / "figures"
-POSTERIOR_NPZ = Path(__file__).parent / "results" / "mock_joint_nuts.npz"
+#: The posterior this figure reads, derived from the SAME helper the fit uses to
+#: write it (``_posterior_utils.posterior_output_paths``) rather than retyped.
+#: The two used to disagree -- the fit wrote ``mock_joint_mcmc_nuts.npz`` and
+#: this script looked for ``mock_joint_nuts.npz`` -- and because a missing
+#: posterior is a legitimate state, nothing raised: the truth-only figure was
+#: rendered and the posterior reported NOT FOUND, which looks exactly like not
+#: having run the fit.
+POSTERIOR_METHOD = "mcmc_nuts"
+POSTERIOR_NPZ, _POSTERIOR_JSON = posterior_output_paths(
+    Path(__file__).parent / "results", POSTERIOR_METHOD
+)
 
 #: Detection threshold the mock applied; censored bands plot as limits at this level.
 DETECTION_SIGMA = 3.0
@@ -322,6 +333,21 @@ def main() -> int:
     posterior = load_posterior(args.posterior)
     have_post = posterior is not None
     print(f"posterior: {'loaded from ' + str(args.posterior) if have_post else 'NOT FOUND'}")
+
+    if not have_post:
+        # Distinguish "not fitted yet" from "fitted, and this script is looking
+        # in the wrong place". Both render the truth-only figure, but only one
+        # of them is a defect, and the quiet version costs whatever the fit cost.
+        others = sorted(args.posterior.parent.glob("mock_joint_*.npz"))
+        others = [q for q in others if q.name not in {"mock_joint_truth.npz", args.posterior.name}]
+        if others:
+            print(
+                f"  but {len(others)} other mock_joint_*.npz exist: "
+                f"{[q.name for q in others]}\n"
+                f"  If one of those is a sampler posterior, this script is reading the "
+                f"wrong name and the figure below is truth-only by accident. Pass it "
+                f"explicitly with --posterior."
+            )
 
     fig = plt.figure(figsize=(7.4, 8.2))
     gs = GridSpec(3, 2, figure=fig, height_ratios=[3.0, 0.75, 1.9], hspace=0.38, wspace=0.30)
