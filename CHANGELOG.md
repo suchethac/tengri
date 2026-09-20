@@ -1158,6 +1158,14 @@
   below 2σ, treating fixture regression as a test failure (#2364).
 
 - **`check_render_diagnostics.py` enumeration via git ls-files (#2315, #2050 drift-proofness).** The guard now uses `git ls-files` instead of filesystem globbing to enumerate notebooks, matching CI enumeration and ensuring untracked local renders (e.g., from interrupted notebook restarts) cannot fail a local pre-push run that CI would pass. This prevents users from dismissing the guard as unreliable when a branch touching no notebooks goes red due to stale renders on disk — both local and CI verdicts now depend only on tracked state. Raises (documents sibling behavior) when run in a `git archive` export. Companion tests added.
+- Radio preset rows kept their buildable composable `use` and carry the
+  not-builder-available marker in `short_doc`, so the menu's `name` column types
+  and every production row's `use` is built by a contract test. The marker is
+  defined as a module constant; `list_sfh_models` uses it at a second site. The
+  agn-block `use` strings carried trailing whitespace that made the generated
+  component tables invalid RST; check_component_page.py now parses the generated
+  fragment with docutils (#2201).
+
 - ``check_literal_param_defaults.py`` (the CI guard that prevents bare literals
   from standing in for declared parameter defaults) had two blind spots, both
   fixed: it was scoped to ``dust/emission/`` only, and it never saw negative
