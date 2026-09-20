@@ -390,13 +390,19 @@ def test_energy_balance_lut_survives_declared_override(ssp, declaration):
 
 
 @pytest.mark.parametrize("declaration", ["fixed", "free"])
-@pytest.mark.parametrize("emission_type", ["dale2014", "dh02_ce01"])
+@pytest.mark.parametrize("emission_type", ["dale2014"])
 def test_band_response_fast_path_survives_free_override(ssp_real, declaration, emission_type):
     """Linear (non-budget-shaped) engines keep the band-response fast path.
 
     ``dust_log_L_ir`` only rescales the overall L_ir amplitude fed to a
     fixed-shape emission template; it must not be treated as a "shape" free
     parameter the way ``dust_T``/``dust_umin`` genuinely are.
+
+    Excludes dh02_ce01: after #2366, dh02_ce01 has factors_l_ir=False
+    because its template shape depends on the realized L_ir (cooler,
+    narrower templates at lower L_IR; warmer, broader at higher L_IR,
+    per Dale & Helou 2002). The fast path assumes factor ability and is
+    correctly disabled for shape-dependent templates.
     """
     obs = _tophat_observation()
     log_l_ir = Fixed(11.0) if declaration == "fixed" else Uniform(9.0, 12.0)
@@ -415,6 +421,37 @@ def test_band_response_fast_path_survives_free_override(ssp_real, declaration, e
         f"{emission_type} band-response fast path disabled under a {declaration} "
         "dust_log_L_ir override, though its emission shape does not depend on "
         "dust_log_L_ir at all"
+    )
+
+
+@pytest.mark.parametrize("declaration", ["fixed", "free"])
+def test_dh02_band_response_fast_path_disabled_after_shape_tracking(ssp_real, declaration):
+    """DH02_CE01's shape-dependent emission disables the band-response fast path.
+
+    After #2366, DH02_CE01IRSEDComponent sets factors_l_ir=False because its
+    template shape depends on the realized L_ir (cooler/narrower at lower L_IR,
+    warmer/broader at higher L_IR, per Dale & Helou 2002 Fig. 1). The
+    band-response fast path applies only to models where the SED scales
+    linearly (SED(L_ir=X) = X * SED(L_ir=1)), which does not hold for
+    shape-tracking templates. This test pins the fast path correctly
+    disengages when factors_l_ir=False.
+    """
+    obs = _tophat_observation()
+    log_l_ir = Fixed(11.0) if declaration == "fixed" else Uniform(9.0, 12.0)
+    m = tengri.SEDModel.build(
+        ssp_data=ssp_real,
+        observation=obs,
+        approx=WavePrecomp(),
+        sfh={"all_params": Fixed(DEFAULT)},
+        dust_attenuation={"law": "calzetti", "all_params": Fixed(DEFAULT)},
+        dust_emission={"type": "dh02_ce01", "log_L_ir": log_l_ir, "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.0),
+    )
+    chain = m._build_component_chain()
+    resp = m._dust_emission_band_response(chain)
+    assert resp is None, (
+        f"dh02_ce01 band-response fast path should be disabled under a {declaration} "
+        "dust_log_L_ir override (factors_l_ir=False means shape is not factorable)"
     )
 
 

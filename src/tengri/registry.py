@@ -655,6 +655,17 @@ def _component_entry(name: str, *, kind: str) -> dict:
 #: the worst possible answer to "show me everything".
 ALL = "all"
 
+#: Prefix marker for rows that carry a buildable hint in ``use`` but are not
+#: the dispatch key a user types into the build grammar. When a ``short_doc``
+#: contains this, the row is unvalidated — the ``use`` string is a workaround
+#: (a composable form, a call to a sibling menu) rather than a direct call on
+#: the row's name. Used by :func:`list_sfh_models` for DSPS-unvalidated kinds,
+#: and by :func:`list_radio_models` for retired preset names. When ``use`` is
+#: grafted into a notebook, this marker and its context must be present so the
+#: user sees the explanation and does not mistake the workaround for the
+#: canonical path (a silent-failure symptom #2201).
+_NOT_BUILDER_AVAILABLE_PREFIX = "[not builder-available:"
+
 
 @functools.cache
 def _menu_vocabulary(column: str) -> tuple[str, ...]:
@@ -883,9 +894,9 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             meta = AGN_BLOCK_META.get((cat, name), {})
             # Special handling for atten/smc_prevot: use law key instead of type
             if cat == "attenuation" and name == "smc_prevot":
-                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}"
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}})"
             else:
-                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}}"
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}})"
             entry_dict = {
                 "name": name,
                 "category": cat,
@@ -1115,14 +1126,17 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
     },
     "pah_drude": {
-        "status": "production",
+        "status": "unvalidated",
         "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
         # Stays listed on purpose: it is a real, validated PAH template that
         # composes into custom models, and delisting it would hide it the way
         # #1120 hid the unvalidated SFH types. What the row must not do is read
         # like a model you can select — standalone it re-emits a measured
         # 1.8925e-04 of L_ir, and SEDModel.build refuses it.
-        "short_doc": "Drude-profile PAH emission features (building block; not selectable standalone)",  # noqa: E501
+        "short_doc": f"{_NOT_BUILDER_AVAILABLE_PREFIX} PAH building block; composes through the dust-emission grid API] Drude-profile PAH emission features",  # noqa: E501
+        "use": (
+            "tengri.components.dust.dust_analytic_precompute.precompute(model='pah_drude', ...)"
+        ),
     },
     "energy_balance_split": {
         "status": "experimental",
@@ -1168,7 +1182,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
         entry = {
             "name": name,
             **meta,
-            "use": _usage_hint(name, "dust_emission"),
+            "use": meta.get("use") or _usage_hint(name, "dust_emission"),
             "kind": "dust_emission",
         }
         out.append(entry)
@@ -1196,8 +1210,8 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
     for m in out:
         if m["name"] in UNVALIDATED_SFH_TYPES:
             m["status"] = "unvalidated"
-            if "not builder-available" not in m["short_doc"]:
-                suffix = " [not builder-available: registered, not yet DSPS-validated]"
+            if _NOT_BUILDER_AVAILABLE_PREFIX not in m["short_doc"]:
+                suffix = f" {_NOT_BUILDER_AVAILABLE_PREFIX} registered, not yet DSPS-validated]"
                 m["short_doc"] = f"{m['short_doc']}{suffix}"
             # The status said "unvalidated" while ``use:`` still advertised
             # ``SEDModel.build(..., sfh={'type': X})``: a copy-pasteable call
@@ -1313,6 +1327,20 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
         else _component_entry(n, kind="radio_model")
         for n in _valid_radio_types()
     ]
+    # Mark all radio menu rows as not builder-available: the legacy
+    # radio={'type': ...} form is retired in favor of the composable
+    # radio={'sf': {...}, 'agn': {...}} form (list_radio_blocks).
+    for m in out:
+        m["status"] = "unvalidated"
+        if _NOT_BUILDER_AVAILABLE_PREFIX not in m["short_doc"]:
+            suffix = (
+                f" {_NOT_BUILDER_AVAILABLE_PREFIX} legacy radio={{'type':...}} form "
+                "retired; use the composable form radio={'sf'/'agn': ...} form]"
+            )
+            m["short_doc"] = f"{m['short_doc']}{suffix}"
+        # Restore the buildable composable form from _usage_hint so the menu
+        # row carries the actual call the builder accepts, not a generic error.
+        m["use"] = _usage_hint(m["name"], "radio_model")
     out = _filter_menu(out, "status", status, listing="list_radio_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
@@ -1621,7 +1649,7 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
             "status": st,
             "citation": "hearin2021" if name == "dsps" else "",
             "short_doc": doc,
-            "use": f"SEDModel.build(sfh={{'age_kernel': {name!r}}})",
+            "use": f"SEDModel.build(..., sfh={{'age_kernel': {name!r}}})",
         }
         for name, st, doc in _AGE_KERNELS
     ]

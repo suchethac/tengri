@@ -401,9 +401,12 @@ def desi_spectroscopy(cameras: tuple[DesiCamera, ...], **kwargs):
             "at pixel resolution), or read a single camera with "
             "read_desi_cameras(..., cameras=('B',))."
         )
+    # Compute segment sizes for per-segment monotonicity validation
+    segment_sizes = tuple(int(cam.wave.shape[0]) for cam in cameras)
     return Spectroscopy(
         wave_obs=wave,
         resolution_matrix=desi_resolution_matrix(cameras),
+        wave_obs_segment_sizes=segment_sizes,
         **kwargs,
     )
 
