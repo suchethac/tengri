@@ -23,7 +23,6 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import DEFAULT, SEDModel
-from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
 
@@ -34,8 +33,10 @@ _SSP_BARE = pathlib.Path("data/ssp_prsc_bc03_chabrier.h5").resolve()
 
 @pytest.fixture(scope="module")
 def ssp_bare():
-    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
-    # while testing AGN template threading (nebular handling is incidental).
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData
+
+    # Use synthetic SSP with unknown nebular status for these tests that don't
+    # exercise nebular-specific behavior (only AGN template threading is tested).
     return SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
         ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,

@@ -166,8 +166,8 @@ def fitter_after_a_map_multistart_run() -> Fitter:
     ForwardModel/CatalogFitter and native VI is ``tier=broken`` (CLAUDE.md),
     neither a good fit for a fast contract test.
     """
-    # Use synthetic SSP with unknown nebular status to avoid bare-stellar error
-    # while testing cache-key contracts (nebular handling is incidental).
+    # Use synthetic SSP with unknown nebular status for this test that
+    # exercises cache-key contracts, not SSP loading behavior.
     ssp_data = SSPData(
         ssp_wave=jnp.logspace(2.0, 7.0, 1600),
         ssp_flux=jnp.ones((3, 25, 1600)) * 1e-20,
