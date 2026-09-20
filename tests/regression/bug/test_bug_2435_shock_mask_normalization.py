@@ -163,11 +163,15 @@ def test_unpopulated_region_returns_nan_not_zero(mappings_grid):
     )
 
 
-def test_gradient_stays_finite_at_populated_points(mappings_grid):
-    """The double-``where`` guard.
+def test_gradient_is_finite_and_live_at_populated_points(mappings_grid):
+    """The double-``where`` guard, asserted on both failure modes it has.
 
     A single ``where`` around ``num / W`` still evaluates the division in the dead
-    branch and poisons the reverse-mode gradient with NaN even where W > 0.
+    branch and poisons the reverse-mode gradient with NaN even where W > 0. The
+    opposite failure is just as real here and finiteness cannot see it: division by
+    an interpolated denominator is exactly the kind of rewrite that can detach a
+    gradient, and an identically-zero gradient is finite. Both halves are asserted
+    (#2100 shipped a zero float32 photometry gradient past a finite-only check).
     """
 
     def o3_over_hb(b):
@@ -176,7 +180,14 @@ def test_gradient_stays_finite_at_populated_points(mappings_grid):
 
     for b_field in (0.5, 1.0, 5.0, 50.0):
         grad = float(jax.grad(o3_over_hb)(jnp.asarray(b_field)))
-        assert np.isfinite(grad), f"gradient at B={b_field} uG is {grad}"
+        assert np.isfinite(grad), (
+            f"gradient at B={b_field} uG is {grad}: the W == 0 branch leaked NaN into "
+            "the backward pass, which is what the double-`where` exists to prevent"
+        )
+        assert grad != 0.0, (
+            f"gradient at B={b_field} uG is identically zero, so the normalization "
+            "detached it — [OIII]/Hb does vary with B here and must stay differentiable"
+        )
 
 
 def test_unmasked_interpolation_is_untouched():
