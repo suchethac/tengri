@@ -14,6 +14,7 @@ import csv
 import importlib.util
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import NamedTuple
 
@@ -24,6 +25,9 @@ from scipy.stats import gaussian_kde
 
 import tengri
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _figure_style import CONFIG_COLORS
+
 jax.config.update("jax_enable_x64", True)
 
 logger = logging.getLogger(__name__)
@@ -32,11 +36,7 @@ logging.basicConfig(level=logging.INFO)
 # Configuration
 FIGURE_WIDTH = 3.4
 FIGURE_HEIGHT = 7.5
-MARKER_COLORS = {
-    "I": "#0072B2",
-    "II": "#E69F00",
-    "III": "#009E73",
-}
+MARKER_COLORS = dict(CONFIG_COLORS)
 CODE_MARKERS = {
     "BAGPIPES": "o",
     "BEAGLE": "s",

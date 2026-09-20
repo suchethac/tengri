@@ -229,8 +229,8 @@ def test_figure_reads_the_file_the_fit_writes():
     constant against the WRITER's helper called with the method the reader
     declares.
     """
-    from paper1 import fig01_mock_joint_infer as figure
-    from paper1._posterior_utils import posterior_output_paths
+    from analysis.paper1 import fig01_mock_joint_infer as figure
+    from analysis.paper1._posterior_utils import posterior_output_paths
 
     written_npz, written_json = posterior_output_paths(
         figure.POSTERIOR_NPZ.parent, figure.POSTERIOR_METHOD

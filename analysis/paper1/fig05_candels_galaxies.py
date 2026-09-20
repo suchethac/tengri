@@ -19,6 +19,7 @@ import logging
 import os
 import subprocess
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -34,19 +35,22 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import tengri
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _cell_provenance import audit, banner
+from _figure_style import CONFIG_COLORS, CONFIG_LABELS, CONFIG_ORDER
+from config_metadata import CONFIGS
+
 jax.config.update("jax_enable_x64", True)
 
 logger = logging.getLogger(__name__)
 
 # Figure setup
 FIGURE_WIDTH = 7.0
-FIGURE_HEIGHT = 7.5
+FIGURE_HEIGHT = 8.1
 NROWS = 3
 NCOLS = 3
 GALAXY_IDS = [13097, 15336, 16049]
-CONFIG_KEYS = ["I", "II", "III"]
-CONFIG_LABELS = {"I": "Configuration I", "II": "Configuration II", "III": "Configuration III"}
-CONFIG_COLORS = {"I": "#0072B2", "II": "#E69F00", "III": "#009E73"}
+CONFIG_KEYS = list(CONFIG_ORDER)
 
 
 def load_galaxy_metadata() -> dict:
@@ -87,19 +91,19 @@ class FitResultManager:
         alone does not mean the cell passed the adoption bar.
 
         Acceptance criteria:
-        - Config I/II: adoption_pass must be True (zero-divergence bar)
-        - Config III: adoption_pass=False by design; accept if rhat_max < 1.01 and
-          divergence_rate <= 1.5%
+        - Every configuration: adoption_pass must be True (zero-divergence bar).
+        - Config III is the one exception. Its nonparametric continuity SFH does
+          not clear a zero-divergence bar at this dimensionality -- measured 0 of
+          17 cells passing, against 15 of 17, 14 of 18, 16 of 18, 15 of 16 and 15
+          of 15 for the others -- so it is accepted on rhat_max < 1.01 and a
+          divergence rate <= 1.5% instead. The relaxation is stated in the
+          caption; it is not applied to any other configuration.
         """
         json_path = self.results_dir / f"{gal_id}_{config_key}.json"
         npz_path = self.results_dir / f"{gal_id}_{config_key}.npz"
         if not (json_path.exists() and npz_path.exists()):
             return False
         diagnostics = self.load_json(gal_id, config_key) or {}
-
-        # Config I/II: strict adoption_pass bar
-        if config_key in ["I", "II"]:
-            return diagnostics.get("adoption_pass") is True
 
         # Config III: relaxed bar (rhat < 1.01 and divergence rate <= 1.5%)
         if config_key == "III":
@@ -116,7 +120,7 @@ class FitResultManager:
             )
             return rhat_max < 1.01 and divergence_rate <= 0.015
 
-        return False
+        return diagnostics.get("adoption_pass") is True
 
     def has_json(self, gal_id: int, config_key: str) -> bool:
         """Check if JSON exists (may indicate failed adoption)."""
@@ -163,7 +167,7 @@ class FitResultManager:
         if not statuses:
             return ""
         parts = [f"{cfg}: {statuses[cfg]}" for cfg in sorted(statuses.keys())]
-        return "; ".join(parts)
+        return "; ".join(parts).replace("failed_adoption", "not adopted")
 
 
 def plot_photometry_panel(ax, result_manager, gal_id: int, z: float):
@@ -420,6 +424,7 @@ def plot_corner_panel(
         ylim_override = (sfr_min - margin_y, sfr_max + margin_y)
 
     # Plot contours for each config
+    degenerate: list[str] = []
     for config_key in completed_configs:
         npz_data = result_manager.load_npz(gal_id, config_key)
         if npz_data is None:
@@ -439,9 +444,24 @@ def plot_corner_panel(
         log_mass = np.log10(stellar_mass)
         log_sfr = np.log10(np.maximum(sfr_100myr, 1e-10))
 
-        # Compute 2D density
+        # Compute 2D density. A posterior whose mass and star formation rate are
+        # so tightly correlated that the cloud is effectively one-dimensional
+        # gives a singular covariance and no KDE exists for it. That is a result,
+        # not a defect, so the draws are drawn directly rather than dropped.
         xy = np.vstack([log_mass, log_sfr])
-        z = gaussian_kde(xy)(xy)
+        try:
+            z = gaussian_kde(xy)(xy)
+        except np.linalg.LinAlgError:
+            ax.scatter(
+                log_mass,
+                log_sfr,
+                s=2,
+                color=CONFIG_COLORS[config_key],
+                alpha=0.25,
+                edgecolors="none",
+            )
+            degenerate.append(f"{gal_id}_{config_key}")
+            continue
 
         # Compute contour levels at 68% and 95%
         level_68 = np.percentile(z, 32)
@@ -505,7 +525,7 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
     """Build the full 3x3 figure with all cells."""
     fig = plt.figure(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
     gs = fig.add_gridspec(
-        NROWS, NCOLS, hspace=0.4, wspace=0.35, left=0.16, right=0.95, top=0.95, bottom=0.08
+        NROWS, NCOLS, hspace=0.4, wspace=0.35, left=0.16, right=0.95, top=0.95, bottom=0.16
     )
 
     # Create all subplots — NO axis sharing (each row/col has independent scales)
@@ -650,46 +670,30 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
             markerfacecolor="black",
             markersize=6,
             label="observed",
-        ),
+        )
+    ]
+    legend_handles += [
         plt.Line2D(
             [0],
             [0],
             marker="s",
-            color=CONFIG_COLORS["I"],
+            color=CONFIG_COLORS[key],
             markersize=6,
             linestyle="none",
-            label="Configuration I",
-        ),
-        plt.Line2D(
-            [0],
-            [0],
-            marker="s",
-            color=CONFIG_COLORS["II"],
-            markersize=6,
-            linestyle="none",
-            label="Configuration II",
-        ),
-        plt.Line2D(
-            [0],
-            [0],
-            marker="s",
-            color=CONFIG_COLORS["III"],
-            markersize=6,
-            linestyle="none",
-            label="Configuration III",
-        ),
+            label=CONFIG_LABELS[key],
+        )
+        for key in CONFIG_KEYS
     ]
     fig.legend(
         handles=legend_handles,
         loc="lower center",
         ncol=4,
-        fontsize=9,
+        fontsize=8,
         frameon=True,
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.5, 0.005),
     )
 
     # Adjust bottom margin for legend
-    fig.subplots_adjust(bottom=0.12)
 
     return fig, data_dict
 
@@ -756,8 +760,33 @@ def main():
     logger.info(f"Writing figures to: {args.output_dir}")
     logger.info(f"Writing sidecar to: {args.results_output_dir}")
 
+    # A configuration that has been redefined leaves its old cells in place
+    # under their old names, so the colors and labels below would announce a
+    # model these cells do not hold. Say so on the figure rather than in a log
+    # line nobody reads beside the PDF.
+    mismatches, notes = audit(args.results_dir, CONFIGS)
+    audit_text = banner(args.results_dir, mismatches, notes)
+    if audit_text:
+        print(audit_text, file=sys.stderr)
+
     results_manager = FitResultManager(args.results_dir)
     fig, data_dict = build_figure(results_manager, repo_root)
+
+    if mismatches:
+        stamp = "CONFIGURATION LABELS ARE NOT configs.py's: " + "; ".join(
+            f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches
+        )
+        for offset, line in enumerate(textwrap.wrap(stamp, 108)):
+            fig.text(
+                0.0,
+                -0.012 - 0.012 * offset,
+                line,
+                fontsize=5.0,
+                color="0.45",
+                ha="left",
+                va="top",
+            )
+        data_dict["configuration_mismatches"] = [m.describe() for m in mismatches]
 
     data_dict.update(
         {
