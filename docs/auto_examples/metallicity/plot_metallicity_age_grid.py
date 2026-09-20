@@ -58,6 +58,11 @@ for i, age_gyr in enumerate(age_gyr_grid):
                 "tau_bc": 0.0,
                 "tau_diff": 0.0,
             },
+            # ``met_logzsol`` is overridden below (#2296: a params-dict key
+            # the spec declared Fixed is refused), so it must be free; no
+            # ``met=`` group was declared before, defaulting the whole group
+            # to ``Fixed(DEFAULT)``. Bounds cover the logz_grid.
+            met={"logzsol": tengri.Uniform(-2.0, 0.5)},
             redshift=tengri.Fixed(0.0),
         )
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))

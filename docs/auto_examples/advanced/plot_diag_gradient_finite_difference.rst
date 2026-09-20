@@ -27,7 +27,7 @@ This diagnostic builds a star-forming model with several free parameters,
 defines a chi-squared loss, and compares autodiff vs FD gradients for each
 parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-107
+.. GENERATED FROM PYTHON SOURCE LINES 11-113
 
 
 
@@ -41,16 +41,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:9272: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
-
-    To free metallicity parameters explicitly, pass either:
-      met={'all_params': FREE}
-    or:
-      met={'logzsol': Uniform(-2, 0.2)}
-
-    Issue #1796
-      spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:9272: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust_attenuation'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:10291: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust_attenuation'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust_attenuation={'dust_f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
@@ -99,6 +90,12 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
         },
         dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
         neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        # ``met_logzsol`` is perturbed below (line ~60) to build an off-target
+        # ``p_ref``, so it must be free (#2296): a params-dict key the spec
+        # declared Fixed is refused, and an omitted ``met=`` group defaults
+        # every metallicity parameter to ``Fixed(DEFAULT)``. Bounds match the
+        # clip range the perturbation already uses.
+        met={"logzsol": tengri.Uniform(-2.0, 0.2)},
         redshift=tengri.FREE,
     )
 
@@ -164,7 +161,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.099 seconds)
+   **Total running time of the script:** (0 minutes 2.689 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:
