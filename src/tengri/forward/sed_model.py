@@ -9198,7 +9198,7 @@ class SEDModel:
         never mentions a shape parameter still gets the law's own published
         default, bit-identical to pre-#2231.
         """
-        from tengri.parameters.groups import _law_shape_params
+        from tengri.parameters.groups import _base_provenance, _law_shape_params
 
         names = laws or (
             getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None),
@@ -9211,35 +9211,34 @@ class SEDModel:
                 reads |= set(_law_shape_params(law))
             except Exception:  # pragma: no cover - law not registered
                 continue
-        if not reads:
-            per_screen_reads = set()
-        else:
-            per_screen_reads = set()
 
         provenance = getattr(self.spec, "_group_provenance", None)
         if provenance is None:
             provenance = getattr(self.spec, "_flat_provenance", None)
         provenance = provenance or {}
 
-        # Check for per-screen parameters (dust_slope_bc, dust_delta_diff, etc.)
-        # Per-screen names are requested ONLY if user-explicit (user_prior/user_fixed);
-        # wildcard-pinned (including inactive) does not count as requested.
-        per_screen_names = [
+        # Per-screen names (dust_slope_bc, dust_delta_diff, etc.) are
+        # requested exactly when their OWN provenance is user-explicit --
+        # explicit-only by design (#2428): a wildcard can never free one
+        # (per_screen_inert), so "wildcard_free" cannot appear here in
+        # practice, but reusing the full _REQUESTED_PROVENANCE set (rather
+        # than a second, hand-copied subset of it) is what keeps this in
+        # sync with the shared-stem rule two lines below instead of drifting
+        # into its own incomplete copy -- a bare ("user_prior", "user_fixed")
+        # tuple here once left out "user_free", so `slope_bc: FREE` never
+        # reached the law at predict time even though the grammar correctly
+        # froze it on its declared free_prior.
+        per_screen_names = (
             f"dust_{stem}_{screen}"
             for stem in ("slope", "delta", "bump_strength", "Rv")
             for screen in ("bc", "diff", "neb")
-        ]
-        for per_screen_name in per_screen_names:
-            if per_screen_name in provenance:
-                prov_tag = provenance.get(per_screen_name, "registry_default")
-                # Only count user-explicit provenances (user_prior, user_fixed)
-                # Strip outcome markers (_grid, _pinned, _zcap, _inactive) for base comparison
-                base_tag = str(prov_tag)
-                for suffix in ("_grid", "_pinned", "_zcap", "_inactive"):
-                    if base_tag.endswith(suffix):
-                        base_tag = base_tag[: -len(suffix)]
-                if base_tag in ("user_prior", "user_fixed"):
-                    per_screen_reads.add(per_screen_name)
+        )
+        per_screen_reads = {
+            name
+            for name in per_screen_names
+            if name in provenance
+            and _base_provenance(str(provenance[name])) in self._REQUESTED_PROVENANCE
+        }
 
         return (
             frozenset(

@@ -42,6 +42,7 @@ disagreement is a live discrepancy, not a typo.
 
 from __future__ import annotations
 
+from tengri.parameters._dust_keys import OVERRIDE_STEMS, SCREENS, short_to_full
 from tengri.parameters.priors import Fixed, Gaussian, Uniform
 from tengri.protocols.component import ParamDeclaration, declared_default
 
@@ -585,10 +586,18 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     # ── Per-screen dust law shape parameters (#2428) ──────────────────────────
     # The 12 per-screen variants (slope, delta, bump_strength, Rv) x (bc, diff, neb)
     # are declared as explicit-only free parameters. They become live parameters
-    # (in spec.free_params) when explicitly set to a Distribution; they are
-    # wildcard-scoped to only activate when the given screen's law reads them.
-    # When given a plain number (not a Distribution), they route through
-    # dust_law_overrides as static config values, identical to today's behavior.
+    # (in spec.free_params) when explicitly set to a Distribution/FREE; a caller
+    # must name the parameter itself to free it -- unlike the four SHARED shape
+    # stems (dust_slope/delta/bump_strength/Rv), these 12 are wildcard-INERT:
+    # per_screen_inert (parameters/groups.py::_dust_wildcard_scopes) excludes
+    # every one of them from `all_params: FREE`'s scope unconditionally, whether
+    # or not the given screen's law reads the stem -- a blanket `FREE` on the
+    # group can never double-parametrize a screen behind its own explicit
+    # setting. When given a plain number (not a Distribution), a per-screen
+    # key still routes through dust_law_overrides as a static config value,
+    # exactly as before this feature existed; a Fixed(v) or the bare scalar v
+    # resolve to the identical value, so the two mechanisms never disagree at
+    # the value level. See #2428.
     ParamDeclaration(
         "dust_slope_bc",
         Fixed(-0.7),
@@ -687,25 +696,25 @@ DEFAULT_DUST_F_OBSCURATION = declared_default(ATTENUATION_PARAMS, "dust_f_obscur
 DEFAULT_DUST_BUMP_STRENGTH = declared_default(ATTENUATION_PARAMS, "dust_bump_strength")
 DEFAULT_DUST_DELTA = declared_default(ATTENUATION_PARAMS, "dust_delta")
 DEFAULT_DUST_RV = declared_default(ATTENUATION_PARAMS, "dust_Rv")
-# Per-screen defaults
-DEFAULT_DUST_SLOPE_BC = declared_default(ATTENUATION_PARAMS, "dust_slope_bc")
-DEFAULT_DUST_SLOPE_DIFF = declared_default(ATTENUATION_PARAMS, "dust_slope_diff")
-DEFAULT_DUST_SLOPE_NEB = declared_default(ATTENUATION_PARAMS, "dust_slope_neb")
-DEFAULT_DUST_BUMP_STRENGTH_BC = declared_default(ATTENUATION_PARAMS, "dust_bump_strength_bc")
-DEFAULT_DUST_BUMP_STRENGTH_DIFF = declared_default(ATTENUATION_PARAMS, "dust_bump_strength_diff")
-DEFAULT_DUST_BUMP_STRENGTH_NEB = declared_default(ATTENUATION_PARAMS, "dust_bump_strength_neb")
-DEFAULT_DUST_DELTA_BC = declared_default(ATTENUATION_PARAMS, "dust_delta_bc")
-DEFAULT_DUST_DELTA_DIFF = declared_default(ATTENUATION_PARAMS, "dust_delta_diff")
-DEFAULT_DUST_DELTA_NEB = declared_default(ATTENUATION_PARAMS, "dust_delta_neb")
-DEFAULT_DUST_RV_BC = declared_default(ATTENUATION_PARAMS, "dust_Rv_bc")
-DEFAULT_DUST_RV_DIFF = declared_default(ATTENUATION_PARAMS, "dust_Rv_diff")
-DEFAULT_DUST_RV_NEB = declared_default(ATTENUATION_PARAMS, "dust_Rv_neb")
+# No per-screen counterparts of the five constants above: the 12 per-screen
+# names (#2428) have no consumer that reads a bare Python float default off
+# this module the way the shared stems' aggregation-point ``.get(...)``
+# fallbacks do -- resolve_bc_diff_law_params/merge_neb_screen_live_overrides
+# both read a per-screen live value straight out of ``params``, never a
+# module-level constant. Twelve such constants were declared and exported
+# here regardless and had zero consumers; removed rather than kept as an
+# always-unread parallel copy of the registry.
 
 # Names within ATTENUATION_PARAMS that are skipped when
 # ``dust_model="single_component"`` (the single-screen geometry replaces
 # both Charlot-Fall optical depths with ``dust_tau_v`` from
-# SINGLE_COMPONENT_PARAMS).
-ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset({"dust_tau_bc", "dust_tau_diff"})
+# SINGLE_COMPONENT_PARAMS). The 12 per-screen shape names (#2428) join them
+# here for the same reason: a single screen has no ``bc``/``diff``/``neb``
+# distinction to name, so ``dust_slope_bc`` etc. would be a declared
+# parameter with nothing for the per-screen spelling to mean.
+ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset(
+    {"dust_tau_bc", "dust_tau_diff"}
+) | frozenset(short_to_full(f"{stem}_{screen}") for stem in OVERRIDE_STEMS for screen in SCREENS)
 
 SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -730,13 +739,7 @@ __all__ = [
     "DEFAULT_DUST_BETA_COLD",
     "DEFAULT_DUST_BETA_WARM",
     "DEFAULT_DUST_BUMP_STRENGTH",
-    "DEFAULT_DUST_BUMP_STRENGTH_BC",
-    "DEFAULT_DUST_BUMP_STRENGTH_DIFF",
-    "DEFAULT_DUST_BUMP_STRENGTH_NEB",
     "DEFAULT_DUST_DELTA",
-    "DEFAULT_DUST_DELTA_BC",
-    "DEFAULT_DUST_DELTA_DIFF",
-    "DEFAULT_DUST_DELTA_NEB",
     "DEFAULT_DUST_EPSILON_MBB",
     "DEFAULT_DUST_ETA_BALANCE",
     "DEFAULT_DUST_FRAC_AGN",
@@ -750,13 +753,7 @@ __all__ = [
     "DEFAULT_DUST_QHAC",
     "DEFAULT_DUST_QPAH",
     "DEFAULT_DUST_RV",
-    "DEFAULT_DUST_RV_BC",
-    "DEFAULT_DUST_RV_DIFF",
-    "DEFAULT_DUST_RV_NEB",
     "DEFAULT_DUST_SLOPE",
-    "DEFAULT_DUST_SLOPE_BC",
-    "DEFAULT_DUST_SLOPE_DIFF",
-    "DEFAULT_DUST_SLOPE_NEB",
     "DEFAULT_DUST_T_COLD",
     "DEFAULT_DUST_T_WARM",
     "DEFAULT_DUST_UMIN",

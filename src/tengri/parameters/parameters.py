@@ -75,6 +75,7 @@ from tengri.parameters._builders import (
 from tengri.parameters._dust_keys import (
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
+    SCREENS,
     resolve_screen_choices,
     short_to_full,
     validate_shape_requests,
@@ -1101,17 +1102,30 @@ class Parameters:
         # the builder from slope_bc / delta_diff / slope_neb /…
         self.dust_law_overrides = kwargs.pop("dust_law_overrides", {}) or {}
 
-        # Check for per-screen overrides with Distribution values (not yet supported
-        # on the flat surface; they must use the declared parameter names instead)
+        # The dust_law_overrides dict is number-only, by design, on both
+        # surfaces (#2428): it is the static, build-time-baked route. A
+        # Distribution belongs on the declared per-screen parameter name
+        # instead (dust_slope_bc=Uniform(...), fully supported on this flat
+        # surface too, validated below), never inside this dict.
         for screen, overrides in self.dust_law_overrides.items():
             for law_kwarg, value in overrides.items():
                 if isinstance(value, Distribution):
+                    # The remedy must always print the canonical
+                    # dust_<stem>_<screen> spelling, whatever spelling the
+                    # caller used as this dict's own inner key -- this dict
+                    # is a raw user-supplied mapping with no key
+                    # normalization pass (unlike the grammar's
+                    # normalize_dust_group_keys), so a short-form key
+                    # (``"slope"``) is exactly as reachable as the
+                    # documented full form (``"dust_slope"``).
+                    stem_short = law_kwarg.removeprefix("dust_")
+                    canonical = f"dust_{stem_short}_{screen}"
                     raise ParameterError(
                         f"dust_law_overrides[{screen!r}][{law_kwarg!r}] is a per-screen "
                         f"law-shape override and cannot take a prior ({value!r} given); "
                         f"it must be a plain number, baked into the compiled model at "
                         f"build time. The per-screen declared parameter spelling is "
-                        f"{law_kwarg}_{screen}=..., which DOES accept a prior/Fixed. "
+                        f"{canonical}=..., which DOES accept a prior/Fixed. "
                         f"See #2428."
                     )
 
@@ -1132,6 +1146,40 @@ class Parameters:
                     {"bc": self.dust_law_bc, "diff": self.dust_law_diff, "neb": self.dust_law_neb},
                     surface="flat",
                 )
+
+            # Per-screen DECLARED parameter names (dust_slope_bc, dust_Rv_neb,
+            # ..., #2428) get the SAME "does this screen's law read the
+            # stem" check the grammar enforces via
+            # _reject_per_screen_keys_no_law_reads -- and the grammar's own
+            # message, verbatim (surface="grammar" here is deliberate: the
+            # message text names the key/law, not which surface asked, so
+            # one wording serves both). Gated on ``two_component``: under
+            # ``single_component``/``wg00`` these names are not declared at
+            # all (ATTENUATION_TWO_COMPONENT_ONLY), so an unrecognized
+            # keyword already raises "Unknown parameter" before this code
+            # runs; duplicating that refusal here with a different message
+            # would just be a second, competing error for the same mistake.
+            # Only a name the caller actually gave a value to is checked --
+            # an untouched per-screen name resolves to its Fixed registry
+            # default and stays silently inert, exactly like the shared
+            # stems (explicit-only by design).
+            if self.dust_model == "two_component":
+                per_screen_requests = [
+                    (short_to_full(stem), screen)
+                    for stem in OVERRIDE_STEMS
+                    for screen in SCREENS
+                    if short_to_full(f"{stem}_{screen}") in kwargs
+                ]
+                if per_screen_requests:
+                    validate_shape_requests(
+                        per_screen_requests,
+                        {
+                            "bc": self.dust_law_bc,
+                            "diff": self.dust_law_diff,
+                            "neb": self.dust_law_neb,
+                        },
+                        surface="grammar",
+                    )
 
         # Lyman-limit clip [Å]: zero the attenuation curve below this wavelength
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.

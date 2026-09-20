@@ -290,7 +290,10 @@ explicit-only: an `all_params: FREE` wildcard never frees them (name one
 explicitly to fit it), and the flat `Parameters(dust_law_overrides={...})`
 surface still accepts only plain numbers in that dict — passing a prior there
 raises `ParameterError` naming the `dust_<stem>_<screen>` spelling as the
-remedy.
+remedy. Naming only one half of a `_bc`/`_diff` pair (e.g. `slope_bc` without
+`slope_diff`) raises: give both explicitly, or use a group-level wildcard
+(`'all_params': FREE`/`Fixed(DEFAULT)`) to free or pin them together — the
+same rule the plain-number spelling of these keys already followed.
 
 **Minimal example:**
 ```python

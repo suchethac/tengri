@@ -155,14 +155,18 @@ def resolve_bc_diff_law_params(
         Flat ``dust_*`` parameter mapping (JAX scalars or floats).
     bc_overrides, diff_overrides : Mapping, optional
         Per-component law-kwarg overrides (e.g. ``{"dust_slope": -1.0}`` for the
-        FSPS birth-cloud convention). Always honored: an override *is* a
-        request, whatever the provenance of the shared parameter.
+        FSPS birth-cloud convention). Honored whenever the corresponding
+        per-screen *declared* name (``dust_slope_bc``/``_diff``) is not itself
+        live in ``params`` -- see the priority order below.
     live_shape_params : frozenset of str, optional
         Flat names a caller actually asked for, resolved from spec provenance
         by :meth:`SEDModel._requested_law_shape_params` (#1808). Names outside
         this set are left out of the returned dicts. ``None`` keeps the
         historical behavior of offering all four, for the direct callers that
-        have no spec to ask.
+        have no spec to ask. Also gates the per-screen live lookup (#2428):
+        ``f"{flat_name}_{screen}"`` (``dust_slope_bc``, ``dust_Rv_diff``, ...)
+        is read straight out of ``params`` -- not ``bc_overrides``/
+        ``diff_overrides`` -- when both present in ``params`` AND listed here.
     bc_law, diff_law : str, optional
         Registry keys of the two screens' laws. When given, each dict is
         narrowed to the keywords *that* screen's law declares, so a parameter
@@ -208,6 +212,20 @@ def resolve_bc_diff_law_params(
     default to protect, and the grammar never accepts it as a dust key. The
     narrowing below is what keeps it away from the laws that do not read it, and
     ``narayanan_z`` is the only one that does.
+
+    Per-screen declared parameters (#2428) are the HIGHEST-priority source,
+    ahead of both the static overrides and the shared spelling. For each
+    tabled parameter and screen, the resolution order is: (1) the live
+    per-screen name ``params[f"{flat_name}_{screen}"]``, read only when it is
+    both present in ``params`` and listed in ``live_shape_params`` (a
+    declared-but-untouched per-screen name still carries its Fixed registry
+    default in ``params`` on some call paths, and that default must not
+    shadow the static override or the shared value nobody asked to bypass);
+    (2) the static ``bc_overrides``/``diff_overrides`` entry; (3) the shared
+    ``dust_<x>`` value, if requested. An override *is* a request whatever the
+    shared parameter's own provenance, but a *live* per-screen name is a
+    stronger request still: it is explicit-only by design, so its mere
+    presence in ``live_shape_params`` means a caller named it by hand.
     """
     bc_overrides = bc_overrides or {}
     diff_overrides = diff_overrides or {}
@@ -239,6 +257,68 @@ def resolve_bc_diff_law_params(
     if diff_law is not None:
         diff = select_law_kwargs(diff_law, diff)
     return bc, diff
+
+
+def merge_neb_screen_live_overrides(
+    params: Mapping,
+    neb_overrides: Mapping,
+    live_shape_params: frozenset[str] | None,
+) -> dict:
+    """Layer live ``*_neb`` per-screen params on top of static neb overrides.
+
+    The nebular birth-cloud screen (:class:`DustSEDComponent`'s three call
+    sites) merges its static ``neb_law_overrides`` with the *live* per-screen
+    names (``dust_slope_neb``, ``dust_Rv_neb``, ...) the same way
+    :func:`resolve_bc_diff_law_params` does for ``bc``/``diff`` (#2428) -- a
+    ``params``-dict lookup gated on ``live_shape_params``, taking priority
+    over the static override.
+
+    Parameters
+    ----------
+    params : Mapping
+        Flat ``dust_*`` parameter mapping (JAX scalars or floats).
+    neb_overrides : Mapping
+        The static per-nebular-screen overrides
+        (``DustSEDComponentConfig.neb_law_overrides``), keyed by law-function
+        kwarg (e.g. ``dust_Rv``).
+    live_shape_params : frozenset of str, optional
+        Flat names a caller actually asked for, from
+        :meth:`SEDModel._requested_law_shape_params`. ``None`` means no spec
+        to ask (direct callers), in which case no live override applies and
+        ``neb_overrides`` is returned as-is.
+
+    Returns
+    -------
+    dict
+        ``neb_overrides`` merged with any live ``*_neb`` overrides, keyed by
+        the correct law-function kwarg (``dust_slope``, not ``slope`` --
+        ``law_kwarg_names`` never declares the bare stem).
+
+    Notes
+    -----
+    **JIT-compatible**: yes, only dict construction and ``Mapping``
+    membership checks on a fixed set of string keys; the values pass through
+    untouched (traced arrays stay traced).
+
+    Both nebular call sites in ``two_component.py`` used to derive the
+    law-function keyword as ``stem.replace("dust_", "")`` (e.g. ``"Rv"`` for
+    ``dust_Rv``), which no law's signature declares
+    (``law_kwarg_names('cardelli') == ('dust_Rv',)``), so
+    ``select_law_kwargs`` silently discarded every live ``*_neb`` value --
+    ``Rv_neb`` swept 2 -> 6 left the nebular lines bit-identical, and a
+    ``Fixed`` ``Rv_neb`` silently equaled the law's own default (#2428). This
+    helper is the single, tested place that keyword is derived, off the same
+    :data:`_TWO_COMPONENT_LAW_PARAMS` table :func:`resolve_bc_diff_law_params`
+    already uses for ``bc``/``diff``, so the two screens cannot drift again.
+    """
+    result = dict(neb_overrides)
+    if live_shape_params is None:
+        return result
+    for law_kw, flat_name, _default in _TWO_COMPONENT_LAW_PARAMS:
+        live_key = f"{flat_name}_neb"
+        if live_key in params and live_key in live_shape_params:
+            result[law_kw] = params[live_key]
+    return result
 
 
 def apply_lyman_cutoff(

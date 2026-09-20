@@ -51,6 +51,7 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_F_OBSCURATION,
 )
 from tengri.components.dust.attenuation import (
+    merge_neb_screen_live_overrides,
     resolve_bc_diff_law_params,
     two_component_dust,
 )
@@ -811,15 +812,12 @@ class DustSEDComponent(TemplateThreading):
             redshift=params.get("redshift"),
         )
         neb_law = self.config.law_neb or self.config.law_bc
-        # Check for per-screen neb params in params dict
-        _neb_overrides_for_line = dict(self.config.neb_law_overrides)
-        live_shape_params = self.config.live_shape_params
-        if live_shape_params is not None:
-            for stem in ("dust_slope", "dust_bump_strength", "dust_delta", "dust_Rv"):
-                neb_key = f"{stem}_neb"
-                law_kw = stem.replace("dust_", "")
-                if neb_key in params and neb_key in live_shape_params:
-                    _neb_overrides_for_line[law_kw] = params[neb_key]
+        # Live *_neb per-screen overrides layered on the static ones -- see
+        # merge_neb_screen_live_overrides for why this cannot be a naive
+        # stem.replace("dust_", "") (#2428).
+        _neb_overrides_for_line = merge_neb_screen_live_overrides(
+            params, self.config.neb_law_overrides, self.config.live_shape_params
+        )
         neb_bc_params = {
             k: jnp.asarray(v)
             for k, v in select_law_kwargs(
@@ -972,15 +970,12 @@ class DustSEDComponent(TemplateThreading):
         # ``diff_law_params``) is always shared with the stars: HII regions sit
         # in their own clouds behind the same foreground ISM.
         neb_law = self.config.law_neb or self.config.law_bc
-        _neb_overrides = dict(self.config.neb_law_overrides)
-        # Check for per-screen neb params in params dict and add them to overrides
-        live_shape_params = self.config.live_shape_params
-        if live_shape_params is not None:
-            for stem in ("dust_slope", "dust_bump_strength", "dust_delta", "dust_Rv"):
-                neb_key = f"{stem}_neb"
-                law_kw = stem.replace("dust_", "")
-                if neb_key in params and neb_key in live_shape_params:
-                    _neb_overrides[law_kw] = params[neb_key]
+        # Live *_neb per-screen overrides layered on the static ones -- see
+        # merge_neb_screen_live_overrides for why this cannot be a naive
+        # stem.replace("dust_", "") (#2428).
+        _neb_overrides = merge_neb_screen_live_overrides(
+            params, self.config.neb_law_overrides, self.config.live_shape_params
+        )
         # Start from the stellar birth-cloud params, then layer every nebular
         # override on top. Merging rather than iterating ``bc_law_params`` keys:
         # since #1833 that dict omits shape parameters nobody requested, and a

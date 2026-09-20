@@ -3647,12 +3647,48 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
             key = f"{stem}_{comp}"
             if key in dust_atten_dict:
                 value = dust_atten_dict[key]
-                if isinstance(value, Distribution):
-                    # Per-screen shape with a Distribution: emit as a declared parameter
-                    result[short_to_full(key)] = value
-                else:
-                    # Per-screen shape with a plain number: static config override
+                full_name = short_to_full(key)
+                if value is DEFAULT:
+                    raise _bare_default_error(full_name)
+                if value is FREE or _is_default_fixed(value):
+                    # A live, declared dust_<stem>_<screen> parameter
+                    # (#2428), left for the per-parameter resolution loop in
+                    # ``parse_groups`` to expand/resolve: it reads the value
+                    # straight off the ORIGINAL group dict, not ``result``/
+                    # ``structural_kwargs``, which only take values
+                    # ``resolve_shorthand`` can turn into a bounded
+                    # ``Distribution`` directly. Neither a bare ``FREE``
+                    # sentinel nor an unresolved ``Fixed(DEFAULT)`` token is
+                    # one of those -- storing either here reaches
+                    # ``priors.py``'s "Fixed(DEFAULT) is a build-grammar
+                    # token" guard with a message that names the wrong
+                    # context (this per-screen key, not the flat surface it
+                    # was written for). Nothing to stash here;
+                    # ``dust_<stem>_<screen>`` is already declared (with its
+                    # Fixed registry default) by ``_builders.py``'s
+                    # unconditional walk over ``ATTENUATION_PARAMS``.
+                    pass
+                elif isinstance(value, Distribution):
+                    # An explicit, already-resolved prior/Fixed (e.g.
+                    # ``Uniform(-1.5, -0.3)``, ``Fixed(-1.0)``): likewise a
+                    # live, declared parameter, and (unlike FREE/
+                    # Fixed(DEFAULT)) itself a ``Distribution``
+                    # ``resolve_shorthand`` can store directly -- pre-seed it
+                    # so the enumeration pass already carries the caller's
+                    # actual choice.
+                    result[full_name] = value
+                elif isinstance(value, int | float) and not isinstance(value, bool):
+                    # Plain number: static config override, baked into the
+                    # compiled model at build time (unchanged since before
+                    # #2428).
                     overrides.setdefault(comp, {})[short_to_full(stem)] = float(value)
+                else:
+                    raise ParameterError(
+                        f"dust_attenuation {key!r} must be a number, Fixed(...), a "
+                        f"prior (e.g. Uniform(...)), or FREE ({value!r} given). The "
+                        f"per-screen declared parameter spelling is {full_name}=..., "
+                        f"which accepts any of these. See #2428."
+                    )
     if overrides:
         result["dust_law_overrides"] = overrides
 
@@ -6392,17 +6428,23 @@ def _resolve_value(
             "lyc_absorb_all",
             "eb_include_lyc",
         }
-        # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying a
-        # ``Distribution`` is a live, declared ``dust_<stem>_<screen>``
-        # parameter (#2428): fall through to ordinary per-parameter resolution
-        # below instead of collapsing it to the registry default. A plain
-        # number keeps routing through the static ``dust_law_overrides``
-        # config path built by ``_translate_dust_attenuation`` untouched --
-        # it still resolves to "registry_default" here, exactly as before.
-        # Every other structural key (``type``, ``law_bc``, ...) is never a
+        # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying
+        # ``FREE``, bare ``DEFAULT``, or a ``Distribution`` (``Fixed(...)``
+        # included) is a live, declared ``dust_<stem>_<screen>`` parameter
+        # (#2428): fall through to ordinary per-parameter resolution below --
+        # the FREE/DEFAULT/Distribution branches there are what actually
+        # expand FREE on the declared ``free_prior``, resolve
+        # ``Fixed(DEFAULT)`` to the registry default, and raise on a bare
+        # ``DEFAULT`` -- instead of collapsing it to the registry default
+        # here, before any of that runs. A plain number keeps routing through
+        # the static ``dust_law_overrides`` config path built by
+        # ``_translate_dust_attenuation`` untouched -- it still resolves to
+        # "registry_default" here, exactly as before. Every other structural
+        # key (``type``, ``law_bc``, ...) is never FREE/DEFAULT/a
         # ``Distribution``, so this narrowing changes nothing for them.
         if override_key in structural_keys and not (
-            override_key in per_screen_keys() and isinstance(val, Distribution)
+            override_key in per_screen_keys()
+            and (val is FREE or val is DEFAULT or isinstance(val, Distribution))
         ):
             return registry_default, "registry_default"
 
