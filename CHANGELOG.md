@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+### Added
+
+- The `met` group now accepts `met_bin_edges_log_yr`, a structural key that allows
+  users to override the default metallicity bin ladder (spanning 1 Myr to 13.8 Gyr)
+  when using metallicity-history modes (`met={'type': 'bins'}` or `'bins_continuity'`).
+  This mirrors how the `sfh` group accepts `bin_edges_gyr` for non-parametric star
+  formation histories. The `met_bin_edges_log_yr` parameter is threaded through the
+  grammar, forward model, and component factory to `StellarSEDComponentConfig`, enabling
+  custom lookback-time binning without direct component access. The #2204 cosmic-age
+  refusal now judges the configured ladder when one is provided, improving the error
+  message to name the `met_bin_edges_log_yr=` key (#2433).
+
 ### Fixed
 
 - Shock line ratios are normalized over the populated grid cells, so

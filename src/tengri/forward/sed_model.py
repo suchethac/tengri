@@ -9384,6 +9384,7 @@ class SEDModel:
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             age_kernel=getattr(self.spec, "age_kernel", None),
             sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),
+            met_bin_edges_log_yr=getattr(self.spec, "met_bin_edges_log_yr", None),
             field_centering=float(getattr(self.spec, "field_centering", 1.0)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,

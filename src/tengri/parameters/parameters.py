@@ -474,6 +474,10 @@ class Parameters:
         # A structural setting, not a free parameter; forwarded to
         # ``build_components(age_kernel=...)``. See #964.
         self.age_kernel = kwargs.pop("age_kernel", None)
+        # Metallicity-history bin edges [log Gyr], or None to use the model default.
+        # A structural setting, not a free parameter; forwarded to
+        # ``build_components(met_bin_edges_log_yr=...)``. See #2433.
+        self.met_bin_edges_log_yr = kwargs.pop("met_bin_edges_log_yr", None)
         # GP-field parameterization: which coordinates the field latent is
         # sampled in. 1.0 = the shipped non-centered map; a < 1 moves amplitude
         # dependence out of it. A structural setting, not a free parameter, and
@@ -2449,6 +2453,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "astrodust_f_cnm": content("astrodust model variant determines parameters"),
     "astrodust_spinning_dust": content("astrodust model variant determines parameters"),
     "bin_edges_gyr": content("bin edges for binned SFH model determine parameters"),
+    "met_bin_edges_log_yr": content("bin edges for binned metallicity model determine parameters"),
     "chem_evol": content("chemical evolution model determines parameters"),
     "cloudy_grid_path": content("CLOUDY grid path determines available parameters"),
     "cue_full_catalog": content("CUE full catalog setting determines parameters"),
