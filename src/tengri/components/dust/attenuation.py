@@ -1263,7 +1263,7 @@ def salim_sbl18(
     divisors: R_V,Cal for the tilted base, and R_V,mod(δ) (Eq. 4) for the bump.
     This implements Salim, Boquien & Lee (2018) Eq. 3, correcting the pre-v0.12
     CIGALE method described in footnote 7, which used a single fixed R_V for
-    both terms. The divided normalization is realized after k(5500) renormalization.
+    both terms.
 
     The attenuation is built from Eq. 3 and Eq. 4. Eq. 3 gives k_mod before
     the k(5500) normalization:
@@ -1282,9 +1282,11 @@ def salim_sbl18(
         R_{V,\rm mod} = \frac{R_{V,\rm Cal}}{(R_{V,\rm Cal} + 1)
         \left(\frac{4400}{5500}\right)^\delta - R_{V,\rm Cal}}
 
-    with R_V,Cal = 4.05 (Calzetti 2000). The division by R_V,mod in the bump term
-    and R_V,Cal in the tilted base are realized after k(5500) renormalization:
-    ``k = (k_base*slope/R_V,Cal + bump/R_V,mod) / k(5500)``.
+    with R_V,Cal = 4.05 (Calzetti 2000). Dividing Eq. 3 by R_V,mod gives the form
+    the code evaluates, ``k' = k_base * slope / R_V,Cal + bump / R_V,mod``: the
+    R_V,mod factor on the tilted base cancels, leaving R_V,Cal as its divisor,
+    while the bump keeps R_V,mod. The result is then divided by k'(5500) so that
+    k(5500 Å) = 1.
 
     **Validity**: R_V,mod is well-defined for δ < 0.989; the denominator in Eq. 4
     passes through zero near δ ≈ 0.989. The declared prior Uniform(-1.0, 0.4) is safe.
