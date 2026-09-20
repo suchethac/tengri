@@ -21,6 +21,14 @@
   Parameters construction is untouched — a valid group without an on-disk grid
   still raises the same grid message.
 
+- Float32 refusal on Hessian-based inference now names the dtype in both
+  Laplace and preconditioning routes, clarifying that non-finiteness is a
+  float32 artifact (the SED model's photometry Hessian is all-NaN in float32)
+  rather than a diverged MAP initialization or genuine curvature failure. The
+  disable-profile-mass-then-raise anti-pattern at the float32 check no longer
+  silently mutates a `Fitter` on an exception path, preserving the invariant
+  that reuse-after-exception is safe (#2378).
+
 - Data locator hermeticity (#2329): a nested worktree's test run found untracked
   data (CLOUDY grids, Cue weights) in the main checkout via the locator's
   ancestor-directory walk, so suites passed locally and failed in CI. A new
