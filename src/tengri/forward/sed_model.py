@@ -3146,8 +3146,7 @@ class SEDModel:
     def wave_obs(self):
         """Configured observed-frame spectroscopy wavelength grid, or ``None``.
 
-        Reports the grid the model predicts spectra on: an explicitly cached
-        ``_wave_obs`` if present, otherwise the configured
+        Reports the grid the model predicts spectra on by consulting the configured
         ``observation.spectroscopy.wave_obs`` (the source of truth, #389/#620).
         Returns ``None`` only when no spectroscopy grid is configured anywhere.
 
@@ -3156,9 +3155,6 @@ class SEDModel:
         ndarray or None
             Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
         """
-        cached = getattr(self, "_wave_obs", None)
-        if cached is not None:
-            return cached
         obs = self.observation
         if obs is not None and getattr(obs, "spectroscopy", None) is not None:
             return getattr(obs.spectroscopy, "wave_obs", None)
@@ -3177,17 +3173,6 @@ class SEDModel:
         """
         return self._z_fixed is not None and self.filter_waves is not None
 
-    @property
-    def hybrid(self):
-        """Container of hybrid (precomputed × on-the-fly) kernels, or ``None``.
-
-        Public accessor for the internal ``_hybrid`` attribute. Returns
-        ``None`` when no hybrid kernels were built (e.g. when the model
-        is constructed without ``precompute=True``). Slots (``photometry``,
-        ``spectroscopy``) on the returned container are individually
-        ``None`` when that channel's hybrid path is unavailable.
-        """
-        return getattr(self, "_hybrid", None)
 
     @property
     def z_fixed(self):
@@ -9044,13 +9029,10 @@ class SEDModel:
             laws_in_play = (dust.config.law_bc, dust.config.law_diff, dust.config.law_neb)
             if any(law and "redshift" in law_kwarg_names(law) for law in laws_in_play):
                 unsafe_free.add("redshift")
-        # Detect dust emission: either old path (DustSEDComponent.emission_model)
-        # or new path (separate dust emission component in the pipeline).
-        # After the switchover, dust_emission_model is set from the spec even
-        # when using separate components, so we check that or the old emission_model path.
-        has_dust_emission = (
-            dust is not None and getattr(dust.config, "emission_model", None) is not None
-        ) or self._dust_emission_model is not None
+        # Detect dust emission: check if dust emission is configured.
+        # After the component migration, dust_emission_model is set from the spec
+        # and is the source of truth for whether dust emission is active.
+        has_dust_emission = self._dust_emission_model is not None
         # Dust emission is not the only consumer of L_ir. Radio reads it too, the
         # FIR-radio correlation sets the SF synchrotron amplitude, so a radio model
         # with no dust *emission* block still needs the LUT, and without it the
