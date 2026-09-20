@@ -91,18 +91,22 @@ def _tengri_dh02_ce01(wavelength_aa: np.ndarray, log_lir: float) -> np.ndarray:
     wavelength_aa : ndarray
         Wavelength grid [Å].
     log_lir : float
-        Log₁₀(L_IR/L_sun).
+        Log₁₀(L_IR/L_sun) for shape selection.
 
     Returns
     -------
     ndarray
-        Peak-normalized L_nu.
+        L_nu normalized to 10^log_lir erg/s (via single log-domain path).
     """
     from tengri.components.dust.emission_templates import create_dh02_ce01_from_grid
+    from tengri.utils.sed_quantities import LOG10_L_SUN
 
     fn = create_dh02_ce01_from_grid(str(_GRID_PATH))
-    # Return L_nu normalized to L_absorbed=1 (peak normalization applied below)
-    return np.asarray(fn(jnp.asarray(wavelength_aa), 1.0, dust_log_lir=log_lir))
+    # The single-path closure normalizes to 10^log_L_ir erg/s when log_L_ir is
+    # provided. Convert log_lir from Lsun to erg/s (the closure's convention).
+    # L_absorbed is ignored by the closure when log_L_ir is provided.
+    log_lir_ergs = log_lir + LOG10_L_SUN
+    return np.asarray(fn(jnp.asarray(wavelength_aa), 1.0, log_L_ir=log_lir_ergs))
 
 
 @pytest.mark.parametrize("log_lir", [10.0, 11.0, 12.0])
@@ -179,13 +183,18 @@ def test_dh02_ce01_is_finite_and_positive() -> None:
 
 
 def test_dh02_ce01_energy_balance() -> None:
-    """The frequency integral of emitted L_nu equals L_absorbed.
+    """The frequency integral of emitted L_nu equals the normalization target.
 
-    Validates the normalization: ∫L_nu dν = L_absorbed.
+    Validates the single-path log-domain normalization: ∫L_nu dν = 10^log_L_ir.
+    Pass log_lir=0 to get unit normalization (1.0 erg/s).
     """
+    from tengri.components.dust.emission_templates import create_dh02_ce01_from_grid
+
     wavelength = np.geomspace(1.0e4, 1.0e8, 4000)
     nu = _C_AA_PER_S / wavelength
-    sed = _tengri_dh02_ce01(wavelength, 11.0)
+    fn = create_dh02_ce01_from_grid(str(_GRID_PATH))
+    # Call with log_L_ir=0.0 to normalize to 1.0 erg/s for testing
+    sed = np.asarray(fn(jnp.asarray(wavelength), 1.0, log_L_ir=0.0))
     integral = -np.trapezoid(sed, nu)
     # Tolerance: numerical quadrature on a coarse grid
     assert abs(integral - 1.0) < 1.0e-2, f"Energy balance violation: ∫L_nu dν = {integral}"

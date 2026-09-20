@@ -121,6 +121,7 @@ from tengri.components.nebular._shared import (
     interp_continuum_with_freefree_tail,
     render_nebular_lines,
     sanitize_qh_table,
+    ssp_log_age_yr_axis,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.scale import pow10
@@ -652,7 +653,7 @@ class CloudyGridBackend:
         )
         # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
         self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
-        self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
+        self._qh_log_age = ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr)  # log(age/yr), #2418
 
         # Precompute indices of young SSP age bins (only these produce
         # ionizing photons and contribute to nebular emission)

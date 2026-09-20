@@ -25,6 +25,7 @@ import numpy as np
 
 from tengri.forward.population import Population
 from tengri.inference._backend_registry import DEFAULT_METHOD
+from tengri.observation.noise import DETECTED as _DETECTED
 from tengri.protocols.component import ForwardState
 from tengri.protocols.derived_state import DerivedState
 
@@ -1090,6 +1091,32 @@ class ForwardModel:
                 # it out of ``ctor_kwargs`` for the surface to set (#1366).
                 data = jnp.concatenate([jnp.asarray(v.flux), jnp.asarray(v.spec_flux)])
                 noise = jnp.concatenate([jnp.asarray(v.noise), jnp.asarray(v.spec_noise)])
+                if data_mask is not None:
+                    # The mask has to follow the data it masks. ``Data.censor``
+                    # is per-photometric-band by contract, and
+                    # ``validate_against`` refuses any other length, but
+                    # ``censored_neg_log_likelihood`` applies the mask to this
+                    # concatenated vector. Extending it here was missing, so a
+                    # joint fit carrying any censored band raised
+                    # ``Incompatible shapes for broadcasting`` from inside a
+                    # ``jnp.where`` three frames below ``fit()``, and no value of
+                    # ``censor`` satisfied both ends (#2432).
+                    #
+                    # Spectral pixels are detections. A censored pixel would be a
+                    # limit on one resolution element, which no instrument
+                    # reports and ``Data`` has no vocabulary for; line limits go
+                    # through ``Data.lines``, not here.
+                    mask_arr = jnp.asarray(data_mask)
+                    data_mask = jnp.concatenate(
+                        [
+                            mask_arr,
+                            jnp.full(
+                                jnp.asarray(v.spec_flux).shape,
+                                _DETECTED,
+                                dtype=mask_arr.dtype,
+                            ),
+                        ]
+                    )
                 ctor_kwargs.setdefault("data_type", "joint")
             elif v.spec_flux is not None:
                 data, noise = v.spec_flux, v.spec_noise

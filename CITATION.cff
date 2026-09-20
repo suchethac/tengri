@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "tengri: Differentiable SED Fitting with IFT Star Formation History Priors"
+title: "tengri: A Differentiable, Modular Framework for Bayesian Galaxy SED Fitting"
 message: "If you use this software, please cite it using the metadata from this file."
 type: software
 authors:
@@ -18,32 +18,16 @@ preferred-citation:
     - family-names: Cooray
       given-names: Suchetha
       email: astro.tengri@gmail.com
-  title: "tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. I. Framework and mock recovery"
+  title: "tengri: A Differentiable, Modular Framework for Bayesian Galaxy Spectral Energy Distribution Fitting"
   journal: "in preparation"
   year: 2026
-  notes: "Methods and mock recovery paper. DOI will be updated on acceptance."
-references:
-  - type: article
-    authors:
-      - family-names: Cooray
-        given-names: Suchetha
-        email: astro.tengri@gmail.com
-    title: "tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. II. Stochastic SFHs and hierarchical population inference"
-    journal: "in preparation"
-    year: 2026
-  - type: article
-    authors:
-      - family-names: Cooray
-        given-names: Suchetha
-        email: astro.tengri@gmail.com
-    title: "tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. III. Application to deep JWST surveys"
-    journal: "in preparation"
-    year: 2026
+  notes: "DOI will be updated on acceptance."
 keywords:
   - galaxy
   - SED fitting
   - star formation history
-  - information field theory
+  - differentiable programming
   - JAX
   - Bayesian inference
   - spectral energy distribution
+  - automatic differentiation

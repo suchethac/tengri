@@ -1,0 +1,18 @@
+{
+  "method": "nss",
+  "dispatched_to": "NSS (Yallup+2026)",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 36.69846274983138,
+  "wall_time_warm_s": null,
+  "n_params": 8,
+  "ess_min": 656.237247667261,
+  "s_per_ess_cold": 0.05592255374147703,
+  "rhat_max": 0.9996957360034969,
+  "log_stellar_mass": 10.56510223794179,
+  "log_stellar_mass_16": 10.478302303734143,
+  "log_stellar_mass_84": 10.627375012424492,
+  "log_sfr_100myr": 1.3935771703917998,
+  "log_sfr_100myr_16": 1.3243068959610729,
+  "log_sfr_100myr_84": 1.447765474283281
+}

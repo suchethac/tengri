@@ -25,6 +25,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from tengri.observation.constants import ELINE_MODES
+
 #: Cue's default line catalog (#2239): the full ~138-line Cue-trained set,
 #: not the legacy 128-line CLOUDY/FSPS-matched subset. The one declaration;
 #: every other spelling reads this constant rather than repeating the
@@ -309,10 +311,11 @@ class NebularConfig:
     ionization : str
         Ionization source for Cue: ``"ssp"`` (default).
     eline_mode : str
-        Emission line fitting mode.
+        Emission line fitting mode. One of:
+
         ``"off"``; no line treatment (default).
-        ``"fixed"``; fixed profiles.
-        ``"marginalized"``: analytic marginalization.
+        ``"marginalized"``: analytically marginalize line amplitudes.
+        ``"fitted"``: line amplitudes as free MCMC parameters.
     eline_broad : bool
         Enable broad AGN emission line component.  Default: ``False``.
 
@@ -345,9 +348,7 @@ class NebularConfig:
 
     def __post_init__(self) -> None:
         _validate_enum(self.backend, {"off", "baked_in", "cloudy", "cue"}, "NebularConfig.backend")
-        _validate_enum(
-            self.eline_mode, {"off", "fixed", "marginalized"}, "NebularConfig.eline_mode"
-        )
+        _validate_enum(self.eline_mode, ELINE_MODES, "NebularConfig.eline_mode")
         if self.backend == "cloudy" and self.grid_path is None:
             raise ValueError("NebularConfig: grid_path is required when backend='cloudy'.")
 
