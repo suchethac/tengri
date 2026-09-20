@@ -109,8 +109,7 @@ def __getattr__(name: str):
         If the name is not PLANCK15 or WMAP5.
     """
     if name in ("PLANCK15", "WMAP5"):
-        from dsps.cosmology import PLANCK15 as _dsps_planck15
-        from dsps.cosmology import WMAP5 as _dsps_wmap5
+        from dsps.cosmology import PLANCK15 as _dsps_planck15, WMAP5 as _dsps_wmap5
 
         if name == "PLANCK15":
             return CosmoParams(*_dsps_planck15)

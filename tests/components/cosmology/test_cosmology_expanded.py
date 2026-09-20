@@ -574,12 +574,12 @@ def test_age_at_z0_host_matches_dsps(cosmo_obj):
     without importing JAX or allocating device buffers.
     """
     from dsps.cosmology.flat_wcdm import age_at_z0 as dsps_age_at_z0
-    
+
     host_age = age_at_z0_host(cosmo_obj)
     dsps_age_val = float(dsps_age_at_z0(*cosmo_obj))
-    
+
     # Absolute tolerance: float64 rounding error
     assert abs(host_age - dsps_age_val) < 1e-9 * max(abs(dsps_age_val), 1.0)
-    
+
     # Rounded values must match (used in registry)
     assert round(host_age, 3) == round(dsps_age_val, 3)
