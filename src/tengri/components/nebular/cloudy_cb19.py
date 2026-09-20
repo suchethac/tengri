@@ -175,6 +175,7 @@ from tengri.components.nebular._shared import (
     compute_qh_log10,
     render_nebular_lines,
     sanitize_qh_table,
+    ssp_log_age_yr_axis,
 )
 from tengri.config.exceptions import ParameterError, TengriIOError
 from tengri.utils.grid_interp import (
@@ -1039,7 +1040,7 @@ class CB19Backend:
         # Store as JAX arrays so they can be indexed with traced integers
         # inside jax.vmap (numpy arrays fail when indexed with traced values).
         self._qh_log_met = jnp.array(ssp_data.ssp_lgmet)  # log10(Z) absolute
-        self._qh_log_age = jnp.array(ssp_data.ssp_lg_age_gyr + 9.0)  # log10(age/yr)
+        self._qh_log_age = ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr)  # log10(age/yr), #2418
 
         ssp_log_ages = np.array(self._qh_log_age)
         young_mask = ssp_log_ages <= self._max_neb_log_age

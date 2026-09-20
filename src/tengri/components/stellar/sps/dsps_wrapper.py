@@ -87,6 +87,7 @@ def canonical_dsps_kwargs(**kwargs):
 # dependency of this module rather than a hidden one. ``_data_setup`` imports
 # only the standard library, so there is no cycle to avoid.
 from tengri._data_setup import download_ssp
+from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
 
 class SSPData(NamedTuple):
@@ -819,8 +820,9 @@ def _synthesize_mass_remaining(
     # surviving-mass sum downstream (log_mstar = NaN) regardless of the
     # anchor's weight. No star has died at age 0, so floor the age at
     # 0.1 Myr where f_surv = 1 to DSPS's own fit accuracy; a no-op for
-    # grids whose youngest template is already >= 0.1 Myr.
-    lg_age_yr = jnp.maximum(ssp_lg_age_gyr + 9.0, 5.0)
+    # grids whose youngest template is already >= 0.1 Myr. The floor is the
+    # one constant the nebular Q_H axes also read (#2418).
+    lg_age_yr = jnp.maximum(ssp_lg_age_gyr + 9.0, ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR)
     f_surv_age = surviving_mstar(lg_age_yr, **params)
     return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 
