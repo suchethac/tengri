@@ -803,6 +803,10 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
     and this fit's data, and warns with the number and the remedy above
     :data:`_LUT_BIAS_GRAD_WARN`.
 
+    For free-redshift fits, evaluates bias at multiple redshifts spanning one
+    table step of the LUT's z axis within the prior (#2105), since the
+    z-interpolation error is invisible to a single-point probe.
+
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
     mismatches, exotic data layouts) degrades to silence, the fit proceeds
@@ -840,6 +844,7 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
         return
     from tengri.config.exceptions import PrecompBiasWarning, warn_measured
 
+    remedy = "approx=None (the exact path on every surface since #2385)"
     warn_measured(
         f"{surface}: the precompute LUT's forward bias, amplified by this "
         f"fit's SNR, gives an estimated relative posterior-gradient error "
@@ -848,8 +853,8 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
         f"(invisible to any forward check) but enters the gradient "
         f"multiplied by SNR, moves the mode, and better data makes it "
         f"worse (#1671; spectroscopy sibling measured in #1688). For "
-        f"final inference at this SNR, rerun with approx=None (the exact "
-        f"path) or compare the two posteriors. Filter PrecompBiasWarning "
+        f"final inference at this SNR, rerun with {remedy} "
+        f"or compare the two posteriors. Filter PrecompBiasWarning "
         f"if this trade is deliberate.",
         PrecompBiasWarning,
         stacklevel=3,
