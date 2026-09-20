@@ -61,6 +61,7 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.components.nebular._params import PARAMS as NEB_PARAMS
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
@@ -68,6 +69,7 @@ from tengri.components.nebular._shared import (
     render_nebular_lines,
     sanitize_qh_table,
 )
+from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -1002,7 +1004,7 @@ class MappingsPhotoAGNBackend:
         self,
         agn_log_l_ion_erg: float,
         neb_logZ_gas: float = _LOG10_ZSUN,
-        neb_logU: float = -2.0,
+        neb_logU: float | None = None,
         agn_logmbh: float = 7.0,
         agn_logedd: float = -0.5,
         neb_logn: float = 3.0,
@@ -1062,6 +1064,8 @@ class MappingsPhotoAGNBackend:
             https://doi.org/10.3847/1538-4365/aa6541
 
         """
+        if neb_logU is None:
+            neb_logU = declared_default(NEB_PARAMS, "neb_logU")
         grid = self.grid
         zo_val = _log_z_abs_to_zo(neb_logZ_gas)
 
@@ -1098,7 +1102,7 @@ class MappingsPhotoAGNBackend:
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -2.0,
+        neb_logU: float | None = None,
         neb_logZ_gas: float | None = None,
         neb_logn: float = 3.0,
         neb_fesc: float = 0.0,
