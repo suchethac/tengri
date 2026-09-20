@@ -367,6 +367,8 @@ class TestModelTree:
 
     def test_recommend_method_used_in_fit(self, smooth_model):
         """recommend_method() output should be accepted by model.fit()."""
+        # Only include free parameters in the dict passed to mock/predict/etc.
+        # Fixed parameters (dust_slope, redshift) are not allowed in params dicts (#2296).
         true_params = {
             "sfh_dpl_alpha": 1.2,
             "sfh_dpl_beta": 1.0,
@@ -376,8 +378,6 @@ class TestModelTree:
             "met_logzsol": -0.3,
             "dust_tau_bc": 1.0,
             "dust_tau_diff": 0.3,
-            "dust_slope": -0.7,
-            "redshift": 0.1,
         }
         mock = smooth_model.mock(true_params, snr=10.0, key=jax.random.PRNGKey(99))
         # Just test it runs without error; MAP is fast

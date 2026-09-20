@@ -24,9 +24,10 @@ def mock_flux(synthetic_ssp_wide, synthetic_tophat_obs):
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
-    # Get fixed parameters
-    params = sed.spec.get_fixed_values()
-    pred = sed.predict_photometry(params)
+    # Every parameter is Fixed on this model, so the free-only params dict
+    # is empty; predict_photometry self-merges the spec's Fixed values
+    # internally (#2296) rather than accepting them back as params keys.
+    pred = sed.predict_photometry({})
     noise = 0.05 * pred + 1e-15  # Add small floor
     return pred, noise
 

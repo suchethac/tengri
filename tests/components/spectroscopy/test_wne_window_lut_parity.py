@@ -45,6 +45,7 @@ from tengri.observation.spectral_indices import (
     measure_indices_from_windows,
     precompute_index_windows,
 )
+from tengri.parameters.resolve import merge_fixed_params
 
 pytestmark = pytest.mark.contract
 
@@ -113,9 +114,10 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
             redshift=Fixed(0.05),
         )
 
+    # dust_tau_diff / dust_tau_bc are already Fixed(0.0) on this build
+    # (#2296): restating them in the free-only params dict would be a
+    # refused presence override of a Fixed key, not a value mismatch.
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["dust_tau_diff"] = jnp.asarray(0.0)
-    p["dust_tau_bc"] = jnp.asarray(0.0)
 
     st = m.predict_state(p)
     jw = np.asarray(st.derived["joint_weights"])
@@ -297,7 +299,11 @@ def test_compute_joint_weights_bitidentical_to_predict_state():
     for i in range(6):
         p = dict(m.spec.sample(jax.random.PRNGKey(i)))
         jw_exact = np.asarray(m.predict_state(p).derived["joint_weights"])
-        jw_fast, _tm, _ages = stellar.compute_joint_weights(p)
+        # compute_joint_weights is a direct component-level call, bypassing
+        # predict_state's merge boundary (#2296): it needs the fully merged
+        # dict (redshift included), unlike predict_state which self-merges.
+        full_p = merge_fixed_params(m.spec, p)
+        jw_fast, _tm, _ages = stellar.compute_joint_weights(full_p)
         rel = np.max(np.abs(np.asarray(jw_fast) - jw_exact) / np.maximum(np.abs(jw_exact), 1e-40))
         worst = max(worst, rel)
     assert worst == 0.0, (
@@ -318,7 +324,10 @@ def test_compute_nion_matches_predict_state():
     for i in range(6):
         p = dict(m.spec.sample(jax.random.PRNGKey(i)))
         nion_exact = float(np.sum(np.asarray(m.predict_state(p).derived["nion"])))
-        nion_fast = float(np.asarray(stellar.compute_nion(p)))
+        # compute_nion is a direct component-level call bypassing
+        # predict_state's merge boundary (#2296); needs the merged dict.
+        full_p = merge_fixed_params(m.spec, p)
+        nion_fast = float(np.asarray(stellar.compute_nion(full_p)))
         worst = max(worst, abs(nion_fast - nion_exact) / max(abs(nion_exact), 1e-30))
     assert worst < 1e-6, f"compute_nion diverges from predict_state by {worst:.2e}"
 
@@ -352,12 +361,17 @@ def test_fast_path_is_faster_than_full_grid(real_ssp_only):
 
     @jax.jit
     def fast(params):
-        jw, tm, ages = stellar.compute_joint_weights(params)
+        # compute_joint_weights is a direct component-level call bypassing
+        # predict_state's merge boundary (#2296); merge in the Fixed values
+        # (redshift) it reads directly. Safe under jit: a static membership
+        # test plus filling in compile-time-constant Fixed values.
+        full_params = merge_fixed_params(m.spec, params)
+        jw, tm, ages = stellar.compute_joint_weights(full_params)
         trans = two_component_dust(
             wavelength=pc.window_centers,
             age_grid=ages,
-            tau_v1=params["dust_tau_bc"],
-            tau_v2=params["dust_tau_diff"],
+            tau_v1=full_params["dust_tau_bc"],
+            tau_v2=full_params["dust_tau_diff"],
             law_bc="calzetti",
             law_diff="calzetti",
         )
@@ -414,7 +428,10 @@ def test_compute_joint_weights_supports_field_sfh():
         )
     stellar = _stellar_of(m)
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    jw, tm, _ages = stellar.compute_joint_weights(p)
+    # Direct component-level call bypassing predict_state's merge boundary
+    # (#2296): needs the merged dict (redshift is Fixed here).
+    full_p = merge_fixed_params(m.spec, p)
+    jw, tm, _ages = stellar.compute_joint_weights(full_p)
     assert jnp.all(jnp.isfinite(jw)), "field weights must be finite"
     assert abs(float(jw.sum()) - 1.0) < 1e-6, "joint weights must sum to 1"
     assert float(tm) > 0.0, "total formed mass must be positive"

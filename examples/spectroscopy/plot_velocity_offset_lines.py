@@ -38,9 +38,17 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 spec = tengri.Spectroscopy(wave_obs=WAVE_OBS, resolution=3000.0)
 obs = tengri.Observation(spectroscopy=spec)
 
-model = tengri.SEDModel.build(
-    ssp,
-    observation=obs,
+# ``sigma_v_kms`` is a "shared" parameter (parameters/_shared.py) with no
+# nested-dict-grammar key of its own -- unlike redshift/met_logzsol it is
+# reachable through neither a top-level ``SEDModel.build(...)`` kwarg nor any
+# group's wildcard, only through the flat ``Parameters`` escape hatch. It is
+# swept below (#2296: a params-dict key the spec declared Fixed is refused),
+# so build the spec via ``parse_groups`` as ``.build()`` would internally,
+# then free it explicitly with ``merge_observation_params`` before
+# constructing the model. Declared bounds are capped at the parameter's own
+# physical constraint (sigma_v_kms in [0, 2000] km/s); SIGMA_GRID's 5000 km/s
+# point is a direct value override at predict time, not bounded by the prior.
+param_spec = tengri.parse_groups(
     sfh={
         "type": "dpl",
         "all_params": tengri.Fixed(tengri.DEFAULT),
@@ -63,7 +71,8 @@ model = tengri.SEDModel.build(
         "fesc": tengri.Fixed(0.0),
     },
     redshift=tengri.Fixed(Z),
-)
+).merge_observation_params(sigma_v_kms=tengri.Uniform(0.0, 2000.0))
+model = tengri.SEDModel(param_spec, ssp, observation=obs)
 
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 

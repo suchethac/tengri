@@ -20,18 +20,26 @@ def minimal_sed_model(synthetic_ssp_wide, simple_observation):
     """Minimal SEDModel for testing."""
     from tengri import DEFAULT, FREE, Fixed, SEDModel
 
+    # Fixed values here match the fixtures' hand-written "truth" dicts below
+    # exactly (#2296): a params dict may no longer carry a key the spec
+    # declared Fixed, so met_logzsol/dust_tau_diff/dust_slope/redshift are
+    # baked into the build instead of being spread into predict_photometry's
+    # params at call time.
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=simple_observation,
         sfh={"type": "dpl", "all_params": FREE},
+        met={"logzsol": Fixed(-0.3), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
+            "tau_diff": 0.3,
+            "slope": -0.7,
         },
         neb={"type": "none"},
-        redshift=Fixed(DEFAULT),
+        redshift=Fixed(0.1),
     )
     return model
 
@@ -40,17 +48,17 @@ def minimal_sed_model(synthetic_ssp_wide, simple_observation):
 def catalog_single_row(minimal_sed_model):
     """Single-row catalog dict."""
     # Generate synthetic flux from the model using prior midpoints
+    # Free-only (#2296): met_logzsol/dust_tau_bc/dust_tau_diff/dust_slope/
+    # redshift are Fixed on minimal_sed_model, baked in above at exactly
+    # these values -- listing them here too would be a refused override of
+    # a Fixed key, not a value mismatch (presence is refused regardless of
+    # whether the value matches the pin).
     true_params = {
         "sfh_dpl_alpha": 1.5,
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 4.0,
         "sfh_dpl_age_gyr": 8.0,
         "sfh_dpl_log_total_mass": 0.9,
-        "met_logzsol": -0.3,
-        "dust_tau_bc": 0.5,
-        "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
     }
     flux_true = minimal_sed_model.predict_photometry(true_params)
     noise = jnp.abs(flux_true) * 0.1 + 1e-30
@@ -70,17 +78,17 @@ def catalog_single_row(minimal_sed_model):
 @pytest.fixture
 def catalog_multi_row(minimal_sed_model):
     """Multi-row catalog dict (3 rows)."""
+    # Free-only (#2296): met_logzsol/dust_tau_bc/dust_tau_diff/dust_slope/
+    # redshift are Fixed on minimal_sed_model, baked in above at exactly
+    # these values -- listing them here too would be a refused override of
+    # a Fixed key, not a value mismatch (presence is refused regardless of
+    # whether the value matches the pin).
     true_params = {
         "sfh_dpl_alpha": 1.5,
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 4.0,
         "sfh_dpl_age_gyr": 8.0,
         "sfh_dpl_log_total_mass": 0.9,
-        "met_logzsol": -0.3,
-        "dust_tau_bc": 0.5,
-        "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
     }
     flux_true = minimal_sed_model.predict_photometry(true_params)
     noise = jnp.abs(flux_true) * 0.1 + 1e-30

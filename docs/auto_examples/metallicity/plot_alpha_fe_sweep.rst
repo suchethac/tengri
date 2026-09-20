@@ -30,7 +30,7 @@ passively evolving galaxy where iron features dominate the continuum absorption.
 
 Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-82
+.. GENERATED FROM PYTHON SOURCE LINES 14-87
 
 
 
@@ -82,6 +82,11 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
             "tau_bc": 0.0,
             "tau_diff": 0.1,
         },
+        # ``met_alpha_fe`` is swept below (#2296: a params-dict key the spec
+        # declared Fixed is refused), so it must be free; no ``met=`` group was
+        # declared before, defaulting the whole group to ``Fixed(DEFAULT)``.
+        # Bounds exactly cover the sweep and match the grid-supported range.
+        met={"alpha_fe": tengri.Uniform(-0.2, 0.6)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -117,7 +122,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.031 seconds)
+   **Total running time of the script:** (0 minutes 3.713 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_alpha_fe_sweep.py:

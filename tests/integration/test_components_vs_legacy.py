@@ -98,7 +98,17 @@ def test_orchestrator_injects_fixed_values_from_spec(stellar_only_model):
 
 
 def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
-    """A param passed explicitly must win over the spec's fixed value."""
+    """A param passed explicitly at a different value than the spec's Fixed
+    pin is refused, not silently honored (#2296).
+
+    Before #2296 an explicit override silently won over the spec's Fixed
+    value here -- exactly the "honored on specialized paths, ignored on
+    exact paths" divergence #2296 closed (see
+    tengri.parameters.resolve.refuse_fixed_overrides). Rebuilding the model
+    with a different Fixed value is the sanctioned way to change it now.
+    """
+    from tengri.config.exceptions import ParameterError
+
     free_only = {
         "sfh_tsnorm_log_total_mass": 1.0,
         "sfh_tsnorm_peak_lbt_gyr": 2.0,
@@ -106,20 +116,8 @@ def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
         "sfh_tsnorm_skew": 0.0,
         "sfh_tsnorm_trunc": 3.0,
     }
-    state_default = stellar_only_model.predict_state(free_only)
-    # Override met_logzsol with a different value than the spec fixed.
-    state_overridden = stellar_only_model.predict_state({**free_only, "met_logzsol": 0.0})
-    # Stellar SED differs because metallicity strongly affects spectral shape.
-    rel_diff = float(
-        jnp.max(
-            jnp.abs(state_default.sed_intrinsic - state_overridden.sed_intrinsic)
-            / jnp.maximum(jnp.abs(state_default.sed_intrinsic), 1e-30)
-        )
-    )
-    assert rel_diff > 1e-3, (
-        f"Override didn't change SED: max rel diff = {rel_diff:.3e} "
-        "(orchestrator ignored explicit met_logzsol?)"
-    )
+    with pytest.raises(ParameterError, match="met_logzsol"):
+        stellar_only_model.predict_state({**free_only, "met_logzsol": 0.0})
 
 
 # ── Sanity: both paths run, produce finite + same-shape output ────────

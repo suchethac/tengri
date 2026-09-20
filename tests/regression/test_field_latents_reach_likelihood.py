@@ -81,7 +81,7 @@ def test_field_latents_receive_likelihood_gradient():
     observation = Observation(photometry=phot, noise=noise_model)
     model = _model(ssp, observation)
 
-    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
     flux, err = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 
@@ -155,7 +155,7 @@ def test_posterior_params_evaluate_to_the_fitted_model():
     )
     model = _model(ssp, observation)
 
-    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
     flux, err = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 
@@ -178,9 +178,8 @@ def test_posterior_params_evaluate_to_the_fitted_model():
     xi = np.asarray(res.params["psd_xi"])
     assert np.linalg.norm(xi) > 1e-8, "fit returned a degenerate all-zero field; test is vacuous"
 
-    fixed = model.spec.get_fixed_values()
-    with_field = np.asarray(model.predict_photometry({**fixed, **res.params}))
-    off = {**fixed, **res.params}
+    with_field = np.asarray(model.predict_photometry(dict(res.params)))
+    off = dict(res.params)
     off["sfh_field_xi"] = jnp.zeros_like(jnp.asarray(xi))
     off["psd_xi"] = jnp.zeros_like(jnp.asarray(xi))
     without_field = np.asarray(model.predict_photometry(off))
@@ -216,7 +215,7 @@ def test_predict_sfh_native_grid_is_reachable_and_unresampled():
         photometry=phot, noise=NoiseModel(calibration_floor=0.01, student_t_dof=None)
     )
     model = _model(ssp, observation)
-    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(5))}
+    params = dict(model.spec.sample(jax.random.PRNGKey(5)))
 
     native = model.predict_sfh(params, grid="native")
     linear = model.predict_sfh(params)
@@ -272,7 +271,7 @@ def test_sampler_spelling_alone_does_not_reach_the_flux_path():
     )
     model = _model(ssp, observation)
 
-    base = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(5))}
+    base = dict(model.spec.sample(jax.random.PRNGKey(5)))
     xi = np.asarray(base["sfh_field_xi"])
     assert np.linalg.norm(xi) > 1e-8, "sampled field is degenerate; test would be vacuous"
 
@@ -336,7 +335,7 @@ def test_forward_model_supports_line_flux_fits():
         "ForwardModel must delegate _has_line_catalog to the inner SED"
     )
 
-    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
     res = forward.fit(
         np.asarray(mock.flux_obs),

@@ -8,6 +8,10 @@ Dust Emission
 Dust emission templates auto-load from ``data/``; analytic fallbacks are not suitable for science. PAH features in Draine & Li templates (q_PAH and U_min sweeps). Mid-IR PAH diagnostics distinguish star-forming, AGN, and composite systems. Temperature sweeps. Template libraries: BOSA, THEMIS, PAHspec, Astrodust (HD23).
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
@@ -34,6 +38,40 @@ Dust emission templates auto-load from ``data/``; analytic fallbacks are not sui
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Casey 2012 Eq. 1 defines a mid-to-far-IR dust SED with temperature T, MIR emissivity index α_mir, FIR emissivity index β, and a pivot wavelength λ_0 where the opacity transitions from the MIR to FIR regime. The top panel sweeps temperature at a fixed 200 μm pivot (the value used in Synthesizer&#x27;s documentation); the bottom panel holds temperature at 35 K and varies the pivot wavelength, showing how it controls the FIR peak location. Both use a constant dust mass and fixed attenuation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_casey2012_temperature_pivot_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_casey2012_temperature_pivot`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Casey 2012 dust model: temperature and pivot wavelength effects</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="At high redshift, the Cosmic Microwave Background (CMB) raises the dust temperature, following da Cunha et al. (2013). Tengri applies a CMB contrast factor 1 - B_ν(T_CMB(z)) / B_ν(T_dust(z)) to the emitted spectrum, so the fraction of the absorbed luminosity that is observable against the CMB in the 8–1000 μm rest-frame window falls for cold dust at high redshift. The quantity plotted is that fraction at z = 10 divided by the same fraction at z = 0.05, which isolates the CMB effect from the absolute luminosity of the galaxy. At 25 K the ratio is ~0.35, whereas codes that instead boost the luminosity by (T_z / T_0)^(4 + β) report ~3.9. The dust temperature itself rises from 25 K to ~31.5 K at z = 10. Hot dust (≥ 100 K) is unaffected because its emission sits far above the CMB at every wavelength.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_cmb_heating_lir_ratio_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_cmb_heating_lir_ratio`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">CMB heating: dust temperature and infrared luminosity ratio across redshift</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="A 2-D grid on the Draine &amp; Li 2007 template library: rows step through PAH mass fraction q_PAH (controls mid-IR PAH-feature strength), columns through the minimum radiation field U_min (sets the diffuse dust temperature, i.e. the FIR peak position). The two axes act nearly orthogonally — a surprise for anyone who would lump them together as &quot;PAH knobs.&quot;">
 
 .. only:: html
@@ -46,6 +84,23 @@ Dust emission templates auto-load from ``data/``; analytic fallbacks are not sui
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">The q_PAH and U_min knobs move PAH amplitude and FIR peak independently</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The optically thin dust emission (modified blackbody) is ν^β B_ν(T), where dust temperature T and emissivity index β determine the SED shape. Adding a frequency-dependent opacity (general graybody) introduces (1 - exp(-(λ_0/λ)^β)) B_ν(T), which peaks in the FIR before flattening in the sub-mm — this shape is also used in CIGALE. A pure blackbody is obtained by setting β = 0 in the modified blackbody form. Both models assume a constant dust mass and fixed attenuation, varying only temperature.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_graybody_opacity_temperature_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_graybody_opacity_temperature`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Graybody dust opacity: optically thin vs. general form across temperature</div>
     </div>
 
 
@@ -179,7 +234,10 @@ Dust emission templates auto-load from ``data/``; analytic fallbacks are not sui
    :hidden:
 
    /auto_examples/dust_emission/plot_bosa_grid
+   /auto_examples/dust_emission/plot_casey2012_temperature_pivot
+   /auto_examples/dust_emission/plot_cmb_heating_lir_ratio
    /auto_examples/dust_emission/plot_dust_qpah_umin_grid
+   /auto_examples/dust_emission/plot_graybody_opacity_temperature
    /auto_examples/dust_emission/plot_ir_library_compare
    /auto_examples/dust_emission/plot_mbb_temperature_beta_grid
    /auto_examples/dust_emission/plot_mid_ir_pah_features

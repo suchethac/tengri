@@ -42,9 +42,15 @@ obs = tengri.Observation(
     spectroscopy=tengri.Spectroscopy(wave_obs=WAVE_OBS),
 )
 
-model = tengri.SEDModel.build(
-    ssp,
-    observation=obs,
+# ``sigma_v_kms`` is a "shared" parameter (parameters/_shared.py) with no
+# nested-dict-grammar key of its own -- unlike redshift/met_logzsol it is
+# reachable through neither a top-level ``SEDModel.build(...)`` kwarg nor any
+# group's wildcard, only through the flat ``Parameters`` escape hatch. It is
+# swept below (#2296: a params-dict key the spec declared Fixed is refused),
+# so build the spec via ``parse_groups`` as ``.build()`` would internally,
+# then free it explicitly with ``merge_observation_params`` before
+# constructing the model. Bounds pad the 50-400 km/s sweep.
+spec = tengri.parse_groups(
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
@@ -63,7 +69,8 @@ model = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(REDSHIFT),
-)
+).merge_observation_params(sigma_v_kms=tengri.Uniform(0.0, 500.0))
+model = tengri.SEDModel(spec, ssp, observation=obs)
 
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
