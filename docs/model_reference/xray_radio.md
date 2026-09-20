@@ -109,7 +109,9 @@ The free-free spectral index $\alpha_{\rm ff} \approx -0.1$ is nearly flat (defa
 
 #### Controlling free-free inclusion
 
-The free-free component is enabled by default. To disable it (for example, to match synchrotron-only models from other codes), pass `freefree: False` in the `radio.sf` sub-dict:
+The free-free component's default depends on the declared nebular backend: it is **off** when the nebular backend carries a free-free continuum (`cue` or `cloudy_grid`), and **on** for all other backends (`none`, baked-in `ssp`, and `cb19` which publishes no continuum). This automatic rule prevents double-counting of thermal free-free between 1 mm and the end of the grid: the Cue and CloudyGrid backends analytically extend their continuum grids beyond 1 cm as optically thin free-free with slope $\nu^{-0.1}$, and an explicit `radio.sf.freefree: True` would add a second thermal term via Murphy et al. (2011). The predicate is keyed on the declared nebular backend name (`nebular_backend_carries_freefree` in `tengri.components.nebular._models`), not on the published continuum array.
+
+To override the default, pass `freefree: True` or `freefree: False` explicitly in the `radio.sf` sub-dict:
 
 ```python
 radio={
@@ -118,7 +120,9 @@ radio={
 }
 ```
 
-Omitting the `freefree` key is equivalent to `freefree: True` for all SFR modes except `bell2003_split`, which automatically forces `freefree: False` (since that mode pre-allocates 10% of its total Bell 2003 radio luminosity to a thermal component). Explicitly passing `freefree: True` with `bell2003_split` raises an error to prevent unintended double-counting of thermal emission.
+Omitting the `freefree` key applies the auto rule above. Exception: `bell2003_split` forces `freefree: False` (since that mode pre-allocates 10% of its total Bell 2003 radio luminosity to a thermal component). Explicitly passing `freefree: True` with `bell2003_split` raises an error to prevent unintended double-counting of thermal emission.
+
+**Known limitation**: the baked-in (`ssp`) nebular continuum lives inside the SSP flux, ends at the SSP grid edge, and is not extended. With a radio block, the auto rule keeps `freefree: True` for baked-in models, so that combination still overlaps between 1 mm and the SSP edge.
 
 ### AGN Radio Jets
 

@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.components.radio.component import RadioSEDComponentConfig
 from tengri.config.exceptions import ConfigError
 from tengri.radio import radio_sfr_bell2003
@@ -237,4 +237,180 @@ def test_freefree_changes_the_compile_signature(synthetic_radio_ssp, synthetic_t
     assert model_true.compile_signature() != model_false.compile_signature(), (
         "freefree=True and freefree=False must compile to different signatures -- "
         "sharing one would hand one model's kernel to the other"
+    )
+
+
+# ── Nebular backend continuum rule (#2346) ────────────────────────────────
+def _build_cue_radio_model(ssp, obs, freefree=None):
+    """A Cue nebular + radio model with the given ``sf.freefree`` setting.
+
+    Like ``_build_radio_model``, but with ``neb={'type': 'cue', ...}`` to test
+    the factory-level auto rule (#2346): when the declared nebular backend
+    carries a free-free continuum (Cue, CloudyGrid), ``include_freefree=None``
+    resolves to ``False`` at construction, so the radio block does not add a
+    second thermal term on top of the nebular continuum.
+
+    Requires the Cue weights file and the git-tracked bare-stellar FSPS PRSC SSP.
+    """
+    from tengri._data_setup import find_data_str
+
+    cue_weights = find_data_str("cue_weights.npz")
+    if cue_weights is None:
+        pytest.skip("Cue weights file not found")
+
+    sf_dict = {"type": "bell2003"}
+    if freefree is not None:
+        sf_dict["freefree"] = freefree
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(0.0),
+            sfh={"type": "const", "all_params": FREE},
+            dust_attenuation={"type": "two_component", "law": "calzetti"},
+            dust_emission={"type": "draine_li2014"},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+            radio={
+                "sf": sf_dict,
+                "agn": {"type": "powerlaw"},
+                "all_params": FREE,
+                "q_ir": Fixed(2.5),
+                "alpha_sf": Fixed(0.8),
+            },
+        )
+
+
+def test_freefree_absent_key_resolves_to_false_with_cue_continuum(
+    ssp_data_fsps, synthetic_tophat_obs
+):
+    """When Cue (free-free bearing nebular) is declared, None → False automatically."""
+    model = _build_cue_radio_model(ssp_data_fsps, synthetic_tophat_obs, freefree=None)
+
+    assert model.spec.radio_include_freefree is None, (
+        "spec.radio_include_freefree must be None when the freefree key is absent"
+    )
+    config = _radio_config(model)
+    assert config.include_freefree is False, (
+        "RadioSEDComponentConfig must resolve None to False when the declared "
+        "nebular backend carries a free-free continuum (Cue carries one)"
+    )
+
+
+def test_freefree_absent_key_stays_true_for_cb19(synthetic_radio_ssp, synthetic_tophat_obs):
+    """CB19 has no continuum, so None stays True (no nebular free-free to conflict).
+
+    Asserts the predicate directly that CB19 carries no nebular continuum,
+    and verifies the model-level check skips when the resolved CB19 grid is
+    the flat placeholder (git-tracked data/cb19_templates.h5).
+    """
+    from tengri._data_setup import find_data_str
+    from tengri.components.nebular._models import nebular_backend_carries_freefree
+    from tengri.components.nebular.cloudy_cb19 import CB19DegenerateGridError
+
+    cb19_grid = find_data_str("cb19_templates.h5")
+    if cb19_grid is None:
+        pytest.skip("CB19 templates file not found")
+
+    assert nebular_backend_carries_freefree("cb19") is False, (
+        "cb19 publishes no nebular continuum, so it must not switch the radio free-free term off"
+    )
+
+    sf_dict = {"type": "bell2003"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            model = SEDModel.build(
+                ssp_data=synthetic_radio_ssp,
+                observation=synthetic_tophat_obs,
+                redshift=Fixed(0.0),
+                sfh={"type": "const", "all_params": FREE},
+                dust_attenuation={"type": "two_component", "law": "calzetti"},
+                dust_emission={"type": "draine_li2014"},
+                neb={"type": "cb19", "all_params": Fixed(DEFAULT)},
+                radio={
+                    "sf": sf_dict,
+                    "agn": {"type": "powerlaw"},
+                    "all_params": FREE,
+                    "q_ir": Fixed(2.5),
+                    "alpha_sf": Fixed(0.8),
+                },
+            )
+        except CB19DegenerateGridError as exc:
+            assert "flat placeholder" in str(exc), (
+                f"Unexpected CB19DegenerateGridError (not the placeholder): {str(exc)[:120]}"
+            )
+            pytest.skip(f"cb19 grid resolved to the flat placeholder: {str(exc)[:120]}")
+
+    assert model.spec.radio_include_freefree is None
+    config = _radio_config(model)
+    assert config.include_freefree is True, (
+        "RadioSEDComponentConfig must resolve None to True when the nebular "
+        "backend does NOT carry a free-free continuum (CB19 publishes zeros)"
+    )
+
+
+def test_explicit_freefree_true_overrides_cue_auto_rule(ssp_data_fsps, synthetic_tophat_obs):
+    """Explicit ``freefree=True`` overrides the Cue auto-rule; SED differs from False."""
+    model_explicit_true = _build_cue_radio_model(
+        ssp_data_fsps, synthetic_tophat_obs, freefree=True
+    )
+    model_explicit_false = _build_cue_radio_model(
+        ssp_data_fsps, synthetic_tophat_obs, freefree=False
+    )
+
+    config_true = _radio_config(model_explicit_true)
+    config_false = _radio_config(model_explicit_false)
+
+    assert config_true.include_freefree is True
+    assert config_false.include_freefree is False
+
+    # Verify that the SED differs above 1 mm (radio band starts at 1 mm)
+    params_true = model_explicit_true.spec.sample(jax.random.PRNGKey(0))
+    state_true = model_explicit_true.predict_state(params_true)
+
+    params_false = model_explicit_false.spec.sample(jax.random.PRNGKey(0))
+    state_false = model_explicit_false.predict_state(params_false)
+
+    wave = np.asarray(state_true.wave)
+    sed_radio_true = np.asarray(state_true.derived["sed_radio"])
+    sed_radio_false = np.asarray(state_false.derived["sed_radio"])
+
+    radio_mask = wave > _RADIO_WAVE_MIN_AA
+    assert np.any(radio_mask), "no radio-band wavelength points in the model's grid"
+    assert not np.allclose(sed_radio_true[radio_mask], sed_radio_false[radio_mask], rtol=1e-8), (
+        "explicit freefree=True must produce a different sed_radio than freefree=False"
+    )
+
+
+def test_one_thermal_term_contract_with_cue(ssp_data_fsps, synthetic_tophat_obs):
+    """Cue model absent freefree key = Cue model explicit False; exactly one thermal term."""
+    model_absent = _build_cue_radio_model(ssp_data_fsps, synthetic_tophat_obs, freefree=None)
+    model_explicit_false = _build_cue_radio_model(
+        ssp_data_fsps, synthetic_tophat_obs, freefree=False
+    )
+
+    params_absent = model_absent.spec.sample(jax.random.PRNGKey(0))
+    state_absent = model_absent.predict_state(params_absent)
+
+    params_explicit_false = model_explicit_false.spec.sample(jax.random.PRNGKey(0))
+    state_explicit_false = model_explicit_false.predict_state(params_explicit_false)
+
+    sed_radio_absent = np.asarray(state_absent.derived["sed_radio"])
+    sed_radio_explicit = np.asarray(state_explicit_false.derived["sed_radio"])
+
+    sed_nebular_absent = np.asarray(state_absent.derived["sed_nebular"])
+    sed_nebular_explicit = np.asarray(state_explicit_false.derived["sed_nebular"])
+
+    np.testing.assert_array_equal(
+        sed_radio_absent,
+        sed_radio_explicit,
+        err_msg="absent freefree key and explicit freefree=False must produce identical sed_radio",
+    )
+    np.testing.assert_array_equal(
+        sed_nebular_absent,
+        sed_nebular_explicit,
+        err_msg=(
+            "absent freefree key and explicit freefree=False must produce identical sed_nebular"
+        ),
     )

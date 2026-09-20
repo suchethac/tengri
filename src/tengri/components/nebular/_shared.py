@@ -18,6 +18,7 @@ from tengri.components.nebular._constants import (
     _LOG_OH_OFFSET,
     _LSUN_ERG,
     _LYMAN_LIMIT,
+    NEBULAR_FREEFREE_TAIL_ALPHA_NU,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
 from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
@@ -601,6 +602,71 @@ def render_nebular_lines(
     return place_line_profiles_velocity(
         line_wavelengths, line_luminosities, obs_wavelengths, line_sigma_kms
     )
+
+
+def interp_continuum_with_freefree_tail(
+    wave: jnp.ndarray,
+    cont_wave: jnp.ndarray,
+    cont_lum: jnp.ndarray,
+    *,
+    alpha_nu: float = NEBULAR_FREEFREE_TAIL_ALPHA_NU,
+) -> jnp.ndarray:
+    r"""Interpolate continuum onto a grid, extending past the last node as free-free.
+
+    Interpolates tabulated nebular continuum onto a model wavelength grid using
+    :func:`jnp.interp` with zero-fill at both edges. Past the tabulated maximum
+    wavelength, continues as optically thin thermal free-free: L_nu ∝ nu^α,
+    anchored at the last tabulated node. This extension is an analytic
+    continuation, NOT an emulator prediction. Cue and CloudyGrid both tabulate
+    only to 1 cm (1e8 Å), leaving a gap to 1 m (1e10 Å) that reference codes
+    (pcigale, bagpipes) cover (#2346).
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Model wavelength grid [Angstrom], rest-frame, increasing.
+    cont_wave : ndarray, shape (n_cont,)
+        Tabulated continuum wavelength grid [Angstrom], MUST be sorted ascending.
+    cont_lum : ndarray, shape (n_cont,)
+        Tabulated continuum luminosity density (units match output).
+    alpha_nu : float, optional
+        Spectral slope in frequency: L_nu ∝ nu^α. Default -0.1, the optically
+        thin thermal bremsstrahlung index. Same value as :func:`tengri.components.radio.radio.radio_freefree` (Murphy et al. 2011, ApJ, 737, 67) (#2346).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Interpolated continuum on the model grid (same units as ``cont_lum``).
+        Zero below the first node. Smooth power law past the last node.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+
+    **Gradient-safe**: yes, gradient flows through ``cont_lum`` (the edge
+    luminosity). The exponent ``alpha_nu`` is a Python float (not a pytree
+    leaf), so it does not block gradients.
+
+    **Boundary behavior**:
+    - Below the first node: zero-fill (``left=0.0`` in ``jnp.interp``).
+    - Between nodes: linear interpolation in linear space (``jnp.interp``).
+    - Above the last node: power-law tail with nu ∝ 1/λ giving
+      L_ν(λ) = edge_lum × (edge_λ / λ)^α_ν, which for α_ν = -0.1 rises as λ^0.1.
+    """
+    # Interpolate on the tabulated grid
+    inside = jnp.interp(wave, cont_wave, cont_lum, left=0.0, right=0.0)
+
+    # Extract the edge (last node)
+    edge_wave = cont_wave[-1]
+    edge_lum = cont_lum[-1]
+
+    # Free-free tail: L_nu ∝ nu^alpha_nu
+    # With nu ∝ 1/lambda, L_nu(wave) = edge_lum * (nu/nu_edge)^alpha_nu
+    #                                 = edge_lum * (wave_edge/wave)^alpha_nu
+    tail = edge_lum * (edge_wave / wave) ** alpha_nu
+
+    # Use interpolated result where wave <= edge_wave, tail where wave > edge_wave
+    return jnp.where(wave > edge_wave, tail, inside)
 
 
 # ── Ionizing photon rate ──────────────────────────────────────────
