@@ -6,19 +6,12 @@
 
 ### Fixed
 
-- Bare `import tengri` now succeeds on float64-less backends (jax-mps, MLX) by
-  deferring DSPS module imports until first use (#2276, #2271): DSPS modules
-  allocate float64 device buffers at module import time, causing a hard failure
-  on backends lacking float64 support. Two mechanisms defer these imports: (1)
-  all `from dsps.*` statements in `utils/cosmology.py` are now function-local,
-  deferred until the function is first called; (2) the age-of-universe constant
-  (`_AGE_UNIV_GYR`) used in the SFH registry is computed at module scope via a
-  pure-numpy implementation (`age_at_z0_host()`) that mirrors DSPS's 512-node
-  trapezoidal integration without importing JAX or DSPS. The registry default
-  is now a cached constant, not a deferred function. The first use of a DSPS path
-  still fails loudly on float64-less backends (the expected behavior for
-  unsupported operations), and no compatibility is altered for code paths that
-  do use DSPS.
+- The accuracy bound of `age_kernel='dsps'` (roughly 1e-3 at the sharpest SFH
+  shapes) is now stated on the discovery surface: the registry rows for each age
+  kernel and the model configuration guide. A new advisory warns at build time when
+  `field=True` silently forces the DSPS kernel over the user's default or
+  explicit choice, so the coupling between the field path and the coarse kernel
+  is no longer invisible. (#2368)
 
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
@@ -55,18 +48,6 @@
   where adjacent cameras meet. Segment sizes must be positive and sum to the
   wavelength grid length. (#2172)
 
-- Bare `import tengri` now succeeds on float64-less backends (jax-mps, MLX) by
-  deferring DSPS module imports until first use (#2276, #2271): DSPS modules
-  allocate float64 device buffers at module import time, causing a hard failure
-  on backends lacking float64 support. Two mechanisms defer these imports: (1)
-  all `from dsps.*` statements in `utils/cosmology.py` are now function-local,
-  deferred until the function is first called; (2) the age-of-universe constant
-  used in the SFH registry parameter definitions is now cached on first use via
-  `@functools.cache(_age_univ_gyr())` instead of module-scope evaluation. The
-  first use of a DSPS path still fails loudly on float64-less backends (the
-  expected behavior for unsupported operations), and no compatibility is altered
-  for code paths that do use DSPS.
-
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently
@@ -85,6 +66,20 @@
   silently mutates a `Fitter` on an exception path, preserving the invariant
   that reuse-after-exception is safe (#2378).
 
+- Bare `import tengri` now succeeds on float64-less backends (jax-mps, MLX) by
+  deferring DSPS module imports until first use (#2276, #2271): DSPS modules
+  allocate float64 device buffers at module import time, causing a hard failure
+  on backends lacking float64 support. Two mechanisms defer these imports: (1)
+  all `from dsps.*` statements in `utils/cosmology.py` are now function-local,
+  deferred until the function is first called; (2) the age-of-universe constant
+  (`_AGE_UNIV_GYR`) used in the SFH registry is computed at module scope via a
+  pure-numpy implementation (`age_at_z0_host()`) that mirrors DSPS's 512-node
+  trapezoidal integration without importing JAX or DSPS. The registry default
+  is now a cached constant, not a deferred function. The first use of a DSPS path
+  still fails loudly on float64-less backends (the expected behavior for
+  unsupported operations), and no compatibility is altered for code paths that
+  do use DSPS.
+
 - Data locator hermeticity (#2329): a nested worktree's test run found untracked
   data (CLOUDY grids, Cue weights) in the main checkout via the locator's
   ancestor-directory walk, so suites passed locally and failed in CI. A new
@@ -98,6 +93,18 @@
   lift the pin explicitly to keep testing the default walk, whose pinned side is
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
+
+- Bare `import tengri` now succeeds on float64-less backends (jax-mps, MLX) by
+  deferring DSPS module imports until first use (#2276, #2271): DSPS modules
+  allocate float64 device buffers at module import time, causing a hard failure
+  on backends lacking float64 support. Two mechanisms defer these imports: (1)
+  all `from dsps.*` statements in `utils/cosmology.py` are now function-local,
+  deferred until the function is first called; (2) the age-of-universe constant
+  used in the SFH registry parameter definitions is now cached on first use via
+  `@functools.cache(_age_univ_gyr())` instead of module-scope evaluation. The
+  first use of a DSPS path still fails loudly on float64-less backends (the
+  expected behavior for unsupported operations), and no compatibility is altered
+  for code paths that do use DSPS.
 
 - `salim_sbl18` UV bump normalization (#2397): the UV bump term now normalizes
   by the δ-dependent R_V,mod of Salim, Boquien & Lee (2018) Eq. 4 instead of
