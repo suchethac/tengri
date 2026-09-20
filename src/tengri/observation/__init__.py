@@ -22,6 +22,7 @@ accessible via direct imports (e.g.,
 
 from tengri.observation import constants, containers, physics
 from tengri.observation.aperture import apply_aperture_correction
+from tengri.observation.constants import ELINE_MODES
 from tengri.observation.data import Data, ValidatedData
 from tengri.observation.eline_catalog import (
     CLOUDY_LINE_NAMES,
@@ -70,6 +71,7 @@ __all__ = [
     "DEFAULT_LINE_NAMES",
     "DEFAULT_LINE_WAVELENGTHS",
     "DETECTED",
+    "ELINE_MODES",
     "LOWER_LIMIT",
     "SSP_LIBRARY_RESOLUTIONS",
     "STANDARD_INDICES",
