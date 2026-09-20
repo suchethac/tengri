@@ -9,8 +9,10 @@
   `freefree: True` build — against pcigale the 3 cm ratio moves 0.84× → 1.02×
   and 1.4 GHz 0.95× → 1.00×, with the mm decade unchanged; bagpipes' §12b
   names the Lyman-β edge (1025.70 Å, 0.8–11.4% over z = 1–5) and drops the
-  single-pixel 610% Lyman-α claim, and its §7 bump row closes at 2.091 vs
-  2.078 after the `salim_sbl18` normalization fix; synthesizer's §12b
+  single-pixel 610% Lyman-α claim, and its §7 bump row closes at 2.082 vs
+  2.079 after the `salim_sbl18` normalization fix (both sides anchored at
+  exactly 2175 and 5500 Å, removing a grid-sampling term that inflated the
+  residual to 0.6%); synthesizer's §12b
   attributes the Madau+1995 residual to line-wavelength conventions at the
   Lyman-series edges (vacuum 1025.72 Å vs rounded 1026 Å; 14.6% at z=3,
   21.1% at z=5, single node). The parity matrix's M4 bagpipes arm is closed.

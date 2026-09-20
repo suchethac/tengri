@@ -1207,18 +1207,24 @@ for delta, b in [(-0.3, 0.0), (0.0, 1.0), (0.3, 3.0)]:
     L_t = s_salim.sed_intrinsic
     _assert_comparable(L_ref, L_t, name=f"§7 cont'd {label}")
 
-    # Calculate A(2175)/A_V on both sides by evaluating the law function
-    # directly (the same approach as §6), normalized to A_V at 5500 Å —
-    # there is no per-wavelength attenuation-curve key on the built model.
+    # Calculate A(2175)/A_V on both sides, anchored at exactly 2175 and
+    # 5500 Å so the two grids' sampling drops out of the ratio: the BAGPIPES
+    # curve is a spectrum ratio on its model wavelength grid, interpolated to
+    # the two anchors; the tengri law evaluates at the anchors directly.
     w_ref_bump, A_ref_bump = B.attenuation_curve(
         dust_block={"type": "Salim", "Av": 1.0, "delta": delta, "B": b}
     )
-    a_2175_ref = np.interp(2175.0, w_ref_bump, _norm_AV(w_ref_bump, A_ref_bump))
-
-    A_t_bump = np.asarray(
-        _tengri_laws["salim_sbl18"](wave_law, dust_bump_strength=b, dust_delta=delta)
+    a_2175_ref = float(
+        np.interp(2175.0, w_ref_bump, A_ref_bump)
+        / np.interp(5500.0, w_ref_bump, A_ref_bump)
     )
-    a_2175_t = np.interp(2175.0, wave_law, _norm_AV(wave_law, A_t_bump))
+
+    _A_t_anchor = np.asarray(
+        _tengri_laws["salim_sbl18"](
+            np.array([2175.0, 5500.0]), dust_bump_strength=b, dust_delta=delta
+        )
+    )
+    a_2175_t = float(_A_t_anchor[0] / _A_t_anchor[1])
 
     print(
         f"§7 cont'd Salim δ={delta:+.1f} B={b:.0f}: "
