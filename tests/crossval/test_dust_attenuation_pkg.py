@@ -272,14 +272,15 @@ class TestSBL18:
             (3.0, 0.0),
             (0.0, -0.3),
             (0.0, 0.3),
-            (3.0, -0.1),
-            (3.0, -0.3),
-            (1.0, 0.1),
-            (5.0, -0.5),
         ],
     )
     def test_sbl18_parametric(self, ampl, slope):
-        """SBL18 with various bump and slope combinations."""
+        """SBL18 with bump or slope zero (cross-validated against dust_attenuation).
+
+        Only cases with at least one parameter zero are cross-validated. Cases with
+        both dust_bump_strength and dust_delta nonzero diverge by design after #2397
+        (see test_sbl18_diverges_from_reference_package_by_design).
+        """
         sbl = SBL18(Av=1.0, ampl=ampl, slope=slope)
         ref = np.array(sbl(WAVS_FULL_UM * u.micron))
         tng = np.array(
@@ -289,6 +290,60 @@ class TestSBL18:
         ref_norm = _normalize_curve_at_5500(ref, WAVS_FULL_AA)
         tng_norm = _normalize_curve_at_5500(tng, WAVS_FULL_AA)
         np.testing.assert_allclose(tng_norm, ref_norm, rtol=1e-3)
+
+    @pytest.mark.parametrize(
+        "ampl,slope",
+        [
+            (3.0, -0.1),
+            (3.0, -0.3),
+            (1.0, 0.1),
+            (5.0, -0.5),
+        ],
+    )
+    def test_sbl18_diverges_from_reference_package_by_design(self, ampl, slope):
+        """SBL18 diverges from dust_attenuation when both bump and slope are nonzero.
+
+        After #2397, tengri correctly implements Salim+2018 Eq. 4: the UV bump is
+        normalized by R_V,mod(δ), not by fixed R_V,Cal=4.05. The reference package
+        v0.5.dev22 retains the pre-v0.12 CIGALE bug (footnote 7 describes it).
+        This test asserts the expected divergence and that tengri matches the
+        corrected Eq. 3+4 formula exactly.
+        """
+        from tengri.components.dust.attenuation import _sbl18_rv_mod, _calzetti_l02_kprime, _drude_profile
+
+        wavs_aa = jnp.array(WAVS_FULL_AA)
+        wavs_um = wavs_aa / 1e4
+        rv_cal = 4.05
+
+        # Compute what the package gives (still buggy, using rv_cal for both terms)
+        sbl = SBL18(Av=1.0, ampl=ampl, slope=slope)
+        ref_buggy = np.array(sbl(WAVS_FULL_UM * u.micron))
+
+        # Compute tengri's corrected value
+        tng = np.array(salim_sbl18(wavs_aa, dust_bump_strength=ampl, dust_delta=slope))
+
+        # They should differ at 2175 Å by approximately the footnote-7 factor
+        # For other wavelengths, convergence is better (bump contribution small)
+        assert not np.allclose(tng, ref_buggy, rtol=1e-2), (
+            f"After #2397 fix, tengri should diverge from package v0.5.dev22 at (ampl={ampl}, slope={slope})"
+        )
+
+        # Verify tengri matches the algebraic formula (Eq. 3+4)
+        # k = (k_base*slope_mod/rv + bump/rv_mod) / k_at_5500
+        k_base = _calzetti_l02_kprime(wavs_aa)
+        bump = ampl * _drude_profile(wavs_um, x0=0.2175, gamma=0.035)
+        slope_mod = (wavs_um / 0.55) ** slope
+        rv_mod = _sbl18_rv_mod(slope, rv_cal=rv_cal)
+
+        k_expected = k_base * slope_mod / rv_cal + bump / rv_mod
+        k_5500 = (
+            _calzetti_l02_kprime(jnp.asarray(5500.0)) * 1.0 / rv_cal
+            + ampl * _drude_profile(jnp.asarray(0.55), x0=0.2175, gamma=0.035) / rv_mod
+        )
+        k_expected = k_expected / k_5500
+        k_expected_clipped = jnp.clip(k_expected, 0.0)
+
+        np.testing.assert_allclose(tng, k_expected_clipped, rtol=1e-12, atol=1e-14)
 
     def test_sbl18_differs_from_n09(self):
         """SBL18 and N09 should differ when both bump and slope are nonzero."""
@@ -411,20 +466,21 @@ class TestRegressionValues:
         np.testing.assert_allclose(tng, ref, rtol=1e-6)
 
     def test_salim_sbl18_reference_values(self):
-        """SBL18 with ampl=3, slope=-0.1 at key wavelengths (Av=1)."""
-        # Re-pinned after #1930 (bump added to the unnormalized calzetti base, single
-        # normalization); <=0.25% shift at the 2175 A bump. The tier was not running when #1930
-        # landed (#1728).
+        """SBL18 with ampl=3, slope=-0.1 at key wavelengths (Av=1).
+
+        Re-pinned after #2397: UV bump now normalized by R_V,mod(δ) instead of
+        fixed R_V,Cal = 4.05 (Salim+2018 Eq. 4). Derived from the fixed implementation.
+        """
         ref = np.array(
             [
-                4.05579532,
-                3.43214982,
-                2.92046727,
-                3.02663578,
-                1.85229535,
+                4.05459977,
+                3.43186492,
+                2.92268209,
+                3.10925810,
+                1.85620888,
                 1.0,
-                0.4360983,
-                0.10724022,
+                0.43600419,
+                0.10721557,
             ]
         )
         wavs = jnp.array(WAVS_FULL_AA)
