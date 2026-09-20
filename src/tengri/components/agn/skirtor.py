@@ -1043,18 +1043,18 @@ def skirtor_disc_dust_ratio(
     # the template boundary. The inclination ratio is wavelength-independent
     # inside the template (SKIRTOR scales one disc shape by an
     # inclination-dependent factor), so this edge value carries smoothly beyond.
-    # Find the last finite node (where disk_0_n > 0) by taking the maximum
-    # index in the mask.
+    # Carry the last finite ratio outward: find the last wavelength node where
+    # the face-on disc is non-zero and use that ratio as the boundary fill.
+    # If the grid structure ever changes, this automatically adapts.
     finite_mask = disk_0_n > 0
-    # Use the fixed index 130 (the known last finite node in the SKIRTOR grid)
-    # or compute it dynamically if the grid structure changes
-    last_finite_idx = 130  # Last finite node at ~9.5e6 Å
+    idx_array = jnp.arange(disk_0_n.shape[0])
+    last_finite_idx = jnp.max(jnp.where(finite_mask, idx_array, -1))
     last_finite_ratio = jnp.where(
         disk_0_n[last_finite_idx] > 0,
         disk_i_n[last_finite_idx] / disk_0_n[last_finite_idx],
-        1.0,
+        1.0,  # Fallback if all template nodes are zero (should not happen)
     )
-    incl_n = jnp.where(disk_0_n > 0, disk_i_n / jnp.where(disk_0_n > 0, disk_0_n, 1.0), last_finite_ratio)
+    incl_n = jnp.where(finite_mask, disk_i_n / jnp.where(finite_mask, disk_0_n, 1.0), last_finite_ratio)
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
     int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
