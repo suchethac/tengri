@@ -554,6 +554,8 @@
 
 ### Fixed
 
+- Four fail-open probes for never-assigned attributes are resolved. `SEDModel.hybrid` property (dead accessor for `_hybrid` never assigned) is removed; `SEDModel.wave_obs` property's dead `_wave_obs` cache probe is removed; `sed_model.py` dust-emission detection's legacy `dust.config.emission_model` probe (unreachable after component migration) is removed; `profiling/pipeline.py`'s dead `_compositional` probe is removed; `profiling/memory.py`'s `_weights` probe is fixed to use the correct `weights` attribute on `CueBackend` (#1240).
+
 - `agn_grahsp_a_bc` parameter description now correctly names the 5100 Å (510 nm)
   reference wavelength, matching the implementation and upstream GRAHSP. The
   previous description incorrectly stated 3000 nm, a wavelength at which the
