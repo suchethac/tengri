@@ -1,5 +1,5 @@
 2026-09-14 07:17:43,093 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 2.280e-30 erg/s/cm2/Hz
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/src/tengri/components/stellar/sps/dsps_wrapper.py:384: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only: adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+<repo>/src/tengri/components/stellar/sps/dsps_wrapper.py:384: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only: adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
   return load_ssp_data(str(candidate))
 2026-09-14 07:17:49,588 - __main__ - INFO - Galaxy 9884 (z=1.048): 13 detected bands
 2026-09-14 07:17:49,588 - __main__ - INFO - Config II: 8 free parameters
@@ -9,8 +9,8 @@
 2026-09-14 07:18:04,577 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (11.7s). Step size: 0.1719. Divergent in the final warmup window: 5%
 2026-09-14 07:18:21,027 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 28.1s. Divergences: 57/2400 (2.4%). Tree depth: mean 3.9, at cap on 0% of iterations (max_num_doublings=10)
 2026-09-14 07:18:21,861 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=57, rhat_max=1.1501
-2026-09-14 07:18:45,237 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/9884_II.npz
-2026-09-14 07:18:45,237 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/9884_II.json
+2026-09-14 07:18:45,237 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/9884_II.npz
+2026-09-14 07:18:45,237 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/9884_II.json
 2026-09-14 07:18:45,238 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=57) before retuning
 2026-09-14 07:18:45,238 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 600, diagonal mass
 2026-09-14 07:18:45,321 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
@@ -18,8 +18,8 @@
 2026-09-14 07:19:03,156 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (17.8s). Step size: 0.0458. Divergent in the final warmup window: 0%
 2026-09-14 07:20:01,199 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 75.9s. Divergences: 0/2400 (0.0%). Tree depth: mean 6.2, at cap on 0% of iterations (max_num_doublings=10)
 2026-09-14 07:20:01,272 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0021
-2026-09-14 07:20:23,483 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/9884_II.npz
-2026-09-14 07:20:23,484 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/9884_II.json
+2026-09-14 07:20:23,483 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/9884_II.npz
+2026-09-14 07:20:23,484 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/9884_II.json
 2026-09-14 07:20:23,485 - __main__ - INFO - ✓ Fit complete for galaxy 9884 config II
   MAP initialization (1000 steps)...
   MAP init done (loss=73.23)

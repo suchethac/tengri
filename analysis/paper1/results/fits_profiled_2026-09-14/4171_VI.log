@@ -7,8 +7,8 @@
 2026-09-14 06:27:29,141 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (62.8s). Step size: 0.0917. Divergent in the final warmup window: 3%
 2026-09-14 06:29:28,169 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 181.8s. Divergences: 0/2400 (0.0%). Tree depth: mean 5.3, at cap on 0% of iterations (max_num_doublings=10)
 2026-09-14 06:29:52,013 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0021
-2026-09-14 06:30:58,833 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/4171_VI.npz
-2026-09-14 06:30:58,833 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/4171_VI.json
+2026-09-14 06:30:58,833 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/4171_VI.npz
+2026-09-14 06:30:58,833 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/4171_VI.json
 2026-09-14 06:30:58,834 - __main__ - INFO - ✓ Fit complete for galaxy 4171 config VI
   MAP initialization (1000 steps)...
   MAP init done (loss=15.17)

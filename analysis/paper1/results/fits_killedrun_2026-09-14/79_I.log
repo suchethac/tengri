@@ -7,8 +7,8 @@
 2026-09-14 13:48:20,567 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (418.3s). Step size: 0.0406. Divergent in the final warmup window: 3%
 2026-09-14 14:06:45,606 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1523.2s. Divergences: 2/2400 (0.1%). Tree depth: mean 6.1, at cap on 0% of iterations (max_num_doublings=10)
 2026-09-14 14:06:45,618 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=2, rhat_max=1.0013
-2026-09-14 14:08:19,638 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/79_I.npz
-2026-09-14 14:08:19,638 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/79_I.json
+2026-09-14 14:08:19,638 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/79_I.npz
+2026-09-14 14:08:19,638 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/79_I.json
 2026-09-14 14:08:19,639 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=2) before retuning
 2026-09-14 14:08:19,639 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 600, diagonal mass
 2026-09-14 14:08:19,847 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.

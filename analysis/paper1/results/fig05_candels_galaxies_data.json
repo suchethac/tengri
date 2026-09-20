@@ -168,7 +168,7 @@
     "II",
     "III"
   ],
-  "results_directory": "/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/fits",
+  "results_directory": "analysis/paper1/results/fits",
   "cells_present": [
     "13097_I",
     "13097_II",

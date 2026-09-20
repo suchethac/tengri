@@ -54,7 +54,7 @@ WAVE_OBS = np.linspace(4000.0, 7000.0, 40)
 @pytest.fixture(scope="module")
 def joint_model():
     """A small joint photometry + spectroscopy model."""
-    ssp = pytest.importorskip("tengri").load_ssp("fsps_mist_c3k_a_chabrier")
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     obs = Observation(
         photometry=Photometry.from_names(FILTERS),
         spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=1000.0),
@@ -124,7 +124,7 @@ def test_censoring_still_changes_the_answer(joint_model):
 
 def test_photometry_only_censoring_unaffected(joint_model):
     """The photometry-only path, which always worked, still does."""
-    ssp = tengri.load_ssp("fsps_mist_c3k_a_chabrier")
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     obs = Observation(photometry=Photometry.from_names(FILTERS))
     sed = SEDModel.build(
         ssp_data=ssp,

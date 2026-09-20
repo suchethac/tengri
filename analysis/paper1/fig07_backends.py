@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,10 +30,10 @@ logger = logging.getLogger(__name__)
 # Okabe-Ito colorblind-safe palette — five distinct colors for all backends
 # Chosen to be visually distinct and remain distinguishable in grayscale print
 SAMPLER_COLORS = {
-    "laplace": "#E69F00",       # Orange (Laplace)
-    "mcmc_nuts_fast": "#56B4E9", # Sky blue (NUTS)
-    "mcmc_hmc": "#009E73",      # Green (HMC)
-    "nss": "#D55E00",           # Red-orange (NSS)
+    "laplace": "#E69F00",  # Orange (Laplace)
+    "mcmc_nuts_fast": "#56B4E9",  # Sky blue (NUTS)
+    "mcmc_hmc": "#009E73",  # Green (HMC)
+    "nss": "#D55E00",  # Red-orange (NSS)
 }
 # MAP is handled separately as black dashed line
 
@@ -201,9 +200,19 @@ def build_figure(
                     linewidth = 2.0
                     label = LABELS[backend]
                     # Horizontal error bar: xerr is (lower_error, upper_error)
-                    ax.errorbar(median, i, xerr=[[median - p16], [p84 - median]],
-                               fmt='o', color=color, linestyle=linestyle, linewidth=linewidth,
-                               markersize=6, capsize=4, capthick=1.5, label=label)
+                    ax.errorbar(
+                        median,
+                        i,
+                        xerr=[[median - p16], [p84 - median]],
+                        fmt="o",
+                        color=color,
+                        linestyle=linestyle,
+                        linewidth=linewidth,
+                        markersize=6,
+                        capsize=4,
+                        capthick=1.5,
+                        label=label,
+                    )
 
             ax.set_yticks(y_positions)
             ax.set_yticklabels([LABELS[m] for m in methods_in_order], fontsize=9)
@@ -241,9 +250,19 @@ def build_figure(
                     linewidth = 2.0
                     label = LABELS[backend]
                     # Horizontal error bar: xerr is (lower_error, upper_error)
-                    ax.errorbar(median, i, xerr=[[median - p16], [p84 - median]],
-                               fmt='o', color=color, linestyle=linestyle, linewidth=linewidth,
-                               markersize=6, capsize=4, capthick=1.5, label=label)
+                    ax.errorbar(
+                        median,
+                        i,
+                        xerr=[[median - p16], [p84 - median]],
+                        fmt="o",
+                        color=color,
+                        linestyle=linestyle,
+                        linewidth=linewidth,
+                        markersize=6,
+                        capsize=4,
+                        capthick=1.5,
+                        label=label,
+                    )
 
             ax.set_yticks(y_positions)
             ax.set_yticklabels([LABELS[m] for m in methods_in_order], fontsize=9)
@@ -284,7 +303,7 @@ def build_figure(
             ax.set_yticklabels([])
         else:
             # M* and SFR panels: forest plot style with backend labels on y-axis
-            ax.grid(True, alpha=0.2, axis='x')
+            ax.grid(True, alpha=0.2, axis="x")
 
     # ========== Right: Timing panel ==========
     methods_in_order = [m for m in ROW_ORDER if m in results]
@@ -339,12 +358,22 @@ def build_figure(
     for backend in methods_in_order:
         color = "black" if backend == "map" else SAMPLER_COLORS.get(backend, "gray")
         linestyle = "--" if backend == "map" else "-"
-        line = plt.Line2D([0], [0], color=color, linestyle=linestyle, linewidth=2, label=LABELS[backend])
+        line = plt.Line2D(
+            [0], [0], color=color, linestyle=linestyle, linewidth=2, label=LABELS[backend]
+        )
         handles.append(line)
         labels_list.append(LABELS[backend])
 
-    fig.legend(handles, labels_list, loc="upper center", bbox_to_anchor=(0.5, 1.02),
-               ncol=5, fontsize=9, framealpha=0.95, borderpad=0.3)
+    fig.legend(
+        handles,
+        labels_list,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=5,
+        fontsize=9,
+        framealpha=0.95,
+        borderpad=0.3,
+    )
 
     # Note: title removed for paper figure (caption supplied by LaTeX)
 
@@ -357,9 +386,7 @@ def main():
     parser.add_argument(
         "--sweep-dir",
         type=Path,
-        default=Path(
-            "/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/backend_sweep_pin"
-        ),
+        default=Path(__file__).parent / "results" / "backend_sweep_pin",
         help="Sweep results directory",
     )
     parser.add_argument(

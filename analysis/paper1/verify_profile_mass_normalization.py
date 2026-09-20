@@ -322,8 +322,11 @@ def test_planted_control(ssp_data):
 
 if __name__ == "__main__":
     import sys
+    from pathlib import Path
 
-    sys.path.insert(0, "/Users/suchethacooray/Projects/tengri/src")
+    # Repo root is two levels above analysis/paper1/, so parents[2] is the checkout.
+    tengri_src = Path(__file__).resolve().parents[2] / "src"
+    sys.path.insert(0, str(tengri_src))
 
     # Load SSP data (using fsps_mist_c3k as specified in the task).
     from tengri import load_ssp

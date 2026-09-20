@@ -7,10 +7,10 @@
 2026-09-14 19:33:06,828 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (286.9s). Step size: 0.0441. Divergent in the final warmup window: 0%
 2026-09-14 19:50:04,481 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1304.5s. Divergences: 0/2400 (0.0%). Tree depth: mean 4.8, at cap on 0% of iterations (max_num_doublings=10)
 2026-09-14 19:50:04,492 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0233
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/src/tengri/forward/orchestrator.py:966: SFHBeforeBigBangWarning: Star formation history forms 57% of its stellar mass before the Big Bang at z=1.01 (cosmic age 5.82 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+<repo>/src/tengri/forward/orchestrator.py:966: SFHBeforeBigBangWarning: Star formation history forms 57% of its stellar mass before the Big Bang at z=1.01 (cosmic age 5.82 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
   state = component.apply(
-2026-09-14 19:52:30,385 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/79_IV.npz
-2026-09-14 19:52:30,386 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/79_IV.json
+2026-09-14 19:52:30,385 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/79_IV.npz
+2026-09-14 19:52:30,386 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/79_IV.json
 2026-09-14 19:52:30,387 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=0) before retuning
 2026-09-14 19:52:30,387 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 600, diagonal mass
 2026-09-14 19:52:30,697 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
@@ -18,8 +18,8 @@
 2026-09-14 19:57:41,360 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (310.7s). Step size: 0.0375. Divergent in the final warmup window: 0%
 2026-09-14 20:15:49,752 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1399.0s. Divergences: 0/2400 (0.0%). Tree depth: mean 4.9, at cap on 0% of iterations (max_num_doublings=10)
 2026-09-14 20:15:49,759 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0002
-2026-09-14 20:18:24,599 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/79_IV.npz
-2026-09-14 20:18:24,600 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1-pin/analysis/paper1/results/fits/79_IV.json
+2026-09-14 20:18:24,599 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/79_IV.npz
+2026-09-14 20:18:24,600 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/79_IV.json
 2026-09-14 20:18:24,602 - __main__ - INFO - ✓ Fit complete for galaxy 79 config IV
   MAP initialization (1000 steps)...
   MAP init done (loss=4.83)

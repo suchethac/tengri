@@ -501,7 +501,7 @@ def plot_corner_panel(
     ax.grid(True, alpha=0.3)
 
 
-def build_figure(results_manager: FitResultManager) -> tuple[object, dict]:
+def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[object, dict]:
     """Build the full 3x3 figure with all cells."""
     fig = plt.figure(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
     gs = fig.add_gridspec(
@@ -521,7 +521,11 @@ def build_figure(results_manager: FitResultManager) -> tuple[object, dict]:
     data_dict = {
         "galaxies": [],
         "configurations": CONFIG_KEYS,
-        "results_directory": str(results_manager.results_dir),
+        # relpath, not relative_to: a results directory outside the checkout is legal
+        # and must not crash the figure. relpath yields "../.." rather than an absolute
+        # path, so this can never reintroduce the machine path tools/check_no_local_paths.py
+        # rejects.
+        "results_directory": os.path.relpath(results_manager.results_dir, repo_root),
         "cells_present": [],
         "cells_absent": [],
     }
@@ -726,9 +730,7 @@ def main():
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path(
-            "/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/fits"
-        ),
+        default=Path(__file__).parent / "results" / "fits",
         help="Directory containing fit results",
     )
     parser.add_argument(
@@ -755,7 +757,7 @@ def main():
     logger.info(f"Writing sidecar to: {args.results_output_dir}")
 
     results_manager = FitResultManager(args.results_dir)
-    fig, data_dict = build_figure(results_manager)
+    fig, data_dict = build_figure(results_manager, repo_root)
 
     data_dict.update(
         {

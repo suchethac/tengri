@@ -397,9 +397,7 @@ def main(
     paper_repo_root = analysis_dir.parent.parent
 
     if results_dir is None:
-        results_dir = Path(
-            "/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/fits"
-        )
+        results_dir = Path(__file__).parent / "results" / "fits"
     else:
         results_dir = Path(results_dir)
 
