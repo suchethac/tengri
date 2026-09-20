@@ -4,7 +4,14 @@
 
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 
+
 ### Fixed
+
+- The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
+  `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
+  threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
+  `StellarSEDComponentConfig`. The #2204 cosmic-age reachability check now judges the
+  configured ladder when provided and names the key in the error message (#2433).
 
 - The photoionized nebular backends floor the SSP age axis at 0.1 Myr, so an
   age-0 anchor template no longer turns every nebular output into NaN
