@@ -1153,16 +1153,19 @@
   spanning 1 Myr–13.8 Gyr) becomes unreachable at high redshift where cosmic age is
   younger than the ladder's oldest edge. When `met={'type': 'bins'}` or
   `'bins_continuity'`, `SEDModel.build` now checks that all bin edges fit within
-  `age_at_z(z)` at the model's redshift floor (fixed redshift) or prior ceiling (free
-  redshift), and raises `ParameterError` naming the unreachable edges and cosmic age.
-  The refusal message points users to the actual remedies: use a lower redshift where
-  all bins are reachable, or use a different metallicity mode. The bin ladder is not
-  yet configurable through `SEDModel.build()` (see issue #2433 for future support).
-  Bins older than the universe silently become identically inert (zero gradient, flat
-  direction in the sampler) until checked; the new guard makes them fail loudly at
-  build time with guidance. The docstring claim in `metallicity_history.py` that the
-  bins mode pairs with the continuity SFH model (different bin-edge sets) is now
-  corrected.
+  `age_at_z(z)`. Reachability is judged at the lowest redshift the prior admits
+  (z=0 for a free redshift prior, the fixed value for a Fixed prior), ensuring that
+  the default ladder and default redshift prior always build together (owner rule:
+  "redshift=FREE must just work"). Raises `ParameterError` naming the unreachable
+  edges and cosmic age when bins lie before the Big Bang even at the most favorable
+  conditions. The refusal message points users to the actual remedies: use a lower
+  redshift where all bins are reachable, or use a different metallicity mode. The bin
+  ladder is not yet configurable through `SEDModel.build()` (see issue #2433 for
+  future support). Bins older than the universe silently become identically inert
+  (zero gradient, flat direction in the sampler) until checked; the new guard makes
+  them fail loudly at build time with guidance. The docstring claim in
+  `metallicity_history.py` that the bins mode pairs with the continuity SFH model
+  (different bin-edge sets) is now corrected.
 
 - `neb_hbfrac` was silently inert at any value: declared as a CB_19
   parameter, but `CB19Backend.__init__`'s `hbfrac` constructor argument was

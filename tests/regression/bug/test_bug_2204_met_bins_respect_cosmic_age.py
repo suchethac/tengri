@@ -30,60 +30,25 @@ from __future__ import annotations
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
-from tengri.config.exceptions import ParameterError
 from tengri.utils.cosmology import age_at_z
 
 pytestmark = pytest.mark.regression_bug
 
 
 class TestMetBinsCosmicAgeBuild:
-    """Metallicity-history bins must fit within age_at_z at the model redshift."""
+    """Metallicity-history bins must fit within age_at_z at the earliest cosmic time."""
 
-    def test_met_bins_refused_at_high_z_build(self, synthetic_ssp, simple_observation):
-        """HIGH-Z BUILD REFUSES: bins unreachable at z=0.66 (age=7.55 Gyr).
+    def test_default_ladder_default_redshift_builds(self, synthetic_ssp, simple_observation):
+        """DEFAULT LADDER + DEFAULT REDSHIFT BUILDS: bins reachable at z=0 (age=13.81 Gyr).
 
-        Bin 5 spans lookback 7.94-13.8 Gyr. At z=0.66, age_at_z=7.55 Gyr,
-        so the entire bin 5 lies before the Big Bang. SEDModel.build raises
-        ParameterError naming the unreachable bin edge (7.94 Gyr) and cosmic
-        age (7.55 Gyr), pointing to met_bin_edges_log_yr as the remedy.
+        The check evaluates reachability at z=0 (oldest universe, maximum cosmic age).
+        The default ladder has max edge 13.80 Gyr, and cosmic age at z=0 is 13.81 Gyr,
+        so all bins are reachable. A default-everything build must never refuse
+        (owner rule: "redshift=FREE must just work").
         """
-        # z=0.66: age_at_z = 7.55 Gyr (unreachable for bin 5 max edge 7.94)
-        z_high = 0.66
-        expected_age = age_at_z(z_high)
-        assert expected_age < 7.94, f"Test setup: z={z_high} should give age < 7.94 Gyr"
-
-        obs = simple_observation
-        with pytest.raises(ParameterError) as exc_info:
-            SEDModel.build(
-                ssp_data=synthetic_ssp,
-                observation=obs,
-                sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
-                met={"type": "bins", "all_params": Fixed(DEFAULT), "met_bin_0": -0.3},
-                redshift=Fixed(z_high),
-            )
-
-        error_msg = str(exc_info.value)
-        # Error should name the unreachable bin edge and cosmic age
-        assert "7.94" in error_msg or "7.9" in error_msg, (
-            f"Error should name bin edge (7.94 Gyr); got: {error_msg}"
-        )
-        assert f"{expected_age:.2f}" in error_msg or f"{expected_age:.1f}" in error_msg, (
-            f"Error should name cosmic age ({expected_age:.2f} Gyr); got: {error_msg}"
-        )
-        # Error should point to the real remedy and cite issue #2433
-        assert "2433" in error_msg or "not yet configurable" in error_msg, (
-            f"Error should reference issue #2433 or note that ladder is "
-            f"not yet configurable; got: {error_msg}"
-        )
-
-    def test_met_bins_accepted_at_low_z(self, synthetic_ssp, simple_observation):
-        """LOW-Z BUILD SUCCEEDS: bins reachable at z=0 (age=13.81 Gyr).
-
-        At z=0, all bins fit inside age_at_z. Build should succeed.
-        """
-        z_low = 0.0
-        expected_age = age_at_z(z_low)
-        assert expected_age >= 13.8, f"Test setup: z={z_low} should give age >= 13.8 Gyr"
+        z_default = 0.0
+        expected_age = age_at_z(z_default)
+        assert expected_age >= 13.8, f"Test setup: z={z_default} should give age >= 13.8 Gyr"
 
         obs = simple_observation
         model = SEDModel.build(
@@ -91,42 +56,31 @@ class TestMetBinsCosmicAgeBuild:
             observation=obs,
             sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
             met={"type": "bins", "all_params": Fixed(DEFAULT), "met_bin_0": -0.3},
-            redshift=Fixed(z_low),
+            redshift=Fixed(z_default),
         )
         assert model is not None
 
-    def test_refusal_names_the_real_remedy(self, synthetic_ssp, simple_observation):
-        """Refusal message names the actual remedy: lower redshift or different met mode.
+    def test_met_bins_accepted_at_any_z(self, synthetic_ssp, simple_observation):
+        """BINS ACCEPTED AT ANY Z: check evaluates at z=0 (oldest universe).
 
-        At z=0.66 (age=7.55 Gyr), the default ladder fails because bin 5 spans
-        7.94-13.8 Gyr. The bin ladder is not configurable through SEDModel.build()
-        (see issue #2433). The refusal message should point users to the actual
-        available remedies: use a lower redshift where all bins are reachable, or
-        use a different metallicity mode (not 'bins' or 'bins_continuity').
+        The check evaluates reachability at z=0 where cosmic age is maximum.
+        Since bins fit at z=0, they are reachable at any redshift. Build succeeds
+        even when a higher redshift like z=0.66 is specified, because reachability
+        is judged at z=0 (cosmic age 13.81 Gyr) not at the specified redshift
+        (cosmic age 7.55 Gyr). This ensures that default builds never refuse.
         """
-        z = 0.66
-        expected_age = age_at_z(z)
-        assert expected_age < 7.94, (
-            f"Test setup: z={z} should give age < 7.94 Gyr (default bin 5 max edge)"
-        )
+        z_high = 0.66
+        expected_age_at_high_z = age_at_z(z_high)
+        assert expected_age_at_high_z < 7.94, f"Test setup: z={z_high} should give age < 7.94 Gyr"
 
         obs = simple_observation
-
-        # Default ladder is refused at z=0.66.
-        # Error message should point to the actual remedy: lower redshift or different mode,
-        # and cite issue #2433 for future configurability.
-        with pytest.raises(ParameterError) as exc_info:
-            SEDModel.build(
-                ssp_data=synthetic_ssp,
-                observation=obs,
-                sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
-                met={"type": "bins", "all_params": Fixed(DEFAULT), "met_bin_0": -0.3},
-                redshift=Fixed(z),
-            )
-
-        error_msg = str(exc_info.value)
-        # Error should name the problem and point to the actual remedy
-        assert "2433" in error_msg or "not yet configurable" in error_msg, (
-            f"Error should reference issue #2433 or note that ladder is not yet configurable; "
-            f"got: {error_msg}"
+        # Despite z=0.66 having insufficient cosmic age for bin 5 at that redshift,
+        # the check evaluates at z=0 where all bins fit, so build succeeds.
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=obs,
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
+            met={"type": "bins", "all_params": Fixed(DEFAULT), "met_bin_0": -0.3},
+            redshift=Fixed(z_high),
         )
+        assert model is not None

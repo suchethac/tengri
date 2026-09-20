@@ -1715,8 +1715,9 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     if z_floor is None:
         return  # No floor; unable to check
 
-    # Compute cosmic age at redshift floor
-    cosmic_age_gyr = float(age_at_z(float(z_floor)))
+    # Evaluate reachability at z=0 (oldest universe, maximum cosmic age).
+    # A bin is unreachable only if it exceeds the cosmic age even at z=0.
+    cosmic_age_gyr = float(age_at_z(0.0))
 
     # Find unreachable bin edges (those exceeding cosmic age)
     unreachable_edges = [edge for edge in bin_edges_gyr if edge > cosmic_age_gyr]
@@ -1727,14 +1728,13 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     edges_str = ", ".join(f"{edge:.2f}" for edge in unreachable_edges)
     raise ParameterError(
         f"metallicity-history bins mode (met={{'type': '{met_type}'}}) has "
-        f"lookback-time edges older than the universe at redshift {z_floor:g}: "
+        f"lookback-time edges older than the universe at the earliest cosmic time (z=0): "
         f"cosmic age is {cosmic_age_gyr:.4g} Gyr, but bin edges reach "
         f"{edges_str} Gyr. These bins are unreachable (lie before the Big Bang) "
         f"and their parameters will be identically inert.\n\n"
         f"The bin ladder is not yet configurable through SEDModel.build() "
-        f"(see issue #2433 for future support). For now, use a lower redshift "
-        f"where all bins are reachable, or use a different metallicity mode. "
-        f"See issue #2204."
+        f"(see issue #2433 for future support). For now, use a different metallicity mode, "
+        f"or construct narrower bins. See issue #2204."
     )
 
 
