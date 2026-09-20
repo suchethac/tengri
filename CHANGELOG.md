@@ -180,6 +180,24 @@
 
 ### Added
 
+- Per-screen dust law shape keys accept `Fixed`/priors and become declared
+  `dust_<shape>_<screen>` parameters; a plain number keeps the build-time
+  path; the flat `dust_law_overrides` dict refuses a prior with the named
+  remedy (#2428). `FREE` frees the key on its declared range, and
+  `Fixed(DEFAULT)` pins it at the same registry default the plain-number
+  spelling of that default already predicts bit-identically to. The 12 names
+  are two-component only (`single_component`/`wg00` never carry them) and
+  wildcard-inert (`all_params: FREE` never frees one; name it explicitly).
+  Every two-component spec now carries 12 more declared (Fixed-by-default)
+  parameters than before, which changes `cache_key()` for such specs (a
+  single_component spec's `cache_key()` is untouched). `compile_signature()`
+  changes for EVERY model, single_component included: it embeds the
+  registry-wide name -> law-kwarg table, which now carries a row per
+  per-screen name. Both are one-time cache invalidations on upgrade, not a
+  behavior change to any existing prediction. A no-`all_params`-disposition
+  `dust_attenuation` build (`DefaultFixedParametersWarning`) now lists 17
+  parameters instead of 5 on a two-component spec, the same 12 names added.
+
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
   `skymapper_g`, `skymapper_r`, `skymapper_i`, `skymapper_z`, with their
   curves tracked under `data/filters/` so they load offline like the rest of

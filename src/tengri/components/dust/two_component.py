@@ -51,6 +51,7 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_F_OBSCURATION,
 )
 from tengri.components.dust.attenuation import (
+    merge_neb_screen_live_overrides,
     resolve_bc_diff_law_params,
     two_component_dust,
 )
@@ -811,10 +812,16 @@ class DustSEDComponent(TemplateThreading):
             redshift=params.get("redshift"),
         )
         neb_law = self.config.law_neb or self.config.law_bc
+        # Live *_neb per-screen overrides layered on the static ones -- see
+        # merge_neb_screen_live_overrides for why this cannot be a naive
+        # stem.replace("dust_", "") (#2428).
+        _neb_overrides_for_line = merge_neb_screen_live_overrides(
+            params, self.config.neb_law_overrides, self.config.live_shape_params
+        )
         neb_bc_params = {
             k: jnp.asarray(v)
             for k, v in select_law_kwargs(
-                neb_law, {**bc_law_params, **dict(self.config.neb_law_overrides)}
+                neb_law, {**bc_law_params, **_neb_overrides_for_line}
             ).items()
         }
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
@@ -963,7 +970,12 @@ class DustSEDComponent(TemplateThreading):
         # ``diff_law_params``) is always shared with the stars: HII regions sit
         # in their own clouds behind the same foreground ISM.
         neb_law = self.config.law_neb or self.config.law_bc
-        _neb_overrides = dict(self.config.neb_law_overrides)
+        # Live *_neb per-screen overrides layered on the static ones -- see
+        # merge_neb_screen_live_overrides for why this cannot be a naive
+        # stem.replace("dust_", "") (#2428).
+        _neb_overrides = merge_neb_screen_live_overrides(
+            params, self.config.neb_law_overrides, self.config.live_shape_params
+        )
         # Start from the stellar birth-cloud params, then layer every nebular
         # override on top. Merging rather than iterating ``bc_law_params`` keys:
         # since #1833 that dict omits shape parameters nobody requested, and a

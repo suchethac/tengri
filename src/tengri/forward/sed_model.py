@@ -9566,7 +9566,12 @@ class SEDModel:
         never mentions a shape parameter still gets the law's own published
         default, bit-identical to pre-#2231.
         """
-        from tengri.parameters.groups import _law_shape_params
+        from tengri.parameters.groups import (
+            PER_SCREEN_REQUESTED_TAGS,
+            _base_provenance,
+            _law_shape_params,
+            _per_screen_full_names,
+        )
 
         names = laws or (
             getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None),
@@ -9579,20 +9584,45 @@ class SEDModel:
                 reads |= set(_law_shape_params(law))
             except Exception:  # pragma: no cover - law not registered
                 continue
-        if not reads:
-            return frozenset()
+
         provenance = getattr(self.spec, "_group_provenance", None)
         if provenance is None:
             provenance = getattr(self.spec, "_flat_provenance", None)
         provenance = provenance or {}
-        return frozenset(
+
+        # Per-screen names (dust_slope_bc, dust_delta_diff, etc.) are
+        # requested exactly when their OWN provenance is user-explicit --
+        # explicit-only by design (#2428): a wildcard can never free one
+        # (per_screen_inert), so "wildcard_free" cannot appear here in
+        # practice. Filtered against PER_SCREEN_REQUESTED_TAGS -- the same
+        # three-tag set (user_prior/user_fixed/user_free) the grammar's own
+        # round-trip emitters (`_get_explicit_overrides`,
+        # `parameters_to_groups`) use to decide whether to re-emit a
+        # per-screen name -- rather than a second, hand-copied tuple here:
+        # a bare ("user_prior", "user_fixed") tuple in all three places once
+        # left out "user_free", so `slope_bc: FREE` built and resolved
+        # correctly but vanished on the very next `to_groups()` round-trip.
+        # Names enumerated via `_per_screen_full_names()` (the canonical
+        # OVERRIDE_STEMS x SCREENS product), not a fourth hand-typed copy.
+        per_screen_names = _per_screen_full_names()
+        per_screen_reads = {
             name
-            for name in reads
-            # ``_grid`` suffixes mark a declared free prior intersected with a
-            # template grid; still a request, so match on the stem.
-            if name == "redshift"
-            or str(provenance.get(name, "registry_default")).removesuffix("_grid")
-            in self._REQUESTED_PROVENANCE
+            for name in per_screen_names
+            if name in provenance
+            and _base_provenance(str(provenance[name])) in PER_SCREEN_REQUESTED_TAGS
+        }
+
+        return (
+            frozenset(
+                name
+                for name in reads
+                # ``_grid`` suffixes mark a declared free prior intersected with a
+                # template grid; still a request, so match on the stem.
+                if name == "redshift"
+                or str(provenance.get(name, "registry_default")).removesuffix("_grid")
+                in self._REQUESTED_PROVENANCE
+            )
+            | per_screen_reads
         )
 
     def _requested_dust_log_L_ir(self) -> bool:
