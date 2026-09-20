@@ -582,6 +582,97 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # dense clouds at the high end.
         free_prior=Uniform(2.0, 6.0, "Total-to-selective extinction R_V", default=3.1),
     ),
+    # ── Per-screen dust law shape parameters (#2428) ──────────────────────────
+    # The 12 per-screen variants (slope, delta, bump_strength, Rv) x (bc, diff, neb)
+    # are declared as explicit-only free parameters. They become live parameters
+    # (in spec.free_params) when explicitly set to a Distribution; they are
+    # wildcard-scoped to only activate when the given screen's law reads them.
+    # When given a plain number (not a Distribution), they route through
+    # dust_law_overrides as static config values, identical to today's behavior.
+    ParamDeclaration(
+        "dust_slope_bc",
+        Fixed(-0.7),
+        "Dust slope on birth cloud screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (bc)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_slope_diff",
+        Fixed(-0.7),
+        "Dust slope on diffuse ISM screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (diff)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_slope_neb",
+        Fixed(-0.7),
+        "Dust slope on nebular cloud screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (neb)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_bc",
+        Fixed(0.0),
+        "UV bump strength on birth cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (bc)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_diff",
+        Fixed(0.0),
+        "UV bump strength on diffuse ISM screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (diff)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_neb",
+        Fixed(0.0),
+        "UV bump strength on nebular cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (neb)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_bc",
+        Fixed(0.0),
+        "Attenuation slope modification on birth cloud (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (bc)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_diff",
+        Fixed(0.0),
+        "Attenuation slope modification on diffuse ISM (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (diff)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_neb",
+        Fixed(0.0),
+        "Attenuation slope modification on nebular cloud (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (neb)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_Rv_bc",
+        Fixed(3.1),
+        "R_V on birth cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (bc)", default=3.1),
+    ),
+    ParamDeclaration(
+        "dust_Rv_diff",
+        Fixed(3.1),
+        "R_V on diffuse ISM screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (diff)", default=3.1),
+    ),
+    ParamDeclaration(
+        "dust_Rv_neb",
+        Fixed(3.1),
+        "R_V on nebular cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (neb)", default=3.1),
+    ),
 )
 
 # ── Derived defaults for direct import, attenuation table (#2265) ─────
@@ -596,6 +687,19 @@ DEFAULT_DUST_F_OBSCURATION = declared_default(ATTENUATION_PARAMS, "dust_f_obscur
 DEFAULT_DUST_BUMP_STRENGTH = declared_default(ATTENUATION_PARAMS, "dust_bump_strength")
 DEFAULT_DUST_DELTA = declared_default(ATTENUATION_PARAMS, "dust_delta")
 DEFAULT_DUST_RV = declared_default(ATTENUATION_PARAMS, "dust_Rv")
+# Per-screen defaults
+DEFAULT_DUST_SLOPE_BC = declared_default(ATTENUATION_PARAMS, "dust_slope_bc")
+DEFAULT_DUST_SLOPE_DIFF = declared_default(ATTENUATION_PARAMS, "dust_slope_diff")
+DEFAULT_DUST_SLOPE_NEB = declared_default(ATTENUATION_PARAMS, "dust_slope_neb")
+DEFAULT_DUST_BUMP_STRENGTH_BC = declared_default(ATTENUATION_PARAMS, "dust_bump_strength_bc")
+DEFAULT_DUST_BUMP_STRENGTH_DIFF = declared_default(ATTENUATION_PARAMS, "dust_bump_strength_diff")
+DEFAULT_DUST_BUMP_STRENGTH_NEB = declared_default(ATTENUATION_PARAMS, "dust_bump_strength_neb")
+DEFAULT_DUST_DELTA_BC = declared_default(ATTENUATION_PARAMS, "dust_delta_bc")
+DEFAULT_DUST_DELTA_DIFF = declared_default(ATTENUATION_PARAMS, "dust_delta_diff")
+DEFAULT_DUST_DELTA_NEB = declared_default(ATTENUATION_PARAMS, "dust_delta_neb")
+DEFAULT_DUST_RV_BC = declared_default(ATTENUATION_PARAMS, "dust_Rv_bc")
+DEFAULT_DUST_RV_DIFF = declared_default(ATTENUATION_PARAMS, "dust_Rv_diff")
+DEFAULT_DUST_RV_NEB = declared_default(ATTENUATION_PARAMS, "dust_Rv_neb")
 
 # Names within ATTENUATION_PARAMS that are skipped when
 # ``dust_model="single_component"`` (the single-screen geometry replaces
@@ -626,7 +730,13 @@ __all__ = [
     "DEFAULT_DUST_BETA_COLD",
     "DEFAULT_DUST_BETA_WARM",
     "DEFAULT_DUST_BUMP_STRENGTH",
+    "DEFAULT_DUST_BUMP_STRENGTH_BC",
+    "DEFAULT_DUST_BUMP_STRENGTH_DIFF",
+    "DEFAULT_DUST_BUMP_STRENGTH_NEB",
     "DEFAULT_DUST_DELTA",
+    "DEFAULT_DUST_DELTA_BC",
+    "DEFAULT_DUST_DELTA_DIFF",
+    "DEFAULT_DUST_DELTA_NEB",
     "DEFAULT_DUST_EPSILON_MBB",
     "DEFAULT_DUST_ETA_BALANCE",
     "DEFAULT_DUST_FRAC_AGN",
@@ -640,7 +750,13 @@ __all__ = [
     "DEFAULT_DUST_QHAC",
     "DEFAULT_DUST_QPAH",
     "DEFAULT_DUST_RV",
+    "DEFAULT_DUST_RV_BC",
+    "DEFAULT_DUST_RV_DIFF",
+    "DEFAULT_DUST_RV_NEB",
     "DEFAULT_DUST_SLOPE",
+    "DEFAULT_DUST_SLOPE_BC",
+    "DEFAULT_DUST_SLOPE_DIFF",
+    "DEFAULT_DUST_SLOPE_NEB",
     "DEFAULT_DUST_T_COLD",
     "DEFAULT_DUST_T_WARM",
     "DEFAULT_DUST_UMIN",

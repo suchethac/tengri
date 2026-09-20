@@ -811,10 +811,19 @@ class DustSEDComponent(TemplateThreading):
             redshift=params.get("redshift"),
         )
         neb_law = self.config.law_neb or self.config.law_bc
+        # Check for per-screen neb params in params dict
+        _neb_overrides_for_line = dict(self.config.neb_law_overrides)
+        live_shape_params = self.config.live_shape_params
+        if live_shape_params is not None:
+            for stem in ("dust_slope", "dust_bump_strength", "dust_delta", "dust_Rv"):
+                neb_key = f"{stem}_neb"
+                law_kw = stem.replace("dust_", "")
+                if neb_key in params and neb_key in live_shape_params:
+                    _neb_overrides_for_line[law_kw] = params[neb_key]
         neb_bc_params = {
             k: jnp.asarray(v)
             for k, v in select_law_kwargs(
-                neb_law, {**bc_law_params, **dict(self.config.neb_law_overrides)}
+                neb_law, {**bc_law_params, **_neb_overrides_for_line}
             ).items()
         }
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
@@ -964,6 +973,14 @@ class DustSEDComponent(TemplateThreading):
         # in their own clouds behind the same foreground ISM.
         neb_law = self.config.law_neb or self.config.law_bc
         _neb_overrides = dict(self.config.neb_law_overrides)
+        # Check for per-screen neb params in params dict and add them to overrides
+        live_shape_params = self.config.live_shape_params
+        if live_shape_params is not None:
+            for stem in ("dust_slope", "dust_bump_strength", "dust_delta", "dust_Rv"):
+                neb_key = f"{stem}_neb"
+                law_kw = stem.replace("dust_", "")
+                if neb_key in params and neb_key in live_shape_params:
+                    _neb_overrides[law_kw] = params[neb_key]
         # Start from the stellar birth-cloud params, then layer every nebular
         # override on top. Merging rather than iterating ``bc_law_params`` keys:
         # since #1833 that dict omits shape parameters nobody requested, and a

@@ -9212,11 +9212,27 @@ class SEDModel:
             except Exception:  # pragma: no cover - law not registered
                 continue
         if not reads:
-            return frozenset()
+            per_screen_reads = set()
+        else:
+            per_screen_reads = set()
+
         provenance = getattr(self.spec, "_group_provenance", None)
         if provenance is None:
             provenance = getattr(self.spec, "_flat_provenance", None)
         provenance = provenance or {}
+
+        # Check for per-screen parameters (dust_slope_bc, dust_delta_diff, etc.)
+        per_screen_names = [
+            f"dust_{stem}_{screen}"
+            for stem in ("slope", "delta", "bump_strength", "Rv")
+            for screen in ("bc", "diff", "neb")
+        ]
+        for per_screen_name in per_screen_names:
+            if per_screen_name in provenance:
+                prov_tag = str(provenance.get(per_screen_name, "registry_default")).removesuffix("_grid")
+                if prov_tag in self._REQUESTED_PROVENANCE:
+                    per_screen_reads.add(per_screen_name)
+
         return frozenset(
             name
             for name in reads
@@ -9225,7 +9241,7 @@ class SEDModel:
             if name == "redshift"
             or str(provenance.get(name, "registry_default")).removesuffix("_grid")
             in self._REQUESTED_PROVENANCE
-        )
+        ) | per_screen_reads
 
     def _requested_dust_log_L_ir(self) -> bool:
         """Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget override).
