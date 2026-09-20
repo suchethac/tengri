@@ -148,17 +148,33 @@ def met_prior_for(ssp_data: tengri.SSPData, inset: float = MET_EDGE_INSET_DEX) -
     """Metallicity prior spanning this library's own grid, in log10(Z/Zsun).
 
     Derived from the grid rather than hardcoded. A ceiling copied from another
-    library is wrong in one of two ways: too low truncates the posterior and
-    leaves headroom the library actually has, too high pushes the sampler onto
-    an edge it cannot cross and shows up as divergences that look structural.
+    library is wrong in two ways: too low truncates the posterior and leaves
+    headroom the library actually has, too high lets the sampler evaluate the
+    library outside its own support.
 
-    The bounds are then held ``inset`` dex inside the grid. Placing them exactly
-    on the edge is not neutral: the library is interpolated, so beyond the last
+    The bounds are then held ``inset`` dex inside the grid. This is a
+    **forward-model** guard, not a sampler one, and an earlier version of this
+    docstring confused the two. The library is interpolated, so beyond the last
     node the prediction clips to a constant and the metallicity gradient goes to
-    zero. A chain that reaches there reads flat likelihood as a maximum (#442),
-    and the resulting geometry is what a divergence count blames on the model.
-    The inset is small against the several-dex span of every grid in the suite,
-    so it costs essentially none of the headroom it protects.
+    zero; a chain reaching there reads flat likelihood as a maximum (#442). The
+    inset keeps the prior support inside the grid so that region is never
+    evaluated. It is small against the several-dex span of every grid here, so
+    it costs essentially none of the headroom it protects.
+
+    What it does **not** do is relieve a hard bound in the sampled coordinate,
+    which is what the earlier text claimed. ``Uniform.unstandardize`` is the
+    Gaussian CDF, so a bound sits at :math:`\\xi = \\pm\\infty` and NUTS never
+    integrates up against a wall. Measured on galaxy 79 configuration I, the
+    metallicity coordinate has standard deviation 0.458 -- better conditioned
+    than the unit-normal prior -- so the divergences on that cell are not the
+    truncation. Crediting this inset for them would be attributing a sampler
+    symptom to a forward-model fix.
+
+    Separately worth knowing for the science: that cell pushes hard against the
+    top of its library, median :math:`\\xi = +1.544` with 19% of draws beyond
+    :math:`\\xi = +2` against a prior expectation of 2.3%. The galaxy wants a
+    metallicity above the highest node the library carries, which is a caveat on
+    any metallicity quoted for it rather than a defect.
     """
     lgmet = ssp_data.ssp_lgmet
     return Uniform(
