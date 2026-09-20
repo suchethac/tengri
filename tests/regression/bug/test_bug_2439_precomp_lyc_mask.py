@@ -198,12 +198,11 @@ def _build(
 
 
 def _params(model, key=None):
-    """Fixed values plus a sample for any free params (redshift, neb_fesc, ...)."""
-    base = dict(model.spec.get_fixed_values())
+    """Free parameters only (#2296: no Fixed keys in predict-time params dicts)."""
     free = model.spec.free_params
-    if free:
-        base.update(model.spec.sample(key if key is not None else jax.random.PRNGKey(0)))
-    return base
+    if not free:
+        return {}
+    return model.spec.sample(key if key is not None else jax.random.PRNGKey(0))
 
 
 def _worst_band(exact, lut, names):
@@ -304,13 +303,11 @@ def test_case3_fesc_free_gradient_and_two_point_match(lyc_ssp):
     model_lut = _build(lyc_ssp, z, WavePrecomp(), filters, fesc_free=True)
     model_exact = _build(lyc_ssp, z, None, filters, fesc_free=True)
 
-    fixed = model_lut.spec.get_fixed_values()
     free_name = next(p for p in model_lut.spec.free_params if p.endswith("neb_fesc"))
 
     def straddle_flux(fesc_value):
-        p = dict(fixed)
-        p[free_name] = fesc_value
-        return model_lut.predict_photometry(p)[0]
+        # Free-only params dict (#2296: no Fixed keys)
+        return model_lut.predict_photometry({free_name: fesc_value})[0]
 
     flux_at_point = float(straddle_flux(jnp.asarray(0.4)))
     grad = jax.grad(straddle_flux)(jnp.asarray(0.4))
@@ -330,8 +327,8 @@ def test_case3_fesc_free_gradient_and_two_point_match(lyc_ssp):
     # used elsewhere (this check's whole job is to catch exactly that
     # mutation, so it must not be loose enough to survive it).
     for fesc_value in (0.25, 0.75):
-        p = dict(fixed)
-        p[free_name] = float(fesc_value)
+        # Free-only params dict (#2296: no Fixed keys)
+        p = {free_name: float(fesc_value)}
         exact_v = np.asarray(model_exact.predict_photometry(p))
         lut_v = np.asarray(model_lut.predict_photometry(p))
         band, err, _, _ = _worst_band(exact_v, lut_v, ["straddle", "clean"])
@@ -495,12 +492,11 @@ def test_case5_z_axis_falsification(lyc_ssp):
         redshift_free_range=(z_min, z_max),
     )
 
-    fixed = model_exact.spec.get_fixed_values()
     redshift_name = next(p for p in model_exact.spec.free_params if p.endswith("redshift"))
 
     def _err_at(model, z_value):
-        p = dict(fixed)
-        p[redshift_name] = float(z_value)
+        # Free-only params dict (#2296: no Fixed keys)
+        p = {redshift_name: float(z_value)}
         exact_v = np.asarray(model_exact.predict_photometry(p))
         lut_v = np.asarray(model.predict_photometry(p))
         _, err, _, _ = _worst_band(exact_v, lut_v, names)
@@ -821,7 +817,8 @@ def test_spectrumprecomp_exact_per_pixel_lyc_mask(lyc_ssp):
     z = 2.0
     model_exact = _spec_build(lyc_ssp, z, None, fesc=0.0)
     model_lut = _spec_build(lyc_ssp, z, SpectrumPrecomp(), fesc=0.0)
-    p = dict(model_exact.spec.get_fixed_values())
+    # Free-only params dict (#2296: no Fixed keys); all params are Fixed for this model
+    p = {}
     exact_spec = np.asarray(model_exact.predict_spectrum(p))
     lut_spec = np.asarray(model_lut.predict_spectrum(p))
 
@@ -845,7 +842,8 @@ def test_spectrumprecomp_exact_per_pixel_lyc_mask(lyc_ssp):
     # fesc=1 floor: same exact-per-pixel mechanism, mask is a no-op.
     model_exact1 = _spec_build(lyc_ssp, z, None, fesc=1.0)
     model_lut1 = _spec_build(lyc_ssp, z, SpectrumPrecomp(), fesc=1.0)
-    p1 = dict(model_exact1.spec.get_fixed_values())
+    # Free-only params dict (#2296: no Fixed keys); all params are Fixed for this model
+    p1 = {}
     exact1 = np.asarray(model_exact1.predict_spectrum(p1))
     lut1 = np.asarray(model_lut1.predict_spectrum(p1))
     nonzero1 = exact1 != 0.0
@@ -1013,10 +1011,10 @@ class TestRealGridIssueRows:
 
     @staticmethod
     def _params(model):
-        p = dict(model.spec.get_fixed_values())
-        if model.spec.free_params:
-            p.update(model.spec.sample(jax.random.PRNGKey(0)))
-        return p
+        """Free parameters only (#2296: no Fixed keys in predict-time params dicts)."""
+        if not model.spec.free_params:
+            return {}
+        return model.spec.sample(jax.random.PRNGKey(0))
 
     def _rel(self, exact, lut, idx):
         e = float(np.asarray(exact)[idx])

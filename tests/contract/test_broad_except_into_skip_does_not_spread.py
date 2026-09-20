@@ -87,22 +87,7 @@ _BROAD = {"Exception", "BaseException"}
 #:     whose message is not about SSP data, and
 #:     ``test_fixed_params_reach_every_entry_point.py`` asserts the exception is
 #:     on a named table first.
-KNOWN: frozenset[tuple[str, str]] = frozenset(
-    {
-        # Narrowed on this branch to a named exemption table, but the handler is
-        # still shaped like the others: it catches Exception, then asserts the
-        # entry point is listed in RAISES_ON_BARE_PARAMS and the type matches.
-        (
-            "contract/test_fixed_params_reach_every_entry_point.py",
-            "test_entry_point_refuses_an_explicit_fixed_redshift",
-        ),
-        ("contract/test_presets.py", "test_preset_can_sample"),
-        ("crossval/test_full_sed_crossval.py", "test_tengri_nonparametric_color_trend"),
-        ("crossval/test_full_sed_crossval.py", "test_tengri_vs_cigale_skirtor_shape"),
-        ("crossval/test_geovi_crossval.py", "test_converged_hamiltonian_close"),
-        ("crossval/test_geovi_crossval.py", "test_posterior_stds_agree"),
-    }
-)
+KNOWN: frozenset[tuple[str, str]] = frozenset()
 
 
 def _handler_is_broad(handler: ast.ExceptHandler) -> bool:

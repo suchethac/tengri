@@ -136,7 +136,7 @@ def test_entry_point_refuses_an_explicit_fixed_redshift(model, name):
 
     try:
         fn(omitted)
-    except Exception as exc:
+    except NotImplementedError as exc:
         allowed = RAISES_ON_BARE_PARAMS.get(name)
         assert allowed is not None, (
             f"{name} raised {type(exc).__name__} on a bare params dict, so the "
