@@ -370,6 +370,34 @@ def divergent_draw_payload(posterior) -> dict:
     return payload
 
 
+def energy_trace_payload(posterior) -> dict:
+    """The per-draw Hamiltonian energy, unthinned, on the same axis as the mask.
+
+    Published by the backend since a3ff0e362 and, until this, computed and
+    discarded by fit_one -- the same gap that lost ``tree_depth_mean`` to the
+    warning text. It is one float per draw, so it rides along unthinned like
+    the mask and joins it and ``samples`` row-wise. E-BFMI is NOT recomputed
+    from it here: that must be done per chain (the flattened axis is
+    chain-major, and differencing across a chain boundary drags a healthy
+    chain under the 0.3 line), and the backend already publishes
+    ``ebfmi_per_chain`` -- recorded into the attempt's JSON, not here.
+
+    Refuses a trace whose length disagrees with the draw count rather than
+    saving one that cannot be joined. Empty dict when nothing was published.
+    """
+    energy = (posterior.diagnostics or {}).get("energy")
+    if energy is None:
+        return {}
+    energy = np.asarray(energy, dtype=float)
+    n_draws = int(next(iter(posterior.samples.values())).shape[0])
+    if energy.shape != (n_draws,):
+        raise ValueError(
+            f"energy has shape {energy.shape} against {n_draws} flattened draws; "
+            "it must be the burn-in-sliced, chain-flattened draw axis to join the mask."
+        )
+    return {"energy": energy}
+
+
 def thin_samples(samples: dict, max_draws: int = MAX_SAVED_DRAWS) -> dict:
     """Thin flattened ``(n_chains * n_samples,)`` draws to at most ``max_draws``.
 
@@ -673,7 +701,11 @@ def save_fit_outputs(
     # Every key the NPZ carries goes through the collision guard (#2089).
     # Divergent draws ride along unthinned; see divergent_draw_payload.
     npz_payload = build_npz_payload(
-        samples_thin, derived, grids, divergent_draw_payload(best_posterior)
+        samples_thin,
+        derived,
+        grids,
+        divergent_draw_payload(best_posterior),
+        energy_trace_payload(best_posterior),
     )
     # ``tmp_suffix=".npz"``: ``np.savez`` appends that suffix to a path without it.
     _atomic_replace_write(
@@ -939,6 +971,8 @@ def run_fit(
                 "target_accept_rate": nuts_kwargs["target_accept_rate"],
                 "max_tree_depth": nuts_kwargs.get("max_tree_depth"),
                 "divergences": int(n_divergent) if n_divergent is not None else None,
+                "ebfmi_per_chain": posterior.diagnostics.get("ebfmi_per_chain"),
+                "ebfmi_min": posterior.diagnostics.get("ebfmi_min"),
                 "rhat_max": float(rhat_max) if rhat_max is not None else None,
                 "rhat_dict": {k: float(v) for k, v in rhat_dict.items()},
                 "ess_min": float(ess_min) if ess_min is not None else None,
