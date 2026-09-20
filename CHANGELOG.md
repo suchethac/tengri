@@ -13,8 +13,9 @@
   wavelength and every line, and `SEDModel.build(ssp_data=<BC03>,
   neb={"type": "cloudy"})` returned an all-NaN `sed_nebular` at all 7955
   master-grid nodes. `ssp_log_age_yr_axis` now applies the same 0.1 Myr floor
-  (`LOG_AGE_YR_FLOOR`) that the stellar path applies to the anchor for
-  surviving mass (#1016) — bit-identical for every grid whose youngest
+  that the stellar path applies to the anchor for surviving mass (#1016),
+  read from one constant (`ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR`, `utils/ssp_anchor.py`) by
+  both paths — bit-identical for every grid whose youngest
   template is already at least 0.1 Myr, which is every other shipped SSP —
   and the shared interpolator treats a non-finite axis node as a zero-width
   interval. The grid-family mismatch suspected in the issue was not the cause:

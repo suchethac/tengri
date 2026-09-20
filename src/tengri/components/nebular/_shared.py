@@ -18,8 +18,8 @@ from tengri.components.nebular._constants import (
     _LOG_OH_OFFSET,
     _LSUN_ERG,
     _LYMAN_LIMIT,
-    LOG_AGE_YR_FLOOR,
     NEBULAR_FREEFREE_TAIL_ALPHA_NU,
+    ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
 from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
@@ -1502,7 +1502,7 @@ def ssp_log_age_yr_axis(ssp_lg_age_gyr: jnp.ndarray) -> jnp.ndarray:
     Returns
     -------
     ndarray, shape (n_age,)
-        ``log10(age/yr)`` [dex re yr], every node ``>= LOG_AGE_YR_FLOOR``.
+        ``log10(age/yr)`` [dex re yr], every node ``>= ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR``.
 
     Notes
     -----
@@ -1518,4 +1518,4 @@ def ssp_log_age_yr_axis(ssp_lg_age_gyr: jnp.ndarray) -> jnp.ndarray:
     grid whose youngest template is already ``>= 0.1 Myr`` (every other
     shipped SSP) the result is bit-identical to ``ssp_lg_age_gyr + 9.0``.
     """
-    return jnp.maximum(jnp.asarray(ssp_lg_age_gyr) + 9.0, LOG_AGE_YR_FLOOR)
+    return jnp.maximum(jnp.asarray(ssp_lg_age_gyr) + 9.0, ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR)

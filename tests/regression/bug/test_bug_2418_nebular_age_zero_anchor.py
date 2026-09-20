@@ -8,8 +8,9 @@ build Q_H axes as ssp_lg_age_gyr + 9.0, putting -inf on the interpolation grid.
 In _interp_index_weight, dx = grid[1] - (-inf) = inf and w = NaN for every age
 in the first interval, spreading NaN through sed_nebular.
 
-Fix: apply ssp_log_age_yr_axis() to floor the anchor at 0.1 Myr (same as
-stellar surviving mass #1016), and guard interpolation weights in
+Fix: apply ssp_log_age_yr_axis() to floor the anchor at 0.1 Myr, reading the
+same ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR (utils/ssp_anchor.py) as the stellar
+surviving-mass floor (#1016), and guard interpolation weights in
 _interp_index_weight with isfinite(dx).
 """
 
@@ -65,7 +66,7 @@ def synthetic_anchor_ssp() -> SSPData:
 
 def test_axis_helper_floors_the_anchor_and_is_a_noop_elsewhere() -> None:
     """ssp_log_age_yr_axis floors -inf anchor and leaves others alone."""
-    from tengri.components.nebular._constants import LOG_AGE_YR_FLOOR
+    from tengri.components.nebular._constants import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
     from tengri.components.nebular._shared import ssp_log_age_yr_axis
 
     # Test anchor flooring
@@ -74,7 +75,8 @@ def test_axis_helper_floors_the_anchor_and_is_a_noop_elsewhere() -> None:
 
     assert np.isfinite(np.asarray(out)).all(), "All nodes must be finite"
     assert np.all(np.diff(np.asarray(out)) > 0), "Axis must be strictly ascending"
-    assert float(out[0]) == LOG_AGE_YR_FLOOR == 5.0, f"Anchor floor: {out[0]} != 5.0"
+    assert float(out[0]) == 5.0, f"Anchor floor: {out[0]} != 5.0"
+    assert float(out[0]) == ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
     assert np.allclose(np.asarray(out)[1:], [5.1, 5.15, 10.3], atol=1e-12)
 
     # Test no-op on finite input
@@ -246,3 +248,18 @@ def test_gradient_through_the_floored_axis_is_finite_and_nonzero(
 
     assert np.isfinite(g), f"Gradient is non-finite: {g}"
     assert g != 0.0, f"Gradient is exactly zero: {g}"
+
+
+def test_floor_is_one_constant_shared_with_the_stellar_path() -> None:
+    """The nebular Q_H floor and the #1016 surviving-mass floor are one object, not two 5.0s."""
+    from tengri.components.nebular._constants import (
+        ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR as nebular_floor,
+    )
+    from tengri.components.stellar.sps.dsps_wrapper import (
+        ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR as stellar_floor,
+    )
+    from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR as home_floor
+
+    assert nebular_floor is home_floor, "nebular re-export split from utils/ssp_anchor.py"
+    assert stellar_floor is home_floor, "dsps_wrapper split from utils/ssp_anchor.py"
+    assert home_floor == 5.0
