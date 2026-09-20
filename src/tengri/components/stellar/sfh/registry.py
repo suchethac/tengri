@@ -95,7 +95,6 @@ from tengri.utils.cosmology import age_at_z0_host
 # override this with ``cosmology.age_at_z(z)`` at the source redshift.
 _AGE_UNIV_GYR = round(age_at_z0_host(), 3)
 
-
 # ── Data structures ───────────────────────────────────────────────
 
 
@@ -786,10 +785,11 @@ _register(
                 #
                 # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
                 # generic numerical safety ceiling reused from the lookback-time
-                # clip in mean_sfh.py) sits ABOVE 13.81 Gyr (the actual age of the
-                # universe today), so it cannot double as this free_prior's default
-                # without violating its own bounds. 13.81 Gyr is used instead,
-                # following the same "default = ceiling" convention already used on
+                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (13.81 Gyr, the
+                # actual age of the universe today), so it cannot double as this
+                # free_prior's default without violating its own bounds.
+                # _AGE_UNIV_GYR is used instead, following the same
+                # "default = ceiling" convention already used on
                 # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
                 # above.
                 Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
@@ -852,7 +852,7 @@ _register(
             # too (see their own entries below/above).
             #
             # The static declaration below uses today's cosmic age
-            # (_AGE_UNIV_GYR, z=0) as the ceiling -- the widest value that
+            # (``_AGE_UNIV_GYR``, z=0) as the ceiling -- the widest value that
             # is ever correct, since a declaration cannot know the source
             # redshift. ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
             # then narrows it to ``age_at_z(z)`` at parse time whenever the
