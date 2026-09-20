@@ -19,10 +19,10 @@ from tengri.components.nebular._constants import (
     _LSUN_ERG,
     _LYMAN_LIMIT,
     NEBULAR_FREEFREE_TAIL_ALPHA_NU,
-    ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
 from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
+from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
 #: ``log10`` of the two constants deferred out of the Q_H integrand (#1568).
 #: Python floats, evaluated once at import in float64, so they enter the graph

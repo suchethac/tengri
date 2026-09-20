@@ -66,8 +66,8 @@ def synthetic_anchor_ssp() -> SSPData:
 
 def test_axis_helper_floors_the_anchor_and_is_a_noop_elsewhere() -> None:
     """ssp_log_age_yr_axis floors -inf anchor and leaves others alone."""
-    from tengri.components.nebular._constants import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
     from tengri.components.nebular._shared import ssp_log_age_yr_axis
+    from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
     # Test anchor flooring
     inp = jnp.array([-jnp.inf, -3.9, -3.85, 1.3])
@@ -252,7 +252,7 @@ def test_gradient_through_the_floored_axis_is_finite_and_nonzero(
 
 def test_floor_is_one_constant_shared_with_the_stellar_path() -> None:
     """The nebular Q_H floor and the #1016 surviving-mass floor are one object, not two 5.0s."""
-    from tengri.components.nebular._constants import (
+    from tengri.components.nebular._shared import (
         ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR as nebular_floor,
     )
     from tengri.components.stellar.sps.dsps_wrapper import (
@@ -260,6 +260,6 @@ def test_floor_is_one_constant_shared_with_the_stellar_path() -> None:
     )
     from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR as home_floor
 
-    assert nebular_floor is home_floor, "nebular re-export split from utils/ssp_anchor.py"
+    assert nebular_floor is home_floor, "nebular _shared split from utils/ssp_anchor.py"
     assert stellar_floor is home_floor, "dsps_wrapper split from utils/ssp_anchor.py"
     assert home_floor == 5.0

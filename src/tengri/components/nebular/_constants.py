@@ -20,9 +20,6 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,  # noqa: F401
     LOG10_ZSUN as _LOG10_ZSUN,
 )
-from tengri.utils.ssp_anchor import (
-    ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR,  # noqa: F401  (re-exported for _shared.py, #2418)
-)
 
 # ── Nebular-specific constants ────────────────────────────────────
 

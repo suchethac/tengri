@@ -15,5 +15,5 @@ a package cycle.
 # every grid whose youngest template is already >= 0.1 Myr (all shipped SSPs
 # except BC03 STELIB). Consumers: ``components/stellar/sps/dsps_wrapper.py``
 # (surviving mass, #1016) and ``components/nebular/_shared.py`` (Q_H axes,
-# #2418), the latter through ``components/nebular/_constants.py``.
+# #2418).
 ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR: float = 5.0
