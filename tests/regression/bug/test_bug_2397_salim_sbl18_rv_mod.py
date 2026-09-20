@@ -11,18 +11,13 @@ Citation: Salim et al. 2018 (ApJ 859, 11), Eq. 3 and Eq. 4.
 import jax.numpy as jnp
 import pytest
 
+from tengri.components.dust.attenuation import _sbl18_rv_mod, salim_sbl18
+
 pytestmark = pytest.mark.regression_bug
 
 
 def test_sbl18_rv_mod_paper_worked_example():
     """R_V,mod(-0.5) from Salim+2018 Eq. 4 must match paper's worked example."""
-    # This test imports the helper after the fix is applied
-    # Import only when the module has the fixed code
-    try:
-        from tengri.components.dust.attenuation import _sbl18_rv_mod
-    except ImportError:
-        pytest.skip("_sbl18_rv_mod not yet implemented (expected on BASE before fix)")
-
     # Eq. 4: R_V,mod = R_V,Cal / [(R_V,Cal + 1)(4400/5500)^δ - R_V,Cal]
     # Paper states: "for δ = -0.5, R_V,mod = 2.54"
     rv_mod_neg05 = _sbl18_rv_mod(-0.5)
@@ -31,11 +26,6 @@ def test_sbl18_rv_mod_paper_worked_example():
 
 def test_sbl18_rv_mod_footnote_7_factor():
     """The footnote-7 bias factor R_V,Cal / R_V,mod(δ=0.3) must equal 0.673."""
-    try:
-        from tengri.components.dust.attenuation import _sbl18_rv_mod
-    except ImportError:
-        pytest.skip("_sbl18_rv_mod not yet implemented (expected on BASE before fix)")
-
     # Eq. 4 at δ=0.3: R_V,mod ≈ 6.0178, so R_V,Cal / R_V,mod ≈ 0.673
     # (The issue #2397 number is the exact thousands digit of this factor)
     rv_mod_pos03 = _sbl18_rv_mod(0.3)
@@ -46,11 +36,6 @@ def test_sbl18_rv_mod_footnote_7_factor():
 
 def test_sbl18_rv_mod_invariance_at_delta_zero():
     """R_V,mod(δ=0) must equal R_V,Cal = 4.05 (Eq. 4 reduces when δ=0)."""
-    try:
-        from tengri.components.dust.attenuation import _sbl18_rv_mod
-    except ImportError:
-        pytest.skip("_sbl18_rv_mod not yet implemented (expected on BASE before fix)")
-
     rv_mod_zero = _sbl18_rv_mod(0.0)
     assert rv_mod_zero == pytest.approx(4.05)
 
@@ -107,33 +92,26 @@ def test_salim_sbl18_absolute_extinction_match_bagpipes():
     Pre-fix tengri gives 2.317; BAGPIPES independently gives 2.082.
     After fix, tengri should match BAGPIPES to within <0.5%.
     """
-    from tengri.components.dust.attenuation import salim_sbl18
-
-    # Construct a full wavelength grid spanning the UV
-    # We'll use a grid from 1000 to 10000 Angstrom
-    wavelength = jnp.linspace(1000.0, 10000.0, 100)
+    # Evaluate at exact wavelengths (not interpolated from a grid)
+    # to avoid grid rounding errors
+    wavelength = jnp.array([2175.0, 5500.0])
 
     # Get extinction at target params
     k = salim_sbl18(wavelength, dust_bump_strength=3.0, dust_delta=0.3)
 
-    # Find k at 2175 Å (the Drude bump peak)
-    idx_2175 = jnp.argmin(jnp.abs(wavelength - 2175.0))
-    k_2175 = k[idx_2175]
+    # Extract exact values
+    k_2175 = k[0]
+    k_5500 = k[1]
 
-    # Find k at 5500 Å (V-band reference; k should be normalized to 1.0 there)
-    idx_5500 = jnp.argmin(jnp.abs(wavelength - 5500.0))
-    k_5500 = k[idx_5500]
-
-    # A(2175)/A_V = k(2175) / k(5500) when normalized
-    # But the function returns k/(k@5500), so it should be k(2175) / 1.0 approximately
-    a_ratio = k_2175 / k_5500 if k_5500 > 0 else k_2175
+    # A(2175)/A_V = k(2175) / k(5500)
+    a_ratio = k_2175 / k_5500
 
     # BAGPIPES gives 2.082; pre-fix tengri gives 2.317
-    # After fix, should be ~2.079
+    # After fix, should be ~2.079; tighten tolerance to <0.5%
     expected_bagpipes = 2.082
     pre_fix_tengri = 2.317
 
-    assert a_ratio == pytest.approx(expected_bagpipes, rel=5e-2), (
+    assert a_ratio == pytest.approx(expected_bagpipes, rel=5e-3), (
         f"Got {a_ratio:.4f}. Expected ~{expected_bagpipes:.4f} (BAGPIPES). "
         f"If you see ~{pre_fix_tengri:.4f}, the fix has not been applied yet."
     )

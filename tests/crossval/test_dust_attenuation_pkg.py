@@ -309,7 +309,11 @@ class TestSBL18:
         This test asserts the expected divergence and that tengri matches the
         corrected Eq. 3+4 formula exactly.
         """
-        from tengri.components.dust.attenuation import _sbl18_rv_mod, _calzetti_l02_kprime, _drude_profile
+        from tengri.components.dust.attenuation import (
+            _calzetti_l02_kprime,
+            _drude_profile,
+            _sbl18_rv_mod,
+        )
 
         wavs_aa = jnp.array(WAVS_FULL_AA)
         wavs_um = wavs_aa / 1e4
@@ -324,9 +328,11 @@ class TestSBL18:
 
         # They should differ at 2175 Å by approximately the footnote-7 factor
         # For other wavelengths, convergence is better (bump contribution small)
-        assert not np.allclose(tng, ref_buggy, rtol=1e-2), (
-            f"After #2397 fix, tengri should diverge from package v0.5.dev22 at (ampl={ampl}, slope={slope})"
+        msg = (
+            f"After #2397 fix, tengri should diverge from package v0.5.dev22 "
+            f"at (ampl={ampl}, slope={slope})"
         )
+        assert not np.allclose(tng, ref_buggy, rtol=1e-2), msg
 
         # Verify tengri matches the algebraic formula (Eq. 3+4)
         # k = (k_base*slope_mod/rv + bump/rv_mod) / k_at_5500
@@ -469,7 +475,9 @@ class TestRegressionValues:
         """SBL18 with ampl=3, slope=-0.1 at key wavelengths (Av=1).
 
         Re-pinned after #2397: UV bump now normalized by R_V,mod(δ) instead of
-        fixed R_V,Cal = 4.05 (Salim+2018 Eq. 4). Derived from the fixed implementation.
+        fixed R_V,Cal = 4.05 (Salim+2018 Eq. 4). Values derived from tengri's
+        implementation of Eq. 3+4, not from the dust_attenuation package
+        (v0.5.dev22 shares the pre-v0.12 CIGALE bug).
         """
         ref = np.array(
             [

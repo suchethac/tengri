@@ -1252,28 +1252,28 @@ def salim_sbl18(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Attenuation curve k(λ) = k'(λ) / R_V. [dimensionless]
+        Normalized attenuation curve k(λ), with k(5500 Å) = 1. [dimensionless]
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, implementation is safe under ``jax.jit`` and
+    ``jax.grad`` via tracer dispatch.
 
-    **Normalization:** The UV bump term is normalized by R_V,mod(δ) (Eq. 4),
-    not by the fixed Calzetti R_V = 4.05. This implements the correction
-    described in Salim, Boquien & Lee (2018) footnote 7, which addresses an
-    earlier CIGALE bug where the bump was added before applying the power-law
-    modification (pre-v0.12 behavior). The corrected SBL18 method applies the
-    tilt to the base only and normalizes the two terms by different divisors
-    corresponding to their respective R_V values.
+    **Normalization:** The UV bump and tilted base are normalized by different
+    divisors: R_V,Cal for the tilted base, and R_V,mod(δ) (Eq. 4) for the bump.
+    This implements Salim, Boquien & Lee (2018) Eq. 3, correcting the pre-v0.12
+    CIGALE method described in footnote 7, which used a single fixed R_V for
+    both terms. The divided normalization is realized after k(5500) renormalization.
 
-    The attenuation is built from Eq. 3 and Eq. 4:
+    The attenuation is built from Eq. 3 and Eq. 4. Eq. 3 gives k_mod before
+    the k(5500) normalization:
 
     .. math::
 
         k_{\rm mod}(\lambda) = k_{\rm L02+C00}(\lambda)
         \left(\frac{R_{V,\rm mod}}{R_{V,\rm Cal}}\right)
         \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
-        + \frac{E_b D(\lambda; \lambda_0, \gamma)}{R_{V,\rm mod}}
+        + E_b D(\lambda; \lambda_0, \gamma)
 
     where the slope modification exponent is δ, and
 
@@ -1282,8 +1282,12 @@ def salim_sbl18(
         R_{V,\rm mod} = \frac{R_{V,\rm Cal}}{(R_{V,\rm Cal} + 1)
         \left(\frac{4400}{5500}\right)^\delta - R_{V,\rm Cal}}
 
-    with R_V,Cal = 4.05 (Calzetti 2000). The final k(λ) is normalized by k(5500)
-    to ensure k(5500) = 1.
+    with R_V,Cal = 4.05 (Calzetti 2000). The division by R_V,mod in the bump term
+    and R_V,Cal in the tilted base are realized after k(5500) renormalization:
+    ``k = (k_base*slope/R_V,Cal + bump/R_V,mod) / k(5500)``.
+
+    **Validity**: R_V,mod is well-defined for δ < 0.989; the denominator in Eq. 4
+    passes through zero near δ ≈ 0.989. The declared prior Uniform(-1.0, 0.4) is safe.
 
     References
     ----------
