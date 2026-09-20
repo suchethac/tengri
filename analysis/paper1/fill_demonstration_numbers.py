@@ -242,12 +242,21 @@ def main() -> int:
         for r in ad:
             if r.get("log_mstar") is not None:
                 by_gal[r["gal"]][r["config"]] = r["log_mstar"]
-        spreads = [max(v.values()) - min(v.values()) for v in by_gal.values() if len(v) > 1]
-        if spreads:
+        multi = [v for v in by_gal.values() if len(v) > 1]
+        ranges = [max(v.values()) - min(v.values()) for v in multi]
+        stdevs = [statistics.stdev(list(v.values())) for v in multi if len(v) > 1]
+        if ranges:
             print(
-                f"\nconfiguration-to-configuration spread in log M*, per galaxy: "
-                f"{fmt_range(spreads, 'dex', places=3)} over {len(spreads)} galaxies "
-                f"with >1 configuration"
+                f"\nconfiguration-to-configuration scatter in log M*, over {len(multi)} galaxies:"
+            )
+            print(f"   range  (max-min)      : {fmt_range(ranges, 'dex', places=3)}")
+            if stdevs:
+                print(f"   stdev across configs  : {fmt_range(stdevs, 'dex', places=3)}")
+            print(
+                "   Compare the STDEV against the published inter-code figure, not the\n"
+                "   range: Pacifici+2023's ~0.1 dex in M* and ~0.3 dex in SFR are scatter,\n"
+                "   and on that catalog the median range is 2.4x the median stdev. Run\n"
+                "   `python -m paper1.published_code_spread` for both, measured."
             )
 
     print("\n--- still outstanding: these need more than the fits ---")
