@@ -120,12 +120,8 @@ def test_table_is_redshift_independent(ssp_data_fsps):
     # own Fixed 0.5, rather than this test re-stating a Fixed key, which is
     # refused on presence regardless of whether the value matches the pin.
     # nion is a stellar (distance-independent) quantity — same physical galaxy
-    exact_hi = np.asarray(
-        m_hi.predict_line_fluxes(p, target_wavelengths=lw, redden=False)
-    )
-    lut_hi = np.asarray(
-        reconstruct_line_lums(_nion(m_hi, p), p["met_logzsol"], 0.5, table)
-    )
+    exact_hi = np.asarray(m_hi.predict_line_fluxes(p, target_wavelengths=lw, redden=False))
+    lut_hi = np.asarray(reconstruct_line_lums(_nion(m_hi, p), p["met_logzsol"], 0.5, table))
     strong = np.abs(exact_hi) > 1e-3 * np.max(np.abs(exact_hi))
     rel = np.max(np.abs(lut_hi - exact_hi)[strong] / np.maximum(np.abs(exact_hi)[strong], 1e-40))
     # 5e-3: see the module note — SFH-shape independence is ~0.2 %, not exact (#1018).
