@@ -37,7 +37,7 @@
   where adjacent cameras meet. Segment sizes must be positive and sum to the
   wavelength grid length. (#2172)
 
-- 6 broad skip handlers narrowed to specific exceptions; the skip-handler ratchet is now empty (#1615).
+- 6 broad skip handlers narrowed to specific exceptions; the skip-handler ratchet is now empty (#1615). The handlers had been hiding failures #2464 and #2465.
 
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
