@@ -68,6 +68,7 @@ __all__ = [
     "CosmoParams",
     "age_at_z",
     "age_at_z0",
+    "age_at_z0_host",
     "angular_diameter_distance",
     "angular_diameter_distance_mpc",
     "arcsec_per_kpc",
@@ -552,6 +553,73 @@ def age_at_z(
     result = _dsps_age_at_z(z, c.Om0, c.w0, c.wa, c.h)
     # Return scalar if input was scalar
     return result[0] if jnp.ndim(z) == 0 else result
+
+
+def age_at_z0_host(cosmo: CosmoParams = DEFAULT_COSMO) -> float:
+    """Age of universe at z=0 (present day) in Gyr, computed on host.
+
+    Pure-numpy implementation of dsps.cosmology.flat_wcdm.age_at_z0,
+    designed to be called at module import time without triggering
+    DSPS's float64 device buffer allocation on float64-less backends
+    (jax-mps, MLX). Returns numerically identical results to DSPS.
+
+    Uses 512 log-spaced redshift nodes and trapezoidal integration,
+    exactly matching DSPS's integration strategy.
+
+    Parameters
+    ----------
+    cosmo : CosmoParams, optional
+        Cosmology parameters (default: PLANCK18).
+
+    Returns
+    -------
+    float
+        Age of universe in Gyr.
+
+    Notes
+    -----
+    This function avoids all JAX and DSPS imports, making it safe
+    to call at module scope for deferred DSPS initialization.
+    """
+    import numpy as np
+
+    # DSPS constants: MPC in cm, YEAR in seconds
+    MPC = 3.08567758149e24
+    YEAR = 31556925.2
+
+    # 512 log-spaced redshift nodes: logspace(0, 3, 512) - 1.0 = [0, ..., 999]
+    z_nodes = np.logspace(0.0, 3.0, 512) - 1.0
+
+    # Cosmological parameters
+    Om0, w0, wa, h = cosmo.Om0, cosmo.w0, cosmo.wa, cosmo.h
+
+    # Dark energy density at z=0 (matter-dominated assumption for flat LCDM)
+    Ode0 = 1.0 - Om0
+
+    # Compute E(z) = H(z) / H0 at each node
+    # E(z) = sqrt(Om0*(1+z)^3 + Ode0*rho_de_z(z))
+    # where rho_de_z(z) = a^(-3*(1+w0+wa)) * exp(-3*wa*(1-a)), a = 1/(1+z)
+    a_nodes = 1.0 / (1.0 + z_nodes)
+    rho_de_z = a_nodes ** (-3.0 * (1.0 + w0 + wa)) * np.exp(
+        -3.0 * wa * (1.0 - a_nodes)
+    )
+    E_z = np.sqrt(Om0 * (1.0 + z_nodes) ** 3.0 + Ode0 * rho_de_z)
+
+    # Integrand: dt/dz = 1 / (H(z) * (1+z)) [in units where H0=1]
+    integrand = 1.0 / (E_z * (1.0 + z_nodes))
+
+    # Trapezoidal rule integration: integral 1/(E(z)*(1+z)) dz
+    # Result is proportional to age / H0
+    integrated = np.trapezoid(integrand, z_nodes)
+
+    # Multiply by Hubble time (in Gyr) to get age in Gyr
+    # hubble_time = 1 / H0 = 1 / (100*h km/s/Mpc) in Gyr units
+    # The constant 1e-16 converts the MPC/YEAR ratio to Gyr:
+    # 1e-16 * MPC / YEAR / h = Hubble time in Gyr
+    hubble_time_gyr = 1e-16 * MPC / YEAR / h
+    age_gyr = integrated * hubble_time_gyr
+
+    return float(age_gyr)
 
 
 def age_at_z0(
