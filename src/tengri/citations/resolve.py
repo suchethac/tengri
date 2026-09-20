@@ -193,6 +193,50 @@ def citation_keys_for(name: str | None) -> list[str]:
     return list(dict.fromkeys(keys))
 
 
+#: Association tables whose keys are true registry namespaces: values a
+#: :func:`tengri.SEDModel.build` group's ``type=``/``law=`` selector actually
+#: accepts, and so the ones :mod:`tengri.parameters.groups` validates unknown
+#: names against. Paired with the human-readable label used when an orphaned
+#: citation key's name is reported (:func:`citation_key_hint`'s "not valid
+#: here" branch).
+#:
+#: Deliberately excludes:
+#:
+#: * SSP provenance/alias tables (``SSP_CODE_CITATIONS``,
+#:   ``SSP_ISOCHRONE_CITATIONS``, ``SSP_LIBRARY_CITATIONS``, ``IMF_CITATIONS``)
+#:   -- filename tokens and their misspelling aliases (``"bsti"`` for
+#:   ``"basti"``), never a value any group's grammar accepts.
+#: * ``PHOTOMETRY_CONVENTION_CITATIONS`` and ``BACKEND_CITATIONS`` -- real
+#:   selectors, but for ``FilterConvention`` / ``Fitter.run(backend=...)``,
+#:   neither of which ``parameters/groups.py`` validates through this path.
+#: * The always-on flat lists (``CORE_CITATIONS``, ``RADIO_CITATIONS``,
+#:   ``DLA_CITATIONS``, ``SYNTHESIZER_CITATIONS``) -- unconditional citations
+#:   triggered by a subsystem being active at all, not name -> key maps.
+#: * ``FUNCTION_CITATIONS`` -- keyed by ``"module.qualname"``, not a
+#:   component name.
+#:
+#: Including any of these reversed a citation key to a name from the wrong
+#: universe: ``sfh={'type': 'basti'}`` (an SSP isochrone token, not an SFH
+#: type) was reported as "citation key for bsti", and ``bessell2012`` /
+#: ``chabrier2003`` similarly pointed at a photometry convention / an IMF
+#: token (#2429 opus review M2).
+_REGISTRY_NAMESPACE_TABLES: tuple[tuple[str, str], ...] = (
+    ("SFH_CITATIONS", "SFH type"),
+    ("RADIO_MODEL_CITATIONS", "radio model"),
+    ("DUST_LAW_CITATIONS", "dust law"),
+    ("DUST_EMISSION_CITATIONS", "dust_emission type"),
+    ("DUST_MODEL_CITATIONS", "dust_attenuation type"),
+    ("NEBULAR_BACKEND_CITATIONS", "nebular type"),
+    ("AGN_DISC_CITATIONS", "agn.disc type"),
+    ("AGN_TORUS_CITATIONS", "agn.torus type"),
+    ("AGN_NLR_CITATIONS", "agn.nlr type"),
+    ("AGN_BLR_CITATIONS", "agn.blr type"),
+    ("IGM_CITATIONS", "IGM type"),
+    ("XRAY_CITATIONS", "X-ray type"),
+    ("SHOCK_CITATIONS", "shock type"),
+)
+
+
 def registry_names_for_citation_key(key: str) -> tuple[str, ...]:
     """Registry names that cite a given BibTeX key.
 
@@ -213,13 +257,16 @@ def registry_names_for_citation_key(key: str) -> tuple[str, ...]:
 
     Notes
     -----
-    Lookup is case-insensitive to handle variation in key spelling. The reverse
-    mapping is built once per module import and cached.
+    Swept sources are :data:`NAME_TO_BIBKEY` and the tables listed in
+    :data:`_REGISTRY_NAMESPACE_TABLES` -- deliberately not every
+    ``*_CITATIONS`` table in :mod:`tengri.citations.associations`; see that
+    constant's docstring for which ones are excluded and why. Lookup is
+    case-insensitive to handle variation in key spelling.
 
     Examples
     --------
     >>> registry_names_for_citation_key("charlot_fall2000")
-    ('power_law',)
+    ('power_law', 'cf00', 'two_component')
     >>> registry_names_for_citation_key("skirtor")
     ('skirtor', 'stalevski', 'skirtor_agnfitter', 'schartmann2005_skirtor_atten')
     """
@@ -231,83 +278,137 @@ def registry_names_for_citation_key(key: str) -> tuple[str, ...]:
         if bibkey.lower() == key_lower:
             names.append(name)
 
-    # Build reverse of association tables
+    # Build reverse of the registry-namespace association tables only.
     from tengri.citations import associations as _assoc
 
-    for attr in sorted(dir(_assoc)):
-        if not attr.endswith("_CITATIONS"):
+    for attr, _kind in _REGISTRY_NAMESPACE_TABLES:
+        table = getattr(_assoc, attr, None)
+        if not isinstance(table, dict):
             continue
-        table = getattr(_assoc, attr)
-        if isinstance(table, dict):
-            for name, keys in table.items():
-                if isinstance(keys, list):
-                    for k in keys:
-                        if k.lower() == key_lower:
-                            names.append(name)
-                elif isinstance(keys, str) and keys.lower() == key_lower:
+        for name, keys in table.items():
+            if isinstance(keys, list):
+                if any(isinstance(k, str) and k.lower() == key_lower for k in keys):
                     names.append(name)
-        elif isinstance(table, list):
-            # Flat tables: check if key is in the list
-            for item in table:
-                if isinstance(item, str) and item.lower() == key_lower:
-                    names.append(item)
+            elif isinstance(keys, str) and keys.lower() == key_lower:
+                names.append(name)
 
     return tuple(dict.fromkeys(names))
 
 
-def citation_key_hint(unknown: str, valid_names: list[str], *, kind: str, keyword: str) -> str:
-    """Error message fragment if unknown name is a citation key.
+def _registry_namespace_kind(name: str) -> str | None:
+    """The human-readable registry namespace ``name`` belongs to, if any.
 
-    When a user provides a citation key (like ``"charlot_fall2000"``) instead
-    of a registry name (like ``"power_law"``), this function returns a helpful
-    message fragment explaining the confusion. If ``unknown`` is not a known
-    citation key, returns an empty string so difflib suggestions can follow.
+    Consulted only once a citation key has resolved to a name that is *not*
+    valid at the current call site, so the error can say what kind of entry
+    it actually is (e.g. ``"power_law (dust law)"``) instead of a bare,
+    context-free name.
+
+    Parameters
+    ----------
+    name : str
+        A registry name, e.g. one returned by
+        :func:`registry_names_for_citation_key`.
+
+    Returns
+    -------
+    str or None
+        The label from :data:`_REGISTRY_NAMESPACE_TABLES` for the first table
+        whose keys contain ``name``, or ``None`` if no table does (e.g. a name
+        known only through :data:`NAME_TO_BIBKEY`, which mixes several kinds
+        under one map and so cannot be attributed to a single one).
+    """
+    from tengri.citations import associations as _assoc
+
+    for attr, label in _REGISTRY_NAMESPACE_TABLES:
+        table = getattr(_assoc, attr, None)
+        if isinstance(table, dict) and name in table:
+            return label
+    return None
+
+
+def citation_key_hint(
+    unknown: str,
+    valid_names: list[str],
+    *,
+    kind: str,
+    keyword: str | None,
+    fallback: str = "",
+) -> str:
+    """Error message fragment recognizing ``unknown`` as a citation key.
+
+    When a user provides a citation key (like ``"charlot_fall2000"``) where a
+    registry name (like ``"power_law"``) belongs, this explains the mix-up
+    instead of leaving the caller with a difflib "did you mean" guess that has
+    nothing close to suggest.
 
     Parameters
     ----------
     unknown : str
         The unknown name the user provided.
-    valid_names : list[str]
-        List of valid registry names for this parameter.
+    valid_names : list of str
+        Registry names valid at this call site.
     kind : str
-        The type of thing being validated (e.g., ``"dust law"``).
-    keyword : str
-        The parameter keyword used (e.g., ``"law"`` or ``"law_bc"``).
+        The kind of thing being validated (e.g., ``"dust law"``), used
+        verbatim in the message.
+    keyword : str or None
+        The parameter keyword to show in the "Use ``keyword='...'``" remedy
+        (e.g. ``"law"``, ``"law_bc"``). ``None`` suppresses that remedy clause
+        entirely -- for call sites where ``unknown`` is a *dict key* name
+        rather than a value assigned via ``keyword=``, for which
+        "Use key='...'" does not parse as an instruction a caller could type.
+    fallback : str
+        The difflib "Did you mean: ...?" sentence (or an alias hint), already
+        computed by the caller. Returned unchanged when ``unknown`` is not a
+        citation key at all; appended after the citation note (never
+        replaced) when it is a citation key but not valid here, so a real
+        typo suggestion is never lost to a true-but-unhelpful citation
+        observation (#2429 opus review M2).
 
     Returns
     -------
     str
-        A sentence(s) or empty string. If non-empty, describes the citation key
-        and which registry name(s) it corresponds to.
+        The hint sentence(s), or ``fallback`` unchanged when ``unknown`` is
+        not a known citation key of any name other than itself.
 
     Examples
     --------
-    >>> citation_key_hint("charlot_fall2000", valid_names, kind="dust law", keyword="law")
+    >>> citation_key_hint(
+    ...     "charlot_fall2000", ["calzetti", "power_law"], kind="dust law", keyword="law"
+    ... )
     "That is a citation key for power_law (dust law). Use law='power_law'."
     """
     names_for_key = registry_names_for_citation_key(unknown)
+    # A name that cites itself (``"cue"`` -> ``"cue"``, ``"tengri"`` ->
+    # ``"tengri"``) has no *other* spelling to redirect to; reporting it as
+    # "a citation key for cue" is a tautology that also throws away the
+    # difflib fallback for no benefit (#2429 opus review M1).
+    unknown_lower = str(unknown).lower()
+    names_for_key = tuple(n for n in names_for_key if n.lower() != unknown_lower)
     if not names_for_key:
-        return ""
+        return fallback
 
-    # Filter to names that are actually valid at this site
     valid_at_site = [n for n in names_for_key if n in valid_names]
 
     if valid_at_site:
-        # This citation key is valid here
         names_str = ", ".join(valid_at_site)
+        if keyword is None:
+            if len(valid_at_site) == 1:
+                return f"That is a citation key for {valid_at_site[0]} ({kind})."
+            return f"That is a citation key for {names_str} ({kind})."
         if len(valid_at_site) == 1:
             return (
                 f"That is a citation key for {valid_at_site[0]} ({kind}). "
                 f"Use {keyword}='{valid_at_site[0]}'."
             )
-        else:
-            return (
-                f"That is a citation key for {names_str} ({kind}). "
-                f"Use {keyword}='{valid_at_site[0]}' or {keyword}='"
-                f"{valid_at_site[1]}' (or another from: {', '.join(valid_at_site)})."
-            )
-    else:
-        # This citation key exists but not for this group
-        # Report the first name it maps to; don't suggest a remedy
-        first_name = names_for_key[0]
-        return f"That is a citation key for {first_name}, not a valid {kind}."
+        remedy = f"Use {keyword}='{valid_at_site[0]}' or {keyword}='{valid_at_site[1]}'"
+        if len(valid_at_site) > 2:
+            # Redundant for exactly two names -- both are already named in
+            # the remedy sentence (#2429 opus review L5).
+            remedy += f" (or another from: {names_str})"
+        return f"That is a citation key for {names_str} ({kind}). {remedy}."
+
+    # This citation key exists, but not for a name valid at this site.
+    first_name = names_for_key[0]
+    entry_kind = _registry_namespace_kind(first_name) or "a model"
+    note = f"That is a citation key for {first_name} ({entry_kind}), not a valid {kind}."
+    return f"{fallback} {note}" if fallback else note

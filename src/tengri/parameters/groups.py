@@ -613,6 +613,65 @@ def _valid_dust_laws() -> frozenset[str]:
     return frozenset(DUST_LAWS.keys())
 
 
+def _hint_for_unknown_name(
+    kind: str,
+    name: str,
+    valid_names: Iterable[str],
+    *,
+    keyword: str | None,
+    n_suggestions: int = 2,
+    alias_hint: str | None = None,
+) -> str:
+    """The " Did you mean: ...?" / citation-key hint fragment, leading space included.
+
+    Computes the difflib (or alias) suggestion first, then asks
+    :func:`tengri.citations.resolve.citation_key_hint` whether ``name`` is
+    instead (or in addition) a known citation key -- that function appends
+    the citation note after the difflib fallback rather than replacing it
+    when the citation key is valid for some *other* group, so a real typo
+    suggestion is never dropped in favor of a true-but-unhelpful observation
+    (#2429 opus review M2).
+
+    Shared by :func:`_unknown_name_error` and the handful of call sites whose
+    surrounding message does not fit that function's fixed template (the AGN
+    ``atten`` law detail line, the top-level group-key list).
+
+    Parameters
+    ----------
+    kind : str
+        Type of thing being validated (e.g., "dust law").
+    name : str
+        The unknown name the user provided.
+    valid_names : Iterable[str]
+        Valid registry names for this category.
+    keyword : str or None
+        The parameter keyword (e.g., "law", "law_bc"); ``None`` when ``name``
+        is a dict *key* rather than a value assigned via ``keyword=``, which
+        suppresses the citation hint's "Use keyword='...'" remedy clause.
+    n_suggestions : int
+        Number of difflib suggestions to show (default 2).
+    alias_hint : str | None
+        If provided and in valid_names, use this as the suggestion instead
+        of difflib. Used for alias maps like _NEBULAR_TYPE_HINTS.
+
+    Returns
+    -------
+    str
+        The hint, prefixed with a space, or ``""`` if there is nothing to say.
+    """
+    from tengri.citations.resolve import citation_key_hint
+
+    valid_list = list(valid_names)
+    if alias_hint is not None and alias_hint in valid_list:
+        fallback = f"Did you mean: {alias_hint}?"
+    else:
+        suggestions = difflib.get_close_matches(name, valid_list, n=n_suggestions, cutoff=0.6)
+        fallback = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+
+    hint = citation_key_hint(name, valid_list, kind=kind, keyword=keyword, fallback=fallback)
+    return f" {hint}" if hint else ""
+
+
 def _unknown_name_error(
     kind: str,
     name: str,
@@ -652,22 +711,14 @@ def _unknown_name_error(
     ValueError
         An error message with citation hint or difflib suggestions.
     """
-    from tengri.citations.resolve import citation_key_hint
-
-    valid_list = list(valid_names)
-    hint = citation_key_hint(name, valid_list, kind=kind, keyword=keyword)
-
-    if not hint:
-        # Fall back to alias hint or difflib suggestion
-        if alias_hint is not None and alias_hint in valid_list:
-            hint = f"Did you mean: {alias_hint}?"
-        else:
-            suggestions = difflib.get_close_matches(name, valid_list, n=n_suggestions, cutoff=0.6)
-            hint = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-
-    if hint:
-        hint = f" {hint}"
-
+    hint = _hint_for_unknown_name(
+        kind,
+        name,
+        valid_names,
+        keyword=keyword,
+        n_suggestions=n_suggestions,
+        alias_hint=alias_hint,
+    )
     return ValueError(f"Unknown {kind} '{name}'.{hint}{extra}")
 
 
@@ -2768,11 +2819,12 @@ def _translate_structural(groups: dict) -> dict:
             )
 
         if group_name not in valid_groups:
-            suggestions = difflib.get_close_matches(group_name, valid_groups, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            # keyword=None: a group key is the kwarg name itself, not a value
+            # assigned via ``keyword=`` (#2429 opus review M3).
+            hint = _hint_for_unknown_name("group key", group_name, valid_groups, keyword=None)
             raise ValueError(
-                f"Unknown group key '{group_name}'. "
-                f"Valid groups: {', '.join(sorted(valid_groups))}.{suggest_str}"
+                f"Unknown group key '{group_name}'.{hint} "
+                f"Valid groups: {', '.join(sorted(valid_groups))}."
             )
 
         # Every component is declared the same way; a dict selecting the
@@ -3093,7 +3145,12 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         for type_name in sfh_type:
             if type_name not in valid:
                 raise _unknown_name_error(
-                    "SFH type", type_name, valid, keyword="type", n_suggestions=3
+                    "SFH type",
+                    type_name,
+                    valid,
+                    keyword="type",
+                    n_suggestions=3,
+                    extra=" This name is in composition.",
                 )
             _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
@@ -3174,7 +3231,7 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
             met_mode,
             valid_modes,
             keyword="type",
-            extra=f" Valid modes: {', '.join(valid_modes)}.",
+            extra=f" This was given in {key}. Valid modes: {', '.join(valid_modes)}.",
         )
 
     result["met_mode"] = met_mode
@@ -3854,7 +3911,11 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
         valid_emission_types = _valid_dust_emission_types()
         if emission_type not in valid_emission_types:
             raise _unknown_name_error(
-                "dust_emission type", emission_type, valid_emission_types, keyword="type"
+                "dust_emission type",
+                emission_type,
+                valid_emission_types,
+                keyword="type",
+                n_suggestions=3,
             )
         result["dust_emission"] = emission_type
 
@@ -5592,19 +5653,26 @@ def _check_dict_keys(
         from tengri.citations.resolve import citation_key_hint
 
         valid_structural = list(suggestion_pool)
-        hint = citation_key_hint(
-            str(key), valid_structural, kind=f"key for group {group!r}", keyword="key"
-        )
+        suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
+        # A suggestion identical to the rejected key is noise, not help.
+        suggestions = [s for s in suggestions if s != str(key)]
+        # Filter out the internal '*' key from suggestions defensively.
+        suggestions = [s for s in suggestions if s != WILDCARD_KEY]
+        fallback = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
 
-        if not hint:
-            suggestions = difflib.get_close_matches(
-                str(key), list(suggestion_pool), n=2, cutoff=0.6
-            )
-            # A suggestion identical to the rejected key is noise, not help.
-            suggestions = [s for s in suggestions if s != str(key)]
-            # Filter out the internal '*' key from suggestions defensively.
-            suggestions = [s for s in suggestions if s != WILDCARD_KEY]
-            hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        # keyword=None: this validates a dict *key* name, not a value assigned
+        # via ``keyword=``, so citation_key_hint's "Use key='...'" remedy
+        # would not parse as an instruction a caller could type (#2429 opus
+        # review L6).
+        hint = citation_key_hint(
+            str(key),
+            valid_structural,
+            kind=f"key for group {group!r}",
+            keyword=None,
+            fallback=fallback,
+        )
+        if hint:
+            hint = f" {hint}"
 
         # Display user-facing keys only (exclude internal WILDCARD_KEY '*').
         # Base set by default; a caller with type-specific structural keys
@@ -6153,12 +6221,9 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                         if law_key in DUST_LAWS
                         else f"Unknown dust law '{law_key}'"
                     )
-                    suggestions = difflib.get_close_matches(law_key, valid, n=2, cutoff=0.6)
-                    suggest_str = (
-                        f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                    )
+                    hint = _hint_for_unknown_name("dust law", law_key, valid, keyword="law")
                     raise ValueError(
-                        f"{detail}.{suggest_str}\n"
+                        f"{detail}.{hint}\n"
                         f"Valid agn['atten'] laws: {valid}.\n"
                         f"The block applies the Prevot SMC curve unconditionally, so "
                         f"accepting another name would silently substitute this one. "
