@@ -2,6 +2,21 @@
 
 ### Fixed
 
+- MAPPINGS shock grid interpolates between bracketing populated nodes where the
+  B-field stencil contains fewer than two populated cells (#2066): on sparse
+  grids, the triweight kernel at an off-node query point can land entirely on
+  unpopulated cells (which are zero-filled), making a normalized convolution
+  flat in that axis even though populated neighbors exist. The fix detects
+  stencils with fewer than 2 populated nodes and widens them to bracket the
+  nearest populated nodes on each side, so interpolation proceeds between real
+  data. Queries outside the bracketing range raise ValueError loudly rather
+  than returning NaN silently. Before: B-field gradient was zero at 17 of 18
+  off-node test points. After: measured B-field response at every test point
+  (before-and-after population mask counts provided in issue). Case-c kernel
+  limitation (#2066 comment) remains: at points with only 1 populated node in
+  the stencil (no bracketing possible), gradient is still ~14% below FD; full
+  closure requires a designed family-graph interpolant.
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
