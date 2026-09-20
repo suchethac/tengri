@@ -504,6 +504,18 @@ class Posterior:
         the override. Falls back to the spec when there is no fitter
         (a hand-built ``Posterior``).
 
+        **Under ``profile_mass``** (#2296): ``fitter.spec`` is the WORKING
+        spec, which pins the mass parameter Fixed at an analytic placeholder
+        -- an internal re-pin, not something the user's own model
+        (``self._model.spec``) declared Fixed at all (the mass is free
+        there). ``finalize_profile_mass`` writes the real, analytically
+        profiled mass into ``params``/``samples``, so without filtering, the
+        same parameter would appear in BOTH ``params`` (the real value) and
+        ``fixed_values`` (the stale placeholder) -- and worse, a caller
+        checking ``name in posterior.fixed_values`` to decide "is this
+        Fixed on the user's model" would get the wrong answer. Keep only the
+        names that are actually Fixed on ``self._model.spec``.
+
         Returns
         -------
         dict
@@ -511,10 +523,15 @@ class Posterior:
             model and no fitter (hand-built posteriors).
         """
         if self._fitter is not None:
-            return dict(self._fitter._fixed_values)
-        if self._model is None:
+            values = dict(self._fitter._fixed_values)
+        elif self._model is None:
             return {}
-        return dict(self._model.spec.get_fixed_values())
+        else:
+            values = dict(self._model.spec.get_fixed_values())
+        if self._model is not None:
+            free_on_model = set(self._model.spec.free_params)
+            values = {k: v for k, v in values.items() if k not in free_on_model}
+        return values
 
     # ── Derived quantities ────────────────────────────────────────
 
