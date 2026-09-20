@@ -35,6 +35,12 @@
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
 
+- LUT-bias advisory probes z-table midpoints on a free-redshift fit (#2105):
+  the advisory probed one redshift and so could not see the LUT's z-interpolation
+  error; it now probes the inter-node midpoints nearest the prior median (or the
+  prior bounds when no node lies inside) and names the peak redshift and
+  `approx=None`, the exact path on every surface since #2385. (#2105)
+
 ### Fixed
 
 - Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
