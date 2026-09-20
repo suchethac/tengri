@@ -15,11 +15,9 @@ finite and non-zero at every wavelength up to the template's maximum.
 Reference: GitHub issue #1512.
 """
 
-import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
