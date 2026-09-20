@@ -54,6 +54,14 @@ class BackendEntry:
         ``TypeError`` deep inside a backend, and so the ``mcmc`` auto-dispatcher
         can ask the registry about whichever backend it picked rather than naming
         one in an ``if``.
+    self_whitening : bool
+        Whether the runner's adaptation applies its own whitening (metric learning
+        or diagonalization). True for MCLMC (which uses ``diagonal_preconditioning=True``)
+        and low-rank HMC (which learns a metric from warmup via
+        ``blackjax.window_adaptation_low_rank``). When True and ``precondition=`` is
+        also truthy, the two whitenings compose catastrophically (measured as 472
+        divergences on a stochastic field, #2196), so ``check_capabilities`` raises
+        rather than allowing silent degradation.
     """
 
     name: str
@@ -63,6 +71,7 @@ class BackendEntry:
     requires: tuple[str, ...] = field(default_factory=tuple)  # optional dep names
     legacy_fitter: bool = True
     accepts_precondition: bool = False
+    self_whitening: bool = False
     # Predicate called with whatever ``runner`` receives (Fitter or InferenceContext).
     # Returns True if this backend can run for the given target's spec/dims/dtypes.
     # Default ``None`` means "no compatibility constraint" (always usable).
@@ -114,6 +123,7 @@ def register_backend(
     legacy_fitter: bool = True,
     is_compatible: Callable[[Any], bool] | None = None,
     accepts_precondition: bool = False,
+    self_whitening: bool = False,
 ):
     """Decorator to register an inference backend.
 
@@ -135,6 +145,11 @@ def register_backend(
         Declare that the runner takes ``precondition=``. See
         :class:`BackendEntry`. Kept honest against the runner's real signature by
         ``tests/contract/test_preconditioning_capability.py``.
+    self_whitening : bool
+        Declare that the runner applies its own whitening internally (e.g., MCLMC
+        uses ``diagonal_preconditioning=True``, or low-rank HMC learns a metric
+        from warmup). When True, composing with ``precondition=`` raises ValueError
+        before sampling starts (#2196).
 
     Raises
     ------
@@ -157,6 +172,7 @@ def register_backend(
             legacy_fitter=legacy_fitter,
             is_compatible=is_compatible,
             accepts_precondition=accepts_precondition,
+            self_whitening=self_whitening,
         )
         _BACKENDS[name] = entry
         for a in aliases:
@@ -360,8 +376,33 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
     Raises
     ------
     ValueError
-        If ``kwargs`` carries a truthy capability the backend does not declare.
+        If ``kwargs`` carries a truthy capability the backend does not declare, or if
+        ``precondition=`` is truthy and the backend performs its own whitening
+        (``self_whitening=True``), since composing two whitenings degrades sampling.
     """
+    # Check if both precondition= is truthy and backend whitens internally FIRST.
+    # This composes two whitenings (analytic metric + learned metric), which
+    # produces catastrophic degradation (measured as 472 divergences on a
+    # stochastic-field posterior, #2196). This check runs before accepts_precondition
+    # to give the user a specific error message about the conflict rather than a
+    # generic "does not support" message.
+    if kwargs.get("precondition") and entry.self_whitening:
+        capable_nonsw = sorted(
+            {
+                e.name
+                for e in all_backends()
+                if not e.self_whitening and e.accepts_precondition
+            }
+        )
+        raise ValueError(
+            f"Inference method '{entry.name}' applies its own self-whitening "
+            f"(e.g., diagonal preconditioning or metric learning from warmup). "
+            f"Composing two whitenings — the analytic metric and this backend's internal "
+            f"one — degrades sampling catastrophically (measured: 472 divergences vs 0-19 "
+            f"elsewhere, #2196). Drop the precondition= argument or choose a different method. "
+            f"Backends without internal whitening: {capable_nonsw}."
+        )
+
     for kwarg, field_name in _CAPABILITY_FIELDS.items():
         if not kwargs.get(kwarg):
             continue

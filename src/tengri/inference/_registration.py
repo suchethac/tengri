@@ -402,6 +402,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    self_whitening=True,
     # NOT accepts_precondition, though run_mclmc does take `precondition=` and
     # wires it to the same analytic-metric seam NUTS uses. The capability is
     # declared when it has been measured and the tier allows a fit:
@@ -495,6 +496,7 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    self_whitening=True,
 )(_ctx_run_hmc_low_rank)
 
 register_backend(
@@ -506,6 +508,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    self_whitening=True,
 )(_ctx_run_adjusted_mclmc)
 
 register_backend(

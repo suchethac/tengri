@@ -2,6 +2,16 @@
 
 ### Fixed
 
+- Self-whitening backends (MCLMC and low-rank HMC) now refuse to compose with
+  the analytic metric when `precondition=` is supplied (#2196). Two whitenings
+  multiply to produce catastrophic degradation (measured as 472 divergences on a
+  stochastic-field posterior where either alone gave 0–19). Backends that learn a
+  metric from warmup (via `diagonal_preconditioning=True` or
+  `blackjax.window_adaptation_low_rank`) now declare `self_whitening=True` and
+  raise `ValueError` before sampling when both conditions hold, rather than
+  silently degrading. The analytic metric and a backend's own whitening cannot be
+  composed; choose one or the other.
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
