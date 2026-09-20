@@ -736,6 +736,28 @@ def test_reinsertion_scratch_is_bounded_by_chunk_size(ssp_data_fsps, monkeypatch
     )
 
 
+def test_reinsertion_chunk_size_never_exceeds_ceiling(ssp_data_fsps):
+    """The derived chunk size is capped at ``_REINSERT_CHUNK_MAX`` draws.
+
+    XLA's ``temp_size_in_bytes`` under-reports the realized peak of the
+    per-chunk program by an order of magnitude on the paper-1 CANDELS models
+    (756 derived draws per chunk allocated past 18 GB; 64 peaked 1 GB above
+    baseline), so the analysis alone cannot be trusted to bound memory. The
+    ceiling is the bound; this pins that the derivation honors it.
+    """
+    from tengri.inference import mass_profile
+
+    model = _minimal_model(ssp_data_fsps)
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    _, flux, noise = _mock(model, seed=42)
+    fitter = Fitter(
+        ForwardModel.build(sed=model, observation=obs), flux, noise, profile_mass="auto"
+    )
+    assert fitter._profile_mass is True
+    chunk = mass_profile._compute_reinsertion_chunk_size(fitter)
+    assert 1 <= chunk <= mass_profile._REINSERT_CHUNK_MAX
+
+
 def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, monkeypatch):
     """Chunk width must not change the answer beyond reduction-reordering noise.
 

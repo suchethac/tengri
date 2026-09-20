@@ -140,6 +140,19 @@ _QUAD_NODES = 48
 #: draw, off the hot loop, so extra nodes are nearly free compared to
 #: the marginal's integral in every log-posterior evaluation.
 _REINSERT_QUAD_NODES = 384
+
+#: Ceiling on the draws per reinsertion chunk, whatever XLA's memory analysis
+#: says. ``temp_size_in_bytes`` of the per-chunk program under-reports the
+#: realized peak by an order of magnitude on the paper-1 CANDELS models:
+#: measured on configuration V (D=5 profiled, 1200 draws, 384 quadrature
+#: nodes) the analysis derived 756 draws per chunk and the run allocated
+#: 1.5 GB buffers past an 18 GB cap, while the same fit at 64 draws per chunk
+#: peaked 1.0 GB above baseline (83 s; 128 per chunk: 1.4 GB, 78 s; 64 on 4
+#: host devices: 1.0 GB, 63 s). At 756 the reinsertion spike reached 23-29 GB
+#: inside a NUTS fit and the shared box's 40 GB watchdog killed four cells at
+#: the finish line. The cost of the ceiling is a few seconds on models the
+#: analysis prices correctly.
+_REINSERT_CHUNK_MAX = 64
 _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: Mathematically, any log10(mass) placeholder works for the value the mass
 #: parameter is pinned to in the working spec once it is profiled out: the
@@ -1273,12 +1286,13 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
         derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
 
         logger.debug(
-            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
+            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB), ceiling %d",
             derived_chunk_size,
             scratch_bytes / reference_chunk_size / 1e6,
             target_bytes / 1e9,
+            _REINSERT_CHUNK_MAX,
         )
-        return derived_chunk_size
+        return min(derived_chunk_size, _REINSERT_CHUNK_MAX)
     except Exception as exc:
         # Fallback: use a conservative fixed size if XLA analysis fails
         # (e.g., on some hardware or JAX versions where memory_analysis is unavailable)
@@ -1288,7 +1302,7 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
             exc,
             exc_info=True,
         )
-        return reference_chunk_size
+        return min(reference_chunk_size, _REINSERT_CHUNK_MAX)
 
 
 def _reinsert_mass_fn(fitter: Fitter):
