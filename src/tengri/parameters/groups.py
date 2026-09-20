@@ -333,6 +333,9 @@ _ensure_registry_loaded()
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
 _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
 
+#: Metallicity modes that accept a lookback-time bin ladder (met_bin_edges_log_yr).
+_MET_LADDER_TYPES: tuple[str, ...] = ("bins", "bins_continuity")
+
 #: Optional Cue nebular knobs beyond logU/logZ_gas: gas density / abundance
 #: ratios (``gas_logn``, ``gas_logno``, ``gas_logco``) and the broken-power-law
 #: ionizing-spectrum shape (``ionspec_index1..4``, ``ionspec_logLratio1..3``).
@@ -3006,9 +3009,17 @@ def _validate_met_bin_edges(met_type, edges) -> None:
     """Validate ``met['met_bin_edges_log_yr']` at build time.
 
     Checks that edges form a valid ladder for metallicity-history binning:
-    at least two edges, all finite, and strictly increasing.
+    at least two edges, all finite, and strictly increasing. Also checks that
+    the met_type accepts a custom bin ladder.
     """
     import numpy as np
+
+    # Check that the met type accepts a custom bin ladder
+    if met_type not in _MET_LADDER_TYPES:
+        raise ValueError(
+            f"met_bin_edges_log_yr is not applicable to met_type='{met_type}'. "
+            f"Valid types: {', '.join(_MET_LADDER_TYPES)}"
+        )
 
     edges_arr = np.asarray(edges)
 
@@ -4750,7 +4761,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
             "met_bin_edges_log_yr",
             "met_bin_edges_log_yr",
             None,
-            only_types=("bins", "bins_continuity"),
+            only_types=_MET_LADDER_TYPES,
         ),
     ),
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
