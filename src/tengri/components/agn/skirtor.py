@@ -596,10 +596,49 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
     )
 
 
+def _fronts_cache(cached):
+    """Decorator: give a dtype-keyed wrapper the ``cache_clear``/``cache_info`` surface of
+    the ``functools.cache`` loader it fronts, so callers that reset a loader through its
+    public name (tests, notebooks) keep working after the dtype keying (#2275)."""
+
+    def _attach(wrapper):
+        wrapper.cache_clear = cached.cache_clear
+        wrapper.cache_info = cached.cache_info
+        return wrapper
+
+    return _attach
+
+
+def _process_float_dtype_name() -> str:
+    """Name of the canonical float dtype of the current process: ``'float64'`` under x64,
+    ``'float32'`` otherwise.
+
+    The SKIRTOR grid loaders below key their ``functools.cache`` on this string so that
+    device arrays built under one x64 state are never handed to a forward running under
+    the other (#2275; the same disease as #1392 and #2024).
+    """
+    return jax.dtypes.canonicalize_dtype(float).name
+
+
 @functools.cache
-def _load_skirtor_default_grid() -> SKIRTORGrid:
-    """Cached default SKIRTOR grid arrays (first grid file found on disk)."""
+def _load_skirtor_default_grid_for(float_dtype_name: str) -> SKIRTORGrid:
+    """Cached default SKIRTOR grid arrays (first grid file found on disk).
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
     return _load_skirtor_grid_data(_find_skirtor_grid())
+
+
+@_fronts_cache(_load_skirtor_default_grid_for)
+def _load_skirtor_default_grid() -> SKIRTORGrid:
+    """Cached default SKIRTOR grid arrays, keyed on the process float dtype.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
+    float_dtype = _process_float_dtype_name()
+    return _load_skirtor_default_grid_for(float_dtype)
 
 
 def create_skirtor_from_grid(grid_path: str) -> Callable:
@@ -1113,7 +1152,7 @@ def skirtor_disc_dust_ratio(
 
 
 @functools.cache
-def _load_raw_disk_dust_grid() -> SkirtorDiscDustGrid | None:
+def _load_raw_disk_dust_grid_for(float_dtype_name: str) -> SkirtorDiscDustGrid | None:
     """Load the CIGALE-lineage SKIRTOR disk/dust template grids for R.
 
     Returns a :class:`SkirtorDiscDustGrid`, or ``None`` if the v3 grid
@@ -1122,6 +1161,9 @@ def _load_raw_disk_dust_grid() -> SkirtorDiscDustGrid | None:
     the node-exact PCHIP interpolant used for R sees strictly-ascending
     coordinates -- and, since R64, has reversed ``norm`` along the same axis
     with them.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
     raw = _load_grid_arrays(_find_skirtor_grid())
     if "disk" not in raw or "dust" not in raw:
@@ -1135,6 +1177,17 @@ def _load_raw_disk_dust_grid() -> SkirtorDiscDustGrid | None:
     return SkirtorDiscDustGrid(
         disk=disk_jax, dust=dust_jax, wave_grid=wave_grid, axes=axes, norm=norm_jax
     )
+
+
+@_fronts_cache(_load_raw_disk_dust_grid_for)
+def _load_raw_disk_dust_grid() -> SkirtorDiscDustGrid | None:
+    """Cached SKIRTOR disk/dust grids, keyed on the process float dtype.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
+    float_dtype = _process_float_dtype_name()
+    return _load_raw_disk_dust_grid_for(float_dtype)
 
 
 class SKIRTORBundle(NamedTuple):
@@ -1322,22 +1375,51 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
 
 
 @functools.cache
-def _load_skirtor_default():
-    """Load SKIRTOR template grid from file (total-only)."""
+def _load_skirtor_default_for(float_dtype_name: str):
+    """Load SKIRTOR template grid from file (total-only).
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
     return create_skirtor_from_grid(_find_skirtor_grid())
 
 
+@_fronts_cache(_load_skirtor_default_for)
+def _load_skirtor_default():
+    """Load SKIRTOR template grid, keyed on the process float dtype.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
+    float_dtype = _process_float_dtype_name()
+    return _load_skirtor_default_for(float_dtype)
+
+
 @functools.cache
-def _load_skirtor_components():
+def _load_skirtor_components_for(float_dtype_name: str):
     """Load SKIRTOR template grid with separate components.
 
     Falls back to total-only if v3 grid is not available.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
     path = _find_skirtor_grid()
     try:
         return create_skirtor_components_from_grid(path)
     except KeyError:
         return None
+
+
+@_fronts_cache(_load_skirtor_components_for)
+def _load_skirtor_components():
+    """Load SKIRTOR template grid, keyed on the process float dtype.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
+    float_dtype = _process_float_dtype_name()
+    return _load_skirtor_components_for(float_dtype)
 
 
 def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
@@ -1512,17 +1594,33 @@ def skirtor_disc_attenuation_from_grid(
 
 
 @functools.cache
-def _load_skirtor_disc_attenuation():
+def _load_skirtor_disc_attenuation_for(float_dtype_name: str):
     """Build SKIRTOR disc attenuation pattern, cached.
 
     Returns an identity function when the v2 grid is used (no disc grid).
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
     path = _find_skirtor_grid()
     return create_skirtor_disc_attenuation_from_grid(path)
 
 
+@_fronts_cache(_load_skirtor_disc_attenuation_for)
+def _load_skirtor_disc_attenuation():
+    """Build SKIRTOR disc attenuation pattern, keyed on the process float dtype.
+
+    Returns an identity function when the v2 grid is used (no disc grid).
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
+    float_dtype = _process_float_dtype_name()
+    return _load_skirtor_disc_attenuation_for(float_dtype)
+
+
 @functools.cache
-def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
+def load_skirtor_disc_atten_grid_for(float_dtype_name: str) -> SKIRTORDiscAttenGrid | None:
     """Load the packaged SKIRTOR disc-column arrays (discovery + cache).
 
     This is the ``template_loader`` the SKIRTOR-attenuated disc block
@@ -1539,11 +1637,40 @@ def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
     ------
     FileNotFoundError
         If no SKIRTOR grid is present on disk.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
     """
     raw = _load_grid_arrays(_find_skirtor_grid())
     if "disk" not in raw:
         return None
     return _disc_atten_bundle(raw)
+
+
+@_fronts_cache(load_skirtor_disc_atten_grid_for)
+def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
+    """Load the packaged SKIRTOR disc-column arrays, keyed on the process float dtype.
+
+    This is the ``template_loader`` the SKIRTOR-attenuated disc block
+    registers, so the forward model can hoist the ~10 MB disc cube out of
+    the JIT trace.
+
+    Returns
+    -------
+    SKIRTORDiscAttenGrid or None
+        ``None`` for a v2 grid, which carries no separate disc column;
+        the attenuation is then identity.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no SKIRTOR grid is present on disk.
+
+    Mechanism: caches are keyed on process float dtype so a float32 arm
+    never hands its arrays to a float64 arm (#2275; same disease as #1392, #2024).
+    """
+    float_dtype = _process_float_dtype_name()
+    return load_skirtor_disc_atten_grid_for(float_dtype)
 
 
 def skirtor_disc_attenuation(*args, _template: SKIRTORDiscAttenGrid | None = None, **kwargs):

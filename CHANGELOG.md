@@ -135,6 +135,10 @@
 
 ### Fixed
 
+- SKIRTOR grid caches are keyed on the process float dtype, so a float32
+  forward no longer perturbs a later float64 forward of the same model
+  (2.5e-9 measured shift) (#2275).
+
 - Test `test_the_threaded_values_actually_reach_the_backend` now owns its CB19 grid instead of relying on whatever the locator finds, ensuring hermetic test isolation (#2318).
 
 - Flat-form `lgmet_scatter` kwarg is now LIVE in predictions (was dead): on
