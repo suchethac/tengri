@@ -233,6 +233,15 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     # tau_gyr is the turnover timescale: once it exceeds age_gyr, the power-law
     # shape flattens by ~200x and tau becomes unobservable. Cap near the cosmic
     # age to keep the turnover in the galaxy's history. See sfh_tau_conditioning.py.
+    #
+    # TWO CLAIMS, and only the first is established. (a) The cap is right on
+    # conditioning and on physics: a turnover longer than the age of the universe
+    # at the galaxy's redshift is not a meaningful model, and the direction is
+    # measurably flat there. (b) Whether it RESOLVES the 381/1200 divergences
+    # observed on galaxy 79 is a separate question, and this cap was committed
+    # before the cell testing it reported. If that cell comes back still frozen,
+    # (a) still holds and (b) is false -- the row would need a different fix and
+    # this cap should not be credited with one.
     tau_upper = age_at_z(z)
     return SEDModel.build(
         ssp_data=ssp_data,
