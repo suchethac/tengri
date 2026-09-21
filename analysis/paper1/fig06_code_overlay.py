@@ -38,6 +38,16 @@ jax.config.update("jax_enable_x64", True)
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+#: The galaxies this figure draws, one panel each.
+#:
+#: The completeness guard below measures *these*, not the locked twenty. It
+#: used to measure the twenty, and the two populations are not the same
+#: question: a grid holding one finished cell for some other galaxy made the
+#: guard pass while all three panels here had an empty tengri arm, and the
+#: figure saved at exit 0 under a stamp reporting a grid it does not plot.
+#: A check has to observe the thing it is guarding.
+PANEL_GALAXY_IDS = (13097, 15336, 16049)
+
 # Configuration
 FIGURE_WIDTH = 3.4
 FIGURE_HEIGHT = 7.5
@@ -188,6 +198,36 @@ def _compute_all_derived_quantities(
 
     # Build model
     model = config_fn(ssp, obs, z)
+
+    # Keep exactly the parameters the model declares, by name.
+    #
+    # The caller selects them by shape -- any 1-D array in the cell whose
+    # length matches the draw count, minus a hand-listed set of known
+    # non-parameters. That denylist has to be exhaustive to be correct, and it
+    # was not: cells carry `divergent_mask` and `energy`, which are per-draw
+    # diagnostics of exactly that length, and they arrived here as parameters.
+    # The model refused them by name, which is the system working, but the
+    # selection rule is "looks like a parameter" where it should be "is one",
+    # and the model is the authority on that.
+    declared = set(model.spec.free_params)
+    unknown = sorted(set(params_dict) - declared)
+    params_dict = {name: values for name, values in params_dict.items() if name in declared}
+    if unknown:
+        logger.info(
+            "%s/%s: ignoring %d cell array(s) that are not declared parameters: %s",
+            gal_id,
+            config,
+            len(unknown),
+            ", ".join(unknown),
+        )
+    missing = sorted(declared - set(params_dict))
+    if missing:
+        raise SystemExit(
+            f"cell {gal_id}_{config} records no draws for {missing}, which "
+            f"configuration {config} declares free. The cell and the "
+            "configuration disagree about the model; re-run it rather than "
+            "predicting at a partial parameter set."
+        )
 
     # Compute all derived quantities for each sample
     mass_formed_list = []
@@ -367,6 +407,40 @@ def plot_galaxy_overlay(
         )
 
 
+def stamp_top(fig, legend) -> float:
+    """Figure-coordinate y for the first line of the completeness stamp.
+
+    Below `legend`, measured rather than guessed. This figure anchors a
+    full-width legend under the axes, and the stamp's fixed ``-0.012`` put it
+    straight through the legend box: the one line saying the grid is
+    incomplete was the one line a reader could not read. fig05 and fig09 have
+    no bottom legend, which is why the same constant works there.
+
+    Never returns a value above the old constant, so a legend that sits high
+    cannot push the stamp up into the axes.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        Drawn before measuring; an undrawn figure has no legend extent.
+    legend : matplotlib.legend.Legend
+        The legend the stamp must clear.
+
+    Returns
+    -------
+    float
+        y in figure coordinates, at or below ``-0.012``.
+    """
+    fig.canvas.draw()
+    try:
+        legend_bottom = legend.get_window_extent().transformed(fig.transFigure.inverted()).y0
+    except (AttributeError, ValueError, RuntimeError):
+        # A backend that cannot report an extent leaves the stamp where it was;
+        # a stamp placed by a fallback is better than no stamp.
+        legend_bottom = -0.05
+    return min(-0.012, legend_bottom - 0.02)
+
+
 def main(
     results_dir: Path | None = None,
     out_dir: Path | None = None,
@@ -414,23 +488,34 @@ def main(
     # this script saved a finished-looking comparison whose tengri arm was empty.
     selection_path = analysis_dir / "results" / "selected_galaxies_20.json"
     try:
-        expected_ids = load_expected_galaxy_ids(selection_path)
+        locked_ids = load_expected_galaxy_ids(selection_path)
     except (OSError, ValueError, KeyError) as exc:
         raise SystemExit(
             f"fig06 cannot read the locked sample at {selection_path}: {exc}. "
             "Without it there is nothing to measure completeness against."
         ) from exc
 
-    present = present_on_disk(results_dir, expected_ids, CONFIG_ORDER)
+    off_sample = [gal for gal in PANEL_GALAXY_IDS if gal not in locked_ids]
+    if off_sample:
+        raise SystemExit(
+            f"fig06 draws {off_sample}, which the locked sample at "
+            f"{selection_path.name} no longer contains. The panels and the sample "
+            "have drifted apart; reconcile them rather than publishing a "
+            "comparison for galaxies the grid does not fit."
+        )
+
+    present = present_on_disk(results_dir, PANEL_GALAXY_IDS, CONFIG_ORDER)
     if not present:
         raise SystemExit(
-            f"fig06 found no finished cells in {results_dir}. This figure's whole "
-            "claim is tengri's posteriors beside the published codes, so with an "
-            "empty tengri arm there is no figure to draw -- only the published "
-            "points under a caption that promises a comparison. Point "
-            "--results-dir at a directory holding grid cells."
+            f"fig06 found no finished cells for {list(PANEL_GALAXY_IDS)} in "
+            f"{results_dir}. This figure's whole claim is tengri's posteriors "
+            "beside the published codes, so with an empty tengri arm there is no "
+            "figure to draw -- only the published points under a caption that "
+            "promises a comparison. Cells for other galaxies of the locked grid "
+            "do not help: this figure does not plot them. Point --results-dir at "
+            "a directory holding cells for these three."
         )
-    shortfall = completeness_note(present, expected_ids, CONFIG_ORDER)
+    shortfall = completeness_note(present, PANEL_GALAXY_IDS, CONFIG_ORDER)
 
     # Load published values
     csv_path = analysis_dir / "results" / "art_sedfitting_z1.csv"
@@ -460,9 +545,17 @@ def main(
         "inter_code_ranges": {},
     }
 
-    for gal_id in [13097, 15336, 16049]:
+    for gal_id in PANEL_GALAXY_IDS:
         if gal_id not in galaxies:
-            continue
+            # Dropping it silently would publish two panels under a caption
+            # promising three, with nothing in the figure or the sidecar
+            # recording the third.
+            raise SystemExit(
+                f"fig06 draws galaxy {gal_id}, which {meta_path.name} does not "
+                "describe. Without its redshift and type label there is no panel "
+                "to draw, and a figure short one panel must not be saved as "
+                "though it were whole."
+            )
 
         gal_meta = galaxies[gal_id]
         tengri_results[gal_id] = {}
@@ -638,7 +731,7 @@ def main(
 
     # Add legend at bottom with 2 columns (published on left, tengri on right)
     # Position below x-axis label with clearance to avoid overlap
-    fig.legend(
+    legend = fig.legend(
         handles=published_handles + tengri_handles,
         loc="lower center",
         ncol=2,
@@ -656,10 +749,11 @@ def main(
     if shortfall:
         print(shortfall, file=sys.stderr)
         json_sidecar["completeness"] = shortfall
+        top = stamp_top(fig, legend)
         for offset, line in enumerate(textwrap.wrap(shortfall, 108)):
             fig.text(
                 0.0,
-                -0.012 - 0.012 * offset,
+                top - 0.012 * offset,
                 line,
                 fontsize=5.0,
                 color="0.45",
