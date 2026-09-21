@@ -152,6 +152,26 @@ def aggregate_sweep_summary(out_dir: Path, methods: tuple[str, ...] = SWEEP_METH
     return rows
 
 
+def _derived(props, name: str) -> float:
+    """A published property, or a refusal -- never a stand-in.
+
+    ``props.get("stellar_mass", 1e10)`` and ``props.get("sfr_100myr", 1.0)``
+    were the two defaults here, and the danger is that both are *ordinary*:
+    they reach the figure as log M* = 10.0 and log SFR = 0.0 exactly, which is
+    an unremarkable galaxy. A default that looks like a measurement cannot be
+    spotted on the plot, in the npz, or by a reader. Neither has ever fired --
+    the five committed backend rows carry log M* 10.55-10.64 and log SFR
+    1.36-1.47 -- and that is the argument for removing them now rather than
+    after one does.
+    """
+    if name not in props:
+        raise SystemExit(
+            f"the model published no {name!r}; the backend sweep will not "
+            f"substitute a value for it. Available: {sorted(props)}"
+        )
+    return float(props[name])
+
+
 def run_backend_sweep(
     methods: tuple[str, ...] = SWEEP_METHODS,
     out_dir: Path | None = None,
@@ -378,8 +398,8 @@ def run_backend_sweep(
                 pred = sed_model.predict(params_full)
                 props = pred.properties
 
-                results_dict["log_stellar_mass"] = float(np.log10(props.get("stellar_mass", 1e10)))
-                results_dict["log_sfr_100myr"] = float(np.log10(props.get("sfr_100myr", 1.0)))
+                results_dict["log_stellar_mass"] = float(np.log10(_derived(props, "stellar_mass")))
+                results_dict["log_sfr_100myr"] = float(np.log10(_derived(props, "sfr_100myr")))
                 results_dict["dust_tau"] = float(params.get("dust_tau_diff", 0.0))
 
             elif method in ("mcmc", "mcmc_nuts", "mcmc_hmc", "nss"):
@@ -392,8 +412,8 @@ def run_backend_sweep(
                     pred = sed_model.predict(params)
                     props = pred.properties
 
-                    m_star_samples.append(float(np.log10(props.get("stellar_mass", 1e10))))
-                    sfr_samples.append(float(np.log10(props.get("sfr_100myr", 1.0))))
+                    m_star_samples.append(float(np.log10(_derived(props, "stellar_mass"))))
+                    sfr_samples.append(float(np.log10(_derived(props, "sfr_100myr"))))
                     dust_samples.append(float(params.get("dust_tau_diff", 0.0)))
 
                 results_dict["log_stellar_mass"] = float(np.median(m_star_samples))
