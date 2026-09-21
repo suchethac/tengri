@@ -164,10 +164,11 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--n-starts",
         type=int,
-        default=4,
-        help="MAP restarts from independent initializations (default: 4). One "
-        "start is not enough at this dimension: a single L-BFGS reached "
-        "chi2/dof 1.69 against truth's 1.08. Ignored for samplers.",
+        default=1,
+        help="MAP restarts, passed to the backend's n_restarts (default: 1). "
+        "One L-BFGS start reaches chi2/dof 1.0487 against truth's 1.0738; an "
+        "eight-start run reached 1.0474 for eight times the wall clock. "
+        "Ignored for samplers.",
     )
     args = parser.parse_args(argv)
 
@@ -228,38 +229,39 @@ def main(argv=None) -> int:
 
     t0 = time.perf_counter()
 
-    def multistart_map(n_starts: int):
-        """Best of `n_starts` independent MAP fits, by chi2 against the data.
+    def map_fit(n_restarts: int):
+        """MAP by L-BFGS, through the public fit surface.
 
         Returns (posterior, params, chi2). The posterior is kept, not just its
         params: `init_from` is handed to `_unbounded_from_posterior` and needs
-        the object, and discarding it is why the warm start below could not be
-        wired before.
+        the object.
 
-        Selecting by agreement with truth would be circular -- it would tune
-        the answer to the thing being measured -- so the criterion is the fit
-        to the data, which a real analysis also has.
+        ``n_restarts`` is the MAP backend's own parameter. This script used to
+        run its own loop of independent ``forward.fit`` calls and keep the one
+        with the lowest chi2, which reimplements a documented feature, pays a
+        fresh setup per start, and selects on a different quantity than the
+        optimizer minimizes. The backend selects by that objective, which is
+        the principled criterion -- selecting by agreement with truth would be
+        circular, and chi2 against the data is one step removed from what is
+        being optimized.
+
+        One start is enough: L-BFGS reaches chi2/dof 1.0487 against truth's
+        1.0738 here, indistinguishable from the 1.0474 an eight-start run
+        reached for eight times the wall clock.
         """
-        best_post, best_params, best_c, chis = None, None, np.inf, []
-        for i in range(n_starts):
-            key = jax.random.PRNGKey(args.seed + 1000 * i)
-            cand_post = forward.fit(data, method="map", key=key)
-            c, _ = chi2_against_data(model, cand_post.params, npz)
-            chis.append(c)
-            if c < best_c:
-                best_post, best_params, best_c = cand_post, cand_post.params, c
-        if n_starts > 1:
-            # The spread across starts is a measurement of the landscape, not
-            # noise to be hidden: it says how badly one start can mislead.
-            print(
-                f"{n_starts} starts: chi2 min {min(chis):.1f}, "
-                f"median {float(np.median(chis)):.1f}, max {max(chis):.1f}"
-            )
-        return best_post, best_params, best_c
+        post = forward.fit(
+            data,
+            method="map",
+            key=jax.random.PRNGKey(args.seed),
+            optimizer="lbfgs",
+            n_restarts=n_restarts,
+        )
+        c, _ = chi2_against_data(model, post.params, npz)
+        return post, post.params, c
 
     post = None
     if args.method == "map":
-        _, fitted, _ = multistart_map(args.n_starts)
+        _, fitted, _ = map_fit(args.n_starts)
     else:
         init_post = None
         if args.init_from_map:
@@ -269,7 +271,7 @@ def main(argv=None) -> int:
             # minutes. Drawing more samples from the wrong region does not fix
             # that, so start the chain where the optimizer already got to.
             # This is the idiom Fitter's own docstring shows.
-            init_post, init_params, init_c = multistart_map(args.init_from_map)
+            init_post, init_params, init_c = map_fit(args.init_from_map)
             _, init_r = chi2_against_data(model, init_params, npz)
             print(f"warm start from MAP: chi2/dof {init_r:.4f} (chi2 {init_c:.1f})")
 
