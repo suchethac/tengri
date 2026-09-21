@@ -35,6 +35,9 @@ from pathlib import Path
 
 import jax
 import numpy as np
+
+from tengri import Data, ForwardModel, Observation, Photometry
+
 from .candels_io import load_candels_z1
 from .configs import config_II, load_ssp_for
 from .fit_one import (
@@ -45,8 +48,6 @@ from .fit_one import (
     iter_draws,
     thin_samples,
 )
-
-from tengri import Data, ForwardModel, Observation, Photometry
 
 jax.config.update("jax_enable_x64", True)
 
@@ -192,6 +193,24 @@ def run_backend_sweep(
 
     results = []
     key = jax.random.PRNGKey(42)
+
+    # Compile the shared forward model and its gradient BEFORE any method is
+    # timed. Every method runs in this one process against the same model, so
+    # without this the first one in `methods` pays for the whole tree's JIT
+    # compilation and every later one inherits it -- and the recorded times
+    # then rank position in the sweep rather than cost of method.
+    #
+    # It is not a subtle effect. In results/backend_sweep_pin, taken before
+    # this existed, map (first in SWEEP_METHODS) recorded 8.639 s and laplace
+    # (second) 1.964 s -- while run_laplace is documented as "Gaussian
+    # posterior from Hessian at MAP" and runs n_map_steps=1000 before it takes
+    # a Hessian. Laplace is MAP plus strictly more work and cannot be 4.4x
+    # cheaper; the gap is compilation, in a figure whose caption says the
+    # timings are comparable to one another.
+    logger.info("warming the shared compile cache before any timed method")
+    t_warmup = time.perf_counter()
+    forward.fit(data, key=key, method="map", n_steps=1, n_restarts=1)
+    logger.info(f"compile warmup took {time.perf_counter() - t_warmup:.2f} s (not recorded)")
 
     for method in methods:
         logger.info(f"\n{'=' * 60}")
