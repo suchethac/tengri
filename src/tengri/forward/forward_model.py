@@ -344,11 +344,6 @@ class ForwardModel:
         return self._single_inner_sed("ssp_data").ssp_data
 
     @property
-    def hybrid(self):
-        """Hybrid kernel container delegated from the inner SED."""
-        return getattr(self._inner_sed_for_delegation(), "hybrid", None)
-
-    @property
     def z_fixed(self):
         """Fixed redshift, or ``None``, delegated from the inner SED."""
         return getattr(self._inner_sed_for_delegation(), "z_fixed", None)

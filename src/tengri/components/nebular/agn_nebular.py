@@ -152,6 +152,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._data_setup import package_or_env_data_path
+from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import (
     _C_CGS,
     _H_PLANCK,
@@ -159,6 +160,7 @@ from tengri.components.nebular._constants import (
     _LSUN_ERG,
 )
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
+from tengri.protocols.component import declared_default
 
 # Default path for the Feltre+2016 HDF5 grid. Honors $TENGRI_DATA_DIR (#1431).
 _DEFAULT_FELTRE_GRID_PATH = package_or_env_data_path("feltre_grid.h5")
@@ -379,11 +381,7 @@ def agn_nlr_cue(
     l_acc_erg: float | None = None,
     covering_fraction: float = 0.1,
     neb_logU: float = -3.0,
-    # Differs from the declared gas_logn default (2.0) on purpose: that
-    # declaration is the *galaxy* Cue HII-region density, while this is the AGN
-    # narrow-line region, whose canonical density is ~1e3 (matching the separate
-    # agn_nlr_logn declaration). Same parameter name, different physical region.
-    gas_logn: float = 3.0,
+    gas_logn: float | None = None,
     gas_logz: float = 0.0,
     gas_logno: float = 0.0,
     gas_logco: float = 0.0,
@@ -458,6 +456,12 @@ def agn_nlr_cue(
     4. Scale line luminosities by the NLR covering fraction.
 
     """
+    if gas_logn is None:
+        # gas_logn represents the AGN NLR electron density, not galaxy HII region density.
+        # The two parameters have different physical meanings and different defaults:
+        # - Galaxy Cue: gas_logn in CUE_GAS_EXTRA_PARAMS has default 2.0 (HII region)
+        # - AGN NLR: agn_nlr_logn in AGN_PARAMS has default 3.0 (NLR density)
+        gas_logn = declared_default(AGN_PARAMS, "agn_nlr_logn")
     if ionspec_params is None:
         ionspec_params = agn_ionspec_from_alpha_pl(alpha_pl)
 
@@ -1361,11 +1365,7 @@ def agn_nlr_emission(
     covering_fraction: float = 0.1,
     alpha_pl: float = -1.7,
     neb_logU: float = -3.0,
-    # Differs from the declared gas_logn default (2.0) on purpose: that
-    # declaration is the *galaxy* Cue HII-region density, while this is the AGN
-    # narrow-line region, whose canonical density is ~1e3 (matching the separate
-    # agn_nlr_logn declaration). Same parameter name, different physical region.
-    gas_logn: float = 3.0,
+    gas_logn: float | None = None,
     gas_logz: float = 0.0,
     gas_logno: float = 0.0,
     gas_logco: float = 0.0,
@@ -1471,6 +1471,12 @@ def agn_nlr_emission(
     which are JIT-compatible. Gradient-safe for continuous parameters.
 
     """
+    if gas_logn is None:
+        # gas_logn represents the AGN NLR electron density, not galaxy HII region density.
+        # The two parameters have different physical meanings and different defaults:
+        # - Galaxy Cue: gas_logn in CUE_GAS_EXTRA_PARAMS has default 2.0 (HII region)
+        # - AGN NLR: agn_nlr_logn in AGN_PARAMS has default 3.0 (NLR density)
+        gas_logn = declared_default(AGN_PARAMS, "agn_nlr_logn")
     if backend == "cue":
         if cue_backend is None:
             raise ValueError(

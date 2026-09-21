@@ -156,3 +156,87 @@ class TestProfilingPipelineDustShapeParams:
             assert key in power_law_kwargs, (
                 f"Unexpected key '{key}' in diff_params; power_law declares: {power_law_kwargs}"
             )
+
+    def test_profiler_fused_path_selection_gate(self, monkeypatch):
+        """Profiler selects fused path when has_fixedz_photometry_precompute is True.
+
+        #1240: The fused-path gate was `model.has_fixedz_photometry_precompute and
+        getattr(getattr(model, "hybrid", None), "photometry", None) is not None`.
+        Since `hybrid` was never assigned, this always evaluated False, so the fused
+        path was unreachable. The gate now reads `has_fixedz_photometry_precompute`
+        alone, activating the fused path when the precompute is available.
+        """
+        from tengri.profiling.pipeline import profile_pipeline
+
+        ssp = _build_ssp()
+        obs = _obs()
+
+        # Build a minimal model with fixed redshift and photometry observation
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = Parameters(
+                mean_sfh_type="dpl",
+                redshift=Fixed(0.1),
+                sfh_dpl_alpha=Fixed(1.0),
+                sfh_dpl_beta=Fixed(0.6),
+                sfh_dpl_tau_gyr=Fixed(3.0),
+                sfh_dpl_log_total_mass=Fixed(10.0),
+                sfh_dpl_age_gyr=Fixed(5.0),
+                met_logzsol=Fixed(0.0),
+                dust_tau_bc=Fixed(0.5),
+                dust_tau_diff=Fixed(0.3),
+            )
+
+        model = SEDModel(spec, ssp, observation=obs)
+
+        # Import the real functions and wrap them to track which path is called
+        from tengri.profiling.pipeline import _profile_exact_path, _profile_fused_path
+
+        paths_called = []
+
+        def _fused_recorder(m, p, n=1):
+            paths_called.append("fused")
+            return _profile_fused_path(m, p, n=n)
+
+        def _exact_recorder(m, p, n=1):
+            paths_called.append("exact")
+            return _profile_exact_path(m, p, n=n)
+
+        monkeypatch.setattr(
+            "tengri.profiling.pipeline._profile_fused_path",
+            _fused_recorder,
+        )
+        monkeypatch.setattr(
+            "tengri.profiling.pipeline._profile_exact_path",
+            _exact_recorder,
+        )
+
+        # Case (a): model.has_fixedz_photometry_precompute is True
+        assert model.has_fixedz_photometry_precompute, (
+            "Test fixture must have fixed redshift and photometry for precompute"
+        )
+
+        paths_called.clear()
+        profile_pipeline(model, params={}, n=1)
+        assert "fused" in paths_called, (
+            f"When has_fixedz_photometry_precompute=True, fused path should run. "
+            f"Got: {paths_called}"
+        )
+
+        # Case (b): Mock the property to False and verify exact path runs
+        # This proves the gate depends only on has_fixedz_photometry_precompute
+        class MockModel:
+            def __init__(self, real_model):
+                self._model = real_model
+                self.has_fixedz_photometry_precompute = False
+
+            def __getattr__(self, name):
+                return getattr(self._model, name)
+
+        mock_model = MockModel(model)
+        paths_called.clear()
+        profile_pipeline(mock_model, params={}, n=1)
+        assert "exact" in paths_called, (
+            f"When has_fixedz_photometry_precompute=False, exact path should run. "
+            f"Got: {paths_called}"
+        )

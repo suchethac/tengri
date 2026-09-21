@@ -266,7 +266,6 @@ def test_multi_population_cross_pop_namespaced_extras(sed_model_minimal) -> None
     [
         "wave_obs",
         "has_fixedz_photometry_precompute",
-        "hybrid",
         "z_fixed",
         "dl_cm_fixed",
         "n_grid",

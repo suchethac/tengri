@@ -238,11 +238,13 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 **Structural keys:**
 - `'type'` — Metallicity model (`'table'` for per-age SSP indexing, `'ramp'` for a linear Z(t) history, etc.). Menu: `tengri.list_metallicity_modes()`.
 - `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'met_bin_edges_log_yr'` — Lookback-time bin edges [log₁₀ yr] for metallicity-history modes (`'bins'` or `'bins_continuity'`). Default spans 1 Myr to 13.8 Gyr. Accepts an array of strictly increasing edge values (at least 2 edges). Mirroring `sfh={'bin_edges_gyr': [...]}` for non-parametric star formation histories.
 
 **Minimal example:**
 ```python
 met={'type': 'table'}  # all_params defaults to Fixed(DEFAULT)
 met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ramp
+met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0, 8.0, 9.5]}  # custom ladder
 ```
 
 **Gotchas:**

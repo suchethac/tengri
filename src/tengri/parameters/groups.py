@@ -334,6 +334,9 @@ _ensure_registry_loaded()
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
 _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
 
+#: Metallicity modes that accept a lookback-time bin ladder (met_bin_edges_log_yr).
+_MET_LADDER_TYPES: tuple[str, ...] = ("bins", "bins_continuity")
+
 #: Optional Cue nebular knobs beyond logU/logZ_gas: gas density / abundance
 #: ratios (``gas_logn``, ``gas_logno``, ``gas_logco``) and the broken-power-law
 #: ionizing-spectrum shape (``ionspec_index1..4``, ``ionspec_logLratio1..3``).
@@ -1904,8 +1907,8 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     if met_type not in ("bins", "bins_continuity"):
         return  # No lookback-time bins to check
 
-    # Use the default bin edges (no build-time override path yet; see #2433).
-    bin_edges_log_yr = _DEFAULT_MET_BIN_EDGES_LOG_YR
+    # Use configured bin edges if provided, otherwise the default (see #2433).
+    bin_edges_log_yr = met_block.get("met_bin_edges_log_yr", _DEFAULT_MET_BIN_EDGES_LOG_YR)
 
     # Convert log10(yr) to Gyr: 10^x yr = 10^(x-9) Gyr
     bin_edges_gyr = [10.0 ** (log_yr - 9.0) for log_yr in bin_edges_log_yr]
@@ -1947,9 +1950,10 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
         f"lookback-time bins unreachable at redshift {z_floor:g}: cosmic age is "
         f"{cosmic_age_gyr:.4g} Gyr, but the following bins lie before the Big Bang: "
         f"{bins_str} Gyr. These bins' parameters will be identically inert.\n\n"
-        f"The bin ladder is not yet configurable through SEDModel.build() "
-        f"(see issue #2433 for future support). For now, use a lower redshift where "
-        f"all bins are reachable, or use a different metallicity mode. See issue #2204."
+        f"To resolve this, either: (1) use a lower redshift where all bins are reachable, "
+        f"(2) provide a custom met_bin_edges_log_yr={{'...'}} whose edges fit within "
+        f"cosmic age at your redshift, or (3) use a different metallicity mode. "
+        f"See issues #2204 and #2433."
     )
 
 
@@ -3228,6 +3232,34 @@ def _validate_sfh_bin_edges(sfh_type, edges) -> None:
     validate_bin_edges_gyr(sfh_type, edges)
 
 
+def _validate_met_bin_edges(met_type, edges) -> None:
+    """Validate ``met['met_bin_edges_log_yr']` at build time.
+
+    Checks that edges form a valid ladder for metallicity-history binning:
+    at least two edges, all finite, and strictly increasing. Also checks that
+    the met_type accepts a custom bin ladder.
+    """
+    import numpy as np
+
+    # Check that the met type accepts a custom bin ladder
+    if met_type not in _MET_LADDER_TYPES:
+        raise ValueError(
+            f"met_bin_edges_log_yr is not applicable to met_type='{met_type}'. "
+            f"Valid types: {', '.join(_MET_LADDER_TYPES)}"
+        )
+
+    edges_arr = np.asarray(edges)
+
+    if len(edges_arr) < 2:
+        raise ValueError(f"met_bin_edges_log_yr must have at least 2 edges; got {len(edges_arr)}")
+
+    if not np.all(np.isfinite(edges_arr)):
+        raise ValueError(f"met_bin_edges_log_yr must contain only finite values; got {edges}")
+
+    if not np.all(np.diff(edges_arr) > 0):
+        raise ValueError(f"met_bin_edges_log_yr must be strictly increasing; got {edges}")
+
+
 def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
     """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
 
@@ -3451,6 +3483,17 @@ def _translate_met(met_dict: dict, result: dict) -> None:
             "still works; this mixes the two.)"
         )
     _set_met_mode(met_dict.get("type"), result)
+
+    # ``met_bin_edges_log_yr`` is a structural setting (array of bin edges in
+    # log Gyr) that only applies to metallicity-history modes (bins, bins_continuity).
+    # Surface it as a top-level kwarg so ``Parameters.__init__`` can pop it and forward
+    # through the sed_model -> component_factory chain to ``StellarSEDComponentConfig``.
+    # The wildcard ``'*': FREE`` / ``Fixed(DEFAULT)`` does NOT apply to this; it's a
+    # config, not a free parameter.
+    if "met_bin_edges_log_yr" in met_dict:
+        met_type = met_dict.get("type")
+        _validate_met_bin_edges(met_type, met_dict["met_bin_edges_log_yr"])
+        result["met_bin_edges_log_yr"] = met_dict["met_bin_edges_log_yr"]
 
 
 def _set_met_mode(met_mode, result: dict) -> None:
@@ -4831,7 +4874,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # history, and both select a model with ``type`` like every other group
     # (#1720). It replaces ``met={'type': ...}`` (#311) outright: two
     # spellings of one setting is the maintenance cost this removes.
-    "met": frozenset({"type", "*", "all_params"}),
+    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr"}),
     "dust_attenuation": frozenset(
         {
             "type",
@@ -5010,6 +5053,15 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # met={} entry is never forced onto call sites that diff against
         # from_groups.
         _Structural("type", "met_mode", "delta"),
+        # Bin edges [log Gyr] for metallicity-history modes (bins, bins_continuity).
+        # None falls back to _DEFAULT_MET_BIN_EDGES_LOG_YR. Only valid for types that
+        # use lookback-time bins for metallicity history.
+        _Structural(
+            "met_bin_edges_log_yr",
+            "met_bin_edges_log_yr",
+            None,
+            only_types=_MET_LADDER_TYPES,
+        ),
     ),
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
     # metallicity mode, and it is emitted above as met={'type': ...}.
