@@ -197,6 +197,11 @@ def dust_parameter_name(config_key: str) -> str:
         ) from exc
 
 
+def _optional_float(value) -> float | None:
+    """``float(value)``, or ``None`` when the backend did not publish it."""
+    return None if value is None else float(value)
+
+
 def machine_load() -> dict:
     """Load average and concurrent tengri fits, for the attempt record.
 
@@ -1076,6 +1081,15 @@ def run_fit(
                 "divergences": int(n_divergent) if n_divergent is not None else None,
                 "ebfmi_per_chain": posterior.diagnostics.get("ebfmi_per_chain"),
                 "ebfmi_min": posterior.diagnostics.get("ebfmi_min"),
+                # The adapted step and the warmup's divergent fraction: a rung
+                # whose adaptation collapsed (step 45x below the previous rung,
+                # ESS 1) is then self-evident in the cell, not only in a log.
+                "step_size": _optional_float(posterior.diagnostics.get("step_size")),
+                "warmup_divergence_frac": _optional_float(
+                    posterior.diagnostics.get("warmup_divergence_frac")
+                ),
+                "tree_depth_mean": _optional_float(posterior.diagnostics.get("tree_depth_mean")),
+                "frac_max_depth": _optional_float(posterior.diagnostics.get("frac_max_depth")),
                 "rhat_max": float(rhat_max) if rhat_max is not None else None,
                 "rhat_dict": {k: float(v) for k, v in rhat_dict.items()},
                 "ess_min": float(ess_min) if ess_min is not None else None,
