@@ -230,8 +230,6 @@ def fitter_setup(ssp_data_wne, sdss_filters):
         # free (it carries a prior) but never given a truth value — the forward
         # used to substitute the spec default silently. Say it out loud (#1021).
         "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
-        "met_logzsol": -0.3,
-        "dust_tau_diff": 0.2,
     }
     mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
     fitter = Fitter(model, mock.flux_obs, mock.noise)
