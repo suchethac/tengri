@@ -15,6 +15,7 @@ import importlib.util
 import json
 import logging
 import sys
+import textwrap
 from pathlib import Path
 from typing import NamedTuple
 
@@ -29,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _adoption import is_adopted
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_ORDER
+from _grid_completeness import completeness_note, load_expected_galaxy_ids, present_on_disk
 from config_metadata import CONFIGS
 
 jax.config.update("jax_enable_x64", True)
@@ -130,7 +132,7 @@ def load_fit_results(
 
     # Compute all derived quantities for the same samples using predict_properties
     mass_formed, mass_survived, sfr = _compute_all_derived_quantities(
-        gal_id, config, params_dict, z, results_dir
+        gal_id, config, params_dict, z
     )
 
     return GalaxyData(
@@ -145,15 +147,18 @@ def load_fit_results(
 
 
 def _compute_all_derived_quantities(
-    gal_id: int, config: str, params_dict: dict, z: float, results_dir: Path
+    gal_id: int, config: str, params_dict: dict, z: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute derived quantities for posterior samples using predict_properties.
 
     Returns (mass_formed_log, mass_survived_log, sfr_log) all in log10 space.
     Uses the same samples for all quantities to ensure proper correspondence.
     """
-    # Determine paths
-    analysis_dir = results_dir.parent.parent
+    # configs.py and candels_io.py are this script's siblings, so anchor on
+    # this file. Deriving them from results_dir instead only worked while
+    # results_dir was the default one two levels below them; --results-dir
+    # pointing anywhere else looked for configs.py beside that directory.
+    analysis_dir = Path(__file__).resolve().parent
     configs_path = analysis_dir / "configs.py"
 
     # Load configs module dynamically
@@ -403,6 +408,30 @@ def main(
             "directory whose cells match configs.py."
         )
 
+    # The audit above asks whether the cells that ARE here hold the right model.
+    # It says nothing about the ones that are not, and a directory holding none
+    # of them passes it trivially: every cell was logged "not ready" at INFO and
+    # this script saved a finished-looking comparison whose tengri arm was empty.
+    selection_path = analysis_dir / "results" / "selected_galaxies_20.json"
+    try:
+        expected_ids = load_expected_galaxy_ids(selection_path)
+    except (OSError, ValueError, KeyError) as exc:
+        raise SystemExit(
+            f"fig06 cannot read the locked sample at {selection_path}: {exc}. "
+            "Without it there is nothing to measure completeness against."
+        ) from exc
+
+    present = present_on_disk(results_dir, expected_ids, CONFIG_ORDER)
+    if not present:
+        raise SystemExit(
+            f"fig06 found no finished cells in {results_dir}. This figure's whole "
+            "claim is tengri's posteriors beside the published codes, so with an "
+            "empty tengri arm there is no figure to draw -- only the published "
+            "points under a caption that promises a comparison. Point "
+            "--results-dir at a directory holding grid cells."
+        )
+    shortfall = completeness_note(present, expected_ids, CONFIG_ORDER)
+
     # Load published values
     csv_path = analysis_dir / "results" / "art_sedfitting_z1.csv"
     published_all = load_published_values(csv_path)
@@ -620,6 +649,22 @@ def main(
 
     # Adjust layout to accommodate legend below x-axis label
     fig.subplots_adjust(bottom=0.16)
+
+    # A partial grid still draws -- fig05 and fig09 stamp rather than refuse, and
+    # a reader comparing panels needs the same sentence on all three. What must
+    # not happen is the stamp being absent because nobody asked.
+    if shortfall:
+        print(shortfall, file=sys.stderr)
+        json_sidecar["completeness"] = shortfall
+        for offset, line in enumerate(textwrap.wrap(shortfall, 108)):
+            fig.text(
+                0.0,
+                -0.012 - 0.012 * offset,
+                line,
+                fontsize=5.0,
+                color="0.45",
+                transform=fig.transFigure,
+            )
 
     # Save figure
     for fmt in ["pdf", "png"]:

@@ -39,9 +39,29 @@ a results file is how a figure and its caption come apart.
 | notebook | figures | data |
 |---|---|---|
 | `01_gpu_performance.py` | datacenter and consumer GPU scaling | `sherlock_h100_batch.json`, `consumer_gpu_batch.json` |
+| `02_candels_grid.py` | sample-level summary, per-galaxy panels, published-code overlay | `results/fits/` grid cells, `selected_galaxies_20.json`, `art_sedfitting_z1.csv` |
 
-Further families (precompute accuracy, the mock joint inference, the CANDELS
-grid) are added as their data lands; each follows the same shape.
+Further families (precompute accuracy, the mock joint inference, the backend
+and gradient comparisons) are added as their data lands; each follows the same
+shape.
+
+`PAPER1_FITS_DIR` points `02_candels_grid.py` at a different directory of grid
+cells; it defaults to `analysis/paper1/results/fits`.
+
+### The CANDELS notebook needs stellar libraries the repository does not carry
+
+Two of its three figures read the posterior samples and nothing else. The
+third, the published-code overlay, rebuilds each configuration's model to
+recompute derived quantities on the same samples, so it needs that
+configuration's stellar library present -- `fsps_mist_miles_chabrier` for
+Configuration III, and so on per `analysis/paper1/config_metadata.py`. These
+grids are large, are not tracked here, and are not all in
+`tengri.list_known_ssps()`, so `tengri.download_ssp` cannot fetch every one of
+them.
+
+Set `TENGRI_DATA_DIR` to the directory holding them. Without it the overlay
+refuses by name, saying which library it looked for and where it looked; the
+other two figures are unaffected and still render.
 
 ## What the figures may not be used to claim
 
@@ -49,3 +69,10 @@ Each data file carries its own `caveats` block and the notebooks print it, so
 the limits travel with the numbers rather than living in someone's memory. For
 the GPU pair the important one is that a per-galaxy cost measured inside the
 launch-latency floor is a lower bound that is still falling, not an asymptote.
+
+For the CANDELS grid it is completeness. A figure drawn from part of the grid
+carries a stamp saying how much of it is present, and the overlay refuses
+outright on an empty one rather than drawing the published codes alone under a
+caption promising a comparison. Neither the stamp nor the refusal is optional:
+a partial grid that renders unmarked is indistinguishable from the finished
+one.
