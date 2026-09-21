@@ -373,16 +373,6 @@ def main() -> int:
     plot_sfh(ax_sfh, model, params)
     if have_post:
         plot_marginals(ax_mar, posterior, truth_values, free_names)
-        if not gate_passed:
-            fig.text(
-                0.5,
-                0.985,
-                "PROVISIONAL -- posterior has not converged: " + "; ".join(gate_reasons),
-                ha="center",
-                fontsize=7.5,
-                color="#b22222",
-                weight="bold",
-            )
     else:
         ax_mar.text(
             0.5,
@@ -395,15 +385,6 @@ def main() -> int:
             color="0.4",
         )
         ax_mar.set_axis_off()
-        fig.text(
-            0.5,
-            0.985,
-            "INCOMPLETE: truth only, no posterior",
-            ha="center",
-            fontsize=10,
-            color="#b22222",
-            weight="bold",
-        )
 
     fig_dir.mkdir(parents=True, exist_ok=True)
     if not have_post:

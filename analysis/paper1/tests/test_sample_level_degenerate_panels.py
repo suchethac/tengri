@@ -61,7 +61,7 @@ def _build(cells):
     import matplotlib.pyplot as plt
     from fig09_sample_level import build_figure
 
-    fig, _ = build_figure(cells, provenance=None)
+    fig, _ = build_figure(cells)
     try:
         collected = _texts(fig)
     finally:

@@ -15,7 +15,6 @@ import importlib.util
 import json
 import logging
 import sys
-import textwrap
 from pathlib import Path
 from typing import NamedTuple
 
@@ -407,40 +406,6 @@ def plot_galaxy_overlay(
         )
 
 
-def stamp_top(fig, legend) -> float:
-    """Figure-coordinate y for the first line of the completeness stamp.
-
-    Below `legend`, measured rather than guessed. This figure anchors a
-    full-width legend under the axes, and the stamp's fixed ``-0.012`` put it
-    straight through the legend box: the one line saying the grid is
-    incomplete was the one line a reader could not read. fig05 and fig09 have
-    no bottom legend, which is why the same constant works there.
-
-    Never returns a value above the old constant, so a legend that sits high
-    cannot push the stamp up into the axes.
-
-    Parameters
-    ----------
-    fig : matplotlib.figure.Figure
-        Drawn before measuring; an undrawn figure has no legend extent.
-    legend : matplotlib.legend.Legend
-        The legend the stamp must clear.
-
-    Returns
-    -------
-    float
-        y in figure coordinates, at or below ``-0.012``.
-    """
-    fig.canvas.draw()
-    try:
-        legend_bottom = legend.get_window_extent().transformed(fig.transFigure.inverted()).y0
-    except (AttributeError, ValueError, RuntimeError):
-        # A backend that cannot report an extent leaves the stamp where it was;
-        # a stamp placed by a fallback is better than no stamp.
-        legend_bottom = -0.05
-    return min(-0.012, legend_bottom - 0.02)
-
-
 def main(
     results_dir: Path | None = None,
     out_dir: Path | None = None,
@@ -731,7 +696,7 @@ def main(
 
     # Add legend at bottom with 2 columns (published on left, tengri on right)
     # Position below x-axis label with clearance to avoid overlap
-    legend = fig.legend(
+    fig.legend(
         handles=published_handles + tengri_handles,
         loc="lower center",
         ncol=2,
@@ -749,16 +714,6 @@ def main(
     if shortfall:
         print(shortfall, file=sys.stderr)
         json_sidecar["completeness"] = shortfall
-        top = stamp_top(fig, legend)
-        for offset, line in enumerate(textwrap.wrap(shortfall, 108)):
-            fig.text(
-                0.0,
-                top - 0.012 * offset,
-                line,
-                fontsize=5.0,
-                color="0.45",
-                transform=fig.transFigure,
-            )
 
     # Save figure
     for fmt in ["pdf", "png"]:

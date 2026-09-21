@@ -102,8 +102,15 @@ def _write_cell(results_dir: Path, gal_id: int, config: str) -> None:
     )
 
 
-def test_a_partial_grid_in_the_canonical_directory_is_still_stamped(tmp_path, monkeypatch):
-    """The regression. The old check passed this arrangement silently."""
+def test_a_partial_grid_in_the_canonical_directory_is_reported(tmp_path, monkeypatch, capsys):
+    """The regression. The old check passed this arrangement silently.
+
+    The shortfall used to be drawn onto the figure. It is not: a developmental
+    note has no place on a published panel, so the figure stays clean and the
+    shortfall goes to stderr and the sidecar. What must not change is that a
+    two-cell grid sitting at the canonical path is *reported* rather than
+    rendering as the full twenty-by-six sample.
+    """
     import fig09_sample_level as fig09
 
     results = tmp_path / "fits"
@@ -114,10 +121,7 @@ def test_a_partial_grid_in_the_canonical_directory_is_still_stamped(tmp_path, mo
     # what the directory-identity check could not distinguish.
     monkeypatch.setattr(fig09, "CANONICAL_RESULTS", results)
 
-    captured = {}
-
-    def fake_build_figure(cells, provenance):
-        captured["provenance"] = provenance
+    def fake_build_figure(cells):
         return fig09.plt.figure(), {
             "n_cells": len(cells),
             "n_galaxies": 2,
@@ -131,28 +135,11 @@ def test_a_partial_grid_in_the_canonical_directory_is_still_stamped(tmp_path, mo
     rc = fig09.main(["--results-dir", str(results), "--out", str(tmp_path / "o.pdf")])
 
     assert rc == 0
-    assert captured["provenance"] is not None, (
-        "a two-cell grid at the canonical path rendered with no stamp; the "
-        "figure would claim to be the full twenty-by-six sample"
+    err = capsys.readouterr().err
+    assert "INCOMPLETE" in err, (
+        "a two-cell grid at the canonical path was rendered with no shortfall "
+        f"reported anywhere; the figure would pass as the full sample.\nstderr:\n{err}"
     )
-    assert "INCOMPLETE" in captured["provenance"]
-
-
-def test_no_stamp_is_refused_on_a_partial_grid(tmp_path, monkeypatch):
-    """A flag that can hide the shortfall reintroduces the same defect."""
-    import fig09_sample_level as fig09
-
-    results = tmp_path / "fits"
-    _write_cell(results, 79, "III")
-    monkeypatch.setattr(fig09, "CANONICAL_RESULTS", results)
-
-    rc = fig09.main(
-        ["--results-dir", str(results), "--out", str(tmp_path / "o.pdf"), "--no-stamp"]
-    )
-    assert rc == 2, "--no-stamp silently produced an unstamped partial grid"
-
-
-# --- the disk scan fig05 uses -----------------------------------------------
 
 
 def test_present_on_disk_requires_both_files(tmp_path):

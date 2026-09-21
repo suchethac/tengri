@@ -19,7 +19,6 @@ import logging
 import os
 import subprocess
 import sys
-import textwrap
 import time
 from pathlib import Path
 
@@ -785,30 +784,17 @@ def main():
     # the configurations configs.py declares" says nothing about whether all
     # eighteen cells are here, and a directory holding a handful of them draws
     # a figure that looks like the full three-by-six panel set.
-    stamp_lines: list[str] = []
     shortfall = completeness_note(present, GALAXY_IDS, CONFIG_ORDER)
     if shortfall:
-        stamp_lines.append(shortfall)
         print(shortfall, file=sys.stderr)
         data_dict["completeness"] = shortfall
     if mismatches:
-        stamp_lines.append(
+        print(
             "CONFIGURATION LABELS ARE NOT configs.py's: "
-            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches)
+            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches),
+            file=sys.stderr,
         )
         data_dict["configuration_mismatches"] = [m.describe() for m in mismatches]
-
-    wrapped = [line for part in stamp_lines for line in textwrap.wrap(part, 108)]
-    for offset, line in enumerate(wrapped):
-        fig.text(
-            0.0,
-            -0.012 - 0.012 * offset,
-            line,
-            fontsize=5.0,
-            color="0.45",
-            ha="left",
-            va="top",
-        )
 
     data_dict.update(
         {

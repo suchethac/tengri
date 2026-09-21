@@ -29,7 +29,6 @@ import argparse
 import json
 import subprocess
 import sys
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -312,7 +311,7 @@ def _draw_offsets(ax, cells: list[Cell], attr: str, ylabel: str, show_xlabel: bo
     return sample_sigma
 
 
-def build_figure(cells: list[Cell], provenance: str | None) -> tuple[plt.Figure, dict]:
+def build_figure(cells: list[Cell]) -> tuple[plt.Figure, dict]:
     fig = plt.figure(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
     grid = GridSpec(2, 2, figure=fig, width_ratios=[1.0, 1.15], hspace=0.12, wspace=0.30)
     ax_plane = fig.add_subplot(grid[:, 0])
@@ -364,9 +363,6 @@ def build_figure(cells: list[Cell], provenance: str | None) -> tuple[plt.Figure,
         handletextpad=0.4,
         columnspacing=1.0,
     )
-
-    if provenance:
-        fig.text(0.0, -0.03, provenance, fontsize=5.0, color="0.45", ha="left", va="top")
 
     stats = {
         "n_cells": len(cells),
@@ -426,11 +422,6 @@ def main(argv: list[str] | None = None) -> int:
         default=REPO_ROOT / "analysis" / "paper1" / "figures" / "fig09_sample_level.pdf",
         help="Output PDF path.",
     )
-    parser.add_argument(
-        "--no-stamp",
-        action="store_true",
-        help="Omit the provenance stamp. Only for the canonical grid.",
-    )
     args = parser.parse_args(argv)
 
     results_dir = args.results_dir.resolve()
@@ -470,45 +461,27 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, KeyError) as exc:
         shortfall = f"COMPLETENESS UNVERIFIED - cannot read {SELECTION_20.name}: {exc}"
 
-    if args.no_stamp and shortfall:
-        print(f"ERROR: --no-stamp refused; {shortfall}", file=sys.stderr)
-        print(
-            "       The stamp is the only thing saying this is not the full grid.",
-            file=sys.stderr,
-        )
-        return 2
-
     # A cell adopted on too few effective samples is not a wrong point, it is
     # an uninformative one, and it is about to be drawn indistinguishably from
     # the rest and counted in the adoption rate. Name it on the figure.
     frozen = [f"{c.gal_id}/{c.config}" for c in cells if c.low_ess]
-    stamp_parts: list[str] = []
     if frozen:
-        stamp_parts.append(
-            f"ADOPTED ON TOO FEW EFFECTIVE SAMPLES: {', '.join(frozen)} "
-            "(the bar has no ESS criterion)"
-        )
-        print(f"low effective sample size, adopted anyway: {', '.join(frozen)}")
+        print(f"low effective sample size, adopted anyway: {', '.join(frozen)}", file=sys.stderr)
     if shortfall:
-        stamp_parts.append(shortfall)
-        print(shortfall)
+        print(shortfall, file=sys.stderr)
     if not is_canonical:
-        stamp_parts.append(
-            f"PROVISIONAL - rendered from {results_dir.name} at {_git_describe()}; "
-            "not the production grid"
+        print(
+            f"NOT THE PRODUCTION GRID -- rendered from {results_dir.name} at {_git_describe()}",
+            file=sys.stderr,
         )
-        print("=" * 72)
-        print("NOT THE PRODUCTION GRID -- rendering from", results_dir.name)
-        print("=" * 72)
     if mismatches:
-        stamp_parts.append(
+        print(
             "CONFIGURATION LABELS ARE NOT configs.py's: "
-            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches)
+            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches),
+            file=sys.stderr,
         )
-    wrapped = [line for part in stamp_parts for line in textwrap.wrap(part, 112)]
-    provenance = None if args.no_stamp else ("\n".join(wrapped) or None)
 
-    fig, stats = build_figure(cells, provenance)
+    fig, stats = build_figure(cells)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, bbox_inches="tight")
     png_path = args.out.with_suffix(".png")
