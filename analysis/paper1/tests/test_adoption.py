@@ -202,3 +202,45 @@ def test_the_bar_itself_is_unchanged_by_the_detector():
     verdict = is_adopted(meta, "V")
     assert verdict.adopted is True
     assert low_ess_note(meta, verdict) is not None
+
+
+# --- an unrecorded divergence count is not a clean one ----------------------
+
+
+def test_an_absent_divergence_count_is_not_read_as_zero():
+    """`or 0` made a cell nobody measured look perfectly clean.
+
+    The relaxed bar gates on the divergence rate, so an absent count passed
+    that half vacuously. is_adopted already refuses a cell with no rhat_max;
+    there is no reason the divergence count should default in its own favor.
+    """
+    import math
+
+    from _adoption import divergence_rate
+
+    assert math.isnan(divergence_rate({"n_samples": 300, "n_chains": 4}))
+
+
+def test_a_recorded_zero_is_still_a_clean_cell():
+    """Non-vacuity: an honest zero must not be confused with an absent one."""
+    from _adoption import divergence_rate
+
+    assert divergence_rate({"divergences": 0, "n_samples": 300, "n_chains": 4}) == 0.0
+
+
+def test_the_relaxed_bar_refuses_a_cell_with_no_divergence_count():
+    from _adoption import is_adopted
+
+    verdict = is_adopted({"rhat_max": 1.004, "n_samples": 300, "n_chains": 4}, "III")
+    assert not verdict.adopted
+    assert "divergence count" in verdict.reason
+
+
+def test_the_relaxed_bar_still_adopts_a_clean_cell():
+    """The guard must not refuse everything."""
+    from _adoption import is_adopted
+
+    verdict = is_adopted(
+        {"rhat_max": 1.004, "divergences": 0, "n_samples": 300, "n_chains": 4}, "III"
+    )
+    assert verdict.adopted, verdict.reason

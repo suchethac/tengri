@@ -45,8 +45,19 @@ class Verdict(NamedTuple):
 
 
 def divergence_rate(meta: dict) -> float:
-    """Divergent transitions per post-warmup draw, over all chains."""
-    divergences = meta.get("divergences") or 0
+    """Divergent transitions per post-warmup draw, over all chains.
+
+    Returns NaN when the count was never recorded. ``or 0`` read an absent
+    count as a clean zero, which is the optimistic reading of a cell nobody
+    measured: the divergence half of the relaxed bar then passed vacuously.
+    ``is_adopted`` already refuses a cell with no ``rhat_max``; this makes the
+    divergence count answer to the same standard instead of defaulting in its
+    favor. NaN compares false against every threshold, so a caller that forgets
+    to check gets a refusal rather than a pass.
+    """
+    divergences = meta.get("divergences")
+    if divergences is None:
+        return float("nan")
     # `or` would read a recorded zero as absent and substitute the default,
     # inventing a denominator for a cell that honestly reports no draws.
     n_samples = meta.get("n_samples")
@@ -65,6 +76,8 @@ def is_adopted(meta: dict, config: str) -> Verdict:
         rhat_max = meta.get("rhat_max")
         if rhat_max is None:
             return Verdict(False, "no rhat_max recorded")
+        if meta.get("divergences") is None:
+            return Verdict(False, "no divergence count recorded")
         rate = divergence_rate(meta)
         if rhat_max >= RELAXED_RHAT_MAX:
             return Verdict(
