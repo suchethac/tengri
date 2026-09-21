@@ -161,7 +161,7 @@ def main(argv=None) -> int:
     )
     print("-" * 78)
 
-    cancelled_at = []
+    canceled_at = []
     for z in redshifts:
         ref_model = build(ssp, obs, z, None)
         params = ref_model.spec.sample(key=jax.random.PRNGKey(0))
@@ -195,7 +195,7 @@ def main(argv=None) -> int:
             verdict = "ok"
             if abs(e_exact) > abs(e_node) + 1e-6 and abs(e_exact) > 1e-4:
                 verdict = "node smaller (cancellation)"
-                cancelled_at.append((z, band, e_node, e_exact))
+                canceled_at.append((z, band, e_node, e_exact))
             print(
                 f"{z:>5.2f}  {band:<10} {e_node:>+10.4f}% {e_exact:>+11.4f}%"
                 f" {e_igm:>+10.4f}%  {verdict}"
@@ -241,9 +241,9 @@ def main(argv=None) -> int:
             print(f"{z:>5.2f}  {band:<10} {e_node:>+10.4f}% {e_exact:>+11.4f}%  {verdict}")
         print()
 
-    if cancelled_at:
+    if canceled_at:
         print(
-            f"note: in {len(cancelled_at)} rich-model cell(s) the node fold's "
+            f"note: in {len(canceled_at)} rich-model cell(s) the node fold's "
             "absolute error was the smaller one. That is not evidence against "
             "the exact fold: the node fold's error oscillates in sign, so where "
             "it crosses zero it can sit closer to the reference than a fold "
