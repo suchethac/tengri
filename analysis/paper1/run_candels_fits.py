@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from .configs import CONFIGS as CONFIGS_REGISTRY
+from .fit_one import ESS_FLOOR
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,12 @@ def cell_is_adopted(json_path: Path) -> bool:
     so the second pass re-runs the cell (#2089).
     """
     payload = read_cell_json(json_path)
-    return bool(payload is not None and payload.get("adoption_pass"))
+    if payload is None or not payload.get("adoption_pass"):
+        return False
+    # A cell adopted before ESS_FLOOR joined the bar can carry the flag on an
+    # ESS the bar now refuses (14099/V: ess_min 3); rerun it rather than skip.
+    ess_min = payload.get("ess_min")
+    return ess_min is not None and float(ess_min) >= ESS_FLOOR
 
 
 def aggregate_summary(results_dir: Path) -> dict:

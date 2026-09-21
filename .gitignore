@@ -294,4 +294,4 @@ docs/_generated/
 
 # Paper-1 CANDELS grid cells: the NPZ is the cell format the figure notebooks build
 # against, ~0.5 MB each, so the global *.npz rule is negated for this one directory.
-!analysis/paper1/results/fits/*.npz
+!analysis/paper1/results/fits*/*.npz

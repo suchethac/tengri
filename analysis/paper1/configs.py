@@ -367,7 +367,16 @@ def config_V(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         sfh={
             "type": "lnorm",
             "all_params": Fixed(DEFAULT),
-            "peak_gyr": Uniform(0.1, 13.0),
+            # Peak bounded by the galaxy's age, like age_gyr (owner, 2026-09-21).
+            # Uniform(0.1, 13) let more than half the draws put the peak after
+            # the epoch of observation, where only the rising limb of the
+            # log-normal is inside the galaxy's life and many (peak, width)
+            # pairs share one slope: a flat ridge, the row-II tau > age(z)
+            # direction again. On 7837, 13097 and 14099 the rung-1 posterior
+            # spanned the whole peak prior (p1 0.3, p99 12.9 Gyr) with healthy
+            # E-BFMI (0.87-0.99) and width never at its floor, and every retune
+            # rung then adapted to a step of 0.0002-0.001 and froze (ESS 1-3).
+            "peak_gyr": Uniform(0.1, age_at_z(z)),
             "width_gyr": Uniform(0.1, 5.0),
             "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),

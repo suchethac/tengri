@@ -88,6 +88,14 @@ DEFAULT_N_WARMUP = 150
 DEFAULT_N_SAMPLES = 300
 DEFAULT_N_CHAINS = 4
 
+#: Third leg of the adoption bar (owner, 2026-09-21): min ESS over the free
+#: parameters. 14099/V was adopted on 0 divergences and rhat_max 1.0089 with
+#: ess_min 3 -- rung 2 had adapted to a step of 0.0011 and the chain barely
+#: moved. rhat_max and ess_min are extrema over different parameters, so a
+#: good rhat_max bounds nothing about ess_min. 100 is the floor the paper's
+#: adoption audit (low_ess_note) already reports against.
+ESS_FLOOR = 100.0
+
 #: NUTS step-size adaptation targets. A retune raises the target rather than
 #: switching to a dense mass matrix: measured on grid cell 13097/II (600 warmup
 #: + 4x600 draws, D = 8), attempt 1 on a diagonal mass matrix gave 3/2400
@@ -195,6 +203,24 @@ def dust_parameter_name(config_key: str) -> str:
             f"Every row of configs.CONFIGS must name the free parameter carrying "
             f"its dust optical depth; known rows: {sorted(CONFIGS)}."
         ) from exc
+
+
+def prior_record(sed_model) -> dict[str, str]:
+    """``{free parameter: repr(prior)}`` -- the bounds this cell was actually run with.
+
+    A cell's filename names its configuration, not the prior edition the
+    configuration had on the day (row V's ``peak_gyr`` was capped at the
+    galaxy's age on 2026-09-21); the record makes the two distinguishable
+    on disk.
+    """
+    spec = sed_model.spec
+    out = {}
+    for name in spec.free_params:
+        try:
+            out[name] = repr(spec.get_distribution(name))
+        except Exception:  # best effort, never blocks a fit
+            out[name] = "?"
+    return out
 
 
 def _optional_float(value) -> float | None:
@@ -1069,6 +1095,7 @@ def run_fit(
                 "config": config_key,
                 "z": float(z),
                 "n_free": sed_model.spec.n_free,
+                "priors": prior_record(sed_model),
                 "n_bands": len(filter_names),
                 "filter_names": filter_names,
                 "n_warmup": nuts_kwargs["n_warmup"],
@@ -1102,12 +1129,17 @@ def run_fit(
                 **sampler_extra,
             }
 
-            # Check adoption bar: 0 divergences and max R̂ < 1.01. A non-chain
-            # sampler has neither; its backend raises when the run is cut off,
-            # so reaching here is the bar.
+            # Check adoption bar: 0 divergences, max R̂ < 1.01 and min ESS at
+            # or above ESS_FLOOR. A non-chain sampler has none of these; its
+            # backend raises when the run is cut off, so reaching here is the bar.
             if chain_sampler:
-                adoption_pass = n_divergent == 0 and rhat_max < 1.01
-                bar = f"divergences={n_divergent}, rhat_max={rhat_max:.4f}"
+                adoption_pass = (
+                    n_divergent == 0
+                    and rhat_max < 1.01
+                    and ess_min is not None
+                    and ess_min >= ESS_FLOOR
+                )
+                bar = f"divergences={n_divergent}, rhat_max={rhat_max:.4f}, ess_min={ess_min:.0f}"
             else:
                 adoption_pass = True
                 bar = ", ".join(f"{k}={v}" for k, v in sampler_extra.items()) + f", ess={ess_min}"
