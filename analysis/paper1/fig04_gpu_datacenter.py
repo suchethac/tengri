@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -129,20 +130,17 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
     # Brackets, not a filled span: the two precisions cross in adjacent
     # octaves, and overlapping spans merge into one gray block that reads as a
     # single wide crossover region rather than as two distinct ones.
-    for prec, height in (("f64", 0.90), ("f32", 0.78)):
+    for prec in ("f64", "f32"):
         span = crossover(batch, fwd[f"cpu_{prec}"], fwd[f"gpu_{prec}"])
         stats[f"crossover_{prec}"] = span
         if span:
             for edge in span:
                 ax_gal.axvline(edge, color="0.75", lw=0.6, ls=":", zorder=0)
-            ax_gal.annotate(
-                f"{prec} crossover\n{int(span[0])}-{int(span[1])}",
-                xy=(float(np.sqrt(span[0] * span[1])), height),
-                xycoords=("data", "axes fraction"),
-                ha="center",
-                va="top",
-                fontsize=5.5,
-                color="0.35",
+            # The guide lines mark the crossover; naming it is the caption's
+            # job. Both spans are in stats["crossover_f64"/"crossover_f32"].
+            print(
+                f"{prec} crossover: batch {int(span[0])}-{int(span[1])}",
+                file=sys.stderr,
             )
 
     i = int(np.argmax(batch))
@@ -173,20 +171,14 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
     spread = float(flat.max() / flat.min())
     stats["gpu_per_call_spread"] = spread
     note = (
-        f"GPU flat: {flat.min():.1f}-{flat.max():.1f} ms\n"
+        f"GPU per-call flat at {flat.min():.1f}-{flat.max():.1f} ms: "
         f"{int(batch[-1])} galaxies cost what 1 does"
         if spread < 1.20
-        else f"GPU leaves the latency floor:\n{flat.min():.1f} to {flat.max():.1f} ms per call"
+        else (f"GPU leaves the latency floor: {flat.min():.1f} to {flat.max():.1f} ms per call")
     )
-    ax_call.annotate(
-        note,
-        xy=(batch[len(batch) // 2], float(flat[len(batch) // 2])),
-        xytext=(0.06, 0.74),
-        textcoords="axes fraction",
-        fontsize=5.5,
-        color=STYLE["gpu_f64"][0],
-        arrowprops={"arrowstyle": "->", "color": STYLE["gpu_f64"][0], "lw": 0.6},
-    )
+    # The reading, not the drawing. It belongs in the caption, and the numbers
+    # behind it are in stats["gpu_per_call_spread"].
+    print(note, file=sys.stderr)
 
     ax_gal.set_xlabel("batch size (galaxies)")
     ax_gal.set_ylabel(r"forward cost per galaxy  [$\mu$s]")

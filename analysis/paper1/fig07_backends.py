@@ -143,15 +143,22 @@ def build_figure(
 ):
     """Build two-column figure with marginals (KDE) and timing panel."""
 
-    # Quantities and labels
+    # Quantities and labels.
+    #
+    # "log_stellar_mass" is tengri's ``stellar_mass``, the SFH's time-integral,
+    # i.e. mass FORMED -- documented as 1.5-1.9x above stellar_mass_surviving,
+    # and 0.1948 dex above it on the paper's mock. Labeling it $M_\star$ reads
+    # as the surviving mass, which is what the codes overlaid in fig06 report.
+    # The choice biases nothing here, since every row is the same model under a
+    # different backend, but the axis has to say which mass it is.
     quantities = ["log_stellar_mass", "log_sfr_100myr", "dust_tau"]
     q_labels = [
-        r"$\log_{10}(M_* / M_\odot)$",
+        r"$\log_{10}(M_{\rm formed} / M_\odot)$",
         r"$\log_{10}({\rm SFR}_{100\,{\rm Myr}} / M_\odot\,{\rm yr}^{-1})$",
         r"$\tau_{\rm diff}$",
     ]
     x_axis_labels = [
-        r"$\log_{10}(M_\star / M_\odot)$",
+        r"$\log_{10}(M_{\rm formed} / M_\odot)$",
         r"$\log_{10}({\rm SFR}_{100\,{\rm Myr}} / M_\odot\,{\rm yr}^{-1})$",
         r"$\tau_{\rm diff}$",
     ]
@@ -330,10 +337,16 @@ def build_figure(
                 wall_times[i] * 1.1, i, f"{s_per_ess:.3f} s/ESS", va="center", fontsize=8
             )
 
-    # Annotate budgets
-    for i, method in enumerate(methods_in_order):
-        budget = BUDGETS.get(method, "")
-        ax_timing.text(-0.05, i, budget, ha="right", va="center", fontsize=7, style="italic")
+    # The sampler budgets belong in the caption, not on the canvas. Printed so
+    # whoever writes it has them in front of them.
+    #
+    # BUDGETS["map"] says "500 steps + 8 restarts", and that is correct for the
+    # committed sweep: those draws were produced that way. It is no longer the
+    # procedure the paper recommends -- MAP now runs a single L-BFGS start,
+    # which reaches the same optimum about six times faster -- so a caption
+    # must present this row as what was measured, not as current practice.
+    for method in methods_in_order:
+        print(f"fig07 budget {method}: {BUDGETS.get(method, '(unset)')}", file=sys.stderr)
 
     ax_timing.set_yticks(y_pos)
     ax_timing.set_yticklabels([LABELS[m] for m in methods_in_order])
