@@ -30,6 +30,12 @@ RELAXED_DIVERGENCE_RATE = 0.015
 _DEFAULT_N_SAMPLES = 600
 _DEFAULT_N_CHAINS = 4
 
+#: Effective samples below which an adopted cell carries too little
+#: information to quote. NOT part of the bar -- the bar is the owner's
+#: criterion and is left exactly as it is. This only makes the case
+#: visible, because the bar cannot see it by construction.
+LOW_ESS = 100.0
+
 
 class Verdict(NamedTuple):
     """Whether to draw a cell, and why not when it is refused."""
@@ -75,3 +81,38 @@ def is_adopted(meta: dict, config: str) -> Verdict:
     if meta.get("adoption_pass") is True:
         return Verdict(True, "adoption_pass")
     return Verdict(False, "did not pass the adoption bar")
+
+
+def low_ess_note(meta: dict, verdict: Verdict) -> str | None:
+    """An adopted cell resting on too few effective samples, or ``None``.
+
+    The bar is zero divergences and ``rhat_max`` under 1.01, and it has no
+    effective-sample criterion. That is not an oversight that R-hat covers:
+    **``rhat_max`` and ``ess_min`` are extrema over different parameters.**
+    In a thirty-six parameter posterior the worst-mixing R-hat can belong to
+    one parameter while the worst ESS belongs to another, so a good
+    ``rhat_max`` places no bound at all on ``ess_min``. The two diagnostics
+    are not redundant and neither substitutes for the other.
+
+    Measured with tengri's own diagnostics on a single parameter, R-hat does
+    catch most near-frozen chains -- an AR(1) at rho=0.97 gives rhat 1.052 and
+    is refused. But there is a window it misses: rho=0.9 at stationarity gives
+    rhat 1.0009, which passes, on an ESS of 33 out of 1200 draws. Across many
+    parameters the gap is wider still.
+
+    A cell like that is not wrong, it is uninformative, and folding it into an
+    adoption *rate* silently mixes converged fits with near-frozen ones. So it
+    is reported rather than reclassified: changing the bar is the owner's call.
+    """
+    if not verdict.adopted:
+        return None
+    ess = meta.get("ess_min")
+    if ess is None:
+        return "adopted with no ess_min recorded, so its information content is unverified"
+    if float(ess) < LOW_ESS:
+        return (
+            f"adopted on ess_min {float(ess):.1f} < {LOW_ESS:.0f}: the bar has no "
+            "effective-sample criterion, and rhat_max cannot bound ess_min "
+            "because they are extrema over different parameters"
+        )
+    return None

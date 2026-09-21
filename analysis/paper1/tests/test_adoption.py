@@ -143,3 +143,62 @@ def test_divergence_rate_defaults_only_when_a_count_is_absent():
     """Absent means absent; recorded zero means zero."""
     assert rate_of({"divergences": 12}) == pytest.approx(12 / (600 * 4))
     assert rate_of({"divergences": 12, "n_chains": 4}) == pytest.approx(12 / (600 * 4))
+
+
+# --- the bar cannot see a near-frozen chain ---------------------------------
+
+
+def test_a_healthy_adopted_cell_gets_no_low_ess_note():
+    """Non-vacuity: the detector must be able to stay quiet."""
+    from _adoption import Verdict, low_ess_note
+
+    meta = {"adoption_pass": True, "ess_min": 380.8, "rhat_max": 1.0037}
+    assert low_ess_note(meta, Verdict(True, "adoption_pass")) is None
+
+
+def test_an_adopted_cell_on_three_effective_samples_is_flagged():
+    """The reported failure: passes the bar, carries almost no information.
+
+    rhat_max 1.0089 clears 1.01 and there are no divergences, so the bar
+    adopts it. ESS 3 out of 1200 draws is a frozen chain. Nothing in the bar
+    can see that, because rhat_max and ess_min are extrema over *different*
+    parameters: the worst R-hat and the worst ESS need not belong to the same
+    one, so a good rhat_max bounds nothing about ess_min.
+    """
+    from _adoption import Verdict, low_ess_note
+
+    meta = {"adoption_pass": True, "ess_min": 3.0, "rhat_max": 1.0089, "divergences": 0}
+    note = low_ess_note(meta, Verdict(True, "adoption_pass"))
+    assert note is not None
+    assert "3.0" in note
+
+
+def test_an_adopted_cell_with_no_recorded_ess_is_flagged():
+    """Absence is not health. An unrecorded ESS is unverified, not fine."""
+    from _adoption import Verdict, low_ess_note
+
+    note = low_ess_note({"adoption_pass": True, "rhat_max": 1.004}, Verdict(True, "x"))
+    assert note is not None and "unverified" in note
+
+
+def test_a_refused_cell_is_not_flagged():
+    """The note is about what the bar *accepted*; a refusal needs no second reason."""
+    from _adoption import Verdict, low_ess_note
+
+    meta = {"adoption_pass": False, "ess_min": 3.0}
+    assert low_ess_note(meta, Verdict(False, "did not pass the adoption bar")) is None
+
+
+def test_the_bar_itself_is_unchanged_by_the_detector():
+    """low_ess_note must not quietly become part of the criterion.
+
+    The bar is the owner's to set. This pins that a cell the bar adopts is
+    still reported as adopted even when the note fires, so the detector
+    informs and never reclassifies.
+    """
+    from _adoption import is_adopted, low_ess_note
+
+    meta = {"adoption_pass": True, "ess_min": 3.0, "rhat_max": 1.0089}
+    verdict = is_adopted(meta, "V")
+    assert verdict.adopted is True
+    assert low_ess_note(meta, verdict) is not None
