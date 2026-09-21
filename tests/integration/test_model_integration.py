@@ -567,12 +567,13 @@ class TestDustEmissionForwardModel:
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
             dust_T=Uniform(20.0, 60.0),
+            dust_beta_ir=Fixed(1.6),
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
             dust_emission="modified_blackbody",
         )
         model = SEDModel(spec, ssp, filters=filters, precompute=False)
-        params_em = {"dust_T": 35.0, "dust_beta_ir": 1.6}
+        params_em = {"dust_T": 35.0}
 
         spec_no = Parameters(
             sfh_dpl_alpha=Fixed(1.0),

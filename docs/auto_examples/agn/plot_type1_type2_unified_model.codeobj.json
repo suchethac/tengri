@@ -1681,29 +1681,6 @@
    "name": "PRNGKey"
   }
  ],
- "jnp.float64": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "jax.numpy",
-   "module_short": "jax.numpy",
-   "name": "float64"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "jax",
-   "module_short": "jax",
-   "name": "float64"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.numpy",
-   "module_short": "jax.numpy",
-   "name": "float64"
-  }
- ],
  "label": [
   {
    "is_class": false,

@@ -118,7 +118,7 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
 
 
 def _params(m, **override):
-    p = {k: jnp.asarray(float(v)) for k, v in m.spec.get_fixed_values().items()}
+    p = {}
     for k in m.spec.free_params:
         p[k] = jnp.asarray(float(TRUTH[k]))
     p.update({k: jnp.asarray(float(v)) for k, v in override.items()})

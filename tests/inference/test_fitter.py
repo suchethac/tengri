@@ -59,9 +59,6 @@ def model_and_mock(ssp_data_wne, sdss_filters):
         "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
         "met_logzsol": -0.3,
         "dust_tau_bc": 1.0,
-        "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
     }
     mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
     return model, mock, true_params

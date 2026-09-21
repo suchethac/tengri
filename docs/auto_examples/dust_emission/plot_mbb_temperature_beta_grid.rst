@@ -31,7 +31,7 @@ power-law index per Δβ = 1.
 Useful when interpreting FIR fits as the ``(T, β)`` degeneracy
 projected onto a single sub-mm photometric point.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-114
+.. GENERATED FROM PYTHON SOURCE LINES 15-122
 
 
 
@@ -78,7 +78,15 @@ projected onto a single sub-mm photometric point.
             "tau_diff": 0.5,
             "tau_bc": 1.0,
         }
-        dust_emission = {"type": "modified_blackbody", "all_params": tengri.Fixed(tengri.DEFAULT)}
+        # ``dust_T``/``dust_beta_ir`` are overridden per grid point below (#2296:
+        # a params-dict key the spec declared Fixed is refused), so both must be
+        # free; bounds pad the T_grid (20-60 K) / beta_grid (1.0-2.5) sweeps.
+        dust_emission = {
+            "type": "modified_blackbody",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "T": tengri.Uniform(10.0, 80.0),
+            "beta_ir": tengri.Uniform(0.5, 3.0),
+        }
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 11.13},
@@ -145,6 +153,11 @@ projected onto a single sub-mm photometric point.
     cb_b.set_label(r"emissivity index $\beta$   ($T_{\rm dust}$ = 30 K fixed)")
 
     plt.savefig("plot_mbb_temperature_beta_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.514 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py:

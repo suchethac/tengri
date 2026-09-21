@@ -85,7 +85,7 @@ def test_eb_lut_engages_and_matches_exact(synthetic_ssp_wide):
 
     f_lut = jax.jit(m_lut.predict_photometry)
     f_exact = jax.jit(m_exact.predict_photometry)
-    base = {**m_lut.spec.get_fixed_values(), **m_lut.spec.sample(jax.random.PRNGKey(0))}
+    base = m_lut.spec.sample(jax.random.PRNGKey(0))
 
     worst = 0.0
     for tau in np.linspace(0.0, 1.0, 9):
@@ -104,7 +104,7 @@ def test_fast_dust_emission_runs_and_is_finite(synthetic_ssp_wide):
     ssp = synthetic_ssp_wide
     m_fast = _build(ssp, WavePrecomp(fast_dust_emission=True))
     f = jax.jit(m_fast.predict_photometry)
-    p = {**m_fast.spec.get_fixed_values(), **m_fast.spec.sample(jax.random.PRNGKey(1))}
+    p = m_fast.spec.sample(jax.random.PRNGKey(1))
     out = np.asarray(f(p))
     assert np.all(np.isfinite(out))
     assert np.all(out > 0.0)
@@ -114,7 +114,7 @@ def test_eb_lut_gradient_is_finite(synthetic_ssp_wide):
     """L_ir flows through the LUT differentiably (the fit path needs gradients)."""
     ssp = synthetic_ssp_wide
     m = _build(ssp, WavePrecomp())
-    p = {**m.spec.get_fixed_values(), **m.spec.sample(jax.random.PRNGKey(2))}
+    p = m.spec.sample(jax.random.PRNGKey(2))
     g = jax.jit(jax.grad(lambda q: jnp.sum(m.predict_photometry(q))))(p)
     assert np.all(np.isfinite(np.asarray(g["dust_tau_bc"])))
     assert np.any(np.asarray(g["dust_tau_bc"]) != 0.0), (

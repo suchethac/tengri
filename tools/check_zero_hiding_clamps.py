@@ -175,7 +175,20 @@ from collections.abc import Sequence
 #: that floor scaled by ``int / 1e-30`` rather than to unit area (measured
 #: 9.9e-06 instead of 1.0). Both are retirements, not hoists: the clamps are
 #: gone from the source.
-EXPECTED_SITES = 91
+#:
+#: 91 -> 92 with #2439/#2427: ``utils/grid_interp.py``'s new
+#: Lyman-continuum twin of the band tensor (the rest-lambda < 912 A
+#: restriction of the same SSP x filter integral) divides its numerator by
+#: ``jnp.maximum(denom, representable_denominator(1e-30))`` at line ~556,
+#: the same ``denom`` the full band tensor two lines above (line ~533)
+#: already divides by. First kind — a **count/scale floor**. ``denom`` is
+#: the filter-weighted transmission integral of a loaded filter curve on the
+#: union quadrature grid; a real filter's transmission is not identically
+#: zero, so ``denom`` cannot vanish by construction, and the floor guards
+#: against numerical-noise underflow in the trapezoid sum, not a degenerate
+#: physical input. The twin shares the sibling site's denominator and its
+#: classification.
+EXPECTED_SITES = 92
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

@@ -158,11 +158,9 @@ z_true = _rng.uniform(0.2, 1.0, N_GAL)
 logm_true = _rng.uniform(9.5, 11.0, N_GAL)
 tau_true = _rng.uniform(0.05, 1.0, N_GAL)  # per-galaxy diffuse dust optical depth
 
-_fixed = model.spec.get_fixed_values()
 galaxies = []
 for z, lm, tau in zip(z_true, logm_true, tau_true):
     truth = {
-        **_fixed,
         "redshift": jnp.asarray(z),
         "sfh_dpl_log_total_mass": jnp.asarray(lm),
         "dust_tau_diff": jnp.asarray(tau),
@@ -227,7 +225,6 @@ def fit_catalog(K):
 
 # One forward photometry evaluation — the inner cost the sampler pays per leapfrog.
 _probe = {
-    **_fixed,
     "redshift": jnp.asarray(0.5),
     "sfh_dpl_log_total_mass": jnp.asarray(10.0),
     "dust_tau_diff": jnp.asarray(0.3),

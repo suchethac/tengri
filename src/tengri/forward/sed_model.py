@@ -91,6 +91,7 @@ from tengri.forward.sed_model_types import (
 )
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
+from tengri.parameters.resolve import merge_fixed_params, refuse_fixed_overrides
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
@@ -4181,16 +4182,28 @@ class SEDModel:
         # a deterministic key to get reasonable values for all free parameters.
         params = spec.sample(jax.random.PRNGKey(0))
 
-        # Override with the specific values for measurement
+        # Override with the specific values for measurement. ``agn_log_lbol`` /
+        # ``agn_ir_frac`` may be Fixed on THIS spec (that is the whole point of
+        # the R55 branch above): a plain params dict can no longer carry a
+        # Fixed key at all (#2296), so this probe cannot go through
+        # ``_predict_rest_sed`` -> ``predict_state(params)``, which would
+        # refuse it as an override. Call ``predict_state`` directly with
+        # ``fixed_values=`` instead: that branch merges
+        # ``{**fixed_values, **params}`` with no refusal, which is exactly
+        # "probe at this value regardless of what the spec pinned" -- the
+        # measurement this build-time check exists to make.
         params_lo = {**params, "agn_log_lbol": lo, "agn_ir_frac": frac_mid}
         params_hi = {**params, "agn_log_lbol": hi, "agn_ir_frac": frac_mid}
+        fixed_values = dict(self.spec.get_fixed_values())
 
-        # Evaluate the rest-frame SED at both bounds. Use _predict_rest_sed, which
-        # is the lowest-level forward entry that needs no Observation, so it works
-        # for filterless and spectroscopy-only builds alike. Per #2069 brief:
-        # "if the forward cannot be evaluated at build, raise -- do not fall back".
-        sed_lo = self._predict_rest_sed(params_lo)
-        sed_hi = self._predict_rest_sed(params_hi)
+        # Evaluate the rest-frame SED at both bounds. Per #2069 brief: "if the
+        # forward cannot be evaluated at build, raise -- do not fall back".
+        from tengri.forward.result import SEDResult
+
+        state_lo = self.predict_state(params_lo, fixed_values=fixed_values)
+        state_hi = self.predict_state(params_hi, fixed_values=fixed_values)
+        sed_lo = SEDResult(wavelength=state_lo.wave, sed=state_lo.sed_intrinsic)
+        sed_hi = SEDResult(wavelength=state_hi.wave, sed=state_hi.sed_intrinsic)
 
         # F1: Check for non-finite values (NaN, Inf). If either SED contains non-finite
         # values, the measurement cannot be made and the model must be fixed.
@@ -5086,6 +5099,12 @@ class SEDModel:
         if grid not in ("linear", "native"):
             raise ValueError(f"grid must be 'linear' or 'native', got {grid!r}")
 
+        # Refuse any Fixed key in params (#2296). ``get_internal_params``
+        # (called via ``_get_internal_params`` below) fills an OMITTED Fixed
+        # value in from the spec correctly, but silently accepts and uses a
+        # PRESENT one at whatever value the caller passed -- the override-wins
+        # bug this issue closes.
+        refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
 
@@ -5239,6 +5258,18 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
+        # Refuse a Fixed key BEFORE _predict_obs_sed's internal free-name
+        # filter (#2296). That filter exists so the internal merged-dict
+        # caller (Prediction._obs_sed_on, which hands in self._params --
+        # fixed+free, deliberately) can drop back to a free-only subset
+        # before delegating to _predict_rest_sed / predict_state; run
+        # against a user-supplied dict here it instead silently discards a
+        # Fixed-key override before any refusal has a chance to see it --
+        # the exact silent-ignore this issue forbids. This public alias is
+        # the only caller that hands _predict_obs_sed a dict that has not
+        # already been through Prediction's one-time refuse-then-merge, so
+        # the check belongs here, not inside _predict_obs_sed itself.
+        refuse_fixed_overrides(self.spec, params)
         return self._predict_obs_sed(params, wave=wave)
 
     def _predict_obs_sed(self, params, wave=None):
@@ -5324,7 +5355,16 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        rest_result = self._predict_rest_sed(params, wave=wave)
+        # ``params`` may already be fully merged here (Prediction._obs_sed_on
+        # passes its own merged self._params, so the IGM/DLA reads below get
+        # real Fixed values via plain .get() rather than silently defaulting).
+        # _predict_rest_sed self-merges via predict_state internally and
+        # refuses a Fixed key of its own (#2296), so it gets the free-only
+        # subset regardless of what shape ``params`` arrived in.
+        _free_names = set(self.spec.free_params)
+        rest_result = self._predict_rest_sed(
+            {k: v for k, v in params.items() if k in _free_names}, wave=wave
+        )
         z = self._get_redshift(params)
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
@@ -5382,7 +5422,9 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values using public parameter names.
+            Free parameters only, using public parameter names; a key the
+            spec declared ``Fixed`` is refused with ``ParameterError``
+            (#2296), not merged or silently overridden.
 
         Returns
         -------
@@ -5580,9 +5622,10 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values using public parameter names (e.g.,
+            Free parameters only, using public parameter names (e.g.,
             ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
-            See :class:`Parameters` for canonical names.
+            See :class:`Parameters` for canonical names. A key the spec
+            declared ``Fixed`` is refused with ``ParameterError`` (#2296).
         ssp_data : SSPData | None, keyword-only, optional
             SSP grid to thread in as a traced argument. ``None`` (default) uses
             ``self.ssp_data``, which is correct for every ordinary call. Pass it
@@ -5881,6 +5924,14 @@ class SEDModel:
         from tengri.cosmology import luminosity_distance
         from tengri.observation.spectrum import project_spectrum
 
+        # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
+        # dict (both of predict_spectrum's explicit-wave_obs branches route
+        # here), so it has not been through Prediction's one-time
+        # refuse-then-merge. Without this, _predict_obs_sed's internal
+        # free-name filter would silently drop a Fixed-key override before
+        # any refusal saw it -- the same silent-ignore closed for
+        # predict_obs_sed itself.
+        refuse_fixed_overrides(self.spec, params)
         sed_obs = self._predict_obs_sed(params)
         z = self._get_redshift(params)
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
@@ -6090,7 +6141,8 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
+            Free parameters only (public names). A key the spec declared
+            ``Fixed`` is refused with ``ParameterError`` (#2296).
         target_wavelengths : array, shape (n_target,), optional
             Rest-frame vacuum wavelengths (Angstrom) of lines to predict.
             Each wavelength is matched to the nearest backend line.
@@ -6188,6 +6240,12 @@ class SEDModel:
         log_all_lums = None
         all_lums = None
         grid = getattr(self, "_nebular_grid_table", None)
+        # Lazily merged the FIRST time either branch below actually needs it
+        # (#2296): a build-time probe (precompute_nebular_grid's per-node
+        # forward) calls this with grid=None, state=given, redden=False --
+        # neither branch nor the redden step touches params, so it must not
+        # be refused for carrying a deliberately-overridden Fixed key.
+        full_params = None
         if grid is not None:
             # FAST path (#950): reconstruct intrinsic line luminosities from the
             # per-Q_H grid, no Cue forward. Q_H is the stellar-published ``nion``
@@ -6212,6 +6270,7 @@ class SEDModel:
             # any model whose Fixed pin differs from the default -- measured
             # 9.3e-1 (neb_logU) / 4.0e-1 (neb_dig_frac) relative error on the
             # returned line fluxes (review I1, #2222).
+            full_params = merge_fixed_params(self.spec, params)
             from tengri.components.nebular.dig import mix_dig_grid_reconstruction
             from tengri.components.nebular.nebular_grid_precompute import (
                 _dig_may_be_active,
@@ -6239,7 +6298,6 @@ class SEDModel:
             # JAX array here (never a Python literal), so the zero-fraction
             # short-circuit never fires on this path -- both lookups always
             # run, even at the declared ``Fixed(0.0)`` default (#2262).
-            full_params = {**self.spec.get_fixed_values(), **params}
             log_all_lums = mix_dig_grid_reconstruction(
                 reconstruct_nebular_line_log_lums,
                 log_nion,
@@ -6310,8 +6368,14 @@ class SEDModel:
                 state.derived.get("log_line_lums_attenuated") if state is not None else None
             )
             if _log_atten is None:
+                # _attenuate_line_catalog reads params["dust_tau_bc"] etc.
+                # directly, no merge of its own (#2296): merge here if the
+                # grid branch above did not already (grid is None on this
+                # call).
+                if full_params is None:
+                    full_params = merge_fixed_params(self.spec, params)
                 if log_all_lums is None:
-                    all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
+                    all_lums = self._attenuate_line_catalog(full_params, all_waves, all_lums)
                 else:
                     # Attenuation is a pure multiplicative screen
                     # (``attenuate_emission`` is ``sed * exp(-tau_bc k_bc) *
@@ -6320,7 +6384,7 @@ class SEDModel:
                     # this surface on the ONE screen #1867 single-sourced, rather
                     # than growing a second copy of the dust law here.
                     screen = self._attenuate_line_catalog(
-                        params, all_waves, jnp.ones_like(jnp.asarray(all_waves))
+                        full_params, all_waves, jnp.ones_like(jnp.asarray(all_waves))
                     )
                     log_all_lums = log_all_lums + jnp.log10(screen)
             else:
@@ -6615,7 +6679,12 @@ class SEDModel:
         stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
         if stellar is None:
             raise ValueError("No StellarSEDComponent in the chain, cannot compute Q_H.")
-        sliced = slice_params_for_component(stellar, params)
+        # compute_log_nion -> compute_joint_weights reads params["redshift"]
+        # directly (require_redshift, no fallback): merge the spec's Fixed
+        # values in first (#2296), same as every other exact-projector-style
+        # consumer this file routes through merge_fixed_params.
+        full_params = merge_fixed_params(self.spec, params)
+        sliced = slice_params_for_component(stellar, full_params)
         return stellar.compute_log_nion(sliced, ssp_data=self.ssp_data)
 
     def predict_line_ratios(self, params, line_ratio_data, *, state=None):
@@ -6950,8 +7019,19 @@ class SEDModel:
         chain = self._feature_chain()
         stellar = self._require_feature_fast_eligible(chain)
 
+        # ``compute_joint_weights`` / ``compute_transmission`` are direct
+        # component-level calls, bypassing the model's own merge boundary
+        # (``predict_state``, which merges ``{**fixed_values, **params}``
+        # before any component runs) -- so this fast (approx=True) path must
+        # do that merge itself, exactly as ``predict_line_fluxes``'s FAST
+        # (grid) branch does for the same reason (#2296). Without it, a
+        # Fixed redshift (or any other Fixed value these two calls read
+        # directly) is silently absent here even though it is legally
+        # omitted from ``params`` on every ordinary predict_* surface.
+        full_params = merge_fixed_params(self.spec, params)
+
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
-        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
         scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
 
         pc = self._index_window_precomp(index_defs)
@@ -6962,12 +7042,15 @@ class SEDModel:
         if dust is None:
             transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
         else:
-            transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+            transmission = dust.compute_transmission(full_params, pc.window_centers, ssp_ages_yr)
 
         values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
+        # ``_predict_rest_sed`` self-merges via ``predict_state`` internally and
+        # refuses a Fixed key of its own (#2296): pass the original free-only
+        # ``params`` here, not ``full_params`` (which would then be refused).
         if pc.has_slope:
             rest = self._predict_rest_sed(params)
             slots = pc.index_slots
@@ -7074,15 +7157,23 @@ class SEDModel:
         if approx:
             from tengri.components.dust.two_component import DustSEDComponent
 
+            # compute_joint_weights / compute_transmission are exact-projector-
+            # style consumers (require_redshift, raw dict reads with no
+            # fallback): they need the MERGED dict, unlike the exact branch
+            # below which self-merges inside predict_state/_predict_rest_sed.
+            # Refuses any Fixed key present (#2296) and fills in the rest.
+            full_params = merge_fixed_params(self.spec, params)
             chain = self._feature_chain()
             stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
-            joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+            joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
             pc = self._line_window_precomp(line_defs)
             dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
             if dust is None:
                 transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
             else:
-                transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+                transmission = dust.compute_transmission(
+                    full_params, pc.window_centers, ssp_ages_yr
+                )
             return measure_line_fluxes_from_window_lut(
                 joint_weights, total_mass, transmission, pc, log10_4pi_dl2
             )
@@ -7180,6 +7271,14 @@ class SEDModel:
             sfr_10 = float(sfh_q.sfr_10myr)
             sfr_10 = max(sfr_10, 1e-10)
             return float(_L_HBETA_PER_SFR * sfr_10)
+        except ParameterError:
+            # A Fixed-key override (#2296) or an unknown/missing free
+            # parameter is a caller mistake, not "invalid params" the safe
+            # fallback below is for -- ``ParameterError`` is a ``ValueError``
+            # subclass, so it must be caught and re-raised ahead of the
+            # broad clause, or it would be silently swallowed into a fake
+            # 1 Lsun answer instead of telling the caller what they did wrong.
+            raise
         except (AttributeError, TypeError, ValueError):
             # AttributeError: predict_sfh_quantities doesn't exist or sfr_10myr missing
             # TypeError: float() conversion failed (JAX tracer or wrong type)
@@ -7316,7 +7415,9 @@ class SEDModel:
         Parameters
         ----------
         params : dict
-            Parameter values using public parameter names.
+            Free parameters only, using public parameter names. A key the
+            spec declared ``Fixed`` is refused with ``ParameterError``
+            (#2296).
         names : tuple[str] or list[str], optional
             Property names to compute. If None, computes all available
             properties. Each name must be in :attr:`available_properties`,
@@ -7563,6 +7664,10 @@ class SEDModel:
             compute_mass_weighted_metallicity,
         )
 
+        # Refuse any Fixed key in params (#2296), same reasoning as
+        # :meth:`predict_sfh`: ``get_internal_params`` below would otherwise
+        # silently accept and use a present-but-overridden Fixed value.
+        refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
 
@@ -7956,7 +8061,8 @@ class SEDModel:
                 "carries a Photometry instance."
             )
         state = self.predict_state(params)
-        full = {**self.spec.get_fixed_values(), **params}
+        # Refuse any Fixed key in params (#2296)
+        full = merge_fixed_params(self.spec, params)
         return self.observation.predict(state, full)["phot_fnu"]
 
     def _spectrum_via_state(self, params, wave_obs=None):
@@ -8019,7 +8125,8 @@ class SEDModel:
             )
 
         state = self.predict_state(params)
-        full = {**self.spec.get_fixed_values(), **params}
+        # Refuse any Fixed key in params (#2296)
+        full = merge_fixed_params(self.spec, params)
         return self.observation.predict(
             state,
             full,
@@ -8161,7 +8268,11 @@ class SEDModel:
             # (dust off/wg00): the SAME no-state screen `predict_line_fluxes`
             # falls back to (#2223), so this deprecated surface cannot drift
             # from its replacement even off that published-catalog fast path.
-            atten_lums = self._attenuate_line_catalog(params, lines.all_waves, lines.all_lums)
+            # _attenuate_line_catalog reads params["dust_tau_bc"] etc. with no
+            # merge of its own (#2296), so it needs the merged form here too.
+            atten_lums = self._attenuate_line_catalog(
+                merge_fixed_params(self.spec, params), lines.all_waves, lines.all_lums
+            )
 
         # Re-extract the headline scalars from the attenuated catalog
         # so EmissionLines.halpha / .hbeta / etc. reflect dust.
@@ -8447,8 +8558,48 @@ class SEDModel:
         # SEDModels with the same structure but different fixed values
         # share one compiled function.
         if fixed_values is None:
-            fixed_values = self.spec.get_fixed_values()
-        full_params = {**fixed_values, **params}
+            # Refuse any Fixed key present in params (#2296)
+            full_params = merge_fixed_params(self.spec, params)
+        else:
+            # "Already resolved, trust me" escape hatch: this branch never
+            # refuses, by design, for THREE DIFFERENT reasons depending on the
+            # caller -- a new caller must fall into one of these, not invent
+            # a fourth:
+            #
+            # (a) The refusal already ran, on this SAME (free-only) ``params``,
+            # in the caller that built ``fixed_values``. ``predict_observables``
+            # / ``predict_observables_jit`` both call
+            # ``refuse_fixed_overrides(self.spec, params)`` before threading
+            # ``self.spec.get_fixed_values()`` in unmodified as a JIT runtime
+            # input (#2296) -- re-checking here would be redundant, not wrong.
+            #
+            # (b) An internal, build-time probe that deliberately overrides a
+            # Fixed key's OWN declared value and is not a user-facing params
+            # dict at all -- refusing it would refuse the measurement the
+            # probe exists to make. Two such callers:
+            # ``_check_agn_lbol_flat_direction`` (this file) sweeps
+            # ``agn_log_lbol``/``agn_ir_frac`` across their declared range to
+            # measure whether the AGN luminosity direction is flat, passing
+            # ``fixed_values=dict(self.spec.get_fixed_values())``; and
+            # ``nebular_grid_precompute._row_traced`` forces
+            # ``neb_dig_frac=0.0`` while sweeping the per-Q_H grid, passing
+            # ``fixed_values={}`` because its ``params`` is already fully
+            # resolved (merged Fixed values plus the deliberate override).
+            #
+            # (c) The fit machinery's own merged dict, internally consistent
+            # by construction rather than user-supplied.
+            # ``inference/loss_functions.py``'s feature channel (line fluxes /
+            # ratios / indices) calls
+            # ``model.predict_state(params, fixed_values=jit_inputs["fixed_values"], ...)``
+            # where ``params`` is the free-only pytree the optimizer/sampler
+            # holds and ``jit_inputs["fixed_values"]`` is
+            # ``dict(model.spec.get_fixed_values())`` optionally updated with
+            # ``Fitter._params_override`` (``fitter.py``'s per-fit override of
+            # specific Fixed names, e.g. a per-galaxy redshift under
+            # ``catalog_z_range`` -- #1329). Neither half ever passed through a
+            # raw user dict, so there is nothing here for
+            # ``refuse_fixed_overrides`` to have caught or to re-check.
+            full_params = {**fixed_values, **params}
 
         # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their
@@ -8506,6 +8657,12 @@ class SEDModel:
                 "predict_observables requires an Observation. Build the "
                 "model with ``observation=`` set."
             )
+
+        # Refuse any Fixed key in params before it reaches the cached ``_impl``
+        # closure, which threads ``self.spec.get_fixed_values()`` in as
+        # ``fixed_values`` and so takes ``predict_state``'s no-refusal branch
+        # (#2296). A static, pre-trace key-set check: safe and cheap here.
+        refuse_fixed_overrides(self.spec, params)
 
         # Eager (non-JIT) forward + projection. Runs the SAME ``_impl`` closure
         # that :meth:`predict_observables_jit` wraps in ``jax.jit``, one
@@ -8584,6 +8741,11 @@ class SEDModel:
         # ...and free params with no value, which would otherwise surface as
         # a bare KeyError deep inside a component.
         check_missing_free_params(params, self.spec, self._param_map)
+        # Refuse any Fixed key in params before it reaches the jitted closure,
+        # which threads ``self.spec.get_fixed_values()`` in as ``fixed_values``
+        # and so takes ``predict_state``'s no-refusal branch (#2296). A static
+        # key-set check on the un-traced dict, safe and free under jit.
+        refuse_fixed_overrides(self.spec, params)
         return self._get_or_build_predict_observables_jit()(
             params,
             self.spec.get_fixed_values(),
@@ -9404,7 +9566,12 @@ class SEDModel:
         never mentions a shape parameter still gets the law's own published
         default, bit-identical to pre-#2231.
         """
-        from tengri.parameters.groups import _law_shape_params
+        from tengri.parameters.groups import (
+            PER_SCREEN_REQUESTED_TAGS,
+            _base_provenance,
+            _law_shape_params,
+            _per_screen_full_names,
+        )
 
         names = laws or (
             getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None),
@@ -9417,20 +9584,45 @@ class SEDModel:
                 reads |= set(_law_shape_params(law))
             except Exception:  # pragma: no cover - law not registered
                 continue
-        if not reads:
-            return frozenset()
+
         provenance = getattr(self.spec, "_group_provenance", None)
         if provenance is None:
             provenance = getattr(self.spec, "_flat_provenance", None)
         provenance = provenance or {}
-        return frozenset(
+
+        # Per-screen names (dust_slope_bc, dust_delta_diff, etc.) are
+        # requested exactly when their OWN provenance is user-explicit --
+        # explicit-only by design (#2428): a wildcard can never free one
+        # (per_screen_inert), so "wildcard_free" cannot appear here in
+        # practice. Filtered against PER_SCREEN_REQUESTED_TAGS -- the same
+        # three-tag set (user_prior/user_fixed/user_free) the grammar's own
+        # round-trip emitters (`_get_explicit_overrides`,
+        # `parameters_to_groups`) use to decide whether to re-emit a
+        # per-screen name -- rather than a second, hand-copied tuple here:
+        # a bare ("user_prior", "user_fixed") tuple in all three places once
+        # left out "user_free", so `slope_bc: FREE` built and resolved
+        # correctly but vanished on the very next `to_groups()` round-trip.
+        # Names enumerated via `_per_screen_full_names()` (the canonical
+        # OVERRIDE_STEMS x SCREENS product), not a fourth hand-typed copy.
+        per_screen_names = _per_screen_full_names()
+        per_screen_reads = {
             name
-            for name in reads
-            # ``_grid`` suffixes mark a declared free prior intersected with a
-            # template grid; still a request, so match on the stem.
-            if name == "redshift"
-            or str(provenance.get(name, "registry_default")).removesuffix("_grid")
-            in self._REQUESTED_PROVENANCE
+            for name in per_screen_names
+            if name in provenance
+            and _base_provenance(str(provenance[name])) in PER_SCREEN_REQUESTED_TAGS
+        }
+
+        return (
+            frozenset(
+                name
+                for name in reads
+                # ``_grid`` suffixes mark a declared free prior intersected with a
+                # template grid; still a request, so match on the stem.
+                if name == "redshift"
+                or str(provenance.get(name, "registry_default")).removesuffix("_grid")
+                in self._REQUESTED_PROVENANCE
+            )
+            | per_screen_reads
         )
 
     def _requested_dust_log_L_ir(self) -> bool:
@@ -9664,6 +9856,45 @@ class SEDModel:
         from tengri.components.nebular.component import NebularSEDComponent
         from tengri.components.stellar.component import StellarSEDComponent
 
+        # Does this model have a LIVE nebular Lyman-continuum mask (#2439,
+        # #2427)? A photoionized nebular backend whose ``neb_fesc`` is not
+        # pinned at exactly 1.0 (the registry default is Fixed(0.0), so most
+        # nebular models are live by default). Gates the stellar LUT's
+        # whole-band + sub-band Lyman-continuum tensors: a model without a
+        # live mask never pays their compute or the larger cache entry, and
+        # its sub-band partition stays bit-for-bit identical to before this
+        # gate existed. 0.0 is the SAME fallback the runtime correction uses
+        # (``params.get("neb_fesc", 0.0)``) if the key is somehow absent from
+        # both the free and fixed spec -- conservatively "live" rather than
+        # silently skipping the exact tensor.
+        # A NebularSEDComponent is ALWAYS in the chain once ``neb=`` is set to
+        # anything (including ``{'type': 'none'}'``, which resolves to
+        # ``backend="baked_in"`` -- "nebular emission already baked into the
+        # SSP grid, publish nothing"), so ``isinstance`` alone is not the live
+        # -mask test: ``backend="baked_in"`` and ``backend="shock"`` both
+        # return from ``NebularSEDComponent.apply`` before ever reaching the
+        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- neither
+        # publishes ``lyc_transmission``, so the stellar LUT's whole-band and
+        # sub-band LyC split would be pure, uncorrected, wasted compute for
+        # them (and, on far-IR filters whose observed-frame footprint sits
+        # nowhere near the forced 912(1+z) edge, could trip the sub-band
+        # partition's own conservation assertion for no physical reason).
+        # Only the photoionized backends run that block.
+        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+        lyc_mask_live = False
+        _live_neb = any(
+            isinstance(c, NebularSEDComponent)
+            and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+            for c in chain
+        )
+        if _live_neb:
+            free_names = self.spec.free_params
+            if "neb_fesc" in free_names:
+                lyc_mask_live = True
+            else:
+                fesc_fixed = float(self.spec.get_fixed_values().get("neb_fesc", 0.0))
+                lyc_mask_live = abs(fesc_fixed - 1.0) > 1e-12
+
         # Precompute-config state: extracted once, reused for all components
         wave_precomp_enabled = (
             self._approx.get("wave_precomp")
@@ -9787,6 +10018,7 @@ class SEDModel:
                         approx=self._approx,
                         filters=filters,
                         redshift_spec=redshift_spec,
+                        lyc_gate=lyc_mask_live,
                     )
                 elif (isinstance(comp, AGNSEDComponent) and filters is not None) or (
                     isinstance(comp, NebularSEDComponent) and filters is not None

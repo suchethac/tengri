@@ -50,6 +50,11 @@ model = tengri.SEDModel.build(
         "type": "themis",
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "dust_gamma_dl": 0.1,
+        # ``dust_alpha`` is swept below (#2296: a params-dict key the spec
+        # declared Fixed is refused), so it must be free; [1.0, 3.0] is the
+        # full physical/grid extent (narrower bounds clip silently), and
+        # exactly covers the sweep.
+        "alpha": tengri.Uniform(1.0, 3.0),
     },
     redshift=tengri.Fixed(0.05),
 )

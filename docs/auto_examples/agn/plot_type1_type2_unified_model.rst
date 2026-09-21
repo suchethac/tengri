@@ -47,7 +47,7 @@ References
 .. [2] Antonucci, R. 1993, ARA&A, 31, 473
    "Unified Models for Active Galactic Nuclei and Quasars"
 
-.. GENERATED FROM PYTHON SOURCE LINES 31-231
+.. GENERATED FROM PYTHON SOURCE LINES 31-235
 
 
 
@@ -75,6 +75,14 @@ References
 
     Building Type 1 (face-on, BLR) model...
     Building Type 2 (edge-on, NLR) model...
+    /tengri/examples/agn/plot_type1_type2_unified_model.py:213: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      fig2.tight_layout()
+    /tengri/examples/agn/plot_type1_type2_unified_model.py:214: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      plt.savefig("plot_type1_type2_unified_model_transition.png", dpi=150, bbox_inches="tight")
+    /tengri/examples/agn/plot_type1_type2_unified_model.py:231: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
+      fig.tight_layout(rect=[0, 0.08, 1, 1])
+    /tengri/examples/agn/plot_type1_type2_unified_model.py:232: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      plt.savefig("plot_type1_type2_unified_model.png", dpi=150, bbox_inches="tight")
     Saved: plot_type1_type2_unified_model.png
     Saved: plot_type1_type2_unified_model_transition.png
 
@@ -95,7 +103,6 @@ References
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -141,11 +148,15 @@ References
         **BASE_AGN,
         "nlr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
         "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        # Inclination: cos(theta) = 1 (face-on). Baked in at build time -- like
+        # the transition-figure models below -- rather than overridden via the
+        # params dict at predict time (#2296: a params-dict key the spec
+        # declared Fixed is refused; agn_cos_inc was undeclared here and so
+        # fell to all_params: Fixed(DEFAULT)).
+        "cos_inc": 1.0,
     }
     model_type1 = tengri.SEDModel.build(ssp, agn=agn_type1, **COMMON)
     params_type1 = dict(model_type1.spec.sample(jax.random.PRNGKey(42)))
-    # Override inclination: cos(θ) = 1 (face-on)
-    params_type1["agn_cos_inc"] = jnp.float64(1.0)
     out_type1 = model_type1.predict(params_type1)
     wave_type1 = np.asarray(model_type1.wavelengths)
     sed_type1 = np.asarray(out_type1.rest_sed())
@@ -156,11 +167,12 @@ References
         **BASE_AGN,
         "nlr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
         "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        # Inclination: cos(theta) = 0 (edge-on). Baked in at build time -- see
+        # agn_type1 above for why (#2296).
+        "cos_inc": 0.0,
     }
     model_type2 = tengri.SEDModel.build(ssp, agn=agn_type2, **COMMON)
     params_type2 = dict(model_type2.spec.sample(jax.random.PRNGKey(42)))
-    # Override inclination: cos(θ) = 0 (edge-on)
-    params_type2["agn_cos_inc"] = jnp.float64(0.0)
     out_type2 = model_type2.predict(params_type2)
     wave_type2 = np.asarray(model_type2.wavelengths)
     sed_type2 = np.asarray(out_type2.rest_sed())
@@ -291,7 +303,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.586 seconds)
+   **Total running time of the script:** (0 minutes 26.094 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

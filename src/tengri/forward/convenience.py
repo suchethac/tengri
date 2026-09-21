@@ -828,7 +828,7 @@ def fit_population(
     """
     from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.hierarchical import PopulationFitter
-    from tengri.parameters.priors import Fixed
+    from tengri.parameters.priors import Uniform
 
     # Normalize input
     galaxies = []
@@ -865,11 +865,41 @@ def fit_population(
     hier_method = _hier_method_map.get(method, method)
 
     def _model_factory(psd_sigma, psd_tau_myr):
-        """Build model with fixed PSD hyperparameters."""
-        new_spec = model.spec.with_params(
-            sfh_field_psd_sigma=Fixed(float(psd_sigma)),
-            sfh_field_psd_tau_myr=Fixed(float(psd_tau_myr)),
+        """Build model with the PSD hyperparameters as the population's
+        shared free parameters.
+
+        PopulationFitter varies ``sfh_field_psd_sigma``/``sfh_field_psd_tau_myr``
+        per step by writing them into each galaxy's params dict (a plain
+        free-key write); a Fixed disposition here makes that write a refused
+        presence override the instant the predict-side positive filter that
+        used to mask it is gone (#2296 fix-round 3). Free, bounded by this
+        function's own prior arguments, with the value this call received as
+        the declared default (informational only -- PopulationFitter
+        overrides it every step).
+
+        ``spec.with_params`` is the wrong tool here: its whole contract is
+        "skip a name already user-provided" (auto-merging NEW observation-
+        level params without clobbering user intent), and every name that
+        survives ``SEDModel.build`` -- explicit, wildcard-resolved, or
+        left at the registry default -- is recorded user-provided. So
+        ``with_params(sfh_field_psd_sigma=...)`` on an already-built model
+        is a silent no-op whatever disposition is passed (measured: Free-
+        before/Free-after, Fixed-before/Fixed-after, never a change). These
+        two names are PopulationFitter's own operational requirement, not a
+        user choice to defer to, so the distributions are replaced directly.
+        """
+        import copy
+
+        new_spec = copy.copy(model.spec)
+        new_distributions = dict(model.spec._distributions)
+        new_distributions["sfh_field_psd_sigma"] = Uniform(
+            *psd_sigma_prior, default=float(psd_sigma)
         )
+        new_distributions["sfh_field_psd_tau_myr"] = Uniform(
+            *psd_tau_prior, default=float(psd_tau_myr)
+        )
+        object.__setattr__(new_spec, "_distributions", new_distributions)
+
         m = ModelClass.__new__(ModelClass)
         m.__dict__.update(model.__dict__)
         m.spec = new_spec
