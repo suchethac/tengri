@@ -169,3 +169,66 @@ def test_a_cell_with_no_ess_min_is_disqualified_not_summarized(tmp_path):
     assert "adopted              : 2 of 3" in result.stdout, (
         f"expected two of three cells adopted.\nstdout:\n{result.stdout[-1200:]}"
     )
+
+
+def test_band_residuals_are_in_the_units_the_fit_was_scored_in(tmp_path):
+    """(model - observed) / sigma, with the sigma the likelihood saw.
+
+    fit_one hands save_fit_outputs the floored sigma, so a residual computed
+    from the cell is already in the units the objective used. Reconstructing
+    it from raw catalog errors would overstate every misfit.
+    """
+    from grid_census import band_residuals
+
+    results = tmp_path / "fits"
+    results.mkdir()
+    np.savez(
+        results / "79_III.npz",
+        obs_fnu=np.array([1.0, 2.0, 4.0]),
+        obs_sigma=np.array([0.1, 0.5, 1.0]),
+        model_photometry_median=np.array([1.2, 2.0, 2.0]),
+        filter_names=np.array(["a", "b", "c"], dtype=object),
+    )
+
+    residuals, bands = band_residuals(results, "79_III")
+
+    assert bands == ["a", "b", "c"]
+    np.testing.assert_allclose(residuals, [2.0, 0.0, -2.0])
+
+
+def test_a_cell_with_no_arrays_is_counted_not_skipped_silently(tmp_path):
+    """A missing npz must not quietly shrink the sample the census reports."""
+    from grid_census import band_residuals
+
+    results = tmp_path / "fits"
+    results.mkdir()
+    assert band_residuals(results, "79_III") is None, (
+        "a cell with no photometry arrays returned residuals from nowhere"
+    )
+
+
+def test_the_census_reports_fit_quality_separately_from_the_bar(tmp_path):
+    """The bar is sampler convergence; chi2 is whether the model fits."""
+    results = tmp_path / "fits"
+    results.mkdir()
+    for gid, model in ((79, 1.0), (4171, 5.0)):
+        (results / f"{gid}_III.json").write_text(json.dumps(_cell(gid)))
+        np.savez(
+            results / f"{gid}_III.npz",
+            obs_fnu=np.array([1.0, 1.0, 1.0]),
+            obs_sigma=np.array([0.1, 0.1, 0.1]),
+            model_photometry_median=np.array([model, model, model]),
+            filter_names=np.array(["a", "b", "c"], dtype=object),
+        )
+
+    result = _run(results, "--allow-partial")
+
+    assert "chi2 per band" in result.stdout, (
+        f"the census did not report fit quality.\nstdout:\n{result.stdout[-1200:]}"
+    )
+    # Galaxy 4171's model is 40 sigma off in every band while its cell records
+    # adoption_pass True: exactly the case the bar cannot see.
+    assert "cells above 2       : 1 of 2" in result.stdout, (
+        "a cell that clears the adoption bar while missing every band by forty "
+        f"sigma was not counted as a poor fit.\nstdout:\n{result.stdout[-1200:]}"
+    )

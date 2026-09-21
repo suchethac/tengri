@@ -37,8 +37,10 @@ import argparse
 import json
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
+
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -63,6 +65,33 @@ def load_cells(results_dir: Path) -> dict[str, dict]:
         except (OSError, json.JSONDecodeError) as exc:
             print(f"  WARNING: {path.name} unreadable ({exc}); excluded", file=sys.stderr)
     return cells
+
+
+def band_residuals(results_dir: Path, name: str) -> tuple[np.ndarray, list[str]] | None:
+    """Per-band ``(model - observed) / sigma`` for one cell, or None.
+
+    ``obs_sigma`` in the cell is the floored error the likelihood actually saw
+    (``fit_one.save_fit_outputs`` is handed ``sigma_floor``), so these
+    residuals are in the units the fit was scored in rather than in raw
+    catalog errors.
+    """
+    npz_path = results_dir / f"{name}.npz"
+    if not npz_path.is_file():
+        return None
+    with np.load(npz_path, allow_pickle=True) as npz:
+        need = ("obs_fnu", "obs_sigma", "model_photometry_median", "filter_names")
+        if not all(k in npz.files for k in need):
+            return None
+        obs = np.asarray(npz["obs_fnu"], dtype=float)
+        sigma = np.asarray(npz["obs_sigma"], dtype=float)
+        model = np.asarray(npz["model_photometry_median"], dtype=float)
+        names = [str(n) for n in npz["filter_names"]]
+    usable = np.isfinite(obs) & np.isfinite(sigma) & np.isfinite(model) & (sigma > 0)
+    if not usable.any():
+        return None
+    return (model[usable] - obs[usable]) / sigma[usable], [
+        n for n, keep in zip(names, usable) if keep
+    ]
 
 
 def coverage(cells: dict[str, dict], field: str) -> tuple[list, int]:
@@ -90,7 +119,7 @@ def _fmt(values, spec=".4g"):
     return f"{lo:{spec}} to {hi:{spec}}"
 
 
-def report(cells: dict[str, dict], expected_ids, config_keys) -> bool:
+def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path) -> bool:
     """Print the census. Returns True when the grid is complete."""
     total = len(expected_ids) * len(config_keys)
     have = len(cells)
@@ -193,6 +222,40 @@ def report(cells: dict[str, dict], expected_ids, config_keys) -> bool:
         print("  ^ wall and s/ESS above are contended; quote them with this or not at all.")
     print('  ^ no hostname or CPU model is recorded; say "N-core", do not name a machine.')
 
+    # --- goodness of fit, which the adoption bar does not measure ----------
+    # The bar asks whether the sampler converged. It cannot see whether the
+    # model fits: a chain settles just as cleanly onto a bad posterior as a
+    # good one, so a cell can clear every leg of the bar and still miss the
+    # photometry badly. Section 7 asks for this number separately and for that
+    # reason.
+    chi2, worst, no_arrays = [], defaultdict(list), 0
+    for name, cell in adopted.items():
+        found = band_residuals(results_dir, name)
+        if found is None:
+            no_arrays += 1
+            continue
+        residuals, bands = found
+        chi2.append(float((residuals**2).mean()))
+        worst[_config_of(name, cell)].append(bands[int(np.argmax(np.abs(residuals)))])
+    if chi2:
+        over = sum(1 for c in chi2 if c > 2.0)
+        print(
+            f"\nchi2 per band        : {_fmt(chi2, '.2f')}  (median {statistics.median(chi2):.2f})"
+        )
+        print(
+            f"  cells above 2       : {over} of {len(chi2)}"
+            + (f"   ({no_arrays} adopted cell(s) carry no photometry arrays)" if no_arrays else "")
+        )
+        print(
+            "  ^ the adoption bar measures sampler convergence, not fit quality;"
+            " these cells all passed it."
+        )
+        for config, bands in sorted(worst.items()):
+            tally = Counter(bands).most_common(3)
+            print(f"  {config:<4} worst band  : " + ", ".join(f"{b} x{n}" for b, n in tally))
+    elif no_arrays:
+        print(f"\nchi2 per band        : {NOT_RECORDED} ({no_arrays} cells carry no arrays)")
+
     # --- per-configuration facts -------------------------------------------
     print("\nper configuration:")
     for config in sorted(
@@ -250,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"cannot read the locked sample at {args.selection}: {exc}", file=sys.stderr)
         return 2
 
-    complete = report(cells, expected_ids, list(CONFIG_ORDER))
+    complete = report(cells, expected_ids, list(CONFIG_ORDER), args.results_dir)
     if not complete and not args.allow_partial:
         print(
             "\nexiting non-zero: the grid is incomplete, so these are not its numbers.",
