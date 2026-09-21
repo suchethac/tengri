@@ -140,6 +140,16 @@ def main(argv=None) -> int:
     parser.add_argument("--n-chains", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
+        "--init-from-map",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "run N multi-start MAP fits first and start the sampler from the best "
+            "of them; 0 (default) keeps the cold start"
+        ),
+    )
+    parser.add_argument(
         "--n-starts",
         type=int,
         default=4,
@@ -205,30 +215,59 @@ def main(argv=None) -> int:
     forward = ForwardModel.build(sed=model)
 
     t0 = time.perf_counter()
-    post = None
-    if args.method == "map":
-        # Restart from independent initializations and keep the best by chi2.
-        # Selecting by agreement with truth would be circular -- it would tune
-        # the answer to the thing being measured -- so the criterion is the fit
-        # to the data, which a real analysis also has.
-        best, best_c, chis = None, np.inf, []
-        for i in range(args.n_starts):
+
+    def multistart_map(n_starts: int):
+        """Best of `n_starts` independent MAP fits, by chi2 against the data.
+
+        Returns (posterior, params, chi2). The posterior is kept, not just its
+        params: `init_from` is handed to `_unbounded_from_posterior` and needs
+        the object, and discarding it is why the warm start below could not be
+        wired before.
+
+        Selecting by agreement with truth would be circular -- it would tune
+        the answer to the thing being measured -- so the criterion is the fit
+        to the data, which a real analysis also has.
+        """
+        best_post, best_params, best_c, chis = None, None, np.inf, []
+        for i in range(n_starts):
             key = jax.random.PRNGKey(args.seed + 1000 * i)
-            cand = forward.fit(data, method="map", key=key).params
-            c, _ = chi2_against_data(model, cand, npz)
+            cand_post = forward.fit(data, method="map", key=key)
+            c, _ = chi2_against_data(model, cand_post.params, npz)
             chis.append(c)
             if c < best_c:
-                best, best_c = cand, c
-        fitted = best
-        if args.n_starts > 1:
+                best_post, best_params, best_c = cand_post, cand_post.params, c
+        if n_starts > 1:
             # The spread across starts is a measurement of the landscape, not
             # noise to be hidden: it says how badly one start can mislead.
             print(
-                f"{args.n_starts} starts: chi2 min {min(chis):.1f}, "
+                f"{n_starts} starts: chi2 min {min(chis):.1f}, "
                 f"median {float(np.median(chis)):.1f}, max {max(chis):.1f}"
             )
+        return best_post, best_params, best_c
+
+    post = None
+    if args.method == "map":
+        _, fitted, _ = multistart_map(args.n_starts)
     else:
-        post = forward.fit(data, method=args.method, key=jax.random.PRNGKey(args.seed), **kwargs)
+        init_post = None
+        if args.init_from_map:
+            # NUTS at this dimensionality does not find the basin from a cold
+            # start: an 8h41m run at 1000 warmup reached chi2/dof 1.50 against
+            # truth's 1.07, while multi-start MAP reaches 1.05 in seven
+            # minutes. Drawing more samples from the wrong region does not fix
+            # that, so start the chain where the optimizer already got to.
+            # This is the idiom Fitter's own docstring shows.
+            init_post, init_params, init_c = multistart_map(args.init_from_map)
+            _, init_r = chi2_against_data(model, init_params, npz)
+            print(f"warm start from MAP: chi2/dof {init_r:.4f} (chi2 {init_c:.1f})")
+
+        post = forward.fit(
+            data,
+            method=args.method,
+            key=jax.random.PRNGKey(args.seed),
+            **({"init_from": init_post} if init_post is not None else {}),
+            **kwargs,
+        )
         fitted = {k: float(np.median(np.asarray(post.samples[k]))) for k in free}
     wall = time.perf_counter() - t0
     delta = report(free, truth, fitted, wall, int((censor == UPPER_LIMIT).sum()))
