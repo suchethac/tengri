@@ -115,10 +115,7 @@ def _catalog_from_truths(model, truths, key, noise_frac=0.02):
 #: so monotonicity across slots is a routing check and not a prior-clamp artifact.
 _DISTINCT_MASSES = (9.0, 10.0, 11.0)
 
-_DISTINCT_TRUTHS = [
-    {"sfh_dpl_log_total_mass": jnp.array(m)}
-    for m in _DISTINCT_MASSES
-]
+_DISTINCT_TRUTHS = [{"sfh_dpl_log_total_mass": jnp.array(m)} for m in _DISTINCT_MASSES]
 
 
 def test_forward_chunk_size_honored_for_nuts(synthetic_ssp, simple_observation):
