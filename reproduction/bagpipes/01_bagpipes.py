@@ -1207,18 +1207,24 @@ for delta, b in [(-0.3, 0.0), (0.0, 1.0), (0.3, 3.0)]:
     L_t = s_salim.sed_intrinsic
     _assert_comparable(L_ref, L_t, name=f"§7 cont'd {label}")
 
-    # Calculate A(2175)/A_V on both sides by evaluating the law function
-    # directly (the same approach as §6), normalized to A_V at 5500 Å —
-    # there is no per-wavelength attenuation-curve key on the built model.
+    # Calculate A(2175)/A_V on both sides, anchored at exactly 2175 and
+    # 5500 Å so the two grids' sampling drops out of the ratio: the BAGPIPES
+    # curve is a spectrum ratio on its model wavelength grid, interpolated to
+    # the two anchors; the tengri law evaluates at the anchors directly.
     w_ref_bump, A_ref_bump = B.attenuation_curve(
         dust_block={"type": "Salim", "Av": 1.0, "delta": delta, "B": b}
     )
-    a_2175_ref = np.interp(2175.0, w_ref_bump, _norm_AV(w_ref_bump, A_ref_bump))
-
-    A_t_bump = np.asarray(
-        _tengri_laws["salim_sbl18"](wave_law, dust_bump_strength=b, dust_delta=delta)
+    a_2175_ref = float(
+        np.interp(2175.0, w_ref_bump, A_ref_bump)
+        / np.interp(5500.0, w_ref_bump, A_ref_bump)
     )
-    a_2175_t = np.interp(2175.0, wave_law, _norm_AV(wave_law, A_t_bump))
+
+    _A_t_anchor = np.asarray(
+        _tengri_laws["salim_sbl18"](
+            np.array([2175.0, 5500.0]), dust_bump_strength=b, dust_delta=delta
+        )
+    )
+    a_2175_t = float(_A_t_anchor[0] / _A_t_anchor[1])
 
     print(
         f"§7 cont'd Salim δ={delta:+.1f} B={b:.0f}: "
@@ -2078,9 +2084,11 @@ print(
 # Lyman limit. Transmission window (800–1300 Å rest) shows the Lyman-series
 # opacity stack and Lyman-continuum absorption (< 912 Å) from the DLA term.
 # The median ratio is 1.000× at every redshift; the printed max deviation
-# (4.0% at z=1, rising to 610% at z=5) is a single-pixel spike at the
-# Lyman-α edge (1215.7 Å), the same edge-sampling effect as §12, not a
-# broadband disagreement.
+# (0.8% at z=1, rising to 11.4% at z=5) sits at the Lyman-β edge (1025.70 Å):
+# BAGPIPES samples its tabulated transmission on a redshift grid, which
+# smooths the sharp Lyman-β step, while tengri evaluates the formula in
+# closed form. A single-node effect at that edge, not a broadband
+# disagreement.
 
 # %%
 from tengri import igm_transmission as _tngigm_sweep

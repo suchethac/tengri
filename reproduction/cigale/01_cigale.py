@@ -2098,10 +2098,10 @@ for _name, _cases in (("casey2012", _cas_cases), ("schreiber2016", _sch_cases), 
 # drops to zero at 912 Å. Setting `dust_attenuation={'lyman_cutoff': True}`
 # applies the same 912 Å clip on both sides.
 #
-# **Beyond 1 cm.** This model carries no radio block, so tengri's grid ends
-# at 1 cm, where the Cue nebular continuum stops; CIGALE's curve continues to
-# 1 m because its `nebular` module carries the free-free continuum into the
-# radio. Both codes' Dale 2014 templates end at 6 mm.
+# **Beyond 1 cm.** Both Cue and CIGALE's nebular modules carry thermal
+# free-free into the radio, and this panel shows the comparison when both
+# grids extend to 1 m (tengri with the nebular tail, CIGALE's native reach).
+# Both codes' Dale 2014 templates end at 6 mm.
 
 # %%
 # Two panels on independent y-axes read as agreement whatever they contain,
@@ -2199,12 +2199,13 @@ plt.show()
 # which would measure line width and grid resolution (CIGALE broadens to
 # `lines_width = 300 km/s`) rather than physics.
 #
-# **Grid coverage.** Cue's native grid runs ~915 Å – 10⁸ Å (optical/UV
-# forest); CIGALE's CLOUDY grid extends to far-IR fine-structure lines
-# ([O III] 88 μm, [C II] 158 μm, [S III] 18.7 μm, [Ne III] 15.6 μm out to
-# ~10⁶ Å), which is why the left panel shows line spikes the Cue panel does
-# not. For a CLOUDY-vs-CLOUDY match, tengri exposes its own static grid via
-# `neb={'type': 'cloudy'}` (`data/cloudy_grid_*.h5`, 166 lines to 6.1×10⁶ Å).
+# **Grid coverage.** Cue's native grid runs ~915 Å – 10⁸ Å, with a thermal
+# free-free tail extending to 10¹⁰ Å (radio); CIGALE's CLOUDY grid extends to
+# far-IR fine-structure lines ([O III] 88 μm, [C II] 158 μm, [S III] 18.7 μm,
+# [Ne III] 15.6 μm out to ~10⁶ Å), which is why the left panel shows line spikes
+# the Cue panel does not. For a CLOUDY-vs-CLOUDY match, tengri exposes its own
+# static grid via `neb={'type': 'cloudy'}` (`data/cloudy_grid_*.h5`, 166 lines
+# to 6.1×10⁶ Å).
 #
 # **Verification Status:** PARTIAL (1/10) — Cue nebular emulator
 
@@ -3612,10 +3613,11 @@ save_fig("cigale_10b_xray_inclination.png")
 # `L_absorbed`: both codes compute `L_ref = L_dust / (3.75e12 · 10^q_IR)`, so any
 # mismatch in the absorbed energy lands 1:1 in the radio.
 #
-# pcigale's `radio` module is synchrotron only. tengri's star-forming radio
-# block adds a Murphy+2011 thermal free-free term by default;
-# `radio={"sf": {"type": "bell2003", "freefree": False}}` turns it off. The
-# comparison here and in the capstone uses that switch.
+# pcigale's `radio` module is synchrotron only — CIGALE's thermal free-free
+# lives in its `nebular` module. tengri mirrors that split: the nebular
+# continuum carries the free-free tail, and the radio block's own Murphy+2011
+# term stays off beside it unless `radio={"sf": {..., "freefree": True}}`
+# turns it on. The comparison below uses both settings.
 #
 # With synchrotron on both sides the ratio is flat across 0.1–100 GHz, and two
 # conventions predict it without being fitted: the anchor frequency (Bell 2003
@@ -3624,10 +3626,15 @@ save_fig("cigale_10b_xray_inclination.png")
 # §6); the printed range is 0.9936–0.9937× against a predicted 0.9937×
 # (anchor ×0.9845 · energy balance ×1.0093).
 #
-# The dash-dot curve is the default build. Free-free is flat (α ≈ 0.1) where
-# synchrotron is steep (α = 0.8), so its share climbs with frequency; the
-# thermal fraction is 9.7% at 1.4 GHz and 191.8% at 100 GHz. A physics
-# difference between the codes, not a discrepancy in the shared physics.
+# The dash-dot curve is the freefree=True build, whose radio block carries
+# Murphy+2011 beside the nebular continuum's own free-free tail. Free-free is
+# flat (α ≈ 0.1) where synchrotron is steep (α = 0.8), so its share climbs
+# with frequency; the ratio panel compares the two thermal terms
+# component-wise against CIGALE's synchrotron across the radio decade — a
+# calibration comparison between two implementations of the same physics. At
+# 1.4 GHz the nebular tail adds 5.3% of the synchrotron amplitude where
+# Murphy+2011 adds 9.6%; the two conventions differ by a factor of ≈1.8
+# across the decade.
 #
 # **Verification Status:** PARTIAL (3/25) — Radio / X-ray / IGM / PSD physics
 
@@ -3694,7 +3701,9 @@ state_r = m_r.predict_state({})
 w_t = np.asarray(state_r.wave)
 sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron only
 
-# Default build with Murphy+2011 free-free.
+# Same model with the radio block's thermal term forced on: freefree=True
+# carries Murphy+2011 beside the nebular continuum's own free-free tail, so
+# both thermal terms can be extracted from one build and compared.
 m_r_ff = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
@@ -3708,7 +3717,7 @@ m_r_ff = SEDModel.build(
     dust_attenuation=_dust_radio_cfg,
     dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     radio={
-        "sf": {"type": "bell2003"},
+        "sf": {"type": "bell2003", "freefree": True},
         "agn": {"type": "powerlaw"},
         "radio_q_ir": Fixed(2.5),
         "radio_alpha_sf": Fixed(0.8),
@@ -3727,7 +3736,7 @@ fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     sed_t,
     x_of_wave=lambda w: C_AA / w / 1e9,
     xlabel=r"$\nu$ [GHz]",
-    title="§11 SF radio — synchrotron matched; free-free is tengri's extension",
+    title="§11 SF radio — synchrotron matched; thermal free-free compared component-wise",
     label_c="CIGALE  radio.sf_nonthermal (synchrotron only)",
     label_t="tengri  radio.bell2003, freefree=False (synchrotron only)",
     xlim=(0.1, 100.0),
@@ -3738,14 +3747,14 @@ for _ln in ax.get_lines():
     if _ln.get_label().startswith("CIGALE"):
         _ln.set(linewidth=4.0, alpha=0.35, solid_capstyle="round")
 
-# Overlay the default build (synchrotron + free-free) as a dashed line.
+# Overlay the freefree=True build (synchrotron + Murphy) as a dashed line.
 ax.plot(
     C_AA / w_t / 1e9,
     sed_t_ff,
     color="C3",
     ls="-.",
     lw=1.4,
-    label="tengri  bell2003 + Murphy 2011 free-free (default)",
+    label="tengri  bell2003 + Murphy 2011 free-free (freefree=True)",
 )
 ax.legend(fontsize=8, frameon=False)
 _nu_r = C_AA / w_r / 1e9
@@ -3769,17 +3778,29 @@ print(
     f"energy-balance ×{_f_lir:.4f} = ×{_f_anchor * _f_lir:.4f}"
 )
 
-# Free-free excess: compute from the default build's ratio to CIGALE.
-_ratio_ff = np.asarray(U.regrid(w_t, sed_t_ff, w_r)) / np.where(L_r > 0, L_r, np.nan)
-_ratio_ff = np.where(np.isfinite(_ratio_ff), _ratio_ff, np.nan)
-_ff_frac = np.asarray(_ratio_ff[_valid]) / (_f_anchor * _f_lir) - 1.0
+# Component-wise thermal free-free calibration: the freefree=True build
+# carries both thermal terms — the nebular continuum's tail and the radio
+# block's Murphy+2011 term — so each can be extracted from the same model
+# and compared against CIGALE on the radio decade.
+_sed_radio_neb_ff = np.asarray(state_r_ff.derived["sed_nebular"])  # nebular tail
+_sed_radio_murphy_ff = np.asarray(state_r_ff.derived["sed_radio"])  # radio block
+# The radio block's total is Murphy+synchrotron; Murphy alone is the difference.
+_sed_murphy_alone = _sed_radio_murphy_ff - sed_t  # murphy = (syn+murphy) - syn
 ax_r.plot(
     _nu_r,
-    _ratio_ff,
+    np.asarray(U.regrid(w_t, _sed_radio_neb_ff, w_r)) / np.where(L_r > 0, L_r, np.nan),
+    color="C2",
+    ls="--",
+    lw=1.2,
+    label="nebular tail / CIGALE",
+)
+ax_r.plot(
+    _nu_r,
+    np.asarray(U.regrid(w_t, _sed_murphy_alone, w_r)) / np.where(L_r > 0, L_r, np.nan),
     color="C3",
     ls="-.",
-    lw=1.0,
-    label="default (free-free on)",
+    lw=1.2,
+    label="Murphy+2011 / CIGALE",
 )
 ax_r.axhline(
     _f_anchor * _f_lir,
@@ -3790,13 +3811,14 @@ ax_r.axhline(
 )
 ax_r.legend(fontsize=7, frameon=False, loc="upper left")
 _nu_valid = np.asarray(_nu_r[_valid])
-_ratio_ff_valid = np.asarray(_ratio_ff[_valid])
-print("§11 default build (synchrotron + free-free) over CIGALE:")
+_neb_ff_valid = np.asarray(U.regrid(w_t, _sed_radio_neb_ff, w_r)[_valid] / L_r[_valid])
+_murphy_valid = np.asarray(U.regrid(w_t, _sed_murphy_alone, w_r)[_valid] / L_r[_valid])
+print("§11 component-wise thermal free-free calibration (both in one Cue build):")
 for _f in (0.15, 1.4, 10.0, 100.0):
     _j = int(np.argmin(np.abs(_nu_valid - _f)))
     print(
-        f"    {float(_nu_valid[_j]):6.2f} GHz: total ×{float(_ratio_ff_valid[_j]):.3f} "
-        f"→ thermal fraction {float(_ff_frac[_j]) * 100:5.1f}%"
+        f"    {float(_nu_valid[_j]):6.2f} GHz: nebular tail ×{float(_neb_ff_valid[_j]):.3f}, "
+        f"Murphy+2011 ×{float(_murphy_valid[_j]):.3f}"
     )
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
@@ -3875,17 +3897,17 @@ save_fig("cigale_12_igm_transmission.png")
 # is reported as a normalization ratio and its 16–84 % spread. With the
 # single-screen dust mapping (`tau_bc = 0`) the residual sits inside ±25 %
 # from the far-UV through the FIR; the sub-912 Å excursion is the
-# Lyman-continuum extrapolation; between 1 mm and 1 cm both codes carry thermal
-# free-free from their nebular continuum — Cue's on tengri's side, CIGALE's
-# `nebular` module on the other — and the radio blocks are synchrotron-only
-# on both sides (`freefree: False`, §11), with ratios 1.00×, 1.07× and 1.05×
-# at 1 mm, 3 mm and 1 cm. Beyond 1 cm Cue's continuum has ended while
-# CIGALE's runs on to 1 m, so tengri sits low by that free-free share:
-# 0.84× at 3 cm, 0.95× at 1.4 GHz. The X-ray wing here is XRB + hot gas
-# with no AGN corona — `alpha_ox` is supplied but there is no disc for it to
-# act on — and the Lehmer+2016 LMXB term is scaled by the SSP mass-weighted age
-# of this galaxy, not by a default age. The radio wings rest on `q_IR = 2.5`,
-# pinned on both sides (§11). Every one of these is printed below.
+# Lyman-continuum extrapolation; the 1 mm to 1 cm decade carries thermal
+# free-free from the nebular continuum on both codes (Cue's tail on tengri's
+# side, CIGALE's `nebular` module on the other) with radio blocks synchrotron-only
+# on both sides (`freefree: False`, §11), with ratios 1.00×, 1.07× and 1.05× at
+# 1 mm, 3 mm and 1 cm; the free-free tail carries the agreement through the
+# radio decade, 1.02× at 3 cm and 1.00× at 1.4 GHz.
+# The X-ray wing here is XRB + hot gas with no AGN corona — `alpha_ox` is
+# supplied but there is no disc for it to act on — and the Lehmer+2016 LMXB
+# term is scaled by the SSP mass-weighted age of this galaxy, not by a default
+# age. The radio wings rest on `q_IR = 2.5`, pinned on both sides (§11).
+# Every one of these is printed below.
 
 # %%
 import chex
@@ -3978,11 +4000,12 @@ resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 # single-screen dust mapping the ratio sits at ~1 with a few-percent spread.
 # Three things sit outside that window, all of them already accounted for:
 # the far-UV, which is §3's age-binning convention; the sub-912 Å excursion,
-# which is the Lyman-continuum extrapolation; and the 1 mm–1 cm decade, where
-# the nebular free-free continua of the two codes (Cue's ends at 1 cm, CIGALE's
-# `nebular` module runs to 1 m) are compared with synchrotron-only radio blocks
-# on both sides. The Cue-vs-CLOUDY nebular residual §8 quantifies is folded
-# into the optical window along with everything else.
+# which is the Lyman-continuum extrapolation; and the 1 mm–1 m decade, where
+# both codes carry thermal free-free from the nebular continuum (Cue's tail
+# extends the continuum from the 1 cm table edge to 1 m; CIGALE's `nebular`
+# module's native reach) with synchrotron-only radio blocks on both sides.
+# The Cue-vs-CLOUDY nebular residual §8 quantifies is folded into the optical
+# window along with everything else.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))
@@ -4012,7 +4035,8 @@ print(
 )
 print(
     "  mm     1 mm = {:.2f}×, 3 mm = {:.2f}×, 1 cm = {:.2f}×, 3 cm = {:.2f}×  "
-    "(nebular free-free on both sides; radio blocks synchrotron-only)".format(
+    "(one thermal free-free term on the whole grid from the nebular continuum; "
+    "radio blocks synchrotron-only)".format(
         _ratio_at(1e7), _ratio_at(3e7), _ratio_at(1e8), _ratio_at(3e8)
     )
 )
