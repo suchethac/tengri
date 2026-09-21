@@ -2812,50 +2812,75 @@ class SEDModel:
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
         if self._approx.get("wave_precomp"):
-            # The two precomputes are independent and fail independently. A single
-            # try around both meant a band-response failure disabled the *energy
-            # balance* LUT too, and reported itself under the energy-balance
-            # warning, blaming the wrong subsystem.
+            # These precomputes are independent and fail independently. A single
+            # try around all of them meant one failure disabled the rest, and
+            # reported itself under the first one's warning, blaming the wrong
+            # subsystem.
+            #
+            # They do share one prerequisite -- the component chain -- and it has
+            # to be built outside them. Left inside the energy-balance try, a
+            # chain failure was announced as an energy-balance failure and then
+            # surfaced three more times as an AttributeError on the cache the
+            # failed build never set, so one root cause produced four warnings
+            # naming three subsystems that had not run. An error that names a
+            # missing attribute instead of the reason it is missing sends the
+            # reader to the wrong place.
+            chain = None
             try:
-                chain = self._build_component_chain()
-                self._cached_component_chain = chain
-                self._energy_balance_lut(chain)
+                chain = self._cached_component_chain = self._build_component_chain()
             except Exception as e:
-                # The exact full-wave energy-balance path is the correct fallback,
-                # but it forfeits the speedup the astronomer opted into, so say so.
                 warnings.warn(
-                    f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
-                    "falling back to the exact energy-balance path (correct, "
-                    "but without the precomputed-LUT speedup).",
+                    f"WavePrecomp precompute is unavailable: the component chain "
+                    f"could not be built ({e!r}). Every LUT below needs it, so all "
+                    "of them fall back to the exact per-call path (correct, but "
+                    "without the precomputed speedup).",
                     UserWarning,
                     stacklevel=2,
                 )
                 self._energy_balance_lut_cache = None
-
-            try:
-                self._dust_emission_band_response(self._cached_component_chain)
-            except Exception as e:
-                warnings.warn(
-                    f"WavePrecomp dust-emission band-response precompute failed "
-                    f"({e!r}); falling back to the exact per-call filter integral "
-                    "(correct, but without the precomputed-response speedup).",
-                    UserWarning,
-                    stacklevel=2,
-                )
                 self._dust_band_response_cache = None
+                self._xray_term_response_cache = None
+                self._radio_term_response_cache = None
 
-            for _emitter in ("xray", "radio"):
+            if chain is not None:
                 try:
-                    self._additive_term_band_response(self._cached_component_chain, _emitter)
+                    self._energy_balance_lut(chain)
+                except Exception as e:
+                    # The exact full-wave energy-balance path is the correct fallback,
+                    # but it forfeits the speedup the astronomer opted into, so say so.
+                    warnings.warn(
+                        f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
+                        "falling back to the exact energy-balance path (correct, "
+                        "but without the precomputed-LUT speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._energy_balance_lut_cache = None
+
+                try:
+                    self._dust_emission_band_response(chain)
                 except Exception as e:
                     warnings.warn(
-                        f"WavePrecomp {_emitter} term band-response precompute failed "
+                        f"WavePrecomp dust-emission band-response precompute failed "
                         f"({e!r}); falling back to the exact per-call filter integral "
                         "(correct, but without the precomputed-response speedup).",
                         UserWarning,
                         stacklevel=2,
                     )
-                    setattr(self, f"_{_emitter}_term_response_cache", None)
+                    self._dust_band_response_cache = None
+
+                for _emitter in ("xray", "radio"):
+                    try:
+                        self._additive_term_band_response(chain, _emitter)
+                    except Exception as e:
+                        warnings.warn(
+                            f"WavePrecomp {_emitter} term band-response precompute failed "
+                            f"({e!r}); falling back to the exact per-call filter integral "
+                            "(correct, but without the precomputed-response speedup).",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                        setattr(self, f"_{_emitter}_term_response_cache", None)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
