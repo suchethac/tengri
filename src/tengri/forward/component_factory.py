@@ -332,6 +332,8 @@ def build_components(
     age_kernel: str | None = None,
     # Non-parametric SFH bin edges [Gyr]; None uses the model default (#1975).
     sfh_bin_edges_gyr: Any = None,
+    # Metallicity-history bin edges [log Gyr]; None uses the model default (#2433).
+    met_bin_edges_log_yr: Any = None,
     # GP-field parameterization: 1.0 = non-centered (shipped), a < 1 moves
     # amplitude dependence out of the xi -> SFH map (#1355).
     field_centering: float = 1.0,
@@ -560,6 +562,7 @@ def build_components(
                 age_kernel=age_kernel,
                 field_centering=field_centering,
                 sfh_bin_edges_gyr=sfh_bin_edges_gyr,
+                met_bin_edges_log_yr=met_bin_edges_log_yr,
             ),
             ssp_data=ssp_data,
         )

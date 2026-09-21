@@ -455,7 +455,6 @@ def profile_pipeline(
 
     has_fast_path = model.has_fixedz_photometry_precompute and (
         getattr(getattr(model, "hybrid", None), "photometry", None) is not None
-        or getattr(getattr(model, "_compositional", None), "photometry", None) is not None
     )
 
     if has_fast_path:

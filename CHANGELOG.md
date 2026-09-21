@@ -6,6 +6,20 @@
 
 ### Fixed
 
+- The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
+  `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
+  threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
+  `StellarSEDComponentConfig`. The #2204 cosmic-age reachability check now judges the
+  configured ladder when provided and names the key in the error message (#2433).
+- Two AGN-NLR fallback defaults read their own parameter declarations instead of
+  literals: the `gas_logn` fallbacks in `components/nebular/agn_nebular.py` read
+  `declared_default(AGN_PARAMS, "agn_nlr_logn")` and the `neb_logU` fallback in
+  `MappingsPhotoAGNBackend` (`components/nebular/mappings_photo.py`) reads
+  `declared_default(AGN_PARAMS, "agn_nlr_logU")`. Both values equal the former
+  literals, so built models predict identically; the same parameter name denotes a
+  different physical quantity in the AGN and stellar contexts, which is why each
+  site reads its own declaration. The shock-normalization fallback is unchanged (#2297).
+- Four fail-open probes for never-assigned attributes are resolved. `SEDModel.hybrid` property (dead accessor for `_hybrid` never assigned) is removed; `SEDModel.wave_obs` property's dead `_wave_obs` cache probe is removed; `sed_model.py` dust-emission detection's legacy `dust.config.emission_model` probe (unreachable after component migration) is removed; `profiling/pipeline.py`'s dead `_compositional` probe is removed; `profiling/memory.py`'s `_weights` probe is fixed to use the correct `weights` attribute on `CueBackend` (#1240).
 - Three reproduction pages re-rendered with their prose reconciled to the
   measurements (#2341 rows; #2419/#2442 page follow-ups): cigale's §7/§8/§11
   and capstone describe one thermal free-free term on the whole grid, §11 now
