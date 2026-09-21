@@ -1104,6 +1104,11 @@ def run_fit(
                 "dense_mass_matrix": nuts_kwargs["dense_mass_matrix"],
                 "profile_mass": profile_mass,
                 "target_accept_rate": nuts_kwargs["target_accept_rate"],
+                # The CLI seed and the key this attempt actually ran at:
+                # PRNGKey(seed + attempt), attempt 1-based, so "seed 42" means
+                # key 43 on rung 1, 44 on rung 2, 45 on rung 3.
+                "seed": int(seed),
+                "prng_key_seed": int(seed + attempt),
                 "max_tree_depth": nuts_kwargs.get("max_tree_depth"),
                 "divergences": int(n_divergent) if n_divergent is not None else None,
                 "ebfmi_per_chain": posterior.diagnostics.get("ebfmi_per_chain"),
