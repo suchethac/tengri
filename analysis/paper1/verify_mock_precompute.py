@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 import tengri
-from tengri import SEDModel
+from tengri import SEDModel, SpectrumPrecomp, WavePrecomp
 
 from . import verify_mock_listing as V
 from .fig_mock_joint_infer import TRUTH_NPZ
@@ -46,6 +46,52 @@ OUT_JSON = Path(__file__).parent / "results" / "mock_precompute_bias.json"
 BIAS_TOLERANCE_SIGMA = 0.25
 
 
+def approximated_channels(approx) -> set[str]:
+    """Which observation channels ``approx`` actually replaces with a LUT.
+
+    ``WavePrecomp`` is the photometric LUT and ``SpectrumPrecomp`` the
+    spectroscopic one; a joint model needs both to approximate both channels.
+    Read this off the value the builder passed, never assume it: a guard that
+    reports a channel the model never approximated reports a difference that is
+    zero for a structural reason, and a structural zero is indistinguishable,
+    on the page, from a measured one.
+    """
+    if approx is None:
+        return set()
+    configs = approx if isinstance(approx, tuple | list) else (approx,)
+    channels: set[str] = set()
+    for cfg in configs:
+        if isinstance(cfg, WavePrecomp):
+            channels.add("photometry")
+        elif isinstance(cfg, SpectrumPrecomp):
+            channels.add("spectrum")
+    return channels
+
+
+def spectrum_bias(channels, s_lut, s_exact, spec_sig):
+    """The spectrum arm's bias, or ``None`` when there is no spectrum LUT.
+
+    Returns ``(max_sigma, chi2, note)``. ``max_sigma`` is ``None`` -- not 0.0 --
+    when the model approximates photometry only: both arms then evaluate the
+    spectrum on the exact path, so their difference cannot be anything but
+    zero and nothing about the spectrum has been checked.
+    """
+    if "spectrum" not in channels:
+        return (
+            None,
+            0.0,
+            "spectrum: not approximated (no SpectrumPrecomp), so both arms compute "
+            "it on the exact path; nothing about the spectrum is measured here",
+        )
+    resid = (np.asarray(s_lut) - np.asarray(s_exact)) / np.asarray(spec_sig)
+    worst = float(np.max(np.abs(resid)))
+    return (
+        worst,
+        float(np.sum(resid**2)),
+        f"spectrum: max |err|/sigma {worst:.3f}, rms {np.sqrt(np.mean(resid**2)):.3f}",
+    )
+
+
 def build_pair():
     """The mock as fit (``WavePrecomp``) and the same model exactly.
 
@@ -54,12 +100,32 @@ def build_pair():
     model can differ from the one under test in some way nobody intended, and
     then the comparison measures the difference between two configurations
     instead of the cost of the approximation.
+
+    Returns ``(lut, exact, approx)``, where ``approx`` is the value the builder
+    actually passed. The channel report below is derived from it rather than
+    restated here, so it cannot drift away from the model under test.
     """
     ssp = tengri.load_ssp(V.SSP_NAME)
     obs = V.build_joint_observation()
-    lut = V.build_mock_model(ssp, obs)
 
     original = SEDModel.build
+    seen: list = []
+
+    def capture(**kwargs):
+        seen.append(kwargs.get("approx"))
+        return original(**kwargs)
+
+    SEDModel.build = capture
+    try:
+        lut = V.build_mock_model(ssp, obs)
+    finally:
+        SEDModel.build = original
+    if len(seen) != 1:
+        raise SystemExit(
+            f"the mock builder called SEDModel.build {len(seen)} times; this guard "
+            "reads the approximation off a single call and cannot say which model "
+            "the numbers below belong to."
+        )
 
     def forced_exact(**kwargs):
         kwargs["approx"] = None
@@ -70,7 +136,7 @@ def build_pair():
         exact = V.build_mock_model(ssp, obs)
     finally:
         SEDModel.build = original
-    return lut, exact
+    return lut, exact, seen[0]
 
 
 def main() -> int:
@@ -92,7 +158,16 @@ def main() -> int:
     spec_sig = np.asarray(truth_npz["spec_sig"])
     filters = [str(f) for f in truth_npz["filters"]]
 
-    lut, exact = build_pair()
+    lut, exact, approx = build_pair()
+    channels = approximated_channels(approx)
+    if "photometry" not in channels:
+        print(
+            f"FAIL: the mock was built with approx={approx!r}, which carries no "
+            "WavePrecomp. Every band difference below would then be zero because "
+            "both arms take the same path, and this guard would pass without "
+            "having measured the photometric LUT at all."
+        )
+        return 1
     p_lut = np.asarray(lut.predict_photometry(truth))
     p_exact = np.asarray(exact.predict_photometry(truth))
     s_lut = np.asarray(lut.predict(truth).spectrum())
@@ -113,16 +188,13 @@ def main() -> int:
             f"{name:<14}{p_exact[i]:>12.3e}{p_lut[i]:>12.3e}{pct:>9.3f}%{nsig:>12.3f}  {detected[i]}"
         )
 
-    spec_sigma = (s_lut - s_exact) / spec_sig
+    spectrum_max, spectrum_chi2, spectrum_note = spectrum_bias(channels, s_lut, s_exact, spec_sig)
     worst = max(abs(r["err_sigma"]) for r in rows if r["detected"])
     chi2_added = float(
-        np.sum(((p_lut[detected] - p_exact[detected]) / phot_sig[detected]) ** 2)
-        + np.sum(spec_sigma**2)
+        np.sum(((p_lut[detected] - p_exact[detected]) / phot_sig[detected]) ** 2) + spectrum_chi2
     )
-    print(
-        f"\nspectrum: max |err|/sigma {np.max(np.abs(spec_sigma)):.3f}, "
-        f"rms {np.sqrt(np.mean(spec_sigma**2)):.3f}"
-    )
+    print(f"\napproximated channels: {', '.join(sorted(channels))}")
+    print(spectrum_note)
     print(f"worst detected band: {worst:.3f} sigma (tolerance {BIAS_TOLERANCE_SIGMA})")
     print(f"chi2 contributed by the approximation alone: {chi2_added:.3f}")
 
@@ -132,7 +204,8 @@ def main() -> int:
             {
                 "bands": rows,
                 "worst_detected_sigma": worst,
-                "spectrum_max_sigma": float(np.max(np.abs(spec_sigma))),
+                "approximated_channels": sorted(channels),
+                "spectrum_max_sigma": spectrum_max,
                 "chi2_added": chi2_added,
                 "tolerance_sigma": BIAS_TOLERANCE_SIGMA,
             },

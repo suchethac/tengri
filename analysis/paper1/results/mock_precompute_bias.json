@@ -98,7 +98,10 @@
     }
   ],
   "worst_detected_sigma": 0.07325413774593043,
-  "spectrum_max_sigma": 0.0,
+  "approximated_channels": [
+    "photometry"
+  ],
+  "spectrum_max_sigma": null,
   "chi2_added": 0.011084844581453783,
   "tolerance_sigma": 0.25
 }
