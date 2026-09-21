@@ -14,6 +14,7 @@ Usage:
 import argparse
 import json
 import os
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,6 +34,12 @@ parser.add_argument(
     type=str,
     default="analysis/paper1/results/fig03_precompute_data.json",
     help="Path to accuracy measurement JSON",
+)
+parser.add_argument(
+    "--out-dir",
+    type=str,
+    default=None,
+    help="Directory to write the figures into; defaults to analysis/paper1/figures",
 )
 args = parser.parse_args()
 
@@ -171,24 +178,40 @@ def plot_panel_b(ax, accuracy_data):
         max_errors = np.array([np.max(e) for e in all_errors_at_z]) / 100.0
 
         # Shaded region for envelope (min to max)
-        ax.fill_between(z_array, min_errors, max_errors, alpha=0.25, color="#4a90e2", label="Band range")
+        ax.fill_between(
+            z_array, min_errors, max_errors, alpha=0.25, color="#4a90e2", label="Band range"
+        )
 
         # Median line
-        (line_median,) = ax.plot(z_array, median_errors, "-", linewidth=2.0, alpha=0.85, color="#2e5c8a", label="Median")
+        (line_median,) = ax.plot(
+            z_array, median_errors, "-", linewidth=2.0, alpha=0.85, color="#2e5c8a", label="Median"
+        )
 
         # Highlight worst-case band with a darker line
         worst_band = "galex_fuv" if "galex_fuv" in band_errors else filters_list[0]
         if worst_band in band_errors:
             worst_errors = np.array(band_errors[worst_band]) / 100.0
             # Format band name for astronomers (e.g. galex_fuv -> GALEX FUV)
-            band_fmt = worst_band.replace("galex_fuv", "GALEX FUV").replace("galex_nuv", "GALEX NUV")
+            band_fmt = worst_band.replace("galex_fuv", "GALEX FUV").replace(
+                "galex_nuv", "GALEX NUV"
+            )
             if band_fmt == worst_band:  # No replacement happened
                 band_fmt = worst_band.replace("_", " ").upper()
-            (line_worst,) = ax.plot(z_array, worst_errors, "--", linewidth=1.5, alpha=0.7, color="#e85d75", label=f"Worst: {band_fmt}")
+            (line_worst,) = ax.plot(
+                z_array,
+                worst_errors,
+                "--",
+                linewidth=1.5,
+                alpha=0.7,
+                color="#e85d75",
+                label=f"Worst: {band_fmt}",
+            )
 
     # 1% and 0.1% reference lines
     ax.axhline(y=0.01, color="red", linestyle="--", linewidth=0.8, alpha=0.5, label="1% threshold")
-    ax.axhline(y=0.001, color="orange", linestyle=":", linewidth=0.8, alpha=0.4, label="0.1% threshold")
+    ax.axhline(
+        y=0.001, color="orange", linestyle=":", linewidth=0.8, alpha=0.4, label="0.1% threshold"
+    )
 
     # Styling
     ax.set_yscale("log")
@@ -252,7 +275,10 @@ if args.accuracy_json and os.path.exists(args.accuracy_json):
 else:
     print(f"Note: Accuracy data not found at {args.accuracy_json}", flush=True)
 
-figures_dir = "analysis/paper1/figures"
+# Resolved against this file rather than the working directory: the default was
+# a relative path, so the script only wrote where it meant to when run from the
+# repository root, and wrote into a stray tree otherwise.
+figures_dir = args.out_dir or str(Path(__file__).resolve().parent / "figures")
 os.makedirs(figures_dir, exist_ok=True)
 
 # The paper uses the two panels as separate single-column figures: the speed

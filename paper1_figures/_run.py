@@ -2,10 +2,11 @@
 """Call a figure script's entry point in-process, whatever shape it has.
 
 The scripts under ``analysis/paper1/`` do not share a CLI contract: some
-``main`` take an ``argv`` list, others read ``sys.argv``, and one has no
-``main`` at all. That is worth fixing in those scripts one day, but not from
-here and not mid-paper; until then every notebook would otherwise need to know
-which kind it is calling.
+``main`` take an ``argv`` list, some take named parameters, others read
+``sys.argv``, and one has no ``main`` at all and does its work at import.
+That is worth fixing in those scripts one day, but not from here and not
+mid-paper; until then every notebook would otherwise need to know which kind
+it is calling.
 
 In-process rather than by subprocess, deliberately. A subprocess returns an
 exit code and a wall of text; an import keeps the traceback, so a notebook that
@@ -37,28 +38,41 @@ def run_figure(module_name: str, argv: list[str]) -> int:
     raised so a notebook can report several figures and still finish; the
     caller decides what a failure means.
     """
-    module = importlib.import_module(f"analysis.paper1.{module_name}")
-    main = getattr(module, "main", None)
-    if main is None:
-        raise AttributeError(f"{module_name} has no main() to call")
+    dotted = f"analysis.paper1.{module_name}"
 
-    signature = inspect.signature(main)
-    params = list(signature.parameters)
-
-    # Three shapes exist in this tree and each needs different handling. The
-    # middle one is the dangerous one: its argparse lives in the __main__
-    # block, so main() ignores sys.argv entirely and silently falls back to its
-    # own defaults. Called the wrong way it exits 0 and writes the figure
-    # somewhere else, which is the quietest possible failure.
-    if params and params[0] == "argv":
-        return int(main(argv) or 0)
-
-    if params:
-        return int(main(**_as_kwargs(argv, signature)) or 0)
-
+    # sys.argv is set BEFORE the import, not around the main() call. One script
+    # here has no main at all -- its argparse and its savefig run at module
+    # scope -- so by the time an import returns, that script has already read
+    # sys.argv and written its figures. Patching afterwards would hand it the
+    # notebook's own arguments.
     saved = sys.argv
     sys.argv = [module_name, *argv]
     try:
+        already_imported = dotted in sys.modules
+        module = importlib.import_module(dotted)
+        main = getattr(module, "main", None)
+
+        if main is None:
+            # Shape four: the script is its own module body. The import above
+            # did the work -- unless Python had already cached the module, in
+            # which case the body did not re-run and nothing was written. That
+            # would have reported success having produced no figure.
+            if already_imported:
+                importlib.reload(module)
+            return 0
+
+        signature = inspect.signature(main)
+        params = list(signature.parameters)
+
+        # Three further shapes, each needing different handling. The middle one
+        # is the dangerous one: its argparse lives in the __main__ block, so
+        # main() ignores sys.argv entirely and falls back to its own defaults.
+        # Called the wrong way it exits 0 and writes the figure somewhere else,
+        # which is the quietest possible failure.
+        if params and params[0] == "argv":
+            return int(main(argv) or 0)
+        if params:
+            return int(main(**_as_kwargs(argv, signature)) or 0)
         return int(main() or 0)
     finally:
         sys.argv = saved

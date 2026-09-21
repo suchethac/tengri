@@ -40,13 +40,31 @@ a results file is how a figure and its caption come apart.
 |---|---|---|
 | `01_gpu_performance.py` | datacenter and consumer GPU scaling | `sherlock_h100_batch.json`, `consumer_gpu_batch.json` |
 | `02_candels_grid.py` | sample-level summary, per-galaxy panels, published-code overlay | `results/fits/` grid cells, `selected_galaxies_20.json`, `art_sedfitting_z1.csv` |
+| `03_precompute_accuracy.py` | appendix LUT-accuracy envelope, and the speed panel the paper does not print | `fig03_precompute_data.json`, `fig03_bench_forward_2026-08-30.json` |
+| `04_backends.py` | one galaxy through MAP, Laplace, NUTS, HMC and nested slice sampling | `results/backend_sweep_pin/` |
 
-Further families (precompute accuracy, the mock joint inference, the backend
-and gradient comparisons) are added as their data lands; each follows the same
-shape.
+The mock joint inference figure is added when a run clears its posterior gate;
+until then the paper carries a provisional render under a distinct filename.
 
 `PAPER1_FITS_DIR` points `02_candels_grid.py` at a different directory of grid
 cells; it defaults to `analysis/paper1/results/fits`.
+
+### Four entry-point shapes, one caller
+
+The scripts under `analysis/paper1/` do not share a CLI contract, so `_run.py`
+dispatches on shape: a `main(argv)`, a `main` taking named parameters whose
+argparse lives in its `__main__` block, a `main()` that reads `sys.argv`, and
+one script with no `main` at all that parses and writes at module scope.
+
+The last two are where a caller goes quietly wrong. The named-parameter shape
+ignores `sys.argv` entirely and falls back to its own defaults, so a dropped
+`--out-dir` writes the figure elsewhere and still reports success; `_run.py`
+therefore refuses a flag with no matching parameter rather than dropping it.
+The module-scope shape does its work during the import, so `sys.argv` is set
+*before* the import and the module body is re-executed if it has already been
+imported once in the session -- without that, a second call returns zero
+having written nothing. Both are pinned by
+`analysis/paper1/tests/test_figure_runner_shapes.py`.
 
 ### The CANDELS notebook needs stellar libraries the repository does not carry
 
