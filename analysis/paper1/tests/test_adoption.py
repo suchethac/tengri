@@ -62,6 +62,7 @@ def test_config_iii_is_accepted_on_the_relaxed_bar():
         "adoption_pass": False,
         "rhat_max": 1.0012,
         "divergences": 12,
+        "ess_min": 300.0,
         "n_samples": 300,
         "n_chains": 4,
     }
@@ -113,6 +114,7 @@ def test_the_relaxation_does_not_leak_to_other_configurations():
         "adoption_pass": False,
         "rhat_max": 1.0001,
         "divergences": 1,
+        "ess_min": 300.0,
         "n_samples": 300,
         "n_chains": 4,
     }
@@ -241,6 +243,75 @@ def test_the_relaxed_bar_still_adopts_a_clean_cell():
     from _adoption import is_adopted
 
     verdict = is_adopted(
-        {"rhat_max": 1.004, "divergences": 0, "n_samples": 300, "n_chains": 4}, "III"
+        {"rhat_max": 1.004, "divergences": 0, "ess_min": 300.0, "n_samples": 300, "n_chains": 4},
+        "III",
     )
     assert verdict.adopted, verdict.reason
+
+
+# --- the ESS leg the owner added to the bar, and the peak_gyr cap -----------
+
+
+def test_the_relaxed_bar_refuses_a_low_ess_cell():
+    """fit_one.ESS_FLOOR is part of the grid's bar; the relaxed bar computes
+    its own verdict, so without this leg it would adopt what the grid refuses."""
+    from _adoption import is_adopted
+
+    verdict = is_adopted(
+        {"rhat_max": 1.004, "divergences": 0, "ess_min": 3.0, "n_samples": 300, "n_chains": 4},
+        "III",
+    )
+    assert not verdict.adopted
+    assert "ess_min" in verdict.reason
+
+
+def test_the_relaxed_bar_refuses_a_cell_with_no_ess_recorded():
+    from _adoption import is_adopted
+
+    verdict = is_adopted(
+        {"rhat_max": 1.004, "divergences": 0, "n_samples": 300, "n_chains": 4}, "III"
+    )
+    assert not verdict.adopted
+    assert "ess_min" in verdict.reason
+
+
+def test_a_capped_v_cell_is_not_flagged():
+    """Non-vacuity: a post-cap cell must pass."""
+    from _adoption import uncapped_peak_note
+
+    meta = {"priors": {"sfh_lnorm_peak_gyr": "Uniform(0.1, 5.4)"}}
+    assert uncapped_peak_note(meta, "V") is None
+
+
+def test_an_uncapped_v_cell_is_flagged():
+    from _adoption import uncapped_peak_note
+
+    meta = {"priors": {"sfh_lnorm_peak_gyr": "Uniform(0.1, 13.0)"}}
+    note = uncapped_peak_note(meta, "V")
+    assert note is not None and "13" in note
+
+
+def test_a_v_cell_with_no_priors_block_is_flagged():
+    """The defect this exists for: the block and the cap landed together, so
+    absence means the cell predates the cap. A bound test on a missing key
+    returns None and skips such a cell into the passing branch."""
+    from _adoption import uncapped_peak_note
+
+    note = uncapped_peak_note({"adoption_pass": True, "ess_min": 380.0}, "V")
+    assert note is not None and "predates" in note
+
+
+def test_a_v_cell_whose_prior_cannot_be_read_is_flagged():
+    """Unparseable is not the same as capped."""
+    from _adoption import uncapped_peak_note
+
+    note = uncapped_peak_note({"priors": {"sfh_lnorm_peak_gyr": "custom object"}}, "V")
+    assert note is not None
+
+
+def test_the_peak_cap_check_is_configuration_v_only():
+    """peak_gyr belongs to the log-normal SFH; III has no such parameter."""
+    from _adoption import uncapped_peak_note
+
+    assert uncapped_peak_note({}, "III") is None
+    assert uncapped_peak_note({}, "VI") is None

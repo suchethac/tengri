@@ -21,6 +21,7 @@ its caption; the relaxation is not applied to any other configuration.
 
 from __future__ import annotations
 
+import re
 from typing import NamedTuple
 
 RELAXED_CONFIGS = frozenset({"III"})
@@ -35,6 +36,13 @@ _DEFAULT_N_CHAINS = 4
 #: criterion and is left exactly as it is. This only makes the case
 #: visible, because the bar cannot see it by construction.
 LOW_ESS = 100.0
+
+#: Upper bound below which Configuration V's ``peak_gyr`` prior counts as
+#: capped. The owner capped it at ``age_at_z(z)``, 5.1 to 5.9 Gyr across this
+#: sample, so 6.0 separates a capped cell from the 13.0 the uncapped prior
+#: carried without being sensitive to which galaxy it is.
+PEAK_GYR_CAP_MAX = 6.0
+_PEAK_PARAM = "sfh_lnorm_peak_gyr"
 
 
 class Verdict(NamedTuple):
@@ -89,6 +97,16 @@ def is_adopted(meta: dict, config: str) -> Verdict:
                 False,
                 f"relaxed bar: divergence rate {rate:.4f} > {RELAXED_DIVERGENCE_RATE}",
             )
+        # The owner added an effective-sample leg to the grid's bar
+        # (fit_one.ESS_FLOOR = 100) on 2026-09-21. The relaxed bar is computed
+        # here rather than read from adoption_pass, so without this it would
+        # adopt a Configuration III cell the grid itself refuses. Absent means
+        # unverified, consistently with the rhat_max and divergence checks above.
+        ess_min = meta.get("ess_min")
+        if ess_min is None:
+            return Verdict(False, "relaxed bar: no ess_min recorded")
+        if float(ess_min) < LOW_ESS:
+            return Verdict(False, f"relaxed bar: ess_min {float(ess_min):.1f} < {LOW_ESS:.0f}")
         return Verdict(True, "relaxed bar")
 
     if meta.get("adoption_pass") is True:
@@ -127,5 +145,46 @@ def low_ess_note(meta: dict, verdict: Verdict) -> str | None:
             f"adopted on ess_min {float(ess):.1f} < {LOW_ESS:.0f}: the bar has no "
             "effective-sample criterion, and rhat_max cannot bound ess_min "
             "because they are extrema over different parameters"
+        )
+    return None
+
+
+def uncapped_peak_note(meta: dict, config: str) -> str | None:
+    """A Configuration V cell that predates, or violates, the ``peak_gyr`` cap.
+
+    Row V was rerun after the owner capped ``peak_gyr`` at ``age_at_z(z)``;
+    the pre-cap cells were archived rather than deleted, so both kinds exist on
+    disk and a figure pointed at the wrong directory would mix two priors under
+    one configuration label.
+
+    **A cell with no ``priors`` block fails.** The block was added by the same
+    commit that capped the prior, so its absence means the cell predates the
+    cap -- exactly the cells that must not be counted. Read the obvious way,
+    ``meta["priors"].get("sfh_lnorm_peak_gyr")`` returns ``None`` for those and
+    a bound test on ``None`` skips them into the "fine" branch.
+
+    The bound is parsed out of the recorded ``repr``, so an unparseable value
+    is reported rather than passed: guessing that a prior is capped because its
+    text could not be read is the same failure in a different coat.
+    """
+    if config != "V":
+        return None
+    priors = meta.get("priors")
+    if not priors:
+        return (
+            "records no priors block, so it predates the peak_gyr cap "
+            "(the block and the cap landed together)"
+        )
+    recorded = priors.get(_PEAK_PARAM)
+    if recorded is None:
+        return f"records priors but no {_PEAK_PARAM}, so the cap cannot be verified"
+    numbers = re.findall(r"-?\d+\.?\d*(?:[eE][-+]?\d+)?", str(recorded))
+    if not numbers:
+        return f"{_PEAK_PARAM} prior {recorded!r} has no readable bound"
+    upper = float(numbers[-1])
+    if upper >= PEAK_GYR_CAP_MAX:
+        return (
+            f"{_PEAK_PARAM} upper bound {upper:g} >= {PEAK_GYR_CAP_MAX:g}: "
+            "this cell ran under the uncapped prior"
         )
     return None
