@@ -46,6 +46,7 @@ from ._posterior_utils import (
     posterior_output_paths,
     thin_samples,
 )
+from ._provenance import code_provenance, provenance_line
 from .fig_mock_joint_infer import DETECTION_SIGMA, RESULTS, TRUTH_NPZ
 from .verify_mock_listing import MOCK_FILTERS, build_joint_observation, build_mock_model
 
@@ -451,6 +452,12 @@ def _save_sampler_results(
         "n_warmup": sampler_kwargs.get("n_warmup"),
         "n_samples": sampler_kwargs.get("n_samples"),
         "method": method,
+        # Which tree produced these numbers. Section 3 quotes them and the
+        # paper is pinned, so a diagnostic without a commit is a diagnostic
+        # nobody can check; read off the imported module rather than the
+        # working directory, because on this machine a bare `python` resolves
+        # `import tengri` to an unrelated checkout.
+        "provenance": code_provenance(tengri),
     }
 
     # Add energy/ebfmi to JSON if available
@@ -463,6 +470,8 @@ def _save_sampler_results(
         json_payload["ebfmi_min"] = float(ebfmi_min)
     else:
         json_payload["ebfmi_min"] = None
+
+    print(provenance_line(json_payload["provenance"]))
 
     with open(out_json, "w") as f:
         json.dump(json_payload, f, indent=2)
