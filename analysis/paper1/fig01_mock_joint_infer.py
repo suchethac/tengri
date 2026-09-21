@@ -48,6 +48,7 @@ from matplotlib.gridspec import GridSpec
 
 import tengri
 
+from ._posterior_gate import posterior_gate
 from ._posterior_utils import posterior_output_paths
 from .fig_mock_joint_infer import TRUTH_NPZ
 from .verify_mock_listing import (
@@ -334,6 +335,11 @@ def main() -> int:
     have_post = posterior is not None
     print(f"posterior: {'loaded from ' + str(args.posterior) if have_post else 'NOT FOUND'}")
 
+    gate_passed, gate_reasons = False, ["no posterior on disk"]
+    if have_post:
+        gate_passed, gate_reasons, _ = posterior_gate(args.posterior)
+        print("gate: PASSED" if gate_passed else "gate: FAILED -- " + "; ".join(gate_reasons))
+
     if not have_post:
         # Distinguish "not fitted yet" from "fitted, and this script is looking
         # in the wrong place". Both render the truth-only figure, but only one
@@ -360,6 +366,16 @@ def main() -> int:
     plot_sfh(ax_sfh, model, params)
     if have_post:
         plot_marginals(ax_mar, posterior, truth_values, free_names)
+        if not gate_passed:
+            fig.text(
+                0.5,
+                0.985,
+                "PROVISIONAL -- posterior has not converged: " + "; ".join(gate_reasons),
+                ha="center",
+                fontsize=7.5,
+                color="#b22222",
+                weight="bold",
+            )
     else:
         ax_mar.text(
             0.5,
@@ -383,12 +399,17 @@ def main() -> int:
         )
 
     FIG_DIR.mkdir(parents=True, exist_ok=True)
-    name = "fig01_mock_joint_infer.pdf" if have_post else "fig01_mock_joint_infer_truthonly.pdf"
+    if not have_post:
+        name = "fig01_mock_joint_infer_truthonly.pdf"
+    elif not gate_passed:
+        name = "fig01_mock_joint_infer_provisional.pdf"
+    else:
+        name = "fig01_mock_joint_infer.pdf"
     out = FIG_DIR / name
     fig.savefig(out, bbox_inches="tight")
     print(f"wrote {out}")
-    if not have_post:
-        print("NOTE: written under the _truthonly name. Do not wire this into the paper.")
+    if not gate_passed:
+        print(f"NOTE: written as {name}. Do not wire this into the paper.")
     return 0
 
 
