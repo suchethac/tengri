@@ -19,9 +19,12 @@ from numpy.testing import assert_allclose
 from tengri.utils.cosmology import (
     DEFAULT_H0,
     DEFAULT_OM0,
+    PLANCK15,
     PLANCK18,
+    WMAP5,
     age_at_z,
     age_at_z0,
+    age_at_z0_host,
     angular_diameter_distance,
     angular_diameter_distance_mpc,
     arcsec_per_kpc,
@@ -560,3 +563,23 @@ class TestZAtLookbackTime:
         z_arr = z_at_lookback_time(t_lb)
         chex.assert_shape(z_arr, (4,))
         chex.assert_tree_all_finite(z_arr)
+
+
+@pytest.mark.parametrize("cosmo_obj", [PLANCK18, PLANCK15, WMAP5])
+def test_age_at_z0_host_matches_dsps(cosmo_obj):
+    """Verify numpy twin of dsps age_at_z0 calculation.
+
+    age_at_z0_host should produce results identical (within float64 rounding)
+    to the DSPS implementation, using the same 512-node trapezoidal quadrature
+    without importing JAX or allocating device buffers.
+    """
+    from dsps.cosmology.flat_wcdm import age_at_z0 as dsps_age_at_z0
+
+    host_age = age_at_z0_host(cosmo_obj)
+    dsps_age_val = float(dsps_age_at_z0(*cosmo_obj))
+
+    # Absolute tolerance: float64 rounding error
+    assert abs(host_age - dsps_age_val) < 1e-9 * max(abs(dsps_age_val), 1.0)
+
+    # Rounded values must match (used in registry)
+    assert round(host_age, 3) == round(dsps_age_val, 3)

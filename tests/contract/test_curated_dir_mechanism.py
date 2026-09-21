@@ -54,6 +54,7 @@ ALL_BACKED = (
 CURATED_BACKED = (
     "tengri",
     "tengri.components.dust",
+    "tengri.utils.cosmology",
 )
 
 CURATING = ALL_BACKED + CURATED_BACKED
