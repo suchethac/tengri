@@ -184,7 +184,13 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
     ax_gal.set_ylabel(r"forward cost per galaxy  [$\mu$s]")
     ax_call.set_xlabel("batch size (galaxies)")
     ax_call.set_ylabel("wall time per call  [ms]")
-    ax_gal.legend(fontsize=6, loc="lower left", frameon=False)
+    # Upper right, measured rather than chosen: with the in-figure sentences
+    # gone the box was free to sit lower left, where it covered the Xeon
+    # float32 markers at batch 32 and 128 and the float64 marker at 128 on the
+    # H100 panel. Of the six standard placements only this one hides nothing on
+    # either dataset this module renders -- lower left hid 3, upper left 2 on
+    # each, lower right 9.
+    ax_gal.legend(fontsize=6, loc="upper right", frameon=False)
     for ax in (ax_gal, ax_call):
         ax.grid(alpha=0.25, which="both", lw=0.4)
         ax.tick_params(labelsize=7)
