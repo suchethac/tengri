@@ -42,6 +42,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _adoption import is_adopted, low_ess_note
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_ORDER
 from _grid_completeness import completeness_note, load_expected_galaxy_ids
@@ -57,6 +58,13 @@ FIGURE_WIDTH = 7.1
 FIGURE_HEIGHT = 3.6
 PERCENTILES = (16.0, 50.0, 84.0)
 
+#: Edge color for a cell the bar adopted on too few effective samples. It is
+#: drawn filled, because the bar did adopt it, but ringed, because its
+#: posterior is not one: without this it is indistinguishable from a
+#: converged cell and the eye reads the stamp's warning as applying to
+#: nothing in particular.
+LOW_ESS_EDGE = "#b22222"
+
 
 @dataclass(frozen=True)
 class Cell:
@@ -65,6 +73,10 @@ class Cell:
     gal_id: int
     config: str
     adopted: bool
+    #: Set when the cell cleared the bar on too few effective samples. The bar
+    #: has no ESS criterion, so this is the only place such a cell announces
+    #: itself; left None for every honest cell.
+    low_ess: str | None
     log_mstar: tuple[float, float, float]  # (p16, p50, p84)
     log_sfr: tuple[float, float, float]
 
@@ -114,11 +126,18 @@ def load_cells(results_dir: Path) -> tuple[list[Cell], list[str]]:
             except ValueError as exc:
                 warnings.append(f"{stem}: {exc}, skipped")
                 continue
+        # The shared rule, not the raw flag. fig05 and fig06 already judge
+        # cells through _adoption.is_adopted; reading meta["adoption_pass"]
+        # here made this the one figure with its own copy of the criterion --
+        # and it is the sample-level figure, the one an adoption rate would be
+        # read off, so it is the worst place for the two to drift.
+        verdict = is_adopted(meta, config)
         cells.append(
             Cell(
                 gal_id=int(gal_str),
                 config=config,
-                adopted=bool(meta.get("adoption_pass", False)),
+                adopted=verdict.adopted,
+                low_ess=low_ess_note(meta, verdict),
                 log_mstar=log_mstar,
                 log_sfr=log_sfr,
             )
@@ -167,8 +186,19 @@ def _draw_plane(ax, cells: list[Cell], rep_gal: int) -> None:
         group = [c for c in cells if c.config == config]
         if not group:
             continue
-        adopted = [c for c in group if c.adopted]
+        adopted = [c for c in group if c.adopted and not c.low_ess]
+        low_ess = [c for c in group if c.adopted and c.low_ess]
         held = [c for c in group if not c.adopted]
+        if low_ess:
+            ax.scatter(
+                [c.log_mstar[1] for c in low_ess],
+                [c.log_sfr[1] for c in low_ess],
+                s=16,
+                color=CONFIG_COLORS[config],
+                edgecolors=LOW_ESS_EDGE,
+                linewidths=0.9,
+                zorder=4,
+            )
         if adopted:
             ax.scatter(
                 [c.log_mstar[1] for c in adopted],
@@ -238,10 +268,14 @@ def _draw_offsets(ax, cells: list[Cell], attr: str, ylabel: str, show_xlabel: bo
             offsets[(cell.gal_id, cell.config)],
             s=11,
             color=CONFIG_COLORS[cell.config],
-            edgecolors="none" if cell.adopted else CONFIG_COLORS[cell.config],
+            edgecolors=(
+                LOW_ESS_EDGE
+                if cell.low_ess
+                else ("none" if cell.adopted else CONFIG_COLORS[cell.config])
+            ),
             facecolors=CONFIG_COLORS[cell.config] if cell.adopted else "none",
-            linewidths=0.0 if cell.adopted else 0.7,
-            zorder=3,
+            linewidths=0.9 if cell.low_ess else (0.0 if cell.adopted else 0.7),
+            zorder=4 if cell.low_ess else 3,
         )
     ax.set_ylabel(ylabel, fontsize=7.5)
     ax.tick_params(labelsize=7)
@@ -282,6 +316,20 @@ def build_figure(cells: list[Cell], provenance: str | None) -> tuple[plt.Figure,
             label="not adopted",
         )
     )
+    if any(cell.low_ess for cell in cells):
+        handles.append(
+            Line2D(
+                [],
+                [],
+                marker="o",
+                linestyle="none",
+                markersize=4,
+                markerfacecolor="0.6",
+                markeredgecolor=LOW_ESS_EDGE,
+                markeredgewidth=0.9,
+                label="too few ESS",
+            )
+        )
     ax_plane.legend(
         handles=handles,
         fontsize=6.5,
@@ -405,7 +453,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    # A cell adopted on too few effective samples is not a wrong point, it is
+    # an uninformative one, and it is about to be drawn indistinguishably from
+    # the rest and counted in the adoption rate. Name it on the figure.
+    frozen = [f"{c.gal_id}/{c.config}" for c in cells if c.low_ess]
     stamp_parts: list[str] = []
+    if frozen:
+        stamp_parts.append(
+            f"ADOPTED ON TOO FEW EFFECTIVE SAMPLES: {', '.join(frozen)} "
+            "(the bar has no ESS criterion)"
+        )
+        print(f"low effective sample size, adopted anyway: {', '.join(frozen)}")
     if shortfall:
         stamp_parts.append(shortfall)
         print(shortfall)

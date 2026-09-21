@@ -200,3 +200,93 @@ def test_present_on_disk_sees_a_whole_grid(tmp_path):
     found = present_on_disk(tmp_path, ids, ["I", "II"])
     assert len(found) == 4
     assert completeness_note(found, ids, ["I", "II"]) is None
+
+
+# --- fig09 must judge cells with the shared rule, not its own copy ----------
+
+
+def _cell_with(results_dir: Path, gal_id: int, config: str, meta: dict) -> None:
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / f"{gal_id}_{config}.json").write_text(json.dumps(meta))
+    rng = np.random.default_rng(gal_id)
+    np.savez(
+        results_dir / f"{gal_id}_{config}.npz",
+        stellar_mass=10 ** rng.normal(10.5, 0.1, 64),
+        sfr_100myr=10 ** rng.normal(0.5, 0.1, 64),
+    )
+
+
+def test_fig09_judges_with_the_shared_rule_not_the_raw_flag(tmp_path):
+    """A Configuration III cell the relaxed bar accepts must be drawn adopted.
+
+    fig09 read meta["adoption_pass"] directly while fig05 and fig06 judged
+    through _adoption.is_adopted. That made the sample-level figure -- the one
+    an adoption rate is read off -- the only consumer with its own copy of the
+    criterion. This cell separates the two: the raw flag says no, the relaxed
+    bar for III says yes.
+    """
+    import fig09_sample_level as fig09
+
+    results = tmp_path / "fits"
+    _cell_with(
+        results,
+        13097,
+        "III",
+        {
+            "adoption_pass": False,
+            "rhat_max": 1.004,
+            "divergences": 0,
+            "ess_min": 300.0,
+            "n_samples": 300,
+            "n_chains": 4,
+        },
+    )
+    cells, _ = fig09.load_cells(results)
+    assert len(cells) == 1
+    assert cells[0].adopted, "fig09 fell back to the raw flag instead of the shared rule"
+
+
+def test_fig09_marks_a_cell_adopted_on_too_few_effective_samples(tmp_path):
+    """The detector must reach the figure, not just exist."""
+    import fig09_sample_level as fig09
+
+    results = tmp_path / "fits"
+    _cell_with(
+        results,
+        14099,
+        "V",
+        {
+            "adoption_pass": True,
+            "rhat_max": 1.0089,
+            "divergences": 0,
+            "ess_min": 2.8,
+            "n_samples": 300,
+            "n_chains": 4,
+        },
+    )
+    cells, _ = fig09.load_cells(results)
+    assert cells[0].adopted
+    assert cells[0].low_ess is not None
+    assert "2.8" in cells[0].low_ess
+
+
+def test_fig09_leaves_an_honest_cell_unmarked(tmp_path):
+    """Non-vacuity: the mark must not appear on every cell."""
+    import fig09_sample_level as fig09
+
+    results = tmp_path / "fits"
+    _cell_with(
+        results,
+        9884,
+        "V",
+        {
+            "adoption_pass": True,
+            "rhat_max": 1.0037,
+            "divergences": 0,
+            "ess_min": 380.8,
+            "n_samples": 300,
+            "n_chains": 4,
+        },
+    )
+    cells, _ = fig09.load_cells(results)
+    assert cells[0].adopted and cells[0].low_ess is None
