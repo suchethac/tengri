@@ -19,7 +19,7 @@
   literals, so built models predict identically; the same parameter name denotes a
   different physical quantity in the AGN and stellar contexts, which is why each
   site reads its own declaration. The shock-normalization fallback is unchanged (#2297).
-- Four fail-open probes for never-assigned attributes are resolved. `SEDModel.hybrid` property (dead accessor for `_hybrid` never assigned) is removed; `SEDModel.wave_obs` property's dead `_wave_obs` cache probe is removed; `sed_model.py` dust-emission detection's legacy `dust.config.emission_model` probe (unreachable after component migration) is removed; `profiling/pipeline.py`'s dead `_compositional` probe is removed; `profiling/memory.py`'s `_weights` probe is fixed to use the correct `weights` attribute on `CueBackend` (#1240).
+- Four fail-open probes for never-assigned attributes are resolved. `SEDModel.hybrid` property (dead accessor for `_hybrid` never assigned) is removed, along with its mirror property on `ForwardModel`; `SEDModel.wave_obs` property's dead `_wave_obs` cache probe is removed; `sed_model.py` dust-emission detection's legacy `dust.config.emission_model` probe (unreachable after component migration) is removed; `profiling/pipeline.py`'s dead `_compositional` probe is removed; `profiling/memory.py`'s `_weights` probe is fixed to use the correct `weights` attribute on `CueBackend` (#1240).
 - Three reproduction pages re-rendered with their prose reconciled to the
   measurements (#2341 rows; #2419/#2442 page follow-ups): cigale's §7/§8/§11
   and capstone describe one thermal free-free term on the whole grid, §11 now
