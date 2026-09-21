@@ -232,3 +232,47 @@ def test_the_census_reports_fit_quality_separately_from_the_bar(tmp_path):
         "a cell that clears the adoption bar while missing every band by forty "
         f"sigma was not counted as a poor fit.\nstdout:\n{result.stdout[-1200:]}"
     )
+
+
+def test_one_bad_band_is_distinguished_from_a_model_that_misses_broadly(tmp_path):
+    """The two look identical in chi2 and want opposite responses.
+
+    A cell whose misfit is one bad photometric point collapses to a good fit
+    when that point is dropped; a cell whose model misses everywhere does not.
+    Reporting only the headline chi2 leaves those indistinguishable, which is
+    how a handful of bad IRAC deblends could be read as a broken model, or a
+    broken model excused as bad photometry.
+    """
+    results = tmp_path / "fits"
+    results.mkdir()
+
+    # 79: four bands perfect, one 10 sigma out. 4171: every band 3 sigma out.
+    (results / "79_III.json").write_text(json.dumps(_cell(79)))
+    np.savez(
+        results / "79_III.npz",
+        obs_fnu=np.ones(5),
+        obs_sigma=np.full(5, 0.1),
+        model_photometry_median=np.array([1.0, 1.0, 1.0, 1.0, 2.0]),
+        filter_names=np.array(list("abcde"), dtype=object),
+    )
+    (results / "4171_III.json").write_text(json.dumps(_cell(4171)))
+    np.savez(
+        results / "4171_III.npz",
+        obs_fnu=np.ones(5),
+        obs_sigma=np.full(5, 0.1),
+        model_photometry_median=np.full(5, 1.3),
+        filter_names=np.array(list("abcde"), dtype=object),
+    )
+
+    result = _run(results, "--allow-partial")
+
+    assert "worst band dropped" in result.stdout, (
+        f"the census reported no trimmed chi2.\nstdout:\n{result.stdout[-1200:]}"
+    )
+    line = result.stdout.split("worst band dropped")[-1].splitlines()[0]
+    # 79 trims to exactly 0; 4171 stays at 9. A range that starts anywhere but
+    # zero means the outlier-driven cell was not actually trimmed.
+    assert "0.00 to 9.00" in line, (
+        "the trimmed range should span the outlier-driven cell (0.00) and the "
+        f"broadly-wrong one (9.00); got {line.strip()!r}"
+    )

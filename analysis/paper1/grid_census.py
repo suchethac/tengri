@@ -228,15 +228,22 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
     # good one, so a cell can clear every leg of the bar and still miss the
     # photometry badly. Section 7 asks for this number separately and for that
     # reason.
-    chi2, worst, no_arrays = [], defaultdict(list), 0
+    chi2, trimmed, worst, no_arrays = [], [], defaultdict(list), 0
     for name, cell in adopted.items():
         found = band_residuals(results_dir, name)
         if found is None:
             no_arrays += 1
             continue
         residuals, bands = found
-        chi2.append(float((residuals**2).mean()))
-        worst[_config_of(name, cell)].append(bands[int(np.argmax(np.abs(residuals)))])
+        squares = residuals**2
+        chi2.append(float(squares.mean()))
+        worst[_config_of(name, cell)].append(bands[int(np.argmax(squares))])
+        # The same chi2 with each cell's single largest contributor removed.
+        # One bad photometric point and a model that misses everywhere give
+        # the same headline number and want opposite responses; only the gap
+        # between these two separates them.
+        if squares.size > 1:
+            trimmed.append(float((squares.sum() - squares.max()) / (squares.size - 1)))
     if chi2:
         over = sum(1 for c in chi2 if c > 2.0)
         print(
@@ -250,6 +257,15 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
             "  ^ the adoption bar measures sampler convergence, not fit quality;"
             " these cells all passed it."
         )
+        if trimmed:
+            print(
+                f"  worst band dropped  : {_fmt(trimmed, '.2f')}  "
+                f"(median {statistics.median(trimmed):.2f})"
+            )
+            print(
+                "  ^ collapsing toward 1 would mean one bad point per cell;"
+                " staying high means the model misses broadly."
+            )
         for config, bands in sorted(worst.items()):
             tally = Counter(bands).most_common(3)
             print(f"  {config:<4} worst band  : " + ", ".join(f"{b} x{n}" for b, n in tally))
