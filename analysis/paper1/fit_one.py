@@ -205,6 +205,30 @@ def dust_parameter_name(config_key: str) -> str:
         ) from exc
 
 
+def code_revision() -> str | None:
+    """``git rev-parse HEAD`` of the tree this process imported ``tengri`` from, or None.
+
+    Two cells with the same filename and the same priors can still have run
+    different code -- the log-normal onset fix (f01975f46) landed while row V
+    was in flight -- and nothing else in the record says which.
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parent,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sha = out.stdout.strip()
+    return sha if out.returncode == 0 and sha else None
+
+
 def prior_record(sed_model) -> dict[str, str]:
     """``{free parameter: repr(prior)}`` -- the bounds this cell was actually run with.
 
@@ -1096,6 +1120,7 @@ def run_fit(
                 "z": float(z),
                 "n_free": sed_model.spec.n_free,
                 "priors": prior_record(sed_model),
+                "code_revision": code_revision(),
                 "n_bands": len(filter_names),
                 "filter_names": filter_names,
                 "n_warmup": nuts_kwargs["n_warmup"],
