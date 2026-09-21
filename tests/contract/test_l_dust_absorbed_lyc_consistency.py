@@ -95,7 +95,7 @@ def test_compute_l_dust_absorbed_matches_bolometric_absorbed_log10(
     model = _build(synthetic_ssp_wide, dust_emission_type)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        params = {**model.spec.get_fixed_values()}
+        params = {}
         pred = model.predict(params)
     components = pred.sed.components
     wave = components["wavelength"]
@@ -168,7 +168,7 @@ def test_agnfitter_priors_energy_balance_is_not_hard_rejected(
     model = _build(synthetic_ssp_wide, dust_emission_type)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        params = {**model.spec.get_fixed_values()}
+        params = {}
         pred = model.predict(params)
 
     _total, breakdown = agnfitter_priors(

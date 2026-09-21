@@ -47,7 +47,10 @@ def test_predict_spectrum_uses_observation_wave_obs_when_unset():
         redshift=tengri.Fixed(0.05),
     )
 
-    params = {p: v.value for p, v in model.spec._distributions.items() if hasattr(v, "value")}
+    # Every group here is Fixed (all_params: Fixed(DEFAULT), n_free=0): the
+    # free-only params contract (#2296) means the empty dict, not a dict of
+    # every Fixed value's own value (refused on presence, not comparison).
+    params = {}
     # Must not raise — tier-2 fallback consults observation.spectroscopy.wave_obs.
     _ = model.predict_spectrum(params)
 

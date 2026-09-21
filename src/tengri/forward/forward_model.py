@@ -26,6 +26,7 @@ import numpy as np
 from tengri.forward.population import Population
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.noise import DETECTED as _DETECTED
+from tengri.parameters.resolve import merge_fixed_params
 from tengri.protocols.component import ForwardState
 from tengri.protocols.derived_state import DerivedState
 
@@ -898,19 +899,28 @@ class ForwardModel:
                 per_pop_states[name] = state.with_(derived=new_derived)
 
         # ── Pass 3: hand to observation.
+        # Merge Fixed values back for observation.predict() (#2296)
+        per_pop_params_full = {}
+        for pop, params in zip(self.populations, per_pop_params.values()):
+            spec = getattr(pop.sed, "spec", None)
+            if spec is not None and hasattr(spec, "get_fixed_values"):
+                per_pop_params_full[pop.name] = merge_fixed_params(spec, params)
+            else:
+                per_pop_params_full[pop.name] = dict(params)
+
         if not is_multipop:
             (only_state,) = per_pop_states.values()
-            (only_params,) = per_pop_params.values()
+            (only_params,) = per_pop_params_full.values()
             (only_pop,) = self.populations
             return _predict_observation(self.observation, only_pop.sed, only_state, only_params)
 
         if hasattr(self.observation, "predict_summed"):
-            return self.observation.predict_summed(per_pop_states, per_pop_params)
+            return self.observation.predict_summed(per_pop_states, per_pop_params_full)
 
         # Fallback: synthesize predict_summed by summing per-population
         # observation.predict outputs in linear flux, key-by-key.
         per_pop_pred = {
-            name: self.observation.predict(state, per_pop_params[name])
+            name: self.observation.predict(state, per_pop_params_full[name])
             for name, state in per_pop_states.items()
         }
         return _linear_flux_sum(per_pop_pred)
@@ -1343,12 +1353,9 @@ class ForwardModel:
             elif "." not in k:
                 sliced[k] = v
 
-        full: dict[str, Any] = {}
-        spec = getattr(pop.sed, "spec", None)
-        if spec is not None and hasattr(spec, "get_fixed_values"):
-            full.update(spec.get_fixed_values())
-        full.update(sliced)
-        return full
+        # Return only free parameters; run() and predict_state() handle
+        # merging Fixed values internally (#2296)
+        return sliced
 
 
 def _predict_observation(

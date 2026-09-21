@@ -156,7 +156,7 @@ def test_lut_bakes_the_same_convention(synthetic_ssp_wide):
     m_exact = _build_emitting(ssp, True, None)
     assert getattr(m_lut, "_energy_balance_lut_cache", None) is not None
 
-    base = {**m_lut.spec.get_fixed_values(), **m_lut.spec.sample(jax.random.PRNGKey(0))}
+    base = m_lut.spec.sample(jax.random.PRNGKey(0))
     for tau in (0.0, 0.5, 1.0):
         p = dict(base)
         p["dust_tau_bc"] = jnp.asarray(float(tau))

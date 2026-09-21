@@ -8,6 +8,10 @@ Quick Start
 Model-summary walkthrough, SED dust anatomy, nebular-backend swap, and components-isolated anatomy tour. Fitting and inference examples live in the tutorial notebooks.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

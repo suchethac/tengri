@@ -277,6 +277,24 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 - `'lyc_absorb_all'` — Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
 - `'eb_include_lyc'` — Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
 
+Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,
+`'Rv_bc'`, `'delta_bc'`, and their `'_diff'`/`'_neb'` siblings) takes
+**either** a plain number (as before) **or** `Fixed(...)`/a prior
+distribution (#2428). A plain number is a build-time config override, baked
+into the compiled model exactly as it always was. `Fixed(...)`/`Uniform(...)`/
+etc. instead declares a real, free-able parameter named
+`dust_<stem>_<screen>` (e.g. `dust_slope_bc`, `dust_Rv_neb`) — it appears in
+`spec.free_params` when given a prior, and a `Fixed(v)` per-screen
+declaration predicts bit-identically to the plain number `v`. These names are
+explicit-only: an `all_params: FREE` wildcard never frees them (name one
+explicitly to fit it), and the flat `Parameters(dust_law_overrides={...})`
+surface still accepts only plain numbers in that dict — passing a prior there
+raises `ParameterError` naming the `dust_<stem>_<screen>` spelling as the
+remedy. Naming only one half of a `_bc`/`_diff` pair (e.g. `slope_bc` without
+`slope_diff`) raises: give both explicitly, or use a group-level wildcard
+(`'all_params': FREE`/`Fixed(DEFAULT)`) to free or pin them together — the
+same rule the plain-number spelling of these keys already followed.
+
 **Minimal example:**
 ```python
 # Single component
