@@ -45,12 +45,31 @@ DEFAULT_OUT = HERE / "figures" / "fig04_gpu_datacenter.pdf"
 #: Device identity drives hue so a later card cannot repaint these; precision
 #: drives the line style. Okabe-Ito, checked for color-vision deficiency.
 STYLE = {
-    "cpu_f64": ("#0072B2", "-", "Xeon 8462Y+, float64"),
-    "cpu_f32": ("#0072B2", "--", "Xeon 8462Y+, float32"),
-    "gpu_f64": ("#D55E00", "-", "H100 80GB, float64"),
-    "gpu_f32": ("#D55E00", "--", "H100 80GB, float32"),
+    "cpu_f64": ("#0072B2", "-"),
+    "cpu_f32": ("#0072B2", "--"),
+    "gpu_f64": ("#D55E00", "-"),
+    "gpu_f32": ("#D55E00", "--"),
 }
 ARMS = tuple(STYLE)
+
+
+def device_labels(payload: dict) -> dict[str, str]:
+    """Legend labels from the file's provenance, never hardcoded.
+
+    Two datasets render through this module and they are different
+    machines; a literal label here would put an H100 in the legend of the
+    consumer figure, which is the exact defect this module exists to end.
+    """
+    prov = payload.get("provenance") or {}
+    cpu, gpu = prov.get("cpu"), prov.get("gpu")
+    if not cpu or not gpu:
+        raise KeyError("provenance must name both cpu and gpu for the legend")
+    return {
+        "cpu_f64": f"{cpu}, float64",
+        "cpu_f32": f"{cpu}, float32",
+        "gpu_f64": f"{gpu}, float64",
+        "gpu_f32": f"{gpu}, float32",
+    }
 
 
 def load(path: Path) -> dict:
@@ -58,12 +77,16 @@ def load(path: Path) -> dict:
     for required in ("forward", "gradient", "forward_ms_per_call", "aa_control", "caveats"):
         if required not in payload:
             raise KeyError(f"{Path(path).name} has no {required!r} block")
+    device_labels(payload)
     return payload
 
 
 def noise_floor(payload: dict, arm: str) -> float:
     """Worst repeat-to-repeat ratio for one arm, as a fraction above unity."""
-    spreads = payload["aa_control"].get(arm)
+    control = payload["aa_control"]
+    if control is None:
+        raise TypeError("this campaign recorded no A/A control")
+    spreads = control.get(arm)
     if not spreads:
         raise KeyError(f"aa_control has no {arm!r}")
     return max(float(v) for v in spreads) - 1.0
@@ -95,8 +118,10 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
     batch = np.asarray(fwd["batch"], float)
 
     fig, (ax_gal, ax_call) = plt.subplots(1, 2, figsize=(7.1, 3.1))
+    labels = device_labels(payload)
     for arm in ARMS:
-        color, dash, label = STYLE[arm]
+        color, dash = STYLE[arm]
+        label = labels[arm]
         ax_gal.loglog(batch, fwd[arm], dash, color=color, marker="o", ms=3, lw=1.2, label=label)
         ax_call.loglog(batch, per_call[arm], dash, color=color, marker="o", ms=3, lw=1.2)
 
@@ -121,10 +146,19 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
             )
 
     i = int(np.argmax(batch))
-    for device, arms in (("H100", ("gpu_f64", "gpu_f32")), ("Xeon", ("cpu_f64", "cpu_f32"))):
+    # A null aa_control is a DECLARATION that this campaign never measured
+    # repeat spread, as distinct from the key being missing, which means
+    # someone forgot. Declared-unmeasured renders, but annotates no ratio:
+    # without a noise floor there is nothing to say a ratio survives.
+    has_control = payload["aa_control"] is not None
+    stats["aa_control_recorded"] = has_control
+    for device, arms in (("gpu", ("gpu_f64", "gpu_f32")), ("cpu", ("cpu_f64", "cpu_f32"))):
         ratio = float(fwd[arms[0]][i]) / float(fwd[arms[1]][i])
-        ok = resolvable(payload, ratio, *arms)
         stats[f"{device}_f64_over_f32"] = ratio
+        if not has_control:
+            stats[f"{device}_resolvable"] = None
+            continue
+        ok = resolvable(payload, ratio, *arms)
         stats[f"{device}_resolvable"] = ok
         if not ok:
             raise ValueError(
@@ -135,18 +169,32 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
     # Say that the two H100 curves coincide, as a title rather than an arrow:
     # an annotation inside the axes lands on the legend, and a reader who sees
     # one orange line reasonably concludes an arm failed to plot.
-    h100 = stats["H100_f64_over_f32"]
-    ax_gal.set_title(
-        f"H100 float32 and float64 coincide ({100 * (h100 - 1):.1f}% apart at "
-        f"batch {int(batch[-1])})",
-        fontsize=6.5,
-        color=STYLE["gpu_f64"][0],
-    )
+    gpu_ratio = stats["gpu_f64_over_f32"]
+    if has_control and abs(gpu_ratio - 1.0) < 0.10:
+        ax_gal.set_title(
+            f"float32 and float64 coincide on this GPU "
+            f"({100 * (gpu_ratio - 1):.1f}% apart at batch {int(batch[-1])})",
+            fontsize=6.5,
+            color=STYLE["gpu_f64"][0],
+        )
+    elif not has_control:
+        ax_gal.set_title(
+            "no A/A repeat control in this campaign; no ratio annotated",
+            fontsize=6.5,
+            color="0.45",
+        )
 
     flat = np.asarray(per_call["gpu_f64"], float)
+    spread = float(flat.max() / flat.min())
+    stats["gpu_per_call_spread"] = spread
+    note = (
+        f"GPU flat: {flat.min():.1f}-{flat.max():.1f} ms\n"
+        f"{int(batch[-1])} galaxies cost what 1 does"
+        if spread < 1.20
+        else f"GPU leaves the latency floor:\n{flat.min():.1f} to {flat.max():.1f} ms per call"
+    )
     ax_call.annotate(
-        f"H100 flat: {flat.min():.1f}-{flat.max():.1f} ms\n"
-        f"{int(batch[-1])} galaxies cost what 1 does",
+        note,
         xy=(batch[len(batch) // 2], float(flat[len(batch) // 2])),
         xytext=(0.06, 0.74),
         textcoords="axes fraction",

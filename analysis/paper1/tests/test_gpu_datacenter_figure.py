@@ -38,7 +38,9 @@ def payload():
 def test_the_committed_data_builds(payload):
     """Non-vacuity: the guards must not refuse the real measurements."""
     fig, stats = figure.build(copy.deepcopy(payload))
-    assert stats["H100_resolvable"] and stats["Xeon_resolvable"]
+    # Keys are device-role, not device-name: this module renders two
+    # machines and an "H100_" key would be the label defect in another form.
+    assert stats["gpu_resolvable"] and stats["cpu_resolvable"]
     figure.plt.close(fig)
 
 
@@ -88,3 +90,67 @@ def test_the_caveats_travel_with_the_data(payload):
     assert "launch" in joined
     assert "asymptotic" in joined
     assert "latency result" in joined
+
+
+# --- two datasets render through this module, and they are different machines
+
+
+CONSUMER = Path(figure.__file__).with_name("results") / "consumer_gpu_batch.json"
+
+
+def test_legend_labels_come_from_the_data_not_the_module():
+    """A literal label would put an H100 in the consumer figure's legend."""
+    consumer = figure.load(CONSUMER)
+    labels = figure.device_labels(consumer)
+    joined = " ".join(labels.values())
+    assert "3060" in joined and "Ryzen" in joined
+    assert "H100" not in joined and "Xeon" not in joined
+
+
+def test_provenance_without_a_device_name_is_refused(payload, tmp_path):
+    """An unlabelled dataset would render an unattributed figure."""
+    nameless = copy.deepcopy(payload)
+    nameless["provenance"].pop("gpu")
+    path = tmp_path / "nameless.json"
+    path.write_text(json.dumps(nameless))
+    with pytest.raises(KeyError):
+        figure.load(path)
+
+
+def test_a_declared_absent_control_renders_but_annotates_no_ratio():
+    """``null`` is a declaration; the key being missing is an omission.
+
+    The consumer campaign never measured repeat spread, so it records
+    ``aa_control: null``. That must still render -- the figure is wanted -- but
+    with no noise floor there is nothing to say a ratio survives, so none is
+    annotated. Treating null and missing alike would either refuse a figure we
+    want or annotate a ratio we cannot defend.
+    """
+    consumer = figure.load(CONSUMER)
+    fig, stats = figure.build(consumer)
+    figure.plt.close(fig)
+    assert stats["aa_control_recorded"] is False
+    assert stats["gpu_resolvable"] is None and stats["cpu_resolvable"] is None
+    assert stats["gpu_f64_over_f32"] > 2.0
+
+
+def test_a_missing_control_key_is_still_refused(payload, tmp_path):
+    """Omission must not inherit the tolerance granted to a declaration."""
+    absent = copy.deepcopy(payload)
+    absent.pop("aa_control")
+    path = tmp_path / "absent.json"
+    path.write_text(json.dumps(absent))
+    with pytest.raises(KeyError):
+        figure.load(path)
+
+
+def test_the_per_call_note_follows_the_data():
+    """Flat and rising are opposite findings and must not share a caption."""
+    h100 = figure.load(figure.DATA)
+    consumer = figure.load(CONSUMER)
+    fig_a, stats_a = figure.build(h100)
+    fig_b, stats_b = figure.build(consumer)
+    figure.plt.close(fig_a)
+    figure.plt.close(fig_b)
+    assert stats_a["gpu_per_call_spread"] < 1.05, "the H100 should be flat across the sweep"
+    assert stats_b["gpu_per_call_spread"] > 2.0, "the consumer card should leave the floor"
