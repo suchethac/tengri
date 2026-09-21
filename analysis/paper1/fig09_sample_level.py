@@ -36,6 +36,8 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+from collections import Counter
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
@@ -277,6 +279,29 @@ def _draw_offsets(ax, cells: list[Cell], attr: str, ylabel: str, show_xlabel: bo
             linewidths=0.9 if cell.low_ess else (0.0 if cell.adopted else 0.7),
             zorder=4 if cell.low_ess else 3,
         )
+    # An offset is measured against that galaxy's OWN median, so a galaxy with
+    # one cell contributes exactly zero -- the value minus itself. Until a
+    # second configuration lands, every marker sits on the zero line by
+    # construction and the panel shows twenty galaxies in perfect agreement
+    # across configurations it does not have. The completeness stamp says the
+    # grid is partial; it does not say this panel cannot mean anything yet, and
+    # a reader looking at a flat row of points inside a tolerance band will not
+    # infer it.
+    per_galaxy = Counter(cell.gal_id for cell in cells)
+    if per_galaxy and max(per_galaxy.values()) < 2:
+        ax.text(
+            0.5,
+            0.5,
+            "one configuration per galaxy:\nevery offset is zero by construction",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=6.5,
+            color="0.35",
+            bbox={"facecolor": "white", "alpha": 0.82, "edgecolor": "none", "pad": 1.6},
+            zorder=6,
+        )
+
     ax.set_ylabel(ylabel, fontsize=7.5)
     ax.tick_params(labelsize=7)
     ax.set_xlim(-0.8, len(order) - 0.2)
