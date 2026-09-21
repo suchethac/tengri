@@ -1,0 +1,69 @@
+arm,precision,metric,n,value_us,compile_ms,aa_ratio,flops
+CPU Intel Xeon Platinum 8462Y+,f64,forward_1gal,1,267.771,750.96,1.057,651885
+CPU Intel Xeon Platinum 8462Y+,f64,gradient_1gal,1,517.509,1297.24,1.099,1770186
+CPU Intel Xeon Platinum 8462Y+,f64,map_fit_warm,300,133800.0,8091.100000000001,,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_forward,1,301.767,1209.07,1.069,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_gradient,1,645.759,,1.009,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_forward,8,74.6009,679.3,1.099,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_gradient,8,222.5935,,1.056,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_forward,32,45.5306,576.34,1.007,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_gradient,32,147.1084,,1.051,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_forward,128,34.9424,568.2,1.055,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_gradient,128,170.49,,1.077,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_forward,512,42.8904,715.21,1.081,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_gradient,512,165.0528,,1.032,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_forward,2048,42.3925,655.21,1.083,
+CPU Intel Xeon Platinum 8462Y+,f64,batch_gradient,2048,171.8388,,1.072,
+CPU Intel Xeon Platinum 8462Y+,f64,throughput,1000,45.9615,1007.13,,21757.3
+CPU Intel Xeon Platinum 8462Y+,f64,throughput,1000000,45.7066,1007.13,,21878.7
+CPU Intel Xeon Platinum 8462Y+,f32,forward_1gal,1,237.341,889.39,1.011,673980
+CPU Intel Xeon Platinum 8462Y+,f32,gradient_1gal,1,433.049,1553.41,1.03,2178199
+CPU Intel Xeon Platinum 8462Y+,f32,map_fit_warm,300,118000.0,6418.400000000001,,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_forward,1,194.945,850.27,1.065,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_gradient,1,459.363,,1.026,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_forward,8,65.0355,929.16,1.024,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_gradient,8,134.194,,1.038,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_forward,32,28.4656,529.3,1.012,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_gradient,32,68.862,,1.06,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_forward,128,17.6886,553.25,1.02,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_gradient,128,45.1487,,1.029,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_forward,512,15.5401,622.58,1.01,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_gradient,512,70.946,,1.032,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_forward,2048,22.0713,670.98,1.113,
+CPU Intel Xeon Platinum 8462Y+,f32,batch_gradient,2048,72.1404,,1.026,
+CPU Intel Xeon Platinum 8462Y+,f32,throughput,1000,18.336,968.6,,54537.4
+CPU Intel Xeon Platinum 8462Y+,f32,throughput,1000000,20.8801,968.6,,47892.6
+NVIDIA H100 80GB HBM3,f64,forward_1gal,1,15322.151,1618.13,1.012,622179
+NVIDIA H100 80GB HBM3,f64,gradient_1gal,1,14915.435,2703.15,1.003,1163912
+NVIDIA H100 80GB HBM3,f64,map_fit_warm,300,1002799.9999999999,31028.7,,
+NVIDIA H100 80GB HBM3,f64,batch_forward,1,13656.545,2334.07,1.001,
+NVIDIA H100 80GB HBM3,f64,batch_gradient,1,13683.451,,1.001,
+NVIDIA H100 80GB HBM3,f64,batch_forward,8,1703.575,1596.17,1.001,
+NVIDIA H100 80GB HBM3,f64,batch_gradient,8,1710.3716,,1.004,
+NVIDIA H100 80GB HBM3,f64,batch_forward,32,424.4459,1360.35,1.002,
+NVIDIA H100 80GB HBM3,f64,batch_gradient,32,428.8308,,1.003,
+NVIDIA H100 80GB HBM3,f64,batch_forward,128,106.4777,1575.38,1.002,
+NVIDIA H100 80GB HBM3,f64,batch_gradient,128,107.6939,,1.002,
+NVIDIA H100 80GB HBM3,f64,batch_forward,512,26.7371,1711.6,1.001,
+NVIDIA H100 80GB HBM3,f64,batch_gradient,512,27.4942,,1.002,
+NVIDIA H100 80GB HBM3,f64,batch_forward,2048,6.8257,1547.84,1.002,
+NVIDIA H100 80GB HBM3,f64,batch_gradient,2048,7.4416,,1.004,
+NVIDIA H100 80GB HBM3,f64,throughput,1000,14.76,2114.12,,67750.5
+NVIDIA H100 80GB HBM3,f64,throughput,1000000,14.7224,2114.12,,67923.7
+NVIDIA H100 80GB HBM3,f32,forward_1gal,1,15401.026,1380.51,1.004,600960
+NVIDIA H100 80GB HBM3,f32,gradient_1gal,1,15581.847,2350.96,1.011,1378466
+NVIDIA H100 80GB HBM3,f32,map_fit_warm,300,842600.0,15153.4,,
+NVIDIA H100 80GB HBM3,f32,batch_forward,1,13518.367,1720.07,1.0,
+NVIDIA H100 80GB HBM3,f32,batch_gradient,1,13539.44,,1.003,
+NVIDIA H100 80GB HBM3,f32,batch_forward,8,1689.5875,1563.71,1.004,
+NVIDIA H100 80GB HBM3,f32,batch_gradient,8,1696.8592,,1.002,
+NVIDIA H100 80GB HBM3,f32,batch_forward,32,422.4809,1165.72,1.001,
+NVIDIA H100 80GB HBM3,f32,batch_gradient,32,425.5193,,1.002,
+NVIDIA H100 80GB HBM3,f32,batch_forward,128,105.6553,1232.07,1.006,
+NVIDIA H100 80GB HBM3,f32,batch_gradient,128,106.9723,,1.006,
+NVIDIA H100 80GB HBM3,f32,batch_forward,512,26.4546,1432.47,1.001,
+NVIDIA H100 80GB HBM3,f32,batch_gradient,512,26.724,,1.001,
+NVIDIA H100 80GB HBM3,f32,batch_forward,2048,6.6675,1249.44,1.001,
+NVIDIA H100 80GB HBM3,f32,batch_gradient,2048,6.8635,,1.002,
+NVIDIA H100 80GB HBM3,f32,throughput,1000,15.5859,3348.94,,64160.4
+NVIDIA H100 80GB HBM3,f32,throughput,1000000,15.2138,3348.94,,65729.7

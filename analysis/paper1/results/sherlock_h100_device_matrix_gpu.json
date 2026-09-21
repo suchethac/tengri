@@ -1,0 +1,700 @@
+{
+  "meta": {
+    "tag": "gpu_h100_sxm5",
+    "host": "sh04-01n01.int",
+    "when": "2026-09-20T05:36:19",
+    "slurm_job": "44335875",
+    "gpu": "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01, 9.0",
+    "cpu": "Intel(R) Xeon(R) Platinum 8462Y+"
+  },
+  "rows": [
+    {
+      "shape": "A",
+      "device": "gpu",
+      "precision": "f32",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 2.887,
+      "ssp_dtype": "float32",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": false,
+        "default_dtype": "float32",
+        "precision": "f32",
+        "vram_used_mib": 694,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "steady_us": 15401.026,
+      "steady_us_all": [
+        15459.727,
+        15401.026,
+        15411.195
+      ],
+      "aa_ratio": 1.004,
+      "compile_ms": 1380.51,
+      "out_dtype": "float32",
+      "flops": 600960,
+      "env_after": {
+        "x64": false,
+        "vram_used_mib": 694,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 98
+      }
+    },
+    {
+      "shape": "B",
+      "device": "gpu",
+      "precision": "f32",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 2.777,
+      "ssp_dtype": "float32",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": false,
+        "default_dtype": "float32",
+        "precision": "f32",
+        "vram_used_mib": 694,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "steady_us": 15581.847,
+      "steady_us_all": [
+        15629.984,
+        15581.847,
+        15750.167
+      ],
+      "aa_ratio": 1.011,
+      "compile_ms": 2350.96,
+      "out_dtype": "float32",
+      "flops": 1378466,
+      "env_after": {
+        "x64": false,
+        "vram_used_mib": 696,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 14
+      }
+    },
+    {
+      "shape": "C",
+      "device": "gpu",
+      "precision": "f32",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 3.505,
+      "ssp_dtype": "float32",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": false,
+        "default_dtype": "float32",
+        "precision": "f32",
+        "vram_used_mib": 694,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "sweep": [
+        {
+          "n": 1,
+          "out_dtype": "float32",
+          "forward_compile_ms": 1720.07,
+          "forward_us": 13518.367,
+          "forward_us_per_gal": 13518.367,
+          "forward_aa": 1.0,
+          "grad_us": 13539.44,
+          "grad_us_per_gal": 13539.44,
+          "grad_aa": 1.003,
+          "vram": 698
+        },
+        {
+          "n": 8,
+          "out_dtype": "float32",
+          "forward_compile_ms": 1563.71,
+          "forward_us": 13516.7,
+          "forward_us_per_gal": 1689.5875,
+          "forward_aa": 1.004,
+          "grad_us": 13574.874,
+          "grad_us_per_gal": 1696.8592,
+          "grad_aa": 1.002,
+          "vram": 764
+        },
+        {
+          "n": 32,
+          "out_dtype": "float32",
+          "forward_compile_ms": 1165.72,
+          "forward_us": 13519.39,
+          "forward_us_per_gal": 422.4809,
+          "forward_aa": 1.001,
+          "grad_us": 13616.619,
+          "grad_us_per_gal": 425.5193,
+          "grad_aa": 1.002,
+          "vram": 764
+        },
+        {
+          "n": 128,
+          "out_dtype": "float32",
+          "forward_compile_ms": 1232.07,
+          "forward_us": 13523.873,
+          "forward_us_per_gal": 105.6553,
+          "forward_aa": 1.006,
+          "grad_us": 13692.454,
+          "grad_us_per_gal": 106.9723,
+          "grad_aa": 1.006,
+          "vram": 764
+        },
+        {
+          "n": 512,
+          "out_dtype": "float32",
+          "forward_compile_ms": 1432.47,
+          "forward_us": 13544.747,
+          "forward_us_per_gal": 26.4546,
+          "forward_aa": 1.001,
+          "grad_us": 13682.678,
+          "grad_us_per_gal": 26.724,
+          "grad_aa": 1.001,
+          "vram": 766
+        },
+        {
+          "n": 2048,
+          "out_dtype": "float32",
+          "forward_compile_ms": 1249.44,
+          "forward_us": 13655.107,
+          "forward_us_per_gal": 6.6675,
+          "forward_aa": 1.001,
+          "grad_us": 14056.391,
+          "grad_us_per_gal": 6.8635,
+          "grad_aa": 1.002,
+          "vram": 1022
+        }
+      ],
+      "env_after": {
+        "x64": false,
+        "vram_used_mib": 1022,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 99
+      }
+    },
+    {
+      "shape": "D",
+      "device": "gpu",
+      "precision": "f32",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 2.834,
+      "ssp_dtype": "float32",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": false,
+        "default_dtype": "float32",
+        "precision": "f32",
+        "vram_used_mib": 694,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "resolved_approx": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "cold_s": 15.1534,
+      "warm_s": 0.8426,
+      "warm_s_all": [
+        1.383,
+        0.8426,
+        1.2495
+      ],
+      "n_steps": 300,
+      "params_finite": true,
+      "params_moved": {
+        "dust_tau_bc": -0.005008,
+        "met_logzsol": -0.150406,
+        "sfh_tsnorm_log_total_mass": 0.067226,
+        "sfh_tsnorm_peak_lbt_gyr": 0.923247,
+        "sfh_tsnorm_skew": -0.025707,
+        "sfh_tsnorm_trunc": 0.032092,
+        "sfh_tsnorm_width_gyr": -0.083572
+      },
+      "any_movement": true,
+      "map_params": {
+        "dust_tau_bc": 0.4949922263622284,
+        "met_logzsol": -1.050405502319336,
+        "sfh_tsnorm_peak_lbt_gyr": 7.173247337341309,
+        "sfh_tsnorm_skew": -0.0257071852684021,
+        "sfh_tsnorm_trunc": 5.532092094421387,
+        "sfh_tsnorm_width_gyr": 2.516427755355835,
+        "dust_Rv": 3.0999999046325684,
+        "dust_bump_strength": 0.0,
+        "dust_delta": 0.0,
+        "dust_f_obscuration": 0.0,
+        "dust_slope": -0.699999988079071,
+        "dust_tau_diff": 0.30000001192092896,
+        "met_alpha_fe": 0.0,
+        "met_logzsol_scatter": 0.10000000149011612,
+        "noise_dof": 0.0,
+        "noise_frac_cal": 0.0,
+        "redshift": 0.05000000074505806,
+        "sfh_tsnorm_log_total_mass": 9.81722640991211,
+        "sigma_v_kms": 0.0
+      },
+      "truth": {
+        "dust_tau_bc": 0.5,
+        "met_logzsol": -0.9,
+        "sfh_tsnorm_log_total_mass": 9.75,
+        "sfh_tsnorm_peak_lbt_gyr": 6.25,
+        "sfh_tsnorm_skew": 0.0,
+        "sfh_tsnorm_trunc": 5.5,
+        "sfh_tsnorm_width_gyr": 2.6
+      },
+      "env_after": {
+        "x64": false,
+        "vram_used_mib": 748,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 93
+      }
+    },
+    {
+      "shape": "G",
+      "device": "gpu",
+      "precision": "f32",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 2.58,
+      "ssp_dtype": "float32",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": false,
+        "default_dtype": "float32",
+        "precision": "f32",
+        "vram_used_mib": 694,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "dump": "/scratch/users/cooray/tengri_bench/arrays/G_gpu_f32_wave_precomp.npz",
+      "photometry_finite": true,
+      "grad_finite": true,
+      "photometry_sum": 1.0553886698508849e-26,
+      "env_after": {
+        "x64": false,
+        "vram_used_mib": 696,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      }
+    },
+    {
+      "shape": "I",
+      "device": "gpu",
+      "precision": "f32",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 2.825,
+      "ssp_dtype": "float32",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": false,
+        "default_dtype": "float32",
+        "precision": "f32",
+        "vram_used_mib": 694,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "sweep": [
+        {
+          "n_total": 1000,
+          "chunk_size": 1000,
+          "n_chunks": 1,
+          "compile_ms": 3348.94,
+          "wall_s": 0.0156,
+          "gal_per_s": 64160.4,
+          "us_per_gal": 15.5859,
+          "vram": 758
+        },
+        {
+          "n_total": 1000000,
+          "chunk_size": 1000,
+          "n_chunks": 1000,
+          "compile_ms": 3348.94,
+          "wall_s": 15.2138,
+          "gal_per_s": 65729.7,
+          "us_per_gal": 15.2138,
+          "vram": 758
+        }
+      ],
+      "env_after": {
+        "x64": false,
+        "vram_used_mib": 758,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 99
+      }
+    },
+    {
+      "shape": "A",
+      "device": "gpu",
+      "precision": "f64",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 3.759,
+      "ssp_dtype": "float64",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": true,
+        "default_dtype": "float64",
+        "precision": "f64",
+        "vram_used_mib": 822,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "steady_us": 15322.151,
+      "steady_us_all": [
+        15508.708,
+        15331.736,
+        15322.151
+      ],
+      "aa_ratio": 1.012,
+      "compile_ms": 1618.13,
+      "out_dtype": "float64",
+      "flops": 622179,
+      "env_after": {
+        "x64": true,
+        "vram_used_mib": 822,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 99
+      }
+    },
+    {
+      "shape": "B",
+      "device": "gpu",
+      "precision": "f64",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 3.008,
+      "ssp_dtype": "float64",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": true,
+        "default_dtype": "float64",
+        "precision": "f64",
+        "vram_used_mib": 822,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "steady_us": 14915.435,
+      "steady_us_all": [
+        14959.483,
+        14927.49,
+        14915.435
+      ],
+      "aa_ratio": 1.003,
+      "compile_ms": 2703.15,
+      "out_dtype": "float64",
+      "flops": 1163912,
+      "env_after": {
+        "x64": true,
+        "vram_used_mib": 824,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 57
+      }
+    },
+    {
+      "shape": "C",
+      "device": "gpu",
+      "precision": "f64",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 4.023,
+      "ssp_dtype": "float64",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": true,
+        "default_dtype": "float64",
+        "precision": "f64",
+        "vram_used_mib": 822,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "sweep": [
+        {
+          "n": 1,
+          "out_dtype": "float64",
+          "forward_compile_ms": 2334.07,
+          "forward_us": 13656.545,
+          "forward_us_per_gal": 13656.545,
+          "forward_aa": 1.001,
+          "grad_us": 13683.451,
+          "grad_us_per_gal": 13683.451,
+          "grad_aa": 1.001,
+          "vram": 826
+        },
+        {
+          "n": 8,
+          "out_dtype": "float64",
+          "forward_compile_ms": 1596.17,
+          "forward_us": 13628.6,
+          "forward_us_per_gal": 1703.575,
+          "forward_aa": 1.001,
+          "grad_us": 13682.973,
+          "grad_us_per_gal": 1710.3716,
+          "grad_aa": 1.004,
+          "vram": 892
+        },
+        {
+          "n": 32,
+          "out_dtype": "float64",
+          "forward_compile_ms": 1360.35,
+          "forward_us": 13582.268,
+          "forward_us_per_gal": 424.4459,
+          "forward_aa": 1.002,
+          "grad_us": 13722.584,
+          "grad_us_per_gal": 428.8308,
+          "grad_aa": 1.003,
+          "vram": 892
+        },
+        {
+          "n": 128,
+          "out_dtype": "float64",
+          "forward_compile_ms": 1575.38,
+          "forward_us": 13629.149,
+          "forward_us_per_gal": 106.4777,
+          "forward_aa": 1.002,
+          "grad_us": 13784.824,
+          "grad_us_per_gal": 107.6939,
+          "grad_aa": 1.002,
+          "vram": 894
+        },
+        {
+          "n": 512,
+          "out_dtype": "float64",
+          "forward_compile_ms": 1711.6,
+          "forward_us": 13689.413,
+          "forward_us_per_gal": 26.7371,
+          "forward_aa": 1.001,
+          "grad_us": 14077.041,
+          "grad_us_per_gal": 27.4942,
+          "grad_aa": 1.002,
+          "vram": 1150
+        },
+        {
+          "n": 2048,
+          "out_dtype": "float64",
+          "forward_compile_ms": 1547.84,
+          "forward_us": 13978.976,
+          "forward_us_per_gal": 6.8257,
+          "forward_aa": 1.002,
+          "grad_us": 15240.473,
+          "grad_us_per_gal": 7.4416,
+          "grad_aa": 1.004,
+          "vram": 1662
+        }
+      ],
+      "env_after": {
+        "x64": true,
+        "vram_used_mib": 1662,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 78
+      }
+    },
+    {
+      "shape": "D",
+      "device": "gpu",
+      "precision": "f64",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 3.107,
+      "ssp_dtype": "float64",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": true,
+        "default_dtype": "float64",
+        "precision": "f64",
+        "vram_used_mib": 822,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "resolved_approx": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "cold_s": 31.0287,
+      "warm_s": 1.0028,
+      "warm_s_all": [
+        1.032,
+        1.0028,
+        1.0381
+      ],
+      "n_steps": 300,
+      "params_finite": true,
+      "params_moved": {
+        "dust_tau_bc": 0.003399,
+        "met_logzsol": -0.255052,
+        "sfh_tsnorm_log_total_mass": -0.021654,
+        "sfh_tsnorm_peak_lbt_gyr": -1.677331,
+        "sfh_tsnorm_skew": -0.19926,
+        "sfh_tsnorm_trunc": -0.103676,
+        "sfh_tsnorm_width_gyr": -0.781332
+      },
+      "any_movement": true,
+      "map_params": {
+        "dust_tau_bc": 0.5033985554895597,
+        "met_logzsol": -1.1550519932307253,
+        "sfh_tsnorm_peak_lbt_gyr": 4.572669258308082,
+        "sfh_tsnorm_skew": -0.19926037120740003,
+        "sfh_tsnorm_trunc": 5.39632387358836,
+        "sfh_tsnorm_width_gyr": 1.8186675032540771,
+        "dust_Rv": 3.1,
+        "dust_bump_strength": 0.0,
+        "dust_delta": 0.0,
+        "dust_f_obscuration": 0.0,
+        "dust_slope": -0.7,
+        "dust_tau_diff": 0.3,
+        "met_alpha_fe": 0.0,
+        "met_logzsol_scatter": 0.1,
+        "noise_dof": 0.0,
+        "noise_frac_cal": 0.0,
+        "redshift": 0.05,
+        "sfh_tsnorm_log_total_mass": 9.72834635299344,
+        "sigma_v_kms": 0.0
+      },
+      "truth": {
+        "dust_tau_bc": 0.5,
+        "met_logzsol": -0.9,
+        "sfh_tsnorm_log_total_mass": 9.75,
+        "sfh_tsnorm_peak_lbt_gyr": 6.25,
+        "sfh_tsnorm_skew": 0.0,
+        "sfh_tsnorm_trunc": 5.5,
+        "sfh_tsnorm_width_gyr": 2.6
+      },
+      "env_after": {
+        "x64": true,
+        "vram_used_mib": 928,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 95
+      }
+    },
+    {
+      "shape": "G",
+      "device": "gpu",
+      "precision": "f64",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 3.007,
+      "ssp_dtype": "float64",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": true,
+        "default_dtype": "float64",
+        "precision": "f64",
+        "vram_used_mib": 822,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "dump": "/scratch/users/cooray/tengri_bench/arrays/G_gpu_f64_wave_precomp.npz",
+      "photometry_finite": true,
+      "grad_finite": true,
+      "photometry_sum": 1.055384707961337e-26,
+      "env_after": {
+        "x64": true,
+        "vram_used_mib": 824,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      }
+    },
+    {
+      "shape": "I",
+      "device": "gpu",
+      "precision": "f64",
+      "approx": "wave_precomp",
+      "obs": "photometry",
+      "n_wave": null,
+      "build_s": 2.254,
+      "ssp_dtype": "float64",
+      "n_free": 7,
+      "env": {
+        "platform": "gpu",
+        "device": "cuda:0",
+        "n_devices": 1,
+        "jax": "0.7.0",
+        "x64": true,
+        "default_dtype": "float64",
+        "precision": "f64",
+        "vram_used_mib": 822,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 0
+      },
+      "sweep": [
+        {
+          "n_total": 1000,
+          "chunk_size": 1000,
+          "n_chunks": 1,
+          "compile_ms": 2114.12,
+          "wall_s": 0.0148,
+          "gal_per_s": 67750.5,
+          "us_per_gal": 14.76,
+          "vram": 888
+        },
+        {
+          "n_total": 1000000,
+          "chunk_size": 1000,
+          "n_chunks": 1000,
+          "compile_ms": 2114.12,
+          "wall_s": 14.7224,
+          "gal_per_s": 67923.7,
+          "us_per_gal": 14.7224,
+          "vram": 888
+        }
+      ],
+      "env_after": {
+        "x64": true,
+        "vram_used_mib": 888,
+        "vram_total_mib": 81559,
+        "gpu_util_pct": 100
+      }
+    }
+  ]
+}

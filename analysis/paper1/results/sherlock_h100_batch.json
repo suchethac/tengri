@@ -1,0 +1,303 @@
+{
+  "provenance": {
+    "measured_utc": "2026-09-20T05:31Z",
+    "slurm_job": "44335875",
+    "cluster": "Sherlock (Stanford SRC)",
+    "node": "sh04-01n01.int",
+    "partition": "gpu",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "gpu_uuid": "GPU-1e5e0726-a3b7-ab23-aba6-5382183e69ab",
+    "gpu_memory_mib": 81559,
+    "gpu_compute_capability": "9.0",
+    "nvidia_driver": "550.163.01",
+    "cpu": "Intel(R) Xeon(R) Platinum 8462Y+",
+    "cpu_cores_allocated": 8,
+    "mem_gb": 64,
+    "commit": "0e2bae3d4c91403c9891473a3ab7a0f9dd6d36af",
+    "branch_measured": "paper1/mock-joint-d44",
+    "tree_clean": true,
+    "jax": "0.7.0",
+    "jaxlib": "0.7.0",
+    "cuda": "12.8.0 (module)",
+    "cudnn": "9.14.0.64 (module)",
+    "python": "3.12.1",
+    "script": "bench/scripts/benchmark_device_matrix.py",
+    "note": "CPU arm measured on the SAME node and allocation as the GPU arm via JAX_PLATFORMS=cpu, as the benchmark brief requires: a crossover against a different machine's CPU is not a crossover."
+  },
+  "config": {
+    "approx": "wave_precomp",
+    "obs": "photometry",
+    "batches": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "reps": 3,
+    "runs": 20,
+    "n_free": 7,
+    "defaults": "unmodified from benchmark_device_matrix.py"
+  },
+  "caveats": [
+    "Per-CALL wall time on the H100 is constant to within 3.4% (f64) and 1.0% (f32) across batch 1..2048, so the entire GPU sweep is launch-latency bound. The per-galaxy curve is therefore exactly 1/n and has NOT flattened at batch 2048.",
+    "Do not quote an asymptotic H100 per-galaxy cost from this file. 6.83 us/gal (f64) at batch 2048 is a lower bound that is still falling.",
+    "f64 ~ f32 on the H100 (ratio 1.02) is a LATENCY result, not an FP64-throughput result. The same ratio on the Xeon is 1.92."
+  ],
+  "forward": {
+    "batch": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      301.767,
+      74.6009,
+      45.5306,
+      34.9424,
+      42.8904,
+      42.3925
+    ],
+    "cpu_f32": [
+      194.945,
+      65.0355,
+      28.4656,
+      17.6886,
+      15.5401,
+      22.0713
+    ],
+    "gpu_f64": [
+      13656.545,
+      1703.575,
+      424.4459,
+      106.4777,
+      26.7371,
+      6.8257
+    ],
+    "gpu_f32": [
+      13518.367,
+      1689.5875,
+      422.4809,
+      105.6553,
+      26.4546,
+      6.6675
+    ]
+  },
+  "gradient": {
+    "batch": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      645.759,
+      222.5935,
+      147.1084,
+      170.49,
+      165.0528,
+      171.8388
+    ],
+    "cpu_f32": [
+      459.363,
+      134.194,
+      68.862,
+      45.1487,
+      70.946,
+      72.1404
+    ],
+    "gpu_f64": [
+      13683.451,
+      1710.3716,
+      428.8308,
+      107.6939,
+      27.4942,
+      7.4416
+    ],
+    "gpu_f32": [
+      13539.44,
+      1696.8592,
+      425.5193,
+      106.9723,
+      26.724,
+      6.8635
+    ]
+  },
+  "forward_ms_per_call": {
+    "batch": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      0.3018,
+      0.5968,
+      1.457,
+      4.4726,
+      21.9599,
+      86.8198
+    ],
+    "cpu_f32": [
+      0.1949,
+      0.5203,
+      0.9109,
+      2.2641,
+      7.9565,
+      45.202
+    ],
+    "gpu_f64": [
+      13.6565,
+      13.6286,
+      13.5823,
+      13.6291,
+      13.6894,
+      13.979
+    ],
+    "gpu_f32": [
+      13.5184,
+      13.5167,
+      13.5194,
+      13.5239,
+      13.5448,
+      13.655
+    ]
+  },
+  "single_galaxy_us": {
+    "forward": {
+      "cpu_f64": 267.771,
+      "cpu_f32": 237.341,
+      "gpu_f64": 15322.151,
+      "gpu_f32": 15401.026
+    },
+    "gradient": {
+      "cpu_f64": 517.509,
+      "cpu_f32": 433.049,
+      "gpu_f64": 14915.435,
+      "gpu_f32": 15581.847
+    }
+  },
+  "map_fit_s": {
+    "cpu_f64": {
+      "cold": 8.0911,
+      "warm": 0.1338,
+      "n_steps": 300
+    },
+    "cpu_f32": {
+      "cold": 6.4184,
+      "warm": 0.118,
+      "n_steps": 300
+    },
+    "gpu_f64": {
+      "cold": 31.0287,
+      "warm": 1.0028,
+      "n_steps": 300
+    },
+    "gpu_f32": {
+      "cold": 15.1534,
+      "warm": 0.8426,
+      "n_steps": 300
+    }
+  },
+  "throughput_chunked": {
+    "cpu_f64": [
+      {
+        "n_total": 1000,
+        "chunk_size": 1000,
+        "gal_per_s": 21757.3,
+        "us_per_gal": 45.9615
+      },
+      {
+        "n_total": 1000000,
+        "chunk_size": 1000,
+        "gal_per_s": 21878.7,
+        "us_per_gal": 45.7066
+      }
+    ],
+    "cpu_f32": [
+      {
+        "n_total": 1000,
+        "chunk_size": 1000,
+        "gal_per_s": 54537.4,
+        "us_per_gal": 18.336
+      },
+      {
+        "n_total": 1000000,
+        "chunk_size": 1000,
+        "gal_per_s": 47892.6,
+        "us_per_gal": 20.8801
+      }
+    ],
+    "gpu_f64": [
+      {
+        "n_total": 1000,
+        "chunk_size": 1000,
+        "gal_per_s": 67750.5,
+        "us_per_gal": 14.76
+      },
+      {
+        "n_total": 1000000,
+        "chunk_size": 1000,
+        "gal_per_s": 67923.7,
+        "us_per_gal": 14.7224
+      }
+    ],
+    "gpu_f32": [
+      {
+        "n_total": 1000,
+        "chunk_size": 1000,
+        "gal_per_s": 64160.4,
+        "us_per_gal": 15.5859
+      },
+      {
+        "n_total": 1000000,
+        "chunk_size": 1000,
+        "gal_per_s": 65729.7,
+        "us_per_gal": 15.2138
+      }
+    ]
+  },
+  "aa_control": {
+    "note": "min/max of repeated identical measurements; ratios below this are not resolvable",
+    "cpu_f64": [
+      1.069,
+      1.099,
+      1.007,
+      1.055,
+      1.081,
+      1.083
+    ],
+    "cpu_f32": [
+      1.065,
+      1.024,
+      1.012,
+      1.02,
+      1.01,
+      1.113
+    ],
+    "gpu_f64": [
+      1.001,
+      1.001,
+      1.002,
+      1.002,
+      1.001,
+      1.002
+    ],
+    "gpu_f32": [
+      1.0,
+      1.004,
+      1.001,
+      1.006,
+      1.001,
+      1.001
+    ]
+  }
+}

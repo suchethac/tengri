@@ -1,0 +1,16 @@
+# Pins that keep every wheel installable on Sherlock's CentOS 7 (glibc 2.17).
+#
+# Sherlock compute nodes are glibc 2.17, so pip can only use `manylinux2014` /
+# `manylinux_2_17` wheels. Anything newer is tagged `manylinux_2_27`/`_2_28`,
+# which pip skips -- and for a package that also publishes an sdist it then
+# silently falls back to building from source. That is not a slow success: the
+# CentOS 7 binutils cannot assemble the `endbr64` (CET) instructions in numpy's
+# AVX-512 SVML kernels, so the build dies after ~470 objects.
+#
+# Newest version of each with a cp312 manylinux2014 wheel, verified against the
+# PyPI JSON API:
+numpy<2.3            # 2.2.6 is the last manylinux2014 build; 2.5.x is _2_28-only
+jax==0.7.0           # 0.7.0 is the last manylinux2014 jaxlib/plugin/pjrt set
+jaxlib==0.7.0        # (>= the 0.4.20 floor in pyproject.toml)
+jax-cuda12-plugin==0.7.0
+jax-cuda12-pjrt==0.7.0
