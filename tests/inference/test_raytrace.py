@@ -231,10 +231,7 @@ def fitter_setup(ssp_data_wne, sdss_filters):
         # used to substitute the spec default silently. Say it out loud (#1021).
         "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
         "met_logzsol": -0.3,
-        "dust_tau_bc": 0.3,
         "dust_tau_diff": 0.2,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
     }
     mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
     fitter = Fitter(model, mock.flux_obs, mock.noise)

@@ -116,7 +116,7 @@ def _catalog_from_truths(model, truths, key, noise_frac=0.02):
 _DISTINCT_MASSES = (9.0, 10.0, 11.0)
 
 _DISTINCT_TRUTHS = [
-    {"sfh_dpl_log_total_mass": jnp.array(m), "sfh_dpl_alpha": jnp.array(2.0)}
+    {"sfh_dpl_log_total_mass": jnp.array(m)}
     for m in _DISTINCT_MASSES
 ]
 

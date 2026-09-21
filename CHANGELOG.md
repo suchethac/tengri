@@ -6,6 +6,17 @@
 
 ### Fixed
 
+- Gallery examples, slow-tier integration tests, and inference test fixtures
+  have been updated to comply with PR #2474's enforcement that prediction entry
+  points refuse params dicts containing Fixed keys (#2474): all sites that
+  previously passed Fixed parameters like `dust_tau_diff`, `dust_slope`,
+  `redshift`, or `dust_beta_ir` to `predict()` / `predict_photometry()` now
+  either pin those values in the model spec via `SEDModel.build()` (removing
+  them from params) or declare them as FREE if they need to vary at call time.
+  Parameters.sample() returns only free parameters, not Fixed ones, so the
+  refusal prevents accidental re-specification of pinned values (all 8 gallery
+  examples, 1 fast-tier test, and 8 slow-tier inference fixtures were affected).
+
 - Unknown-name errors recognize citation keys and name the registry entry they
   cite (#2429): when a user provides a citation key (e.g., `charlot_fall2000`)
   instead of a registry name (e.g., `power_law`), the error message now
