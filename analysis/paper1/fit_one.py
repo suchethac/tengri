@@ -37,6 +37,7 @@ import jax
 import numpy as np
 
 from tengri import Data, ForwardModel, Observation, Photometry
+from tengri.inference.mass_profile import REINSERT_LOCK_ENV
 
 from .candels_io import load_candels_z1, photometry_for_row
 from .configs import (
@@ -900,6 +901,13 @@ def run_fit(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Serialize the profile-mass reinsertion across the cells of this grid:
+    # it is the one step whose transient memory (10 GB measured on a III
+    # cell) dwarfs the 3-4 GB a sampling cell holds, and the shared box's
+    # watchdog kills whichever cell is spiking when N of them stack. One lock
+    # per results directory; a caller that set the variable keeps its own.
+    if profile_mass:
+        os.environ.setdefault(REINSERT_LOCK_ENV, str(out_dir / ".reinsert.lock"))
     # The JSON path is needed before the loop: a failed attempt is persisted
     # before the retune starts (#2089). ``save_fit_outputs`` derives the same
     # two paths from ``out_dir`` for the final write.

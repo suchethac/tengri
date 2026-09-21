@@ -98,6 +98,7 @@ import contextlib
 import copy
 import logging
 import math
+import os
 import re
 import warnings
 from typing import TYPE_CHECKING, Any
@@ -1372,6 +1373,36 @@ def _reinsert_mass_fn(fitter: Fitter):
     return fn
 
 
+#: Environment variable naming a lock file. When set, the reinsertion's
+#: execution is serialized across processes with an advisory ``flock`` on that
+#: file. The reinsertion is the one step of a profiled fit whose transient
+#: memory is many times the sampler's resident footprint (measured 10 GB
+#: on a paper-1 III cell against a 3-4 GB baseline), so N concurrent fits on
+#: one box that all finish near each other stack N such transients; a shared
+#: 40 GB watchdog killed a cell exactly there. Unset (the default) nothing
+#: is locked and nothing changes.
+REINSERT_LOCK_ENV = "TENGRI_REINSERT_LOCK"
+
+
+@contextlib.contextmanager
+def _reinsertion_lock():
+    """Hold the cross-process reinsertion lock named by ``REINSERT_LOCK_ENV``, if set."""
+    path = os.environ.get(REINSERT_LOCK_ENV)
+    if not path:
+        yield
+        return
+    import fcntl
+
+    with open(path, "a") as fh:
+        logger.info("profile_mass reinsertion: waiting for lock %s", path)
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        logger.info("profile_mass reinsertion: lock acquired")
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Posterior:
     """Record the resolved ``profile_mass`` choice, and reinsert the mass if engaged.
 
@@ -1422,7 +1453,14 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
         n_draws = next(iter(samples_no_mass.values())).shape[0]
         mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
         draw_keys = jax.random.split(mass_key, n_draws)
-        ell_samples = _reinsert_mass_fn(fitter)(samples_no_mass, draw_keys, data, noise, presence)
+        with _reinsertion_lock():
+            ell_samples = _reinsert_mass_fn(fitter)(
+                samples_no_mass, draw_keys, data, noise, presence
+            )
+            # Execute inside the lock: dispatch is asynchronous, and without
+            # this the work (and its memory) would run whenever the caller
+            # first reads the draws, outside the critical section.
+            ell_samples = jax.block_until_ready(ell_samples)
 
         posterior.samples = {**posterior.samples, mass_name: ell_samples}
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}

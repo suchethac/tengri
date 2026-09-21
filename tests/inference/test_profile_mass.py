@@ -736,6 +736,27 @@ def test_reinsertion_scratch_is_bounded_by_chunk_size(ssp_data_fsps, monkeypatch
     )
 
 
+def test_reinsertion_lock_is_opt_in_and_exclusive(tmp_path, monkeypatch):
+    """Unset, the lock is a no-op; set, it is an exclusive flock on that file."""
+    import fcntl
+
+    from tengri.inference import mass_profile
+
+    monkeypatch.delenv(mass_profile.REINSERT_LOCK_ENV, raising=False)
+    with mass_profile._reinsertion_lock():
+        pass  # nothing to acquire, nothing raised
+
+    lock = tmp_path / "reinsert.lock"
+    monkeypatch.setenv(mass_profile.REINSERT_LOCK_ENV, str(lock))
+    with mass_profile._reinsertion_lock():
+        assert lock.exists()
+        with open(lock, "a") as other, pytest.raises(BlockingIOError):
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with open(lock, "a") as other:  # released on exit
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(other, fcntl.LOCK_UN)
+
+
 def test_reinsertion_chunk_size_never_exceeds_ceiling(ssp_data_fsps):
     """The derived chunk size is capped at ``_REINSERT_CHUNK_MAX`` draws.
 
