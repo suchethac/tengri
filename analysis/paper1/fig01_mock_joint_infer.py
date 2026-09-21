@@ -259,11 +259,43 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
     ax_res.set_ylabel(r"$\chi$")
 
 
-def plot_sfh(ax, model, params):
-    """Star formation history on the model's own SFH grid."""
+#: SFH draws behind the recovery band. Each costs a full ``predict_state``,
+#: so this is a wall-clock choice; 60 is ample for a 16-84 interval.
+SFH_BAND_DRAWS = 60
+
+
+def _sfr_history(model, params):
+    """One SFH curve, as lookback time in Gyr and SFR in Msun/yr."""
     derived = model.predict_state(params).derived
-    lbt_gyr = np.asarray(derived["sfh_grid_lbt_yr"]) / 1e9
-    sfr = np.asarray(derived["sfr_history"])
+    return np.asarray(derived["sfh_grid_lbt_yr"]) / 1e9, np.asarray(derived["sfr_history"])
+
+
+def plot_sfh(ax, model, params, posterior=None, free_names=None, n_draws=SFH_BAND_DRAWS):
+    """Star formation history on the model's own SFH grid, truth and recovery.
+
+    The panel used to draw the truth alone, in a figure whose caption promises
+    the recovery. The star formation history is where seven of the thirty-six
+    free parameters live -- a total mass and six continuity ratios -- so
+    omitting its posterior left the most structured part of the model
+    unillustrated, and left a reader to read a curve labeled "Truth" in a
+    recovery figure as though it were the fit.
+    """
+    lbt_gyr, sfr = _sfr_history(model, params)
+
+    if posterior is not None and free_names:
+        index = np.linspace(0, len(posterior[free_names[0]]) - 1, n_draws).round().astype(int)
+        curves = []
+        for i in index:
+            draw = {name: float(posterior[name][i]) for name in free_names}
+            _, drawn = _sfr_history(model, draw)
+            curves.append(drawn)
+        band = np.asarray(curves)
+        lo, mid, hi = np.percentile(band, [16, 50, 84], axis=0)
+        ax.fill_between(
+            lbt_gyr, lo, hi, color="#d62728", alpha=0.25, lw=0, label="Posterior 16-84"
+        )
+        ax.plot(lbt_gyr, mid, "-", color="#d62728", lw=1.2, label="Posterior median")
+
     ax.plot(lbt_gyr, sfr, "-", color="#1f77b4", lw=1.6, label="Truth")
     ax.set_xscale("log")
     ax.set_xlabel("Lookback time  [Gyr]")
@@ -275,7 +307,10 @@ def plot_sfh(ax, model, params):
 def plot_marginals(ax, posterior, truth_values, free_names):
     """Posterior marginals for the parameters the section makes claims about."""
     wanted = [
-        ("sfh_cont_log_total_mass", r"$\log M_\star$"),
+        # The SFH's time-integral, not the surviving mass a reader takes
+        # $\log M_\star$ to mean. They differ by 0.1948 dex on this mock's
+        # truth, which is larger than the offsets this panel plots.
+        ("sfh_cont_log_total_mass", r"$\log M_{\rm formed}$"),
         ("agn_log_lbol", r"$\log L_{\rm bol}$"),
         ("xray_log_nh", r"$\log N_{\rm H}$"),
         ("dust_tau_diff", r"$\tau_{\rm diff}$"),
@@ -373,7 +408,7 @@ def main() -> int:
     ax_mar = fig.add_subplot(gs[2, 1])
 
     plot_sed(ax_sed, ax_res, model, truth, params, obs)
-    plot_sfh(ax_sfh, model, params)
+    plot_sfh(ax_sfh, model, params, posterior if have_post else None, free_names)
     if have_post:
         plot_marginals(ax_mar, posterior, truth_values, free_names)
     else:
