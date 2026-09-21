@@ -1074,8 +1074,28 @@ def skirtor_disc_dust_ratio(
         jnp.trapezoid(disc_n, wave_grid), representable_denominator(1e-30)
     )
     disk_analytic = shape_n * int_disk0
-    # CIGALE nan_to_num: zero the disc where the face-on disc vanishes.
-    incl_n = jnp.where(disk_0_n > 0, disk_i_n / jnp.where(disk_0_n > 0, disk_0_n, 1.0), 0.0)
+    # CIGALE nan_to_num: continue the inclination ratio smoothly where the
+    # face-on disc vanishes. The SKIRTOR disk template is truncated (zeros out
+    # at 1e7 A = node 131/136), but the inclination ratio disk(i)/disk(0)
+    # should continue smoothly, not drop to zero (#1512). Compute the last
+    # finite ratio at the template edge and use it as the fill value beyond
+    # the template boundary. The inclination ratio is wavelength-independent
+    # inside the template (SKIRTOR scales one disc shape by an
+    # inclination-dependent factor), so this edge value carries smoothly beyond.
+    # Carry the last finite ratio outward: find the last wavelength node where
+    # the face-on disc is non-zero and use that ratio as the boundary fill.
+    # If the grid structure ever changes, this automatically adapts.
+    finite_mask = disk_0_n > 0
+    idx_array = jnp.arange(disk_0_n.shape[0])
+    last_finite_idx = jnp.max(jnp.where(finite_mask, idx_array, -1))
+    last_finite_ratio = jnp.where(
+        disk_0_n[last_finite_idx] > 0,
+        disk_i_n[last_finite_idx] / disk_0_n[last_finite_idx],
+        1.0,  # Fallback if all template nodes are zero (should not happen)
+    )
+    incl_n = jnp.where(
+        finite_mask, disk_i_n / jnp.where(finite_mask, disk_0_n, 1.0), last_finite_ratio
+    )
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
     int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
@@ -1129,7 +1149,17 @@ def skirtor_disc_dust_ratio(
         )
     R_faceon = int_disk0 * incl_norm_ratio / int_dust
     # ``incl_ratio`` on the *user* grid for the disc-shape reweighting.
-    incl_ratio = resample_template(wave, wave_grid, incl_n, left=0.0, right=0.0)
+    # Carry the last finite ratio outward so the inclination ratio
+    # (disk(i)/disk(0)) continues smoothly beyond the template boundary rather
+    # than collapsing to zero. The template extends to 1e8 A with an exact node
+    # at 1e7 A (node 131/136), but the composable disc path resamples this onto
+    # the model's panchromatic grid. Boundary zero-fill zeroed the disc component
+    # at exactly the 1e7 A node and caused sed_agn_disc to collapse catastrophically
+    # while sed_agn_torus remained smooth (#1512). The inclination ratio is
+    # wavelength-independent inside the template (SKIRTOR scales one disc shape
+    # by an inclination-dependent factor), so the last_finite_ratio carries
+    # smoothly beyond the boundary.
+    incl_ratio = resample_template(wave, wave_grid, incl_n, left=0.0, right=last_finite_ratio)
     # ``incl_ratio`` = disk(i)/disk(0) is the wavelength-dependent SKIRTOR
     # inclination attenuation of the disc continuum (CIGALE
     # ``SKIRTOR.disk(i)/AGN1.disk(0)``); the caller applies it to the disc

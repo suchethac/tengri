@@ -159,6 +159,23 @@
   gated on `packaging.version` comparison. The orphan-atime repair stays
   load-bearing on JAX < 0.11.2 and remains useful for recovery on all versions.
 
+- Composable AGN torus no longer collapses at the 1 mm node (#1512): the
+  composable disc+skirtor path with cigale_joint normalization computes an
+  inclination-attenuation ratio `disk(i)/disk(0)` by resampling the SKIRTOR
+  template grid (136 nodes, last at 1e8 Å) onto the model grid. The SKIRTOR
+  disk template is zeroed beyond node 130 (8.71e6 Å); when resampling reached
+  the boundary, `right=0.0` fill zeroed the inclination ratio, causing the
+  reweighted disc (`L_lambda_disc * incl_n`) to collapse to zero despite the
+  smooth torus. The ratio `sed_agn[1e7]/sed_agn[prev]` fell from 1.009 (smooth)
+  to 3e-6 (catastrophic) for powerlaw disc, and showed a 60% step for qsogen
+  disc. Fixed by computing the last finite inclination ratio at the template
+  edge (0.793341 for cos_inc=0.866, wavelength-independent inside template)
+  and carrying it smoothly beyond the boundary at both the fill value (line 1043
+  `incl_n`) and the resampling `right=` parameter (line 1104). Affected
+  configurations: any composable disc under cigale_joint with fracAGN set.
+  Verified on powerlaw (measured: 1.0093 ratio, <0.5% error) and qsogen
+  (measured: 1.0017 ratio, <1.0% error).
+
 - `Spectroscopy` now validates `wave_obs` at construction time, refusing grids
   that are non-finite (NaN/inf), non-positive, or non-increasing, with
   descending grids raising a hint to reverse them alongside the flux and error
