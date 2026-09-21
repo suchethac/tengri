@@ -114,12 +114,25 @@ WITHHELD = {
         "there is no posterior on disk, so this shows the mock alone and recovers nothing"
     ),
 }
+PAPER_FIGURE = "fig01_mock_joint_infer.pdf"
 written = sorted(p.name for p in OUT.glob("fig01_mock_joint_infer*.pdf"))
 if not written:
     print("no figure was written; see the renderer's output above")
 for name in written:
-    if name == "fig01_mock_joint_infer.pdf":
+    if name == PAPER_FIGURE:
         print(f"ok   {name} -- the posterior cleared the gate")
     else:
         why = WITHHELD.get(name, "the renderer withheld the paper's filename")
         print(f"NOT FOR THE PAPER  {name}\n     {why}.")
+
+# A stand-in is not this family's figure. Exiting 0 here reported success to
+# regenerate.py -- whose 0 means "every family produced its figures" -- for a
+# run that wrote a banner-stamped substitute and left the paper's filename
+# unwritten. That is the substitution the gate exists to refuse, arriving one
+# step later: in the exit code instead of in the filename.
+if PAPER_FIGURE not in written:
+    print(
+        "\nThe paper's figure was not produced: it needs a posterior that clears\n"
+        "the gate above. Reported as skipped rather than as success."
+    )
+    raise SystemExit(SKIPPED)
