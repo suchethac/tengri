@@ -29,7 +29,7 @@ while not (HERE / "paper1_figures").is_dir() and HERE.parent != HERE:
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "paper1_figures"))
 
-from _run import repo_root, run_figure
+from _run import SKIPPED, repo_root, run_figure
 
 REPO = repo_root(HERE)
 sys.path.insert(0, str(REPO))
@@ -55,7 +55,7 @@ if n_cells == 0:
         "carries the scripts, not the cells. Fetch them, or point --results-dir\n"
         "at a directory that has them, and re-run. Skipping the grid figures."
     )
-    raise SystemExit(0)
+    raise SystemExit(SKIPPED)
 
 # %% [markdown]
 # ## The sample in one frame

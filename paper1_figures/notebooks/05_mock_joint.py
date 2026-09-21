@@ -36,7 +36,7 @@ while not (HERE / "paper1_figures").is_dir() and HERE.parent != HERE:
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "paper1_figures"))
 
-from _run import repo_root, run_figure
+from _run import SKIPPED, repo_root, run_figure
 
 REPO = repo_root(HERE)
 sys.path.insert(0, str(REPO))
@@ -53,7 +53,7 @@ if not TRUTH.is_file():
         "on purpose -- it runs where the stellar library is. Generate it, or\n"
         "fetch the committed copy, and re-run."
     )
-    raise SystemExit(0)
+    raise SystemExit(SKIPPED)
 
 # %% [markdown]
 # ## What the gate asks
@@ -76,8 +76,22 @@ print(f"split R-hat <= {GATE_RHAT_MAX}")
 print(f"ESS         >= {GATE_ESS_MIN:.0f}")
 
 # %%
-status = run_figure("fig01_mock_joint_infer", ["--out-dir", str(OUT)])
-print(f"fig01_mock_joint_infer: {status}")
+# The renderer rebuilds the model to recompute derived quantities, so it needs
+# the mock's stellar library. That is a missing input, not a broken figure --
+# the same situation the grid notebook skips on, and it should read the same
+# way rather than as a traceback.
+try:
+    status = run_figure("fig01_mock_joint_infer", ["--out-dir", str(OUT)])
+    print(f"fig01_mock_joint_infer: {status}")
+except FileNotFoundError as exc:
+    print(f"{exc}\n")
+    print(
+        "Skipping: this figure rebuilds its model and so needs the stellar\n"
+        "library above. Every grid the paper uses is a known download --\n"
+        "  python -c \"import tengri; tengri.download_ssp('<name>')\"\n"
+        "-- or set TENGRI_DATA_DIR to a directory that already holds it."
+    )
+    raise SystemExit(SKIPPED) from None
 
 # %% [markdown]
 # ## Which filename landed

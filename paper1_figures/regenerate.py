@@ -12,6 +12,10 @@ ordinary Python script, so this runs them directly and needs neither jupyter
 nor nbconvert. A notebook that cannot be run headless is not reproducible, so
 running them is the test.
 
+Exit status: 0 when every family produced its figures, ``3`` when some family
+could not run for want of inputs (it names them), and 1 when one failed. Only
+0 means the whole set was rebuilt -- a skip is not a success.
+
 Figures land in ``paper1_figures/figures/`` and are NOT committed: ``fig*.pdf``
 is excluded by .gitignore and ``tools/check_tracked_not_ignored.py`` enforces
 it. The committed artifact is the notebook plus the data it reads.
@@ -23,6 +27,9 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _run import SKIPPED
 
 HERE = Path(__file__).resolve().parent
 NOTEBOOKS = HERE / "notebooks"
@@ -46,30 +53,38 @@ def main(argv: list[str] | None = None) -> int:
     FIGURES.mkdir(parents=True, exist_ok=True)
     before = {p.name for p in FIGURES.glob("*.pdf")}
     failures: list[tuple[str, str]] = []
+    skipped: list[str] = []
     for path in chosen:
         print(f"--- {path.name}")
         done = subprocess.run(
             [sys.executable, str(path)], cwd=HERE.parent, capture_output=True, text=True
         )
-        if done.returncode != 0:
+        print(done.stdout.rstrip())
+        if done.returncode == SKIPPED:
+            # Not a success. A family that could not run for want of inputs
+            # produced no figure, and reporting that as zero is how this
+            # command came to promise more than it delivered.
+            skipped.append(path.name)
+        elif done.returncode != 0:
             failures.append(
                 (path.name, done.stderr.strip().splitlines()[-1] if done.stderr else "?")
             )
-            print(done.stdout)
             print(done.stderr, file=sys.stderr)
-        else:
-            print(done.stdout.rstrip())
 
     after = {p.name for p in FIGURES.glob("*.pdf")}
     print(f"\nfigures written: {len(after)} ({len(after - before)} new this run)")
     for name in sorted(after):
         print(f"  {name}")
+    if skipped:
+        print(f"\n{len(skipped)} family(ies) skipped for want of inputs:")
+        for name in skipped:
+            print(f"  {name}")
     if failures:
         print(f"\n{len(failures)} notebook(s) failed:", file=sys.stderr)
         for name, why in failures:
             print(f"  {name}: {why}", file=sys.stderr)
         return 1
-    return 0
+    return SKIPPED if skipped else 0
 
 
 if __name__ == "__main__":

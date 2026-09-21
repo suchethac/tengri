@@ -419,9 +419,27 @@ def main():
         if npz_path.exists():
             npz = np.load(npz_path, allow_pickle=False)
             tau_draws[backend] = np.asarray(npz["dust_tau_diff"])
-    # MAP: single point estimate
-    map_npz = np.load(args.sweep_dir / "map.npz", allow_pickle=False)
-    tau_draws["map"] = float(map_npz["dust_tau_diff"][0])
+    # MAP: single point estimate. Guarded like the four above it -- this load
+    # was unconditional, so a sweep directory with no per-draw NPZs logged
+    # "Skipping <backend>: NPZ not found" five times and then died on the
+    # sixth read of the same absence. build_figure already treats "map" as
+    # optional, so there is nothing here that needs it to exist.
+    map_npz_path = args.sweep_dir / "map.npz"
+    if map_npz_path.exists():
+        map_npz = np.load(map_npz_path, allow_pickle=False)
+        tau_draws["map"] = float(map_npz["dust_tau_diff"][0])
+
+    # The per-draw arrays are what makes this a comparison of posteriors
+    # rather than a row of summary numbers. With none of them the figure still
+    # draws, and draws something that looks finished, so refuse instead and
+    # name what is absent.
+    if not tau_draws:
+        raise SystemExit(
+            f"fig07 found no per-draw NPZ files in {args.sweep_dir}. This figure "
+            "shows each backend's marginal, which lives in the .npz beside each "
+            ".json summary; with none of them there is no comparison to draw. "
+            "Point --sweep-dir at a directory holding them."
+        )
 
     # Build figure
     fig = build_figure(results, pending, derived, tau_draws, out_dir=args.out_dir)

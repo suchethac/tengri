@@ -255,6 +255,19 @@ _galrun/
 !data/skirtor_templates_v2.h5
 !data/themis_templates.h5
 
+# Paper I figure inputs. `paper1_figures/regenerate.py` is the paper's
+# acceptance test and its README promises that every figure it prints can be
+# rebuilt by someone who has only this repository. The blanket *.npz above
+# quietly made that false: the backend sweep's .json summaries were tracked
+# while the per-draw arrays beside them were not, so the figures regenerated
+# for anyone whose working tree still held the untracked originals and for
+# nobody else. Found by running the acceptance test against a fresh tarball,
+# which is the only way this class of gap shows up. 1.9 MB for the sweep,
+# 52 KB for the mock; these are inputs, not generated output -- the figures
+# themselves stay ignored.
+!analysis/paper1/results/backend_sweep_pin/*.npz
+!analysis/paper1/results/mock_joint_truth.npz
+
 # Vendored test fixtures. Small, deterministic, and committed on purpose; the
 # blanket *.npz / *.h5 rules above are aimed at generated arrays, not at these.
 !tests/fixtures/**

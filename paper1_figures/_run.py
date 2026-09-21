@@ -20,6 +20,12 @@ import inspect
 import sys
 from pathlib import Path
 
+#: Exit status a notebook uses when it cannot run for want of inputs, as
+#: distinct from succeeding (0) or failing (anything else). A skip that exits 0
+#: is indistinguishable from a figure that was produced, which is exactly the
+#: reading that made this folder's README claim more than it delivered.
+SKIPPED = 3
+
 
 def repo_root(start: Path | None = None) -> Path:
     """Walk up until the directory holding ``analysis/paper1`` is found."""
