@@ -24,9 +24,12 @@ Two frame facts this figure depends on, both measured rather than assumed
    all 1500 pixels.
 
 Without a posterior on disk the figure is still produced, from truth alone, but
-under a DIFFERENT filename and with a banner. An incomplete paper figure that
-carries the final name is one ``\\includegraphics`` away from being published as
-the real thing.
+under a DIFFERENT filename; a posterior that misses the convergence bar gets a
+third name. The filename is the whole mechanism -- there is no banner drawn on
+the canvas, because a developmental note does not belong on a published figure
+and a stamp only asks the reader to notice. An incomplete paper figure that
+carries the final name is one ``\\includegraphics`` away from being published
+as the real thing, and the manuscript reads nothing but the name.
 """
 
 from __future__ import annotations
@@ -48,7 +51,7 @@ from matplotlib.gridspec import GridSpec
 
 import tengri
 
-from ._posterior_gate import posterior_gate
+from ._posterior_gate import figure_name, posterior_gate
 from ._posterior_utils import posterior_output_paths
 from .fig_mock_joint_infer import TRUTH_NPZ
 from .verify_mock_listing import (
@@ -387,12 +390,7 @@ def main() -> int:
         ax_mar.set_axis_off()
 
     fig_dir.mkdir(parents=True, exist_ok=True)
-    if not have_post:
-        name = "fig01_mock_joint_infer_truthonly.pdf"
-    elif not gate_passed:
-        name = "fig01_mock_joint_infer_provisional.pdf"
-    else:
-        name = "fig01_mock_joint_infer.pdf"
+    name = figure_name(have_post, gate_passed)
     out = fig_dir / name
     fig.savefig(out, bbox_inches="tight")
     print(f"wrote {out}")

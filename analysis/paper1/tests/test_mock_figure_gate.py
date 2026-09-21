@@ -29,6 +29,8 @@ from _posterior_gate import (
     GATE_ESS_MIN,
     GATE_MAX_DIVERGENCES,
     GATE_RHAT_MAX,
+    PUBLISHED_NAME,
+    figure_name,
     posterior_gate,
 )
 
@@ -115,3 +117,56 @@ def test_an_unreadable_sidecar_fails(tmp_path):
     passed, reasons, _ = posterior_gate(npz)
     assert not passed
     assert any("cannot be read" in r for r in reasons)
+
+
+# ---------------------------------------------------------------------------
+# Which filename a render has earned.
+#
+# The manuscript reads nothing about a figure except its name: there is no
+# banner on the canvas, deliberately, because a developmental note does not
+# belong on a published page. So the name carries the entire distinction
+# between truth-only, not-yet-converged, and publishable, and a render that
+# takes the published name while failing the gate is indistinguishable from
+# the real thing at every point downstream.
+
+
+def test_a_cleared_posterior_earns_the_published_name():
+    assert figure_name(have_posterior=True, gate_passed=True) == PUBLISHED_NAME
+
+
+def test_a_failed_gate_does_not_earn_the_published_name():
+    """The defect this guards. A real inference, not yet publishable."""
+    name = figure_name(have_posterior=True, gate_passed=False)
+    assert name != PUBLISHED_NAME
+    assert "provisional" in name
+
+
+def test_no_posterior_earns_neither_the_published_nor_the_provisional_name():
+    """Truth only is a third state, not a flavor of provisional.
+
+    Collapsing it into "provisional" would say an inference was run and missed
+    the bar, when none was run at all.
+    """
+    name = figure_name(have_posterior=False, gate_passed=False)
+    assert name != PUBLISHED_NAME
+    assert "truthonly" in name
+    assert "provisional" not in name
+
+
+def test_the_three_states_are_three_distinct_names():
+    names = {
+        figure_name(True, True),
+        figure_name(True, False),
+        figure_name(False, False),
+    }
+    assert len(names) == 3, f"two states share a filename: {sorted(names)}"
+
+
+def test_a_gate_pass_without_a_posterior_cannot_publish():
+    """Incoherent input must not resolve to the published name.
+
+    ``gate_passed`` defaults to False beside ``have_posterior``, so this pairing
+    should not arise -- but if a refactor ever lets it, failing open here would
+    publish a truth-only render under the paper's filename.
+    """
+    assert figure_name(have_posterior=False, gate_passed=True) != PUBLISHED_NAME

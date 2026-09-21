@@ -71,3 +71,26 @@ def posterior_gate(npz_path: Path) -> tuple[bool, list[str], dict]:
         reasons.append(f"{int(divergences)} divergences > {GATE_MAX_DIVERGENCES}")
 
     return not reasons, reasons, diagnostics
+
+
+#: The name the paper's \includegraphics points at. Only a posterior that
+#: clears the gate may carry it.
+PUBLISHED_NAME = "fig01_mock_joint_infer.pdf"
+
+
+def figure_name(have_posterior: bool, gate_passed: bool) -> str:
+    """Which filename this render has earned.
+
+    Three states, and the distinction between the last two is the point. With
+    no posterior the figure is truth only; with one that misses the bar it is a
+    real inference that is not yet publishable; with one that clears it, it is
+    the paper's figure. An incomplete figure carrying the final name is one
+    ``\\includegraphics`` away from being published as the real thing, and
+    nothing downstream would notice, because the name is the only thing the
+    manuscript reads.
+    """
+    if not have_posterior:
+        return "fig01_mock_joint_infer_truthonly.pdf"
+    if not gate_passed:
+        return "fig01_mock_joint_infer_provisional.pdf"
+    return PUBLISHED_NAME
