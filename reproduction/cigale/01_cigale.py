@@ -1743,7 +1743,7 @@ _peaks = []
 _ratios_l, _ratios_r = [], []
 
 # LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
-m_frac = _knob_model("dale2014_cigale", alpha_dale=Fixed(2.0))
+m_frac = _knob_model("dale2014_cigale", alpha_dale=Fixed(2.0), frac_agn=Uniform(0.0, 0.99, default=0.3))
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 print("§6 knobs — Dale 2014 fracAGN sweep (tengri / CIGALE, median in band):")
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
@@ -1773,7 +1773,7 @@ ax_l.legend(fontsize=8, frameon=False, ncol=2)
 ax_l.tick_params(labelbottom=False)
 
 # RIGHT — THEMIS slope alpha, matched qhac=0.17, umin=1.0, gamma=0.1.
-m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1), dust_qhac=Fixed(0.17))
+m_alpha = _knob_model("themis", gamma_dl=Fixed(0.1), qhac=Fixed(0.17), alpha=Uniform(1.0, 3.0, default=2.0))
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
 print("§6 knobs — THEMIS α sweep (tengri / CIGALE, median in band):")
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
