@@ -61,7 +61,11 @@ model_config = {{
     "agn": {{
         "type": "composable",
         "all_params": Fixed(DEFAULT),
-        "disc": {{"type": "kubota_done", "all_params": Fixed(DEFAULT), "log_mbh": Uniform(4.0, 10.0)}},
+        "disc": {{
+            "type": "kubota_done",
+            "all_params": Fixed(DEFAULT),
+            "log_mbh": Uniform(4.0, 10.0),
+        }},
         "torus": {{"type": "skirtor", "all_params": Fixed(DEFAULT)}},
         "norm": "cigale_joint",
         "log_lbol": Fixed(11.0),

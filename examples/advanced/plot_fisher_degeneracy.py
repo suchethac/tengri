@@ -92,23 +92,27 @@ for fname, filters in FILTER_SETS.items():
         mdl = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            sfh={
+                "type": "tsnorm",
+                "log_total_mass": 10.5,
+                "peak_lbt_gyr": 4.0,
+                "width_gyr": 2.0,
+                "skew": 0.0,
+                "trunc": 5.0,
+            },
             met={"logzsol": tengri.FREE},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_bc": tengri.FREE,
                 "tau_diff": tengri.FREE,
-                "slope": tengri.FREE,
+                "slope": -0.7,
             },
             redshift=tengri.Fixed(0.1),
         )
-        phot = jnp.abs(
-            mdl.predict_photometry(
-                {k: v for k, v in true_params.items() if k in mdl.spec.free_params}
-            )
-        )
+        # Build the free-parameters dict from the truth values
+        free_truth = {name: true_params[name] for name in fisher_params}
+        phot = jnp.abs(mdl.predict_photometry(free_truth))
         noise = phot / 20.0
 
         # Compute Fisher Information Matrix using JAX jacobian.
@@ -123,13 +127,12 @@ for fname, filters in FILTER_SETS.items():
             param_values.append(true_params[pname])
         param_array = jnp.array(param_values)
 
-        def forward_free_params(free_array):
-            """Forward model taking only free parameters; reconstruct full params dict."""
-            params_dict = true_params.copy()
+        def forward_free_params(free_array, _free_truth=free_truth):
+            """Forward model taking only free parameters; reconstruct free-only params dict."""
+            params_dict = _free_truth.copy()
             for i, pname in enumerate(fisher_params):
                 params_dict[pname] = free_array[i]
-            # Pass only free parameters to predict
-            return predict_fn({k: v for k, v in params_dict.items() if k in mdl.spec.free_params})
+            return predict_fn(params_dict)
 
         # Compute Jacobian of predictions w.r.t. free parameters.
         jac = jax.jacobian(forward_free_params)(param_array)  # shape: (n_bands, n_params)
