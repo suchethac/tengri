@@ -21,11 +21,6 @@
 AGN parameters are free-able now — and every one moves the SED
 ==============================================================
 
-.. image:: images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :alt: plot agn free param sensitivity
-   :class: sphx-glr-single-img
-
-
 Until recently the ``agn_*`` parameters were declared with *fixed* defaults and
 no prior range, so the build grammar's ``FREE`` controls
 (``agn={'all_params': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
@@ -144,7 +139,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
         "log_lbol": 12.0,
         "lum_ratio": 1.0,
         "disc": {"type": "multicolor", "log_mbh": tengri.FREE},
-        "torus": {"type": "nenkova", "tau": tengri.FREE},
+        "torus": {"type": "nenkova", "tau": tengri.FREE, "theta_torus": tengri.FREE},
         "nlr": {"type": "analytic"},
         "blr": {"type": "none"},
     }
@@ -187,28 +182,12 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
     plt.savefig("plot_agn_free_param_sensitivity.png", dpi=150, bbox_inches="tight")
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
+   :alt: Each freed AGN parameter visibly reshapes the SED (no silent no-ops), $\log_{10}(M_{\rm BH}/M_\odot)$, Torus viewing angle $\theta$ [deg], Nenkova torus $\tau_{9.7}$
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
+   :class: sphx-glr-single-img
 
-    Traceback (most recent call last):
-      File "/tengri/examples/agn/plot_agn_free_param_sensitivity.py", line 106, in <module>
-        out = model.predict({**base, param: float(v)})
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/tengri/src/tengri/forward/sed_model.py", line 5505, in predict
-        return Prediction(self, params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/tengri/src/tengri/forward/prediction.py", line 1977, in __init__
-        self._params = resolve_fixed_params(model, params)
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/tengri/src/tengri/parameters/resolve.py", line 264, in resolve_fixed_params
-        return merge_fixed_params(spec, params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/tengri/src/tengri/parameters/resolve.py", line 190, in merge_fixed_params
-        refuse_fixed_overrides(spec, params)
-      File "/tengri/src/tengri/parameters/resolve.py", line 131, in refuse_fixed_overrides
-        raise ParameterError(
-    tengri.config.exceptions.ParameterError: params overrides Fixed parameter(s): 'agn_theta_torus' (pinned 30.0). Call-time overrides of a Fixed parameter are not supported (#2296); rebuild the model with this parameter FREE, or with a different Fixed value, instead.
 
 
 
@@ -216,7 +195,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.367 seconds)
+   **Total running time of the script:** (0 minutes 5.091 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

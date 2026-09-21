@@ -84,7 +84,7 @@ agn_fixed = {
     "log_lbol": 12.0,
     "lum_ratio": 1.0,
     "disc": {"type": "multicolor", "log_mbh": tengri.FREE},
-    "torus": {"type": "nenkova", "tau": tengri.FREE},
+    "torus": {"type": "nenkova", "tau": tengri.FREE, "theta_torus": tengri.FREE},
     "nlr": {"type": "analytic"},
     "blr": {"type": "none"},
 }

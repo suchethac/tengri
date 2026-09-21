@@ -104,7 +104,7 @@ flux_mean = np.asarray(
         fwd_mean,
         t_gyr=t_gyr,
         sfr=sfr,
-        params={**params, "met_logzsol": mean_logzsol},
+        params={"met_logzsol": mean_logzsol},
     ).predict()
 )
 

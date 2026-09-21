@@ -104,7 +104,11 @@ for fname, filters in FILTER_SETS.items():
             },
             redshift=tengri.Fixed(0.1),
         )
-        phot = jnp.abs(mdl.predict_photometry({k: v for k, v in true_params.items() if k in mdl.spec.free_params}))
+        phot = jnp.abs(
+            mdl.predict_photometry(
+                {k: v for k, v in true_params.items() if k in mdl.spec.free_params}
+            )
+        )
         noise = phot / 20.0
 
         # Compute Fisher Information Matrix using JAX jacobian.
