@@ -165,3 +165,57 @@ def test_the_figure_actually_hands_the_panel_its_posterior():
         f"main() draws the SFH panel without handing it the posterior, so the "
         f"panel can only show the truth: {call[0].strip()}"
     )
+
+
+# ---------------------------------------------------------------------------
+# The residual panel showed 16 of ~1516 data points.
+#
+# The spectrum is ~1500 pixels and the photometry 16 bands, so a chi panel
+# carrying only the bands displays about 1% of what the joint fit was fit to,
+# and a badly fit spectrum leaves no mark on it.
+
+
+def test_the_spectrum_residual_is_the_noise_weighted_difference():
+    from paper1.fig01_mock_joint_infer import spectrum_chi
+
+    obs = np.array([1.0, 2.0, 3.0])
+    sig = np.array([0.5, 0.5, 0.5])
+    model = np.array([1.0, 1.5, 4.0])
+
+    chi = spectrum_chi(obs, sig, model)
+    assert np.allclose(chi, [0.0, 1.0, -2.0])
+
+
+def test_a_mismatched_spectrum_grid_refuses_instead_of_broadcasting():
+    """The defect a shape check exists for.
+
+    numpy would happily broadcast a length-1 noise array against 1500 pixels
+    and return a residual that plots like any other, while comparing each pixel
+    to the wrong wavelength.
+    """
+    from paper1.fig01_mock_joint_infer import spectrum_chi
+
+    with pytest.raises(SystemExit) as excinfo:
+        spectrum_chi(np.ones(1500), np.ones(1), np.ones(1500))
+    assert "not the same grid" in str(excinfo.value)
+
+
+def test_a_shorter_predicted_spectrum_refuses():
+    from paper1.fig01_mock_joint_infer import spectrum_chi
+
+    with pytest.raises(SystemExit):
+        spectrum_chi(np.ones(1500), np.ones(1500), np.ones(1200))
+
+
+def test_the_residual_panel_is_given_the_spectrum():
+    """Wiring, not capability -- the same lesson as the SFH panel above.
+
+    ``spectrum_chi`` existing proves nothing about whether plot_sed calls it.
+    """
+    source = (PAPER1 / "fig01_mock_joint_infer.py").read_text()
+    body = source[source.index("def plot_sed(") :]
+    body = body[: body.index("\ndef ", 1)]
+    assert "spectrum_chi(" in body, "plot_sed computes no spectrum residual"
+    assert "ax_res.plot(spec_w" in body, (
+        "the spectrum residual is computed but never drawn into the residual axis"
+    )

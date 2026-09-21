@@ -138,6 +138,27 @@ def load_posterior(path: Path):
         return {k: np.asarray(handle[k]) for k in handle.files}
 
 
+def spectrum_chi(spec_obs, spec_sig, spec_model):
+    """Per-pixel residual of the spectrum channel, in units of its noise.
+
+    Refuses on a shape mismatch rather than letting numpy broadcast. The
+    predicted spectrum comes off the model's spectroscopy grid and the observed
+    one off the mock file; if those ever stop being the same grid, a broadcast
+    would still produce an array, and a residual panel drawn from it would look
+    entirely normal while comparing pixels to the wrong wavelengths.
+    """
+    spec_obs = np.asarray(spec_obs)
+    spec_sig = np.asarray(spec_sig)
+    spec_model = np.asarray(spec_model)
+    if not (spec_obs.shape == spec_sig.shape == spec_model.shape):
+        raise SystemExit(
+            f"the spectrum channel does not line up: observed {spec_obs.shape}, "
+            f"noise {spec_sig.shape}, predicted {spec_model.shape}. These are "
+            "not the same grid and their residual would be meaningless."
+        )
+    return (spec_obs - spec_model) / spec_sig
+
+
 def plot_sed(ax, ax_res, model, truth, params, obs):
     """Decomposed SED, the photometry it is fit to, and the spectrum."""
     wave_obs, comps, total = observed_components(model, params, truth)
@@ -177,7 +198,8 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
     # X-ray points read as a bad fit: a broadband point is an integral over the
     # bandpass, not the SED's value at the pivot, and where the SED is steep
     # across a band the two differ a lot -- on this mock by up to a factor of 36.
-    # The residual panel below says those same bands sit within 1 sigma.
+    # The residual panel below carries both channels: these bands, and the
+    # spectrum pixels that are 99% of the data.
     model_phot_plot = np.asarray(model.predict_photometry(params))
     ax.plot(
         piv,
@@ -247,6 +269,19 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
     model_phot = np.asarray(model.predict_photometry(params))
     resid = (flux - model_phot) / sig
     ax_res.axhline(0.0, color="k", lw=0.8)
+
+    # The spectrum is ~1500 of the ~1516 data points in this joint fit, so a
+    # residual panel carrying only the 16 bands shows about 1% of the data and
+    # a badly fit spectrum leaves no mark on it. Drawn first and thin, so the
+    # band markers still read on top.
+    chi_spec = spectrum_chi(spec_o, truth["spec_sig"], model.predict(params).spectrum())
+    ax_res.plot(spec_w, chi_spec, "-", color="#e377c2", lw=0.5, alpha=0.7, zorder=1)
+    off_axis = int(np.sum(np.abs(chi_spec) > 4.2))
+    print(
+        f"spectrum residuals: {len(chi_spec)} pixels, "
+        f"rms {float(np.sqrt(np.mean(chi_spec**2))):.3f}, "
+        f"{off_axis} beyond the +-4.2 the panel shows"
+    )
     for band in (1, 2):
         ax_res.axhspan(-band, band, color="0.85" if band == 2 else "0.7", zorder=0, lw=0)
     ax_res.plot(piv[det], resid[det], "o", ms=4, color="k", mfc="white", mew=1.1)
@@ -256,7 +291,7 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
     ax_res.set_xlim(1.0, 1e8)
     ax_res.set_ylim(-4.2, 4.2)
     ax_res.set_xlabel(r"Observed wavelength  [$\mathrm{\AA}$]")
-    ax_res.set_ylabel(r"$\chi$")
+    ax_res.set_ylabel(r"$\chi$  (data $-$ truth)")
 
 
 #: SFH draws behind the recovery band. Each costs a full ``predict_state``,
