@@ -13,8 +13,22 @@ import json
 from pathlib import Path
 
 #: The convergence bar a posterior must clear before this figure may carry the
-#: paper's filename -- the same three numbers Section 7 adopts a CANDELS cell
-#: on, applied here to the mock.
+#: paper's filename.
+#:
+#: **This is not Section 7's bar, and an earlier version of this comment said
+#: it was.** Section 7 adopts a CANDELS cell on ``adoption_pass``, which is
+#: zero divergences and nothing else, for every configuration but III; a low
+#: ``ess_min`` there produces a note beside the cell rather than refusing it
+#: (``_adoption.low_ess_note``). Configuration III alone is judged on a
+#: relaxed bar -- ``rhat_max`` under 1.01, divergence rate under 0.015, and
+#: ``ess_min`` at or above ``_adoption.LOW_ESS`` = 100, the floor the owner
+#: added to the grid driver on 2026-09-21. No part of Section 7 uses 400.
+#:
+#: The mock is held to more because it is one figure rather than a hundred and
+#: twenty cells, and because it is the only place the paper claims to recover
+#: a known truth: a posterior too thin to place a quantile cannot support that
+#: claim even with no divergences. Keeping the numbers different is
+#: deliberate; describing them as the same was the error.
 #:
 #: ``GATE_ESS_MIN`` is the effective sample size below which posterior
 #: quantiles are not trustworthy (Vehtari et al. 2021, "Rank-normalization,
