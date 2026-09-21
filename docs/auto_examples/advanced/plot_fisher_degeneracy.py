@@ -93,14 +93,18 @@ for fname, filters in FILTER_SETS.items():
             ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            met={"logzsol": tengri.FREE},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
+                "tau_bc": tengri.FREE,
+                "tau_diff": tengri.FREE,
+                "slope": tengri.FREE,
             },
             redshift=tengri.Fixed(0.1),
         )
-        phot = jnp.abs(mdl.predict_photometry(true_params))
+        phot = jnp.abs(mdl.predict_photometry({k: v for k, v in true_params.items() if k in mdl.spec.free_params}))
         noise = phot / 20.0
 
         # Compute Fisher Information Matrix using JAX jacobian.

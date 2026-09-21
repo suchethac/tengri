@@ -21,6 +21,11 @@
 AGN parameters are free-able now — and every one moves the SED
 ==============================================================
 
+.. image:: images/sphx_glr_plot_agn_free_param_sensitivity_001.png
+   :alt: plot agn free param sensitivity
+   :class: sphx-glr-single-img
+
+
 Until recently the ``agn_*`` parameters were declared with *fixed* defaults and
 no prior range, so the build grammar's ``FREE`` controls
 (``agn={'all_params': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
@@ -130,7 +135,7 @@ Sweep three consumed parameters across their priors. We build the model once
 with the AGN sector held fixed at its defaults, then override one parameter at
 a time in the prediction dict — a clean, deterministic parameter sweep.
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-125
+.. GENERATED FROM PYTHON SOURCE LINES 82-128
 
 .. code-block:: Python
 
@@ -138,7 +143,10 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_lbol": 12.0,
         "lum_ratio": 1.0,
-        **BLOCKS,
+        "disc": {"type": "multicolor", "log_mbh": tengri.FREE},
+        "torus": {"type": "nenkova", "tau": tengri.FREE},
+        "nlr": {"type": "analytic"},
+        "blr": {"type": "none"},
     }
     model = tengri.SEDModel.build(
         ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0)
@@ -147,7 +155,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
     SWEEPS = [
         ("agn_log_mbh", np.linspace(6.5, 9.5, 5), r"$\log_{10}(M_{\rm BH}/M_\odot)$"),
-        ("agn_log_ledd", np.linspace(-1.8, 0.3, 5), r"$\log_{10}(L/L_{\rm Edd})$"),
+        ("agn_theta_torus", np.linspace(20.0, 80.0, 5), r"Torus viewing angle $\theta$ [deg]"),
         ("agn_tau", np.linspace(10.0, 140.0, 5), r"Nenkova torus $\tau_{9.7}$"),
     ]
 
@@ -179,12 +187,28 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
     plt.savefig("plot_agn_free_param_sensitivity.png", dpi=150, bbox_inches="tight")
 
 
+.. rst-class:: sphx-glr-script-out
 
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :alt: Each freed AGN parameter visibly reshapes the SED (no silent no-ops), $\log_{10}(M_{\rm BH}/M_\odot)$, $\log_{10}(L/L_{\rm Edd})$, Nenkova torus $\tau_{9.7}$
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :class: sphx-glr-single-img
+.. code-block:: pytb
 
+    Traceback (most recent call last):
+      File "/tengri/examples/agn/plot_agn_free_param_sensitivity.py", line 106, in <module>
+        out = model.predict({**base, param: float(v)})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/tengri/src/tengri/forward/sed_model.py", line 5505, in predict
+        return Prediction(self, params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/tengri/src/tengri/forward/prediction.py", line 1977, in __init__
+        self._params = resolve_fixed_params(model, params)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/tengri/src/tengri/parameters/resolve.py", line 264, in resolve_fixed_params
+        return merge_fixed_params(spec, params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/tengri/src/tengri/parameters/resolve.py", line 190, in merge_fixed_params
+        refuse_fixed_overrides(spec, params)
+      File "/tengri/src/tengri/parameters/resolve.py", line 131, in refuse_fixed_overrides
+        raise ParameterError(
+    tengri.config.exceptions.ParameterError: params overrides Fixed parameter(s): 'agn_theta_torus' (pinned 30.0). Call-time overrides of a Fixed parameter are not supported (#2296); rebuild the model with this parameter FREE, or with a different Fixed value, instead.
 
 
 
@@ -192,7 +216,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.771 seconds)
+   **Total running time of the script:** (0 minutes 4.367 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

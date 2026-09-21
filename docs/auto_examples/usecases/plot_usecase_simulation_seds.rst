@@ -21,6 +21,11 @@
 Predicting SEDs for a simulated population: what collapsing Z(t) costs
 ======================================================================
 
+.. image:: images/sphx_glr_plot_usecase_simulation_seds_001.png
+   :alt: plot usecase simulation seds
+   :class: sphx-glr-single-img
+
+
 Replacing metallicity history Z(t) with its mass-weighted mean introduces
 10–23% flux errors in *u* and 1–6% in *z*. The SED is a nonlinear
 mass-weighted sum of SSP templates; young metal-rich stars (dominant in UV)
@@ -28,28 +33,21 @@ and old metal-poor stars do not average.
 
 Reference: Conroy+2013.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-183
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_simulation_seds_001.png
-   :alt: plot usecase simulation seds
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_simulation_seds_001.png
-   :class: sphx-glr-single-img
+.. GENERATED FROM PYTHON SOURCE LINES 12-184
 
 
 .. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. code-block:: pytb
 
-    /tengri/examples/usecases/plot_usecase_simulation_seds.py:62: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
-      met_alpha_fe=0
-
-    To fit them, pass 'all_params': FREE:
-      met={'all_params': FREE, ...}
-    To keep them fixed and silence this warning, say so explicitly:
-      met={'all_params': Fixed(DEFAULT), ...}
-      model_zt = tengri.SEDModel.build(
+    Traceback (most recent call last):
+      File "/tengri/examples/usecases/plot_usecase_simulation_seds.py", line 103, in <module>
+        tengri.Catalog.from_histories(
+      File "/tengri/src/tengri/inference/catalog.py", line 831, in from_histories
+        refuse_fixed_overrides(fwd.spec, columns)
+      File "/tengri/src/tengri/parameters/resolve.py", line 131, in refuse_fixed_overrides
+        raise ParameterError(
+    tengri.config.exceptions.ParameterError: params overrides Fixed parameter(s): 'dust_tau_diff' (pinned 0.3). Call-time overrides of a Fixed parameter are not supported (#2296); rebuild the model with this parameter FREE, or with a different Fixed value, instead.
 
 
 
@@ -120,6 +118,7 @@ Reference: Conroy+2013.
             "type": "two_component",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.4,
+            "tau_diff": tengri.FREE,
         },
         redshift=tengri.Fixed(Z_OBS),
     )
@@ -231,11 +230,6 @@ Reference: Conroy+2013.
     )
 
     fig.savefig("plot_workflow_simulation_seds.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.882 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_simulation_seds.py:
