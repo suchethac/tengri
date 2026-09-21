@@ -319,7 +319,12 @@ def _save_sampler_results(
     diagnostics = posterior.diagnostics or {}
 
     # Build per-parameter diagnostics
-    rhat_dict = posterior.rhats() if hasattr(posterior, "rhats") else {}
+    # posterior.rhat(), singular. The previous spelling was rhats() behind a
+    # hasattr guard, and since no such method exists the guard fired every time
+    # and every mock fit silently reported no R-hat at all. Call it directly:
+    # if the method ever goes away that should raise, not quietly disarm the
+    # only between-chain diagnostic the run produces.
+    rhat_dict = posterior.rhat()
     rhat_max = max((float(v) for v in rhat_dict.values()), default=None)
 
     ess_dict = (
