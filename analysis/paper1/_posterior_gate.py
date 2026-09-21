@@ -16,8 +16,12 @@ from pathlib import Path
 #: paper's filename.
 #:
 #: **This is not Section 7's bar, and an earlier version of this comment said
-#: it was.** Section 7 adopts a CANDELS cell on ``adoption_pass``, which is
-#: zero divergences and nothing else, for every configuration but III; a low
+#: it was.** Section 7 adopts a CANDELS cell on ``adoption_pass``, which on
+#: this branch is zero divergences AND ``rhat_max`` under 1.01 -- two legs, not
+#: the one an earlier draft of this note claimed -- for every configuration but
+#: III. The grid session's driver adds a third leg, ``ess_min >= 100``
+#: (03ffff576, on ``paper1/nss-profile-mass`` only), so the flag is not the same
+#: predicate on both sides. Under this branch's two legs a low
 #: ``ess_min`` there produces a note beside the cell rather than refusing it
 #: (``_adoption.low_ess_note``). Configuration III alone is judged on a
 #: relaxed bar -- ``rhat_max`` under 1.01, divergence rate under 0.015, and

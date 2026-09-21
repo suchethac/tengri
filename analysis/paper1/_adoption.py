@@ -9,7 +9,13 @@ Configurations IV, V and VI however many cells were on disk. Two copies also
 means a correction to one leaves the other behind, which is the condition
 this module exists to remove.
 
-The bar is `adoption_pass`, the zero-divergence criterion the driver records.
+The bar is `adoption_pass`, the criterion the driver records. On this
+branch `fit_one` computes it as two legs, `n_divergent == 0 and rhat_max <
+1.01` -- not the one leg this line used to claim. The grid session runs a
+driver carrying a third, `ess_min >= fit_one.ESS_FLOOR` (100, the owner's
+ruling), added in 03ffff576 on `paper1/nss-profile-mass`; that commit is on
+neither this branch, nor `paper1/grid-20x6-locked`, nor `main`, so the flag
+means different things on either side and a cell's provenance decides which.
 Configuration III is the single exception, and it is measured rather than
 assumed: across `results/fits_superseded_oldsuite_20260920`, 0 of 17 of its
 cells clear a zero-divergence bar, against 15 of 17, 14 of 18, 16 of 18, 15 of
