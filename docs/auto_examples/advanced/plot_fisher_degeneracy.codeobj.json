@@ -626,6 +626,15 @@
    "name": "function"
   }
  ],
+ "free_truth": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
  "i": [
   {
    "is_class": false,
@@ -883,29 +892,6 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SEDModel.predict_photometry"
-  }
- ],
- "mdl.spec.free_params": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.parameters.parameters",
-   "module_short": "tengri.parameters.parameters",
-   "name": "Parameters.free_params"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri.parameters",
-   "name": "Parameters.free_params"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Parameters.free_params"
   }
  ],
  "noise": [
@@ -1331,36 +1317,6 @@
    "name": "SSPData"
   }
  ],
- "tengri.DEFAULT": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.parameters.sentinels",
-   "module_short": "tengri.parameters.sentinels",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri.parameters",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "DEFAULT"
-  }
- ],
  "tengri.FREE": [
   {
    "is_class": false,
@@ -1541,24 +1497,6 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "dict"
-  }
- ],
- "true_params.copy": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
- "true_params.items": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
   }
  ],
  "warnings.filterwarnings": [
