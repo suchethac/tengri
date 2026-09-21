@@ -56,15 +56,26 @@ CONFIG_KEYS = list(CONFIG_ORDER)
 
 
 def load_galaxy_metadata() -> dict:
-    """Load galaxy metadata from selected_galaxies.json."""
-    galaxy_file = Path(__file__).resolve().parents[2] / "results" / "selected_galaxies.json"
+    """Galaxy redshifts and type labels, from the committed selection.
+
+    ``parents[2]`` reached the repository root, where there is no ``results/``
+    -- the selection lives beside this script, under ``analysis/paper1``. The
+    path therefore never existed, the hardcoded fallback beneath it won every
+    single run, and the committed selection was decorative: the redshifts
+    printed in the panel titles came from a literal in this file, and a change
+    to the locked sample could not reach the figure. The two agreed on every
+    redshift when this was found, so nothing wrong was published; that is luck
+    rather than a mechanism, which is why the fallback is gone rather than
+    corrected. A missing selection is now a refusal.
+    """
+    galaxy_file = Path(__file__).resolve().parent / "results" / "selected_galaxies.json"
     if not galaxy_file.exists():
-        # Fallback to hardcoded metadata if file doesn't exist
-        return {
-            13097: {"z": 1.097, "class": "blue star-forming"},
-            15336: {"z": 1.036, "class": "red quiescent"},
-            16049: {"z": 1.047, "class": "intermediate dusty"},
-        }
+        raise SystemExit(
+            f"fig05 cannot read the galaxy selection at {galaxy_file}. It supplies "
+            "the redshift and type label printed on every panel, and substituting "
+            "remembered values for them is how a figure comes to disagree with the "
+            "sample it claims to draw."
+        )
     with open(galaxy_file) as f:
         data = json.load(f)
     metadata = {}
@@ -756,6 +767,17 @@ def main():
     if audit_text:
         print(audit_text, file=sys.stderr)
 
+    # Every panel of this figure is tengri output, so a directory holding no
+    # cells for these galaxies draws axes and nothing in them -- and exits 0.
+    # fig06 shipped exactly that figure before it was given this refusal.
+    present = present_on_disk(args.results_dir, GALAXY_IDS, CONFIG_ORDER)
+    if not present:
+        raise SystemExit(
+            f"fig05 found no finished cells for {GALAXY_IDS} in {args.results_dir}. "
+            "Every panel here is a tengri posterior, so there is nothing to draw. "
+            "Point --results-dir at a directory holding cells for these galaxies."
+        )
+
     results_manager = FitResultManager(args.results_dir)
     fig, data_dict = build_figure(results_manager, repo_root)
 
@@ -764,11 +786,7 @@ def main():
     # eighteen cells are here, and a directory holding a handful of them draws
     # a figure that looks like the full three-by-six panel set.
     stamp_lines: list[str] = []
-    shortfall = completeness_note(
-        present_on_disk(args.results_dir, GALAXY_IDS, CONFIG_ORDER),
-        GALAXY_IDS,
-        CONFIG_ORDER,
-    )
+    shortfall = completeness_note(present, GALAXY_IDS, CONFIG_ORDER)
     if shortfall:
         stamp_lines.append(shortfall)
         print(shortfall, file=sys.stderr)
