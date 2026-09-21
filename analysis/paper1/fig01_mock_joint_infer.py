@@ -260,11 +260,6 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
         columnspacing=1.1,
         handlelength=1.8,
     )
-    ax.set_title(
-        f"Mock Type 1 AGN + star-forming host at $z={REDSHIFT:g}$, "
-        f"{int(det.sum())}/{det.size} bands detected",
-        fontsize=9,
-    )
 
     model_phot = np.asarray(model.predict_photometry(params))
     resid = (flux - model_phot) / sig
@@ -335,7 +330,6 @@ def plot_sfh(ax, model, params, posterior=None, free_names=None, n_draws=SFH_BAN
     ax.set_xscale("log")
     ax.set_xlabel("Lookback time  [Gyr]")
     ax.set_ylabel(r"SFR  [$M_\odot$ yr$^{-1}$]")
-    ax.set_title("Star formation history", fontsize=9)
     ax.legend(fontsize=7, frameon=False)
 
 
@@ -354,17 +348,11 @@ def plot_marginals(ax, posterior, truth_values, free_names):
     ]
     present = [(k, lab) for k, lab in wanted if k in posterior]
     if not present:
-        ax.text(
-            0.5,
-            0.5,
-            "no overlapping parameters in the posterior",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-            fontsize=8,
+        raise SystemExit(
+            "none of the parameters this panel reports are in the posterior, so "
+            "there is no recovery to draw. Writing a sentence on the canvas "
+            "instead would ship the figure with an empty panel."
         )
-        ax.set_axis_off()
-        return
     offsets = []
     labels = []
     for key, label in present:
@@ -382,7 +370,6 @@ def plot_marginals(ax, posterior, truth_values, free_names):
     ax.set_yticklabels(labels, fontsize=8)
     ax.set_xlabel(r"(median $-$ truth) / posterior $\sigma$")
     ax.set_xlim(-3.2, 3.2)
-    ax.set_title("Recovery, in units of the posterior width", fontsize=9)
 
 
 def main() -> int:
@@ -447,16 +434,9 @@ def main() -> int:
     if have_post:
         plot_marginals(ax_mar, posterior, truth_values, free_names)
     else:
-        ax_mar.text(
-            0.5,
-            0.5,
-            "awaiting NUTS posterior",
-            ha="center",
-            va="center",
-            transform=ax_mar.transAxes,
-            fontsize=9,
-            color="0.4",
-        )
+        # Truth-only render: the filename already says so, and a sentence on
+        # the canvas would be a developmental note on a published page.
+        print("no posterior: the recovery panel is left empty", file=sys.stderr)
         ax_mar.set_axis_off()
 
     fig_dir.mkdir(parents=True, exist_ok=True)

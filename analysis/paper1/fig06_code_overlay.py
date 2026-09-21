@@ -664,7 +664,6 @@ def main(
         ax.set_xlim(9.5, 11.8)
         ax.set_ylim(-1.0, 3.5)
         ax.grid(True, alpha=0.3)
-        ax.set_title(f"ID {gal_id} (z={galaxies[gal_id]['z']:.3f})")
 
     # Add shared x-axis label on the bottom panel
     axes[-1].set_xlabel(r"$\log_{10}$ M$_*$ (M$_\odot$)")

@@ -244,7 +244,6 @@ def plot_figures(
     }
     param_labels = [label_map.get(p, p) for p in free_params]
     ax_a.set_yticklabels(param_labels, fontsize=10)
-    ax_a.set_title("(a) Jacobian", fontsize=10, fontweight="bold")
     ax_a.set_xlabel("Filter", fontsize=10)
     ax_a.set_ylabel("Parameter", fontsize=10)
     ax_a.tick_params(axis="both", which="major", labelsize=9)
@@ -258,7 +257,6 @@ def plot_figures(
     ax_b.set_yticks(range(n_params))
     ax_b.set_xticklabels(param_labels, rotation=45, ha="right", fontsize=10)
     ax_b.set_yticklabels(param_labels, fontsize=10)
-    ax_b.set_title("(b) Fisher correlation", fontsize=10, fontweight="bold")
     ax_b.tick_params(axis="both", which="major", labelsize=9)
     cbar_b = plt.colorbar(im_b, ax=ax_b, shrink=0.9)
     cbar_b.set_label("Correlation", fontsize=10)

@@ -567,14 +567,10 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
         # Panel (a): photometry
         ax = axes[i_row, 0]
         plot_photometry_panel(ax, results_manager, gal_id, z)
-        if i_row == 0:
-            ax.set_title("(a) Photometry", fontsize=11, fontweight="bold")
 
         # Panel (b): SFH
         ax = axes[i_row, 1]
         plot_sfh_panel(ax, results_manager, gal_id, z)
-        if i_row == 0:
-            ax.set_title("(b) SFH", fontsize=11, fontweight="bold")
 
         # Panel (c): M* vs SFR (compute per-row axis limits)
         completed_configs = results_manager.get_completed_configs_for_galaxy(gal_id)
@@ -613,8 +609,6 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
             xlim_override=xlim_c,
             ylim_override=ylim_c,
         )
-        if i_row == 0:
-            ax.set_title("(c) M$_\\ast$ vs SFR", fontsize=11, fontweight="bold")
 
         # Collect diagnostics for completed cells
         for config_key in CONFIG_KEYS:

@@ -14,6 +14,7 @@ Usage:
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -113,18 +114,10 @@ def plot_panel_a(ax, bench_data=None):
                 color="#F18F01",
             )
 
-    # Add provisional stamp if using default data
     if bench_data is None:
-        ax.text(
-            0.02,
-            0.98,
-            "timings: May 2026 run; to be re-measured",
-            transform=ax.transAxes,
-            fontsize=7,
-            ha="left",
-            va="top",
-            color="gray",
-            style="italic",
+        print(
+            "fig03 panel (a): timings are the May 2026 run and need re-measuring",
+            file=sys.stderr,
         )
 
 
@@ -134,15 +127,11 @@ def plot_panel_b(ax, accuracy_data):
     filters_list = accuracy_data.get("metadata", {}).get("filters", [])
 
     if not measurements or not filters_list:
-        ax.text(
-            0.5,
-            0.5,
-            "No accuracy data available",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
+        raise SystemExit(
+            "fig03 panel (b) has no accuracy data to draw. A blank panel under "
+            "the paper's filename is worse than no figure, and a sentence "
+            "printed on the canvas saying so is not a substitute for refusing."
         )
-        return
 
     # Extract z values and organize errors by band
     z_values = sorted([float(z) for z in measurements])
@@ -240,8 +229,6 @@ def create_figure(bench_data=None, accuracy_data=None):
     plot_panel_b(axes[1], accuracy_data)
 
     # Panel labels
-    axes[0].text(-0.13, 1.08, "(a)", transform=axes[0].transAxes, fontsize=12, fontweight="bold")
-    axes[1].text(-0.13, 1.08, "(b)", transform=axes[1].transAxes, fontsize=12, fontweight="bold")
 
     return fig
 

@@ -166,23 +166,8 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
                 "this figure will not annotate a ratio a rerun could invert"
             )
 
-    # Say that the two H100 curves coincide, as a title rather than an arrow:
-    # an annotation inside the axes lands on the legend, and a reader who sees
-    # one orange line reasonably concludes an arm failed to plot.
-    gpu_ratio = stats["gpu_f64_over_f32"]
-    if has_control and abs(gpu_ratio - 1.0) < 0.10:
-        ax_gal.set_title(
-            f"float32 and float64 coincide on this GPU "
-            f"({100 * (gpu_ratio - 1):.1f}% apart at batch {int(batch[-1])})",
-            fontsize=6.5,
-            color=STYLE["gpu_f64"][0],
-        )
-    elif not has_control:
-        ax_gal.set_title(
-            "no A/A repeat control in this campaign; no ratio annotated",
-            fontsize=6.5,
-            color="0.45",
-        )
+    # That the two H100 curves coincide is a fact for the caption, not the
+    # canvas; it is in stats["gpu_f64_over_f32"] for whoever writes it.
 
     flat = np.asarray(per_call["gpu_f64"], float)
     spread = float(flat.max() / flat.min())

@@ -174,7 +174,6 @@ def create_figure():
 
     ax1.set_xlabel("Batch size", fontsize=10)
     ax1.set_ylabel("Time per galaxy (µs)", fontsize=10)
-    ax1.set_title("(a)", fontsize=10, loc="left", fontweight="bold")
     ax1.grid(True, which="both", alpha=0.2, linestyle="-", linewidth=0.5)
     ax1.set_xticks([1, 10, 100, 1000, 2048])
     ax1.set_xticklabels(["1", "10", "100", "1k", "2k"], fontsize=8)
@@ -250,7 +249,6 @@ def create_figure():
 
     ax2.set_xlabel("Batch size", fontsize=10)
     ax2.set_ylabel("Time per galaxy (µs)", fontsize=10)
-    ax2.set_title("(b)", fontsize=10, loc="left", fontweight="bold")
     ax2.grid(True, which="both", alpha=0.2, linestyle="-", linewidth=0.5)
     ax2.set_xticks([1, 10, 100, 1000, 2048])
     ax2.set_xticklabels(["1", "10", "100", "1k", "2k"], fontsize=8)

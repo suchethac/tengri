@@ -236,19 +236,7 @@ def _draw_plane(ax, cells: list[Cell], rep_gal: int) -> None:
             alpha=0.9,
             zorder=4,
         )
-    # Held in axes coordinates rather than beside the point: at this density the
-    # marker the label describes is surrounded by others, and an offset label
-    # either covers them or leaves the panel.
-    ax.text(
-        0.03,
-        0.97,
-        f"intervals drawn: galaxy {rep_gal}",
-        transform=ax.transAxes,
-        fontsize=6.5,
-        color="0.25",
-        ha="left",
-        va="top",
-    )
+    print(f"fig09: credible intervals are drawn for galaxy {rep_gal}", file=sys.stderr)
 
     ax.set_xlabel(r"$\log_{10}(M_\star\,/\,M_\odot)$")
     ax.set_ylabel(r"$\log_{10}(\mathrm{SFR}_{100\,\mathrm{Myr}}\,/\,M_\odot\,\mathrm{yr}^{-1})$")
@@ -288,17 +276,11 @@ def _draw_offsets(ax, cells: list[Cell], attr: str, ylabel: str, show_xlabel: bo
     # infer it.
     per_galaxy = Counter(cell.gal_id for cell in cells)
     if per_galaxy and max(per_galaxy.values()) < 2:
-        ax.text(
-            0.5,
-            0.5,
-            "one configuration per galaxy:\nevery offset is zero by construction",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=6.5,
-            color="0.35",
-            bbox={"facecolor": "white", "alpha": 0.82, "edgecolor": "none", "pad": 1.6},
-            zorder=6,
+        raise SystemExit(
+            "fig09 has at most one configuration per galaxy, so every "
+            "configuration-to-configuration offset is zero by construction and "
+            "the panel shows agreement it has not measured. A note on the "
+            "canvas asked the reader to notice that; refusing does not ship it."
         )
 
     ax.set_ylabel(ylabel, fontsize=7.5)

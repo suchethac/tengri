@@ -69,22 +69,28 @@ def _build(cells):
     return collected
 
 
-def test_one_configuration_per_galaxy_is_labeled_degenerate():
-    """What row III actually produced."""
+def test_one_configuration_per_galaxy_is_refused():
+    """What row III actually produced.
+
+    This used to draw a note on the canvas saying the offsets were zero by
+    construction. A note asks the reader to notice; it still ships a panel
+    showing twenty galaxies in perfect agreement across configurations the
+    grid does not have. Developmental text does not belong on a published
+    figure, so the figure is not produced at all.
+    """
     cells = [
         _cell(gid, "III", 10.0 + i * 0.1, 0.5 + i * 0.05) for i, gid in enumerate(range(1, 9))
     ]
 
-    texts = _build(cells)
+    with pytest.raises(SystemExit) as excinfo:
+        _build(cells)
 
-    assert any(DEGENERATE_NOTE in t for t in texts), (
-        "the offset panels drew every galaxy on zero with no note saying that is "
-        f"arithmetic rather than agreement.\ntexts: {texts}"
-    )
+    message = str(excinfo.value)
+    assert "zero by construction" in message, message
 
 
-def test_the_note_goes_away_once_a_second_configuration_lands():
-    """Otherwise it is a permanent caveat on a panel that has started working."""
+def test_a_second_configuration_lets_the_figure_build():
+    """Otherwise the refusal would be a permanent block on a working panel."""
     cells = []
     for i, gid in enumerate(range(1, 9)):
         cells.append(_cell(gid, "III", 10.0 + i * 0.1, 0.5 + i * 0.05))
@@ -96,6 +102,7 @@ def test_the_note_goes_away_once_a_second_configuration_lands():
         "the degenerate-panel note survived into a figure holding two "
         f"configurations per galaxy, where the offsets are real.\ntexts: {texts}"
     )
+    assert texts is not None, "the figure must build once the offsets are real"
 
 
 def test_the_offsets_really_are_zero_with_one_configuration():
