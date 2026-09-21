@@ -18,8 +18,7 @@
   `declared_default(AGN_PARAMS, "agn_nlr_logU")`. Both values equal the former
   literals, so built models predict identically; the same parameter name denotes a
   different physical quantity in the AGN and stellar contexts, which is why each
-  site reads its own declaration. `tools/check_literal_param_defaults.py` now also
-  scans `components/nebular/`. The shock-normalization fallback is unchanged (#2297).
+  site reads its own declaration. The shock-normalization fallback is unchanged (#2297).
 - Four fail-open probes for never-assigned attributes are resolved. `SEDModel.hybrid` property (dead accessor for `_hybrid` never assigned) is removed; `SEDModel.wave_obs` property's dead `_wave_obs` cache probe is removed; `sed_model.py` dust-emission detection's legacy `dust.config.emission_model` probe (unreachable after component migration) is removed; `profiling/pipeline.py`'s dead `_compositional` probe is removed; `profiling/memory.py`'s `_weights` probe is fixed to use the correct `weights` attribute on `CueBackend` (#1240).
 - Unknown-name errors recognize citation keys and name the registry entry they
   cite (#2429): when a user provides a citation key (e.g., `charlot_fall2000`)

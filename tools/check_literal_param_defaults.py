@@ -114,7 +114,6 @@ ROOT = Path(__file__).resolve().parent.parent
 #: land and their sweeps go in.
 DEFAULT_SCOPES: tuple[Path, ...] = (
     ROOT / "src" / "tengri" / "components" / "dust",
-    ROOT / "src" / "tengri" / "components" / "nebular",
     ROOT / "src" / "tengri" / "components" / "radio",
     ROOT / "src" / "tengri" / "components" / "stellar",
     ROOT / "src" / "tengri" / "components" / "igm",
