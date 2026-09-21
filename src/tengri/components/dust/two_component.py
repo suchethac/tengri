@@ -51,6 +51,7 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_F_OBSCURATION,
 )
 from tengri.components.dust.attenuation import (
+    merge_neb_screen_live_overrides,
     resolve_bc_diff_law_params,
     two_component_dust,
 )
@@ -811,10 +812,16 @@ class DustSEDComponent(TemplateThreading):
             redshift=params.get("redshift"),
         )
         neb_law = self.config.law_neb or self.config.law_bc
+        # Live *_neb per-screen overrides layered on the static ones -- see
+        # merge_neb_screen_live_overrides for why this cannot be a naive
+        # stem.replace("dust_", "") (#2428).
+        _neb_overrides_for_line = merge_neb_screen_live_overrides(
+            params, self.config.neb_law_overrides, self.config.live_shape_params
+        )
         neb_bc_params = {
             k: jnp.asarray(v)
             for k, v in select_law_kwargs(
-                neb_law, {**bc_law_params, **dict(self.config.neb_law_overrides)}
+                neb_law, {**bc_law_params, **_neb_overrides_for_line}
             ).items()
         }
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
@@ -963,7 +970,12 @@ class DustSEDComponent(TemplateThreading):
         # ``diff_law_params``) is always shared with the stars: HII regions sit
         # in their own clouds behind the same foreground ISM.
         neb_law = self.config.law_neb or self.config.law_bc
-        _neb_overrides = dict(self.config.neb_law_overrides)
+        # Live *_neb per-screen overrides layered on the static ones -- see
+        # merge_neb_screen_live_overrides for why this cannot be a naive
+        # stem.replace("dust_", "") (#2428).
+        _neb_overrides = merge_neb_screen_live_overrides(
+            params, self.config.neb_law_overrides, self.config.live_shape_params
+        )
         # Start from the stellar birth-cloud params, then layer every nebular
         # override on top. Merging rather than iterating ``bc_law_params`` keys:
         # since #1833 that dict omits shape parameters nobody requested, and a
@@ -1452,6 +1464,46 @@ class DustSEDComponent(TemplateThreading):
                 a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, **diff_kw))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
+
+                # Lyman-continuum sub-band factor (#2439, #2427, R2):
+                # overwrites NebularSEDComponent's flat publish (SAME key,
+                # ``derived_overrides`` from a later component in the chain
+                # wins) with this component's own birth-cloud-graded rule,
+                # matching the dense ``lyc_factor`` in §2a exactly:
+                # ``1 - y(a)*(1-fesc)`` under the default
+                # ``lyc_absorb_all=False`` (only birth-cloud/young stars
+                # reprocess LyC; old/diffuse stellar LyC passes through), or
+                # the flat rule under ``lyc_absorb_all=True`` (matching §2a's
+                # ``sed_attenuated = sed_attenuated * _lyc_t`` there). Gated
+                # on the SAME ``lyc_transmission`` signal §2a reads: absent ->
+                # no nebular component -> nothing to correct, and this key is
+                # not published (a model without a live mask stays
+                # bit-for-bit identical to before this fix, R1/R3(b)).
+                if _lyc_t is not None:
+                    # NOT ``params.get("neb_fesc", ...)``: this component's own
+                    # ``params`` mapping is scoped to ``dust_*`` keys plus the
+                    # bare ``redshift`` (see this method's docstring) -- "neb_fesc"
+                    # is never in it, so that read would silently and always take
+                    # the 0.0 default regardless of the model's actual escape
+                    # fraction (caught by mutation testing: the K-sweep floor at
+                    # neb_fesc=1 failed to converge, staying pinned at the
+                    # fesc=0 answer instead of shrinking with K). ``_lyc_t`` is
+                    # already the correctly-resolved ``where(λ<912, fesc, 1)``
+                    # step (state.derived, not params-scoped) on the dense
+                    # ``wave`` grid nebular built it on; interpolating it onto
+                    # the sparse per-node ``sub_waves`` reads off the same
+                    # step exactly (off the 912 Å discontinuity itself, which
+                    # R1's forced edge keeps every node off of when the mask is
+                    # live) without re-deriving fesc at all.
+                    lyc_chunk = jnp.interp(sub_waves, wave, _lyc_t)
+                    if self.config.lyc_absorb_all:
+                        lyc_factor_sub = lyc_chunk
+                    else:
+                        y_age_sub = _young_indicator(
+                            ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+                        )
+                        lyc_factor_sub = 1.0 - y_age_sub[:, None, None] * (1.0 - lyc_chunk)
+                    derived_overrides["stellar_subband_lyc_factor_precomp"] = lyc_factor_sub
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
             # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z): a

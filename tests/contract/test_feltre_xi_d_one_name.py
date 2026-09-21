@@ -296,7 +296,7 @@ def test_the_axis_carries_a_gradient_at_every_prior_quantile(_feltre_model):
     import jax.numpy as jnp
 
     model = _feltre_model
-    base = dict(model.spec.get_fixed_values())
+    base = {}
     base["agn_nlr_xi_d"] = 0.3
     base["agn_nlr_logU"] = -3.0
 
@@ -326,7 +326,7 @@ def test_the_axis_moves_the_agn_sed_above_the_consumes_threshold(_feltre_model):
     import numpy as np
 
     model = _feltre_model
-    base = dict(model.spec.get_fixed_values())
+    base = {}
     base["agn_nlr_logU"] = -3.0
 
     def sed(xi_d):

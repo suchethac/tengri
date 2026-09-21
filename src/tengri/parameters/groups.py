@@ -121,6 +121,7 @@ from tengri.parameters._dust_keys import (
     resolve_screen_choices,
     screen_keys,
     short_to_full,
+    split_screen_suffix,
     validate_shape_requests,
 )
 
@@ -2438,6 +2439,19 @@ def _warn_silently_fixed_parameters(
         if group == "sfh" and param_name.startswith("met_") and not has_met_block:
             continue
 
+        # Per-screen dust shape names (dust_slope_bc, ...) are wildcard-INERT
+        # by design (#2428): `per_screen_inert` (`_dust_wildcard_scopes`)
+        # excludes every one of them from `all_params: FREE`'s scope
+        # unconditionally, so this warning's own remedy ("pass 'all_params':
+        # FREE'") is false for them -- naming a false remedy is worse than
+        # staying quiet about these 12, the same principle the met_* skip
+        # above already applies. A caller who wants one free must name it
+        # (``dust_attenuation={'slope_bc': FREE}``), which is not something
+        # silently defaulting at the group's wildcard-freeable population
+        # was ever going to catch anyway.
+        if param_name in _per_screen_full_names():
+            continue
+
         # Collect this parameter as silently-fixed
         value = dist.default
         default_fixed_by_group.setdefault(group, []).append((param_name, value))
@@ -2816,8 +2830,19 @@ def _dust_wildcard_scopes(
             ),
             frozenset(),
         )
+        # Per-screen shape names (dust_slope_bc, dust_delta_diff, etc.) are
+        # EXPLICIT-ONLY: they never participate in wildcard freeing. This
+        # ensures that a blanket `all_params: FREE` cannot accidentally
+        # double-parametrize a screen. The shared spellings (dust_slope,
+        # dust_delta, etc.) are already law-scoped by the logic above; the
+        # per-screen variants add per-screen specificity and must be requested
+        # by name. Names enumerated via `_per_screen_full_names()` (the
+        # canonical OVERRIDE_STEMS x SCREENS product), not a second,
+        # hand-typed copy that can drift out of order or out of sync with it.
+        per_screen_inert = _per_screen_full_names() & dust_group_params
+
         scopes["dust_attenuation"] = frozenset(
-            dust_group_params - (_all_law_shape_params() - active_shape)
+            dust_group_params - (_all_law_shape_params() - active_shape) - per_screen_inert
         )
 
     return scopes
@@ -4016,7 +4041,61 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         for comp in SCREENS:
             key = f"{stem}_{comp}"
             if key in dust_atten_dict:
-                overrides.setdefault(comp, {})[short_to_full(stem)] = float(dust_atten_dict[key])
+                value = dust_atten_dict[key]
+                full_name = short_to_full(key)
+                if value is DEFAULT:
+                    raise _bare_default_error(full_name)
+                if value is FREE or _is_default_fixed(value):
+                    # A live, declared dust_<stem>_<screen> parameter
+                    # (#2428), left for the per-parameter resolution loop in
+                    # ``parse_groups`` to expand/resolve: it reads the value
+                    # straight off the ORIGINAL group dict, not ``result``/
+                    # ``structural_kwargs``, which only take values
+                    # ``resolve_shorthand`` can turn into a bounded
+                    # ``Distribution`` directly. Neither a bare ``FREE``
+                    # sentinel nor an unresolved ``Fixed(DEFAULT)`` token is
+                    # one of those -- storing either here reaches
+                    # ``priors.py``'s "Fixed(DEFAULT) is a build-grammar
+                    # token" guard with a message that names the wrong
+                    # context (this per-screen key, not the flat surface it
+                    # was written for). Nothing to stash here;
+                    # ``dust_<stem>_<screen>`` is already declared (with its
+                    # Fixed registry default) by ``_builders.py``'s
+                    # unconditional walk over ``ATTENUATION_PARAMS``.
+                    pass
+                elif isinstance(value, Distribution):
+                    # An explicit, already-resolved prior/Fixed (e.g.
+                    # ``Uniform(-1.5, -0.3)``, ``Fixed(-1.0)``): likewise a
+                    # live, declared parameter, and (unlike FREE/
+                    # Fixed(DEFAULT)) itself a ``Distribution``
+                    # ``resolve_shorthand`` can store directly -- pre-seed it
+                    # so the enumeration pass already carries the caller's
+                    # actual choice.
+                    result[full_name] = value
+                elif isinstance(value, int | float) and not isinstance(value, bool):
+                    # Plain number: static config override, baked into the
+                    # compiled model at build time (unchanged since before
+                    # #2428) -- AND the declared dust_<stem>_<screen>
+                    # parameter's in-force value (#2428): without this,
+                    # `get_fixed_values()`/`summary()` showed the untouched
+                    # registry default for the declared parameter while the
+                    # screen actually used this value, even though the
+                    # PREDICTION was already correct (it reads from
+                    # `dust_law_overrides`, not the declared parameter's
+                    # resolved value). Seeding `result[full_name]` here is
+                    # exactly what the `Distribution` branch above already
+                    # does for `Fixed(v)`, so the two spellings become
+                    # identical from here on: same value, same "user_fixed"
+                    # provenance.
+                    result[full_name] = Fixed(float(value))
+                    overrides.setdefault(comp, {})[short_to_full(stem)] = float(value)
+                else:
+                    raise ParameterError(
+                        f"dust_attenuation {key!r} must be a number, Fixed(...), a "
+                        f"prior (e.g. Uniform(...)), or FREE ({value!r} given). The "
+                        f"per-screen declared parameter spelling is {full_name}=..., "
+                        f"which accepts any of these. See #2428."
+                    )
     if overrides:
         result["dust_law_overrides"] = overrides
 
@@ -5267,6 +5346,7 @@ def _variant_scoped_param_names(
     param_partition: dict[str, str],
     group_allowed: frozenset[str] | set[str],
     wildcard_scopes: dict[str, frozenset[str] | None],
+    structural_params: Parameters | None = None,
 ) -> frozenset[str] | None:
     """Canonical parameter names the variant selected for ``group`` reads.
 
@@ -5284,6 +5364,11 @@ def _variant_scoped_param_names(
     wildcard_scopes : dict
         Group -> the parameters its ``all_params`` wildcard may free, from
         :func:`_wildcard_scopes`.
+    structural_params : Parameters, optional
+        Structural-only spec, consulted only for ``group="dust_attenuation"``
+        to law-scope the per-screen names (below). ``None`` skips that
+        narrowing (the per-screen names then stay in ``group_allowed``,
+        unscoped by law).
 
     Returns
     -------
@@ -5301,12 +5386,48 @@ def _variant_scoped_param_names(
     what the group declares", while an empty scope is a positive statement that
     the selected variant reads nothing of its own (``pah_drude``, a pure
     template shape), and every per-parameter key is then foreign to it.
+
+    The 12 per-screen dust shape names (``dust_slope_bc``, ...) are
+    ``group_allowed`` "group-level knobs" (#2428) regardless of which law is
+    selected -- they must stay accepted so ``_check_dict_keys`` never raises
+    the generic "Unknown parameter" for one on ANY two_component build. But
+    left unscoped here, ``shared`` re-admits all 12 unconditionally, so
+    :func:`_reject_foreign_variant_keys`'s "this variant accepts:" message
+    advertised e.g. ``Rv_bc`` under ``law_bc='power_law'`` as accepted, and
+    passing it then still raised -- just later, from
+    :func:`_reject_per_screen_keys_no_law_reads`'s law-read check, with a
+    different message. Law-scoping per-screen names here (when
+    ``structural_params`` is given) makes the two checks agree: a name this
+    function advertises as accepted is one :func:`_reject_per_screen_keys_no_
+    law_reads` also accepts. Round-tripping never loses a value by this:
+    a per-screen name can only carry a non-default value if some earlier
+    build already passed that same law-read check, so a law-scoped ``shared``
+    here never excludes anything the round-trip actually needs to re-emit.
     """
     scope = wildcard_scopes.get(group)
     if scope is None:
         return None
     owned = {name for name, owner in param_partition.items() if owner == group}
     shared = {name for name in owned if _extract_short_name(name, {}) in group_allowed}
+
+    if group == "dust_attenuation" and structural_params is not None:
+        per_screen = _per_screen_full_names()
+        law_by_screen = {
+            "bc": getattr(structural_params, "dust_law_bc", None),
+            "diff": getattr(structural_params, "dust_law_diff", None),
+            "neb": getattr(structural_params, "dust_law_neb", None)
+            or getattr(structural_params, "dust_law_bc", None),
+        }
+
+        def _screen_law_reads(name: str) -> bool:
+            stem, screen = split_screen_suffix(full_to_short(name))
+            if screen is None:
+                return True
+            law = law_by_screen.get(screen)
+            return law is not None and short_to_full(stem) in _law_shape_params(law)
+
+        shared = {name for name in shared if name not in per_screen or _screen_law_reads(name)}
+
     return frozenset(set(scope) | shared)
 
 
@@ -5597,7 +5718,7 @@ def _validate_user_keys(
         # answers to "which parameters does this variant read?" stay one answer.
         if top_key in _VARIANT_SCOPED_KEY_GROUPS:
             accepted_full = _variant_scoped_param_names(
-                top_key, param_partition, group_allowed, wildcard_scopes
+                top_key, param_partition, group_allowed, wildcard_scopes, structural_params
             )
             if accepted_full is not None:
                 # A user-registered subclass declares params the partition has
@@ -5620,11 +5741,24 @@ def _validate_user_keys(
             # neb's displayed list must show the resolved type's actual
             # structural keys (e.g. cb19/cloudy/mappings/mappings_agn include
             # 'grid', cue/ssp/none do not), not just the base set 'grid' was
-            # deliberately removed from (#2220 I2). Every other group's base
-            # set is still its full displayed set, so None (the default)
-            # keeps their behavior unchanged.
+            # deliberately removed from (#2220 I2). dust_attenuation's base
+            # set (`_GROUP_STRUCTURAL_KEYS`) lists the 12 per-screen names
+            # unconditionally, but they are declared (`ATTENUATION_TWO_
+            # COMPONENT_ONLY`) only under `two_component` (#2428) --
+            # `single_component`/`wg00` refuse them (an "Unknown key" this
+            # same message reports), so advertising them there would be the
+            # same "accepts a name it then refuses" inconsistency
+            # `_variant_scoped_param_names`'s law-scoping already fixed for
+            # the two_component/per-law case. Every other group's base set
+            # is still its full displayed set, so None (the default) keeps
+            # their behavior unchanged.
             displayed_structural_keys=(
-                group_allowed | neb_type_specific_keys if top_key == "neb" else None
+                group_allowed | neb_type_specific_keys
+                if top_key == "neb"
+                else group_allowed - per_screen_keys()
+                if top_key == "dust_attenuation"
+                and getattr(structural_params, "dust_model", None) != "two_component"
+                else None
             ),
         )
 
@@ -6838,8 +6972,38 @@ def _resolve_value(
             "lyc_absorb_all",
             "eb_include_lyc",
         }
-        if override_key in structural_keys:
-            # These are structural keys, not parameters
+        # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying
+        # ``FREE``, bare ``DEFAULT``, or a ``Distribution`` (``Fixed(...)``
+        # included) is a live, declared ``dust_<stem>_<screen>`` parameter
+        # (#2428): fall through to ordinary per-parameter resolution below --
+        # the FREE/DEFAULT/Distribution branches there are what actually
+        # expand FREE on the declared ``free_prior``, resolve
+        # ``Fixed(DEFAULT)`` to the registry default, and raise on a bare
+        # ``DEFAULT`` -- instead of collapsing it to the registry default
+        # here, before any of that runs. A plain number keeps routing through
+        # the static ``dust_law_overrides`` config path built by
+        # ``_translate_dust_attenuation`` untouched. Every other structural
+        # key (``type``, ``law_bc``, ...) is never FREE/DEFAULT/a
+        # ``Distribution``, so this narrowing changes nothing for them.
+        if override_key in structural_keys and not (
+            override_key in per_screen_keys()
+            and (val is FREE or val is DEFAULT or isinstance(val, Distribution))
+        ):
+            # A plain-number per-screen value (the ONLY way this branch is
+            # reached for one -- FREE/DEFAULT/Distribution bypass it above,
+            # and a non-numeric junk value already raised in
+            # ``_translate_dust_attenuation``, before this ever runs) was
+            # ALSO seeded into Pass 1's structural kwargs as ``Fixed(value)``
+            # by that same function (#2428): ``registry_default`` here
+            # (read off ``structural_params``, not the registry) already IS
+            # that user-given value, so tag it "user_fixed" -- the same
+            # provenance the ``Fixed(v)``/``Uniform(...)`` spellings of this
+            # key get two branches down -- not the misleading
+            # "registry_default" an actually-untouched parameter would carry.
+            # Before this, ``get_fixed_values()``/``summary()`` showed the
+            # right VALUE (Pass 1's seed) tagged with the wrong PROVENANCE.
+            if override_key in per_screen_keys():
+                return registry_default, "user_fixed"
             return registry_default, "registry_default"
 
         if val is DEFAULT:
@@ -7249,7 +7413,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
         met_group="met" if use_met_block else "sfh",
         agn_flat=agn_flat,
     )
-    provenance = getattr(spec, "_group_provenance", {})
+    # A ``parse_groups``-built spec carries ``_group_provenance``; a flat
+    # ``Parameters(dust_slope_bc=...)``-built one carries ``_flat_provenance``
+    # instead (the declared per-screen name is "fully supported on this flat
+    # surface too" -- parameters.py's own per-screen validation docstring).
+    # Falling back the same way ``SEDModel._requested_law_shape_params``
+    # already does for predict-time resolution: without it, EVERY per-screen
+    # name resolved to "registry_default" here regardless of what the flat
+    # constructor actually recorded, so both ``PER_SCREEN_REQUESTED_TAGS``
+    # filters below dropped it -- a flat-built ``dust_slope_bc: Uniform(...)``
+    # predicted correctly but round-tripped as the unrelated shared ``slope``
+    # stem at its own untouched default, silently losing the per-screen value.
+    provenance = getattr(spec, "_group_provenance", None)
+    if provenance is None:
+        provenance = getattr(spec, "_flat_provenance", None)
+    provenance = provenance or {}
 
     # Group parameters by their owning group
     groups_dict = {}
@@ -7281,6 +7459,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 partition,
                 _GROUP_STRUCTURAL_KEYS.get(group_name, frozenset()),
                 dust_scopes,
+                spec,
             )
             if emittable is not None:
                 param_names = [name for name in param_names if name in emittable]
@@ -7315,8 +7494,23 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 param_names, spec, provenance, wildcard_intent
             )
         else:
-            # No wildcard; list all params explicitly
-            explicit_params = {p: spec.get_distribution(p) for p in param_names}
+            # No wildcard; list all params explicitly. Per-screen shape names
+            # (dust_slope_bc, ...) are explicit-only (#2428): `param_names`
+            # here is scope-narrowed by `_variant_scoped_param_names`, whose
+            # `group_allowed` union always re-admits every per-screen
+            # spelling as a "group-level knob" (`_GROUP_STRUCTURAL_KEYS`'s
+            # design note) independent of whether the selected law reads the
+            # stem, so re-emit one only when its own provenance says a caller
+            # actually asked for it -- the same rule `_get_explicit_overrides`
+            # applies on the wildcard branch, and just as necessary here:
+            # untouched (registry_default), never a request.
+            explicit_params = {
+                p: spec.get_distribution(p)
+                for p in param_names
+                if p not in _per_screen_full_names()
+                or _base_provenance(provenance.get(p, "registry_default"))
+                in PER_SCREEN_REQUESTED_TAGS
+            }
 
         # Add explicit per-param entries to the group dict FIRST.
         for full_name, distribution in explicit_params.items():
@@ -7520,15 +7714,34 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         if getattr(spec, "dust_law_neb", None) is not None:
             group_output["law_neb"] = spec.dust_law_neb
         # Round-trip per-component law-parameter overrides (slope_bc, delta_diff,
-        # slope_neb…).
+        # slope_neb…) as a bare number -- the ``dust_law_overrides`` static
+        # config path only ever holds a plain-number value (#2428:
+        # ``_translate_dust_attenuation`` stashes there only from its plain-
+        # number branch), and this is the ONLY round-trip route for one built
+        # via the flat ``Parameters(dust_law_overrides=...)`` surface, which
+        # carries no ``_group_provenance`` to drive the explicit-params loop
+        # below. A ``parse_groups``-built spec's plain-number per-screen value
+        # ALSO now carries "user_fixed" provenance (same fix), so that loop
+        # emits it too, as ``Fixed(value)`` -- skip it here rather than write
+        # the same fact twice under two different representations.
         from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
 
         _law_kw_to_short = {v: k for k, v in TWO_COMPONENT_OVERRIDE_KEYS.items()}
-        for comp in ("bc", "diff", "neb"):
+        # Same fallback as `parameters_to_groups` above: a flat-built spec
+        # carries `_flat_provenance`, not `_group_provenance` (#2428).
+        _provenance = getattr(spec, "_group_provenance", None)
+        if _provenance is None:
+            _provenance = getattr(spec, "_flat_provenance", None)
+        _provenance = _provenance or {}
+        for comp in SCREENS:
             for law_kw, value in (getattr(spec, "dust_law_overrides", {}).get(comp) or {}).items():
                 short = _law_kw_to_short.get(law_kw)
-                if short is not None:
-                    group_output[f"{short}_{comp}"] = value
+                if short is None:
+                    continue
+                full_name = short_to_full(f"{short}_{comp}")
+                if _base_provenance(_provenance.get(full_name, "")) == "user_fixed":
+                    continue
+                group_output[f"{short}_{comp}"] = value
         # Round-trip the Lyman-limit clip back to its boolean grammar form.
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True
@@ -7585,6 +7798,40 @@ def _analyze_wildcard_intent(
     return None
 
 
+#: Provenance base tags that mean "a caller explicitly asked for this
+#: per-screen dust shape name" (#2428) -- ``user_prior`` (a prior), ``user_
+#: fixed`` (``Fixed(v)`` or the bare-scalar spelling), and ``user_free``
+#: (``FREE``). Per-screen names are explicit-only (``per_screen_inert`` in
+#: :func:`_dust_wildcard_scopes`), so ``wildcard_free``/``wildcard_fixed``
+#: never legitimately apply to one -- unlike ``SEDModel._REQUESTED_
+#: PROVENANCE``, which also covers the SHARED stems, where a wildcard tag
+#: is a real, meaningful request. One module-level set for both round-trip
+#: emitters below (:func:`_get_explicit_overrides` and
+#: :func:`parameters_to_groups`'s no-wildcard branch) and for
+#: ``SEDModel._requested_law_shape_params``'s per-screen filter, so the three
+#: cannot drift into three different answers to "was this name requested?"
+#: again -- a bare ``("user_prior", "user_fixed")`` tuple in the first two
+#: once omitted ``user_free``, so `slope_bc: FREE` built and resolved
+#: correctly but vanished on the very next ``to_groups()``/``from_config()``
+#: round-trip: reparsing the emitted dict gave a model with no free dust
+#: parameter at all, and `predict_photometry` silently accepted (and
+#: ignored) an explicit ``dust_slope_bc`` value for it.
+PER_SCREEN_REQUESTED_TAGS: frozenset[str] = frozenset({"user_prior", "user_fixed", "user_free"})
+
+
+def _per_screen_full_names() -> frozenset[str]:
+    """Fully-prefixed per-screen dust shape names (``dust_slope_bc``, ...).
+
+    Returns
+    -------
+    frozenset of str
+        The 12 ``dust_<stem>_<screen>`` names from the ``OVERRIDE_STEMS x
+        SCREENS`` cartesian product (:func:`per_screen_keys`), prefixed via
+        :func:`short_to_full`.
+    """
+    return frozenset(short_to_full(key) for key in per_screen_keys())
+
+
 def _get_explicit_overrides(
     param_names: list[str],
     spec: Parameters,
@@ -7610,11 +7857,28 @@ def _get_explicit_overrides(
         Mapping of full param name to distribution for explicit listing.
     """
     explicit = {}
+    per_screen_names = _per_screen_full_names()
 
     for param_name in param_names:
+        raw_tag = provenance.get(param_name, "registry_default")
+
+        # Per-screen shape names (dust_slope_bc, dust_Rv_neb, ...) are
+        # explicit-only (#2428): emit one only when a caller actually asked
+        # for it (see PER_SCREEN_REQUESTED_TAGS). Every other provenance --
+        # untouched (registry_default), wildcard-pinned
+        # (wildcard_fixed(_inactive)), or wildcard-freed-but-inactive
+        # (wildcard_free_pinned) -- means nobody requested it, and
+        # re-emitting it can make the reparse raise when the selected
+        # screen's law does not read the stem (#2428).
+        if (
+            param_name in per_screen_names
+            and _base_provenance(raw_tag) not in PER_SCREEN_REQUESTED_TAGS
+        ):
+            continue
+
         # Base tag: a grid-narrowed parameter still came from the wildcard, so
         # it must collapse back into it rather than surface as an override.
-        tag = _base_provenance(provenance.get(param_name, "registry_default"))
+        tag = _base_provenance(raw_tag)
 
         # If there's a wildcard intent, exclude params that match it
         if wildcard_intent is not None:

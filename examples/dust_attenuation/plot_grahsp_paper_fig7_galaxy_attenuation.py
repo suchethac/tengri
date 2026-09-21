@@ -27,7 +27,7 @@ import numpy as np
 from matplotlib import cm, colors
 
 import tengri
-from tengri import DEFAULT, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.plot import setup_style
 
 setup_style()
@@ -64,10 +64,13 @@ def nu_Lnu(lnu):
 fig, ax = plt.subplots(figsize=(6.6, 7.6))
 
 # Build the SED model ONCE; the diffuse-screen optical depth ``dust_tau_diff``
-# is a parameter, so the E(B-V) sweep only varies that key in the fixed-value
-# dict and re-runs the (already-compiled) forward pass. Rebuilding the full
-# stellar+dust model inside the loop would recompile the SSP pipeline on every
-# iteration and accumulate XLA buffers — the gallery-OOM anti-pattern.
+# is declared FREE (not Fixed), so the E(B-V) sweep only ever names that one
+# key in a fresh params dict and re-runs the (already-compiled) forward pass.
+# A params dict may not carry a Fixed key at all (#2296) -- including to
+# re-pin it per loop iteration -- so sweeping a parameter this way requires
+# building it free. Rebuilding the full stellar+dust model inside the loop
+# would recompile the SSP pipeline on every iteration and accumulate XLA
+# buffers — the gallery-OOM anti-pattern.
 model = SEDModel.build(
     ssp_data=ssp,
     sfh={
@@ -82,17 +85,16 @@ model = SEDModel.build(
         "law": "calzetti",
         "all_params": Fixed(DEFAULT),
         "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
-        "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
+        "tau_diff": FREE,  # swept per E(B-V) below; not read from its prior
     },
     dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.01),
 )
-base_params = model.spec.get_fixed_values()
 
 norm_ref = None
 for ebv in ebv_grid:
     tau_diff = R_V * ebv / 1.086  # diffuse screen scales with E(B-V)
-    params = {**base_params, "dust_tau_diff": tau_diff}
+    params = {"dust_tau_diff": tau_diff}
     rest = model.predict(params)
     lnu = np.asarray(rest.rest_sed(np.asarray(wave_aa)))
     lflam = nu_Lnu(lnu)

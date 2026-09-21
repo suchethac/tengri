@@ -75,7 +75,11 @@ def test_high_z_sfh_sed_is_finite(synthetic_ssp_wide):
     m = _high_z_model(synthetic_ssp_wide, redshift=5.0, age_gyr=3.0)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SFHBeforeBigBangWarning)
-        sed = np.asarray(m.predict_rest_sed(m.spec.get_fixed_values()).sed)
+        # `free_mass=False` (default) leaves every parameter Fixed, so the
+        # params dict is legitimately empty: predict_rest_sed merges the
+        # spec's own Fixed values in (#2296 refuses a Fixed key that is
+        # NAMED in the dict, not one that is correctly omitted).
+        sed = np.asarray(m.predict_rest_sed({}).sed)
     assert np.all(np.isfinite(sed)), "high-z SFH SED must be finite (no NaN/Inf)"
     assert np.nanmax(sed) > 0.0
 
@@ -103,7 +107,7 @@ def test_eager_warns_when_sfh_predates_big_bang(synthetic_ssp_wide):
     m = _high_z_model(synthetic_ssp_wide, redshift=5.0, age_gyr=3.0)
     with warnings.catch_warnings(record=True) as rec:
         warnings.simplefilter("always")
-        m.predict_rest_sed(m.spec.get_fixed_values())
+        m.predict_rest_sed({})
     hits = [w for w in rec if issubclass(w.category, SFHBeforeBigBangWarning)]
     assert len(hits) == 1, "expected exactly one SFHBeforeBigBangWarning"
     assert "Big Bang" in str(hits[0].message)
@@ -114,14 +118,14 @@ def test_eager_does_not_warn_at_low_redshift(synthetic_ssp_wide):
     m = _high_z_model(synthetic_ssp_wide, redshift=0.05, age_gyr=3.0)
     with warnings.catch_warnings(record=True) as rec:
         warnings.simplefilter("always")
-        m.predict_rest_sed(m.spec.get_fixed_values())
+        m.predict_rest_sed({})
     assert not any(issubclass(w.category, SFHBeforeBigBangWarning) for w in rec)
 
 
 def test_jit_path_is_silent_and_finite(synthetic_ssp_wide):
     """Under jit the warning is skipped (tracer guard) and the result is finite."""
     m = _high_z_model(synthetic_ssp_wide, redshift=5.0, age_gyr=3.0)
-    p = m.spec.get_fixed_values()
+    p = {}
 
     def scalar(pp):
         return jnp.nansum(m.predict_state(pp).sed_intrinsic)

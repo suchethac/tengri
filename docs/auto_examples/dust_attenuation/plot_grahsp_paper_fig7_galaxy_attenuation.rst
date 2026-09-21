@@ -31,7 +31,7 @@ The extremely attenuated, low-metallicity starbursting galaxy **Haro 11**
 (photometry from NED, mirroring Lyu et al. 2016) is overplotted as a dashed
 red curve for reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-166
+.. GENERATED FROM PYTHON SOURCE LINES 15-168
 
 
 
@@ -45,7 +45,7 @@ red curve for reference.
 
  .. code-block:: none
 
-    /tengri/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:154: RuntimeWarning: divide by zero encountered in divide
+    /tengri/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:156: RuntimeWarning: divide by zero encountered in divide
       "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
 
 
@@ -72,7 +72,7 @@ red curve for reference.
     from matplotlib import cm, colors
 
     import tengri
-    from tengri import DEFAULT, Fixed, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, SEDModel
     from tengri.plot import setup_style
 
     setup_style()
@@ -109,10 +109,13 @@ red curve for reference.
     fig, ax = plt.subplots(figsize=(6.6, 7.6))
 
     # Build the SED model ONCE; the diffuse-screen optical depth ``dust_tau_diff``
-    # is a parameter, so the E(B-V) sweep only varies that key in the fixed-value
-    # dict and re-runs the (already-compiled) forward pass. Rebuilding the full
-    # stellar+dust model inside the loop would recompile the SSP pipeline on every
-    # iteration and accumulate XLA buffers — the gallery-OOM anti-pattern.
+    # is declared FREE (not Fixed), so the E(B-V) sweep only ever names that one
+    # key in a fresh params dict and re-runs the (already-compiled) forward pass.
+    # A params dict may not carry a Fixed key at all (#2296) -- including to
+    # re-pin it per loop iteration -- so sweeping a parameter this way requires
+    # building it free. Rebuilding the full stellar+dust model inside the loop
+    # would recompile the SSP pipeline on every iteration and accumulate XLA
+    # buffers — the gallery-OOM anti-pattern.
     model = SEDModel.build(
         ssp_data=ssp,
         sfh={
@@ -127,17 +130,16 @@ red curve for reference.
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
             "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
-            "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
+            "tau_diff": FREE,  # swept per E(B-V) below; not read from its prior
         },
         dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.01),
     )
-    base_params = model.spec.get_fixed_values()
 
     norm_ref = None
     for ebv in ebv_grid:
         tau_diff = R_V * ebv / 1.086  # diffuse screen scales with E(B-V)
-        params = {**base_params, "dust_tau_diff": tau_diff}
+        params = {"dust_tau_diff": tau_diff}
         rest = model.predict(params)
         lnu = np.asarray(rest.rest_sed(np.asarray(wave_aa)))
         lflam = nu_Lnu(lnu)
@@ -208,6 +210,11 @@ red curve for reference.
 
     fig.tight_layout()
     plt.savefig("plot_grahsp_paper_fig7_galaxy_attenuation.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 11.443 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py:

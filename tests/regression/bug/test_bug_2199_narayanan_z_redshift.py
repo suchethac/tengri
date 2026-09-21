@@ -571,7 +571,11 @@ def _build_ir(uv_ssp, ir_obs, law: str, redshift, approx, **shape):
 def _ir_photometry(model) -> np.ndarray:
     with warnings.catch_warnings():
         _filter_fixture_warnings()
-        params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+        # Free-only (#2296): the standard predict_photometry funnel merges
+        # Fixed values in on its own; spreading get_fixed_values() here would
+        # hand it a params dict naming keys the spec already declared Fixed,
+        # which is refused on presence regardless of value.
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
         params["dust_tau_bc"] = jnp.asarray(0.0)
         params["dust_tau_diff"] = jnp.asarray(_TAU)
         return np.asarray(model.predict_photometry(params))
@@ -646,7 +650,11 @@ def test_a_free_redshift_disables_the_lut_only_for_a_law_that_reads_it(uv_ssp, i
     exact = _build_ir(uv_ssp, ir_obs, "narayanan_z", free_z, None)
     with warnings.catch_warnings():
         _filter_fixture_warnings()
-        params = {**ours.spec.get_fixed_values(), **ours.spec.sample(jax.random.PRNGKey(0))}
+        # Free-only (#2296): redshift is free on `ours`/`exact` (free_z), so
+        # overriding it below is legal; the get_fixed_values() spread is not
+        # (it would restate every OTHER Fixed key, e.g. sfh_dpl_*, refused on
+        # presence).
+        params = dict(ours.spec.sample(jax.random.PRNGKey(0)))
         params["dust_tau_bc"] = jnp.asarray(0.0)
         params["dust_tau_diff"] = jnp.asarray(_TAU)
         params["redshift"] = jnp.asarray(2.0)

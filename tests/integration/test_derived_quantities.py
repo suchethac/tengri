@@ -79,8 +79,8 @@ def fiducial_params(spec):
         "met_logzsol": -0.2,
         "dust_tau_bc": 1.0,
         "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
+        # dust_slope / redshift are Fixed on spec (#2296): a matching
+        # restatement here is still a refused presence override.
     }
 
 
@@ -99,8 +99,8 @@ def smooth_params(spec):
         "met_logzsol": -0.2,
         "dust_tau_bc": 1.0,
         "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
+        # dust_slope / redshift are Fixed on spec (#2296): a matching
+        # restatement here is still a refused presence override.
     }
 
 
@@ -212,10 +212,11 @@ class TestDerivedQuantities:
     def test_mstar_paths_agree_within_tolerance(self, model, spec):
         """Regression test: verify fixed params (dust_slope, redshift) are consistent.
 
-        Generates a fixed-seed parameter dict with dust_slope=-0.7 and
-        redshift=0.1 (both Fixed in spec), then checks both predict_derived
-        and predict_sfh_quantities return the same stellar_mass to within
-        1e-6 relative tolerance. Regression test for the refactor from
+        dust_slope=-0.7 and redshift=0.1 are Fixed on ``spec`` (#2296: the
+        free-only params dict below legitimately omits them), so both
+        predict_derived and predict_sfh_quantities must resolve them from the
+        spec identically and return the same stellar_mass to within 1e-6
+        relative tolerance. Regression test for the refactor from
         parameters.is_fixed(name) → parameters.get_fixed_values().
         """
         n_grid = spec.n_grid
@@ -230,8 +231,6 @@ class TestDerivedQuantities:
             "met_logzsol": -0.2,
             "dust_tau_bc": 1.0,
             "dust_tau_diff": 0.3,
-            "dust_slope": -0.7,
-            "redshift": 0.1,
         }
 
         derived = model.predict_derived(params_with_fixed)
@@ -271,8 +270,6 @@ class TestDerivedQuantities:
             "met_logzsol": -0.2,
             "dust_tau_bc": 1.0,
             "dust_tau_diff": 0.3,
-            "dust_slope": -0.7,
-            "redshift": 0.1,
         }
 
         # Compare to zero-xi version
@@ -300,8 +297,6 @@ class TestDerivedQuantities:
             "met_logzsol": -0.2,
             "dust_tau_bc": 0.5,
             "dust_tau_diff": 0.2,
-            "dust_slope": -0.7,
-            "redshift": 0.1,
         }
 
         params_zero = {**params, "sfh_field_xi": jnp.zeros(n_grid)}
@@ -348,8 +343,6 @@ class TestDerivedQuantities:
             "met_logzsol": -0.2,
             "dust_tau_bc": 0.5,
             "dust_tau_diff": 0.2,
-            "dust_slope": -0.7,
-            "redshift": 0.1,
         }
 
         # Baseline = the MEAN SFH: field effectively off, so the modulation is 1 and

@@ -398,7 +398,16 @@ def test_energy_balance_screened_agn(synthetic_ssp_wide, branch, approx):
     else:
         assert eb_lut is None, "approx=None build unexpectedly reached the eb_lut branch"
 
-    p = dict(m_screen.spec.get_fixed_values())
+    # Free-only (#2296): _build_agn_dust_model pins every parameter Fixed, so
+    # the free-only params dict is simply empty; predict_state self-merges
+    # each model's own Fixed values internally (m_screen and m_none share
+    # the same free_params set -- empty -- so {} is valid for both).
+    # ``_agn_oracle_transmission`` below is a bare test helper, not a
+    # #2296-refusing predict surface: it reads params["dust_tau_bc"] etc.
+    # directly, so it needs the full physical dict -- get_fixed_values() is
+    # exactly that here, since nothing on this model is free.
+    p = {}
+    full = dict(m_screen.spec.get_fixed_values())
     state_screen = m_screen.predict_state(p)
     state_none = m_none.predict_state(p)
 
@@ -417,7 +426,7 @@ def test_energy_balance_screened_agn(synthetic_ssp_wide, branch, approx):
     sed_agn = jnp.asarray(state_screen.derived["sed_agn"])
     wave = jnp.asarray(state_screen.wave)
     nu = C_AA / wave
-    transmission = jnp.asarray(_agn_oracle_transmission(np.asarray(wave), p, "diffuse"))
+    transmission = jnp.asarray(_agn_oracle_transmission(np.asarray(wave), full, "diffuse"))
     chex.assert_tree_all_finite((sed_agn, transmission))
     expected = abs(
         float(
@@ -472,7 +481,11 @@ def test_exact_vs_precomp_photometry_agn(synthetic_ssp_wide, synthetic_tophat_ob
         observation=synthetic_tophat_obs,
         with_dust_emission=False,
     )
-    p = dict(m_exact.spec.get_fixed_values())
+    # Free-only (#2296): _build_agn_dust_model pins every parameter Fixed,
+    # so {} is the free-only params dict for both m_exact and m_lut (same
+    # free_params set -- empty); predict_photometry self-merges each
+    # model's own Fixed values internally.
+    p = {}
     phot_exact = np.asarray(m_exact.predict_photometry(p))
     phot_lut = np.asarray(m_lut.predict_photometry(p))
 

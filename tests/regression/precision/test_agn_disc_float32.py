@@ -199,10 +199,9 @@ def _composable_intrinsics(ssp, dtype):
         },
         redshift=Fixed(0.1),
     )
-    p = {
-        k: jnp.asarray(v, dtype=dtype)
-        for k, v in {"sfh_delayed_log_total_mass": 10.0, "agn_log_lbol": 11.0}.items()
-    }
+    # agn_log_lbol is Fixed(11.0) above (#2069's flat-direction pin); restating
+    # it here is refused on presence regardless of value match (#2296).
+    p = {k: jnp.asarray(v, dtype=dtype) for k, v in {"sfh_delayed_log_total_mass": 10.0}.items()}
     d = model.predict_state(p).derived
     return (
         float(np.asarray(d["L_4400_intrinsic"])),
@@ -282,7 +281,9 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
             redshift=Fixed(0.1),
         )
 
-    truth = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5, "agn_log_lbol": 11.0}
+    # dust_tau_diff=0.5 and agn_log_lbol=11.0 are already Fixed at those exact
+    # values in _model() above; restating them here is refused (#2296).
+    truth = {"sfh_delayed_log_total_mass": 10.0}
     with jax.enable_x64(True):
         mock = _model().mock(truth, snr=30.0, key=jax.random.PRNGKey(0))
         flux = np.asarray(mock.flux_obs, dtype=np.float64)

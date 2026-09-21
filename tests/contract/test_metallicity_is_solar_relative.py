@@ -38,7 +38,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
 from tengri.forward.properties import PROPERTY_REGISTRY
 from tengri.utils.conversions import log_z_abs_to_logzsol, logzsol_to_log_z_abs
 from tengri.utils.physics_constants import LOG10_ZSUN
@@ -64,7 +64,7 @@ def delta_model(ssp_data_fsps):
             "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        met={"type": "delta"},
+        met={"type": "delta", "logzsol": FREE},
         redshift=Fixed(0.1),
     )
 
@@ -73,8 +73,7 @@ def _fit_against_input(model, getter):
     """Fit ``reported = a * met_logzsol + b`` over the sweep."""
     xs, ys = [], []
     for z in _LOGZSOLS:
-        params = dict(model.spec.get_fixed_values())
-        params["met_logzsol"] = z
+        params = {"met_logzsol": z}
         xs.append(z)
         ys.append(float(getter(model, params)))
     slope, intercept = np.polyfit(xs, ys, 1)
@@ -123,8 +122,7 @@ class TestTheCensusIsComplete:
         test wearing six hats — and the deprecated path is exactly where the
         fix was nearly missed.
         """
-        params = dict(delta_model.spec.get_fixed_values())
-        params["met_logzsol"] = 0.3
+        params = {"met_logzsol": 0.3}
         values = {label: float(fn(delta_model, params)) for label, fn in _SURFACES.items()}
         assert len(values) == 6, values
 
@@ -151,8 +149,7 @@ class TestTheInternalHistoryStaysAbsolute:
     """The SSP grid's convention must not be 'fixed' along with the readout."""
 
     def test_log_metallicity_history_is_still_absolute(self, delta_model):
-        params = dict(delta_model.spec.get_fixed_values())
-        params["met_logzsol"] = 0.0
+        params = {"met_logzsol": 0.0}
         history = np.asarray(delta_model.predict_state(params).derived["log_metallicity_history"])
         assert np.allclose(history, LOG10_ZSUN, atol=1e-9), (
             f"state.derived['log_metallicity_history'] should hold absolute "

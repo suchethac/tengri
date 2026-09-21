@@ -196,6 +196,111 @@ class TestErrorMessageContent:
         assert "law_diff='smc'" in message
 
 
+class TestAcceptedListLawScopesPerScreenNames:
+    """The "this variant accepts:" list law-scopes the 12 per-screen names
+    (#2428), the way :func:`_reject_per_screen_keys_no_law_reads` already
+    does -- so a name this list advertises as accepted is never one that
+    then still raises when actually written.
+
+    Before this fix, the list re-admitted all 12 per-screen names (``Rv_bc``,
+    ``delta_diff``, ``bump_strength_neb``, ...) regardless of which law each
+    screen selected, because they are ``_GROUP_STRUCTURAL_KEYS``
+    "group-level knobs" independent of the law-scoping the four SHARED
+    stems (``slope``, ``Rv``, ``delta``, ``bump_strength``) already got.
+    ``power_law`` reads only ``slope`` -- of the 12 per-screen names, only
+    ``slope_bc``/``slope_diff``/``slope_neb`` should ever appear.
+    """
+
+    def test_stray_key_under_power_law(self):
+        """``Rv`` is foreign to ``power_law``; the advertised list must name
+        only the per-screen names ``power_law`` actually reads."""
+        with pytest.raises(ParameterError) as exc_info:
+            build_groups(
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "power_law",
+                    "all_params": WILDCARD,
+                    "Rv": Fixed(3.5),
+                }
+            )
+        message = str(exc_info.value)
+
+        for accepted in ("slope_bc", "slope_diff", "slope_neb"):
+            assert accepted in message, f"{accepted!r} should be listed as accepted: {message}"
+
+        for foreign in (
+            "Rv_bc",
+            "Rv_diff",
+            "Rv_neb",
+            "delta_bc",
+            "delta_diff",
+            "delta_neb",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "bump_strength_neb",
+        ):
+            assert foreign not in message, (
+                f"{foreign!r} is not read by power_law and must not be advertised "
+                f"as accepted: {message}"
+            )
+
+
+class TestAcceptedListScopesPerScreenNamesByType:
+    """The "Valid structural keys" list drops the 12 per-screen names on
+    ``single_component`` (#2428), where they are not even declared
+    (``ATTENUATION_TWO_COMPONENT_ONLY``) -- an "Unknown key" this same
+    message reports for any of them. Before this fix the list was drawn from
+    the unconditional base set (``_GROUP_STRUCTURAL_KEYS``), so an unrelated
+    typo under ``single_component`` advertised e.g. ``slope_bc`` as valid,
+    and writing it then raised (a different message) instead.
+    """
+
+    def test_single_component_omits_per_screen_names(self):
+        with pytest.raises(ValueError) as exc_info:
+            build_groups(
+                dust_attenuation={
+                    "type": "single_component",
+                    "law": "power_law",
+                    "all_params": WILDCARD,
+                    "bogus_key": Fixed(1.0),
+                }
+            )
+        message = str(exc_info.value)
+        for name in (
+            "slope_bc",
+            "slope_diff",
+            "slope_neb",
+            "Rv_bc",
+            "Rv_diff",
+            "Rv_neb",
+            "delta_bc",
+            "delta_diff",
+            "delta_neb",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "bump_strength_neb",
+        ):
+            assert name not in message, (
+                f"{name!r} is not declared under single_component and must not be "
+                f"advertised as a valid structural key: {message}"
+            )
+
+    def test_two_component_still_lists_per_screen_names(self):
+        with pytest.raises(ValueError) as exc_info:
+            build_groups(
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "power_law",
+                    "all_params": WILDCARD,
+                    "bogus_key": Fixed(1.0),
+                }
+            )
+        message = str(exc_info.value)
+        assert "slope_bc" in message
+        assert "slope_diff" in message
+        assert "slope_neb" in message
+
+
 class TestOwnParametersAccepted:
     """A variant's own declared parameters stay accepted."""
 

@@ -131,10 +131,10 @@ def test_two_torus_libraries_do_not_return_the_same_photometry(
     model_b = _model(synthetic_ssp_wide, synthetic_tophat_obs, torus="cat3d_wind")
 
     def photometry(model):
-        params = {
-            **model.spec.get_fixed_values(),
-            **model.spec.sample(jax.random.PRNGKey(0)),
-        }
+        # spec.sample() is free-only (#2296); the spec merges its own Fixed
+        # values in, so no separate get_fixed_values() spread is needed (and
+        # would now be refused as a Fixed-key override).
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
         return np.asarray(model.predict_photometry(params))
 
     phot_a, phot_b = photometry(model_a), photometry(model_b)

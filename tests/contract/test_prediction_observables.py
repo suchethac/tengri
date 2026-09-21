@@ -76,7 +76,16 @@ def _model(ssp, filters=_FILTERS, spectroscopy=None, **kw) -> SEDModel:
 
 
 def _params(model: SEDModel) -> dict:
-    return {name: float(v) for name, v in model.spec.get_fixed_values().items()}
+    """Free-only params dict for this module's models (#2296).
+
+    Every model built here pins everything (``all_params: Fixed(DEFAULT)`` for
+    ``sfh``/``dust_attenuation``, ``redshift=Fixed(_Z)``), so the correct params
+    dict at every predict surface is empty: a Fixed key is refused now, not
+    merged, even when the value handed back matches the pin exactly. This used
+    to return ``spec.get_fixed_values()`` verbatim and rely on the pre-#2296
+    override-wins behavior to make that harmless.
+    """
+    return {}
 
 
 @pytest.fixture(scope="module")
@@ -186,7 +195,10 @@ def test_photometry_carries_the_igm_attenuation(ssp):
     igm = state.derived.get("igm_transmission")
     assert igm is not None, "IGM is off — this test would be vacuous"
 
-    z = params["redshift"]
+    # redshift is Fixed on this model (#2296: absent from the free-only
+    # ``params`` dict by construction) -- read the pinned value directly
+    # rather than through the params dict.
+    z = _Z
     dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
     photometry = model.observation.photometry
 

@@ -217,6 +217,15 @@ _CANONICAL_UNITS: dict[str, str] = {
     # (n_age, n_filter)). Sum over age axis equals stellar_phot_lnu_precomp.
     "stellar_phot_lnu_per_age_precomp": "erg/s/Hz",
     "stellar_phot_moment_per_age_precomp": "erg*Angstrom/s/Hz",
+    # Stellar, Lyman-continuum (rest λ < 912 Å) split of the two tensors
+    # above (#2439, #2427). Same units, since it is the same physical
+    # quantity restricted to a sub-band of the filter.
+    "stellar_phot_lnu_precomp_lyc": "erg/s/Hz",
+    "stellar_phot_lnu_per_age_precomp_lyc": "erg/s/Hz",
+    # Per-chunk Lyman-continuum multiplicative factor at the K-node
+    # sub-band quadrature nodes (#2439, #2427): dimensionless, like
+    # dust_young_indicator below.
+    "stellar_subband_lyc_factor_precomp": "",
     # Filter pivot wavelengths (published by stellar when wave_precomp
     # is on; used by dust LUT, AGN LUT, IGM LUT downstream).
     "filter_eff_waves": "Angstrom",
