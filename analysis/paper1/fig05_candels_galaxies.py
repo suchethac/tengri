@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _adoption import is_adopted
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_LABELS, CONFIG_ORDER
+from _grid_completeness import completeness_note, present_on_disk
 from config_metadata import CONFIGS
 
 jax.config.update("jax_enable_x64", True)
@@ -758,21 +759,38 @@ def main():
     results_manager = FitResultManager(args.results_dir)
     fig, data_dict = build_figure(results_manager, repo_root)
 
+    # Two separate questions, and only the second used to be asked. "Are these
+    # the configurations configs.py declares" says nothing about whether all
+    # eighteen cells are here, and a directory holding a handful of them draws
+    # a figure that looks like the full three-by-six panel set.
+    stamp_lines: list[str] = []
+    shortfall = completeness_note(
+        present_on_disk(args.results_dir, GALAXY_IDS, CONFIG_ORDER),
+        GALAXY_IDS,
+        CONFIG_ORDER,
+    )
+    if shortfall:
+        stamp_lines.append(shortfall)
+        print(shortfall, file=sys.stderr)
+        data_dict["completeness"] = shortfall
     if mismatches:
-        stamp = "CONFIGURATION LABELS ARE NOT configs.py's: " + "; ".join(
-            f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches
+        stamp_lines.append(
+            "CONFIGURATION LABELS ARE NOT configs.py's: "
+            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches)
         )
-        for offset, line in enumerate(textwrap.wrap(stamp, 108)):
-            fig.text(
-                0.0,
-                -0.012 - 0.012 * offset,
-                line,
-                fontsize=5.0,
-                color="0.45",
-                ha="left",
-                va="top",
-            )
         data_dict["configuration_mismatches"] = [m.describe() for m in mismatches]
+
+    wrapped = [line for part in stamp_lines for line in textwrap.wrap(part, 108)]
+    for offset, line in enumerate(wrapped):
+        fig.text(
+            0.0,
+            -0.012 - 0.012 * offset,
+            line,
+            fontsize=5.0,
+            color="0.45",
+            ha="left",
+            va="top",
+        )
 
     data_dict.update(
         {

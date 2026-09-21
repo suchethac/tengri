@@ -44,10 +44,13 @@ from matplotlib.lines import Line2D
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_ORDER
+from _grid_completeness import completeness_note, load_expected_galaxy_ids
 from config_metadata import CONFIGS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_RESULTS = REPO_ROOT / "analysis" / "paper1" / "results" / "fits"
+#: The locked sample this figure claims to show. Read, never restated.
+SELECTION_20 = REPO_ROOT / "analysis" / "paper1" / "results" / "selected_galaxies_20.json"
 
 
 FIGURE_WIDTH = 7.1
@@ -380,7 +383,32 @@ def main(argv: list[str] | None = None) -> int:
     if audit_text:
         print(audit_text, file=sys.stderr)
 
+    # Is the whole declared sample here? The directory check below answers
+    # only where the cells came from. A canonical directory holding five of
+    # a hundred and twenty cells passes it and is not the figure the caption
+    # describes, so completeness is asked separately and against the
+    # committed selection rather than against a literal count.
+    shortfall = None
+    try:
+        expected_ids = load_expected_galaxy_ids(SELECTION_20)
+        shortfall = completeness_note(
+            ((cell.gal_id, cell.config) for cell in cells), expected_ids, CONFIG_ORDER
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        shortfall = f"COMPLETENESS UNVERIFIED - cannot read {SELECTION_20.name}: {exc}"
+
+    if args.no_stamp and shortfall:
+        print(f"ERROR: --no-stamp refused; {shortfall}", file=sys.stderr)
+        print(
+            "       The stamp is the only thing saying this is not the full grid.",
+            file=sys.stderr,
+        )
+        return 2
+
     stamp_parts: list[str] = []
+    if shortfall:
+        stamp_parts.append(shortfall)
+        print(shortfall)
     if not is_canonical:
         stamp_parts.append(
             f"PROVISIONAL - rendered from {results_dir.name} at {_git_describe()}; "
