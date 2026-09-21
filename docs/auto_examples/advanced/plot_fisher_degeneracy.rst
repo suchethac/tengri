@@ -21,11 +21,6 @@
 Age-Dust-Metallicity Degeneracy: Fisher Analysis
 =================================================
 
-.. image:: images/sphx_glr_plot_fisher_degeneracy_001.png
-   :alt: plot fisher degeneracy
-   :class: sphx-glr-single-img
-
-
 The Cramér-Rao bound from the Fisher Information Matrix shows that SDSS
 5-band photometry alone cannot separately constrain age, dust, and
 metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
@@ -38,24 +33,18 @@ predictions w.r.t. parameters and C^{-1} is the inverse noise covariance.
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-179
+.. GENERATED FROM PYTHON SOURCE LINES 17-184
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/tengri/examples/advanced/plot_fisher_degeneracy.py", line 160, in <module>
-        raise RuntimeError(
-    RuntimeError: Fisher computation failed for every filter set. First failure: ParameterError: params overrides Fixed parameter(s): 'redshift' (pinned 0.1); 'sfh_tsnorm_log_total_mass' (pinned 10.0); 'sfh_tsnorm_peak_lbt_gyr' (pinned 5.0); 'sfh_tsnorm_skew' (pinned 0.0); 'sfh_tsnorm_trunc' (pinned 2.0); 'sfh_tsnorm_width_gyr' (pinned 1.0). Call-time overrides of a Fixed parameter are not supported (#2296); rebuild the model with this parameter FREE, or with a different Fixed value, instead.
+.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_fisher_degeneracy_001.png
+   :alt: plot fisher degeneracy
+   :srcset: /auto_examples/advanced/images/sphx_glr_plot_fisher_degeneracy_001.png
+   :class: sphx-glr-single-img
 
 
 
 
-
-
-|
 
 .. code-block:: Python
 
@@ -149,7 +138,11 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
                 },
                 redshift=tengri.Fixed(0.1),
             )
-            phot = jnp.abs(mdl.predict_photometry({k: v for k, v in true_params.items() if k in mdl.spec.free_params}))
+            phot = jnp.abs(
+                mdl.predict_photometry(
+                    {k: v for k, v in true_params.items() if k in mdl.spec.free_params}
+                )
+            )
             noise = phot / 20.0
 
             # Compute Fisher Information Matrix using JAX jacobian.
@@ -169,7 +162,8 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
                 params_dict = true_params.copy()
                 for i, pname in enumerate(fisher_params):
                     params_dict[pname] = free_array[i]
-                return predict_fn(params_dict)
+                # Pass only free parameters to predict
+                return predict_fn({k: v for k, v in params_dict.items() if k in mdl.spec.free_params})
 
             # Compute Jacobian of predictions w.r.t. free parameters.
             jac = jax.jacobian(forward_free_params)(param_array)  # shape: (n_bands, n_params)
@@ -221,6 +215,11 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     ax.legend(fontsize=10, frameon=False)
     fig.tight_layout()
     plt.savefig("plot_fisher_degeneracy.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.553 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

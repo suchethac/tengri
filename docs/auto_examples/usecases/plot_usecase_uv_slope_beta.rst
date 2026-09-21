@@ -308,7 +308,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.917 seconds)
+   **Total running time of the script:** (0 minutes 4.979 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

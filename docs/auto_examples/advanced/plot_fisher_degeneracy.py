@@ -104,7 +104,11 @@ for fname, filters in FILTER_SETS.items():
             },
             redshift=tengri.Fixed(0.1),
         )
-        phot = jnp.abs(mdl.predict_photometry({k: v for k, v in true_params.items() if k in mdl.spec.free_params}))
+        phot = jnp.abs(
+            mdl.predict_photometry(
+                {k: v for k, v in true_params.items() if k in mdl.spec.free_params}
+            )
+        )
         noise = phot / 20.0
 
         # Compute Fisher Information Matrix using JAX jacobian.
@@ -124,7 +128,8 @@ for fname, filters in FILTER_SETS.items():
             params_dict = true_params.copy()
             for i, pname in enumerate(fisher_params):
                 params_dict[pname] = free_array[i]
-            return predict_fn(params_dict)
+            # Pass only free parameters to predict
+            return predict_fn({k: v for k, v in params_dict.items() if k in mdl.spec.free_params})
 
         # Compute Jacobian of predictions w.r.t. free parameters.
         jac = jax.jacobian(forward_free_params)(param_array)  # shape: (n_bands, n_params)

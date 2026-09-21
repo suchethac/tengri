@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.091** total execution time for 15 files **from auto_examples/agn**:
+**00:34.423** total execution time for 15 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,13 +32,16 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_free_param_sensitivity.py` (``plot_agn_free_param_sensitivity.py``)
-     - 00:05.091
+   * - :ref:`sphx_glr_auto_examples_agn_plot_type1_type2_unified_model.py` (``plot_type1_type2_unified_model.py``)
+     - 00:26.094
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_feii_sweep.py` (``plot_agn_feii_sweep.py``)
+     - 00:08.329
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``plot_agn_disc_compare.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_feii_sweep.py` (``plot_agn_feii_sweep.py``)
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_free_param_sensitivity.py` (``plot_agn_free_param_sensitivity.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_hierarchy.py` (``plot_agn_hierarchy.py``)
@@ -69,9 +72,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_xcigale_sweep.py` (``plot_skirtor_xcigale_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_type1_type2_unified_model.py` (``plot_type1_type2_unified_model.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_ulirg_to_qso_transition.py` (``plot_ulirg_to_qso_transition.py``)

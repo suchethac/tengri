@@ -42,7 +42,7 @@ Reference: Conroy+2013.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-ac87b2034992580db/examples/usecases/plot_usecase_simulation_seds.py:62: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
+    /tengri/examples/usecases/plot_usecase_simulation_seds.py:62: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       met_alpha_fe=0
 
     To fit them, pass 'all_params': FREE:

@@ -21,11 +21,6 @@
 Mass conservation in SFH: manual integration vs predict_properties
 ======================================================================
 
-.. image:: images/sphx_glr_plot_diag_mass_conservation_sfh_001.png
-   :alt: plot diag mass conservation sfh
-   :class: sphx-glr-single-img
-
-
 Internal consistency check: the cumulative SFR integral ∫₀ᵗ SFR(t) dt should
 equal the stellar mass returned by ``predict_properties()``. This diagnostic
 varies the DPL SFH parameters and verifies that the two pathways (manual trapz
@@ -35,29 +30,18 @@ the mass integration kernel.
 
 Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-138
+.. GENERATED FROM PYTHON SOURCE LINES 14-137
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/tengri/examples/advanced/plot_diag_mass_conservation_sfh.py", line 71, in <module>
-        sfh_dict = model.predict_sfh(params, n_linear=500)
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/tengri/src/tengri/forward/sed_model.py", line 5107, in predict_sfh
-        refuse_fixed_overrides(self.spec, params)
-      File "/tengri/src/tengri/parameters/resolve.py", line 131, in refuse_fixed_overrides
-        raise ParameterError(
-    tengri.config.exceptions.ParameterError: params overrides Fixed parameter(s): 'redshift' (pinned 0.0). Call-time overrides of a Fixed parameter are not supported (#2296); rebuild the model with this parameter FREE, or with a different Fixed value, instead.
+.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_diag_mass_conservation_sfh_001.png
+   :alt: plot diag mass conservation sfh
+   :srcset: /auto_examples/advanced/images/sphx_glr_plot_diag_mass_conservation_sfh_001.png
+   :class: sphx-glr-single-img
 
 
 
 
-
-
-|
 
 .. code-block:: Python
 
@@ -108,13 +92,12 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
         for beta in beta_vals:
             for tau_gyr in tau_gyr_vals:
                 for log_total_mass in log_total_mass_vals:
-                    # Build parameter dict
+                    # Build parameter dict (redshift is Fixed at 0.0 in the model)
                     params = {
                         "sfh_dpl_alpha": alpha,
                         "sfh_dpl_beta": beta,
                         "sfh_dpl_tau_gyr": tau_gyr,
                         "sfh_dpl_log_total_mass": log_total_mass,
-                        "redshift": 0.0,
                     }
 
                     # Get SFH trajectory (t_gyr in lookback time, sfr_full in Msun/yr)

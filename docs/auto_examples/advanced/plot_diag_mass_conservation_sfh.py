@@ -58,13 +58,12 @@ for alpha in alpha_vals:
     for beta in beta_vals:
         for tau_gyr in tau_gyr_vals:
             for log_total_mass in log_total_mass_vals:
-                # Build parameter dict
+                # Build parameter dict (redshift is Fixed at 0.0 in the model)
                 params = {
                     "sfh_dpl_alpha": alpha,
                     "sfh_dpl_beta": beta,
                     "sfh_dpl_tau_gyr": tau_gyr,
                     "sfh_dpl_log_total_mass": log_total_mass,
-                    "redshift": 0.0,
                 }
 
                 # Get SFH trajectory (t_gyr in lookback time, sfr_full in Msun/yr)
