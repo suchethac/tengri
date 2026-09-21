@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 
 import jax
@@ -130,6 +131,17 @@ def report(free, truth, fitted, wall, n_censored):
     if "xray_log_nh" in delta:
         print(f"xray_log_nh delta {delta['xray_log_nh']:+.4f} dex (was +2.04 with no X-ray band)")
     return delta
+
+
+# Progress goes to a log through a redirect, and Python line-buffers stdout
+# only to a terminal. Warnings reach stderr unbuffered while every print here
+# sat in a buffer until exit, so an 8h41m run showed nothing but warnings for
+# its whole life and the warm-start readout below -- the one line that says
+# whether --init-from-map engaged -- would not have appeared until it no
+# longer mattered. A long run that cannot be watched is a long run that has to
+# be rerun to answer a question its log should already hold.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
 
 
 def main(argv=None) -> int:
