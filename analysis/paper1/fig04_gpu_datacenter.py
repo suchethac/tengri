@@ -102,7 +102,7 @@ def build(payload: dict) -> tuple[plt.Figure, dict]:
 
     stats: dict = {}
     # Brackets, not a filled span: the two precisions cross in adjacent
-    # octaves, and overlapping spans merge into one grey block that reads as a
+    # octaves, and overlapping spans merge into one gray block that reads as a
     # single wide crossover region rather than as two distinct ones.
     for prec, height in (("f64", 0.90), ("f32", 0.78)):
         span = crossover(batch, fwd[f"cpu_{prec}"], fwd[f"gpu_{prec}"])
