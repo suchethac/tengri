@@ -101,15 +101,25 @@ except FileNotFoundError as exc:
 # includes.
 
 # %%
-final = OUT / "fig01_mock_joint_infer.pdf"
-provisional = OUT / "fig01_mock_joint_infer_provisional.pdf"
-if final.is_file():
-    print("ok   fig01_mock_joint_infer.pdf -- the posterior cleared the gate")
-elif provisional.is_file():
-    print(
-        "PROVISIONAL  fig01_mock_joint_infer_provisional.pdf\n"
-        "The posterior did not clear the gate, so the paper's filename was\n"
-        "withheld. The figure above is for inspection, not for inclusion."
-    )
-else:
+# Report what is on disk, not what was expected to be. Listing the two
+# filenames this notebook knew about printed "no figure was written" two lines
+# after the renderer logged that it had written a third --
+# fig01_mock_joint_infer_truthonly.pdf, which it uses when the mock exists but
+# no posterior does. A reader believes the summary, not the log above it.
+WITHHELD = {
+    "fig01_mock_joint_infer_provisional.pdf": (
+        "the posterior did not clear the gate, so the paper's filename was withheld"
+    ),
+    "fig01_mock_joint_infer_truthonly.pdf": (
+        "there is no posterior on disk, so this shows the mock alone and recovers nothing"
+    ),
+}
+written = sorted(p.name for p in OUT.glob("fig01_mock_joint_infer*.pdf"))
+if not written:
     print("no figure was written; see the renderer's output above")
+for name in written:
+    if name == "fig01_mock_joint_infer.pdf":
+        print(f"ok   {name} -- the posterior cleared the gate")
+    else:
+        why = WITHHELD.get(name, "the renderer withheld the paper's filename")
+        print(f"NOT FOR THE PAPER  {name}\n     {why}.")

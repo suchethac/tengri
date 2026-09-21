@@ -265,6 +265,14 @@ _galrun/
 # which is the only way this class of gap shows up. 1.9 MB for the sweep,
 # 52 KB for the mock; these are inputs, not generated output -- the figures
 # themselves stay ignored.
+# The mock's posterior sidecar is OUTPUT, not input: fit_mock_joint.py
+# overwrites it on every run, and the copy on disk today predates the fix that
+# made mock fits report R-hat at all. It was committed by accident once and
+# re-staged by the next `git add -A`, because untracking a file that stays on
+# disk does not stop git from offering it again. Ignoring it is the part that
+# holds without anyone remembering.
+analysis/paper1/results/mock_joint_mcmc_*.json
+
 !analysis/paper1/results/backend_sweep_pin/*.npz
 !analysis/paper1/results/mock_joint_truth.npz
 
