@@ -315,7 +315,14 @@ def plot_marginals(ax, posterior, truth_values, free_names):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--posterior", type=Path, default=POSTERIOR_NPZ)
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=None,
+        help="Directory to write the figure into; defaults to this script's figures/",
+    )
     args = parser.parse_args()
+    fig_dir = args.out_dir or FIG_DIR
 
     if not TRUTH_NPZ.exists():
         print(f"no mock at {TRUTH_NPZ}; run `python -m paper1.fig_mock_joint_infer` first")
@@ -398,14 +405,14 @@ def main() -> int:
             weight="bold",
         )
 
-    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    fig_dir.mkdir(parents=True, exist_ok=True)
     if not have_post:
         name = "fig01_mock_joint_infer_truthonly.pdf"
     elif not gate_passed:
         name = "fig01_mock_joint_infer_provisional.pdf"
     else:
         name = "fig01_mock_joint_infer.pdf"
-    out = FIG_DIR / name
+    out = fig_dir / name
     fig.savefig(out, bbox_inches="tight")
     print(f"wrote {out}")
     if not gate_passed:

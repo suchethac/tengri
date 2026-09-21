@@ -42,9 +42,13 @@ a results file is how a figure and its caption come apart.
 | `02_candels_grid.py` | sample-level summary, per-galaxy panels, published-code overlay | `results/fits/` grid cells, `selected_galaxies_20.json`, `art_sedfitting_z1.csv` |
 | `03_precompute_accuracy.py` | appendix LUT-accuracy envelope, and the speed panel the paper does not print | `fig03_precompute_data.json`, `fig03_bench_forward_2026-08-30.json` |
 | `04_backends.py` | one galaxy through MAP, Laplace, NUTS, HMC and nested slice sampling | `results/backend_sweep_pin/` |
+| `05_mock_joint.py` | the kitchen-sink z=1 mock and its recovery | `mock_joint_truth.npz`, `mock_joint_mcmc_nuts.npz` |
 
-The mock joint inference figure is added when a run clears its posterior gate;
-until then the paper carries a provisional render under a distinct filename.
+That is every figure the paper prints. `05_mock_joint.py` writes the paper's
+filename only when the posterior clears its gate and a provisional one, under
+a different name and carrying a banner, when it does not -- so a figure drawn
+from an unconverged fit cannot quietly occupy the name the manuscript
+includes.
 
 `PAPER1_FITS_DIR` points `02_candels_grid.py` at a different directory of grid
 cells; it defaults to `analysis/paper1/results/fits`.
