@@ -54,7 +54,11 @@ model = tengri.SEDModel.build(
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "tau_bc": tengri.Fixed(tengri.DEFAULT),  # Birth cloud dust fixed
+        # Pinned directly at 0.1 (matches the constant value the sweep loop
+        # below used to re-assert every iteration; that per-iteration
+        # override is now redundant and dropped -- #2296 refuses a
+        # params-dict key the spec declared Fixed, even at its own value).
+        "tau_bc": tengri.Fixed(0.1),  # Birth cloud dust fixed
         "tau_diff": tengri.Uniform(0.0, 2.0),  # Sweep diffuse dust
         "slope": tengri.Fixed(-0.7),
     },
@@ -78,8 +82,9 @@ ha_hb_ratio = []
 baseline_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 for tau_diff in tau_diff_values:
-    # Only vary dust optical depth
-    params = {**baseline_params, "dust_tau_diff": np.float64(tau_diff), "dust_tau_bc": 0.1}
+    # Only vary dust optical depth; dust_tau_bc is Fixed(0.1) in the build
+    # above, so it is correctly omitted here rather than re-asserted (#2296).
+    params = {**baseline_params, "dust_tau_diff": np.float64(tau_diff)}
     lines = model.predict(params).lines
 
     if lines is not None:

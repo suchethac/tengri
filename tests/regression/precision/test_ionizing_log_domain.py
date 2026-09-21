@@ -203,8 +203,14 @@ def test_gradient_identity_with_total_mass():
     chain = model._build_component_chain() if hasattr(model, "_build_component_chain") else None
     stellar = next(c for c in chain if isinstance(c, StellarSEDComponent))
 
-    # Sample and get params, override log_total_mass
-    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    # compute_log_nion is a direct component-level call, bypassing
+    # predict_state's own merge boundary -- merge the spec's Fixed values in
+    # explicitly (#2296) rather than relying on spec.sample()'s now free-only
+    # output (here nearly everything is Fixed, so sample() alone would be
+    # missing redshift and the sfh_dpl_* params compute_log_nion needs).
+    from tengri.parameters.resolve import merge_fixed_params
+
+    p = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
 
     # Gradient w.r.t. sfh_dpl_log_total_mass should be 1.0
     grad_fn = jax.grad(lambda lm: stellar.compute_log_nion({**p, "sfh_dpl_log_total_mass": lm}))

@@ -134,7 +134,7 @@ def test_fit_runs_through_the_canonical_surface(kind):
     sed = _model(ssp, observation)
     forward = ForwardModel.build(sed=sed, observation=observation)
 
-    params = {**sed.spec.get_fixed_values(), **sed.spec.sample(jax.random.PRNGKey(0))}
+    params = sed.spec.sample(jax.random.PRNGKey(0))
     mock = sed.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
 
     res = forward.fit(

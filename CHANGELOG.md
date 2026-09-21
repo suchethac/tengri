@@ -52,6 +52,71 @@
   explicit choice, so the coupling between the field path and the coarse kernel
   is no longer invisible. (#2368)
 
+- WavePrecomp photometry now applies the nebular Lyman-continuum mask
+  (`neb_fesc`) that the exact path applies below rest-frame 912 Å (#2439,
+  #2427): `predict_via_precomp` summed the stellar photometric LUT with no
+  such correction, so any band whose observed passband sampled rest λ < 912 Å
+  carried the full, unabsorbed stellar Lyman continuum regardless of
+  `neb_fesc`, K-invariant. Measured on the issue's model (Cue nebular,
+  default `neb_fesc=0.0`, no dust): z=2 GALEX NUV +915 %, z=3 SDSS u +69 %;
+  #2427's Inoue-IGM rows (z=0.8-3.0) are the same defect. The whole-band
+  stellar LUT (`stellar_phot_lnu_precomp`) now carries an exact algebraic
+  split of the SSP × filter integral at the 912 Å edge
+  (`stellar_phot_lnu_precomp_lyc` and its per-age twin, zero-clamped against
+  catastrophic cancellation in a fully-Lyman-continuum band), collapsing the
+  residual to the pre-existing WavePrecomp floor.
+
+  Fix round (2026-09): the K-node sub-band tensors are now matched to each
+  consumer's OWN dense-path rule instead of one flat approximation shared by
+  all three. `preintegrate_grid` forces an extra quadrature edge exactly at
+  the physical 912 Å boundary whenever a live nebular mask is present, so no
+  chunk straddles the break; `NebularSEDComponent` publishes a flat
+  `stellar_subband_lyc_factor_precomp` factor (the only rule available
+  without a birth-cloud concept — the dust-free mean-IGM branch's own case),
+  and `two_component`, when it runs, overwrites the same key with its
+  y(age)-graded `1-y(a)(1-fesc)` rule (or the flat rule under
+  `lyc_absorb_all=True`) — never both, so there is exactly one factor per
+  model. `SpectrumPrecomp` gets the identical fix as an exact per-pixel mask
+  (a spectrum pixel is a single wavelength, so there is no partition to make
+  approximate). Four conservation invariants are now asserted directly: the
+  raw partition sums to the raw whole band; `neb_fesc=1.0` is bit-for-bit
+  identical to no nebular component at all; the corrected sub-band sum
+  matches the corrected whole band to ~1e-9 relative; and the per-age split
+  sums over age to its whole-band twin. The on-disk z-table cache version was
+  bumped (a warm cache built one day earlier would otherwise have satisfied
+  an unversioned key and silently served a table with no Lyman-continuum
+  split), and a missing `ssp_phot_lyc_table` key is now treated as a cache
+  miss rather than trusted.
+
+  Also fixed, found via a BASE-vs-HEAD zero-diff probe of this fix round's
+  own changes: `lyc_mask_live` (the build-time gate above) tested only
+  `isinstance(c, NebularSEDComponent)`, but `neb={'type': 'none'}` and
+  `backend="shock"` both still put a `NebularSEDComponent` in the chain
+  (`backend="baked_in"` for `'none'`) and both return from `apply` before
+  ever reaching the `neb_fesc` masking block, so a model with either one was
+  wrongly treated as "live": pure wasted compute for most filters, and for a
+  very wide/red far-IR filter whose observed-frame footprint sits nowhere
+  near the forced 912(1+z) edge, `subband_quadrature`'s own partition-
+  conservation assertion could raise outright (measured: WISE W3 and
+  Herschel PACS green/100um on the real `fsps_prsc_miles_chabrier.h5` grid,
+  a `neb={'type': 'none'}` model that built and predicted cleanly before
+  this fix round). The gate now also checks the nebular backend is one of
+  the photoionized ones (`cue`, `cloudy_grid`, `cb19`, `mappings`).
+
+  A real-grid residual remains after this fix (measured on the real
+  `fsps_prsc_miles_chabrier.h5` + Cue grid, this round's own SFH: z=2 GALEX
+  NUV ~10 %, z=3 SDSS u ~5 %, K-invariant) — this is the EXACT path's own
+  SSP-grid-node quantization of the 912 Å edge (the dense mask cuts at
+  whichever SSP wavelength node sits just below 912 Å, not at 912 Å itself,
+  while this LUT's split is exact at the true physical edge), filed as #2447
+  and not fixed this round; the magnitude is SFH- and filter-dependent.
+
+  `tools/check_zero_hiding_clamps.py`'s pinned count moves 91 -> 92: the new
+  Lyman-continuum twin's `num / jnp.maximum(denom, ...)` shares its
+  denominator with the whole-band tensor's existing site and the same
+  count/scale-floor classification — the filter integral of a loaded filter
+  cannot vanish by construction.
+
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
@@ -203,6 +268,24 @@
   below ~1 keV) is now documented in the docstring. (#901)
 
 ### Added
+
+- Per-screen dust law shape keys accept `Fixed`/priors and become declared
+  `dust_<shape>_<screen>` parameters; a plain number keeps the build-time
+  path; the flat `dust_law_overrides` dict refuses a prior with the named
+  remedy (#2428). `FREE` frees the key on its declared range, and
+  `Fixed(DEFAULT)` pins it at the same registry default the plain-number
+  spelling of that default already predicts bit-identically to. The 12 names
+  are two-component only (`single_component`/`wg00` never carry them) and
+  wildcard-inert (`all_params: FREE` never frees one; name it explicitly).
+  Every two-component spec now carries 12 more declared (Fixed-by-default)
+  parameters than before, which changes `cache_key()` for such specs (a
+  single_component spec's `cache_key()` is untouched). `compile_signature()`
+  changes for EVERY model, single_component included: it embeds the
+  registry-wide name -> law-kwarg table, which now carries a row per
+  per-screen name. Both are one-time cache invalidations on upgrade, not a
+  behavior change to any existing prediction. A no-`all_params`-disposition
+  `dust_attenuation` build (`DefaultFixedParametersWarning`) now lists 17
+  parameters instead of 5 on a two-component spec, the same 12 names added.
 
 - SkyMapper Southern Survey filters: `skymapper_u`, `skymapper_v`,
   `skymapper_g`, `skymapper_r`, `skymapper_i`, `skymapper_z`, with their
@@ -1180,6 +1263,46 @@
   encounter both changes at once; the renamed group is *also* now subject to the
   explicit-law rule.
 
+
+### Changed
+
+- **Params dicts are free-only; every entry point refuses a Fixed key
+  (#2296; breaking change).**
+  ``model.predict(params)`` and every prediction surface now refuse a `params`
+  key the spec declared ``Fixed``, raising ``ParameterError`` naming the key,
+  the pinned value, and the remedy. ``Parameters.sample(key)`` and
+  ``Posterior.params`` / ``.samples`` now carry free parameters only, not Fixed
+  ones. Fixed values are accessible through ``spec.get_fixed_values()`` or the
+  new ``Posterior.fixed_values`` property (which reflects any
+  ``Fitter(params_override=...)`` re-pin actually used by the fit, not just
+  the spec's declared value). This closes the silent physics error
+  where a Fixed-key override was honored on some specialized paths
+  (FeaturePrecomp) and dropped on others (exact), producing stealthily different
+  physics. To pin a *different* value for one fit or one galaxy, the
+  sanctioned route is still ``Fitter(params_override={...})`` (validated at
+  construction to name only Fixed parameters) or ``CatalogFitter``'s per-galaxy
+  redshift override — both unaffected by this refusal.
+
+  Neighbors of the same fix, registered here rather than as separate entries:
+  - A mirror target (e.g. ``neb_logZ_gas="met_logzsol"``) present in ``params``
+    is refused when its value differs from its resolved source; a value equal
+    to the source (what ``sample()`` produces) is still accepted.
+  - ``Catalog.from_histories`` refuses a Fixed ``met_gas=``/``redshift=`` at
+    construction, not lazily inside ``predict()``/``simulate()``.
+  - ``Posterior.fixed_values`` excludes any name free on the user's model,
+    closing a leak where a ``profile_mass``-pinned mass appeared in both
+    ``params`` (its real value) and ``fixed_values`` (a stale placeholder).
+  - ``PopulationFitter`` requires its two population-shared PSD names
+    (``sfh_field_psd_sigma``, ``sfh_field_psd_tau_myr``) free on
+    ``model_factory``'s spec, and refuses construction otherwise, naming the
+    remedy (breaking change for any ``model_factory`` that pinned them Fixed;
+    ``SEDModel.fit_population``'s own factory is updated to match).
+  - Three idioms are refused the same way everywhere they were found:
+    ``spec.get_fixed_values()`` spread into a params dict,
+    ``{**dict(spec.sample(...)), "<key>": value}`` sweeping a Fixed key, and
+    an explicit Fixed key restated at its own pinned value. Repair recipe:
+    declare the swept/restated parameter FREE in ``SEDModel.build`` instead,
+    and pass only the free (swept) keys.
 
 ### Fixed
 

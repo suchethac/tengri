@@ -100,7 +100,12 @@ def _build(ssp, dust, approx=None):
 
 
 def _params(model):
-    return {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    # Free-only (#2296): every predict_* surface below self-merges the
+    # spec's Fixed values internally and refuses a params key the spec
+    # declared Fixed. Spreading get_fixed_values() here used to be
+    # harmless (the old blanket-merge machinery matched it); now it hands
+    # every one of those names back as a refused override.
+    return dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 
 def _zero_lyc(ssp):

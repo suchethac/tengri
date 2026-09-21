@@ -251,20 +251,28 @@ class TestIssue2068FilterWaveSignature:
         # Order 1: optical first, then IR
         opt_obs = Observation(photometry=Photometry(filters=opt_filters))
         opt_model = SEDModel(spec, synthetic_ssp, observation=opt_obs)
-        opt_phot = opt_model.predict_photometry(spec.get_fixed_values())
+        opt_phot = opt_model.predict_photometry(
+            {}
+        )  # spec here is all-Fixed (n_free=0); free-only means empty (#2296)
 
         ir_obs = Observation(photometry=Photometry(filters=ir_filters))
         ir_model = SEDModel(spec, synthetic_ssp, observation=ir_obs)
-        ir_phot = ir_model.predict_photometry(spec.get_fixed_values())
+        ir_phot = ir_model.predict_photometry(
+            {}
+        )  # spec here is all-Fixed (n_free=0); free-only means empty (#2296)
 
         # Order 2: IR first, then optical (in same process to test cache collision)
         ir_obs_2 = Observation(photometry=Photometry(filters=ir_filters))
         ir_model_2 = SEDModel(spec, synthetic_ssp, observation=ir_obs_2)
-        ir_phot_2 = ir_model_2.predict_photometry(spec.get_fixed_values())
+        ir_phot_2 = ir_model_2.predict_photometry(
+            {}
+        )  # spec here is all-Fixed (n_free=0); free-only means empty (#2296)
 
         opt_obs_2 = Observation(photometry=Photometry(filters=opt_filters))
         opt_model_2 = SEDModel(spec, synthetic_ssp, observation=opt_obs_2)
-        opt_phot_2 = opt_model_2.predict_photometry(spec.get_fixed_values())
+        opt_phot_2 = opt_model_2.predict_photometry(
+            {}
+        )  # spec here is all-Fixed (n_free=0); free-only means empty (#2296)
 
         # Assertions: photometry must differ and IR must be zero
         assert not bool(jnp.all(opt_phot == ir_phot)), "Optical and IR photometry should differ"
@@ -346,11 +354,15 @@ class TestIssue2068FilterWaveSignature:
 
         opt_obs = Observation(photometry=Photometry(filters=opt_filters))
         opt_model = SEDModel(spec, synthetic_ssp, observation=opt_obs)
-        opt_phot = opt_model.predict_photometry(spec.get_fixed_values())
+        opt_phot = opt_model.predict_photometry(
+            {}
+        )  # spec here is all-Fixed (n_free=0); free-only means empty (#2296)
 
         shifted_obs = Observation(photometry=Photometry(filters=shifted_filters))
         shifted_model = SEDModel(spec, synthetic_ssp, observation=shifted_obs)
-        shifted_phot = shifted_model.predict_photometry(spec.get_fixed_values())
+        shifted_phot = shifted_model.predict_photometry(
+            {}
+        )  # spec here is all-Fixed (n_free=0); free-only means empty (#2296)
 
         assert not bool(jnp.all(opt_phot == shifted_phot)), (
             "Shifted filter wavelengths should produce different photometry"

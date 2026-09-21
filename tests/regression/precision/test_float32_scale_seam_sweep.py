@@ -548,7 +548,14 @@ def _agn_black_hole_mass_model(ssp):
         agn={
             "type": "composable",
             "all_params": Fixed(DEFAULT),
-            "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
+            # agn_log_mbh declared FREE (#2296): every call site below sweeps
+            # it explicitly at predict time across the documented Uniform(6, 10)
+            # black-hole-mass range this file's docstrings already describe.
+            "disc": {
+                "type": "kubota_done",
+                "all_params": Fixed(DEFAULT),
+                "log_mbh": Uniform(6.0, 10.0),
+            },
             "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
             "log_lbol": Fixed(11.0),
@@ -589,7 +596,8 @@ model = SEDModel.build(
     dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT),
                       "tau_diff": 0.3, "tau_bc": 0.0},
     agn={"type": "composable", "all_params": Fixed(DEFAULT),
-         "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
+         "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT),
+                  "log_mbh": Uniform(6.0, 10.0)},
          "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
          "norm": "cigale_joint", "log_lbol": Fixed(11.0), "fracAGN": 0.1},
     redshift=Fixed(0.1),

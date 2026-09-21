@@ -243,18 +243,8 @@ def test_sedmodel_fit_emits_no_deprecation_warning(ssp_data_wne, simple_observat
         redshift=Fixed(0.1),
     )
     # Generate a trivial mock for fitting
-    params = {
-        "sfh_dpl_alpha": 1.5,
-        "sfh_dpl_beta": 1.0,
-        "sfh_dpl_tau_gyr": 5.0,
-        "sfh_dpl_age_gyr": 10.0,
-        "sfh_dpl_log_total_mass": 0.5,
-        "met_logzsol": 0.0,
-        "dust_tau_bc": 0.5,
-        "dust_tau_diff": 0.2,
-        "dust_slope": -0.7,
-        "redshift": 0.05,
-    }
+    # Pass only free parameters; mock() will handle Fixed values internally (#2296)
+    params = {name: 0.5 for name in sed.spec.free_params}
     mock = sed.mock(params, snr=5.0, key=__import__("jax").random.PRNGKey(0))
 
     # Verify sed.fit(method="map") emits NO DeprecationWarning (excluding unrelated JAX warnings)

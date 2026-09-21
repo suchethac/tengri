@@ -42,6 +42,7 @@ disagreement is a live discrepancy, not a typo.
 
 from __future__ import annotations
 
+from tengri.parameters._dust_keys import OVERRIDE_STEMS, SCREENS, short_to_full
 from tengri.parameters.priors import Fixed, Gaussian, Uniform
 from tengri.protocols.component import ParamDeclaration, declared_default
 
@@ -582,6 +583,106 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # dense clouds at the high end.
         free_prior=Uniform(2.0, 6.0, "Total-to-selective extinction R_V", default=3.1),
     ),
+    # ── Per-screen dust law shape parameters (#2428) ──────────────────────────
+    # The 12 per-screen variants (slope, delta, bump_strength, Rv) x (bc, diff, neb)
+    # are declared as explicit-only free parameters. They become live parameters
+    # (in spec.free_params) when explicitly set to a Distribution/FREE; a caller
+    # must name the parameter itself to free it -- unlike the four SHARED shape
+    # stems (dust_slope/delta/bump_strength/Rv), these 12 are wildcard-INERT:
+    # per_screen_inert (parameters/groups.py::_dust_wildcard_scopes) excludes
+    # every one of them from `all_params: FREE`'s scope unconditionally, whether
+    # or not the given screen's law reads the stem -- a blanket `FREE` on the
+    # group can never double-parametrize a screen behind its own explicit
+    # setting. When given a plain number (not a Distribution), a per-screen
+    # key still routes through dust_law_overrides as a static config value,
+    # exactly as before this feature existed -- AND seeds the declared
+    # parameter itself at that same value (provenance user_fixed), so a
+    # Fixed(v) and the bare scalar v are indistinguishable from here on:
+    # same predicted SED, same get_fixed_values()/summary() value. See #2428.
+    ParamDeclaration(
+        "dust_slope_bc",
+        Fixed(-0.7),
+        "Dust slope on birth cloud screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (bc)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_slope_diff",
+        Fixed(-0.7),
+        "Dust slope on diffuse ISM screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (diff)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_slope_neb",
+        Fixed(-0.7),
+        "Dust slope on nebular cloud screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (neb)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_bc",
+        Fixed(0.0),
+        "UV bump strength on birth cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (bc)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_diff",
+        Fixed(0.0),
+        "UV bump strength on diffuse ISM screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (diff)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_neb",
+        Fixed(0.0),
+        "UV bump strength on nebular cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (neb)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_bc",
+        Fixed(0.0),
+        "Attenuation slope modification on birth cloud (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (bc)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_diff",
+        Fixed(0.0),
+        "Attenuation slope modification on diffuse ISM (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (diff)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_neb",
+        Fixed(0.0),
+        "Attenuation slope modification on nebular cloud (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (neb)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_Rv_bc",
+        Fixed(3.1),
+        "R_V on birth cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (bc)", default=3.1),
+    ),
+    ParamDeclaration(
+        "dust_Rv_diff",
+        Fixed(3.1),
+        "R_V on diffuse ISM screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (diff)", default=3.1),
+    ),
+    ParamDeclaration(
+        "dust_Rv_neb",
+        Fixed(3.1),
+        "R_V on nebular cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (neb)", default=3.1),
+    ),
 )
 
 # ── Derived defaults for direct import, attenuation table (#2265) ─────
@@ -596,12 +697,25 @@ DEFAULT_DUST_F_OBSCURATION = declared_default(ATTENUATION_PARAMS, "dust_f_obscur
 DEFAULT_DUST_BUMP_STRENGTH = declared_default(ATTENUATION_PARAMS, "dust_bump_strength")
 DEFAULT_DUST_DELTA = declared_default(ATTENUATION_PARAMS, "dust_delta")
 DEFAULT_DUST_RV = declared_default(ATTENUATION_PARAMS, "dust_Rv")
+# No per-screen counterparts of the five constants above: the 12 per-screen
+# names (#2428) have no consumer that reads a bare Python float default off
+# this module the way the shared stems' aggregation-point ``.get(...)``
+# fallbacks do -- resolve_bc_diff_law_params/merge_neb_screen_live_overrides
+# both read a per-screen live value straight out of ``params``, never a
+# module-level constant. Twelve such constants were declared and exported
+# here regardless and had zero consumers; removed rather than kept as an
+# always-unread parallel copy of the registry.
 
 # Names within ATTENUATION_PARAMS that are skipped when
 # ``dust_model="single_component"`` (the single-screen geometry replaces
 # both Charlot-Fall optical depths with ``dust_tau_v`` from
-# SINGLE_COMPONENT_PARAMS).
-ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset({"dust_tau_bc", "dust_tau_diff"})
+# SINGLE_COMPONENT_PARAMS). The 12 per-screen shape names (#2428) join them
+# here for the same reason: a single screen has no ``bc``/``diff``/``neb``
+# distinction to name, so ``dust_slope_bc`` etc. would be a declared
+# parameter with nothing for the per-screen spelling to mean.
+ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset(
+    {"dust_tau_bc", "dust_tau_diff"}
+) | frozenset(short_to_full(f"{stem}_{screen}") for stem in OVERRIDE_STEMS for screen in SCREENS)
 
 SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(

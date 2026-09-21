@@ -150,10 +150,8 @@ def test_parametric_arm_conserves_mass_on_the_same_truncating_grid(
     loss below cannot be attributed to the SSP grid being short; it is specific
     to how the tabulated path lands mass on that grid.
     """
-    import jax.numpy as jnp
-
-    fwd, sed = _build(truncating_ssp, synthetic_tophat_obs, _parametric_sfh())
-    params = {k: jnp.asarray(v) for k, v in fwd.spec.get_fixed_values().items()}
+    _fwd, sed = _build(truncating_ssp, synthetic_tophat_obs, _parametric_sfh())
+    params = {}  # every parameter here is Fixed (n_free=0); free-only is empty (#2296)
     mass = float(
         np.asarray(sed.predict_properties(params, names=("stellar_mass",))["stellar_mass"])
     )
@@ -201,9 +199,7 @@ def test_tabulated_sfh_conserves_mass_across_the_grid_edge(truncating_ssp, synth
     # tests/unit/inference/test_catalog_histories.py measures exactly that), so
     # it scales with the relocated fraction rather than being a residual defect.
     # Before the fix this ratio was 0.7246 — the mass deficit, in light.
-    import jax.numpy as jnp
-
-    p_par = {k: jnp.asarray(v) for k, v in par_fwd.spec.get_fixed_values().items()}
+    p_par = {}  # every parameter here is Fixed (n_free=0); free-only is empty (#2296)
     f_par = np.asarray(par_fwd.predict_photometry(p_par))
     f_tab = np.asarray(mock.photometry)[0]
     assert np.allclose(f_tab / f_par, 1.0, rtol=2e-2), f"flux ratio {f_tab / f_par}"
