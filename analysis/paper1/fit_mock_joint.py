@@ -151,6 +151,16 @@ def main(argv=None) -> int:
     parser.add_argument("--n-warmup", type=int, default=300)
     parser.add_argument("--n-samples", type=int, default=300)
     parser.add_argument("--n-chains", type=int, default=4)
+    parser.add_argument(
+        "--target-accept",
+        type=float,
+        default=0.85,
+        help=(
+            "NUTS target acceptance rate; run_nuts's own default is 0.85. "
+            "Higher shortens the step and suppresses divergences at the cost "
+            "of wall clock."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--init-from-map",
@@ -223,6 +233,15 @@ def main(argv=None) -> int:
             # divergences than dense on a continuity SFH at D=9 (12 vs 2), so
             # this is not a memory concession that costs sampling quality.
             "dense_mass_matrix": False,
+            # Step size, the remaining lever on divergences once the start is
+            # excluded. run_nuts has taken this all along at 0.85; raising it
+            # shortens the step, which is the standard remedy and costs wall
+            # clock. Exposed because the 11 h run at the default warm-started
+            # INSIDE the basin, at chi2/dof 1.0480 against truth's 1.0738, and
+            # still ended at 1.3075 with 79 divergences against the cold run's
+            # 19 -- more divergences from a better start, so initialization is
+            # not the cause and geometry is what is left.
+            "target_accept_rate": args.target_accept,
         }
 
     # Inference is canonically through ForwardModel, not the SEDModel directly.
@@ -451,6 +470,8 @@ def _save_sampler_results(
         "n_chains": sampler_kwargs.get("n_chains"),
         "n_warmup": sampler_kwargs.get("n_warmup"),
         "n_samples": sampler_kwargs.get("n_samples"),
+        "target_accept_rate": sampler_kwargs.get("target_accept_rate"),
+        "dense_mass_matrix": sampler_kwargs.get("dense_mass_matrix"),
         "method": method,
         # Which tree produced these numbers. Section 3 quotes them and the
         # paper is pinned, so a diagnostic without a commit is a diagnostic
