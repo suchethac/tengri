@@ -9,7 +9,7 @@ the notebooks are the reproducible, inspectable driver for them.
 | Notebook | Paper label | File | Script | Inputs (under `analysis/paper1/`) |
 |---|---|---|---|---|
 | `fig_gpu.ipynb` | `fig:gpu` | `fig04_gpu_datacenter.pdf` | `fig04_gpu_datacenter.py` | `results/sherlock_h100_batch.json` |
-| `fig_gpu_consumer.ipynb` | `fig:gpu_consumer` | `figD1_gpu_consumer.pdf` | `fig04_gpu_crossover.py` | none |
+| `fig_gpu_consumer.ipynb` | `fig:gpu_consumer` | `figD1_gpu_consumer.pdf` | `fig04_gpu_datacenter.py` | `results/consumer_gpu_batch.json` |
 | `fig_backends.ipynb` | `fig:backends` | `fig07_backends.pdf` | `fig07_backends.py` | `results/backend_sweep_pin` |
 | `fig_precomp_accuracy.ipynb` | `fig:precomp_accuracy` | `figB1_lut_accuracy.pdf` | `fig03_precompute.py` | `results/fig03_precompute_data.json`, `results/fig03_bench_forward_2026-08-30.json` |
 | `fig_sample.ipynb` | `fig:sample` | `fig09_sample_level.pdf` | `fig09_sample_level.py` | `results/fits` |

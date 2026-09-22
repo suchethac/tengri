@@ -111,23 +111,33 @@ def run_module(p: Paths, module: str, *args: object, tail: int = 3000) -> str:
 
 
 def provenance(p: Paths) -> dict[str, str]:
-    """Record what rendered the figure: commit, tree state, interpreter, tengri, JAX."""
-    def git(*a: str) -> str:
-        return subprocess.run(["git", *a], cwd=p.checkout, text=True, capture_output=True).stdout.strip()
+    """Record what rendered the figure: commit, tree state, interpreter, library versions."""
 
-    probe = "import jax, tengri; print(tengri.__version__, jax.__version__)"
+    def git(*a: str) -> str:
+        return subprocess.run(
+            ["git", *a], cwd=p.checkout, text=True, capture_output=True
+        ).stdout.strip()
+
+    probe = "import jax, matplotlib, tengri; print(tengri.__version__, jax.__version__, matplotlib.__version__)"
     versions = subprocess.run(
-        [interpreter(), "-c", probe], cwd=p.checkout, env=environment(p), text=True, capture_output=True
+        [interpreter(), "-c", probe],
+        cwd=p.checkout,
+        env=environment(p),
+        text=True,
+        capture_output=True,
     )
-    tengri_v, jax_v = (versions.stdout.split() + ["?", "?"])[:2]
+    tengri_v, jax_v, mpl_v = [*versions.stdout.split(), "?", "?", "?"][:3]
     info = {
         "checkout": str(p.checkout),
         "commit": git("rev-parse", "--short", "HEAD"),
         "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
-        "dirty_paths": str(len(git("status", "--porcelain", "--", "src", "analysis/paper1").splitlines())),
+        "dirty_paths": str(
+            len(git("status", "--porcelain", "--", "src", "analysis/paper1").splitlines())
+        ),
         "python": interpreter(),
         "tengri": tengri_v,
         "jax": jax_v,
+        "matplotlib": mpl_v,
     }
     for key, value in info.items():
         print(f"{key:12s} {value}")
@@ -143,7 +153,10 @@ def show(p: Paths, stem: str) -> None:
         raise FileNotFoundError(f"{pdf} was not written")
     print(f"output {pdf.relative_to(p.checkout)}  ({pdf.stat().st_size / 1024:.0f} kB)")
     if not png.exists() and shutil.which("pdftoppm"):
-        subprocess.run(["pdftoppm", "-png", "-r", "110", "-singlefile", str(pdf), str(pdf.with_suffix(""))], check=False)
+        subprocess.run(
+            ["pdftoppm", "-png", "-r", "110", "-singlefile", str(pdf), str(pdf.with_suffix(""))],
+            check=False,
+        )
     if png.exists():
         display(Image(filename=str(png)))
     else:
