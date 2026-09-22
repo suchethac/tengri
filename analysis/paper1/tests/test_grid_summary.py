@@ -34,6 +34,7 @@ from paper1.grid_summary import (
     load_cells,
     per_cell,
     provenance_check,
+    relaxation_audit,
     summarize,
 )
 
@@ -229,3 +230,66 @@ def test_a_checked_directory_reports_how_many_cells_it_examined(tmp_path):
 
     assert prov["checked"] is True
     assert prov["cells_examined"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Is the relaxed bar still needed by the configuration it names?
+#
+# RELAXED_CONFIGS holds "III" because 0 of 17 Configuration III cells cleared a
+# zero-divergence bar in the superseded suite -- measured when III was the
+# nonparametric continuity model. The 20x6 scheme made III delayed-tau and
+# moved continuity to I and VI, so the key selects a different model than the
+# exemption was measured on.
+
+
+def test_a_relaxed_configuration_whose_cells_clear_the_strict_bar_is_reported_inert():
+    """The defect. An exemption nobody uses still forces a caption caveat."""
+    rows = _rows([_cell(g, "III", rhat=1.004) for g in range(1, 21)])
+
+    report = relaxation_audit(rows)
+
+    assert report["III"]["relaxation_needed"] is False
+    assert report["III"]["worst_divergences"] == 0
+    assert report["III"]["clear_the_strict_bar"] == 20
+
+
+def test_a_relaxed_configuration_that_needs_it_says_so():
+    """Otherwise the audit would report every exemption as removable."""
+    cells = [_cell(g, "III") for g in range(1, 21)]
+    for cell in cells[:5]:
+        cell["divergences"] = 3
+    rows = _rows(cells)
+
+    report = relaxation_audit(rows)
+
+    assert report["III"]["relaxation_needed"] is True
+    assert report["III"]["worst_divergences"] == 3
+    assert report["III"]["clear_the_strict_bar"] == 15
+
+
+def test_an_unrelaxed_configuration_is_not_reported():
+    """The audit speaks only about configurations carrying an exemption."""
+    rows = _rows([_cell(g, "I") for g in range(1, 21)])
+    assert relaxation_audit(rows) == {}
+
+
+def test_a_relaxed_configuration_with_no_cells_is_not_reported():
+    """Absence of cells is not evidence the exemption is unneeded."""
+    rows = _rows([_cell(g, "II") for g in range(1, 21)])
+    assert "III" not in relaxation_audit(rows)
+
+
+def test_a_high_rhat_alone_does_not_make_the_relaxation_needed():
+    """The relaxation is about divergences; R-hat is on both bars.
+
+    A cell refused for R-hat is refused under the strict bar and the relaxed
+    one alike, so it is not evidence that the exemption earns its place.
+    """
+    cells = [_cell(g, "III") for g in range(1, 21)]
+    cells[0]["rhat_max"] = 1.05
+    cells[0]["adoption_pass"] = False
+
+    report = relaxation_audit(_rows(cells))
+
+    assert report["III"]["relaxation_needed"] is False
+    assert report["III"]["clear_the_strict_bar"] == 19

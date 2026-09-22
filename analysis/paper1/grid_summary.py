@@ -132,6 +132,43 @@ def provenance_check(results_dir: Path) -> dict:
     }
 
 
+def relaxation_audit(rows: list[dict]) -> dict:
+    """Does each relaxed configuration still need its relaxation?
+
+    ``_adoption.RELAXED_CONFIGS`` holds ``{"III"}`` and the reason is recorded
+    there: across the superseded suite, 0 of 17 Configuration III cells cleared
+    a zero-divergence bar, so it is judged on convergence and a divergence rate
+    instead. That measurement was taken when III was the nonparametric
+    continuity model.
+
+    The 20x6 scheme redefined the configurations. III is now delayed-tau at six
+    free parameters and continuity moved to I and VI, so the key selects a
+    different model than the one the exemption was measured on. This reports
+    whether the cells on disk actually need it, because a relaxation nobody
+    needs is not harmless: ``_adoption`` requires every figure drawing a
+    relaxed configuration to say so in its caption, and that caveat would be
+    describing a bar the cells clear outright.
+
+    Deciding what to do about it is the owner's -- moving the key silently
+    would change which cells the paper draws.
+    """
+    from _adoption import RELAXED_CONFIGS
+
+    report = {}
+    for config in sorted(RELAXED_CONFIGS):
+        sub = [r for r in rows if r["config"] == config]
+        if not sub:
+            continue
+        strict = [r for r in sub if r["divergences"] == 0 and r["rhat_max"] < 1.01]
+        report[config] = {
+            "cells": len(sub),
+            "clear_the_strict_bar": len(strict),
+            "worst_divergences": max(r["divergences"] for r in sub),
+            "relaxation_needed": len(strict) < len([r for r in sub if r["adopted"]]),
+        }
+    return report
+
+
 def summarize(rows: list[dict]) -> dict:
     """Aggregate, refusing the grid-wide figures when the grid is partial."""
     configs = sorted({r["config"] for r in rows})
@@ -227,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = [per_cell(name, cell) for name, cell in cells.items()]
     summary = summarize(rows)
     summary["provenance"] = provenance_check(args.results)
+    summary["relaxation"] = relaxation_audit(rows)
 
     print(
         f"{'config':<8}{'cells':>7}{'adopted':>9}{'worst ESS':>11}{'worst rhat':>12}{'med wall s':>12}"
@@ -256,6 +294,20 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         print(f"declared vs sampled: clean over {prov['cells_examined']} cells")
+
+    for config, row in summary["relaxation"].items():
+        if row["relaxation_needed"]:
+            print(
+                f"relaxed bar {config}: needed -- {row['cells'] - row['clear_the_strict_bar']} "
+                f"of {row['cells']} cells do not clear the strict bar"
+            )
+        else:
+            print(
+                f"relaxed bar {config}: INERT -- all {row['cells']} cells have at most "
+                f"{row['worst_divergences']} divergences and {row['clear_the_strict_bar']} "
+                "clear the strict bar, so the caption caveat _adoption requires "
+                "would describe an exemption these cells do not use"
+            )
 
     if summary["aggregates"] is None:
         print(f"\ngrid-wide figures withheld: {summary['aggregates_withheld_because']}")
