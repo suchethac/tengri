@@ -33,6 +33,7 @@ from paper1.grid_summary import (
     Missing,
     load_cells,
     per_cell,
+    provenance_check,
     summarize,
 )
 
@@ -185,3 +186,46 @@ def test_the_summary_round_trips_as_json():
     """It is written to disk and read by whoever fills the section."""
     summary = summarize(_rows(_full_grid()))
     assert json.loads(json.dumps(summary))["aggregates"]["n_adopted"] == 120
+
+
+# ---------------------------------------------------------------------------
+# Declared versus sampled.
+#
+# The audit reads the npz draws; everything else here reads the JSON sidecars.
+# A directory with sidecars and no draws returns zero mismatches from a check
+# that never ran, and zero-over-zero reads exactly like a clean bill.
+
+
+def test_sidecars_without_draws_report_not_checked_rather_than_clean(tmp_path):
+    """The defect. Absence of draws is not absence of mismatches."""
+    (tmp_path / "13097_III.json").write_text(json.dumps(_cell(13097, "III")))
+
+    prov = provenance_check(tmp_path)
+
+    assert prov["checked"] is False
+    assert prov["cells_examined"] == 0
+    assert prov["mismatches"] == []
+    assert "not a clean result" in prov["note"]
+
+
+def test_an_empty_directory_is_also_not_checked(tmp_path):
+    prov = provenance_check(tmp_path)
+    assert prov["checked"] is False
+    assert prov["cells_examined"] == 0
+
+
+def test_a_checked_directory_reports_how_many_cells_it_examined(tmp_path):
+    """So "zero mismatches" always arrives with its denominator."""
+    import numpy as np
+
+    np.savez(
+        tmp_path / "13097_III.npz",
+        sfh_delayed_tau_gyr=np.zeros(4),
+        sfh_delayed_age_gyr=np.zeros(4),
+        sfh_lookback_time_yr=np.linspace(0.0, 1e10, 8),
+    )
+
+    prov = provenance_check(tmp_path)
+
+    assert prov["checked"] is True
+    assert prov["cells_examined"] == 1

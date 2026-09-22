@@ -99,6 +99,39 @@ def per_cell(name: str, cell: dict) -> dict:
     }
 
 
+def provenance_check(results_dir: Path) -> dict:
+    """Do the cells sample what their configuration declares?
+
+    ``_cell_provenance.audit`` answers that, and it reads the **npz** draws
+    while everything else here reads the JSON sidecars. A directory holding
+    sidecars and no draws would come back with zero mismatches, which reads as
+    a clean bill and is really a check that never ran. The number of files
+    examined is reported beside the verdict for that reason: zero mismatches
+    over zero cells is not a result.
+    """
+    import config_metadata
+    from _cell_provenance import audit
+
+    n_npz = len(list(results_dir.glob("*.npz")))
+    if n_npz == 0:
+        return {
+            "checked": False,
+            "cells_examined": 0,
+            "mismatches": [],
+            "note": (
+                "no npz draws beside the sidecars, so declared-vs-sampled "
+                "parameters were not checked. This is not a clean result."
+            ),
+        }
+    mismatches, notes = audit(results_dir, config_metadata.CONFIGS)
+    return {
+        "checked": True,
+        "cells_examined": n_npz,
+        "mismatches": [str(m) for m in mismatches],
+        "note": notes[0] if notes else None,
+    }
+
+
 def summarize(rows: list[dict]) -> dict:
     """Aggregate, refusing the grid-wide figures when the grid is partial."""
     configs = sorted({r["config"] for r in rows})
@@ -193,6 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     cells = load_cells(args.results)
     rows = [per_cell(name, cell) for name, cell in cells.items()]
     summary = summarize(rows)
+    summary["provenance"] = provenance_check(args.results)
 
     print(
         f"{'config':<8}{'cells':>7}{'adopted':>9}{'worst ESS':>11}{'worst rhat':>12}{'med wall s':>12}"
@@ -210,6 +244,18 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"\nadoption bar: {split['two_leg_cells']} two-leg, {split['three_leg_cells']} three-leg"
     )
+
+    prov = summary["provenance"]
+    if not prov["checked"]:
+        print(f"declared vs sampled: NOT CHECKED -- {prov['note']}")
+    elif prov["mismatches"]:
+        raise SystemExit(
+            "cells sample parameters their configuration does not declare, so no "
+            "number computed from them means what Section 7 would say it means:\n  "
+            + "\n  ".join(prov["mismatches"])
+        )
+    else:
+        print(f"declared vs sampled: clean over {prov['cells_examined']} cells")
 
     if summary["aggregates"] is None:
         print(f"\ngrid-wide figures withheld: {summary['aggregates_withheld_because']}")
