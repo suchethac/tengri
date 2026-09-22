@@ -172,6 +172,76 @@ def fmt_range(values, unit="", places=1):
     return f"{lo:.{places}f} to {hi:.{places}f} {unit} (median {med:.{places}f})".strip()
 
 
+def machine_and_load(cells: list[dict]) -> list[str]:
+    """Summarize the hardware and contention each attempt recorded.
+
+    Wall-clock is hardware-dependent and contention-dependent, so the seconds
+    above mean nothing without both. ``fit_one`` records ``load_at_start`` and
+    ``load_at_end`` per attempt, each carrying ``n_cpus``, ``load_avg_1m`` and
+    ``n_concurrent_fits``.
+
+    Parameters
+    ----------
+    cells : list of dict
+        Per-cell diagnostics.
+
+    Returns
+    -------
+    list of str
+        Lines to print; empty when no cell carries the record.
+
+    Notes
+    -----
+    More than one distinct ``n_cpus`` means the grid was split across machines,
+    so its wall times are not one population. That is said loudly rather than
+    averaged away. Section 7 names the machine from this field, having once
+    asserted a laptop that never ran the grid.
+    """
+    cpus: Counter = Counter()
+    loads: list[float] = []
+    concurrent: list[int] = []
+    missing = 0
+
+    for cell in cells:
+        seen = False
+        for attempt in cell.get("attempts") or []:
+            for slot in ("load_at_start", "load_at_end"):
+                record = attempt.get(slot)
+                if not isinstance(record, dict):
+                    continue
+                seen = True
+                if record.get("n_cpus") is not None:
+                    cpus[record["n_cpus"]] += 1
+                if record.get("load_avg_1m") is not None:
+                    loads.append(float(record["load_avg_1m"]))
+                if record.get("n_concurrent_fits") is not None:
+                    concurrent.append(int(record["n_concurrent_fits"]))
+        if not seen:
+            missing += 1
+
+    out = ["", "machine and contention (wall-clock means nothing without these):"]
+    if not cpus and not loads:
+        # Said, not skipped. Section 7 names the machine from this field, and a
+        # silent section cannot be told apart from one nobody looked at.
+        out.append(f"   no cell carries a load record ({len(cells)} read); the machine is")
+        out.append("   unknown from this directory -- do not name one in the paper.")
+        return out
+
+    if cpus:
+        shown = ", ".join(f"{n} cpus in {k} record(s)" for n, k in sorted(cpus.items()))
+        out.append(f"   n_cpus                : {shown}")
+        if len(cpus) > 1:
+            out.append("   WARNING: more than one n_cpus -- the grid ran on more than one")
+            out.append("            machine, so these wall times are not one population.")
+    if loads:
+        out.append(f"   load_avg_1m           : {min(loads):.2f} to {max(loads):.2f}")
+    if concurrent:
+        out.append(f"   n_concurrent_fits     : {min(concurrent)} to {max(concurrent)}")
+    if missing:
+        out.append(f"   {missing} cell(s) carry no load record (the field postdates them).")
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--from-dir", type=Path, default=None)
@@ -230,6 +300,9 @@ def main() -> int:
 
     walls = [c["wall_time_s"] for c in adopted if c.get("wall_time_s") is not None]
     print(f"wall per adopted cell : {fmt_range(walls, 's')}")
+
+    for line in machine_and_load(cells):
+        print(line)
 
     per_ess = [
         c["wall_time_s"] / c["ess_min"]
