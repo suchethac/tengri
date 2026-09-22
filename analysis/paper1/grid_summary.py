@@ -175,6 +175,12 @@ def summarize(rows: list[dict]) -> dict:
     galaxies = sorted({r["gal_id"] for r in rows})
     complete = len(configs) >= EXPECTED_CONFIGS and len(galaxies) >= EXPECTED_GALAXIES
 
+    # Every figure below is over adopted cells. A refused cell is usually
+    # refused because it went badly -- it retuned repeatedly and burned wall
+    # time doing it -- so folding one into a wall-clock statistic inflates the
+    # maximum and the median in particular. Section 7 asks for "wall-clock cost
+    # per adopted cell"; the ESS figures here already excluded refusals and the
+    # wall figures did not, which made one dictionary answer two questions.
     adopted = [r for r in rows if r["adopted"]]
     by_config = {}
     for config in configs:
@@ -188,7 +194,9 @@ def summarize(rows: list[dict]) -> dict:
                 statistics.median([r["ess_min"] for r in sub_adopted]) if sub_adopted else None
             ),
             "rhat_max_worst": max((r["rhat_max"] for r in sub), default=None),
-            "wall_median_s": statistics.median([r["wall_s"] for r in sub]),
+            "wall_median_s": (
+                statistics.median([r["wall_s"] for r in sub_adopted]) if sub_adopted else None
+            ),
         }
 
     two_leg = [r["gal_id"] for r in rows if not r["three_leg"]]
@@ -242,9 +250,9 @@ def summarize(rows: list[dict]) -> dict:
     summary["aggregates"] = {
         "n_adopted": len(adopted),
         "n_cells": len(rows),
-        "wall_min_s": min(r["wall_s"] for r in rows),
-        "wall_max_s": max(r["wall_s"] for r in rows),
-        "wall_median_s": statistics.median([r["wall_s"] for r in rows]),
+        "wall_min_s": min(r["wall_s"] for r in adopted),
+        "wall_max_s": max(r["wall_s"] for r in adopted),
+        "wall_median_s": statistics.median([r["wall_s"] for r in adopted]),
         "s_per_ess_min": min(r["s_per_ess"] for r in adopted),
         "s_per_ess_max": max(r["s_per_ess"] for r in adopted),
         "ess_min": min(r["ess_min"] for r in adopted),

@@ -16,6 +16,7 @@ adoption count for a bar that no cell was actually judged against.
 from __future__ import annotations
 
 import json
+import statistics
 import sys
 from pathlib import Path
 
@@ -293,3 +294,73 @@ def test_a_high_rhat_alone_does_not_make_the_relaxation_needed():
 
     assert report["III"]["relaxation_needed"] is False
     assert report["III"]["clear_the_strict_bar"] == 19
+
+
+# ---------------------------------------------------------------------------
+# Wall-clock cost is quoted per *adopted* cell.
+#
+# Every ESS figure in the summary already excluded refused cells and every
+# wall-clock figure included them, in the same dictionary. The bias has a
+# direction: a cell is usually refused because it went badly, retuning
+# repeatedly and burning wall time doing it, so a refusal lands at the
+# expensive end and drags the maximum and the median with it.
+
+
+def test_a_refused_cell_does_not_set_the_wall_clock_range():
+    """The defect. Section 7 quotes a cost for cells it declines to draw."""
+    cells = _full_grid()
+    cells[0]["adoption_pass"] = False
+    cells[0]["wall_time_s"] = 99_999.0
+    cells[1]["adoption_pass"] = False
+    cells[1]["wall_time_s"] = 1.0
+
+    agg = summarize(_rows(cells))["aggregates"]
+
+    assert agg["wall_max_s"] == 1800.0
+    assert agg["wall_min_s"] == 1800.0
+    assert agg["wall_median_s"] == 1800.0
+    assert agg["n_adopted"] == len(cells) - 2
+
+
+def test_a_configuration_wall_median_is_over_its_adopted_cells():
+    """The per-configuration row carried the same split as the grid row.
+
+    Half the configuration is refused, not one cell of it. A median shrugs off
+    a single outlier, so a one-refusal fixture passes whether or not the code
+    filters -- it cannot observe the thing it is here to guard. Ten refusals
+    against ten adopted put the unfiltered median between the two populations
+    and the filtered one on the adopted population, which is a difference the
+    assertion can see.
+    """
+    cells = _full_grid()
+    quartet = [c for c in cells if c["config"] == "IV"]
+    for cell in quartet:
+        cell["wall_time_s"] = 1000.0
+    for cell in quartet[: len(quartet) // 2]:
+        cell["adoption_pass"] = False
+        cell["wall_time_s"] = 50_000.0
+
+    per = summarize(_rows(cells))["per_configuration"]["IV"]
+
+    assert per["adopted"] == len(quartet) // 2
+    assert per["wall_median_s"] == 1000.0
+    # What the unfiltered median would have been, so the fixture cannot drift
+    # back into a shape where both answers coincide.
+    assert statistics.median([c["wall_time_s"] for c in quartet]) == 25_500.0
+
+
+def test_a_configuration_with_no_adopted_cells_reports_no_wall_median():
+    """``None`` says there is no adopted cell to cost.
+
+    A number here would be the median of cells the paper refuses, which reads
+    exactly like a cost someone paid.
+    """
+    cells = _full_grid()
+    for cell in cells:
+        if cell["config"] == "V":
+            cell["adoption_pass"] = False
+
+    per = summarize(_rows(cells))["per_configuration"]["V"]
+
+    assert per["wall_median_s"] is None
+    assert per["ess_min_median"] is None
