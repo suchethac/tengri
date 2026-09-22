@@ -230,3 +230,189 @@ def test_the_exact_fold_is_free_in_a_band_with_no_structure(ssp, observation):
         f"the folds differ by {abs(node[CONTROL] - exact[CONTROL]) / node[CONTROL]:.3e} "
         f"in {CONTROL_BAND}, which carries no IGM structure"
     )
+
+
+# ---------------------------------------------------------------------------
+# "auto": the exact fold wherever it can be built, the node fold where it cannot.
+#
+# The exact fold raises for a free redshift and for a transmission carrying free
+# parameters, so `"exact"` can never be proposed as the default while it is the
+# only way to ask for the exact fold -- a blanket flip would break every free-z
+# fit at once. `"auto"` is the mode that could be: it asks for the exact fold
+# and accepts the node fold where the exact one is unavailable.
+#
+# The promise is one-sided and that is the whole risk. `"auto"` must never
+# raise where `"node"` would have worked, which means the fall-back has to know
+# every precondition the exact fold refuses on. A second, drifting copy of that
+# list breaks the promise at run time and only for the configuration that
+# happens to trigger it, so both read one predicate.
+
+
+def test_auto_is_an_accepted_value():
+    assert WavePrecomp(igm_fold="auto").igm_fold == "auto"
+
+
+def test_adding_auto_does_not_move_the_default():
+    """A new mode must not change what an unconfigured WavePrecomp does."""
+    assert WavePrecomp().igm_fold == "node"
+
+
+def test_auto_is_not_resolved_at_construction(ssp, observation):
+    """The declared value survives on the config object.
+
+    Resolution needs the redshift disposition and the transmission config,
+    neither of which a bare ``WavePrecomp()`` has. A config that rewrote
+    itself to "node" at construction would resolve every model the same way.
+    """
+    assert WavePrecomp(igm_fold="auto").igm_fold == "auto"
+    model = _bare_stellar(ssp, observation, WavePrecomp(igm_fold="auto"))
+    assert model._approx_config_wave.igm_fold == "auto"
+
+
+def test_auto_takes_the_exact_fold_at_a_fixed_redshift(ssp, observation):
+    """Where the exact fold is available, "auto" must actually use it."""
+    auto = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="auto")))
+    exact = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="exact")))
+    node = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="node")))
+
+    np.testing.assert_array_equal(auto, exact)
+    # Without this the assertion above passes vacuously whenever the exact
+    # fold happens to equal the node fold -- including if it never ran.
+    assert auto[STRADDLING] != node[STRADDLING], (
+        "auto is bit-identical to the node fold in the band that straddles the "
+        "break, so it did not resolve to the exact fold"
+    )
+
+
+def _free_z_photometry(ssp, observation, fold):
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=observation,
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "met_logzsol": Fixed(0.0),
+        },
+        redshift=tengri.Uniform(0.5, 1.5),
+        igm={"type": "inoue"},
+        approx=WavePrecomp(igm_fold=fold),
+    )
+    return np.asarray(model.predict_photometry({"redshift": PROBE_Z}), dtype=np.float64)
+
+
+def test_auto_falls_back_to_the_node_fold_for_a_free_redshift(ssp, observation):
+    """The precondition that makes "exact" unusable as a default.
+
+    ``test_a_free_redshift_refuses_the_exact_fold`` pins that ``"exact"``
+    raises here. ``"auto"`` must build the same model and return the node
+    answer: not raise, and not quietly return a third thing.
+    """
+    np.testing.assert_array_equal(
+        _free_z_photometry(ssp, observation, "auto"),
+        _free_z_photometry(ssp, observation, "node"),
+    )
+
+
+def _patchy_model(ssp, observation, fold):
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=observation,
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "tau_gyr": Fixed(2.0),
+            "age_gyr": Fixed(3.0),
+            "log_total_mass": Fixed(10.0),
+            "met_logzsol": Fixed(0.0),
+        },
+        redshift=Fixed(PROBE_Z),
+        igm={"type": "inoue", "patchy": True},
+        approx=WavePrecomp(igm_fold=fold),
+    )
+
+
+def test_a_free_transmission_refuses_the_exact_fold(ssp, observation):
+    """The other precondition, pinned as a refusal before it is paired."""
+    with pytest.raises(ValueError) as excinfo:
+        _patchy_model(ssp, observation, "exact").predict_photometry({})
+    assert "node" in str(excinfo.value)
+
+
+def test_auto_falls_back_to_the_node_fold_for_a_free_transmission(ssp, observation):
+    """Paired with the refusal above: same configuration, no raise."""
+    auto = _photometry(_patchy_model(ssp, observation, "auto"))
+    node = _photometry(_patchy_model(ssp, observation, "node"))
+    np.testing.assert_array_equal(auto, node)
+
+
+def test_the_refusals_and_the_fall_back_read_one_list_of_preconditions():
+    """A third refusal must not make "auto" raise.
+
+    ``"auto"`` promises to fall back wherever the exact fold cannot be built.
+    That promise is only as good as the fall-back's knowledge of what the
+    exact fold refuses on, and a refusal added to the exact fold alone would
+    break it silently -- for one configuration, at run time, with no
+    diagnostic. Both sides call ``_exact_fold_blocker``, so there is one list
+    rather than two that can drift.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from tengri.forward import sed_model
+
+    exact_src = inspect.getsource(sed_model._fold_igm_exact_into_subbands)
+    resolver_src = inspect.getsource(sed_model._resolve_igm_fold)
+
+    assert "_exact_fold_blocker(" in exact_src, "the exact fold does not consult the predicate"
+    assert "_exact_fold_blocker(" in resolver_src, "the resolver does not consult the predicate"
+
+    raises = [
+        n for n in ast.walk(ast.parse(textwrap.dedent(exact_src))) if isinstance(n, ast.Raise)
+    ]
+    assert len(raises) == 1, (
+        f"the exact fold raises from {len(raises)} sites, but only the one "
+        "driven by _exact_fold_blocker is mirrored by the auto fall-back; the "
+        f"others are at lines {[n.lineno for n in raises]} of the function"
+    )
+
+
+def test_auto_falls_back_when_the_exact_fold_would_do_nothing_at_all():
+    """The second reason to fall back, and the one no exception announces.
+
+    Without templates or filters the exact fold returns the state untouched,
+    while the node fold still applies a fold. Resolving to "exact" there would
+    silently skip work the node path does -- not a refusal, not a warning, just
+    a missing fold. Asserted on the resolver directly because the condition is
+    about arguments the dispatcher receives, not about any model's physics.
+    """
+    from tengri.forward.sed_model import _resolve_igm_fold
+
+    class _NoBlocker:
+        config = None
+
+    comp, state = _NoBlocker(), object()
+
+    assert _resolve_igm_fold("auto", comp, state, ssp_data=object(), filters=("f",)) == "exact"
+    assert _resolve_igm_fold("auto", comp, state, ssp_data=None, filters=("f",)) == "node"
+    assert _resolve_igm_fold("auto", comp, state, ssp_data=object(), filters=()) == "node"
+
+
+def test_a_named_fold_is_never_downgraded_by_the_resolver():
+    """ "node" and "exact" pass through untouched, whatever the configuration.
+
+    The resolver exists to serve ``"auto"``. If it also rewrote an explicit
+    ``"exact"``, a caller who asked for the exact fold by name would silently
+    receive the node answer -- the substitution this seam exists to prevent.
+    """
+    from tengri.forward.sed_model import _resolve_igm_fold
+
+    class _Blocked:
+        class config:
+            igm_patchy = True
+            use_dla = False
+
+    comp, state = _Blocked(), object()
+
+    assert _resolve_igm_fold("exact", comp, state, ssp_data=None, filters=()) == "exact"
+    assert _resolve_igm_fold("node", comp, state, ssp_data=object(), filters=("f",)) == "node"
