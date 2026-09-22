@@ -54,7 +54,7 @@ SEED = 20260920
 
 #: Truth parameters set by hand to make a Type 1 AGN with a star-forming host.
 #: Everything not named here keeps its prior draw, so the recovery still has to
-#: work across the full 43-dimensional space rather than a hand-tuned corner.
+#: work across the full 36-dimensional space rather than a hand-tuned corner.
 DESIGNED_TRUTH = {
     # An unobscured sightline to the disc is what makes the object Type 1.
     "agn_ebv_disc": 0.02,
