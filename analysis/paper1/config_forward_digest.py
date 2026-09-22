@@ -63,7 +63,13 @@ def _config_fn(key: str):
     return fn, configs
 
 
-def digest(config_key: str, cell_path: Path, params_in: Path | None, params_out: Path | None):
+def digest(
+    config_key: str,
+    cell_path: Path,
+    params_in: Path | None,
+    params_out: Path | None,
+    borrow_observation: bool = False,
+):
     """One tree's predicted photometry for one configuration on one galaxy."""
     import jax
 
@@ -76,10 +82,22 @@ def digest(config_key: str, cell_path: Path, params_in: Path | None, params_out:
     for required in ("gal_id", "z", "filter_names", "config"):
         if cell.get(required) is None:
             raise SystemExit(f"{cell_path} records no {required!r}")
-    if cell["config"] != config_key:
+    if cell["config"] != config_key and not borrow_observation:
         raise SystemExit(
-            f"{cell_path} is configuration {cell['config']}, not {config_key}. The "
-            "observation and the model must come from the same cell."
+            f"{cell_path} is configuration {cell['config']}, not {config_key}.\n"
+            "The observation it carries -- filters, redshift -- belongs to the "
+            "GALAXY and is shared by every configuration, so borrowing it is "
+            "legitimate; only Configuration III has completed cells, so the "
+            "other five have no cell of their own to read. Pass "
+            "--borrow-observation to say so deliberately. The refusal is here "
+            "because a borrowed cell must not be mistaken later for a cell of "
+            "the configuration named on the digest."
+        )
+    if cell["config"] != config_key:
+        print(
+            f"borrowing the observation of a configuration {cell['config']} cell "
+            f"for configuration {config_key}: galaxy {cell['gal_id']}, z "
+            f"{float(cell['z']):.4f}, {len(cell['filter_names'])} bands"
         )
 
     fn, configs_mod = _config_fn(config_key)
@@ -178,6 +196,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="where to write this tree's digest")
     parser.add_argument("--params-out", type=Path, help="write the sampled vector here")
     parser.add_argument("--params-in", type=Path, help="evaluate this vector instead of sampling")
+    parser.add_argument(
+        "--borrow-observation",
+        action="store_true",
+        help="use a cell of another configuration for its filters and redshift",
+    )
     parser.add_argument("--compare", type=Path, nargs=2, metavar=("A", "B"))
     args = parser.parse_args(argv)
 
@@ -186,7 +209,9 @@ def main(argv: list[str] | None = None) -> int:
     if not (args.config and args.cell and args.out):
         parser.error("need config, --cell and --out (or --compare A B)")
 
-    payload = digest(args.config, args.cell, args.params_in, args.params_out)
+    payload = digest(
+        args.config, args.cell, args.params_in, args.params_out, args.borrow_observation
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(args.out, **payload)
     print(
