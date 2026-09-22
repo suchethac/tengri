@@ -41,3 +41,28 @@ not say so and cannot be made to say so after the fact.
 
 Kept for comparison against the next attempt, which raises target_accept to
 0.95 — the one lever left, changed alone.
+
+## What was exercised against it
+
+Two tools were run on this run rather than on a fixture, which is the only way
+to know they work on the real schema:
+
+`divergence_geometry.py` located the 79 divergences. They are **diffuse**: the
+largest standardized offset is `neb_dig_frac` at -0.69 sd, nothing else past
+0.44, well short of the 2 sd that marks a funnel's neck, and `neb_dig_frac`
+sits mid-range in a 0-1 fraction rather than against a bound. Its verdict JSON
+is beside this file. That points at curvature between coordinates, which a
+diagonal mass matrix cannot represent, rather than at any one parameter --
+which is what makes `target_accept` the right next lever and `dense_mass_matrix`
+the one after it.
+
+`derive_mock_properties.py` ran end to end on this file's 2400 draws, which is
+a schema it had only ever seen at 1200. It thins, pairs the draws against the
+truth, and reports all four quantities.
+
+**Its numbers are deliberately not stored here.** A recovery JSON sitting in
+this directory would be quotable, and this posterior never reached the mode.
+What the run established is that the path works and that the pattern the cold
+run showed -- star formation rate the worst-recovered of the four, both masses
+well inside a sigma -- reappears here from a different chain. That is a
+hypothesis to test on a converged posterior, not a result.
