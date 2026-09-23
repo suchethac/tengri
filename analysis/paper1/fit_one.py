@@ -36,6 +36,7 @@ import jax
 import numpy as np
 
 from tengri import Data, ForwardModel, Observation, Photometry
+from tengri.inference.mass_profile import REINSERT_LOCK_ENV
 
 from ._posterior_utils import build_npz_payload, divergent_draw_payload, thin_samples
 from .candels_io import load_candels_z1, photometry_for_row
@@ -86,6 +87,14 @@ PPD_N_DRAWS = 200
 DEFAULT_N_WARMUP = 150
 DEFAULT_N_SAMPLES = 300
 DEFAULT_N_CHAINS = 4
+
+#: Third leg of the adoption bar (owner, 2026-09-21): min ESS over the free
+#: parameters. 14099/V was adopted on 0 divergences and rhat_max 1.0089 with
+#: ess_min 3 -- rung 2 had adapted to a step of 0.0011 and the chain barely
+#: moved. rhat_max and ess_min are extrema over different parameters, so a
+#: good rhat_max bounds nothing about ess_min. 100 is the floor the paper's
+#: adoption audit (low_ess_note) already reports against.
+ESS_FLOOR = 100.0
 
 #: NUTS step-size adaptation targets. A retune raises the target rather than
 #: switching to a dense mass matrix: measured on grid cell 13097/II (600 warmup
@@ -196,6 +205,130 @@ def dust_parameter_name(config_key: str) -> str:
         ) from exc
 
 
+def code_revision() -> str | None:
+    """``git rev-parse HEAD`` of the tree this process imported ``tengri`` from, or None.
+
+    Two cells with the same filename and the same priors can still have run
+    different code -- the log-normal onset fix (f01975f46) landed while row V
+    was in flight -- and nothing else in the record says which.
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parent,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sha = out.stdout.strip()
+    return sha if out.returncode == 0 and sha else None
+
+
+def prior_record(sed_model) -> dict[str, str]:
+    """``{free parameter: repr(prior)}`` -- the bounds this cell was actually run with.
+
+    A cell's filename names its configuration, not the prior edition the
+    configuration had on the day (row V's ``peak_gyr`` was capped at the
+    galaxy's age on 2026-09-21); the record makes the two distinguishable
+    on disk.
+    """
+    spec = sed_model.spec
+    out = {}
+    for name in spec.free_params:
+        try:
+            out[name] = repr(spec.get_distribution(name))
+        except Exception:  # best effort, never blocks a fit
+            out[name] = "?"
+    return out
+
+
+def _optional_float(value) -> float | None:
+    """``float(value)``, or ``None`` when the backend did not publish it."""
+    return None if value is None else float(value)
+
+
+def machine_load() -> dict:
+    """Load average and concurrent tengri fits, for the attempt record.
+
+    A cell's wall time is a property of what else was running: the same
+    warmup trajectory measured 1,017 s beside one other fit and 10,347 s
+    beside eight (2026-09-20, galaxy 79 configuration I, identical step
+    size to four digits). Recorded so the number on disk carries its own
+    caveat instead of depending on log archaeology.
+    """
+    try:
+        load_1m = os.getloadavg()[0]
+    except (AttributeError, OSError):
+        load_1m = None
+    n_fits = 0
+    try:
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                    cmd = fh.read()
+            except OSError:
+                continue
+            argv0 = cmd.split(b"\0", 1)[0]
+            # argv[0] must BE python: a shell whose command text mentions
+            # python would otherwise count its own child twice.
+            if argv0.endswith((b"python", b"python3")) and (
+                b"paper1.fit_" in cmd or b"paper1/fit_" in cmd
+            ):
+                n_fits += 1
+    except OSError:
+        n_fits = None
+    return {"load_avg_1m": load_1m, "n_concurrent_fits": n_fits, "n_cpus": os.cpu_count()}
+
+
+def is_chain_sampler(method: str) -> bool:
+    """Whether ``method`` produces chains the NUTS adoption bar can judge.
+
+    The retune ladder, the divergence count and split R-hat all presuppose
+    an MCMC backend. Nested sampling (``"nss"``) returns weighted dead points
+    with an evidence and its own ESS; splitting those in half compares early
+    against late likelihood levels and reports a meaningless R-hat, so a
+    non-chain method gets one attempt and is adopted on completion (the
+    backend raises if the evidence integral is cut off, so completion is
+    the bar).
+    """
+    return method.startswith("mcmc")
+
+
+def sampler_kwargs_for(method: str, kwargs: dict) -> dict:
+    """Drop the kwargs ``method``'s runner does not declare, with a warning.
+
+    ``base_kwargs`` is written for NUTS (``n_warmup``, ``target_accept_rate``,
+    ``dense_mass_matrix``, ...). The dispatch seam refuses any name a runner
+    cannot take -- deliberately, as a typo guard (#1469) -- so ``--method nss``
+    would die there on ``n_warmup``. This is the one caller that knows it is
+    holding NUTS settings, so it filters against the runner's signature here
+    and says what it dropped; the library guard is untouched. A runner that
+    takes ``**kwargs`` receives everything.
+    """
+    import inspect
+
+    from tengri.inference._backend_registry import get_backend
+
+    sig = inspect.signature(get_backend(method).runner)
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return dict(kwargs)
+    accepted = {k: v for k, v in kwargs.items() if k in sig.parameters or k == "method"}
+    dropped = sorted(set(kwargs) - set(accepted))
+    if dropped:
+        logger.warning(
+            f"method={method!r} does not take {dropped}; running without them. "
+            f"Accepted: {sorted(k for k in accepted if k != 'method')}"
+        )
+    return accepted
+
+
 def retune_settings(attempt: int, base: dict) -> dict:
     """NUTS settings for attempt ``attempt`` (1-based) of the adoption loop.
 
@@ -268,6 +401,105 @@ def select_best_attempt(attempts: list[dict]) -> int:
     )
 
 
+def energy_trace_payload(posterior) -> dict:
+    """The per-draw Hamiltonian energy, unthinned, on the same axis as the mask.
+
+    Published by the backend since a3ff0e362 and, until this, computed and
+    discarded by fit_one -- the same gap that lost ``tree_depth_mean`` to the
+    warning text. It is one float per draw, so it rides along unthinned like
+    the mask and joins it and ``samples`` row-wise. E-BFMI is NOT recomputed
+    from it here: that must be done per chain (the flattened axis is
+    chain-major, and differencing across a chain boundary drags a healthy
+    chain under the 0.3 line), and the backend already publishes
+    ``ebfmi_per_chain`` -- recorded into the attempt's JSON, not here.
+
+    Refuses a trace whose length disagrees with the draw count rather than
+    saving one that cannot be joined. Empty dict when nothing was published.
+    """
+    energy = (posterior.diagnostics or {}).get("energy")
+    if energy is None:
+        return {}
+    energy = np.asarray(energy, dtype=float)
+    n_draws = int(next(iter(posterior.samples.values())).shape[0])
+    if energy.shape != (n_draws,):
+        raise ValueError(
+            f"energy has shape {energy.shape} against {n_draws} flattened draws; "
+            "it must be the burn-in-sliced, chain-flattened draw axis to join the mask."
+        )
+    return {"energy": energy}
+
+
+def draw_indices(samples_thin: dict, n_draws: int) -> np.ndarray:
+    """Indices of ``n_draws`` draws strided across the whole flattened record.
+
+    The single definition of which draws the derived quantities are computed
+    from, shared by :func:`iter_draws` and the batched evaluators so the eager
+    and vmapped paths never pick different draws.
+    """
+    n_available = int(next(iter(samples_thin.values())).shape[0])
+    n_take = min(n_draws, n_available)
+    if n_take <= 0:
+        return np.zeros(0, dtype=int)
+    return np.linspace(0, n_available - 1, n_take).round().astype(int)
+
+
+#: Draws per vmapped forward pass in the derived-quantity evaluators. The
+#: exact-wave-grid state vmapped over a chunk allocates (chunk, n_age, n_wave)
+#: intermediates, so the chunk bounds the peak, not the number of draws.
+DERIVED_CHUNK = 25
+
+
+def _chunked_vmap(fn: Callable, samples_thin: dict, idx: np.ndarray, chunk: int = DERIVED_CHUNK):
+    """Apply a jitted ``vmap(fn)`` to the selected draws, ``chunk`` draws at a time.
+
+    ``fn`` maps one dict of sampled scalars to a pytree; the result is the
+    same pytree with a leading draw axis, as numpy arrays. Chunks are padded
+    to ``chunk`` by repeating the last draw so every call hits one compiled
+    program; the padding is sliced off.
+    """
+    sampled = {k: np.asarray(v)[idx] for k, v in samples_thin.items()}
+    batched = jax.jit(jax.vmap(fn))
+    pieces = []
+    for start in range(0, idx.shape[0], chunk):
+        sel = {k: v[start : start + chunk] for k, v in sampled.items()}
+        n_real = next(iter(sel.values())).shape[0]
+        pad = chunk - n_real
+        if pad:
+            sel = {k: np.concatenate([v, np.repeat(v[-1:], pad)]) for k, v in sel.items()}
+        out = batched(sel)
+        pieces.append(jax.tree_util.tree_map(lambda a, n=n_real: np.asarray(a)[:n], out))
+    return jax.tree_util.tree_map(lambda *a: np.concatenate(a), *pieces)
+
+
+def derived_over_draws(sed_model, samples_thin: dict, fixed_values: dict, n_draws: int) -> dict:
+    """Stellar mass and SFRs for ``n_draws`` strided draws, via the jit/vmap surface.
+
+    Uses :meth:`SEDModel.predict_properties`, the documented jit/vmap surface
+    for derived quantities (NAMING_CONTRACT §4b). A property the model does
+    not publish is a NaN column, as the eager ``props.get(name, nan)`` was.
+    """
+    idx = draw_indices(samples_thin, n_draws)
+    wanted = ("stellar_mass", "sfr_100myr", "sfr_10myr")
+    available = tuple(n for n in wanted if n in sed_model.available_properties)
+
+    def one(sample):
+        return sed_model.predict_properties({**fixed_values, **sample}, names=available)
+
+    got = _chunked_vmap(one, samples_thin, idx) if available else {}
+    return {n: got[n] if n in got else np.full(idx.shape[0], np.nan) for n in wanted}
+
+
+def sfh_over_draws(sed_model, samples_thin: dict, fixed_values: dict, n_draws: int):
+    """Per-draw SFH grids ``(lookback time [yr], SFR [Msun/yr])`` for ``n_draws`` strided draws."""
+    idx = draw_indices(samples_thin, n_draws)
+
+    def one(sample):
+        state = sed_model.predict_state({**fixed_values, **sample})
+        return state.derived["sfh_grid_lbt_yr"], state.derived["sfr_history"]
+
+    return _chunked_vmap(one, samples_thin, idx)
+
+
 def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
     """Yield parameter dicts (fixed values merged) for ``n_draws`` draws spanning the record.
 
@@ -278,12 +510,7 @@ def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
     early-draw estimate (#2089). ``n_draws >= n_available`` yields every draw in
     order.
     """
-    n_available = int(next(iter(samples_thin.values())).shape[0])
-    n_take = min(n_draws, n_available)
-    if n_take <= 0:
-        return
-    idx = np.linspace(0, n_available - 1, n_take).round().astype(int)
-    for i in idx:
+    for i in draw_indices(samples_thin, n_draws):
         yield {**fixed_values, **{k: float(v[i]) for k, v in samples_thin.items()}}
 
 
@@ -475,31 +702,21 @@ def save_fit_outputs(
             f"the attenuation family changed; the derived dust column would "
             f"otherwise be silently NaN for every draw of this cell."
         )
-    derived_samples = {key: [] for key in DERIVED_KEYS}
-
-    for params in iter_draws(samples_thin, fixed_values, 500):
-        pred = sed_model.predict(params)
-        props = pred.properties
-
-        derived_samples["stellar_mass"].append(float(props.get("stellar_mass", np.nan)))
-        derived_samples["sfr_100myr"].append(float(props.get("sfr_100myr", np.nan)))
-        derived_samples["sfr_10myr"].append(float(props.get("sfr_10myr", np.nan)))
-        derived_samples["dust_tau"].append(float(params.get(dust_param, np.nan)))
+    # One jitted, vmapped pass per chunk of draws (#2089's eager per-draw
+    # ``sed_model.predict`` took 28 min for 700 draws on a loaded box -- twice
+    # the fit itself once the sampling ran under pmap). Same draws, same
+    # quantities, same NPZ keys; only the evaluation path changed.
+    derived_samples = derived_over_draws(sed_model, samples_thin, fixed_values, 500)
+    derived_samples["dust_tau"] = np.asarray(
+        [float(v) for v in samples_thin[dust_param][draw_indices(samples_thin, 500)]]
+    )
 
     # Compute SFH posteriors on a common grid
     t_lbt_yr = np.logspace(6, 10.1, 100)  # 100 points, 1 Myr to ~13 Gyr
-    sfr_posterior = []
-
-    for params in iter_draws(samples_thin, fixed_values, 200):
-        state = sed_model.predict_state(params)
-        t_lbt_grid = np.asarray(state.derived["sfh_grid_lbt_yr"])
-        sfr_grid = np.asarray(state.derived["sfr_history"])
-
-        # Interpolate SFR onto common grid
-        sfr_interp = np.interp(t_lbt_yr, t_lbt_grid, sfr_grid)
-        sfr_posterior.append(sfr_interp)
-
-    sfr_posterior = np.stack(sfr_posterior)
+    t_lbt_grid, sfr_grid = sfh_over_draws(sed_model, samples_thin, fixed_values, 200)
+    sfr_posterior = np.stack(
+        [np.interp(t_lbt_yr, t, s) for t, s in zip(t_lbt_grid, sfr_grid, strict=True)]
+    )
     sfr_median = np.median(sfr_posterior, axis=0)
     sfr_p16 = np.percentile(sfr_posterior, 16, axis=0)
     sfr_p84 = np.percentile(sfr_posterior, 84, axis=0)
@@ -559,7 +776,11 @@ def save_fit_outputs(
     # Every key the NPZ carries goes through the collision guard (#2089).
     # Divergent draws ride along unthinned; see divergent_draw_payload.
     npz_payload = build_npz_payload(
-        samples_thin, derived, grids, divergent_draw_payload(best_posterior)
+        samples_thin,
+        derived,
+        grids,
+        divergent_draw_payload(best_posterior),
+        energy_trace_payload(best_posterior),
     )
     # ``tmp_suffix=".npz"``: ``np.savez`` appends that suffix to a path without it.
     _atomic_replace_write(
@@ -632,6 +853,7 @@ def run_fit(
     n_warmup: int = DEFAULT_N_WARMUP,
     n_samples: int = DEFAULT_N_SAMPLES,
     n_chains: int = DEFAULT_N_CHAINS,
+    profile_mass: bool = False,
 ) -> dict:
     """Run a single fit for a galaxy and configuration.
 
@@ -660,6 +882,13 @@ def run_fit(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Serialize the profile-mass reinsertion across the cells of this grid:
+    # it is the one step whose transient memory (10 GB measured on a III
+    # cell) dwarfs the 3-4 GB a sampling cell holds, and the shared box's
+    # watchdog kills whichever cell is spiking when N of them stack. One lock
+    # per results directory; a caller that set the variable keeps its own.
+    if profile_mass:
+        os.environ.setdefault(REINSERT_LOCK_ENV, str(out_dir / ".reinsert.lock"))
     # The JSON path is needed before the loop: a failed attempt is persisted
     # before the retune starts (#2089). ``save_fit_outputs`` derives the same
     # two paths from ``out_dir`` for the final write.
@@ -723,19 +952,31 @@ def run_fit(
     # Posteriors parallel to ``attempts`` -- index i of one is index i of the
     # other -- so the best attempt's posterior can be saved when none passes.
     posteriors: list = []
+    chain_sampler = is_chain_sampler(method)
+    if not chain_sampler and retune_attempts != 1:
+        logger.info(
+            f"method={method!r} is not a chain sampler: one attempt, no retune ladder "
+            f"(was {retune_attempts})"
+        )
+        retune_attempts = 1
     attempt = 0
 
     while attempt < retune_attempts:
         attempt += 1
         nuts_kwargs = retune_settings(attempt, base_kwargs)
-        logger.info(
-            f"Attempt {attempt}/{retune_attempts}: "
-            f"target_accept {nuts_kwargs['target_accept_rate']}, "
-            f"warmup {nuts_kwargs['n_warmup']}, "
-            f"{'dense' if nuts_kwargs['dense_mass_matrix'] else 'diagonal'} mass"
-        )
+        if chain_sampler:
+            logger.info(
+                f"Attempt {attempt}/{retune_attempts}: "
+                f"target_accept {nuts_kwargs['target_accept_rate']}, "
+                f"warmup {nuts_kwargs['n_warmup']}, "
+                f"{'dense' if nuts_kwargs['dense_mass_matrix'] else 'diagonal'} mass"
+            )
+        else:
+            logger.info(f"Attempt {attempt}/{retune_attempts}: method {method}")
+        fit_kwargs = sampler_kwargs_for(method, nuts_kwargs)
 
         key = jax.random.PRNGKey(seed + attempt)
+        load_at_start = machine_load()
         t_start = time.perf_counter()
 
         try:
@@ -783,59 +1024,103 @@ def run_fit(
             # against a 1e-8 tolerance, four orders inside it), but verify
             # rather than assume if a configuration is ever added or its age
             # kernel changed.
-            posterior = forward.fit(data, key=key, profile_mass=False, **nuts_kwargs)
+            posterior = forward.fit(data, key=key, profile_mass=profile_mass, **fit_kwargs)
             t_elapsed = time.perf_counter() - t_start
 
             # Extract diagnostics
-            rhat_dict = posterior.rhat()
-            rhat_max = max(float(v) for v in rhat_dict.values())
-            ess_dict = posterior.effective_sample_size()
-            ess_min = min(float(v) for v in ess_dict.values()) if ess_dict else None
-            n_divergent = posterior.diagnostics.get("n_divergent", 0)
+            if chain_sampler:
+                rhat_dict = posterior.rhat()
+                rhat_max = max(float(v) for v in rhat_dict.values())
+                ess_dict = posterior.effective_sample_size()
+                ess_min = min(float(v) for v in ess_dict.values()) if ess_dict else None
+                n_divergent = posterior.diagnostics.get("n_divergent", 0)
+                sampler_extra = {}
+            else:
+                # No chains to split: R-hat and per-parameter ESS are undefined.
+                # NSS publishes one ESS for the weighted set, and the evidence.
+                rhat_dict, rhat_max, ess_dict = {}, None, {}
+                ess_min = posterior.diagnostics.get("ess")
+                ess_min = float(ess_min) if ess_min is not None else None
+                n_divergent = None
+                sampler_extra = {
+                    k: (float(v) if v is not None else None)
+                    for k, v in posterior.diagnostics.items()
+                    if k
+                    in ("log_evidence", "log_evidence_err", "n_iterations", "n_dead", "n_live")
+                }
 
             diagnostics = {
                 "gal_id": gal_id,
                 "config": config_key,
                 "z": float(z),
                 "n_free": sed_model.spec.n_free,
+                "priors": prior_record(sed_model),
+                "code_revision": code_revision(),
                 "n_bands": len(filter_names),
                 "filter_names": filter_names,
                 "n_warmup": nuts_kwargs["n_warmup"],
                 "n_samples": nuts_kwargs["n_samples"],
                 "n_chains": nuts_kwargs["n_chains"],
                 "dense_mass_matrix": nuts_kwargs["dense_mass_matrix"],
+                "profile_mass": profile_mass,
                 "target_accept_rate": nuts_kwargs["target_accept_rate"],
+                # The CLI seed and the key this attempt actually ran at:
+                # PRNGKey(seed + attempt), attempt 1-based, so "seed 42" means
+                # key 43 on rung 1, 44 on rung 2, 45 on rung 3.
+                "seed": int(seed),
+                "prng_key_seed": int(seed + attempt),
                 "max_tree_depth": nuts_kwargs.get("max_tree_depth"),
-                "divergences": int(n_divergent),
-                "rhat_max": float(rhat_max),
+                "divergences": int(n_divergent) if n_divergent is not None else None,
+                "ebfmi_per_chain": posterior.diagnostics.get("ebfmi_per_chain"),
+                "ebfmi_min": posterior.diagnostics.get("ebfmi_min"),
+                # The adapted step and the warmup's divergent fraction: a rung
+                # whose adaptation collapsed (step 45x below the previous rung,
+                # ESS 1) is then self-evident in the cell, not only in a log.
+                "step_size": _optional_float(posterior.diagnostics.get("step_size")),
+                "warmup_divergence_frac": _optional_float(
+                    posterior.diagnostics.get("warmup_divergence_frac")
+                ),
+                "tree_depth_mean": _optional_float(posterior.diagnostics.get("tree_depth_mean")),
+                "frac_max_depth": _optional_float(posterior.diagnostics.get("frac_max_depth")),
+                "rhat_max": float(rhat_max) if rhat_max is not None else None,
                 "rhat_dict": {k: float(v) for k, v in rhat_dict.items()},
                 "ess_min": float(ess_min) if ess_min is not None else None,
                 "ess_dict": {k: float(v) for k, v in ess_dict.items()},
                 "wall_time_s": t_elapsed,
+                "load_at_start": load_at_start,
+                "load_at_end": machine_load(),
                 "systematic_floor_frac": floor_frac,
                 "systematic_floor_mean_erg": float((floor_frac * fnu).mean()),
+                **sampler_extra,
             }
 
-            # Check adoption bar: 0 divergences and max R̂ < 1.01
-            adoption_pass = n_divergent == 0 and rhat_max < 1.01
+            # Check adoption bar: 0 divergences, max R̂ < 1.01 and min ESS at
+            # or above ESS_FLOOR. A non-chain sampler has none of these; its
+            # backend raises when the run is cut off, so reaching here is the bar.
+            if chain_sampler:
+                adoption_pass = (
+                    n_divergent == 0
+                    and rhat_max < 1.01
+                    and ess_min is not None
+                    and ess_min >= ESS_FLOOR
+                )
+                bar = f"divergences={n_divergent}, rhat_max={rhat_max:.4f}, ess_min={ess_min:.0f}"
+            else:
+                adoption_pass = True
+                bar = ", ".join(f"{k}={v}" for k, v in sampler_extra.items()) + f", ess={ess_min}"
             diagnostics["adoption_pass"] = adoption_pass
             diagnostics["retune_attempt"] = attempt
             attempts.append(dict(diagnostics))
             posteriors.append(posterior)
 
             if adoption_pass:
-                logger.info(
-                    f"✓ Fit passed adoption bar: "
-                    f"divergences={n_divergent}, rhat_max={rhat_max:.4f}"
-                )
+                logger.info(f"✓ Fit passed adoption bar: {bar}")
                 best_posterior = posterior
                 best_diagnostics = diagnostics
                 best_diagnostics["best_attempt"] = attempt
                 break
 
-            logger.warning(
-                f"✗ Fit failed adoption bar: divergences={n_divergent}, rhat_max={rhat_max:.4f}"
-            )
+            logger.warning(f"✗ Fit failed adoption bar: {bar}")
             retune_history.append(dict(diagnostics))
 
             # Persist this attempt before the retune starts: the driver's
@@ -971,6 +1256,12 @@ def main():
         default=DEFAULT_N_CHAINS,
         help=f"NUTS chains (default: {DEFAULT_N_CHAINS})",
     )
+    parser.add_argument(
+        "--profile-mass",
+        action="store_true",
+        help="Profile log_total_mass analytically instead of sampling it (see the"
+        " comment above forward.fit for why the grid default is off).",
+    )
 
     args = parser.parse_args()
 
@@ -990,6 +1281,7 @@ def main():
             n_warmup=args.n_warmup,
             n_samples=args.n_samples,
             n_chains=args.n_chains,
+            profile_mass=args.profile_mass,
         )
         logger.info(f"✓ Fit complete for galaxy {args.galaxy} config {args.config}")
         return 0

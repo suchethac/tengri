@@ -1,0 +1,52 @@
+2026-09-22 15:15:51,532 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 3.906e-31 erg/s/cm2/Hz
+2026-09-22 15:18:15,122 - __main__ - INFO - Galaxy 4056 (z=1.071): 14 detected bands
+2026-09-22 15:18:15,123 - __main__ - INFO - Config I: 10 free parameters
+2026-09-22 15:18:15,123 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+E0922 15:18:27.281888 1787516 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
+
+  %sort.156 = f64[14444]{0} sort(%constant.7188), dimensions={0}, is_stable=true, to_apply=%region_61.214.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1847}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0922 15:18:27.351984 1786363 slow_operation_alarm.cc:140] The operation took 1.070252228s
+Constant folding an instruction is taking > 1s:
+
+  %sort.156 = f64[14444]{0} sort(%constant.7188), dimensions={0}, is_stable=true, to_apply=%region_61.214.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1847}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-22 15:24:00,610 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-22 15:39:48,024 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (947.4s). Step size: 0.0485. Divergent in the final warmup window: 0%
+2026-09-22 16:25:32,991 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 3691.7s. Divergences: 30/1200 (2.5%). Tree depth: mean 6.5, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-22 16:25:33,368 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-22 16:25:33,368 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-22 16:32:22,550 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=30, rhat_max=1.0064, ess_min=224
+2026-09-22 16:33:28,096 - __main__ - INFO - Saved results to analysis/paper1/results/fits/4056_I.npz
+2026-09-22 16:33:28,097 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/4056_I.json
+2026-09-22 16:33:28,101 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=30) before retuning
+2026-09-22 16:33:28,102 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
+2026-09-22 16:33:31,417 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-22 17:01:06,952 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1655.5s). Step size: 0.0490. Divergent in the final warmup window: 7%
+2026-09-22 17:42:46,208 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 4154.6s. Divergences: 17/1200 (1.4%). Tree depth: mean 6.4, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-22 17:42:46,211 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-22 17:42:46,211 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-22 17:47:46,187 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=17, rhat_max=1.0029, ess_min=404
+2026-09-22 17:48:59,888 - __main__ - INFO - Saved results to analysis/paper1/results/fits/4056_I.npz
+2026-09-22 17:48:59,891 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/4056_I.json
+2026-09-22 17:48:59,894 - __main__ - INFO - Saved the best attempt so far (attempt 2 of 2, divergences=17) before retuning
+2026-09-22 17:48:59,896 - __main__ - INFO - Attempt 3/3: target_accept 0.99, warmup 150, diagonal mass
+2026-09-22 17:49:03,469 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.99
+2026-09-22 18:52:28,859 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (3805.4s). Step size: 0.0217. Divergent in the final warmup window: 0%
+2026-09-22 20:53:22,397 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 11058.7s. Divergences: 0/1200 (0.0%). Tree depth: mean 7.7, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-22 20:53:22,401 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-22 20:53:22,401 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-22 21:01:13,999 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0036, ess_min=344
+2026-09-22 21:03:36,416 - __main__ - INFO - Saved results to analysis/paper1/results/fits/4056_I.npz
+2026-09-22 21:03:36,424 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/4056_I.json
+2026-09-22 21:03:36,437 - __main__ - INFO - ✓ Fit complete for galaxy 4056 config I
+  MAP initialization (1000 steps)...
+  MAP init done (loss=29.72)
+  MAP initialization: reusing cached MAP point
+  MAP initialization: reusing cached MAP point

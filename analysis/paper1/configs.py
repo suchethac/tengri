@@ -234,6 +234,9 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     # before the cell testing it reported. If that cell comes back still frozen,
     # (a) still holds and (b) is false -- the row would need a different fix and
     # this cap should not be credited with one.
+    # Measured on the committed 13 Gyr prior (2026-09-21): |dF/F| 0.018% outside
+    # the age window against 300-2100% inside, with 59% of that prior sitting
+    # in the flat regime at z ~ 1.07. See sfh_tau_conditioning.py.
     tau_upper = age_at_z(z)
     return SEDModel.build(
         ssp_data=ssp_data,
@@ -357,16 +360,20 @@ def config_V(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         sfh={
             "type": "lnorm",
             "all_params": Fixed(DEFAULT),
-            "peak_gyr": Uniform(0.1, 13.0),
-            # NOT capped at the cosmic age, unlike the DPL turnover. A
-            # log-normal peak beyond the observed epoch is not a flat
-            # direction: it encodes a star formation rate still RISING at
-            # that epoch, which the data distinguish. Measured outside the
-            # age window the peak retains 0.48-2.70% band sensitivity, an
-            # inside/outside ratio of 2.96-3.26 -- better conditioned than
-            # delayed-tau (64-79) and nothing like the DPL turnover
-            # (467-121000). Capping here would delete rising-SFH solutions
-            # the fit can actually constrain.
+            # Peak bounded by the galaxy's age, like age_gyr (owner, 2026-09-21).
+            # Uniform(0.1, 13) let more than half the draws put the peak after
+            # the epoch of observation, where only the rising limb of the
+            # log-normal is inside the galaxy's life and many (peak, width)
+            # pairs share one slope: a flat ridge, the row-II tau > age(z)
+            # direction again. On 7837, 13097 and 14099 the rung-1 posterior
+            # spanned the whole peak prior (p1 0.3, p99 12.9 Gyr) with healthy
+            # E-BFMI (0.87-0.99) and width never at its floor, and every retune
+            # rung then adapted to a step of 0.0002-0.001 and froze (ESS 1-3).
+            # The cap has a measured cost: beyond the age window the peak keeps
+            # 0.48-2.70% band sensitivity (inside/outside ratio 2.96-3.26), so
+            # rising-SFH solutions the data can constrain are excluded. The
+            # ruling trades that for the sampler freezing measured above.
+            "peak_gyr": Uniform(0.1, age_at_z(z)),
             "width_gyr": Uniform(0.1, 5.0),
             "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
