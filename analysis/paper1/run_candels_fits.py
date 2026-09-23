@@ -248,7 +248,13 @@ def run_fit_subprocess(
         with open(log_file, "w") as f:
             env = os.environ.copy()
             worktree_root = Path(__file__).parent.parent.parent
-            env["PYTHONPATH"] = str(worktree_root / "src")
+            env["PYTHONPATH"] = os.pathsep.join(
+                (
+                    str(worktree_root / "src"),
+                    str(worktree_root / "analysis"),
+                    str(worktree_root / "analysis" / "paper1"),
+                )
+            )
             env["JAX_PLATFORMS"] = "cpu"
             env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
 
@@ -378,7 +384,13 @@ def run_fit_cells_concurrent(
 
         env = os.environ.copy()
         worktree_root = Path(__file__).parent.parent.parent
-        env["PYTHONPATH"] = str(worktree_root / "src")
+        env["PYTHONPATH"] = os.pathsep.join(
+            (
+                str(worktree_root / "src"),
+                str(worktree_root / "analysis"),
+                str(worktree_root / "analysis" / "paper1"),
+            )
+        )
         env["JAX_PLATFORMS"] = "cpu"
         env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
 
@@ -493,7 +505,13 @@ def run_fit_cells_concurrent(
 
                 env = os.environ.copy()
                 worktree_root = Path(__file__).parent.parent.parent
-                env["PYTHONPATH"] = str(worktree_root / "src")
+                env["PYTHONPATH"] = os.pathsep.join(
+                    (
+                        str(worktree_root / "src"),
+                        str(worktree_root / "analysis"),
+                        str(worktree_root / "analysis" / "paper1"),
+                    )
+                )
                 env["JAX_PLATFORMS"] = "cpu"
                 env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
 
