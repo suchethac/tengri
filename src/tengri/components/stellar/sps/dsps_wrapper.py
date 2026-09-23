@@ -115,9 +115,12 @@ class SSPData(NamedTuple):
         at each (age, metallicity) [dimensionless, ∈ [0, 1]].
         Used for stellar mass normalization in CSP integral. Depends on IMF
         and isochrone library; None if unavailable.
-    ssp_alpha_fe : array, optional
-        Alpha enhancement grid (for future use). Currently None.
-        When implemented: ssp_flux will be (n_met, n_alpha, n_age, n_wave).
+    ssp_alpha_fe : array, shape (n_alpha,), optional
+        [alpha/Fe] grid values, relative to solar. Present only for a 4D
+        alpha-enhanced library; ``None`` for every library shipped here.
+        When present, ``ssp_flux`` is (n_met, n_alpha, n_age, n_wave) and
+        the alpha axis is collapsed by :func:`interpolate_alpha_only`
+        before the DSPS kernel sees a 3D grid.
     nebular : str, optional
         Nebular provenance: ``"included"`` (wNE: nebular continuum and
         lines baked in), ``"bare"``, or ``"unknown"`` (default). Resolved
@@ -130,9 +133,17 @@ class SSPData(NamedTuple):
     to solar. To convert user-supplied log10(Z/Z_sun) to grid coordinates,
     add LOG10_ZSUN ≈ −1.848.
 
-    **Future extension**: ssp_alpha_fe support for alpha-element abundance
-    variations (Vazdekis+2015, MIST, etc.) is planned. Currently, metallicity
-    is the only dimension; alpha is fixed (typically solar, α = 0).
+    **Alpha enhancement**: a 4D library carrying an [alpha/Fe] axis is
+    supported. :func:`has_alpha_grid` detects one and
+    :func:`interpolate_alpha_only` collapses the axis at ``met_alpha_fe``,
+    after which ``met_logzsol`` is used directly rather than through the
+    effective-metallicity approximation. What is missing is a grid file, not
+    the code path: every library shipped here is 3D, so ``ssp_alpha_fe`` is
+    ``None`` in practice and ``met_alpha_fe`` is instead folded into an
+    effective metallicity, ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``.
+    On such a grid the two are exactly degenerate: an alpha-enhanced spectrum
+    *is* the scaled-solar array 0.75 dex higher in Z, so freeing
+    ``met_alpha_fe`` there samples a flat ridge rather than a mode.
 
     **Survival mass**: ssp_mass_remaining encodes stellar mass loss due to
     stellar evolution (main-sequence turnoff, white dwarf cooling, etc.).
