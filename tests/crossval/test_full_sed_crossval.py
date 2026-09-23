@@ -2073,9 +2073,7 @@ class TestTabularSFH:
                 f"ratio_{i}": float(jnp.log10(sfr_bins[i] / sfr_bins[i + 1]))
                 for i in range(sfr_bins.shape[0] - 1)
             }
-            sfr_t = continuity(
-                ages_yr, log_total_mass=10.0, bin_edges_gyr=bin_edges, **ratios
-            )
+            sfr_t = continuity(ages_yr, log_total_mass=10.0, bin_edges_gyr=bin_edges, **ratios)
             weights = compute_csp_weights(sfr_t, ages_yr)
             sed = jnp.einsum("t,tw->w", weights, ssp_data.ssp_flux[0])  # first met node
             v = float(jnp.mean(sed[(wave > 5400.0) & (wave < 5600.0)]))
