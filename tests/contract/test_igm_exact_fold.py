@@ -50,6 +50,13 @@ CONTROL = 1
 PROBE_Z = 1.0
 
 
+#: Node count for the two free-redshift builds below. Their subject is how the
+#: fold is resolved when the redshift is free, not the z table's resolution, and
+#: a default-resolution table cost ~45 s per build locally, which put the contract
+#: shard past its 70-minute CI budget. Coarse is enough to have a table at all.
+FREE_Z_NODES = 8
+
+
 @pytest.fixture(scope="module")
 def ssp(ssp_data_wne):
     """The suite's own grid.
@@ -127,7 +134,7 @@ def test_a_free_redshift_refuses_the_exact_fold(ssp, observation):
             },
             redshift=tengri.Uniform(0.5, 1.5),
             igm={"type": "inoue"},
-            approx=WavePrecomp(igm_fold="exact"),
+            approx=WavePrecomp(igm_fold="exact", n_z=FREE_Z_NODES),
         )
         model.predict_photometry({"redshift": PROBE_Z})
     assert "node" in str(excinfo.value)
@@ -295,7 +302,7 @@ def _free_z_photometry(ssp, observation, fold):
         },
         redshift=tengri.Uniform(0.5, 1.5),
         igm={"type": "inoue"},
-        approx=WavePrecomp(igm_fold=fold),
+        approx=WavePrecomp(igm_fold=fold, n_z=FREE_Z_NODES),
     )
     return np.asarray(model.predict_photometry({"redshift": PROBE_Z}), dtype=np.float64)
 
