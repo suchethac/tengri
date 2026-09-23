@@ -13,6 +13,8 @@ References
 
 import pytest
 
+from tengri.forward.sed_model import WavePrecomp
+
 from tengri import DEFAULT, Fixed, SEDModel, Uniform, recipes
 from tengri.forward.precompute_report import precompute_engagement_report
 
@@ -33,13 +35,14 @@ class TestPrecomputeEngagementCensus:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "tau_v": Fixed(0.5),
+                "tau_bc": Fixed(0.5),
+                "tau_diff": Fixed(0.3),
                 "all_params": Fixed(DEFAULT),
             },
             dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             neb={"type": "ssp"},  # Use SSP-baked nebular for wNE SSP
             redshift=Fixed(0.1),
-            approx="auto",
+            approx=WavePrecomp(),
         )
 
         report = precompute_engagement_report(model)
@@ -82,7 +85,7 @@ class TestPrecomputeEngagementCensus:
             dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             neb={"type": "ssp"},
             redshift=Fixed(0.1),
-            approx="auto",
+            approx=WavePrecomp(),
         )
 
         report = precompute_engagement_report(model)
@@ -111,13 +114,14 @@ class TestPrecomputeEngagementCensus:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "tau_v": Uniform(0.0, 3.0),
+                "tau_bc": Uniform(0.0, 1.5),
+                "tau_diff": Uniform(0.0, 1.5),
                 "all_params": Fixed(DEFAULT),
             },
             dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             neb={"type": "ssp"},
             redshift=Fixed(0.1),
-            approx="auto",
+            approx=WavePrecomp(),
         )
 
         report = precompute_engagement_report(model)
@@ -143,13 +147,14 @@ class TestPrecomputeEngagementCensus:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "tau_v": Fixed(0.5),
+                "tau_bc": Fixed(0.5),
+                "tau_diff": Fixed(0.3),
                 "all_params": Fixed(DEFAULT),
             },
             dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             neb={"type": "ssp"},
             redshift=Uniform(0.0, 3.0),
-            approx="auto",
+            approx=WavePrecomp(),
         )
 
         report = precompute_engagement_report(model)
@@ -177,7 +182,8 @@ class TestPrecomputeEngagementCensus:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "tau_v": Fixed(0.5),
+                "tau_bc": Fixed(0.5),
+                "tau_diff": Fixed(0.3),
                 "all_params": Fixed(DEFAULT),
             },
             dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
@@ -196,18 +202,22 @@ class TestPrecomputeEngagementCensus:
             "approx=None should not trigger dust band response"
         )
 
-    def test_emitter_term_responses_with_free_redshift(self, synthetic_tophat_obs, ssp_data_wne):
+    def test_emitter_term_responses_with_free_redshift(
+        self, synthetic_tophat_obs, ssp_data_wne
+    ):
         """Radio/xray term responses should disengage with free redshift."""
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-            dust_attenuation={"type": "two_component", "all_params": Fixed(DEFAULT)},
-            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
             neb={"type": "ssp"},
-            radio={"type": "default", "all_params": Fixed(DEFAULT)},
             redshift=Uniform(0.0, 3.0),
-            approx="auto",
+            approx=WavePrecomp(),
         )
 
         report = precompute_engagement_report(model)
@@ -241,10 +251,10 @@ def test_precompute_engagement_report_structure():
     assert "DECLINED" in summary or "declined" in summary.lower()
 
 
-def test_precompute_report_on_minimal_model(synthetic_tophat_obs, ssp_data_bc03):
+def test_precompute_report_on_minimal_model(synthetic_tophat_obs, synthetic_ssp):
     """Minimal model should not error on precompute report."""
     model = SEDModel.build(
-        ssp_data=ssp_data_bc03,
+        ssp_data=synthetic_ssp,
         observation=synthetic_tophat_obs,
         **recipes.star_forming_photometry(),
     )

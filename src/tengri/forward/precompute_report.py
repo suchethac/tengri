@@ -294,8 +294,8 @@ def _gather_observed_facts(model: Any) -> dict[str, Any]:
 
     # Approximation mode
     if hasattr(model, "_approx"):
-        facts["approx_mode"] = model._approx.get("mode", "unknown")
         facts["wave_precomp_enabled"] = model._approx.get("wave_precomp", False)
+        facts["ztable_enabled"] = model._approx.get("ztable", False)
 
     # Free parameters
     if hasattr(model, "spec"):
