@@ -61,15 +61,22 @@ NOT_RECORDED = "not recorded"
 #: the band doubles as the null the observed share is judged against.
 EDGE_BAND = 0.05
 
+#: How close a declared lower bound must be to zero to count as the physical
+#: "none of this component" limit rather than an imposed floor.
+PHYSICAL_ZERO_ATOL = 1e-12
+
 #: Share of draws inside one edge band above which the cell is called pinned.
 #: Four times the flat-prior expectation, so ordinary posterior width near a
 #: bound does not register.
 PIN_THRESHOLD = 0.20
 
-#: Lower bounds that mean something physical. A posterior against tau = 0 is
-#: the fit saying "no dust is needed", which is an inference and not a defect,
-#: and counting it with the artificial bounds inflates the limitation.
-#: agn_lum_ratio = 0 is the same statement about the AGN.
+#: Parameters whose lower bound *may* mean something physical: a posterior
+#: against tau = 0 is the fit saying "no dust is needed", an inference and not a
+#: defect, and agn_lum_ratio = 0 is the same statement about the AGN. Membership
+#: here is necessary but not sufficient -- the bound must also actually BE zero.
+#: Configuration I declares dust_tau_diff as Uniform(0.5, 3.0), and a floor of
+#: 0.5 is a forced minimum screen, so naming the parameter alone would file that
+#: wall under "physical" and hide it.
 PHYSICAL_ZERO_BOUNDS = frozenset({"dust_tau_v", "dust_tau_bc", "dust_tau_diff", "agn_lum_ratio"})
 
 #: Simplex coordinates. An edge means "all the mass in one age bin", which is a
@@ -174,7 +181,7 @@ def prior_boundary_pressure(cells: dict[str, dict], results_dir: Path):
             low_end = at_lo >= at_hi
             if param.startswith(SIMPLEX_PARAMS_PREFIX):
                 kind = "simplex"
-            elif low_end and param in PHYSICAL_ZERO_BOUNDS:
+            elif low_end and param in PHYSICAL_ZERO_BOUNDS and abs(lo) <= PHYSICAL_ZERO_ATOL:
                 kind = "physical"
             else:
                 kind = "artificial"
