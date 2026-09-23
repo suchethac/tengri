@@ -7,10 +7,11 @@
 ### Fixed
 
 - The numeric-guard ledger now skips `jnp.clip` calls whose results are assigned to a
-  plain Name and used only as gather indices (element of `Subscript.slice`, argument to
+  plain Name and used only as gather indices (element of `Subscript.slice`, inside an
+  expression within a subscript slice such as `table[i + 1]`, argument to
   `jnp.take` / `jnp.take_along_axis`, or slice of `.at[...]` access). These index bounds
   with literal floor 0 do not present a subnormal-risk floor on the value path; the ledger
-  improves by ratcheting down count on two files (#2327).
+  improves by ratcheting down count on seven files (#2327).
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to

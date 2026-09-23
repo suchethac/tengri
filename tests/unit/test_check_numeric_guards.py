@@ -370,6 +370,34 @@ def example(ax, table, m):
         # Clip used in arithmetic (+ i), so it IS counted (conservative).
         assert len(visitor.violations) == 1
 
+    def test_clip_index_inside_arithmetic_within_subscript_not_counted(self):
+        """jnp.clip used in arithmetic inside subscript (e.g., i+1) is NOT counted.
+
+        The new definition: a Name is an "index use" if it has an ancestor that is
+        the slice of a Subscript, EVEN if that Name is inside an arithmetic
+        expression. Example: ax[i + 1] — the i is inside a BinOp, but that BinOp
+        is the subscript, so it counts as index use.
+        """
+        source = """\
+import jax.numpy as jnp
+
+def example(ax, m, grid, j):
+    '''Index use in arithmetic: clip result used only inside subscript slices.'''
+    i = jnp.clip(jnp.searchsorted(ax, m) - 1, 0, ax.shape[0] - 2)
+    return ax[i + 1] - ax[i] + grid[i + 1, j]
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # The clip result i is used only inside subscripts, even when part of
+        # arithmetic like (i + 1). Should NOT be counted.
+        assert len(visitor.violations) == 0, (
+            f"Clip used only in index expressions should not be counted, "
+            f"but got {visitor.violations}"
+        )
+
 
 class TestMainFunction:
     """Test the main() entrypoint with argv convention."""

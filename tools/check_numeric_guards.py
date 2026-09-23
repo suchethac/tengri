@@ -240,7 +240,12 @@ class NumericGuardVisitor(ast.NodeVisitor):
         """Check if a name is used only as an index in the current function.
 
         Scans the function body for all Name nodes matching var_name and checks
-        if they're all used as indices (Subscript slice, jnp.take arg, .at[] etc).
+        if they're all used as indices. A use is an index use if:
+        - It's the direct element of a Subscript.slice
+        - It's inside an expression (BinOp, UnaryOp, Call, Tuple, etc.) that
+          ultimately becomes the Subscript.slice (e.g., i in ax[i + 1])
+        - It's an argument to jnp.take / jnp.take_along_axis
+        - It's inside the slice of an .at[...] access
         """
         if self._current_function is None:
             return False
@@ -266,38 +271,69 @@ class NumericGuardVisitor(ast.NodeVisitor):
                     self.found_non_index_use = True
                     return
 
-                parent = parent_map[node]
+                # Walk up the parent chain to find if this name is used as an index
+                if not self._is_index_use(node):
+                    self.found_non_index_use = True
 
-                # Case 1: Direct index in Subscript (table[i])
-                if isinstance(parent, ast.Subscript) and parent.slice is node:
-                    return
-                # Case 2: Index within Tuple in Subscript (table[i, j])
-                if isinstance(parent, ast.Tuple):
-                    tuple_parent = parent_map.get(parent)
-                    if isinstance(tuple_parent, ast.Subscript) and tuple_parent.slice is parent:
-                        return
+            def _is_index_use(self, name_node: ast.Name) -> bool:
+                """Check if a Name node is used as an index (possibly indirectly).
 
-                # Case 3: Argument to jnp.take or jnp.take_along_axis
-                if isinstance(parent, ast.Call) and (
-                    is_call_to(parent.func, ("jnp", "take"))
-                    or is_call_to(parent.func, ("jnp", "take_along_axis"))
-                ):
-                    return
+                Returns True if the Name is:
+                - The slice of a Subscript (directly or inside an expression)
+                - An argument to jnp.take / jnp.take_along_axis
+                - Inside a .at[...] slice
+                """
+                current = name_node
+                while current in parent_map:
+                    parent = parent_map[current]
 
-                # Case 4: Index in .at[...].get() or .at[...].set()
-                if isinstance(parent, ast.Subscript):
-                    # Check if parent is the slice of an Attribute (.at[...])
-                    subscript_parent = parent_map.get(parent)
-                    if (
-                        subscript_parent
-                        and isinstance(subscript_parent, ast.Attribute)
-                        and subscript_parent.attr in ("at",)
+                    # Case 1: Direct index in Subscript (table[i])
+                    if isinstance(parent, ast.Subscript) and parent.slice is current:
+                        return True
+
+                    # Case 3: Argument to jnp.take or jnp.take_along_axis
+                    # Check BEFORE generic Call to avoid matching then continuing
+                    if isinstance(parent, ast.Call) and (
+                        is_call_to(parent.func, ("jnp", "take"))
+                        or is_call_to(parent.func, ("jnp", "take_along_axis"))
                     ):
-                        # Check if the Attribute's value has .at method
-                        return
+                        return True
 
-                # If we get here, it's a non-index use
-                self.found_non_index_use = True
+                    # Case 4: Index in .at[...].get() or .at[...].set()
+                    if isinstance(parent, ast.Subscript):
+                        # Check if parent is the slice of an Attribute (.at[...])
+                        subscript_parent = parent_map.get(parent)
+                        if (
+                            subscript_parent
+                            and isinstance(subscript_parent, ast.Attribute)
+                            and subscript_parent.attr in ("at",)
+                        ):
+                            return True
+
+                    # Case 2: Inside an expression (BinOp, etc.) that is the subscript slice
+                    # Walk up through BinOp, UnaryOp, Call, Tuple, etc. until we hit a Subscript
+                    # Non-jnp.take Calls can be walked through
+                    if isinstance(
+                        parent,
+                        (
+                            ast.BinOp,
+                            ast.UnaryOp,
+                            ast.Call,
+                            ast.Tuple,
+                            ast.List,
+                            ast.Compare,
+                            ast.IfExp,
+                        ),
+                    ):
+                        # Keep walking up to see if this expression is a subscript slice
+                        current = parent
+                        continue
+
+                    # Not an index use
+                    return False
+
+                # Reached top without finding index use
+                return False
 
         checker = NameUsageChecker()
         checker.visit(self._current_function)
