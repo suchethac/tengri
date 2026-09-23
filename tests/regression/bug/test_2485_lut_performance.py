@@ -28,8 +28,6 @@ pytestmark = pytest.mark.regression_bug
 #: the fixture cannot redden CI while a silently-unread LUT still fails.
 MIN_SPEEDUP = 1.5
 
-pytestmark = pytest.mark.regression_bug
-
 
 def _single_screen_with_lut(ssp, obs, enable_lut=True):
     """Build single-component dust model with or without LUT."""
