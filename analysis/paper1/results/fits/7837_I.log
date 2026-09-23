@@ -1,55 +1,68 @@
-2026-09-23 02:08:38,656 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 6.157e-30 erg/s/cm2/Hz
-2026-09-23 02:10:40,976 - __main__ - INFO - Galaxy 7837 (z=1.095): 15 detected bands
-2026-09-23 02:10:40,977 - __main__ - INFO - Config I: 10 free parameters
-2026-09-23 02:10:40,977 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
-E0923 02:10:50.115336 3264536 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
+2026-09-23 21:50:23,005 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 6.157e-30 erg/s/cm2/Hz
+/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:859: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': Timeout: The file lock '/Users/suchethacooray/.cache/tengri_jax_cache/.lockfile' could not be acquired.
+  warnings.warn(
+2026-09-23 21:57:52,071 - __main__ - INFO - Galaxy 7837 (z=1.095): 15 detected bands
+2026-09-23 21:57:52,076 - __main__ - INFO - Config I: 10 free parameters
+2026-09-23 21:57:52,076 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+E0923 21:58:22.482048 114106362 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
 
-  %sort.163 = f64[13356]{0} sort(%constant.7405), dimensions={0}, is_stable=true, to_apply=%region_49.162.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1847}
+  %sort.163 = f64[13396]{0} sort(%constant.7514), dimensions={0}, is_stable=true, to_apply=%region_49.164.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1881}
 
 This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
 
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
-E0923 02:10:50.218722 3264439 slow_operation_alarm.cc:140] The operation took 1.103539142s
+E0923 21:58:25.737636 114106182 slow_operation_alarm.cc:140] The operation took 4.25702s
 Constant folding an instruction is taking > 1s:
 
-  %sort.163 = f64[13356]{0} sort(%constant.7405), dimensions={0}, is_stable=true, to_apply=%region_49.162.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1847}
+  %sort.163 = f64[13396]{0} sort(%constant.7514), dimensions={0}, is_stable=true, to_apply=%region_49.164.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1881}
 
 This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
 
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
-2026-09-23 02:19:56,585 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.85
-E0923 02:20:29.648234 3264536 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 2s:
+E0923 21:58:27.832265 114106362 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 2s:
 
-  %sort.304 = f64[15705]{0} sort(%constant.23917), dimensions={0}, is_stable=true, to_apply=%region_71.272, metadata={op_name="jit(_nuts_warmup_only)/jvp(jit(logdensity))/jit(loss_fn)/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=8187}
+  %sort.164 = f64[13159]{0} sort(%constant.7590), dimensions={0}, is_stable=true, to_apply=%region_55.190.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1881}
 
 This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
 
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
-E0923 02:20:29.841550 3264439 slow_operation_alarm.cc:140] The operation took 2.193514725s
+E0923 21:58:29.380408 114106182 slow_operation_alarm.cc:140] The operation took 3.554055s
 Constant folding an instruction is taking > 2s:
 
-  %sort.304 = f64[15705]{0} sort(%constant.23917), dimensions={0}, is_stable=true, to_apply=%region_71.272, metadata={op_name="jit(_nuts_warmup_only)/jvp(jit(logdensity))/jit(loss_fn)/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=8187}
+  %sort.164 = f64[13159]{0} sort(%constant.7590), dimensions={0}, is_stable=true, to_apply=%region_55.190.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1881}
 
 This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
 
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
-2026-09-23 02:55:04,424 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (2107.8s). Step size: 0.0515. Divergent in the final warmup window: 7%
-2026-09-23 03:54:28,212 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 5670.9s. Divergences: 5/1200 (0.4%). Tree depth: mean 6.5, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-23 03:54:28,616 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
-2026-09-23 03:54:28,616 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
-2026-09-23 04:03:09,504 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=5, rhat_max=1.0013, ess_min=225
-2026-09-23 04:04:58,345 - __main__ - INFO - Saved results to analysis/paper1/results/fits/7837_I.npz
-2026-09-23 04:04:58,352 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/7837_I.json
-2026-09-23 04:04:58,356 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=5) before retuning
-2026-09-23 04:04:58,357 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
-2026-09-23 04:05:02,695 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.95
-2026-09-23 04:47:14,376 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (2531.7s). Step size: 0.0412. Divergent in the final warmup window: 13%
-2026-09-23 05:53:19,531 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 6496.6s. Divergences: 15/1200 (1.2%). Tree depth: mean 6.5, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-23 05:53:19,541 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
-2026-09-23 05:53:19,542 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
-2026-09-23 06:01:24,377 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=15, rhat_max=1.0159, ess_min=126
-2026-09-23 06:03:41,060 - __main__ - INFO - Saved results to analysis/paper1/results/fits/7837_I.npz
-2026-09-23 06:03:41,063 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/7837_I.json
-2026-09-23 06:03:41,066 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 2, divergences=5) before retuning
-2026-09-23 06:03:41,067 - __main__ - INFO - Attempt 3/3: target_accept 0.99, warmup 150, diagonal mass
-2026-09-23 06:03:46,411 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.99
+E0923 21:58:33.441838 114106362 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 4s:
+
+  %sort.165 = f64[14484]{0} sort(%constant.7666), dimensions={0}, is_stable=true, to_apply=%region_61.216.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1881}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0923 21:58:33.891763 114106182 slow_operation_alarm.cc:140] The operation took 4.457741s
+Constant folding an instruction is taking > 4s:
+
+  %sort.165 = f64[14484]{0} sort(%constant.7666), dimensions={0}, is_stable=true, to_apply=%region_61.216.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1881}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-23 22:11:27,813 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.85
+E0923 22:13:42.614592 114106362 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 8s:
+
+  %sort.399 = f64[15294]{0} sort(%constant.26003), dimensions={0}, is_stable=true, to_apply=%region_430.1373, metadata={op_name="jit(_nuts_warmup_only)/while/body/eval_jaxpr/while/body/while/body/jvp(jit(logdensity))/jit(loss_fn)/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=6961}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0923 22:13:44.266241 114106182 slow_operation_alarm.cc:140] The operation took 9.662397s
+Constant folding an instruction is taking > 8s:
+
+  %sort.399 = f64[15294]{0} sort(%constant.26003), dimensions={0}, is_stable=true, to_apply=%region_430.1373, metadata={op_name="jit(_nuts_warmup_only)/while/body/eval_jaxpr/while/body/while/body/jvp(jit(logdensity))/jit(loss_fn)/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=6961}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-23 22:36:57,267 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1529.5s). Step size: 0.0492. Divergent in the final warmup window: 0%
