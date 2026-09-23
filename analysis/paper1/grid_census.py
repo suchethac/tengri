@@ -199,6 +199,51 @@ def prior_boundary_pressure(cells: dict[str, dict], results_dir: Path):
     return rows, scanned, skipped
 
 
+def config_spread(cells: dict[str, dict], results_dir: Path):
+    """Per galaxy, how far apart the configurations put log10 M* and log10 SFR.
+
+    This is the sample-level result Section 7 asks for, and it is a spread
+    *within* a galaxy across configurations -- a model-choice uncertainty --
+    not a scatter across the sample. Taking it the other way round would report
+    the mass range of twenty galaxies, which is a property of the sample and
+    says nothing about the configurations.
+
+    Only adopted cells contribute. A galaxy with fewer than two adopted
+    configurations has no spread to report and is counted as uncovered rather
+    than entered as zero.
+
+    ``stellar_mass`` and ``sfr_100myr`` are stored linear, so the log is taken
+    after dropping non-positive draws, matching ``fig09_sample_level``.
+    """
+    per_galaxy: dict[int, dict[str, dict[str, float]]] = defaultdict(dict)
+    for name, cell in cells.items():
+        config = _config_of(name, cell)
+        if not is_adopted(cell, config).adopted:
+            continue
+        npz_path = results_dir / f"{name}.npz"
+        if not npz_path.is_file():
+            continue
+        with np.load(npz_path, allow_pickle=True) as npz:
+            for field in ("stellar_mass", "sfr_100myr"):
+                if field not in npz.files:
+                    continue
+                values = np.asarray(npz[field], dtype=float).ravel()
+                values = values[np.isfinite(values) & (values > 0)]
+                if values.size:
+                    per_galaxy[cell.get("gal_id")].setdefault(field, {})[config] = float(
+                        np.median(np.log10(values))
+                    )
+    out = {}
+    for field in ("stellar_mass", "sfr_100myr"):
+        spreads = []
+        for byconfig in per_galaxy.values():
+            got = byconfig.get(field, {})
+            if len(got) >= 2:
+                spreads.append((max(got.values()) - min(got.values()), len(got)))
+        out[field] = spreads
+    return out, len(per_galaxy)
+
+
 def coverage(cells: dict[str, dict], field: str) -> tuple[list, int]:
     """Values present for ``field``, and how many cells lack it.
 
@@ -389,6 +434,25 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
         )
     if not complete:
         print("  ^ 'which configurations mix worst' needs every row; this is not that.")
+
+    # --- model-choice spread, the sample-level result -----------------------
+    spreads, n_gal = config_spread(cells, results_dir)
+    print("\nconfiguration-to-configuration spread, within a galaxy (adopted cells only)")
+    for field, label in (("stellar_mass", "log10 M*"), ("sfr_100myr", "log10 SFR(100 Myr)")):
+        rows = spreads.get(field) or []
+        if not rows:
+            print(f"  {label:<20} {NOT_RECORDED} (no galaxy has two adopted configurations)")
+            continue
+        vals = [v for v, _ in rows]
+        widest = max(rows, key=lambda r: r[0])
+        print(
+            f"  {label:<20} median {np.median(vals):.3f} dex, "
+            f"range {min(vals):.3f} to {max(vals):.3f} dex, "
+            f"over {len(rows)} of {n_gal} galaxies "
+            f"(widest spans {widest[1]} configurations)"
+        )
+    if not complete:
+        print("  ^ a galaxy missing a row cannot show that row's disagreement; partial.")
 
     # --- prior boundaries, which the adoption bar cannot see ---------------
     rows, scanned, skipped = prior_boundary_pressure(cells, results_dir)
