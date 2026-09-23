@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 """The opt-in exact IGM fold, against the exact wavelength-grid integrator.
 
 ``WavePrecomp(igm_fold=...)`` chooses how IGM transmission enters the sub-band
