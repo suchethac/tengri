@@ -106,6 +106,47 @@ ESS_FLOOR = 100.0
 #: 5741 s at 0.85, and percent-level divergences are a step-size problem, so
 #: 0.99 is tried at the base warmup -- one run -- before paying for two.
 DEFAULT_TARGET_ACCEPT = 0.85
+
+#: Metric preconditioning strength for every NUTS attempt (#1301; enabled
+#: 2026-09-24 on the owner's call). Every tengri parameter is standardized, so
+#: the prior contributes exactly I to the metric and what remains is the
+#: likelihood's curvature. Preconditioning supplies that analytically as a
+#: linear change of variables, which leaves the sampled distribution unchanged:
+#: the Jacobian is constant, draws are recovered exactly, no importance weights
+#: and no bias. Only the efficiency changes.
+#:
+#: It is a general transform, not a per-problem knob. Measured across
+#: parametric and stochastic SFHs, photometry / emission lines / spectroscopy
+#: and D = 7 to 73, the raw posterior condition number ran 8.5e4 to 3.1e8 in
+#: every configuration tested and whitened to 1.0 at the MAP.
+#:
+#: 0.5 is DEFAULT_WHITENING_STRENGTH, and the value whose gradients-per-draw
+#: win replicated (8.16x and 2.34x on two seeds) in
+#: bench/reports/2026-08-31_fast_nuts.md. The knob that report refutes twice
+#: over, warmup_max_num_doublings, is deliberately left unset.
+#:
+#: Cells that ran before this: rows III and V entire, the first six of row I,
+#: and the row II / row IV cells finished earlier on 2026-09-24. The
+#: per-attempt record carries ``precondition`` so that split is auditable
+#: rather than inferred from file timestamps.
+#: MEASURED ON THIS GRID 2026-09-24 AND TURNED BACK OFF. Enabling it produced
+#: divergences where the plain runs had none, which the adoption bar forbids.
+#: Row I: plain cells peaked at 5 and 3 divergences (2 of 5 affected); the
+#: preconditioned cell gave 31. Row VI: 107 and 72, both cells, neither
+#: adopted. Rows I, II and VI went 0 of 4 adopted preconditioned.
+#:
+#: On a paired test -- galaxy 79, Configuration IV, seed 42, same machine, one
+#: variable -- it halved the wall clock (2077 s -> 1010 s) by taking a step
+#: 2.3x larger (0.0536 -> 0.1230), and paid for it in mixing: min ESS 445 ->
+#: 189 and max split R-hat 1.0031 -> 1.0100, landing exactly on the bar. Per
+#: effective sample it was 15% WORSE (4.67 -> 5.35 s/ESS). Wall clock alone
+#: reads as a 2x win and is the wrong metric.
+#:
+#: This does not contradict bench/reports/2026-08-31_fast_nuts.md, which
+#: measured gradients per draw on a different fixture; it says the win does not
+#: carry to these six configurations at z ~ 1 on real photometry. Left wired
+#: and recorded per attempt so the next attempt at it starts from evidence.
+PRECONDITION_STRENGTH: float | None = None
 RETUNE_TARGET_ACCEPT_1 = 0.95
 RETUNE_TARGET_ACCEPT_2 = 0.99
 
@@ -743,9 +784,7 @@ def save_fit_outputs(
         model_photometry_p84 = np.percentile(ppd_stack, 84, axis=0)
     else:
         model_photometry_median = np.asarray(
-            sed_model.predict_photometry(
-                {k: float(np.median(v)) for k, v in samples_thin.items()}
-            )
+            sed_model.predict_photometry({k: float(np.median(v)) for k, v in samples_thin.items()})
         )
         model_photometry_p16 = None
         model_photometry_p84 = None
@@ -939,6 +978,7 @@ def run_fit(
         n_burnin=0,
         dense_mass_matrix=False,
         target_accept_rate=DEFAULT_TARGET_ACCEPT,
+        precondition=PRECONDITION_STRENGTH,
     )
 
     # Run fit with retune logic
@@ -1059,6 +1099,7 @@ def run_fit(
                 "n_samples": nuts_kwargs["n_samples"],
                 "n_chains": nuts_kwargs["n_chains"],
                 "dense_mass_matrix": nuts_kwargs["dense_mass_matrix"],
+                "precondition": nuts_kwargs.get("precondition"),
                 "profile_mass": profile_mass,
                 "target_accept_rate": nuts_kwargs["target_accept_rate"],
                 # The CLI seed and the key this attempt actually ran at:
