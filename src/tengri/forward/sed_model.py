@@ -245,6 +245,48 @@ def _chain_consumes(chain, key: str) -> bool:
     return False
 
 
+def _chain_implements_emission_terms(chain) -> list[str]:
+    """Derive which components in ``chain`` implement the ``emission_terms`` contract.
+
+    The ``emission_terms`` method is the contract for additive emitters that can be
+    optimized via per-filter band-response precompute: a component that decomposes
+    its SED into rank-1 terms (amplitude × fixed spectral shape) can precompute the
+    filter integral of each term at build time instead of evaluating it on every call.
+
+    This asks each component whether it declares the contract, rather than matching
+    it against a hardcoded list of names, so a future emitter inherits the
+    optimization instead of silently forfeiting it. Note this is a check for the
+    *contract*, not for the rank-1 property itself: whether a term response is
+    actually valid for the emitter is settled downstream by the two-draw probe in
+    :meth:`SEDModel._additive_term_band_response`, which rejects any emitter whose
+    spectral shape moves with its amplitude. Declaring ``emission_terms`` buys a
+    component an evaluation, not an exemption.
+
+    Deterministic ordering (sorted by component name) keeps the build reproducible.
+
+    Parameters
+    ----------
+    chain : sequence
+        The component chain.
+
+    Returns
+    -------
+    list[str]
+        Sorted list of component names that implement ``emission_terms``, in
+        alphabetical order for reproducibility. Empty if no components qualify.
+    """
+    emitters = []
+    for comp in chain:
+        emission_terms_method = getattr(comp, "emission_terms", None)
+        if emission_terms_method is not None and callable(emission_terms_method):
+            # Safely read the component's name attribute, falling back to str(comp)
+            # if the attribute is missing (defensive against malformed components).
+            name = getattr(comp, "name", None)
+            if name is not None and isinstance(name, str):
+                emitters.append(name)
+    return sorted(emitters)
+
+
 #: Relative tolerance for the rank-1 check in
 #: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
 #: each term's spectral shape to this precision for the term to earn a constant
@@ -2971,7 +3013,11 @@ class SEDModel:
                     )
                     self._dust_band_response_cache = None
 
-                for _emitter in ("xray", "radio"):
+                # Derive which emitters in the chain implement the emission_terms
+                # contract rather than hardcoding ("xray", "radio"). Any additive
+                # emitter added in future automatically inherits the band-response
+                # optimization without silent performance regression.
+                for _emitter in _chain_implements_emission_terms(chain):
                     try:
                         self._additive_term_band_response(chain, _emitter)
                     except Exception as e:
@@ -9233,6 +9279,11 @@ class SEDModel:
     #: fed to the (fixed-shape) emission template, so a build-time per-filter
     #: response ``R`` computed at one ``L_ir`` and reused for any other (the
     #: homogeneity check in ``_dust_emission_band_response``) stays valid.
+    #:
+    #: **TRAP: This set is consulted by TWO mechanisms with DIFFERENT correctness
+    #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
+    #: this set without also checking the energy-balance LUT build requirements is
+    #: a silent numerical error.
     _EB_ATTEN_FREE_OK = frozenset(
         {
             "dust_tau_bc",
@@ -9241,6 +9292,27 @@ class SEDModel:
             "dust_eta_balance",
             "dust_log_L_ir",
         }
+    )
+
+    #: dust attenuation params that may be free without invalidating the dust
+    #: *emission band response* precompute (separate from energy-balance LUT).
+    #: Admits ``dust_tau_v``: changes the absorbed-energy amplitude but not the
+    #: Dale+2014 template's spectral SHAPE. The per-filter response R stays a
+    #: build-time constant and homogeneity holds (exactly proportional to L_ir).
+    #:
+    #: **CRITICAL: This set is separate from ``_EB_ATTEN_FREE_OK`` by design.**
+    #: ``_EB_ATTEN_FREE_OK`` gates the energy-balance LUT, which requires:
+    #:   1. A ``DustSEDComponent`` in the chain (absent for single_component).
+    #:   2. ``tau_bc_grid`` and ``tau_diff_grid`` axes in the LUT (no tau_v axis).
+    #: Adding ``dust_tau_v`` to the shared set would enable the LUT build on a
+    #: single_component model where (1) is False, violating (2). The LUT would
+    #: bake the wrong L_absorbed and emit silently wrong fluxes. The band response
+    #: gate (this set) has no such constraint: it checks only that the emission
+    #: *shape* is fixed, and the homogeneity probe independently guards correctness.
+    #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
+    #: adding a new attenuation parameter that does not reshape the emission.
+    _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
+        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir", "dust_tau_v"}
     )
 
     def _ztable_data_for_jit(self):
@@ -9463,7 +9535,7 @@ class SEDModel:
         # SAFE, an unrecognized free parameter simply disables the optimization.
         free = set(self.spec.free_params)
         free_dust = {p for p in free if p.startswith("dust_")}
-        shape_free = bool(free_dust - self._EB_ATTEN_FREE_OK) or ("redshift" in free)
+        shape_free = bool(free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK) or ("redshift" in free)
 
         if (
             emitter is not None
