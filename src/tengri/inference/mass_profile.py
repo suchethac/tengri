@@ -1725,55 +1725,59 @@ def _reinsertion_lock():
             fcntl.flock(fh, fcntl.LOCK_UN)
 
 
-def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Posterior:
-    """Record the resolved ``profile_mass`` choice, and reinsert the mass if engaged.
+def reinsert_profiled_mass(
+    fitter: Fitter,
+    posterior: Posterior,
+    *,
+    data,
+    noise,
+    presence,
+    line_obs,
+    line_err,
+    key,
+) -> Posterior:
+    """Draw (or set) the profiled mass and merge it into ``posterior``.
 
-    Called once from ``Fitter.run()``, immediately after the backend runner
-    returns, for every fit regardless of whether profiling engaged: the
-    resolved choice and its reason are always recorded so ``"auto"`` is
-    inspectable after the fact.
+    Shared body for :func:`finalize_profile_mass` (single-galaxy: passes
+    ``fitter.data``/``fitter.noise``, the Fitter's own observation) and the
+    ``Fitter._fit_batch_vmap_map`` / ``_fit_batch_vmap_mcmc`` batch paths
+    (one call per galaxy, with *that* galaxy's own ``data``/``noise`` --
+    ``fitter.data`` is whichever galaxy the batch ``Fitter`` happens to have
+    been constructed with, not the one being finalized here, so the caller
+    must supply the right observation explicitly rather than let this
+    function default to ``fitter.data``/``fitter.noise``).
 
-    When profiling engaged, draws (or, for a point estimate, sets) the
-    marginalized mass and merges it into ``posterior.samples``/``params`` so
-    they carry the mass parameter exactly as they would without profiling
-    (``posterior.properties`` and other derived quantities work unchanged).
+    Precondition: ``fitter._profile_mass`` is truthy (checked by both
+    callers before invoking this; calling it when profiling did not engage
+    would read ``fitter._profile_mass_name`` as ``None``).
 
     Parameters
     ----------
     fitter : Fitter
-        The fitter that produced ``posterior``.
+        The fitter whose working spec pinned the mass (for ``mass_name``,
+        ``model``, ``_fixed_values``, ``data_type``, ``use_components``).
     posterior : Posterior
-        The backend's result, not yet returned to the caller.
+        The backend's result for ONE galaxy, not yet returned to the caller.
+    data, noise : array_like
+        That galaxy's own observation -- the channel(s) the objective that
+        produced ``posterior`` was actually scored against.
+    presence : array_like or None
+        That galaxy's presence mask, or ``None``.
+    line_obs, line_err : array_like or None
+        That galaxy's measured line fluxes/errors, or ``None`` if this fit
+        has no line-flux channel.
     key : jax.Array
-        The fit's PRNG key; the mass draw uses a key folded in from it, so it
-        is reproducible alongside the rest of the fit.
+        PRNG key for the mass draw (samples case only; unused for a point
+        estimate, since :func:`_profile_stats` is deterministic given the
+        other channels).
 
     Returns
     -------
     Posterior
         ``posterior``, mutated in place and returned for convenience.
     """
-    posterior.diagnostics = {
-        **posterior.diagnostics,
-        "profile_mass": fitter._profile_mass_resolved,
-        "profile_mass_resolved": fitter._profile_mass_resolved,
-        "profile_mass_reason": fitter._profile_mass_reason,
-    }
-    if not fitter._profile_mass:
-        return posterior
-
     mass_name = fitter._profile_mass_name
     model = fitter.model
-    data, noise = fitter.data, fitter.noise
-    presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
-    # The measured line channel, sourced the same way: straight off the fitter
-    # rather than out of ``_data_args``. Both the draw path and the point
-    # estimate below score the same channels the objective did -- a mass drawn
-    # or set against a different channel set than the one sampled would be a
-    # different posterior, with nothing raising to say so.
-    _line_cfg = fitter._resolved_line_fluxes()
-    line_obs = None if _line_cfg is None else jnp.asarray(_line_cfg.fluxes)
-    line_err = None if _line_cfg is None else jnp.asarray(_line_cfg.errors)
     fixed_values = fitter._fixed_values
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
@@ -1817,5 +1821,70 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
             line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
         )
         posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
-
     return posterior
+
+
+def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Posterior:
+    """Record the resolved ``profile_mass`` choice, and reinsert the mass if engaged.
+
+    Called once from ``Fitter.run()``, immediately after the backend runner
+    returns, for every fit regardless of whether profiling engaged: the
+    resolved choice and its reason are always recorded so ``"auto"`` is
+    inspectable after the fact.
+
+    When profiling engaged, draws (or, for a point estimate, sets) the
+    marginalized mass and merges it into ``posterior.samples``/``params`` so
+    they carry the mass parameter exactly as they would without profiling
+    (``posterior.properties`` and other derived quantities work unchanged).
+    Delegates the actual draw/set + merge to :func:`reinsert_profiled_mass`,
+    using this Fitter's own ``data``/``noise``/``presence``/line channel --
+    the single-galaxy case, where "this fitter's observation" and "the
+    observation the profiled objective was scored against" are the same
+    thing. The batch vmap paths (``Fitter._fit_batch_vmap_map`` /
+    ``_fit_batch_vmap_mcmc``) call :func:`reinsert_profiled_mass` directly,
+    once per galaxy, with that galaxy's own observation instead.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter that produced ``posterior``.
+    posterior : Posterior
+        The backend's result, not yet returned to the caller.
+    key : jax.Array
+        The fit's PRNG key; the mass draw uses a key folded in from it, so it
+        is reproducible alongside the rest of the fit.
+
+    Returns
+    -------
+    Posterior
+        ``posterior``, mutated in place and returned for convenience.
+    """
+    posterior.diagnostics = {
+        **posterior.diagnostics,
+        "profile_mass": fitter._profile_mass_resolved,
+        "profile_mass_resolved": fitter._profile_mass_resolved,
+        "profile_mass_reason": fitter._profile_mass_reason,
+    }
+    if not fitter._profile_mass:
+        return posterior
+
+    presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
+    # The measured line channel, sourced the same way: straight off the fitter
+    # rather than out of ``_data_args``. Both the draw path and the point
+    # estimate below score the same channels the objective did -- a mass drawn
+    # or set against a different channel set than the one sampled would be a
+    # different posterior, with nothing raising to say so.
+    _line_cfg = fitter._resolved_line_fluxes()
+    line_obs = None if _line_cfg is None else jnp.asarray(_line_cfg.fluxes)
+    line_err = None if _line_cfg is None else jnp.asarray(_line_cfg.errors)
+
+    return reinsert_profiled_mass(
+        fitter,
+        posterior,
+        data=fitter.data,
+        noise=fitter.noise,
+        presence=presence,
+        line_obs=line_obs,
+        line_err=line_err,
+        key=key,
+    )

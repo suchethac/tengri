@@ -1952,6 +1952,7 @@ class Prediction:
 
     __slots__ = (
         "_cache",
+        "_free_params",
         "_model",
         "_params",
         "_photometry_cache",
@@ -1966,7 +1967,22 @@ class Prediction:
 
     def __init__(self, model, params):
         self._model = model
+        # (#2296) Refuses any Fixed key in ``params``, then merges in every
+        # Fixed value the caller omitted. This is the ONE refusal check for
+        # this Prediction's lifetime, run once here on exactly what the
+        # caller supplied. ``self._params`` (fixed+free) is what the exact
+        # projectors below need -- ``project_photometry``/``project_spectrum``
+        # and ``_predict_obs_sed`` read values like ``redshift``/``igm_x_HI``
+        # straight out of the dict with no fallback of their own.
         self._params = resolve_fixed_params(model, params)
+        # The free-only dict exactly as the caller supplied it (already
+        # refused above). Use THIS, not ``self._params``, for any call into a
+        # public ``predict_*`` surface: those surfaces refuse a Fixed key of
+        # their own (#2296), and ``self._params`` legitimately carries every
+        # one of them, so handing it back in would trip that refusal on
+        # values this constructor injected, not on anything the caller
+        # overrode.
+        self._free_params = dict(params)
         self._cache = {}
         self._photometry_cache = {}
         self.sfh = SFHProperties(self)
@@ -2082,8 +2098,9 @@ class Prediction:
         """
         if "weights" in self._cache:
             return
-        p = self._model._get_internal_params(self._params)
-        state = self._model.predict_state(self._params)
+        # Free-only: both calls self-merge Fixed values from the spec (#2296).
+        p = self._model._get_internal_params(self._free_params)
+        state = self._model.predict_state(self._free_params)
         derived = state.derived
         # The stellar block integrates the SFH on
         # ``spec.n_grid`` (default 64) regardless of whether the model
@@ -2417,7 +2434,9 @@ class Prediction:
                     "approx=True requires the model to be built with approx=WavePrecomp(...). "
                     "Rebuild the model with approx=WavePrecomp() and try again."
                 )
-            return self._model.predict_photometry(self._params)
+            # Free-only: predict_photometry refuses a Fixed key of its own
+            # (#2296) and self-merges self.spec.get_fixed_values() internally.
+            return self._model.predict_photometry(self._free_params)
 
         # Mode 2: Runtime filters
         if filters is not None:
@@ -2626,7 +2645,11 @@ class Prediction:
                     "approx=SpectrumPrecomp(...). Rebuild the model with "
                     "approx=SpectrumPrecomp() and try again."
                 )
-            return self._model.predict_spectrum(self._params, wave_obs=wave_obs)
+            # Free-only: predict_spectrum refuses a Fixed key of its own
+            # (#2296) and self-merges self.spec.get_fixed_values() internally
+            # on the configured-spectroscopy (predict_observables_jit) route,
+            # the one this approx=True branch is documented to take.
+            return self._model.predict_spectrum(self._free_params, wave_obs=wave_obs)
 
         # Exact: project the cached ForwardState through the shared spectrum
         # projector. ``Observation.predict`` is the canonical exact path, it calls

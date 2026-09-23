@@ -83,10 +83,10 @@ def _build_forward_and_data(noise_seed):
         "dust_tau_diff": jnp.array(0.25),
         "sfh_tsnorm_log_total_mass": jnp.array(10.5),
     }
-    truth_full = {
-        **sed_model.spec.get_fixed_values(),
-        **{k: float(v) for k, v in truth.items()},
-    }
+    # Free-only (#2296): predict_spectrum self-merges the spec's Fixed
+    # values internally, so spreading get_fixed_values() here would present
+    # them back as a refused override.
+    truth_full = {k: float(v) for k, v in truth.items()}
     p_spec = np.asarray(sed_model.predict_spectrum(truth_full, wave_obs=wave_obs))
     noise = p_spec / 30.0
     flux = p_spec + np.random.default_rng(noise_seed).normal(size=p_spec.shape) * noise

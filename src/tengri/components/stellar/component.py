@@ -25,6 +25,7 @@ not an output of a separate precompute step.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -80,6 +81,24 @@ class SFHBeyondSSPGridWarning(UserWarning):
     """
 
 
+class AgeKernelFieldWarning(UserWarning):
+    """Warning raised when field=True forces age_kernel='dsps' silently.
+
+    When a GP-field SFH is requested without an explicit age_kernel, the field
+    draw lives on a coarse lookback grid with no dense integrand, so the kernel
+    is forced to 'dsps' (the DSPS histogram kernel). This warning alerts the user
+    to that choice and states the accuracy bound.
+
+    Notes
+    -----
+    The 'dsps' kernel costs mass-proportionality accuracy: typically well below
+    1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
+
+    To silence this advisory, set age_kernel='dsps' explicitly to acknowledge
+    the choice. See #2368 for details.
+    """
+
+
 from tengri.components.stellar._params import ALPHA_FE_PARAMS
 from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
@@ -116,6 +135,14 @@ _DEFAULT_MET_BIN_EDGES_LOG_YR = host_array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14]
 #: Accepted ``age_kernel`` values: how the SFH is integrated onto the SSP age
 #: grid. See :class:`StellarSEDComponentConfig` for the accuracy/cost tradeoff.
 VALID_AGE_KERNELS = ("cic", "dsps")
+
+#: Accuracy bound of the 'dsps' age kernel relative to exact mass-proportionality.
+#: The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' integrates
+#: the SFH on the coarse SSP age grid and costs proportionality accuracy,
+#: typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes
+#: in the prior (#2368, #2370). This constant is used in registry docs, public
+#: docs (model_configuration.md), and the field=True advisory.
+AGE_KERNEL_ACCURACY_BOUND = 1e-3
 
 #: Kernel chosen on the non-field path when ``age_kernel`` is left unset
 #: (``None`` = auto). ``"cic"`` is the accuracy default: the DSPS histogram
@@ -174,7 +201,7 @@ def _resolve_age_kernel(config) -> str:
     if config.field:
         # The field draw lives on the coarse lookback grid by construction, so
         # DSPS is the only implemented kernel here. Auto-select resolves to it
-        # silently (that is today's behavior); an EXPLICIT 'cic' must not.
+        # silently; an EXPLICIT 'cic' must not.
         if kernel == "cic":
             raise NotImplementedError(
                 "age_kernel='cic' is not supported with a GP-field SFH: the "
@@ -1660,9 +1687,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     sfh_bin_edges_gyr: Any = None
 
     def __post_init__(self):
-        """Emit deprecation warning for sps_backend (issue #1470)."""
-        import warnings
-
+        """Emit deprecation warning for sps_backend and advisory for field=True."""
         self._validate_bin_edges()
 
         if self.sps_backend != "dsps":
@@ -1674,6 +1699,17 @@ class StellarSEDComponentConfig(SEDComponentConfig):
                 DeprecationWarning,
                 stacklevel=3,
             )
+
+        # Emit advisory when field=True forces 'dsps' over the default kernel
+        if self.field and self.age_kernel is None:
+            bound_str = f"{AGE_KERNEL_ACCURACY_BOUND:g}"
+            msg = (
+                f"field=True forces age_kernel='dsps', which costs mass-proportionality "
+                f"accuracy: typically well below 1e-5, but reaching roughly {bound_str} "
+                f"at the sharpest SFH shapes in the prior. To silence this advisory, "
+                f"set age_kernel='dsps' explicitly to acknowledge the choice. (#2368)"
+            )
+            warnings.warn(msg, AgeKernelFieldWarning, stacklevel=3)
 
     def bin_edges_sfh_kwarg(self) -> dict:
         """``{'bin_edges_gyr': ...}`` when the SFH takes it, else ``{}``.
@@ -1914,6 +1950,7 @@ class StellarSEDComponent:
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
         redshift_spec: dict[str, Any] | None = None,
         spec_wave_obs: jnp.ndarray | None = None,
+        lyc_gate: bool = False,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -1947,6 +1984,14 @@ class StellarSEDComponent:
         spec_wave_obs : array_like, shape (n_pix,), optional
             Observed-frame spectrum pixel wavelengths [Angstrom]. Required
             when ``spectrum_precomp=True``.
+        lyc_gate : bool
+            Whether this model has a live nebular Lyman-continuum mask (a
+            photoionized nebular backend whose ``neb_fesc`` is not pinned at
+            exactly ``1.0``; #2439, #2427). Default False. Threaded to
+            :func:`~tengri.components.stellar.sps.precompute.precompute_photometry`
+            / ``precompute_photometry_ztable``: gates the whole-band and
+            sub-band Lyman-continuum tensors so a model without a live mask
+            pays neither the compute nor the larger cache entry.
         """
         del wave_grid
         approx = approx or {}
@@ -2013,6 +2058,7 @@ class StellarSEDComponent:
                     taylor_correction=approx.get("taylor_correction", False),
                     # Sub-band quadrature for the dust screen (#1122): supersedes Ψ.
                     n_subbands=int(approx.get("n_subbands", 0)),
+                    lyc_gate=lyc_gate,
                 )
                 state = _replace_state(state, ssp_phot_lut=lut)
             else:  # mode == "free"
@@ -2034,6 +2080,7 @@ class StellarSEDComponent:
                     taylor_correction=approx.get("taylor_correction", False),
                     # Sub-band quadrature for the dust screen (#1122): supersedes Ψ.
                     n_subbands=int(approx.get("n_subbands", 0)),
+                    lyc_gate=lyc_gate,
                 )
                 state = _replace_state(state, ssp_phot_ztable=ztable)
 
@@ -3053,6 +3100,14 @@ class StellarSEDComponent:
                 jnp.einsum("ma,maf->f", joint_weights, ssp_phot), total_mass
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
+            # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
+            # component to apply the neb_fesc mask (#2439, #2427).
+            ssp_phot_lyc = self._state.ssp_phot_lut.ssp_phot_lyc
+            if ssp_phot_lyc is not None:
+                stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
             # Age-resolved per-filter LUT for two-component
             # dust attenuation. Marginalize over metallicity only; preserve
             # the age axis. Shape (n_age, n_filter). Sum over age == the
@@ -3061,6 +3116,22 @@ class StellarSEDComponent:
                 jnp.einsum("ma,maf->af", joint_weights, ssp_phot), total_mass
             )
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
+            # Per-age twin of stellar_phot_lnu_precomp_lyc above (R3d, #2439,
+            # #2427): the DerivedState contract is
+            # ``sum(stellar_phot_lnu_per_age_precomp, axis=age) ==
+            # stellar_phot_lnu_precomp``, and that must still hold once
+            # NebularSEDComponent corrects the marginalized bucket by
+            # subtracting ``(1-fesc)*stellar_phot_lnu_precomp_lyc`` -- the
+            # per-age bucket needs the same per-age correction, or the two
+            # buckets (which the Taylor/no-subband two_component path reads
+            # per-age) silently disagree with the marginalized one.
+            if ssp_phot_lyc is not None:
+                stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_lyc), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
+                    stellar_phot_lnu_per_age_lyc
+                )
             # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
@@ -3171,6 +3242,20 @@ class StellarSEDComponent:
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
+            # Lyman continuum photometry at runtime z (#2439, #2427).
+            if ztable.ssp_phot_lyc_table is not None:
+                ssp_lyc_at_z = _interp(ztable.ssp_phot_lyc_table)
+                stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_lyc_at_z), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
+                # Per-age twin (R3d): see the fixed-z path for why.
+                stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->af", joint_weights, ssp_lyc_at_z), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
+                    stellar_phot_lnu_per_age_lyc
+                )
             # Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalized + per-age.
             if ztable.ssp_phot_moment_table is not None:

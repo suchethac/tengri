@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Module-level constants for the observation layer.
 
-This namespace gathers the catalogs, status flags, and instrument-
-resolution registries used throughout the observation layer:
+This namespace gathers the catalogs, status flags, instrument-
+resolution registries, and analysis modes used throughout the observation layer:
 
 - Photometry status flags: ``DETECTED``, ``UPPER_LIMIT``, ``LOWER_LIMIT``
+- Emission-line fitting modes: ``ELINE_MODES`` (legal modes for spectroscopic
+  emission line analysis).
 - Default emission-line catalog: ``DEFAULT_LINE_NAMES`` /
   ``DEFAULT_LINE_WAVELENGTHS`` (the 13-line set used by the
   marginalized e-line likelihood when no line list is given).
@@ -25,6 +27,13 @@ tengri.observation.physics : transformation functions
 
 from __future__ import annotations
 
+#: Legal emission line fitting modes for spectroscopic fitting.
+#:
+#: - ``"off"``: No emission line fitting.
+#: - ``"marginalized"``: Analytically marginalize line amplitudes.
+#: - ``"fitted"``: Line amplitudes as free MCMC parameters.
+ELINE_MODES = ("off", "marginalized", "fitted")
+
 from tengri.observation.eline_catalog import (
     CLOUDY_LINE_NAMES,
     CLOUDY_LINE_WAVELENGTHS,
@@ -43,6 +52,7 @@ __all__ = [
     "DEFAULT_LINE_NAMES",
     "DEFAULT_LINE_WAVELENGTHS",
     "DETECTED",
+    "ELINE_MODES",
     "LOWER_LIMIT",
     "SSP_LIBRARY_RESOLUTIONS",
     "STANDARD_INDICES",

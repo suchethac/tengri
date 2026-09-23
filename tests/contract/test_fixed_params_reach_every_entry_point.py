@@ -1,27 +1,35 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Contract: a ``Fixed`` parameter must reach **every** public entry point.
+r"""Contract: a ``Fixed`` parameter is refused, loudly, at every public entry point.
 
-Omitting a fixed parameter is legal by design — that is what fixing it *means*.
+Omitting a fixed parameter is legal by design -- that is what fixing it *means*.
 :meth:`SEDModel._get_redshift` falls back to the spec's value and
-``get_internal_params`` merges ``{**fixed_values, **params}``. So a params dict
-carrying only the free parameters is valid input everywhere.
+``get_internal_params`` / ``merge_fixed_params`` fill in ``{**fixed_values,
+**params}``. So a params dict carrying only the free parameters is valid input
+everywhere.
 
-Twice now, a public surface has read the redshift out of the **dict** instead of
-the **state** and silently answered at :math:`d_L(0)` = 10 pc:
+Before #2296, an *explicit* Fixed key in ``params`` was a silent physics bug
+rather than a refusal: twice, a public surface read the redshift out of the
+**dict** instead of the **state** and silently answered at :math:`d_L(0)` =
+10 pc.
 
 * #1097 shipped it in the exact projectors; #1124 fixed it at ``Prediction``.
 * #1127 found it still live in ``SEDModel.measure_line_fluxes``, which never
-  routes through ``Prediction`` — 8.5e16 too bright, no warning.
+  routes through ``Prediction`` -- 8.5e16 too bright, no warning.
 
-Patching boundaries one at a time does not converge: ``params.get("redshift",
-0.0)`` fails **open**, returning a physically meaningful value rather than
-raising, so each new entry point re-introduces the bug and nothing complains.
+Patching boundaries one at a time did not converge: ``params.get("redshift",
+0.0)`` failed **open**, returning a physically meaningful value rather than
+raising, so each new entry point re-introduced the bug and nothing complained.
 
-This test closes the *class* instead of the instance. It **auto-discovers** every
-public ``SEDModel`` method whose first argument is ``params``, calls each one
-twice — once with the redshift omitted (legal) and once with it passed
-explicitly — and demands the same answer. A new method that reads the dict is
-caught the day it lands, without anyone remembering to add it here.
+#2296 closes the *class* structurally instead of patching instances: a params
+dict key the spec declared Fixed is now refused outright, at every entry
+point, regardless of whether the passed-in value happens to match the pinned
+one. There is no longer a "silently disagrees" outcome to detect -- the two
+arms below are "omit it" (legal, must work) and "name it explicitly" (refused,
+must raise), and nothing in between. This test **auto-discovers** every public
+``SEDModel`` method whose first argument is ``params``, and demands exactly
+that split from each one. A new method that instead reads the dict and
+disagrees silently, or reads it and doesn't raise, is caught the day it lands,
+without anyone remembering to add it here.
 """
 
 from __future__ import annotations
@@ -33,6 +41,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tengri.config.exceptions import ParameterError
 
 pytestmark = pytest.mark.contract
 
@@ -40,12 +49,18 @@ Z_FIXED = 0.5
 FREE_PARAMS = {"sfh_dpl_log_total_mass": jnp.asarray(10.0)}
 
 
-@pytest.fixture(scope="module")
-def model(synthetic_ssp_wide, synthetic_tophat_obs):
-    """Redshift FIXED, so a params dict legitimately omits it."""
+def _build_model(ssp_data, obs, redshift):
+    """Build the fixture model at a given Fixed redshift.
+
+    Factored out so :func:`test_the_sweep_is_not_vacuous` can build a second,
+    otherwise-identical model at a different Fixed redshift -- comparing two
+    models is now the only way to prove the sweep can detect a dropped
+    redshift, since passing an explicit override into ONE model is refused
+    (#2296) and can no longer serve as the probe.
+    """
     return SEDModel.build(
-        ssp_data=synthetic_ssp_wide,
-        observation=synthetic_tophat_obs,
+        ssp_data=ssp_data,
+        observation=obs,
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "type": "two_component",
@@ -53,8 +68,14 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
             "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        redshift=Fixed(Z_FIXED),
+        redshift=Fixed(redshift),
     )
+
+
+@pytest.fixture(scope="module")
+def model(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Redshift FIXED, so a params dict legitimately omits it."""
+    return _build_model(synthetic_ssp_wide, synthetic_tophat_obs, Z_FIXED)
 
 
 def _params_entry_points():
@@ -82,11 +103,11 @@ NEEDS_EXTRA_ARGS = {"predict_line_ratios", "predict_state"}
 #
 # This list replaces a bare ``except Exception: pytest.skip(...)`` around the
 # call below, which silently exempted these six from the very contract the
-# module exists to enforce — and would have exempted any future entry point
-# that started raising, including one that raises *because* it mishandles the
-# fixed redshift. The docstring above records that this bug shipped twice and
-# that patching boundaries one at a time does not converge; a skip-on-exception
-# is how the seventh instance would get in unnoticed.
+# module exists to enforce -- and would have exempted any future entry point
+# that started raising, including one that raises *because* it mishandles a
+# Fixed key. The docstring above records that the redshift bug shipped twice
+# and that patching boundaries one at a time does not converge; a
+# skip-on-exception is how the seventh instance would get in unnoticed.
 RAISES_ON_BARE_PARAMS = {
     "mock_spectrum": TypeError,
     "predict_emission_lines": NotImplementedError,
@@ -96,109 +117,72 @@ RAISES_ON_BARE_PARAMS = {
     "predict_spectrum_components": ValueError,
 }
 
-# ``predict`` returns a lazy ``Prediction``, not numbers. Compare the observables
-# it exposes instead — that is the surface the bug actually corrupted.
-RETURNS_PREDICTION = {"predict"}
-
-
-def _leaves(x, prefix=""):
-    """Flatten any return shape to numeric leaves, dropping what cannot be a float."""
-    if hasattr(x, "_asdict"):
-        x = x._asdict()
-    elif hasattr(x, "sed") and hasattr(x, "wavelength"):  # SEDResult
-        x = {"sed": x.sed}
-
-    if isinstance(x, dict):
-        out = {}
-        for k, v in x.items():
-            out.update(_leaves(v, f"{prefix}{k}."))
-        return out
-    if isinstance(x, (list, tuple)):
-        out = {}
-        for i, v in enumerate(x):
-            out.update(_leaves(v, f"{prefix}{i}."))
-        return out
-    try:
-        return {prefix.rstrip("."): np.asarray(x, dtype=float)}
-    except (TypeError, ValueError):
-        return {}  # not numeric (a string setting, a callable) — nothing to compare
-
 
 @pytest.mark.parametrize("name", ENTRY_POINTS)
-def test_entry_point_honors_a_fixed_redshift(model, name):
-    """Omitting a Fixed redshift must give the same answer as passing it."""
+def test_entry_point_refuses_an_explicit_fixed_redshift(model, name):
+    """Omitting a Fixed redshift works; naming it explicitly is refused (#2296).
+
+    Every value the caller could pass for a Fixed key is refused alike --
+    including the pinned value itself. There is no "matches, so it's let
+    through" carve-out: the rule is on key presence, not value comparison
+    (:func:`tengri.parameters.resolve.refuse_fixed_overrides`).
+    """
     if name in NEEDS_EXTRA_ARGS:
         pytest.skip(f"{name} needs arguments beyond params")
 
     fn = getattr(model, name)
-    if name in RETURNS_PREDICTION:  # compare what the Prediction exposes, not the object
-        base = fn
-
-        def fn(p):
-            pred = base(p)
-            return {"photometry": pred.photometry(), "magnitudes": pred.magnitudes()}
-
     omitted = dict(FREE_PARAMS)
     explicit = {**FREE_PARAMS, "redshift": jnp.asarray(Z_FIXED)}
 
     try:
-        got = fn(omitted)
-    except Exception as exc:
+        fn(omitted)
+    except NotImplementedError as exc:
         allowed = RAISES_ON_BARE_PARAMS.get(name)
         assert allowed is not None, (
             f"{name} raised {type(exc).__name__} on a bare params dict, so the "
-            f"fixed-redshift contract is unverified for it. If that call really "
-            f"cannot take bare params, add it to RAISES_ON_BARE_PARAMS; do not "
-            f"let it exempt itself by raising. ({exc})"
+            f"Fixed-redshift-refusal contract is unverified for it. If that call "
+            f"really cannot take bare params, add it to RAISES_ON_BARE_PARAMS; do "
+            f"not let it exempt itself by raising. ({exc})"
         )
         assert isinstance(exc, allowed), (
             f"{name} now raises {type(exc).__name__}, not the recorded "
-            f"{allowed.__name__} — the exemption no longer describes reality"
+            f"{allowed.__name__} -- the exemption no longer describes reality"
+        )
+        pytest.skip(f"{name}: listed in RAISES_ON_BARE_PARAMS ({allowed.__name__})")
+    except (TypeError, ValueError) as exc:
+        # TypeError and ValueError can be real defects. Only allow them if explicitly
+        # listed in RAISES_ON_BARE_PARAMS — that's the legitimate signal for "not applicable".
+        allowed = RAISES_ON_BARE_PARAMS.get(name)
+        assert allowed is not None and isinstance(exc, allowed), (
+            f"{name} raised {type(exc).__name__} on a bare params dict, which may be "
+            f"a real defect in the entry point. If this is genuinely a 'not applicable' "
+            f"case, add it to RAISES_ON_BARE_PARAMS; do not let arbitrary exceptions "
+            f"exempt the surface from the fixed-redshift contract. ({exc})"
         )
         pytest.skip(f"{name}: listed in RAISES_ON_BARE_PARAMS ({allowed.__name__})")
 
-    expected = fn(explicit)
-
-    got_leaves, exp_leaves = _leaves(got), _leaves(expected)
-
-    # Some entry points (``mock``) echo the parameters they used, so the explicit
-    # arm carries a ``redshift`` key the omitted arm does not. That difference is
-    # expected — but *only* for fixed-parameter names. Anything else missing from
-    # one arm is a real dropped output, so assert the difference is explainable
-    # rather than quietly intersecting the keys.
-    fixed_names = set(model.spec.fixed_params)
-    diff = set(got_leaves) ^ set(exp_leaves)
-    unexplained = {k for k in diff if k.split(".")[-1] not in fixed_names}
-    assert not unexplained, f"{name} returned different keys per arm: {sorted(unexplained)}"
-
-    for key in set(got_leaves) & set(exp_leaves):
-        a, b = got_leaves[key], exp_leaves[key]
-        both_nan = np.isnan(a) & np.isnan(b)
-        np.testing.assert_allclose(
-            np.where(both_nan, 0.0, a),
-            np.where(both_nan, 0.0, b),
-            rtol=1e-10,
-            err_msg=(
-                f"{name}{'[' + key + ']' if key else ''} disagrees when the Fixed "
-                f"redshift is omitted vs passed explicitly. It is reading the "
-                f"redshift out of the params dict instead of resolving it from "
-                f"the spec — see #1127."
-            ),
-        )
+    with pytest.raises(ParameterError) as exc_info:
+        fn(explicit)
+    msg = str(exc_info.value)
+    assert "redshift" in msg, (
+        f"{name} raised {type(exc_info.value).__name__} for the explicit-redshift "
+        f"arm, but the message doesn't name 'redshift': {msg}"
+    )
 
 
 def test_the_resolver_cannot_fail_silently(model):
     """A guard against a silent failure must not itself be able to fail silently.
 
-    ``resolve_fixed_params`` used ``getattr(spec, "fixed_params", ())`` and a
-    blanket ``except``. Rename the attribute upstream and the resolver quietly
-    became a no-op — handing back an unresolved dict and bringing the 1e17 error
-    straight back with no error at all (#1127). It must raise instead.
+    ``resolve_fixed_params`` (via ``refuse_fixed_overrides``) reads
+    ``spec.fixed_params`` directly, with no ``getattr`` default and no blanket
+    ``except``. Rename the attribute upstream and the resolver would quietly
+    become a no-op -- handing back an unresolved dict and bringing the 1e17
+    error straight back with no error at all (#1127). It must raise instead.
     """
     from tengri.parameters.resolve import resolve_fixed_params
 
     class SpecWithoutFixedParams:
-        """A spec that lost ``fixed_params`` — e.g. to a later rename."""
+        """A spec that lost ``fixed_params`` -- e.g. to a later rename."""
 
         fixed_value = model.spec.fixed_value
 
@@ -213,18 +197,29 @@ def test_the_resolver_cannot_fail_silently(model):
         resolve_fixed_params(object(), {})
 
 
-def test_the_resolver_injects_the_fixed_value_and_never_clobbers_the_user(model):
-    """The two halves of the contract, pinned."""
+def test_the_resolver_injects_omitted_values_and_refuses_an_explicit_one(model):
+    """The two halves of the contract, pinned.
+
+    Before #2296 the second half read ``"an explicit value must win"`` --
+    ``resolve_fixed_params`` let a caller-supplied Fixed key clobber the
+    pinned value. That was the override-wins bug the owner ruling closes:
+    presence of a Fixed key is refused now, unconditionally, not merged.
+    """
     from tengri.parameters.resolve import resolve_fixed_params
 
     filled = resolve_fixed_params(model, dict(FREE_PARAMS))
     assert float(filled["redshift"]) == pytest.approx(Z_FIXED)
 
-    override = resolve_fixed_params(model, {**FREE_PARAMS, "redshift": jnp.asarray(2.0)})
-    assert float(override["redshift"]) == pytest.approx(2.0), "an explicit value must win"
+    with pytest.raises(ParameterError, match="redshift"):
+        resolve_fixed_params(model, {**FREE_PARAMS, "redshift": jnp.asarray(2.0)})
+
+    # Even the PINNED value, named explicitly, is refused -- this is a
+    # key-presence rule, not a value comparison.
+    with pytest.raises(ParameterError, match="redshift"):
+        resolve_fixed_params(model, {**FREE_PARAMS, "redshift": jnp.asarray(Z_FIXED)})
 
 
-def test_the_sweep_is_not_vacuous(model):
+def test_the_sweep_is_not_vacuous(model, synthetic_ssp_wide, synthetic_tophat_obs):
     """The sweep must actually cover the surfaces that broke, and have power.
 
     Two ways this suite could pass while proving nothing: it discovers no entry
@@ -234,12 +229,16 @@ def test_the_sweep_is_not_vacuous(model):
 
     # The three surfaces that actually broke must be in the swept set.
     for known in ("predict_photometry", "measure_line_fluxes", "predict_magnitudes"):
-        assert known in ENTRY_POINTS, f"{known} is no longer discovered — the sweep has a hole"
+        assert known in ENTRY_POINTS, f"{known} is no longer discovered -- the sweep has a hole"
 
-    # And the redshift must genuinely move the number, or the comparison above
-    # is satisfied by any implementation at all.
-    at_z = np.asarray(model.predict_photometry({**FREE_PARAMS, "redshift": jnp.asarray(Z_FIXED)}))
-    at_zero = np.asarray(model.predict_photometry({**FREE_PARAMS, "redshift": jnp.asarray(0.0)}))
+    # And the redshift must genuinely move the number, or the refusal above is
+    # satisfied vacuously by a model the redshift cannot affect. Compare TWO
+    # otherwise-identical models at different Fixed redshifts -- passing an
+    # explicit override into one model is refused (#2296) and can no longer
+    # serve as this probe.
+    model_at_zero = _build_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.0)
+    at_z = np.asarray(model.predict_photometry(dict(FREE_PARAMS)))
+    at_zero = np.asarray(model_at_zero.predict_photometry(dict(FREE_PARAMS)))
     assert np.nanmax(np.abs(at_zero / at_z)) > 1e3, (
         "z=0 and z=0.5 give comparable fluxes on this model, so the sweep cannot "
         "detect a dropped redshift"
@@ -250,7 +249,7 @@ def test_every_exemption_names_a_real_entry_point():
     """A stale name in either list exempts nothing and hides that it does."""
     for name in NEEDS_EXTRA_ARGS | set(RAISES_ON_BARE_PARAMS):
         assert name in ENTRY_POINTS, (
-            f"{name} is exempted but no longer discovered — drop it from the list"
+            f"{name} is exempted but no longer discovered -- drop it from the list"
         )
 
 
@@ -259,7 +258,7 @@ def test_the_bare_params_exemptions_are_still_needed(model, name):
     """The exemption list must shrink on purpose, not drift.
 
     If one of these starts accepting a bare params dict, it becomes coverable
-    and should be covered — this turns red so the name is removed rather than
+    and should be covered -- this turns red so the name is removed rather than
     sitting there quietly exempting a surface that no longer needs it.
     """
     with pytest.raises(RAISES_ON_BARE_PARAMS[name]):

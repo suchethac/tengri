@@ -228,8 +228,8 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 ```
 
 **Gotchas:**
-- `'age_kernel': 'dsps'` is **not** a performance knob — it's 13% slower. Use `'cic'` (default) unless you need DSPS cross-code parity.
-- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`.
+- `'age_kernel': 'dsps'` is **not** a performance knob — it's 13% slower. Use `'cic'` (default) unless you need DSPS cross-code parity. The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' costs it, typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes (#2368).
+- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`. When you set `type='field'` without an explicit `age_kernel`, an advisory warns you that the field path forces 'dsps'.
 - Default `age_kernel` auto-selects: `'cic'` for parametric SFH, `'dsps'` for field.
 
 
@@ -238,11 +238,13 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 **Structural keys:**
 - `'type'` — Metallicity model (`'table'` for per-age SSP indexing, `'ramp'` for a linear Z(t) history, etc.). Menu: `tengri.list_metallicity_modes()`.
 - `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'met_bin_edges_log_yr'` — Lookback-time bin edges [log₁₀ yr] for metallicity-history modes (`'bins'` or `'bins_continuity'`). Default spans 1 Myr to 13.8 Gyr. Accepts an array of strictly increasing edge values (at least 2 edges). Mirroring `sfh={'bin_edges_gyr': [...]}` for non-parametric star formation histories.
 
 **Minimal example:**
 ```python
 met={'type': 'table'}  # all_params defaults to Fixed(DEFAULT)
 met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ramp
+met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0, 8.0, 9.5]}  # custom ladder
 ```
 
 **Gotchas:**
@@ -276,6 +278,24 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 - `'lyman_cutoff'` — Zero attenuation below 912 Å (Lyman limit). Two-component only.
 - `'lyc_absorb_all'` — Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
 - `'eb_include_lyc'` — Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
+
+Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,
+`'Rv_bc'`, `'delta_bc'`, and their `'_diff'`/`'_neb'` siblings) takes
+**either** a plain number (as before) **or** `Fixed(...)`/a prior
+distribution (#2428). A plain number is a build-time config override, baked
+into the compiled model exactly as it always was. `Fixed(...)`/`Uniform(...)`/
+etc. instead declares a real, free-able parameter named
+`dust_<stem>_<screen>` (e.g. `dust_slope_bc`, `dust_Rv_neb`) — it appears in
+`spec.free_params` when given a prior, and a `Fixed(v)` per-screen
+declaration predicts bit-identically to the plain number `v`. These names are
+explicit-only: an `all_params: FREE` wildcard never frees them (name one
+explicitly to fit it), and the flat `Parameters(dust_law_overrides={...})`
+surface still accepts only plain numbers in that dict — passing a prior there
+raises `ParameterError` naming the `dust_<stem>_<screen>` spelling as the
+remedy. Naming only one half of a `_bc`/`_diff` pair (e.g. `slope_bc` without
+`slope_diff`) raises: give both explicitly, or use a group-level wildcard
+(`'all_params': FREE`/`Fixed(DEFAULT)`) to free or pin them together — the
+same rule the plain-number spelling of these keys already followed.
 
 **Minimal example:**
 ```python

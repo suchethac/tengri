@@ -130,7 +130,7 @@ Sweep three consumed parameters across their priors. We build the model once
 with the AGN sector held fixed at its defaults, then override one parameter at
 a time in the prediction dict — a clean, deterministic parameter sweep.
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-125
+.. GENERATED FROM PYTHON SOURCE LINES 82-128
 
 .. code-block:: Python
 
@@ -138,7 +138,10 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_lbol": 12.0,
         "lum_ratio": 1.0,
-        **BLOCKS,
+        "disc": {"type": "multicolor", "log_mbh": tengri.FREE},
+        "torus": {"type": "nenkova", "tau": tengri.FREE, "theta_torus": tengri.FREE},
+        "nlr": {"type": "analytic"},
+        "blr": {"type": "none"},
     }
     model = tengri.SEDModel.build(
         ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0)
@@ -147,7 +150,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
     SWEEPS = [
         ("agn_log_mbh", np.linspace(6.5, 9.5, 5), r"$\log_{10}(M_{\rm BH}/M_\odot)$"),
-        ("agn_log_ledd", np.linspace(-1.8, 0.3, 5), r"$\log_{10}(L/L_{\rm Edd})$"),
+        ("agn_theta_torus", np.linspace(20.0, 80.0, 5), r"Torus viewing angle $\theta$ [deg]"),
         ("agn_tau", np.linspace(10.0, 140.0, 5), r"Nenkova torus $\tau_{9.7}$"),
     ]
 
@@ -181,7 +184,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 
 .. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :alt: Each freed AGN parameter visibly reshapes the SED (no silent no-ops), $\log_{10}(M_{\rm BH}/M_\odot)$, $\log_{10}(L/L_{\rm Edd})$, Nenkova torus $\tau_{9.7}$
+   :alt: Each freed AGN parameter visibly reshapes the SED (no silent no-ops), $\log_{10}(M_{\rm BH}/M_\odot)$, Torus viewing angle $\theta$ [deg], Nenkova torus $\tau_{9.7}$
    :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
    :class: sphx-glr-single-img
 
@@ -192,7 +195,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.771 seconds)
+   **Total running time of the script:** (0 minutes 5.091 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

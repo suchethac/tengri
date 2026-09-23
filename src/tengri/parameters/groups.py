@@ -121,6 +121,7 @@ from tengri.parameters._dust_keys import (
     resolve_screen_choices,
     screen_keys,
     short_to_full,
+    split_screen_suffix,
     validate_shape_requests,
 )
 
@@ -332,6 +333,9 @@ _ensure_registry_loaded()
 
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
 _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
+
+#: Metallicity modes that accept a lookback-time bin ladder (met_bin_edges_log_yr).
+_MET_LADDER_TYPES: tuple[str, ...] = ("bins", "bins_continuity")
 
 #: Optional Cue nebular knobs beyond logU/logZ_gas: gas density / abundance
 #: ratios (``gas_logn``, ``gas_logno``, ``gas_logco``) and the broken-power-law
@@ -611,6 +615,207 @@ def _valid_dust_laws() -> frozenset[str]:
     from tengri.components.dust.attenuation import DUST_LAWS
 
     return frozenset(DUST_LAWS.keys())
+
+
+def _names_accepted_anywhere() -> frozenset[str]:
+    """Union of every value accepted by 21 of the 22 routed grammar validators.
+
+    Consulted by :func:`_hint_for_unknown_name` (via
+    :func:`tengri.citations.resolve.citation_key_hint`'s ``accepted_anywhere``
+    parameter) so an orphaned citation key's hint can never name a value no
+    validator would accept: several association tables key on an internal
+    backend spelling (``cb19_grid``), an author-name alias
+    (``stalevski``), or an inference-backend name (``mcmc_nuts``) that no
+    ``SEDModel.build`` group validates, and naming one of those reads as an
+    instruction the reader could actually type and cannot (#2429 opus review
+    round 2, item 1).
+
+    Derived from the same menu-deriving functions the validators themselves
+    call (:func:`_valid_sfh_types`, :func:`_agn_block_types`, ...), never a
+    hand-maintained list, so this set cannot drift from what
+    :meth:`tengri.SEDModel.build` actually accepts. Looked up at call time,
+    matching the "no caching" convention of the ``_valid_*`` functions it
+    unions, so a newly-registered component is picked up immediately.
+
+    **Deliberately excludes the 22nd routed site**, ``_check_dict_keys``
+    (the per-group "Unknown key" validator): that site's ``valid_names`` is
+    not a fixed, enumerable menu of physics-model *values* like the other 21
+    -- it is a build-specific set of dict *key* names (structural keys such
+    as ``'type'``/``'law'`` plus every parameter's short and full name for
+    *that particular* ``SEDModel.build`` call), which varies with what the
+    caller activated and is measured in the hundreds even for one build. No
+    citation key ever targets a key name (a bibkey cites a registry
+    selector *value*, e.g. ``'power_law'``, never the string ``'law'``
+    itself), so there is nothing in that universe for this set to usefully
+    include, and unioning a build-dependent, unstable set into a
+    module-level constant-shaped union would be actively misleading (#2429
+    opus review round 3, item 2).
+
+    Returns
+    -------
+    frozenset[str]
+        Every accepted SFH / dust-law / dust_emission / dust_attenuation /
+        nebular / shock / IGM / X-ray / radio(sf, agn) / AGN(disc, torus,
+        nlr, blr, feii, atten) / metallicity-mode / foreground-law /
+        top-level-group-key / top-level-AGN-model name, unioned.
+    """
+    from tengri.components.agn.unified import AGN_MODELS, monolithic_agn_model_names
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+
+    names: set[str] = set()
+    names |= _valid_sfh_types()
+    names |= _valid_dust_laws()
+    names |= _valid_dust_emission_types()
+    names |= _VALID_DUST_TYPES
+    names |= _valid_nebular_types()
+    names |= _VALID_SHOCK_TYPES
+    names |= _valid_igm_types()
+    names |= _valid_xray_types()
+    names |= set(SF_RADIO_MODELS)
+    names |= set(AGN_RADIO_MODELS)
+    for category in ("disc", "torus", "nlr", "blr", "feii", "atten"):
+        names |= _agn_block_types(category)
+    names |= _VALID_AGN_ATTEN_LAWS
+    names |= set(MET_REGISTRY.keys())
+    names |= {k for k in _GROUP_STRUCTURAL_KEYS if "." not in k}
+    names |= monolithic_agn_model_names() | set(AGN_MODELS) | {"none"}
+    names |= _VALID_FOREGROUND_LAWS
+    return frozenset(names)
+
+
+def _hint_for_unknown_name(
+    kind: str,
+    name: str,
+    valid_names: Iterable[str],
+    *,
+    keyword: str | None,
+    n_suggestions: int = 2,
+    alias_hint: str | None = None,
+    suggestion_rewrite: dict[str, str] | None = None,
+) -> str:
+    """The " Did you mean: ...?" / citation-key hint fragment, leading space included.
+
+    Computes the difflib (or alias) suggestion first, then asks
+    :func:`tengri.citations.resolve.citation_key_hint` whether ``name`` is
+    instead (or in addition) a known citation key -- that function appends
+    the citation note after the difflib fallback rather than replacing it
+    when the citation key is valid for some *other* group, so a real typo
+    suggestion is never dropped in favor of a true-but-unhelpful observation
+    (#2429 opus review M2).
+
+    Shared by :func:`_unknown_name_error` and the handful of call sites whose
+    surrounding message does not fit that function's fixed template (the AGN
+    ``atten`` law detail line, the top-level group-key list, the top-level
+    AGN model selector).
+
+    Parameters
+    ----------
+    kind : str
+        Type of thing being validated (e.g., "dust law").
+    name : str
+        The unknown name the user provided.
+    valid_names : Iterable[str]
+        Valid registry names for this category.
+    keyword : str or None
+        The parameter keyword (e.g., "law", "law_bc"); ``None`` when ``name``
+        is a dict *key* rather than a value assigned via ``keyword=``, which
+        suppresses the citation hint's "Use keyword='...'" remedy clause.
+    n_suggestions : int
+        Number of difflib suggestions to show (default 2).
+    alias_hint : str | None
+        If provided and in valid_names, use this as the suggestion instead
+        of difflib. Used for alias maps like _NEBULAR_TYPE_HINTS.
+    suggestion_rewrite : dict[str, str] | None
+        Maps a raw difflib suggestion to the display text to show instead
+        (e.g. ``{"smc_prevot": "law='prevot_smc'"}``), for a site where the
+        nearest valid *name* is itself refused and would route the reader
+        through a second hop to the same fix (#2420's AGN ``atten`` block).
+        Suggestions with no entry pass through unchanged.
+
+    Returns
+    -------
+    str
+        The hint, prefixed with a space, or ``""`` if there is nothing to say.
+    """
+    from tengri.citations.resolve import citation_key_hint
+
+    valid_list = list(valid_names)
+    if alias_hint is not None and alias_hint in valid_list:
+        fallback = f"Did you mean: {alias_hint}?"
+    else:
+        suggestions = difflib.get_close_matches(name, valid_list, n=n_suggestions, cutoff=0.6)
+        if suggestion_rewrite:
+            suggestions = [suggestion_rewrite.get(s, s) for s in suggestions]
+        fallback = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+
+    hint = citation_key_hint(
+        name,
+        valid_list,
+        kind=kind,
+        keyword=keyword,
+        fallback=fallback,
+        accepted_anywhere=_names_accepted_anywhere(),
+    )
+    return f" {hint}" if hint else ""
+
+
+def _unknown_name_error(
+    kind: str,
+    name: str,
+    valid_names: Iterable[str],
+    *,
+    keyword: str | None,
+    extra: str = "",
+    n_suggestions: int = 2,
+    alias_hint: str | None = None,
+    suggestion_rewrite: dict[str, str] | None = None,
+) -> ValueError:
+    """Build a ValueError for an unknown name, with citation key hints.
+
+    When a user provides an unknown name (e.g., dust law), check if it's a
+    known citation key and explain which registry entry it cites. Fall back
+    to difflib suggestions if not a citation key.
+
+    Parameters
+    ----------
+    kind : str
+        Type of thing being validated (e.g., "dust law").
+    name : str
+        The unknown name the user provided.
+    valid_names : Iterable[str]
+        Valid registry names for this category.
+    keyword : str or None
+        The parameter keyword (e.g., "law", "law_bc"); ``None`` when ``name``
+        is one element of a list-valued field (e.g. a composition entry)
+        rather than a value a caller assigns via ``keyword=`` directly, so
+        "Use keyword='...'" would misdirect the reader into replacing the
+        whole field with a scalar.
+    extra : str
+        Extra information to append after the suggestion (e.g., " Available: ...").
+    n_suggestions : int
+        Number of difflib suggestions to show (default 2).
+    alias_hint : str | None
+        If provided and in valid_names, use this as the suggestion instead
+        of difflib. Used for alias maps like _NEBULAR_TYPE_HINTS.
+    suggestion_rewrite : dict[str, str] | None
+        See :func:`_hint_for_unknown_name`.
+
+    Returns
+    -------
+    ValueError
+        An error message with citation hint or difflib suggestions.
+    """
+    hint = _hint_for_unknown_name(
+        kind,
+        name,
+        valid_names,
+        keyword=keyword,
+        n_suggestions=n_suggestions,
+        alias_hint=alias_hint,
+        suggestion_rewrite=suggestion_rewrite,
+    )
+    return ValueError(f"Unknown {kind} '{name}'.{hint}{extra}")
 
 
 def _agn_block_types(category: str) -> frozenset[str]:
@@ -1702,8 +1907,8 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
     if met_type not in ("bins", "bins_continuity"):
         return  # No lookback-time bins to check
 
-    # Use the default bin edges (no build-time override path yet; see #2433).
-    bin_edges_log_yr = _DEFAULT_MET_BIN_EDGES_LOG_YR
+    # Use configured bin edges if provided, otherwise the default (see #2433).
+    bin_edges_log_yr = met_block.get("met_bin_edges_log_yr", _DEFAULT_MET_BIN_EDGES_LOG_YR)
 
     # Convert log10(yr) to Gyr: 10^x yr = 10^(x-9) Gyr
     bin_edges_gyr = [10.0 ** (log_yr - 9.0) for log_yr in bin_edges_log_yr]
@@ -1745,9 +1950,10 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
         f"lookback-time bins unreachable at redshift {z_floor:g}: cosmic age is "
         f"{cosmic_age_gyr:.4g} Gyr, but the following bins lie before the Big Bang: "
         f"{bins_str} Gyr. These bins' parameters will be identically inert.\n\n"
-        f"The bin ladder is not yet configurable through SEDModel.build() "
-        f"(see issue #2433 for future support). For now, use a lower redshift where "
-        f"all bins are reachable, or use a different metallicity mode. See issue #2204."
+        f"To resolve this, either: (1) use a lower redshift where all bins are reachable, "
+        f"(2) provide a custom met_bin_edges_log_yr={{'...'}} whose edges fit within "
+        f"cosmic age at your redshift, or (3) use a different metallicity mode. "
+        f"See issues #2204 and #2433."
     )
 
 
@@ -2233,6 +2439,19 @@ def _warn_silently_fixed_parameters(
         if group == "sfh" and param_name.startswith("met_") and not has_met_block:
             continue
 
+        # Per-screen dust shape names (dust_slope_bc, ...) are wildcard-INERT
+        # by design (#2428): `per_screen_inert` (`_dust_wildcard_scopes`)
+        # excludes every one of them from `all_params: FREE`'s scope
+        # unconditionally, so this warning's own remedy ("pass 'all_params':
+        # FREE'") is false for them -- naming a false remedy is worse than
+        # staying quiet about these 12, the same principle the met_* skip
+        # above already applies. A caller who wants one free must name it
+        # (``dust_attenuation={'slope_bc': FREE}``), which is not something
+        # silently defaulting at the group's wildcard-freeable population
+        # was ever going to catch anyway.
+        if param_name in _per_screen_full_names():
+            continue
+
         # Collect this parameter as silently-fixed
         value = dist.default
         default_fixed_by_group.setdefault(group, []).append((param_name, value))
@@ -2611,8 +2830,19 @@ def _dust_wildcard_scopes(
             ),
             frozenset(),
         )
+        # Per-screen shape names (dust_slope_bc, dust_delta_diff, etc.) are
+        # EXPLICIT-ONLY: they never participate in wildcard freeing. This
+        # ensures that a blanket `all_params: FREE` cannot accidentally
+        # double-parametrize a screen. The shared spellings (dust_slope,
+        # dust_delta, etc.) are already law-scoped by the logic above; the
+        # per-screen variants add per-screen specificity and must be requested
+        # by name. Names enumerated via `_per_screen_full_names()` (the
+        # canonical OVERRIDE_STEMS x SCREENS product), not a second,
+        # hand-typed copy that can drift out of order or out of sync with it.
+        per_screen_inert = _per_screen_full_names() & dust_group_params
+
         scopes["dust_attenuation"] = frozenset(
-            dust_group_params - (_all_law_shape_params() - active_shape)
+            dust_group_params - (_all_law_shape_params() - active_shape) - per_screen_inert
         )
 
     return scopes
@@ -2822,11 +3052,12 @@ def _translate_structural(groups: dict) -> dict:
             )
 
         if group_name not in valid_groups:
-            suggestions = difflib.get_close_matches(group_name, valid_groups, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            # keyword=None: a group key is the kwarg name itself, not a value
+            # assigned via ``keyword=`` (#2429 opus review M3).
+            hint = _hint_for_unknown_name("group key", group_name, valid_groups, keyword=None)
             raise ValueError(
-                f"Unknown group key '{group_name}'. "
-                f"Valid groups: {', '.join(sorted(valid_groups))}.{suggest_str}"
+                f"Unknown group key '{group_name}'.{hint} "
+                f"Valid groups: {', '.join(sorted(valid_groups))}."
             )
 
         # Every component is declared the same way; a dict selecting the
@@ -3001,6 +3232,34 @@ def _validate_sfh_bin_edges(sfh_type, edges) -> None:
     validate_bin_edges_gyr(sfh_type, edges)
 
 
+def _validate_met_bin_edges(met_type, edges) -> None:
+    """Validate ``met['met_bin_edges_log_yr']` at build time.
+
+    Checks that edges form a valid ladder for metallicity-history binning:
+    at least two edges, all finite, and strictly increasing. Also checks that
+    the met_type accepts a custom bin ladder.
+    """
+    import numpy as np
+
+    # Check that the met type accepts a custom bin ladder
+    if met_type not in _MET_LADDER_TYPES:
+        raise ValueError(
+            f"met_bin_edges_log_yr is not applicable to met_type='{met_type}'. "
+            f"Valid types: {', '.join(_MET_LADDER_TYPES)}"
+        )
+
+    edges_arr = np.asarray(edges)
+
+    if len(edges_arr) < 2:
+        raise ValueError(f"met_bin_edges_log_yr must have at least 2 edges; got {len(edges_arr)}")
+
+    if not np.all(np.isfinite(edges_arr)):
+        raise ValueError(f"met_bin_edges_log_yr must contain only finite values; got {edges}")
+
+    if not np.all(np.diff(edges_arr) > 0):
+        raise ValueError(f"met_bin_edges_log_yr must be strictly increasing; got {edges}")
+
+
 def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
     """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
 
@@ -3146,9 +3405,22 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
             if type_name not in valid:
-                suggestions = difflib.get_close_matches(type_name, valid, n=3, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
+                # keyword=None (#2429 opus review round 2 item 4): this name
+                # is one element of the sfh 'type' list, not a value assigned
+                # via a scalar 'type='; a "Use type='delayed'." remedy reads
+                # as an instruction to replace the WHOLE list with a scalar,
+                # which is wrong. Say where to fix it instead.
+                raise _unknown_name_error(
+                    "SFH type",
+                    type_name,
+                    valid,
+                    keyword=None,
+                    n_suggestions=3,
+                    extra=(
+                        " This name is in composition. Replace it inside the "
+                        "sfh 'type' list, not with a scalar 'type='."
+                    ),
+                )
             _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
@@ -3163,9 +3435,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         )
 
     if sfh_type not in valid:
-        suggestions = difflib.get_close_matches(sfh_type, valid, n=3, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
+        raise _unknown_name_error("SFH type", sfh_type, valid, keyword="type", n_suggestions=3)
 
     _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
@@ -3212,11 +3482,43 @@ def _translate_met(met_dict: dict, result: dict) -> None:
             "the key of the older met={'type': ...} spelling, which also "
             "still works; this mixes the two.)"
         )
-    _set_met_mode(met_dict.get("type"), result, key="met={'type': ...}")
+    _set_met_mode(met_dict.get("type"), result)
+
+    # ``met_bin_edges_log_yr`` is a structural setting (array of bin edges in
+    # log Gyr) that only applies to metallicity-history modes (bins, bins_continuity).
+    # Surface it as a top-level kwarg so ``Parameters.__init__`` can pop it and forward
+    # through the sed_model -> component_factory chain to ``StellarSEDComponentConfig``.
+    # The wildcard ``'*': FREE`` / ``Fixed(DEFAULT)`` does NOT apply to this; it's a
+    # config, not a free parameter.
+    if "met_bin_edges_log_yr" in met_dict:
+        met_type = met_dict.get("type")
+        _validate_met_bin_edges(met_type, met_dict["met_bin_edges_log_yr"])
+        result["met_bin_edges_log_yr"] = met_dict["met_bin_edges_log_yr"]
 
 
-def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
-    """Validate a metallicity mode and record it, whichever spelling supplied it."""
+def _set_met_mode(met_mode, result: dict) -> None:
+    """Validate a metallicity mode and record it.
+
+    Parameters
+    ----------
+    met_mode : str or None
+        The ``met={'type': ...}`` value. ``None`` defers to auto-inference
+        from per-param keys.
+    result : dict
+        Parameters kwargs being assembled; ``met_mode`` is written into it.
+
+    Raises
+    ------
+    ValueError
+        If ``met_mode`` is not a registered metallicity mode.
+
+    Notes
+    -----
+    Only :func:`_translate_met` calls this, always with the literal
+    ``met={'type': ...}`` spelling (#2429 opus review round 2 item 5): a
+    ``key`` parameter existed for a caller that never had another spelling
+    to pass, so it is inlined below rather than threaded through.
+    """
     from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
 
     if met_mode is None:
@@ -3225,11 +3527,14 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
 
     valid_modes = sorted(MET_REGISTRY.keys())
     if met_mode not in MET_REGISTRY:
-        suggestions = difflib.get_close_matches(met_mode, valid_modes, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(
-            f"Unknown metallicity mode '{met_mode}' in {key}. Valid modes: "
-            f"{', '.join(valid_modes)}.{suggest_str}"
+        raise _unknown_name_error(
+            "metallicity mode",
+            met_mode,
+            valid_modes,
+            keyword="type",
+            extra=(
+                f" This was given in met={{'type': ...}}. Valid modes: {', '.join(valid_modes)}."
+            ),
         )
 
     result["met_mode"] = met_mode
@@ -3468,9 +3773,9 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 f"to give the two screens different laws. Valid dust types are: "
                 f"{', '.join(sorted(_VALID_DUST_TYPES))}."
             )
-        suggestions = difflib.get_close_matches(dust_type, _VALID_DUST_TYPES, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown dust_attenuation type '{dust_type}'.{suggest_str}")
+        raise _unknown_name_error(
+            "dust_attenuation type", dust_type, _VALID_DUST_TYPES, keyword="type"
+        )
 
     result["dust_model"] = dust_type
 
@@ -3651,9 +3956,7 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 f"'law': 'calzetti', 'tau_v': ...}}"
             )
         if dust_law not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+            raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
         # Store law on both _bc and _diff for consistency (single screen)
         result["dust_law_bc"] = dust_law
         result["dust_law_diff"] = dust_law
@@ -3705,30 +4008,24 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         # Resolve to the two-screen form
         if has_law:
             if dust_law not in valid_laws:
-                suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+                raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
             result["dust_law_bc"] = dust_law
             result["dust_law_diff"] = dust_law
         else:
             # Both law_bc and law_diff are given (already checked above)
             if dust_law_bc not in valid_laws:
-                suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
+                raise _unknown_name_error("dust law", dust_law_bc, valid_laws, keyword="law_bc")
             if dust_law_diff not in valid_laws:
-                suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
+                raise _unknown_name_error(
+                    "dust law", dust_law_diff, valid_laws, keyword="law_diff"
+                )
             result["dust_law_bc"] = dust_law_bc
             result["dust_law_diff"] = dust_law_diff
 
     # law_neb: optional per-screen override for nebular birth cloud. None -> inherit dust_law_bc
     if dust_law_neb is not None:
         if dust_law_neb not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law_neb, valid_laws, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law_neb}'.{suggest_str}")
+            raise _unknown_name_error("dust law", dust_law_neb, valid_laws, keyword="law_neb")
         result["dust_law_neb"] = dust_law_neb
 
     # Per-component law-parameter overrides: slope_bc / slope_diff / slope_neb /
@@ -3744,7 +4041,61 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         for comp in SCREENS:
             key = f"{stem}_{comp}"
             if key in dust_atten_dict:
-                overrides.setdefault(comp, {})[short_to_full(stem)] = float(dust_atten_dict[key])
+                value = dust_atten_dict[key]
+                full_name = short_to_full(key)
+                if value is DEFAULT:
+                    raise _bare_default_error(full_name)
+                if value is FREE or _is_default_fixed(value):
+                    # A live, declared dust_<stem>_<screen> parameter
+                    # (#2428), left for the per-parameter resolution loop in
+                    # ``parse_groups`` to expand/resolve: it reads the value
+                    # straight off the ORIGINAL group dict, not ``result``/
+                    # ``structural_kwargs``, which only take values
+                    # ``resolve_shorthand`` can turn into a bounded
+                    # ``Distribution`` directly. Neither a bare ``FREE``
+                    # sentinel nor an unresolved ``Fixed(DEFAULT)`` token is
+                    # one of those -- storing either here reaches
+                    # ``priors.py``'s "Fixed(DEFAULT) is a build-grammar
+                    # token" guard with a message that names the wrong
+                    # context (this per-screen key, not the flat surface it
+                    # was written for). Nothing to stash here;
+                    # ``dust_<stem>_<screen>`` is already declared (with its
+                    # Fixed registry default) by ``_builders.py``'s
+                    # unconditional walk over ``ATTENUATION_PARAMS``.
+                    pass
+                elif isinstance(value, Distribution):
+                    # An explicit, already-resolved prior/Fixed (e.g.
+                    # ``Uniform(-1.5, -0.3)``, ``Fixed(-1.0)``): likewise a
+                    # live, declared parameter, and (unlike FREE/
+                    # Fixed(DEFAULT)) itself a ``Distribution``
+                    # ``resolve_shorthand`` can store directly -- pre-seed it
+                    # so the enumeration pass already carries the caller's
+                    # actual choice.
+                    result[full_name] = value
+                elif isinstance(value, int | float) and not isinstance(value, bool):
+                    # Plain number: static config override, baked into the
+                    # compiled model at build time (unchanged since before
+                    # #2428) -- AND the declared dust_<stem>_<screen>
+                    # parameter's in-force value (#2428): without this,
+                    # `get_fixed_values()`/`summary()` showed the untouched
+                    # registry default for the declared parameter while the
+                    # screen actually used this value, even though the
+                    # PREDICTION was already correct (it reads from
+                    # `dust_law_overrides`, not the declared parameter's
+                    # resolved value). Seeding `result[full_name]` here is
+                    # exactly what the `Distribution` branch above already
+                    # does for `Fixed(v)`, so the two spellings become
+                    # identical from here on: same value, same "user_fixed"
+                    # provenance.
+                    result[full_name] = Fixed(float(value))
+                    overrides.setdefault(comp, {})[short_to_full(stem)] = float(value)
+                else:
+                    raise ParameterError(
+                        f"dust_attenuation {key!r} must be a number, Fixed(...), a "
+                        f"prior (e.g. Uniform(...)), or FREE ({value!r} given). The "
+                        f"per-screen declared parameter spelling is {full_name}=..., "
+                        f"which accepts any of these. See #2428."
+                    )
     if overrides:
         result["dust_law_overrides"] = overrides
 
@@ -3916,11 +4267,13 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
         # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.
         valid_emission_types = _valid_dust_emission_types()
         if emission_type not in valid_emission_types:
-            suggestions = difflib.get_close_matches(
-                emission_type, valid_emission_types, n=3, cutoff=0.6
+            raise _unknown_name_error(
+                "dust_emission type",
+                emission_type,
+                valid_emission_types,
+                keyword="type",
+                n_suggestions=3,
             )
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust_emission type '{emission_type}'.{suggest_str}")
         result["dust_emission"] = emission_type
 
         # Astrodust+PAH (HD23) optional configuration: spinning dust (AME)
@@ -3955,16 +4308,14 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
     # Validate type
     valid_neb = _valid_nebular_types()
     if neb_type not in valid_neb:
-        hint = _NEBULAR_TYPE_HINTS.get(str(neb_type).lower())
-        suggestions = (
-            [hint]
-            if hint in valid_neb
-            else difflib.get_close_matches(neb_type, valid_neb, n=2, cutoff=0.6)
-        )
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(
-            f"Unknown nebular type '{neb_type}'.{suggest_str} "
-            f"Available: {', '.join(sorted(valid_neb))}."
+        alias = _NEBULAR_TYPE_HINTS.get(str(neb_type).lower())
+        raise _unknown_name_error(
+            "nebular type",
+            neb_type,
+            valid_neb,
+            keyword="type",
+            alias_hint=alias,
+            extra=f" Available: {', '.join(sorted(valid_neb))}.",
         )
 
     # Map type to nebular settings
@@ -4047,9 +4398,7 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
     shock_type = _normalize_off_switch(shock_dict.get("type", "mappings"))
     valid_shock = _VALID_SHOCK_TYPES
     if shock_type not in valid_shock:
-        suggestions = difflib.get_close_matches(shock_type, valid_shock, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown shock type '{shock_type}'.{suggest_str}")
+        raise _unknown_name_error("shock type", shock_type, valid_shock, keyword="type")
 
     if shock_type == "none":
         result["shock"] = False
@@ -4094,9 +4443,7 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     # Validate type
     valid_igm = _valid_igm_types()
     if igm_type not in valid_igm:
-        suggestions = difflib.get_close_matches(igm_type, valid_igm, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
+        raise _unknown_name_error("IGM type", igm_type, valid_igm, keyword="type")
 
     # IGM is activated by the presence of the igm dict.
     # If type='none', it is explicitly deactivated.
@@ -4263,9 +4610,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
 
             valid_sf = frozenset(SF_RADIO_MODELS)
             if sf_variant not in valid_sf:
-                suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown radio sf type '{sf_variant}'.{suggest_str}")
+                raise _unknown_name_error("radio sf type", sf_variant, valid_sf, keyword="type")
             # Handle optional 'freefree' boolean key in the sf sub-dict
             if "freefree" in sf_dict:
                 freefree_val = sf_dict["freefree"]
@@ -4285,9 +4630,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
 
             valid_agn = frozenset(AGN_RADIO_MODELS)
             if agn_variant not in valid_agn:
-                suggestions = difflib.get_close_matches(agn_variant, valid_agn, n=2, cutoff=0.6)
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                raise ValueError(f"Unknown radio agn type '{agn_variant}'.{suggest_str}")
+                raise _unknown_name_error("radio agn type", agn_variant, valid_agn, keyword="type")
         else:
             raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
 
@@ -4459,11 +4802,12 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     law = fg_dict.get("law", "cardelli")
     rv = fg_dict.get("rv", 3.1)
     if law not in _VALID_FOREGROUND_LAWS:
-        suggestions = difflib.get_close_matches(law, _VALID_FOREGROUND_LAWS, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(
-            f"Unknown foreground law {law!r}. Valid: "
-            f"{sorted(_VALID_FOREGROUND_LAWS)}.{suggest_str}"
+        raise _unknown_name_error(
+            "foreground law",
+            law,
+            _VALID_FOREGROUND_LAWS,
+            keyword="law",
+            extra=f" Valid: {sorted(_VALID_FOREGROUND_LAWS)}.",
         )
     if float(ebmv) < 0:
         raise ValueError(f"foreground.ebmv_mw must be >= 0, got {ebmv}")
@@ -4481,9 +4825,7 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     # Validate type
     valid_xray = _valid_xray_types()
     if xray_type not in valid_xray:
-        suggestions = difflib.get_close_matches(xray_type, valid_xray, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown X-ray type '{xray_type}'.{suggest_str}")
+        raise _unknown_name_error("X-ray type", xray_type, valid_xray, keyword="type")
 
     result["xray"] = xray_type != "none"
     # Thread the corona prescription (yang20 / simple / lopez24) to the
@@ -4532,7 +4874,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # history, and both select a model with ``type`` like every other group
     # (#1720). It replaces ``met={'type': ...}`` (#311) outright: two
     # spellings of one setting is the maintenance cost this removes.
-    "met": frozenset({"type", "*", "all_params"}),
+    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr"}),
     "dust_attenuation": frozenset(
         {
             "type",
@@ -4711,6 +5053,15 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # met={} entry is never forced onto call sites that diff against
         # from_groups.
         _Structural("type", "met_mode", "delta"),
+        # Bin edges [log Gyr] for metallicity-history modes (bins, bins_continuity).
+        # None falls back to _DEFAULT_MET_BIN_EDGES_LOG_YR. Only valid for types that
+        # use lookback-time bins for metallicity history.
+        _Structural(
+            "met_bin_edges_log_yr",
+            "met_bin_edges_log_yr",
+            None,
+            only_types=_MET_LADDER_TYPES,
+        ),
     ),
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
     # metallicity mode, and it is emitted above as met={'type': ...}.
@@ -4995,6 +5346,7 @@ def _variant_scoped_param_names(
     param_partition: dict[str, str],
     group_allowed: frozenset[str] | set[str],
     wildcard_scopes: dict[str, frozenset[str] | None],
+    structural_params: Parameters | None = None,
 ) -> frozenset[str] | None:
     """Canonical parameter names the variant selected for ``group`` reads.
 
@@ -5012,6 +5364,11 @@ def _variant_scoped_param_names(
     wildcard_scopes : dict
         Group -> the parameters its ``all_params`` wildcard may free, from
         :func:`_wildcard_scopes`.
+    structural_params : Parameters, optional
+        Structural-only spec, consulted only for ``group="dust_attenuation"``
+        to law-scope the per-screen names (below). ``None`` skips that
+        narrowing (the per-screen names then stay in ``group_allowed``,
+        unscoped by law).
 
     Returns
     -------
@@ -5029,12 +5386,48 @@ def _variant_scoped_param_names(
     what the group declares", while an empty scope is a positive statement that
     the selected variant reads nothing of its own (``pah_drude``, a pure
     template shape), and every per-parameter key is then foreign to it.
+
+    The 12 per-screen dust shape names (``dust_slope_bc``, ...) are
+    ``group_allowed`` "group-level knobs" (#2428) regardless of which law is
+    selected -- they must stay accepted so ``_check_dict_keys`` never raises
+    the generic "Unknown parameter" for one on ANY two_component build. But
+    left unscoped here, ``shared`` re-admits all 12 unconditionally, so
+    :func:`_reject_foreign_variant_keys`'s "this variant accepts:" message
+    advertised e.g. ``Rv_bc`` under ``law_bc='power_law'`` as accepted, and
+    passing it then still raised -- just later, from
+    :func:`_reject_per_screen_keys_no_law_reads`'s law-read check, with a
+    different message. Law-scoping per-screen names here (when
+    ``structural_params`` is given) makes the two checks agree: a name this
+    function advertises as accepted is one :func:`_reject_per_screen_keys_no_
+    law_reads` also accepts. Round-tripping never loses a value by this:
+    a per-screen name can only carry a non-default value if some earlier
+    build already passed that same law-read check, so a law-scoped ``shared``
+    here never excludes anything the round-trip actually needs to re-emit.
     """
     scope = wildcard_scopes.get(group)
     if scope is None:
         return None
     owned = {name for name, owner in param_partition.items() if owner == group}
     shared = {name for name in owned if _extract_short_name(name, {}) in group_allowed}
+
+    if group == "dust_attenuation" and structural_params is not None:
+        per_screen = _per_screen_full_names()
+        law_by_screen = {
+            "bc": getattr(structural_params, "dust_law_bc", None),
+            "diff": getattr(structural_params, "dust_law_diff", None),
+            "neb": getattr(structural_params, "dust_law_neb", None)
+            or getattr(structural_params, "dust_law_bc", None),
+        }
+
+        def _screen_law_reads(name: str) -> bool:
+            stem, screen = split_screen_suffix(full_to_short(name))
+            if screen is None:
+                return True
+            law = law_by_screen.get(screen)
+            return law is not None and short_to_full(stem) in _law_shape_params(law)
+
+        shared = {name for name in shared if name not in per_screen or _screen_law_reads(name)}
+
     return frozenset(set(scope) | shared)
 
 
@@ -5325,7 +5718,7 @@ def _validate_user_keys(
         # answers to "which parameters does this variant read?" stay one answer.
         if top_key in _VARIANT_SCOPED_KEY_GROUPS:
             accepted_full = _variant_scoped_param_names(
-                top_key, param_partition, group_allowed, wildcard_scopes
+                top_key, param_partition, group_allowed, wildcard_scopes, structural_params
             )
             if accepted_full is not None:
                 # A user-registered subclass declares params the partition has
@@ -5348,11 +5741,24 @@ def _validate_user_keys(
             # neb's displayed list must show the resolved type's actual
             # structural keys (e.g. cb19/cloudy/mappings/mappings_agn include
             # 'grid', cue/ssp/none do not), not just the base set 'grid' was
-            # deliberately removed from (#2220 I2). Every other group's base
-            # set is still its full displayed set, so None (the default)
-            # keeps their behavior unchanged.
+            # deliberately removed from (#2220 I2). dust_attenuation's base
+            # set (`_GROUP_STRUCTURAL_KEYS`) lists the 12 per-screen names
+            # unconditionally, but they are declared (`ATTENUATION_TWO_
+            # COMPONENT_ONLY`) only under `two_component` (#2428) --
+            # `single_component`/`wg00` refuse them (an "Unknown key" this
+            # same message reports), so advertising them there would be the
+            # same "accepts a name it then refuses" inconsistency
+            # `_variant_scoped_param_names`'s law-scoping already fixed for
+            # the two_component/per-law case. Every other group's base set
+            # is still its full displayed set, so None (the default) keeps
+            # their behavior unchanged.
             displayed_structural_keys=(
-                group_allowed | neb_type_specific_keys if top_key == "neb" else None
+                group_allowed | neb_type_specific_keys
+                if top_key == "neb"
+                else group_allowed - per_screen_keys()
+                if top_key == "dust_attenuation"
+                and getattr(structural_params, "dust_model", None) != "two_component"
+                else None
             ),
         )
 
@@ -5669,12 +6075,38 @@ def _check_dict_keys(
                 f"it here would be silently ignored. Nest it: "
                 f"{group}={{{sub!r}: {{{key!r}: ...}}}}."
             )
+        # Check if the unknown key is a citation key
+        from tengri.citations.resolve import citation_key_hint
+
         suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
         # A suggestion identical to the rejected key is noise, not help.
         suggestions = [s for s in suggestions if s != str(key)]
         # Filter out the internal '*' key from suggestions defensively.
         suggestions = [s for s in suggestions if s != WILDCARD_KEY]
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        fallback = f"Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+
+        # keyword=None: this validates a dict *key* name, not a value assigned
+        # via ``keyword=``, so citation_key_hint's "Use key='...'" remedy
+        # would not parse as an instruction a caller could type (#2429 opus
+        # review L6). valid_names=list(allowed), NOT suggestion_pool
+        # (#2429 opus review round 2 item 6): suggestion_pool unions in
+        # every short parameter name across ALL groups, for the broader
+        # "wrong group, right name" did-you-mean case below -- using that
+        # bloated pool here would report a citation key "valid here"
+        # whenever it happened to resolve to some OTHER group's parameter
+        # name. ``allowed`` is this group's own accepted key set, the true
+        # site scope.
+        hint = citation_key_hint(
+            str(key),
+            list(allowed),
+            kind=f"key for group {group!r}",
+            keyword=None,
+            fallback=fallback,
+            accepted_anywhere=_names_accepted_anywhere(),
+        )
+        if hint:
+            hint = f" {hint}"
+
         # Display user-facing keys only (exclude internal WILDCARD_KEY '*').
         # Base set by default; a caller with type-specific structural keys
         # (currently only the top-level 'neb' dispatch) passes the resolved
@@ -5711,7 +6143,7 @@ def _check_dict_keys(
                     )
 
         raise ValueError(
-            f"Unknown key {key!r} in group {group!r}.{suggest_str} "
+            f"Unknown key {key!r} in group {group!r}.{hint} "
             f"Valid structural keys for this group are: "
             f"{displayed_keys}.{param_hint}"
         )
@@ -5950,8 +6382,11 @@ def _validate_agn_top_type(top_type: str) -> None:
             f"  agn={{'type': 'composable', {where!r}: {{'type': {top_type!r}, ...}}}}"
         )
 
-    suggestions = difflib.get_close_matches(top_type, sorted(valid), n=2, cutoff=0.6)
-    hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+    # keyword="type" (#2429 opus review round 2 item 2): a citation key
+    # given here (e.g. 'buchner2024') gets the same recognition as every
+    # other routed site -- previously this was the one top-level type
+    # selector still difflib-only.
+    hint = _hint_for_unknown_name("AGN model", top_type, sorted(valid), keyword="type")
     raise ConfigError(
         f"agn['type']={top_type!r} is not an AGN model.{hint} "
         f"Models: {sorted(valid)}. Composable block types are selected per "
@@ -6248,12 +6683,17 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                         if law_key in DUST_LAWS
                         else f"Unknown dust law '{law_key}'"
                     )
-                    suggestions = difflib.get_close_matches(law_key, valid, n=2, cutoff=0.6)
-                    suggest_str = (
-                        f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                    # kind="agn['atten'] law", not "dust law" (#2429 opus
+                    # review round 3 item 1): `valid` here is this block's
+                    # own restricted set (just prevot_smc), so "not a valid
+                    # dust law" was false when the resolved name (e.g.
+                    # power_law) IS a real dust law -- just not one this
+                    # block implements.
+                    hint = _hint_for_unknown_name(
+                        "agn['atten'] law", law_key, valid, keyword="law"
                     )
                     raise ValueError(
-                        f"{detail}.{suggest_str}\n"
+                        f"{detail}.{hint}\n"
                         f"Valid agn['atten'] laws: {valid}.\n"
                         f"The block applies the Prevot SMC curve unconditionally, so "
                         f"accepting another name would silently substitute this one. "
@@ -6275,27 +6715,26 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
 
         # Validate type
         if block_type not in valid_types:
-            suggestions = difflib.get_close_matches(block_type, valid_types, n=2, cutoff=0.6)
-            # Special case for atten: if a suggestion is a law-wrapped type, suggest the law
-            # form instead. This prevents routing the user through a type that would itself
-            # be refused with "no longer supported".
-            if block_name == "atten" and suggestions:
-                revised_suggestions = []
-                for s in suggestions:
-                    if s in _AGN_ATTEN_LAW_TYPES:
-                        # This type wraps a law; suggest the law form instead
-                        law_name = _AGN_ATTEN_LAW_TYPES[s]
-                        revised_suggestions.append(f"law='{law_name}'")
-                    else:
-                        revised_suggestions.append(s)
-                suggest_str = (
-                    f" Did you mean: {', '.join(revised_suggestions)}?"
-                    if revised_suggestions
-                    else ""
-                )
-            else:
-                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown agn_{block_name}_block type '{block_type}'.{suggest_str}")
+            # Special case for atten (#2420): if a difflib suggestion is a
+            # law-wrapped type (e.g. smc_prevot), rewrite it to the law form
+            # the block actually accepts (law='prevot_smc') instead of
+            # routing the user through a type that would itself be refused
+            # with "no longer supported".
+            suggestion_rewrite = (
+                {
+                    law_type: f"law={law_name!r}"
+                    for law_type, law_name in _AGN_ATTEN_LAW_TYPES.items()
+                }
+                if block_name == "atten"
+                else None
+            )
+            raise _unknown_name_error(
+                f"agn_{block_name}_block type",
+                block_type,
+                valid_types,
+                keyword="type",
+                suggestion_rewrite=suggestion_rewrite,
+            )
 
         result[block_to_kwarg[block_name]] = block_type
 
@@ -6533,8 +6972,38 @@ def _resolve_value(
             "lyc_absorb_all",
             "eb_include_lyc",
         }
-        if override_key in structural_keys:
-            # These are structural keys, not parameters
+        # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying
+        # ``FREE``, bare ``DEFAULT``, or a ``Distribution`` (``Fixed(...)``
+        # included) is a live, declared ``dust_<stem>_<screen>`` parameter
+        # (#2428): fall through to ordinary per-parameter resolution below --
+        # the FREE/DEFAULT/Distribution branches there are what actually
+        # expand FREE on the declared ``free_prior``, resolve
+        # ``Fixed(DEFAULT)`` to the registry default, and raise on a bare
+        # ``DEFAULT`` -- instead of collapsing it to the registry default
+        # here, before any of that runs. A plain number keeps routing through
+        # the static ``dust_law_overrides`` config path built by
+        # ``_translate_dust_attenuation`` untouched. Every other structural
+        # key (``type``, ``law_bc``, ...) is never FREE/DEFAULT/a
+        # ``Distribution``, so this narrowing changes nothing for them.
+        if override_key in structural_keys and not (
+            override_key in per_screen_keys()
+            and (val is FREE or val is DEFAULT or isinstance(val, Distribution))
+        ):
+            # A plain-number per-screen value (the ONLY way this branch is
+            # reached for one -- FREE/DEFAULT/Distribution bypass it above,
+            # and a non-numeric junk value already raised in
+            # ``_translate_dust_attenuation``, before this ever runs) was
+            # ALSO seeded into Pass 1's structural kwargs as ``Fixed(value)``
+            # by that same function (#2428): ``registry_default`` here
+            # (read off ``structural_params``, not the registry) already IS
+            # that user-given value, so tag it "user_fixed" -- the same
+            # provenance the ``Fixed(v)``/``Uniform(...)`` spellings of this
+            # key get two branches down -- not the misleading
+            # "registry_default" an actually-untouched parameter would carry.
+            # Before this, ``get_fixed_values()``/``summary()`` showed the
+            # right VALUE (Pass 1's seed) tagged with the wrong PROVENANCE.
+            if override_key in per_screen_keys():
+                return registry_default, "user_fixed"
             return registry_default, "registry_default"
 
         if val is DEFAULT:
@@ -6944,7 +7413,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
         met_group="met" if use_met_block else "sfh",
         agn_flat=agn_flat,
     )
-    provenance = getattr(spec, "_group_provenance", {})
+    # A ``parse_groups``-built spec carries ``_group_provenance``; a flat
+    # ``Parameters(dust_slope_bc=...)``-built one carries ``_flat_provenance``
+    # instead (the declared per-screen name is "fully supported on this flat
+    # surface too" -- parameters.py's own per-screen validation docstring).
+    # Falling back the same way ``SEDModel._requested_law_shape_params``
+    # already does for predict-time resolution: without it, EVERY per-screen
+    # name resolved to "registry_default" here regardless of what the flat
+    # constructor actually recorded, so both ``PER_SCREEN_REQUESTED_TAGS``
+    # filters below dropped it -- a flat-built ``dust_slope_bc: Uniform(...)``
+    # predicted correctly but round-tripped as the unrelated shared ``slope``
+    # stem at its own untouched default, silently losing the per-screen value.
+    provenance = getattr(spec, "_group_provenance", None)
+    if provenance is None:
+        provenance = getattr(spec, "_flat_provenance", None)
+    provenance = provenance or {}
 
     # Group parameters by their owning group
     groups_dict = {}
@@ -6976,6 +7459,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 partition,
                 _GROUP_STRUCTURAL_KEYS.get(group_name, frozenset()),
                 dust_scopes,
+                spec,
             )
             if emittable is not None:
                 param_names = [name for name in param_names if name in emittable]
@@ -7010,8 +7494,23 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 param_names, spec, provenance, wildcard_intent
             )
         else:
-            # No wildcard; list all params explicitly
-            explicit_params = {p: spec.get_distribution(p) for p in param_names}
+            # No wildcard; list all params explicitly. Per-screen shape names
+            # (dust_slope_bc, ...) are explicit-only (#2428): `param_names`
+            # here is scope-narrowed by `_variant_scoped_param_names`, whose
+            # `group_allowed` union always re-admits every per-screen
+            # spelling as a "group-level knob" (`_GROUP_STRUCTURAL_KEYS`'s
+            # design note) independent of whether the selected law reads the
+            # stem, so re-emit one only when its own provenance says a caller
+            # actually asked for it -- the same rule `_get_explicit_overrides`
+            # applies on the wildcard branch, and just as necessary here:
+            # untouched (registry_default), never a request.
+            explicit_params = {
+                p: spec.get_distribution(p)
+                for p in param_names
+                if p not in _per_screen_full_names()
+                or _base_provenance(provenance.get(p, "registry_default"))
+                in PER_SCREEN_REQUESTED_TAGS
+            }
 
         # Add explicit per-param entries to the group dict FIRST.
         for full_name, distribution in explicit_params.items():
@@ -7215,15 +7714,34 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         if getattr(spec, "dust_law_neb", None) is not None:
             group_output["law_neb"] = spec.dust_law_neb
         # Round-trip per-component law-parameter overrides (slope_bc, delta_diff,
-        # slope_neb…).
+        # slope_neb…) as a bare number -- the ``dust_law_overrides`` static
+        # config path only ever holds a plain-number value (#2428:
+        # ``_translate_dust_attenuation`` stashes there only from its plain-
+        # number branch), and this is the ONLY round-trip route for one built
+        # via the flat ``Parameters(dust_law_overrides=...)`` surface, which
+        # carries no ``_group_provenance`` to drive the explicit-params loop
+        # below. A ``parse_groups``-built spec's plain-number per-screen value
+        # ALSO now carries "user_fixed" provenance (same fix), so that loop
+        # emits it too, as ``Fixed(value)`` -- skip it here rather than write
+        # the same fact twice under two different representations.
         from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
 
         _law_kw_to_short = {v: k for k, v in TWO_COMPONENT_OVERRIDE_KEYS.items()}
-        for comp in ("bc", "diff", "neb"):
+        # Same fallback as `parameters_to_groups` above: a flat-built spec
+        # carries `_flat_provenance`, not `_group_provenance` (#2428).
+        _provenance = getattr(spec, "_group_provenance", None)
+        if _provenance is None:
+            _provenance = getattr(spec, "_flat_provenance", None)
+        _provenance = _provenance or {}
+        for comp in SCREENS:
             for law_kw, value in (getattr(spec, "dust_law_overrides", {}).get(comp) or {}).items():
                 short = _law_kw_to_short.get(law_kw)
-                if short is not None:
-                    group_output[f"{short}_{comp}"] = value
+                if short is None:
+                    continue
+                full_name = short_to_full(f"{short}_{comp}")
+                if _base_provenance(_provenance.get(full_name, "")) == "user_fixed":
+                    continue
+                group_output[f"{short}_{comp}"] = value
         # Round-trip the Lyman-limit clip back to its boolean grammar form.
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True
@@ -7280,6 +7798,40 @@ def _analyze_wildcard_intent(
     return None
 
 
+#: Provenance base tags that mean "a caller explicitly asked for this
+#: per-screen dust shape name" (#2428) -- ``user_prior`` (a prior), ``user_
+#: fixed`` (``Fixed(v)`` or the bare-scalar spelling), and ``user_free``
+#: (``FREE``). Per-screen names are explicit-only (``per_screen_inert`` in
+#: :func:`_dust_wildcard_scopes`), so ``wildcard_free``/``wildcard_fixed``
+#: never legitimately apply to one -- unlike ``SEDModel._REQUESTED_
+#: PROVENANCE``, which also covers the SHARED stems, where a wildcard tag
+#: is a real, meaningful request. One module-level set for both round-trip
+#: emitters below (:func:`_get_explicit_overrides` and
+#: :func:`parameters_to_groups`'s no-wildcard branch) and for
+#: ``SEDModel._requested_law_shape_params``'s per-screen filter, so the three
+#: cannot drift into three different answers to "was this name requested?"
+#: again -- a bare ``("user_prior", "user_fixed")`` tuple in the first two
+#: once omitted ``user_free``, so `slope_bc: FREE` built and resolved
+#: correctly but vanished on the very next ``to_groups()``/``from_config()``
+#: round-trip: reparsing the emitted dict gave a model with no free dust
+#: parameter at all, and `predict_photometry` silently accepted (and
+#: ignored) an explicit ``dust_slope_bc`` value for it.
+PER_SCREEN_REQUESTED_TAGS: frozenset[str] = frozenset({"user_prior", "user_fixed", "user_free"})
+
+
+def _per_screen_full_names() -> frozenset[str]:
+    """Fully-prefixed per-screen dust shape names (``dust_slope_bc``, ...).
+
+    Returns
+    -------
+    frozenset of str
+        The 12 ``dust_<stem>_<screen>`` names from the ``OVERRIDE_STEMS x
+        SCREENS`` cartesian product (:func:`per_screen_keys`), prefixed via
+        :func:`short_to_full`.
+    """
+    return frozenset(short_to_full(key) for key in per_screen_keys())
+
+
 def _get_explicit_overrides(
     param_names: list[str],
     spec: Parameters,
@@ -7305,11 +7857,28 @@ def _get_explicit_overrides(
         Mapping of full param name to distribution for explicit listing.
     """
     explicit = {}
+    per_screen_names = _per_screen_full_names()
 
     for param_name in param_names:
+        raw_tag = provenance.get(param_name, "registry_default")
+
+        # Per-screen shape names (dust_slope_bc, dust_Rv_neb, ...) are
+        # explicit-only (#2428): emit one only when a caller actually asked
+        # for it (see PER_SCREEN_REQUESTED_TAGS). Every other provenance --
+        # untouched (registry_default), wildcard-pinned
+        # (wildcard_fixed(_inactive)), or wildcard-freed-but-inactive
+        # (wildcard_free_pinned) -- means nobody requested it, and
+        # re-emitting it can make the reparse raise when the selected
+        # screen's law does not read the stem (#2428).
+        if (
+            param_name in per_screen_names
+            and _base_provenance(raw_tag) not in PER_SCREEN_REQUESTED_TAGS
+        ):
+            continue
+
         # Base tag: a grid-narrowed parameter still came from the wildcard, so
         # it must collapse back into it rather than surface as an override.
-        tag = _base_provenance(provenance.get(param_name, "registry_default"))
+        tag = _base_provenance(raw_tag)
 
         # If there's a wildcard intent, exclude params that match it
         if wildcard_intent is not None:

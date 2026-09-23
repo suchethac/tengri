@@ -86,14 +86,14 @@ from tengri.components.stellar.sfh.nonparametric import (
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
-from tengri.utils.cosmology import age_at_z0
+from tengri.utils.cosmology import age_at_z0_host
 
 # Age of the universe today [Gyr], from the default cosmology: never a
 # literal. Used as the prior upper bound and default for the dpl/lnorm
 # formation anchors ``sfh_*_age_gyr`` (cosmic time available for star
 # formation = lookback of formation at the Big Bang). Per-fit, users
 # override this with ``cosmology.age_at_z(z)`` at the source redshift.
-_AGE_UNIV_GYR = round(float(age_at_z0()), 3)
+_AGE_UNIV_GYR = round(age_at_z0_host(), 3)
 
 # ── Data structures ───────────────────────────────────────────────
 

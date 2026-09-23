@@ -130,7 +130,6 @@ for name, factory, color in [
 ]:
     m = _build_sfh(factory)
     p = m.spec.sample(jax.random.PRNGKey(0))
-    p = {**m.spec.get_fixed_values(), **p}
     s = m.predict_state(p)
     lbt_gyr = np.asarray(s.derived["sfh_grid_lbt_yr"]) / 1e9
     sfr = np.asarray(s.derived["sfr_history"])

@@ -104,6 +104,7 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
+#
 
 # %% [markdown]
 # ## A prior fan via `sample_sfh_prior`

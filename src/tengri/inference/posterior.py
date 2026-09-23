@@ -200,8 +200,10 @@ class Posterior:
     ----------
     samples : dict or None
         Posterior samples in physical parameter space (optional, set by inference).
+        Free parameters only (#2296); Fixed values are on :attr:`fixed_values`.
     params : dict
-        Best-fit or posterior mean parameters.
+        Best-fit or posterior mean parameters. Free parameters only (#2296);
+        Fixed values are on :attr:`fixed_values`, not merged into this dict.
     method : str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
     wall_time_s : float
@@ -239,11 +241,15 @@ class Posterior:
         Posterior samples in physical parameter space. Each value has shape
         (n_samples, ...). Keys are parameter names (e.g., ``"stellar_mass"``,
         ``"age_gyr"``, ``"psd_xi"``). ``None`` for point estimates (MAP, Laplace,
-        Pathfinder).
+        Pathfinder). Free parameters only (#2296): a key the spec declared
+        ``Fixed`` never appears here, see :attr:`fixed_values`.
 
     params : dict
         Best-fit (MAP for point estimation) or posterior mean parameters in
-        physical space. Same keys as ``samples`` (without ``"psd_xi"`` latent field).
+        physical space. Same keys as ``samples`` (without ``"psd_xi"`` latent
+        field). Free parameters only (#2296): safe to feed straight back into
+        ``model.predict(posterior.params)`` on the SAME model, which fills
+        Fixed values in internally.
 
     method : str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
@@ -478,6 +484,54 @@ class Posterior:
         if getattr(spec, "stochastic", False) and self.samples and "psd_xi" in self.samples:
             names.append("psd_xi")
         return tuple(names)
+
+    @property
+    def fixed_values(self) -> dict:
+        """Fixed parameter values actually used by this fit (#2296).
+
+        Returns a dict of parameter name → pinned value for every parameter
+        the spec declared Fixed. Use this for display/diagnostics; ``params``
+        and ``samples`` carry free parameters only and are safe to feed back
+        into ``model.predict(...)``.
+
+        When this posterior carries a ``_fitter`` back-reference (set by
+        ``model.fit(...)`` / ``fitter.run(...)``), the values come from
+        ``fitter._fixed_values`` -- the spec's declared values merged with
+        any ``Fitter(params_override=...)`` re-pin (#1329), which is the
+        sanctioned way to fit at a *different* Fixed value for one fit.
+        Reading straight off ``self._model.spec`` instead would silently
+        report the spec's original value even when the fit actually ran at
+        the override. Falls back to the spec when there is no fitter
+        (a hand-built ``Posterior``).
+
+        **Under ``profile_mass``** (#2296): ``fitter.spec`` is the WORKING
+        spec, which pins the mass parameter Fixed at an analytic placeholder
+        -- an internal re-pin, not something the user's own model
+        (``self._model.spec``) declared Fixed at all (the mass is free
+        there). ``finalize_profile_mass`` writes the real, analytically
+        profiled mass into ``params``/``samples``, so without filtering, the
+        same parameter would appear in BOTH ``params`` (the real value) and
+        ``fixed_values`` (the stale placeholder) -- and worse, a caller
+        checking ``name in posterior.fixed_values`` to decide "is this
+        Fixed on the user's model" would get the wrong answer. Keep only the
+        names that are actually Fixed on ``self._model.spec``.
+
+        Returns
+        -------
+        dict
+            Fixed parameter name → value. Empty dict if the posterior has no
+            model and no fitter (hand-built posteriors).
+        """
+        if self._fitter is not None:
+            values = dict(self._fitter._fixed_values)
+        elif self._model is None:
+            return {}
+        else:
+            values = dict(self._model.spec.get_fixed_values())
+        if self._model is not None:
+            free_on_model = set(self._model.spec.free_params)
+            values = {k: v for k, v in values.items() if k not in free_on_model}
+        return values
 
     # ── Derived quantities ────────────────────────────────────────
 
@@ -970,8 +1024,13 @@ class Posterior:
         def _one(p: dict) -> dict:
             from tengri.forward.component_factory import state_to_sed_components
 
-            full_p = {**self._model.spec.get_fixed_values(), **p}
-            state = self._model.predict_state(full_p)
+            # predict_state self-merges the spec's Fixed values and refuses a
+            # Fixed key of its own (#2296); merging here first would hand it
+            # an already-merged dict and trip that refusal on values THIS
+            # call injected, not on anything the caller overrode -- the same
+            # hazard Prediction/Catalog avoid by keeping a free-only params
+            # dict alongside the merged one.
+            state = self._model.predict_state(p)
             return state_to_sed_components(state)
 
         if self.samples is None:
@@ -1885,16 +1944,27 @@ class Posterior:
             raise RuntimeError("This model has no photometry to evaluate.")
 
         draws = self._draws_for_lift(n_draws=n_draws, key=key)
+        # ``draws`` carries every Fixed value merged in (``_draws_for_lift``'s
+        # whole reason to exist, #1124/#1127: the exact projector below reads
+        # ``redshift`` straight out of its params dict). ``predict_photometry``
+        # / ``predict_state`` refuse a Fixed key of their own (#2296), so the
+        # branches below strip the merged-in names back out before calling
+        # into either -- the same free-only/merged split
+        # :class:`~tengri.forward.prediction.Prediction` keeps.
+        fixed_names = set(model.spec.fixed_params)
 
         if approx:
             # The lean hot-loop path: honors whatever `approx=` the model was
             # built with. Faster, and an approximation.
-            fn = model.predict_photometry
+            def fn(p):
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                return model.predict_photometry(free_p)
         else:
             # The canonical exact projector, the same kernel Prediction.photometry()
             # uses, so a posterior band and a Prediction band answer the same question.
             def fn(p):
-                return project_photometry(model.predict_state(p), p, phot)
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                return project_photometry(model.predict_state(free_p), p, phot)
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)
 
@@ -1986,15 +2056,25 @@ class Posterior:
                     "approx=SpectrumPrecomp() and try again."
                 )
 
+            fixed_names = set(model.spec.fixed_params)
+
             def fn(p):
-                return model.predict_spectrum(p, wave_obs=wave_obs)
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                return model.predict_spectrum(free_p, wave_obs=wave_obs)
         else:
             # Exact, and the same kernel Prediction.spectrum uses:
             # Observation.predict calls project_spectrum (#1052) and applies the flux
             # calibration (#1086), so a posterior spectrum and the likelihood's
             # spec_fnu answer the same question by construction.
+            #
+            # ``p`` here is ``draws`` from _draws_for_lift, Fixed values already
+            # merged in for the exact projector; predict_state refuses a Fixed
+            # key of its own (#2296), so it gets the free-only subset instead.
+            fixed_names = set(model.spec.fixed_params)
+
             def fn(p):
-                out = model.observation.predict(model.predict_state(p), p, wave_obs=wave_obs)
+                free_p = {k: v for k, v in p.items() if k not in fixed_names}
+                out = model.observation.predict(model.predict_state(free_p), p, wave_obs=wave_obs)
                 return out["spec_fnu"]
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)

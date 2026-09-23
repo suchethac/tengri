@@ -60,3 +60,28 @@ __all__ = [
     "z_at_cosmic_time",
     "z_at_lookback_time",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy load PLANCK15 and WMAP5 from utils.cosmology on access (PEP 562).
+
+    Parameters
+    ----------
+    name : str
+        The attribute name.
+
+    Returns
+    -------
+    CosmoParams
+        For PLANCK15 and WMAP5, returns a CosmoParams object from utils.cosmology.
+
+    Raises
+    ------
+    AttributeError
+        If the name is not PLANCK15 or WMAP5.
+    """
+    if name in ("PLANCK15", "WMAP5"):
+        import tengri.utils.cosmology as _cosmo_utils
+
+        return getattr(_cosmo_utils, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

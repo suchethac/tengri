@@ -177,19 +177,41 @@ def test_multi_population_predict_sums_in_linear_flux(
     assert jnp.allclose(twin_phot, 2.0 * single_phot, rtol=1e-10)
 
 
-def test_multi_population_params_slice_by_namespace(sed_model_minimal, simple_observation) -> None:
-    """Namespaced params reach the right population; bare names flow everywhere."""
+def test_multi_population_params_slice_by_namespace(synthetic_ssp, simple_observation) -> None:
+    """Namespaced params reach the right population; bare names flow everywhere.
+
+    ``sed_model_minimal`` has zero free parameters, so a bare params dict has
+    nothing legal to carry: every real parameter name on it is Fixed, and a
+    Fixed key is refused outright regardless of value (#2296). This test
+    needs one genuinely FREE bare-name key to exercise the namespace-slicing
+    path (``_params_for_population``), so it builds its own model with
+    ``redshift`` free instead of reusing the shared Fixed-redshift fixture.
+    """
     import jax.numpy as jnp
 
+    from tengri import DEFAULT, SEDModel, Uniform
+
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Uniform(0.01, 0.2),
+    )
     forward = ForwardModel.build(
         populations=[
-            Population(name="a", sed=sed_model_minimal),
-            Population(name="b", sed=sed_model_minimal),
+            Population(name="a", sed=model),
+            Population(name="b", sed=model),
         ],
         observation=simple_observation,
     )
-    # No free params in this minimal model, but the namespace path should
-    # still produce finite output (this exercises _params_for_population).
+    # A bare (non-namespaced) free parameter should flow to every population
+    # and produce finite output (this exercises _params_for_population).
     pred = forward.predict_observables({"redshift": 0.05})
     phot = pred.get("phot_fnu", pred.get("fnu_obs"))
     assert phot is not None
@@ -220,7 +242,10 @@ def test_multi_population_cross_pop_namespaced_extras(sed_model_minimal) -> None
         ],
         observation=_CapturingObservation(),
     )
-    forward.predict_observables({"redshift": 0.05})
+    # sed_model_minimal has zero free parameters (redshift is Fixed), so the
+    # only legal params dict is empty (#2296); this behavior doesn't depend
+    # on what's in it anyway.
+    forward.predict_observables({})
 
     assert set(captured) == {"a", "b"}
     # Every typed-derived key published by population "a" must surface in
@@ -241,7 +266,6 @@ def test_multi_population_cross_pop_namespaced_extras(sed_model_minimal) -> None
     [
         "wave_obs",
         "has_fixedz_photometry_precompute",
-        "hybrid",
         "z_fixed",
         "dl_cm_fixed",
         "n_grid",
@@ -282,7 +306,9 @@ def test_forward_model_predict_delegates_match_inner_sed(
     calling the inner SED directly. Guards against accidental wrapper drift.
     """
     forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
-    params = {"redshift": 0.05}
+    # sed_model_minimal has zero free parameters (redshift is Fixed), so the
+    # only legal params dict is empty (#2296).
+    params = {}
     import jax.numpy as jnp
 
     direct_phot = sed_model_minimal.predict_photometry(params)

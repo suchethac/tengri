@@ -91,11 +91,13 @@ def test_runtime_z_rides_data_args_and_reaches_the_loss(ztable_model, mock_data)
 
 
 def test_override_is_still_reported(ztable_model, mock_data):
-    """posterior.params must echo the override even though it is not baked."""
+    """posterior.fixed_values must echo the override even though it is not baked."""
     flux, err = mock_data
     f = Fitter(ztable_model, flux, err, data_type="photometry", params_override={"redshift": 0.7})
     post = f.run("map", n_steps=3, verbose=False)
-    assert abs(float(post.params["redshift"]) - 0.7) < 1e-12
+    # params_override is a re-pin (redshift is Fixed for this fit), reachable
+    # through Posterior.fixed_values, not the free-only Posterior.params (#2296).
+    assert abs(float(post.fixed_values["redshift"]) - 0.7) < 1e-12
 
 
 def test_no_ztable_model_keeps_the_bake(synthetic_ssp_wide, synthetic_tophat_obs):

@@ -1593,6 +1593,7 @@ from tengri.components.dust._apply import (
     _TWO_COMPONENT_LAW_PARAMS as _TWO_COMPONENT_LAW_PARAMS,
     TWO_COMPONENT_OVERRIDE_KEYS as TWO_COMPONENT_OVERRIDE_KEYS,
     apply_lyman_cutoff as apply_lyman_cutoff,
+    merge_neb_screen_live_overrides as merge_neb_screen_live_overrides,
     precompute_dust_age_mask as precompute_dust_age_mask,
     precompute_dust_age_weights as precompute_dust_age_weights,
     resolve_bc_diff_law_params as resolve_bc_diff_law_params,

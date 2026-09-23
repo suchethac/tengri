@@ -65,8 +65,13 @@ def lut_model(ssp_data_fsps):
 
 
 def _params(model, width_gyr):
+    """Free-only params (#2296): every key set here is free on
+    ``mock_recovery_minimal`` (tsnorm ``all_params=FREE``, ``met_logzsol``
+    FREE, ``dust_tau_bc`` free) -- redshift and the other dust/met defaults
+    are Fixed and merge in from the spec automatically.
+    """
+    del model
     return {
-        **model.spec.get_fixed_values(),
         "sfh_tsnorm_log_total_mass": 10.0,
         "sfh_tsnorm_peak_lbt_gyr": 5.0,
         "sfh_tsnorm_skew": 0.0,

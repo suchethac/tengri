@@ -69,9 +69,6 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
         "sfh_tsnorm_trunc": 3.0,
         "met_logzsol": -0.3,
         "dust_tau_bc": 0.5,
-        "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
     }
     mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(42))
     fitter = Fitter(model, mock.flux_obs, mock.noise)

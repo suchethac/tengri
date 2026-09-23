@@ -16,9 +16,7 @@
 # %%
 import os
 
-os.environ["TENGRI_HOST_DEVICES"] = (
-    "4"  # four CPU devices, one per chain
-)
+os.environ["TENGRI_HOST_DEVICES"] = "4"  # four CPU devices, one per chain
 
 # %% [markdown]
 # # Quickstart: fit a mock galaxy
@@ -186,14 +184,13 @@ truth = {
 }
 
 # Verify the intended shape: star-forming, peak ~3 Gyr ago, plateau to today
-truth_full_temp = {**sed_model.spec.get_fixed_values(), **truth}
-pred_truth = sed_model.predict(truth_full_temp)
+pred_truth = sed_model.predict(truth)
 ssfr_truth = float(pred_truth.ssfr)
 assert ssfr_truth > 1e-11, (
     f"Truth is not star-forming: sSFR = {ssfr_truth:.3e} /yr (need > 1e-11 /yr)"
 )
 
-state_truth = sed_model.predict_state(truth_full_temp)
+state_truth = sed_model.predict_state(truth)
 sfr_grid = np.asarray(state_truth.derived["sfr_history"])
 t_lbt_grid = np.asarray(state_truth.derived["sfh_grid_lbt_yr"])
 sfr_current = sfr_grid[np.argmin(np.abs(t_lbt_grid))]
@@ -225,7 +222,7 @@ wave_eff_um = effective_wavelengths_um(phot)
 # %%
 import time
 
-p0 = {**sed_model.spec.get_fixed_values(), **truth}
+p0 = dict(truth)
 predict_phot = jax.jit(sed_model.predict_photometry)
 grad_fn = jax.jit(
     jax.grad(lambda p: 0.5 * jnp.sum(((sed_model.predict_photometry(p) - flux_obs) / noise) ** 2))
@@ -302,12 +299,11 @@ print(
 # %%
 N_DRAWS = 200
 draws = posterior.resample(jax.random.PRNGKey(11), n=N_DRAWS)
-fixed = sed_model.spec.get_fixed_values()
 
 
 def draw_dicts(n):
     for i in range(n):
-        yield {**fixed, **{k: float(v[i]) for k, v in draws.items()}}
+        yield {k: float(v[i]) for k, v in draws.items()}
 
 
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
@@ -316,8 +312,7 @@ DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
 # the same names a `Prediction` uses, one axis wider, evaluated in memory-bounded
 # chunks. It reads every draw the chain produced rather than the 200 resampled
 # here, and `.ci()` returns the 16/50/84 interval directly.
-truth_full = {**fixed, **truth}
-truth_derived = sed_model.predict(truth_full).properties
+truth_derived = sed_model.predict(truth).properties
 
 print(f"{'quantity':<14}{'truth':>14}{'p16':>14}{'p50':>14}{'p84':>14}")
 print("-" * 70)
@@ -336,7 +331,7 @@ for k in DERIVED_KEYS:
 
 # %%
 WAVE_OBS = np.geomspace(1300.0, 6e4, 1200)  # 0.13–6 μm covers GALEX → WISE W2
-z_truth = float(truth_full["redshift"])
+z_truth = float(sed_model._get_redshift(truth))
 dl_cm = cosmology.luminosity_distance(z_truth)
 
 
@@ -350,7 +345,7 @@ def obs_fnu(params):
 
 spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(40)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
-spec_truth = obs_fnu(truth_full)
+spec_truth = obs_fnu(truth)
 
 # Posterior photometry via ``predict_photometry`` — the same WavePrecomp LUT
 # path the fit used. It serves the filter fluxes straight from the SSP × filter
@@ -448,7 +443,7 @@ for p in draw_dicts(80):
         lbt = lbt_i
 sfr_draws = np.stack(sfr_draws)
 sfr_lo, sfr_med, sfr_hi = np.percentile(sfr_draws, [16, 50, 84], axis=0)
-lbt_t, sfr_t = sfh(truth_full)
+lbt_t, sfr_t = sfh(truth)
 
 # Two-panel SFH: SFR(t) on top, cumulative formed mass on bottom.
 fig_sfh, (ax_sfh, ax_cum) = plt.subplots(
@@ -487,6 +482,6 @@ fig_sfh.savefig(FIG_DIR / "00_sfh.pdf", bbox_inches="tight")
 # `sfr_10myr`, in log₁₀), truth dashed.
 
 # %%
-fig_corner = posterior.plot_corner(truths=truth_full, color=C_POST)
+fig_corner = posterior.plot_corner(truths=truth, color=C_POST)
 fig_corner.savefig(FIG_DIR / "00_corner.png", dpi=300, bbox_inches="tight")
 fig_corner.savefig(FIG_DIR / "00_corner.pdf", bbox_inches="tight")

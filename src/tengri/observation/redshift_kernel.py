@@ -33,9 +33,8 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-from dsps.cosmology.flat_wcdm import CosmoParams
 
-from tengri.cosmology import PLANCK18, luminosity_distance
+from tengri.cosmology import PLANCK18, CosmoParams, luminosity_distance
 from tengri.utils.scale import apply_log10_scale, log10_flux_scale
 
 __all__ = ("shift_to_obs_frame",)

@@ -17,6 +17,10 @@ out low, with no error raised.
 Gas-phase metallicity is its own knob and does not follow the stellar one. Shock emission examples include line-ratio diagnostics and a composable shock-group sweep across shock parameters.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
