@@ -1,0 +1,80 @@
+2026-09-24 05:20:01,129 - __main__ - INFO - IGM node fold adequate: sample z_max=1.0970, bluest band ctio_u would admit the Lyman break at z=1.503
+2026-09-24 05:20:01,129 - __main__ - INFO - Running 20 cells: 20 galaxies x 1 configurations ['IV'] at --jobs 1
+2026-09-24 05:20:01,129 - __main__ - INFO - skipping 79/IV: adopted
+2026-09-24 05:20:01,129 - __main__ - INFO - skipping 267/IV: adopted
+2026-09-24 05:20:01,129 - __main__ - INFO - Completed: 2/20 (running: 0/1)
+2026-09-24 05:20:01,129 - __main__ - INFO - skipping 1826/IV: adopted
+2026-09-24 05:20:01,129 - __main__ - INFO - Completed: 3/20 (running: 0/1)
+2026-09-24 05:20:01,130 - __main__ - INFO - skipping 4056/IV: adopted
+2026-09-24 05:20:01,130 - __main__ - INFO - Completed: 4/20 (running: 0/1)
+2026-09-24 05:20:01,130 - __main__ - INFO - skipping 4171/IV: adopted
+2026-09-24 05:20:01,130 - __main__ - INFO - Completed: 5/20 (running: 0/1)
+2026-09-24 05:20:01,130 - __main__ - INFO - skipping 7837/IV: adopted
+2026-09-24 05:20:01,130 - __main__ - INFO - Completed: 6/20 (running: 0/1)
+2026-09-24 05:20:01,130 - __main__ - INFO - skipping 9884/IV: adopted
+2026-09-24 05:20:01,130 - __main__ - INFO - Completed: 7/20 (running: 0/1)
+2026-09-24 05:20:01,130 - __main__ - INFO - skipping 13097/IV: adopted
+2026-09-24 05:20:01,130 - __main__ - INFO - Completed: 8/20 (running: 0/1)
+2026-09-24 05:20:01,130 - __main__ - INFO - skipping 14099/IV: adopted
+2026-09-24 05:20:01,130 - __main__ - INFO - Completed: 9/20 (running: 0/1)
+2026-09-24 05:20:01,131 - __main__ - INFO - skipping 15336/IV: adopted
+2026-09-24 05:20:01,131 - __main__ - INFO - Completed: 10/20 (running: 0/1)
+2026-09-24 05:20:01,131 - __main__ - INFO - skipping 15775/IV: adopted
+2026-09-24 05:20:01,131 - __main__ - INFO - Completed: 11/20 (running: 0/1)
+2026-09-24 05:20:01,131 - __main__ - INFO - skipping 16049/IV: adopted
+2026-09-24 05:20:01,131 - __main__ - INFO - Completed: 12/20 (running: 0/1)
+2026-09-24 05:20:01,131 - __main__ - INFO - skipping 16455/IV: adopted
+2026-09-24 05:20:01,131 - __main__ - INFO - Completed: 13/20 (running: 0/1)
+2026-09-24 05:20:01,131 - __main__ - INFO - skipping 17376/IV: adopted
+2026-09-24 05:20:01,131 - __main__ - INFO - Completed: 14/20 (running: 0/1)
+2026-09-24 05:20:01,140 - __main__ - INFO - Started job 1/1: galaxy 18160 config IV (cells: 14/20 completed)
+2026-09-24 05:54:14,351 - __main__ - INFO - ✓ SUCCESS: galaxy 18160 config IV (2053.2s)
+2026-09-24 05:54:14,352 - __main__ - INFO - Completed: 15/20 (running: 0/1)
+2026-09-24 05:54:14,364 - __main__ - INFO - Started job 1/1: galaxy 22173 config IV (cells: 15/20 completed)
+2026-09-24 05:58:54,844 - __main__ - INFO - ✓ SUCCESS: galaxy 22173 config IV (280.5s)
+2026-09-24 05:58:54,844 - __main__ - INFO - Completed: 16/20 (running: 0/1)
+2026-09-24 05:58:54,851 - __main__ - INFO - Started job 1/1: galaxy 24786 config IV (cells: 16/20 completed)
+2026-09-24 06:04:00,411 - __main__ - INFO - ✓ SUCCESS: galaxy 24786 config IV (305.6s)
+2026-09-24 06:04:00,411 - __main__ - INFO - Completed: 17/20 (running: 0/1)
+2026-09-24 06:04:00,422 - __main__ - INFO - Started job 1/1: galaxy 25206 config IV (cells: 17/20 completed)
+2026-09-24 06:15:56,310 - __main__ - INFO - ✓ SUCCESS: galaxy 25206 config IV (715.9s)
+2026-09-24 06:15:56,311 - __main__ - INFO - Completed: 18/20 (running: 0/1)
+2026-09-24 06:15:56,327 - __main__ - INFO - Started job 1/1: galaxy 25489 config IV (cells: 18/20 completed)
+2026-09-24 06:22:06,663 - __main__ - INFO - ✓ SUCCESS: galaxy 25489 config IV (370.3s)
+2026-09-24 06:22:06,664 - __main__ - INFO - Completed: 19/20 (running: 0/1)
+2026-09-24 06:22:06,671 - __main__ - INFO - Started job 1/1: galaxy 26398 config IV (cells: 19/20 completed)
+2026-09-24 06:31:37,178 - __main__ - INFO - ✓ SUCCESS: galaxy 26398 config IV (570.5s)
+2026-09-24 06:31:37,178 - __main__ - INFO - Completed: 20/20 (running: 0/1)
+2026-09-24 06:31:37,185 - __main__ - INFO - 
+Summary saved to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fit_summary.json
+2026-09-24 06:31:37,185 - __main__ - INFO - 
+✓ All 20 fits completed (20 adopted; the table above carries the per-cell verdict)
+
+============================================================================================================================================
+3×3 CANDELS FITS SUMMARY
+============================================================================================================================================
+Galaxy     Cfg D   Div  Rhat_max   ESS_min   Wall(s)   s/ESS    Adopted        log M* (50)  log SFR (50)
+--------------------------------------------------------------------------------------------------------------------------------------------
+red        IV  11  0    1.0031     445       2076.6    4.67     ✓              -999.000     -999.000    
+red        IV  11  0    1.0030     467       713.7     1.53     ✓              -999.000     -999.000    
+unknown    IV  11  0    1.0027     407       392.6     0.96     ✓              -999.000     -999.000    
+unknown    IV  11  0    1.0019     529       535.5     1.01     ✓              -999.000     -999.000    
+red        IV  11  0    1.0075     337       1366.8    4.05     ✓              -999.000     -999.000    
+blue       IV  11  0    1.0050     223       1359.2    6.10     ✓              -999.000     -999.000    
+blue       IV  11  0    1.0051     342       388.8     1.14     ✓              -999.000     -999.000    
+blue       IV  11  0    1.0008     264       858.9     3.26     ✓              -999.000     -999.000    
+blue       IV  11  0    1.0002     157       811.2     5.16     ✓              -999.000     -999.000    
+red        IV  11  0    1.0040     358       592.2     1.66     ✓              -999.000     -999.000    
+intermediate IV  11  0    1.0016     265       851.8     3.21     ✓              -999.000     -999.000    
+intermediate IV  11  0    1.0013     231       1426.5    6.18     ✓              -999.000     -999.000    
+blue       IV  11  0    1.0028     281       1141.1    4.06     ✓              -999.000     -999.000    
+blue       IV  11  0    1.0043     140       1182.6    8.45     ✓              -999.000     -999.000    
+  → Retune 1: Rhat_max=1.0154, div=0, wall=1130.9s
+intermediate IV  11  0    1.0038     138       1033.1    7.48     ✓              -999.000     -999.000    
+  → Retune 1: Rhat_max=1.0210, div=0, wall=987.5s
+blue       IV  11  0    1.0016     296       247.8     0.84     ✓              -999.000     -999.000    
+unknown    IV  11  0    1.0028     470       274.1     0.58     ✓              -999.000     -999.000    
+red        IV  11  0    1.0013     470       683.7     1.45     ✓              -999.000     -999.000    
+red        IV  11  0    1.0054     521       338.0     0.65     ✓              -999.000     -999.000    
+red        IV  11  0    1.0068     384       544.9     1.42     ✓              -999.000     -999.000    
+============================================================================================================================================

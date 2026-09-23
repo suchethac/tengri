@@ -1,5 +1,36 @@
-2026-09-24 02:47:51,756 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.071e-29 erg/s/cm2/Hz
-2026-09-24 02:47:59,791 - __main__ - INFO - Galaxy 79 (z=1.012): 13 detected bands
-2026-09-24 02:47:59,792 - __main__ - INFO - Config II: 7 free parameters
-2026-09-24 02:47:59,792 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
-2026-09-24 02:49:16,106 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-24 05:20:02,623 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.071e-29 erg/s/cm2/Hz
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/src/tengri/components/nebular/ionizing_spectrum.py:309: RuntimeWarning: invalid value encountered in scalar divide
+  log_Q_pred = b - _LOG_H + np.log10(np.abs((x_max_alpha - x_min_alpha) / alpha))
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/src/tengri/components/nebular/ionizing_spectrum.py:321: RuntimeWarning: invalid value encountered in scalar divide
+  term_Q = b + np.log10(np.abs(denom / alpha)) - log_Q - _LOG_H
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/src/tengri/components/nebular/ionizing_spectrum.py:323: RuntimeWarning: divide by zero encountered in scalar divide
+  d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/src/tengri/components/nebular/ionizing_spectrum.py:323: RuntimeWarning: invalid value encountered in scalar subtract
+  d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
+2026-09-24 05:20:10,409 - __main__ - INFO - Galaxy 79 (z=1.012): 13 detected bands
+2026-09-24 05:20:10,409 - __main__ - INFO - Config II: 7 free parameters
+2026-09-24 05:20:10,409 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-24 05:21:13,302 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-24 05:29:15,218 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (481.9s). Step size: 0.0401. Divergent in the final warmup window: 0%
+2026-09-24 06:00:40,155 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2366.8s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.7, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-24 06:00:40,391 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 06:00:40,392 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-24 06:00:52,046 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 222 draws (4.50 MB/draw, target=1.0 GB), ceiling 64
+2026-09-24 06:00:52,068 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
+2026-09-24 06:01:23,021 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.1017, ess_min=3
+2026-09-24 06:01:34,145 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/79_II.npz
+2026-09-24 06:01:34,146 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/79_II.json
+2026-09-24 06:01:34,147 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=0) before retuning
+2026-09-24 06:01:34,147 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
+2026-09-24 06:01:35,422 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-24 06:11:07,597 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (572.2s). Step size: 0.0185. Divergent in the final warmup window: 0%
+2026-09-24 06:51:10,067 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2974.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 7.4, at cap on 1% of iterations (max_num_doublings=10)
+2026-09-24 06:51:10,075 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 06:51:10,075 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-24 06:51:13,276 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0297, ess_min=49
+2026-09-24 06:51:22,571 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/79_II.npz
+2026-09-24 06:51:22,572 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/79_II.json
+2026-09-24 06:51:22,574 - __main__ - INFO - Saved the best attempt so far (attempt 2 of 2, divergences=0) before retuning
+2026-09-24 06:51:22,574 - __main__ - INFO - Attempt 3/3: target_accept 0.99, warmup 150, diagonal mass
+2026-09-24 06:51:23,752 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.99
+2026-09-24 07:06:15,436 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (891.7s). Step size: 0.0092. Divergent in the final warmup window: 0%

@@ -1,0 +1,12 @@
+2026-09-23 21:15:22,391 - __main__ - INFO - IGM node fold adequate: sample z_max=1.0970, bluest band ctio_u would admit the Lyman break at z=1.503
+2026-09-23 21:15:22,391 - __main__ - INFO - Running 20 cells: 20 galaxies x 1 configurations ['IV'] at --jobs 2
+2026-09-23 21:15:22,426 - __main__ - INFO - Started job 1/2: galaxy 79 config IV (cells: 0/20 completed)
+2026-09-23 21:15:42,832 - __main__ - INFO - Started job 2/2: galaxy 267 config IV (cells: 0/20 completed)
+2026-09-23 22:14:09,843 - __main__ - ERROR - fit_one.py exited with code 1 for 267_IV (wall time: 3507.0s)
+2026-09-23 22:14:09,850 - __main__ - ERROR - See log: /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/267_IV.log
+2026-09-23 22:14:09,851 - __main__ - INFO - Completed: 1/20 (running: 1/2)
+2026-09-23 22:14:10,724 - __main__ - INFO - Started job 2/2: galaxy 1826 config IV (cells: 1/20 completed)
+2026-09-23 22:25:37,330 - __main__ - ERROR - fit_one.py exited with code 1 for 79_IV (wall time: 4214.9s)
+2026-09-23 22:25:37,331 - __main__ - ERROR - See log: /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/79_IV.log
+2026-09-23 22:25:37,331 - __main__ - INFO - Completed: 2/20 (running: 0/2)
+2026-09-23 22:25:37,556 - __main__ - INFO - Started job 2/2: galaxy 4056 config IV (cells: 2/20 completed)

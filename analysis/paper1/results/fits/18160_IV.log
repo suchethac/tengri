@@ -1,0 +1,30 @@
+2026-09-24 05:20:02,623 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 9.120e-30 erg/s/cm2/Hz
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/src/tengri/forward/sed_model.py:3962: CloudyGridIonizingSpectrumWarning: CloudyGridBackend: Q_H is computed from your DSPS SSPs (correct for stellar mass accounting), but the ionizing spectral shape used to compute the CLOUDY grid was BPASS v2.1 binary stars. If your SSPs have a significantly harder/softer ionizing SED than BPASS (e.g., single-star models, stripped-star prescriptions, very young/old populations), predicted line ratios will be biased. Use CueBackend if ionizing SED shape variation matters for your science. To suppress: pass ionizing_source_warning='suppress'.
+  self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+2026-09-24 05:20:12,968 - __main__ - INFO - Galaxy 18160 (z=1.095): 15 detected bands
+2026-09-24 05:20:12,969 - __main__ - INFO - Config IV: 11 free parameters
+2026-09-24 05:20:12,969 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-24 05:20:50,111 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 10 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-24 05:23:05,901 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (135.8s). Step size: 0.0663. Divergent in the final warmup window: 0%
+2026-09-24 05:36:08,363 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 918.2s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.4, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-24 05:36:08,710 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 05:36:08,710 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-24 05:36:16,409 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 65 draws (15.19 MB/draw, target=1.0 GB), ceiling 64
+2026-09-24 05:36:16,438 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
+2026-09-24 05:36:40,693 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0210, ess_min=54
+2026-09-24 05:36:50,415 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/18160_IV.npz
+2026-09-24 05:36:50,417 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/18160_IV.json
+2026-09-24 05:36:50,417 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=0) before retuning
+2026-09-24 05:36:50,418 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
+2026-09-24 05:36:51,594 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 10 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-24 05:40:16,073 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (204.5s). Step size: 0.0338. Divergent in the final warmup window: 0%
+2026-09-24 05:53:56,743 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1025.0s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.9, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-24 05:53:56,749 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 05:53:56,749 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-24 05:54:03,673 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0038, ess_min=138
+2026-09-24 05:54:12,525 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/18160_IV.npz
+2026-09-24 05:54:12,527 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/18160_IV.json
+2026-09-24 05:54:12,529 - __main__ - INFO - ✓ Fit complete for galaxy 18160 config IV
+  MAP initialization (1000 steps)...
+  MAP init done (loss=16.18)
+  MAP initialization: reusing cached MAP point
