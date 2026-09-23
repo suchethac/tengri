@@ -103,6 +103,7 @@ DUST_EMISSION_TYPES = frozenset(
         "draine_li2007",
         "draine_li2014",
         "energy_balance_split",
+        "graybody",
         "mbb",
         "modified_blackbody",
         "pah_drude",
