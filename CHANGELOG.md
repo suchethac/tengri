@@ -6,6 +6,11 @@
 
 ### Fixed
 
+- `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
+  `wavelength` as a keyword argument. Previously, calling with all keyword arguments
+  raised `IndexError: tuple index out of range`. Both functions now resolve
+  `wavelength` from positional or keyword argument and raise `TypeError` if omitted
+  (#2464).
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to

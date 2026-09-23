@@ -2575,11 +2575,6 @@ class TestCIGALESKIRTOR:
             "Increasing AGN fraction should boost the NIR torus emission."
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=IndexError,
-        reason="#2464: skirtor_analytic fails with tuple index out of range",
-    )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
         """tengri skirtor_analytic vs pCIGALE SKIRTOR2016 shape within 20% at 1–3 μm.
 
