@@ -9306,11 +9306,7 @@ class SEDModel:
 
         lut = None
         dust = next(
-            (
-                c
-                for c in chain
-                if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))
-            ),
+            (c for c in chain if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
             None,
         )
         free = set(self.spec.free_params)
@@ -9366,6 +9362,7 @@ class SEDModel:
                 diff_params = {}
                 law_bc = dust.config.law
                 law_diff = dust.config.law
+
                 # For single-component, tau_v maps to tau_diff with tau_bc=0 (degenerate)
                 def _grid_single(name):
                     if name == "dust_tau_v" and "dust_tau_v" in free:
@@ -9422,9 +9419,7 @@ class SEDModel:
                 bc_params={k: float(v) for k, v in bc_params.items()},
                 diff_params={k: float(v) for k, v in diff_params.items()},
                 lyman_cutoff_aa=(
-                    dust.config.lyman_cutoff_aa
-                    if hasattr(dust.config, "lyman_cutoff_aa")
-                    else 0.0
+                    dust.config.lyman_cutoff_aa if hasattr(dust.config, "lyman_cutoff_aa") else 0.0
                 ),
                 eb_include_lyc=eb_include_lyc,
                 tau_bc_grid=tau_bc_grid,
