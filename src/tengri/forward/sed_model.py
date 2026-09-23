@@ -9381,6 +9381,7 @@ class SEDModel:
             (c for c in chain if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
             None,
         )
+
         free = set(self.spec.free_params)
         unsafe_free = {
             p
@@ -9429,13 +9430,10 @@ class SEDModel:
             is_single_component = isinstance(dust, DustAttenuationSEDComponent)
 
             if is_single_component:
-                # Single-component dust: no law overrides, use the component's law for both
-                bc_params = {}
-                diff_params = {}
-                law_bc = dust.config.law
-                law_diff = dust.config.law
-
-                # For single-component, tau_v maps to tau_diff with tau_bc=0 (degenerate)
+                # Single-component dust: build LUT using build_energy_balance_lut
+                # with degenerate grids (tau_bc=[0.0], tau_diff=tau_v).
+                # This reuses the same two_component_dust transmission function
+                # and handles Lyman-continuum masking correctly.
                 def _grid_single(name):
                     if name == "dust_tau_v" and "dust_tau_v" in free:
                         dist = self.spec.get_distribution("dust_tau_v")
@@ -9443,13 +9441,45 @@ class SEDModel:
                         return jnp.linspace(lo, hi, 24)
                     return jnp.asarray([float(fixed.get(name, 0.0))])
 
-                tau_bc_grid = jnp.asarray([0.0])  # Degenerate: no birth-cloud
-                tau_diff_grid = _grid_single("dust_tau_v")
-                # For single-component, we use default t_birth and transition_width
-                # (they are not used since tau_bc is 0, but we still need to pass them)
-                t_birth_yr = 1e7
-                transition_width_dex = 0.3
-                eb_include_lyc = False
+                tau_v_grid = _grid_single("dust_tau_v")
+
+                # Resolve law parameters for single-component (both bc and diff
+                # use the same law and parameters).
+                law = dust.config.law
+                dust_params, _ = resolve_bc_diff_law_params(
+                    fixed,
+                    bc_overrides=None,
+                    diff_overrides=None,
+                    live_shape_params=dust.config.live_shape_params,
+                    bc_law=law,
+                    diff_law=law,
+                    redshift=fixed.get("redshift"),
+                )
+                # Single-component dust uses simple exponential attenuation: no
+                # Lyman-continuum masking is applied in the exact path either.
+                # The LUT builder must match: lyman_cutoff_aa=0.0 and
+                # eb_include_lyc=True means include all wavelengths.
+                eb_include_lyc = True
+                lyman_cutoff_aa = 0.0
+
+                ssp_ages_yr = (10.0 ** self.ssp_data.ssp_lg_age_gyr) * 1e9
+
+                lut = build_energy_balance_lut(
+                    jnp.asarray(self.ssp_data.ssp_flux),
+                    jnp.asarray(self.ssp_data.ssp_wave),
+                    jnp.asarray(ssp_ages_yr),
+                    law_bc=law,
+                    law_diff=law,
+                    f_obscuration=0.0,
+                    t_birth_yr=1e7,
+                    transition_width_dex=0.3,
+                    bc_params={k: float(v) for k, v in dust_params.items()},
+                    diff_params={k: float(v) for k, v in dust_params.items()},
+                    lyman_cutoff_aa=lyman_cutoff_aa,
+                    eb_include_lyc=eb_include_lyc,
+                    tau_bc_grid=jnp.asarray([0.0]),
+                    tau_diff_grid=tau_v_grid,
+                )
             else:
                 # Two-component dust: existing logic
                 bc_params, diff_params = resolve_bc_diff_law_params(
@@ -9477,26 +9507,28 @@ class SEDModel:
                 tau_bc_grid = _grid("dust_tau_bc")
                 tau_diff_grid = _grid("dust_tau_diff")
 
-            ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+            if not is_single_component:
+                # Two-component: use the standard LUT builder
+                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
-            lut = build_energy_balance_lut(
-                jnp.asarray(self.ssp_data.ssp_flux),
-                jnp.asarray(self.ssp_data.ssp_wave),
-                jnp.asarray(ssp_ages_yr),
-                law_bc=law_bc,
-                law_diff=law_diff,
-                f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
-                t_birth_yr=t_birth_yr,
-                transition_width_dex=transition_width_dex,
-                bc_params={k: float(v) for k, v in bc_params.items()},
-                diff_params={k: float(v) for k, v in diff_params.items()},
-                lyman_cutoff_aa=(
-                    dust.config.lyman_cutoff_aa if hasattr(dust.config, "lyman_cutoff_aa") else 0.0
-                ),
-                eb_include_lyc=eb_include_lyc,
-                tau_bc_grid=tau_bc_grid,
-                tau_diff_grid=tau_diff_grid,
-            )
+                lut = build_energy_balance_lut(
+                    jnp.asarray(self.ssp_data.ssp_flux),
+                    jnp.asarray(self.ssp_data.ssp_wave),
+                    jnp.asarray(ssp_ages_yr),
+                    law_bc=law_bc,
+                    law_diff=law_diff,
+                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    t_birth_yr=t_birth_yr,
+                    transition_width_dex=transition_width_dex,
+                    bc_params={k: float(v) for k, v in bc_params.items()},
+                    diff_params={k: float(v) for k, v in diff_params.items()},
+                    lyman_cutoff_aa=(
+                        dust.config.lyman_cutoff_aa if hasattr(dust.config, "lyman_cutoff_aa") else 0.0
+                    ),
+                    eb_include_lyc=eb_include_lyc,
+                    tau_bc_grid=tau_bc_grid,
+                    tau_diff_grid=tau_diff_grid,
+                )
 
         self._energy_balance_lut_cache = lut
         return lut
