@@ -161,6 +161,19 @@ def main(argv=None) -> int:
             "of wall clock."
         ),
     )
+    parser.add_argument(
+        "--dense-mass",
+        action="store_true",
+        help=(
+            "adapt a dense mass matrix instead of a diagonal one. The diagonal "
+            "metric rescales each coordinate by its own spread and leaves the "
+            "correlations, so what it cannot represent is measured by the "
+            "condition number of the posterior correlation matrix -- 464 on the "
+            "ta085 draws (paper1.posterior_conditioning), worth a factor of 21 "
+            "in leapfrog steps per draw. Off by default; see the comment at the "
+            "sampler kwargs for the evidence on both sides."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--init-from-map",
@@ -226,13 +239,32 @@ def main(argv=None) -> int:
             "n_warmup": args.n_warmup,
             "n_samples": args.n_samples,
             "n_chains": args.n_chains,
-            # Diagonal, stated rather than left to the auto-policy. At D=44 the
-            # warmup memory is dominated by the mass matrix and a dense one is
-            # O(D^2) -- measured at 20+ GB on problems this size, which OOMs
-            # rather than slows down. A diagonal metric also produced FEWER
-            # divergences than dense on a continuity SFH at D=9 (12 vs 2), so
-            # this is not a memory concession that costs sampling quality.
-            "dense_mass_matrix": False,
+            # Diagonal by default, and the default is NOT free of evidence
+            # against it. At D=44 the warmup memory is dominated by the mass
+            # matrix and a dense one is O(D^2) -- measured at 20+ GB on problems
+            # this size, which OOMs rather than slows down. A diagonal metric
+            # also produced FEWER divergences than dense on a continuity SFH at
+            # D=9 (12 vs 2), and this mock carries a continuity SFH, so that
+            # measurement is on point rather than incidental.
+            #
+            # --dense-mass exists because three attempts at D=36 failed for a
+            # reason neither of those addresses. The failure is not divergences
+            # -- the 0.95 run produced two -- it is that the chain never reached
+            # the basin, ending 700.5 worse in chi2 than truth while the MAP
+            # start sits better than truth. paper1.posterior_conditioning puts a
+            # number on what the diagonal metric leaves: the correlation matrix
+            # of the ta085 draws is conditioned at 464, worth a factor of 21 in
+            # leapfrog steps per draw, driven by many moderate correlations
+            # (adjacent continuity-SFH bins trading mass, the two dust screens
+            # trading optical depth) rather than one pair a reparameterization
+            # would fix.
+            #
+            # So the two lines of evidence are about different failures: the D=9
+            # result is a divergence count at a quarter the dimension, and the
+            # 20+ GB figure is a generic warning for D > 30 rather than a
+            # measurement at D=36, where the matrix itself is 36^2 x 8 bytes =
+            # 10 kB. Memory is measured before the long run, not assumed.
+            "dense_mass_matrix": args.dense_mass,
             # Step size, the remaining lever on divergences once the start is
             # excluded. run_nuts has taken this all along at 0.85; raising it
             # shortens the step, which is the standard remedy and costs wall
