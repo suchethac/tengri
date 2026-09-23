@@ -27,7 +27,7 @@ import pytest
 ANALYSIS_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ANALYSIS_DIR))
 
-from paper1._provenance import code_provenance, provenance_line
+from paper1._provenance import code_provenance, provenance_line, publishable
 
 pytestmark = pytest.mark.unit
 
@@ -182,3 +182,118 @@ def test_a_worktree_is_resolved_although_its_dot_git_is_a_file(tmp_path):
 
     assert record["commit"] is not None
     assert Path(record["repo_root"]).resolve() == wt.resolve()
+
+
+# ---------------------------------------------------------------------------
+# Publication: the same record, minus the machine it was recorded on.
+#
+# ``code_provenance`` records absolute paths deliberately -- on a box carrying
+# two hundred worktrees, the absolute path is the only field that says which
+# one ran, and the tests above pin that. But a record that is right in a log is
+# wrong in a tracked file: ``mock_joint_mcmc_nuts.json`` shipped
+# ``/Users/<me>/Projects/tengri/.claude/worktrees/paper1-pin`` to a public
+# repository and failed ``tools/check_no_local_paths.py`` in CI.
+#
+# The two requirements do not actually conflict; they apply at different
+# boundaries. So the sanitizing happens where the record is serialized, and
+# ``code_provenance`` keeps its absolute paths for the reader debugging live.
+# ---------------------------------------------------------------------------
+
+
+def test_a_published_record_carries_no_absolute_path(tmp_path):
+    """The defect. Any absolute path here ships someone's home directory."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git_repo(repo)
+
+    published = publishable(code_provenance(_FakeModule(repo / "mod_under_test.py")))
+
+    for key, value in published.items():
+        assert not (isinstance(value, str) and value.startswith("/")), (
+            f"{key} is an absolute path ({value!r}) and would ship the machine "
+            "that generated the file"
+        )
+
+
+def test_the_published_path_stays_repo_relative_so_a_foreign_import_is_visible(tmp_path):
+    """Sanitizing must not destroy the one fact the record exists for.
+
+    The failure this module was written against is ``import tengri`` resolving
+    to an unrelated checkout. That shows up as the path *within* the tree, so
+    the relative path has to survive publication -- stripping to a bare
+    basename would hide exactly the case worth detecting.
+    """
+    repo = tmp_path / "repo"
+    (repo / "src" / "pkg").mkdir(parents=True)
+    _git_repo(repo)
+
+    published = publishable(code_provenance(_FakeModule(repo / "src" / "pkg" / "__init__.py")))
+
+    assert published["path"] == "src/pkg/__init__.py"
+
+
+def test_publication_names_the_tree_without_naming_the_machine(tmp_path):
+    """Which worktree ran is real provenance; where it sits on disk is not."""
+    repo = tmp_path / "paper1-pin"
+    repo.mkdir()
+    _git_repo(repo)
+
+    published = publishable(code_provenance(_FakeModule(repo / "mod_under_test.py")))
+
+    assert published["repo_root"] == "paper1-pin"
+
+
+def test_publication_does_not_mutate_the_record(tmp_path):
+    """The caller keeps the absolute record for its log line."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git_repo(repo)
+    record = code_provenance(_FakeModule(repo / "mod_under_test.py"))
+    before = dict(record)
+
+    publishable(record)
+
+    assert record == before
+
+
+def test_publishing_preserves_the_fields_that_make_a_result_quotable(tmp_path):
+    """Sanitizing is about location only: commit and dirty must survive."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    sha = _git_repo(repo)
+    (repo / "mod_under_test.py").write_text("VALUE = 2  # uncommitted\n")
+
+    published = publishable(code_provenance(_FakeModule(repo / "mod_under_test.py")))
+
+    assert published["commit"] == sha
+    assert published["dirty"] is True
+    assert published["version"] is None
+
+
+def test_a_record_with_no_path_survives_publication(tmp_path, monkeypatch):
+    """Absence stays absence rather than becoming a crash or a guess."""
+    monkeypatch.chdir(tmp_path)
+
+    published = publishable(code_provenance(_FakeModule(None)))
+
+    assert published["path"] is None
+    assert published["repo_root"] is None
+
+
+def test_code_outside_any_repository_is_published_without_its_location(tmp_path, monkeypatch):
+    """No repo means no relative path to compute, and still no home directory.
+
+    A site-packages install lands here, and its absolute path is as much a
+    machine path as a worktree's.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git_repo(repo)
+    outside = tmp_path / "not_a_repo" / "pkg"
+    outside.mkdir(parents=True)
+
+    monkeypatch.chdir(repo)
+    published = publishable(code_provenance(_FakeModule(outside / "__init__.py")))
+
+    assert published["repo_root"] is None
+    assert published["path"] == "pkg/__init__.py"

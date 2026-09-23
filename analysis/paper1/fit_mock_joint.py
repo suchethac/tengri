@@ -46,7 +46,7 @@ from ._posterior_utils import (
     posterior_output_paths,
     thin_samples,
 )
-from ._provenance import code_provenance, provenance_line
+from ._provenance import code_provenance, provenance_line, publishable
 from .fig_mock_joint_infer import DETECTION_SIGMA, RESULTS, TRUTH_NPZ
 from .verify_mock_listing import MOCK_FILTERS, build_joint_observation, build_mock_model
 
@@ -491,6 +491,12 @@ def _save_sampler_results(
 
     np.savez(out_npz, **npz_payload)
 
+    # The absolute paths in this record name which of many worktrees ran,
+    # which is what the log line below is for. They must not reach the JSON:
+    # a tracked file carrying a home directory describes this machine rather
+    # than the project, and `tools/check_no_local_paths.py` fails the build.
+    provenance = code_provenance(tengri)
+
     # Write JSON sidecar with diagnostic summary
     json_payload = {
         "divergences": int(n_divergent),
@@ -510,7 +516,7 @@ def _save_sampler_results(
         # nobody can check; read off the imported module rather than the
         # working directory, because on this machine a bare `python` resolves
         # `import tengri` to an unrelated checkout.
-        "provenance": code_provenance(tengri),
+        "provenance": publishable(provenance),
     }
 
     # Add energy/ebfmi to JSON if available
@@ -524,7 +530,7 @@ def _save_sampler_results(
     else:
         json_payload["ebfmi_min"] = None
 
-    print(provenance_line(json_payload["provenance"]))
+    print(provenance_line(provenance))
 
     with open(out_json, "w") as f:
         json.dump(json_payload, f, indent=2)
