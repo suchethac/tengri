@@ -13,10 +13,9 @@ References
 
 import pytest
 
-from tengri.forward.sed_model import WavePrecomp
-
-from tengri import DEFAULT, Fixed, SEDModel, Uniform, recipes
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.forward.precompute_report import precompute_engagement_report
+from tengri.forward.sed_model import WavePrecomp
 
 pytestmark = pytest.mark.contract
 
@@ -209,9 +208,7 @@ class TestPrecomputeEngagementCensus:
             "approx=None should not trigger dust band response"
         )
 
-    def test_emitter_term_responses_with_free_redshift(
-        self, synthetic_tophat_obs, ssp_data_wne
-    ):
+    def test_emitter_term_responses_with_free_redshift(self, synthetic_tophat_obs, ssp_data_wne):
         """Radio/xray term responses should disengage with free redshift."""
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
