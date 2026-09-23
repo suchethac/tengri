@@ -1,9 +1,13 @@
 # Landing the Paper I trees on main: nss, pin, and what each side must not lose
 
 Three trees carry Paper I work and **no two of them contain each other**. This
-records what is where, in what order to merge, and the two places where both
-sides changed the same decision — because in each of those a plausible
-resolution silently deletes a guard that exists for a measured reason.
+records what is where, in what order to merge, and the places where both sides
+changed the same decision — because a plausible resolution there silently
+deletes a guard that exists for a measured reason.
+
+**Status 2026-09-23:** two such places were identified. `configs.py` has since
+been settled by the owner's ruling and is now a variable-name difference; see
+its section. `mass_profile.py` is still live and is the one to read carefully.
 
 Measured 2026-09-23 against the tips of `origin/main`,
 `origin/paper1/pin-2026-09-14` and `origin/paper1/nss-profile-mass`. Re-measure
@@ -49,7 +53,34 @@ rerere will replay resolutions nobody in this decision reviewed, and CHANGELOG
 is this repository's known repeat offender. Disable it for the merge, or diff
 every auto-resolved hunk.
 
-## `analysis/paper1/configs.py` — both sides capped a time prior, differently
+## `analysis/paper1/configs.py` — SETTLED UPSTREAM, now cosmetic
+
+**Update, after the owner's ruling.** Everything below described a genuine
+either/or in which each resolution deleted something real. It no longer does.
+The owner ruled for the unconditional cap and dropped the `II_taucap` probe
+row, and the grid branch applied it at `4fe883564`. Verified against both
+branches just now:
+
+    pin   tau_upper = age_at_z(z)   ->  Uniform(0.5, tau_upper)
+    nss   tau_hi    = age_at_z(z)   ->  Uniform(0.5, tau_hi)
+
+Semantically identical; the conflict that remains is the **local variable
+name**. Take either. `II_taucap` is gone from `configs.py` and
+`config_metadata.py` on nss (zero matches in each), so there is no probe row to
+keep vacuous and no reason to prefer one side for its behavior.
+
+`analysis/paper1/tests/test_time_prior_bounds.py` is on pin and on main and
+**absent from nss**, so the merge brings it in — which is now safe rather than
+contentious: nss's `config_II` caps unconditionally, so the assertion that
+previously would have failed against it holds.
+
+The account below is kept because it records why the ruling went the way it
+did, and because the same shape will recur: two branches independently
+implementing one guard is not the same as two branches disagreeing about it.
+
+---
+
+### The original analysis, superseded above
 
 Pin `ef848e0c0` makes the cap unconditional:
 
