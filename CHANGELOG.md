@@ -6,6 +6,13 @@
 
 ### Fixed
 
+- `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
+  `wavelength` as a keyword argument. Previously, calling with all keyword arguments
+  raised `IndexError: tuple index out of range`. Both functions now resolve
+  `wavelength` from positional or keyword argument and raise `TypeError` if omitted.
+  The CIGALE-era cross-validation test now calls `skirtor_analytic()` with the
+  current parameter names (`agn_tau_skirtor`, `agn_p_skirtor`, etc.) instead of
+  retired CIGALE-style names (`t`, `pl`, `q`, `oa`, `R`, `Mcl`, `i`) (#2464).
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
