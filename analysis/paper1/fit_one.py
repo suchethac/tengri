@@ -483,7 +483,7 @@ def derived_over_draws(sed_model, samples_thin: dict, fixed_values: dict, n_draw
     available = tuple(n for n in wanted if n in sed_model.available_properties)
 
     def one(sample):
-        return sed_model.predict_properties({**fixed_values, **sample}, names=available)
+        return sed_model.predict_properties(sample, names=available)
 
     got = _chunked_vmap(one, samples_thin, idx) if available else {}
     return {n: got[n] if n in got else np.full(idx.shape[0], np.nan) for n in wanted}
@@ -494,7 +494,7 @@ def sfh_over_draws(sed_model, samples_thin: dict, fixed_values: dict, n_draws: i
     idx = draw_indices(samples_thin, n_draws)
 
     def one(sample):
-        state = sed_model.predict_state({**fixed_values, **sample})
+        state = sed_model.predict_state(sample)
         return state.derived["sfh_grid_lbt_yr"], state.derived["sfr_history"]
 
     return _chunked_vmap(one, samples_thin, idx)
@@ -511,7 +511,7 @@ def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
     order.
     """
     for i in draw_indices(samples_thin, n_draws):
-        yield {**fixed_values, **{k: float(v[i]) for k, v in samples_thin.items()}}
+        yield {k: float(v[i]) for k, v in samples_thin.items()}
 
 
 def diagnostics_payload(
@@ -744,10 +744,7 @@ def save_fit_outputs(
     else:
         model_photometry_median = np.asarray(
             sed_model.predict_photometry(
-                {
-                    **fixed_values,
-                    **{k: float(np.median(v)) for k, v in samples_thin.items()},
-                }
+                {k: float(np.median(v)) for k, v in samples_thin.items()}
             )
         )
         model_photometry_p16 = None
