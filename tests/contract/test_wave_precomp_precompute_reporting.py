@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 """One failed prerequisite must be reported once, under its own name.
 
 ``SEDModel.build(approx=WavePrecomp(...))`` runs four precomputes at
