@@ -68,3 +68,34 @@ forward model is the tree as it stood at launch, 2026-09-22 18:08.
 `mock_joint_mcmc_nuts.npz` is **not** in git — `.gitignore` excludes `*.npz`,
 as it does for the ta085 archive. The draws exist only on the machine that ran
 them.
+
+## The metric lever, measured rather than argued
+
+`posterior_conditioning` (added 2026-09-23) puts a number on the claim above. A
+diagonal mass matrix rescales each coordinate by its own standard deviation and
+nothing else, so what it leaves behind is exactly the correlation matrix, and
+its condition number is the conditioning HMC still faces afterwards.
+
+On **ta085**, 2400 draws, 36 moving parameters, ess_min 520.3 (14.5 per
+parameter): **condition number 464.3**. Trajectory length scales as its square
+root, so roughly **21x** in leapfrog steps per draw.
+
+The top pairs are structural rather than incidental — adjacent continuity-SFH
+bins trading mass, and the two dust screens trading optical depth:
+
+    -0.756  sfh_cont_ratio_3        x  sfh_cont_ratio_4
+    -0.742  sfh_cont_log_total_mass x  sfh_cont_ratio_4
+    +0.692  dust_alpha_dl14         x  dust_gamma_dl
+    -0.666  sfh_cont_ratio_1        x  sfh_cont_ratio_2
+    -0.636  dust_tau_bc             x  dust_tau_diff
+
+Two pairs exceed |r| = 0.7 and **none** exceeds 0.9, while the matrix is
+conditioned at 464. That gap is the finding: this is many moderate correlations
+compounding across 36 dimensions, not one bad pair a reparameterization would
+fix — which is `divergence_geometry`'s "diffuse" verdict restated in a form
+that names a remedy.
+
+**This run cannot supply the number.** At 117.7 effective samples over 36
+parameters it reaches 3.3 per parameter, under the tool's floor of 5, and is
+refused: a correlation matrix estimated from that is noise wearing a condition
+number. The figure above is ta085's alone.
