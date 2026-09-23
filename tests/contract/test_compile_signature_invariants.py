@@ -81,6 +81,146 @@ def spec_dpl():
     )
 
 
+def test_signature_policy_matches_pattern_cache_attributes():
+    """Pattern '_*_term_response_cache' in SIGNATURE_POLICY covers all emitters.
+
+    Demonstrates that the policy-ledger rewrite (#2163) handles dynamically-created
+    cache attributes by matching a pattern rule instead of enumerating literal keys.
+    When a new emitter is added (e.g., a hypothetical third emitter beside radio/xray),
+    its cache attribute must be accepted without requiring a policy update.
+    """
+    from tengri._cache_keys import assert_policy_complete
+
+    # Mock an object with an arbitrary emitter cache attribute (one that doesn't
+    # exist on the current codebase, simulating a future or branch-specific emitter)
+    class MockModel:
+        def __init__(self):
+            self._radio_term_response_cache = None
+            self._xray_term_response_cache = None
+            self._phantom_term_response_cache = None  # Hypothetical third emitter
+            # Add other required attributes so assert_policy_complete passes
+            self.observation = None
+            self.spec = None
+            self.ssp_data = None
+            self._component_configs = []
+            self._rest_wavelength = jnp.array([1.0, 2.0])
+            self.age_yr = jnp.array([1.0, 2.0])
+            self.log_age_grid = jnp.array([1.0, 2.0])
+            self.d_log_age = 0.1
+            self.ssp_ages_yr = jnp.array([1.0, 2.0])
+            self.ssp_log_ages_yr = jnp.array([1.0, 2.0])
+            self._dl_cm_fixed = None
+            self._n_grid = 10
+            self._lgmet_scatter = 0.1
+            self._met_interp = "lin"
+            self._met_mode = "table"
+            self._z_interp = "lin"
+            self._sfh_fn = None
+            self._sfh_internal_names = []
+            self._sfh_public_names = []
+            self._sfh_settings = {}
+            self._uses_stochastic_sfh = False
+            self._field_centering = "mean"
+            self._gp_kernel = "drw"
+            self._dust_model = "two_component"
+            self._dust_scheme = "two_component"
+            self._dust_emission_model = "dale2014"
+            self._dust_law_bc = "calzetti"
+            self._dust_law_diff = "calzetti"
+            self._dust_law_neb = None
+            self._dust_law_bc_fn = None
+            self._dust_law_diff_fn = None
+            self._dust_nebular_screen = "birth_cloud"
+            self._dust_shock_screen = None
+            self._dust_agn_screen = None
+            self._dust_law_overrides = {}
+            self._dust_lyman_cutoff_aa = 912.0
+            self._dust_lyc_absorb_all = False
+            self._dust_eb_include_lyc = False
+            self._astrodust_spinning_dust = False
+            self._astrodust_f_cnm = 0.5
+            self._wg00_dust_curve = 0
+            self._wg00_geometry = 0
+            self._wg00_structure = 0
+            self._nebular_backend = None
+            self._nebular_model = "cue"
+            self._nebular_grid_table = None
+            self._uses_igm = False
+            self._igm_model = "madau"
+            self._igm_fn = None
+            self._igm_patchy = False
+            self._uses_dla = False
+            self._agn_model = "none"
+            self._agn_luminosity_mode = "bolometric"
+            self._agn_disc_block = None
+            self._agn_torus_block = None
+            self._agn_nlr_block = None
+            self._agn_blr_block = None
+            self._agn_feii_block = None
+            self._agn_attenuation_block = None
+            self._agn_norm = "independent"
+            self._agn_config = None
+            self._agn_ir_frac_dist = None
+            self._agn_lbol_dist = None
+            self._needs_agn_lbol_flat_check = False
+            self._agn_lbol_is_user_fixed = False
+            self._uses_radio = False
+            self._radio_include_freefree = False
+            self._radio_sfr_mode = "kranichstein"
+            self._radio_agn_model = "wilman"
+            self._uses_xray = False
+            self._xray_model = "yu"
+            self._uses_shock = False
+            self._shock_norm = "frac"
+            self._shock_abundance = "anders_grevesse"
+            self._shock_component = "mappings"
+            self._sigma_lib_kms = 0.0
+            self._lsf_resolution = 0.0
+            self._lsf_n_bins = 64
+            self._has_sigma_v = False
+            self._z_fixed = 0.0
+            self._catalog_z_range = (0.0, 10.0)
+            self._param_map = {}
+            self._compile_mode = "tracing"
+            self._wave_chunk_size = None
+            self._alpha_fe_evolving = False
+            self._fast_line_measurement = False
+            self._approx = None
+            self._approx_config = None
+            self._approx_config_wave = None
+            self._approx_config_spec = None
+            self._approx_config_feature = None
+            self._signature_memo = None
+            self._Observables = None
+            self._cached_component_chain = None
+            self._cached_full_state_chain = None
+            self._dust_band_response_cache = None
+            self._energy_balance_lut_cache = None
+            self._index_window_lut_cache = None
+            self._line_window_lut_cache = None
+            self._property_catalog = None
+            self._state = None
+            self._csp_integration = None
+            self._forward_dtype = None
+            self._csp_age_dt = None
+            self._csp_matrix = None
+
+    model = MockModel()
+    # The pattern-based policy should accept the hypothetical _phantom_term_response_cache
+    # without raising AssertionError about unclassified attributes
+    try:
+        assert_policy_complete([model], SIGNATURE_POLICY)
+        # If we reach here, the pattern matching worked
+        assert True, (
+            "Pattern '_*_term_response_cache' correctly matched _phantom_term_response_cache"
+        )
+    except AssertionError as e:
+        if "unclassified" in str(e) and "_phantom_term_response_cache" in str(e):
+            pytest.fail(f"Pattern matching failed for _phantom_term_response_cache: {e}")
+        else:
+            raise
+
+
 class TestCompileSignatureInvariants:
     """Tests for memory_mode exclusion from compile_signature."""
 
@@ -856,14 +996,12 @@ _CTOR_HELPER_PREFIXES = ("__init__", "_init_", "_build_", "_resolve_", "_setup_"
 #: cache via ``setattr(self, f"_{name}_term_response_cache", ...)``, a
 #: dynamic name the AST cannot resolve to a literal string. Manually
 #: verified (see tests/contract/_signature_builds.py and the E.3 report):
-#: for name in ("xray", "radio"), both targets
-#: (_xray_term_response_cache, _radio_term_response_cache) are EXCLUDE rows
-#: in SIGNATURE_POLICY, so this method needs no _invalidate_signature() call.
+#: the pattern "_*_term_response_cache" in SIGNATURE_POLICY covers all
+#: possible targets, so this method needs no _invalidate_signature() call.
 _DYNAMIC_SETATTR_ALLOWLIST = {
     "_additive_term_band_response": (
-        "setattr(self, f'_{name}_term_response_cache', ...): both possible "
-        "targets (_xray_term_response_cache, _radio_term_response_cache) are "
-        "EXCLUDE rows"
+        "setattr(self, f'_{name}_term_response_cache', ...): covered by "
+        "pattern '_*_term_response_cache' in SIGNATURE_POLICY"
     ),
 }
 
@@ -959,4 +1097,33 @@ def test_every_structural_mutator_invalidates_the_signature():
     assert checked, "AST probe found no non-constructor methods assigning self.<attr> at all"
     assert not violations, "structural mutator(s) skip signature invalidation:\n" + "\n".join(
         violations
+    )
+
+
+def test_the_pattern_rule_did_not_make_the_policy_permissive():
+    """The other half of the pattern change, and the one worth guarding.
+
+    Admitting ``_*_term_response_cache`` by pattern is only safe while every
+    *other* attribute still needs an explicit entry. The cheap way to make the
+    phantom-emitter test above pass is to let the policy match anything, and
+    that would silently retire the whole contract: ``assert_policy_complete``
+    exists so that an attribute nobody classified is caught rather than
+    defaulting into the compile signature.
+
+    So: an attribute that matches no literal key and no pattern must still be
+    refused.
+    """
+    from tengri._cache_keys import assert_policy_complete
+    from tengri.forward._signature_policy import SIGNATURE_POLICY
+
+    class Unclassified:
+        def __init__(self):
+            self._an_attribute_no_policy_mentions = object()
+
+    with pytest.raises(Exception) as excinfo:
+        assert_policy_complete([Unclassified()], SIGNATURE_POLICY)
+
+    assert "_an_attribute_no_policy_mentions" in str(excinfo.value), (
+        "the policy accepted an attribute it does not classify, so the "
+        "completeness contract is no longer enforced"
     )

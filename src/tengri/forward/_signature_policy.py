@@ -239,8 +239,10 @@ SIGNATURE_POLICY: KeyPolicy = {
     ),
     "_dust_band_response_cache": exclude("memo cache computed from keyed structure"),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
-    "_radio_term_response_cache": exclude("memo cache computed from keyed structure"),
-    "_xray_term_response_cache": exclude("memo cache computed from keyed structure"),
+    "_*_term_response_cache": exclude(
+        "memo cache computed from keyed structure; pattern matches all additive "
+        "emitters (radio, xray, and any new ones)"
+    ),
     "_index_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_line_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_property_catalog": exclude("memo cache computed from keyed structure"),
