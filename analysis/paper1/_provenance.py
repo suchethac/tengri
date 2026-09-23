@@ -126,3 +126,56 @@ def provenance_line(record: dict) -> str:
     elif record.get("dirty") is None:
         flag = " (clean/dirty unknown)"
     return f"provenance: {record.get('path')} @ {record['commit'][:9]}{flag}"
+
+
+def publishable(record: dict) -> dict:
+    """The same record with the machine it was recorded on taken out.
+
+    :func:`code_provenance` records absolute paths deliberately: on a box
+    carrying many worktrees, the absolute path is the only field that says
+    which one ran. A tracked file is the other boundary. An absolute path
+    committed to a public repository describes the machine that generated the
+    file rather than this project, and ``tools/check_no_local_paths.py`` fails
+    the build for it -- as it did for ``mock_joint_mcmc_nuts.json``.
+
+    The two requirements do not conflict; they apply at different boundaries.
+    Serialize through this, and keep the raw record for the log line.
+
+    Parameters
+    ----------
+    record : dict
+        A record from :func:`code_provenance`. Not modified.
+
+    Returns
+    -------
+    dict
+        A new record. ``path`` becomes repo-relative and ``repo_root`` becomes
+        the tree's name. Every other field carries over untouched, so
+        ``commit`` and ``dirty`` -- the two that decide whether a result is
+        quotable at all -- are unaffected by publication.
+
+    Notes
+    -----
+    The path is reduced to a *relative* path rather than a basename because
+    the failure this module exists to catch shows up inside it: an ``import``
+    that resolved to an unrelated checkout sits at a different path within its
+    tree, and a bare basename would hide exactly that.
+    """
+    published = dict(record)
+
+    raw = record.get("path")
+    if raw is None:
+        return published
+
+    path = Path(raw)
+    root = record.get("repo_root")
+    if root is not None:
+        published["path"] = path.relative_to(Path(root)).as_posix()
+        published["repo_root"] = Path(root).name
+    else:
+        # No repository to be relative to. A site-packages install lands here,
+        # and its absolute path is as much a machine path as a worktree's. Two
+        # components name the module within its package and nothing else.
+        published["path"] = "/".join(path.parts[-2:])
+
+    return published

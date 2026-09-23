@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     import tengri  # deferred so --help costs nothing
 
     from . import verify_mock_listing as V
-    from ._provenance import code_provenance, provenance_line
+    from ._provenance import code_provenance, provenance_line, publishable
 
     truth_npz = np.load(args.truth, allow_pickle=True)
     post_npz = np.load(args.posterior, allow_pickle=True)
@@ -175,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"{name} is not among the sampled parameters: {post_names}")
         report[name] = summarize(truth_params[name], np.asarray(post_npz[name])[index])
 
+    provenance = code_provenance(tengri)
+
     payload = {
         "quantities": report,
         "n_draws_evaluated": len(index),
@@ -182,7 +184,9 @@ def main(argv: list[str] | None = None) -> int:
         "formed_minus_surviving_dex_at_truth": float(
             np.log10(truth_props["stellar_mass"]) - np.log10(truth_props["stellar_mass_surviving"])
         ),
-        "provenance": code_provenance(tengri),
+        # Published, not raw: the absolute paths belong in the log line
+        # below, never in a tracked file. See `_provenance.publishable`.
+        "provenance": publishable(provenance),
     }
 
     width = max(len(k) for k in report)
@@ -199,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"\nformed - surviving at truth: {payload['formed_minus_surviving_dex_at_truth']:.4f} dex"
     )
-    print(provenance_line(payload["provenance"]))
+    print(provenance_line(provenance))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2, sort_keys=True))

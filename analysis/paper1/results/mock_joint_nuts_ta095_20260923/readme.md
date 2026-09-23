@@ -65,6 +65,12 @@ dirty file was an untracked `results/grid_summary.json` written by a separate
 analysis, since removed. No `src/tengri/` file changed during the run, so the
 forward model is the tree as it stood at launch, 2026-09-22 18:08.
 
+Its `path` and `repo_root` were rewritten from absolute to repo-relative after
+the fact. The run predates `_provenance.publishable`, and the absolute form
+shipped this machine's home directory into a public repository, which is what
+`tools/check_no_local_paths.py` exists to stop. The values now are the ones the
+writer emits; no other field was touched and no diagnostic changed.
+
 `mock_joint_mcmc_nuts.npz` is **not** in git — `.gitignore` excludes `*.npz`,
 as it does for the ta085 archive. The draws exist only on the machine that ran
 them.

@@ -89,7 +89,7 @@
     "package": "tengri",
     "path": "src/tengri/__init__.py",
     "version": "0.1.0",
-    "repo_root": "<checkout>",
+    "repo_root": "paper1-pin",
     "commit": "2e5cdac5c1d4381e228c288be4a9295c8aeb494d",
     "dirty": true,
     "recorded": "2026-09-22T23:51:15Z"
