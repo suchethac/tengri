@@ -46,6 +46,17 @@ DEFAULT_OUT = RESULTS / "divergence_geometry.json"
 #: enough that no parameter is being singled out.
 FUNNEL_SIGMA = 2.0
 
+#: Below this many divergent draws, the ranking is measuring noise and no shape
+#: can be read off it. The standard error of a median is about ``1.253 * sd /
+#: sqrt(n)``, so in the units this module reports -- the parameter's own sd --
+#: the offset it computes carries an uncertainty of ``1.253 / sqrt(n)``. At
+#: n = 10 that is 0.40 sd, a fifth of :data:`FUNNEL_SIGMA`; at n = 2 it is
+#: 0.89 sd, and a "funnel" verdict would then rest on a median of two numbers.
+#: A run with a handful of divergences is the good case, not the informative
+#: one: the ta095 mock fit ended with two, and without this floor it would have
+#: been handed a shape.
+MIN_DIVERGENT_FOR_SHAPE = 10
+
 
 def offsets(posterior, free_names: list[str]) -> list[dict]:
     """Per parameter, the divergent draws' median offset in units of its spread.
@@ -88,6 +99,21 @@ def verdict(rows: list[dict], n_divergent: int) -> dict:
             "note": (
                 "no divergent transitions, so there is no geometry to locate. "
                 "This is not a diffuse result; it is an absent one."
+            ),
+        }
+    if n_divergent < MIN_DIVERGENT_FOR_SHAPE:
+        return {
+            "shape": None,
+            "n_divergent": n_divergent,
+            "note": (
+                f"{n_divergent} divergent draws is too few to locate a shape: "
+                f"the median offset this module reports carries an uncertainty "
+                f"of about {1.253 / n_divergent**0.5:.2f} sd at this count, "
+                f"against a funnel threshold of {FUNNEL_SIGMA} sd. Fewer than "
+                f"{MIN_DIVERGENT_FOR_SHAPE} is reported as no verdict rather "
+                "than a weak one, because a weak verdict reads exactly like a "
+                "strong one once it is quoted. This is not a clean geometry; "
+                "it is an unmeasurable one."
             ),
         }
     scored = [r for r in rows if r["offset_sd"] is not None]
