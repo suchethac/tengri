@@ -23,6 +23,7 @@ Assumptions:
 import contextlib
 import dataclasses
 import enum
+import fnmatch
 import functools
 import hashlib
 import types
@@ -349,18 +350,47 @@ def frozen_dataclass_key(cfg) -> tuple:
     return (type(cfg).__qualname__, fields_tuple)
 
 
+def _match_policy_pattern(attr_name: str, policy: KeyPolicy) -> str | None:
+    """Match attribute name against pattern keys in policy.
+
+    Patterns are policy keys containing wildcards (*, ?, [...]).
+    Literals are tried first; then patterns in lexicographic order.
+
+    Parameters
+    ----------
+    attr_name : str
+        Attribute name to match.
+    policy : KeyPolicy
+        Policy dict containing literal and pattern keys.
+
+    Returns
+    -------
+    str or None
+        The mode ("content", "shape", "exclude") if a pattern matches,
+        None if no pattern matches.
+    """
+    # Try patterns (keys with wildcards)
+    for key in sorted(policy.keys()):
+        has_wildcard = any(c in key for c in ("*", "?", "["))
+        if has_wildcard and fnmatch.fnmatch(attr_name, key):
+            mode, _ = policy[key]
+            return mode
+    return None
+
+
 def classify(obj, policy: KeyPolicy) -> tuple[dict[str, str], tuple[str, ...]]:
     """Classify object attributes against a policy.
 
     For each attribute in ``vars(obj)``, determine its mode from the policy
-    (or default to "content" if absent).
+    (or default to "content" if absent). Supports pattern matching: keys with
+    wildcards (*, ?, [...]) are matched against attribute names using fnmatch.
 
     Parameters
     ----------
     obj : object
         The object to classify.
     policy : KeyPolicy
-        Mapping from attribute name to PolicyRow.
+        Mapping from attribute name (or pattern) to PolicyRow.
 
     Returns
     -------
@@ -378,6 +408,7 @@ def classify(obj, policy: KeyPolicy) -> tuple[dict[str, str], tuple[str, ...]]:
     unclassified_set = set()
 
     for name in sorted(vars(obj)):
+        # Try literal match first
         if name in policy:
             mode, _ = policy[name]
             if mode not in MODES:
@@ -385,8 +416,20 @@ def classify(obj, policy: KeyPolicy) -> tuple[dict[str, str], tuple[str, ...]]:
             if mode != "exclude":
                 modes[name] = mode
         else:
-            modes[name] = "content"
-            unclassified_set.add(name)
+            # Try pattern match
+            pattern_mode = _match_policy_pattern(name, policy)
+            if pattern_mode is not None:
+                if pattern_mode not in MODES:
+                    msg = (
+                        f"policy mode {pattern_mode!r} for {name!r} "
+                        f"(via pattern) not in MODES {MODES}"
+                    )
+                    raise ValueError(msg)
+                if pattern_mode != "exclude":
+                    modes[name] = pattern_mode
+            else:
+                modes[name] = "content"
+                unclassified_set.add(name)
 
     return modes, tuple(sorted(unclassified_set))
 
@@ -470,21 +513,24 @@ def derive_key(
 def assert_policy_complete(objs, policy: KeyPolicy) -> None:
     """Assert that a policy covers all attributes on the given objects.
 
-    Over an iterable of objects, the union of ``vars()`` names must equal
-    the set of policy keys.
+    Over an iterable of objects, all attributes must be covered by either a
+    literal policy key or a pattern key (containing wildcards). Literal policy
+    keys must match at least one attribute; pattern keys are allowed even if
+    they don't match any current attribute (they may match in future branches).
 
     Parameters
     ----------
     objs : Iterable[object]
         Objects whose attributes to check.
     policy : KeyPolicy
-        Mapping from attribute name to PolicyRow.
+        Mapping from attribute name (or pattern) to PolicyRow.
 
     Raises
     ------
     AssertionError
         If there are unclassified attributes (present on some object but absent
-        from policy) or stale policy entries (in policy but absent from all objects).
+        from both literal and pattern policy keys) or stale literal policy entries
+        (literal keys in policy but not matching any object attribute).
         Lists both categories sorted in a single message.
     """
     all_attrs = set()
@@ -493,13 +539,33 @@ def assert_policy_complete(objs, policy: KeyPolicy) -> None:
 
     policy_attrs = set(policy.keys())
 
-    unclassified = sorted(all_attrs - policy_attrs)
-    stale = sorted(policy_attrs - all_attrs)
+    # Separate literal keys from pattern keys
+    literal_keys = {k for k in policy_attrs if not any(c in k for c in ("*", "?", "["))}
+    pattern_keys = policy_attrs - literal_keys
 
-    if unclassified or stale:
+    # Find unclassified: attributes not in literal keys AND not matching any pattern
+    unclassified = set()
+    for attr in all_attrs:
+        if attr not in literal_keys:
+            # Check if it matches any pattern
+            matched = False
+            for pattern_key in pattern_keys:
+                if fnmatch.fnmatch(attr, pattern_key):
+                    matched = True
+                    break
+            if not matched:
+                unclassified.add(attr)
+
+    # Find stale literal keys: literal keys in policy but not in any object
+    stale = literal_keys - all_attrs
+
+    unclassified_sorted = sorted(unclassified)
+    stale_sorted = sorted(stale)
+
+    if unclassified_sorted or stale_sorted:
         msg_parts = []
-        if unclassified:
-            msg_parts.append(f"unclassified attributes: {unclassified}")
-        if stale:
-            msg_parts.append(f"stale policy entries: {stale}")
+        if unclassified_sorted:
+            msg_parts.append(f"unclassified attributes: {unclassified_sorted}")
+        if stale_sorted:
+            msg_parts.append(f"stale policy entries: {stale_sorted}")
         raise AssertionError("; ".join(msg_parts))
