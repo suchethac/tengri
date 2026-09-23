@@ -245,6 +245,42 @@ def _chain_consumes(chain, key: str) -> bool:
     return False
 
 
+def _chain_implements_emission_terms(chain) -> list[str]:
+    """Derive which components in ``chain`` implement the ``emission_terms`` contract.
+
+    The ``emission_terms`` method is the contract for additive emitters that can be
+    optimized via per-filter band-response precompute: a component that decomposes
+    its SED into rank-1 terms (amplitude × fixed spectral shape) can precompute the
+    filter integral of each term at build time instead of evaluating it on every call.
+
+    This function probes the chain behaviorally rather than maintaining a hardcoded
+    list, so future emitters inherit the optimization automatically without silent
+    performance regression. Deterministic ordering (sorted by component name) ensures
+    reproducible build behavior.
+
+    Parameters
+    ----------
+    chain : sequence
+        The component chain.
+
+    Returns
+    -------
+    list[str]
+        Sorted list of component names that implement ``emission_terms``, in
+        alphabetical order for reproducibility. Empty if no components qualify.
+    """
+    emitters = []
+    for comp in chain:
+        emission_terms_method = getattr(comp, "emission_terms", None)
+        if emission_terms_method is not None and callable(emission_terms_method):
+            # Safely read the component's name attribute, falling back to str(comp)
+            # if the attribute is missing (defensive against malformed components).
+            name = getattr(comp, "name", None)
+            if name is not None and isinstance(name, str):
+                emitters.append(name)
+    return sorted(emitters)
+
+
 #: Relative tolerance for the rank-1 check in
 #: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
 #: each term's spectral shape to this precision for the term to earn a constant
@@ -2971,7 +3007,11 @@ class SEDModel:
                     )
                     self._dust_band_response_cache = None
 
-                for _emitter in ("xray", "radio"):
+                # Derive which emitters in the chain implement the emission_terms
+                # contract rather than hardcoding ("xray", "radio"). Any additive
+                # emitter added in future automatically inherits the band-response
+                # optimization without silent performance regression.
+                for _emitter in _chain_implements_emission_terms(chain):
                     try:
                         self._additive_term_band_response(chain, _emitter)
                     except Exception as e:
