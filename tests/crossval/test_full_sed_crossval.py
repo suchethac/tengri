@@ -2578,7 +2578,10 @@ class TestCIGALESKIRTOR:
     @pytest.mark.xfail(
         strict=True,
         raises=AssertionError,
-        reason="tengri/pCIGALE SKIRTOR NIR/V ratio = 508.9: the comparison is ill-posed (torus-only NIR/V against a total-SED excess over stellar V), see #2480",
+        reason=(
+            "tengri/pCIGALE SKIRTOR NIR/V ratio = 508.9: the comparison is ill-posed "
+            "(torus-only NIR/V against a total-SED excess over stellar V), see #2480"
+        ),
     )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
         """tengri skirtor_analytic vs pCIGALE SKIRTOR2016 shape within 20% at 1–3 μm.
