@@ -9457,12 +9457,14 @@ class SEDModel:
                 )
                 # Single-component dust uses simple exponential attenuation: no
                 # Lyman-continuum masking is applied in the exact path either.
-                # The LUT builder must match: lyman_cutoff_aa=0.0 and
-                # eb_include_lyc=True means include all wavelengths.
-                eb_include_lyc = True
-                lyman_cutoff_aa = 0.0
+                # Match the runtime exact path, which masks the Lyman continuum
+                # (#922: LyC photons ionize H rather than heat dust). Baking a
+                # different cutoff here than DustAttenuationSEDComponent.apply()
+                # uses is what made the LUT disagree with the exact integral.
+                eb_include_lyc = dust.config.eb_include_lyc
+                lyman_cutoff_aa = dust.config.lyman_cutoff_aa
 
-                ssp_ages_yr = (10.0 ** self.ssp_data.ssp_lg_age_gyr) * 1e9
+                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
                 lut = build_energy_balance_lut(
                     jnp.asarray(self.ssp_data.ssp_flux),
@@ -9523,7 +9525,9 @@ class SEDModel:
                     bc_params={k: float(v) for k, v in bc_params.items()},
                     diff_params={k: float(v) for k, v in diff_params.items()},
                     lyman_cutoff_aa=(
-                        dust.config.lyman_cutoff_aa if hasattr(dust.config, "lyman_cutoff_aa") else 0.0
+                        dust.config.lyman_cutoff_aa
+                        if hasattr(dust.config, "lyman_cutoff_aa")
+                        else 0.0
                     ),
                     eb_include_lyc=eb_include_lyc,
                     tau_bc_grid=tau_bc_grid,

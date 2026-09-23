@@ -597,6 +597,8 @@ def build_components(
                 law=dust_law_bc,
                 live_shape_params=frozenset(dust_live_shape_params or ()),
                 log_l_ir_requested=dust_log_l_ir_requested,
+                lyman_cutoff_aa=dust_lyman_cutoff_aa,
+                eb_include_lyc=dust_eb_include_lyc,
             )
         else:
             atten_type = "two_component"
