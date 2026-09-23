@@ -6,6 +6,14 @@
 
 ### Fixed
 
+- A wide log-normal SFH was a staircase in `age`: its support boundary moves with
+  the age parameter and a hard mask switched each dense-grid node on at full weight,
+  so the trapezoid integral jumped at every node crossing (89 steps above four times
+  the median step over a 161-point age sweep on FSPS MIST C3K at width 2.14 dex) and
+  autodiff could not see the jumps, which NUTS read as divergences. The boundary cell
+  now carries a smoothstep partial-cell weight at the grid's own spacing; bit-identical
+  wherever the kernel was already small at onset; ported from the paper-1 pin branch
+  (f01975f46). Periodic and tsnorm remain measured staircases (#2476).
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
