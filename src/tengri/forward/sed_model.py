@@ -9233,8 +9233,34 @@ class SEDModel:
     #: fed to the (fixed-shape) emission template, so a build-time per-filter
     #: response ``R`` computed at one ``L_ir`` and reused for any other (the
     #: homogeneity check in ``_dust_emission_band_response``) stays valid.
+    #:
+    #: **TRAP: This set is consulted by TWO mechanisms with DIFFERENT correctness
+    #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
+    #: this set without also checking the energy-balance LUT build requirements is
+    #: a silent numerical error.
     _EB_ATTEN_FREE_OK = frozenset(
         {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir"}
+    )
+
+    #: dust attenuation params that may be free without invalidating the dust
+    #: *emission band response* precompute (separate from energy-balance LUT).
+    #: Admits ``dust_tau_v``: changes the absorbed-energy amplitude but not the
+    #: Dale+2014 template's spectral SHAPE. The per-filter response R stays a
+    #: build-time constant and homogeneity holds (exactly proportional to L_ir).
+    #:
+    #: **CRITICAL: This set is separate from ``_EB_ATTEN_FREE_OK`` by design.**
+    #: ``_EB_ATTEN_FREE_OK`` gates the energy-balance LUT, which requires:
+    #:   1. A ``DustSEDComponent`` in the chain (absent for single_component).
+    #:   2. ``tau_bc_grid`` and ``tau_diff_grid`` axes in the LUT (no tau_v axis).
+    #: Adding ``dust_tau_v`` to the shared set would enable the LUT build on a
+    #: single_component model where (1) is False, violating (2). The LUT would
+    #: bake the wrong L_absorbed and emit silently wrong fluxes. The band response
+    #: gate (this set) has no such constraint: it checks only that the emission
+    #: *shape* is fixed, and the homogeneity probe independently guards correctness.
+    #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
+    #: adding a new attenuation parameter that does not reshape the emission.
+    _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
+        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir", "dust_tau_v"}
     )
 
     def _ztable_data_for_jit(self):
@@ -9412,7 +9438,7 @@ class SEDModel:
         # SAFE, an unrecognized free parameter simply disables the optimization.
         free = set(self.spec.free_params)
         free_dust = {p for p in free if p.startswith("dust_")}
-        shape_free = bool(free_dust - self._EB_ATTEN_FREE_OK) or ("redshift" in free)
+        shape_free = bool(free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK) or ("redshift" in free)
 
         if (
             emitter is not None
