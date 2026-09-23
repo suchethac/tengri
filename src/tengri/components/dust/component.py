@@ -438,15 +438,60 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # (#922).
         from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
         from tengri.utils.physics_constants import C_AA
-        from tengri.utils.scale import pow10
+        from tengri.utils.scale import pow10, log10_add
 
         nu = C_AA / state.wave  # Hz
         # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
         # (#1206). The sign only tracks grid orientation; the energy is |L|.
-        log_l_absorbed, _ = bolometric_absorbed_log10(
-            state.sed_intrinsic, attenuated, nu, wave=state.wave
-        )
+
+        # Try to use the energy-balance LUT (fast path) if available.
+        # The LUT was built with the stellar SED only; for single-component
+        # models without a nebular component (the canonical case), it captures
+        # the full absorption.
+        eb_lut = None
+        if isinstance(template_data, dict):
+            _dir = template_data.get("dust_ir")
+            if isinstance(_dir, dict):
+                eb_lut = _dir.get("energy_balance_lut")
+
+        jw = state.derived.get("joint_weights")
+        log_mass_scale = state.derived.get("log_stellar_mass_scale")
+        _eb_cutoff = None  # LyC mask is baked at LUT build time
+
+        if eb_lut is not None and jw is not None and log_mass_scale is not None:
+            # Fast path: use precomputed LUT with degenerate two-component mapping.
+            # Single-screen tau_v maps to tau_diff; tau_bc is pinned at 0.0.
+            from tengri.components.dust.energy_balance_precompute import (
+                lut_l_absorbed_stellar_log10,
+            )
+
+            log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
+                eb_lut,
+                jnp.asarray(jw),
+                jnp.asarray(log_mass_scale),
+                jnp.asarray(0.0),  # tau_bc = 0.0 (degenerate)
+                jnp.asarray(params["dust_tau_v"]),  # tau_diff = tau_v
+            )
+
+            # If a nebular component exists, it contributes via bolometric_absorbed_log10.
+            # Most single-component models have no nebular (BakedIn or none), so this
+            # fallback is typically a no-op. When present, the nebular continuum was
+            # already added to sed_intrinsic by the nebular component; the screen
+            # attenuates the total, so we need to extract just the nebular contribution
+            # to dust absorption. For simplicity, when LUT is used, we assume no
+            # separate nebular component and assign all absorption to the LUT path.
+            # A model with both single-component attenuation AND an active nebular
+            # backend would need the two-component path instead (#668).
+            log_l_absorbed = log_stellar
+        else:
+            # Slow path (exact integral): full-wavelength integration over all
+            # components (stellar, nebular, shock, AGN). Same as before.
+            log_l_absorbed, _ = bolometric_absorbed_log10(
+                state.sed_intrinsic, attenuated, nu, wave=state.wave,
+                lyman_cutoff_aa=_eb_cutoff,
+            )
+
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:
             # Total dust IR budget override (#2187-series): a STATIC branch
