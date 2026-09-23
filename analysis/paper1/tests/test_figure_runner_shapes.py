@@ -83,15 +83,27 @@ def _fresh_import():
     sys.modules.pop(name, None)
 
 
-def test_the_script_really_has_no_main(run_figure):
+def test_the_script_really_has_no_main(run_figure, monkeypatch):
     """Guards the two below: if it grows a main they test a different path.
 
     Not a style assertion -- the runner branches on this, so a `main` appearing
     silently moves these tests onto a code path they were not written for and
     they would keep passing without covering the module-scope shape at all.
+
+    **The import needs a patched argv**, and leaving it out is why this test
+    spent its life passing for the wrong reason. The script parses at module
+    scope -- that is the shape being guarded -- so importing it runs argparse
+    against whatever ``sys.argv`` holds, which under pytest is pytest's own
+    command line and exits 2 on the first unrecognized argument. The suite
+    bakes ``-n auto`` into addopts, and xdist workers carry a clean argv, so
+    the hostile case never arose: this passes in isolation, across its own
+    file, and across all 230 tests of the directory, and fails immediately
+    under ``-n 0``. Do not remove the patch because the test is green without
+    it; green without it means the import is not being exercised.
     """
     import importlib
 
+    monkeypatch.setattr(sys, "argv", [f"{MODULE_SCOPE_SCRIPT}.py"])
     module = importlib.import_module(f"analysis.paper1.{MODULE_SCOPE_SCRIPT}")
     assert getattr(module, "main", None) is None, (
         f"{MODULE_SCOPE_SCRIPT} now has a main(); the module-scope shape these "
