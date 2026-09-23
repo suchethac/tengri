@@ -24,7 +24,6 @@ DIR/<ID>_<config>.json (diagnostics summary).
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import logging
 import os
@@ -992,7 +991,6 @@ def run_fit(
     config_builder = {
         "I": config_I,
         "II": config_II,
-        "II_taucap": functools.partial(config_II, tau_cap=True),
         "III": config_III,
         "IV": config_IV,
         "V": config_V,
