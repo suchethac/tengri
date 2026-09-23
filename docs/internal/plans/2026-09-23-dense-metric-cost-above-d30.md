@@ -44,16 +44,47 @@ from D = 8 to D = 12 as a result. So the project has already established once
 that the 20+ GB figure belongs to the SFH and not to D. The advisory above
 D = 30 was not revisited at the same time.
 
-## The measurement in flight
+## The measurement that was attempted, and why it measured nothing
 
-The paper's joint mock, D = 36, continuity SFH, `dense_mass_matrix=True`
-forced on (the auto policy would pick diagonal above D = 12), 4 chains,
-1000 warmup, 600 samples.
+The intent was: the paper's joint mock, D = 36, continuity SFH,
+`dense_mass_matrix=True` forced on, 4 chains, 1000 warmup, 600 samples. It ran
+for roughly eight hours and reached a peak RSS of 3538 MB.
 
-Provisional at 3 h elapsed: **peak RSS 1218 MB**, steady between 0.7 and
-1.2 GB. Roughly 17x below the warned figure, in the band the warning is about.
-**Do not quote this until the run ends** -- it is an in-flight number and the
-final peak is what belongs in an issue.
+**That number does not measure a dense metric, and no number from this run
+does.** The run's own log says why, in a fourth warning that only appears once
+the sampler starts:
+
+> `mcmc_nuts: dense_mass_matrix=True at D=36 exceeds the D<=30 cap (the mass
+> matrix alone is O(D^2), and warmup has been measured at 20+ GB well below
+> this size, #319). Falling back to a DIAGONAL metric.`
+
+So the lever was never pulled. Eight hours of "dense" run was a fourth
+diagonal run, and the earlier provisional figure recorded here -- 1218 MB at
+3 h -- was a diagonal run too. Both are struck. The caution written into this
+section at the time ("do not quote this until the run ends") was right for the
+wrong reason: the problem was not that the number was early, it was that the
+configuration under test was never active.
+
+## The larger finding: a named mode is silently downgraded
+
+The advisory above D = 30 is one thing; the hard cap underneath it is another,
+and it is the more serious of the two. A caller who asks for
+`dense_mass_matrix=True` at D > 30 does not get it. They get a diagonal metric
+and a warning, and the posterior that comes back carries no field saying which
+metric produced it -- the run's own JSON records `dense_mass_matrix: true`,
+which is what was *requested*, not what ran.
+
+That is the shape this repository already guards against elsewhere: a name may
+only map to a driver that runs the algorithm the name promises, and stand-ins
+are the flat seam's founding bug. Refusing loudly, or recording the resolved
+metric beside the requested one, would both be consistent with that rule. The
+present behavior is neither.
+
+It also invalidates a diagnostic path that looked sound: `posterior_conditioning`
+measured a condition number of 464 on this posterior and concluded a dense
+metric was the remedy. Acting on that conclusion is currently impossible at
+D = 36 through the documented knob, and nothing says so until a warning scrolls
+past in a log.
 
 ## Why this is not a pedantic complaint
 
