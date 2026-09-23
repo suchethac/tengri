@@ -120,6 +120,10 @@ def test_the_alpha_fe_gradient_agrees_with_a_finite_difference(ssp_data_wne, obs
     numeric = (float(total(PROBE + step)) - float(total(PROBE - step))) / (2.0 * step)
 
     assert np.isfinite(analytic), "the [alpha/Fe] gradient is not finite"
+    assert analytic != 0.0, (
+        "the [alpha/Fe] gradient is identically zero: the parameter is severed from "
+        "the photometry, and a sampler could not move it"
+    )
     assert abs(numeric) > 0.0, "the finite difference is zero, so this check is vacuous"
 
     # Compare the RATIO, not the difference. These fluxes are ~1e-27, and both
