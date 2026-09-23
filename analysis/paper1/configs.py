@@ -237,6 +237,7 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     # Measured on the committed 13 Gyr prior (2026-09-21): |dF/F| 0.018% outside
     # the age window against 300-2100% inside, with 59% of that prior sitting
     # in the flat regime at z ~ 1.07. See sfh_tau_conditioning.py.
+    # Owner ruling 2026-09-23: the uncapped variant is not part of the paper's grid.
     tau_upper = age_at_z(z)
     return SEDModel.build(
         ssp_data=ssp_data,
