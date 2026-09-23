@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 import sys
 from collections import Counter, defaultdict
@@ -54,6 +55,29 @@ SELECTION_20 = ANALYSIS_DIR / "results" / "selected_galaxies_20.json"
 
 #: Field a cell may or may not carry, depending on when it was run.
 NOT_RECORDED = "not recorded"
+
+#: A draw counts as sitting at a bound when it lies within this fraction of the
+#: prior's width of it. A flat prior puts exactly this share in each band, so
+#: the band doubles as the null the observed share is judged against.
+EDGE_BAND = 0.05
+
+#: Share of draws inside one edge band above which the cell is called pinned.
+#: Four times the flat-prior expectation, so ordinary posterior width near a
+#: bound does not register.
+PIN_THRESHOLD = 0.20
+
+#: Lower bounds that mean something physical. A posterior against tau = 0 is
+#: the fit saying "no dust is needed", which is an inference and not a defect,
+#: and counting it with the artificial bounds inflates the limitation.
+#: agn_lum_ratio = 0 is the same statement about the AGN.
+PHYSICAL_ZERO_BOUNDS = frozenset({"dust_tau_v", "dust_tau_bc", "dust_tau_diff", "agn_lum_ratio"})
+
+#: Simplex coordinates. An edge means "all the mass in one age bin", which is a
+#: statement about the SFH rather than a wall the model was pushed into, so
+#: these are held apart from both other groups rather than silently counted.
+SIMPLEX_PARAMS_PREFIX = "sfh_dir_z"
+
+_UNIFORM = re.compile(r"Uniform\(([-\d.eE+]+),\s*([-\d.eE+]+)\)")
 
 
 def load_cells(results_dir: Path) -> dict[str, dict]:
@@ -92,6 +116,80 @@ def band_residuals(results_dir: Path, name: str) -> tuple[np.ndarray, list[str]]
     return (model[usable] - obs[usable]) / sigma[usable], [
         n for n, keep in zip(names, usable) if keep
     ]
+
+
+def _config_of(name: str, cell: dict) -> str:
+    """The cell's configuration, from the record if it has one, else its filename."""
+    return cell.get("config") or name.rsplit("_", 1)[-1]
+
+
+def prior_boundary_pressure(cells: dict[str, dict], results_dir: Path):
+    """Which parameters sit against a prior bound, in how many cells.
+
+    The adoption bar cannot answer this. Zero divergences, split R-hat below
+    1.01 and a healthy ESS are all satisfied by a chain that has converged
+    cleanly onto a wall, so a cell can clear every leg of the bar while the
+    number it reports is set by the edge of the prior rather than by the data.
+    Section 7 asks where the posteriors lean on their boundaries precisely
+    because the rest of the census cannot see it.
+
+    Bounds are read from the cell's own ``priors`` record, so a prior derived
+    per library -- ``met_logzsol`` is held 0.02 dex inside its grid's outermost
+    node -- is judged against the bound that cell actually ran with, never
+    against a bound copied from another row.
+
+    Returns ``(rows, scanned, skipped)``; a cell with no NPZ is skipped and
+    counted rather than treated as unpinned.
+    """
+    rows, scanned, skipped = [], 0, 0
+    for name, cell in cells.items():
+        npz_path = results_dir / f"{name}.npz"
+        if not npz_path.is_file():
+            skipped += 1
+            continue
+        with np.load(npz_path, allow_pickle=True) as npz:
+            available = set(npz.files)
+            draws = {
+                k: np.asarray(npz[k], dtype=float).ravel()
+                for k in (cell.get("priors") or {})
+                if k in available
+            }
+        if not draws:
+            skipped += 1
+            continue
+        scanned += 1
+        for param, prior in (cell.get("priors") or {}).items():
+            match = _UNIFORM.match(str(prior))
+            if match is None or param not in draws:
+                continue
+            lo, hi = float(match.group(1)), float(match.group(2))
+            values = draws[param]
+            if hi <= lo or values.size == 0 or not np.isfinite(values).all():
+                continue
+            band = (hi - lo) * EDGE_BAND
+            at_lo = float(np.mean(values < lo + band))
+            at_hi = float(np.mean(values > hi - band))
+            if max(at_lo, at_hi) < PIN_THRESHOLD:
+                continue
+            low_end = at_lo >= at_hi
+            if param.startswith(SIMPLEX_PARAMS_PREFIX):
+                kind = "simplex"
+            elif low_end and param in PHYSICAL_ZERO_BOUNDS:
+                kind = "physical"
+            else:
+                kind = "artificial"
+            rows.append(
+                {
+                    "cell": name,
+                    "config": cell.get("config"),
+                    "adopted": bool(is_adopted(cell, _config_of(name, cell)).adopted),
+                    "param": param,
+                    "end": "lo" if low_end else "hi",
+                    "share": max(at_lo, at_hi),
+                    "kind": kind,
+                }
+            )
+    return rows, scanned, skipped
 
 
 def coverage(cells: dict[str, dict], field: str) -> tuple[list, int]:
@@ -138,9 +236,6 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
     # is_adopted judges per configuration -- the relaxed bar applies to some
     # rows and not others -- so the config is read from the cell, with the
     # filename as the fallback for a cell that does not record one.
-    def _config_of(name: str, cell: dict) -> str:
-        return cell.get("config") or name.rsplit("_", 1)[-1]
-
     adopted = {k: c for k, c in cells.items() if is_adopted(c, _config_of(k, c)).adopted}
     refused = {k: c for k, c in cells.items() if k not in adopted}
     print(f"\nadopted              : {len(adopted)} of {have}")
@@ -287,6 +382,36 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
         )
     if not complete:
         print("  ^ 'which configurations mix worst' needs every row; this is not that.")
+
+    # --- prior boundaries, which the adoption bar cannot see ---------------
+    rows, scanned, skipped = prior_boundary_pressure(cells, results_dir)
+    print(
+        f"\nprior-boundary pressure (edge band {EDGE_BAND:.0%} of prior width, "
+        f"pinned at {PIN_THRESHOLD:.0%} of draws)"
+    )
+    print(
+        f"  cells scanned        : {scanned}"
+        + (f", skipped for want of an NPZ: {skipped}" if skipped else "")
+    )
+    artificial = [r for r in rows if r["kind"] == "artificial"]
+    pinned_cells = {r["cell"] for r in artificial}
+    adopted_pinned = {r["cell"] for r in artificial if r["adopted"]}
+    print(
+        f"  cells against an artificial bound: {len(pinned_cells)} of {scanned}, "
+        f"of which adopted: {len(adopted_pinned)}"
+    )
+    by_param = Counter(r["param"] + " (" + r["end"] + ")" for r in artificial)
+    for label, count in by_param.most_common():
+        print(f"    {label:<34} {count:>3} cells")
+    for kind, note in (
+        ("physical", "a bound at zero: the fit saying the component is not needed"),
+        ("simplex", "a simplex edge: all the mass in one age bin"),
+    ):
+        held = {r["cell"] for r in rows if r["kind"] == kind}
+        if held:
+            print(f"  held apart -- {kind}: {len(held)} cells ({note})")
+    if not complete:
+        print("  ^ a partial grid undercounts every line above.")
 
     # --- seed provenance, which the grid is not uniform about --------------
     seeds, seed_missing = coverage(cells, "seed")
