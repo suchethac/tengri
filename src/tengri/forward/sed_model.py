@@ -253,10 +253,16 @@ def _chain_implements_emission_terms(chain) -> list[str]:
     its SED into rank-1 terms (amplitude × fixed spectral shape) can precompute the
     filter integral of each term at build time instead of evaluating it on every call.
 
-    This function probes the chain behaviorally rather than maintaining a hardcoded
-    list, so future emitters inherit the optimization automatically without silent
-    performance regression. Deterministic ordering (sorted by component name) ensures
-    reproducible build behavior.
+    This asks each component whether it declares the contract, rather than matching
+    it against a hardcoded list of names, so a future emitter inherits the
+    optimization instead of silently forfeiting it. Note this is a check for the
+    *contract*, not for the rank-1 property itself: whether a term response is
+    actually valid for the emitter is settled downstream by the two-draw probe in
+    :meth:`SEDModel._additive_term_band_response`, which rejects any emitter whose
+    spectral shape moves with its amplitude. Declaring ``emission_terms`` buys a
+    component an evaluation, not an exemption.
+
+    Deterministic ordering (sorted by component name) keeps the build reproducible.
 
     Parameters
     ----------

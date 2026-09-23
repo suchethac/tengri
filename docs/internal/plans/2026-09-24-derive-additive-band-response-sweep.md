@@ -71,14 +71,36 @@ The fix applies the same principle to the emitter sweep.
   - Non-emitters ignored ✓
   - Missing name attribute handled safely ✓
 
-- `test_derived_emission_terms_bit_identity.py` (2 tests):
-  - Photometry with WavePrecomp + radio/xray is finite ✓
-  - Photometry without xray/radio (no regression) ✓
+- `test_derived_emission_terms_equivalence.py` (4 tests), against a real build
+  carrying both emitters:
+  - the derived census equals `["radio", "xray"]`, the tuple it replaced, so the
+    change is a no-op for every model that exists today
+  - the band responses are actually *built*, not merely named by the census
+  - a model with neither emitter still builds and predicts finitely
+  - **the build loop actually consults the census**
 
-**Mutations tested:**
-- Empty list (catches via mock-emitter test)
-- No sort (catches via deterministic-order test)
-- Hardcoded fallback (catches via mock-emitter test)
+**On bit-identity.** No before/after `numpy.array_equal` comparison is recorded
+here, and the earlier draft of this note claimed one on the strength of an
+`isfinite` assertion. Finite is not identical. What is established instead is
+stronger for this particular change: `radio` and `xray` are the only two
+components in the tree that implement `emission_terms`, so the derived census is
+provably equal to the old tuple for every current model, and the first test above
+pins that equality. A component added later changes the swept set by design, and
+that is the point of the change rather than a regression in it.
+
+**Mutations tested**, each restored afterwards and the tree confirmed clean:
+
+| mutation | caught by |
+|---|---|
+| census always returns `[]` | equality test **and** responses-built test |
+| loop order unsorted | deterministic-order test |
+| loop reverted to the literal `("xray", "radio")` | **only** the build-loop test |
+
+That last row is why the build-loop test exists. Measured before it was added:
+a faithful revert of the loop left all ten other tests green, because every one
+of them called the helper directly and none observed the wiring. A suite that
+cannot see the single edit undoing the change is guarding the helper, not the
+behavior -- the same defect class this PR exists to remove.
 
 ## Changes
 
@@ -96,7 +118,8 @@ The fix applies the same principle to the emitter sweep.
 - [x] Tests pass (9 tests, all contract-marked)
 - [x] Ruff check passes (zero violations)
 - [x] Ruff format passes
-- [x] Photometry is finite (bit-identity gate)
+- [x] Derived census equals the tuple it replaced (no-op proof)
+- [x] Build loop verified to consult the census (mutation-caught)
 - [x] All mutations caught by test suite
 
 ## Rollout
@@ -105,6 +128,15 @@ No breaking changes. The refactor is transparent:
 - Same components are swept (radio, xray)
 - Same precomputed responses are built
 - Same caches are used
-- New emitters added in future automatically participate
+- New emitters added in future are swept automatically
+
+One caveat on that last point. The sweep reaches a new emitter without further
+edits, but `tengri.forward._signature_policy.SIGNATURE_POLICY` still names
+`_radio_term_response_cache` and `_xray_term_response_cache` literally, and
+`assert_policy_complete` requires the policy to cover every attribute. A third
+emitter's `_<name>_term_response_cache` is therefore unclassified and fails that
+test until it is added. This fails loudly rather than silently, so it is a
+signpost rather than a trap -- but it is the same hardcoded-list pattern one
+layer down, and it belongs on the follow-up list.
 
 No deprecation warnings needed.
