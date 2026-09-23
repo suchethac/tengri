@@ -80,6 +80,12 @@ REDSHIFT = 1.0
 #: same model cannot drift from the script that wrote the truth file.
 SSP_NAME = "fsps_mist_c3k_a_chabrier"
 
+#: The method name the section's listing prints. Spelled out rather than left
+#: inline because the listing carried ``"nuts"`` for a while, which
+#: ``resolve_method`` rejects -- a reader copying the block got a
+#: ``ParameterError`` on its last line, and nothing here executed that line.
+FIT_METHOD = "mcmc_nuts"
+
 #: X-ray through millimeter: seven decades in wavelength, 4 Angstrom to 3 mm.
 #:
 #: The two Chandra bands are not decoration. ``xray={"type": "yang20",
@@ -293,6 +299,33 @@ def build_joint_observation():
     )
 
 
+def verify_fit_invocation() -> None:
+    """Check the listing's last line without running a fit.
+
+    The model block above is re-implemented here, so building it proves the
+    listing's *middle*. Its last line is a different surface and went
+    unchecked: ``Fitter(forward).run(data, method="nuts", seed=0)`` binds
+    ``data`` to ``run``'s first positional, which is ``method``, so the
+    keyword collides; ``"nuts"`` is not a method name; and ``run`` takes
+    ``key``, not ``seed``. Binding the signature costs nothing and observes
+    all three.
+    """
+    import inspect
+
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.inference.fitter import resolve_method
+
+    assert resolve_method(FIT_METHOD) == FIT_METHOD, (
+        f"{FIT_METHOD!r} is not a canonical method name"
+    )
+
+    signature = inspect.signature(ForwardModel.fit)
+    signature.bind(None, "data", method=FIT_METHOD, key="key")
+
+    assert "key" in signature.parameters, "fit takes key=, not seed="
+    assert "seed" not in signature.parameters
+
+
 def main() -> int:
     ssp = tengri.load_ssp(SSP_NAME)
     obs = build_joint_observation()
@@ -330,6 +363,10 @@ def main() -> int:
     )
     assert data is not None
     print("Data carries the measurements; Observation carries the model")
+
+    verify_fit_invocation()
+    print(f"the documented fit call binds, with method={FIT_METHOD!r}")
+
     print("[ok] the corrected listing executes, both channels")
     return 0
 

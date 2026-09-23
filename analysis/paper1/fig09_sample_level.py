@@ -29,30 +29,42 @@ import argparse
 import json
 import subprocess
 import sys
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
+from collections import Counter
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _adoption import is_adopted, low_ess_note
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_ORDER
+from _grid_completeness import completeness_note, load_expected_galaxy_ids
 from config_metadata import CONFIGS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_RESULTS = REPO_ROOT / "analysis" / "paper1" / "results" / "fits"
+#: The locked sample this figure claims to show. Read, never restated.
+SELECTION_20 = REPO_ROOT / "analysis" / "paper1" / "results" / "selected_galaxies_20.json"
 
 
 FIGURE_WIDTH = 7.1
 FIGURE_HEIGHT = 3.6
 PERCENTILES = (16.0, 50.0, 84.0)
+
+#: Edge color for a cell the bar adopted on too few effective samples. It is
+#: drawn filled, because the bar did adopt it, but ringed, because its
+#: posterior is not one: without this it is indistinguishable from a
+#: converged cell and the eye reads the stamp's warning as applying to
+#: nothing in particular.
+LOW_ESS_EDGE = "#b22222"
 
 
 @dataclass(frozen=True)
@@ -62,6 +74,10 @@ class Cell:
     gal_id: int
     config: str
     adopted: bool
+    #: Set when the cell cleared the bar on too few effective samples. The bar
+    #: has no ESS criterion, so this is the only place such a cell announces
+    #: itself; left None for every honest cell.
+    low_ess: str | None
     log_mstar: tuple[float, float, float]  # (p16, p50, p84)
     log_sfr: tuple[float, float, float]
 
@@ -111,11 +127,18 @@ def load_cells(results_dir: Path) -> tuple[list[Cell], list[str]]:
             except ValueError as exc:
                 warnings.append(f"{stem}: {exc}, skipped")
                 continue
+        # The shared rule, not the raw flag. fig05 and fig06 already judge
+        # cells through _adoption.is_adopted; reading meta["adoption_pass"]
+        # here made this the one figure with its own copy of the criterion --
+        # and it is the sample-level figure, the one an adoption rate would be
+        # read off, so it is the worst place for the two to drift.
+        verdict = is_adopted(meta, config)
         cells.append(
             Cell(
                 gal_id=int(gal_str),
                 config=config,
-                adopted=bool(meta.get("adoption_pass", False)),
+                adopted=verdict.adopted,
+                low_ess=low_ess_note(meta, verdict),
                 log_mstar=log_mstar,
                 log_sfr=log_sfr,
             )
@@ -164,8 +187,19 @@ def _draw_plane(ax, cells: list[Cell], rep_gal: int) -> None:
         group = [c for c in cells if c.config == config]
         if not group:
             continue
-        adopted = [c for c in group if c.adopted]
+        adopted = [c for c in group if c.adopted and not c.low_ess]
+        low_ess = [c for c in group if c.adopted and c.low_ess]
         held = [c for c in group if not c.adopted]
+        if low_ess:
+            ax.scatter(
+                [c.log_mstar[1] for c in low_ess],
+                [c.log_sfr[1] for c in low_ess],
+                s=16,
+                color=CONFIG_COLORS[config],
+                edgecolors=LOW_ESS_EDGE,
+                linewidths=0.9,
+                zorder=4,
+            )
         if adopted:
             ax.scatter(
                 [c.log_mstar[1] for c in adopted],
@@ -202,19 +236,7 @@ def _draw_plane(ax, cells: list[Cell], rep_gal: int) -> None:
             alpha=0.9,
             zorder=4,
         )
-    # Held in axes coordinates rather than beside the point: at this density the
-    # marker the label describes is surrounded by others, and an offset label
-    # either covers them or leaves the panel.
-    ax.text(
-        0.03,
-        0.97,
-        f"intervals drawn: galaxy {rep_gal}",
-        transform=ax.transAxes,
-        fontsize=6.5,
-        color="0.25",
-        ha="left",
-        va="top",
-    )
+    print(f"fig09: credible intervals are drawn for galaxy {rep_gal}", file=sys.stderr)
 
     ax.set_xlabel(r"$\log_{10}(M_\star\,/\,M_\odot)$")
     ax.set_ylabel(r"$\log_{10}(\mathrm{SFR}_{100\,\mathrm{Myr}}\,/\,M_\odot\,\mathrm{yr}^{-1})$")
@@ -235,11 +257,32 @@ def _draw_offsets(ax, cells: list[Cell], attr: str, ylabel: str, show_xlabel: bo
             offsets[(cell.gal_id, cell.config)],
             s=11,
             color=CONFIG_COLORS[cell.config],
-            edgecolors="none" if cell.adopted else CONFIG_COLORS[cell.config],
+            edgecolors=(
+                LOW_ESS_EDGE
+                if cell.low_ess
+                else ("none" if cell.adopted else CONFIG_COLORS[cell.config])
+            ),
             facecolors=CONFIG_COLORS[cell.config] if cell.adopted else "none",
-            linewidths=0.0 if cell.adopted else 0.7,
-            zorder=3,
+            linewidths=0.9 if cell.low_ess else (0.0 if cell.adopted else 0.7),
+            zorder=4 if cell.low_ess else 3,
         )
+    # An offset is measured against that galaxy's OWN median, so a galaxy with
+    # one cell contributes exactly zero -- the value minus itself. Until a
+    # second configuration lands, every marker sits on the zero line by
+    # construction and the panel shows twenty galaxies in perfect agreement
+    # across configurations it does not have. The completeness stamp says the
+    # grid is partial; it does not say this panel cannot mean anything yet, and
+    # a reader looking at a flat row of points inside a tolerance band will not
+    # infer it.
+    per_galaxy = Counter(cell.gal_id for cell in cells)
+    if per_galaxy and max(per_galaxy.values()) < 2:
+        raise SystemExit(
+            "fig09 has at most one configuration per galaxy, so every "
+            "configuration-to-configuration offset is zero by construction and "
+            "the panel shows agreement it has not measured. A note on the "
+            "canvas asked the reader to notice that; refusing does not ship it."
+        )
+
     ax.set_ylabel(ylabel, fontsize=7.5)
     ax.tick_params(labelsize=7)
     ax.set_xlim(-0.8, len(order) - 0.2)
@@ -250,7 +293,7 @@ def _draw_offsets(ax, cells: list[Cell], attr: str, ylabel: str, show_xlabel: bo
     return sample_sigma
 
 
-def build_figure(cells: list[Cell], provenance: str | None) -> tuple[plt.Figure, dict]:
+def build_figure(cells: list[Cell]) -> tuple[plt.Figure, dict]:
     fig = plt.figure(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
     grid = GridSpec(2, 2, figure=fig, width_ratios=[1.0, 1.15], hspace=0.12, wspace=0.30)
     ax_plane = fig.add_subplot(grid[:, 0])
@@ -279,6 +322,20 @@ def build_figure(cells: list[Cell], provenance: str | None) -> tuple[plt.Figure,
             label="not adopted",
         )
     )
+    if any(cell.low_ess for cell in cells):
+        handles.append(
+            Line2D(
+                [],
+                [],
+                marker="o",
+                linestyle="none",
+                markersize=4,
+                markerfacecolor="0.6",
+                markeredgecolor=LOW_ESS_EDGE,
+                markeredgewidth=0.9,
+                label="too few ESS",
+            )
+        )
     ax_plane.legend(
         handles=handles,
         fontsize=6.5,
@@ -288,9 +345,6 @@ def build_figure(cells: list[Cell], provenance: str | None) -> tuple[plt.Figure,
         handletextpad=0.4,
         columnspacing=1.0,
     )
-
-    if provenance:
-        fig.text(0.0, -0.03, provenance, fontsize=5.0, color="0.45", ha="left", va="top")
 
     stats = {
         "n_cells": len(cells),
@@ -350,11 +404,6 @@ def main(argv: list[str] | None = None) -> int:
         default=REPO_ROOT / "analysis" / "paper1" / "figures" / "fig09_sample_level.pdf",
         help="Output PDF path.",
     )
-    parser.add_argument(
-        "--no-stamp",
-        action="store_true",
-        help="Omit the provenance stamp. Only for the canonical grid.",
-    )
     args = parser.parse_args(argv)
 
     results_dir = args.results_dir.resolve()
@@ -380,24 +429,41 @@ def main(argv: list[str] | None = None) -> int:
     if audit_text:
         print(audit_text, file=sys.stderr)
 
-    stamp_parts: list[str] = []
-    if not is_canonical:
-        stamp_parts.append(
-            f"PROVISIONAL - rendered from {results_dir.name} at {_git_describe()}; "
-            "not the production grid"
+    # Is the whole declared sample here? The directory check below answers
+    # only where the cells came from. A canonical directory holding five of
+    # a hundred and twenty cells passes it and is not the figure the caption
+    # describes, so completeness is asked separately and against the
+    # committed selection rather than against a literal count.
+    shortfall = None
+    try:
+        expected_ids = load_expected_galaxy_ids(SELECTION_20)
+        shortfall = completeness_note(
+            ((cell.gal_id, cell.config) for cell in cells), expected_ids, CONFIG_ORDER
         )
-        print("=" * 72)
-        print("NOT THE PRODUCTION GRID -- rendering from", results_dir.name)
-        print("=" * 72)
-    if mismatches:
-        stamp_parts.append(
-            "CONFIGURATION LABELS ARE NOT configs.py's: "
-            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches)
-        )
-    wrapped = [line for part in stamp_parts for line in textwrap.wrap(part, 112)]
-    provenance = None if args.no_stamp else ("\n".join(wrapped) or None)
+    except (OSError, ValueError, KeyError) as exc:
+        shortfall = f"COMPLETENESS UNVERIFIED - cannot read {SELECTION_20.name}: {exc}"
 
-    fig, stats = build_figure(cells, provenance)
+    # A cell adopted on too few effective samples is not a wrong point, it is
+    # an uninformative one, and it is about to be drawn indistinguishably from
+    # the rest and counted in the adoption rate. Name it on the figure.
+    frozen = [f"{c.gal_id}/{c.config}" for c in cells if c.low_ess]
+    if frozen:
+        print(f"low effective sample size, adopted anyway: {', '.join(frozen)}", file=sys.stderr)
+    if shortfall:
+        print(shortfall, file=sys.stderr)
+    if not is_canonical:
+        print(
+            f"NOT THE PRODUCTION GRID -- rendered from {results_dir.name} at {_git_describe()}",
+            file=sys.stderr,
+        )
+    if mismatches:
+        print(
+            "CONFIGURATION LABELS ARE NOT configs.py's: "
+            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches),
+            file=sys.stderr,
+        )
+
+    fig, stats = build_figure(cells)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, bbox_inches="tight")
     png_path = args.out.with_suffix(".png")

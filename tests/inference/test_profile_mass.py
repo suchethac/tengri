@@ -607,6 +607,11 @@ def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
 
     assert "mcmc_nuts_fast" in PROFILE_MASS_BACKENDS
     assert "vi" not in PROFILE_MASS_BACKENDS
+    # NSS scores live points with ``Fitter._get_or_build_loglikelihood_fn()``,
+    # the seam ``build_profiled_loglikelihood_fn`` was written for; it was
+    # missing from the list, so the resolver refused it before the profiled
+    # likelihood could be reached.
+    assert "nss" in PROFILE_MASS_BACKENDS
 
     class _Spec:
         free_params = ("a", "m_log_total_mass")
@@ -640,6 +645,9 @@ def test_profiling_steps_aside_for_backends_that_build_their_own_objective():
     g = _Fitter()
     with pytest.raises(ValueError, match="profile_mass=True"):
         resolve_profile_mass_for_method(g, "vi", True)
+    h = _Fitter()
+    resolve_profile_mass_for_method(h, "nss", True)
+    assert h._profile_mass is True
 
 
 @pytest.mark.contract
@@ -774,6 +782,49 @@ def test_reinsertion_scratch_is_bounded_by_chunk_size(ssp_data_fsps, monkeypatch
         f"chunked scratch grew {chunked:.2f}x over 64->256 draws (unchunked grew "
         f"{unchunked:.2f}x); peak must be set by chunk width, not draw count"
     )
+
+
+def test_reinsertion_lock_is_opt_in_and_exclusive(tmp_path, monkeypatch):
+    """Unset, the lock is a no-op; set, it is an exclusive flock on that file."""
+    import fcntl
+
+    from tengri.inference import mass_profile
+
+    monkeypatch.delenv(mass_profile.REINSERT_LOCK_ENV, raising=False)
+    with mass_profile._reinsertion_lock():
+        pass  # nothing to acquire, nothing raised
+
+    lock = tmp_path / "reinsert.lock"
+    monkeypatch.setenv(mass_profile.REINSERT_LOCK_ENV, str(lock))
+    with mass_profile._reinsertion_lock():
+        assert lock.exists()
+        with open(lock, "a") as other, pytest.raises(BlockingIOError):
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with open(lock, "a") as other:  # released on exit
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(other, fcntl.LOCK_UN)
+
+
+def test_reinsertion_chunk_size_never_exceeds_ceiling(ssp_data_fsps):
+    """The derived chunk size is capped at ``_REINSERT_CHUNK_MAX`` draws.
+
+    XLA's ``temp_size_in_bytes`` under-reports the realized peak of the
+    per-chunk program by an order of magnitude on the paper-1 CANDELS models
+    (756 derived draws per chunk allocated past 18 GB; 64 peaked 1 GB above
+    baseline), so the analysis alone cannot be trusted to bound memory. The
+    ceiling is the bound; this pins that the derivation honors it.
+    """
+    from tengri.inference import mass_profile
+
+    model = _minimal_model(ssp_data_fsps)
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    _, flux, noise = _mock(model, seed=42)
+    fitter = Fitter(
+        ForwardModel.build(sed=model, observation=obs), flux, noise, profile_mass="auto"
+    )
+    assert fitter._profile_mass is True
+    chunk = mass_profile._compute_reinsertion_chunk_size(fitter)
+    assert 1 <= chunk <= mass_profile._REINSERT_CHUNK_MAX
 
 
 def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, monkeypatch):

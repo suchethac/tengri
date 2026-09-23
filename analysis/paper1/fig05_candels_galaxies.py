@@ -19,7 +19,6 @@ import logging
 import os
 import subprocess
 import sys
-import textwrap
 import time
 from pathlib import Path
 
@@ -39,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _adoption import is_adopted
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_LABELS, CONFIG_ORDER
+from _grid_completeness import completeness_note, present_on_disk
 from config_metadata import CONFIGS
 
 jax.config.update("jax_enable_x64", True)
@@ -55,15 +55,26 @@ CONFIG_KEYS = list(CONFIG_ORDER)
 
 
 def load_galaxy_metadata() -> dict:
-    """Load galaxy metadata from selected_galaxies.json."""
-    galaxy_file = Path(__file__).resolve().parents[2] / "results" / "selected_galaxies.json"
+    """Galaxy redshifts and type labels, from the committed selection.
+
+    ``parents[2]`` reached the repository root, where there is no ``results/``
+    -- the selection lives beside this script, under ``analysis/paper1``. The
+    path therefore never existed, the hardcoded fallback beneath it won every
+    single run, and the committed selection was decorative: the redshifts
+    printed in the panel titles came from a literal in this file, and a change
+    to the locked sample could not reach the figure. The two agreed on every
+    redshift when this was found, so nothing wrong was published; that is luck
+    rather than a mechanism, which is why the fallback is gone rather than
+    corrected. A missing selection is now a refusal.
+    """
+    galaxy_file = Path(__file__).resolve().parent / "results" / "selected_galaxies.json"
     if not galaxy_file.exists():
-        # Fallback to hardcoded metadata if file doesn't exist
-        return {
-            13097: {"z": 1.097, "class": "blue star-forming"},
-            15336: {"z": 1.036, "class": "red quiescent"},
-            16049: {"z": 1.047, "class": "intermediate dusty"},
-        }
+        raise SystemExit(
+            f"fig05 cannot read the galaxy selection at {galaxy_file}. It supplies "
+            "the redshift and type label printed on every panel, and substituting "
+            "remembered values for them is how a figure comes to disagree with the "
+            "sample it claims to draw."
+        )
     with open(galaxy_file) as f:
         data = json.load(f)
     metadata = {}
@@ -556,14 +567,10 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
         # Panel (a): photometry
         ax = axes[i_row, 0]
         plot_photometry_panel(ax, results_manager, gal_id, z)
-        if i_row == 0:
-            ax.set_title("(a) Photometry", fontsize=11, fontweight="bold")
 
         # Panel (b): SFH
         ax = axes[i_row, 1]
         plot_sfh_panel(ax, results_manager, gal_id, z)
-        if i_row == 0:
-            ax.set_title("(b) SFH", fontsize=11, fontweight="bold")
 
         # Panel (c): M* vs SFR (compute per-row axis limits)
         completed_configs = results_manager.get_completed_configs_for_galaxy(gal_id)
@@ -602,8 +609,6 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
             xlim_override=xlim_c,
             ylim_override=ylim_c,
         )
-        if i_row == 0:
-            ax.set_title("(c) M$_\\ast$ vs SFR", fontsize=11, fontweight="bold")
 
         # Collect diagnostics for completed cells
         for config_key in CONFIG_KEYS:
@@ -755,23 +760,34 @@ def main():
     if audit_text:
         print(audit_text, file=sys.stderr)
 
+    # Every panel of this figure is tengri output, so a directory holding no
+    # cells for these galaxies draws axes and nothing in them -- and exits 0.
+    # fig06 shipped exactly that figure before it was given this refusal.
+    present = present_on_disk(args.results_dir, GALAXY_IDS, CONFIG_ORDER)
+    if not present:
+        raise SystemExit(
+            f"fig05 found no finished cells for {GALAXY_IDS} in {args.results_dir}. "
+            "Every panel here is a tengri posterior, so there is nothing to draw. "
+            "Point --results-dir at a directory holding cells for these galaxies."
+        )
+
     results_manager = FitResultManager(args.results_dir)
     fig, data_dict = build_figure(results_manager, repo_root)
 
+    # Two separate questions, and only the second used to be asked. "Are these
+    # the configurations configs.py declares" says nothing about whether all
+    # eighteen cells are here, and a directory holding a handful of them draws
+    # a figure that looks like the full three-by-six panel set.
+    shortfall = completeness_note(present, GALAXY_IDS, CONFIG_ORDER)
+    if shortfall:
+        print(shortfall, file=sys.stderr)
+        data_dict["completeness"] = shortfall
     if mismatches:
-        stamp = "CONFIGURATION LABELS ARE NOT configs.py's: " + "; ".join(
-            f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches
+        print(
+            "CONFIGURATION LABELS ARE NOT configs.py's: "
+            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches),
+            file=sys.stderr,
         )
-        for offset, line in enumerate(textwrap.wrap(stamp, 108)):
-            fig.text(
-                0.0,
-                -0.012 - 0.012 * offset,
-                line,
-                fontsize=5.0,
-                color="0.45",
-                ha="left",
-                va="top",
-            )
         data_dict["configuration_mismatches"] = [m.describe() for m in mismatches]
 
     data_dict.update(

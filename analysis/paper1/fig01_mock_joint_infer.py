@@ -24,9 +24,12 @@ Two frame facts this figure depends on, both measured rather than assumed
    all 1500 pixels.
 
 Without a posterior on disk the figure is still produced, from truth alone, but
-under a DIFFERENT filename and with a banner. An incomplete paper figure that
-carries the final name is one ``\\includegraphics`` away from being published as
-the real thing.
+under a DIFFERENT filename; a posterior that misses the convergence bar gets a
+third name. The filename is the whole mechanism -- there is no banner drawn on
+the canvas, because a developmental note does not belong on a published figure
+and a stamp only asks the reader to notice. An incomplete paper figure that
+carries the final name is one ``\\includegraphics`` away from being published
+as the real thing, and the manuscript reads nothing but the name.
 """
 
 from __future__ import annotations
@@ -48,6 +51,7 @@ from matplotlib.gridspec import GridSpec
 
 import tengri
 
+from ._posterior_gate import figure_name, posterior_gate
 from ._posterior_utils import posterior_output_paths
 from .fig_mock_joint_infer import TRUTH_NPZ
 from .verify_mock_listing import (
@@ -134,6 +138,27 @@ def load_posterior(path: Path):
         return {k: np.asarray(handle[k]) for k in handle.files}
 
 
+def spectrum_chi(spec_obs, spec_sig, spec_model):
+    """Per-pixel residual of the spectrum channel, in units of its noise.
+
+    Refuses on a shape mismatch rather than letting numpy broadcast. The
+    predicted spectrum comes off the model's spectroscopy grid and the observed
+    one off the mock file; if those ever stop being the same grid, a broadcast
+    would still produce an array, and a residual panel drawn from it would look
+    entirely normal while comparing pixels to the wrong wavelengths.
+    """
+    spec_obs = np.asarray(spec_obs)
+    spec_sig = np.asarray(spec_sig)
+    spec_model = np.asarray(spec_model)
+    if not (spec_obs.shape == spec_sig.shape == spec_model.shape):
+        raise SystemExit(
+            f"the spectrum channel does not line up: observed {spec_obs.shape}, "
+            f"noise {spec_sig.shape}, predicted {spec_model.shape}. These are "
+            "not the same grid and their residual would be meaningless."
+        )
+    return (spec_obs - spec_model) / spec_sig
+
+
 def plot_sed(ax, ax_res, model, truth, params, obs):
     """Decomposed SED, the photometry it is fit to, and the spectrum."""
     wave_obs, comps, total = observed_components(model, params, truth)
@@ -173,7 +198,8 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
     # X-ray points read as a bad fit: a broadband point is an integral over the
     # bandpass, not the SED's value at the pivot, and where the SED is steep
     # across a band the two differ a lot -- on this mock by up to a factor of 36.
-    # The residual panel below says those same bands sit within 1 sigma.
+    # The residual panel below carries both channels: these bands, and the
+    # spectrum pixels that are 99% of the data.
     model_phot_plot = np.asarray(model.predict_photometry(params))
     ax.plot(
         piv,
@@ -234,15 +260,23 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
         columnspacing=1.1,
         handlelength=1.8,
     )
-    ax.set_title(
-        f"Mock Type 1 AGN + star-forming host at $z={REDSHIFT:g}$, "
-        f"{int(det.sum())}/{det.size} bands detected",
-        fontsize=9,
-    )
 
     model_phot = np.asarray(model.predict_photometry(params))
     resid = (flux - model_phot) / sig
     ax_res.axhline(0.0, color="k", lw=0.8)
+
+    # The spectrum is ~1500 of the ~1516 data points in this joint fit, so a
+    # residual panel carrying only the 16 bands shows about 1% of the data and
+    # a badly fit spectrum leaves no mark on it. Drawn first and thin, so the
+    # band markers still read on top.
+    chi_spec = spectrum_chi(spec_o, truth["spec_sig"], model.predict(params).spectrum())
+    ax_res.plot(spec_w, chi_spec, "-", color="#e377c2", lw=0.5, alpha=0.7, zorder=1)
+    off_axis = int(np.sum(np.abs(chi_spec) > 4.2))
+    print(
+        f"spectrum residuals: {len(chi_spec)} pixels, "
+        f"rms {float(np.sqrt(np.mean(chi_spec**2))):.3f}, "
+        f"{off_axis} beyond the +-4.2 the panel shows"
+    )
     for band in (1, 2):
         ax_res.axhspan(-band, band, color="0.85" if band == 2 else "0.7", zorder=0, lw=0)
     ax_res.plot(piv[det], resid[det], "o", ms=4, color="k", mfc="white", mew=1.1)
@@ -252,26 +286,60 @@ def plot_sed(ax, ax_res, model, truth, params, obs):
     ax_res.set_xlim(1.0, 1e8)
     ax_res.set_ylim(-4.2, 4.2)
     ax_res.set_xlabel(r"Observed wavelength  [$\mathrm{\AA}$]")
-    ax_res.set_ylabel(r"$\chi$")
+    ax_res.set_ylabel(r"$\chi$  (data $-$ truth)")
 
 
-def plot_sfh(ax, model, params):
-    """Star formation history on the model's own SFH grid."""
+#: SFH draws behind the recovery band. Each costs a full ``predict_state``,
+#: so this is a wall-clock choice; 60 is ample for a 16-84 interval.
+SFH_BAND_DRAWS = 60
+
+
+def _sfr_history(model, params):
+    """One SFH curve, as lookback time in Gyr and SFR in Msun/yr."""
     derived = model.predict_state(params).derived
-    lbt_gyr = np.asarray(derived["sfh_grid_lbt_yr"]) / 1e9
-    sfr = np.asarray(derived["sfr_history"])
+    return np.asarray(derived["sfh_grid_lbt_yr"]) / 1e9, np.asarray(derived["sfr_history"])
+
+
+def plot_sfh(ax, model, params, posterior=None, free_names=None, n_draws=SFH_BAND_DRAWS):
+    """Star formation history on the model's own SFH grid, truth and recovery.
+
+    The panel used to draw the truth alone, in a figure whose caption promises
+    the recovery. The star formation history is where seven of the thirty-six
+    free parameters live -- a total mass and six continuity ratios -- so
+    omitting its posterior left the most structured part of the model
+    unillustrated, and left a reader to read a curve labeled "Truth" in a
+    recovery figure as though it were the fit.
+    """
+    lbt_gyr, sfr = _sfr_history(model, params)
+
+    if posterior is not None and free_names:
+        index = np.linspace(0, len(posterior[free_names[0]]) - 1, n_draws).round().astype(int)
+        curves = []
+        for i in index:
+            draw = {name: float(posterior[name][i]) for name in free_names}
+            _, drawn = _sfr_history(model, draw)
+            curves.append(drawn)
+        band = np.asarray(curves)
+        lo, mid, hi = np.percentile(band, [16, 50, 84], axis=0)
+        ax.fill_between(
+            lbt_gyr, lo, hi, color="#d62728", alpha=0.25, lw=0, label="Posterior 16-84"
+        )
+        ax.plot(lbt_gyr, mid, "-", color="#d62728", lw=1.2, label="Posterior median")
+
     ax.plot(lbt_gyr, sfr, "-", color="#1f77b4", lw=1.6, label="Truth")
     ax.set_xscale("log")
     ax.set_xlabel("Lookback time  [Gyr]")
     ax.set_ylabel(r"SFR  [$M_\odot$ yr$^{-1}$]")
-    ax.set_title("Star formation history", fontsize=9)
     ax.legend(fontsize=7, frameon=False)
 
 
 def plot_marginals(ax, posterior, truth_values, free_names):
     """Posterior marginals for the parameters the section makes claims about."""
     wanted = [
-        ("sfh_cont_log_total_mass", r"$\log M_\star$"),
+        # The SFH's time-integral, not the surviving mass a reader takes
+        # $\log M_\star$ to mean. They differ by 0.1948 dex on this mock's
+        # truth, which is larger than the offsets this panel plots.
+        ("sfh_cont_log_total_mass", r"$\log M_{\rm formed}$"),
         ("agn_log_lbol", r"$\log L_{\rm bol}$"),
         ("xray_log_nh", r"$\log N_{\rm H}$"),
         ("dust_tau_diff", r"$\tau_{\rm diff}$"),
@@ -280,17 +348,11 @@ def plot_marginals(ax, posterior, truth_values, free_names):
     ]
     present = [(k, lab) for k, lab in wanted if k in posterior]
     if not present:
-        ax.text(
-            0.5,
-            0.5,
-            "no overlapping parameters in the posterior",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-            fontsize=8,
+        raise SystemExit(
+            "none of the parameters this panel reports are in the posterior, so "
+            "there is no recovery to draw. Writing a sentence on the canvas "
+            "instead would ship the figure with an empty panel."
         )
-        ax.set_axis_off()
-        return
     offsets = []
     labels = []
     for key, label in present:
@@ -308,13 +370,19 @@ def plot_marginals(ax, posterior, truth_values, free_names):
     ax.set_yticklabels(labels, fontsize=8)
     ax.set_xlabel(r"(median $-$ truth) / posterior $\sigma$")
     ax.set_xlim(-3.2, 3.2)
-    ax.set_title("Recovery, in units of the posterior width", fontsize=9)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--posterior", type=Path, default=POSTERIOR_NPZ)
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=None,
+        help="Directory to write the figure into; defaults to this script's figures/",
+    )
     args = parser.parse_args()
+    fig_dir = args.out_dir or FIG_DIR
 
     if not TRUTH_NPZ.exists():
         print(f"no mock at {TRUTH_NPZ}; run `python -m paper1.fig_mock_joint_infer` first")
@@ -333,6 +401,11 @@ def main() -> int:
     posterior = load_posterior(args.posterior)
     have_post = posterior is not None
     print(f"posterior: {'loaded from ' + str(args.posterior) if have_post else 'NOT FOUND'}")
+
+    gate_passed, gate_reasons = False, ["no posterior on disk"]
+    if have_post:
+        gate_passed, gate_reasons, _ = posterior_gate(args.posterior)
+        print("gate: PASSED" if gate_passed else "gate: FAILED -- " + "; ".join(gate_reasons))
 
     if not have_post:
         # Distinguish "not fitted yet" from "fitted, and this script is looking
@@ -357,38 +430,22 @@ def main() -> int:
     ax_mar = fig.add_subplot(gs[2, 1])
 
     plot_sed(ax_sed, ax_res, model, truth, params, obs)
-    plot_sfh(ax_sfh, model, params)
+    plot_sfh(ax_sfh, model, params, posterior if have_post else None, free_names)
     if have_post:
         plot_marginals(ax_mar, posterior, truth_values, free_names)
     else:
-        ax_mar.text(
-            0.5,
-            0.5,
-            "awaiting NUTS posterior",
-            ha="center",
-            va="center",
-            transform=ax_mar.transAxes,
-            fontsize=9,
-            color="0.4",
-        )
+        # Truth-only render: the filename already says so, and a sentence on
+        # the canvas would be a developmental note on a published page.
+        print("no posterior: the recovery panel is left empty", file=sys.stderr)
         ax_mar.set_axis_off()
-        fig.text(
-            0.5,
-            0.985,
-            "INCOMPLETE: truth only, no posterior",
-            ha="center",
-            fontsize=10,
-            color="#b22222",
-            weight="bold",
-        )
 
-    FIG_DIR.mkdir(parents=True, exist_ok=True)
-    name = "fig01_mock_joint_infer.pdf" if have_post else "fig01_mock_joint_infer_truthonly.pdf"
-    out = FIG_DIR / name
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    name = figure_name(have_post, gate_passed)
+    out = fig_dir / name
     fig.savefig(out, bbox_inches="tight")
     print(f"wrote {out}")
-    if not have_post:
-        print("NOTE: written under the _truthonly name. Do not wire this into the paper.")
+    if not gate_passed:
+        print(f"NOTE: written as {name}. Do not wire this into the paper.")
     return 0
 
 

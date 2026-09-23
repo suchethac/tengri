@@ -1,0 +1,263 @@
+{
+  "n_divergent": 79,
+  "parameters": [
+    {
+      "median_all": 0.4911233619282195,
+      "median_divergent": 0.27847395189190804,
+      "offset_sd": -0.6930950570412069,
+      "parameter": "neb_dig_frac",
+      "sd": 0.3068113210099963
+    },
+    {
+      "median_all": 0.06453221746613222,
+      "median_divergent": 0.1585406471226898,
+      "offset_sd": 0.4433022150002297,
+      "parameter": "sfh_cont_ratio_3",
+      "sd": 0.2120639745878754
+    },
+    {
+      "median_all": 10.499345652295812,
+      "median_divergent": 10.513956788160197,
+      "offset_sd": 0.4422027548880626,
+      "parameter": "sfh_cont_log_total_mass",
+      "sd": 0.03304171152910074
+    },
+    {
+      "median_all": 3.672694010879825,
+      "median_divergent": 3.4546842578350567,
+      "offset_sd": -0.4338547015592747,
+      "parameter": "dust_qpah",
+      "sd": 0.502494849684101
+    },
+    {
+      "median_all": 9.951442162840593,
+      "median_divergent": 10.025878287194756,
+      "offset_sd": 0.34186297185559006,
+      "parameter": "agn_log_lbol",
+      "sd": 0.21773672635598063
+    },
+    {
+      "median_all": 0.18719720721964944,
+      "median_divergent": 0.13029953112303833,
+      "offset_sd": -0.3037205036008826,
+      "parameter": "agn_torus_frac",
+      "sd": 0.18733564386347795
+    },
+    {
+      "median_all": 1.3131281931113299,
+      "median_divergent": 0.9990576852828581,
+      "offset_sd": -0.27979343470986934,
+      "parameter": "xray_det_hmxb",
+      "sd": 1.1225084968635735
+    },
+    {
+      "median_all": 12.191721739971568,
+      "median_divergent": 10.70910363714025,
+      "offset_sd": -0.27950961444231265,
+      "parameter": "dust_umin",
+      "sd": 5.304354577532114
+    },
+    {
+      "median_all": 0.7435863021819594,
+      "median_divergent": 0.6861537172208589,
+      "offset_sd": -0.27939899587931893,
+      "parameter": "agn_nlr_line_efficiency",
+      "sd": 0.20555759257598546
+    },
+    {
+      "median_all": 0.05208851150106461,
+      "median_divergent": -0.015043862122663045,
+      "offset_sd": -0.25877401619844714,
+      "parameter": "sfh_cont_ratio_4",
+      "sd": 0.25942470812929513
+    },
+    {
+      "median_all": 0.3674804826999243,
+      "median_divergent": 0.30425387040886465,
+      "offset_sd": -0.23629957384411232,
+      "parameter": "agn_blr_line_efficiency",
+      "sd": 0.2675697262694619
+    },
+    {
+      "median_all": 0.8045918960316356,
+      "median_divergent": 0.8572822158692521,
+      "offset_sd": 0.23539183744942158,
+      "parameter": "dust_tau_bc",
+      "sd": 0.22384089613531327
+    },
+    {
+      "median_all": 1475.5273168845956,
+      "median_divergent": 1456.346995289609,
+      "offset_sd": -0.22951848028432476,
+      "parameter": "neb_eline_sigma_kms",
+      "sd": 83.56765682321682
+    },
+    {
+      "median_all": 0.3561917940219446,
+      "median_divergent": 0.29677324840066854,
+      "offset_sd": -0.21566954542818825,
+      "parameter": "agn_blr_cf",
+      "sd": 0.27550735317453867
+    },
+    {
+      "median_all": 0.06931719783973347,
+      "median_divergent": 0.06022625635230794,
+      "offset_sd": -0.2138604100079942,
+      "parameter": "agn_grahsp_ebv",
+      "sd": 0.042508763015490864
+    },
+    {
+      "median_all": 0.4332790481455968,
+      "median_divergent": 0.48923803396583343,
+      "offset_sd": 0.20760447426480585,
+      "parameter": "agn_ebv_disc",
+      "sd": 0.26954614546919264
+    },
+    {
+      "median_all": 0.605854753404421,
+      "median_divergent": 0.6541328241045047,
+      "offset_sd": 0.17879375073164794,
+      "parameter": "dust_gamma_dl",
+      "sd": 0.2700210186459169
+    },
+    {
+      "median_all": -0.08807039097476017,
+      "median_divergent": -0.05193305311067795,
+      "offset_sd": 0.15500836097482704,
+      "parameter": "sfh_cont_ratio_1",
+      "sd": 0.23313153972353035
+    },
+    {
+      "median_all": -0.17515334884340905,
+      "median_divergent": -0.19506807628928016,
+      "offset_sd": -0.1463389640707902,
+      "parameter": "xray_delta_alpha_ox",
+      "sd": 0.13608629507748554
+    },
+    {
+      "median_all": 1.9747650771675063,
+      "median_divergent": 2.0121438566399115,
+      "offset_sd": 0.1361042272527142,
+      "parameter": "xray_gamma_agn",
+      "sd": 0.27463349395461034
+    },
+    {
+      "median_all": 38.8165499627398,
+      "median_divergent": 40.68465464068144,
+      "offset_sd": 0.13366495371449458,
+      "parameter": "agn_oa_skirtor",
+      "sd": 13.976024575086964
+    },
+    {
+      "median_all": 21.22780166323099,
+      "median_divergent": 21.067610871188375,
+      "offset_sd": -0.1326385540520657,
+      "parameter": "xray_log_nh",
+      "sd": 1.2077242034750728
+    },
+    {
+      "median_all": 0.03310436426429378,
+      "median_divergent": 0.004514992813323353,
+      "offset_sd": -0.12966396544554443,
+      "parameter": "sfh_cont_ratio_2",
+      "sd": 0.22048817767321202
+    },
+    {
+      "median_all": -1.5137575821247788,
+      "median_divergent": -1.63522769797894,
+      "offset_sd": -0.12647820357293937,
+      "parameter": "neb_dig_delta_logU",
+      "sd": 0.960403551147134
+    },
+    {
+      "median_all": 0.09434510986078065,
+      "median_divergent": 0.08417796712790727,
+      "offset_sd": -0.12415693805640676,
+      "parameter": "neb_fdust",
+      "sd": 0.08188944485933004
+    },
+    {
+      "median_all": 0.0974358828644258,
+      "median_divergent": 0.08888412933108811,
+      "offset_sd": -0.10262507940289554,
+      "parameter": "neb_fesc",
+      "sd": 0.08333005521744233
+    },
+    {
+      "median_all": 0.0417849830619575,
+      "median_divergent": -0.039466039001656995,
+      "offset_sd": -0.09533145697941761,
+      "parameter": "sfh_cont_ratio_5",
+      "sd": 0.8523002232217731
+    },
+    {
+      "median_all": 1.6908349551507333,
+      "median_divergent": 1.7141087861871172,
+      "offset_sd": 0.09312254166271032,
+      "parameter": "agn_fe2_strength",
+      "sd": 0.24992693091090212
+    },
+    {
+      "median_all": 0.7864454030089121,
+      "median_divergent": 0.7736130317178703,
+      "offset_sd": -0.07584586074194763,
+      "parameter": "dust_eta_balance",
+      "sd": 0.1691901333245023
+    },
+    {
+      "median_all": -0.1642563515650617,
+      "median_divergent": -0.17214405183159645,
+      "offset_sd": -0.07467260565878597,
+      "parameter": "met_logzsol",
+      "sd": 0.10563044100238517
+    },
+    {
+      "median_all": 0.7430819451152986,
+      "median_divergent": 0.7312360305103165,
+      "offset_sd": -0.05899998821235302,
+      "parameter": "agn_nlr_cf",
+      "sd": 0.20077825375737718
+    },
+    {
+      "median_all": -0.019015828451282454,
+      "median_divergent": -0.008234481093680223,
+      "offset_sd": 0.05660617832032629,
+      "parameter": "sfh_cont_ratio_0",
+      "sd": 0.19046237844554922
+    },
+    {
+      "median_all": 1.8623524890901244,
+      "median_divergent": 1.8602598406911164,
+      "offset_sd": -0.023786220469979937,
+      "parameter": "dust_alpha_dl14",
+      "sd": 0.08797733972276549
+    },
+    {
+      "median_all": -0.2821985222609936,
+      "median_divergent": -0.2857117768870446,
+      "offset_sd": -0.015535792608093303,
+      "parameter": "neb_logZ_gas",
+      "sd": 0.22613938758558993
+    },
+    {
+      "median_all": -3.275230132772642,
+      "median_divergent": -3.2885139634964426,
+      "offset_sd": -0.012630959102267796,
+      "parameter": "neb_logU",
+      "sd": 1.0516882064336492
+    },
+    {
+      "median_all": 0.35850537404271954,
+      "median_divergent": 0.3586827866669004,
+      "offset_sd": 0.003799379199083132,
+      "parameter": "dust_tau_diff",
+      "sd": 0.04669516120519765
+    }
+  ],
+  "verdict": {
+    "note": "no parameter is singled out -- the largest offset is neb_dig_frac at -0.69 sd, short of 2.0. The problem is in the directions between coordinates, which a diagonal mass matrix cannot represent, or the step is simply too long. Looking for a guilty parameter will not find one.",
+    "offset_sd": -0.6930950570412069,
+    "parameter": "neb_dig_frac",
+    "shape": "diffuse"
+  }
+}

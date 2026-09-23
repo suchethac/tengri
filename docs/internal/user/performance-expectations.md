@@ -99,11 +99,31 @@ SED per photometric call because they do not support the band-projection fast br
 drowns any savings from caching. If your model is dominated by K&D or SKIRTOR AGN
 and inference is slow, consider:
 
-1. Using composable disc + torus (`agn_type='composable'`, `agn.torus='composable'`)
-   instead: **2.0–2.2× speedup**.
-2. Using QSOgen (`agn_type='qsogen'`): **1.8–2.0× speedup**.
-3. Running with `approx=None` (exact path) instead of `approx=WavePrecomp()`:
-   the precompute cost already dominates.
+1. Selecting a lighter torus. The composable AGN takes one block per stage, so the
+   torus is named inside it — `agn={'type': 'composable', 'torus': {'type': ...}}`.
+   There is **no `'composable'` torus**: that is the AGN's own `type`, and passing it
+   as the torus raises `ValueError: Unknown agn_torus_block type 'composable'`. The
+   registered torus blocks are enumerated by the registry, not here, because a list
+   frozen into prose drifts; `skirtor`, `nenkova`, `fritz` and `cat3d_wind` are the
+   template-heavy ones this section is about. The **2.0–2.2×** was measured without
+   recording which torus it used, so it cannot be attributed to a particular one.
+2. Using QSOgen (`agn={'type': 'qsogen'}`): **1.8–2.0× speedup**.
+3. Trying `approx=None` (exact path) instead of `approx=WavePrecomp()`. The LUT
+   cannot help a model whose cost is AGN dense integration, but do not expect
+   switching it off to buy anything either: measured on the paper's z=1 joint
+   spectro-photometric mock (QSOgen disc + SKIRTOR torus, Cue nebular, D=36), the
+   gradient was 101.0 ms under `WavePrecomp` against 110.2 ms exact — a difference
+   inside a 31–78% run-to-run spread, so the two are indistinguishable on that model
+   rather than one being faster.
+
+**What actually costs, on that model.** Removing the AGN block entirely took the
+gradient from 135.5 ms to 41.2 ms and the forward pass from 101.0 ms to 29.0 ms, a
+factor of 3.3–3.5 — far outside the spread above. The AGN was also 10 of the 36 free
+parameters, so it is expensive twice over: once per gradient, and again by enlarging
+the space the sampler traverses. Neither cost is one precomputation can reach.
+Floor of 21 repeats, each arm in its own process (`analysis/paper1` in the paper
+repository); process isolation matters, because one arm's trace can poison the next
+through a shared template loader.
 
 ## MAP Optimization
 

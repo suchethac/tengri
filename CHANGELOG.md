@@ -340,6 +340,21 @@
 
 ### Added
 
+- `WavePrecomp(igm_fold="auto")`, a third IGM fold that takes the exact
+  bandpass integral wherever it can be built and the node fold everywhere
+  else. The existing `"exact"` fold carries transmission inside the bandpass
+  integral instead of forming <S><T> at the quadrature node, which matters
+  where a Lyman break falls inside a band (measured ~10% on GALEX FUV at
+  z = 1.5, ~83% at z = 3); but it raises for a free redshift and for a
+  transmission carrying free parameters (patchy reionization, DLAs), so it
+  could never be proposed as the default while naming it was the only way to
+  ask for it. `"auto"` asks for it and falls back without raising. The default
+  is unchanged at `"node"`, and an explicit `"exact"` still raises where it
+  cannot be served: a mode named by the caller is never silently downgraded.
+  The refusal and the fall-back read one predicate, so the two lists cannot
+  drift; `tests/contract/test_igm_exact_fold.py` pins that, and that `"auto"`
+  also falls back where the exact fold would do nothing at all (no templates,
+  no filters) while the node fold still applies one.
 - Per-screen dust law shape keys accept `Fixed`/priors and become declared
   `dust_<shape>_<screen>` parameters; a plain number keeps the build-time
   path; the flat `dust_law_overrides` dict refuses a prior with the named

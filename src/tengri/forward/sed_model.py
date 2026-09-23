@@ -326,6 +326,15 @@ class WavePrecomp:
             T_IGM(λ, z) is tabulated. Fails loudly if free parameters
             (patchy reionization, DLAs) make transmission non-tabulated.
 
+        ``"auto"``
+            ``"exact"`` wherever it can be built, ``"node"`` everywhere else.
+            The exact fold refuses a free redshift and a transmission carrying
+            free parameters, so ``"exact"`` cannot simply be asked for on a
+            model whose redshift is being fit. ``"auto"`` asks for it and takes
+            the node fold where it is unavailable, without raising. An explicit
+            ``"exact"`` still raises in those cases: a mode named by the caller
+            is never silently downgraded.
+
     Examples
     --------
     >>> SEDModel(..., approx=WavePrecomp())  # default ztable sampling
@@ -475,7 +484,7 @@ class WavePrecomp:
         "taylor",
         "effective_wavelength",
     )
-    _VALID_IGM_FOLD: ClassVar[tuple[str, ...]] = ("node", "exact")
+    _VALID_IGM_FOLD: ClassVar[tuple[str, ...]] = ("node", "exact", "auto")
 
     def __post_init__(self):
         """Resolve the band-integration scheme once, in one place.
@@ -592,7 +601,8 @@ class WavePrecomp:
                 f"igm_fold={self.igm_fold!r} is not a legal value. "
                 f"Choose one of {', '.join(map(repr, self._VALID_IGM_FOLD))}. "
                 "'node' (the default) evaluates transmission at sub-band nodes; "
-                "'exact' integrates transmission inside the bandpass integral."
+                "'exact' integrates transmission inside the bandpass integral; "
+                "'auto' takes 'exact' where it can be built and 'node' elsewhere."
             )
 
     def cache_key(self) -> tuple:
@@ -1815,22 +1825,9 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
     if stellar_state is None or ssp_data is None or not filters:
         return stellar_state
 
-    cfg = getattr(igm_comp, "config", None)
-    if getattr(cfg, "igm_patchy", False) or getattr(cfg, "use_dla", False):
-        raise ValueError(
-            "igm_fold='exact' needs a transmission that is a fixed function of "
-            "(wavelength, redshift), so it can be folded in at build time. "
-            "Patchy reionization and discrete DLAs read free parameters and "
-            "change every call. Use igm_fold='node' (the default) for those."
-        )
-
-    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
-    if ztable is not None and ztable.ssp_subband_phot_table is not None:
-        raise NotImplementedError(
-            "igm_fold='exact' is implemented for a fixed redshift only. A free "
-            "redshift would need the sub-band tensor rebuilt at every node of "
-            "the z table. Use igm_fold='node' or fix the redshift."
-        )
+    blocker = _exact_fold_blocker(igm_comp, stellar_state)
+    if blocker is not None:
+        raise blocker
 
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is None or lut.ssp_subband_phot is None:
@@ -1854,7 +1851,7 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
             wave_rest * (1.0 + z),
             z,
             igm_patchy=False,
-            igm_model=getattr(cfg, "igm_model", None),
+            igm_model=getattr(getattr(igm_comp, "config", None), "igm_model", None),
             use_dla=False,
         ),
         dtype=np.float64,
@@ -1900,6 +1897,107 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
     )
 
 
+def _exact_fold_blocker(igm_comp, stellar_state):
+    """Why the exact IGM fold cannot be built here, or ``None`` when it can.
+
+    One reading of the exact fold's preconditions, consulted by both the
+    refusal in :func:`_fold_igm_exact_into_subbands` and the ``"auto"``
+    resolution in :func:`_resolve_igm_fold`. The two ask the same question for
+    opposite purposes -- whether to raise, and whether to fall back -- and a
+    second copy of the list would drift. A drifted copy is not a cosmetic
+    problem: it leaves ``"auto"`` raising for a configuration it promised to
+    serve, at run time, for whoever happens to build that configuration.
+
+    Returns the exception *instance* rather than a flag, so each refusal's type
+    and wording stay beside the condition that produces them.
+
+    Parameters
+    ----------
+    igm_comp : IGMSEDComponent
+        Supplies the transmission configuration.
+    stellar_state : StellarSEDComponentState
+        Carrying either the fixed-z photometry LUT or the free-z z-table.
+
+    Returns
+    -------
+    Exception or None
+        The refusal to raise, or ``None`` when the exact fold can be built.
+
+    Notes
+    -----
+    **Build-time only.** Reads configuration, never parameter values.
+    """
+    cfg = getattr(igm_comp, "config", None)
+    if getattr(cfg, "igm_patchy", False) or getattr(cfg, "use_dla", False):
+        return ValueError(
+            "igm_fold='exact' needs a transmission that is a fixed function of "
+            "(wavelength, redshift), so it can be folded in at build time. "
+            "Patchy reionization and discrete DLAs read free parameters and "
+            "change every call. Use igm_fold='node' (the default) for those, "
+            "or igm_fold='auto' to take that fall-back automatically."
+        )
+
+    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
+    if ztable is not None and ztable.ssp_subband_phot_table is not None:
+        return NotImplementedError(
+            "igm_fold='exact' is implemented for a fixed redshift only. A free "
+            "redshift would need the sub-band tensor rebuilt at every node of "
+            "the z table. Use igm_fold='node' or fix the redshift, or "
+            "igm_fold='auto' to take that fall-back automatically."
+        )
+
+    return None
+
+
+def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None) -> str:
+    """Resolve ``"auto"`` to the fold that can actually be built here.
+
+    ``"exact"`` cannot be the default: it raises for a free redshift and for a
+    transmission carrying free parameters, so flipping the default would break
+    those fits rather than speed them up. ``"auto"`` is the mode that can be
+    proposed as one -- it asks for the exact fold and takes the node fold
+    wherever the exact fold is unavailable.
+
+    Parameters
+    ----------
+    igm_fold : str
+        The declared mode: ``"node"``, ``"exact"`` or ``"auto"``. Anything but
+        ``"auto"`` is returned unchanged, so an explicit ``"exact"`` still
+        raises where it cannot be served -- silently downgrading a mode the
+        caller asked for by name is what this whole seam exists to avoid.
+    igm_comp : IGMSEDComponent
+        Supplies the transmission configuration.
+    stellar_state : StellarSEDComponentState
+        Carrying either the fixed-z photometry LUT or the free-z z-table.
+    ssp_data : SSPData, optional
+        Template grid. The exact fold needs it and returns the state untouched
+        without it.
+    filters : sequence, optional
+        Filter curves, on the same footing as ``ssp_data``.
+
+    Returns
+    -------
+    str
+        ``"node"`` or ``"exact"``.
+
+    Notes
+    -----
+    **Build-time only.** Two distinct reasons send ``"auto"`` to the node fold
+    and both matter. The first is a refusal, shared with the exact fold through
+    :func:`_exact_fold_blocker`. The second is that the exact fold is a no-op
+    without templates or filters, while the node fold is not -- resolving to
+    ``"exact"`` there would skip a fold the node path would have applied, which
+    no exception would announce.
+    """
+    if igm_fold != "auto":
+        return igm_fold
+
+    if ssp_data is None or not filters:
+        return "node"
+
+    return "node" if _exact_fold_blocker(igm_comp, stellar_state) is not None else "exact"
+
+
 def _fold_igm_into_subbands(
     igm_comp, stellar_state, igm_fold="node", ssp_data=None, filters=None, redshift_spec=None
 ):
@@ -1932,7 +2030,8 @@ def _fold_igm_into_subbands(
     stellar_state : StellarSEDComponentState
         Carrying the fixed-z photometry LUT or the free-z z-table.
     igm_fold : str, default "node"
-        Fold mode: "node" (evaluate at nodes) or "exact" (integrate inside integral).
+        Fold mode: "node" (evaluate at nodes), "exact" (integrate inside the
+        integral), or "auto" ("exact" where it can be built, "node" elsewhere).
     ssp_data : SSPData, optional
         SSP templates, required for "exact" fold.
     filters : tuple, optional
@@ -1959,6 +2058,8 @@ def _fold_igm_into_subbands(
 
     if stellar_state is None:
         return stellar_state
+
+    igm_fold = _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data, filters)
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
@@ -2813,50 +2914,75 @@ class SEDModel:
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
         if self._approx.get("wave_precomp"):
-            # The two precomputes are independent and fail independently. A single
-            # try around both meant a band-response failure disabled the *energy
-            # balance* LUT too, and reported itself under the energy-balance
-            # warning, blaming the wrong subsystem.
+            # These precomputes are independent and fail independently. A single
+            # try around all of them meant one failure disabled the rest, and
+            # reported itself under the first one's warning, blaming the wrong
+            # subsystem.
+            #
+            # They do share one prerequisite -- the component chain -- and it has
+            # to be built outside them. Left inside the energy-balance try, a
+            # chain failure was announced as an energy-balance failure and then
+            # surfaced three more times as an AttributeError on the cache the
+            # failed build never set, so one root cause produced four warnings
+            # naming three subsystems that had not run. An error that names a
+            # missing attribute instead of the reason it is missing sends the
+            # reader to the wrong place.
+            chain = None
             try:
-                chain = self._build_component_chain()
-                self._cached_component_chain = chain
-                self._energy_balance_lut(chain)
+                chain = self._cached_component_chain = self._build_component_chain()
             except Exception as e:
-                # The exact full-wave energy-balance path is the correct fallback,
-                # but it forfeits the speedup the astronomer opted into, so say so.
                 warnings.warn(
-                    f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
-                    "falling back to the exact energy-balance path (correct, "
-                    "but without the precomputed-LUT speedup).",
+                    f"WavePrecomp precompute is unavailable: the component chain "
+                    f"could not be built ({e!r}). Every LUT below needs it, so all "
+                    "of them fall back to the exact per-call path (correct, but "
+                    "without the precomputed speedup).",
                     UserWarning,
                     stacklevel=2,
                 )
                 self._energy_balance_lut_cache = None
-
-            try:
-                self._dust_emission_band_response(self._cached_component_chain)
-            except Exception as e:
-                warnings.warn(
-                    f"WavePrecomp dust-emission band-response precompute failed "
-                    f"({e!r}); falling back to the exact per-call filter integral "
-                    "(correct, but without the precomputed-response speedup).",
-                    UserWarning,
-                    stacklevel=2,
-                )
                 self._dust_band_response_cache = None
+                self._xray_term_response_cache = None
+                self._radio_term_response_cache = None
 
-            for _emitter in ("xray", "radio"):
+            if chain is not None:
                 try:
-                    self._additive_term_band_response(self._cached_component_chain, _emitter)
+                    self._energy_balance_lut(chain)
+                except Exception as e:
+                    # The exact full-wave energy-balance path is the correct fallback,
+                    # but it forfeits the speedup the astronomer opted into, so say so.
+                    warnings.warn(
+                        f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
+                        "falling back to the exact energy-balance path (correct, "
+                        "but without the precomputed-LUT speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._energy_balance_lut_cache = None
+
+                try:
+                    self._dust_emission_band_response(chain)
                 except Exception as e:
                     warnings.warn(
-                        f"WavePrecomp {_emitter} term band-response precompute failed "
+                        f"WavePrecomp dust-emission band-response precompute failed "
                         f"({e!r}); falling back to the exact per-call filter integral "
                         "(correct, but without the precomputed-response speedup).",
                         UserWarning,
                         stacklevel=2,
                     )
-                    setattr(self, f"_{_emitter}_term_response_cache", None)
+                    self._dust_band_response_cache = None
+
+                for _emitter in ("xray", "radio"):
+                    try:
+                        self._additive_term_band_response(chain, _emitter)
+                    except Exception as e:
+                        warnings.warn(
+                            f"WavePrecomp {_emitter} term band-response precompute failed "
+                            f"({e!r}); falling back to the exact per-call filter integral "
+                            "(correct, but without the precomputed-response speedup).",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                        setattr(self, f"_{_emitter}_term_response_cache", None)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a

@@ -35,6 +35,9 @@ from pathlib import Path
 
 import jax
 import numpy as np
+
+from tengri import Data, ForwardModel, Observation, Photometry
+
 from .candels_io import load_candels_z1
 from .configs import config_II, load_ssp_for
 from .fit_one import (
@@ -45,8 +48,6 @@ from .fit_one import (
     iter_draws,
     thin_samples,
 )
-
-from tengri import Data, ForwardModel, Observation, Photometry
 
 jax.config.update("jax_enable_x64", True)
 
@@ -151,6 +152,26 @@ def aggregate_sweep_summary(out_dir: Path, methods: tuple[str, ...] = SWEEP_METH
     return rows
 
 
+def _derived(props, name: str) -> float:
+    """A published property, or a refusal -- never a stand-in.
+
+    ``props.get("stellar_mass", 1e10)`` and ``props.get("sfr_100myr", 1.0)``
+    were the two defaults here, and the danger is that both are *ordinary*:
+    they reach the figure as log M* = 10.0 and log SFR = 0.0 exactly, which is
+    an unremarkable galaxy. A default that looks like a measurement cannot be
+    spotted on the plot, in the npz, or by a reader. Neither has ever fired --
+    the five committed backend rows carry log M* 10.55-10.64 and log SFR
+    1.36-1.47 -- and that is the argument for removing them now rather than
+    after one does.
+    """
+    if name not in props:
+        raise SystemExit(
+            f"the model published no {name!r}; the backend sweep will not "
+            f"substitute a value for it. Available: {sorted(props)}"
+        )
+    return float(props[name])
+
+
 def run_backend_sweep(
     methods: tuple[str, ...] = SWEEP_METHODS,
     out_dir: Path | None = None,
@@ -192,6 +213,24 @@ def run_backend_sweep(
 
     results = []
     key = jax.random.PRNGKey(42)
+
+    # Compile the shared forward model and its gradient BEFORE any method is
+    # timed. Every method runs in this one process against the same model, so
+    # without this the first one in `methods` pays for the whole tree's JIT
+    # compilation and every later one inherits it -- and the recorded times
+    # then rank position in the sweep rather than cost of method.
+    #
+    # It is not a subtle effect. In results/backend_sweep_pin, taken before
+    # this existed, map (first in SWEEP_METHODS) recorded 8.639 s and laplace
+    # (second) 1.964 s -- while run_laplace is documented as "Gaussian
+    # posterior from Hessian at MAP" and runs n_map_steps=1000 before it takes
+    # a Hessian. Laplace is MAP plus strictly more work and cannot be 4.4x
+    # cheaper; the gap is compilation, in a figure whose caption says the
+    # timings are comparable to one another.
+    logger.info("warming the shared compile cache before any timed method")
+    t_warmup = time.perf_counter()
+    forward.fit(data, key=key, method="map", n_steps=1, n_restarts=1)
+    logger.info(f"compile warmup took {time.perf_counter() - t_warmup:.2f} s (not recorded)")
 
     for method in methods:
         logger.info(f"\n{'=' * 60}")
@@ -359,8 +398,8 @@ def run_backend_sweep(
                 pred = sed_model.predict(params_full)
                 props = pred.properties
 
-                results_dict["log_stellar_mass"] = float(np.log10(props.get("stellar_mass", 1e10)))
-                results_dict["log_sfr_100myr"] = float(np.log10(props.get("sfr_100myr", 1.0)))
+                results_dict["log_stellar_mass"] = float(np.log10(_derived(props, "stellar_mass")))
+                results_dict["log_sfr_100myr"] = float(np.log10(_derived(props, "sfr_100myr")))
                 results_dict["dust_tau"] = float(params.get("dust_tau_diff", 0.0))
 
             elif method in ("mcmc", "mcmc_nuts", "mcmc_hmc", "nss"):
@@ -373,8 +412,8 @@ def run_backend_sweep(
                     pred = sed_model.predict(params)
                     props = pred.properties
 
-                    m_star_samples.append(float(np.log10(props.get("stellar_mass", 1e10))))
-                    sfr_samples.append(float(np.log10(props.get("sfr_100myr", 1.0))))
+                    m_star_samples.append(float(np.log10(_derived(props, "stellar_mass"))))
+                    sfr_samples.append(float(np.log10(_derived(props, "sfr_100myr"))))
                     dust_samples.append(float(params.get("dust_tau_diff", 0.0)))
 
                 results_dict["log_stellar_mass"] = float(np.median(m_star_samples))
