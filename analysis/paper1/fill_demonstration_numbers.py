@@ -15,10 +15,10 @@ in the paper. Pointing this script at them takes an explicit flag, and anything
 produced that way is stamped so it cannot be mistaken for a result.
 
 It does not estimate. Goodness of fit, per-band systematic residuals and the
-configuration-to-configuration scatter are read from the saved NPZs; the two
-that need more than the fits -- prior-boundary leaning, which needs the declared
-priors, and the published inter-code comparison, which needs the per-code
-catalog -- are named at the end as outstanding rather than approximated.
+configuration-to-configuration scatter are read from the saved NPZs; two
+further entries -- prior-boundary leaning and the published inter-code
+comparison -- are computed by ``grid_census`` instead, and are named at the end
+with the section that covers them rather than approximated here.
 
 It also splits the cells the bar rejected by WHY. Zero divergences and
 max split-R-hat < 1.01 is one line but two unrelated failures: divergences with
@@ -94,11 +94,30 @@ def classify_directory(directory: Path) -> str:
 #: declared priors, which means rebuilding each configuration; the second needs
 #: the published per-code catalog. Named so the report says what is missing
 #: rather than quietly covering fewer numbers.
-NEEDS_MORE = [
-    "where the posteriors lean on prior boundaries (needs the declared priors, "
-    "so a model rebuild per configuration)",
-    "where the configurations fall against the published inter-code spread "
-    "(needs results/art_sedfitting_z1.csv joined on galaxy ID)",
+#: Section-7 entries this script does not compute, and the tool that does.
+#:
+#: Both were listed here as needing "more than the fits" until the census grew
+#: sections for them. Neither is outstanding now, and the first one's stated
+#: reason was wrong as well as stale: a boundary scan does NOT need a model
+#: rebuild per configuration, because ``prior_boundary_pressure`` reads each
+#: bound from the cell's own ``priors`` record. That matters beyond tidiness --
+#: rebuilding would judge a cell against whatever the configuration declares
+#: today, while the recorded bounds are the ones that cell actually ran with.
+#:
+#: Kept as a pointer rather than deleted: the entries still are not computed
+#: *here*, and a reader who finds nothing about them in this output should be
+#: told where to look rather than left to conclude they are unavailable.
+COMPUTED_ELSEWHERE = [
+    (
+        "where the posteriors lean on prior boundaries",
+        "grid_census.prior_boundary_pressure -- reads bounds from each cell's "
+        "own priors record, no rebuild",
+    ),
+    (
+        "where the configurations fall against the published inter-code spread",
+        "grid_census.published_inter_code_spread, and "
+        "`python -m paper1.published_code_spread` for range against stdev",
+    ),
 ]
 
 
@@ -434,9 +453,10 @@ def main() -> int:
                 "   `python -m paper1.published_code_spread` for both, measured."
             )
 
-    print("\n--- still outstanding: these need more than the fits ---")
-    for item in NEEDS_MORE:
+    print("\n--- not computed here; the census covers these ---")
+    for item, where in COMPUTED_ELSEWHERE:
         print(f"   - {item}")
+        print(f"       {where}")
     if kind == "superseded":
         print("\nNOT FOR THE PAPER -- see the banner above.")
     return 0
