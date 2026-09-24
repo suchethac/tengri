@@ -113,7 +113,7 @@ class TestStepFunctionRegression:
         age_mid1 = jnp.array([1.5e9])
         age_mid2 = jnp.array([2.5e9])
 
-        kwargs = {f"z_frac_{i}": 0.3 + 0.1 * i for i in range(7)}
+        kwargs = {f"z_frac_{i}": 0.3 + 0.1 * i for i in range(6)}
         sfr1 = dirichlet(age_mid1, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
         sfr2 = dirichlet(age_mid2, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
 
