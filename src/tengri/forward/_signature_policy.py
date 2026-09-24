@@ -238,6 +238,11 @@ SIGNATURE_POLICY: KeyPolicy = {
         "memo of the built chain; the chain's configs are keyed through _component_configs instead"
     ),
     "_dust_band_response_cache": exclude("memo cache computed from keyed structure"),
+    "_dust_band_response_decline": exclude(
+        "the verdict that accompanies _dust_band_response_cache: why the response "
+        "was refused, recorded for precompute_report. Derived from the same keyed "
+        "structure as the cache, and read by no numerical path"
+    ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
     "_*_term_response_cache": exclude(
         "memo cache computed from keyed structure; pattern matches all additive "
