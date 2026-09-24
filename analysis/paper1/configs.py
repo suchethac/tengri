@@ -226,14 +226,27 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     # shape flattens by ~200x and tau becomes unobservable. Cap near the cosmic
     # age to keep the turnover in the galaxy's history. See sfh_tau_conditioning.py.
     #
-    # TWO CLAIMS, and only the first is established. (a) The cap is right on
-    # conditioning and on physics: a turnover longer than the age of the universe
-    # at the galaxy's redshift is not a meaningful model, and the direction is
-    # measurably flat there. (b) Whether it RESOLVES the 381/1200 divergences
-    # observed on galaxy 79 is a separate question, and this cap was committed
-    # before the cell testing it reported. If that cell comes back still frozen,
-    # (a) still holds and (b) is false -- the row would need a different fix and
-    # this cap should not be credited with one.
+    # TWO CLAIMS. (a) The cap is right on conditioning and on physics: a turnover
+    # longer than the age of the universe at the galaxy's redshift is not a
+    # meaningful model, and the direction is measurably flat there. (b) Whether it
+    # RESOLVES the 381/1200 divergences observed on galaxy 79 was left open because
+    # the cap was committed before the cell testing it reported.
+    #
+    # ANSWERED 2026-09-24, the cell reported. On the divergences (b) is TRUE and the
+    # cap is credited: 79/II now scores 0 divergences at rung 1 (target_accept 0.85)
+    # and 0 at rung 2 (0.95), against 381/1200 before, and ess_min rose from the
+    # recorded 1.9 to 3.0 then 49.1.
+    #
+    # It is NOT adopted, for a different reason. The cell is now mixing-limited, not
+    # divergence-limited: rhat_max 1.1017 at rung 1 and 1.0297 at rung 2, ess_min
+    # 49.1 against the floor of 100. So "still frozen" is half right -- the freeze
+    # moved from the geometry to the mixing, and a fix for the remainder has to
+    # target ESS, which target_accept alone has not delivered here.
+    #
+    # The pre-cap suites under results/fits_prepin_2026-09-05 and
+    # fits_600draws_2026-09-14 are NOT a baseline for this: they record n_free 8
+    # against today's 7, carry no priors, no NPZ and code_revision null, so which
+    # parameter was free is unrecoverable and their ess_min ~496 is not comparable.
     # Measured on the committed 13 Gyr prior (2026-09-21): |dF/F| 0.018% outside
     # the age window against 300-2100% inside, with 59% of that prior sitting
     # in the flat regime at z ~ 1.07. See sfh_tau_conditioning.py.
