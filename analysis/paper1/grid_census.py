@@ -146,14 +146,19 @@ def prior_boundary_pressure(cells: dict[str, dict], results_dir: Path):
     node -- is judged against the bound that cell actually ran with, never
     against a bound copied from another row.
 
-    Returns ``(rows, scanned, skipped)``; a cell with no NPZ is skipped and
-    counted rather than treated as unpinned.
+    Returns ``(rows, scanned, no_npz, no_priors)``. The two skip reasons are
+    different problems and are kept apart: a cell with no NPZ has lost its
+    draws, while a cell that has an NPZ but an empty ``priors`` record predates
+    the prior-recording feature and has bounds nobody wrote down. Reporting
+    them as one number misnames the cause -- every cell of the second kind
+    still carries its draws.
     """
-    rows, scanned, skipped = [], 0, 0
+    rows, scanned = [], 0
+    no_npz, no_priors = [], []
     for name, cell in cells.items():
         npz_path = results_dir / f"{name}.npz"
         if not npz_path.is_file():
-            skipped += 1
+            no_npz.append(name)
             continue
         with np.load(npz_path, allow_pickle=True) as npz:
             available = set(npz.files)
@@ -163,7 +168,7 @@ def prior_boundary_pressure(cells: dict[str, dict], results_dir: Path):
                 if k in available
             }
         if not draws:
-            skipped += 1
+            no_priors.append(name)
             continue
         scanned += 1
         for param, prior in (cell.get("priors") or {}).items():
@@ -197,7 +202,7 @@ def prior_boundary_pressure(cells: dict[str, dict], results_dir: Path):
                     "kind": kind,
                 }
             )
-    return rows, scanned, skipped
+    return rows, scanned, no_npz, no_priors
 
 
 def config_spread(cells: dict[str, dict], results_dir: Path):
@@ -542,15 +547,23 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
         print("    different quantities and read high.")
 
     # --- prior boundaries, which the adoption bar cannot see ---------------
-    rows, scanned, skipped = prior_boundary_pressure(cells, results_dir)
+    rows, scanned, no_npz, no_priors = prior_boundary_pressure(cells, results_dir)
     print(
         f"\nprior-boundary pressure (edge band {EDGE_BAND:.0%} of prior width, "
         f"pinned at {PIN_THRESHOLD:.0%} of draws)"
     )
-    print(
-        f"  cells scanned        : {scanned}"
-        + (f", skipped for want of an NPZ: {skipped}" if skipped else "")
-    )
+    print(f"  cells scanned        : {scanned} of {len(cells)}")
+    if no_npz:
+        print(f"  no NPZ on disk       : {len(no_npz)}")
+    if no_priors:
+        _by = Counter(_config_of(n, cells[n]) for n in no_priors)
+        print(
+            f"  NPZ but no priors    : {len(no_priors)} "
+            f"({', '.join(f'{k} x{v}' for k, v in sorted(_by.items()))})"
+        )
+        print("    ^ these predate the prior record, so their bounds are unknown. They are")
+        print("      NOT counted as unpinned; a row listed here is judged on a fraction of")
+        print("      its cells, and the count must be quoted that way.")
     artificial = [r for r in rows if r["kind"] == "artificial"]
     pinned_cells = {r["cell"] for r in artificial}
     adopted_pinned = {r["cell"] for r in artificial if r["adopted"]}
