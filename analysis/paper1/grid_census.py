@@ -34,6 +34,7 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 import statistics
@@ -242,6 +243,67 @@ def config_spread(cells: dict[str, dict], results_dir: Path):
                 spreads.append((max(got.values()) - min(got.values()), len(got)))
         out[field] = spreads
     return out, len(per_galaxy)
+
+
+#: Published per-code outputs for the same galaxies, ingested by
+#: ingest_art_sedfitting.py. Committed, so this comparison does not need the
+#: external checkout that produced it.
+ART_SEDFITTING_CSV = ANALYSIS_DIR / "results" / "art_sedfitting_z1.csv"
+
+#: A logsfr outside this range is a code reporting "no star formation" through
+#: a floor rather than a measurement, and one such value would set the whole
+#: range for its galaxy. Stated here rather than applied silently.
+_LOGSFR_SANE = (-5.0, 15.0)
+
+
+def published_inter_code_spread(csv_path: Path = ART_SEDFITTING_CSV):
+    """Spread between published codes for the grid's own galaxies.
+
+    Returned per quantity for both the full set of codes and for the subset
+    whose definition matches what tengri reports, because the two differ and
+    only the matched one is a like-for-like comparison:
+
+    * Prospector publishes **formed** stellar mass; the other four publish
+      **survived**. tengri's ``stellar_mass`` is survived.
+    * BAGPIPES publishes an **instantaneous** SFR; the other four average over
+      100 Myr, which is what ``sfr_100myr`` is.
+
+    Mixing either pair inflates the spread by comparing different quantities,
+    which is the failure mode a cross-code number invites.
+    """
+    if not csv_path.is_file():
+        return None
+    rows = list(csv.DictReader(csv_path.read_text().splitlines()))
+
+    def _spread(field, keep, sane=None):
+        per_galaxy = defaultdict(dict)
+        for row in rows:
+            try:
+                gal_id = int(row["id"])
+                value = float(row[field])
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(value) or not keep(row):
+                continue
+            if sane is not None and not (sane[0] < value < sane[1]):
+                continue
+            per_galaxy[gal_id][row["code"]] = value
+        return {
+            gal_id: max(byc.values()) - min(byc.values())
+            for gal_id, byc in per_galaxy.items()
+            if len(byc) >= 2
+        }
+
+    return {
+        "logmstar_all": _spread("logmstar", lambda r: True),
+        "logmstar_survived": _spread(
+            "logmstar", lambda r: r.get("mass_definition_note") == "survived stellar mass"
+        ),
+        "logsfr_all": _spread("logsfr", lambda r: True, _LOGSFR_SANE),
+        "logsfr_100myr": _spread(
+            "logsfr", lambda r: "100 Myr" in (r.get("sfr_timescale_note") or ""), _LOGSFR_SANE
+        ),
+    }
 
 
 def coverage(cells: dict[str, dict], field: str) -> tuple[list, int]:
@@ -453,6 +515,31 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
         )
     if not complete:
         print("  ^ a galaxy missing a row cannot show that row's disagreement; partial.")
+
+    # --- the published inter-code spread, restricted to our galaxies -------
+    published = published_inter_code_spread()
+    if published is None:
+        print(f"\npublished inter-code spread: {NOT_RECORDED} (no {ART_SEDFITTING_CSV.name})")
+    else:
+        grid_ids = set(expected_ids)
+        print("\npublished inter-code spread, same galaxies (art_sedfitting)")
+        for key, label in (
+            ("logmstar_all", "log10 M*   all codes"),
+            ("logmstar_survived", "log10 M*   survived only"),
+            ("logsfr_all", "log10 SFR  all codes"),
+            ("logsfr_100myr", "log10 SFR  100 Myr only"),
+        ):
+            vals = [v for gid, v in (published.get(key) or {}).items() if gid in grid_ids]
+            if not vals:
+                print(f"  {label:<26} {NOT_RECORDED}")
+                continue
+            print(
+                f"  {label:<26} median {np.median(vals):.3f} dex, "
+                f"range {min(vals):.3f} to {max(vals):.3f}, over {len(vals)} galaxies"
+            )
+        print("  ^ compare the matched rows only: Prospector publishes formed mass and")
+        print("    BAGPIPES an instantaneous SFR, so the 'all codes' rows compare")
+        print("    different quantities and read high.")
 
     # --- prior boundaries, which the adoption bar cannot see ---------------
     rows, scanned, skipped = prior_boundary_pressure(cells, results_dir)
