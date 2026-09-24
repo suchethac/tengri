@@ -276,3 +276,32 @@ def test_one_bad_band_is_distinguished_from_a_model_that_misses_broadly(tmp_path
         "the trimmed range should span the outlier-driven cell (0.00) and the "
         f"broadly-wrong one (9.00); got {line.strip()!r}"
     )
+
+
+def test_cells_outside_the_requested_configurations_do_not_fill_the_quota(tmp_path, capsys):
+    """A foreign-configuration cell must not be counted toward a subset view.
+
+    ``report`` decides completeness with ``have == total``, and both sides can
+    be wrong in opposite directions: a cell from a configuration the caller did
+    not ask for inflates ``have``, while the shorter ``config_keys`` shrinks
+    ``total``. The two errors cancel, and the census prints COMPLETE for a grid
+    with a hole in it -- the reassuring answer, which is the dangerous one.
+
+    Here two galaxies and two configurations want four cells. Three are present
+    and ``2_II`` is missing, so the honest answer is partial; a single stray
+    Configuration VI cell brings the unfiltered count to four.
+    """
+    import grid_census as gc
+
+    cells = {
+        "1_I": _cell(1, "I"),
+        "2_I": _cell(2, "I"),
+        "1_II": _cell(1, "II"),
+        "1_VI": _cell(1, "VI"),  # not asked for; must not fill 2_II's slot
+    }
+    complete = gc.report(cells, [1, 2], ["I", "II"], tmp_path)
+    out = capsys.readouterr().out
+
+    assert complete is False, "a grid missing 2_II was reported complete"
+    assert "3 of 4" in out, f"foreign cell counted toward the quota:\n{out}"
+    assert "VI" not in out.split("configurations seen")[1].split("\n")[0]

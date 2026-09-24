@@ -372,7 +372,26 @@ def _fmt(values, spec=".4g"):
 
 
 def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path) -> bool:
-    """Print the census. Returns True when the grid is complete."""
+    """Print the census. Returns True when the grid is complete.
+
+    ``cells`` is filtered to ``config_keys`` first. Without that the
+    completeness test ``have == total`` can pass by coincidence: cells from a
+    configuration the caller did not ask for inflate ``have`` while the shorter
+    ``config_keys`` shrinks ``total``, and the two errors cancel. Measured on
+    the 2026-09-24 partial grid, a five-configuration view of 98 cells in rows
+    I-V plus 2 stray Configuration VI cells printed "100 of 100" and reported
+    the grid COMPLETE. A completeness check that can pass by accident is worse
+    than none, because it prints the reassuring answer.
+    """
+    wanted = set(config_keys)
+    dropped = {k: c for k, c in cells.items() if _config_of(k, c) not in wanted}
+    if dropped:
+        cells = {k: c for k, c in cells.items() if k not in dropped}
+        seen = sorted({_config_of(k, c) for k, c in dropped.items()})
+        print(
+            f"note                 : ignoring {len(dropped)} cell(s) outside the "
+            f"requested configurations {sorted(wanted)} -- found {seen}"
+        )
     total = len(expected_ids) * len(config_keys)
     have = len(cells)
     by_config = defaultdict(dict)
