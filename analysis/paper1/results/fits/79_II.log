@@ -34,3 +34,15 @@
 2026-09-24 06:51:22,574 - __main__ - INFO - Attempt 3/3: target_accept 0.99, warmup 150, diagonal mass
 2026-09-24 06:51:23,752 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.99
 2026-09-24 07:06:15,436 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (891.7s). Step size: 0.0092. Divergent in the final warmup window: 0%
+2026-09-24 11:08:59,750 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 15455.4s. Divergences: 0/1200 (0.0%). Tree depth: mean 8.5, at cap on 8% of iterations (max_num_doublings=10)
+2026-09-24 11:08:59,761 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 11:08:59,761 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-24 11:09:20,015 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0023, ess_min=4
+2026-09-24 11:09:59,418 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/79_II.npz
+2026-09-24 11:09:59,419 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/79_II.json
+2026-09-24 11:09:59,420 - __main__ - WARNING - No attempt cleared the adoption bar for galaxy 79 config II; keeping attempt 3 of 3 (divergences=0, rhat_max=1.0023) with adoption_pass=False
+2026-09-24 11:09:59,421 - __main__ - INFO - ✓ Fit complete for galaxy 79 config II
+  MAP initialization (1000 steps)...
+  MAP init done (loss=12.76)
+  MAP initialization: reusing cached MAP point
+  MAP initialization: reusing cached MAP point

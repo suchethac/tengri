@@ -1,0 +1,28 @@
+2026-09-24 13:49:59,883 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.951e-30 erg/s/cm2/Hz
+2026-09-24 13:50:07,015 - __main__ - INFO - Galaxy 14099 (z=1.093): 15 detected bands
+2026-09-24 13:50:07,015 - __main__ - INFO - Config II: 7 free parameters
+2026-09-24 13:50:07,015 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-24 13:51:55,582 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-24 13:59:35,448 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (459.9s). Step size: 0.0623. Divergent in the final warmup window: 0%
+2026-09-24 14:27:13,446 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2117.8s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.1, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-24 14:27:13,538 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/.reinsert.lock
+2026-09-24 14:27:29,409 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-24 14:27:52,247 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 201 draws (4.97 MB/draw, target=1.0 GB), ceiling 64
+2026-09-24 14:27:52,277 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
+2026-09-24 14:28:54,158 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0157, ess_min=65
+2026-09-24 14:29:11,408 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/14099_II.npz
+2026-09-24 14:29:11,409 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/14099_II.json
+2026-09-24 14:29:11,410 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=0) before retuning
+2026-09-24 14:29:11,410 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
+2026-09-24 14:29:13,601 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-24 14:45:27,795 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (974.2s). Step size: 0.0140. Divergent in the final warmup window: 0%
+2026-09-24 16:58:41,048 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 8966.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 8.0, at cap on 1% of iterations (max_num_doublings=10)
+2026-09-24 16:58:41,066 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/.reinsert.lock
+2026-09-24 16:58:41,066 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-24 16:58:51,792 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0030, ess_min=302
+2026-09-24 16:59:10,808 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/14099_II.npz
+2026-09-24 16:59:10,812 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/14099_II.json
+2026-09-24 16:59:10,815 - __main__ - INFO - ✓ Fit complete for galaxy 14099 config II
+  MAP initialization (1000 steps)...
+  MAP init done (loss=13.36)
+  MAP initialization: reusing cached MAP point

@@ -1,0 +1,32 @@
+2026-09-24 20:11:51,164 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 4.562e-30 erg/s/cm2/Hz
+2026-09-24 20:12:21,337 - __main__ - INFO - Galaxy 13097 (z=1.097): 15 detected bands
+2026-09-24 20:12:21,337 - __main__ - INFO - Config I: 10 free parameters
+2026-09-24 20:12:21,337 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-24 20:14:23,258 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-24 20:21:37,478 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (434.2s). Step size: 0.0452. Divergent in the final warmup window: 0%
+2026-09-24 20:53:38,557 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2355.2s. Divergences: 3/1200 (0.2%). Tree depth: mean 6.7, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-24 20:53:38,672 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 20:53:38,672 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+E0924 20:53:51.986162 117338124 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
+
+  %sort.104 = f64[15294]{0} sort(%constant.5899), dimensions={0}, is_stable=true, to_apply=%region_77.288, metadata={op_name="jit(_reference_chunk)/vmap(jit(_impl))/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=2634}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0924 20:53:52.284474 117338039 slow_operation_alarm.cc:140] The operation took 1.29922s
+Constant folding an instruction is taking > 1s:
+
+  %sort.104 = f64[15294]{0} sort(%constant.5899), dimensions={0}, is_stable=true, to_apply=%region_77.288, metadata={op_name="jit(_reference_chunk)/vmap(jit(_impl))/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=2634}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-24 20:54:19,140 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 64 draws (15.49 MB/draw, target=1.0 GB), ceiling 64
+2026-09-24 20:54:19,189 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
+2026-09-24 20:56:14,109 - __main__ - INFO - ✓ Fit passed adoption bar: divergence rate=0.0025 (n=3), rhat_max=1.0079, ess_min=234 [relaxed bar, configuration I]
+2026-09-24 20:56:44,077 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/13097_I.npz
+2026-09-24 20:56:44,078 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/13097_I.json
+2026-09-24 20:56:44,080 - __main__ - INFO - ✓ Fit complete for galaxy 13097 config I
+  MAP initialization (1000 steps)...
+  MAP init done (loss=13.26)
