@@ -17,17 +17,17 @@
 # # Anatomy of an SED
 #
 # ## What you will do
-# Build a panchromatic SED model with every major component enabled: stellar continuum, nebular emission, dust attenuation and re-emission, AGN, radio, X-ray, and IGM absorption. You'll sweep individual knobs to isolate their contribution to the total flux, from hard X-rays to the radio.
+# Build a panchromatic spectral energy distribution (SED) model with every major component enabled: stellar continuum, nebular emission, dust attenuation and re-emission, active galactic nucleus, radio, X-ray, and intergalactic medium absorption. You will sweep individual parameters to isolate each component's contribution to the total flux, from hard X-rays to radio wavelengths.
 #
 # ## What you need
-# A bare-stellar SSP grid (no nebular or dust emissions) and a panchromatic filter set spanning UV through radio to showcase each component.
+# A bare-stellar stellar population synthesis grid (without nebular or dust emissions) and a panchromatic filter set spanning ultraviolet through radio to showcase each component.
 #
 # ## What you will have
-# A toolkit for reasoning about which components matter where in the SED, and how to turn each on or off in your own models. A complete self-consistent spectrum from hard X-rays to 10 cm radio.
+# A framework for understanding which components matter where in the SED, and how to enable or disable each in your own models. A complete self-consistent spectrum from hard X-rays to 10 centimeter radio.
 #
 # ---
 #
-# A faithful SED is a composition: stellar continuum, nebular emission, dust attenuation and re-emission, AGN, radio, X-ray, and intergalactic absorption. Tengri composes all of this from one nested-dict specification. As you build the model, `model.summary()` makes the assembly explicit, and `citations.print_citations(model)` produces a working bibliography for your methods section.
+# A faithful SED is a composition of stellar continuum, nebular emission, dust attenuation and re-emission, active galactic nucleus, radio, X-ray, and intergalactic medium absorption. Tengri assembles all of these from a single nested-dictionary specification. The methods `model.summary()` makes the composition explicit, and `citations.print_citations(model)` produces a bibliography ready for your methods section.
 
 # %%
 import os
@@ -77,10 +77,9 @@ from tengri.units import erg_per_s_to_lsun, lnu_to_llambda
 plot.setup_style()
 
 # %% [markdown]
-# ## Setup — bare-stellar SSP and panchromatic filters
+# ## Setup: bare-stellar SSP and panchromatic filters
 #
-# Cue needs a bare-stellar SSP. The filter set spans GALEX through ALMA
-# so every component has somewhere to be visible.
+# The Cue nebular backend requires a bare-stellar stellar population synthesis grid. The filter set spans GALEX through ALMA so every component has wavelengths where it contributes measurably.
 
 # %%
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
@@ -115,19 +114,12 @@ filters = [
 obs = Observation(photometry=Photometry.from_names(filters))
 
 # %% [markdown]
-# ## The kitchen-sink model
+# ## The complete model
 #
-# A complete model at z = 2 with all major components enabled: star formation,
-# dust attenuation and emission, nebular continuum and lines, AGN, radio, X-ray,
-# and intergalactic absorption. Every parameter pinned at a physically reasonable
-# value so the figure is reproducible.
+# A full model at z = 2 with all major components enabled: star formation, dust attenuation and emission, nebular continuum and lines, active galactic nucleus, radio, X-ray, and intergalactic medium absorption. Every parameter is pinned at a physically reasonable value so the figure is reproducible.
 
 # %%
-# ``log_lbol`` is log10(L_bol / Lsun) — set the disc to a modest AGN.
-# At z = 2 (cosmic age 3.29 Gyr) a parametric DPL inevitably has some
-# support before the Big Bang, which tengri flags with an
-# ``SFHBeforeBigBangWarning`` and truncates; the absolute mass scale is
-# irrelevant for this shape-only anatomy figure, so we silence it above.
+# log_lbol is log10(L_bol / L_sun), set to a modest active galactic nucleus here. At z = 2 (cosmic age 3.29 Gyr), a parametric double power-law inevitably has support before the Big Bang, which tengri flags with a `SFHBeforeBigBangWarning` and truncates; the absolute mass scale is irrelevant for this shape-only anatomy illustration, so we silence the warning above.
 kitchen_sink = dict(
     sfh={
         "type": "dpl",
@@ -180,10 +172,9 @@ print(model.summary())
 citations.print_citations(model)
 
 # %% [markdown]
-# ## Hero figure — the panchromatic anatomy
+# ## Panchromatic anatomy
 #
-# All components of the SED from X-rays to the radio, shown together on a
-# single rest-frame wavelength grid.
+# All components of the SED from X-rays to radio are shown together on a single rest-frame wavelength grid.
 
 # %%
 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -295,8 +286,7 @@ fig.savefig(FIG_DIR / "02_anatomy_panchromatic.png", dpi=300, bbox_inches="tight
 # %% [markdown]
 # ## Four sweeps, one knob at a time
 #
-# All on a leaner star-forming recipe so the figures stay readable;
-# everything is held fixed except the swept parameter.
+# We use a leaner star-forming recipe so the figures remain readable; all parameters are held fixed except the swept one.
 
 # %%
 base = recipes.star_forming_photometry()
@@ -336,9 +326,7 @@ ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
 ax.set_title("SFH shape")
 ax.legend(frameon=False, fontsize=9)
 
-# (b) Birth-cloud τ_V sweep — same structure, varying parameter value
-# Build once with tau_bc as a free parameter; predict at each value.
-# This teaches that a model is a function of its parameters: same structure, many parameter values.
+# (b) Birth-cloud τ_V sweep: same structure, varying parameter value. Build once with tau_bc as a free parameter; predict at each value. This illustrates that a model is a function of its parameters.
 ax = axes[0, 1]
 cmap = plt.colormaps["viridis"]
 tau_grid = [0.0, 0.5, 1.0, 2.0, 3.0]
@@ -357,10 +345,7 @@ ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
 ax.set_title("Birth-cloud optical depth")
 ax.legend(frameon=False, fontsize=9, ncol=2)
 
-# (c) AGN bolometric luminosity sweep — same structure, varying parameter value
-# Lightweight AGN (multicolor disc + Nenkova torus): build once, predict at each luminosity.
-# The Nenkova torus is a cheap analytic stand-in (SKIRTOR would cost 5×).
-# ``log_lbol`` is log10(L_bol / Lsun), so 10–11 spans a Seyfert to a low-luminosity quasar.
+# (c) AGN bolometric luminosity sweep: same structure, varying parameter value. A lightweight active galactic nucleus uses a multicolor disc and Nenkova torus; build once, predict at each luminosity. The Nenkova torus is an analytic stand-in (SKIRTOR would cost 5 times more). log_lbol = log10(L_bol / L_sun), so 10–11 spans a Seyfert to a low-luminosity quasar.
 ax = axes[1, 0]
 log_lbol_grid = [9.5, 10.0, 10.5, 11.0, 11.5]
 cmap = plt.colormaps["plasma"]
@@ -387,7 +372,7 @@ ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
 ax.set_title("AGN luminosity")
 ax.legend(frameon=False, fontsize=8, ncol=1)
 
-# (d) Redshift sweep — same intrinsic, different IGM + observed-frame
+# (d) Redshift sweep: same intrinsic spectrum, different intergalactic medium attenuation and observed-frame wavelengths.
 ax = axes[1, 1]
 z_grid = [0.0, 1.0, 3.0, 6.0]
 cmap = plt.colormaps["cividis"]
@@ -412,9 +397,9 @@ ax.legend(frameon=False, fontsize=9)
 fig.savefig(FIG_DIR / "02_anatomy_sweeps.png", dpi=300, bbox_inches="tight")
 
 # %% [markdown]
-# ## Editing a built model — `spec.to_groups()`
+# ## Editing a built model: `spec.to_groups()`
 #
-# Pull the model's configuration back, edit a parameter, and rebuild:
+# Extract the model's configuration, edit a parameter, and rebuild it.
 
 # %%
 groups = model.spec.to_groups()
@@ -423,46 +408,31 @@ model_edited = SEDModel.build(ssp_data=ssp, observation=obs, **groups)
 print(model_edited.summary())
 
 # %% [markdown]
-# ## What each layer does, in one sentence
+# ## What each layer does
 #
-# - **Stellar continuum.** DSPS-driven SSP integration: an SFH +
-#   metallicity history projects onto an age × wavelength grid and sums
-#   to the intrinsic L_ν.
-# - **Dust attenuation.** Birth-cloud (Calzetti) and diffuse-ISM optical
-#   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`. The
-#   two-component group also decides which screen each emission source
-#   passes through (`nebular_screen`, default birth cloud; `shock_screen`,
-#   default diffuse; `agn_screen`, default none).
-# - **Dust emission.** Dale 2014 / Draine–Li / THEMIS templates
-#   re-radiate `L_ir` from 8 to 1000 µm.
-# - **Nebular.** Cue (neural emulator on Cloudy 17.03) gives photoionized
-#   continuum + 128 emission lines from `nion` and ionization conditions.
-# - **AGN.** Disc (multicolor / Kubota–Done / ADAF / power-law) +
-#   torus (SKIRTOR / Nenkova / CAT3D / Silva04 / toy) + NLR (Cue) +
-#   BLR (qsogen).
-# - **Radio.** Free-free + synchrotron from the IR–radio correlation
-#   plus an AGN power-law if a disc is present.
-# - **X-ray.** Lusso & Risaliti 2017 L_2500 → L_2keV with optional
-#   ADAF / Comptonization refinements.
-# - **IGM.** Inoue 2014 Lyman-alpha forest opacity at z > 0.
+# - **Stellar continuum.** Differentiable Stellar Population Synthesis integration of an SFH and metallicity history onto an age × wavelength grid, summed to intrinsic L_ν.
+# - **Dust attenuation.** Birth-cloud (Calzetti) and diffuse interstellar medium optical depths reshape the ultraviolet to near-infrared. Absorbed energy is tracked as L_ir. The two-component group also routes each emission source through specified screens: nebular_screen (default birth cloud), shock_screen (default diffuse), and agn_screen (default none).
+# - **Dust emission.** Dale 2014, Draine–Li, or THEMIS templates re-radiate L_ir from 8 to 1000 micrometers.
+# - **Nebular.** Cue, a neural emulator on Cloudy 17.03, yields photoionized continuum and 128 emission lines from ionization parameter and conditions.
+# - **AGN.** Disc (multicolor, Kubota–Done, ADAF, or power-law), torus (SKIRTOR, Nenkova, CAT3D, Silva04, or toy), narrow-line region (Cue), and broad-line region (qsogen).
+# - **Radio.** Free-free and synchrotron emission from the infrared to radio correlation, plus an optional AGN power-law.
+# - **X-ray.** Lusso & Risaliti 2017 L_2500 to L_2keV conversion with optional ADAF or Comptonization refinements.
+# - **IGM.** Inoue 2014 Lyman-alpha forest opacity for z greater than 0.
 
 # %% [markdown]
-# ## The money shot — one model, X-rays to radio
+# ## Multiwavelength SED
 #
-# A complete self-consistent SED from hard X-rays to the radio at z = 0.1.
-# The model parameters (M_star, SFR, and AGN bolometric luminosity) are
-# displayed in the title, read from the assembled model.
+# A complete self-consistent SED from hard X-rays to radio wavelengths at z = 0.1. The model parameters (stellar mass, SFR, and AGN bolometric luminosity) are displayed in the title, read from the assembled model.
 #
-# The X-ray component is shown twice: unobscured and behind a heavily-absorbing
-# column (N_H = 10²³ cm⁻²) to demonstrate how line-of-sight photoelectric
-# absorption carves the soft band while hard X-rays pass through.
+# The X-ray component is shown twice: unobscured and behind a heavily absorbing column (N_H = 10²³ cm⁻²). This demonstrates how line-of-sight photoelectric absorption attenuates the soft band while hard X-rays penetrate.
 
 # %%
 C_UM = 2.998e14  # speed of light in [µm Hz], for the λ → ν twin axis
 
 money_shot = dict(
-    # tau ≈ cosmic age at z = 0.1 puts the DPL on its rising shoulder, so
-    # the current SFR is near peak (elevated, dusty main-sequence galaxy).
+    # tau is close to the cosmic age at z = 0.1, which places the double power-law on its
+    # rising shoulder, so the current SFR is near its peak (an elevated, dusty
+    # main-sequence galaxy).
     sfh={
         "type": "dpl",
         "all_params": Fixed(DEFAULT),
@@ -515,7 +485,7 @@ def _comp(key):
     return None if arr is None else np.asarray(arr)
 
 
-# νL_ν in solar luminosities so the y-axis matches the reference figure.
+# Convert to nu*L_nu in solar luminosities so the y-axis matches the reference figure.
 def nuLnu_lsun(lnu):
     return None if lnu is None else erg_per_s_to_lsun(nu_lnu(wave_aa, lnu))
 
@@ -524,21 +494,12 @@ lnu_age = _comp("lnu_age")
 sed_stars = lnu_age.sum(axis=0) if lnu_age is not None else None
 sed_total = np.asarray(state.sed_intrinsic)
 
-# X-ray, with line-of-sight obscuration as a teaching point.
-# ``state.derived["sed_xray"]`` is the full Yang+2020 / X-CIGALE X-ray —
-# XRB + hot gas + AGN corona — at the default column N_H = 1e20 (the corona
-# is driven by the AGN-published ``L_2500_intrinsic`` via the Just+2007 α_ox
-# relation; #722/#746). It is already in the black total. To show how
-# line-of-sight absorption carves the soft band, we recompute the X-ray at
-# N_H = 1e23 with the model's own 2500 Å luminosity (Morrison & McCammon 1983
-# + Wilms+2000 photoelectric + Compton). N_H is not yet a build-time
-# parameter, so the obscured variant goes through the public ``tengri.xray`` API.
+# X-ray with line-of-sight obscuration as a teaching point. state.derived["sed_xray"] is the full Yang+2020 / X-CIGALE X-ray (XRB plus hot gas plus AGN corona) at the default column N_H = 1e20. The corona is driven by the AGN-published L_2500_intrinsic via the Just+2007 α_ox relation, and it is already included in the total. To show how line-of-sight absorption attenuates the soft band, we recompute the X-ray at N_H = 1e23 using the model's 2500 Angstrom luminosity (Morrison & McCammon 1983 + Wilms+2000 photoelectric + Compton). Since N_H is not yet a build-time parameter, the obscured variant uses the public tengri.xray API.
 from tengri.xray import xray_total
 
 _sfr = float(state.derived["sfr"])
 _mstar = 10.0 ** float(state.derived["log_mstar"])
-# Same l_2500 the X-ray component uses: intrinsic disc 2500 Å, falling back to
-# the Hopkins+2007 bolometric correction when the disc value is unavailable.
+# Use the same L_2500 as the X-ray component: intrinsic disc 2500 Å, or the Hopkins+2007 bolometric correction if the disc value is unavailable.
 _l2500 = float(state.derived.get("L_2500_intrinsic", 0.0))
 if _l2500 <= 0.0:
     _l2500 = float(state.derived["L_agn_bol"]) / (5.15 * 1.199e15)
@@ -547,7 +508,7 @@ sed_xray_obsc = np.asarray(
     xray_total(wave_aa, sfr=_sfr, stellar_mass=_mstar, l_2500_30deg=_l2500, log_nh=23.0)
 )
 
-# (sed, label, color, linestyle, linewidth) — drawn back-to-front.
+# (sed, label, color, linestyle, linewidth): drawn back-to-front.
 CURVES = [
     (sed_stars, "Stars (intrinsic, no dust)", "0.55", "--", 1.1),
     (_comp("sed_nebular"), "Nebular (Cue: continuum + lines)", "#19b3c4", "-", 1.0),
@@ -559,7 +520,7 @@ CURVES = [
     (sed_xray_obsc, r"X-ray obscured ($N_{\rm H}=10^{23}\,$cm$^{-2}$)", "#5a2f8f", ":", 1.6),
 ]
 
-# Rest-frame wavelength regimes [µm]; pale alternating tints behind the SED.
+# Rest-frame wavelength regimes [micrometers] with pale alternating tints behind the SED.
 BANDS = [
     ("Hard\nX-ray", 1e-4, 1.24e-3),
     ("Soft\nX-ray", 1.24e-3, 1.24e-2),
@@ -603,7 +564,7 @@ for sed, label, color, ls, lw in CURVES:
 
 ax.plot(wave_um, nuLnu_lsun(sed_total), color="k", lw=2.6, label="Total model", zorder=4)
 
-# Two rest-frame UV landmarks.
+# Annotate two rest-frame ultraviolet landmarks.
 for lam_aa, txt in [(912.0, "Lyman\nlimit\n(912 Å)"), (3646.0, "Balmer\nbreak\n(3646 Å)")]:
     lam_um = lam_aa / 1e4
     ax.axvline(lam_um, color="0.5", ls=":", lw=0.8, zorder=1)
@@ -615,11 +576,11 @@ ax.set_ylim(ymax * 1e-9, ymax * 30)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$  [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$  [$L_\odot$]")
 
-# Twin frequency axis (ν = c / λ), sharing the log scale.
+# Add a twin frequency axis (nu = c / lambda), sharing the log scale.
 secax = ax.secondary_xaxis("top", functions=(lambda w: C_UM / w, lambda f: C_UM / f))
 secax.set_xlabel(r"Rest-frame frequency $\nu$  [Hz]")
 
-# Hero numbers, read back from the model.
+# Extract the headline numbers from the model.
 m_star = 10.0 ** float(state.derived["log_mstar"])
 sfr = float(state.derived["sfr"])
 log_lagn = np.log10(erg_per_s_to_lsun(float(state.derived["L_agn_bol"])))
@@ -634,5 +595,4 @@ fig.tight_layout()
 fig.savefig(FIG_DIR / "02_anatomy_moneyshot.png", dpi=300, bbox_inches="tight")
 
 # %% [markdown]
-# Next: [`03_discovering_the_menu.py`](03_discovering_the_menu.py) shows
-# how to find every available variant from inside Python.
+# The next notebook, [`03_discovering_the_menu.py`](03_discovering_the_menu.py), shows how to discover every available component variant from inside Python.

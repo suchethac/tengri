@@ -74,9 +74,9 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
+# Twelve UV-MIR bands (GALEX through WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
 # 3800–9200 Å observed). At z = 0.05 this covers the 4000 Å break, the Balmer lines Hβ and Hα,
-# the Mgb triplet, the Fe5270/Fe5335 blends and the Ca II triplet — the features that carry
+# the Mgb triplet, the Fe5270/Fe5335 blends, and the Ca II triplet, which carry
 # metallicity and light-weighted age. Sampling at 260 pixels resolves these indices.
 # The SSP grid carries its nebular emission (lines and continuum), so no separate nebular model is needed.
 
@@ -112,7 +112,7 @@ obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
 #
 # One builder, called twice: the same physics and the same free parameters
 # against two different observations. The spectrum's pixel count drives the fit
-# cost — each pixel adds a likelihood term and a gradient row.
+# cost, as each pixel adds a likelihood term and a gradient row.
 #
 # **Both channels assume Gaussian, uncorrelated errors.** That holds for the
 # photometry, but real spectral pixels share correlated noise (wavelength
@@ -240,7 +240,7 @@ post_joint, t_joint = run(
 print(f"Total fitting time: {t_phot + t_joint:.1f}s", flush=True)
 
 # %% [markdown]
-# ## Constraint widths: joint vs single-modality
+# ## Constraint widths (joint versus single-modality)
 #
 # The 68% credible width of each free parameter, normalized so the photometry-
 # only width is 1. Bars below 1 mean the joint fit tightened that parameter.
@@ -320,9 +320,9 @@ print(f"\n68% coverage: {n_cov}/{len(params)}", flush=True)
 # ## Posterior SED
 #
 # Observed photometry (labeled by band) and the optical spectrum on a single
-# F_ν axis, joint posterior model SED behind them. The shaded band marks the
+# F_ν axis, with the joint posterior model SED behind them. The shaded band marks the
 # spectral window, expanded in the inset. A single posterior explains the
-# broadband points and the spectrum at the same time.
+# broadband points and the spectrum simultaneously.
 
 # %%
 N_DRAW = 60
@@ -411,10 +411,10 @@ fig_h.savefig(FIG_DIR / "07_joint_sed.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Corner — joint posterior
+# ## Corner (joint posterior)
 #
 # Free parameters with truth dashed. The metallicity and dust columns are now
-# tight and centered on the truth — neither dataset managed that on its own.
+# tight and centered on the truth, which neither dataset managed alone.
 
 # %%
 fig_corner = post_joint.plot_corner(truths=truth, color=C_POST)

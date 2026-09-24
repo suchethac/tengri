@@ -16,11 +16,11 @@
 # %% [markdown]
 # # Why JAX
 #
-# Traditional SED fitting (`emcee` + Prospector / BAGPIPES / CIGALE) is gradient-free: at every step the sampler queries the likelihood and guesses the next move. In 10–30 dimensions with 10⁴ likelihood calls per chain step, a single galaxy takes hours.
+# Traditional SED (spectral energy distribution) fitting with codes like emcee, Prospector, BAGPIPES, or CIGALE is gradient-free: at every step, the sampler queries the likelihood and proposes the next move. In 10–30 dimensions with 10,000 likelihood calls per chain step, fitting a single galaxy takes hours.
 #
-# Tengri builds the same physics — stellar populations, dust, nebular emission, AGN, IGM — entirely from JAX primitives. The model is differentiable. The likelihood and its gradient come together at no extra cost. Gradient-based samplers (NUTS, HMC, VI) then use that gradient to climb the posterior efficiently.
+# Tengri builds the same physics (stellar populations, dust, nebular emission, active galactic nucleus, intergalactic medium) entirely from JAX primitives, making the model differentiable. The likelihood and its gradient are computed together at no additional cost. Gradient-based samplers (No-U-Turn Sampler, Hamiltonian Monte Carlo, variational inference) then use that gradient to efficiently explore the posterior.
 #
-# The figures below make this concrete: an astronomer-readable map of the posterior gradient, and how that translates into wall-clock time.
+# The figures below illustrate this concretely: an astronomer-readable visualization of the posterior gradient, and how that translates into wall-clock time.
 
 # %%
 import os
@@ -73,9 +73,7 @@ plot.setup_style()
 # %% [markdown]
 # ## A minimal star-forming galaxy
 #
-# `recipes.mock_recovery_minimal()` is the cheapest stable model — a
-# truncated-skew-normal SFH, single dust optical depth, with baked-in nebular emission.
-# Seven free parameters; tractable in seconds.
+# `recipes.mock_recovery_minimal()` is the lightest stable model: a truncated-skew-normal SFH, single dust optical depth, and baked-in nebular emission. Seven free parameters yield inference in seconds.
 
 # %%
 SSP_NAME = "prsc_miles_chabrier_wNE"
@@ -92,16 +90,11 @@ mock = generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
 flux_obs, noise = mock["flux_obs"], mock["noise"]
 
 # %% [markdown]
-# ## Figure 1 — the posterior gradient
+# ## Figure 1: the posterior gradient
 #
-# Two of the free parameters, varied on a 20×20 grid with the rest fixed
-# at truth: the total stellar mass formed and the birth-cloud optical depth. Left panel:
-# the log-posterior surface, with contours at 1σ / 2σ / 3σ. Right panel:
-# `jax.grad` of the same quantity, plotted as a vector field.
+# Two free parameters are varied on a 20×20 grid with the rest fixed at the truth: the total stellar mass formed and the birth-cloud optical depth. The left panel shows the log-posterior surface with contours at 1σ / 2σ / 3σ significance. The right panel shows `jax.grad` of the same quantity, plotted as a vector field.
 #
-# A gradient-free sampler explores by trial-and-error; a gradient-based
-# sampler reads the arrows. In one or two dozen dimensions that is the
-# difference between hours and seconds.
+# A gradient-free sampler explores by trial-and-error, while a gradient-based sampler reads the arrows. In one or two dozen dimensions, that is the difference between hours and seconds.
 
 # %%
 base = dict(truth)
@@ -123,10 +116,7 @@ def neg_log_post(log_m, tau):
     return 0.5 * chi2  # uniform priors → χ²/2 = -ln posterior up to const
 
 
-# Sequentialize: calling scalar functions in a loop, each JIT'd to its own
-# compiled kernel. Vmapping over the grid would trace the entire orchestrator
-# state pytree (n_age × n_wave × n_grid), exploding memory; scalar calls
-# reuse the same kernel and stay well under a GB.
+# Sequentialize: call scalar functions in a loop, each JIT-compiled to its own kernel. Vmapping over the grid would trace the entire orchestrator state pytree (n_age × n_wave × n_grid), exhausting memory; scalar calls reuse the same kernel and stay well under a gigabyte.
 neg_log_post_jit = jax.jit(neg_log_post)
 grad_jit = jax.jit(jax.grad(neg_log_post, argnums=(0, 1)))
 
@@ -207,12 +197,9 @@ grad_at_truth = jax.grad(loss)(truth)
 {k: float(v) for k, v in grad_at_truth.items() if k in free_keys}
 
 # %% [markdown]
-# ## Figure 2 — forward-model throughput
+# ## Figure 2: forward-model throughput
 #
-# A single forward call versus a `vmap` over 100 parameter draws.
-# The batched call is far below 100× the single-call cost.
-# This is the unit of speed-up that lets gradient samplers, population fits,
-# and posterior-predictive sweeps fit on a laptop.
+# A single forward call is compared with `vmap` over 100 parameter draws. The batched call is far below 100 times the single-call cost. This scaling enables gradient samplers, population fits, and posterior-predictive sweeps to run on a laptop.
 
 # %%
 # Trigger the first JIT compile on a single call (cold cache).
@@ -236,8 +223,7 @@ _ = forward(batch_params).block_until_ready()
 t_batch = perf_counter() - t0
 
 t0 = perf_counter()
-# The default fit: four NUTS chains on the mass-profiled posterior with a dense metric.
-# Seven parameters is also the emcee comparison's dimensionality, so the bars are like-for-like.
+# The default fit: four NUTS chains on the mass-profiled posterior with a dense metric. Seven parameters matches the emcee comparison dimensionality for fair comparison.
 fwd_model = ForwardModel.build(sed=model)
 posterior = fwd_model.fit(flux_obs, noise, key=jax.random.PRNGKey(2), verbose=False)
 t_nuts = perf_counter() - t0
@@ -269,11 +255,7 @@ fig2.savefig(FIG_DIR / "01_wallclock.png", dpi=300, bbox_inches="tight")
 # %% [markdown]
 # ## Two switches worth knowing
 #
-# **`compile=`** controls how the forward model is JIT-wrapped at build
-# time. `per_component` (the default) compiles each `SEDComponent`
-# independently — fast cold start, friendly to notebook edits. `fused`
-# compiles the full pipeline as one graph — slower first call, fastest
-# steady state, what you want inside a population fit.
+# **`compile=`** controls how the forward model is JIT-wrapped at build time. `per_component` (the default) compiles each `SEDComponent` independently, giving fast cold start and friendliness to notebook iteration. `fused` compiles the full pipeline as one graph, slower on first call but fastest in steady state, which is what a population fit needs.
 
 # %%
 cfg = {**recipes.mock_recovery_minimal(), "neb": {"type": "ssp"}}  # the wNE grid carries its nebular emission; the recipe's "no nebular" entry is replaced
@@ -285,20 +267,8 @@ model_fused = SEDModel.build(
 )
 
 # %% [markdown]
-# **Persistent JAX cache.** `import tengri` enables an on-disk JIT cache
-# at `~/.cache/tengri_jax_cache`. Restarting the kernel or launching a
-# Slurm worker does not trigger recompilation of unchanged components;
-# the first forward pass of a fresh process is already warm. Cache
-# management lives in four verbs: `tengri.lean` (default, drop the
-# engine after each fit), `tengri.persistent` (keep it for repeated
-# same-shape fits), `tengri.gc` (one-shot collect), and
-# `tengri.clear_shared_caches()` (full reset for clean benchmarking).
+# **Persistent JAX cache.** Importing `tengri` enables an on-disk JIT cache at `~/.cache/tengri_jax_cache`. Kernel restarts and new Slurm worker launches do not trigger recompilation of unchanged components; the first forward pass of a fresh process is already warm. Cache management has four modes: `tengri.lean` (default, drops the engine after each fit), `tengri.persistent` (keeps it for repeated same-shape fits), `tengri.gc` (one-shot garbage collection), and `tengri.clear_shared_caches()` (full reset for clean benchmarking).
 #
-# ## What this opens up
+# ## What this enables
 #
-# Population fits across thousands of galaxies become tractable on a
-# laptop, not just a cluster. Hierarchical priors, where each galaxy's
-# posterior informs a shared parent distribution, are sampled jointly
-# rather than post-hoc. High-dimensional non-parametric SFHs (≥30
-# bins) are sampled in minutes. The next notebooks build the model up
-# component by component.
+# Population fits across thousands of galaxies become tractable on a laptop rather than a cluster. Hierarchical priors, where each galaxy's posterior informs a shared parent distribution, are sampled jointly instead of post-hoc. High-dimensional non-parametric SFHs (30 or more bins) are sampled in minutes. The next notebooks build the model component by component.

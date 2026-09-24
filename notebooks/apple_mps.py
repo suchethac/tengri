@@ -17,9 +17,9 @@
 # # Running tengri on the Apple GPU (MPS) — experimental
 #
 # **Status: experimental.** This is a working recipe with measured numbers, not a
-# supported configuration. It needs a JAX version tengri does not pin, and it
-# runs in pure float32, where parts of the model are still open work.
-# Nothing here changes the default: on CPU, in float64, nothing below applies.
+# supported configuration. The approach requires a JAX version that the standard
+# tengri installation does not pin, and it runs in pure float32, where parts of the
+# model are still open work. On CPU with float64, nothing below applies.
 #
 # The one-line summary, measured on an Apple M4 Pro:
 #
@@ -34,13 +34,13 @@
 #
 # So the useful question is not "GPU or CPU" but "how many galaxies at once".
 # Below roughly a thousand, stay on the CPU. Above it, the GPU wins on
-# throughput and — at catalog scale — on whether the job completes at all.
+# throughput and (at catalog scale) on whether the job completes at all.
 #
-# The reason is not that the GPU is slow. It is that tengri moves a lot of memory
-# and does very little arithmetic — about **0.12 FLOP per byte** on the
-# `WavePrecomp` path. A GPU needs roughly 25–50 FLOP/byte before its ALUs matter.
-# So per galaxy there is nothing for the GPU to win with; the only way it wins is
-# by having enough galaxies in flight to hide its dispatch latency.
+# The reason is not that the GPU is slow, but that tengri moves a lot of memory
+# and does very little arithmetic (about **0.12 FLOP per byte** on the
+# `WavePrecomp` path). A GPU needs roughly 25–50 FLOP/byte before its ALUs matter.
+# Per galaxy there is nothing for the GPU to win with; the only way it wins is by
+# having enough galaxies in flight to hide its dispatch latency.
 #
 # **How to read the numbers here:**
 #
@@ -85,17 +85,17 @@
 # %% [markdown]
 # ## 2. The three rules
 #
-# **Rule 1 — MPS has no float64, at all.** Not "slower"; absent. A float64 array
+# **Rule 1: MPS has no float64, at all.** Not "slower"; absent. A float64 array
 # does not get downcast, it raises:
 #
 # ```text
 # MLX does not support float64 (F64).
 # ```
 #
-# That is a good failure mode — loud, not silent — but it means the whole process
+# That is a good failure mode (loud, not silent), but it means the whole process
 # must be float32.
 #
-# **Rule 2 — select float32 in the environment, before Python starts.** Setting
+# **Rule 2: select float32 in the environment, before Python starts.** Setting
 # it after `import tengri` is too late: constants allocated during the import are
 # already on the device.
 #
@@ -107,9 +107,9 @@
 #
 # tengri honors that and holds it for the whole import. It will
 # warn once that you are in float32 and that cosmological distances are the known
-# hazard — that warning is expected here, not a problem.
+# hazard (that warning is expected here, not a problem).
 #
-# **Rule 3 — turn MLX kernel fusion off** (`MLX_DISABLE_COMPILE=1`). With it on,
+# **Rule 3: turn MLX kernel fusion off** (`MLX_DISABLE_COMPILE=1`). With it on,
 # a reversed array combined with a broadcast scalar is silently wrong on MPS
 # (`y[::-1] * 2.0` keeps its first element and zeros the rest;
 # [jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)). tengri hits
@@ -142,7 +142,7 @@ print("dtype  :", jnp.zeros(1).dtype)
 
 # %% [markdown]
 # You should see `[MpsDevice(id=0)]`, `False`, `float32`. If `x64` is `True`,
-# something imported JAX before the `os.environ` lines ran — restart the kernel
+# something imported JAX before the `os.environ` lines ran. Restart the kernel
 # and put that cell first.
 
 # %% [markdown]
@@ -185,8 +185,8 @@ print("dtype                    :", flux.dtype)
 # ## 4. Batching: the only thing that moves the needle
 #
 # A single galaxy is the worst case for MPS by a wide margin. Batching with
-# `jax.vmap` closes most of that gap — and on a quiet machine can reverse it.
-# This is the same call, mapped over a leading axis.
+# `jax.vmap` closes most of that gap. On a quiet machine it can reverse it. This is
+# the same call, mapped over a leading axis.
 
 # %%
 import time
@@ -233,15 +233,15 @@ for n in (1, 32):
 # | 4096 | ~0.30 | **0.094** | MPS 3.2x |
 #
 # The shape of it: **CPU plateaus and MPS does not.** From batch 256 upward the
-# CPU sits at 0.24-0.30 ms/galaxy however many you give it, while MPS keeps
-# falling — 0.294, 0.124, 0.094. MPS pays a large fixed dispatch cost once and
-# then amortizes it; the CPU has nothing left to amortize.
+# CPU sits at 0.24-0.30 ms/galaxy however many you give it, while MPS keeps falling
+# (0.294, 0.124, 0.094). MPS pays a large fixed dispatch cost once and then amortizes
+# it; the CPU has nothing left to amortize.
 #
 # The batch 1 and 32 rows were taken against an older tengri whose CPU path was
 # slower, so treat their CPU column as an upper bound.
 
 # %% [markdown]
-# ### It depends on the SHAPE of the work — and on how many galaxies
+# ### Work shape and batch size
 #
 # "Prediction on the GPU, inference on the CPU" is the natural intuition, and it
 # is not what the data says. Batch 256 and batch 4096, one shape per process,
@@ -264,18 +264,18 @@ for n in (1, 32):
 #
 # **At 4096 the inference shape does not fit in CPU memory at all.** Both CPU
 # runs were SIGKILLed by the host's OOM guard (exit 137) while MPS returned in
-# 0.10 ms/galaxy. On unified memory the GPU is not merely faster there — it is
-# the one that completes. For catalog-scale fitting that is a stronger argument
+# 0.10 ms/galaxy. On unified memory the GPU is faster there; more importantly,
+# it is the one that completes. For catalog-scale fitting that is a stronger argument
 # than any of the throughput numbers.
 #
-# **Compile time favors MPS heavily** — cold 0.34-0.71 s against CPU's 4.6-5.1 s.
+# **Compile time favors MPS heavily**: cold 0.34-0.71 s against CPU's 4.6-5.1 s.
 # For iterating on a model that is a real gain regardless of throughput.
 
 # %% [markdown]
 # ### The same numbers, as a picture
 #
-# Two views of one dataset. Left: per-galaxy cost — where the lines cross is the
-# only number that decides which backend to use. Right: total wall clock — MPS is
+# Two views of one dataset. Left: per-galaxy cost (where the lines cross is the
+# only number that decides which backend to use). Right: total wall clock. MPS is
 # nearly horizontal, which is the whole explanation.
 
 # %%
@@ -328,7 +328,7 @@ plt.show()
 # %% [markdown]
 # The right-hand panel is the point. MPS goes from 46.7 ms to ~385 ms while doing
 # 4096x more work; CPU goes from 0.8 ms to ~1230 ms. The GPU is not getting faster
-# as N grows — it is finally being given enough work to be worth waking up.
+# as N grows; it is finally being given enough work to be worth waking up.
 
 # %% [markdown]
 # ## 5. Fitting on MPS
@@ -337,9 +337,9 @@ plt.show()
 # `Fitter` → `InferenceContext` → a backend, with its own compiled kernels. It
 # does work. Whether you *want* it to is another matter.
 #
-# Note what `Fitter` does to `approx` — it resolves `"auto"` and **tops up** to
-# the LUT even though the model was built without one. Always print it; an arm
-# that silently lost its precompute is the classic way to benchmark the wrong
+# Note what `Fitter` does to `approx`: it resolves `"auto"` and **tops up** to
+# the LUT even though the model was built without one. Always print it, because an
+# arm that silently lost its precompute is the classic way to benchmark the wrong
 # thing.
 
 # %%
@@ -370,29 +370,29 @@ print("MAP fit completed on", jax.devices()[0])
 # | 2 | **0.22 s** | 18.80 s |
 # | 3 | **0.22 s** | 19.43 s |
 #
-# The default MAP optimizer is now L-BFGS-B (scipy), a host-driven loop that dispatches one gradient per iteration — the same sequential shape as the Adam loop measured here, so these conclusions stand.
+# The default MAP optimizer is now L-BFGS-B (scipy), a host-driven loop that dispatches one gradient per iteration. The shape is the same as the Adam loop measured here, so these conclusions stand.
 #
 # Two things to read here.
 #
 # **On CPU the fit is 0.22 s, not 4.7 s.** The first run is XLA compilation. With
 # 300 gradients at 0.822 ms the arithmetic is 0.25 s, so 0.22 s warm means the
 # `lax.scan` optimizer loop has essentially *zero* per-step overhead. If you see
-# seconds, you are measuring the compile — and tengri's persistent JAX cache
+# seconds, you are measuring the compile. tengri's persistent JAX cache
 # (`~/.cache/tengri_jax_cache`) amortizes it across processes.
 #
 # **On MPS the warm time does not improve.** 19 s is execution, not compile:
 # ~63 ms per scan step against CPU's 0.73 ms. A single-galaxy fit is 300
-# sequential steps, each one a dispatch — the worst possible shape for this
-# backend, and **86x slower**.
+# sequential steps, each one a dispatch, which is the worst possible shape for this
+# backend and **86x slower**.
 #
-# So: **do not fit one galaxy on the GPU.**
+# Thus, **do not fit one galaxy on the GPU.**
 #
-# Does batching rescue it? Yes, if the batch is large enough. Shape C in §4 is
-# exactly this question — a batch carried through 50 scanned gradient steps. At
+# Batching recovers the GPU only when the batch is large enough. Shape C in §4
+# tests this directly with a batch carried through 50 scanned gradient steps. At
 # batch 256 it is **1.5x slower** than CPU; at batch 4096 the CPU run is
 # **OOM-killed** while MPS returns in 0.10 ms/galaxy. A fit multiplies per-step
 # dispatch by the step count, so it needs a bigger batch than a bare gradient
-# does before the GPU pays off — but past that point it is the only one that
+# does before the GPU pays off. Past that point it is the only one that
 # runs.
 #
 # The honest position: a `CatalogFitter` over hundreds of galaxies with a vmapped
@@ -422,7 +422,7 @@ mm = timed(lambda x: x @ x, a)
 print(f"matmul 2048^2: {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.0f} GFLOP/s")
 
 # %% [markdown]
-# ## 7. Limits, honestly
+# ## 7. Known limitations
 #
 # * **float32 only.** What is still open there is tracked upstream. Forward photometry
 #   and gradients on the fit objective agree with float64 to ~1e-5 on the
@@ -432,8 +432,8 @@ print(f"matmul 2048^2: {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.0f} GF
 #   Expect to bump both together.
 # * **Not in CI.** Nothing here is covered by the test suite. Treat results as
 #   experimental and check anything important against a CPU float64 run.
-# * **The numbers age.** They are a ratio between two moving targets, and the
-#   CPU path is actively optimized — a 3.3x speedup there moved the crossover
+# * **The numbers age.** They are a ratio between two moving targets. The
+#   CPU path is actively optimized; a 3.3x speedup there moved the crossover
 #   from ~250 galaxies to between 256 and 1024. Re-run before relying on them.
 #
 # For a fit that must be right, use the default: CPU, float64. This path is for
