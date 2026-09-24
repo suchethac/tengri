@@ -311,6 +311,41 @@ def published_inter_code_spread(csv_path: Path = ART_SEDFITTING_CSV):
     }
 
 
+def attempt_selection_cost(cells: dict[str, dict]):
+    """Adopted cells whose recorded ``ess_min`` is not the best their rungs reached.
+
+    ``select_best_attempt`` ranks mixed-first, then fewest divergences, then
+    lowest R-hat. It has no ESS term, so when rungs tie on the legs it can see
+    it will take one with far fewer effective samples -- 79/II ties at zero
+    divergences across all three rungs and is decided on a R-hat difference of
+    0.027, taking ``ess_min`` 4.0 over 49.1.
+
+    Every better number is already in the record, so this is a reporting cost
+    rather than a sampling one, and it lands on the s/ESS figures Section 7
+    quotes. Reported rather than corrected: what "best" means interacts with
+    the bar, which is the owner's.
+    """
+    moved = []
+    for name, cell in cells.items():
+        config = _config_of(name, cell)
+        attempts = cell.get("attempts") or []
+        recorded = cell.get("ess_min")
+        if recorded is None or len(attempts) < 2:
+            continue
+        best = max((a.get("ess_min") or 0.0) for a in attempts)
+        if best > recorded * 1.05:
+            moved.append(
+                {
+                    "cell": name,
+                    "config": config,
+                    "adopted": bool(is_adopted(cell, config).adopted),
+                    "recorded": float(recorded),
+                    "best": float(best),
+                }
+            )
+    return moved
+
+
 def coverage(cells: dict[str, dict], field: str) -> tuple[list, int]:
     """Values present for ``field``, and how many cells lack it.
 
@@ -545,6 +580,23 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
         print("  ^ compare the matched rows only: Prospector publishes formed mass and")
         print("    BAGPIPES an instantaneous SFR, so the 'all codes' rows compare")
         print("    different quantities and read high.")
+
+    # --- what the attempt ranking costs the record -------------------------
+    moved = attempt_selection_cost(cells)
+    if moved:
+        adopted_moved = [m for m in moved if m["adopted"]]
+        print(
+            f"\nattempt selection: {len(moved)} cells record a lower ess_min than their "
+            f"own best rung ({len(adopted_moved)} of them adopted)"
+        )
+        for m in sorted(moved, key=lambda m: -(m["best"] / max(m["recorded"], 1e-9)))[:5]:
+            print(
+                f"  {m['cell']:<12} {m['config']:<4} recorded {m['recorded']:7.1f}  "
+                f"best rung {m['best']:7.1f}{'  (adopted)' if m['adopted'] else ''}"
+            )
+        print("  ^ select_best_attempt has no ESS term, so a rung that wins on divergences")
+        print("    or R-hat can lose an order of magnitude of effective samples. The better")
+        print("    numbers are in retune_history; this is a reporting cost, not a sampling one.")
 
     # --- prior boundaries, which the adoption bar cannot see ---------------
     rows, scanned, no_npz, no_priors = prior_boundary_pressure(cells, results_dir)
