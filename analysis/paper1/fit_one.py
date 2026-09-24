@@ -217,8 +217,11 @@ RETUNE_ATTEMPTS_BY_CONFIG: dict[str, int] = {}
 #: the first two rungs say nothing about the third, and an attempt's cost while
 #: it is still running is not evidence about its outcome. Do not cap a rung
 #: from the shape of the rungs below it; cap it only on observed failures of
-#: that rung. Config III's cap stands because attempt 3 there was observed to
-#: exhaust a 21600 s cell timeout without clearing (R60/#2089).
+#: that rung. Configuration III's cap was the case that measurement supported
+#: (R60/#2089: attempt 3 exhausted a 21600 s cell timeout without clearing),
+#: and it was nevertheless removed in bd773bbb3 -- the measurement was taken
+#: when "III" named the continuity history, and today's III shares no component
+#: with it. RETUNE_ATTEMPTS_BY_CONFIG is empty and no configuration is capped.
 
 #: Keys the NPZ carries beside the sampled parameters, one array each.
 #: ``dust_tau`` is the configuration's dust optical depth whichever parameter
@@ -907,8 +910,9 @@ def run_fit(
         seed: Random seed for reproducibility
         retune_attempts: Attempts made before the best one is kept (see
             :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS, unless
-            ``config_key`` has an override in RETUNE_ATTEMPTS_BY_CONFIG). An
-            explicitly passed value always wins over the per-config default.
+            ``config_key`` has an override in RETUNE_ATTEMPTS_BY_CONFIG, which
+            is empty today). An explicitly passed value always wins over the
+            per-config default.
         n_warmup: NUTS warmup draws per chain (default: 150, the advertised recipe)
         n_samples: NUTS kept draws per chain (default: 300, the advertised recipe)
         n_chains: NUTS chains (default: the paper's 4)
@@ -917,8 +921,10 @@ def run_fit(
         Dict with fit result and diagnostics
     """
     # An explicit caller override (a value other than the module default) wins;
-    # otherwise the per-config table applies (RETUNE_ATTEMPTS_BY_CONFIG) --
-    # e.g. Config III caps at 2 (#2089, ruling R60).
+    # otherwise the per-config table applies. RETUNE_ATTEMPTS_BY_CONFIG is
+    # currently empty, so every configuration runs the full ladder; the lookup
+    # stays because a cap restored from a measurement on the current suite
+    # belongs there.
     if retune_attempts == DEFAULT_RETUNE_ATTEMPTS:
         retune_attempts = RETUNE_ATTEMPTS_BY_CONFIG.get(config_key, DEFAULT_RETUNE_ATTEMPTS)
 
