@@ -4919,19 +4919,96 @@ class SEDModel:
         """
         return get_internal_params(params, self._param_map, self.spec, self._uses_stochastic_sfh)
 
-    def _get_redshift(self, params):
-        """Get redshift value from params or fixed value."""
+    def _evaluation_params(self, params, fixed_values=None):
+        """Merge params with fixed values for evaluation-time parameter resolution.
+
+        Returns the merged dict using both the spec's fixed values and any
+        evaluation-time overrides in fixed_values. This is the single source of
+        truth for complete parameter dicts at evaluation time.
+
+        Parameters
+        ----------
+        params : dict
+            Free parameters only.
+        fixed_values : dict, optional
+            Evaluation-time fixed values (e.g., runtime redshift from data_args).
+            When supplied, these override the spec's declared Fixed values.
+
+        Returns
+        -------
+        dict
+            Complete parameter dict with all fixed values merged in.
+        """
+        from tengri.parameters.resolve import merge_fixed_params
+
+        merged = merge_fixed_params(self.spec, params)
+        if fixed_values is not None:
+            merged = {**merged, **fixed_values}
+        return merged
+
+    def _get_redshift(self, params, fixed_values=None):
+        """Get redshift value from params or evaluation parameters.
+
+        Resolution order: params["redshift"] → merged evaluation params
+        (from _evaluation_params).
+
+        Parameters
+        ----------
+        params : dict
+            Parameter dict (typically free params only).
+        fixed_values : dict, optional
+            Evaluation-time fixed values (e.g., runtime redshift from data_args).
+
+        Returns
+        -------
+        scalar or tracer
+            The redshift, either from params or the merged evaluation parameters.
+
+        Raises
+        ------
+        KeyError
+            If redshift is not found in params or evaluation parameters.
+        """
         if "redshift" in params:
             return params["redshift"]
-        if self._z_fixed is not None:
-            return self._z_fixed
+        eval_params = self._evaluation_params(params, fixed_values)
+        if "redshift" in eval_params:
+            return eval_params["redshift"]
         raise KeyError("Redshift not in params and not fixed in spec")
 
-    def _get_dl_cm(self, params):
-        """Get luminosity distance from params or precomputed value."""
-        if self._dl_cm_fixed is not None:
+    def _get_dl_cm(self, params, fixed_values=None):
+        """Get luminosity distance from params or precomputed value.
+
+        Returns precomputed _dl_cm_fixed only when redshift comes from the
+        spec's own Fixed value. Otherwise computes luminosity_distance(z)
+        to remain JAX-traceable.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter dict (typically free params only).
+        fixed_values : dict, optional
+            Evaluation-time fixed values (e.g., runtime redshift from data_args).
+
+        Returns
+        -------
+        scalar or tracer
+            Luminosity distance in cm.
+
+        Notes
+        -----
+        When redshift comes from params or fixed_values (not the spec's
+        declared Fixed value), the result is always computed via
+        luminosity_distance(z) to remain JAX-traceable for gradients.
+        """
+        z = self._get_redshift(params, fixed_values=fixed_values)
+        # Use precomputed _dl_cm_fixed only when z came from the spec's Fixed value
+        if (
+            "redshift" not in params
+            and (fixed_values is None or "redshift" not in fixed_values)
+            and self._dl_cm_fixed is not None
+        ):
             return self._dl_cm_fixed
-        z = self._get_redshift(params)
         return luminosity_distance(z)
 
     def _get_sigma_v_kms(self, params):
@@ -6275,7 +6352,14 @@ class SEDModel:
         return pow10(log_atten)
 
     def predict_line_fluxes(
-        self, params, target_wavelengths=None, tolerance_aa=5.0, *, redden=True, state=None
+        self,
+        params,
+        target_wavelengths=None,
+        tolerance_aa=5.0,
+        *,
+        redden=True,
+        state=None,
+        fixed_values=None,
     ):
         """Predict observed emission line fluxes (dust-reddened by default).
 
@@ -6315,6 +6399,18 @@ class SEDModel:
             (un-reddened) fluxes, e.g. when fitting extinction-corrected
             catalog line fluxes. (Before 2026-07 this was always intrinsic,
             silently omitting the line reddening; ``redden=True`` is the fix.)
+        state : ForwardState, optional
+            A pre-computed forward state to read the discrete line catalog
+            from (shares one ``predict_state`` across channels, e.g. the
+            joint loss's line-flux + line-ratio + index channels). When
+            ``None``, this method runs its own ``predict_state`` (unless a
+            fast per-Q_H grid is attached, which never needs one).
+        fixed_values : dict, optional
+            Evaluation-time fixed values (e.g., a Fitter's runtime redshift
+            under ``catalog_z_range``), forwarded to :meth:`_evaluation_params`
+            / :meth:`_get_dl_cm` and to any internal ``predict_state`` call.
+            When supplied, these win over the spec's own declared Fixed
+            values during resolution.
 
         Returns
         -------
@@ -6425,8 +6521,11 @@ class SEDModel:
             # merges the spec's own value) and was silently wrong here for
             # any model whose Fixed pin differs from the default -- measured
             # 9.3e-1 (neb_logU) / 4.0e-1 (neb_dig_frac) relative error on the
-            # returned line fluxes (review I1, #2222).
-            full_params = merge_fixed_params(self.spec, params)
+            # returned line fluxes (review I1, #2222). ``_evaluation_params``
+            # additionally lets an evaluation-time ``fixed_values`` (e.g. a
+            # Fitter's runtime redshift under ``catalog_z_range``) win over the
+            # spec's own Fixed value, exactly as ``_get_dl_cm`` below does.
+            full_params = self._evaluation_params(params, fixed_values)
             from tengri.components.nebular.dig import mix_dig_grid_reconstruction
             from tengri.components.nebular.nebular_grid_precompute import (
                 _dig_may_be_active,
@@ -6441,7 +6540,7 @@ class SEDModel:
             if state is not None and ("log_nion" in state.derived or "nion" in state.derived):
                 log_nion = _log_nion_of_state(state)
             else:
-                log_nion = self._compute_log_nion(params)
+                log_nion = self._compute_log_nion(params, fixed_values=fixed_values)
                 log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
             all_waves = jnp.asarray(grid.wavelengths)
             # Both lookups (HII and DIG) go through the log10 form: the
@@ -6471,7 +6570,7 @@ class SEDModel:
             # ``loss_functions._build_prediction``) so the full-grid forward
             # is not recomputed once per feature channel.
             if state is None:
-                state = self.predict_state(params)
+                state = self.predict_state(params, fixed_values=fixed_values)
             if "line_waves" not in state.derived or "line_lums" not in state.derived:
                 raise ValueError(
                     "Configured nebular backend did not publish a discrete "
@@ -6527,9 +6626,11 @@ class SEDModel:
                 # _attenuate_line_catalog reads params["dust_tau_bc"] etc.
                 # directly, no merge of its own (#2296): merge here if the
                 # grid branch above did not already (grid is None on this
-                # call).
+                # call). ``_evaluation_params`` folds in ``fixed_values`` too,
+                # so a Fitter's evaluation-time override wins here exactly as
+                # it does for the grid branch above.
                 if full_params is None:
-                    full_params = merge_fixed_params(self.spec, params)
+                    full_params = self._evaluation_params(params, fixed_values)
                 if log_all_lums is None:
                     all_lums = self._attenuate_line_catalog(full_params, all_waves, all_lums)
                 else:
@@ -6611,7 +6712,7 @@ class SEDModel:
             selected_lums = all_lums
             selected_log_lums = log_all_lums
 
-        dl_cm = self._get_dl_cm(params)
+        dl_cm = self._get_dl_cm(params, fixed_values=fixed_values)
         # ``line_lums`` are published in erg/s (DerivedKey contract in
         # NebularSEDComponent), no L_sun conversion here. Multiplying by
         # L_SUN was a 33.6-dex unit error that made every joint
@@ -6816,7 +6917,7 @@ class SEDModel:
         sliced = slice_params_for_component(stellar, params)
         return stellar.compute_nion(sliced, ssp_data=self.ssp_data)
 
-    def _compute_log_nion(self, params):
+    def _compute_log_nion(self, params, fixed_values=None):
         """SED-free log10 :math:`Q_H` [dex re photons/s]; the float32-safe sibling.
 
         :meth:`_compute_nion` exponentiates a ~52.8 dex result, which is ``inf`` in
@@ -6825,6 +6926,16 @@ class SEDModel:
         ``StellarSEDComponent.compute_log_nion`` is the log-domain core
         :meth:`~tengri.components.stellar.component.StellarSEDComponent.compute_nion`
         itself wraps, so this is the shorter path as well as the safe one.
+
+        Parameters
+        ----------
+        params : dict
+            Free-parameter dict (same shape as :meth:`predict_line_fluxes`).
+        fixed_values : dict, optional
+            Evaluation-time fixed values (e.g., runtime redshift from
+            ``data_args`` under ``catalog_z_range``), forwarded to
+            :meth:`_evaluation_params`. See :meth:`predict_line_fluxes`, the
+            only caller (the grid branch's no-state fallback).
         """
         from tengri.components.stellar.component import StellarSEDComponent
         from tengri.forward.orchestrator import slice_params_for_component
@@ -6836,14 +6947,16 @@ class SEDModel:
         if stellar is None:
             raise ValueError("No StellarSEDComponent in the chain, cannot compute Q_H.")
         # compute_log_nion -> compute_joint_weights reads params["redshift"]
-        # directly (require_redshift, no fallback): merge the spec's Fixed
-        # values in first (#2296), same as every other exact-projector-style
-        # consumer this file routes through merge_fixed_params.
-        full_params = merge_fixed_params(self.spec, params)
+        # directly (require_redshift, no fallback) to bound the SFH integral
+        # by the age of the universe at that redshift: merge the spec's Fixed
+        # values AND any evaluation-time ``fixed_values`` in first (#2296),
+        # same as every other exact-projector-style consumer this file routes
+        # through ``_evaluation_params``.
+        full_params = self._evaluation_params(params, fixed_values)
         sliced = slice_params_for_component(stellar, full_params)
         return stellar.compute_log_nion(sliced, ssp_data=self.ssp_data)
 
-    def predict_line_ratios(self, params, line_ratio_data, *, state=None):
+    def predict_line_ratios(self, params, line_ratio_data, *, state=None, fixed_values=None):
         """Predict emission line ratios for a :class:`LineRatioData` set.
 
         Computes the model flux ratio ``F(numerator) / F(denominator)`` for
@@ -6862,6 +6975,10 @@ class SEDModel:
         line_ratio_data : LineRatioData
             The observed ratio set; supplies ``numerator_waves`` /
             ``denominator_waves`` for matching and the ``log_space`` flag.
+        fixed_values : dict, optional
+            Fixed parameter values (evaluation-time only). When supplied, these
+            are consulted during redshift resolution to support per-galaxy or
+            per-call redshift overrides that do not appear in the free params.
 
         Returns
         -------
@@ -6885,7 +7002,7 @@ class SEDModel:
         from tengri.utils.scale import pow10
 
         if state is None:
-            state = self.predict_state(params)
+            state = self.predict_state(params, fixed_values=fixed_values)
         if "line_waves" not in state.derived or "log_line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete line "
@@ -6913,7 +7030,7 @@ class SEDModel:
         log_all_lums = jnp.asarray(
             _log_atten if _log_atten is not None else state.derived["log_line_lums"]
         )
-        dl_cm = self._get_dl_cm(params)
+        dl_cm = self._get_dl_cm(params, fixed_values=fixed_values)
         # ``line_lums`` are erg/s (DerivedKey contract), same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
         # this is unit hygiene, not a behavior change.
@@ -6948,6 +7065,14 @@ class SEDModel:
         state : ForwardState, optional
             A pre-computed forward state to measure on (shares one
             ``predict_state`` across channels). Ignored when ``approx=True``.
+            No ``fixed_values`` kwarg: indices are rest-frame quantities and
+            this method never resolves a redshift itself -- the ``approx=False``
+            branch reads ``state.sed_intrinsic`` (already resolved by whoever
+            built ``state``) or self-merges via ``_predict_rest_sed``, and the
+            ``approx=True`` branch (:meth:`_feature_fast_indices`) merges the
+            spec's own Fixed values with no evaluation-time override (unlike
+            :meth:`predict_line_fluxes`, this path has no Fitter call site that
+            ever exercises ``approx=True``).
         approx : bool, default False
             Route through the FeaturePrecomp window-LUT path
             (:meth:`_feature_fast_indices`): contract precomputed SSP window
@@ -7220,7 +7345,16 @@ class SEDModel:
             )
         return values
 
-    def measure_line_fluxes(self, params, line_defs=None, *, approx=False, state=None, fast=UNSET):
+    def measure_line_fluxes(
+        self,
+        params,
+        line_defs=None,
+        *,
+        approx=False,
+        state=None,
+        fixed_values=None,
+        fast=UNSET,
+    ):
         r"""Emission-line fluxes **measured from the model spectrum**, catalog-style.
 
         The counterpart to :meth:`predict_line_fluxes`: where ``predict_*`` returns
@@ -7261,6 +7395,10 @@ class SEDModel:
             Spelled ``fast`` until 2026-08.
         state : ForwardState, optional
             Pre-computed forward state to measure on (exact path only).
+        fixed_values : dict, optional
+            Fixed parameter values (evaluation-time only). When supplied, these
+            are consulted during redshift resolution to support per-galaxy or
+            per-call redshift overrides that do not appear in the free params.
         fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
@@ -7303,7 +7441,7 @@ class SEDModel:
         # a 0.0 default put the galaxy at 10 pc, 1e17 too bright, silently
         # (#1127). ``_get_redshift`` lets an explicit value win, falls back to the
         # fixed one, and raises if the model has neither.
-        z = jnp.asarray(self._get_redshift(params))
+        z = jnp.asarray(self._get_redshift(params, fixed_values=fixed_values))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         # log10, never the linear divisor: 4 pi d_L^2 is ~1e57 (and ~1.2e40 even
         # at the 10-pc z=0 convention) against a float32 ceiling of 3.4e38, so the
@@ -7317,8 +7455,12 @@ class SEDModel:
             # style consumers (require_redshift, raw dict reads with no
             # fallback): they need the MERGED dict, unlike the exact branch
             # below which self-merges inside predict_state/_predict_rest_sed.
-            # Refuses any Fixed key present (#2296) and fills in the rest.
-            full_params = merge_fixed_params(self.spec, params)
+            # ``_evaluation_params`` refuses any Fixed key present in
+            # ``params`` (#2296), fills in the spec's own Fixed values, and
+            # then lets ``fixed_values`` (a Fitter's evaluation-time
+            # redshift override under ``catalog_z_range``) win, exactly as
+            # ``z`` was just resolved above via ``_get_redshift``.
+            full_params = self._evaluation_params(params, fixed_values)
             chain = self._feature_chain()
             stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
             joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)

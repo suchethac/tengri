@@ -188,8 +188,11 @@ def _build_prediction(
     if _spec is not None and hasattr(_spec, "free_params"):
         _free_names = set(_spec.free_params)
         free_params = {k: v for k, v in params.items() if k in _free_names}
+        # Evaluation's fixed values (e.g., runtime redshift from data_args)
+        eval_fixed = {k: v for k, v in params.items() if k not in _free_names}
     else:
         free_params = params
+        eval_fixed = None
 
     # Single threaded forward for phot/spec/joint: one orchestrator call
     # returns an Observables carrying every configured channel. ``_obs`` is
@@ -282,17 +285,32 @@ def _build_prediction(
             # model spectrum the way a pipeline does (measure_line_fluxes). With
             # FeaturePrecomp the measurement runs against the SSP window LUT.
             prediction["line_fluxes"] = model.measure_line_fluxes(
-                free_params, measured_line_defs, approx=fast_lines, state=feature_state
+                free_params,
+                measured_line_defs,
+                approx=fast_lines,
+                state=feature_state,
+                fixed_values=eval_fixed,
             )
         else:
             prediction["line_fluxes"] = model.predict_line_fluxes(
-                free_params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
+                free_params,
+                target_wavelengths=data_args["line_flux_waves"],
+                state=feature_state,
+                fixed_values=eval_fixed,
             )
     if has_line_ratios:
         prediction["line_ratios"] = model.predict_line_ratios(
-            free_params, model.observation.line_ratios, state=feature_state
+            free_params,
+            model.observation.line_ratios,
+            state=feature_state,
+            fixed_values=eval_fixed,
         )
     if has_indices:
+        # predict_spectral_indices takes no fixed_values: indices are
+        # rest-frame quantities and this call always supplies feature_state
+        # (needs_state is unconditionally True whenever has_indices), so the
+        # exact branch reads the already-resolved state.sed_intrinsic; see
+        # SEDModel.predict_spectral_indices's docstring for the full reason.
         prediction["indices"] = model.predict_spectral_indices(
             free_params, index_defs, state=feature_state
         )

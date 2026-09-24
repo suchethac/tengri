@@ -6,6 +6,21 @@
 
 ### Fixed
 
+- A `Fixed` redshift now reaches the emission-line paths the same way it reaches
+  photometry. Under `WavePrecomp(catalog_z_range=...)` the build keeps redshift out
+  of the compiled kernel (so `model.z_fixed` is `None` by design), and
+  `predict_line_fluxes`, `predict_line_ratios`, `measure_line_fluxes`, and the
+  `FeaturePrecomp` catalog snap resolved z only from that baked value, raising
+  `KeyError: Redshift not in params and not fixed in spec` at build time with
+  `FeaturePrecomp` and at likelihood setup with line-flux data. The loss also
+  stripped the evaluation's fixed values before calling the line methods, so a
+  runtime redshift (`params_override={"redshift": z}` or a catalog row's z)
+  reached photometry but not lines, which silently computed line fluxes at the
+  model's build-time redshift. One resolver, `SEDModel._evaluation_params`, now
+  merges the spec's Fixed values with the evaluation's own, and the line methods
+  take it through a new `fixed_values=` argument, so lines, dust, and photometry
+  read one redshift.
+
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
