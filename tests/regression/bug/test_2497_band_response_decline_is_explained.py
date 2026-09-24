@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 """A refused dust band response must say why, and dh02_ce01 must not crash.
 
 The band-response precompute is exact only for a dust emission template that
