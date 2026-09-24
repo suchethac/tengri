@@ -1,0 +1,37 @@
+2026-09-21 10:39:40,159 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 6.157e-30 erg/s/cm2/Hz
+2026-09-21 10:41:47,822 - __main__ - INFO - Galaxy 7837 (z=1.095): 15 detected bands
+2026-09-21 10:41:47,823 - __main__ - INFO - Config III: 6 free parameters
+2026-09-21 10:41:47,823 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-21 10:46:05,704 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-21 10:56:23,917 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (618.2s). Step size: 0.2120. Divergent in the final warmup window: 0%
+2026-09-21 11:15:23,172 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1756.1s. Divergences: 6/1200 (0.5%). Tree depth: mean 4.9, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-21 11:15:23,907 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-21 11:15:23,907 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-21 11:21:16,393 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=6, rhat_max=1.0209
+2026-09-21 11:22:46,853 - __main__ - INFO - Saved results to analysis/paper1/results/fits/7837_III.npz
+2026-09-21 11:22:46,855 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/7837_III.json
+2026-09-21 11:22:46,858 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=6) before retuning
+2026-09-21 11:22:46,860 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
+2026-09-21 11:22:51,098 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-21 11:45:18,505 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1347.4s). Step size: 0.0580. Divergent in the final warmup window: 0%
+2026-09-21 12:08:19,388 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2728.1s. Divergences: 2/1200 (0.2%). Tree depth: mean 5.4, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-21 12:08:19,393 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-21 12:08:19,395 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-21 12:14:21,450 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=2, rhat_max=1.0057
+2026-09-21 12:16:04,603 - __main__ - INFO - Saved results to analysis/paper1/results/fits/7837_III.npz
+2026-09-21 12:16:04,605 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/7837_III.json
+2026-09-21 12:16:04,609 - __main__ - INFO - Saved the best attempt so far (attempt 2 of 2, divergences=2) before retuning
+2026-09-21 12:16:04,609 - __main__ - INFO - Attempt 3/3: target_accept 0.99, warmup 150, diagonal mass
+2026-09-21 12:16:09,863 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.99
+2026-09-21 12:55:05,822 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (2336.0s). Step size: 0.0460. Divergent in the final warmup window: 0%
+2026-09-21 13:36:33,575 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 4823.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.3, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-21 13:36:33,580 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-21 13:36:33,581 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-21 13:41:16,956 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0051
+2026-09-21 13:43:11,498 - __main__ - INFO - Saved results to analysis/paper1/results/fits/7837_III.npz
+2026-09-21 13:43:11,504 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/7837_III.json
+2026-09-21 13:43:11,513 - __main__ - INFO - ✓ Fit complete for galaxy 7837 config III
+  MAP initialization (1000 steps)...
+  MAP init done (loss=29.38)
+  MAP initialization: reusing cached MAP point
+  MAP initialization: reusing cached MAP point

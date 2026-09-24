@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from .configs import CONFIGS as CONFIGS_REGISTRY
+from .fit_one import ESS_FLOOR
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,12 @@ def cell_is_adopted(json_path: Path) -> bool:
     so the second pass re-runs the cell (#2089).
     """
     payload = read_cell_json(json_path)
-    return bool(payload is not None and payload.get("adoption_pass"))
+    if payload is None or not payload.get("adoption_pass"):
+        return False
+    # A cell adopted before ESS_FLOOR joined the bar can carry the flag on an
+    # ESS the bar now refuses (14099/V: ess_min 3); rerun it rather than skip.
+    ess_min = payload.get("ess_min")
+    return ess_min is not None and float(ess_min) >= ESS_FLOOR
 
 
 def aggregate_summary(results_dir: Path) -> dict:
@@ -242,7 +248,13 @@ def run_fit_subprocess(
         with open(log_file, "w") as f:
             env = os.environ.copy()
             worktree_root = Path(__file__).parent.parent.parent
-            env["PYTHONPATH"] = str(worktree_root / "src")
+            env["PYTHONPATH"] = os.pathsep.join(
+                (
+                    str(worktree_root / "src"),
+                    str(worktree_root / "analysis"),
+                    str(worktree_root / "analysis" / "paper1"),
+                )
+            )
             env["JAX_PLATFORMS"] = "cpu"
             env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
 
@@ -288,6 +300,7 @@ def run_fit_cells_concurrent(
     only_missing: bool = False,
     stagger_seconds: float = 20.0,
     cell_command: list[str] | None = None,
+    profile_mass: bool = False,
 ) -> tuple[list[dict], list[tuple[int, str]], list[tuple[int, str]]]:
     """Run fit cells concurrently with at most max_jobs subprocesses alive at once.
 
@@ -335,6 +348,7 @@ def run_fit_cells_concurrent(
                 str(results_dir),
                 "--seed",
                 str(42),
+                *(["--profile-mass"] if profile_mass else []),
             ]
 
     # Track running subprocesses: list of (gal_id, config_key, Popen, start_time)
@@ -370,7 +384,13 @@ def run_fit_cells_concurrent(
 
         env = os.environ.copy()
         worktree_root = Path(__file__).parent.parent.parent
-        env["PYTHONPATH"] = str(worktree_root / "src")
+        env["PYTHONPATH"] = os.pathsep.join(
+            (
+                str(worktree_root / "src"),
+                str(worktree_root / "analysis"),
+                str(worktree_root / "analysis" / "paper1"),
+            )
+        )
         env["JAX_PLATFORMS"] = "cpu"
         env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
 
@@ -485,7 +505,13 @@ def run_fit_cells_concurrent(
 
                 env = os.environ.copy()
                 worktree_root = Path(__file__).parent.parent.parent
-                env["PYTHONPATH"] = str(worktree_root / "src")
+                env["PYTHONPATH"] = os.pathsep.join(
+                    (
+                        str(worktree_root / "src"),
+                        str(worktree_root / "analysis"),
+                        str(worktree_root / "analysis" / "paper1"),
+                    )
+                )
                 env["JAX_PLATFORMS"] = "cpu"
                 env["TENGRI_PRECOMP_CACHE_DIR"] = str(Path.home() / ".cache" / "tengri_precomp")
 
@@ -643,6 +669,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Maximum number of concurrent fit_one subprocesses (default 3)",
     )
     parser.add_argument(
+        "--profile-mass",
+        action="store_true",
+        help=(
+            "Pass --profile-mass to every fit_one cell: the stellar mass amplitude is "
+            "marginalized analytically (exact for a Gaussian likelihood) instead of "
+            "sampled. Rows whose photometry is not linear in the mass (VI, whose AGN "
+            "components carry their own luminosity) refuse it loudly and fail their "
+            "cell; run those rows without the flag. Recorded per attempt in the JSON."
+        ),
+    )
+    parser.add_argument(
         "--configs",
         type=str,
         default=None,
@@ -761,6 +798,7 @@ def main(argv: list[str] | None = None):
         results_dir,
         max_jobs=args.jobs,
         only_missing=args.only_missing,
+        profile_mass=args.profile_mass,
     )
 
     # Print summary table

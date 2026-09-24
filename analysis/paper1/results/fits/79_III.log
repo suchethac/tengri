@@ -1,0 +1,43 @@
+2026-09-21 09:30:39,487 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.071e-29 erg/s/cm2/Hz
+2026-09-21 09:32:45,446 - __main__ - INFO - Galaxy 79 (z=1.012): 13 detected bands
+2026-09-21 09:32:45,447 - __main__ - INFO - Config III: 6 free parameters
+2026-09-21 09:32:45,447 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+E0921 09:33:16.402687  664624 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
+
+  %sort.105 = f64[7127]{0} sort(%constant.6212), dimensions={0}, is_stable=true, to_apply=%region_45.155, metadata={op_name="jit(val_and_grad)/jvp(jit(loss_fn))/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=3578}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0921 09:33:16.571686  664538 slow_operation_alarm.cc:140] The operation took 1.169211437s
+Constant folding an instruction is taking > 1s:
+
+  %sort.105 = f64[7127]{0} sort(%constant.6212), dimensions={0}, is_stable=true, to_apply=%region_45.155, metadata={op_name="jit(val_and_grad)/jvp(jit(loss_fn))/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=3578}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0921 09:33:22.088390  664624 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 2s:
+
+  %sort.110 = f64[12844]{0} sort(%constant.6597), dimensions={0}, is_stable=true, to_apply=%region_80.325, metadata={op_name="jit(val_and_grad)/jvp(jit(loss_fn))/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=3578}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0921 09:33:22.096219  664538 slow_operation_alarm.cc:140] The operation took 2.00800549s
+Constant folding an instruction is taking > 2s:
+
+  %sort.110 = f64[12844]{0} sort(%constant.6597), dimensions={0}, is_stable=true, to_apply=%region_80.325, metadata={op_name="jit(val_and_grad)/jvp(jit(loss_fn))/jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=3578}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-21 09:38:27,134 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-21 10:02:24,496 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1437.4s). Step size: 0.0707. Divergent in the final warmup window: 0%
+2026-09-21 10:32:07,472 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 3218.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 5.7, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-21 10:37:55,596 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0054
+2026-09-21 10:39:16,561 - __main__ - INFO - Saved results to analysis/paper1/results/fits/79_III.npz
+2026-09-21 10:39:16,562 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/79_III.json
+2026-09-21 10:39:16,568 - __main__ - INFO - ✓ Fit complete for galaxy 79 config III
+  MAP initialization (1000 steps)...
+  MAP init done (loss=24.06)

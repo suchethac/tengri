@@ -74,6 +74,20 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
 
     law: str = "calzetti"
     name: str = "dust_attenuation"
+    lyman_cutoff_aa: float = 0.0
+    """Lyman clip applied to the attenuation curve, mirroring two_component."""
+    eb_include_lyc: bool = False
+    """FSPS-parity toggle (#961), mirroring ``DustSEDComponentConfig``.
+
+    ``False`` applies the canonical LyC mask to the energy-balance integral --
+    ionizing photons ionize H rather than heat dust (#922). ``True`` keeps the
+    LyC in, so all absorbed energy heats dust.
+
+    The toggle has to reach BOTH the exact integral in :meth:`apply` and the
+    build-time LUT, because they must integrate the same thing: a LUT baked
+    with one choice and a runtime using the other disagreed by 2e-2 to 1e-1 in
+    photometry, and at a LUT node -- where interpolation is exact -- by 2e3.
+    """
     live_shape_params: frozenset[str] = frozenset()
     r"""Shape parameters somebody actually asked for, resolved at build time.
 
@@ -436,17 +450,96 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # amplitude via the FIR-radio correlation). LyC photons ionize H
         # rather than heat dust, so the canonical integral masks λ < 912 Å
         # (#922).
-        from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
+        from tengri.forward.energy_balance import (
+            LYMAN_CUTOFF_AA,
+            bolometric_absorbed_log10,
+            warn_if_corrupt,
+        )
         from tengri.utils.physics_constants import C_AA
-        from tengri.utils.scale import pow10
+        from tengri.utils.scale import log10_add, pow10
 
         nu = C_AA / state.wave  # Hz
         # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
         # (#1206). The sign only tracks grid orientation; the energy is |L|.
-        log_l_absorbed, _ = bolometric_absorbed_log10(
-            state.sed_intrinsic, attenuated, nu, wave=state.wave
-        )
+
+        # Try to use the energy-balance LUT (fast path) if available.
+        # The LUT was built with the stellar SED only; for single-component
+        # models without a nebular component (the canonical case), it captures
+        # the full absorption.
+        eb_lut = None
+        if isinstance(template_data, dict):
+            _dir = template_data.get("dust_ir")
+            if isinstance(_dir, dict):
+                eb_lut = _dir.get("energy_balance_lut")
+
+        jw = state.derived.get("joint_weights")
+        log_mass_scale = state.derived.get("log_stellar_mass_scale")
+        # FSPS-parity toggle (#961), the same expression DustSEDComponent uses:
+        # None disables the canonical LyC mask so all absorbed energy heats
+        # dust. The fast-path LUT bakes the same choice at build time
+        # (sed_model passes config.eb_include_lyc), so the two agree either way.
+        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_CUTOFF_AA
+
+        if eb_lut is not None and jw is not None and log_mass_scale is not None:
+            # Fast path: use precomputed LUT with degenerate two-component mapping.
+            # Single-screen tau_v maps to tau_diff; tau_bc is pinned at 0.0.
+            from tengri.components.dust.energy_balance_precompute import (
+                lut_l_absorbed_stellar_log10,
+            )
+
+            log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
+                eb_lut,
+                jnp.asarray(jw),
+                jnp.asarray(log_mass_scale),
+                jnp.asarray(0.0),  # tau_bc = 0.0 (degenerate)
+                jnp.asarray(params["dust_tau_v"]),  # tau_diff = tau_v
+            )
+
+            # The nebular continuum is absorbed by the SAME screen, so its
+            # contribution is added rather than dropped. The LUT term covers
+            # the stellar light only -- it is built from the SSP cube -- and
+            # assigning all absorption to it loses whatever the nebular
+            # backend emits: measured 7.7e-2 relative photometry error AT a
+            # LUT node (where interpolation is exact) for single_component
+            # with a Cue backend, which is the shape configurations II and V
+            # of the paper grid use.
+            #
+            # This mirrors DustSEDComponent, which integrates its nebular term
+            # separately and combines in the log domain. Unlike the
+            # two-component case there is only one screen here, so the same
+            # ``attenuation`` applies to both terms and no second curve is
+            # needed. ``log10_add`` carries each integral's own sign rather
+            # than inventing one for a partial sum.
+            #
+            # BakedIn publishes ``sed_nebular`` as zeros, so this costs a
+            # zero-valued integral there and changes nothing.
+            _sed_neb = state.derived.get("sed_nebular")
+            if _sed_neb is None:
+                log_l_absorbed = log_stellar
+            else:
+                sed_neb = jnp.asarray(_sed_neb)
+                log_neb, sign_neb = bolometric_absorbed_log10(
+                    sed_neb,
+                    sed_neb * attenuation,
+                    nu,
+                    wave=state.wave,
+                    lyman_cutoff_aa=_eb_cutoff,
+                )
+                log_l_absorbed = log10_add(
+                    log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb
+                )
+        else:
+            # Slow path (exact integral): full-wavelength integration over all
+            # components (stellar, nebular, shock, AGN). Same as before.
+            log_l_absorbed, _ = bolometric_absorbed_log10(
+                state.sed_intrinsic,
+                attenuated,
+                nu,
+                wave=state.wave,
+                lyman_cutoff_aa=_eb_cutoff,
+            )
+
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:
             # Total dust IR budget override (#2187-series): a STATIC branch

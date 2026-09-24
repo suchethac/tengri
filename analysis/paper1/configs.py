@@ -48,6 +48,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import jax
+from config_metadata import CONFIGS, SSP_FOR_CONFIG
 
 import tengri
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
@@ -67,15 +68,6 @@ MET_EDGE_INSET_DEX = 0.02
 # Grid per configuration. The suite spans MIST and PARSEC isochrones crossed with
 # C3K and MILES spectral libraries, plus BPASS for binary-star evolution.
 # Configuration VI reuses Configuration I's library so the AGN is the only change.
-SSP_FOR_CONFIG = {
-    "I": "fsps_mist_c3k_a_chabrier",
-    "II": "fsps_prsc_c3k_a_chabrier",
-    "III": "fsps_mist_miles_chabrier",
-    "IV": "fsps_prsc_miles_chabrier",
-    "V": "bpss_stars_c3k_a_chabrier",
-    "VI": "fsps_mist_c3k_a_chabrier",
-}
-
 N_SFH_BINS = 7
 
 #: Photoionization grid for Configuration IV, named rather than discovered.
@@ -242,6 +234,10 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     # before the cell testing it reported. If that cell comes back still frozen,
     # (a) still holds and (b) is false -- the row would need a different fix and
     # this cap should not be credited with one.
+    # Measured on the committed 13 Gyr prior (2026-09-21): |dF/F| 0.018% outside
+    # the age window against 300-2100% inside, with 59% of that prior sitting
+    # in the flat regime at z ~ 1.07. See sfh_tau_conditioning.py.
+    # Owner ruling 2026-09-23: the uncapped variant is not part of the paper's grid.
     tau_upper = age_at_z(z)
     return SEDModel.build(
         ssp_data=ssp_data,
@@ -365,16 +361,20 @@ def config_V(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         sfh={
             "type": "lnorm",
             "all_params": Fixed(DEFAULT),
-            "peak_gyr": Uniform(0.1, 13.0),
-            # NOT capped at the cosmic age, unlike the DPL turnover. A
-            # log-normal peak beyond the observed epoch is not a flat
-            # direction: it encodes a star formation rate still RISING at
-            # that epoch, which the data distinguish. Measured outside the
-            # age window the peak retains 0.48-2.70% band sensitivity, an
-            # inside/outside ratio of 2.96-3.26 -- better conditioned than
-            # delayed-tau (64-79) and nothing like the DPL turnover
-            # (467-121000). Capping here would delete rising-SFH solutions
-            # the fit can actually constrain.
+            # Peak bounded by the galaxy's age, like age_gyr (owner, 2026-09-21).
+            # Uniform(0.1, 13) let more than half the draws put the peak after
+            # the epoch of observation, where only the rising limb of the
+            # log-normal is inside the galaxy's life and many (peak, width)
+            # pairs share one slope: a flat ridge, the row-II tau > age(z)
+            # direction again. On 7837, 13097 and 14099 the rung-1 posterior
+            # spanned the whole peak prior (p1 0.3, p99 12.9 Gyr) with healthy
+            # E-BFMI (0.87-0.99) and width never at its floor, and every retune
+            # rung then adapted to a step of 0.0002-0.001 and froze (ESS 1-3).
+            # The cap has a measured cost: beyond the age window the peak keeps
+            # 0.48-2.70% band sensitivity (inside/outside ratio 2.96-3.26), so
+            # rising-SFH solutions the data can constrain are excluded. The
+            # ruling trades that for the sampler freezing measured above.
+            "peak_gyr": Uniform(0.1, age_at_z(z)),
             "width_gyr": Uniform(0.1, 5.0),
             "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
@@ -420,87 +420,6 @@ def config_VI(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         approx=WavePrecomp(),
     )
 
-
-CONFIGS = {
-    "I": {
-        "key": "I",
-        "dust_param": "dust_tau_diff",
-        "name": "continuity, MIST/C3K",
-        "sfh": "continuity, 7 bins",
-        "library": "FSPS MIST/C3K",
-        "attenuation": "Kriek+13, 2-comp",
-        "dust_ir": "Draine+2014",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["I"],
-        "n_free": None,
-    },
-    "II": {
-        "key": "II",
-        "dust_param": "dust_tau_v",
-        "name": "double power law, PARSEC/C3K",
-        "sfh": "double power law",
-        "library": "FSPS PARSEC/C3K",
-        "attenuation": "Calzetti, 1-comp",
-        "dust_ir": "Dale+2014",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["II"],
-        "n_free": None,
-    },
-    "III": {
-        "key": "III",
-        "dust_param": "dust_tau_diff",
-        "name": "delayed-tau, MIST/MILES",
-        "sfh": "delayed-tau",
-        "library": "FSPS MIST/MILES",
-        "attenuation": "Charlot+2000, 2-comp",
-        "dust_ir": "THEMIS",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["III"],
-        "n_free": None,
-    },
-    "IV": {
-        "key": "IV",
-        "dust_param": "dust_tau_diff",
-        "name": "Dirichlet, PARSEC/MILES",
-        "sfh": "Dirichlet, 7 bins",
-        "library": "FSPS PARSEC/MILES",
-        "attenuation": "Kriek+13, 2-comp",
-        "dust_ir": "Casey+2012",
-        "nebular": "Cloudy, free logU",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["IV"],
-        "n_free": None,
-    },
-    "V": {
-        "key": "V",
-        "dust_param": "dust_tau_v",
-        "name": "log-normal, BPASS",
-        "sfh": "log-normal",
-        "library": "BPASS C3K",
-        "attenuation": "SMC, 1-comp",
-        "dust_ir": "Dale+2014",
-        "nebular": "Cue",
-        "agn": False,
-        "ssp_grid": SSP_FOR_CONFIG["V"],
-        "n_free": None,
-    },
-    "VI": {
-        "key": "VI",
-        "dust_param": "dust_tau_diff",
-        "name": "continuity + AGN disc and torus",
-        "sfh": "continuity, 7 bins",
-        "library": "FSPS MIST/C3K",
-        "attenuation": "Kriek+13, 2-comp",
-        "dust_ir": "Draine+2014",
-        "nebular": "Cue",
-        "agn": True,
-        "ssp_grid": SSP_FOR_CONFIG["VI"],
-        "n_free": None,
-    },
-}
 
 CONFIG_KEYS = ["I", "II", "III", "IV", "V", "VI"]
 

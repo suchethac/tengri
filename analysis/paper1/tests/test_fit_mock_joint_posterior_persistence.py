@@ -45,7 +45,7 @@ def make_stub_posterior(n_params=5, n_draws=100, n_chains=2):
                 "ebfmi_min": 0.75,
             }
 
-        def rhats(self):
+        def rhat(self):
             return {f"param_{i}": 1.01 + 0.001 * i for i in range(n_params)}
 
         def effective_sample_size(self):
@@ -229,8 +229,8 @@ def test_figure_reads_the_file_the_fit_writes():
     constant against the WRITER's helper called with the method the reader
     declares.
     """
-    from paper1 import fig01_mock_joint_infer as figure
-    from paper1._posterior_utils import posterior_output_paths
+    from analysis.paper1 import fig01_mock_joint_infer as figure
+    from analysis.paper1._posterior_utils import posterior_output_paths
 
     written_npz, written_json = posterior_output_paths(
         figure.POSTERIOR_NPZ.parent, figure.POSTERIOR_METHOD
@@ -242,3 +242,38 @@ def test_figure_reads_the_file_the_fit_writes():
     # The sidecar rides on the same stem; if the stem drifts, both move together.
     assert written_json.stem == written_npz.stem
     assert written_npz.name == "mock_joint_mcmc_nuts.npz"
+
+
+def test_the_stub_cannot_implement_a_method_the_real_posterior_lacks():
+    """The stub is why the R-hat defect survived, so pin it to the real class.
+
+    ``StubPosterior`` defined ``rhats()``. No such method has ever existed on
+    ``Posterior`` -- the accessor is ``rhat()``. Because the double
+    implemented the name the caller happened to use, every test here passed
+    while ``fit_mock_joint.py`` called a method that is not there, and each
+    mock fit wrote ``rhat_max = None``: convergence never measured, recorded
+    to disk in the place a measurement goes.
+
+    A double that does not match the interface it stands in for converts an
+    ``AttributeError`` in production into a green test, so it has to be
+    checked against the real class and not against what the caller expects.
+    """
+    posterior_mod = pytest.importorskip("tengri.inference.posterior")
+    real = posterior_mod.Posterior
+
+    stub_type = type(make_stub_posterior())
+    stub_methods = {
+        name
+        for name in vars(stub_type)
+        if not name.startswith("_") and callable(getattr(stub_type, name))
+    }
+    # Without this the check passes vacuously if the stub is ever rewritten
+    # to expose plain attributes instead of methods.
+    assert stub_methods, "the stub defines no public methods, so this check proves nothing"
+
+    missing = sorted(name for name in stub_methods if not hasattr(real, name))
+    assert not missing, (
+        f"StubPosterior implements {missing}, which Posterior does not have. "
+        "A double that invents a method makes every test using it green against "
+        "production code that would raise AttributeError."
+    )

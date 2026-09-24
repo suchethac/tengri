@@ -245,6 +245,48 @@ def _chain_consumes(chain, key: str) -> bool:
     return False
 
 
+def _chain_implements_emission_terms(chain) -> list[str]:
+    """Derive which components in ``chain`` implement the ``emission_terms`` contract.
+
+    The ``emission_terms`` method is the contract for additive emitters that can be
+    optimized via per-filter band-response precompute: a component that decomposes
+    its SED into rank-1 terms (amplitude × fixed spectral shape) can precompute the
+    filter integral of each term at build time instead of evaluating it on every call.
+
+    This asks each component whether it declares the contract, rather than matching
+    it against a hardcoded list of names, so a future emitter inherits the
+    optimization instead of silently forfeiting it. Note this is a check for the
+    *contract*, not for the rank-1 property itself: whether a term response is
+    actually valid for the emitter is settled downstream by the two-draw probe in
+    :meth:`SEDModel._additive_term_band_response`, which rejects any emitter whose
+    spectral shape moves with its amplitude. Declaring ``emission_terms`` buys a
+    component an evaluation, not an exemption.
+
+    Deterministic ordering (sorted by component name) keeps the build reproducible.
+
+    Parameters
+    ----------
+    chain : sequence
+        The component chain.
+
+    Returns
+    -------
+    list[str]
+        Sorted list of component names that implement ``emission_terms``, in
+        alphabetical order for reproducibility. Empty if no components qualify.
+    """
+    emitters = []
+    for comp in chain:
+        emission_terms_method = getattr(comp, "emission_terms", None)
+        if emission_terms_method is not None and callable(emission_terms_method):
+            # Safely read the component's name attribute, falling back to str(comp)
+            # if the attribute is missing (defensive against malformed components).
+            name = getattr(comp, "name", None)
+            if name is not None and isinstance(name, str):
+                emitters.append(name)
+    return sorted(emitters)
+
+
 #: Relative tolerance for the rank-1 check in
 #: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
 #: each term's spectral shape to this precision for the term to earn a constant
@@ -325,6 +367,15 @@ class WavePrecomp:
             per redshift node), cost amortized over inference. Exact when
             T_IGM(λ, z) is tabulated. Fails loudly if free parameters
             (patchy reionization, DLAs) make transmission non-tabulated.
+
+        ``"auto"``
+            ``"exact"`` wherever it can be built, ``"node"`` everywhere else.
+            The exact fold refuses a free redshift and a transmission carrying
+            free parameters, so ``"exact"`` cannot simply be asked for on a
+            model whose redshift is being fit. ``"auto"`` asks for it and takes
+            the node fold where it is unavailable, without raising. An explicit
+            ``"exact"`` still raises in those cases: a mode named by the caller
+            is never silently downgraded.
 
     Examples
     --------
@@ -475,7 +526,7 @@ class WavePrecomp:
         "taylor",
         "effective_wavelength",
     )
-    _VALID_IGM_FOLD: ClassVar[tuple[str, ...]] = ("node", "exact")
+    _VALID_IGM_FOLD: ClassVar[tuple[str, ...]] = ("node", "exact", "auto")
 
     def __post_init__(self):
         """Resolve the band-integration scheme once, in one place.
@@ -592,7 +643,8 @@ class WavePrecomp:
                 f"igm_fold={self.igm_fold!r} is not a legal value. "
                 f"Choose one of {', '.join(map(repr, self._VALID_IGM_FOLD))}. "
                 "'node' (the default) evaluates transmission at sub-band nodes; "
-                "'exact' integrates transmission inside the bandpass integral."
+                "'exact' integrates transmission inside the bandpass integral; "
+                "'auto' takes 'exact' where it can be built and 'node' elsewhere."
             )
 
     def cache_key(self) -> tuple:
@@ -1815,22 +1867,9 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
     if stellar_state is None or ssp_data is None or not filters:
         return stellar_state
 
-    cfg = getattr(igm_comp, "config", None)
-    if getattr(cfg, "igm_patchy", False) or getattr(cfg, "use_dla", False):
-        raise ValueError(
-            "igm_fold='exact' needs a transmission that is a fixed function of "
-            "(wavelength, redshift), so it can be folded in at build time. "
-            "Patchy reionization and discrete DLAs read free parameters and "
-            "change every call. Use igm_fold='node' (the default) for those."
-        )
-
-    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
-    if ztable is not None and ztable.ssp_subband_phot_table is not None:
-        raise NotImplementedError(
-            "igm_fold='exact' is implemented for a fixed redshift only. A free "
-            "redshift would need the sub-band tensor rebuilt at every node of "
-            "the z table. Use igm_fold='node' or fix the redshift."
-        )
+    blocker = _exact_fold_blocker(igm_comp, stellar_state)
+    if blocker is not None:
+        raise blocker
 
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is None or lut.ssp_subband_phot is None:
@@ -1854,7 +1893,7 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
             wave_rest * (1.0 + z),
             z,
             igm_patchy=False,
-            igm_model=getattr(cfg, "igm_model", None),
+            igm_model=getattr(getattr(igm_comp, "config", None), "igm_model", None),
             use_dla=False,
         ),
         dtype=np.float64,
@@ -1900,6 +1939,107 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
     )
 
 
+def _exact_fold_blocker(igm_comp, stellar_state):
+    """Why the exact IGM fold cannot be built here, or ``None`` when it can.
+
+    One reading of the exact fold's preconditions, consulted by both the
+    refusal in :func:`_fold_igm_exact_into_subbands` and the ``"auto"``
+    resolution in :func:`_resolve_igm_fold`. The two ask the same question for
+    opposite purposes -- whether to raise, and whether to fall back -- and a
+    second copy of the list would drift. A drifted copy is not a cosmetic
+    problem: it leaves ``"auto"`` raising for a configuration it promised to
+    serve, at run time, for whoever happens to build that configuration.
+
+    Returns the exception *instance* rather than a flag, so each refusal's type
+    and wording stay beside the condition that produces them.
+
+    Parameters
+    ----------
+    igm_comp : IGMSEDComponent
+        Supplies the transmission configuration.
+    stellar_state : StellarSEDComponentState
+        Carrying either the fixed-z photometry LUT or the free-z z-table.
+
+    Returns
+    -------
+    Exception or None
+        The refusal to raise, or ``None`` when the exact fold can be built.
+
+    Notes
+    -----
+    **Build-time only.** Reads configuration, never parameter values.
+    """
+    cfg = getattr(igm_comp, "config", None)
+    if getattr(cfg, "igm_patchy", False) or getattr(cfg, "use_dla", False):
+        return ValueError(
+            "igm_fold='exact' needs a transmission that is a fixed function of "
+            "(wavelength, redshift), so it can be folded in at build time. "
+            "Patchy reionization and discrete DLAs read free parameters and "
+            "change every call. Use igm_fold='node' (the default) for those, "
+            "or igm_fold='auto' to take that fall-back automatically."
+        )
+
+    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
+    if ztable is not None and ztable.ssp_subband_phot_table is not None:
+        return NotImplementedError(
+            "igm_fold='exact' is implemented for a fixed redshift only. A free "
+            "redshift would need the sub-band tensor rebuilt at every node of "
+            "the z table. Use igm_fold='node' or fix the redshift, or "
+            "igm_fold='auto' to take that fall-back automatically."
+        )
+
+    return None
+
+
+def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None) -> str:
+    """Resolve ``"auto"`` to the fold that can actually be built here.
+
+    ``"exact"`` cannot be the default: it raises for a free redshift and for a
+    transmission carrying free parameters, so flipping the default would break
+    those fits rather than speed them up. ``"auto"`` is the mode that can be
+    proposed as one -- it asks for the exact fold and takes the node fold
+    wherever the exact fold is unavailable.
+
+    Parameters
+    ----------
+    igm_fold : str
+        The declared mode: ``"node"``, ``"exact"`` or ``"auto"``. Anything but
+        ``"auto"`` is returned unchanged, so an explicit ``"exact"`` still
+        raises where it cannot be served -- silently downgrading a mode the
+        caller asked for by name is what this whole seam exists to avoid.
+    igm_comp : IGMSEDComponent
+        Supplies the transmission configuration.
+    stellar_state : StellarSEDComponentState
+        Carrying either the fixed-z photometry LUT or the free-z z-table.
+    ssp_data : SSPData, optional
+        Template grid. The exact fold needs it and returns the state untouched
+        without it.
+    filters : sequence, optional
+        Filter curves, on the same footing as ``ssp_data``.
+
+    Returns
+    -------
+    str
+        ``"node"`` or ``"exact"``.
+
+    Notes
+    -----
+    **Build-time only.** Two distinct reasons send ``"auto"`` to the node fold
+    and both matter. The first is a refusal, shared with the exact fold through
+    :func:`_exact_fold_blocker`. The second is that the exact fold is a no-op
+    without templates or filters, while the node fold is not -- resolving to
+    ``"exact"`` there would skip a fold the node path would have applied, which
+    no exception would announce.
+    """
+    if igm_fold != "auto":
+        return igm_fold
+
+    if ssp_data is None or not filters:
+        return "node"
+
+    return "node" if _exact_fold_blocker(igm_comp, stellar_state) is not None else "exact"
+
+
 def _fold_igm_into_subbands(
     igm_comp, stellar_state, igm_fold="node", ssp_data=None, filters=None, redshift_spec=None
 ):
@@ -1932,7 +2072,8 @@ def _fold_igm_into_subbands(
     stellar_state : StellarSEDComponentState
         Carrying the fixed-z photometry LUT or the free-z z-table.
     igm_fold : str, default "node"
-        Fold mode: "node" (evaluate at nodes) or "exact" (integrate inside integral).
+        Fold mode: "node" (evaluate at nodes), "exact" (integrate inside the
+        integral), or "auto" ("exact" where it can be built, "node" elsewhere).
     ssp_data : SSPData, optional
         SSP templates, required for "exact" fold.
     filters : tuple, optional
@@ -1959,6 +2100,8 @@ def _fold_igm_into_subbands(
 
     if stellar_state is None:
         return stellar_state
+
+    igm_fold = _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data, filters)
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
@@ -2813,50 +2956,79 @@ class SEDModel:
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
         if self._approx.get("wave_precomp"):
-            # The two precomputes are independent and fail independently. A single
-            # try around both meant a band-response failure disabled the *energy
-            # balance* LUT too, and reported itself under the energy-balance
-            # warning, blaming the wrong subsystem.
+            # These precomputes are independent and fail independently. A single
+            # try around all of them meant one failure disabled the rest, and
+            # reported itself under the first one's warning, blaming the wrong
+            # subsystem.
+            #
+            # They do share one prerequisite -- the component chain -- and it has
+            # to be built outside them. Left inside the energy-balance try, a
+            # chain failure was announced as an energy-balance failure and then
+            # surfaced three more times as an AttributeError on the cache the
+            # failed build never set, so one root cause produced four warnings
+            # naming three subsystems that had not run. An error that names a
+            # missing attribute instead of the reason it is missing sends the
+            # reader to the wrong place.
+            chain = None
             try:
-                chain = self._build_component_chain()
-                self._cached_component_chain = chain
-                self._energy_balance_lut(chain)
+                chain = self._cached_component_chain = self._build_component_chain()
             except Exception as e:
-                # The exact full-wave energy-balance path is the correct fallback,
-                # but it forfeits the speedup the astronomer opted into, so say so.
                 warnings.warn(
-                    f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
-                    "falling back to the exact energy-balance path (correct, "
-                    "but without the precomputed-LUT speedup).",
+                    f"WavePrecomp precompute is unavailable: the component chain "
+                    f"could not be built ({e!r}). Every LUT below needs it, so all "
+                    "of them fall back to the exact per-call path (correct, but "
+                    "without the precomputed speedup).",
                     UserWarning,
                     stacklevel=2,
                 )
                 self._energy_balance_lut_cache = None
-
-            try:
-                self._dust_emission_band_response(self._cached_component_chain)
-            except Exception as e:
-                warnings.warn(
-                    f"WavePrecomp dust-emission band-response precompute failed "
-                    f"({e!r}); falling back to the exact per-call filter integral "
-                    "(correct, but without the precomputed-response speedup).",
-                    UserWarning,
-                    stacklevel=2,
-                )
                 self._dust_band_response_cache = None
+                self._xray_term_response_cache = None
+                self._radio_term_response_cache = None
 
-            for _emitter in ("xray", "radio"):
+            if chain is not None:
                 try:
-                    self._additive_term_band_response(self._cached_component_chain, _emitter)
+                    self._energy_balance_lut(chain)
+                except Exception as e:
+                    # The exact full-wave energy-balance path is the correct fallback,
+                    # but it forfeits the speedup the astronomer opted into, so say so.
+                    warnings.warn(
+                        f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
+                        "falling back to the exact energy-balance path (correct, "
+                        "but without the precomputed-LUT speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._energy_balance_lut_cache = None
+
+                try:
+                    self._dust_emission_band_response(chain)
                 except Exception as e:
                     warnings.warn(
-                        f"WavePrecomp {_emitter} term band-response precompute failed "
+                        f"WavePrecomp dust-emission band-response precompute failed "
                         f"({e!r}); falling back to the exact per-call filter integral "
                         "(correct, but without the precomputed-response speedup).",
                         UserWarning,
                         stacklevel=2,
                     )
-                    setattr(self, f"_{_emitter}_term_response_cache", None)
+                    self._dust_band_response_cache = None
+
+                # Derive which emitters in the chain implement the emission_terms
+                # contract rather than hardcoding ("xray", "radio"). Any additive
+                # emitter added in future automatically inherits the band-response
+                # optimization without silent performance regression.
+                for _emitter in _chain_implements_emission_terms(chain):
+                    try:
+                        self._additive_term_band_response(chain, _emitter)
+                    except Exception as e:
+                        warnings.warn(
+                            f"WavePrecomp {_emitter} term band-response precompute failed "
+                            f"({e!r}); falling back to the exact per-call filter integral "
+                            "(correct, but without the precomputed-response speedup).",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                        setattr(self, f"_{_emitter}_term_response_cache", None)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -9107,8 +9279,40 @@ class SEDModel:
     #: fed to the (fixed-shape) emission template, so a build-time per-filter
     #: response ``R`` computed at one ``L_ir`` and reused for any other (the
     #: homogeneity check in ``_dust_emission_band_response``) stays valid.
+    #:
+    #: **TRAP: This set is consulted by TWO mechanisms with DIFFERENT correctness
+    #: conditions.** See ``_BAND_RESPONSE_ATTEN_FREE_OK`` comment below. Widening
+    #: this set without also checking the energy-balance LUT build requirements is
+    #: a silent numerical error.
     _EB_ATTEN_FREE_OK = frozenset(
-        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir"}
+        {
+            "dust_tau_bc",
+            "dust_tau_diff",
+            "dust_tau_v",
+            "dust_eta_balance",
+            "dust_log_L_ir",
+        }
+    )
+
+    #: dust attenuation params that may be free without invalidating the dust
+    #: *emission band response* precompute (separate from energy-balance LUT).
+    #: Admits ``dust_tau_v``: changes the absorbed-energy amplitude but not the
+    #: Dale+2014 template's spectral SHAPE. The per-filter response R stays a
+    #: build-time constant and homogeneity holds (exactly proportional to L_ir).
+    #:
+    #: **CRITICAL: This set is separate from ``_EB_ATTEN_FREE_OK`` by design.**
+    #: ``_EB_ATTEN_FREE_OK`` gates the energy-balance LUT, which requires:
+    #:   1. A ``DustSEDComponent`` in the chain (absent for single_component).
+    #:   2. ``tau_bc_grid`` and ``tau_diff_grid`` axes in the LUT (no tau_v axis).
+    #: Adding ``dust_tau_v`` to the shared set would enable the LUT build on a
+    #: single_component model where (1) is False, violating (2). The LUT would
+    #: bake the wrong L_absorbed and emit silently wrong fluxes. The band response
+    #: gate (this set) has no such constraint: it checks only that the emission
+    #: *shape* is fixed, and the homogeneity probe independently guards correctness.
+    #: Do not merge this set with ``_EB_ATTEN_FREE_OK``. Widen only this one when
+    #: adding a new attenuation parameter that does not reshape the emission.
+    _BAND_RESPONSE_ATTEN_FREE_OK = frozenset(
+        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir", "dust_tau_v"}
     )
 
     def _ztable_data_for_jit(self):
@@ -9165,6 +9369,7 @@ class SEDModel:
             return cached
 
         from tengri.components.dust.attenuation import resolve_bc_diff_law_params
+        from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.energy_balance_precompute import (
             build_energy_balance_lut,
         )
@@ -9172,7 +9377,11 @@ class SEDModel:
         from tengri.components.dust.two_component import DustSEDComponent
 
         lut = None
-        dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
+        dust = next(
+            (c for c in chain if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
+            None,
+        )
+
         free = set(self.spec.free_params)
         unsafe_free = {
             p
@@ -9187,7 +9396,11 @@ class SEDModel:
         # same disposition a free ``dust_delta`` gets, which is no LUT and the
         # exact energy-balance integral instead (#2199).
         if "redshift" in free and dust is not None:
-            laws_in_play = (dust.config.law_bc, dust.config.law_diff, dust.config.law_neb)
+            is_single_component = isinstance(dust, DustAttenuationSEDComponent)
+            if is_single_component:
+                laws_in_play = (dust.config.law,)
+            else:
+                laws_in_play = (dust.config.law_bc, dust.config.law_diff, dust.config.law_neb)
             if any(law and "redshift" in law_kwarg_names(law) for law in laws_in_play):
                 unsafe_free.add("redshift")
         # Detect dust emission: check if dust emission is configured.
@@ -9214,40 +9427,112 @@ class SEDModel:
             # Same narrowing as the component's own apply() (#1833), read off
             # the component that is actually in the chain, so the LUT cannot
             # bake a different curve from the one the direct path evaluates.
-            bc_params, diff_params = resolve_bc_diff_law_params(
-                fixed,
-                dict(dust.config.bc_law_overrides),
-                dict(dust.config.diff_law_overrides),
-                dust.config.live_shape_params,
-                bc_law=dust.config.law_bc,
-                diff_law=dust.config.law_diff,
-                redshift=fixed.get("redshift"),
-            )
-            ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+            is_single_component = isinstance(dust, DustAttenuationSEDComponent)
 
-            def _grid(name):
-                if name in free:
-                    dist = self.spec.get_distribution(name)
-                    lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
-                    return jnp.linspace(lo, hi, 24)
-                return jnp.asarray([float(fixed.get(name, 0.0))])
+            if is_single_component:
+                # Single-component dust: build LUT using build_energy_balance_lut
+                # with degenerate grids (tau_bc=[0.0], tau_diff=tau_v).
+                # This reuses the same two_component_dust transmission function
+                # and handles Lyman-continuum masking correctly.
+                def _grid_single(name):
+                    if name == "dust_tau_v" and "dust_tau_v" in free:
+                        dist = self.spec.get_distribution("dust_tau_v")
+                        lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
+                        return jnp.linspace(lo, hi, 24)
+                    return jnp.asarray([float(fixed.get(name, 0.0))])
 
-            lut = build_energy_balance_lut(
-                jnp.asarray(self.ssp_data.ssp_flux),
-                jnp.asarray(self.ssp_data.ssp_wave),
-                jnp.asarray(ssp_ages_yr),
-                law_bc=dust.config.law_bc,
-                law_diff=dust.config.law_diff,
-                f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
-                t_birth_yr=dust.config.t_birth_yr,
-                transition_width_dex=dust.config.transition_width_dex,
-                bc_params={k: float(v) for k, v in bc_params.items()},
-                diff_params={k: float(v) for k, v in diff_params.items()},
-                lyman_cutoff_aa=dust.config.lyman_cutoff_aa,
-                eb_include_lyc=dust.config.eb_include_lyc,
-                tau_bc_grid=_grid("dust_tau_bc"),
-                tau_diff_grid=_grid("dust_tau_diff"),
-            )
+                tau_v_grid = _grid_single("dust_tau_v")
+
+                # Resolve law parameters for single-component (both bc and diff
+                # use the same law and parameters).
+                law = dust.config.law
+                dust_params, _ = resolve_bc_diff_law_params(
+                    fixed,
+                    bc_overrides=None,
+                    diff_overrides=None,
+                    live_shape_params=dust.config.live_shape_params,
+                    bc_law=law,
+                    diff_law=law,
+                    redshift=fixed.get("redshift"),
+                )
+                # Single-component dust uses simple exponential attenuation: no
+                # Lyman-continuum masking is applied in the exact path either.
+                # Match the runtime exact path, which masks the Lyman continuum
+                # (#922: LyC photons ionize H rather than heat dust). Baking a
+                # different cutoff here than DustAttenuationSEDComponent.apply()
+                # uses is what made the LUT disagree with the exact integral.
+                eb_include_lyc = dust.config.eb_include_lyc
+                lyman_cutoff_aa = dust.config.lyman_cutoff_aa
+
+                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+
+                lut = build_energy_balance_lut(
+                    jnp.asarray(self.ssp_data.ssp_flux),
+                    jnp.asarray(self.ssp_data.ssp_wave),
+                    jnp.asarray(ssp_ages_yr),
+                    law_bc=law,
+                    law_diff=law,
+                    f_obscuration=0.0,
+                    t_birth_yr=1e7,
+                    transition_width_dex=0.3,
+                    bc_params={k: float(v) for k, v in dust_params.items()},
+                    diff_params={k: float(v) for k, v in dust_params.items()},
+                    lyman_cutoff_aa=lyman_cutoff_aa,
+                    eb_include_lyc=eb_include_lyc,
+                    tau_bc_grid=jnp.asarray([0.0]),
+                    tau_diff_grid=tau_v_grid,
+                )
+            else:
+                # Two-component dust: existing logic
+                bc_params, diff_params = resolve_bc_diff_law_params(
+                    fixed,
+                    dict(dust.config.bc_law_overrides),
+                    dict(dust.config.diff_law_overrides),
+                    dust.config.live_shape_params,
+                    bc_law=dust.config.law_bc,
+                    diff_law=dust.config.law_diff,
+                    redshift=fixed.get("redshift"),
+                )
+                law_bc = dust.config.law_bc
+                law_diff = dust.config.law_diff
+                t_birth_yr = dust.config.t_birth_yr
+                transition_width_dex = dust.config.transition_width_dex
+                eb_include_lyc = dust.config.eb_include_lyc
+
+                def _grid(name):
+                    if name in free:
+                        dist = self.spec.get_distribution(name)
+                        lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
+                        return jnp.linspace(lo, hi, 24)
+                    return jnp.asarray([float(fixed.get(name, 0.0))])
+
+                tau_bc_grid = _grid("dust_tau_bc")
+                tau_diff_grid = _grid("dust_tau_diff")
+
+            if not is_single_component:
+                # Two-component: use the standard LUT builder
+                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+
+                lut = build_energy_balance_lut(
+                    jnp.asarray(self.ssp_data.ssp_flux),
+                    jnp.asarray(self.ssp_data.ssp_wave),
+                    jnp.asarray(ssp_ages_yr),
+                    law_bc=law_bc,
+                    law_diff=law_diff,
+                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    t_birth_yr=t_birth_yr,
+                    transition_width_dex=transition_width_dex,
+                    bc_params={k: float(v) for k, v in bc_params.items()},
+                    diff_params={k: float(v) for k, v in diff_params.items()},
+                    lyman_cutoff_aa=(
+                        dust.config.lyman_cutoff_aa
+                        if hasattr(dust.config, "lyman_cutoff_aa")
+                        else 0.0
+                    ),
+                    eb_include_lyc=eb_include_lyc,
+                    tau_bc_grid=tau_bc_grid,
+                    tau_diff_grid=tau_diff_grid,
+                )
 
         self._energy_balance_lut_cache = lut
         return lut
@@ -9286,7 +9571,7 @@ class SEDModel:
         # SAFE, an unrecognized free parameter simply disables the optimization.
         free = set(self.spec.free_params)
         free_dust = {p for p in free if p.startswith("dust_")}
-        shape_free = bool(free_dust - self._EB_ATTEN_FREE_OK) or ("redshift" in free)
+        shape_free = bool(free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK) or ("redshift" in free)
 
         if (
             emitter is not None

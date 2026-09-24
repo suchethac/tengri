@@ -14,6 +14,7 @@ import csv
 import importlib.util
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import NamedTuple
 
@@ -24,19 +25,32 @@ from scipy.stats import gaussian_kde
 
 import tengri
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _adoption import is_adopted
+from _cell_provenance import audit, banner
+from _figure_style import CONFIG_COLORS, CONFIG_ORDER
+from _grid_completeness import completeness_note, load_expected_galaxy_ids, present_on_disk
+from config_metadata import CONFIGS
+
 jax.config.update("jax_enable_x64", True)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+#: The galaxies this figure draws, one panel each.
+#:
+#: The completeness guard below measures *these*, not the locked twenty. It
+#: used to measure the twenty, and the two populations are not the same
+#: question: a grid holding one finished cell for some other galaxy made the
+#: guard pass while all three panels here had an empty tengri arm, and the
+#: figure saved at exit 0 under a stamp reporting a grid it does not plot.
+#: A check has to observe the thing it is guarding.
+PANEL_GALAXY_IDS = (13097, 15336, 16049)
+
 # Configuration
 FIGURE_WIDTH = 3.4
 FIGURE_HEIGHT = 7.5
-MARKER_COLORS = {
-    "I": "#0072B2",
-    "II": "#E69F00",
-    "III": "#009E73",
-}
+MARKER_COLORS = dict(CONFIG_COLORS)
 CODE_MARKERS = {
     "BAGPIPES": "o",
     "BEAGLE": "s",
@@ -73,10 +87,7 @@ def load_fit_results(
 
     Returns None if files don't exist (fit still running).
 
-    Acceptance criteria:
-    - Config I/II: adoption_pass must be True (zero-divergence bar)
-    - Config III: adoption_pass=False by design; accept if rhat_max < 1.01 and
-      divergence_rate <= 1.5%
+    Acceptance criteria are `_adoption.is_adopted`, shared with fig05.
     """
     npz_path = results_dir / f"{gal_id}_{config}.npz"
     json_path = results_dir / f"{gal_id}_{config}.json"
@@ -89,30 +100,9 @@ def load_fit_results(
         meta = json.load(f)
     z = meta["z"]
 
-    # Check acceptance criteria
-    if config in ["I", "II"]:
-        if meta.get("adoption_pass") is not True:
-            logger.info(f"Skipping {gal_id}_{config} (did not pass the adoption bar)")
-            return None
-    elif config == "III":
-        # Config III: relaxed bar (rhat < 1.01 and divergence rate <= 1.5%)
-        rhat_max = meta.get("rhat_max")
-        divergences = meta.get("divergences", 0)
-        n_samples = meta.get("n_samples", 600)
-        n_chains = meta.get("n_chains", 4)
-
-        if rhat_max is None:
-            logger.info(f"Skipping {gal_id}_{config} (missing rhat_max)")
-            return None
-
-        divergence_rate = divergences / (n_samples * n_chains) if (n_samples * n_chains) > 0 else 0
-        if not (rhat_max < 1.01 and divergence_rate <= 0.015):
-            logger.info(
-                f"Skipping {gal_id}_{config} (Config III bar not met: "
-                f"rhat_max={rhat_max:.6f}, divergence_rate={divergence_rate:.4f})"
-            )
-            return None
-    else:
+    verdict = is_adopted(meta, config)
+    if not verdict.adopted:
+        logger.info(f"Skipping {gal_id}_{config} ({verdict.reason})")
         return None
 
     # Load NPZ; the number of saved draws is whatever the driver thinned to
@@ -151,7 +141,7 @@ def load_fit_results(
 
     # Compute all derived quantities for the same samples using predict_properties
     mass_formed, mass_survived, sfr = _compute_all_derived_quantities(
-        gal_id, config, params_dict, z, results_dir
+        gal_id, config, params_dict, z
     )
 
     return GalaxyData(
@@ -166,15 +156,18 @@ def load_fit_results(
 
 
 def _compute_all_derived_quantities(
-    gal_id: int, config: str, params_dict: dict, z: float, results_dir: Path
+    gal_id: int, config: str, params_dict: dict, z: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute derived quantities for posterior samples using predict_properties.
 
     Returns (mass_formed_log, mass_survived_log, sfr_log) all in log10 space.
     Uses the same samples for all quantities to ensure proper correspondence.
     """
-    # Determine paths
-    analysis_dir = results_dir.parent.parent
+    # configs.py and candels_io.py are this script's siblings, so anchor on
+    # this file. Deriving them from results_dir instead only worked while
+    # results_dir was the default one two levels below them; --results-dir
+    # pointing anywhere else looked for configs.py beside that directory.
+    analysis_dir = Path(__file__).resolve().parent
     configs_path = analysis_dir / "configs.py"
 
     # Load configs module dynamically
@@ -204,6 +197,36 @@ def _compute_all_derived_quantities(
 
     # Build model
     model = config_fn(ssp, obs, z)
+
+    # Keep exactly the parameters the model declares, by name.
+    #
+    # The caller selects them by shape -- any 1-D array in the cell whose
+    # length matches the draw count, minus a hand-listed set of known
+    # non-parameters. That denylist has to be exhaustive to be correct, and it
+    # was not: cells carry `divergent_mask` and `energy`, which are per-draw
+    # diagnostics of exactly that length, and they arrived here as parameters.
+    # The model refused them by name, which is the system working, but the
+    # selection rule is "looks like a parameter" where it should be "is one",
+    # and the model is the authority on that.
+    declared = set(model.spec.free_params)
+    unknown = sorted(set(params_dict) - declared)
+    params_dict = {name: values for name, values in params_dict.items() if name in declared}
+    if unknown:
+        logger.info(
+            "%s/%s: ignoring %d cell array(s) that are not declared parameters: %s",
+            gal_id,
+            config,
+            len(unknown),
+            ", ".join(unknown),
+        )
+    missing = sorted(declared - set(params_dict))
+    if missing:
+        raise SystemExit(
+            f"cell {gal_id}_{config} records no draws for {missing}, which "
+            f"configuration {config} declares free. The cell and the "
+            "configuration disagree about the model; re-run it rather than "
+            "predicting at a partial parameter set."
+        )
 
     # Compute all derived quantities for each sample
     mass_formed_list = []
@@ -310,7 +333,7 @@ def plot_galaxy_overlay(
             )
 
     # tengri posteriors (colored contours + open marker)
-    for config in ["I", "II", "III"]:
+    for config in CONFIG_ORDER:
         if config not in tengri_data:
             continue
 
@@ -408,6 +431,57 @@ def main(
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Unlike fig05 and fig09, this figure rebuilds each configuration's model to
+    # recompute derived quantities, then feeds it the cell's samples. If the
+    # cells hold a different model the rebuild raises UnknownParameterError two
+    # hundred lines in, naming a parameter rather than the cause. Refuse here,
+    # with the cause.
+    mismatches, notes = audit(results_dir, CONFIGS)
+    text = banner(results_dir, mismatches, notes)
+    if text:
+        print(text, file=sys.stderr)
+    if mismatches:
+        raise SystemExit(
+            "fig06 rebuilds each configuration's model and cannot draw cells that "
+            "hold a different one. Re-run the grid, or point --results-dir at a "
+            "directory whose cells match configs.py."
+        )
+
+    # The audit above asks whether the cells that ARE here hold the right model.
+    # It says nothing about the ones that are not, and a directory holding none
+    # of them passes it trivially: every cell was logged "not ready" at INFO and
+    # this script saved a finished-looking comparison whose tengri arm was empty.
+    selection_path = analysis_dir / "results" / "selected_galaxies_20.json"
+    try:
+        locked_ids = load_expected_galaxy_ids(selection_path)
+    except (OSError, ValueError, KeyError) as exc:
+        raise SystemExit(
+            f"fig06 cannot read the locked sample at {selection_path}: {exc}. "
+            "Without it there is nothing to measure completeness against."
+        ) from exc
+
+    off_sample = [gal for gal in PANEL_GALAXY_IDS if gal not in locked_ids]
+    if off_sample:
+        raise SystemExit(
+            f"fig06 draws {off_sample}, which the locked sample at "
+            f"{selection_path.name} no longer contains. The panels and the sample "
+            "have drifted apart; reconcile them rather than publishing a "
+            "comparison for galaxies the grid does not fit."
+        )
+
+    present = present_on_disk(results_dir, PANEL_GALAXY_IDS, CONFIG_ORDER)
+    if not present:
+        raise SystemExit(
+            f"fig06 found no finished cells for {list(PANEL_GALAXY_IDS)} in "
+            f"{results_dir}. This figure's whole claim is tengri's posteriors "
+            "beside the published codes, so with an empty tengri arm there is no "
+            "figure to draw -- only the published points under a caption that "
+            "promises a comparison. Cells for other galaxies of the locked grid "
+            "do not help: this figure does not plot them. Point --results-dir at "
+            "a directory holding cells for these three."
+        )
+    shortfall = completeness_note(present, PANEL_GALAXY_IDS, CONFIG_ORDER)
+
     # Load published values
     csv_path = analysis_dir / "results" / "art_sedfitting_z1.csv"
     published_all = load_published_values(csv_path)
@@ -436,9 +510,17 @@ def main(
         "inter_code_ranges": {},
     }
 
-    for gal_id in [13097, 15336, 16049]:
+    for gal_id in PANEL_GALAXY_IDS:
         if gal_id not in galaxies:
-            continue
+            # Dropping it silently would publish two panels under a caption
+            # promising three, with nothing in the figure or the sidecar
+            # recording the third.
+            raise SystemExit(
+                f"fig06 draws galaxy {gal_id}, which {meta_path.name} does not "
+                "describe. Without its redshift and type label there is no panel "
+                "to draw, and a figure short one panel must not be saved as "
+                "though it were whole."
+            )
 
         gal_meta = galaxies[gal_id]
         tengri_results[gal_id] = {}
@@ -446,7 +528,7 @@ def main(
         json_sidecar["tengri_data"][gal_id] = {}
 
         # Try to load each configuration
-        for config in ["I", "II", "III"]:
+        for config in CONFIG_ORDER:
             data = load_fit_results(gal_id, config, results_dir, max_samples)
             if data is None:
                 json_sidecar["pending_cells"].append(f"{gal_id}_{config}")
@@ -582,7 +664,6 @@ def main(
         ax.set_xlim(9.5, 11.8)
         ax.set_ylim(-1.0, 3.5)
         ax.grid(True, alpha=0.3)
-        ax.set_title(f"ID {gal_id} (z={galaxies[gal_id]['z']:.3f})")
 
     # Add shared x-axis label on the bottom panel
     axes[-1].set_xlabel(r"$\log_{10}$ M$_*$ (M$_\odot$)")
@@ -606,7 +687,7 @@ def main(
 
     # tengri configurations in color
     tengri_handles = []
-    for config in ["I", "II", "III"]:
+    for config in CONFIG_ORDER:
         color = MARKER_COLORS[config]
         tengri_handles.append(
             plt.Line2D([0], [0], color=color, linewidth=1.5, label=f"Configuration {config}")
@@ -625,6 +706,13 @@ def main(
 
     # Adjust layout to accommodate legend below x-axis label
     fig.subplots_adjust(bottom=0.16)
+
+    # A partial grid still draws -- fig05 and fig09 stamp rather than refuse, and
+    # a reader comparing panels needs the same sentence on all three. What must
+    # not happen is the stamp being absent because nobody asked.
+    if shortfall:
+        print(shortfall, file=sys.stderr)
+        json_sidecar["completeness"] = shortfall
 
     # Save figure
     for fmt in ["pdf", "png"]:

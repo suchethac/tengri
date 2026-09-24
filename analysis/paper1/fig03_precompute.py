@@ -14,6 +14,8 @@ Usage:
 import argparse
 import json
 import os
+import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,6 +35,12 @@ parser.add_argument(
     type=str,
     default="analysis/paper1/results/fig03_precompute_data.json",
     help="Path to accuracy measurement JSON",
+)
+parser.add_argument(
+    "--out-dir",
+    type=str,
+    default=None,
+    help="Directory to write the figures into; defaults to analysis/paper1/figures",
 )
 args = parser.parse_args()
 
@@ -106,18 +114,10 @@ def plot_panel_a(ax, bench_data=None):
                 color="#F18F01",
             )
 
-    # Add provisional stamp if using default data
     if bench_data is None:
-        ax.text(
-            0.02,
-            0.98,
-            "timings: May 2026 run; to be re-measured",
-            transform=ax.transAxes,
-            fontsize=7,
-            ha="left",
-            va="top",
-            color="gray",
-            style="italic",
+        print(
+            "fig03 panel (a): timings are the May 2026 run and need re-measuring",
+            file=sys.stderr,
         )
 
 
@@ -127,15 +127,11 @@ def plot_panel_b(ax, accuracy_data):
     filters_list = accuracy_data.get("metadata", {}).get("filters", [])
 
     if not measurements or not filters_list:
-        ax.text(
-            0.5,
-            0.5,
-            "No accuracy data available",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
+        raise SystemExit(
+            "fig03 panel (b) has no accuracy data to draw. A blank panel under "
+            "the paper's filename is worse than no figure, and a sentence "
+            "printed on the canvas saying so is not a substitute for refusing."
         )
-        return
 
     # Extract z values and organize errors by band
     z_values = sorted([float(z) for z in measurements])
@@ -171,24 +167,40 @@ def plot_panel_b(ax, accuracy_data):
         max_errors = np.array([np.max(e) for e in all_errors_at_z]) / 100.0
 
         # Shaded region for envelope (min to max)
-        ax.fill_between(z_array, min_errors, max_errors, alpha=0.25, color="#4a90e2", label="Band range")
+        ax.fill_between(
+            z_array, min_errors, max_errors, alpha=0.25, color="#4a90e2", label="Band range"
+        )
 
         # Median line
-        (line_median,) = ax.plot(z_array, median_errors, "-", linewidth=2.0, alpha=0.85, color="#2e5c8a", label="Median")
+        (line_median,) = ax.plot(
+            z_array, median_errors, "-", linewidth=2.0, alpha=0.85, color="#2e5c8a", label="Median"
+        )
 
         # Highlight worst-case band with a darker line
         worst_band = "galex_fuv" if "galex_fuv" in band_errors else filters_list[0]
         if worst_band in band_errors:
             worst_errors = np.array(band_errors[worst_band]) / 100.0
             # Format band name for astronomers (e.g. galex_fuv -> GALEX FUV)
-            band_fmt = worst_band.replace("galex_fuv", "GALEX FUV").replace("galex_nuv", "GALEX NUV")
+            band_fmt = worst_band.replace("galex_fuv", "GALEX FUV").replace(
+                "galex_nuv", "GALEX NUV"
+            )
             if band_fmt == worst_band:  # No replacement happened
                 band_fmt = worst_band.replace("_", " ").upper()
-            (line_worst,) = ax.plot(z_array, worst_errors, "--", linewidth=1.5, alpha=0.7, color="#e85d75", label=f"Worst: {band_fmt}")
+            (line_worst,) = ax.plot(
+                z_array,
+                worst_errors,
+                "--",
+                linewidth=1.5,
+                alpha=0.7,
+                color="#e85d75",
+                label=f"Worst: {band_fmt}",
+            )
 
     # 1% and 0.1% reference lines
     ax.axhline(y=0.01, color="red", linestyle="--", linewidth=0.8, alpha=0.5, label="1% threshold")
-    ax.axhline(y=0.001, color="orange", linestyle=":", linewidth=0.8, alpha=0.4, label="0.1% threshold")
+    ax.axhline(
+        y=0.001, color="orange", linestyle=":", linewidth=0.8, alpha=0.4, label="0.1% threshold"
+    )
 
     # Styling
     ax.set_yscale("log")
@@ -217,8 +229,6 @@ def create_figure(bench_data=None, accuracy_data=None):
     plot_panel_b(axes[1], accuracy_data)
 
     # Panel labels
-    axes[0].text(-0.13, 1.08, "(a)", transform=axes[0].transAxes, fontsize=12, fontweight="bold")
-    axes[1].text(-0.13, 1.08, "(b)", transform=axes[1].transAxes, fontsize=12, fontweight="bold")
 
     return fig
 
@@ -252,7 +262,10 @@ if args.accuracy_json and os.path.exists(args.accuracy_json):
 else:
     print(f"Note: Accuracy data not found at {args.accuracy_json}", flush=True)
 
-figures_dir = "analysis/paper1/figures"
+# Resolved against this file rather than the working directory: the default was
+# a relative path, so the script only wrote where it meant to when run from the
+# repository root, and wrote into a stray tree otherwise.
+figures_dir = args.out_dir or str(Path(__file__).resolve().parent / "figures")
 os.makedirs(figures_dir, exist_ok=True)
 
 # The paper uses the two panels as separate single-column figures: the speed

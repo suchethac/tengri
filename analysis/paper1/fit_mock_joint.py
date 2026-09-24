@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 
 import jax
@@ -45,6 +46,7 @@ from ._posterior_utils import (
     posterior_output_paths,
     thin_samples,
 )
+from ._provenance import code_provenance, provenance_line, publishable
 from .fig_mock_joint_infer import DETECTION_SIGMA, RESULTS, TRUTH_NPZ
 from .verify_mock_listing import MOCK_FILTERS, build_joint_observation, build_mock_model
 
@@ -132,20 +134,65 @@ def report(free, truth, fitted, wall, n_censored):
     return delta
 
 
+# Progress goes to a log through a redirect, and Python line-buffers stdout
+# only to a terminal. Warnings reach stderr unbuffered while every print here
+# sat in a buffer until exit, so an 8h41m run showed nothing but warnings for
+# its whole life and the warm-start readout below -- the one line that says
+# whether --init-from-map engaged -- would not have appeared until it no
+# longer mattered. A long run that cannot be watched is a long run that has to
+# be rerun to answer a question its log should already hold.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--method", default="map")
     parser.add_argument("--n-warmup", type=int, default=300)
     parser.add_argument("--n-samples", type=int, default=300)
     parser.add_argument("--n-chains", type=int, default=4)
+    parser.add_argument(
+        "--target-accept",
+        type=float,
+        default=0.85,
+        help=(
+            "NUTS target acceptance rate; run_nuts's own default is 0.85. "
+            "Higher shortens the step and suppresses divergences at the cost "
+            "of wall clock."
+        ),
+    )
+    parser.add_argument(
+        "--dense-mass",
+        action="store_true",
+        help=(
+            "adapt a dense mass matrix instead of a diagonal one. The diagonal "
+            "metric rescales each coordinate by its own spread and leaves the "
+            "correlations, so what it cannot represent is measured by the "
+            "condition number of the posterior correlation matrix -- 464 on the "
+            "ta085 draws (paper1.posterior_conditioning), worth a factor of 21 "
+            "in leapfrog steps per draw. Off by default; see the comment at the "
+            "sampler kwargs for the evidence on both sides."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--init-from-map",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "run N multi-start MAP fits first and start the sampler from the best "
+            "of them; 0 (default) keeps the cold start"
+        ),
+    )
     parser.add_argument(
         "--n-starts",
         type=int,
-        default=4,
-        help="MAP restarts from independent initializations (default: 4). One "
-        "start is not enough at this dimension: a single L-BFGS reached "
-        "chi2/dof 1.69 against truth's 1.08. Ignored for samplers.",
+        default=1,
+        help="MAP restarts, passed to the backend's n_restarts (default: 1). "
+        "One L-BFGS start reaches chi2/dof 1.0487 against truth's 1.0738; an "
+        "eight-start run reached 1.0474 for eight times the wall clock. "
+        "Ignored for samplers.",
     )
     args = parser.parse_args(argv)
 
@@ -192,43 +239,101 @@ def main(argv=None) -> int:
             "n_warmup": args.n_warmup,
             "n_samples": args.n_samples,
             "n_chains": args.n_chains,
-            # Diagonal, stated rather than left to the auto-policy. At D=44 the
-            # warmup memory is dominated by the mass matrix and a dense one is
-            # O(D^2) -- measured at 20+ GB on problems this size, which OOMs
-            # rather than slows down. A diagonal metric also produced FEWER
-            # divergences than dense on a continuity SFH at D=9 (12 vs 2), so
-            # this is not a memory concession that costs sampling quality.
-            "dense_mass_matrix": False,
+            # Diagonal by default, and the default is NOT free of evidence
+            # against it. At D=44 the warmup memory is dominated by the mass
+            # matrix and a dense one is O(D^2) -- measured at 20+ GB on problems
+            # this size, which OOMs rather than slows down. A diagonal metric
+            # also produced FEWER divergences than dense on a continuity SFH at
+            # D=9 (12 vs 2), and this mock carries a continuity SFH, so that
+            # measurement is on point rather than incidental.
+            #
+            # --dense-mass exists because three attempts at D=36 failed for a
+            # reason neither of those addresses. The failure is not divergences
+            # -- the 0.95 run produced two -- it is that the chain never reached
+            # the basin, ending 700.5 worse in chi2 than truth while the MAP
+            # start sits better than truth. paper1.posterior_conditioning puts a
+            # number on what the diagonal metric leaves: the correlation matrix
+            # of the ta085 draws is conditioned at 464, worth a factor of 21 in
+            # leapfrog steps per draw, driven by many moderate correlations
+            # (adjacent continuity-SFH bins trading mass, the two dust screens
+            # trading optical depth) rather than one pair a reparameterization
+            # would fix.
+            #
+            # So the two lines of evidence are about different failures: the D=9
+            # result is a divergence count at a quarter the dimension, and the
+            # 20+ GB figure is a generic warning for D > 30 rather than a
+            # measurement at D=36, where the matrix itself is 36^2 x 8 bytes =
+            # 10 kB. Memory is measured before the long run, not assumed.
+            "dense_mass_matrix": args.dense_mass,
+            # Step size, the remaining lever on divergences once the start is
+            # excluded. run_nuts has taken this all along at 0.85; raising it
+            # shortens the step, which is the standard remedy and costs wall
+            # clock. Exposed because the 11 h run at the default warm-started
+            # INSIDE the basin, at chi2/dof 1.0480 against truth's 1.0738, and
+            # still ended at 1.3075 with 79 divergences against the cold run's
+            # 19 -- more divergences from a better start, so initialization is
+            # not the cause and geometry is what is left.
+            "target_accept_rate": args.target_accept,
         }
 
     # Inference is canonically through ForwardModel, not the SEDModel directly.
     forward = ForwardModel.build(sed=model)
 
     t0 = time.perf_counter()
+
+    def map_fit(n_restarts: int):
+        """MAP by L-BFGS, through the public fit surface.
+
+        Returns (posterior, params, chi2). The posterior is kept, not just its
+        params: `init_from` is handed to `_unbounded_from_posterior` and needs
+        the object.
+
+        ``n_restarts`` is the MAP backend's own parameter. This script used to
+        run its own loop of independent ``forward.fit`` calls and keep the one
+        with the lowest chi2, which reimplements a documented feature, pays a
+        fresh setup per start, and selects on a different quantity than the
+        optimizer minimizes. The backend selects by that objective, which is
+        the principled criterion -- selecting by agreement with truth would be
+        circular, and chi2 against the data is one step removed from what is
+        being optimized.
+
+        One start is enough: L-BFGS reaches chi2/dof 1.0487 against truth's
+        1.0738 here, indistinguishable from the 1.0474 an eight-start run
+        reached for eight times the wall clock.
+        """
+        post = forward.fit(
+            data,
+            method="map",
+            key=jax.random.PRNGKey(args.seed),
+            optimizer="lbfgs",
+            n_restarts=n_restarts,
+        )
+        c, _ = chi2_against_data(model, post.params, npz)
+        return post, post.params, c
+
     post = None
     if args.method == "map":
-        # Restart from independent initializations and keep the best by chi2.
-        # Selecting by agreement with truth would be circular -- it would tune
-        # the answer to the thing being measured -- so the criterion is the fit
-        # to the data, which a real analysis also has.
-        best, best_c, chis = None, np.inf, []
-        for i in range(args.n_starts):
-            key = jax.random.PRNGKey(args.seed + 1000 * i)
-            cand = forward.fit(data, method="map", key=key).params
-            c, _ = chi2_against_data(model, cand, npz)
-            chis.append(c)
-            if c < best_c:
-                best, best_c = cand, c
-        fitted = best
-        if args.n_starts > 1:
-            # The spread across starts is a measurement of the landscape, not
-            # noise to be hidden: it says how badly one start can mislead.
-            print(
-                f"{args.n_starts} starts: chi2 min {min(chis):.1f}, "
-                f"median {float(np.median(chis)):.1f}, max {max(chis):.1f}"
-            )
+        _, fitted, _ = map_fit(args.n_starts)
     else:
-        post = forward.fit(data, method=args.method, key=jax.random.PRNGKey(args.seed), **kwargs)
+        init_post = None
+        if args.init_from_map:
+            # NUTS at this dimensionality does not find the basin from a cold
+            # start: an 8h41m run at 1000 warmup reached chi2/dof 1.50 against
+            # truth's 1.07, while multi-start MAP reaches 1.05 in seven
+            # minutes. Drawing more samples from the wrong region does not fix
+            # that, so start the chain where the optimizer already got to.
+            # This is the idiom Fitter's own docstring shows.
+            init_post, init_params, init_c = map_fit(args.init_from_map)
+            _, init_r = chi2_against_data(model, init_params, npz)
+            print(f"warm start from MAP: chi2/dof {init_r:.4f} (chi2 {init_c:.1f})")
+
+        post = forward.fit(
+            data,
+            method=args.method,
+            key=jax.random.PRNGKey(args.seed),
+            **({"init_from": init_post} if init_post is not None else {}),
+            **kwargs,
+        )
         fitted = {k: float(np.median(np.asarray(post.samples[k]))) for k in free}
     wall = time.perf_counter() - t0
     delta = report(free, truth, fitted, wall, int((censor == UPPER_LIMIT).sum()))
@@ -319,7 +424,12 @@ def _save_sampler_results(
     diagnostics = posterior.diagnostics or {}
 
     # Build per-parameter diagnostics
-    rhat_dict = posterior.rhats() if hasattr(posterior, "rhats") else {}
+    # posterior.rhat(), singular. The previous spelling was rhats() behind a
+    # hasattr guard, and since no such method exists the guard fired every time
+    # and every mock fit silently reported no R-hat at all. Call it directly:
+    # if the method ever goes away that should raise, not quietly disarm the
+    # only between-chain diagnostic the run produces.
+    rhat_dict = posterior.rhat()
     rhat_max = max((float(v) for v in rhat_dict.values()), default=None)
 
     ess_dict = (
@@ -381,6 +491,12 @@ def _save_sampler_results(
 
     np.savez(out_npz, **npz_payload)
 
+    # The absolute paths in this record name which of many worktrees ran,
+    # which is what the log line below is for. They must not reach the JSON:
+    # a tracked file carrying a home directory describes this machine rather
+    # than the project, and `tools/check_no_local_paths.py` fails the build.
+    provenance = code_provenance(tengri)
+
     # Write JSON sidecar with diagnostic summary
     json_payload = {
         "divergences": int(n_divergent),
@@ -392,7 +508,15 @@ def _save_sampler_results(
         "n_chains": sampler_kwargs.get("n_chains"),
         "n_warmup": sampler_kwargs.get("n_warmup"),
         "n_samples": sampler_kwargs.get("n_samples"),
+        "target_accept_rate": sampler_kwargs.get("target_accept_rate"),
+        "dense_mass_matrix": sampler_kwargs.get("dense_mass_matrix"),
         "method": method,
+        # Which tree produced these numbers. Section 3 quotes them and the
+        # paper is pinned, so a diagnostic without a commit is a diagnostic
+        # nobody can check; read off the imported module rather than the
+        # working directory, because on this machine a bare `python` resolves
+        # `import tengri` to an unrelated checkout.
+        "provenance": publishable(provenance),
     }
 
     # Add energy/ebfmi to JSON if available
@@ -405,6 +529,8 @@ def _save_sampler_results(
         json_payload["ebfmi_min"] = float(ebfmi_min)
     else:
         json_payload["ebfmi_min"] = None
+
+    print(provenance_line(provenance))
 
     with open(out_json, "w") as f:
         json.dump(json_payload, f, indent=2)

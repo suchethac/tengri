@@ -34,31 +34,47 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import tengri
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _adoption import is_adopted
+from _cell_provenance import audit, banner
+from _figure_style import CONFIG_COLORS, CONFIG_LABELS, CONFIG_ORDER
+from _grid_completeness import completeness_note, present_on_disk
+from config_metadata import CONFIGS
+
 jax.config.update("jax_enable_x64", True)
 
 logger = logging.getLogger(__name__)
 
 # Figure setup
 FIGURE_WIDTH = 7.0
-FIGURE_HEIGHT = 7.5
+FIGURE_HEIGHT = 8.1
 NROWS = 3
 NCOLS = 3
 GALAXY_IDS = [13097, 15336, 16049]
-CONFIG_KEYS = ["I", "II", "III"]
-CONFIG_LABELS = {"I": "Configuration I", "II": "Configuration II", "III": "Configuration III"}
-CONFIG_COLORS = {"I": "#0072B2", "II": "#E69F00", "III": "#009E73"}
+CONFIG_KEYS = list(CONFIG_ORDER)
 
 
 def load_galaxy_metadata() -> dict:
-    """Load galaxy metadata from selected_galaxies.json."""
-    galaxy_file = Path(__file__).resolve().parents[2] / "results" / "selected_galaxies.json"
+    """Galaxy redshifts and type labels, from the committed selection.
+
+    ``parents[2]`` reached the repository root, where there is no ``results/``
+    -- the selection lives beside this script, under ``analysis/paper1``. The
+    path therefore never existed, the hardcoded fallback beneath it won every
+    single run, and the committed selection was decorative: the redshifts
+    printed in the panel titles came from a literal in this file, and a change
+    to the locked sample could not reach the figure. The two agreed on every
+    redshift when this was found, so nothing wrong was published; that is luck
+    rather than a mechanism, which is why the fallback is gone rather than
+    corrected. A missing selection is now a refusal.
+    """
+    galaxy_file = Path(__file__).resolve().parent / "results" / "selected_galaxies.json"
     if not galaxy_file.exists():
-        # Fallback to hardcoded metadata if file doesn't exist
-        return {
-            13097: {"z": 1.097, "class": "blue star-forming"},
-            15336: {"z": 1.036, "class": "red quiescent"},
-            16049: {"z": 1.047, "class": "intermediate dusty"},
-        }
+        raise SystemExit(
+            f"fig05 cannot read the galaxy selection at {galaxy_file}. It supplies "
+            "the redshift and type label printed on every panel, and substituting "
+            "remembered values for them is how a figure comes to disagree with the "
+            "sample it claims to draw."
+        )
     with open(galaxy_file) as f:
         data = json.load(f)
     metadata = {}
@@ -87,9 +103,13 @@ class FitResultManager:
         alone does not mean the cell passed the adoption bar.
 
         Acceptance criteria:
-        - Config I/II: adoption_pass must be True (zero-divergence bar)
-        - Config III: adoption_pass=False by design; accept if rhat_max < 1.01 and
-          divergence_rate <= 1.5%
+        - Every configuration: adoption_pass must be True (zero-divergence bar).
+        - Config III is the one exception. Its nonparametric continuity SFH does
+          not clear a zero-divergence bar at this dimensionality -- measured 0 of
+          17 cells passing, against 15 of 17, 14 of 18, 16 of 18, 15 of 16 and 15
+          of 15 for the others -- so it is accepted on rhat_max < 1.01 and a
+          divergence rate <= 1.5% instead. The relaxation is stated in the
+          caption; it is not applied to any other configuration.
         """
         json_path = self.results_dir / f"{gal_id}_{config_key}.json"
         npz_path = self.results_dir / f"{gal_id}_{config_key}.npz"
@@ -97,26 +117,7 @@ class FitResultManager:
             return False
         diagnostics = self.load_json(gal_id, config_key) or {}
 
-        # Config I/II: strict adoption_pass bar
-        if config_key in ["I", "II"]:
-            return diagnostics.get("adoption_pass") is True
-
-        # Config III: relaxed bar (rhat < 1.01 and divergence rate <= 1.5%)
-        if config_key == "III":
-            rhat_max = diagnostics.get("rhat_max")
-            divergences = diagnostics.get("divergences", 0)
-            n_samples = diagnostics.get("n_samples", 600)
-            n_chains = diagnostics.get("n_chains", 4)
-
-            if rhat_max is None:
-                return False
-
-            divergence_rate = (
-                divergences / (n_samples * n_chains) if (n_samples * n_chains) > 0 else 0
-            )
-            return rhat_max < 1.01 and divergence_rate <= 0.015
-
-        return False
+        return is_adopted(diagnostics, config_key).adopted
 
     def has_json(self, gal_id: int, config_key: str) -> bool:
         """Check if JSON exists (may indicate failed adoption)."""
@@ -163,7 +164,7 @@ class FitResultManager:
         if not statuses:
             return ""
         parts = [f"{cfg}: {statuses[cfg]}" for cfg in sorted(statuses.keys())]
-        return "; ".join(parts)
+        return "; ".join(parts).replace("failed_adoption", "not adopted")
 
 
 def plot_photometry_panel(ax, result_manager, gal_id: int, z: float):
@@ -420,6 +421,7 @@ def plot_corner_panel(
         ylim_override = (sfr_min - margin_y, sfr_max + margin_y)
 
     # Plot contours for each config
+    degenerate: list[str] = []
     for config_key in completed_configs:
         npz_data = result_manager.load_npz(gal_id, config_key)
         if npz_data is None:
@@ -439,9 +441,24 @@ def plot_corner_panel(
         log_mass = np.log10(stellar_mass)
         log_sfr = np.log10(np.maximum(sfr_100myr, 1e-10))
 
-        # Compute 2D density
+        # Compute 2D density. A posterior whose mass and star formation rate are
+        # so tightly correlated that the cloud is effectively one-dimensional
+        # gives a singular covariance and no KDE exists for it. That is a result,
+        # not a defect, so the draws are drawn directly rather than dropped.
         xy = np.vstack([log_mass, log_sfr])
-        z = gaussian_kde(xy)(xy)
+        try:
+            z = gaussian_kde(xy)(xy)
+        except np.linalg.LinAlgError:
+            ax.scatter(
+                log_mass,
+                log_sfr,
+                s=2,
+                color=CONFIG_COLORS[config_key],
+                alpha=0.25,
+                edgecolors="none",
+            )
+            degenerate.append(f"{gal_id}_{config_key}")
+            continue
 
         # Compute contour levels at 68% and 95%
         level_68 = np.percentile(z, 32)
@@ -505,7 +522,7 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
     """Build the full 3x3 figure with all cells."""
     fig = plt.figure(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
     gs = fig.add_gridspec(
-        NROWS, NCOLS, hspace=0.4, wspace=0.35, left=0.16, right=0.95, top=0.95, bottom=0.08
+        NROWS, NCOLS, hspace=0.4, wspace=0.35, left=0.16, right=0.95, top=0.95, bottom=0.16
     )
 
     # Create all subplots — NO axis sharing (each row/col has independent scales)
@@ -550,14 +567,10 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
         # Panel (a): photometry
         ax = axes[i_row, 0]
         plot_photometry_panel(ax, results_manager, gal_id, z)
-        if i_row == 0:
-            ax.set_title("(a) Photometry", fontsize=11, fontweight="bold")
 
         # Panel (b): SFH
         ax = axes[i_row, 1]
         plot_sfh_panel(ax, results_manager, gal_id, z)
-        if i_row == 0:
-            ax.set_title("(b) SFH", fontsize=11, fontweight="bold")
 
         # Panel (c): M* vs SFR (compute per-row axis limits)
         completed_configs = results_manager.get_completed_configs_for_galaxy(gal_id)
@@ -596,8 +609,6 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
             xlim_override=xlim_c,
             ylim_override=ylim_c,
         )
-        if i_row == 0:
-            ax.set_title("(c) M$_\\ast$ vs SFR", fontsize=11, fontweight="bold")
 
         # Collect diagnostics for completed cells
         for config_key in CONFIG_KEYS:
@@ -650,46 +661,30 @@ def build_figure(results_manager: FitResultManager, repo_root: Path) -> tuple[ob
             markerfacecolor="black",
             markersize=6,
             label="observed",
-        ),
+        )
+    ]
+    legend_handles += [
         plt.Line2D(
             [0],
             [0],
             marker="s",
-            color=CONFIG_COLORS["I"],
+            color=CONFIG_COLORS[key],
             markersize=6,
             linestyle="none",
-            label="Configuration I",
-        ),
-        plt.Line2D(
-            [0],
-            [0],
-            marker="s",
-            color=CONFIG_COLORS["II"],
-            markersize=6,
-            linestyle="none",
-            label="Configuration II",
-        ),
-        plt.Line2D(
-            [0],
-            [0],
-            marker="s",
-            color=CONFIG_COLORS["III"],
-            markersize=6,
-            linestyle="none",
-            label="Configuration III",
-        ),
+            label=CONFIG_LABELS[key],
+        )
+        for key in CONFIG_KEYS
     ]
     fig.legend(
         handles=legend_handles,
         loc="lower center",
         ncol=4,
-        fontsize=9,
+        fontsize=8,
         frameon=True,
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.5, 0.005),
     )
 
     # Adjust bottom margin for legend
-    fig.subplots_adjust(bottom=0.12)
 
     return fig, data_dict
 
@@ -756,8 +751,44 @@ def main():
     logger.info(f"Writing figures to: {args.output_dir}")
     logger.info(f"Writing sidecar to: {args.results_output_dir}")
 
+    # A configuration that has been redefined leaves its old cells in place
+    # under their old names, so the colors and labels below would announce a
+    # model these cells do not hold. Say so on the figure rather than in a log
+    # line nobody reads beside the PDF.
+    mismatches, notes = audit(args.results_dir, CONFIGS)
+    audit_text = banner(args.results_dir, mismatches, notes)
+    if audit_text:
+        print(audit_text, file=sys.stderr)
+
+    # Every panel of this figure is tengri output, so a directory holding no
+    # cells for these galaxies draws axes and nothing in them -- and exits 0.
+    # fig06 shipped exactly that figure before it was given this refusal.
+    present = present_on_disk(args.results_dir, GALAXY_IDS, CONFIG_ORDER)
+    if not present:
+        raise SystemExit(
+            f"fig05 found no finished cells for {GALAXY_IDS} in {args.results_dir}. "
+            "Every panel here is a tengri posterior, so there is nothing to draw. "
+            "Point --results-dir at a directory holding cells for these galaxies."
+        )
+
     results_manager = FitResultManager(args.results_dir)
     fig, data_dict = build_figure(results_manager, repo_root)
+
+    # Two separate questions, and only the second used to be asked. "Are these
+    # the configurations configs.py declares" says nothing about whether all
+    # eighteen cells are here, and a directory holding a handful of them draws
+    # a figure that looks like the full three-by-six panel set.
+    shortfall = completeness_note(present, GALAXY_IDS, CONFIG_ORDER)
+    if shortfall:
+        print(shortfall, file=sys.stderr)
+        data_dict["completeness"] = shortfall
+    if mismatches:
+        print(
+            "CONFIGURATION LABELS ARE NOT configs.py's: "
+            + "; ".join(f"{m.config} sampled {m.found_prefixes[0]}" for m in mismatches),
+            file=sys.stderr,
+        )
+        data_dict["configuration_mismatches"] = [m.describe() for m in mismatches]
 
     data_dict.update(
         {

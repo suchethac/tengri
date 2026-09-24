@@ -98,7 +98,7 @@ class TestStepFunctionRegression:
         age_mid1 = jnp.array([1.5e9])
         age_mid2 = jnp.array([2.5e9])
 
-        kwargs = {f"ratio_{i}": 0.3 * (i - 3) for i in range(7)}
+        kwargs = {f"ratio_{i}": 0.3 * (i - 3) for i in range(6)}
         sfr1 = continuity(age_mid1, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
         sfr2 = continuity(age_mid2, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
 
@@ -131,7 +131,7 @@ class TestStepFunctionRegression:
 
         # ratio_i = log(SFR_{i+1} / SFR_i). Setting ratio_2 = 1.0 makes
         # SFR in bin 3 = 10^1.0 × SFR in bin 2 — a clear step.
-        kwargs = {f"ratio_{i}": 1.0 if i == 2 else 0.0 for i in range(7)}
+        kwargs = {f"ratio_{i}": 1.0 if i == 2 else 0.0 for i in range(6)}
         sfr_before = continuity(age_before, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
         sfr_after = continuity(age_after, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
 

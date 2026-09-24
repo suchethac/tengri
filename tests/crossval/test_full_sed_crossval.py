@@ -2052,35 +2052,30 @@ class TestTabularSFH:
             f"({color_rising:.3f}). Higher recent burst (sfr=8 vs 5 Msun/yr) should be bluer."
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason="#2465: continuity shape mismatch between sfr_bins and mass_unnorm",
-    )
     def test_tengri_nonparametric_color_trend(self, ssp_data):
         """tengri continuity: rising SFH should be bluer than quenching SFH.
 
         This checks the tengri implementation independently of FSPS.
         Uses the same SFR-per-bin values as TABSFH_CASES in the reference generator.
         """
-        try:
-            from tengri.components.stellar.sfh.nonparametric import continuity
-        except ImportError:
-            pytest.skip("continuity not importable")
+        from tengri.components.stellar.sfh.nonparametric import continuity
+        from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
 
         bin_edges = jnp.array([0.0, 0.1, 0.5, 2.0, 6.0])
         sfr_rising = jnp.array([5.0, 2.0, 0.8, 0.2])
         sfr_quenching = jnp.array([0.2, 1.0, 3.0, 5.0])
 
         wave = jnp.asarray(ssp_data.ssp_wave)
+        ages_yr = 10.0 ** jnp.asarray(ssp_data.ssp_lg_age_gyr) * 1e9
 
         def uv_over_v(sfr_bins):
-            t_obs, sfr_t = continuity(bin_edges, sfr_bins, n_pts=200)
-            # Compute CSP: approximate as sum of SSPs weighted by SFR dt
-            from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
-
-            weights = compute_csp_weights(t_obs, sfr_t)
-            sed = jnp.einsum("t,tw->w", weights, ssp_data.ssp_flux[0])  # solar Z
+            ratios = {
+                f"ratio_{i}": float(jnp.log10(sfr_bins[i] / sfr_bins[i + 1]))
+                for i in range(sfr_bins.shape[0] - 1)
+            }
+            sfr_t = continuity(ages_yr, log_total_mass=10.0, bin_edges_gyr=bin_edges, **ratios)
+            weights = compute_csp_weights(sfr_t, ages_yr)
+            sed = jnp.einsum("t,tw->w", weights, ssp_data.ssp_flux[0])  # first met node
             v = float(jnp.mean(sed[(wave > 5400.0) & (wave < 5600.0)]))
             uv = float(jnp.mean(sed[(wave > 2700.0) & (wave < 2900.0)]))
             return uv / max(v, 1e-30)
@@ -2577,8 +2572,11 @@ class TestCIGALESKIRTOR:
 
     @pytest.mark.xfail(
         strict=True,
-        raises=IndexError,
-        reason="#2464: skirtor_analytic fails with tuple index out of range",
+        raises=AssertionError,
+        reason=(
+            "tengri/pCIGALE SKIRTOR NIR/V ratio = 508.9: the comparison is ill-posed "
+            "(torus-only NIR/V against a total-SED excess over stellar V), see #2480"
+        ),
     )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
         """tengri skirtor_analytic vs pCIGALE SKIRTOR2016 shape within 20% at 1–3 μm.
@@ -2610,15 +2608,13 @@ class TestCIGALESKIRTOR:
         # tengri: compute skirtor SED and get NIR/V ratio
         wave_aa = np.asarray(ssp_data.ssp_wave)
         skirtor_result = skirtor_analytic(
-            wave_aa=wave_aa,
-            t=3,
-            pl=1.0,
-            q=1.0,
-            oa=40,
-            R=20,
-            Mcl=0.97,
-            i=30,
-            fracAGN=0.30,
+            wavelength=wave_aa,
+            agn_log_lbol=10.0,
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=40.0,
+            agn_cos_inc=np.cos(np.radians(30.0)),
         )
         # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalize to NIR/V
         tengri_sed = np.asarray(skirtor_result)
