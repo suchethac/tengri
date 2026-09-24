@@ -414,6 +414,39 @@ def config_VI(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
     dust emission, and nebular backend -- so that the difference between the two
     rows isolates the AGN rather than confounding it with a recipe change. This
     row is fit on every galaxy, including the three mid-infrared AGN candidates.
+
+    **The AGN amplitude is ``agn_lum_ratio``, not ``agn_log_lbol`` (#2495).**
+    Seventeen of the twenty galaxies are not AGN candidates, and a row fit on
+    all of them has to be able to answer "no AGN". ``agn_log_lbol ~
+    Uniform(9.42, 13.42)`` cannot: its floor is ~1e43 erg/s, already a Seyfert,
+    so the fits piled against it -- galaxy 267 put 32% of its draws and 33% of
+    its 72 divergent draws within 0.05 dex of the floor.
+
+    ``agn_lum_ratio`` is declared ``Uniform(0.0, 5.0)`` and reaches zero, where
+    the row nests Configuration I exactly (measured 4.4e-06 relative in
+    photometry), so "does this galaxy need an AGN?" becomes one parameter's
+    posterior rather than a wall. Measured A/B, attempt 1, seed 42, same
+    machine, 11 free parameters in both arms:
+
+    ==========  ==================  =====================
+    galaxy 79   ``log_lbol`` free   ``agn_lum_ratio`` free
+    ==========  ==================  =====================
+    divergences 107                 15
+    rhat_max    1.0168              1.0014
+    ess_min     75.3                276.7
+    step size   0.05538             0.01264
+    ==========  ==================  =====================
+
+    **It is not free.** The adapted step size falls ~4.5x and mean tree depth
+    rises 6.21 -> 8.46, so roughly 4-5x more gradient evaluations per draw: a
+    linear amplitude reaching zero is worse conditioned than a log one. That
+    cost buys a parametrization that can express the model 17 of 20 galaxies
+    actually need, which the old one could not at any step size.
+
+    ``log_lbol`` is pinned at 11.0 -- the value the A/B above ran with --
+    rather than left to the wildcard, whose registry default is 10.0. Since
+    ``agn_lum_ratio`` multiplies this scale, taking the default would shift
+    what every ratio means by a factor of ten away from what was measured.
     """
     return SEDModel.build(
         ssp_data=ssp_data,
@@ -425,8 +458,9 @@ def config_VI(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         agn={
             "disc": {"type": "qsogen"},
             "torus": {"type": "skirtor"},
+            "log_lbol": Fixed(11.0),
+            "lum_ratio": Uniform(0.0, 5.0),
             "all_params": Fixed(DEFAULT),
-            "log_lbol": Uniform(9.42, 13.42),
         },
         redshift=Fixed(z),
         igm={"type": "inoue"},
