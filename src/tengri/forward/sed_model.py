@@ -9613,11 +9613,23 @@ class SEDModel:
             lo, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
             hi, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=_L_IR_PROBE)
             if not bool(jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)):
+                # Record WHY, or the refusal is invisible. Every gate a caller
+                # can re-check from outside is satisfied here, so
+                # precompute_engagement_report reported "unknown reason (gate
+                # conditions appear satisfied)" and the natural next move --
+                # widening the gate -- is the one that produces silently wrong
+                # IR photometry (#2497, #2485).
+                self._dust_band_response_decline = (
+                    "dust emission template is not homogeneous in L_ir: its shape "
+                    "depends on luminosity, so a constant per-filter response "
+                    "cannot represent it"
+                )
                 self._dust_band_response_cache = None
                 return None
 
             response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
 
+        self._dust_band_response_decline = None
         self._dust_band_response_cache = response
         return response
 

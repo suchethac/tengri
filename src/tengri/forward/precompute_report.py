@@ -227,6 +227,14 @@ def _infer_dust_response_decline_reason(model: Any) -> str | None:
     str | None
         Reason string, or None if unable to determine.
     """
+    # A verdict the builder recorded beats one inferred from outside. The
+    # homogeneity probe is the only gate a caller cannot re-check, because it
+    # evaluates the template rather than reading the spec, so without this the
+    # report calls a refusal it cannot see "unknown reason" (#2497).
+    recorded = getattr(model, "_dust_band_response_decline", None)
+    if recorded:
+        return str(recorded)
+
     free = set(model.spec.free_params)
     free_dust = {p for p in free if p.startswith("dust_")}
 
