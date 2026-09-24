@@ -6,6 +6,27 @@
 
 ### Fixed
 
+- `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
+  `wavelength` as a keyword argument. Previously, calling with all keyword arguments
+  raised `IndexError: tuple index out of range`. Both functions now resolve
+  `wavelength` from positional or keyword argument and raise `TypeError` if omitted.
+  The CIGALE-era cross-validation test now calls `skirtor_analytic()` with the
+  current parameter names (`agn_tau_skirtor`, `agn_p_skirtor`, etc.) instead of
+  retired CIGALE-style names (`t`, `pl`, `q`, `oa`, `R`, `Mcl`, `i`) (#2464).
+- The numeric-guard ledger now skips `jnp.clip` calls whose results are assigned to a
+  plain Name and used only as gather indices (element of `Subscript.slice`, inside an
+  expression within a subscript slice such as `table[i + 1]`, argument to
+  `jnp.take` / `jnp.take_along_axis`, or slice of `.at[...]` access). These index bounds
+  with literal floor 0 do not present a subnormal-risk floor on the value path; the ledger
+  improves by ratcheting down count on seven files (#2327).
+- A wide log-normal SFH was a staircase in `age`: its support boundary moves with
+  the age parameter and a hard mask switched each dense-grid node on at full weight,
+  so the trapezoid integral jumped at every node crossing (89 steps above four times
+  the median step over a 161-point age sweep on FSPS MIST C3K at width 2.14 dex) and
+  autodiff could not see the jumps, which NUTS read as divergences. The boundary cell
+  now carries a smoothstep partial-cell weight at the grid's own spacing; bit-identical
+  wherever the kernel was already small at onset; ported from the paper-1 pin branch
+  (f01975f46). Periodic and tsnorm remain measured staircases (#2476).
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to

@@ -2572,8 +2572,11 @@ class TestCIGALESKIRTOR:
 
     @pytest.mark.xfail(
         strict=True,
-        raises=IndexError,
-        reason="#2464: skirtor_analytic fails with tuple index out of range",
+        raises=AssertionError,
+        reason=(
+            "tengri/pCIGALE SKIRTOR NIR/V ratio = 508.9: the comparison is ill-posed "
+            "(torus-only NIR/V against a total-SED excess over stellar V), see #2480"
+        ),
     )
     def test_tengri_vs_cigale_skirtor_shape(self, ref, ref_wave, ssp_data):
         """tengri skirtor_analytic vs pCIGALE SKIRTOR2016 shape within 20% at 1–3 μm.
@@ -2605,15 +2608,13 @@ class TestCIGALESKIRTOR:
         # tengri: compute skirtor SED and get NIR/V ratio
         wave_aa = np.asarray(ssp_data.ssp_wave)
         skirtor_result = skirtor_analytic(
-            wave_aa=wave_aa,
-            t=3,
-            pl=1.0,
-            q=1.0,
-            oa=40,
-            R=20,
-            Mcl=0.97,
-            i=30,
-            fracAGN=0.30,
+            wavelength=wave_aa,
+            agn_log_lbol=10.0,
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=40.0,
+            agn_cos_inc=np.cos(np.radians(30.0)),
         )
         # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalize to NIR/V
         tengri_sed = np.asarray(skirtor_result)

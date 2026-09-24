@@ -51,6 +51,32 @@ class NumericGuardVisitor(ast.NodeVisitor):
         self.filename = filename
         self.lines = source.split("\n")
         self.violations: list[tuple[int, str]] = []
+        self._current_function: ast.FunctionDef | None = None
+        self._parent_map: dict[ast.expr, ast.expr] = {}
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        """Track the current function while visiting its body."""
+        old_func = self._current_function
+        old_parent_map = self._parent_map
+        try:
+            self._current_function = node
+            self._parent_map = self._build_parent_map(node)
+            self.generic_visit(node)
+        finally:
+            self._current_function = old_func
+            self._parent_map = old_parent_map
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        """Track the current function for async functions too."""
+        old_func = self._current_function
+        old_parent_map = self._parent_map
+        try:
+            self._current_function = node
+            self._parent_map = self._build_parent_map(node)
+            self.generic_visit(node)
+        finally:
+            self._current_function = old_func
+            self._parent_map = old_parent_map
 
     def visit_Call(self, node: ast.Call):
         """Check for unsafe patterns in function calls."""
@@ -67,7 +93,8 @@ class NumericGuardVisitor(ast.NodeVisitor):
         ) and not self._is_inside_isfinite_where_guard(node):
             if len(node.args) >= 2:
                 lit = self._extract_float_literal(node.args[1])
-                if lit is not None and lit < 1e-20:
+                if lit is not None and lit < 1e-20 and not self._is_clip_index_bound(node):
+                    # Skip if this clip is assigned to a Name and used only as an index
                     self.violations.append((node.lineno, f"jnp.clip with floor {lit} < 1e-20"))
             # Also check keyword arguments
             for kw in node.keywords:
@@ -158,6 +185,159 @@ class NumericGuardVisitor(ast.NodeVisitor):
         # Heuristic: if we see both jnp.where (current line) and jnp.isfinite
         # (in preceding lines), this is likely the guarded pattern
         return "isfinite" in preceding or "finite" in line
+
+    def _build_parent_map(self, node: ast.expr) -> dict[ast.expr, ast.expr]:
+        """Build a parent map for all nodes in the given subtree."""
+        parent_map = {}
+
+        class ParentMapper(ast.NodeVisitor):
+            def visit(self, node):
+                for child in ast.iter_child_nodes(node):
+                    parent_map[child] = node
+                self.generic_visit(node)
+
+        ParentMapper().visit(node)
+        return parent_map
+
+    def _is_clip_index_bound(self, clip_node: ast.Call) -> bool:
+        """Check if a jnp.clip is assigned to a Name and used only as an index.
+
+        Returns True if:
+        - The clip is the value of an Assign/AnnAssign to a plain Name
+        - Every use of that Name in the enclosing function is as an index:
+          - Direct element of Subscript.slice
+          - Within a Tuple that is Subscript.slice
+          - Argument to jnp.take / jnp.take_along_axis
+          - Index in .at[...] access
+
+        Returns False otherwise (conservative: assumes it's a value floor).
+        """
+        if self._current_function is None:
+            return False
+
+        # Find the parent of the clip call (should be an Assign or AnnAssign)
+        if clip_node not in self._parent_map:
+            return False
+
+        parent = self._parent_map[clip_node]
+
+        # Must be directly assigned to a Name (i = jnp.clip(...))
+        if isinstance(parent, ast.Assign):
+            if len(parent.targets) != 1 or not isinstance(parent.targets[0], ast.Name):
+                return False
+            var_name = parent.targets[0].id
+        elif isinstance(parent, ast.AnnAssign):
+            if not isinstance(parent.target, ast.Name):
+                return False
+            var_name = parent.target.id
+        else:
+            return False
+
+        # Now check all uses of var_name in the function
+        return self._name_used_only_as_index(var_name)
+
+    def _name_used_only_as_index(self, var_name: str) -> bool:
+        """Check if a name is used only as an index in the current function.
+
+        Scans the function body for all Name nodes matching var_name and checks
+        if they're all used as indices. A use is an index use if:
+        - It's the direct element of a Subscript.slice
+        - It's inside an expression (BinOp, UnaryOp, Call, Tuple, etc.) that
+          ultimately becomes the Subscript.slice (e.g., i in ax[i + 1])
+        - It's an argument to jnp.take / jnp.take_along_axis
+        - It's inside the slice of an .at[...] access
+        """
+        if self._current_function is None:
+            return False
+
+        parent_map = self._parent_map
+        is_call_to = self._is_call_to
+
+        class NameUsageChecker(ast.NodeVisitor):
+            def __init__(self):
+                self.found_non_index_use = False
+
+            def visit_Name(self, node: ast.Name):
+                if node.id != var_name:
+                    self.generic_visit(node)
+                    return
+
+                # Skip Name nodes in Store context (assignment targets)
+                if isinstance(node.ctx, ast.Store):
+                    return
+
+                # Found a use (Load context) of var_name. Check if it's an index use.
+                if node not in parent_map:
+                    self.found_non_index_use = True
+                    return
+
+                # Walk up the parent chain to find if this name is used as an index
+                if not self._is_index_use(node):
+                    self.found_non_index_use = True
+
+            def _is_index_use(self, name_node: ast.Name) -> bool:
+                """Check if a Name node is used as an index (possibly indirectly).
+
+                Returns True if the Name is:
+                - The slice of a Subscript (directly or inside an expression)
+                - An argument to jnp.take / jnp.take_along_axis
+                - Inside a .at[...] slice
+                """
+                current = name_node
+                while current in parent_map:
+                    parent = parent_map[current]
+
+                    # Case 1: Direct index in Subscript (table[i])
+                    if isinstance(parent, ast.Subscript) and parent.slice is current:
+                        return True
+
+                    # Case 3: Argument to jnp.take or jnp.take_along_axis
+                    # Check BEFORE generic Call to avoid matching then continuing
+                    if isinstance(parent, ast.Call) and (
+                        is_call_to(parent.func, ("jnp", "take"))
+                        or is_call_to(parent.func, ("jnp", "take_along_axis"))
+                    ):
+                        return True
+
+                    # Case 4: Index in .at[...].get() or .at[...].set()
+                    if isinstance(parent, ast.Subscript):
+                        # Check if parent is the slice of an Attribute (.at[...])
+                        subscript_parent = parent_map.get(parent)
+                        if (
+                            subscript_parent
+                            and isinstance(subscript_parent, ast.Attribute)
+                            and subscript_parent.attr in ("at",)
+                        ):
+                            return True
+
+                    # Case 2: Inside an expression (BinOp, etc.) that is the subscript slice
+                    # Walk up through BinOp, UnaryOp, Call, Tuple, etc. until we hit a Subscript
+                    # Non-jnp.take Calls can be walked through
+                    if isinstance(
+                        parent,
+                        (
+                            ast.BinOp,
+                            ast.UnaryOp,
+                            ast.Call,
+                            ast.Tuple,
+                            ast.List,
+                            ast.Compare,
+                            ast.IfExp,
+                        ),
+                    ):
+                        # Keep walking up to see if this expression is a subscript slice
+                        current = parent
+                        continue
+
+                    # Not an index use
+                    return False
+
+                # Reached top without finding index use
+                return False
+
+        checker = NameUsageChecker()
+        checker.visit(self._current_function)
+        return not checker.found_non_index_use
 
 
 def _tracked_python_files_in_src() -> list[Path]:
