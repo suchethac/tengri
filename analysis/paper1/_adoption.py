@@ -16,13 +16,32 @@ driver carrying a third, `ess_min >= fit_one.ESS_FLOOR` (100, the owner's
 ruling), added in 03ffff576 on `paper1/nss-profile-mass`; that commit is on
 neither this branch, nor `paper1/grid-20x6-locked`, nor `main`, so the flag
 means different things on either side and a cell's provenance decides which.
-Configuration III is the single exception, and it is measured rather than
-assumed: across `results/fits_superseded_oldsuite_20260920`, 0 of 17 of its
-cells clear a zero-divergence bar, against 15 of 17, 14 of 18, 16 of 18, 15 of
-16 and 15 of 15 for the other five. Its nonparametric continuity SFH does not
-reach that bar at this dimensionality, so it is judged on convergence and a
-divergence rate instead. Any figure drawing Configuration III must say so in
-its caption; the relaxation is not applied to any other configuration.
+The relaxation is applied to Configurations **I, III and VI**, and it is
+measured rather than assumed.
+
+It was introduced for III alone, on a measurement over
+`results/fits_superseded_oldsuite_20260920` where 0 of 17 of its cells cleared
+a zero-divergence bar against 15 of 17, 14 of 18, 16 of 18, 15 of 16 and 15 of
+15 for the other five, and justified by the *nonparametric continuity SFH* not
+reaching that bar at this dimensionality.
+
+That justification names a model property, and the property has since moved.
+The configuration table was diversified and **Configuration III is now
+delayed-tau; I and VI are the continuity rows** (`configs.py` builds
+`sfh={"type": "delayed"}` for III and calls `_continuity_sfh` for I and VI, and
+the cells' own recorded priors carry `sfh_delayed_*` against
+`sfh_cont_ratio_0..5`). III now clears the strict bar 19 times in 20, the
+opposite of the behavior that earned it the exception.
+
+Measured over the 78-cell grid of 2026-09-24, adopted under the strict bar
+against adopted under the relaxed one: I 3 -> 8 of 9, III 19 -> 19 of 20, II
+5 -> 5, IV 20 -> 20, V 16 -> 16, VI 0 -> 0 (VI is held back by the prior floor
+in #2495, not by the bar). Only the continuity rows move, so this is not a
+general loosening. Owner ruling 2026-09-24, on #2496; III keeps the relaxation
+although it no longer needs it, because removing it changes nothing and was not
+asked for.
+
+Any figure drawing a relaxed configuration must say so in its caption.
 """
 
 from __future__ import annotations
@@ -30,7 +49,10 @@ from __future__ import annotations
 import re
 from typing import NamedTuple
 
-RELAXED_CONFIGS = frozenset({"III"})
+#: Judged on a divergence *rate* plus R-hat and ESS rather than on zero
+#: divergences. The continuity rows (I, VI) and III, which keeps it
+#: historically. See the module docstring for the measurement.
+RELAXED_CONFIGS = frozenset({"I", "III", "VI"})
 RELAXED_RHAT_MAX = 1.01
 RELAXED_DIVERGENCE_RATE = 0.015
 

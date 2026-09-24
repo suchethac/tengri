@@ -315,3 +315,99 @@ def test_the_peak_cap_check_is_configuration_v_only():
 
     assert uncapped_peak_note({}, "III") is None
     assert uncapped_peak_note({}, "VI") is None
+
+
+# --- the relaxed bar follows the SFH, not the label (#2496, owner 2026-09-24) ---
+
+
+def test_the_relaxed_set_is_the_two_continuity_rows_and_iii():
+    """I and VI are the continuity rows; III keeps it although it no longer needs it.
+
+    The exception was introduced for III on the grounds that a nonparametric
+    continuity SFH cannot reach a zero-divergence bar at this dimensionality.
+    The table was later diversified and that SFH moved to I and VI, while the
+    frozenset kept the string. Pinning membership here so a future reshuffle
+    has to come past a test rather than past a comment.
+    """
+    assert frozenset({"I", "III", "VI"}) == RELAXED_CONFIGS
+
+
+@pytest.mark.parametrize(
+    ("config", "divergences", "rhat", "ess"),
+    [
+        ("I", 6, 1.0024, 504.8),  # 24786/I, measured
+        ("I", 1, 1.0015, 468.7),  # 26398/I, measured
+        ("VI", 15, 1.0014, 276.7),  # 79/VI under the #2495 reparametrization
+    ],
+)
+def test_a_continuity_row_is_adopted_on_the_relaxed_bar(config, divergences, rhat, ess):
+    """Cells the strict bar refuses only for a nonzero divergence count."""
+    meta = {
+        "adoption_pass": False,
+        "rhat_max": rhat,
+        "divergences": divergences,
+        "ess_min": ess,
+        "n_samples": 300,
+        "n_chains": 4,
+    }
+    verdict = is_adopted(meta, config)
+    assert verdict.adopted is True, verdict.reason
+    assert "relaxed" in verdict.reason
+    assert rate_of(meta) <= 0.015
+
+
+@pytest.mark.parametrize("config", ["I", "VI"])
+def test_a_continuity_row_still_fails_past_the_rate(config):
+    """The relaxation is a rate, not an amnesty: 267/VI at 6.0% stays refused."""
+    meta = {
+        "adoption_pass": False,
+        "rhat_max": 1.0052,
+        "divergences": 72,
+        "ess_min": 300.0,
+        "n_samples": 300,
+        "n_chains": 4,
+    }
+    assert is_adopted(meta, config).adopted is False
+
+
+@pytest.mark.parametrize("config", ["I", "VI"])
+def test_a_continuity_row_still_fails_on_effective_samples(config):
+    """1826/I: rate 0.0025 and R-hat 1.0010, refused on ess_min 81."""
+    meta = {
+        "adoption_pass": False,
+        "rhat_max": 1.0010,
+        "divergences": 3,
+        "ess_min": 81.0,
+        "n_samples": 300,
+        "n_chains": 4,
+    }
+    verdict = is_adopted(meta, config)
+    assert verdict.adopted is False
+    assert "ess_min" in verdict.reason
+
+
+def test_the_retune_ladder_reads_the_same_relaxed_set_as_the_judge():
+    """fit_one must not restate the bar it stops retuning on.
+
+    The ladder decides when to stop; this module decides whether the saved cell
+    counts. A second copy of the membership would let them drift, and the
+    failure is silent: the ladder keeps retuning a cell the census already
+    adopts, and a later rung can carry fewer effective samples than the one it
+    replaces. Identity, not equality, so a copied literal fails.
+    """
+    from importlib import import_module
+
+    # fit_one uses relative imports, so it only loads as a package module, and
+    # that loads _adoption a second time under its package-qualified name. The
+    # comparison has to be against the instance fit_one itself bound, or this
+    # would fail on the duplicate import rather than on a copied literal.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    fit_one = import_module("analysis.paper1.fit_one")
+    shared = import_module("analysis.paper1._adoption")
+
+    assert fit_one.RELAXED_CONFIGS is shared.RELAXED_CONFIGS
+    assert fit_one.RELAXED_DIVERGENCE_RATE is shared.RELAXED_DIVERGENCE_RATE
+    assert fit_one.RELAXED_RHAT_MAX is shared.RELAXED_RHAT_MAX
+    # and the duplicate import must still agree in value, or the two copies of
+    # the module have drifted and every other test here judges the wrong one.
+    assert shared.RELAXED_CONFIGS == RELAXED_CONFIGS

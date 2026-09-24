@@ -38,6 +38,12 @@ import numpy as np
 from tengri import Data, ForwardModel, Observation, Photometry
 from tengri.inference.mass_profile import REINSERT_LOCK_ENV
 
+from ._adoption import (
+    RELAXED_CONFIGS,
+    RELAXED_DIVERGENCE_RATE,
+    RELAXED_RHAT_MAX,
+    divergence_rate,
+)
 from ._posterior_utils import build_npz_payload, divergent_draw_payload, thin_samples
 from .candels_io import load_candels_z1, photometry_for_row
 from .configs import (
@@ -1135,7 +1141,33 @@ def run_fit(
             # Check adoption bar: 0 divergences, max R̂ < 1.01 and min ESS at
             # or above ESS_FLOOR. A non-chain sampler has none of these; its
             # backend raises when the run is cut off, so reaching here is the bar.
-            if chain_sampler:
+            if chain_sampler and config_key in RELAXED_CONFIGS:
+                # The relaxed bar judges a divergence *rate* instead of demanding
+                # zero, for the configurations whose SFH does not reach a
+                # zero-divergence bar at this dimensionality. Read from _adoption
+                # rather than restated, because that module judges the saved cell:
+                # if the two drifted apart the ladder would keep retuning a cell
+                # the census already counts as adopted, and a later rung can carry
+                # fewer effective samples than the one it replaces.
+                rate = divergence_rate(
+                    {
+                        "divergences": n_divergent,
+                        "n_samples": n_samples,
+                        "n_chains": n_chains,
+                    }
+                )
+                adoption_pass = (
+                    rhat_max < RELAXED_RHAT_MAX
+                    and rate <= RELAXED_DIVERGENCE_RATE
+                    and ess_min is not None
+                    and ess_min >= ESS_FLOOR
+                )
+                bar = (
+                    f"divergence rate={rate:.4f} (n={n_divergent}), "
+                    f"rhat_max={rhat_max:.4f}, ess_min={ess_min:.0f} "
+                    f"[relaxed bar, configuration {config_key}]"
+                )
+            elif chain_sampler:
                 adoption_pass = (
                     n_divergent == 0
                     and rhat_max < 1.01
