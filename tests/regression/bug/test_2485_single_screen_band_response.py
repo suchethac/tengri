@@ -121,20 +121,26 @@ def test_the_band_response_does_not_change_the_photometry(
 
 
 def test_the_energy_balance_lut_was_not_enabled_too(synthetic_ssp, synthetic_tophat_obs):
-    """The trap, pinned.
+    """The degenerate two-component LUT structure.
 
-    Widening the shared ``_EB_ATTEN_FREE_OK`` instead of the band-response set
-    would also admit ``dust_tau_v`` to the energy-balance LUT, which has no
-    ``tau_v`` axis and would return a wrong ``L_absorbed`` without saying so.
-    This test exists to fail on that edit.
+    Single-screen ``dust_tau_v`` is now enabled for the energy-balance LUT
+    by mapping it to the degenerate two-component geometry:
+    tau_bc = [0.0] (birth-cloud disabled) and tau_diff = tau_v.
+    This test verifies the LUT is built with this degenerate axis structure,
+    not that it is absent.
     """
     model = _single_screen(synthetic_ssp, synthetic_tophat_obs)
 
-    assert "dust_tau_v" not in SEDModel._EB_ATTEN_FREE_OK, (
-        "dust_tau_v reached the energy-balance allowlist; the LUT is built on "
-        "(tau_bc, tau_diff) axes and cannot represent a single screen"
-    )
-    assert model._energy_balance_lut_cache is None
+    lut = model._energy_balance_lut_cache
+    assert lut is not None, "Energy balance LUT was not built for single-screen"
+
+    # Verify degenerate structure: tau_bc pinned to [0.0], tau_diff spans tau_v prior
+    assert lut.tau_bc_grid.shape[0] == 1, "tau_bc axis should have exactly one point"
+    assert np.isclose(lut.tau_bc_grid[0], 0.0), "tau_bc should be pinned to 0.0"
+    assert lut.tau_diff_grid.shape[0] > 1, "tau_diff should have multiple points"
+    # tau_v prior is Uniform(0.0, 3.0)
+    assert np.isclose(lut.tau_diff_grid.min(), 0.0), "tau_diff grid minimum should be 0.0"
+    assert np.isclose(lut.tau_diff_grid.max(), 3.0), "tau_diff grid maximum should be 3.0"
 
 
 def test_the_two_component_path_is_unchanged(synthetic_ssp, synthetic_tophat_obs):

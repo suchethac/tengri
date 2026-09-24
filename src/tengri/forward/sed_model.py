@@ -9285,7 +9285,13 @@ class SEDModel:
     #: this set without also checking the energy-balance LUT build requirements is
     #: a silent numerical error.
     _EB_ATTEN_FREE_OK = frozenset(
-        {"dust_tau_bc", "dust_tau_diff", "dust_eta_balance", "dust_log_L_ir"}
+        {
+            "dust_tau_bc",
+            "dust_tau_diff",
+            "dust_tau_v",
+            "dust_eta_balance",
+            "dust_log_L_ir",
+        }
     )
 
     #: dust attenuation params that may be free without invalidating the dust
@@ -9363,6 +9369,7 @@ class SEDModel:
             return cached
 
         from tengri.components.dust.attenuation import resolve_bc_diff_law_params
+        from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.energy_balance_precompute import (
             build_energy_balance_lut,
         )
@@ -9370,7 +9377,11 @@ class SEDModel:
         from tengri.components.dust.two_component import DustSEDComponent
 
         lut = None
-        dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
+        dust = next(
+            (c for c in chain if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
+            None,
+        )
+
         free = set(self.spec.free_params)
         unsafe_free = {
             p
@@ -9385,7 +9396,11 @@ class SEDModel:
         # same disposition a free ``dust_delta`` gets, which is no LUT and the
         # exact energy-balance integral instead (#2199).
         if "redshift" in free and dust is not None:
-            laws_in_play = (dust.config.law_bc, dust.config.law_diff, dust.config.law_neb)
+            is_single_component = isinstance(dust, DustAttenuationSEDComponent)
+            if is_single_component:
+                laws_in_play = (dust.config.law,)
+            else:
+                laws_in_play = (dust.config.law_bc, dust.config.law_diff, dust.config.law_neb)
             if any(law and "redshift" in law_kwarg_names(law) for law in laws_in_play):
                 unsafe_free.add("redshift")
         # Detect dust emission: check if dust emission is configured.
@@ -9412,40 +9427,112 @@ class SEDModel:
             # Same narrowing as the component's own apply() (#1833), read off
             # the component that is actually in the chain, so the LUT cannot
             # bake a different curve from the one the direct path evaluates.
-            bc_params, diff_params = resolve_bc_diff_law_params(
-                fixed,
-                dict(dust.config.bc_law_overrides),
-                dict(dust.config.diff_law_overrides),
-                dust.config.live_shape_params,
-                bc_law=dust.config.law_bc,
-                diff_law=dust.config.law_diff,
-                redshift=fixed.get("redshift"),
-            )
-            ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+            is_single_component = isinstance(dust, DustAttenuationSEDComponent)
 
-            def _grid(name):
-                if name in free:
-                    dist = self.spec.get_distribution(name)
-                    lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
-                    return jnp.linspace(lo, hi, 24)
-                return jnp.asarray([float(fixed.get(name, 0.0))])
+            if is_single_component:
+                # Single-component dust: build LUT using build_energy_balance_lut
+                # with degenerate grids (tau_bc=[0.0], tau_diff=tau_v).
+                # This reuses the same two_component_dust transmission function
+                # and handles Lyman-continuum masking correctly.
+                def _grid_single(name):
+                    if name == "dust_tau_v" and "dust_tau_v" in free:
+                        dist = self.spec.get_distribution("dust_tau_v")
+                        lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
+                        return jnp.linspace(lo, hi, 24)
+                    return jnp.asarray([float(fixed.get(name, 0.0))])
 
-            lut = build_energy_balance_lut(
-                jnp.asarray(self.ssp_data.ssp_flux),
-                jnp.asarray(self.ssp_data.ssp_wave),
-                jnp.asarray(ssp_ages_yr),
-                law_bc=dust.config.law_bc,
-                law_diff=dust.config.law_diff,
-                f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
-                t_birth_yr=dust.config.t_birth_yr,
-                transition_width_dex=dust.config.transition_width_dex,
-                bc_params={k: float(v) for k, v in bc_params.items()},
-                diff_params={k: float(v) for k, v in diff_params.items()},
-                lyman_cutoff_aa=dust.config.lyman_cutoff_aa,
-                eb_include_lyc=dust.config.eb_include_lyc,
-                tau_bc_grid=_grid("dust_tau_bc"),
-                tau_diff_grid=_grid("dust_tau_diff"),
-            )
+                tau_v_grid = _grid_single("dust_tau_v")
+
+                # Resolve law parameters for single-component (both bc and diff
+                # use the same law and parameters).
+                law = dust.config.law
+                dust_params, _ = resolve_bc_diff_law_params(
+                    fixed,
+                    bc_overrides=None,
+                    diff_overrides=None,
+                    live_shape_params=dust.config.live_shape_params,
+                    bc_law=law,
+                    diff_law=law,
+                    redshift=fixed.get("redshift"),
+                )
+                # Single-component dust uses simple exponential attenuation: no
+                # Lyman-continuum masking is applied in the exact path either.
+                # Match the runtime exact path, which masks the Lyman continuum
+                # (#922: LyC photons ionize H rather than heat dust). Baking a
+                # different cutoff here than DustAttenuationSEDComponent.apply()
+                # uses is what made the LUT disagree with the exact integral.
+                eb_include_lyc = dust.config.eb_include_lyc
+                lyman_cutoff_aa = dust.config.lyman_cutoff_aa
+
+                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+
+                lut = build_energy_balance_lut(
+                    jnp.asarray(self.ssp_data.ssp_flux),
+                    jnp.asarray(self.ssp_data.ssp_wave),
+                    jnp.asarray(ssp_ages_yr),
+                    law_bc=law,
+                    law_diff=law,
+                    f_obscuration=0.0,
+                    t_birth_yr=1e7,
+                    transition_width_dex=0.3,
+                    bc_params={k: float(v) for k, v in dust_params.items()},
+                    diff_params={k: float(v) for k, v in dust_params.items()},
+                    lyman_cutoff_aa=lyman_cutoff_aa,
+                    eb_include_lyc=eb_include_lyc,
+                    tau_bc_grid=jnp.asarray([0.0]),
+                    tau_diff_grid=tau_v_grid,
+                )
+            else:
+                # Two-component dust: existing logic
+                bc_params, diff_params = resolve_bc_diff_law_params(
+                    fixed,
+                    dict(dust.config.bc_law_overrides),
+                    dict(dust.config.diff_law_overrides),
+                    dust.config.live_shape_params,
+                    bc_law=dust.config.law_bc,
+                    diff_law=dust.config.law_diff,
+                    redshift=fixed.get("redshift"),
+                )
+                law_bc = dust.config.law_bc
+                law_diff = dust.config.law_diff
+                t_birth_yr = dust.config.t_birth_yr
+                transition_width_dex = dust.config.transition_width_dex
+                eb_include_lyc = dust.config.eb_include_lyc
+
+                def _grid(name):
+                    if name in free:
+                        dist = self.spec.get_distribution(name)
+                        lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
+                        return jnp.linspace(lo, hi, 24)
+                    return jnp.asarray([float(fixed.get(name, 0.0))])
+
+                tau_bc_grid = _grid("dust_tau_bc")
+                tau_diff_grid = _grid("dust_tau_diff")
+
+            if not is_single_component:
+                # Two-component: use the standard LUT builder
+                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+
+                lut = build_energy_balance_lut(
+                    jnp.asarray(self.ssp_data.ssp_flux),
+                    jnp.asarray(self.ssp_data.ssp_wave),
+                    jnp.asarray(ssp_ages_yr),
+                    law_bc=law_bc,
+                    law_diff=law_diff,
+                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    t_birth_yr=t_birth_yr,
+                    transition_width_dex=transition_width_dex,
+                    bc_params={k: float(v) for k, v in bc_params.items()},
+                    diff_params={k: float(v) for k, v in diff_params.items()},
+                    lyman_cutoff_aa=(
+                        dust.config.lyman_cutoff_aa
+                        if hasattr(dust.config, "lyman_cutoff_aa")
+                        else 0.0
+                    ),
+                    eb_include_lyc=eb_include_lyc,
+                    tau_bc_grid=tau_bc_grid,
+                    tau_diff_grid=tau_diff_grid,
+                )
 
         self._energy_balance_lut_cache = lut
         return lut

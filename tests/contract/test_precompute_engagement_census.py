@@ -58,14 +58,15 @@ class TestPrecomputeEngagementCensus:
             f"Reason: {report.dust_band_response.reason}"
         )
 
-    def test_single_component_dust_attenuation_currently_forfeits(
+    def test_single_component_dust_attenuation_engages_lut(
         self, synthetic_tophat_obs, ssp_data_wne
     ):
-        """Single-component dust currently forfeits precompute (known defect #2485).
+        """Single-component dust engages the energy-balance LUT (#2485 resolved).
 
-        This test records the current state as the expectation. When #2485 is
-        fixed to support single-component dust, flip these assertions to
-        expect 'engaged' instead.
+        This test recorded the forfeit as the expectation and said to flip it
+        when #2485 was fixed. It is flipped: the LUT builder now serves the
+        single-screen case from degenerate grids rather than declining it, so a
+        single-component model gets the same precompute a two-component one does.
 
         References
         ----------
@@ -89,14 +90,13 @@ class TestPrecomputeEngagementCensus:
 
         report = precompute_engagement_report(model)
 
-        # KNOWN DEFECT #2485: single_component dust is now detected (not never_attempted),
-        # but the LUT builder declines it. This is correct behavior (model still computes
-        # right answer, just slower), but silent. Record the current state and flip when
-        # #2485 is resolved. The LUT builder only recognizes two_component dust attenuation.
-        # Note: dust_band_response (from dust_emission) still engages because it does not
-        # depend on the dust attenuation type.
-        assert report.energy_balance_lut.state == "declined", (
-            "Single-component dust detected but LUT declined (expected for #2485)"
+        # #2485 RESOLVED: the LUT builder used to recognize only two_component dust and
+        # decline the single screen, which was correct but slower and silent. It now
+        # builds the single-screen case from degenerate grids, so the state is engaged.
+        # dust_band_response engaged before and after, because it does not depend on the
+        # dust attenuation type.
+        assert report.energy_balance_lut.state == "engaged", (
+            "Single-component dust should now engage the LUT (#2485)"
         )
         assert report.dust_band_response.state == "engaged", (
             "Dust emission band response engages (independent of attenuation type)"
