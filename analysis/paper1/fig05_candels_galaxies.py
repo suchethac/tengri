@@ -381,7 +381,7 @@ def plot_corner_panel(
             ylim_override = (0.0, 1.6)
         ax.set_xlim(xlim_override)
         ax.set_ylim(ylim_override)
-        ax.set_xlabel("log M$_\\ast$ / M$_\\odot$", fontsize=10)
+        ax.set_xlabel("log M$_{\\ast,\\mathrm{formed}}$ / M$_\\odot$", fontsize=10)
         ax.set_ylabel("log SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
         return
 
@@ -509,7 +509,7 @@ def plot_corner_panel(
             family="monospace",
         )
 
-    ax.set_xlabel("log M$_\\ast$ / M$_\\odot$", fontsize=10)
+    ax.set_xlabel("log M$_{\\ast,\\mathrm{formed}}$ / M$_\\odot$", fontsize=10)
     ax.set_ylabel("log SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
     if xlim_override:
         ax.set_xlim(xlim_override)

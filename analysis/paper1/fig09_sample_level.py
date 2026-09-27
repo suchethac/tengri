@@ -238,7 +238,7 @@ def _draw_plane(ax, cells: list[Cell], rep_gal: int) -> None:
         )
     print(f"fig09: credible intervals are drawn for galaxy {rep_gal}", file=sys.stderr)
 
-    ax.set_xlabel(r"$\log_{10}(M_\star\,/\,M_\odot)$")
+    ax.set_xlabel(r"$\log_{10}(M_{\star,\mathrm{formed}}\,/\,M_\odot)$")
     ax.set_ylabel(r"$\log_{10}(\mathrm{SFR}_{100\,\mathrm{Myr}}\,/\,M_\odot\,\mathrm{yr}^{-1})$")
     ax.tick_params(labelsize=7)
 
