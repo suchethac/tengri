@@ -542,6 +542,7 @@ def main(
         "published_data": {},
         "tengri_data": {},
         "pending_cells": [],
+        "refused_cells": [],
         "inter_code_ranges": {},
     }
 
@@ -566,8 +567,20 @@ def main(
         for config in CONFIG_ORDER:
             data = load_fit_results(gal_id, config, results_dir, max_samples)
             if data is None:
-                json_sidecar["pending_cells"].append(f"{gal_id}_{config}")
-                logger.info(f"Skipping {gal_id}_{config} (not ready)")
+                # Two different states, and only one of them will ever change.
+                # A cell whose files are absent has not run; a cell that is on
+                # disk and declined has run and been refused by the adoption
+                # bar, and will stay refused. Recording both as "pending" left
+                # a reader of this sidecar waiting on a verdict already given.
+                on_disk = (results_dir / f"{gal_id}_{config}.npz").exists() and (
+                    results_dir / f"{gal_id}_{config}.json"
+                ).exists()
+                bucket = "refused_cells" if on_disk else "pending_cells"
+                json_sidecar[bucket].append(f"{gal_id}_{config}")
+                logger.info(
+                    f"Skipping {gal_id}_{config} "
+                    f"({'did not pass the adoption bar' if on_disk else 'not yet run'})"
+                )
                 continue
 
             tengri_results[gal_id][config] = data
@@ -701,7 +714,7 @@ def main(
         ax.grid(True, alpha=0.3)
 
     # Add shared x-axis label on the bottom panel
-    axes[-1].set_xlabel(r"$\log_{10}$ M$_*$ (M$_\odot$)")
+    axes[-1].set_xlabel(r"$\log_{10}$ M$_{*,\mathrm{surv}}$ (M$_\odot$)")
 
     # Legend (published codes in left column, tengri configurations in right)
     published_handles = []
