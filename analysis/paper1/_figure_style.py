@@ -17,7 +17,9 @@ from __future__ import annotations
 #: The configurations Section 7 demonstrates, in the order it presents them.
 #:
 #: Configuration VI is deliberately NOT here (owner, 2026-09-28). Its row is
-#: partial: five cells of twenty, two of them adopted. The cost is the reason.
+#: partial: nine cells of twenty, six of them adopted, and still running as of
+#: 2026-09-28 -- re-read the count rather than trusting this line. The cost is
+#: the reason for the deferral, not the count.
 #: VI frees ``agn_lum_ratio``, a linear amplitude reaching zero, which is worse
 #: conditioned than the log amplitude it replaced -- the adapted step size falls
 #: about 4.5x and mean tree depth rises 6.21 -> 8.46, so a cell costs 4-5x more
