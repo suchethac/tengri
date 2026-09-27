@@ -18,7 +18,7 @@ model = SEDModel.build(
 )
 ```
 
-**Why?** Each block is a unit of configuration. The grammar scales: adding a new physics component (e.g., a new AGN model) requires only registering one class and showing up in one dict. No grammar edits, no menu consolidation.
+**Reason:** Each block is a unit of configuration. The grammar scales: adding a new physics component (e.g., a new AGN model) requires only registering one class and showing up in one dict. No grammar edits, no menu consolidation.
 
 **Nesting for composition:** Sub-blocks (like AGN's six emitters, or the DLA inside IGM) nest the same structure one level deeper:
 
@@ -93,7 +93,7 @@ dust_emission={'type': 'dale2014', ...}
 dust={'attenuation': {...}, 'emission': {...}}  # ← retired, raises
 ```
 
-Why? Nesting dust under one key invited conflating them. A user might ask "what is my dust configuration?" and see one large `dust=` dict, losing the independence. Keeping them parallel — `dust_attenuation=` and `dust_emission=` — makes it clear: these are separate choices. You can have dust attenuation without emission, or vice versa.
+Why? Nesting dust under one key invites conflating them. A user might ask "what is my dust configuration?" and see one large `dust=` dict, losing the independence. Keeping them parallel as `dust_attenuation=` and `dust_emission=` makes it clear: these are separate choices. You can have dust attenuation without emission, or vice versa.
 
 ### Redshift: required, three spellings
 
@@ -107,7 +107,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 #   - redshift=<any Distribution>
 ```
 
-**Why require it?** IGM models, precompute tables, and photo-z fits all hinge on redshift. Making it explicit prevents silent wrong answers (like a galaxy silently placed at z=0 when z was meant to be free).
+**Reason to require it:** IGM models, precompute tables, and photo-z fits all hinge on redshift. Making it explicit prevents silent wrong answers (like a galaxy silently placed at z=0 when z was meant to be free).
 
 **Three spellings, one structure:** Users work in three modes:
 - **Spectroscopy with known z:** `Fixed(z)`
@@ -127,25 +127,25 @@ sfh={'*': FREE}
 # instead of {'*': FREE}.
 ```
 
-**Why two spellings, not one?** They read differently depending on the shape of the dict. `'all_params'` reads best when the wildcard is the group's only directive — the everything-free (or everything-fixed) case. `'other_params'` reads best written **last**, after explicit per-parameter entries, where it means "the others":
+**Two spellings instead of one:** They read differently depending on the shape of the dict. `'all_params'` reads best when the wildcard is the group's only directive (the everything-free or everything-fixed case). `'other_params'` reads best written **last**, after explicit per-parameter entries, where it means "the others":
 
 ```python
 sfh={'type': 'dpl', 'all_params': FREE}                                          # sole directive
 sfh={'type': 'dpl', 'alpha': Uniform(0.5, 3.0), 'other_params': Fixed(DEFAULT)}   # mixed, wildcard last
 ```
 
-Normalization rewrites both spellings to the same internal key before any other logic runs, so `to_groups()`, `summary()`, and the round-trip stay single-valued regardless of which one a user wrote. Giving both in one dict raises — they'd set the same policy twice.
+Normalization rewrites both spellings to the same internal key before any other logic runs, so `to_groups()`, `summary()`, and the round-trip stay single-valued regardless of which one a user wrote. Giving both in one dict raises because they would set the same policy twice.
 
-**Why the wildcard only takes `FREE` or `Fixed(DEFAULT)`.** A single parameter's disposition is one of four things — fixed or free, crossed with an explicit value or the registry default:
+**Why the wildcard only takes `FREE` or `Fixed(DEFAULT)`.** A single parameter's disposition takes one of four forms: fixed or free, each crossed with an explicit value or the registry default:
 
 | | explicit value | registry default |
 |---|---|---|
 | **fixed** | `Fixed(v)` | `Fixed(DEFAULT)` |
 | **free** | any `Distribution` (e.g. `Uniform(1, 3)`) | `FREE` |
 
-A per-parameter entry can be any of the four. The wildcard can't: it applies to *every* parameter in the group at once, and only the registry-default column resolves sensibly across parameters of different physical meaning and scale — `FREE` defers each parameter to its own registered prior, `Fixed(DEFAULT)` defers each parameter to its own registered default value. The explicit column doesn't generalize: one literal number, or one distribution, can't be smeared across `tau_bc` and `tau_diff` and `Rv` at once. So a concrete `'all_params': Fixed(1.5)` raises — the wildcard only ever takes `FREE` or `Fixed(DEFAULT)`.
+A per-parameter entry can be any of the four. The wildcard cannot: it applies to *every* parameter in the group at once, and only the registry-default column resolves sensibly across parameters of different physical meaning and scale. `FREE` defers each parameter to its own registered prior, and `Fixed(DEFAULT)` defers each parameter to its own registered default value. The explicit column does not generalize: one literal number, or one distribution, cannot be smeared across `tau_bc` and `tau_diff` and `Rv` at once. So a concrete `'all_params': Fixed(1.5)` raises because the wildcard only ever takes `FREE` or `Fixed(DEFAULT)`.
 
-**Why two names bought nothing extra?** Fewer names = fewer mental models. A reader sees `'all_params'`/`'other_params'` and knows: this is the wildcard, and it always means one of the same two things. The retired `'*'` spelling bought nothing but a second way to write the same thing — no readability payoff, since `'all_params'`/`'other_params'` were already picked for how they read at each call site.
+**Two names, not more:** Fewer names mean fewer mental models. A reader sees `'all_params'`/`'other_params'` and knows this is the wildcard, and it always means one of the same two things. The retired `'*'` spelling offered nothing but a second way to write the same thing with no readability gain, since `'all_params'`/`'other_params'` were already chosen for how they read at each call site.
 
 ### No nested wildcard shortcuts
 
@@ -159,7 +159,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_p
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'all_params': FREE, ...}, neb={'all_params': Fixed(DEFAULT), ...}, redshift=Fixed(0.1))
 ```
 
-**Why?** Nesting wildcards invites ambiguity: does `'all_params': FREE` apply to all params in all groups? Just the explicit ones? Keeping wildcards local — inside each group — makes scope crystal clear.
+**Why?** Nesting wildcards invites ambiguity: does `'all_params': FREE` apply to all params in all groups, or just the explicit ones? Keeping wildcards local (inside each group) makes scope crystal clear.
 
 ### Law explicitness on dust attenuation
 
@@ -173,7 +173,7 @@ dust_attenuation={'type': 'two_component', 'all_params': Fixed(DEFAULT)}
 
 **Why?** "The law" is not optional. A reader sees `'law': 'calzetti'` and knows exactly what attenuation curve is applied. A silent default (like assuming Calzetti) hides a choice that should be visible in the config.
 
-On a two-component attenuation, you must provide **either** a single law for both screens or name both `law_bc` and `law_diff`. You cannot give one without the other — that's a configuration error, not a valid partial spec.
+On a two-component attenuation, you must provide **either** a single law for both screens or name both `law_bc` and `law_diff`. You cannot give one without the other. That is a configuration error, not a valid partial spec.
 
 - **No silent no-ops.** If `'all_params': FREE` has no effect, it raises.
 - **No structural precedence.** A parameter named in the dict **always** overrides the wildcard, which overrides the default. No special cases.
@@ -209,10 +209,10 @@ This is the right tradeoff: common cases are short (one recipe call), uncommon c
 ## Summary
 
 The grammar is built to make configuration:
-1. **Composable** — one dict per block, no coupling.
-2. **Explicit** — types activate, no silent defaults, wildcards detect no-ops.
-3. **Orthogonal** — structure and physics are separate concerns.
-4. **Readable** — a user can scan a model dict and see exactly what it does.
-5. **Extensible** — adding a new component or variant requires no grammar edits.
+1. **Composable**: one dict per block, no coupling.
+2. **Explicit**: types activate, no silent defaults, wildcards detect no-ops.
+3. **Orthogonal**: structure and physics are separate concerns.
+4. **Readable**: a user can scan a model dict and see exactly what it does.
+5. **Extensible**: adding a new component or variant requires no grammar edits.
 
 See the [configuration reference](model_configuration.md) for the detailed syntax and the configuration reference for usage details.
