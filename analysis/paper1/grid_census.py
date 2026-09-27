@@ -269,12 +269,26 @@ def published_inter_code_spread(csv_path: Path = ART_SEDFITTING_CSV):
     only the matched one is a like-for-like comparison:
 
     * Prospector publishes **formed** stellar mass; the other four publish
-      **survived**. tengri's ``stellar_mass`` is survived.
+      **survived**.
     * BAGPIPES publishes an **instantaneous** SFR; the other four average over
       100 Myr, which is what ``sfr_100myr`` is.
 
     Mixing either pair inflates the spread by comparing different quantities,
     which is the failure mode a cross-code number invites.
+
+    .. warning::
+
+       ``logmstar_survived`` is the subset that matches tengri's
+       ``stellar_mass_surviving``, **not** its ``stellar_mass``. The registry
+       defines ``stellar_mass`` as *total formed* stellar mass
+       (``forward/properties.py``, ``forward/prediction.py``) and publishes
+       surviving mass separately as ``stellar_mass_surviving``. An earlier
+       version of this docstring asserted the opposite, and the saved NPZ
+       records carry only the formed quantity, so any caller that reads
+       ``stellar_mass`` out of a fit record and sets it against this subset is
+       comparing formed mass to survived mass. Measured on real cells of this
+       grid the two differ by ~0.17-0.19 dex, which is comparable to the
+       published inter-code spread itself.
     """
     if not csv_path.is_file():
         return None

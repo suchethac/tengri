@@ -209,9 +209,16 @@ def _compute_all_derived_quantities(
     candels_io = importlib.util.module_from_spec(spec2)
     spec2.loader.exec_module(candels_io)
 
-    # Map config letter to function
-    config_fn_map = {"I": configs.config_I, "II": configs.config_II, "III": configs.config_III}
-    config_fn = config_fn_map[config]
+    # Resolve the builder by name rather than restating the census. The literal
+    # map this replaces listed I, II and III -- the three configurations the
+    # paper had when it was written -- and stayed that way when the table grew,
+    # so every panel for a later configuration died on a bare KeyError.
+    if config not in configs.CONFIG_KEYS:
+        raise KeyError(
+            f"configuration {config!r} is not one of {configs.CONFIG_KEYS}; "
+            "add its builder to configs.py before asking a figure for it"
+        )
+    config_fn = getattr(configs, f"config_{config}")
 
     # Load SSP
     ssp = configs.load_ssp_for(config)
