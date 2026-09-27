@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
 from pathlib import Path
 
@@ -39,7 +40,7 @@ if str(ANALYSIS_DIR) not in sys.path:
 
 from ._adoption import is_adopted
 from ._figure_style import CONFIG_ORDER
-from .published_code_spread import CATALOG, SURVIVED_MASS_CODES, load
+from .published_code_spread import CATALOG, SURVIVED_MASS_CODES, load, spread_stats
 from .run_candels_fits import GALAXIES
 
 RESULTS_DIR = ANALYSIS_DIR / "results" / "fits"
@@ -129,8 +130,40 @@ def compare(mass: str, results_dir: Path, catalog: Path) -> dict:
         if len(surv_vals) >= 2 and min(surv_vals) <= value <= max(surv_vals):
             counts["survived_codes"] += 1
 
+    # Configuration-to-configuration spread in the SAME quantity, so the two
+    # sides of the comparison in Section 7 are one quantity rather than two.
+    per_galaxy_values: dict[int, list[float]] = {}
+    for key, cell in sorted(cells.items()):
+        value = (
+            _formed_mass(results_dir, key)
+            if mass == "formed"
+            else _surviving_mass(census, results_dir, key)
+        )
+        if value is not None:
+            per_galaxy_values.setdefault(cell["galaxy"], []).append(value)
+    config_ranges = [
+        max(vals) - min(vals) for vals in per_galaxy_values.values() if len(vals) >= 2
+    ]
+    # Restricted to the grid's own galaxies. The catalog is larger than the
+    # locked sample, and a spread taken over all of it is a different
+    # population: measured, the unrestricted median range is 0.254 dex against
+    # 0.315 for these twenty, so the comparison would have read as though the
+    # configurations were far wider apart than the codes than they are.
+    grid_ids = {cell["galaxy"] for cell in cells.values()}
+    grid_published = {gid: vals for gid, vals in per_galaxy.items() if int(gid) in grid_ids}
+    published_survived = spread_stats(grid_published, sorted(SURVIVED_MASS_CODES), 0, 2)
+    published_all = spread_stats(
+        grid_published, sorted({c for v in grid_published.values() for c in v}), 0, 2
+    )
+
     return {
         "mass_quantity": mass,
+        "config_spread_median": (statistics.median(config_ranges) if config_ranges else None),
+        "config_spread_galaxies": len(config_ranges),
+        "published_survived_median_range": (
+            published_survived["median_range"] if published_survived else None
+        ),
+        "published_all_median_range": (published_all["median_range"] if published_all else None),
         "n_adopted": len(cells),
         "n_considered": considered,
         "n_missing": len(missing),
@@ -162,6 +195,22 @@ def main(argv: list[str] | None = None) -> int:
         f"inside survived-only : {r['inside_survived_codes']} of {r['n_considered']}"
         f"  ({100 * r['inside_survived_codes'] / n:.0f} per cent)"
     )
+    if r["config_spread_median"] is not None:
+        print(
+            f"\nconfig-to-config spread ({r['mass_quantity']} mass), median range over "
+            f"{r['config_spread_galaxies']} galaxies: {r['config_spread_median']:.3f} dex"
+        )
+        for label, key in (
+            ("published, survived-mass codes only (matched)", "published_survived_median_range"),
+            ("published, all five codes (mixed definitions)", "published_all_median_range"),
+        ):
+            val = r[key]
+            if val is None:
+                continue
+            ratio = r["config_spread_median"] / val
+            wider = "wider" if ratio >= 1 else "narrower"
+            pct = abs(ratio - 1.0) * 100
+            print(f"  vs {label}: {val:.3f} dex  -> {pct:.0f} per cent {wider}")
     return 0
 
 
