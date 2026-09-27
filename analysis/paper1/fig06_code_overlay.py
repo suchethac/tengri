@@ -107,10 +107,6 @@ def load_fit_results(
 
     # Load NPZ; the number of saved draws is whatever the driver thinned to
     npz = np.load(npz_path, allow_pickle=False)
-    n_params_full = int(npz["redshift"].shape[0])
-
-    # Subsample from the full 2400 using the same indices for all quantities
-    idx = np.round(np.linspace(0, n_params_full - 1, max_samples)).astype(int)
 
     # Extract parameters only (not derived quantities)
     params_dict = {}
@@ -129,6 +125,38 @@ def load_fit_results(
         "obs_sigma",
         "filter_names",
     }
+
+    # The chain length is read off the sampled parameters themselves, not off
+    # any one key by name.
+    #
+    # This used to be ``npz["redshift"].shape[0]``, which worked only because
+    # every cell predated #2296. That change made ``spec.sample()`` return the
+    # FREE keys only, and redshift is ``Fixed(z)`` in every configuration, so
+    # the array stopped being written -- 57 of the 100 cells in rows I-V have
+    # no ``redshift`` in their NPZ (I x17, II x20, IV x20, all of them the
+    # cells launched after the change). A cell records the code it imported at
+    # launch, so a mid-grid API change splits the archive's schema in two and
+    # the figure sees a KeyError rather than a wrong number.
+    #
+    # Sampled parameters carry the full chain while the derived quantities are
+    # written on a subsample, so the longest non-derived 1-D array IS the chain
+    # length whatever the configuration happens to free. Redshift is not needed
+    # here in any case: its value is ``meta["z"]``, read above.
+    sampled_lengths = [
+        int(npz[key].shape[0])
+        for key in npz.files
+        if key not in derived_keys and getattr(npz[key], "ndim", 0) == 1
+    ]
+    if not sampled_lengths:
+        raise KeyError(
+            f"{npz_path.name} carries no sampled-parameter array: cannot "
+            f"determine the chain length (keys: {sorted(npz.files)})"
+        )
+    n_params_full = max(sampled_lengths)
+
+    # Subsample from the full chain using the same indices for all quantities
+    idx = np.round(np.linspace(0, n_params_full - 1, max_samples)).astype(int)
+
     for key in npz.files:
         val = npz[key]
         if (

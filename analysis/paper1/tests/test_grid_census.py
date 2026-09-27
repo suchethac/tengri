@@ -84,19 +84,32 @@ def _require_selection():
 
 
 def test_a_partial_grid_exits_nonzero_and_says_so(tmp_path):
-    """The guard against row III's numbers being read as the grid's."""
+    """The guard against row III's numbers being read as the grid's.
+
+    The expected total is DERIVED from the census and the locked selection, not
+    written here as a literal. It was ``"3 of 120"`` until Configuration VI was
+    held out of ``CONFIG_ORDER`` (owner, 2026-09-28), and then this test failed
+    for the one reason a guard must not: the grid it describes changed shape and
+    the guard was still asserting the old one. A restated constant tests the
+    transcription; a derived one tests the census.
+    """
+    from _figure_style import CONFIG_ORDER
+    from _grid_completeness import load_expected_galaxy_ids
+
+    expected_total = len(load_expected_galaxy_ids(SELECTION_20)) * len(CONFIG_ORDER)
+
     results = tmp_path / "fits"
     _write(results, {f"{gid}_III": _cell(gid) for gid in (79, 4171, 13097)})
 
     result = _run(results)
 
     assert result.returncode != 0, (
-        "a three-cell grid was reported as if it answered for one hundred and twenty"
+        f"a three-cell grid was reported as if it answered for {expected_total}"
     )
     assert PARTIAL_BANNER in result.stdout, (
         f"no partial-grid banner in the output.\nstdout:\n{result.stdout[-1200:]}"
     )
-    assert "3 of 120" in result.stdout, (
+    assert f"3 of {expected_total}" in result.stdout, (
         f"the count was not stated.\nstdout:\n{result.stdout[-1200:]}"
     )
 
