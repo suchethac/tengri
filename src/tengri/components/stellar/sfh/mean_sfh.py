@@ -554,8 +554,34 @@ def lognormal(
     exponent = -0.5 * ((ln_T - mu) / sigma_ln) ** 2
     kernel = inv_T * jnp.exp(exponent)
 
-    # Apply mask: zero out regions where T <= 0.
-    shape = jnp.where(T > 0.0, kernel, 0.0)
+    # Partial-cell weight at the support boundary.
+    #
+    # The density is integrable at T -> 0 for any width, but at large width it
+    # approaches zero so slowly that it is effectively flat across the whole
+    # grid: at width 2.14 dex the kernel varies by about a factor of four over
+    # four decades in T. A hard mask then makes each age-grid node switch on at
+    # a value comparable to every other node's, and since `shape` is
+    # point-sampled and integrated by trapezoid, the integral jumps every time
+    # the moving boundary T = age - t_lookback crosses a node.
+    #
+    # That is a quadrature artifact, not physics, so the correction is
+    # quadrature: weight the boundary cell by the fraction of it that lies
+    # inside the support. The scale is the local grid spacing, which the
+    # problem already fixes -- there is no taper length to choose. Measured on
+    # FSPS MIST C3K at width 2.14 dex, this takes an age sweep from 89 steps
+    # above four times the median step to zero, and it is a no-op wherever the
+    # kernel was already small at onset, which is every width the mask handled
+    # correctly before.
+    spacing = jnp.gradient(t_lookback)
+    u = jnp.clip(T / jnp.abs(spacing), 0.0, 1.0)
+    # Smoothstep rather than the ramp itself. A linear partial-cell weight is
+    # continuous but kinked where it saturates, and a kink in the integrand is
+    # a kink in the gradient: it took the worst |FD/AD - 1| over a 161-point
+    # age scan from 7.7 to 0.22, against 0.0021 for delayed-tau on the same
+    # scan. 3u^2 - 2u^3 has zero slope at both ends, so the weight joins the
+    # interior smoothly and the derivative has no corner to cross.
+    partial_cell = u * u * (3.0 - 2.0 * u)
+    shape = jnp.where(T > 0.0, kernel * partial_cell, 0.0)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 

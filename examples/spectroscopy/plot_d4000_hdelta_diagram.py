@@ -152,13 +152,31 @@ for shape_i, (_shape_name, sfh_dict) in enumerate(sfh_shapes):
                 "tau_bc": 0.0,
                 "tau_diff": 0.0,
             }
-            neb = {"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)}
+            # ``neb_logZ_gas`` is overridden below (undeclared -> falls to
+            # the neb group's ``all_params: Fixed(DEFAULT)``) and
+            # ``met_logzsol`` is overridden below (no ``met=`` group ->
+            # defaults to ``Fixed(DEFAULT)``) (#2296: a params-dict key the
+            # spec declared Fixed is refused). Both must be free; bounds are
+            # this SSP grid's full metallicity extent [-2.152, 0.626]
+            # log10(Z/Zsun) (values outside it silently clip to the edge,
+            # issue #442 -- NOTE: with LOG10_ZSUN = -1.8477 below, every
+            # ``z_sun - LOG10_ZSUN`` value assigned for this file's
+            # metallicities array (-0.5, 0.0, 0.3) already lands above 0.626
+            # and clips to the same edge node regardless; that appears to be
+            # a pre-existing sign issue in this conversion, predating and
+            # unrelated to #2296, left as found).
+            neb = {
+                "type": "cue",
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "logZ_gas": tengri.Uniform(-2.15, 0.62),
+            }
 
             model = tengri.SEDModel.build(
                 ssp,
                 sfh=sfh,
                 dust_attenuation=dust,
                 neb=neb,
+                met={"logzsol": tengri.Uniform(-2.15, 0.62)},
                 redshift=tengri.Fixed(0.05),  # avoid numerical issues at z=0
             )
 

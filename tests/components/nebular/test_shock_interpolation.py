@@ -279,19 +279,36 @@ class TestGradients:
         exactly 0.0 and the difference quotient of a locally flat function is
         exactly 0.0, so ``assert_allclose`` between them passes. The
         log-sensitivity floor -- fractional change out per fractional change in
-        -- is 1e-3; measured at this base point velocity gives 0.53 and
-        log_density 0.73, so the floor is ~500x clear of the real values and is
-        not a threshold anyone has to tune.
+        -- is 1e-3; measured at this base point velocity gives 0.53 on the
+        summed ratios and log_density 0.027 on the [SII] doublet, so the floor
+        is 27x clear of the smaller of the two and is not a threshold anyone has
+        to tune.
+
+        **Each axis is probed on an observable it actually drives.** Velocity and
+        B-field move the summed ratios; density does not. Density's signal lives
+        almost entirely in the [SII] 6716/6731 doublet -- the classic density
+        diagnostic -- which falls 1.444 -> 1.109 across the axis here, while the
+        sum of all 24 lines varies by 1.5% and is locally flat at this base point
+        (log-sensitivity 2.4e-4). Probing density with the sum would make its FD
+        comparison the very 0.0 == 0.0 this test exists to prevent.
+
+        Until #2435 the sum *appeared* density-sensitive (0.73, the figure this
+        docstring used to quote). That was not physics: the population mask's
+        weight sum varied with density and scaled every line, so the guard's
+        non-vacuity was being supplied by the defect it could not see.
         """
         base = list(_base_point())
+
+        def observable(ratios):
+            if axis == "log_density":
+                return ratios["SII_6716A"] / ratios["SII_6731A"]
+            return sum(ratios.values())
 
         def f(x):
             args = list(base)
             args[idx] = x
-            return sum(
-                shock_line_ratios(
-                    args[0], shock_log_density=args[2], shock_b_over_sqrt_n=args[1]
-                ).values()
+            return observable(
+                shock_line_ratios(args[0], shock_log_density=args[2], shock_b_over_sqrt_n=args[1])
             )
 
         value = float(f(base[idx]))

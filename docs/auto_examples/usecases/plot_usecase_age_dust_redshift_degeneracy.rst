@@ -43,7 +43,7 @@ References:
 - Papovich et al. 2001, AJ, 122, 1
 - Poggianti & Barbaro 1997, A&A, 325, 1025
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-328
+.. GENERATED FROM PYTHON SOURCE LINES 28-349
 
 
 
@@ -57,18 +57,10 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:295: RuntimeWarning: invalid value encountered in scalar divide
-      log_Q_pred = b - _LOG_H + np.log10(np.abs((x_max_alpha - x_min_alpha) / alpha))
-    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:307: RuntimeWarning: invalid value encountered in scalar divide
-      term_Q = b + np.log10(np.abs(denom / alpha)) - log_Q - _LOG_H
-    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:309: RuntimeWarning: divide by zero encountered in scalar divide
-      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
-    /tengri/src/tengri/components/nebular/ionizing_spectrum.py:309: RuntimeWarning: invalid value encountered in scalar subtract
-      d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 63% of its stellar mass before the Big Bang at z=1.00 (cosmic age 5.87 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 89% of its stellar mass before the Big Bang at z=1.50 (cosmic age 4.28 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /tengri/src/tengri/forward/orchestrator.py:966: SFHBeforeBigBangWarning: Star formation history forms 63% of its stellar mass before the Big Bang at z=1.00 (cosmic age 5.87 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(
+    /tengri/src/tengri/forward/orchestrator.py:966: SFHBeforeBigBangWarning: Star formation history forms 89% of its stellar mass before the Big Bang at z=1.50 (cosmic age 4.28 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(
 
 
 
@@ -111,7 +103,9 @@ References:
             "type": "dexp",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_gyr": 0.3,
-            "log_total_mass": 10.0,  # Will be tuned for magnitude match
+            # Tuned below by _bisect_log_total_mass over [lo, hi] = [-1, 3]
+            # (#2296: a params-dict key the spec declared Fixed is refused).
+            "log_total_mass": tengri.Uniform(-1.0, 3.0),
         },
         dust_attenuation={
             "type": "two_component",
@@ -121,13 +115,18 @@ References:
             "tau_diff": 0.8,
         },
         neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        # ``met_logzsol`` is overridden below to -0.1 (no ``met=`` group ->
+        # defaults to Fixed(DEFAULT) = 0.0, so this is a real change, not a
+        # no-op) (#2296: a params-dict key the spec declared Fixed is refused).
+        met={"logzsol": tengri.Uniform(-2.0, 0.2)},
         redshift=tengri.Fixed(0.5),
         igm={"type": "inoue"},
     )
 
     baseline_a = dict(model_a.spec.sample(jax.random.PRNGKey(0)))
     baseline_a["met_logzsol"] = -0.1
-    baseline_a["dust_tau_diff"] = 0.8
+    # dust_tau_diff=0.8 is already this build's Fixed value (see tau_diff above)
+    # -- the override was a no-op; dropped rather than freed (#2296).
 
     # Scenario B: Old + clean + mid-z
     # Use a very declining SFH with long timescale (old light-weighted age)
@@ -139,7 +138,9 @@ References:
             "type": "dexp",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_gyr": 8.0,
-            "log_total_mass": 10.0,  # Will be tuned
+            # Tuned below by _bisect_log_total_mass over [lo, hi] = [-1, 3]
+            # (#2296: a params-dict key the spec declared Fixed is refused).
+            "log_total_mass": tengri.Uniform(-1.0, 3.0),
         },
         dust_attenuation={
             "type": "two_component",
@@ -149,13 +150,18 @@ References:
             "tau_diff": 0.05,
         },
         neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        # ``met_logzsol`` is overridden below to -0.1 (no ``met=`` group ->
+        # defaults to Fixed(DEFAULT) = 0.0, so this is a real change, not a
+        # no-op) (#2296: a params-dict key the spec declared Fixed is refused).
+        met={"logzsol": tengri.Uniform(-2.0, 0.2)},
         redshift=tengri.Fixed(1.0),
         igm={"type": "inoue"},
     )
 
     baseline_b = dict(model_b.spec.sample(jax.random.PRNGKey(1)))
     baseline_b["met_logzsol"] = -0.1
-    baseline_b["dust_tau_diff"] = 0.05
+    # dust_tau_diff=0.05 is already this build's Fixed value (see tau_diff
+    # above) -- the override was a no-op; dropped rather than freed (#2296).
 
     # Scenario C: Post-starburst + dust + high-z
     # Use log-normal peak with intermediate age at peak
@@ -168,7 +174,9 @@ References:
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "peak_gyr": 1.0,
             "width_gyr": 0.5,
-            "log_total_mass": 10.0,  # Will be tuned
+            # Tuned below by _bisect_log_total_mass over [lo, hi] = [-1, 3]
+            # (#2296: a params-dict key the spec declared Fixed is refused).
+            "log_total_mass": tengri.Uniform(-1.0, 3.0),
         },
         dust_attenuation={
             "type": "two_component",
@@ -178,13 +186,18 @@ References:
             "tau_diff": 0.3,
         },
         neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        # ``met_logzsol`` is overridden below to -0.1 (no ``met=`` group ->
+        # defaults to Fixed(DEFAULT) = 0.0, so this is a real change, not a
+        # no-op) (#2296: a params-dict key the spec declared Fixed is refused).
+        met={"logzsol": tengri.Uniform(-2.0, 0.2)},
         redshift=tengri.Fixed(1.5),
         igm={"type": "inoue"},
     )
 
     baseline_c = dict(model_c.spec.sample(jax.random.PRNGKey(2)))
     baseline_c["met_logzsol"] = -0.1
-    baseline_c["dust_tau_diff"] = 0.3
+    # dust_tau_diff=0.3 is already this build's Fixed value (see tau_diff above)
+    # -- the override was a no-op; dropped rather than freed (#2296).
 
 
     # Bisection helper to find log_total_mass that produces target r-band magnitude
@@ -383,7 +396,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.719 seconds)
+   **Total running time of the script:** (0 minutes 4.273 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:

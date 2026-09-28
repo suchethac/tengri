@@ -89,7 +89,7 @@ def test_grammar_accepts_f_cnm(fixture_path, ssp_data):
 
 def test_spinning_dust_changes_microwave_sed(ssp_data):
     """Spinning dust should change the SED at microwave wavelengths."""
-    from tengri import DEFAULT, Fixed, Observation, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, Observation, SEDModel
     from tengri.observation.spectroscopy import Spectroscopy
 
     ssp = ssp_data
@@ -98,11 +98,17 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
     obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_aa))
 
     # Build two models: one with and one without spinning dust
-    # All parameters fixed to isolate the spinning_dust effect
+    # Fix SFH to specific values and leave dust_lgU free to observe its effect
     model_no_spd = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "dpl",
+            "alpha": 1.5,
+            "beta": 2.5,
+            "tau_gyr": 1.0,
+            "log_total_mass": 9.0,
+        },
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
@@ -110,7 +116,7 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
             "tau_diff": 1.5,
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "astrodust", "spinning_dust": False},
+        dust_emission={"type": "astrodust", "spinning_dust": False, "lgU": FREE},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )
@@ -118,7 +124,13 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
     model_yes_spd = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "dpl",
+            "alpha": 1.5,
+            "beta": 2.5,
+            "tau_gyr": 1.0,
+            "log_total_mass": 9.0,
+        },
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
@@ -126,19 +138,14 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
             "tau_diff": 1.5,
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "astrodust", "spinning_dust": True},
+        dust_emission={"type": "astrodust", "spinning_dust": True, "lgU": FREE},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )
 
-    # Make predictions with fixed parameters
+    # Make predictions with only the free parameter (dust_lgU)
     params = {
-        "sfh_dpl_alpha": 1.5,
-        "sfh_dpl_beta": 2.5,
-        "sfh_dpl_tau_gyr": 1.0,
-        "sfh_dpl_log_total_mass": 9.0,
         "dust_lgU": 0.2,
-        "redshift": 0.0,
     }
 
     pred_no = model_no_spd.predict(params)
@@ -186,19 +193,24 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
 
 def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
     """Different f_cnm values should change the spinning-dust spectrum."""
-    from tengri import DEFAULT, Fixed, Observation, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, Observation, SEDModel
     from tengri.observation.spectroscopy import Spectroscopy
 
     ssp = ssp_data
     wave_aa = jnp.geomspace(1.0e3, 3.0e8, 1500)
     obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_aa))
 
-    # Build models with different f_cnm values
-    # All parameters fixed to isolate the f_cnm effect
+    # Build models with different f_cnm values; fix SFH to specific values
     model_cnm_low = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "dpl",
+            "alpha": 1.5,
+            "beta": 2.5,
+            "tau_gyr": 1.0,
+            "log_total_mass": 9.0,
+        },
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
@@ -206,7 +218,7 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
             "tau_diff": 1.5,
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "astrodust", "spinning_dust": True, "f_cnm": 0.1},
+        dust_emission={"type": "astrodust", "spinning_dust": True, "f_cnm": 0.1, "lgU": FREE},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )
@@ -214,7 +226,13 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
     model_cnm_high = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "dpl",
+            "alpha": 1.5,
+            "beta": 2.5,
+            "tau_gyr": 1.0,
+            "log_total_mass": 9.0,
+        },
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
@@ -222,18 +240,13 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
             "tau_diff": 1.5,
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "astrodust", "spinning_dust": True, "f_cnm": 0.9},
+        dust_emission={"type": "astrodust", "spinning_dust": True, "f_cnm": 0.9, "lgU": FREE},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )
 
     params = {
-        "sfh_dpl_alpha": 1.5,
-        "sfh_dpl_beta": 2.5,
-        "sfh_dpl_tau_gyr": 1.0,
-        "sfh_dpl_log_total_mass": 9.0,
         "dust_lgU": 0.2,
-        "redshift": 0.0,
     }
 
     pred_low = model_cnm_low.predict(params)

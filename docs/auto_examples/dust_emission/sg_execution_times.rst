@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:23.856** total execution time for 9 files **from auto_examples/dust_emission**:
+**00:07.556** total execution time for 12 files **from auto_examples/dust_emission**:
 
 .. container::
 
@@ -32,19 +32,28 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``plot_ir_library_compare.py``)
-     - 00:18.208
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``plot_themis_alpha_sweep.py``)
+     - 00:04.042
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``plot_dust_qpah_umin_grid.py``)
-     - 00:03.902
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_tdust_vs_lir.py` (``plot_tdust_vs_lir.py``)
-     - 00:01.746
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``plot_mbb_temperature_beta_grid.py``)
+     - 00:03.514
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``plot_bosa_grid.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``plot_mbb_temperature_beta_grid.py``)
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_casey2012_temperature_pivot.py` (``plot_casey2012_temperature_pivot.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_cmb_heating_lir_ratio.py` (``plot_cmb_heating_lir_ratio.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``plot_dust_qpah_umin_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_graybody_opacity_temperature.py` (``plot_graybody_opacity_temperature.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``plot_ir_library_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mid_ir_pah_features.py` (``plot_mid_ir_pah_features.py``)
@@ -53,7 +62,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``plot_pahspec_starlight_sweep.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``plot_themis_alpha_sweep.py``)
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_tdust_vs_lir.py` (``plot_tdust_vs_lir.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py` (``plot_warm_cold_dust_decomposition.py``)

@@ -36,17 +36,25 @@ model = tengri.SEDModel.build(
         "skew": 0.5,
         "trunc": 3.0,
     },
+    # ``dust_tau_bc``/``dust_tau_diff`` are zeroed below to build the
+    # "no dust" comparison SED (#2296: a params-dict key the spec declared
+    # Fixed is refused), so both must be free; bounds comfortably contain
+    # both the 1.0/0.5 baseline and the 0.0 comparison point.
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "tau_bc": 1.0,
-        "tau_diff": 0.5,
+        "tau_bc": tengri.Uniform(0.0, 2.0),
+        "tau_diff": tengri.Uniform(0.0, 1.0),
     },
     redshift=tengri.Fixed(0.0),
 )
 
 params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+# dust_tau_bc/dust_tau_diff are now free (see build() above, #2296), so pin
+# them explicitly to the figure's documented baseline (1.0 / 0.5) rather than
+# leaving them at whatever spec.sample() drew.
+params = {**params, "dust_tau_bc": jnp.array(1.0), "dust_tau_diff": jnp.array(0.5)}
 sed_total = np.array(model.predict(params).rest_sed())
 sed_intrinsic = np.array(
     model.predict(

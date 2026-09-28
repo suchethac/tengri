@@ -244,10 +244,16 @@ class TestProperties:
 
 class TestSampling:
     def test_sample_all_keys_present(self):
+        """spec.sample() returns only free parameters, not Fixed ones (#2296)."""
         spec = Parameters(mean_sfh_type="tsnorm")
         params = spec.sample(jax.random.PRNGKey(0))
-        for name in spec.valid_param_names:
-            assert name in params, f"Missing key: {name}"
+        # Should have exactly the free parameters, no more, no less
+        assert set(params.keys()) == set(spec.free_params)
+        for name in spec.free_params:
+            assert name in params, f"Missing free key: {name}"
+        # Should NOT have Fixed parameters
+        for name in spec.fixed_params:
+            assert name not in params, f"Fixed param {name} should not be in sample()"
 
     def test_sample_stochastic_has_xi(self):
         spec = Parameters(mean_sfh_type=["tsnorm", "field"], n_grid=64)
@@ -261,9 +267,14 @@ class TestSampling:
         assert "sfh_field_xi" not in params
 
     def test_sample_fixed_returns_value(self):
+        """Fixed params are not in sample(); use get_fixed_values() instead (#2296)."""
         spec = Parameters(dust_slope=-0.7)
         params = spec.sample(jax.random.PRNGKey(0))
-        np.testing.assert_allclose(float(params["dust_slope"]), -0.7)
+        # dust_slope is Fixed, so it should NOT be in the sample
+        assert "dust_slope" not in params
+        # But get_fixed_values() should return it
+        fixed = spec.get_fixed_values()
+        np.testing.assert_allclose(float(fixed["dust_slope"]), -0.7)
 
     def test_sample_free_in_bounds(self):
         spec = Parameters(
@@ -278,10 +289,16 @@ class TestSampling:
         assert d.lo <= val <= d.hi
 
     def test_sample_batch_shapes(self):
+        """sample_batch() returns only free parameters with batch dimension (#2296)."""
         spec = Parameters(mean_sfh_type="tsnorm")
         batch = spec.sample_batch(jax.random.PRNGKey(0), 50)
-        for name in spec.valid_param_names:
+        # Should have exactly the free parameters, no more, no less
+        assert set(batch.keys()) == set(spec.free_params)
+        for name in spec.free_params:
             assert batch[name].shape[0] == 50, f"{name} batch dim wrong"
+        # Should NOT have Fixed parameters
+        for name in spec.fixed_params:
+            assert name not in batch, f"Fixed param {name} should not be in sample_batch()"
 
     def test_sample_batch_stochastic_xi_shape(self):
         spec = Parameters(mean_sfh_type=["tsnorm", "field"], n_grid=32)

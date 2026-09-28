@@ -152,6 +152,14 @@ class TestRoundTrip:
         ``delta_diff`` until #2185: under the fixture's ``power_law`` no screen
         reads a ``dust_delta``, so ``delta_diff`` was a value the curve
         discarded, and the grammar now refuses it by name.
+
+        The bare-scalar spelling now carries "user_fixed" provenance
+        (#2428), so the emitted value is ``Fixed(v)`` -- the same
+        representation the ``Fixed(v)``/``Uniform(...)`` spellings of this
+        key already got -- not the bare number an earlier tree wrote (from a
+        second, now-redundant round-trip mechanism reading
+        ``dust_law_overrides`` directly). Either resolves to the identical
+        value on reparse; unwrap before comparing.
         """
         model = _build(
             synthetic_ssp_wide,
@@ -161,5 +169,9 @@ class TestRoundTrip:
             Rv_diff=4.0,
         )
         groups = model.spec.to_groups()
-        assert groups["dust_attenuation"]["slope_bc"] == -1.0
-        assert groups["dust_attenuation"]["Rv_diff"] == 4.0
+
+        def _value(v):
+            return float(v.bounds[0]) if hasattr(v, "bounds") else float(v)
+
+        assert _value(groups["dust_attenuation"]["slope_bc"]) == -1.0
+        assert _value(groups["dust_attenuation"]["Rv_diff"]) == 4.0

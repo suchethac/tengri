@@ -98,6 +98,7 @@ import contextlib
 import copy
 import logging
 import math
+import os
 import re
 import warnings
 from dataclasses import dataclass
@@ -107,6 +108,7 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
+from tengri.inference.preconditioning import FLOAT32_HESSIAN_NAN_NOTE
 from tengri.parameters.priors import Fixed
 from tengri.utils.scale import pow10, whiten
 
@@ -141,6 +143,19 @@ _QUAD_NODES = 48
 #: draw, off the hot loop, so extra nodes are nearly free compared to
 #: the marginal's integral in every log-posterior evaluation.
 _REINSERT_QUAD_NODES = 384
+
+#: Ceiling on the draws per reinsertion chunk, whatever XLA's memory analysis
+#: says. ``temp_size_in_bytes`` of the per-chunk program under-reports the
+#: realized peak by an order of magnitude on the paper-1 CANDELS models:
+#: measured on configuration V (D=5 profiled, 1200 draws, 384 quadrature
+#: nodes) the analysis derived 756 draws per chunk and the run allocated
+#: 1.5 GB buffers past an 18 GB cap, while the same fit at 64 draws per chunk
+#: peaked 1.0 GB above baseline (83 s; 128 per chunk: 1.4 GB, 78 s; 64 on 4
+#: host devices: 1.0 GB, 63 s). At 756 the reinsertion spike reached 23-29 GB
+#: inside a NUTS fit and the shared box's 40 GB watchdog killed four cells at
+#: the finish line. The cost of the ceiling is a few seconds on models the
+#: analysis prices correctly.
+_REINSERT_CHUNK_MAX = 64
 _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: Mathematically, any log10(mass) placeholder works for the value the mass
 #: parameter is pinned to in the working spec once it is profiled out: the
@@ -848,11 +863,15 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
 #: ``tests/inference/test_profile_mass_backend_coverage.py``: every registered
 #: backend must be listed here or named in that test's excluded set with a
 #: reason. An omission is otherwise indistinguishable from a deliberate
-#: exclusion, which is how ``nss`` came to have a profiled log-likelihood
-#: builder written for it (:func:`build_profiled_loglikelihood_fn`) that
-#: ``resolve_profile_mass_for_method`` then made unreachable.
+#: exclusion. ``nss`` is the clearest case: ``backends/evidence._get_nss_fns``
+#: scores live points with ``Fitter._get_or_build_loglikelihood_fn()``, and
+#: :func:`build_profiled_loglikelihood_fn` exists for exactly that caller --
+#: but the name was missing here, so ``resolve_profile_mass_for_method``
+#: refused ``profile_mass=True`` and silently disabled ``"auto"`` before the
+#: profiled likelihood could ever be reached (a rule keyed to a label).
 PROFILE_MASS_BACKENDS = frozenset(
     {
+        "nss",
         "map",
         "laplace",
         "mcmc",
@@ -914,13 +933,14 @@ PROFILE_MASS_BACKENDS = frozenset(
 
 #: Backends that take a Hessian of the objective function and therefore trigger
 #: the known float32 NaN failure in the SED model's photometry Hessian
-#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). The Hessian is computed
-#: via ``jax.hessian`` (laplace backend) or via preconditioning's ``negative_hessian_metric``
-#: (optional metric whitening for Hamiltonian samplers). Note that preconditioning is
-#: **opt-in** (``precondition=`` must be truthy), so float32 refusal is scoped to the
-#: backends listed here. The float32 NaN is **not** specific to ``profile_mass`` — it
-#: reproduces on the plain objective with ``profile_mass=False`` — so float32 refusal
-#: names which objective this is, not which fitting path triggered it.
+#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). Currently laplace only.
+#: Preconditioning's ``negative_hessian_metric`` (optional metric whitening for
+#: Hamiltonian samplers) takes a Hessian under float32 but is caught downstream by
+#: the metric's non-finiteness check (see ``preconditioning.py``'s
+#: ``FLOAT32_METRIC_CLAUSE``), with the dtype named in the error message. The float32
+#: NaN is **not** specific to ``profile_mass`` — it reproduces on the plain objective
+#: with ``profile_mass=False`` — so float32 refusal names which objective this is, not
+#: which fitting path triggered it.
 HESSIAN_BACKEND_SET = frozenset({"laplace"})
 
 
@@ -962,20 +982,17 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
     ``profile_mass=False`` — so this guard names which objective (not which
     fitting path) blocks float32.
     """
-    # Check float32 refusal for Hessian-taking backends
+    # Check float32 refusal for Hessian-taking backends.
+    # Raise before any Fitter state mutation to keep reuse-after-exception safe.
     if method in HESSIAN_BACKEND_SET:
         dtype = jnp.result_type(float)
         if dtype == jnp.float32:
             reason = (
-                "float32 mode; the SED model's photometry Hessian is all-NaN in float32 "
-                "at the converged MAP (a forward-over-reverse seam in the model), "
-                "not specific to profiling (reproduces with profile_mass=False). "
-                "See bench/reports/2026-09-11_profile_mass_20s.md, Finding 8."
+                f"{FLOAT32_HESSIAN_NAN_NOTE}, "
+                "not specific to profiling (reproduces with profile_mass=False)."
             )
-            if getattr(fitter, "_profile_mass", False):
-                if requested is True:
-                    raise ValueError(f"profile_mass=True but {reason}")
-                disable_profile_mass(fitter, f"auto-disabled: {reason}")
+            if requested is True and getattr(fitter, "_profile_mass", False):
+                raise ValueError(f"profile_mass=True but {reason}")
             raise ValueError(f"method={method!r}: {reason}")
 
     if not getattr(fitter, "_profile_mass", False) or method in PROFILE_MASS_BACKENDS:
@@ -1813,12 +1830,13 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
         derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
 
         logger.info(
-            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
+            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB), ceiling %d",
             derived_chunk_size,
             scratch_bytes / reference_chunk_size / 1e6,
             target_bytes / 1e9,
+            _REINSERT_CHUNK_MAX,
         )
-        return derived_chunk_size
+        return min(derived_chunk_size, _REINSERT_CHUNK_MAX)
     except Exception as exc:
         # Fallback: use a conservative fixed size if XLA analysis fails
         # (e.g., on some hardware or JAX versions where memory_analysis is unavailable)
@@ -1828,7 +1846,7 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
             exc,
             exc_info=True,
         )
-        return reference_chunk_size
+        return min(reference_chunk_size, _REINSERT_CHUNK_MAX)
 
 
 def _reinsert_mass_fn(fitter: Fitter):
@@ -1933,6 +1951,135 @@ def _reinsert_mass_fn(fitter: Fitter):
     return fn
 
 
+#: Environment variable naming a lock file. When set, the reinsertion's
+#: execution is serialized across processes with an advisory ``flock`` on that
+#: file. The reinsertion is the one step of a profiled fit whose transient
+#: memory is many times the sampler's resident footprint (measured 10 GB
+#: on a paper-1 III cell against a 3-4 GB baseline), so N concurrent fits on
+#: one box that all finish near each other stack N such transients; a shared
+#: 40 GB watchdog killed a cell exactly there. Unset (the default) nothing
+#: is locked and nothing changes.
+REINSERT_LOCK_ENV = "TENGRI_REINSERT_LOCK"
+
+
+@contextlib.contextmanager
+def _reinsertion_lock():
+    """Hold the cross-process reinsertion lock named by ``REINSERT_LOCK_ENV``, if set."""
+    path = os.environ.get(REINSERT_LOCK_ENV)
+    if not path:
+        yield
+        return
+    import fcntl
+
+    with open(path, "a") as fh:
+        logger.info("profile_mass reinsertion: waiting for lock %s", path)
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        logger.info("profile_mass reinsertion: lock acquired")
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def reinsert_profiled_mass(
+    fitter: Fitter,
+    posterior: Posterior,
+    *,
+    data,
+    noise,
+    presence,
+    line_obs,
+    line_err,
+    key,
+) -> Posterior:
+    """Draw (or set) the profiled mass and merge it into ``posterior``.
+
+    Shared body for :func:`finalize_profile_mass` (single-galaxy: passes
+    ``fitter.data``/``fitter.noise``, the Fitter's own observation) and the
+    ``Fitter._fit_batch_vmap_map`` / ``_fit_batch_vmap_mcmc`` batch paths
+    (one call per galaxy, with *that* galaxy's own ``data``/``noise`` --
+    ``fitter.data`` is whichever galaxy the batch ``Fitter`` happens to have
+    been constructed with, not the one being finalized here, so the caller
+    must supply the right observation explicitly rather than let this
+    function default to ``fitter.data``/``fitter.noise``).
+
+    Precondition: ``fitter._profile_mass`` is truthy (checked by both
+    callers before invoking this; calling it when profiling did not engage
+    would read ``fitter._profile_mass_name`` as ``None``).
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter whose working spec pinned the mass (for ``mass_name``,
+        ``model``, ``_fixed_values``, ``data_type``, ``use_components``).
+    posterior : Posterior
+        The backend's result for ONE galaxy, not yet returned to the caller.
+    data, noise : array_like
+        That galaxy's own observation -- the channel(s) the objective that
+        produced ``posterior`` was actually scored against.
+    presence : array_like or None
+        That galaxy's presence mask, or ``None``.
+    line_obs, line_err : array_like or None
+        That galaxy's measured line fluxes/errors, or ``None`` if this fit
+        has no line-flux channel.
+    key : jax.Array
+        PRNG key for the mass draw (samples case only; unused for a point
+        estimate, since :func:`_profile_stats` is deterministic given the
+        other channels).
+
+    Returns
+    -------
+    Posterior
+        ``posterior``, mutated in place and returned for convenience.
+    """
+    mass_name = fitter._profile_mass_name
+    model = fitter.model
+    fixed_values = fitter._fixed_values
+    data_type = fitter.data_type
+    use_components = bool(getattr(fitter, "use_components", False))
+
+    if posterior.samples is not None:
+        samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
+        n_draws = next(iter(samples_no_mass.values())).shape[0]
+        mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
+        draw_keys = jax.random.split(mass_key, n_draws)
+        with _reinsertion_lock():
+            ell_samples = _reinsert_mass_fn(fitter)(
+                samples_no_mass,
+                draw_keys,
+                data,
+                noise,
+                presence,
+                line_obs,
+                line_err,
+            )
+            # Execute inside the lock: dispatch is asynchronous, and without
+            # this the work (and its memory) would run whenever the caller
+            # first reads the draws, outside the critical section.
+            ell_samples = jax.block_until_ready(ell_samples)
+
+        posterior.samples = {**posterior.samples, mass_name: ell_samples}
+        posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
+    else:
+        phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
+        # Same channel set as the objective and the draw path: a point estimate
+        # taken against a different set of channels would disagree with the
+        # samples beside it in the same Posterior.
+        _, a_star, _, ell_ref = _profile_stats(
+            model,
+            mass_name,
+            phys,
+            data,
+            noise,
+            presence=presence,
+            data_type=data_type,
+            use_components=use_components,
+            line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
+        )
+        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
+    return posterior
+
+
 def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Posterior:
     """Record the resolved ``profile_mass`` choice, and reinsert the mass if engaged.
 
@@ -1945,6 +2092,13 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     marginalized mass and merges it into ``posterior.samples``/``params`` so
     they carry the mass parameter exactly as they would without profiling
     (``posterior.properties`` and other derived quantities work unchanged).
+    Delegates the actual draw/set + merge to :func:`reinsert_profiled_mass`,
+    using this Fitter's own ``data``/``noise``/``presence``/line channel --
+    the single-galaxy case, where "this fitter's observation" and "the
+    observation the profiled objective was scored against" are the same
+    thing. The batch vmap paths (``Fitter._fit_batch_vmap_map`` /
+    ``_fit_batch_vmap_mcmc``) call :func:`reinsert_profiled_mass` directly,
+    once per galaxy, with that galaxy's own observation instead.
 
     Parameters
     ----------
@@ -1970,9 +2124,6 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     if not fitter._profile_mass:
         return posterior
 
-    mass_name = fitter._profile_mass_name
-    model = fitter.model
-    data, noise = fitter.data, fitter.noise
     presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
     # The measured line channel, sourced the same way: straight off the fitter
     # rather than out of ``_data_args``. Both the draw path and the point
@@ -1982,43 +2133,14 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     _line_cfg = fitter._resolved_line_fluxes()
     line_obs = None if _line_cfg is None else jnp.asarray(_line_cfg.fluxes)
     line_err = None if _line_cfg is None else jnp.asarray(_line_cfg.errors)
-    fixed_values = fitter._fixed_values
-    data_type = fitter.data_type
-    use_components = bool(getattr(fitter, "use_components", False))
 
-    if posterior.samples is not None:
-        samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
-        n_draws = next(iter(samples_no_mass.values())).shape[0]
-        mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
-        draw_keys = jax.random.split(mass_key, n_draws)
-        ell_samples = _reinsert_mass_fn(fitter)(
-            samples_no_mass,
-            draw_keys,
-            data,
-            noise,
-            presence,
-            line_obs,
-            line_err,
-        )
-
-        posterior.samples = {**posterior.samples, mass_name: ell_samples}
-        posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
-    else:
-        phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
-        # Same channel set as the objective and the draw path: a point estimate
-        # taken against a different set of channels would disagree with the
-        # samples beside it in the same Posterior.
-        _, a_star, _, ell_ref = _profile_stats(
-            model,
-            mass_name,
-            phys,
-            data,
-            noise,
-            presence=presence,
-            data_type=data_type,
-            use_components=use_components,
-            line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
-        )
-        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
-
-    return posterior
+    return reinsert_profiled_mass(
+        fitter,
+        posterior,
+        data=fitter.data,
+        noise=fitter.noise,
+        presence=presence,
+        line_obs=line_obs,
+        line_err=line_err,
+        key=key,
+    )

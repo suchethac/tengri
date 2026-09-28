@@ -51,6 +51,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.utils.physics_constants import C_AA
 
@@ -92,7 +93,7 @@ def build_energy_balance_lut(
     *,
     law_bc: str,
     law_diff: str,
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     t_birth_yr: float = 1e7,
     transition_width_dex: float = 0.3,
     bc_params: dict | None = None,

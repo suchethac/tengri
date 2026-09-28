@@ -43,6 +43,12 @@ model = tengri.SEDModel.build(
     },
     dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
     neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    # ``met_logzsol`` is perturbed below (line ~60) to build an off-target
+    # ``p_ref``, so it must be free (#2296): a params-dict key the spec
+    # declared Fixed is refused, and an omitted ``met=`` group defaults
+    # every metallicity parameter to ``Fixed(DEFAULT)``. Bounds match the
+    # clip range the perturbation already uses.
+    met={"logzsol": tengri.Uniform(-2.0, 0.2)},
     redshift=tengri.FREE,
 )
 

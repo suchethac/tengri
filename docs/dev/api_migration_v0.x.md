@@ -1112,6 +1112,11 @@ group is also now subject to the explicit-law rule — `law` must be spelled.
 `tengri.list_dust_attenuation_types()` and `tengri.list_dust_emission_types()`
 are the live menus.
 
+**Update (2026-09-20, #2428):** the per-screen shape keys named above
+(`slope_bc`/`_diff`/`_neb`, `Rv_bc`/`_diff`/`_neb`, `delta_bc`/`_diff`/`_neb`,
+`bump_strength_bc`/`_diff`/`_neb`) now also accept `Fixed(...)`/a prior, not
+only a plain number — see "Model configuration" for the grammar.
+
 ---
 
 ## Physical constants re-exports (2026-08, gallery overhaul)
@@ -1411,6 +1416,14 @@ The registry callables, `law_kwarg_names()`, and per-screen override dicts
 (`dust_law_overrides`, `bc_law_overrides`, `neb_law_overrides`) use `dust_slope`
 only. Grammar spellings (`slope`, `slope_bc`, `slope_diff`, …) are unchanged.
 `n_slope=` will be removed in v1.0.
+
+**Update (2026-09-20, #2428):** a per-screen grammar key (`slope_bc`, …) may
+now be a `Distribution` instead of a plain number; the value's type decides
+the route — a number still goes into `dust_law_overrides` as a build-time
+config float, a `Distribution` becomes a declared `dust_<stem>_<screen>`
+parameter instead. The flat `dust_law_overrides={...}` dict itself is
+unaffected by this and still takes plain numbers only, raising
+`ParameterError` if given a `Distribution`.
 
 ---
 

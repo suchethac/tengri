@@ -187,6 +187,11 @@ def test_model_level_f32_gradient_with_delayed_sfh_cue_dust():
             "law": "calzetti",
             "all_params": FREE,
         },
+        # met_logzsol is set below to -0.3 (not the Fixed(DEFAULT) 0.0), so it
+        # must be declared free explicitly: sfh's 'all_params': FREE wildcard
+        # no longer frees metallicity params with no explicit met= block
+        # (#1796), and #2296 refuses a params-dict key the spec declared Fixed.
+        met={"logzsol": FREE},
         neb={"type": "cue", "all_params": FREE},
         redshift=Fixed(0.05),
     )

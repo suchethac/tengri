@@ -24,7 +24,16 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SpectrumPrecomp, WavePrecomp
+from tengri import (
+    DEFAULT,
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    SpectrumPrecomp,
+    Uniform,
+    WavePrecomp,
+)
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectroscopy import Spectroscopy
@@ -59,6 +68,11 @@ def _sfh_dust_neb():
             "type": "two_component",
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
+            # Free, not Fixed (#2296): both tests below sweep tau across
+            # parametrized values by writing into the free params dict --
+            # a refused presence override of a Fixed key at any value.
+            "tau_bc": Uniform(0.0, 2.0),
+            "tau_diff": Uniform(0.0, 2.0),
         },
         neb={"type": "cue", "all_params": Fixed(DEFAULT)},
     )
@@ -77,7 +91,7 @@ def test_spectrum_precomp_nebular_line_matches_exact(ssp, tau):
         approx=approx,
         **_sfh_dust_neb(),
     )
-    sf = {**build(None).spec.get_fixed_values(), "dust_tau_bc": tau, "dust_tau_diff": tau}
+    sf = {"dust_tau_bc": tau, "dust_tau_diff": tau}  # only free params (#2296)
     w = np.asarray(wave)
     line, cont = (w > 6540) & (w < 6590), (w < 6520) | (w > 6610)
     lf = lambda s: float(np.trapezoid(s[line] - np.median(s[cont]), w[line]))  # noqa: E731
@@ -105,7 +119,7 @@ def test_wave_precomp_nebular_band_matches_exact(ssp, tau):
         approx=approx,
         **_sfh_dust_neb(),
     )
-    sf = {**build(None).spec.get_fixed_values(), "dust_tau_bc": tau, "dust_tau_diff": tau}
+    sf = {"dust_tau_bc": tau, "dust_tau_diff": tau}  # only free params (#2296)
     p_exact = float(np.asarray(build(None).predict_photometry(sf))[0])
     p_lut = float(np.asarray(build(WavePrecomp()).predict_photometry(sf))[0])
     # Was 1.18 (τ=0.5) / 1.37 (τ=1) with diffuse-only; now within the residual.

@@ -30,7 +30,7 @@ attenuation and thermal emission from warm dust.
 
 Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-87
+.. GENERATED FROM PYTHON SOURCE LINES 14-92
 
 
 
@@ -44,8 +44,8 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /tengri/src/tengri/forward/orchestrator.py:966: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(
 
 
 
@@ -99,6 +99,11 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
             "T": 30.0,
             "beta_ir": 1.8,
         },
+        # ``met_logzsol`` is swept below (#2296: a params-dict key the spec
+        # declared Fixed is refused), so it must be free; no ``met=`` group was
+        # declared before, defaulting the whole group to ``Fixed(DEFAULT)``.
+        # Bounds cover the -1.5..0.5 sweep.
+        met={"logzsol": tengri.Uniform(-2.0, 0.5)},
         redshift=tengri.Fixed(0.2),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

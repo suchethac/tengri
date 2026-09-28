@@ -2,7 +2,7 @@
 
 # Predicting and properties
 
-The core workflow after building a model is to generate predictions — forward pass results and derived physical quantities. This page covers the three prediction surfaces, the property catalog, and common workflows.
+The core workflow after building a model is to generate predictions (forward pass results and derived physical quantities). This page covers the three prediction surfaces, the property catalog, and common workflows.
 
 ## The three prediction surfaces
 
@@ -10,7 +10,7 @@ tengri provides three interfaces for computing predictions, each optimized for a
 
 ### 1. Lazy exploration: `model.predict(params)`
 
-For interactive work — plotting, diagnostics, manual inspection — the **recommended** interface is the lazy `Prediction` object:
+For interactive work (plotting, diagnostics, manual inspection), the **recommended** interface is the lazy `Prediction` object:
 
 ```python
 pred = model.predict(params)
@@ -30,7 +30,7 @@ The `Prediction` object caches intermediate results, so related quantities share
 
 ### 2. Inference hot path: `model.predict_photometry()`, `model.predict_spectrum()`, etc.
 
-For inference loops and likelihood evaluation, use the **lean methods** directly:
+For inference loops and likelihood evaluation, use the lean methods directly:
 
 ```python
 # These methods are called by the inference loop
@@ -39,13 +39,13 @@ spectrum = model.predict_spectrum(params, wave_obs)
 lines = model.predict_emission_lines(params)
 ```
 
-These bypass the lazy `Prediction` wrapper and return only what you request, with no caching overhead. They are **JIT-compatible** and safe to call from inside an inference loop. The lean `predict_photometry` uses the filters the model was built with; to evaluate a *different* filter set at runtime, use the rich accessor `pred.photometry(filters=[...])` instead (see [Exact vs fast photometry](#exact-vs-fast-photometry)).
+These bypass the lazy `Prediction` wrapper and return only what you request, with no caching overhead. They are JIT-compatible and safe to call from inside an inference loop. The lean `predict_photometry` uses the filters the model was built with; to evaluate a different filter set at runtime, use the rich accessor `pred.photometry(filters=[...])` instead (see [Exact vs fast photometry](#exact-vs-fast-photometry)).
 
 **When to use:** Likelihood evaluation, fitting, parameter sweeps.
 
 ### 3. Batch (posterior) computation: `model.predict_properties()` + `jax.vmap`
 
-For computing derived quantities over many parameter sets — posterior chains, mock catalogs, parameter grids — use the JIT-compatible property method with `jax.vmap`:
+For computing derived quantities over many parameter sets (posterior chains, mock catalogs, parameter grids), use the JIT-compatible property method with `jax.vmap`:
 
 ```python
 import jax
@@ -62,13 +62,13 @@ fn = jax.vmap(predict_one_property)
 stellar_mass_batch = fn(params_batch)  # shape (10_000,)
 ```
 
-This path is **100–1000× faster** than calling `.predict()` in a loop, with no Python-level overhead.
+This path is 100–1000× faster than calling `.predict()` in a loop, with no Python-level overhead.
 
 **When to use:** Computing posterior summaries, generating mock catalogs, batch inference diagnostics.
 
 ## The property catalog
 
-A tengri model publishes **derived quantities** — stellar mass, SFR, emission line luminosities, colors, and diagnostics. These are called **properties**.
+A tengri model publishes derived quantities (stellar mass, SFR, emission line luminosities, colors, and diagnostics). These are called properties.
 
 ### Discovering properties
 
@@ -108,7 +108,7 @@ comparison sample uses; they are not interchangeable.
 
 ### Accessing properties: two forms
 
-Properties can be accessed in two ways — attribute sugar or dict-like access:
+Properties can be accessed in two ways: attribute sugar or dict-like access:
 
 ```python
 pred = model.predict(params)
@@ -133,7 +133,7 @@ print(pred.properties["stellar_mass"])       # explicit dict access
 
 ## Topology: same names, more axes
 
-One principle unifies the API: **same property names work everywhere**, but with different shapes depending on context.
+One principle unifies the API: the same property names work everywhere, but with different shapes depending on context.
 
 | Context | Shape | Example |
 |---------|-------|---------|
@@ -141,7 +141,7 @@ One principle unifies the API: **same property names work everywhere**, but with
 | Posterior (samples) | `(n_samples,)` | `posterior.properties["stellar_mass"]` → `Array([...], shape=(5000,))` |
 | Population catalog | `(n_galaxies,)` or `(n_galaxies, n_apertures)` | Grid or mock catalog |
 
-So you can write **one** function that works on all topologies:
+So you can write one function that works on all topologies:
 
 ```python
 def print_stellar_mass(entity):
@@ -176,11 +176,11 @@ print(f"Stellar mass: {median:.2e} (−{median - lo:.2e} / +{hi - median:.2e}) M
 
 ## SED vs spectrum: naming and conventions
 
-Two distinct concepts — understand the difference:
+Two distinct concepts: understand the difference.
 
 ### SED: panchromatic model grid
 
-`rest_sed` and `obs_sed` are **callables with a default**, like `photometry()` and `spectrum()`. Call with no argument for the model's own grid, or pass a wavelength grid to resample onto yours:
+`rest_sed` and `obs_sed` are callables with a default, like `photometry()` and `spectrum()`. Call with no argument for the model's own grid, or pass a wavelength grid to resample onto yours:
 
 ```python
 pred = model.predict(params)
@@ -198,9 +198,9 @@ wave = pred.wave_obs            # the matching observed-frame axis
 lnu  = pred.obs_sed(np.logspace(3, 5, 500))     # OBSERVED-frame Angstrom
 ```
 
-**The wavelength argument is in the accessor's own frame** — `rest_sed(wave)` takes rest-frame Å, `obs_sed(wave_obs)` takes observed-frame Å.
+The wavelength argument is in the accessor's own frame: `rest_sed(wave)` takes rest-frame Å, `obs_sed(wave_obs)` takes observed-frame Å.
 
-**The SED array does not carry its axis.** Use `pred.wave_rest` / `pred.wave_obs`. Never reconstruct the observed axis by hand as `wave * (1 + params["redshift"])`: a `Fixed` redshift is legitimately absent from `params`, and a `0.0` fallback silently puts the galaxy at 10 pc.
+The SED array does not carry its axis. Use `pred.wave_rest` / `pred.wave_obs`. Never reconstruct the observed axis by hand as `wave * (1 + params["redshift"])`: a `Fixed` redshift is legitimately absent from `params`, and a `0.0` fallback silently puts the galaxy at 10 pc.
 
 The model grid is the SSP grid, auto-extended when dust emission, radio or X-ray components are configured.
 
@@ -210,7 +210,7 @@ The model grid is the SSP grid, auto-extended when dust emission, radio or X-ray
 
 ### Units: the distance is applied at *projection*, not on the SED
 
-**`obs_sed` is not a flux.** "Observed" names the *frame*, not a flux conversion.
+`obs_sed` is not a flux. "Observed" names the frame, not a flux conversion.
 
 | surface | quantity | units |
 |---|---|---|
@@ -220,13 +220,13 @@ The model grid is the SSP grid, auto-extended when dust emission, radio or X-ray
 | `pred.magnitudes()` | AB magnitude | — |
 | `pred.spectrum()` | F_ν | erg/s/cm²/Hz |
 
-`obs_sed()` does **not** apply `(1+z)/(4π d_L²)`; that factor lives in the projection layer. The only differences from `rest_sed()` are the wavelength axis and IGM absorption — at z = 3 the two arrays are identical everywhere above rest-frame Lyman-α.
+`obs_sed()` does not apply `(1+z)/(4π d_L²)`; that factor lives in the projection layer. The only differences from `rest_sed()` are the wavelength axis and IGM absorption (at z = 3 the two arrays are identical everywhere above rest-frame Lyman-α).
 
-Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude. **If you want a flux, use `photometry()` or `spectrum()`.**
+Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude. If you want a flux, use `photometry()` or `spectrum()`.
 
 ### Spectrum: instrument-specific, LSF-convolved, calibrated
 
-The `.spectrum()` method returns an **instrument-ready** spectrum — convolved with the line-spread function, rebinned to a specific wavelength grid, and calibrated. It requires the model to have a spectroscopy channel: build with `observation=Observation(spectroscopy=...)`, otherwise `pred.spectrum(...)` raises `ValueError` (a photometry-only model has no LSF or calibration to apply). For a bare model SED with no instrument convolution, use `pred.obs_sed(wave_obs)` instead.
+The `.spectrum()` method returns an instrument-ready spectrum (convolved with the line-spread function, rebinned to a specific wavelength grid, and calibrated). It requires the model to have a spectroscopy channel: build with `observation=Observation(spectroscopy=...)`, otherwise `pred.spectrum(...)` raises `ValueError` (a photometry-only model has no LSF or calibration to apply). For a bare model SED with no instrument convolution, use `pred.obs_sed(wave_obs)` instead.
 
 ```python
 # Spectrum at specific observer-frame wavelengths.
@@ -239,11 +239,11 @@ spec = pred.spectrum(wave_obs=obs_wave)
 # spec.error — noise model prediction [erg/s/cm²/Å]
 ```
 
-**Key differences from SED:**
+Key differences from SED:
 - **Grid**: User-specified (not the model grid)
 - **Frame**: Observed-frame wavelengths
 - **Calibration**: Applied (photometry, line spread, noise)
-- **Units**: F_ν (erg/s/cm²/Å), a flux *per unit wavelength*
+- **Units**: F_ν (erg/s/cm²/Å), a flux per unit wavelength
 
 **Summary table:**
 
@@ -257,7 +257,7 @@ spec = pred.spectrum(wave_obs=obs_wave)
 
 ## Exact vs fast photometry
 
-By default, photometry and spectroscopy predictions are **exact** — integrated over the model's full wavelength grid:
+By default, photometry and spectroscopy predictions are exact (integrated over the model's full wavelength grid):
 
 ```python
 pred = model.predict(params)
@@ -267,7 +267,7 @@ photometry = pred.photometry()  # filters built into the model
 spectrum = pred.spectrum(wave_obs=...)
 ```
 
-If the model was built with a precomputation (`approx=WavePrecomp(...)`), you can opt into a **fast** lookup-table path:
+If the model was built with a precomputation (`approx=WavePrecomp(...)`), you can opt into a fast lookup-table path:
 
 ```python
 # ONLY valid if the model was built with approx=WavePrecomp()
@@ -292,7 +292,7 @@ A speed knob must never silently change the physics. If you pass `approx=True`, 
 
 ## Mock catalogs: batch prediction from arbitrary parameters
 
-The model is a pure function of parameters. You can generate mock catalogs from **any** batch of parameter sets — prior samples, a grid, hand-tuned values — without a fit or observed data:
+The model is a pure function of parameters. You can generate mock catalogs from any batch of parameter sets (prior samples, a grid, hand-tuned values) without a fit or observed data:
 
 ```python
 import jax
@@ -350,9 +350,7 @@ This workflow is pure JAX — no loop, fully differentiable, and trivial to para
 
 ## Error handling: unknown properties raise, never return NaN
 
-If you request a property the model doesn't provide, you get a clear error naming the
-available ones — never a silent `NaN` or `None`. Which exception you catch depends on how
-you asked:
+If you request a property the model does not provide, you get a clear error naming the available ones (never a silent `NaN` or `None`). Which exception you catch depends on how you asked:
 
 | Access style | Raises |
 |---|---|

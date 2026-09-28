@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.config.exceptions import ConfigError
 
 pytestmark = pytest.mark.regression_bug
@@ -189,7 +189,11 @@ class TestFracAGNDustCoupling944:
                 "type": "composable",
                 "norm": "cigale_joint",
                 "torus": {"type": "skirtor"},
-                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "disc": {
+                    "type": "multicolor",
+                    "all_params": Fixed(DEFAULT),
+                    "log_lbol": Uniform(9.0, 14.0),
+                },
                 "nlr": {"type": "none"},
                 "blr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -213,7 +217,11 @@ class TestFracAGNDustCoupling944:
                 "type": "composable",
                 "norm": "cigale_joint",
                 "torus": {"type": "none"},
-                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "disc": {
+                    "type": "multicolor",
+                    "all_params": Fixed(DEFAULT),
+                    "log_lbol": Uniform(9.0, 14.0),
+                },
                 "nlr": {"type": "none"},
                 "blr": {"type": "none"},
                 "feii": {"type": "none"},

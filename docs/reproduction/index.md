@@ -1,16 +1,8 @@
 # Physics reproduction
 
-The reproduction studies below configure tengri's public nested-dict API to mimic the behavior of established SED-fitting codes (CIGALE, Prospector, BAGPIPES, AGNFITTER-RX, ProSpect, and others). This is possible because tengri implements a superset of the union of the models found in common SED-fitting codes. These are not reimplementations; tengri's underlying physics may differ, and residual differences are expected and are documented per study.
+The reproduction studies below configure tengri's public nested-dict API to mimic the behavior of established SED-fitting codes (CIGALE, Prospector, BAGPIPES, AGNFITTER-RX, ProSpect, and others). This is possible because tengri implements a superset of the union of the models found in common SED-fitting codes. These are not reimplementations; tengri's underlying physics may differ, and residual differences are expected and documented per study.
 
-A new code should earn trust by reproducing the physics in the codes
-already in use before claiming anything new. The notebooks here do that
-for tengri. Each one implements the same models as one external code and
-puts the two on the same axes at matched parameters, block by block:
-stellar populations, star formation history, dust, nebular, AGN, IGM.
-Where they agree, that is stated; where they differ, the reason is
-tracked down. Having the same physics in one framework also means every
-assumption can be checked and different models compared directly. Each
-notebook ends with a full-SED head-to-head with a residual panel.
+A new code should earn trust by reproducing the physics in the codes already in use before claiming anything new. The notebooks here do that for tengri. Each one implements the same models as one external code and puts the two on the same axes at matched parameters, block by block: stellar populations, star formation history, dust, nebular, AGN, IGM. Where they agree, that is stated; where they differ, the reason is tracked down. Having the same physics in one framework also means every assumption can be checked and different models compared directly. Each notebook ends with a full-SED head-to-head with a residual panel.
 
 - **{doc}`cigale`**: CIGALE (Boquien et al. 2019). The widest stack:
   stellar, SFH, dust attenuation with Dale 2014 IR, nebular, AGN

@@ -10,6 +10,7 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import DEFAULT_DUST_LOG_SSFR
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
@@ -58,7 +59,7 @@ class BosaIRSEDComponent(EmissionComponent):
     name: str = "bosa"
 
     # Free parameters (user-facing names, prefix-stripped)
-    log_ssfr = Fixed(-10.0)
+    log_ssfr = Fixed(DEFAULT_DUST_LOG_SSFR)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("boquien_salim2021",)
 

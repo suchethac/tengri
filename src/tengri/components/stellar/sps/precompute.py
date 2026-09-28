@@ -40,7 +40,12 @@ import numpy as np
 from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_digest
 from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
-from tengri.utils.grid_interp import preintegrate_grid, subband_quadrature
+from tengri.utils.grid_interp import (
+    _cumtrapz_rows,
+    _interp_rows,
+    preintegrate_grid,
+    subband_quadrature,
+)
 from tengri.utils.physics_constants import TEN_PC_CM
 from tengri.utils.scale import (
     apply_log10_scale,
@@ -131,10 +136,16 @@ class PhotometricPrecomputation(NamedTuple):
         Number of filters [dimensionless].
     ssp_subband_phot : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Filter integral restricted to each sub-band. Sums over the last axis
-        to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]
+        to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]. The last
+        axis is ``n_subbands + 1`` wide, not ``n_subbands``, when ``lyc_gate``
+        was also True: a physical edge at 912 Å(1+z) is then forced into the
+        equal-filter-mass partition (#2439, #2427, R1;
+        :func:`tengri.utils.grid_interp.subband_quadrature`), so every chunk
+        lies wholly on one side of the Lyman limit.
     ssp_subband_waves_rest : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Rest-frame quadrature node of each sub-band: the template's own
-        flux-weighted centroid there. None unless ``n_subbands > 0``. [Angstrom]
+        flux-weighted centroid there. None unless ``n_subbands > 0``.
+        [Angstrom]. Same last-axis width note as ``ssp_subband_phot``.
     ssp_subband_phot_igm : array or None, shape (n_met, n_age, n_filters, n_subbands)
         ``ssp_subband_phot`` with the IGM transmission at each node folded in
         (#1135): Φ_{majk} · T_IGM(λ*_{majk} · (1+z), z) [erg/s/Hz], where λ* is
@@ -146,6 +157,18 @@ class PhotometricPrecomputation(NamedTuple):
         The REST-frame band lives in :class:`RestBandPrecomputation`, built once by
         :func:`precompute_restband_photometry` and carried on the stellar component's
         state: one builder for the fixed-z and free-z paths alike (#1148).
+    ssp_phot_lyc : array or None, shape (n_met, n_age, n_filters)
+        SSP broadband flux restricted to rest-frame λ < 912 Ångström
+        (Lyman continuum) per metallicity, age, and filter [erg/s/Hz/Msun].
+        The exact algebraic split ``ssp_phot = ssp_phot_lyc + (ssp_phot -
+        ssp_phot_lyc)`` at the physical edge. Used to apply the nebular
+        ``neb_fesc`` mask in ``NebularSEDComponent.apply``:
+        ``stellar_phot_lnu_precomp - (1 - neb_fesc) * stellar_phot_lnu_precomp_lyc``.
+        ``None`` unless ``lyc_gate=True`` was passed to
+        :func:`~tengri.utils.grid_interp.preintegrate_grid` -- a live nebular
+        Lyman-continuum mask (a photoionized backend whose ``neb_fesc`` is not
+        pinned at exactly ``1.0``, #2439, #2427). A model without one never
+        computes or caches this.
 
     Notes
     -----
@@ -165,6 +188,7 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_phot: "jnp.ndarray | None" = None
     ssp_subband_waves_rest: "jnp.ndarray | None" = None
     ssp_subband_phot_igm: "jnp.ndarray | None" = None
+    ssp_phot_lyc: "jnp.ndarray | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -210,6 +234,7 @@ def precompute_photometry(
     taylor_correction: bool = True,
     n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
+    lyc_gate: bool = False,
 ) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
 
@@ -259,6 +284,12 @@ def precompute_photometry(
 
         If provided, these axes are collapsed at init time via triweight
         interpolation. Default None.
+    lyc_gate : bool
+        Whether this model has a live nebular Lyman-continuum mask (a
+        photoionized nebular backend whose ``neb_fesc`` is not pinned at
+        exactly ``1.0``; #2439, #2427). Default False. Threaded straight to
+        :func:`~tengri.utils.grid_interp.preintegrate_grid`; see its
+        ``lyc_gate`` parameter for what it changes.
 
     Returns
     -------
@@ -290,6 +321,7 @@ def precompute_photometry(
         ),
         taylor=taylor_correction,
         n_subbands=n_subbands,
+        lyc_gate=lyc_gate,
     )
 
     # Collapse fixed axes if provided
@@ -306,6 +338,7 @@ def precompute_photometry(
         n_filters=preint.n_filters,
         ssp_subband_phot=preint.subband_phot,
         ssp_subband_waves_rest=preint.subband_waves_rest,
+        ssp_phot_lyc=preint.lyc_phot,
     )
 
 
@@ -622,6 +655,9 @@ class PhotometricZTable(NamedTuple):
     #: cache key needs no IGM term). ``None`` when the IGM is absent or reads free
     #: parameters (patchy reionization, DLAs).
     ssp_subband_phot_igm_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < 912 Å)
+    #: at each redshift (#2439, #2427). ``None`` when not explicitly computed.
+    ssp_phot_lyc_table: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -652,6 +688,11 @@ class ZTableRequest:
     convention: str
     #: Number of sub-band quadrature nodes
     n_subbands: int
+    #: Whether this model has a live nebular Lyman-continuum mask (#2439,
+    #: #2427): gates the LyC whole-band split and the sub-band forced edge.
+    #: Part of the key so a lyc_gate=True request can never be served an
+    #: entry a lyc_gate=False (or pre-#2439) build wrote.
+    lyc_gate: bool
     #: Cosmology parameters (baked DEFAULT_COSMO or equivalent)
     cosmology: tuple
     #: Whether JAX X64 mode is enabled
@@ -662,7 +703,14 @@ class ZTableRequest:
 
 # Bump when the quadrature or table layout changes: invalidates every
 # cached z-table built by an older algorithm.
-_ZTABLE_CACHE_VERSION = 3
+# 3 -> 4 (#2439, #2427): the npz payload gained ``ssp_phot_lyc_table`` at
+# version 3 without a bump, so a warm cache built the day before this fix
+# would have satisfied the (unversioned-for-this-field) key and silently
+# served a table with no Lyman-continuum split -- the full defect returns
+# with no warning. ``lyc_gate`` is now also its own field in
+# :class:`ZTableRequest`, so a lyc_gate=True request can never collide with
+# a lyc_gate=False (or pre-#2439) entry even if the version were not bumped.
+_ZTABLE_CACHE_VERSION = 4
 
 
 def _ztable_cache_dir():
@@ -690,6 +738,7 @@ def _ztable_cache_key(
     taylor_correction,
     convention,
     n_subbands=0,
+    lyc_gate=False,
 ) -> str:
     """Content hash over everything the table depends on.
 
@@ -721,6 +770,7 @@ def _ztable_cache_key(
         taylor_correction=bool(taylor_correction),
         convention=str(convention),
         n_subbands=int(n_subbands),
+        lyc_gate=bool(lyc_gate),
         cosmology=baked(DEFAULT_COSMO),
         x64=bool(jax.config.jax_enable_x64),
         backend=jax.default_backend(),
@@ -741,6 +791,7 @@ def precompute_photometry_ztable(
     taylor_correction: bool = False,
     n_subbands: int = 0,
     convention: FilterConvention = FilterConvention.BESSELL,
+    lyc_gate: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid, disk-cached.
 
@@ -752,6 +803,17 @@ def precompute_photometry_ztable(
     quadrature; every later build (any process, any model) loads the npz
     in well under a second. ``TENGRI_DISABLE_PRECOMP_CACHE=1`` opts out,
     ``TENGRI_PRECOMP_CACHE_DIR`` relocates the cache.
+
+    Parameters
+    ----------
+    lyc_gate : bool
+        Whether this model has a live nebular Lyman-continuum mask (a
+        photoionized nebular backend whose ``neb_fesc`` is not pinned at
+        exactly ``1.0``; #2439, #2427). Default False. Part of the cache key
+        (:class:`ZTableRequest`), so a ``lyc_gate=True`` request can never be
+        served an entry a ``lyc_gate=False`` build wrote. Threaded to
+        :func:`_compute_photometry_ztable`; see its parameter for what it
+        changes.
 
     Notes
     -----
@@ -774,33 +836,47 @@ def precompute_photometry_ztable(
             taylor_correction,
             convention,
             n_subbands,
+            lyc_gate,
         )
         cache_path = cache_dir / f"ztable_{key}.npz"
         if cache_path.is_file():
             with np.load(cache_path, allow_pickle=False) as d:
-                return PhotometricZTable(
-                    ssp_phot_table=jnp.array(d["ssp_phot_table"]),
-                    eff_waves_rest_table=jnp.array(d["eff_waves_rest_table"]),
-                    log10_flux_scale_table=jnp.array(d["log10_flux_scale_table"]),
-                    z_grid=jnp.array(d["z_grid"]),
-                    n_filters=int(d["n_filters"]),
-                    igm_trans_table=jnp.array(d["igm_trans_table"]),
-                    ssp_phot_moment_table=(
-                        jnp.array(d["ssp_phot_moment_table"])
-                        if "ssp_phot_moment_table" in d.files
-                        else None
-                    ),
-                    ssp_subband_phot_table=(
-                        jnp.array(d["ssp_subband_phot_table"])
-                        if "ssp_subband_phot_table" in d.files
-                        else None
-                    ),
-                    subband_waves_rest_table=(
-                        jnp.array(d["subband_waves_rest_table"])
-                        if "subband_waves_rest_table" in d.files
-                        else None
-                    ),
-                )
+                # Defense in depth beside the version bump + lyc_gate cache
+                # key above (#2439, #2427): if this request needs the LyC
+                # table and the file on disk does not have it -- a hand-built
+                # fixture, or a future key-computation bug that lets a stale
+                # entry slip through -- do NOT silently return None for it
+                # (that is the exact shape of the original bug: a warm cache
+                # serving a table with no Lyman-continuum split, no warning).
+                # Fall through and rebuild instead.
+                has_lyc = "ssp_phot_lyc_table" in d.files
+                if not (lyc_gate and not has_lyc):
+                    return PhotometricZTable(
+                        ssp_phot_table=jnp.array(d["ssp_phot_table"]),
+                        eff_waves_rest_table=jnp.array(d["eff_waves_rest_table"]),
+                        log10_flux_scale_table=jnp.array(d["log10_flux_scale_table"]),
+                        z_grid=jnp.array(d["z_grid"]),
+                        n_filters=int(d["n_filters"]),
+                        igm_trans_table=jnp.array(d["igm_trans_table"]),
+                        ssp_phot_moment_table=(
+                            jnp.array(d["ssp_phot_moment_table"])
+                            if "ssp_phot_moment_table" in d.files
+                            else None
+                        ),
+                        ssp_subband_phot_table=(
+                            jnp.array(d["ssp_subband_phot_table"])
+                            if "ssp_subband_phot_table" in d.files
+                            else None
+                        ),
+                        subband_waves_rest_table=(
+                            jnp.array(d["subband_waves_rest_table"])
+                            if "subband_waves_rest_table" in d.files
+                            else None
+                        ),
+                        ssp_phot_lyc_table=(
+                            jnp.array(d["ssp_phot_lyc_table"]) if has_lyc else None
+                        ),
+                    )
 
     table = _compute_photometry_ztable(
         ssp_data,
@@ -811,6 +887,7 @@ def precompute_photometry_ztable(
         taylor_correction=taylor_correction,
         n_subbands=n_subbands,
         convention=convention,
+        lyc_gate=lyc_gate,
     )
 
     if cache_path is not None:
@@ -831,6 +908,8 @@ def precompute_photometry_ztable(
         if table.ssp_subband_phot_table is not None:
             payload["ssp_subband_phot_table"] = np.asarray(table.ssp_subband_phot_table)
             payload["subband_waves_rest_table"] = np.asarray(table.subband_waves_rest_table)
+        if table.ssp_phot_lyc_table is not None:
+            payload["ssp_phot_lyc_table"] = np.asarray(table.ssp_phot_lyc_table)
         # Atomic publish: concurrent builds of the same key race benignly.
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".npz.tmp")
         try:
@@ -858,6 +937,7 @@ def _compute_photometry_ztable(
     taylor_correction: bool = False,
     n_subbands: int = 0,
     convention: FilterConvention = FilterConvention.BESSELL,
+    lyc_gate: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
 
@@ -886,6 +966,15 @@ def _compute_photometry_ztable(
         If True, precompute IGM transmission (Inoue+2014) at the
         effective observed wavelengths for each z in the grid.
         Default False (igm_trans_table will be all ones).
+    lyc_gate : bool
+        Whether this model has a live nebular Lyman-continuum mask (a
+        photoionized nebular backend whose ``neb_fesc`` is not pinned at
+        exactly ``1.0``; #2439, #2427). Default False. When True: (1)
+        ``ssp_phot_lyc_table`` is computed (else ``None``); (2)
+        ``n_subbands`` sub-band quadrature, if requested, gets the forced
+        physical edge (K -> K+1 chunks; see
+        :func:`tengri.utils.grid_interp.subband_quadrature`). A model
+        without a live mask pays neither the compute nor the larger table.
 
     Returns
     -------
@@ -924,12 +1013,17 @@ def _compute_photometry_ztable(
     # n_z_pts, NOT n_z: the caller may pass an explicit ``z_grid``, in which case
     # ``n_z`` is a stale default and the tables come out the wrong length.
     K = int(n_subbands)
+    K_sub = K + 1 if (K > 0 and lyc_gate) else K
     ssp_subband_all = (
-        np.zeros((n_z_pts, n_met, n_age, n_filters, K), dtype=np.float64) if K > 0 else None
+        np.zeros((n_z_pts, n_met, n_age, n_filters, K_sub), dtype=np.float64) if K > 0 else None
     )
     subband_waves_all = (
-        np.zeros((n_z_pts, n_met, n_age, n_filters, K), dtype=np.float64) if K > 0 else None
+        np.zeros((n_z_pts, n_met, n_age, n_filters, K_sub), dtype=np.float64) if K > 0 else None
     )
+    # Lyman continuum photometry (rest λ < 912 Å) (#2439, #2427). Gated on
+    # lyc_gate (a live nebular Lyman-continuum mask): a model without one
+    # never pays this compute or the extra table size.
+    ssp_phot_lyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters)) if lyc_gate else None
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
@@ -995,6 +1089,35 @@ def _compute_photometry_ztable(
             num = _np_trapezoid(integrand, grid, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
+            # Lyman continuum photometry: rest λ < 912 Å (#2439, #2427).
+            # Gated on lyc_gate. Use cumulative trapezoid to extract the
+            # integral over [grid_min, 912*(1+z)] on the observed-frame grid.
+            lyc_wave_obs = 912.0 * (1.0 + z_val)
+            if lyc_gate:
+                if np.any(grid < lyc_wave_obs):
+                    # (n_met*n_age, len(grid))
+                    cum_integrand = _cumtrapz_rows(integrand, grid[None, :])
+                    # Reshape to (n_met, n_age, len(grid)) for later use
+                    cum_integrand_reshaped = cum_integrand.reshape(n_met, n_age, -1)
+                    # Interpolate cumulative integral at the Lyman limit
+                    lyc_idx = np.searchsorted(grid, lyc_wave_obs)
+                    if lyc_idx > 0 and lyc_idx < len(grid):
+                        # Interpolate the cumulative integral at lyc_wave_obs
+                        cum_at_lyc = _interp_rows(
+                            np.array([lyc_wave_obs]), grid, cum_integrand_reshaped
+                        )  # (n_met, n_age, 1)
+                        lyc_num = cum_at_lyc[:, :, 0]
+                    elif lyc_idx >= len(grid):
+                        # Lyman limit is beyond all grid points; take everything
+                        lyc_num = cum_integrand_reshaped[:, :, -1]
+                    else:
+                        # Lyman limit is before all grid points; zero LyC
+                        lyc_num = 0.0
+                    ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom, 1e-30)
+                else:
+                    # No grid points below the Lyman limit; zero LyC photometry
+                    ssp_phot_lyc_all[zi, :, :, f_idx] = 0.0
+
             # Taylor moment Ψ at this z and filter.
             # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
             # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
@@ -1010,9 +1133,17 @@ def _compute_photometry_ztable(
             # Sub-band quadrature (#1122): same helper the fixed-z precompute
             # uses, so the two paths cannot drift. Nodes come back observed-frame;
             # store them rest-frame, which is where the dust law is evaluated.
+            # ``lyc_edge_obs`` forces a chunk boundary at the physical Lyman
+            # limit when this model has a live mask (R1, #2439, #2427).
             if K > 0:
                 phi_k, nodes_obs = subband_quadrature(
-                    grid, tw_np, integrand, denom, K, float(eff_waves_obs[f_idx])
+                    grid,
+                    tw_np,
+                    integrand,
+                    denom,
+                    K,
+                    float(eff_waves_obs[f_idx]),
+                    lyc_edge_obs=lyc_wave_obs if lyc_gate else None,
                 )
                 ssp_subband_all[zi, :, :, f_idx, :] = phi_k
                 subband_waves_all[zi, :, :, f_idx, :] = nodes_obs / (1.0 + z_val)
@@ -1040,6 +1171,7 @@ def _compute_photometry_ztable(
         subband_waves_rest_table=(
             jnp.array(subband_waves_all) if subband_waves_all is not None else None
         ),
+        ssp_phot_lyc_table=(jnp.array(ssp_phot_lyc_all) if ssp_phot_lyc_all is not None else None),
     )
 
 

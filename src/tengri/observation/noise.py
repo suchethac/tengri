@@ -173,6 +173,22 @@ def compute_std_inv(
 # ── Detection: is the noise model active? ─────────────────────────
 
 
+def is_noise_parameter(name: str) -> bool:
+    """Check if a parameter name is a noise parameter.
+
+    Parameters
+    ----------
+    name : str
+        Parameter name to check.
+
+    Returns
+    -------
+    bool
+        True if the parameter name starts with "noise_" prefix.
+    """
+    return name.startswith("noise_")
+
+
 def has_noise_model(spec) -> bool:
     """Check if any noise parameter is free (not Fixed at 0).
 
@@ -208,7 +224,7 @@ def has_noise_model(spec) -> bool:
     from tengri.parameters.priors import Fixed
 
     for name in spec.free_params:
-        if name.startswith("noise_"):
+        if is_noise_parameter(name):
             return True
     # Also check if noise_frac_cal is Fixed but nonzero
     if "noise_frac_cal" in spec.all_params:

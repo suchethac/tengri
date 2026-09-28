@@ -138,7 +138,7 @@ def _assert_predicts(model, obs, label):
     It is true of every value a constructor can return, so it cannot separate a
     model that builds from one that builds and then predicts nothing.
     """
-    phot = model.predict_photometry(model.spec.get_fixed_values())
+    phot = model.predict_photometry({})
     chex.assert_tree_all_finite(phot)
     assert phot.shape == (len(obs.photometry.filters),), (
         f"{label}: photometry shape {phot.shape} does not match "
@@ -311,10 +311,8 @@ class TestDustIRTemplateThreading:
         except FileNotFoundError:
             pytest.skip("Dale2014 template not available")
 
-        fixed_params = spec.get_fixed_values()
-
-        phot_non_jit = model.predict_photometry(fixed_params)
-        phot_jit = jax.jit(lambda p: model.predict_photometry(p))(fixed_params)
+        phot_non_jit = model.predict_photometry({})
+        phot_jit = jax.jit(lambda p: model.predict_photometry(p))({})
 
         # The test's whole claim is agreement, so compare the two. It used to
         # assert each was separately `not None` and never compare them, which
@@ -358,8 +356,7 @@ class TestAGNSKIRTORTemplateThreading:
         except FileNotFoundError:
             pytest.skip("SKIRTOR grid not available")
 
-        fixed_vals = model.spec.get_fixed_values()
-        result = assert_jit_matches_eager(lambda p: model.predict_photometry(p), fixed_vals)
+        result = assert_jit_matches_eager(lambda p: model.predict_photometry(p), {})
 
         # Assert something the compile actually has to produce: finite fluxes
         # of the right shape, not merely "not None".

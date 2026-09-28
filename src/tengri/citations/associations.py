@@ -121,10 +121,22 @@ NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     # same underlying Cloudy photoionization-grid citations.
     "cloudy_grid": ["cloudy"],
     "cb19_grid": ["byler2017", "cloudy"],
+    # Additive: "cb19_grid" is the live backend's ``.name``, but the grammar
+    # selector a caller actually writes is ``neb={'type': 'cb19'}``
+    # (cloudy_cb19.py). Citation-key recognition resolves a bibkey to a
+    # *grammar-accepted* name, so the selector needs its own entry beside the
+    # backend one -- removing "cb19_grid" would silently drop it from
+    # ``collect_citations`` for any caller still matching by backend name
+    # (#2429 opus review round 2, item 1).
+    "cb19": ["byler2017", "cloudy"],
     "mappings": ["mappings"],
     # Nebular emission baked into the SSP grid (FSPS ``wNE`` files) uses the
     # Byler+2017 Cloudy photoionization grids.
     "baked_in": ["byler2017", "cloudy"],
+    # Additive, same reasoning as "cb19" above: the grammar selector for the
+    # baked-in backend is ``neb={'type': 'ssp'}`` (see _NEBULAR_TYPE_HINTS in
+    # parameters/groups.py), not "baked_in".
+    "ssp": ["byler2017", "cloudy"],
     "off": [],
     None: [],
 }

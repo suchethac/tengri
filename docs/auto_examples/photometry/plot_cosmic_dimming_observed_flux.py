@@ -136,8 +136,12 @@ for i, z in enumerate(z_grid):
         redshift=tengri.Fixed(float(z)),
     )
 
-    # Copy baseline params and update redshift key explicitly
-    params = {**baseline_params, "redshift": float(z)}
+    # ``z_model`` is already built with ``redshift=Fixed(float(z))`` above,
+    # so its own params dict must OMIT "redshift" (#2296: a params-dict key
+    # the spec declared Fixed is refused, even at the value it is already
+    # pinned to). Passing it explicitly here was always redundant --
+    # z_model resolves its own Fixed redshift internally.
+    params = dict(baseline_params)
 
     # Predict observed-frame photometric flux [erg/s/cm^2/Hz]
     flux = np.asarray(z_model.predict_photometry(params))
