@@ -39,10 +39,10 @@ pytestmark = pytest.mark.unit
 
 def test_the_cap_these_tests_assume_is_the_one_the_code_uses():
     """The parametrized dimensions below straddle the cap; pin it explicitly."""
-    assert DENSE_MASS_MAX_DIM == 64
+    assert DENSE_MASS_MAX_DIM == 30
 
 
-@pytest.mark.parametrize("n_dim", [1, 5, 7, 8, 9, 20, 30, 36, 64])
+@pytest.mark.parametrize("n_dim", [1, 5, 7, 8, 9, 20, 30])
 def test_gate_agrees_with_the_auto_policy_below_the_cap(n_dim):
     """Below the cap the gate is exactly the #319 auto-policy, unchanged."""
     with warnings.catch_warnings():
@@ -52,7 +52,7 @@ def test_gate_agrees_with_the_auto_policy_below_the_cap(n_dim):
         )
 
 
-@pytest.mark.parametrize("n_dim", [1, 5, 7, 30, 36, 64])
+@pytest.mark.parametrize("n_dim", [1, 5, 7, 30])
 def test_explicit_requests_round_trip_below_the_cap(n_dim):
     """An explicit True or False is honored, and says nothing, below the cap."""
     with warnings.catch_warnings():
@@ -61,7 +61,7 @@ def test_explicit_requests_round_trip_below_the_cap(n_dim):
         assert resolve_dense_mass_gate(False, n_dim, method="mcmc_hmc") is False
 
 
-@pytest.mark.parametrize("n_dim", [65, 74, 137])
+@pytest.mark.parametrize("n_dim", [31, 36, 74, 137])
 def test_dense_above_the_cap_falls_back_and_warns(n_dim):
     """Above the cap the request is refused, and the caller is told."""
     with warnings.catch_warnings(record=True) as caught:
@@ -76,7 +76,7 @@ def test_the_warning_carries_the_numbers_it_reports():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         resolve_dense_mass_gate(True, 74, method="mcmc_hmc", verbose=False)
-    assert measurements_of(caught[0].message) == {"n_dim": 74.0, "max_dim": 64.0}
+    assert measurements_of(caught[0].message) == {"n_dim": 74.0, "max_dim": 30.0}
 
 
 def test_verbose_false_still_warns_because_a_lost_setting_is_not_verbosity():
