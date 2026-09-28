@@ -35,7 +35,7 @@ from _figure_style import CONFIG_COLORS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIGURE_WIDTH = 7.1
-FIGURE_HEIGHT = 9.0
+FIGURE_HEIGHT = 11.0
 
 # X-like configuration mapping
 XLIKE_CODE = {
@@ -64,9 +64,10 @@ class DrawSummary:
     models_drawn: list[str]
     sets_present: list[str]
     close_galaxies: list[int]
-    excluded_models: dict[str, list[str]]  # set_name -> [model_keys]
+    excluded_models: dict[str, list[tuple[str, str]]]  # set_name -> [(model_key, reason)]
     invalid_counts: dict[str, dict[str, int]]  # set_name -> {model_key: count}
     prior_mass: dict[str, Any]  # Prior mass specification
+    close_disagreement: list[str]  # Warnings about close flag disagreement
 
 
 def _get_model_color(model_key: str) -> str:
@@ -79,12 +80,40 @@ def _get_model_color(model_key: str) -> str:
     return "#cccccc"
 
 
-def _normalize_weights(weights: dict[str, float]) -> dict[str, float]:
-    """Normalize weights to sum to 1."""
+def _validate_weights_sum(weights: dict[str, float], galaxy_id: int, set_name: str) -> None:
+    """Validate that valid weights sum to 1 within tolerance.
+
+    Raises ValueError if not.
+    """
     total = sum(weights.values())
-    if total <= 0:
-        return weights
-    return {k: v / total for k, v in weights.items()}
+    if abs(total - 1.0) > 1e-6:
+        raise ValueError(
+            f"Galaxy {galaxy_id} set {set_name}: valid weights sum to {total:.9f}, "
+            f"not 1.0 within 1e-6 tolerance"
+        )
+
+
+def _filter_configuration_vi(summary: dict[str, Any]) -> dict[str, Any]:
+    """Remove Configuration VI entries and warn if found."""
+    removed_count = 0
+
+    for gal_id_str in summary.get("galaxies", {}):
+        gal_data = summary["galaxies"][gal_id_str]
+        for set_name in list(gal_data.get("sets", {}).keys()):
+            w_set = gal_data["sets"][set_name]
+            models = w_set.get("models", [])
+            # Filter out VI entries
+            original_count = len(models)
+            models[:] = [m for m in models if m.get("config") != "VI"]
+            removed_count += original_count - len(models)
+
+    if removed_count > 0:
+        print(
+            f"Dropped {removed_count} Configuration VI entries (not part of Section 7)",
+            file=sys.stderr,
+        )
+
+    return summary
 
 
 def load_summary(path: Path) -> dict[str, Any]:
@@ -100,6 +129,9 @@ def load_summary(path: Path) -> dict[str, Any]:
         raise ValueError("Summary missing 'galaxies' key")
     if not summary["galaxies"]:
         raise ValueError("Summary contains no galaxies")
+
+    # Filter out Configuration VI
+    summary = _filter_configuration_vi(summary)
 
     return summary
 
@@ -163,10 +195,10 @@ def _draw_weights_panel(
     ax: plt.Axes,
     summary: dict[str, Any],
     selected_set: str,
-) -> tuple[list[int], list[str], list[int]]:
-    """Draw panel (b): per-galaxy BMA weights heatmap and marginals.
+) -> tuple[list[int], list[str], list[int], list[tuple[str, str]]]:
+    """Draw panel (b): per-galaxy BMA weights heatmap and excluded/invalid cells.
 
-    Returns: (galaxies_drawn, models_drawn, close_galaxies)
+    Returns: (galaxies_drawn, models_drawn, close_galaxies, excluded_with_reasons)
     """
     galaxies = sorted(int(gal_id) for gal_id in summary["galaxies"])
 
@@ -181,14 +213,21 @@ def _draw_weights_panel(
     if weight_set is None:
         # No data for this set
         ax.text(
-            0.5, 0.5, f"No data for set: {selected_set}", ha="center", va="center", fontsize=10
+            0.5,
+            0.5,
+            f"No data for set: {selected_set}",
+            ha="center",
+            va="center",
+            fontsize=10,
         )
-        return galaxies, [], []
+        return galaxies, [], [], []
 
     # Collect models from all galaxies in this set
     all_models = set()
     weight_matrix = {}
+    validity_matrix = {}  # Track which cells are valid/invalid
     close_galaxies = []
+    excluded_with_reasons = []
 
     for gal_id in galaxies:
         gal_id_str = str(gal_id)
@@ -199,26 +238,40 @@ def _draw_weights_panel(
                 models = w_set.get("models", [])
 
                 weights = {}
+                validity = {}  # True for valid, False for invalid/excluded
+
                 for model in models:
                     model_key = model.get("model_key")
                     weight = model.get("weight")
                     valid = model.get("valid", True)
 
-                    if model_key and weight is not None and valid:
-                        weights[model_key] = weight
+                    if model_key:
                         all_models.add(model_key)
+                        validity[model_key] = valid
+                        if valid and weight is not None:
+                            weights[model_key] = weight
+                        elif not valid:
+                            excluded_with_reasons.append(
+                                (model_key, model.get("excluded_reason", "unknown"))
+                            )
 
-                # Normalize weights for this galaxy
-                weights = _normalize_weights(weights)
+                # Validate that valid weights sum to 1
+                try:
+                    _validate_weights_sum(weights, gal_id, selected_set)
+                except ValueError as exc:
+                    raise ValueError(str(exc)) from exc
+
                 weight_matrix[gal_id] = weights
+                validity_matrix[gal_id] = validity
 
-                # Check if close (max weight < 0.9)
-                if weights and max(weights.values()) < 0.9:
+                # Check if close (read from set data)
+                is_close = w_set.get("close", False)
+                if is_close:
                     close_galaxies.append(gal_id)
 
     if not all_models:
         ax.text(0.5, 0.5, "No valid model weights found", ha="center", va="center", fontsize=10)
-        return galaxies, [], close_galaxies
+        return galaxies, [], close_galaxies, excluded_with_reasons
 
     models_sorted = sorted(all_models)
 
@@ -226,14 +279,40 @@ def _draw_weights_panel(
     n_gal = len(galaxies)
     n_mod = len(models_sorted)
     heatmap = np.full((n_mod, n_gal), np.nan)
+    hatch_matrix = np.zeros((n_mod, n_gal), dtype=bool)  # Track which cells should be hatched
 
     for gal_idx, gal_id in enumerate(galaxies):
         if gal_id in weight_matrix:
             for mod_idx, model_key in enumerate(models_sorted):
-                heatmap[mod_idx, gal_idx] = weight_matrix[gal_id].get(model_key, 0.0)
+                if gal_id in validity_matrix and model_key in validity_matrix[gal_id]:
+                    is_valid = validity_matrix[gal_id][model_key]
+                    if not is_valid:
+                        # Excluded/invalid cell
+                        hatch_matrix[mod_idx, gal_idx] = True
+                        heatmap[mod_idx, gal_idx] = 0.0  # Use 0 for display
+                    else:
+                        # Valid cell
+                        heatmap[mod_idx, gal_idx] = weight_matrix[gal_id].get(model_key, 0.0)
 
     # Plot heatmap
     im = ax.imshow(heatmap, cmap="YlOrRd", aspect="auto", vmin=0, vmax=1)
+
+    # Add hatching for excluded/invalid cells
+    for mod_idx in range(n_mod):
+        for gal_idx in range(n_gal):
+            if hatch_matrix[mod_idx, gal_idx]:
+                ax.add_patch(
+                    plt.Rectangle(
+                        (gal_idx - 0.5, mod_idx - 0.5),
+                        1,
+                        1,
+                        fill=False,
+                        hatch="///",
+                        edgecolor="gray",
+                        linewidth=0.5,
+                    )
+                )
+
     ax.set_xticks(range(n_gal))
     ax.set_yticks(range(n_mod))
     ax.set_xticklabels([str(g) for g in galaxies], fontsize=7, rotation=45)
@@ -245,7 +324,7 @@ def _draw_weights_panel(
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label("Weight", fontsize=7)
 
-    return galaxies, models_sorted, close_galaxies
+    return galaxies, models_sorted, close_galaxies, excluded_with_reasons
 
 
 def _draw_posterior_panel(
@@ -254,12 +333,11 @@ def _draw_posterior_panel(
     selected_set: str,
     quantity: str,  # "log_stellar_mass_survived" or "log_sfr_100myr"
 ) -> None:
-    """Draw panel (c): BMA vs single-config posteriors."""
+    """Draw panel (c): BMA vs single-config posteriors for a quantity."""
     galaxies = sorted(int(gal_id) for gal_id in summary["galaxies"])
 
     # Collect data
     x_pos = np.arange(len(galaxies))
-    colors_by_config = {}
 
     for gal_idx, gal_id in enumerate(galaxies):
         gal_id_str = str(gal_id)
@@ -287,7 +365,6 @@ def _draw_posterior_panel(
             config = model.get("config")
             if config:
                 color = _get_model_color(config)
-                colors_by_config[config] = color
                 ax.errorbar(
                     gal_idx,
                     p50,
@@ -339,7 +416,7 @@ def build_figure(
 ) -> tuple[plt.Figure, DrawSummary]:
     """Build the three-panel BMA figure."""
     fig = plt.figure(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
-    gs = GridSpec(3, 1, figure=fig, height_ratios=[1.2, 1.5, 1.5], hspace=0.4)
+    gs = GridSpec(3, 1, figure=fig, height_ratios=[1.0, 1.5, 2.0], hspace=0.35)
 
     # Panel (a): flow diagram
     ax_flow = fig.add_subplot(gs[0])
@@ -350,34 +427,55 @@ def build_figure(
 
     # Panel (b): weights heatmap
     ax_weights = fig.add_subplot(gs[1])
-    galaxies, models, close_gal = _draw_weights_panel(ax_weights, summary, selected_set)
+    galaxies, models, close_gal, excluded = _draw_weights_panel(ax_weights, summary, selected_set)
     ax_weights.text(
         0.02, 0.95, "(b)", fontsize=10, weight="bold", transform=ax_weights.transAxes, va="top"
     )
 
-    # Panel (c): posteriors
-    ax_posterior = fig.add_subplot(gs[2])
-    _draw_posterior_panel(ax_posterior, summary, selected_set, "log_stellar_mass_survived")
-    ax_posterior.text(
-        0.02, 0.95, "(c)", fontsize=10, weight="bold", transform=ax_posterior.transAxes, va="top"
+    # Panel (c): two sub-panels for mass and SFR
+    gs_c = gs[2].subgridspec(2, 1, hspace=0.3)
+    ax_mass = fig.add_subplot(gs_c[0])
+    ax_sfr = fig.add_subplot(gs_c[1])
+
+    _draw_posterior_panel(ax_mass, summary, selected_set, "log_stellar_mass_survived")
+    _draw_posterior_panel(ax_sfr, summary, selected_set, "log_sfr_100myr")
+
+    ax_mass.text(
+        0.02, 0.95, "(c1)", fontsize=10, weight="bold", transform=ax_mass.transAxes, va="top"
+    )
+    ax_sfr.text(
+        0.02, 0.95, "(c2)", fontsize=10, weight="bold", transform=ax_sfr.transAxes, va="top"
     )
 
     # Collect excluded models
-    excluded = {}
-    for gal_id_str in summary["galaxies"]:
-        gal_data = summary["galaxies"][gal_id_str]
-        if "sets" in gal_data and selected_set in gal_data["sets"]:
-            w_set = gal_data["sets"][selected_set]
-            models_list = w_set.get("models", [])
-            for model in models_list:
-                if not model.get("valid", True):
-                    reason = model.get("excluded_reason", "unknown")
-                    key = model.get("model_key")
-                    if key:
-                        if selected_set not in excluded:
-                            excluded[selected_set] = []
-                        if key not in excluded[selected_set]:
-                            excluded[selected_set].append(key)
+    excluded_by_set = {}
+    for model_key, reason in excluded:
+        if selected_set not in excluded_by_set:
+            excluded_by_set[selected_set] = []
+        excluded_by_set[selected_set].append((model_key, reason))
+
+    # Check for close flag disagreement
+    close_disagreement = []
+    for gal_id in galaxies:
+        gal_id_str = str(gal_id)
+        if gal_id_str in summary["galaxies"]:
+            gal_data = summary["galaxies"][gal_id_str]
+            if "sets" in gal_data and selected_set in gal_data["sets"]:
+                w_set = gal_data["sets"][selected_set]
+                is_close = w_set.get("close", False)
+                models = w_set.get("models", [])
+                weights = {
+                    m.get("model_key"): m.get("weight")
+                    for m in models
+                    if m.get("valid", True) and m.get("weight") is not None
+                }
+                max_weight = max(weights.values()) if weights else 0.0
+                computed_close = max_weight < 0.9
+                if is_close != computed_close:
+                    close_disagreement.append(
+                        f"Galaxy {gal_id}: close={is_close} but max_weight={max_weight:.4f} "
+                        f"(computed_close={computed_close})"
+                    )
 
     # Collect invalid counts and prior mass
     invalid_counts = {}
@@ -400,9 +498,10 @@ def build_figure(
         models_drawn=models,
         sets_present=sets_present,
         close_galaxies=close_gal,
-        excluded_models=excluded,
+        excluded_models=excluded_by_set,
         invalid_counts=invalid_counts,
         prior_mass=prior_mass,
+        close_disagreement=close_disagreement,
     )
 
     return fig, draw_summary
@@ -488,9 +587,17 @@ def main(argv: list[str] | None = None) -> int:
     # Build figure
     try:
         fig, draw_summary = build_figure(summary, selected_set)
+    except (ValueError, KeyError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     except Exception as exc:
         print(f"ERROR: Failed to build figure: {exc}", file=sys.stderr)
         return 1
+
+    # Warn about close flag disagreement
+    if draw_summary.close_disagreement:
+        for warning in draw_summary.close_disagreement:
+            print(f"WARNING: {warning}", file=sys.stderr)
 
     # Write figure
     args.out.parent.mkdir(parents=True, exist_ok=True)

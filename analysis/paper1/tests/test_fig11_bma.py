@@ -2,12 +2,12 @@
 """``fig11_bma.py`` contract tests for BMA figure generation.
 
 The figure reads a BMA summary JSON written by bma_combine.py, validates that
-it contains valid models and weight sets, and refuses if the summary is missing
-or empty. The sidecar JSON lists exactly which galaxies and models were drawn,
-and flags which are close (max weight < 0.9). Missing summary → non-zero exit,
-no PDF. Excluded models are marked excluded, not drawn as weights. Weights per
-galaxy sum to 1 within tolerance. Falls back from named_all to named_grid if
-named_all is absent.
+it contains valid models and weight sets with valid weights summing to 1 within
+1e-6 tolerance, and refuses if the summary is missing, empty, or has invalid
+weights. Excluded/invalid cells are drawn hatched. Close galaxies are read from
+the summary set's "close" field. The sidecar JSON lists exactly which galaxies
+and models were drawn, and flags which are close. Configuration VI entries are
+dropped. Missing summary → non-zero exit, no PDF.
 
 These tests pin the contract between the combiner and the figure.
 """
@@ -181,7 +181,7 @@ def test_valid_summary_writes_pdf_and_sidecar(tmp_path):
 
 
 def test_excluded_models_marked_in_sidecar(tmp_path):
-    """Excluded models listed in sidecar, not drawn as weights."""
+    """Excluded models listed in sidecar with reason, not drawn as weights."""
     summary = _build_minimal_summary(tmp_path)
     # Add an excluded model
     summary["galaxies"]["100001"]["sets"]["named_grid"]["models"].append(
@@ -212,15 +212,18 @@ def test_excluded_models_marked_in_sidecar(tmp_path):
 
     assert "excluded_models" in sidecar
     if "named_grid" in sidecar["excluded_models"]:
-        assert "III" in sidecar["excluded_models"]["named_grid"]
+        # Check that excluded model is listed with reason
+        excluded_list = sidecar["excluded_models"]["named_grid"]
+        assert any(e[0] == "III" for e in excluded_list), (
+            f"III not in excluded models: {excluded_list}"
+        )
 
 
 def test_close_galaxy_flagged(tmp_path):
-    """Galaxy with max weight < 0.9 flagged as close in sidecar."""
+    """Galaxy with close=True in set is flagged in sidecar."""
     summary = _build_minimal_summary(tmp_path)
-    # Make weights more distributed (max < 0.9)
-    summary["galaxies"]["100001"]["sets"]["named_grid"]["models"][0]["weight"] = 0.4
-    summary["galaxies"]["100001"]["sets"]["named_grid"]["models"][1]["weight"] = 0.6
+    # Mark galaxy as close
+    summary["galaxies"]["100001"]["sets"]["named_grid"]["close"] = True
     summary["galaxies"]["100001"]["sets"]["named_grid"]["max_weight"] = 0.6
 
     summary_path = tmp_path / "bma_summary.json"
@@ -237,6 +240,26 @@ def test_close_galaxy_flagged(tmp_path):
 
     assert "close_galaxies" in sidecar
     assert 100001 in sidecar["close_galaxies"]
+
+
+def test_weights_not_summing_to_one_exits_nonzero(tmp_path):
+    """Weights that don't sum to 1 within 1e-6 → non-zero exit."""
+    summary = _build_minimal_summary(tmp_path)
+    # Break weight sum (0.8 instead of 1.0)
+    summary["galaxies"]["100001"]["sets"]["named_grid"]["models"][0]["weight"] = 0.4
+    summary["galaxies"]["100001"]["sets"]["named_grid"]["models"][1]["weight"] = 0.4
+
+    summary_path = tmp_path / "bma_summary.json"
+    summary_path.write_text(json.dumps(summary))
+
+    out_pdf = tmp_path / "fig11_bma.pdf"
+
+    result = _run_fig11(summary_path, out_pdf)
+
+    assert result.returncode != 0, (
+        f"fig11 exited 0 on weights summing to 0.8; should refuse.\nstderr:\n{result.stderr}"
+    )
+    assert not out_pdf.exists(), f"PDF written despite invalid weights: {out_pdf}"
 
 
 def test_fallback_to_named_grid_when_named_all_absent(tmp_path):
@@ -260,45 +283,44 @@ def test_fallback_to_named_grid_when_named_all_absent(tmp_path):
     assert sidecar["selected_set"] == "named_grid"
 
 
-def test_weights_sum_to_one_per_galaxy(tmp_path):
-    """Weights per galaxy sum to 1 within 1e-6 tolerance."""
+def test_configuration_vi_is_filtered(tmp_path):
+    """Configuration VI entries are dropped from summary with a note."""
     summary = _build_minimal_summary(tmp_path)
-
-    # Add a third model with computed weight
+    # Add a Configuration VI entry (should be filtered)
     summary["galaxies"]["100001"]["sets"]["named_grid"]["models"].append(
         {
-            "model_key": "IV",
-            "config": "IV",
+            "model_key": "VI",
+            "config": "VI",
             "components": {},
             "log_evidence": -1250.0,
-            "weight": 0.0,  # Tiny weight after normalization
+            "weight": 0.0,
             "valid": True,
             "excluded_reason": None,
             "nuts_adoption_pass": True,
             "percentiles": {
-                "log_stellar_mass_survived": [10.2, 10.7, 11.2],
-                "log_stellar_mass_formed": [10.3, 10.8, 11.3],
-                "log_sfr_100myr": [-1.2, -0.7, -0.2],
-                "log_sfr_10myr": [-1.7, -1.2, -0.7],
+                "log_stellar_mass_survived": [10.3, 10.8, 11.3],
+                "log_stellar_mass_formed": [10.4, 10.9, 11.4],
+                "log_sfr_100myr": [-1.3, -0.8, -0.3],
+                "log_sfr_10myr": [-1.8, -1.3, -0.8],
             },
         }
     )
-
-    # Adjust weights to sum to 1
-    models = summary["galaxies"]["100001"]["sets"]["named_grid"]["models"]
-    total = sum(m["weight"] for m in models if m.get("valid"))
-    for model in models:
-        if model.get("valid") and model["weight"]:
-            model["weight"] /= total
 
     summary_path = tmp_path / "bma_summary.json"
     summary_path.write_text(json.dumps(summary))
 
     out_pdf = tmp_path / "fig11_bma.pdf"
+    data_out = tmp_path / "data.json"
 
-    result = _run_fig11(summary_path, out_pdf)
+    result = _run_fig11(summary_path, out_pdf, data_out=data_out)
 
     assert result.returncode == 0
+    # VI should not be in the drawn models (it was filtered)
+    with open(data_out) as f:
+        sidecar = json.load(f)
+    assert "VI" not in sidecar["models_drawn"]
+    # Note should be in stderr
+    assert "Configuration VI" in result.stderr
 
 
 def test_xlike_models_included_in_named_all(tmp_path):
