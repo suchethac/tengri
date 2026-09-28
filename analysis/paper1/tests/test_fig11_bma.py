@@ -382,6 +382,157 @@ def test_xlike_models_included_in_named_all(tmp_path):
     assert "cigale_like" in sidecar["models_drawn"]
 
 
+def _add_factorial_set(summary: dict, gal_id_str: str, marginal: dict) -> None:
+    """Attach a minimal "factorial" weight set with the given marginal to one galaxy."""
+    summary["galaxies"][gal_id_str]["sets"]["factorial"] = {
+        "models": [],
+        "max_weight": None,
+        "close": False,
+        "n_valid": 0,
+        "n_expected": 100,
+        "bma_percentiles": {},
+        "marginal": marginal,
+    }
+
+
+def test_factorial_marginal_panel_draws_and_records_weight_and_prior(tmp_path):
+    """Panel (b2) draws, and the sidecar records weight and prior per axis value."""
+    summary = _build_minimal_summary(tmp_path)
+    _add_factorial_set(
+        summary,
+        "100001",
+        {
+            "sfh": {
+                "continuity": {"weight": 0.7, "prior": 0.25},
+                "dirichlet": {"weight": 0.3, "prior": 0.75},
+            }
+        },
+    )
+
+    summary_path = tmp_path / "bma_summary.json"
+    summary_path.write_text(json.dumps(summary))
+
+    out_pdf = tmp_path / "fig11_bma.pdf"
+    data_out = tmp_path / "data.json"
+
+    result = _run_fig11(summary_path, out_pdf, data_out=data_out)
+
+    assert result.returncode == 0, (
+        f"fig11 failed to draw the factorial marginal panel.\nstderr:\n{result.stderr}"
+    )
+    assert out_pdf.exists()
+
+    with open(data_out) as f:
+        sidecar = json.load(f)
+
+    assert "factorial_marginals" in sidecar
+    sfh = sidecar["factorial_marginals"]["sfh"]
+    assert sfh["continuity"]["prior"] == pytest.approx(0.25)
+    assert sfh["continuity"]["weight"]["100001"] == pytest.approx(0.7)
+    assert sfh["dirichlet"]["prior"] == pytest.approx(0.75)
+    assert sfh["dirichlet"]["weight"]["100001"] == pytest.approx(0.3)
+
+
+def test_factorial_marginal_ratio_uses_prior(tmp_path):
+    """log2(weight / prior) actually depends on the prior, not just the weight.
+
+    Two axis values carry the same weight (0.5) but different priors: the recorded
+    log2_ratio must differ between them. A third value carries no prior at all, and
+    must fall back to the documented flat-prior design constant (0.25 for a 4-value
+    attenuation axis) rather than being dropped.
+    """
+    summary = _build_minimal_summary(tmp_path)
+    _add_factorial_set(
+        summary,
+        "100001",
+        {
+            "attenuation": {
+                "calzetti": {"weight": 0.5, "prior": 0.25},  # ratio 2 -> log2 = 1.0
+                "smc": {"weight": 0.5, "prior": 0.5},  # ratio 1 -> log2 = 0.0
+                "kriek_conroy_2c": 0.5,  # bare weight, no prior -> falls back to 0.25
+            }
+        },
+    )
+
+    summary_path = tmp_path / "bma_summary.json"
+    summary_path.write_text(json.dumps(summary))
+
+    out_pdf = tmp_path / "fig11_bma.pdf"
+    data_out = tmp_path / "data.json"
+
+    result = _run_fig11(summary_path, out_pdf, data_out=data_out)
+    assert result.returncode == 0, f"stderr:\n{result.stderr}"
+
+    with open(data_out) as f:
+        sidecar = json.load(f)
+
+    attenuation = sidecar["factorial_marginals"]["attenuation"]
+    assert attenuation["calzetti"]["log2_ratio"]["100001"] == pytest.approx(1.0, abs=1e-9)
+    assert attenuation["smc"]["log2_ratio"]["100001"] == pytest.approx(0.0, abs=1e-9)
+    # Same weight (0.5) as "smc" but a different prior must give a different ratio.
+    assert (
+        attenuation["calzetti"]["log2_ratio"]["100001"]
+        != attenuation["smc"]["log2_ratio"]["100001"]
+    )
+    # No prior supplied for kriek_conroy_2c -> falls back to the flat-prior design constant.
+    assert attenuation["kriek_conroy_2c"]["prior"] == pytest.approx(0.25)
+    assert attenuation["kriek_conroy_2c"]["log2_ratio"]["100001"] == pytest.approx(1.0, abs=1e-9)
+
+
+def test_galaxy_missing_factorial_set_does_not_crash(tmp_path):
+    """A galaxy with no "factorial" weight set is drawn as a hatched column, not a crash."""
+    summary = _build_minimal_summary(tmp_path)
+    _add_factorial_set(summary, "100001", {"sfh": {"continuity": {"weight": 1.0, "prior": 0.2}}})
+
+    # Second galaxy has only named_grid, no "factorial" key at all.
+    summary["galaxies"]["100002"] = {
+        "z": 0.6,
+        "sets": {
+            "named_grid": {
+                "models": [
+                    {
+                        "model_key": "I",
+                        "config": "I",
+                        "components": {},
+                        "log_evidence": -1235.0,
+                        "weight": 1.0,
+                        "valid": True,
+                        "excluded_reason": None,
+                        "nuts_adoption_pass": True,
+                        "percentiles": {
+                            "log_stellar_mass_survived": [10.1, 10.6, 11.1],
+                            "log_stellar_mass_formed": [10.2, 10.7, 11.2],
+                            "log_sfr_100myr": [-1.1, -0.6, -0.1],
+                            "log_sfr_10myr": [-1.6, -1.1, -0.6],
+                        },
+                    }
+                ],
+                "max_weight": 1.0,
+                "close": False,
+                "n_valid": 1,
+            }
+        },
+    }
+
+    summary_path = tmp_path / "bma_summary.json"
+    summary_path.write_text(json.dumps(summary))
+
+    out_pdf = tmp_path / "fig11_bma.pdf"
+    data_out = tmp_path / "data.json"
+
+    result = _run_fig11(summary_path, out_pdf, data_out=data_out)
+
+    assert result.returncode == 0, (
+        f"fig11 crashed on a galaxy missing the factorial set.\nstderr:\n{result.stderr}"
+    )
+    assert out_pdf.exists()
+
+    with open(data_out) as f:
+        sidecar = json.load(f)
+
+    assert sidecar["factorial_marginals"]["galaxies_missing_factorial"] == [100002]
+
+
 def test_multiple_galaxies_draws_all(tmp_path):
     """Multiple galaxies in summary → all listed in sidecar."""
     summary = _build_minimal_summary(tmp_path)
