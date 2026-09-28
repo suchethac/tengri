@@ -20,6 +20,7 @@ from typing import NamedTuple
 import jax.numpy as jnp
 
 from tengri._completion import curated_dir
+from tengri._x64_hold import hold_x64_preference
 from tengri.utils.physics_constants import MPC_CM
 
 
@@ -108,11 +109,13 @@ def __getattr__(name: str):
         If the name is not PLANCK15 or WMAP5.
     """
     if name == "PLANCK15":
-        from dsps.cosmology import PLANCK15 as _dsps_planck15
+        with hold_x64_preference():
+            from dsps.cosmology import PLANCK15 as _dsps_planck15
 
         return CosmoParams(*_dsps_planck15)
     if name == "WMAP5":
-        from dsps.cosmology import WMAP5 as _dsps_wmap5
+        with hold_x64_preference():
+            from dsps.cosmology import WMAP5 as _dsps_wmap5
 
         return CosmoParams(*_dsps_wmap5)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -293,7 +296,8 @@ def luminosity_distance(
     float
         Luminosity distance in cm. At z=0, returns 10 pc (3.086e19 cm).
     """
-    from dsps.cosmology.flat_wcdm import luminosity_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import luminosity_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     dl_mpc = luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -327,7 +331,8 @@ def luminosity_distance_mpc(
     float
         Luminosity distance in Mpc.
     """
-    from dsps.cosmology.flat_wcdm import luminosity_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import luminosity_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     return luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -358,7 +363,8 @@ def comoving_distance(
     float
         Comoving distance in cm.
     """
-    from dsps.cosmology.flat_wcdm import comoving_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import comoving_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     dc_mpc = comoving_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -390,7 +396,8 @@ def comoving_distance_mpc(
     float
         Comoving distance in Mpc.
     """
-    from dsps.cosmology.flat_wcdm import comoving_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import comoving_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     return comoving_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -421,7 +428,8 @@ def angular_diameter_distance(
     float
         Angular diameter distance in cm.
     """
-    from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -453,7 +461,8 @@ def angular_diameter_distance_mpc(
     float
         Angular diameter distance in Mpc.
     """
-    from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     return angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -487,7 +496,8 @@ def distance_modulus(
     float
         Distance modulus in magnitudes.
     """
-    from dsps.cosmology.flat_wcdm import distance_modulus_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import distance_modulus_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     return distance_modulus_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -521,7 +531,8 @@ def lookback_time(
     float
         Lookback time in Gyr.
     """
-    from dsps.cosmology.flat_wcdm import lookback_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import lookback_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     return lookback_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -553,7 +564,8 @@ def age_at_z(
         Age of universe in Gyr. Returns scalar if input is scalar, array if
         input is array.
     """
-    from dsps.cosmology.flat_wcdm import age_at_z as _dsps_age_at_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import age_at_z as _dsps_age_at_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     # DSPS age_at_z always returns array (minimum shape (1,))
@@ -649,7 +661,8 @@ def age_at_z0(
     float
         Age of universe in Gyr.
     """
-    from dsps.cosmology.flat_wcdm import age_at_z0 as _dsps_age_at_z0
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import age_at_z0 as _dsps_age_at_z0
 
     c = _cosmo_from_args(h0, om0, cosmo)
     return _dsps_age_at_z0(c.Om0, c.w0, c.wa, c.h)
@@ -683,7 +696,8 @@ def comoving_volume_element(
     float or array
         Comoving volume element in Mpc³/sr. Returns scalar if input is scalar.
     """
-    from dsps.cosmology.flat_wcdm import differential_comoving_volume
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import differential_comoving_volume
 
     c = _cosmo_from_args(h0, om0, cosmo)
     # differential_comoving_volume requires array input; ensure z is array
@@ -721,7 +735,8 @@ def arcsec_per_kpc(
     float
         Angular scale in arcsec/kpc.
     """
-    from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -756,7 +771,8 @@ def kpc_per_arcsec(
     float
         Physical scale in kpc/arcsec.
     """
-    from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
     da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
@@ -801,7 +817,8 @@ def z_at_cosmic_time(
         Redshift corresponding to the given cosmic time. Returns z_max
         for t < age(z_max), and 0 for t >= age(0).
     """
-    from dsps.cosmology.flat_wcdm import age_at_z as _dsps_age_at_z
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import age_at_z as _dsps_age_at_z
 
     c = _cosmo_from_args(h0, om0, cosmo)
 
@@ -851,7 +868,8 @@ def z_at_lookback_time(
         Redshift corresponding to the given lookback time. Returns 0
         for t_lookback=0, z_max for t_lookback >= lookback(z_max).
     """
-    from dsps.cosmology.flat_wcdm import age_at_z, age_at_z0
+    with hold_x64_preference():
+        from dsps.cosmology.flat_wcdm import age_at_z, age_at_z0
 
     c = _cosmo_from_args(h0, om0, cosmo)
 
