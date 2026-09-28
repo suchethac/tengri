@@ -377,7 +377,7 @@ class TestRegistryBinEdges:
     def test_custom_edges_passed_through(self):
         from tengri.components.stellar.sfh.registry import resolve_sfh
 
-        edges = make_agebins_from_zred(2.0, n_bins=6)
+        edges = make_agebins_from_zred(2.0, n_bins=7)
         fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=edges)
         age_yr = jnp.linspace(1e6, 3.3e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
@@ -397,7 +397,7 @@ class TestRegistryBinEdges:
     def test_dirichlet_custom_edges(self):
         from tengri.components.stellar.sfh.registry import resolve_sfh
 
-        edges = make_agebins_from_zred(3.0, n_bins=6)
+        edges = make_agebins_from_zred(3.0, n_bins=7)
         fn, _, param_map, _ = resolve_sfh("dirichlet", bin_edges_gyr=edges)
         age_yr = jnp.linspace(1e6, 2.0e9, 100)
         # param_map: {public_name: (internal_name, scale, offset)}
