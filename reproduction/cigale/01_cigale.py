@@ -659,8 +659,7 @@ save_fig("cigale_02_sfh2exp.png")
 # rotational velocity — same parameters, in Gyr, as `sfh.delayed_bq`,
 # `sfh.periodic`, `sfh.buat08`. Seven cases: τ_main=2, age_main=8,
 # age_bq=0.5 Gyr, r_sfr ∈ {0.1, 5}; burst_type ∈ {0, 1, 2} at δ=1, τ=0.2,
-# age=8 Gyr; velocity ∈ {150, 250} km/s at age=8 Gyr. `buat08` normalizes
-# over tengri's full age (13.8 Gyr), not CIGALE's 8 Gyr window. Worst case:
+# age=8 Gyr; velocity ∈ {150, 250} km/s at age=8 Gyr. Worst case:
 # periodic rectangular, 100% of peak SFR — the on/off edges land at
 # different lookback times. Tabulated histories enter tengri via
 # `Catalog.from_histories`, so `sfhfromfile` is not compared.
@@ -739,6 +738,7 @@ for _v in (150, 250):
         sfh={
             "type": "buat08",
             "velocity_km_s": Fixed(float(_v)),
+            "age_gyr": Fixed(_AGE_2C_GYR),
             "log_total_mass": Fixed(0.0),
             "all_params": Fixed(DEFAULT),
         },

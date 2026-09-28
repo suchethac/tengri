@@ -364,19 +364,21 @@ class TestBuat08:
     def test_nonnegative(self):
         """SFR is non-negative everywhere."""
         t = jnp.logspace(7, 10, 200)
+        age = 8e9
         for v in [80.0, 150.0, 220.0, 290.0, 360.0]:
-            sfr = buat08(t, log_total_mass=10.0, velocity_km_s=v)
+            sfr = buat08(t, log_total_mass=10.0, velocity_km_s=v, age_yr=age)
             assert_non_negative(sfr, name="sfr")
 
     def test_velocity_clipping(self):
         """Velocities outside [40, 360] are clipped."""
         t = jnp.logspace(7, 9, 50)
-        sfr_clipped_lo = buat08(t, log_total_mass=10.0, velocity_km_s=20.0)
-        sfr_at_40 = buat08(t, log_total_mass=10.0, velocity_km_s=40.0)
+        age = 8e9
+        sfr_clipped_lo = buat08(t, log_total_mass=10.0, velocity_km_s=20.0, age_yr=age)
+        sfr_at_40 = buat08(t, log_total_mass=10.0, velocity_km_s=40.0, age_yr=age)
         assert_allclose(sfr_clipped_lo, sfr_at_40, rtol=1e-10)
 
-        sfr_clipped_hi = buat08(t, log_total_mass=10.0, velocity_km_s=400.0)
-        sfr_at_360 = buat08(t, log_total_mass=10.0, velocity_km_s=360.0)
+        sfr_clipped_hi = buat08(t, log_total_mass=10.0, velocity_km_s=400.0, age_yr=age)
+        sfr_at_360 = buat08(t, log_total_mass=10.0, velocity_km_s=360.0, age_yr=age)
         assert_allclose(sfr_clipped_hi, sfr_at_360, rtol=1e-10)
 
     def test_interpolation_at_table_values(self):
@@ -387,13 +389,14 @@ class TestBuat08:
         """
         t_gyr = jnp.array([0.001, 0.01, 0.1, 1.0, 5.0, 10.0])
         t_yr = t_gyr * 1e9
+        age = 8e9
         velocities_ref = jnp.array([80.0, 150.0, 220.0, 290.0, 360.0])
         as_ref = jnp.array([6.62, 8.74, 10.01, 10.82, 11.35])
         bs_ref = jnp.array([0.41, 0.98, 1.25, 1.36, 1.37])
         cs_ref = jnp.array([0.36, -0.20, -0.55, -0.74, -0.85])
 
         for i, v in enumerate(velocities_ref):
-            sfr = buat08(t_yr, 10.0, float(v))
+            sfr = buat08(t_yr, 10.0, float(v), age_yr=age)
             a = as_ref[i]
             b = bs_ref[i]
             c = cs_ref[i]
@@ -406,24 +409,27 @@ class TestBuat08:
     def test_velocity_dependence(self):
         """SFR varies with velocity (monotonically at early times)."""
         t = jnp.logspace(7, 8.5, 100)
-        sfr_80 = buat08(t, log_total_mass=10.0, velocity_km_s=80.0)
-        sfr_220 = buat08(t, log_total_mass=10.0, velocity_km_s=220.0)
-        sfr_360 = buat08(t, log_total_mass=10.0, velocity_km_s=360.0)
+        age = 8e9
+        sfr_80 = buat08(t, log_total_mass=10.0, velocity_km_s=80.0, age_yr=age)
+        sfr_220 = buat08(t, log_total_mass=10.0, velocity_km_s=220.0, age_yr=age)
+        sfr_360 = buat08(t, log_total_mass=10.0, velocity_km_s=360.0, age_yr=age)
         assert not jnp.allclose(sfr_80, sfr_220)
         assert not jnp.allclose(sfr_220, sfr_360)
 
     def test_is_jittable(self):
         """buat08 is JIT-compatible."""
         t = jnp.logspace(7, 10, 100)
-        sfr = assert_jit_matches_eager(buat08, t, 10.0, 220.0)
+        age = 8e9
+        sfr = assert_jit_matches_eager(buat08, t, 10.0, 220.0, age)
         chex.assert_shape(sfr, (100,))
 
     def test_has_gradients(self):
         """Gradient w.r.t. velocity_km_s via jax.grad."""
         t = jnp.logspace(7, 10, 100)
+        age = 8e9
 
         def f_v(v):
-            return jnp.sum(buat08(t, log_total_mass=10.0, velocity_km_s=v))
+            return jnp.sum(buat08(t, log_total_mass=10.0, velocity_km_s=v, age_yr=age))
 
         g_auto = float(jax.grad(f_v)(220.0))
         assert jnp.isfinite(g_auto)
@@ -435,7 +441,8 @@ class TestBuat08:
     def test_energy_conservation(self):
         """Integrated mass is positive and finite."""
         t = jnp.logspace(6, 10.15, 1000)
-        sfr = buat08(t, log_total_mass=10.0, velocity_km_s=220.0)
+        age = 8e9
+        sfr = buat08(t, log_total_mass=10.0, velocity_km_s=220.0, age_yr=age)
         dt = jnp.gradient(t)
         total_mass = jnp.sum(sfr * dt)
         assert float(total_mass) > 0
@@ -449,16 +456,21 @@ class TestBuat08:
         self.sfr = 10.**(a + b * np.log10(t) + c * t**.5 - 9)
 
         Test at velocity=220, with a=10.01, b=1.25, c=-0.55.
+        In tengri's cosmic-time-since-formation convention, T ranges from 1 to
+        1000 Myr. With age=8 Gyr, t_lookback = age - T.
 
         After 2026-05-25 normalization refactor, compare *shapes* only—
         absolute scale is set by log_total_mass externally.
         """
         a, b, c = 10.01, 1.25, -0.55
+        age = 8e9
         time_myr = jnp.arange(1, 1001)
         time_yr = time_myr * 1e6
+        # T in cosmic time; t_lookback = age - T
+        t_lookback = age - time_yr
         time_gyr = time_yr / 1e9
 
-        sfr = buat08(time_yr, 10.0, 220.0)
+        sfr = buat08(t_lookback, 10.0, 220.0, age_yr=age)
 
         expected = 10.0 ** (a + b * jnp.log10(time_gyr) + c * jnp.sqrt(time_gyr) - 9.0)
 
