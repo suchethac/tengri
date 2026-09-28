@@ -356,31 +356,33 @@ def _linearity_max_deviation(
                     phys[name] = sample[name]
             # spec.sample() already includes sfh_field_xi for stochastic specs.
 
-        # Fixed parameters always included.
-        for name, val in spec.get_fixed_values().items():
+        # Fixed parameters always included. Use the Fitter's own resolved fixed
+        # values, which include params_override (e.g., runtime redshift), so the
+        # probe evaluates the fit being run, not the model as built.
+        for name, val in fitter._fixed_values.items():
             if name != mass_name:
                 phys[name] = jnp.asarray(val)
 
         # Evaluate the two masses and compute the deviation at this theta.
-        try:
-            pred_a = _predict_full_vector(
-                fitter.model,
-                fitter.data_type,
-                {**phys, mass_name: jnp.asarray(ell_a)},
-                use_components=use_components,
-                line_flux_block=probe_block,
-            )
-            pred_b = _predict_full_vector(
-                fitter.model,
-                fitter.data_type,
-                {**phys, mass_name: jnp.asarray(ell_b)},
-                use_components=use_components,
-                line_flux_block=probe_block,
-            )
-        except Exception as exc:
-            if first_error is None:
-                first_error = exc
-            continue
+        # Model-evaluation errors (KeyError, ValueError, etc.) indicate
+        # configuration or setup issues, not legitimate prior draws, so they
+        # propagate rather than being silently logged. The numeric-invalidity
+        # path below (NaN, Inf, zeros) is the legitimate case of a valid draw
+        # that produces a prediction the linearity test cannot evaluate.
+        pred_a = _predict_full_vector(
+            fitter.model,
+            fitter.data_type,
+            {**phys, mass_name: jnp.asarray(ell_a)},
+            use_components=use_components,
+            line_flux_block=probe_block,
+        )
+        pred_b = _predict_full_vector(
+            fitter.model,
+            fitter.data_type,
+            {**phys, mass_name: jnp.asarray(ell_b)},
+            use_components=use_components,
+            line_flux_block=probe_block,
+        )
 
         # Restrict comparison to valid bands (finite and strictly positive).
         valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
@@ -922,7 +924,6 @@ PROFILE_MASS_BACKENDS = frozenset(
         #                    ``_get_flat_logdensity`` at ``vi/gaussian.py:285``.
         #                    These are the BlackJAX Gaussian VI backends and are
         #                    NOT what the NIFTy/native exclusion above refers to.
-        "nss",
         "mcmc_raytrace",
         "mcmc_ess",
         "pathfinder",

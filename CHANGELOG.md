@@ -42,7 +42,9 @@
   when the model carries one. An audit of every registered SFH found
   `dense_basis` is the only one that leaks the mass into its shape: the other
   20 measurable ones sit at 9e-15 to 1.3e-14, the roundoff floor, via
-  `mean_sfh._renormalize_to_mass`.
+  `mean_sfh._renormalize_to_mass`. The linearity probe now evaluates at the
+  fit's own fixed values (including a `params_override` redshift) and lets
+  model-evaluation errors propagate instead of logging them as invalid thetas.
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls
