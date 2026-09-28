@@ -249,12 +249,16 @@ def dust_parameter_name(config_key: str) -> str:
     """
     try:
         return CONFIGS[config_key]["dust_param"]
-    except KeyError as exc:  # pragma: no cover - configuration wiring error
-        raise KeyError(
-            f"No dust_param declared for configuration {config_key!r}. "
-            f"Every row of configs.CONFIGS must name the free parameter carrying "
-            f"its dust optical depth; known rows: {sorted(CONFIGS)}."
-        ) from exc
+    except KeyError:
+        try:
+            return XLIKE_CONFIGS[config_key]["dust_param"]
+        except KeyError as exc:  # pragma: no cover - configuration wiring error
+            all_keys = sorted(list(CONFIGS.keys()) + list(XLIKE_CONFIGS.keys()))
+            raise KeyError(
+                f"No dust_param declared for configuration {config_key!r}. "
+                f"Every row of CONFIGS and XLIKE_CONFIGS must name the free parameter carrying "
+                f"its dust optical depth; known rows: {all_keys}."
+            ) from exc
 
 
 def code_revision() -> str | None:
