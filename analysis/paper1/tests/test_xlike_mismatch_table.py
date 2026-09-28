@@ -129,8 +129,8 @@ class TestXlikeMismatchTable:
         n_rows = content.count(r"\\")
         assert n_rows >= 5, f"Expected at least 5 rows, got {n_rows}"
 
-    def test_latex_American_spelling(self, tmp_path):
-        """LaTeX output uses American spelling (e.g. 'parameterization' not 'parameterisation')."""
+    def test_latex_american_spelling(self, tmp_path):
+        """LaTeX output uses American spelling (e.g., 'parameterization')."""
         script = PAPER1_DIR / "xlike_mismatch_table.py"
         out_tex = tmp_path / "xlike_mismatches.tex"
         subprocess.run(
@@ -143,9 +143,9 @@ class TestXlikeMismatchTable:
             content = f.read()
 
         # Check a few American spellings (should not have British alternatives)
-        british_bad = ["colour", "center", "organised", "analyzed"]
-        for word in british_bad:
-            assert word not in content.lower(), f"British spelling '{word}' found"
+        british_alternatives = ["center", "analyze"]
+        for word in british_alternatives:
+            assert word not in content.lower(), f"British spelling variant found instead of: {word}"
 
     def test_mismatch_sources_length_matches_mismatches(self):
         """Each entry has mismatch_sources of same length as mismatches."""

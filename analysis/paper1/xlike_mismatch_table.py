@@ -110,7 +110,7 @@ def print_summary() -> None:
         if n_mismatches > 2:
             print(f"  ... {n_mismatches - 2} more")
         if "notes" in cfg:
-            print(f"  Notes:")
+            print("  Notes:")
             notes = cfg.get("notes", [])
             notes_sources = cfg.get("notes_sources", [])
             for i, note in enumerate(notes):
