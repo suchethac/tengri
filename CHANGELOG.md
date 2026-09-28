@@ -13,6 +13,13 @@
   `z_frac_*` keywords naming the accepted range instead of ignoring them
   (#2479, #2503).
 
+- The eline fitted-mode test mocks now attach `Spectroscopy` through
+  `observation.spectroscopy` instead of the private `_spectroscopy_config` that #2455
+  stopped reading. The loss builder's channel-scale probe drew its reference
+  parameter point from `spec.sample()` (free-only per #2296) that lacked Fitter-registered
+  eline amplitudes, raising `KeyError` in fitted mode; it now samples the fitter's
+  working spec and merges the fixed values (#2502).
+
 - Lazy DSPS imports (deferred to function-local scope via #2276) now hold the x64 preference where the caller left it. DSPS modules run `jax.config.update("jax_enable_x64", True)` at import time, and lazy imports that execute after the user has set `JAX_ENABLE_X64=0` would silently flip x64 back on mid-run, inflating float32 dtypes to float64. Every lazy DSPS import now runs under `hold_x64_preference()`, a shared context manager that snapshots the current `jax.config.jax_enable_x64` flag at entry and restores it on exit, preserving the caller's preference regardless of whether it was set via environment variable or `jax.config.update()` call. All 10 function-local DSPS imports across `utils/cosmology.py`, `components/stellar/component.py`, `components/stellar/sps/dsps_wrapper.py`, and `observation/filters/custom.py` are wrapped (#2504).
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
   (previously silently skipped there, so intrinsic galaxy velocity dispersion had

@@ -413,21 +413,16 @@ def _build_data_neg_log_likelihood_fn(fitter):
             _check_channel_scales,
         )
 
-        # Sample from ``model.spec`` when it exists, not the (possibly
-        # ``profile_mass``-rewritten) ``spec`` above: when profile_mass has
-        # engaged, ``spec`` is the working spec with the mass parameter
-        # turned ``Fixed`` for the analytic marginalization, so
-        # ``spec.sample()``'s now free-only output (#2296) omits it -- but
-        # the prediction below runs through ``model.predict_photometry``/etc.,
-        # which validate against the ORIGINAL ``model.spec`` (mass still free
-        # there) and raise ``MissingParameterError``. ``_build_prediction``
-        # re-filters to ``model.spec.free_params`` regardless, so drawing the
-        # reference from ``model.spec`` (a superset whenever the two specs
-        # differ) is always safe and never under-supplies either one.
-        # ``getattr`` falls back to ``spec`` (``fitter.spec``) for a bare
-        # test double that mocks the Fitter interface without a ``.spec`` on
-        # its ``model`` (e.g. ``tests/contract/test_unified_loss.py``).
-        _ref_params = dict(getattr(model, "spec", spec).sample(_jax.random.PRNGKey(0)))
+        # The fitter's working spec carries every registered latent: ``merge_observation_params``
+        # merges eline amplitudes and noise calibration into the spec that
+        # ``model.spec`` lacks. ``spec.sample()`` returns free parameters only (#2296),
+        # so fixed values are merged in from ``fitter._fixed_values`` (always present:
+        # assigned at Fitter.__init__ and reassigned at mass_profile.py:705 when
+        # profile_mass engages). The reference point spans fitter's full parameter space
+        # (free + fixed) so the likelihood can read every name without KeyError.
+        # ``_build_prediction`` then filters to ``model.spec.free_params`` for validation.
+        _ref_params = dict(spec.sample(_jax.random.PRNGKey(0)))
+        _ref_params.update(fitter._fixed_values)
         _ref_prediction, _, _, _ = _build_prediction(
             model,
             _ref_params,
