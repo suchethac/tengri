@@ -251,17 +251,21 @@ def _load_xlike_builders() -> dict[str, callable]:
     if not xlike_module_path.is_file():
         return {}
 
-    spec = importlib.util.spec_from_file_location("xlike_configs", xlike_module_path)
-    if spec is None or spec.loader is None:
+    try:
+        spec = importlib.util.spec_from_file_location("xlike_configs", xlike_module_path)
+        if spec is None or spec.loader is None:
+            return {}
+
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        builders = {}
+        if hasattr(module, "XLIKE_BUILDERS"):
+            builders.update(module.XLIKE_BUILDERS)
+        return builders
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        # xlike_configs may have unresolvable relative imports or missing deps
         return {}
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    builders = {}
-    if hasattr(module, "XLIKE_BUILDERS"):
-        builders.update(module.XLIKE_BUILDERS)
-    return builders
 
 
 def enumerate_named_all() -> list[dict[str, str]]:
