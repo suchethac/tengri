@@ -125,12 +125,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--out-json",
         type=Path,
-        help="Write JSON summary to this file",
+        default=Path("results/xlike_mismatch_table.json"),
+        help="Write JSON summary to this file (default: results/xlike_mismatch_table.json)",
     )
     parser.add_argument(
         "--out-tex",
         type=Path,
-        help="Write LaTeX table to this file",
+        default=Path("tables/xlike_mismatch_table.tex"),
+        help="Write LaTeX table to this file (default: tables/xlike_mismatch_table.tex)",
     )
     args = parser.parse_args()
 

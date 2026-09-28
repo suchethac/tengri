@@ -57,7 +57,7 @@ if n_cells == 0:
 
 # %%
 status = {}
-MISMATCH_JSON = RESULTS / "xlike_mismatches.json"
+MISMATCH_JSON = RESULTS / "xlike_mismatch_table.json"
 if MISMATCH_JSON.is_file():
     with open(MISMATCH_JSON) as f:
         mismatch_data = json.load(f)
@@ -75,7 +75,7 @@ if MISMATCH_JSON.is_file():
 else:
     status["xlike_mismatch_table"] = run_figure(
         "xlike_mismatch_table",
-        ["--out-json", str(RESULTS / "xlike_mismatches.json")],
+        ["--out-json", str(RESULTS / "xlike_mismatch_table.json")],
     )
 
 # %% [markdown]
@@ -122,8 +122,7 @@ if data_file.is_file():
         fig_data = json.load(f)
     print("\nPer-code statistics from fig10:\n")
     hdr = (
-        f"{'Code':<20} {'M* offset':>12} {'M* scatter':>12} "
-        f"{'SFR offset':>12} {'SFR scatter':>12}"
+        f"{'Code':<20} {'M* offset':>12} {'M* scatter':>12} {'SFR offset':>12} {'SFR scatter':>12}"
     )
     print(hdr)
     print("-" * 68)
@@ -135,20 +134,10 @@ if data_file.is_file():
             m_scatters = [m.get("scatter_mstar", 0) for m in code_meas]
             sfr_offsets = [m.get("offset_sfr100", 0) for m in code_meas]
             sfr_scatters = [m.get("scatter_sfr100", 0) for m in code_meas]
-            m_off_med = (
-                sorted(m_offsets)[len(m_offsets) // 2] if m_offsets else 0
-            )
-            m_scat_med = (
-                sorted(m_scatters)[len(m_scatters) // 2] if m_scatters else 0
-            )
-            sfr_off_med = (
-                sorted(sfr_offsets)[len(sfr_offsets) // 2] if sfr_offsets else 0
-            )
-            sfr_scat_med = (
-                sorted(sfr_scatters)[len(sfr_scatters) // 2]
-                if sfr_scatters
-                else 0
-            )
+            m_off_med = sorted(m_offsets)[len(m_offsets) // 2] if m_offsets else 0
+            m_scat_med = sorted(m_scatters)[len(m_scatters) // 2] if m_scatters else 0
+            sfr_off_med = sorted(sfr_offsets)[len(sfr_offsets) // 2] if sfr_offsets else 0
+            sfr_scat_med = sorted(sfr_scatters)[len(sfr_scatters) // 2] if sfr_scatters else 0
             row = (
                 f"{code:<20} {m_off_med:12.3f} {m_scat_med:12.3f} "
                 f"{sfr_off_med:12.3f} {sfr_scat_med:12.3f}"

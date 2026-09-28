@@ -203,6 +203,8 @@ def test_missing_surviving_mass_json_exits_with_command(tmp_path: Path) -> None:
             str(surviving_json),
             "--out",
             str(tmp_path / "fig10.pdf"),
+            "--data-out",
+            str(tmp_path / "fig10_data.json"),
         ],
         capture_output=True,
         text=True,
@@ -381,6 +383,7 @@ def test_prospector_uses_formed_mass_others_use_surviving(tmp_path: Path) -> Non
         )
     )
 
+    data_out_path = tmp_path / "fig10_data.json"
     result = subprocess.run(
         [
             sys.executable,
@@ -396,7 +399,7 @@ def test_prospector_uses_formed_mass_others_use_surviving(tmp_path: Path) -> Non
             "--out",
             str(tmp_path / "fig10.pdf"),
             "--data-out",
-            str(tmp_path / "fig10_data.json"),
+            str(data_out_path),
         ],
         capture_output=True,
         text=True,
@@ -406,7 +409,7 @@ def test_prospector_uses_formed_mass_others_use_surviving(tmp_path: Path) -> Non
     assert result.returncode == 0
 
     # Verify sidecar shows expected offsets
-    sidecar = json.loads((tmp_path / "fig10_data.json").read_text())
+    sidecar = json.loads(data_out_path.read_text())
 
     # Prospector should have offset ~0 (formed 10.5 vs published 10.5)
     pro_offset = sidecar["codes"]["Prospector"]["mass_median_offset"]
@@ -485,6 +488,8 @@ def test_code_markers_present(tmp_path: Path) -> None:
             str(surviving_json),
             "--out",
             str(tmp_path / "fig10.pdf"),
+            "--data-out",
+            str(tmp_path / "fig10_data.json"),
         ],
         capture_output=True,
         text=True,
