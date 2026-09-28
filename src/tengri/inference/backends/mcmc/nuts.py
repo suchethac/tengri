@@ -218,8 +218,26 @@ def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int, spec=
 #: Largest sampled dimension at which a dense mass matrix is actually allocated.
 #:
 #: Above this the dense request is refused and the fit falls back to a diagonal
-#: metric, because the mass matrix alone is O(D^2) and warmup has been measured
-#: at 20+ GB on problems well below this size (#319).
+#: metric.
+#:
+#: **The cap is a backstop against the unmeasured, not against the matrix.** It
+#: sat at 30 citing "20+ GB measured on problems well below this size" (#319).
+#: That figure -- 22.78 GB peak -- was measured at D ~ 8 with
+#: ``mean_sfh_type="dense_basis"``, and it is a property of how many per-sample
+#: quantities that SFH publishes rather than of D. The matrix the old comment
+#: named is 36^2 x 8 bytes = 10 kB at D = 36 and 33 kB at D = 64, so it is not
+#: the driver anywhere in this range. The actual driver has its own two
+#: handlers: ``_maybe_warn_high_memory_nuts`` announces it from D >= 8, and the
+#: ``dense_mass_matrix=None`` auto-policy refuses ``dense_basis`` by name.
+#:
+#: Calibrating on D therefore refused a case that had never been measured. The
+#: paper's joint photometry-plus-spectrum mock is D = 36 with a continuity SFH,
+#: and every dense request it made was silently downgraded, which left its
+#: posterior mixing on a diagonal metric against a posterior correlation matrix
+#: conditioned at 464 -- worth a factor of 21 in leapfrog steps per draw.
+#: Measured 2026-09-28 on that mock, 4 chains: peak RSS 4.5 GB while compiling,
+#: 1.6 GB steady. Nothing has been measured above D = 64, so the refusal stands
+#: there rather than being widened on an extrapolation.
 #:
 #: **The fallback is not neutral, and that is why it is announced rather than
 #: applied quietly.** On the D = 74 field posterior a diagonal metric recovers
@@ -228,7 +246,7 @@ def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int, spec=
 #: leaves the geometry worse than it found it. A caller who asked for dense and
 #: silently received diagonal has had the sampler's most important setting
 #: changed underneath them.
-DENSE_MASS_MAX_DIM: int = 30
+DENSE_MASS_MAX_DIM: int = 64
 
 
 def resolve_dense_mass_gate(
@@ -292,8 +310,9 @@ def resolve_dense_mass_gate(
 
     warn_measured(
         f"{method}: dense_mass_matrix=True at D={n_dim} exceeds the "
-        f"D<={DENSE_MASS_MAX_DIM} cap (the mass matrix alone is O(D^2), and "
-        f"warmup has been measured at 20+ GB well below this size, #319). "
+        f"D<={DENSE_MASS_MAX_DIM} cap, which is a backstop against dimensions "
+        f"nobody has measured rather than a statement about the matrix (that "
+        f"term is tens of kB here). "
         f"Falling back to a DIAGONAL metric. That fallback is not neutral: on "
         f"a D=74 field posterior the diagonal metric was measured recovering "
         f"only a small fraction of the conditioning a full one recovers, "
