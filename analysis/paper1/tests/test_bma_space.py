@@ -210,3 +210,28 @@ def test_enumerate_factorial_has_all_components():
     for i, model in enumerate(models):
         model_keys = set(model.keys())
         assert required_keys <= model_keys, f"Model {i} missing keys: {required_keys - model_keys}"
+
+
+def test_xlike_import_error_raises():
+    """Broken xlike_configs import raises, doesn't silently return empty dict.
+
+    Tests issue: xlike imports must raise on error, not swallow silently.
+    """
+    from paper1.bma_space import _load_xlike_builders
+    from pathlib import Path
+    from unittest.mock import patch
+
+    # Monkeypatch xlike_configs.py to simulate import failure
+    here = PAPER1
+    xlike_path = here / "xlike_configs.py"
+
+    # Only test if xlike_configs exists (optional module)
+    if not xlike_path.is_file():
+        pytest.skip("xlike_configs.py not present")
+
+    # Monkeypatch sys.modules to make xlike_configs import fail
+    import sys
+
+    with patch.dict(sys.modules, {"xlike_configs": None}):
+        with pytest.raises(ImportError, match="Failed to import xlike_configs"):
+            _load_xlike_builders()

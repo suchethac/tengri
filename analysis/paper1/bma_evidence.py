@@ -52,11 +52,13 @@ from paper1.bma_space import (
 from paper1.candels_io import load_candels_z1, photometry_for_row
 from paper1.config_metadata import SSP_FOR_CONFIG, XLIKE_CONFIGS
 from paper1.configs import CONFIGS, load_ssp_for
+from paper1.fit_one import apply_systematic_error_floor, extract_photometry
 
 logger = logging.getLogger(__name__)
 
 # Reverse map: SSP name -> config key
 _SSP_NAME_TO_CONFIG_KEY = {v: k for k, v in SSP_FOR_CONFIG.items()}
+_SYSTEMATIC_FLOOR_FRAC = 0.05
 
 
 def code_revision() -> str | None:
@@ -91,19 +93,29 @@ def peak_rss_gb() -> float | None:
 
 
 def _load_xlike_builders() -> dict[str, callable]:
-    """Load XLIKE_BUILDERS if xlike_configs module exists."""
+    """Load XLIKE_BUILDERS from xlike_configs module if it exists.
+
+    Raises:
+        ImportError: If xlike_configs.py exists but fails to import (don't swallow).
+    """
     here = ANALYSIS_DIR
     xlike_module_path = here / "xlike_configs.py"
 
     if not xlike_module_path.is_file():
         return {}
 
-    spec = importlib.util.spec_from_file_location("xlike_configs", xlike_module_path)
-    if spec is None or spec.loader is None:
-        return {}
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        # Import as a package module, matching the style used by bma_space for configs
+        import sys
+        sys.path.insert(0, str(here))
+        try:
+            import xlike_configs as module
+        finally:
+            if str(here) in sys.path:
+                sys.path.remove(str(here))
+    except (ImportError, ModuleNotFoundError, AttributeError) as e:
+        # If the file exists but import fails, raise (don't silently drop X-like)
+        raise ImportError(f"Failed to import xlike_configs from {xlike_module_path}: {e}") from e
 
     builders = {}
     if hasattr(module, "XLIKE_BUILDERS"):
@@ -112,16 +124,21 @@ def _load_xlike_builders() -> dict[str, callable]:
 
 
 def _load_ssp_for_xlike(key: str):
-    """Load SSP for an X-like configuration."""
-    xlike_module_path = ANALYSIS_DIR / "xlike_configs.py"
-    spec = importlib.util.spec_from_file_location("xlike_configs", xlike_module_path)
-    if spec is None or spec.loader is None:
-        raise ValueError(f"Cannot load xlike_configs for {key}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    """Load SSP for an X-like configuration via xlike_configs module."""
+    try:
+        import sys
+        sys.path.insert(0, str(ANALYSIS_DIR))
+        try:
+            import xlike_configs as module
+        finally:
+            if str(ANALYSIS_DIR) in sys.path:
+                sys.path.remove(str(ANALYSIS_DIR))
+    except (ImportError, ModuleNotFoundError, AttributeError) as e:
+        raise ImportError(f"Cannot load xlike_configs for {key}: {e}") from e
+
     if hasattr(module, "load_ssp_for_xlike"):
         return module.load_ssp_for_xlike(key)
-    raise ValueError(f"No load_ssp_for_xlike in xlike_configs for {key}")
+    raise AttributeError(f"No load_ssp_for_xlike in xlike_configs for {key}")
 
 
 def get_galaxy_data(galaxy_id: int) -> tuple[float, dict, np.ndarray, np.ndarray]:
@@ -150,21 +167,24 @@ def fit_one_model(
     sigma: np.ndarray,
     n_restarts: int,
     seed: int,
-) -> tuple[dict, str | None]:
+) -> tuple[dict, dict | None]:
     """Fit MAP and Laplace evidence for one model on one galaxy.
 
+    Uses same systematic error floor (5%) and ForwardModel path as fit_one.py.
     Returns:
-        (result_dict, npz_path_or_none) where result_dict has BMA evidence cell fields
-        and npz_path is the path to saved draws (or None on failure).
+        (result_dict, npz_data_dict_or_none) where result_dict has BMA evidence cell fields
+        and npz_data_dict is a dict of numpy arrays or None on failure.
         On error, result_dict has error field set and valid=False.
     """
-    import jax
+    import contextlib
 
-    from tengri import Observation, Photometry
+    import jax
+    from tengri import Data, ForwardModel, Observation, Photometry
 
     jax.config.update("jax_enable_x64", True)
 
     started = time.time()
+    rss_start = peak_rss_gb()
     model_key = model_dict.get("config", make_model_key(model_dict))
     cell_key = f"{galaxy_id}_{model_key}"
 
@@ -173,13 +193,12 @@ def fit_one_model(
         if "config" in model_dict:
             cfg_key = model_dict["config"]
             if cfg_key in XLIKE_CONFIGS:
-                # X-like model
+                # X-like model (will raise if import fails)
                 xlike_builders = _load_xlike_builders()
                 if cfg_key not in xlike_builders:
                     raise ValueError(f"X-like config {cfg_key} not found in xlike_configs")
                 ssp_data = _load_ssp_for_xlike(cfg_key)
                 builder = xlike_builders[cfg_key]
-                # Extract components from the builder's result (will populate in result)
                 components_to_report = {
                     "sfh": "xlike",
                     "ssp": "xlike",
@@ -213,19 +232,24 @@ def fit_one_model(
             builder = None
             components_to_report = model_dict.copy()
 
-        # Create observation (filter list only; fnu/sigma are passed to fit())
+        # Create observation (filter list only; data passed separately)
         photometry = Photometry.from_names(phot_dict["names"])
         obs = Observation(photometry=photometry)
 
         # Build the model
         if builder is None:
-            # Factorial path
             sed_model = build_model(model_dict, ssp_data, obs, z)
         else:
-            # Named or X-like path: call the builder directly
             sed_model = builder(ssp_data, obs, z)
 
         n_free = len(sed_model.spec.free_params)
+
+        # Apply systematic error floor (5%) like fit_one.py does (lines 956-957)
+        sigma_floor = apply_systematic_error_floor(sigma, fnu, floor_frac=_SYSTEMATIC_FLOOR_FRAC)
+
+        # Build data and forward model like fit_one.py does (lines 987, 985)
+        data = Data(photometry=(fnu, sigma_floor))
+        forward = ForwardModel.build(sed=sed_model)
 
         # MAP with n_restarts: run multiple times and track losses
         map_losses = []
@@ -236,14 +260,8 @@ def fit_one_model(
             restart_seed = seed + restart_idx
             try:
                 key = jax.random.PRNGKey(restart_seed)
-                posterior = sed_model.fit(
-                    fnu,
-                    sigma,
-                    method="map",
-                    key=key,
-                    n_restarts=1,
-                    verbose=False,
-                )
+                # Use ForwardModel.fit like fit_one.py (line 1086)
+                posterior = forward.fit(data, key=key, method="map", profile_mass=False)
                 loss = float(posterior.diagnostics.get("final_loss", np.inf))
                 map_losses.append(loss)
                 if loss < best_loss:
@@ -270,6 +288,7 @@ def fit_one_model(
                 "valid": False,
                 "n_map_restarts": len(map_losses),
                 "map_restart_loss_spread": None,
+                "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
                 "wall_time_s": time.time() - started,
                 "peak_rss_gb": peak_rss_gb(),
                 "code_revision": code_revision(),
@@ -284,13 +303,8 @@ def fit_one_model(
         # Laplace evidence from best MAP
         try:
             key = jax.random.PRNGKey(seed + n_restarts)
-            laplace_posterior = sed_model.fit(
-                fnu,
-                sigma,
-                method="laplace",
-                key=key,
-                init_from=best_map_posterior,
-                verbose=False,
+            laplace_posterior = forward.fit(
+                data, key=key, method="laplace", init_from=best_map_posterior, profile_mass=False
             )
         except Exception as e:
             logger.error(f"{cell_key} Laplace failed: {e}")
@@ -310,6 +324,7 @@ def fit_one_model(
                 "valid": False,
                 "n_map_restarts": len(map_losses),
                 "map_restart_loss_spread": map_restart_loss_spread,
+                "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
                 "wall_time_s": time.time() - started,
                 "peak_rss_gb": peak_rss_gb(),
                 "code_revision": code_revision(),
@@ -317,62 +332,66 @@ def fit_one_model(
                 "error": f"Laplace failed: {e}",
             }, None
 
-        # Extract Laplace diagnostics
+        # Extract Laplace diagnostics (null for missing, not default to 0)
         diag = laplace_posterior.diagnostics or {}
         log_evidence = laplace_posterior.log_evidence
-        newton_decrement = float(diag.get("newton_decrement", np.nan))
-        n_clipped_eigenvalues = int(diag.get("n_clipped_eigenvalues", 0))
-        condition_number = float(diag.get("condition_number", np.nan))
+        newton_decrement = diag.get("newton_decrement")
+        n_clipped_eigenvalues = diag.get("n_clipped_eigenvalues")
+        condition_number = diag.get("condition_number")
+
+        # Convert to float/int or None (issue 2: missing -> None, not default)
+        newton_decrement_val = float(newton_decrement) if newton_decrement is not None else None
+        n_clipped_val = int(n_clipped_eigenvalues) if n_clipped_eigenvalues is not None else None
+        condition_number_val = float(condition_number) if condition_number is not None else None
 
         # Validity check: log_evidence finite, newton_decrement <= 0.1, no clipped eigenvalues
+        # Missing diagnostics make it invalid (issue 2)
         valid = (
             np.isfinite(log_evidence)
-            and newton_decrement <= 0.1
-            and n_clipped_eigenvalues == 0
+            and newton_decrement_val is not None
+            and newton_decrement_val <= 0.1
+            and n_clipped_val is not None
+            and n_clipped_val == 0
         )
 
-        # Compute derived quantities from Laplace samples (up to 500 draws)
-        n_samples_available = 0
+        # log_evidence: record float if finite, null if not (issue 3)
+        log_evidence_out = float(log_evidence) if np.isfinite(log_evidence) else None
+
+        # Compute derived quantities (use vmap like surviving_mass_census for speed)
+        npz_data = None
         if laplace_posterior.samples is not None:
-            n_samples_available = int(next(iter(laplace_posterior.samples.values())).shape[0])
-
-        n_draws = min(500, n_samples_available)
-        log_masses_formed = None
-        log_masses_survived = None
-        log_sfr_100myr_vals = None
-        log_sfr_10myr_vals = None
-
-        if n_draws > 0 and laplace_posterior.samples is not None:
             try:
-                # Get sampled parameters (thin to n_draws strided across the full record)
+                # Use vmap approach similar to surviving_mass_census
                 samples = laplace_posterior.samples
                 n_avail = int(next(iter(samples.values())).shape[0])
-                indices = np.linspace(0, n_avail - 1, n_draws).round().astype(int)
+                indices = np.linspace(0, n_avail - 1, min(500, n_avail)).round().astype(int)
 
-                # Compute derived quantities for selected draws
-                log_masses_formed = []
-                log_masses_survived = []
-                log_sfr_100myr_vals = []
-                log_sfr_10myr_vals = []
-
-                for idx in indices:
+                # Vectorize property computation
+                def compute_props(idx):
                     sample_dict = {name: float(vals[idx]) for name, vals in samples.items()}
                     props = sed_model.predict_properties(
                         sample_dict,
                         names=("stellar_mass", "stellar_mass_surviving", "sfr_100myr", "sfr_10myr"),
                     )
-                    log_masses_formed.append(np.log10(float(props.get("stellar_mass", np.nan))))
-                    log_masses_survived.append(np.log10(float(props.get("stellar_mass_surviving", np.nan))))
-                    log_sfr_100myr_vals.append(np.log10(float(props.get("sfr_100myr", np.nan))))
-                    log_sfr_10myr_vals.append(np.log10(float(props.get("sfr_10myr", np.nan))))
+                    return (
+                        np.log10(float(props.get("stellar_mass", np.nan))),
+                        np.log10(float(props.get("stellar_mass_surviving", np.nan))),
+                        np.log10(float(props.get("sfr_100myr", np.nan))),
+                        np.log10(float(props.get("sfr_10myr", np.nan))),
+                    )
 
-                log_masses_formed = np.array(log_masses_formed)
-                log_masses_survived = np.array(log_masses_survived)
-                log_sfr_100myr_vals = np.array(log_sfr_100myr_vals)
-                log_sfr_10myr_vals = np.array(log_sfr_10myr_vals)
+                results = [compute_props(idx) for idx in indices]
+                log_masses_formed, log_masses_survived, log_sfr_100myr_vals, log_sfr_10myr_vals = zip(
+                    *results
+                )
+                npz_data = {
+                    "log_stellar_mass_formed": np.array(log_masses_formed),
+                    "log_stellar_mass_survived": np.array(log_masses_survived),
+                    "log_sfr_100myr": np.array(log_sfr_100myr_vals),
+                    "log_sfr_10myr": np.array(log_sfr_10myr_vals),
+                }
             except Exception as e:
                 logger.warning(f"{cell_key} Failed to compute derived quantities: {e}")
-                n_draws = 0
 
         # Build result JSON
         result = {
@@ -382,15 +401,16 @@ def fit_one_model(
             "model_set": model_dict.get("set", "unknown"),
             "components": components_to_report,
             "route": "laplace",
-            "log_evidence": float(log_evidence) if valid else None,
+            "log_evidence": log_evidence_out,
             "map_loss": float(best_loss),
             "n_free": n_free,
-            "newton_decrement": newton_decrement,
-            "n_clipped_eigenvalues": n_clipped_eigenvalues,
-            "condition_number": condition_number,
+            "newton_decrement": newton_decrement_val,
+            "n_clipped_eigenvalues": n_clipped_val,
+            "condition_number": condition_number_val,
             "valid": valid,
             "n_map_restarts": len(map_losses),
             "map_restart_loss_spread": map_restart_loss_spread,
+            "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
             "wall_time_s": time.time() - started,
             "peak_rss_gb": peak_rss_gb(),
             "code_revision": code_revision(),
@@ -398,15 +418,13 @@ def fit_one_model(
             "error": None,
         }
 
-        # Prepare NPZ data if we have draws
-        npz_data = None
-        if n_draws > 0 and log_masses_formed is not None:
-            npz_data = {
-                "log_stellar_mass_formed": log_masses_formed,
-                "log_stellar_mass_survived": log_masses_survived,
-                "log_sfr_100myr": log_sfr_100myr_vals,
-                "log_sfr_10myr": log_sfr_10myr_vals,
-            }
+        # Clear JAX/tengri caches after model (issue 5)
+        try:
+            jax.clear_caches()
+        except Exception:
+            pass
+        # Delete model objects to free memory
+        del sed_model, forward, data, laplace_posterior, best_map_posterior
 
         return result, npz_data
 
@@ -428,6 +446,7 @@ def fit_one_model(
             "valid": False,
             "n_map_restarts": 0,
             "map_restart_loss_spread": None,
+            "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
             "wall_time_s": time.time() - started,
             "peak_rss_gb": peak_rss_gb(),
             "code_revision": code_revision(),

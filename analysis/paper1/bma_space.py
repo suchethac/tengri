@@ -242,6 +242,9 @@ def enumerate_named_grid() -> list[dict[str, str]]:
 def _load_xlike_builders() -> dict[str, callable]:
     """Load xlike config builders if the module exists.
 
+    Raises:
+        ImportError: If xlike_configs.py exists but fails to import (don't swallow).
+
     Returns:
         Dict mapping xlike keys to builder functions, or empty dict if absent.
     """
@@ -251,21 +254,23 @@ def _load_xlike_builders() -> dict[str, callable]:
     if not xlike_module_path.is_file():
         return {}
 
+    # If file exists, import must succeed (don't swallow errors)
     try:
-        spec = importlib.util.spec_from_file_location("xlike_configs", xlike_module_path)
-        if spec is None or spec.loader is None:
-            return {}
+        import sys
+        sys.path.insert(0, str(here))
+        try:
+            import xlike_configs as module
+        finally:
+            if str(here) in sys.path:
+                sys.path.remove(str(here))
+    except (ImportError, ModuleNotFoundError, AttributeError) as e:
+        # If the file exists but import fails, raise (don't silently drop X-like)
+        raise ImportError(f"Failed to import xlike_configs from {xlike_module_path}: {e}") from e
 
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        builders = {}
-        if hasattr(module, "XLIKE_BUILDERS"):
-            builders.update(module.XLIKE_BUILDERS)
-        return builders
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        # xlike_configs may have unresolvable relative imports or missing deps
-        return {}
+    builders = {}
+    if hasattr(module, "XLIKE_BUILDERS"):
+        builders.update(module.XLIKE_BUILDERS)
+    return builders
 
 
 def enumerate_named_all() -> list[dict[str, str]]:
