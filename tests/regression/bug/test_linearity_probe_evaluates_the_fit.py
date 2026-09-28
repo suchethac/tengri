@@ -9,18 +9,11 @@ Tests that:
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import jax.numpy as jnp
 import pytest
 
-from tengri import (
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    recipes,
-)
+from tengri import Fixed, Observation, Photometry, SEDModel, recipes
+from tengri.inference import mass_profile
 from tengri.inference.fitter import Fitter
 
 pytestmark = pytest.mark.regression_bug
@@ -34,107 +27,111 @@ def _minimal_photometry_model(ssp_data):
     return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipes.mock_recovery_minimal())
 
 
-@pytest.mark.slow
-class TestLinearityProbeErrors:
-    """Test that model-evaluation errors propagate from the linearity probe."""
+def test_linearity_probe_model_error_propagates(ssp_data_bc03, monkeypatch, caplog):
+    """Model-evaluation errors propagate out instead of being logged as invalid thetas."""
+    model = _minimal_photometry_model(ssp_data_bc03)
+    # Build with profile_mass=False so probe doesn't run during construction
+    fitter = Fitter(model, method="map", profile_mass=False)
 
-    def test_model_eval_error_propagates(self, ssp_data, caplog):
-        """Model-evaluation errors propagate out instead of being logged as invalid thetas."""
-        model = _minimal_photometry_model(ssp_data)
-        fitter = Fitter(model, method="map", profile_mass=True)
+    mass_name = "sfh_tsnorm_log_total_mass"
+    mass_bounds = fitter.spec.get_distribution(mass_name).bounds
 
-        # Monkeypatch _predict_full_vector to raise KeyError on first call
-        original_predict = fitter.model.predict_photometry
-        call_count = [0]
+    # Monkeypatch _predict_full_vector to raise KeyError on first call
+    original_predict = mass_profile._predict_full_vector
+    call_count = [0]
 
-        def mock_predict_photometry(params):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                raise KeyError("Redshift not in params and not fixed in spec")
-            return original_predict(params)
+    def mock_predict_full_vector(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise KeyError("boom")
+        return original_predict(*args, **kwargs)
+
+    with monkeypatch.context() as mp:
+        mp.setattr(mass_profile, "_predict_full_vector", mock_predict_full_vector)
 
         # The probe should propagate the KeyError, not log it as a warning
-        with (
-            patch.object(type(fitter.model), "predict_photometry", mock_predict_photometry),
-            pytest.raises(KeyError, match="Redshift not in params"),
-        ):
-            # Trigger profile_mass evaluation
-            # Note: profile_mass evaluation happens during Fitter construction
-            pass
+        with pytest.raises(KeyError, match="boom"):
+            mass_profile._linearity_max_deviation(fitter, mass_name, mass_bounds)
 
-        # No "linearity probe: ... valid bands" warning should be present
-        assert "linearity probe:" not in caplog.text
+    # No "linearity probe: ... valid bands" warning should be present
+    assert "linearity probe:" not in caplog.text
 
-    @pytest.mark.slow
-    def test_probe_evaluates_at_fitter_fixed_values(self, ssp_data, monkeypatch):
-        """Probe evaluates at Fitter's fixed values, not spec's (including params_override)."""
-        # Build with Fixed redshift at z1
-        z1 = 0.5
-        obs = Observation(photometry=Photometry.from_names(_FILTERS))
-        model = SEDModel.build(
-            ssp_data=ssp_data,
-            observation=obs,
-            redshift=Fixed(z1),
-            **recipes.mock_recovery_minimal(),
-        )
 
-        # Create fitter with params_override for runtime z2
-        z2 = 1.5
-        fitter = Fitter(
-            model,
-            method="map",
-            profile_mass=True,
-            params_override={"redshift": z2},
-        )
+def test_linearity_probe_evaluates_at_fitter_fixed_values(ssp_data_bc03, monkeypatch):
+    """Probe evaluates at Fitter's resolved fixed values, including params_override redshift."""
+    # Build with Fixed redshift at z1
+    z1 = 0.5
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    model = SEDModel.build(
+        ssp_data=ssp_data_bc03,
+        observation=obs,
+        redshift=Fixed(z1),
+        **recipes.mock_recovery_minimal(),
+    )
 
-        # Capture the redshift values used in _predict_full_vector calls
-        recorded_redshifts = []
-        original_predict = fitter.model.predict_photometry
+    # Create fitter with params_override for runtime z2
+    z2 = 1.5
+    fitter = Fitter(
+        model,
+        method="map",
+        profile_mass=False,
+        params_override={"redshift": z2},
+    )
 
-        def track_redshift_predict(params):
-            z_val = params.get("redshift", None)
-            if z_val is not None:
-                recorded_redshifts.append(float(z_val))
-            return original_predict(params)
+    mass_name = "sfh_tsnorm_log_total_mass"
+    mass_bounds = fitter.spec.get_distribution(mass_name).bounds
 
-        # Monkeypatch to track what redshift is used
-        monkeypatch.setattr(fitter.model, "predict_photometry", track_redshift_predict)
+    # Capture the redshift values used in _predict_full_vector calls
+    recorded_redshifts = []
+    original_predict = mass_profile._predict_full_vector
 
-        # Trigger profile_mass setup - this calls the linearity probe
-        # Fitter construction should now use z2 in the probe, not z1
-        profile_computed = fitter._profile_mass_computed
+    def track_redshift_predict(model, data_type, params, **kwargs):
+        z_val = params.get("redshift", None)
+        if z_val is not None:
+            recorded_redshifts.append(float(z_val))
+        return original_predict(model, data_type, params, **kwargs)
 
-        # Verify that all recorded redshifts are z2, not z1
-        # (with some tolerance for floating point)
-        if recorded_redshifts:
-            for z_recorded in recorded_redshifts:
-                assert abs(z_recorded - z2) < 1e-10, (
-                    f"Expected redshift {z2} but probe used {z_recorded}"
-                )
+    # Monkeypatch to track what redshift is used
+    with monkeypatch.context() as mp:
+        mp.setattr(mass_profile, "_predict_full_vector", track_redshift_predict)
+        # Call the probe directly
+        mass_profile._linearity_max_deviation(fitter, mass_name, mass_bounds)
 
-    @pytest.mark.slow
-    def test_numeric_invalid_path_still_works(self, ssp_data, monkeypatch):
-        """Numeric-invalid (NaN) predictions skip without raising when other thetas valid."""
-        model = _minimal_photometry_model(ssp_data)
-        fitter = Fitter(model, method="map", profile_mass=True)
+    # Verify that all recorded redshifts are z2, not z1
+    # (with some tolerance for floating point)
+    assert len(recorded_redshifts) >= 2, "Probe should call predict_full_vector multiple times"
+    for z_recorded in recorded_redshifts:
+        assert abs(z_recorded - z2) < 1e-12, f"Expected redshift {z2} but probe used {z_recorded}"
 
-        # Monkeypatch _predict_full_vector to return NaN for theta index 0
-        from tengri.inference import mass_profile
 
-        original_predict_fn = mass_profile._predict_full_vector
-        call_count = [0]
+def test_linearity_probe_numeric_invalid_path_works(ssp_data_bc03, monkeypatch):
+    """Numeric-invalid (NaN) predictions skip without raising when other thetas valid."""
+    model = _minimal_photometry_model(ssp_data_bc03)
+    # Build with profile_mass=False so probe doesn't run during construction
+    fitter = Fitter(model, method="map", profile_mass=False)
 
-        def mock_predict_full_vector(*args, **kwargs):
-            call_count[0] += 1
-            result = original_predict_fn(*args, **kwargs)
-            # Return NaN for the first theta (when called by linearity probe)
-            if call_count[0] <= 2:  # First two calls are for theta 0
-                return jnp.full_like(result, jnp.nan)
-            return result
+    mass_name = "sfh_tsnorm_log_total_mass"
+    mass_bounds = fitter.spec.get_distribution(mass_name).bounds
 
-        monkeypatch.setattr(mass_profile, "_predict_full_vector", mock_predict_full_vector)
+    # Monkeypatch _predict_full_vector to return NaN for theta index 0
+    original_predict_fn = mass_profile._predict_full_vector
+    call_count = [0]
 
+    def mock_predict_full_vector(*args, **kwargs):
+        call_count[0] += 1
+        result = original_predict_fn(*args, **kwargs)
+        # Return NaN for the first two calls (theta 0's two masses)
+        if call_count[0] <= 2:
+            return jnp.full_like(result, jnp.nan)
+        return result
+
+    with monkeypatch.context() as mp:
+        mp.setattr(mass_profile, "_predict_full_vector", mock_predict_full_vector)
         # This should not raise - the probe should skip the NaN theta
         # and continue with the other 8 thetas
-        # Note: This test verifies the current behavior is preserved
-        profile_computed = fitter._profile_mass_computed  # Trigger lazy evaluation
+        max_dev, tol, kind = mass_profile._linearity_max_deviation(fitter, mass_name, mass_bounds)
+
+        # Verify the probe still returned valid results (from other 8 thetas)
+        assert jnp.isfinite(max_dev), "Max deviation should be finite"
+        assert jnp.isfinite(tol), "Tolerance should be finite"
+        assert kind in ("proportional", "affine", "nonlinear"), "Kind should be one of the three"

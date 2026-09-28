@@ -357,9 +357,15 @@ def _linearity_max_deviation(
             # spec.sample() already includes sfh_field_xi for stochastic specs.
 
         # Fixed parameters always included. Use the Fitter's own resolved fixed
-        # values, which include params_override (e.g., runtime redshift), so the
-        # probe evaluates the fit being run, not the model as built.
-        for name, val in fitter._fixed_values.items():
+        # values (including params_override, e.g. runtime redshift) when available,
+        # falling back to spec's fixed values if _fixed_values hasn't been
+        # initialized yet (can occur during Fitter construction).
+        fixed_vals = getattr(fitter, "_fixed_values", None)
+        if fixed_vals is None:
+            fixed_vals = dict(spec.get_fixed_values())
+            if hasattr(fitter, "_params_override") and fitter._params_override:
+                fixed_vals.update(fitter._params_override)
+        for name, val in fixed_vals.items():
             if name != mass_name:
                 phys[name] = jnp.asarray(val)
 
