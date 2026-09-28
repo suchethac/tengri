@@ -46,6 +46,7 @@ from ._adoption import (
 )
 from ._posterior_utils import build_npz_payload, divergent_draw_payload, thin_samples
 from .candels_io import load_candels_z1, photometry_for_row
+from .config_metadata import XLIKE_CONFIGS
 from .configs import (
     CONFIGS,
     config_I,
@@ -56,6 +57,7 @@ from .configs import (
     config_VI,
     load_ssp_for,
 )
+from .xlike_configs import XLIKE_BUILDERS, load_ssp_for_xlike
 
 jax.config.update("jax_enable_x64", True)
 
@@ -962,15 +964,19 @@ def run_fit(
     obs = Observation(photometry=Photometry.from_names(filter_names))
 
     # Load SSP and build model
-    ssp = load_ssp_for(config_key)
-    config_builder = {
-        "I": config_I,
-        "II": config_II,
-        "III": config_III,
-        "IV": config_IV,
-        "V": config_V,
-        "VI": config_VI,
-    }[config_key]
+    if config_key in XLIKE_CONFIGS:
+        ssp = load_ssp_for_xlike(config_key)
+        config_builder = XLIKE_BUILDERS[config_key]
+    else:
+        ssp = load_ssp_for(config_key)
+        config_builder = {
+            "I": config_I,
+            "II": config_II,
+            "III": config_III,
+            "IV": config_IV,
+            "V": config_V,
+            "VI": config_VI,
+        }[config_key]
     sed_model = config_builder(ssp, obs, z)
     forward = ForwardModel.build(sed=sed_model)
 
@@ -1303,8 +1309,8 @@ def main():
         "--config",
         type=str,
         required=True,
-        choices=sorted(CONFIGS),
-        help="Configuration (I, II, III, IV, V, or VI)",
+        choices=sorted(list(CONFIGS.keys()) + list(XLIKE_CONFIGS.keys())),
+        help="Configuration (I, II, III, IV, V, VI, or X-like keys)",
     )
     parser.add_argument(
         "--method",
