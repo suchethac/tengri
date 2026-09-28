@@ -68,12 +68,18 @@ class TestDelayedBq:
         assert float(sfr[1]) > 0.0
 
     def test_constant_after_bq(self):
-        """SFR is constant for t >= age_main - age_bq."""
+        """SFR is constant for t_lb <= age_bq (the most recent age_bq window).
+
+        The burst/quench episode covers ``T >= T_bq``, i.e. ``t_lb <= age_bq``
+        (#2514: T = age_main - t_lb, not t_lb itself). The old version of this
+        test probed points near ``age_main - age_bq`` (deep lookback, close to
+        formation), which under the fix lies in the *delayed* branch, not the
+        constant one.
+        """
         tau = 2e9
         age_main = 5e9
         age_bq = 500e6
-        t_bq = age_main - age_bq
-        t = jnp.array([t_bq - 100e6, t_bq, t_bq + 100e6, t_bq + 500e6, age_main])
+        t = jnp.array([0.0, 100e6, 300e6, age_bq])
         sfr = delayed_bq(
             t,
             log_total_mass=10.0,
@@ -82,16 +88,23 @@ class TestDelayedBq:
             age_bq_yr=age_bq,
             r_sfr=0.1,
         )
-        assert_allclose(float(sfr[1]), float(sfr[2]), rtol=1e-10)
-        assert_allclose(float(sfr[1]), float(sfr[3]), rtol=1e-10)
+        assert_allclose(float(sfr[0]), float(sfr[1]), rtol=1e-10)
+        assert_allclose(float(sfr[0]), float(sfr[2]), rtol=1e-10)
+        assert_allclose(float(sfr[0]), float(sfr[3]), rtol=1e-10)
 
     def test_quenching(self):
-        """With r_sfr < 1, SFR drops after burst/quench."""
-        t = jnp.array([1e9, 4.5e9, 4.6e9, 5e9])
+        """With r_sfr < 1, SFR drops after quench (t_lb just below age_bq vs just above).
+
+        "Post-quench" is the recent side (t_lb < age_bq, constant branch);
+        "pre-quench" is the older side (t_lb > age_bq, delayed branch), which by
+        continuity is close to the un-scaled delayed value at T = T_bq. Points
+        near ``age_main`` (the old version's probe) are not adjacent to the
+        quench boundary at all under the fix.
+        """
         tau = 2e9
         age_main = 5e9
         age_bq = 400e6
-        t_bq = age_main - age_bq
+        t = jnp.array([age_bq - 50e6, age_bq + 50e6])  # [post-quench, pre-quench]
         sfr = delayed_bq(
             t,
             log_total_mass=10.0,
@@ -100,16 +113,16 @@ class TestDelayedBq:
             age_bq_yr=age_bq,
             r_sfr=0.1,
         )
+        sfr_post_bq = float(sfr[0])
         sfr_pre_bq = float(sfr[1])
-        sfr_post_bq = float(sfr[2])
         assert sfr_post_bq < sfr_pre_bq
 
     def test_bursting(self):
-        """With r_sfr > 1, SFR increases after burst/quench."""
-        t = jnp.array([1e9, 4.5e9, 4.6e9, 5e9])
+        """With r_sfr > 1, SFR increases after the burst (t_lb just below age_bq vs just above)."""
         tau = 2e9
         age_main = 5e9
         age_bq = 400e6
+        t = jnp.array([age_bq - 50e6, age_bq + 50e6])  # [post-burst, pre-burst]
         sfr = delayed_bq(
             t,
             log_total_mass=10.0,
@@ -118,20 +131,36 @@ class TestDelayedBq:
             age_bq_yr=age_bq,
             r_sfr=10.0,
         )
+        sfr_post_bq = float(sfr[0])
         sfr_pre_bq = float(sfr[1])
-        sfr_post_bq = float(sfr[2])
         assert sfr_post_bq > sfr_pre_bq
 
     def test_peaks_before_bq(self):
-        """Without early quench, delayed-tau peaks before SFR ratio change."""
-        t = jnp.linspace(1e7, 5e9, 1000)
+        """The delayed-tau branch peaks at T = tau, i.e. t_lb = age_main - tau.
+
+        With a small age_bq the burst/quench window is a thin sliver near the
+        present, so the peak visible over most of the array is the underlying
+        delayed-tau peak (#2514: T = age_main - t_lb).
+        """
+        age_main = 5e9
         tau = 2e9
+        age_bq = 100e6
+        t = jnp.linspace(1e7, age_main, 1000)
         sfr = delayed_bq(
-            t, log_total_mass=10.0, tau_main_yr=tau, age_main_yr=5e9, age_bq_yr=100e6, r_sfr=0.5
+            t,
+            log_total_mass=10.0,
+            tau_main_yr=tau,
+            age_main_yr=age_main,
+            age_bq_yr=age_bq,
+            r_sfr=0.5,
         )
         peak_idx = jnp.argmax(sfr)
-        peak_t = t[peak_idx]
-        assert float(peak_t) < 5e9 - 100e6
+        peak_t = float(t[peak_idx])
+        expected_peak_t = age_main - tau
+        cell = float(t[1] - t[0])
+        assert abs(peak_t - expected_peak_t) < 2.0 * cell, (
+            f"peak at t_lb={peak_t:.4g}, expected t_lb={expected_peak_t:.4g} (T=tau)"
+        )
 
     def test_jit_parity_vs_eager(self):
         """JIT output matches eager evaluation (JAX correctness)."""
@@ -190,14 +219,16 @@ class TestDelayedBq:
         assert jnp.isfinite(total_mass)
 
     def test_vs_cigale_reference(self):
-        """Compare delayed_bq against known CIGALE output for test case.
+        """Compare delayed_bq against the CIGALE sfhdelayedbq formula in T = age_main - t_lb.
 
-        CIGALE code (sfhdelayedbq.py line 79):
+        CIGALE code (sfhdelayedbq.py line 79), t = time since formation:
         self.sfr = t * np.exp(-t / self.tau_main) / self.tau_main**2
 
         With tau_main=2000 Myr, age_main=5000 Myr, age_bq=500 Myr, r_sfr=0.1.
+        tengri takes t_lookback, so the CIGALE formula must be evaluated at
+        T = age_main - t_lb, not at t_lb directly (#2514).
 
-        After 2026-05-25 normalization refactor, compare *shapes* only—
+        After 2026-05-25 normalization refactor, compare *shapes* only —
         absolute scale is set by log_total_mass externally.
         """
         tau_myr = 2000
@@ -207,28 +238,21 @@ class TestDelayedBq:
         age_bq_myr = 500
         age_bq_yr = age_bq_myr * 1e6
 
-        time_myr = jnp.arange(0, age_main_myr)
-        time_yr = time_myr * 1e6
+        t_lb_myr = jnp.arange(0, age_main_myr)
+        t_lb_yr = t_lb_myr * 1e6
 
-        sfr_delayed = delayed_bq(time_yr, 10.0, tau_yr, age_main_yr, age_bq_yr, 0.1)
+        sfr = delayed_bq(t_lb_yr, 10.0, tau_yr, age_main_yr, age_bq_yr, 0.1)
 
-        expected_pre_bq = time_yr * jnp.exp(-time_yr / tau_yr) / tau_yr**2
-        t_bq = age_main_yr - age_bq_yr
-        mask_pre_bq = time_yr < t_bq
+        T = age_main_yr - t_lb_yr
+        T_bq = age_main_yr - age_bq_yr
+        expected_delayed = T * jnp.exp(-T / tau_yr) / tau_yr**2
+        sfr_at_bq = T_bq * jnp.exp(-T_bq / tau_yr) / tau_yr**2
+        expected = jnp.where(T_bq <= T, 0.1 * sfr_at_bq, expected_delayed)
 
-        # Normalize both to compare shapes, not absolute values
-        sfr_pre_bq = jnp.where(mask_pre_bq, sfr_delayed, 0)
-        expected_normalized = jnp.where(mask_pre_bq, expected_pre_bq, 0)
-
-        sfr_peak = jnp.max(sfr_pre_bq)
-        expected_peak = jnp.max(expected_normalized)
-
-        if sfr_peak > 0 and expected_peak > 0:
-            sfr_normalized = sfr_pre_bq / sfr_peak
-            expected_normalized = expected_normalized / expected_peak
-            assert_allclose(
-                sfr_normalized[mask_pre_bq], expected_normalized[mask_pre_bq], rtol=1e-6
-            )
+        # Normalize both to compare shapes, not absolute values.
+        sfr_norm = sfr / jnp.max(sfr)
+        expected_norm = expected / jnp.max(expected)
+        assert_allclose(sfr_norm, expected_norm, rtol=1e-6)
 
 
 # ── Tests for periodic ────────────────────────────────────────────
@@ -266,7 +290,14 @@ class TestPeriodic:
         assert float(sfr[-1]) == 0.0
 
     def test_exponential_type(self):
-        """Exponential bursts (type=0) decay monotonically."""
+        """Within one inter-burst window, exponential bursts (type=0) decay
+        toward the present (#2514: bursts decay forward in T = age - t_lb, so
+        SFR increases with lookback right after an onset).
+
+        t in [1e6, 100e6] Myr with delta=200e6, age=1000e6 stays within a
+        single burst window (n=4 throughout), so the whole range exercises one
+        decay curve without crossing an onset.
+        """
         t = jnp.linspace(1e6, 100e6, 500)
         sfr = periodic(
             t,
@@ -276,15 +307,22 @@ class TestPeriodic:
             burst_type=0,
             age_yr=1000e6,
         )
-        assert jnp.all(jnp.diff(sfr) <= 0.0)
+        assert jnp.all(jnp.diff(sfr) >= 0.0)
 
     def test_delayed_type(self):
-        """Delayed bursts (type=1) rise then decay."""
-        t = jnp.linspace(1e6, 100e6, 500)
+        """Delayed bursts (type=1) rise then decay across one inter-burst window.
+
+        Spans nearly the full window (0, delta) in t_lb so the u=0 onset (at
+        the older edge) and u->delta (at the younger edge) both bound the
+        scan; the delayed shape is 0 at both u=0 and large u, with an interior
+        peak near u=tau (#2514: u is measured from T = age - t_lb).
+        """
+        delta = 200e6
+        t = jnp.linspace(1e6, delta - 1e6, 500)
         sfr = periodic(
             t,
             log_total_mass=10.0,
-            delta_bursts_yr=200e6,
+            delta_bursts_yr=delta,
             tau_bursts_yr=20e6,
             burst_type=1,
             age_yr=1000e6,
@@ -293,19 +331,27 @@ class TestPeriodic:
         assert 0 < peak_idx < len(sfr) - 1
 
     def test_rectangular_type(self):
-        """Rectangular bursts (type=2) are flat then drop."""
-        t = jnp.linspace(0, 40e6, 500)
+        """Rectangular bursts (type=2) are active for 0 <= T - kDelta <= tau.
+
+        This window's onset (k=9) is at T=900e6, i.e. t_lb=100e6 (the older
+        edge); active while u = T - 900e6 <= tau, i.e. t_lb >= 100e6 - tau
+        (#2514: T = age - t_lb, so small lookback is NOT automatically active).
+        """
+        age = 1000e6
+        delta = 100e6
         tau = 20e6
+        t = jnp.linspace(60e6, 100e6, 500)
         sfr = periodic(
             t,
             log_total_mass=10.0,
-            delta_bursts_yr=100e6,
+            delta_bursts_yr=delta,
             tau_bursts_yr=tau,
             burst_type=2,
-            age_yr=1000e6,
+            age_yr=age,
         )
-        mask_active = t <= tau
-        mask_inactive = t > tau
+        onset_lb = 100e6 - tau  # t_lb >= onset_lb <=> u <= tau
+        mask_active = t >= onset_lb
+        mask_inactive = t < onset_lb
         sfr_active = jnp.where(mask_active, sfr, 0)
         sfr_inactive = jnp.where(mask_inactive, sfr, 0)
         assert float(jnp.max(sfr_active)) > 0
@@ -384,23 +430,32 @@ class TestBuat08:
     def test_interpolation_at_table_values(self):
         """At Buat+2008 Table 2 velocities, SFR matches expected form.
 
+        ``t_gyr`` is cosmic time since formation T (Gyr); tengri takes
+        lookback time, so T is converted via t_lb = age - T (#2514). ``age``
+        must exceed the largest T (10 Gyr) so every point stays inside the
+        formation window. The CIGALE formula also floors t by 1 Myr
+        (``t_gyr_floored = T/1e9 + 1e-3``), matching the src implementation.
+
         After 2026-05-25 normalization refactor, compare *shapes* only—
         absolute scale is set by log_total_mass externally.
         """
         t_gyr = jnp.array([0.001, 0.01, 0.1, 1.0, 5.0, 10.0])
-        t_yr = t_gyr * 1e9
-        age = 8e9
+        t_gyr_floored = t_gyr + 1e-3
+        age = 11e9
+        t_lb = age - t_gyr * 1e9
         velocities_ref = jnp.array([80.0, 150.0, 220.0, 290.0, 360.0])
         as_ref = jnp.array([6.62, 8.74, 10.01, 10.82, 11.35])
         bs_ref = jnp.array([0.41, 0.98, 1.25, 1.36, 1.37])
         cs_ref = jnp.array([0.36, -0.20, -0.55, -0.74, -0.85])
 
         for i, v in enumerate(velocities_ref):
-            sfr = buat08(t_yr, 10.0, float(v), age_yr=age)
+            sfr = buat08(t_lb, 10.0, float(v), age_yr=age)
             a = as_ref[i]
             b = bs_ref[i]
             c = cs_ref[i]
-            expected = 10.0 ** (a + b * jnp.log10(t_gyr) + c * jnp.sqrt(t_gyr) - 9.0)
+            expected = 10.0 ** (
+                a + b * jnp.log10(t_gyr_floored) + c * jnp.sqrt(t_gyr_floored) - 9.0
+            )
             # Normalize both shapes and compare
             sfr_norm = sfr / jnp.max(sfr)
             expected_norm = expected / jnp.max(expected)
@@ -449,15 +504,16 @@ class TestBuat08:
         assert jnp.isfinite(total_mass)
 
     def test_vs_cigale_reference(self):
-        """Compare buat08 against known CIGALE output.
+        """Compare buat08 against the CIGALE sfh_buat08 formula, t = (T - t_lb)/1e9 + 1e-3.
 
         CIGALE code (sfh_buat08.py line 86):
-        t = (time_grid + 1) / 1000  # time in Gyr
+        t = (time_grid + 1) / 1000  # time in Gyr, time_grid in Myr since formation
         self.sfr = 10.**(a + b * np.log10(t) + c * t**.5 - 9)
 
         Test at velocity=220, with a=10.01, b=1.25, c=-0.55.
         In tengri's cosmic-time-since-formation convention, T ranges from 1 to
-        1000 Myr. With age=8 Gyr, t_lookback = age - T.
+        1000 Myr. With age=8 Gyr, t_lookback = age - T (#2514), and the "+1 Myr"
+        floor in CIGALE's ``t`` becomes ``t_gyr = T/1e9 + 1e-3`` here.
 
         After 2026-05-25 normalization refactor, compare *shapes* only—
         absolute scale is set by log_total_mass externally.
@@ -468,11 +524,11 @@ class TestBuat08:
         time_yr = time_myr * 1e6
         # T in cosmic time; t_lookback = age - T
         t_lookback = age - time_yr
-        time_gyr = time_yr / 1e9
+        t_gyr = time_yr / 1e9 + 1e-3
 
         sfr = buat08(t_lookback, 10.0, 220.0, age_yr=age)
 
-        expected = 10.0 ** (a + b * jnp.log10(time_gyr) + c * jnp.sqrt(time_gyr) - 9.0)
+        expected = 10.0 ** (a + b * jnp.log10(t_gyr) + c * jnp.sqrt(t_gyr) - 9.0)
 
         # Normalize both shapes and compare
         sfr_norm = sfr / jnp.max(sfr)
