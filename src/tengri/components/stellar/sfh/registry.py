@@ -2256,6 +2256,29 @@ _NONPARAM_NAMES = frozenset(
 )
 
 
+def _refuse_ladder_edge_count_mismatch(sfh_type: str, arr, n_declared: int, kind: str) -> None:
+    """Raise if n_declared parameters do not match the bin-edge count.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of the SFH.
+    arr : ndarray
+        Bin edges array.
+    n_declared : int
+        Number of declared ratio or z_frac parameters.
+    kind : str
+        Parameter class name: "ratio" or "z_frac".
+    """
+    n_needed = arr.shape[0] - 2
+    if n_declared and n_needed != n_declared:
+        raise ValueError(
+            f"sfh type={sfh_type!r} declares {n_declared} {kind} parameters, which needs "
+            f"{n_declared + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
+            f"{n_declared + 2} edges (for example tengri.make_agebins_from_zred(zred=...))."
+        )
+
+
 def validate_bin_edges_gyr(sfh_type, edges) -> None:
     """Reject a ``bin_edges_gyr`` array that the named SFH cannot use.
 
@@ -2277,14 +2300,13 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
     -----
     Three families take a bin-count rule, each with its own parameter class.
     The models whose shape function *is* :func:`continuity` (``continuity``,
-    ``bursty_continuity``, ``prospector_beta``) declare ``n_bins - 1`` ratios,
-    so ``n`` edges need exactly ``n - 2`` of them. The post-starburst models on
-    :func:`psb_continuity_flex` (``psb_suess2022``, ``psb_flex``) read only the
-    *length* and the last entry of the array, and their ``ratio_old_*`` count
-    the steps of the fixed section, which again comes to ``n - 2``. The
-    :func:`dirichlet` model declares ``n - 2`` internal ``z_frac_*`` parameters
-    (one fewer than the bin count, because the stick-breaking sums the last two
-    into one final bin), so ``n`` edges also need ``n - 2`` declared parameters.
+    ``bursty_continuity``, ``prospector_beta``) declare ``n_bins - 1`` ratio
+    parameters, so ``n`` edges need exactly ``n - 2`` of them. The post-starburst
+    models on :func:`psb_continuity_flex` (``psb_suess2022``, ``psb_flex``) read
+    only the *length* and the last entry of the array, and their ``ratio_old_*``
+    count the steps of the fixed section, which again comes to ``n - 2``. The
+    :func:`dirichlet` model declares ``n_bins - 1`` stick-breaking variables
+    ``z_frac_*``, one fewer than bins, so ``n`` edges again need ``n - 2`` of them.
     ``continuity_flex`` spends some of its parameters on bin *widths*, so the
     rule is not applied to it.
 
@@ -2337,32 +2359,19 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
 
     if spec.fn is continuity:
         n_declared = sum(1 for name in spec.params if "ratio" in name)
-        n_needed = arr.shape[0] - 2  # n_bins - 1 ratios, with n_bins = len(edges) - 1
-        if n_declared and n_needed != n_declared:
-            raise ValueError(
-                f"sfh type={sfh_type!r} declares {n_declared} ratio parameters, which needs "
-                f"{n_declared + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
-                f"{n_declared + 2} edges (for example tengri.make_agebins_from_zred(zred=...))."
-            )
+        _refuse_ladder_edge_count_mismatch(sfh_type, arr, n_declared, "ratio")
         return
 
     if spec.fn is dirichlet:
-        # Dirichlet declares n_bins - 2 internal z_frac_* parameters
-        # (one fewer than the bin count, because the stick-breaking sums the
-        # last two into one final bin). So ``n`` edges need ``n - 2`` declared
-        # parameters, which comes to n_declared = n_bins - 2, thus
-        # n_needed = n_bins - 2 = arr.shape[0] - 2 - 2.
-        # Surplus or missing ones are swallowed by ``**z_frac_kwargs``
-        # and change no output, which is the silent-config failure #1975
-        # exists to refuse.
-        n_declared = sum(1 for name in spec.params if name.startswith("sfh_dir_z_"))
-        n_needed = arr.shape[0] - 2
-        if n_declared and n_needed != n_declared:
-            raise ValueError(
-                f"sfh type={sfh_type!r} declares {n_declared} z_frac parameters, which needs "
-                f"{n_declared + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
-                f"{n_declared + 2} edges (for example tengri.make_agebins_from_zred(zred=...))."
-            )
+        # Count z_frac_* from internal_param_map; the public names are
+        # sfh_dir_z_*, but we count only internal names to match the actual
+        # number of stick-breaking variables.
+        n_declared = sum(
+            1
+            for _, (internal, _, _) in spec.internal_param_map.items()
+            if internal.startswith("z_frac_")
+        )
+        _refuse_ladder_edge_count_mismatch(sfh_type, arr, n_declared, "z_frac")
         return
 
 

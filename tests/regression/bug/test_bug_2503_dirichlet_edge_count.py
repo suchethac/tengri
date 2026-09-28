@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Regression test for #2503: dirichlet SFH with wrong bin-edge count.
 
-Dirichlet SFH ladders declare n internal z_frac_* parameters (where n is one
-fewer than the number of bins, because the stick-breaking sums the last two
-into one final bin). A dirichlet model with n declared z_frac_* parameters
-requires n+2 bin edges. validate_bin_edges_gyr must reject a 7-edge ladder
-for a 6-parameter dirichlet. resolve_sfh must also call validate_bin_edges_gyr
-so direct calls (tests, tools) enforce the same rule as the build path does.
+Dirichlet SFH ladders declare n_bins - 1 stick-breaking variables z_frac_*,
+one fewer than the number of bins. A dirichlet model with six declared z_frac_*
+parameters requires exactly eight bin edges. validate_bin_edges_gyr must reject
+a 7-edge ladder. resolve_sfh must also call validate_bin_edges_gyr so direct
+calls (tests, tools) enforce the same rule as the build path does.
 
 With correct edges (8 for a 6-parameter dirichlet), resolve_sfh returns a
 param_map with exactly six z_frac_* parameters, the returned function accepts
@@ -20,6 +19,8 @@ from tengri.components.stellar.sfh.registry import (
     resolve_sfh,
     validate_bin_edges_gyr,
 )
+
+pytestmark = pytest.mark.regression_bug
 
 
 @pytest.mark.regression_bug
