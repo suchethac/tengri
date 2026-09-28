@@ -6,6 +6,10 @@
 
 ### Fixed
 
+- The eline fitted-mode tests attached their `Spectroscopy` configuration through a
+  private `_spectroscopy_config` attribute; after #2455 stopped reading it, they now
+  attach it where the fitter reads it, `observation.spectroscopy`. The product path was
+  intact; only the test mocks needed updating (#2502).
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments
   raised `IndexError: tuple index out of range`. Both functions now resolve
