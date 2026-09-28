@@ -33,6 +33,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from tengri._x64_hold import hold_x64_preference
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
 from tengri.utils.host_array import device_table, host_array
@@ -1096,8 +1097,9 @@ def _lgmet_weights_parcels(log_z, lgmet_scatter, ssp_lgmet):
     Operands are canonicalized to one dtype first for the reason given in
     :func:`_lgmet_weights`.
     """
-    from dsps.constants import LGMET_HI, LGMET_LO
-    from dsps.utils import _get_bin_edges, _tw_cuml_kern
+    with hold_x64_preference():
+        from dsps.constants import LGMET_HI, LGMET_LO
+        from dsps.utils import _get_bin_edges, _tw_cuml_kern
 
     args = canonical_dsps_kwargs(log_z=log_z, lgmet_scatter=lgmet_scatter, ssp_lgmet=ssp_lgmet)
     log_z, lgmet_scatter, ssp_lgmet = args["log_z"], args["lgmet_scatter"], args["ssp_lgmet"]
@@ -2666,7 +2668,8 @@ class StellarSEDComponent:
         # separable form (lgmet_w × age_w) gave the right marginals but
         # the wrong product for non-trivial age-metallicity correlations,
         # over-scaling the CSP SED by orders of magnitude.
-        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
+        with hold_x64_preference():
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
 
         # NaN-safe cosmic-time prep mirroring
         # :func:`compute_dsps_age_weights`: when SSP ages exceed
@@ -2807,7 +2810,8 @@ class StellarSEDComponent:
                 )
                 _used_cic = True
             else:
-                from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+                with hold_x64_preference():
+                    from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
 
                 # GP-field SFH: coarse per-SSP-age integrand through DSPS's
                 # kernel, with the young-boundary knot (#538). The knot is the
@@ -3571,7 +3575,8 @@ class StellarSEDComponent:
                     "Use age_kernel='cic' (the default), or call predict()/"
                     "apply() instead of the line/nion fast path."
                 )
-            from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf
+            with hold_x64_preference():
+                from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf
 
             if self.config.field:
                 # The field modulates the SFR on the lookback grid

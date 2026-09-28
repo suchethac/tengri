@@ -25,6 +25,7 @@ import numpy as np
 from jax import dtypes as jax_dtypes
 
 from tengri._cache_keys import KeyPolicy, baked, content
+from tengri._x64_hold import hold_x64_preference
 
 
 def canonical_dsps_kwargs(**kwargs):
@@ -793,13 +794,14 @@ def _synthesize_mass_remaining(
     """
     import warnings
 
-    from dsps.imf.surviving_mstar import (
-        CHABRIER_PARAMS,
-        KROUPA_PARAMS,
-        SALPETER_PARAMS,
-        VAN_DOKKUM_PARAMS,
-        surviving_mstar,
-    )
+    with hold_x64_preference():
+        from dsps.imf.surviving_mstar import (
+            CHABRIER_PARAMS,
+            KROUPA_PARAMS,
+            SALPETER_PARAMS,
+            VAN_DOKKUM_PARAMS,
+            surviving_mstar,
+        )
 
     _IMF_PARAMS = {
         "chabrier": CHABRIER_PARAMS,
@@ -1123,7 +1125,8 @@ def compute_dsps_native_weights(
 
     """
     try:
-        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
+        with hold_x64_preference():
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
     except ImportError:
         raise ImportError(
             "dsps is required for csp_integration='dsps_native'. Install with: pip install dsps"
@@ -1260,7 +1263,8 @@ def compute_dsps_age_weights(
        Population Synthesis", arXiv:2112.06830, Eq. 9.
     """
     try:
-        from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
+        with hold_x64_preference():
+            from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
     except ImportError:
         raise ImportError(
             "dsps is required for DSPS-canonical age weights. Install with: pip install dsps"
@@ -1367,7 +1371,8 @@ def compute_dsps_met_table_weights(
 
     """
     try:
-        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+        with hold_x64_preference():
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
     except ImportError:
         raise ImportError(
             "dsps is required for csp_integration='dsps_met_table'. Install with: pip install dsps"
