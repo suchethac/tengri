@@ -15,7 +15,7 @@
     "sfh_cont_ratio_4": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
     "sfh_cont_ratio_5": "StudentT(mu=0.0, sigma=0.3, df=2.0)"
   },
-  "code_revision": "6b365b5f1793838589bb02d2af67534ef53a35be",
+  "code_revision": "6cd1d3407a5641ef59007d84d7a0fe65ecbd54db",
   "n_bands": 14,
   "filter_names": [
     "ctio_u",
@@ -66,7 +66,7 @@
     "sfh_cont_ratio_3": 0.9996741876626751,
     "sfh_cont_ratio_4": 0.9994438700939261,
     "sfh_cont_ratio_5": 1.001244604693788,
-    "sfh_cont_log_total_mass": 0.9995134836955902
+    "sfh_cont_log_total_mass": 0.999443301281832
   },
   "ess_min": 200.05596739079184,
   "ess_dict": {
@@ -79,16 +79,16 @@
     "sfh_cont_ratio_3": 727.3901425021108,
     "sfh_cont_ratio_4": 551.9609375586543,
     "sfh_cont_ratio_5": 311.0753620428382,
-    "sfh_cont_log_total_mass": 640.3732143360088
+    "sfh_cont_log_total_mass": 629.9939059617384
   },
-  "wall_time_s": 3281.421263957862,
+  "wall_time_s": 2572.492624875158,
   "load_at_start": {
-    "load_avg_1m": 299.7431640625,
+    "load_avg_1m": 308.78662109375,
     "n_concurrent_fits": null,
     "n_cpus": 14
   },
   "load_at_end": {
-    "load_avg_1m": 313.0068359375,
+    "load_avg_1m": 643.10595703125,
     "n_concurrent_fits": null,
     "n_cpus": 14
   },
@@ -115,7 +115,7 @@
         "sfh_cont_ratio_4": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
         "sfh_cont_ratio_5": "StudentT(mu=0.0, sigma=0.3, df=2.0)"
       },
-      "code_revision": "6b365b5f1793838589bb02d2af67534ef53a35be",
+      "code_revision": "6cd1d3407a5641ef59007d84d7a0fe65ecbd54db",
       "n_bands": 14,
       "filter_names": [
         "ctio_u",
@@ -166,7 +166,7 @@
         "sfh_cont_ratio_3": 0.9996741876626751,
         "sfh_cont_ratio_4": 0.9994438700939261,
         "sfh_cont_ratio_5": 1.001244604693788,
-        "sfh_cont_log_total_mass": 0.9995134836955902
+        "sfh_cont_log_total_mass": 0.999443301281832
       },
       "ess_min": 200.05596739079184,
       "ess_dict": {
@@ -179,16 +179,16 @@
         "sfh_cont_ratio_3": 727.3901425021108,
         "sfh_cont_ratio_4": 551.9609375586543,
         "sfh_cont_ratio_5": 311.0753620428382,
-        "sfh_cont_log_total_mass": 640.3732143360088
+        "sfh_cont_log_total_mass": 629.9939059617384
       },
-      "wall_time_s": 3281.421263957862,
+      "wall_time_s": 2572.492624875158,
       "load_at_start": {
-        "load_avg_1m": 299.7431640625,
+        "load_avg_1m": 308.78662109375,
         "n_concurrent_fits": null,
         "n_cpus": 14
       },
       "load_at_end": {
-        "load_avg_1m": 313.0068359375,
+        "load_avg_1m": 643.10595703125,
         "n_concurrent_fits": null,
         "n_cpus": 14
       },
