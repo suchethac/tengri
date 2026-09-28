@@ -43,15 +43,15 @@ ANALYSIS_DIR = Path(__file__).resolve().parent
 if str(ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(ANALYSIS_DIR))
 
-from paper1.bma_space import (
+from paper1.bma_space import (  # noqa: E402
     enumerate_factorial,
     enumerate_named_all,
     enumerate_named_grid,
     build_model,
     model_key as make_model_key,
 )
-from paper1.candels_io import load_candels_z1, photometry_for_row
-from paper1.configs import load_ssp_for
+from paper1.candels_io import load_candels_z1, photometry_for_row  # noqa: E402
+from paper1.configs import load_ssp_for  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,7 @@ def get_galaxy_data(galaxy_id: int) -> tuple[float, Observation]:
     names, fnu, fnu_err = photometry_for_row(catalog["header"], catalog["data"][row_idx[0]])
 
     from tengri import Photometry
+
     photometry = Photometry(names=names, fnu=np.array(fnu), fnu_err=np.array(fnu_err))
     observation = Observation(photometry=photometry)
 
@@ -123,7 +124,6 @@ def fit_one_model(
         On error, returns a dict with error field set and valid=False.
     """
     import jax
-    import jax.numpy as jnp
 
     jax.config.update("jax_enable_x64", True)
 
@@ -224,9 +224,7 @@ def fit_one_model(
 
         # Extract diagnostics
         log_evidence = float(laplace_result.posterior.log_evidence)
-        newton_decrement = float(
-            laplace_result.posterior.diagnostics.get("newton_decrement")
-        )
+        newton_decrement = float(laplace_result.posterior.diagnostics.get("newton_decrement"))
         n_clipped_eigenvalues = int(
             laplace_result.posterior.diagnostics.get("n_clipped_eigenvalues", 0)
         )
@@ -236,9 +234,7 @@ def fit_one_model(
 
         # Check validity
         valid = (
-            np.isfinite(log_evidence)
-            and newton_decrement <= 0.1
-            and n_clipped_eigenvalues == 0
+            np.isfinite(log_evidence) and newton_decrement <= 0.1 and n_clipped_eigenvalues == 0
         )
 
         return {
@@ -291,9 +287,7 @@ def fit_one_model(
 
 def main():
     """CLI entry point."""
-    parser = argparse.ArgumentParser(
-        description="Compute Laplace evidence for BMA models"
-    )
+    parser = argparse.ArgumentParser(description="Compute Laplace evidence for BMA models")
     parser.add_argument("--galaxy", type=int, required=True, help="Galaxy ID")
     parser.add_argument(
         "--set",
@@ -301,21 +295,15 @@ def main():
         default="factorial",
         help="Model set to evaluate",
     )
-    parser.add_argument(
-        "--models", help="Comma-separated model keys to limit (default: all)"
-    )
+    parser.add_argument("--models", help="Comma-separated model keys to limit (default: all)")
     parser.add_argument(
         "--out",
         default="analysis/paper1/results/bma_evidence",
         help="Output directory",
     )
-    parser.add_argument(
-        "--n-restarts", type=int, default=8, help="Number of MAP restarts"
-    )
+    parser.add_argument("--n-restarts", type=int, default=8, help="Number of MAP restarts")
     parser.add_argument("--seed", type=int, default=0, help="PRNG seed")
-    parser.add_argument(
-        "--force", action="store_true", help="Re-run even if output exists"
-    )
+    parser.add_argument("--force", action="store_true", help="Re-run even if output exists")
     parser.add_argument("--limit", type=int, help="Limit number of models (testing)")
 
     args = parser.parse_args()
@@ -342,9 +330,7 @@ def main():
 
     if args.models:
         model_keys = set(args.models.split(","))
-        all_models = [
-            m for m in all_models if make_model_key(m) in model_keys
-        ]
+        all_models = [m for m in all_models if make_model_key(m) in model_keys]
 
     if args.limit:
         all_models = all_models[: args.limit]

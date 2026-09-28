@@ -19,22 +19,19 @@ for entry in [str(ANALYSIS), str(PAPER1)]:
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
-import pytest
+import pytest  # noqa: E402
 
-from paper1.bma_space import (
+from paper1.bma_space import (  # noqa: E402
     enumerate_factorial,
     enumerate_named_grid,
-    enumerate_named_all,
     model_key,
     parse_model_key,
     build_model,
     FACTORIAL_SFH_TYPES,
-    FACTORIAL_SSP_KEYS,
-    FACTORIAL_ATTENUATION_TYPES,
     _SFH_BUILDERS,
 )
-from paper1.configs import load_ssp_for
-from tengri import Observation, Photometry
+from paper1.configs import load_ssp_for  # noqa: E402
+from tengri import Observation, Photometry  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
@@ -84,7 +81,7 @@ def test_build_model_factorial(tmp_path):
     """Build one factorial model (no JAX fit, just construction)."""
     models = enumerate_factorial()
     model_dict = models[0]  # continuity, mist_c3k, calzetti
-    
+
     z = 1.0
     ssp_data = load_ssp_for(model_dict["ssp"][-1])
     phot = Photometry(
@@ -93,7 +90,7 @@ def test_build_model_factorial(tmp_path):
         fnu_err=[0.1e-27],
     )
     obs = Observation(photometry=phot)
-    
+
     model = build_model(model_dict, ssp_data, obs, z)
     assert model is not None
     assert len(model.spec.free_params) > 0

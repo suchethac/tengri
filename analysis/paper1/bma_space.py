@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any
 
 import tengri
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
@@ -34,7 +33,6 @@ from config_metadata import CONFIGS, SSP_FOR_CONFIG
 from configs import (
     _continuity_sfh,
     _kriek_conroy_two_component,
-    load_ssp_for,
     met_prior_for,
 )
 
@@ -319,9 +317,7 @@ def build_model(
             f"Only {FIXED_DUST_EMISSION!r} dust emission is supported; got {dust_em_type!r}"
         )
     if neb_type != FIXED_NEBULAR:
-        raise ValueError(
-            f"Only {FIXED_NEBULAR!r} nebular is supported; got {neb_type!r}"
-        )
+        raise ValueError(f"Only {FIXED_NEBULAR!r} nebular is supported; got {neb_type!r}")
 
     sfh_builder = _SFH_BUILDERS[sfh_type]
     sfh = sfh_builder(ssp_data, z)

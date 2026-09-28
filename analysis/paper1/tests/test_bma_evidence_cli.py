@@ -8,10 +8,8 @@ Pinned invariants:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 PAPER1 = Path(__file__).resolve().parent.parent
 ANALYSIS = PAPER1.parent
@@ -19,7 +17,7 @@ for entry in [str(ANALYSIS), str(PAPER1)]:
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
-import pytest
+import pytest  # noqa: E402
 
 pytestmark = pytest.mark.contract
 

@@ -27,19 +27,16 @@ def main():
     parser.add_argument("--out", default="analysis/paper1/results/bma_summary.json")
     parser.add_argument("--draws", type=int, default=4000)
     parser.add_argument("--seed", type=int, default=0)
-    
+
     args = parser.parse_args()
-    
-    summary = {
-        "route": "laplace",
-        "weight_sets": {}
-    }
-    
+
+    summary = {"route": "laplace", "weight_sets": {}}
+
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2)
-    
+
     return 0
 
 
