@@ -13,11 +13,13 @@ from pathlib import Path
 
 import pytest
 
-PAPER1_DIR = Path(__file__).parent.parent
-sys.path.insert(0, str(PAPER1_DIR.parent))
-sys.path.insert(0, str(PAPER1_DIR))
+PAPER1 = Path(__file__).resolve().parents[1]
+ANALYSIS = PAPER1.parent
+for entry in (str(ANALYSIS), str(PAPER1)):
+    if entry not in sys.path:
+        sys.path.insert(0, entry)
 
-from fit_one import dust_parameter_name
+from paper1.fit_one import dust_parameter_name
 
 pytestmark = pytest.mark.unit
 

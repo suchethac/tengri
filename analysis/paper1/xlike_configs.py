@@ -9,10 +9,11 @@ component libraries. Built as free-parameter models for fitting.
 
 from __future__ import annotations
 
-from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, SFH_REGISTRY, Fixed, SEDModel, Uniform, WavePrecomp, load_ssp
 from tengri.cosmology import age_at_z
 
-from .configs import _continuity_sfh, load_ssp_for, met_prior_for
+from .config_metadata import XLIKE_SSP
+from .configs import _continuity_sfh, met_prior_for
 
 
 def cigale_like(ssp_data, observation, z: float) -> SEDModel:
@@ -252,6 +253,46 @@ def dense_basis_like(ssp_data, observation, z: float) -> SEDModel:
       galaxy's age at the source redshift
     """
     age_universe_gyr = age_at_z(z)
+
+    # The "sfh" build grammar has no key for a model's registry SETTINGS (as
+    # opposed to its fittable parameters): parse_groups only recognizes
+    # 'type', 'all_params', 'bin_edges_gyr', 'age_kernel', 'field_centering',
+    # and per-parameter names for the "sfh" group (see
+    # tengri.parameters.groups._GROUP_STRUCTURAL_KEYS["sfh"]). Passing
+    # sfh={"settings": {...}} -- what an earlier revision of this function did
+    # -- raises "Unknown key 'settings' in group 'sfh'" the moment this
+    # actually builds, so the cosmic-age override never reached the
+    # component and every fit ran at the registry default of 13.47 Gyr
+    # (z=0), silently outside the galaxy's age at z>0.
+    #
+    # dense_basis reads its cutoff from
+    # SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"]
+    # (src/tengri/components/stellar/component.py:2360), a plain dict on the
+    # shared registry entry with no per-build override path, and it is read
+    # by StellarSEDComponent.apply() -- which SEDModel.predict_photometry
+    # routes through (predict_state -> run_components) -- not by anything
+    # SEDModel.build() constructs eagerly. That read happens lazily, at the
+    # first prediction JAX traces after this function returns, so mutating
+    # the registry and restoring it before returning (an earlier revision
+    # of this fix did exactly that) would make the override inert again:
+    # by the time the trace runs, the registry would already be back at
+    # 13.47.
+    #
+    # So this sets the registry entry and DELIBERATELY LEAVES IT SET. That
+    # is safe for how this is actually used: run_candels_fits.py fits one
+    # (galaxy, configuration) cell per `fit_one.py` subprocess, so each
+    # process builds at most one dense_basis_like model and this mutation
+    # never outlives the redshift it was set for. It is NOT safe to call
+    # this for two different redshifts within one long-lived process and
+    # expect both to take effect: ``compile_signature()`` does not key on
+    # this setting, so a second build with the same structure (same free
+    # parameters, filters, dust/nebular choices -- true across galaxies
+    # here) can silently reuse the first build's compiled kernel, with the
+    # first build's age baked in. A test that calls this more than once
+    # must restore ``SFH_REGISTRY["dense_basis"].settings`` itself; see
+    # tests/test_xlike_configs.py and tests/test_xlike_configs_build.py.
+    SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"] = float(age_universe_gyr)
+
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
@@ -264,9 +305,6 @@ def dense_basis_like(ssp_data, observation, z: float) -> SEDModel:
             "tx_frac_1": Uniform(0.05, 0.95),
             "tx_frac_2": Uniform(0.05, 0.95),
             "met_logzsol": met_prior_for(ssp_data),
-            "settings": {
-                "sfh_db_age_universe_gyr": age_universe_gyr,
-            },
         },
         dust_attenuation={
             "type": "single_component",
@@ -305,7 +343,13 @@ XLIKE_BUILDERS = {
 def load_ssp_for_xlike(key: str):
     """Load the stellar library for X-like configuration key.
 
-    Maps X-like keys to their corresponding SSP grid names.
+    Maps X-like keys to their corresponding SSP grid names via
+    ``config_metadata.XLIKE_SSP``, the single declared mapping (an inline
+    copy here previously drifted from it in shape, not content: this
+    function fed the copy's grid *names* -- e.g. "bc03_pdva_stelib_chabrier"
+    -- through ``configs.load_ssp_for``, which expects a *configuration key*
+    ("I".."VI") and looks it up in ``SSP_FOR_CONFIG``. Every call raised
+    ``KeyError: 'bc03_pdva_stelib_chabrier'`` before a grid ever loaded).
 
     Parameters
     ----------
@@ -322,11 +366,4 @@ def load_ssp_for_xlike(key: str):
     KeyError
         If key is not a recognized X-like configuration.
     """
-    xlike_ssp_map = {
-        "cigale_like": "bc03_pdva_stelib_chabrier",
-        "prospector_like": "fsps_mist_miles_chabrier",
-        "bagpipes_like": "bc03_pdva_stelib_chabrier",
-        "beagle_like": "bc03_pdva_stelib_chabrier",
-        "dense_basis_like": "fsps_mist_miles_chabrier",
-    }
-    return load_ssp_for(xlike_ssp_map[key])
+    return load_ssp(XLIKE_SSP[key])

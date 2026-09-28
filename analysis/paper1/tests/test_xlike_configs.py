@@ -17,13 +17,14 @@ from pathlib import Path
 
 import pytest
 
-# Add analysis to path for imports
-PAPER1_DIR = Path(__file__).parent.parent
-sys.path.insert(0, str(PAPER1_DIR.parent))
-sys.path.insert(0, str(PAPER1_DIR))
+PAPER1 = Path(__file__).resolve().parents[1]
+ANALYSIS = PAPER1.parent
+for entry in (str(ANALYSIS), str(PAPER1)):
+    if entry not in sys.path:
+        sys.path.insert(0, entry)
 
-from config_metadata import CONFIG_KEYS, XLIKE_CONFIGS, XLIKE_KEYS
-from configs import CONFIGS
+from paper1.config_metadata import XLIKE_CONFIGS, XLIKE_KEYS
+from paper1.configs import CONFIG_KEYS, CONFIGS, config_II
 
 pytestmark = pytest.mark.unit
 
@@ -83,7 +84,13 @@ class TestXlikeBuildKwargs:
     """Test that builder functions construct correct argument dicts (no JAX build).
 
     Uses monkeypatch to intercept SEDModel.build and capture its kwargs,
-    verifying structure without materializing JAX models.
+    verifying structure without materializing JAX models. ``SEDModel.build``
+    is a ``classmethod``; assigning a plain function to the class attribute
+    (what ``monkeypatch.setattr`` does) means a call routed through the class
+    -- ``SEDModel.build(**kwargs)`` -- does NOT auto-bind a leading ``cls``,
+    so the stand-in below takes no ``cls`` parameter. A stand-in that declared
+    one would raise ``TypeError: missing 1 required positional argument:
+    'cls'`` on every call, before any assertion below ran.
     """
 
     def test_cigale_like_sfh_structure(self, monkeypatch):
@@ -91,15 +98,15 @@ class TestXlikeBuildKwargs:
         from unittest.mock import MagicMock
 
         import numpy as np
-        from xlike_configs import cigale_like
+        from paper1.xlike_configs import cigale_like
 
         captured_kwargs = {}
 
-        def mock_build(cls, **kwargs):
+        def mock_build(**kwargs):
             captured_kwargs.update(kwargs)
             return MagicMock()
 
-        monkeypatch.setattr("xlike_configs.SEDModel.build", mock_build)
+        monkeypatch.setattr("paper1.xlike_configs.SEDModel.build", mock_build)
 
         # Create minimal test inputs
         ssp_data = MagicMock()
@@ -117,6 +124,8 @@ class TestXlikeBuildKwargs:
         assert "dust_attenuation" in captured_kwargs
         dust_att = captured_kwargs["dust_attenuation"]
         assert dust_att["type"] == "two_component"
+        # Both screens must be leitherer02 -- CIGALE's own attenuation law --
+        # not one screen defaulting to a different law by omission.
         assert dust_att["law_bc"] == "leitherer02"
         assert dust_att["law_diff"] == "leitherer02"
 
@@ -125,15 +134,15 @@ class TestXlikeBuildKwargs:
         from unittest.mock import MagicMock
 
         import numpy as np
-        from xlike_configs import prospector_like
+        from paper1.xlike_configs import prospector_like
 
         captured_kwargs = {}
 
-        def mock_build(cls, **kwargs):
+        def mock_build(**kwargs):
             captured_kwargs.update(kwargs)
             return MagicMock()
 
-        monkeypatch.setattr("xlike_configs.SEDModel.build", mock_build)
+        monkeypatch.setattr("paper1.xlike_configs.SEDModel.build", mock_build)
 
         ssp_data = MagicMock()
         ssp_data.ssp_lgmet = np.array([-2.0, -1.0, 0.0])
@@ -147,48 +156,67 @@ class TestXlikeBuildKwargs:
         ratio_keys = [k for k in sfh if k.startswith("ratio_")]
         assert len(ratio_keys) > 0, "continuity SFH should have ratio_* parameters"
 
-    def test_bagpipes_like_dpl_sfh(self, monkeypatch):
-        """bagpipes_like has dpl SFH with free alpha, beta, tau_gyr, age_gyr."""
+    def test_bagpipes_like_matches_config_ii_dpl_sfh(self, monkeypatch):
+        """bagpipes_like has dpl SFH with free alpha, beta, tau_gyr, age_gyr.
+
+        It must match config_II's dpl SFH exactly: both are meant to be the
+        same double-power-law family with the same bounds (age-conditioned
+        tau_gyr cap included), and nothing else in the code pins the two
+        together, so a comparison against config_II's own captured kwargs is
+        the only thing that would catch them drifting apart.
+        """
         from unittest.mock import MagicMock
 
         import numpy as np
-        from xlike_configs import bagpipes_like
+        from paper1.xlike_configs import bagpipes_like
 
         captured_kwargs = {}
 
-        def mock_build(cls, **kwargs):
+        def mock_build(**kwargs):
+            captured_kwargs.clear()
             captured_kwargs.update(kwargs)
             return MagicMock()
 
-        monkeypatch.setattr("xlike_configs.SEDModel.build", mock_build)
+        monkeypatch.setattr("paper1.xlike_configs.SEDModel.build", mock_build)
 
         ssp_data = MagicMock()
         ssp_data.ssp_lgmet = np.array([-2.0, -1.0, 0.0])
         observation = MagicMock()
 
         bagpipes_like(ssp_data, observation, z=1.0)
+        sfh = dict(captured_kwargs["sfh"])
 
-        sfh = captured_kwargs["sfh"]
         assert sfh["type"] == "dpl"
         assert "alpha" in sfh
         assert "beta" in sfh
         assert "tau_gyr" in sfh
         assert "age_gyr" in sfh
 
+        # config_II uses the same mocked SEDModel.build, so this second call
+        # reuses (and overwrites) captured_kwargs -- read bagpipes_like's sfh
+        # dict above before calling it.
+        config_II(ssp_data, observation, z=1.0)
+        config_ii_sfh = dict(captured_kwargs["sfh"])
+
+        assert sfh == config_ii_sfh, (
+            "bagpipes_like's dpl SFH has drifted from config_II's -- they are "
+            "meant to share the same double-power-law family and bounds"
+        )
+
     def test_beagle_like_dust_none(self, monkeypatch):
-        """beagle_like has no dust emission (type='none')."""
+        """beagle_like has no dust emission, in the exact form the builder passes."""
         from unittest.mock import MagicMock
 
         import numpy as np
-        from xlike_configs import beagle_like
+        from paper1.xlike_configs import beagle_like
 
         captured_kwargs = {}
 
-        def mock_build(cls, **kwargs):
+        def mock_build(**kwargs):
             captured_kwargs.update(kwargs)
             return MagicMock()
 
-        monkeypatch.setattr("xlike_configs.SEDModel.build", mock_build)
+        monkeypatch.setattr("paper1.xlike_configs.SEDModel.build", mock_build)
 
         ssp_data = MagicMock()
         ssp_data.ssp_lgmet = np.array([-2.0, -1.0, 0.0])
@@ -197,37 +225,81 @@ class TestXlikeBuildKwargs:
         beagle_like(ssp_data, observation, z=1.0)
 
         dust_em = captured_kwargs["dust_emission"]
-        assert dust_em["type"] == "none"
+        # The builder passes exactly {"type": "none"} -- no "all_params" wildcard,
+        # no fixed IR parameters -- since a dust-IR-free model has none to govern.
+        assert dust_em == {"type": "none"}
 
     def test_dense_basis_like_age_universe_setting(self, monkeypatch):
-        """dense_basis_like sets age_universe_gyr in settings to cosmic age at z."""
+        """dense_basis_like sets the dense_basis registry's cosmic-age cutoff.
+
+        There is no key in the "sfh" build grammar for a model's registry
+        SETTINGS (as opposed to its fittable parameters) -- only 'type',
+        'all_params', 'bin_edges_gyr', 'age_kernel', 'field_centering', and
+        per-parameter names are recognized for the "sfh" group. The age
+        override therefore cannot travel through ``captured_kwargs["sfh"]``;
+        it goes through ``tengri.SFH_REGISTRY["dense_basis"].settings``.
+
+        dense_basis_like sets that entry and deliberately leaves it set
+        (see the docstring there): the component that reads it
+        (``StellarSEDComponent.apply``, reached from
+        ``predict_photometry``) does so lazily, at the first prediction
+        JAX traces, strictly after this function returns -- so restoring
+        the registry before returning would make the override inert for
+        every real fit. This test therefore checks the registry is left
+        holding ``age_at_z(1.0)`` exactly (not merely "less than 13.47")
+        rather than expecting it back at the default, and restores the
+        default itself afterward (``finally``) so this test cannot leak
+        into a sibling test in the same pytest session that assumes it.
+        """
         from unittest.mock import MagicMock
 
         import numpy as np
-        from xlike_configs import dense_basis_like
+        from paper1.xlike_configs import dense_basis_like
+
+        from tengri import SFH_REGISTRY
+        from tengri.cosmology import age_at_z
 
         captured_kwargs = {}
 
-        def mock_build(cls, **kwargs):
+        def mock_build(**kwargs):
             captured_kwargs.update(kwargs)
             return MagicMock()
 
-        monkeypatch.setattr("xlike_configs.SEDModel.build", mock_build)
+        monkeypatch.setattr("paper1.xlike_configs.SEDModel.build", mock_build)
 
         ssp_data = MagicMock()
         ssp_data.ssp_lgmet = np.array([-2.0, -1.0, 0.0])
         observation = MagicMock()
 
-        z = 1.0
-        dense_basis_like(ssp_data, observation, z=z)
+        original_age_gyr = SFH_REGISTRY["dense_basis"].settings.get("sfh_db_age_universe_gyr")
 
-        sfh = captured_kwargs["sfh"]
-        assert sfh["type"] == "dense_basis"
-        assert "settings" in sfh
-        # age_at_z(1.0) should be roughly 5.9 Gyr (not 13.47)
-        age_gyr = sfh["settings"]["sfh_db_age_universe_gyr"]
-        assert age_gyr < 13.47, "age_universe_gyr at z>0 should be less than z=0 value"
-        assert age_gyr > 5.0, "age_universe_gyr at z=1 should be several Gyr"
+        z = 1.0
+        try:
+            dense_basis_like(ssp_data, observation, z=z)
+
+            expected_age_gyr = float(age_at_z(z))
+            assert expected_age_gyr != pytest.approx(13.47), (
+                "age_at_z(1.0) must not coincide with the z=0 registry default -- "
+                "otherwise this test cannot tell the override from a no-op"
+            )
+
+            # Left set (not restored) -- see the docstring above.
+            resolved_age_gyr = SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"]
+            assert resolved_age_gyr == pytest.approx(expected_age_gyr)
+
+            sfh = captured_kwargs["sfh"]
+            assert sfh["type"] == "dense_basis"
+            assert "settings" not in sfh, (
+                "'settings' is not a recognized key in the sfh build grammar and "
+                "raises ValueError on a real (non-mocked) build; the age override "
+                "must go through SFH_REGISTRY, not a build kwarg"
+            )
+        finally:
+            # Test hygiene only -- production leaves this mutated (see above).
+            if original_age_gyr is None:
+                SFH_REGISTRY["dense_basis"].settings.pop("sfh_db_age_universe_gyr", None)
+            else:
+                SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"] = original_age_gyr
 
 
 class TestFitOneArgparse:
