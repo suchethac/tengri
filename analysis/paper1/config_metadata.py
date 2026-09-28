@@ -152,6 +152,13 @@ XLIKE_CONFIGS = {
             "Continuous metallicity prior over the grid vs CIGALE's discrete values",
             "1 Gyr age floor vs CIGALE's workshop default (unrecorded)",
         ],
+        "mismatch_sources": [
+            "reproduction/cigale/01_cigale.py:24-26",
+            "reproduction/cigale/01_cigale.py:126-134",
+            "Pacifici et al. (2023) Table 1",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+        ],
     },
     "prospector_like": {
         "key": "prospector_like",
@@ -179,12 +186,20 @@ XLIKE_CONFIGS = {
             "agn": "Yes",
         },
         "mismatches": [
-            "Continuity with Student-t prior (Leja et al. 2019) vs Prospector workshop priors (unrecorded in output)",
-            "Cue emulator (trained on Cloudy 17) vs FSPS default Cloudy 13 (Byler et al. 2017)",
+            "Continuity with Student-t prior vs Prospector workshop priors (unrecorded in output)",
+            "Cue emulator (trained on Cloudy 17) vs FSPS default Cloudy 13",
             "7-bin continuity SFH edges vs Prospector's parameter bins (workshop metadata unrecorded)",
             "Continuous metallicity prior over the grid vs Prospector's discrete values",
             "1 Gyr age floor vs Prospector's workshop default",
-            "Energy balance excludes lambda<912 A (far-IR ~11% lower than exact integration)",
+            "Energy balance excludes lambda<912 A (far-IR ~11% lower than exact integration, outside the fitted UV-to-IRAC bands)",
+        ],
+        "mismatch_sources": [
+            "analysis/paper1/configs.py:178 (_continuity_sfh)",
+            "reproduction/prospector/01_prospector.py:33-38",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "reproduction/prospector/01_prospector.py:1379-1382",
         ],
     },
     "bagpipes_like": {
@@ -213,12 +228,20 @@ XLIKE_CONFIGS = {
             "agn": "No",
         },
         "mismatches": [
-            "BC03 MILES 2016 update (BAGPIPES 1.3.6, Kroupa IMF) vs tengri's BC03 2003 STELIB (Chabrier IMF, reproduction/bagpipes/01_bagpipes.py ~136-142)",
-            "dpl priors Uniform(alpha, beta) vs BAGPIPES log-uniform convention (exact BAGPIPES workshop priors unrecorded in output)",
+            "BAGPIPES's default stellar library, BC03 with MILES and a Kroupa IMF, against tengri's registered BC03 (Padova 1994 tracks, STELIB, Chabrier IMF)",
+            "dpl priors Uniform(alpha, beta) vs BAGPIPES log-uniform convention (exact workshop priors unrecorded in output)",
             "Cue emulator (trained on Cloudy 17) vs BAGPIPES Cloudy 17 grids",
             "Continuous metallicity prior vs BAGPIPES discrete values",
             "1 Gyr age floor vs BAGPIPES workshop default",
             "Single-component Calzetti (tau_v screen) vs BAGPIPES two-component Calzetti with birth-cloud term off (physically equivalent)",
+        ],
+        "mismatch_sources": [
+            "reproduction/bagpipes/01_bagpipes.py:136-142 (bc03_miles_from_bagpipes.h5)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "reproduction/bagpipes/01_bagpipes.py:43-46",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
         ],
     },
     "beagle_like": {
@@ -249,10 +272,18 @@ XLIKE_CONFIGS = {
         "mismatches": [
             "No reproduction notebook available; parity check not performed",
             "BC03 2003 (Padova 1994 tracks, STELIB, Chabrier) vs BEAGLE Table 1: BC03(16)",
-            "Cue emulator (trained on Cloudy 17) vs BEAGLE Gutkin et al. 2016 Cloudy 13 grids",
+            "Cue emulator (trained on Cloudy 17) vs BEAGLE's Cloudy 13 nebular grids",
             "Power law attenuation (Charlot & Fall 2000) without BEAGLE's mu/tau_V parametrization",
             "No optional burst component (BEAGLE's optional feature not included)",
             "1 Gyr age floor vs BEAGLE's workshop default",
+        ],
+        "mismatch_sources": [
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "Pacifici et al. (2023) Table 1",
+            "Pacifici et al. (2023) Table 1 (C13)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
         ],
     },
     "dense_basis_like": {
@@ -282,10 +313,21 @@ XLIKE_CONFIGS = {
         },
         "mismatches": [
             "No reproduction notebook available; parity check not performed",
-            "Dense Basis atlas: full GP with Dirichlet prior over 256 log-grid mass quantiles (Iyer & Gawiser 2017) vs tengri: Matérn 3/2 + Linear kernel GP over three uniform-prior mass fractions (25%, 50%, 75%) with SFR constraint points (Iyer et al. 2019 algorithm)",
+            "Dense Basis draws the mass-time quantiles from a Dirichlet prior (concentration 5 by default); tengri draws three independent uniform fractions and sorts them, so its prior is their order statistics",
             "FSPS library isochrone and spectral library versions not recorded in external metadata",
-            "Cue emulator (trained on Cloudy 17) vs FSPS default Cloudy (Byler et al. 2017)",
-            "Age of universe set to cosmic age at redshift z (not registry default 13.47 Gyr at z=0)",
+            "Cue emulator (trained on Cloudy 17) vs FSPS default Cloudy",
+        ],
+        "mismatch_sources": [
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "site-packages/dense_basis/priors.py:84,121; src/tengri/components/stellar/sfh/dense_basis.py:487",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+            "art_sedfitting/code_outputs/header (absence of the setting)",
+        ],
+        "notes": [
+            "Age of universe set to cosmic age at redshift z (tengri's registry default is 13.47 Gyr at z=0)",
+        ],
+        "notes_sources": [
+            "src/tengri/components/stellar/sfh/registry.py:2007",
         ],
     },
 }

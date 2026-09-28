@@ -80,7 +80,12 @@ def write_json(output_file: Path) -> None:
             "parity_check": cfg["parity_check"],
             "n_mismatches": len(cfg.get("mismatches", [])),
             "mismatches": cfg.get("mismatches", []),
+            "mismatch_sources": cfg.get("mismatch_sources", []),
         }
+        if "notes" in cfg:
+            summary[key]["notes"] = cfg["notes"]
+        if "notes_sources" in cfg:
+            summary[key]["notes_sources"] = cfg["notes_sources"]
     with open(output_file, "w") as f:
         json.dump(summary, f, indent=2)
 
@@ -88,7 +93,7 @@ def write_json(output_file: Path) -> None:
 def print_summary() -> None:
     """Print table to stdout.
 
-    Each X-like configuration's code name, parity status, and mismatch count.
+    Each X-like configuration's code name, parity status, mismatches, and sources.
     """
     print("\nX-like configuration summary:\n")
     for key in sorted(XLIKE_CONFIGS.keys()):
@@ -96,10 +101,22 @@ def print_summary() -> None:
         parity = "Yes" if cfg["parity_check"] else "No"
         n_mismatches = len(cfg.get("mismatches", []))
         print(f"{key:20} {cfg['code']:15} parity={parity:3} mismatches={n_mismatches}")
-        for m in cfg.get("mismatches", [])[:2]:
+        mismatches = cfg.get("mismatches", [])
+        sources = cfg.get("mismatch_sources", [])
+        for i, m in enumerate(mismatches[:2]):
+            source = sources[i] if i < len(sources) else "(no source)"
             print(f"  - {m}")
+            print(f"    source: {source}")
         if n_mismatches > 2:
             print(f"  ... {n_mismatches - 2} more")
+        if "notes" in cfg:
+            print(f"  Notes:")
+            notes = cfg.get("notes", [])
+            notes_sources = cfg.get("notes_sources", [])
+            for i, note in enumerate(notes):
+                source = notes_sources[i] if i < len(notes_sources) else "(no source)"
+                print(f"    - {note}")
+                print(f"      source: {source}")
         print()
 
 

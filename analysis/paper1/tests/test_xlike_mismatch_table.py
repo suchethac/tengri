@@ -146,3 +146,106 @@ class TestXlikeMismatchTable:
         british_bad = ["colour", "center", "organised", "analyzed"]
         for word in british_bad:
             assert word not in content.lower(), f"British spelling '{word}' found"
+
+    def test_mismatch_sources_length_matches_mismatches(self):
+        """Each entry has mismatch_sources of same length as mismatches."""
+        for key, cfg in XLIKE_CONFIGS.items():
+            mismatches = cfg.get("mismatches", [])
+            sources = cfg.get("mismatch_sources", [])
+            assert len(sources) == len(mismatches), (
+                f"{key}: mismatch_sources length {len(sources)} != mismatches length {len(mismatches)}"
+            )
+
+    def test_no_empty_mismatch_sources(self):
+        """No mismatch_sources entry is empty."""
+        for key, cfg in XLIKE_CONFIGS.items():
+            sources = cfg.get("mismatch_sources", [])
+            for i, source in enumerate(sources):
+                assert source and isinstance(source, str), (
+                    f"{key}: mismatch_sources[{i}] is empty or not a string"
+                )
+
+    def test_no_forbidden_strings_in_mismatches_and_sources(self):
+        """Forbidden version/size strings are absent from mismatches and sources."""
+        for key, cfg in XLIKE_CONFIGS.items():
+            mismatches = cfg.get("mismatches", [])
+            sources = cfg.get("mismatch_sources", [])
+            forbidden = ["1.3.6", "256", "Gutkin"]
+            for text_list in [mismatches, sources]:
+                for i, text in enumerate(text_list):
+                    for word in forbidden:
+                        assert word not in text, (
+                            f"{key}: forbidden string '{word}' found in item {i}"
+                        )
+
+    def test_table1_rows_match_verbatim(self):
+        """fiducial_table1 rows match verbatim Table 1 rows (Pacifici et al. 2023)."""
+        expected_rows = {
+            "bagpipes_like": {
+                "sampler": "Nested sam.",
+                "sfh": "Flex.",
+                "ssp": "Multiple",
+                "nebular": "C17",
+                "dust_att": "Multiple",
+                "dust_em": "Single",
+                "agn": "No",
+            },
+            "beagle_like": {
+                "sampler": "Nested sam.",
+                "sfh": "Flex. param.",
+                "ssp": "BC03(16)",
+                "nebular": "C13",
+                "dust_att": "2 comp.",
+                "dust_em": "No",
+                "agn": "No",
+            },
+            "cigale_like": {
+                "sampler": "Grid",
+                "sfh": "Flex.",
+                "ssp": "Multiple",
+                "nebular": "C13",
+                "dust_att": "Multiple",
+                "dust_em": "Multiple",
+                "agn": "Yes",
+            },
+            "dense_basis_like": {
+                "sampler": "Atlas",
+                "sfh": "Non-param.",
+                "ssp": "FSPS",
+                "nebular": "C",
+                "dust_att": "Multiple",
+                "dust_em": "Single",
+                "agn": "No",
+            },
+            "prospector_like": {
+                "sampler": "Nested sam.",
+                "sfh": "Non-param.",
+                "ssp": "FSPS",
+                "nebular": "C13",
+                "dust_att": "2 comp.",
+                "dust_em": "Single",
+                "agn": "Yes",
+            },
+        }
+        for key, expected in expected_rows.items():
+            cfg = XLIKE_CONFIGS[key]
+            actual = cfg.get("fiducial_table1", {})
+            assert actual == expected, (
+                f"{key}: Table 1 row mismatch.\n"
+                f"Expected: {expected}\n"
+                f"Actual: {actual}"
+            )
+
+    def test_notes_and_notes_sources_paired(self):
+        """If notes exist, notes_sources must also exist and be same length."""
+        for key, cfg in XLIKE_CONFIGS.items():
+            if "notes" in cfg:
+                notes = cfg["notes"]
+                sources = cfg.get("notes_sources", [])
+                assert len(sources) == len(notes), (
+                    f"{key}: notes_sources length {len(sources)} != notes length {len(notes)}"
+                )
+                for i, source in enumerate(sources):
+                    assert source and isinstance(source, str), (
+                        f"{key}: notes_sources[{i}] is empty or not a string"
+                    )
