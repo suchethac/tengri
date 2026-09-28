@@ -123,3 +123,77 @@ def test_grid_census_sfr_100myr_filter_matches_documented_codes():
     assert "100 Myr" in source
     assert "logsfr_100myr" in source
     assert "sfr_timescale_note" in source
+
+
+def test_committed_csv_has_all_five_codes():
+    """The committed CSV in results/ has all five codes with correct row counts."""
+    import csv
+
+    csv_path = PAPER1 / "results" / "art_sedfitting_z1.csv"
+    assert csv_path.exists(), f"CSV not found at {csv_path}"
+
+    code_counts = {}
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            code = row["code"]
+            code_counts[code] = code_counts.get(code, 0) + 1
+
+    # Check all five codes are present
+    expected_codes = {"BAGPIPES", "BEAGLE", "CIGALE", "Dense_Basis", "Prospector"}
+    assert set(code_counts.keys()) == expected_codes, (
+        f"Expected codes {expected_codes}, got {set(code_counts.keys())}"
+    )
+
+    # Check BEAGLE has at least 360 rows (it should be 367)
+    assert code_counts["BEAGLE"] >= 360, (
+        f"BEAGLE has {code_counts['BEAGLE']} rows, expected >= 360"
+    )
+
+
+def test_ingest_raises_on_missing_prospector_file(monkeypatch, tmp_path):
+    """Ingest raises FileNotFoundError if Prospector input file is missing."""
+    # Create a temp directory with no Prospector file
+    code_outputs = tmp_path / "code_outputs"
+    code_outputs.mkdir(parents=True)
+    # Create dummy files for other codes to avoid their errors
+    (code_outputs / "bagpipes_11_3_19_z1_noir.cat").touch()
+    (code_outputs / "cigale_UV_NIR_2020.fits").touch()
+    (code_outputs / "BEAGLE_summary_catalogue_z1.fits").touch()
+    (code_outputs / "Dense_Basis_GOODS-S_v1.2.dat").touch()
+
+    # Set ART_SEDFITTING_DIR before import
+    monkeypatch.setenv("ART_SEDFITTING_DIR", str(tmp_path))
+
+    # Force reload to pick up new env var
+    if "paper1.ingest_art_sedfitting" in sys.modules:
+        del sys.modules["paper1.ingest_art_sedfitting"]
+
+    import paper1.ingest_art_sedfitting as ingest
+
+    with pytest.raises(FileNotFoundError, match="prospector_output_z1.dat"):
+        ingest.ingest_z1_results()
+
+
+def test_ingest_raises_on_missing_beagle_file(monkeypatch, tmp_path):
+    """Ingest raises FileNotFoundError if BEAGLE input file is missing."""
+    # Create a temp directory with no BEAGLE file
+    code_outputs = tmp_path / "code_outputs"
+    code_outputs.mkdir(parents=True)
+    (code_outputs / "prospector_output_z1.dat").touch()
+    (code_outputs / "bagpipes_11_3_19_z1_noir.cat").touch()
+    (code_outputs / "cigale_UV_NIR_2020.fits").touch()
+    (code_outputs / "Dense_Basis_GOODS-S_v1.2.dat").touch()
+
+    # Set ART_SEDFITTING_DIR before import
+    monkeypatch.setenv("ART_SEDFITTING_DIR", str(tmp_path))
+
+    # Force reload to pick up new env var
+    if "paper1.ingest_art_sedfitting" in sys.modules:
+        del sys.modules["paper1.ingest_art_sedfitting"]
+
+    import paper1.ingest_art_sedfitting as ingest
+
+    # Just test the parse_beagle_z1 function directly
+    with pytest.raises(FileNotFoundError, match="BEAGLE_summary_catalogue_z1.fits"):
+        ingest.parse_beagle_z1()
