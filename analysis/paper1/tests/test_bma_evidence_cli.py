@@ -166,6 +166,8 @@ def test_json_has_all_required_fields():
         "valid",
         "n_map_restarts",
         "map_restart_loss_spread",
+        "systematic_floor_frac",
+        "profile_mass",
         "wall_time_s",
         "peak_rss_gb",
         "code_revision",
@@ -184,6 +186,9 @@ def test_json_has_all_required_fields():
     assert result["route"] == "laplace"
     assert isinstance(result["valid"], bool)
     assert isinstance(result["n_map_restarts"], int)
+    assert isinstance(result["systematic_floor_frac"], float)
+    assert isinstance(result["profile_mass"], bool)
+    assert result["profile_mass"] is False  # Always False for evidence
     assert isinstance(result["wall_time_s"], float)
     assert result["seed"] == 42
 

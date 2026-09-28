@@ -252,6 +252,8 @@ def fit_one_model(
         forward = ForwardModel.build(sed=sed_model)
 
         # MAP with n_restarts: run multiple times and track losses
+        # Note: profile_mass=False because evidence must integrate log_total_mass under
+        # its Uniform(8, 12.5) prior. NUTS profiling is a sampler optimization, not for evidence.
         map_losses = []
         best_map_posterior = None
         best_loss = float("inf")
@@ -261,6 +263,7 @@ def fit_one_model(
             try:
                 key = jax.random.PRNGKey(restart_seed)
                 # Use ForwardModel.fit like fit_one.py (line 1086)
+                # profile_mass=False: evidence integrates all parameters under their priors
                 posterior = forward.fit(data, key=key, method="map", profile_mass=False)
                 loss = float(posterior.diagnostics.get("final_loss", np.inf))
                 map_losses.append(loss)
@@ -289,6 +292,7 @@ def fit_one_model(
                 "n_map_restarts": len(map_losses),
                 "map_restart_loss_spread": None,
                 "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
+                "profile_mass": False,
                 "wall_time_s": time.time() - started,
                 "peak_rss_gb": peak_rss_gb(),
                 "code_revision": code_revision(),
@@ -411,6 +415,7 @@ def fit_one_model(
             "n_map_restarts": len(map_losses),
             "map_restart_loss_spread": map_restart_loss_spread,
             "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
+            "profile_mass": False,
             "wall_time_s": time.time() - started,
             "peak_rss_gb": peak_rss_gb(),
             "code_revision": code_revision(),
@@ -447,6 +452,7 @@ def fit_one_model(
             "n_map_restarts": 0,
             "map_restart_loss_spread": None,
             "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
+            "profile_mass": False,
             "wall_time_s": time.time() - started,
             "peak_rss_gb": peak_rss_gb(),
             "code_revision": code_revision(),
@@ -474,12 +480,7 @@ def main():
     parser.add_argument("--n-restarts", type=int, default=8, help="Number of MAP restarts")
     parser.add_argument("--seed", type=int, default=0, help="PRNG seed")
     parser.add_argument("--force", action="store_true", help="Re-run even if output exists")
-    parser.add_argument(
-        "--limit",
-        type=int,
-        dest="max_models",
-        help="Limit number of models (testing, alias for --max-models)",
-    )
+    parser.add_argument("--limit", type=int, help="Limit number of models (alias for --max-models)")
     parser.add_argument("--max-models", type=int, help="Limit number of models")
     parser.add_argument(
         "--dry-run",
@@ -495,7 +496,7 @@ def main():
     )
 
     # Resolve max_models (prefer --max-models over --limit)
-    max_models = args.max_models or args.limit
+    max_models = getattr(args, "max_models", None) or getattr(args, "limit", None)
 
     # Get models to evaluate
     if args.set == "factorial":
