@@ -4,6 +4,10 @@
 
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 
+- The eline fitted-mode tests attached their `Spectroscopy` configuration through a
+  private `_spectroscopy_config` attribute; after #2455 stopped reading it, they now
+  attach it where the fitter reads it, `observation.spectroscopy`. The product path was
+  intact; only the test mocks needed updating (#2502).
 ### Fixed
 
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
