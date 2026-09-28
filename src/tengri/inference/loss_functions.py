@@ -413,19 +413,16 @@ def _build_data_neg_log_likelihood_fn(fitter):
             _check_channel_scales,
         )
 
-        # Sample from ``fitter.spec``, not ``model.spec``: the fitter's spec includes
-        # all registered observation parameters (eline amplitudes, noise calibration)
-        # merged via ``merge_observation_params`` (#2502). ``model.spec`` may lag
-        # behind, particularly under fitted-mode emission lines. The reference point
-        # must be a complete point in the Fitter's own parameter space (every name
-        # in fitter._free_names + fitter._fixed_values) so the likelihood probe can
-        # read it without KeyError (#2502). ``spec`` is the working spec (possibly
-        # with mass ``Fixed`` for profile_mass analytic marginalization);
-        # ``spec.sample()`` returns free-only output (#2296), then we merge in
-        # fixed values. ``_build_prediction`` re-filters to ``model.spec.free_params``.
+        # The fitter's working spec carries every registered latent: ``merge_observation_params``
+        # merges eline amplitudes and noise calibration into the spec that
+        # ``model.spec`` lacks. ``spec.sample()`` returns free parameters only (#2296),
+        # so fixed values are merged in from ``fitter._fixed_values`` (always present:
+        # assigned at Fitter.__init__ and reassigned at mass_profile.py:705 when
+        # profile_mass engages). The reference point spans fitter's full parameter space
+        # (free + fixed) so the likelihood can read every name without KeyError.
+        # ``_build_prediction`` then filters to ``model.spec.free_params`` for validation.
         _ref_params = dict(spec.sample(_jax.random.PRNGKey(0)))
-        # Add fixed values so the reference point spans fitter._free_names + fitter._fixed_values
-        _ref_params.update(getattr(fitter, "_fixed_values", {}))
+        _ref_params.update(fitter._fixed_values)
         _ref_prediction, _, _, _ = _build_prediction(
             model,
             _ref_params,

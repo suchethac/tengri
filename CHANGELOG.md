@@ -6,17 +6,12 @@
 
 ### Fixed
 
-- The eline fitted-mode tests attached their `Spectroscopy` configuration through a
-  private `_spectroscopy_config` attribute; after #2455 stopped reading it, they now
-  attach it where the fitter reads it, `observation.spectroscopy`. The product path was
-  intact; only the test mocks needed updating. The loss function's channel-scale probe
-  was drawing its reference parameter point from `spec.sample()`, which returns free
-  parameters only (#2296); under fitted-mode emission lines, the Fitter registers
-  eline amplitudes as additional free parameters that were absent from the probe point,
-  causing the likelihood to raise `KeyError` when reading the missing amplitude names.
-  The probe now draws from `fitter.spec` (which includes merged observation parameters)
-  and merges `fitter._fixed_values`, so the reference point spans every parameter in
-  the Fitter's own working space (#2502).
+- The eline fitted-mode test mocks now attach `Spectroscopy` through
+  `observation.spectroscopy` instead of the private `_spectroscopy_config` that #2455
+  stopped reading. The loss builder's channel-scale probe drew its reference
+  parameter point from `spec.sample()` (free-only per #2296) that lacked Fitter-registered
+  eline amplitudes, raising `KeyError` in fitted mode; it now samples the fitter's
+  working spec and merges the fixed values (#2502).
 
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
   (previously silently skipped there, so intrinsic galaxy velocity dispersion had
