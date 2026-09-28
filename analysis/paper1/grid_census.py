@@ -270,8 +270,8 @@ def published_inter_code_spread(csv_path: Path = ART_SEDFITTING_CSV):
 
     * Prospector publishes **formed** stellar mass; the other four publish
       **survived**.
-    * BAGPIPES publishes an **instantaneous** SFR; the other four average over
-      100 Myr, which is what ``sfr_100myr`` is.
+    * BAGPIPES, BEAGLE, and Dense_Basis document a 100 Myr averaged SFR;
+      CIGALE and Prospector do not record a SFR timescale.
 
     Mixing either pair inflates the spread by comparing different quantities,
     which is the failure mode a cross-code number invites.
@@ -610,9 +610,9 @@ def report(cells: dict[str, dict], expected_ids, config_keys, results_dir: Path)
                 f"  {label:<26} median {np.median(vals):.3f} dex, "
                 f"range {min(vals):.3f} to {max(vals):.3f}, over {len(vals)} galaxies"
             )
-        print("  ^ compare the matched rows only: Prospector publishes formed mass and")
-        print("    BAGPIPES an instantaneous SFR, so the 'all codes' rows compare")
-        print("    different quantities and read high.")
+        print("  ^ compare the matched rows only: Prospector publishes formed mass,")
+        print("    and CIGALE and Prospector do not record a SFR timescale, so the")
+        print("    'all codes' rows compare mixed definitions.")
 
     # --- what the attempt ranking costs the record -------------------------
     moved = attempt_selection_cost(cells)
