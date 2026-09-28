@@ -6,6 +6,15 @@
 
 ### Fixed
 
+- Dirichlet SFH ladders now enforce the same bin-edge count rule as other
+  nonparametric models: a dirichlet model with n declared `z_frac_*` parameters
+  requires n+2 bin edges (dirichlet uses these edges to define n+1 bins, then
+  sums the last two into a single final bin). `validate_bin_edges_gyr` validates
+  every path to `resolve_sfh`, including direct calls in tests and tools, so
+  passing a 7-edge ladder to a 6-parameter dirichlet now raises `ValueError` at
+  validation time rather than failing at sampling time with unknown keyword
+  (#2479, #2503).
+
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
   (previously silently skipped there, so intrinsic galaxy velocity dispersion had
   zero effect and zero gradient on the DESI spectroscopy path). `observation/banded.py`
