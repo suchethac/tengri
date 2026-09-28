@@ -310,11 +310,12 @@ def plot_sfh_panel(ax, result_manager, gal_id: int, z: float):
             color="gray",
         )
         ax.set_xlim(0, age_gyr)
-        ax.set_ylim(-2, 2)
+        ax.set_ylim(0, 1)
         ax.set_xlabel("lookback time / Gyr", fontsize=10)
-        ax.set_ylabel("log SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
+        ax.set_ylabel("SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
         return
 
+    upper_sfr = 0.0
     for config_key in completed_configs:
         npz_data = result_manager.load_npz(gal_id, config_key)
         if npz_data is None:
@@ -327,29 +328,33 @@ def plot_sfh_panel(ax, result_manager, gal_id: int, z: float):
 
         t_lbt_gyr = t_lbt_yr / 1e9
 
-        # Plot 16-84% band
+        # Plot 16-84% band. The records store SFR in Msun/yr already; this
+        # panel draws it in those units, as the mock's SFH panel does.
         ax.fill_between(
             t_lbt_gyr,
-            np.log10(np.maximum(sfr_p16, 1e-10)),
-            np.log10(np.maximum(sfr_p84, 1e-10)),
+            sfr_p16,
+            sfr_p84,
             alpha=0.3,
             color=CONFIG_COLORS[config_key],
         )
+        upper_sfr = max(upper_sfr, float(np.nanmax(sfr_p84)))
 
         # Plot median
         ax.plot(
             t_lbt_gyr,
-            np.log10(np.maximum(sfr_median, 1e-10)),
+            sfr_median,
             color=CONFIG_COLORS[config_key],
             linewidth=2,
             label=CONFIG_LABELS[config_key],
         )
 
     ax.set_xlabel("lookback time / Gyr", fontsize=10)
-    ax.set_ylabel("log SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
+    ax.set_ylabel("SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
     ax.set_xlim(0, age_gyr)
-    # Linear y-axis showing log SFR values (NOT log-scaled axis)
-    ax.set_ylim(-2, 3.5)
+    # Linear in Msun/yr. The limit follows the data: the old -2 to 3.5 was a
+    # range in log space, and carrying a log-era constant onto a linear axis
+    # would flatten every history against the floor.
+    ax.set_ylim(0, upper_sfr * 1.05 if upper_sfr > 0 else 1)
     ax.grid(True, alpha=0.3)
 
 
