@@ -222,6 +222,53 @@ def test_every_module_scope_float_table_is_a_plain_contiguous_host_array():
     )
 
 
+def test_first_lazy_dsps_use_keeps_x64_off():
+    """Lazy dsps imports at first use must respect the caller's x64_preference (#2504).
+
+    Commit #2276 made DSPS imports lazy (function-local, inside __getattr__ or
+    function bodies). Before the fix, the first lazy import still flipped x64 on
+    unchecked, so ``JAX_ENABLE_X64=0`` would be honored at import, then silently
+    clobbered at first use of any lazy DSPS path (cosmology distance functions,
+    PLANCK15/WMAP5 attribute access). The result was silent dtype inflation for
+    the rest of the process.
+
+    This test runs in a subprocess with x64=off, touches the first lazy DSPS use,
+    and asserts that x64 is still off and dtypes are still float32 afterwards.
+    """
+    out = _run(
+        "0",
+        """
+        import warnings
+        warnings.simplefilter("ignore")
+        import jax
+        import jax.numpy as jnp
+        import tengri
+
+        # First lazy dsps import: access PLANCK15
+        _ = tengri.cosmology.PLANCK15
+        print("AFTER_PLANCK15", jax.config.jax_enable_x64)
+        print("DTYPE_AFTER_PLANCK15", (jnp.zeros(1) + 1.0).dtype)
+
+        # Another lazy import: call luminosity_distance which imports from dsps
+        _ = tengri.cosmology.luminosity_distance(0.1)
+        print("AFTER_LUMINOSITY_DISTANCE", jax.config.jax_enable_x64)
+        print("DTYPE_AFTER_LUMINOSITY_DISTANCE", (jnp.zeros(1) + 1.0).dtype)
+        """,
+    )
+    assert _parse(out, "AFTER_PLANCK15") == "False", (
+        "x64 flipped on at first lazy PLANCK15 access despite JAX_ENABLE_X64=0"
+    )
+    assert _parse(out, "DTYPE_AFTER_PLANCK15") == "float32", (
+        "dtype inflated to float64 after lazy PLANCK15 import"
+    )
+    assert _parse(out, "AFTER_LUMINOSITY_DISTANCE") == "False", (
+        "x64 flipped on at first lazy cosmology function call despite JAX_ENABLE_X64=0"
+    )
+    assert _parse(out, "DTYPE_AFTER_LUMINOSITY_DISTANCE") == "float32", (
+        "dtype inflated to float64 after lazy cosmology function import"
+    )
+
+
 @pytest.mark.parametrize(
     ("env_value", "x64"),
     [(None, "True"), ("0", "False")],
