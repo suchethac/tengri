@@ -48,6 +48,12 @@ import numpy as np
 from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
 from tengri.components.nebular.component import _BACKEND_OPTIONAL_PARAMS
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
+from tengri.components.nebular.nebular_grid_dust_build import (
+    _build_dust_channels,
+    _nebular_eb_channel,  # noqa: F401  (re-exported build helper)
+    _nebular_screen_for,  # noqa: F401  (re-exported build helper)
+    _nebular_subband_channels,  # noqa: F401  (re-exported build helper)
+)
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.resolve import merge_fixed_params
 from tengri.parameters.translate import LOG10_ZSUN
@@ -186,6 +192,7 @@ def validate_n_grid(n_grid):
 #: not depend on who else is in the batch. Grids at or below this size take the
 #: single-call path unchanged, so the common one-axis grid is untouched.
 _BUILD_CHUNK_NODES = 64
+_DUST_TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -238,6 +245,29 @@ class NebularGridTable:
         :func:`precompute_nebular_grid` now always populates it alongside
         ``log_phot_per_qh``, and a table missing it disables the fast path
         rather than serving a half-answer.
+    log_phot_subband_per_qh : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
+        log10 of the intrinsic rest-frame L_nu per unit nion integrated through
+        sub-band chunk k of each OBSERVED-frame filter [erg/s/Hz per (photon/s)];
+        sum_k 10**x == 10**log_phot_per_qh to 1e-10 rel.
+    phot_subband_waves_rest : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
+        Rest-frame flux-weighted wavelength of the nebular SED inside chunk k [Angstrom];
+        chunk filter-mass centroid where the chunk integral is <= 0.
+    log_restband_subband_per_qh : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
+        Rest-frame twin (filters at redshift 0), same shape and units.
+    restband_subband_waves_rest : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
+        Rest-frame twin of the node wavelengths.
+    eb_absorbed_per_qh : ndarray, shape ``(*grid_dims, n_tau_a, n_tau_b)`` or None
+        LINEAR LyC-masked absorbed nebular luminosity per unit nion through the model's
+        NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)]; >= 0; exactly 0
+        where the screen is unity.
+    eb_tau_a_grid : ndarray, shape (n_tau_a,) or None
+        The stellar EnergyBalanceLUT's tau_bc_grid (two_component) or
+        ``[0.0]`` (single screen).
+    eb_tau_b_grid : ndarray, shape (n_tau_b,) or None
+        The stellar EnergyBalanceLUT's tau_diff_grid (two_component) or its tau_v
+        grid (single screen).
+    eb_include_lyc : bool
+        The LyC-mask choice baked into eb_absorbed_per_qh (must equal dust.config.eb_include_lyc).
     """
 
     axis_names: tuple
@@ -247,6 +277,30 @@ class NebularGridTable:
     log_phot_per_qh: jnp.ndarray | None = None
     axis_kinds: tuple = ()
     log_restband_per_qh: jnp.ndarray | None = None
+    log_phot_subband_per_qh: jnp.ndarray | None = None
+    phot_subband_waves_rest: jnp.ndarray | None = None
+    log_restband_subband_per_qh: jnp.ndarray | None = None
+    restband_subband_waves_rest: jnp.ndarray | None = None
+    eb_absorbed_per_qh: jnp.ndarray | None = None
+    eb_tau_a_grid: jnp.ndarray | None = None
+    eb_tau_b_grid: jnp.ndarray | None = None
+    eb_include_lyc: bool = False
+
+    @property
+    def serves_dust(self) -> bool:
+        """True iff all seven dust-channel arrays are not None."""
+        return all(
+            getattr(self, attr) is not None
+            for attr in (
+                "log_phot_subband_per_qh",
+                "phot_subband_waves_rest",
+                "log_restband_subband_per_qh",
+                "restband_subband_waves_rest",
+                "eb_absorbed_per_qh",
+                "eb_tau_a_grid",
+                "eb_tau_b_grid",
+            )
+        )
 
 
 def _ssp_met_nodes(model):
@@ -688,6 +742,9 @@ def precompute_nebular_grid(
     ranges: dict | None = None,
     ref_params: dict | None = None,
     snap_met_to_ssp_nodes: bool = True,
+    dust_component=None,
+    eb_tau_grids=None,
+    n_subbands=None,
 ) -> NebularGridTable:
     """Build the adaptive-axis per-Q_H line grid for ``model``.
 
@@ -739,6 +796,14 @@ def precompute_nebular_grid(
         on the kinks + a C0 interpolant converge normally; a uniform axis, or a
         cubic whose tangent straddles a kink, does not (#1020). Set False to
         recover the pre-#1020 uniform + PCHIP axis.
+    dust_component : SEDModelComponent or None, optional
+        The chain's DustSEDComponent or DustAttenuationSEDComponent, or None (then
+        the dust channels stay None).
+    eb_tau_grids : tuple or None, optional
+        (tau_a_grid, tau_b_grid) from the stellar EnergyBalanceLUT; None -> eb_absorbed_per_qh
+        stays None.
+    n_subbands : int or None, optional
+        K; None -> the sub-band channels stay None.
 
     Returns
     -------
@@ -914,6 +979,11 @@ def precompute_nebular_grid(
     axes = tuple(axes)
     axis_kinds = tuple(axis_kinds)
 
+    collect_sed = n_subbands is not None or (
+        dust_component is not None and eb_tau_grids is not None
+    )
+    wave_sink: dict = {}
+
     def _row(point_values):
         """(line, phot|None, restband|None) at one grid point: one eager Cue forward.
 
@@ -921,10 +991,10 @@ def precompute_nebular_grid(
         vmap sanity check); the full grid is built vmapped, not by looping this.
         """
         row = jnp.asarray([float(v) for v in point_values])
-        line, phot, rest = _row_traced(row, want_phot=True)
+        line, phot, rest, _, _ = _row_traced(row, want_phot=True, wave_sink=wave_sink)
         return line, (None if phot is None else phot), (None if rest is None else rest)
 
-    def _row_traced(row, *, want_phot):
+    def _row_traced(row, *, want_phot, wave_sink=None):
         """Per-Q_H line (and optionally phot) vector at one grid point, tracer-safe.
 
         ``row`` is a ``(n_axes,)`` array so this vmaps: ``predict_state`` compiles
@@ -940,7 +1010,16 @@ def precompute_nebular_grid(
         # `fixed_values={}` is predict_state's "already resolved, trust me"
         # escape hatch, so this internal build-time probe is not refused for
         # carrying a Fixed key it deliberately overrides.
+        if collect_sed:
+            # The attenuator re-publishes ``sed_nebular`` reddened. Its optical
+            # depths are pinned to zero so the captured continuum is the intrinsic
+            # one every dust screen is later applied to; nothing else read here
+            # (line luminosities with ``redden=False``, the nebular photometry
+            # channels) depends on them.
+            p.update({k: jnp.zeros(()) for k in _DUST_TAU_NAMES if k in p})
         state = model.predict_state(p, fixed_values={})
+        if wave_sink is not None:
+            wave_sink["wave"] = np.asarray(state.wave)
         # Q_H is ~1e53 photons/s, so the LINEAR ``nion`` is ``inf`` in float32 and
         # ``inv_qh`` is then exactly 0. The reciprocal is only ever used as a
         # divisor, so take it as a log offset instead and it never materializes
@@ -956,7 +1035,7 @@ def precompute_nebular_grid(
         # applying them together is what keeps every intermediate in range.
         line_per_qh = apply_log10_scale(jnp.asarray(flux), log10_ref_divisor + neg_log_qh)
         if not want_phot:
-            return line_per_qh, None, None
+            return line_per_qh, None, None, None, None
         # intrinsic nebular filter-integrated rest-frame L_nu per Q_H (the exact
         # per-eval publish, captured once at build time). Absent when the model
         # has no WavePrecomp filters (line-only grid).
@@ -974,7 +1053,14 @@ def precompute_nebular_grid(
         rest_per_qh = (
             None if neb_rest is None else apply_log10_scale(jnp.asarray(neb_rest), neg_log_qh)
         )
-        return line_per_qh, phot_per_qh, rest_per_qh
+        # The materialized nebular continuum, only when a dust channel is built
+        # from it: per-node SEDs are the memory cost of the dust channels.
+        sed_neb = (
+            jnp.asarray(state.derived["sed_nebular"])
+            if collect_sed and "sed_nebular" in state.derived
+            else None
+        )
+        return line_per_qh, phot_per_qh, rest_per_qh, sed_neb, neg_log_qh
 
     if not axis_names:
         grid_shape: tuple = ()
@@ -1025,22 +1111,35 @@ def precompute_nebular_grid(
         @jax.jit
         @jax.vmap
         def _eval_both(row):
-            line, phot, rest = _row_traced(row, want_phot=True)
-            return line, phot, rest
+            line, phot, rest, sed_neb, neg_log_qh = _row_traced(row, want_phot=True)
+            if not collect_sed:
+                return line, phot, rest
+            if sed_neb is None:
+                raise RuntimeError(
+                    "nebular fast grid: a dust channel was requested but the reference "
+                    "model does not publish 'sed_nebular' (a BakedIn or line-only nebular "
+                    "has no continuum to tabulate)."
+                )
+            return line, phot, rest, sed_neb, neg_log_qh
 
         # (n_points, n_line), (n_points, n_phot), (n_points, n_phot)
-        line_all, phot_all, rest_all = _in_chunks(_eval_both, pts_arr, 3)
+        # and, when a dust channel is built: (n_points, n_wave), (n_points,)
+        n_out = 5 if collect_sed else 3
+        outs = _in_chunks(_eval_both, pts_arr, n_out)
+        line_all, phot_all, rest_all = outs[:3]
+        sed_all, neg_log_qh_all = (outs[3], outs[4]) if collect_sed else (None, None)
     else:
 
         @jax.jit
         @jax.vmap
         def _eval_line(row):
-            line, _, _ = _row_traced(row, want_phot=False)
+            line = _row_traced(row, want_phot=False)[0]
             return line
 
         line_all = _in_chunks(_eval_line, pts_arr, 1)  # (n_points, n_line)
         phot_all = None
         rest_all = None
+        sed_all = neg_log_qh_all = None
 
     # Sanity: the vmapped first node must reproduce the eager reference forward.
     # The tolerance follows the working dtype: 1e-5 is the historical float64
@@ -1063,6 +1162,20 @@ def precompute_nebular_grid(
     log_phot = None if phot_all is None else _stack_log(phot_all)
     log_rest = None if rest_all is None else _stack_log(rest_all)
 
+    dust_channels = _build_dust_channels(
+        model,
+        grid_shape=grid_shape,
+        phot_all=phot_all,
+        rest_all=rest_all,
+        sed_all=sed_all,
+        neg_log_qh_all=neg_log_qh_all,
+        wave_rest=wave_sink.get("wave"),
+        ref_params=ref_params,
+        dust_component=dust_component,
+        eb_tau_grids=eb_tau_grids,
+        n_subbands=n_subbands,
+    )
+
     return NebularGridTable(
         axis_names=axis_names,
         axes=axes,
@@ -1071,6 +1184,7 @@ def precompute_nebular_grid(
         log_phot_per_qh=log_phot,
         axis_kinds=axis_kinds,
         log_restband_per_qh=log_rest,
+        **dust_channels,
     )
 
 
@@ -1337,3 +1451,172 @@ def reconstruct_nebular_restband(log_nion, params, table) -> jnp.ndarray:
     moved off the exact path, worst ``HgA`` by +1733%, silently.
     """
     return _reconstruct_band_channel(log_nion, params, table, "log_restband_per_qh", "rest-band")
+
+
+def reconstruct_nebular_phot_subband(log_nion, params, table) -> jnp.ndarray:
+    r"""Intrinsic nebular sub-band photometry from the grid: (n_filter, K).
+
+    The per-chunk L_nu per unit Q_H, where chunks are equal filter-mass intervals.
+
+    Parameters
+    ----------
+    log_nion : float
+        log10 ionizing photon rate [dex re photons/s].
+    params : Mapping
+        Parameter dict: the free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+
+    Returns
+    -------
+    ndarray, shape (n_filter, K)
+        Intrinsic nebular L_nu per sub-band chunk [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP + log-domain add.
+    """
+    return _reconstruct_band_channel_subband(
+        log_nion, params, table, "log_phot_subband_per_qh", "photometry"
+    )
+
+
+def reconstruct_nebular_restband_subband(log_nion, params, table) -> jnp.ndarray:
+    r"""Intrinsic nebular rest-band sub-band photometry from the grid: (n_filter, K).
+
+    Twin of :func:`reconstruct_nebular_phot_subband`, integrated at redshift=0.
+
+    Parameters
+    ----------
+    log_nion : float
+        log10 ionizing photon rate [dex re photons/s].
+    params : Mapping
+        Parameter dict: the free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+
+    Returns
+    -------
+    ndarray, shape (n_filter, K)
+        Intrinsic nebular rest-frame L_nu per sub-band chunk [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP + log-domain add.
+    """
+    return _reconstruct_band_channel_subband(
+        log_nion, params, table, "log_restband_subband_per_qh", "rest-band"
+    )
+
+
+def _reconstruct_band_channel_subband(log_nion, params, table, field, label) -> jnp.ndarray:
+    """Shared core of the two per-filter sub-band reconstructions.
+
+    Parameters
+    ----------
+    log_nion : float
+        log10 ionizing photon rate [dex re photons/s].
+    params : Mapping
+        Parameter dict; free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+    field : str
+        Grid attribute to read ('log_phot_subband_per_qh' / 'log_restband_subband_per_qh').
+    label : str
+        Human name of the channel for the error message.
+
+    Returns
+    -------
+    ndarray, shape (n_filter, K)
+        Intrinsic nebular filter-integrated rest-frame L_nu per chunk [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP + log-domain add.
+    """
+    log_channel = getattr(table, field, None)
+    if log_channel is None:
+        raise ValueError(
+            f"NebularGridTable has no {label} sub-band channel ({field} is None). "
+            "Rebuild precompute_nebular_grid with n_subbands=."
+        )
+    if not table.axis_names:
+        log_cpq = log_channel
+    else:
+        point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
+        log_cpq = interp_nd_pchip(log_channel, table.axes, point, _kinds(table))
+    return pow10(jnp.asarray(log_nion) + log_cpq)  # rest-frame L_nu; consumer applies dust + z
+
+
+def reconstruct_nebular_subband_waves(params, table, *, rest: bool) -> jnp.ndarray:
+    r"""Flux-weighted wavelength of nebular sub-band chunks from the grid.
+
+    Parameters
+    ----------
+    params : Mapping
+        Parameter dict: the free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+    rest : bool
+        Whether to interpolate the rest-frame or observed-frame nodes.
+
+    Returns
+    -------
+    ndarray, shape (n_filter, K)
+        Linear interpolation over the nebular axes [Angstrom].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes, linear interpolation.
+    """
+    field = "restband_subband_waves_rest" if rest else "phot_subband_waves_rest"
+    waves = getattr(table, field, None)
+    if waves is None:
+        raise ValueError(
+            f"NebularGridTable has no sub-band wave channel ({field} is None). "
+            "Rebuild precompute_nebular_grid with n_subbands=."
+        )
+    if not table.axis_names:
+        return waves
+    n_ax = len(table.axes)
+    point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
+    # Wavelengths are interpolated linearly on every axis: a node wavelength is
+    # a flux-weighted centroid, not a positive log-scale quantity.
+    flat = waves.reshape(*waves.shape[:n_ax], -1)
+    return interp_nd_pchip(flat, table.axes, point, ("linear",) * n_ax).reshape(waves.shape[n_ax:])
+
+
+def reconstruct_nebular_eb_absorbed_per_qh(params, table) -> jnp.ndarray:
+    r"""Absorbed nebular luminosity per unit Q_H at the energy-balance tau grid.
+
+    Parameters
+    ----------
+    params : Mapping
+        Parameter dict: the free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+
+    Returns
+    -------
+    ndarray, shape (n_tau_a, n_tau_b)
+        LINEAR per unit nion, interpolated over the nebular axes [erg/s per (photon/s)].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes, node-exact interpolation.
+    """
+    eb_arr = getattr(table, "eb_absorbed_per_qh", None)
+    if eb_arr is None:
+        raise ValueError(
+            "NebularGridTable has no energy-balance channel. "
+            "Rebuild precompute_nebular_grid with eb_tau_grids=."
+        )
+    if not table.axis_names:
+        return eb_arr
+    point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
+    # Reshape to flatten the last axis (tau grid), interpolate, reshape back
+    shape_grid_dims = eb_arr.shape[: len(table.axes)]
+    shape_tau = eb_arr.shape[len(table.axes) :]
+    eb_flat = eb_arr.reshape(*shape_grid_dims, -1)
+    result_flat = interp_nd_pchip(eb_flat, table.axes, point, _kinds(table))
+    return result_flat.reshape(shape_tau)
