@@ -189,20 +189,31 @@ class TestMeanSFHCrossval:
     """Validate mean SFH parametric forms."""
 
     def test_dpl_peak_location(self):
-        """Double power-law should peak near tau."""
+        """Double power-law should peak at age - tau*(beta/alpha)^{1/(alpha+beta)}.
+
+        With alpha=1.0, beta=1.5, tau=3.0 Gyr:
+        T_peak = 3.0 * (1.5)^(1/2.5) ≈ 3.9 Gyr
+        Peak lookback time = 13.8 - 3.9 ≈ 9.9 Gyr
+        """
         from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
-        sfr = np.asarray(double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0))
+        age = 13.8
+        sfr = np.asarray(double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0, age=age))
         peak_t = float(t[np.argmax(sfr)])
-        assert 1.0 < peak_t < 5.0, f"DPL peak at {peak_t:.1f} Gyr"
+        # Expected: age - tau*(beta/alpha)^{1/(alpha+beta)} ≈ 13.8 - 3.9 ≈ 9.9
+        expected_peak = age - 3.0 * (1.5) ** (1.0 / 2.5)
+        assert abs(peak_t - expected_peak) < 0.5, (
+            f"DPL peak at {peak_t:.1f} Gyr, expected {expected_peak:.1f}"
+        )
 
     def test_dpl_integral_positive(self):
         """DPL integral should be positive."""
         from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
-        sfr = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)
+        age = 13.8
+        sfr = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0, age=age)
         assert float(jnp.trapezoid(sfr, t)) > 0
 
     def test_dpl_norm_scales_linearly(self):
@@ -210,8 +221,9 @@ class TestMeanSFHCrossval:
         from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
-        sfr1 = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)
-        sfr2 = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=2.0)
+        age = 13.8
+        sfr1 = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0, age=age)
+        sfr2 = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=2.0, age=age)
         np.testing.assert_allclose(np.asarray(sfr2), np.asarray(sfr1) * 2, rtol=1e-10)
 
 

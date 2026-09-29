@@ -49,6 +49,7 @@ from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineList
 from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.photometry_config import Photometry
+from tengri.observation.spectral_indices import STANDARD_INDICES, SpectralIndexData
 
 pytestmark = pytest.mark.regression_bug
 
@@ -93,6 +94,37 @@ def synthetic_ssp_wide():
         * (1.0 + 0.15 * (ages_gyr - ages_gyr.mean()))[None, :, None]
         * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
     )
+    flux = jnp.abs(flux) + 1e-12
+    return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
+
+
+def synthetic_ssp_with_break():
+    """Synthetic SSP whose spectral SHAPE (not just amplitude) depends on age.
+
+    ``synthetic_ssp_wide()`` scales every age's flux by the SAME wavelength
+    shape (one power law); an age-weighted RATIO (a break/slope spectral
+    index) is then invariant to the age mix by construction, since a uniform
+    per-age amplitude factor cancels exactly in any ratio of two windows on
+    that same shape -- measured: D4000 moved by 6e-5 relative between a
+    z=0.1 and a z=2.0 build of the SAME strongly-truncating SFH, three
+    orders of magnitude below this file's VACUITY_FLOOR, regardless of how
+    the SFH shape was tuned. This fixture instead suppresses flux blueward
+    of 4000 Angstrom by an amount that grows with age and with distance from
+    4000 Angstrom (a toy stand-in for real metal-line blanketing below the
+    4000 Angstrom break, and for a genuine age-dependent UV continuum
+    slope), so an age-weight shift genuinely moves both a break index
+    (D4000) and a slope index (``uv_slope_beta``, measured on 1250-2600
+    Angstrom, entirely within the suppressed region).
+    """
+    n_met, n_age = 3, 25
+    wave = jnp.logspace(2.0, 7.0, 1600)
+    ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
+    lgmet = jnp.array([-4.0, -2.65, -1.3])
+    base = (5000.0 / wave) ** 2
+    break_strength = 0.9 * (ages_gyr - ages_gyr.min()) / (ages_gyr.max() - ages_gyr.min())
+    frac_below_4000 = jnp.clip(1.0 - wave / 4000.0, 0.0, 1.0)
+    suppression = 1.0 - break_strength[None, :, None] * frac_below_4000[None, None, :]
+    flux = base[None, None, :] * suppression * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
     flux = jnp.abs(flux) + 1e-12
     return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 
@@ -549,4 +581,310 @@ def test_compute_log_nion_respects_fixed_values_redshift_override():
     assert _relative_diff(log_nion_helper, log_nion_baked) > VACUITY_FLOOR, (
         "vacuity: overriding redshift via fixed_values did not change log_nion "
         "(the age-of-universe SFH cutoff must depend on the evaluation z)"
+    )
+
+
+def _index_defs():
+    """Minimal spectral index definitions for testing.
+
+    D4000 (break ratio) is sensitive to age, which is affected by the cosmic
+    age at z via the SFH truncation.
+    """
+    return (STANDARD_INDICES["D4000"],)
+
+
+def _build_bare_stellar_model(ssp, obs, z, approx):
+    """Bare-stellar (no nebular) model for the ``approx=True`` index tests.
+
+    ``_feature_fast_indices`` (``predict_spectral_indices(approx=True)``)
+    contracts SED-free SFH+met weights with the dust screen only -- no
+    nebular term -- so a nebular component is not needed here, and omitting
+    it keeps ``FeaturePrecomp`` from also having to satisfy its (unrelated)
+    per-Q_H photometry grid requirements.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(z),
+            sfh={"type": "dpl", "all_params": FREE},
+            met={"logzsol": Fixed(0.0)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+                "tau_bc": Uniform(0.0, 4.0),
+                "tau_diff": Uniform(0.0, 3.0),
+            },
+            dust_emission={"type": "none"},
+            approx=approx,
+        )
+
+
+#: A deliberately old SFH age. PARAMS' own ``sfh_dpl_age_gyr=0.5`` sits well
+#: inside ``age_at_z`` at every z used below (0.1-2.0), so the SFH's
+#: age-of-universe truncation (components/stellar/component.py's
+#: ``_cic_parcels``) never actually engages and every index comparison built
+#: on it would be vacuously equal -- the exact failure mode this file's
+#: rejected draft shipped (see test_compute_log_nion_respects_fixed_values_
+#: redshift_override's comment for the line-flux analog, measured 0.26 dex
+#: apart there). age_at_z(2.0) ~ 3.3 Gyr, age_at_z(0.1) ~ 12.4 Gyr: 13.0 Gyr
+#: is clipped hard at z=2.0 and (almost) not at all at z=0.1.
+_OLD_AGE_PARAMS = {**PARAMS, "sfh_dpl_age_gyr": 13.0}
+
+
+def test_predict_spectral_indices_approx_true_matches_plain_model_at_same_z():
+    """predict_spectral_indices(approx=True): fixed_values override matches model built at z.
+
+    FeaturePrecomp window-LUT path: plain_01 with fixed_values={"redshift": 2.0}
+    must match plain_20 built directly at z=2.0, proving evaluation-time z override
+    reaches the SFH age truncation -- paired with an UNCONDITIONAL vacuity check
+    that plain_01's own NATIVE (un-overridden) indices are genuinely different,
+    so the equality above cannot be satisfied merely because D4000 does not
+    depend on z at these parameters.
+    """
+    ssp = synthetic_ssp_with_break()
+    obs = Observation(photometry=Photometry.from_names(BANDS), line_fluxes=line_data())
+
+    plain_01 = _build_bare_stellar_model(ssp, obs, 0.1, FeaturePrecomp(n_grid=4))
+    plain_20 = _build_bare_stellar_model(ssp, obs, 2.0, FeaturePrecomp(n_grid=4))
+
+    index_defs = _index_defs()
+    fixed_at_20 = _full_fixed_values(plain_01, redshift=2.0)
+
+    # plain_01 with overridden z=2.0 should match plain_20
+    idx_plain01_override = np.asarray(
+        plain_01.predict_spectral_indices(
+            _OLD_AGE_PARAMS, index_defs, approx=True, fixed_values=fixed_at_20
+        )
+    )
+    idx_plain20 = np.asarray(
+        plain_20.predict_spectral_indices(_OLD_AGE_PARAMS, index_defs, approx=True)
+    )
+    np.testing.assert_allclose(idx_plain01_override, idx_plain20, rtol=RTOL)
+
+    # Vacuity: plain_01's NATIVE (un-overridden, z=0.1) indices must genuinely
+    # differ from the z=2.0 answer above, or the equality check is satisfied
+    # trivially by an index this override cannot move.
+    idx_plain01_native = np.asarray(
+        plain_01.predict_spectral_indices(_OLD_AGE_PARAMS, index_defs, approx=True)
+    )
+    assert _relative_diff(idx_plain01_override, idx_plain01_native) > VACUITY_FLOOR, (
+        "vacuity: overriding redshift via fixed_values did not change the "
+        "approx=True spectral indices (the age-of-universe SFH cutoff must "
+        "depend on the evaluation z)"
+    )
+
+
+def test_predict_spectral_indices_approx_true_slope_index_matches_plain_model_at_same_z():
+    """``_feature_fast_indices``'s slope fallback must also honor fixed_values.
+
+    ``approx=True`` measures break/EW indices straight from the window LUT,
+    but a slope index (``uv_slope_beta``) is not a single-window functional:
+    ``_feature_fast_indices`` fills it in from ONE extra exact
+    ``_predict_rest_sed`` call (the ``pc.has_slope`` branch). That fallback
+    call must thread the SAME evaluation-time ``fixed_values`` the window-LUT
+    slots use in the same call, or a slope index silently disagrees with
+    every other index in ``index_defs`` under a runtime redshift override --
+    the sibling of the bug this file's D4000 tests guard, in the one branch
+    D4000 (a break index) never reaches.
+    """
+    ssp = synthetic_ssp_with_break()
+    obs = Observation(photometry=Photometry.from_names(BANDS), line_fluxes=line_data())
+
+    plain_01 = _build_bare_stellar_model(ssp, obs, 0.1, FeaturePrecomp(n_grid=4))
+    plain_20 = _build_bare_stellar_model(ssp, obs, 2.0, FeaturePrecomp(n_grid=4))
+
+    index_defs = (STANDARD_INDICES["D4000"], STANDARD_INDICES["uv_slope_beta"])
+    fixed_at_20 = _full_fixed_values(plain_01, redshift=2.0)
+
+    idx_plain01_override = np.asarray(
+        plain_01.predict_spectral_indices(
+            _OLD_AGE_PARAMS, index_defs, approx=True, fixed_values=fixed_at_20
+        )
+    )
+    idx_plain20 = np.asarray(
+        plain_20.predict_spectral_indices(_OLD_AGE_PARAMS, index_defs, approx=True)
+    )
+    np.testing.assert_allclose(idx_plain01_override, idx_plain20, rtol=RTOL)
+
+    idx_plain01_native = np.asarray(
+        plain_01.predict_spectral_indices(_OLD_AGE_PARAMS, index_defs, approx=True)
+    )
+    assert _relative_diff(idx_plain01_override, idx_plain01_native) > VACUITY_FLOOR, (
+        "vacuity: overriding redshift via fixed_values did not change the "
+        "slope index (uv_slope_beta) under approx=True"
+    )
+
+
+def test_predict_spectral_indices_approx_false_matches_plain_model_at_same_z():
+    """predict_spectral_indices(approx=False): fixed_values override matches model built at z.
+
+    Exact path (no FeaturePrecomp): plain_01 with fixed_values={"redshift": 2.0}
+    must match plain_20 built directly at z=2.0, with the same unconditional
+    vacuity guard as the ``approx=True`` test above.
+
+    Bare-stellar (no nebular), like the ``approx=True`` test: Cue's own
+    ionizing-photon sanity check (``CueWNESSPError``) refuses
+    ``synthetic_ssp_with_break()`` once its age-dependent blue suppression is
+    read as baked-in nebular continuum, so this comparison -- which needs
+    that fixture for a genuinely age-sensitive D4000 -- cannot carry a Cue
+    nebular component the way ``_build_model`` does.
+    """
+    ssp = synthetic_ssp_with_break()
+    obs = Observation(photometry=Photometry.from_names(BANDS))
+
+    plain_01 = _build_bare_stellar_model(ssp, obs, 0.1, WavePrecomp())
+    plain_20 = _build_bare_stellar_model(ssp, obs, 2.0, WavePrecomp())
+
+    index_defs = _index_defs()
+    fixed_at_20 = _full_fixed_values(plain_01, redshift=2.0)
+
+    # plain_01 with overridden z=2.0 should match plain_20
+    idx_plain01_override = np.asarray(
+        plain_01.predict_spectral_indices(
+            _OLD_AGE_PARAMS, index_defs, approx=False, fixed_values=fixed_at_20
+        )
+    )
+    idx_plain20 = np.asarray(
+        plain_20.predict_spectral_indices(_OLD_AGE_PARAMS, index_defs, approx=False)
+    )
+    np.testing.assert_allclose(idx_plain01_override, idx_plain20, rtol=RTOL)
+
+    idx_plain01_native = np.asarray(
+        plain_01.predict_spectral_indices(_OLD_AGE_PARAMS, index_defs, approx=False)
+    )
+    assert _relative_diff(idx_plain01_override, idx_plain01_native) > VACUITY_FLOOR, (
+        "vacuity: overriding redshift via fixed_values did not change the "
+        "approx=False spectral indices (the age-of-universe SFH cutoff must "
+        "depend on the evaluation z)"
+    )
+
+
+def test_measure_line_fluxes_state_none_respects_fixed_values_redshift_override():
+    """measure_line_fluxes' exact (state=None) branch must honor fixed_values.
+
+    Distinct from test_measure_line_fluxes_matches_plain_model_at_same_z
+    above: that test never passes an explicit ``fixed_values`` override (it
+    only exercises the model's OWN spec-declared Fixed redshift resolving
+    under ``catalog_z_range``). This exercises the ``fixed_values`` kwarg
+    itself on the ``state is None`` branch, which computed ``dl_cm`` (the
+    luminosity-distance rescale) from the OVERRIDDEN z via ``_get_redshift``
+    but the rest-frame SED itself from ``_predict_rest_sed(params)`` with no
+    ``fixed_values`` -- silently the model's own build-time z, disagreeing
+    with the distance it was just rescaled to.
+    """
+    ssp = synthetic_ssp_wide()
+    obs = Observation(photometry=Photometry.from_names(BANDS), line_fluxes=line_data())
+
+    plain_01 = _build_model(ssp, obs, 0.1, WavePrecomp())
+    plain_20 = _build_model(ssp, obs, 2.0, WavePrecomp())
+
+    fixed_at_20 = _full_fixed_values(plain_01, redshift=2.0)
+
+    mlf_plain01_override = np.asarray(
+        plain_01.measure_line_fluxes(_OLD_AGE_PARAMS, fixed_values=fixed_at_20)
+    )
+    mlf_plain20 = np.asarray(plain_20.measure_line_fluxes(_OLD_AGE_PARAMS))
+    np.testing.assert_allclose(mlf_plain01_override, mlf_plain20, rtol=RTOL)
+
+    mlf_plain01_native = np.asarray(plain_01.measure_line_fluxes(_OLD_AGE_PARAMS))
+    assert _relative_diff(mlf_plain01_override, mlf_plain01_native) > VACUITY_FLOOR, (
+        "vacuity: overriding redshift via fixed_values did not change "
+        "measure_line_fluxes on the state=None (exact) branch"
+    )
+
+
+def test_fitter_spectral_indices_with_runtime_redshift_matches_plain_model_loss():
+    """A Fitter's runtime z override reaches the spectral-index channel's loss.
+
+    Same contract as ``test_fitter_runtime_redshift_matches_plain_model_loss``
+    (loss from a ``catalog_z_range`` + ``params_override`` Fitter must match a
+    plain model built directly at that redshift, at an identical standardized
+    point), but for a SPECTRAL-INDEX observation rather than line fluxes --
+    this is the level at which #2499's line-method fix left indices behind,
+    and where the previous (rejected) draft's loss-level test used line-flux
+    data instead and so could not have caught a defect confined to
+    ``_build_prediction``'s ``predict_spectral_indices`` call.
+
+    The photometry channel is given deliberately enormous noise so its own
+    (real, but already covered by the sibling line-flux test) z-sensitivity
+    cannot mask a defect confined to the index channel: with it silenced, the
+    loss is dominated by the index chi-squared term, which is what M1 (see
+    the module docstring / task table) targets.
+
+    Bare-stellar (no nebular), same reason as the sibling ``approx=False``
+    index test: ``synthetic_ssp_with_break()`` (needed for a genuinely
+    age-sensitive D4000) fails Cue's ionizing-photon sanity check.
+    """
+    ssp = synthetic_ssp_with_break()
+    index_defs = _index_defs()
+    idx_obs = SpectralIndexData.from_names(names=["D4000"], values=[1.3], errors=[0.05])
+    obs = Observation(photometry=Photometry.from_names(BANDS), spectral_indices=idx_obs)
+
+    wp_catalog = WavePrecomp(catalog_z_range=(0.01, 2.5), n_z=50)
+    catalog_model = _build_bare_stellar_model(ssp, obs, 0.1, wp_catalog)
+    plain_20 = _build_bare_stellar_model(ssp, obs, 2.0, WavePrecomp())
+    plain_01 = _build_bare_stellar_model(ssp, obs, 0.1, WavePrecomp())
+
+    phot, _ = _mock_photometry(plain_20, _OLD_AGE_PARAMS)
+    # Enormous noise: silences the photometry channel's own z-sensitivity so
+    # the compiled loss is dominated by the index chi-squared term.
+    phot_err = 1e8 * (0.05 * np.abs(phot) + 1e-31)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        f_catalog = Fitter(
+            catalog_model,
+            data=phot,
+            noise=phot_err,
+            data_type="photometry",
+            approx=wp_catalog,
+            params_override={"redshift": 2.0},
+        )
+        f_plain20 = Fitter(
+            plain_20, data=phot, noise=phot_err, data_type="photometry", approx=WavePrecomp()
+        )
+        f_plain01 = Fitter(
+            plain_01, data=phot, noise=phot_err, data_type="photometry", approx=WavePrecomp()
+        )
+
+    assert "index_obs" in f_catalog._data_args, (
+        "spectral-index channel must be wired into data_args, or this "
+        "comparison never touches predict_spectral_indices at all"
+    )
+
+    ctx_c = InferenceContext.from_target(f_catalog)
+    ctx_20 = InferenceContext.from_target(f_plain20)
+    ctx_01 = InferenceContext.from_target(f_plain01)
+
+    # Standardize the SAME deliberately-old-age point every model above
+    # shares the free-parameter declarations for (see _OLD_AGE_PARAMS), so
+    # the SFH truncation genuinely differs between the compared redshifts
+    # instead of a random draw that might land on an age too young to be
+    # clipped by either.
+    p_u = {
+        name: catalog_model.spec.get_distribution(name).standardize(jnp.asarray(float(value)))
+        for name, value in _OLD_AGE_PARAMS.items()
+        if name in catalog_model.spec.free_params
+    }
+
+    loss_c_at_20 = float(ctx_c.neg_log_posterior_fn(p_u, ctx_c.data_args))
+    loss_plain_20 = float(ctx_20.neg_log_posterior_fn(p_u, ctx_20.data_args))
+    np.testing.assert_allclose(loss_c_at_20, loss_plain_20, rtol=RTOL)
+
+    # ONE compiled catalog loss, re-evaluated at a different data_args
+    # redshift, must match a SEPARATELY built plain model at that redshift
+    # too (#1316 spec Sec. 9.4: distinct runtime z must not fork the compiled
+    # program).
+    data_args_01 = {**ctx_c.data_args, "redshift": jnp.asarray(0.1)}
+    loss_c_at_01 = float(ctx_c.neg_log_posterior_fn(p_u, data_args_01))
+    loss_plain_01 = float(ctx_01.neg_log_posterior_fn(p_u, ctx_01.data_args))
+    np.testing.assert_allclose(loss_c_at_01, loss_plain_01, rtol=RTOL)
+
+    assert _relative_diff(loss_c_at_01, loss_c_at_20) > VACUITY_FLOOR, (
+        "vacuity: the same compiled loss (spectral-index channel, photometry "
+        "silenced) at two different runtime redshifts must give genuinely "
+        "different values, or this comparison proves nothing"
     )

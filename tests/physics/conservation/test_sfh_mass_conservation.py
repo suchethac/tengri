@@ -159,7 +159,9 @@ class TestDoublePowerlawMassConservation:
 
     def test_finite_positive(self):
         alpha, beta, tau, norm = 1.5, 2.0, 3e9, 5.0
-        mass = _integrate(double_powerlaw, alpha=alpha, beta=beta, tau=tau, norm=norm)
+        mass = _integrate(
+            double_powerlaw, alpha=alpha, beta=beta, tau=tau, norm=norm, age=_AGE_UNIV_YR
+        )
         assert np.isfinite(mass)
         assert mass > 0.0
 
