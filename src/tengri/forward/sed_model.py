@@ -9521,6 +9521,7 @@ class SEDModel:
         )
         from tengri.components.dust.laws._registry import law_kwarg_names
         from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
 
         lut = None
         dust = next(
@@ -9574,6 +9575,7 @@ class SEDModel:
             # the component that is actually in the chain, so the LUT cannot
             # bake a different curve from the one the direct path evaluates.
             is_single_component = isinstance(dust, DustAttenuationSEDComponent)
+            _decline_two_component_lut_for_lyc = False
 
             if is_single_component:
                 # Single-component dust: build LUT using build_energy_balance_lut
@@ -9645,6 +9647,43 @@ class SEDModel:
                 transition_width_dex = dust.config.transition_width_dex
                 eb_include_lyc = dust.config.eb_include_lyc
 
+                # #2539 sibling defect: the LUT's stellar B/G terms
+                # (energy_balance_precompute.build_energy_balance_lut) are
+                # integrated from the raw SSP cube alone -- they carry no
+                # nebular-fesc dependence at all, unlike
+                # DustSEDComponent.apply()'s exact path, which now reads the
+                # SAME per-age, gas-reprocessed population ``sed_attenuated``
+                # attenuates (see the §2a/§3 comments in two_component.py).
+                # ``neb_fesc`` can be a runtime FREE parameter, so that
+                # per-age masking cannot be baked into a build-time LUT the
+                # way (tau_bc, tau_diff) are. Rather than silently bake a
+                # fesc-blind answer whenever ``eb_include_lyc=True`` unmasks
+                # the LyC region, decline the LUT here and fall back to the
+                # exact integral, which is correct. Only matters when a live
+                # (fesc != 1) photoionized nebular component is in the chain;
+                # BakedIn/no-nebular models are unaffected (``_lyc_t`` is
+                # never published, both paths already agree).
+                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+                _live_neb = any(
+                    isinstance(c, NebularSEDComponent)
+                    and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+                    for c in chain
+                )
+                _lyc_mask_live = False
+                if _live_neb:
+                    if "neb_fesc" in free:
+                        _lyc_mask_live = True
+                    else:
+                        _fesc_fixed = float(fixed.get("neb_fesc", 0.0))
+                        _lyc_mask_live = abs(_fesc_fixed - 1.0) > 1e-12
+                if eb_include_lyc and _lyc_mask_live:
+                    _decline_two_component_lut_for_lyc = True
+                    self._energy_balance_lut_decline_reason = (
+                        "eb_include_lyc=True with a live nebular LyC mask (fesc != 1): "
+                        "the energy-balance LUT has no fesc dependence (#2539 sibling), "
+                        "declined in favor of the exact integral"
+                    )
+
                 def _grid(name):
                     if name in free:
                         dist = self.spec.get_distribution(name)
@@ -9655,7 +9694,7 @@ class SEDModel:
                 tau_bc_grid = _grid("dust_tau_bc")
                 tau_diff_grid = _grid("dust_tau_diff")
 
-            if not is_single_component:
+            if not is_single_component and not _decline_two_component_lut_for_lyc:
                 # Two-component: use the standard LUT builder
                 ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -9680,6 +9719,8 @@ class SEDModel:
                     tau_diff_grid=tau_diff_grid,
                 )
 
+        if lut is not None:
+            self._energy_balance_lut_decline_reason = None
         self._energy_balance_lut_cache = lut
         return lut
 

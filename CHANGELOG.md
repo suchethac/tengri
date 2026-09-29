@@ -428,7 +428,15 @@
   log-add is gradient-safe at `neb_fdust == 0` (bit-identical value, finite
   gradient). Also threads the `eb_include_lyc` (FSPS/Prospector-parity) toggle
   to `wg00` (`dust_type=3`), which the grammar already accepted but
-  `component_factory.py` silently dropped (#2539).
+  `component_factory.py` silently dropped (#2539). A sibling defect in the same
+  budget is fixed alongside it: `two_component`'s own `eb_include_lyc=True`
+  screen-absorption integral for `lyc_absorb_all=False` now reads the same
+  per-age, fesc-aware population `sed_attenuated` itself attenuates rather
+  than a uniform all-ages bookkeeping value, in both the exact and WavePrecomp
+  LUT paths (the LUT, which cannot represent a runtime `neb_fesc`, declines in
+  favor of the exact integral instead), bit-identical at the
+  `eb_include_lyc=False` default; `single_component` and `wg00` already
+  integrated the same SED they attenuate.
 
 ### Fixed
 

@@ -933,8 +933,11 @@ class DustSEDComponent(TemplateThreading):
         # ``sed_intrinsic_stellar`` mirrors the nebular component's *uniform*
         # mask on ``state.sed_intrinsic`` (all ages × neb_fesc below 912) so the
         # ``non_stellar_other`` bookkeeping below stays clean; the below-912
-        # region is excluded from the energy-balance integral, so this uniform
-        # bookkeeping value never feeds L_ir.
+        # region is excluded from the energy-balance integral BY DEFAULT, so
+        # this uniform bookkeeping value never feeds L_ir there. It DOES feed
+        # ``non_stellar_pre_dust`` (§4 below) unconditionally, so it must stay
+        # the uniform (all-ages) mask -- do not repoint it at the per-age
+        # split below.
         #
         # ``sed_attenuated`` (the actual stellar output) uses the physical rule:
         #   * default (``lyc_absorb_all=False``): **young/birth-cloud only**.
@@ -944,12 +947,29 @@ class DustSEDComponent(TemplateThreading):
         #     Per-age factor ``1 - y(a)·(1 - lyc_t(λ))`` -> young→neb_fesc,
         #     old→1 below 912; both →1 above 912.
         #   * ``lyc_absorb_all=True``: all stellar LyC absorbed (FSPS/CIGALE).
+        #
+        # ``sed_intrinsic_stellar_eb``: the pre-screen input the energy-balance
+        # integral (§3 below) uses is a SEPARATE quantity from the uniform
+        # bookkeeping one above (sibling defect to #2539, found by its own
+        # closure test). With ``eb_include_lyc=True`` the LyC region enters
+        # that integral, so the integral's "intrinsic" side must be the SAME
+        # per-age, gas-reprocessed population ``sed_attenuated`` itself is the
+        # dust-screen output of -- i.e. ``lnu_age * lyc_factor`` (the exact
+        # pre-transmission input §2a already forms for ``sed_attenuated``),
+        # not the uniform all-ages mask. For ``lyc_absorb_all=True`` the two
+        # already agree (both apply ``_lyc_t`` uniformly across every age), so
+        # this is a no-op there. With ``eb_include_lyc=False`` (default) the
+        # below-912 region is masked out of that integral regardless of what
+        # this array holds there (``_eb_cutoff=912.0``, see §3), so switching
+        # to this quantity is bit-identical at the default.
         _lyc_t = state.derived.get("lyc_transmission")
+        sed_intrinsic_stellar_eb = sed_intrinsic_stellar
         if _lyc_t is not None:
             _lyc_t = jnp.asarray(_lyc_t)
             sed_intrinsic_stellar = sed_intrinsic_stellar * _lyc_t
             if self.config.lyc_absorb_all:
                 sed_attenuated = sed_attenuated * _lyc_t
+                sed_intrinsic_stellar_eb = sed_intrinsic_stellar
             else:
                 # "Which stars are inside their birth cloud" is ONE physical
                 # quantity, so it must be ONE function. It was previously spelled
@@ -963,6 +983,7 @@ class DustSEDComponent(TemplateThreading):
                 )
                 lyc_factor = 1.0 - y_age[:, None] * (1.0 - _lyc_t[None, :])  # (n_age, n_wave)
                 sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
+                sed_intrinsic_stellar_eb = jnp.sum(lnu_age * lyc_factor, axis=0)
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the
@@ -1209,8 +1230,14 @@ class DustSEDComponent(TemplateThreading):
         else:
             from tengri.forward.energy_balance import bolometric_absorbed_log10
 
+            # Exact path: ``sed_intrinsic_stellar_eb`` (not the uniformly
+            # masked ``sed_intrinsic_stellar``) is the correct pre-screen
+            # side here -- see the §2a comment above for why. Outside the LyC
+            # region (or whenever ``eb_include_lyc=False`` masks it out of
+            # this integral via ``_eb_cutoff``) the two are identical, so this
+            # is bit-identical at the default.
             log_L_absorbed, _ = bolometric_absorbed_log10(
-                sed_intrinsic_stellar + sed_neb + sed_shock + sed_agn,
+                sed_intrinsic_stellar_eb + sed_neb + sed_shock + sed_agn,
                 sed_attenuated + sed_neb_attenuated + sed_shock_attenuated + sed_agn_attenuated,
                 nu,
                 wave=wave,

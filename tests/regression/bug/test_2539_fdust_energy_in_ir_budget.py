@@ -421,23 +421,17 @@ class TestLycConservationClosure:
         # closure sum below uses.
         screen_absorbed_derived = escaped_measured - post_screen_measured
 
-        # Two_component's ``eb_include_lyc=True`` integral, when
-        # ``lyc_absorb_all=False``, reads a UNIFORM (all-ages) fesc-masked
-        # bookkeeping value for the newly-unmasked LyC region rather than the
-        # per-age young/old-split value ``sed_attenuated`` itself uses (a
-        # pre-existing inconsistency in two_component.py's ``eb_include_lyc``
-        # handling, independent of and out of scope for #2539 -- CIGALE/FSPS
-        # parity and wg00's own eb_include_lyc threading, item 6, are
-        # unaffected). That is the ONLY combination where the model's own
-        # measured toggle diff and the independent SED-integral derivation
-        # are expected to disagree; everywhere else they must agree exactly.
-        _two_component_lyc_absorb_all_false_eb_lyc_gap = (
-            dust_type == "two_component" and not lyc_absorb_all
-        )
-        if not _two_component_lyc_absorb_all_false_eb_lyc_gap:
-            np.testing.assert_allclose(
-                screen_absorbed_measured, screen_absorbed_derived, rtol=1e-6
-            )
+        # Two_component's ``eb_include_lyc=True`` integral used to read a
+        # UNIFORM (all-ages) fesc-masked bookkeeping value
+        # (``sed_intrinsic_stellar``) for the newly-unmasked LyC region
+        # instead of the per-age young/old-split value ``sed_attenuated``
+        # itself uses -- a sibling defect in the same LyC energy budget,
+        # fixed alongside #2539 (``sed_intrinsic_stellar_eb`` in
+        # ``two_component.py``, honoring the SAME ``lyc_factor`` split for
+        # both the exact and LUT paths). The model's own measured toggle
+        # diff and the independent SED-integral derivation now agree exactly
+        # for every attenuator x lyc_absorb_all combination.
+        np.testing.assert_allclose(screen_absorbed_measured, screen_absorbed_derived, rtol=1e-6)
 
         # -- closure: nothing counted twice, nothing lost --
         np.testing.assert_allclose(
