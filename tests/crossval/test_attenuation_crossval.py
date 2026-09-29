@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.dust.attenuation import cardelli, conroy2010, power_law
+from tengri.components.dust.attenuation import cardelli, conroy2010
 
 pytestmark = pytest.mark.crossval
 
