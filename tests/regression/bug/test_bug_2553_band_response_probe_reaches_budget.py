@@ -27,7 +27,6 @@ References
 from __future__ import annotations
 
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, Observation, SEDModel
@@ -122,19 +121,14 @@ def _model_control(ssp) -> SEDModel:
 
 #: Exclude emitters that have required data files missing (draine2021_pah
 #: requires TENGRI_PAHSPEC_PATH to be set).
-_EMITTERS_TO_TEST = sorted(
-    e for e in _standalone_dust_emission_types()
-    if e != "draine2021_pah"
-)
+_EMITTERS_TO_TEST = sorted(e for e in _standalone_dust_emission_types() if e != "draine2021_pah")
 
 
 @pytest.mark.parametrize(
     "dust_emission_type",
     _EMITTERS_TO_TEST,
 )
-def test_lut_photometry_matches_exact(
-    dust_emission_type: str, synthetic_ssp_wide
-):
+def test_lut_photometry_matches_exact(dust_emission_type: str, synthetic_ssp_wide):
     """Every dust emitter's LUT photometry must match exact photometry.
 
     Builds three models (exact, LUT, control) with the same configuration

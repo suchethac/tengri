@@ -9760,10 +9760,7 @@ class SEDModel:
                     declared_optional = declared_optional()
                 except Exception:
                     declared_optional = None
-            accepts_log_l_ir = (
-                declared_optional is not None
-                and "log_L_ir" in declared_optional
-            )
+            accepts_log_l_ir = declared_optional is not None and "log_L_ir" in declared_optional
 
             # HOMOGENEITY CHECK. The band response is exact only because an additive
             # emitter is linear (degree-1 homogeneous) in its luminosity:
@@ -9795,8 +9792,10 @@ class SEDModel:
             # (homogeneous and proportional to zero input) from an emitter that was
             # never activated, so record a clear reason and return None (#2553).
             if (
-                jnp.all(lo == 0) or not jnp.all(jnp.isfinite(lo))
-                or jnp.all(hi == 0) or not jnp.all(jnp.isfinite(hi))
+                jnp.all(lo == 0)
+                or not jnp.all(jnp.isfinite(lo))
+                or jnp.all(hi == 0)
+                or not jnp.all(jnp.isfinite(hi))
             ):
                 self._dust_band_response_decline = (
                     "the probe SED is identically zero or contains non-finite values; "

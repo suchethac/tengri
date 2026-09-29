@@ -10,6 +10,14 @@
 
 ### Fixed
 
+- Under `approx=WavePrecomp()` the dust emission model `energy_balance_split`
+  contributed ZERO to photometry. The band-response probe ignored the `log_L_ir`
+  parameter that `energy_balance_split` requires; when it defaulted to -inf
+  (nothing absorbed), both probe points returned zero SEDs and the homogeneity
+  check passed vacuously, caching a zero response. The probe now passes `log_L_ir`
+  to any emitter that declares it as an optional input, and declines the band
+  response with a clear reason when the probe SED is zero or non-finite, so the
+  refusal is visible in engagement reports (#2553).
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
