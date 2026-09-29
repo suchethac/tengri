@@ -45,6 +45,15 @@
   `mean_sfh._renormalize_to_mass`. The linearity probe now evaluates at the
   fit's own fixed values (including a `params_override` redshift) and lets
   model-evaluation errors propagate instead of logging them as invalid thetas.
+  The same fix now covers the whole guard chain rather than just that one
+  evaluation loop: the affine-vs-nonlinear retest's own third-mass evaluation
+  (`_classify_nonproportional`) and the `profile_mass="auto"` guard-check
+  dispatch (`configure_profile_mass`) no longer fold a model-evaluation error
+  into a silent `"nonlinear"` classification or `"auto-disabled"` reason
+  either, and the probe's fixed-values resolution takes the raw
+  `params_override` argument directly, so a call reached during
+  `Fitter.__init__` — before `self._fixed_values`/`self._params_override`
+  exist — no longer silently falls back to the spec's own declared value.
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls

@@ -210,7 +210,10 @@ def _mass_prior_bounds(dist: Distribution) -> tuple[float, float]:
 
 
 def _linearity_max_deviation(
-    fitter: Fitter, mass_name: str, mass_prior_bounds: tuple[float, float]
+    fitter: Fitter,
+    mass_name: str,
+    mass_prior_bounds: tuple[float, float],
+    params_override: dict | None = None,
 ) -> tuple[float, float]:
     """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` worst over 9 thetas.
 
@@ -269,6 +272,19 @@ def _linearity_max_deviation(
         The name of the mass parameter.
     mass_prior_bounds : tuple[float, float]
         The (lo, hi) log10-mass bounds from the prior's support.
+    params_override : dict or None, optional
+        The fitter's raw ``params_override`` constructor argument. Threaded
+        through explicitly because this probe runs from
+        :func:`configure_profile_mass` -- called from ``Fitter.__init__``
+        *before* ``self._fixed_values`` and ``self._params_override`` are
+        set (fitter.py assigns them at ~1574/~1630, ``configure_profile_mass``
+        runs at ~1570) -- so neither fitter attribute exists yet at
+        construction time, and reading ``getattr(fitter, "_params_override",
+        None)`` there would silently evaluate the fit at the spec's *own*
+        fixed values (e.g. the model's declared ``Fixed`` redshift) instead
+        of the value this fit actually runs at. Ignored when
+        ``fitter._fixed_values`` already exists (a post-construction direct
+        call), since that dict is already the fully resolved one.
 
     Returns
     -------
@@ -335,6 +351,23 @@ def _linearity_max_deviation(
     #: one that decides the refusal.
     worst = None
 
+    # Fixed parameters always included, resolved once (invariant across the
+    # nine thetas below). Use the Fitter's own resolved fixed values (already
+    # merged with params_override) when available -- a post-construction
+    # direct call, where that merge has already happened (fitter.py ~1630).
+    # During actual Fitter construction, this probe runs from
+    # configure_profile_mass BEFORE fitter._fixed_values exists (see the
+    # params_override parameter's docstring above), so the only correct
+    # source of the runtime override at that point is the explicit
+    # params_override argument, not a fitter attribute.
+    fixed_vals = getattr(fitter, "_fixed_values", None)
+    if fixed_vals is None:
+        fixed_vals = dict(spec.get_fixed_values())
+        if params_override:
+            fixed_vals = {**fixed_vals, **params_override}
+    else:
+        fixed_vals = dict(fixed_vals)
+
     # Evaluate at prior median (xi = 0) plus 8 draws from the prior.
     for i in range(9):
         phys: dict[str, Any] = {}
@@ -356,15 +389,6 @@ def _linearity_max_deviation(
                     phys[name] = sample[name]
             # spec.sample() already includes sfh_field_xi for stochastic specs.
 
-        # Fixed parameters always included. Use the Fitter's own resolved fixed
-        # values (including params_override, e.g. runtime redshift) when available,
-        # falling back to spec's fixed values if _fixed_values hasn't been
-        # initialized yet (can occur during Fitter construction).
-        fixed_vals = getattr(fitter, "_fixed_values", None)
-        if fixed_vals is None:
-            fixed_vals = dict(spec.get_fixed_values())
-            if hasattr(fitter, "_params_override") and fitter._params_override:
-                fixed_vals.update(fitter._params_override)
         for name, val in fixed_vals.items():
             if name != mass_name:
                 phys[name] = jnp.asarray(val)
@@ -474,25 +498,27 @@ def _classify_nonproportional(
     ``f``, ``g`` from the pair and ask whether they predict the third point. One
     extra forward evaluation, on the refusal branch only.
 
-    Returns ``"nonlinear"`` when the third evaluation cannot be made or produces
-    no valid band -- the conservative answer, since every caller treats
-    ``"nonlinear"`` as "refuse".
+    Returns ``"nonlinear"`` when the third evaluation produces no valid band
+    -- the conservative answer, since every caller treats ``"nonlinear"`` as
+    "refuse". A model-evaluation error (KeyError, ValueError, a shape
+    mismatch, ...) propagates instead of being folded into that same
+    "nonlinear" answer: those indicate a configuration bug in the model or
+    the probe's own vector assembly, not a legitimate third theta the guard
+    should conservatively refuse, and reporting them as a plain refusal would
+    hide the actual defect behind an unrelated-looking linearity message.
     """
     if worst is None:
         return "nonlinear"
     phys, pred_a, pred_b, valid = worst
 
     ell_c = ell_b + 1.0
-    try:
-        pred_c = _predict_full_vector(
-            fitter.model,
-            fitter.data_type,
-            {**phys, mass_name: jnp.asarray(ell_c)},
-            use_components=use_components,
-            line_flux_block=line_flux_block,
-        )
-    except Exception:
-        return "nonlinear"
+    pred_c = _predict_full_vector(
+        fitter.model,
+        fitter.data_type,
+        {**phys, mass_name: jnp.asarray(ell_c)},
+        use_components=use_components,
+        line_flux_block=line_flux_block,
+    )
 
     m_a, m_b, m_c = 10.0**ell_a, 10.0**ell_b, 10.0**ell_c
     # f and g from the two points already in hand: pred = M f + g.
@@ -788,6 +814,13 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
     ValueError
         If ``profile_mass`` is not one of ``True``, ``False``, ``"auto"``, or
         if ``profile_mass=True`` and any guard fails.
+    Exception
+        Under ``profile_mass="auto"``, any error other than a guard's own
+        documented refusal (see :func:`_check_guards`) propagates rather
+        than being reinterpreted as "auto-disabled": it means the model
+        itself could not be evaluated (or the guard machinery has a bug),
+        which is a configuration error the caller needs to see, not a
+        legitimate reason to silently skip profiling.
     """
     if profile_mass not in (True, False, "auto"):
         raise ValueError(f"profile_mass must be True, False, or 'auto'; got {profile_mass!r}")
@@ -811,10 +844,17 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
             raise ValueError(f"profile_mass=True but {reason}.")
         engage, resolved_reason = True, "profile_mass=True"
     else:  # "auto"
-        try:
-            reason, ctx = _check_guards(fitter, params_override)
-        except Exception as exc:
-            reason, ctx = f"guard check raised {exc!r}", {}
+        # Every guard _check_guards owns that can legitimately fail on a
+        # valid model already returns a string reason instead of raising
+        # (the mass-prior-bounds check and the linearity probe's own
+        # ValueError are both caught inline, inside _check_guards). An
+        # exception escaping past that point -- a KeyError/ValueError/etc.
+        # from evaluating the model itself, or a bug in the guard machinery
+        # -- is a configuration error, not a legitimate "auto" input, so it
+        # propagates rather than being folded into a silent "auto-disabled"
+        # decision that would hide the real defect behind an unrelated
+        # linearity-sounding reason string.
+        reason, ctx = _check_guards(fitter, params_override)
         engage = reason is None
         if engage:
             max_dev = ctx.get("max_dev")
