@@ -28,6 +28,9 @@ for entry in (str(ANALYSIS), str(PAPER1)):
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
+from unittest.mock import patch, MagicMock
+from subprocess import CompletedProcess
+
 from paper1.fit_one import (
     DEFAULT_RETUNE_ATTEMPTS,
     build_parser as fit_one_build_parser,
@@ -37,6 +40,8 @@ from paper1.fit_one import (
 from paper1.run_candels_fits import (
     build_parser as run_candels_build_parser,
     default_jobs,
+    fit_one_cell_command,
+    run_fit_subprocess,
 )
 
 pytestmark = pytest.mark.contract
@@ -156,22 +161,56 @@ class TestRunCandelsParser:
 
 
 class TestCommandTemplatePassthrough:
-    def test_fit_one_command_includes_profile_mass(self):
-        """The scheduler command template includes --profile-mass."""
-        # Simulate building a command for a cell
-        parser = fit_one_build_parser()
-        args = parser.parse_args(
-            ["--galaxy", "79", "--config", "II", "--out", "outdir", "--profile-mass", "auto"]
-        )
-        # Verify that the profile_mass setting would be passed to subprocess
-        assert hasattr(args, "profile_mass")
-        assert args.profile_mass == "auto"
+    def test_fit_one_cell_command_with_defaults(self):
+        """fit_one_cell_command includes --profile-mass auto and no --retune-attempts by default."""
+        cmd = fit_one_cell_command(79, "II", Path("results/fits"))
+        # Check that --profile-mass and its value are in the command
+        assert "--profile-mass" in cmd
+        profile_mass_idx = cmd.index("--profile-mass")
+        assert cmd[profile_mass_idx + 1] == "auto"
+        # retune-attempts should not be present when retune_attempts=None
+        assert "--retune-attempts" not in cmd
 
-    def test_fit_one_command_includes_retune_attempts(self):
-        """The scheduler command template includes --retune-attempts."""
-        parser = fit_one_build_parser()
-        args = parser.parse_args(
-            ["--galaxy", "79", "--config", "II", "--out", "outdir", "--retune-attempts", "2"]
-        )
-        assert hasattr(args, "retune_attempts")
-        assert args.retune_attempts == 2
+    def test_fit_one_cell_command_with_custom_values(self):
+        """fit_one_cell_command respects profile_mass and retune_attempts parameters."""
+        cmd = fit_one_cell_command(79, "II", Path("results/fits"),
+                                    profile_mass="off", retune_attempts=3)
+        # Check profile-mass value
+        assert "--profile-mass" in cmd
+        profile_mass_idx = cmd.index("--profile-mass")
+        assert cmd[profile_mass_idx + 1] == "off"
+        # Check retune-attempts is included
+        assert "--retune-attempts" in cmd
+        retune_idx = cmd.index("--retune-attempts")
+        assert cmd[retune_idx + 1] == "3"
+
+    def test_run_fit_subprocess_calls_subprocess_run(self):
+        """run_fit_subprocess passes the command to subprocess.run."""
+        # Mock subprocess.run and json.load
+        fake_diagnostics = {"gal_id": 79, "adoption_pass": True}
+
+        with patch("paper1.run_candels_fits.subprocess.run") as mock_run, \
+             patch("builtins.open", create=True) as mock_open, \
+             patch("paper1.run_candels_fits.json.load", return_value=fake_diagnostics):
+
+            # Mock Popen to capture the command
+            mock_process = MagicMock()
+            mock_process.returncode = 0
+            mock_run.return_value = mock_process
+
+            result = run_fit_subprocess(
+                79, "II", Path("results/fits"),
+                profile_mass="off", retune_attempts=3
+            )
+
+            # Verify subprocess.run was called with the right command
+            assert mock_run.called
+            called_cmd = mock_run.call_args[0][0]
+
+            # Verify command contains the flags
+            assert "--profile-mass" in called_cmd
+            profile_mass_idx = called_cmd.index("--profile-mass")
+            assert called_cmd[profile_mass_idx + 1] == "off"
+            assert "--retune-attempts" in called_cmd
+            retune_idx = called_cmd.index("--retune-attempts")
+            assert called_cmd[retune_idx + 1] == "3"

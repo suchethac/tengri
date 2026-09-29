@@ -36,9 +36,55 @@ from pathlib import Path
 import numpy as np
 
 from .configs import CONFIGS as CONFIGS_REGISTRY
-from .fit_one import ESS_FLOOR
+from .fit_one import DEFAULT_RETUNE_ATTEMPTS, ESS_FLOOR
 
 logger = logging.getLogger(__name__)
+
+
+def fit_one_cell_command(
+    gal_id: int,
+    config_key: str,
+    results_dir,
+    *,
+    method: str = "mcmc_nuts_fast",
+    seed: int = 42,
+    profile_mass: str = "auto",
+    retune_attempts: int | None = None,
+) -> list[str]:
+    """Build subprocess command to run fit_one for one cell.
+
+    Args:
+        gal_id: Galaxy ID
+        config_key: Configuration key (I, II, III, etc.)
+        results_dir: Output directory for results
+        method: Inference method (default: mcmc_nuts_fast)
+        seed: Random seed (default: 42)
+        profile_mass: Profile mass strategy (default: auto)
+        retune_attempts: Retune ladder attempts (default: None = use fit_one default)
+
+    Returns:
+        Command list ready for subprocess.run or Popen
+    """
+    cmd = [
+        sys.executable,
+        "-m",
+        "analysis.paper1.fit_one",
+        "--galaxy",
+        str(gal_id),
+        "--config",
+        config_key,
+        "--method",
+        method,
+        "--out",
+        str(results_dir),
+        "--seed",
+        str(seed),
+        "--profile-mass",
+        profile_mass,
+    ]
+    if retune_attempts is not None:
+        cmd.extend(["--retune-attempts", str(retune_attempts)])
+    return cmd
 
 
 def load_selected_galaxies() -> tuple[list[int], dict[int, str]]:
@@ -228,6 +274,8 @@ def run_fit_subprocess(
     out_dir: Path,
     seed: int = 42,
     timeout: int = DEFAULT_FIT_TIMEOUT_S,
+    profile_mass: str = "auto",
+    retune_attempts: int | None = None,
 ) -> dict | None:
     """Spawn fit_one.py in subprocess and collect results.
 
@@ -237,6 +285,8 @@ def run_fit_subprocess(
         out_dir: Output directory for results
         seed: Random seed
         timeout: Subprocess timeout in seconds
+        profile_mass: Profile mass strategy (default: auto)
+        retune_attempts: Retune ladder attempts (default: None)
 
     Returns:
         Diagnostics dict if successful, None if subprocess failed
@@ -244,21 +294,15 @@ def run_fit_subprocess(
     log_file = out_dir / f"{gal_id}_{config_key}.log"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "analysis.paper1.fit_one",
-        "--galaxy",
-        str(gal_id),
-        "--config",
+    cmd = fit_one_cell_command(
+        gal_id,
         config_key,
-        "--method",
-        "mcmc_nuts_fast",
-        "--out",
-        str(out_dir),
-        "--seed",
-        str(seed),
-    ]
+        out_dir,
+        method="mcmc_nuts_fast",
+        seed=seed,
+        profile_mass=profile_mass,
+        retune_attempts=retune_attempts,
+    )
 
     logger.info(f"Running: {' '.join(cmd)}")
 
@@ -352,27 +396,16 @@ def run_fit_cells_concurrent(
             # Use custom command template
             return [c.format(gal_id=gal_id, config_key=config_key) for c in cell_command]
         else:
-            # Default: use fit_one
-            cmd = [
-                sys.executable,
-                "-m",
-                "analysis.paper1.fit_one",
-                "--galaxy",
-                str(gal_id),
-                "--config",
+            # Default: use fit_one_cell_command
+            return fit_one_cell_command(
+                gal_id,
                 config_key,
-                "--method",
-                "mcmc_nuts_fast",
-                "--out",
-                str(results_dir),
-                "--seed",
-                str(42),
-                "--profile-mass",
-                profile_mass,
-            ]
-            if retune_attempts is not None:
-                cmd.extend(["--retune-attempts", str(retune_attempts)])
-            return cmd
+                results_dir,
+                method="mcmc_nuts_fast",
+                seed=42,
+                profile_mass=profile_mass,
+                retune_attempts=retune_attempts,
+            )
 
     # Track running subprocesses: list of (gal_id, config_key, Popen, start_time)
     running = []
