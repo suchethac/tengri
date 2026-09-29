@@ -270,11 +270,20 @@ class DerivedState:
     #: eta == 1 and no override is declared.
     log_L_absorbed: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
+    #: Full-grid diffuse dust transmission (dimensionless): T(λ) on the full
+    #: state.wave grid, evaluated by the dust attenuator. Published by all
+    #: dust-attenuation models for use by dust-emission components when
+    #: diffuse_screen=True.
+    dust_diff_transmission: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
     #: Bolometric IR luminosity from dust emission component [erg/s].
     #: Published by dust-emission components that close the energy balance.
     L_ir_emission: jnp.ndarray | None = None
+    #: log10(L_ir_emergent / (erg/s)) [dex]: the IR luminosity escaping the diffuse
+    #: dust screen after single-pass attenuation (diffuse_screen=True only).
+    #: When diffuse_screen is off, this key is absent (not published).
+    log_L_ir_emergent: jnp.ndarray | None = None
     # Dust attenuation per filter. A(λ_eff) and its
     # wavelength derivative A'(λ_eff) at each filter pivot, used
     # to apply Taylor-expansion attenuation in

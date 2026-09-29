@@ -7,7 +7,7 @@ explored them on prior signal alone with the likelihood contributing nothing,
 and nothing warned:
 
     constant.start   constant.end   exponential.start   constant_then_exponential.age
-    psb_wild2020.age   sfh2exp.age_yr   periodic.age_yr
+    psb_wild2020.age   sfh2exp.age_yr   periodic.age_yr   buat08.age_yr
 
 Every one entered its model **only** through a hard boolean window such as
 ``(t_lookback >= 0) & (t_lookback <= age)``. Point-sampling a step function makes
@@ -49,6 +49,7 @@ import numpy as np
 import pytest
 
 from tengri.components.stellar.sfh.mean_sfh import (
+    buat08,
     constant,
     constant_then_exponential,
     exponential,
@@ -122,6 +123,16 @@ _WINDOW_PARAMS = [
             "delta_bursts_yr": 5e8,
             "tau_bursts_yr": 2e8,
             "burst_type": 0,
+        },
+        "age_yr",
+        6e9,
+    ),
+    (
+        "buat08.age_yr",
+        buat08,
+        {
+            "log_total_mass": 10.0,
+            "velocity_km_s": 220.0,
         },
         "age_yr",
         6e9,
