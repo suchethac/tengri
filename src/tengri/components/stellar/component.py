@@ -2820,9 +2820,6 @@ class StellarSEDComponent:
                 age_w_cic, total_mass = _age_weights_cic(
                     _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
                 )
-                total_mass = _mass_conserving_total(
-                    sfh_kwargs, total_mass, is_composite=is_composite
-                )
                 lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
                 joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
                 _used_cic = True
@@ -2869,9 +2866,6 @@ class StellarSEDComponent:
                     lgmet_on_ssp_ages,
                     lgmet_scatter,
                     ssp.ssp_lgmet,
-                )
-                total_mass = _mass_conserving_total(
-                    sfh_kwargs, total_mass, is_composite=is_composite
                 )
                 _used_cic = True
             else:
@@ -2925,6 +2919,15 @@ class StellarSEDComponent:
         joint_weights = joint_weights / jnp.maximum(
             joint_weights.sum(), representable_denominator(1e-300)
         )
+        # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
+        # point every age kernel's total_mass converges to (after both the
+        # "cic" and "dsps" branches above): the CIC weights already zero the
+        # integrand at lookback ages older than age(z) and renormalize
+        # within the surviving support (#2521); the DSPS histogram weights
+        # (GP field, or an explicit ``age_kernel='dsps'`` choice) get the
+        # identical correction here rather than a second copy in that
+        # branch, so a future kernel cannot silently skip it.
+        total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
         # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
         # folded into the (params-independent) SSP operand INSIDE the einsum, not
         # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
@@ -3690,44 +3693,53 @@ class StellarSEDComponent:
             # clipped ~10% low. The CIC path (below) bakes it in instead.
             weights = weights * _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)[None, :]
             joint_weights = weights / jnp.maximum(weights.sum(), representable_denominator(1e-300))
-            return joint_weights, total_mass, ssp_ages_yr
-
-        # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
-        # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
-        # with the SFH's exact bin-edge knots injected for binned families) times
-        # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
-        # applies the youngest-bin lookback correction and returns the conserved
-        # total_mass, so (unlike the DSPS histogram path) the caller must NOT
-        # also multiply by ``_youngest_bin_lookback_multiplier`` here.
-        # The SAME builder apply uses, so the two integrands are identical point
-        # for point: the #982 contract, now enforced by construction.
-        _fine_age_yr, _fine_sfr = _cic_integrand(
-            ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
-        )
-
-        # Per-age metallicity → the joint CIC kernel apply uses (#964), which
-        # spreads each mass parcel over the metallicity axis with the MDF
-        # centered on that parcel's own Z. It normalizes internally.
-        if lgmet_on_ssp_ages is not None:
-            joint_weights, total_mass = _joint_weights_cic_met_table(
-                _fine_age_yr,
-                _fine_sfr,
-                ssp_ages_yr,
-                t_obs_gyr,
-                lgmet_on_ssp_ages,
-                lgmet_scatter,
-                ssp.ssp_lgmet,
+        else:
+            # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
+            # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
+            # with the SFH's exact bin-edge knots injected for binned families) times
+            # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
+            # applies the youngest-bin lookback correction and returns the conserved
+            # total_mass, so (unlike the DSPS histogram path) the caller must NOT
+            # also multiply by ``_youngest_bin_lookback_multiplier`` here.
+            # The SAME builder apply uses, so the two integrands are identical point
+            # for point: the #982 contract, now enforced by construction.
+            _fine_age_yr, _fine_sfr = _cic_integrand(
+                ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
             )
-            total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
-            return joint_weights, total_mass, ssp_ages_yr
 
-        age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
+            # Per-age metallicity → the joint CIC kernel apply uses (#964), which
+            # spreads each mass parcel over the metallicity axis with the MDF
+            # centered on that parcel's own Z. It normalizes internally.
+            if lgmet_on_ssp_ages is not None:
+                joint_weights, total_mass = _joint_weights_cic_met_table(
+                    _fine_age_yr,
+                    _fine_sfr,
+                    ssp_ages_yr,
+                    t_obs_gyr,
+                    lgmet_on_ssp_ages,
+                    lgmet_scatter,
+                    ssp.ssp_lgmet,
+                )
+            else:
+                age_w_cic, total_mass = _age_weights_cic(
+                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                )
+                lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
+                joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
+                joint_weights = joint_weights / jnp.maximum(
+                    joint_weights.sum(), representable_denominator(1e-300)
+                )
+
+        # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
+        # point every age kernel's total_mass converges to (mirrors
+        # :meth:`apply`): the CIC weights already zero the integrand at
+        # lookback ages older than age(z) and renormalize within the
+        # surviving support (#2521); the DSPS histogram weights (GP field,
+        # or an explicit ``age_kernel='dsps'`` choice) get the identical
+        # correction here rather than a second copy in that branch. This
+        # function never sees a composite (list) ``sfh_model``: indexing
+        # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
-        lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
-        joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
-        joint_weights = joint_weights / jnp.maximum(
-            joint_weights.sum(), representable_denominator(1e-300)
-        )
         return joint_weights, total_mass, ssp_ages_yr
 
     def compute_log_nion(self, params, ssp_data=None):

@@ -106,6 +106,7 @@ from tengri.config.exceptions import (
     AdvisoryWarning,
     ConfigError,
     DefaultFixedParametersWarning,
+    FreeRedshiftOnsetCeilingWarning,
     ParameterError,
     WildcardPartialFreeWarning,
     warn_measured,
@@ -1484,6 +1485,7 @@ def parse_groups(**kwargs) -> Parameters:
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _narrow_free_priors_to_z(resolved_kwargs, provenance)
+    _warn_free_redshift_onset_ceiling(resolved_kwargs)
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
@@ -1907,6 +1909,101 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
             default=default,
         )
         provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+
+
+def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
+    """Warn once when a free redshift's own range can outrun an onset ceiling.
+
+    :func:`_narrow_free_priors_to_z` caps each z-capped onset/age/peak-time
+    parameter (:func:`_z_capped_onset_params`) at ``age_at_z(z_floor)``, the
+    age of the universe at the LOWEST redshift the build's own ``redshift``
+    prior admits. That is the most permissive age a single static cap can
+    use, and it is deliberately silent about the redshift range's upper
+    (younger-universe) end (see that function's docstring). This check
+    covers exactly that blind spot: it re-reads each z-capped parameter's
+    FINAL declared ceiling -- after any z_floor-based narrowing, so it also
+    sees a user's own untouched explicit prior -- and compares it against
+    ``age_at_z(z_ceil)``, the age at the redshift range's upper end. A draw
+    near ``z_ceil`` paired with an onset value between the two ages places
+    star formation before the Big Bang at that draw, even though the value
+    is within the parameter's own declared range.
+
+    Fires at most once per build, naming every offending parameter together
+    with both ages, rather than once per parameter: the underlying cause
+    (redshift is free) is shared, and one build-time notice is enough to act
+    on. See :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning`
+    for why this warns rather than raises, and for why a build-time check is
+    the only way to surface this at all for a fit that runs under
+    ``jax.jit`` (every sampling backend).
+
+    Parameters
+    ----------
+    resolved : dict
+        Final resolved ``{param_name: Distribution}`` kwargs, read after
+        :func:`_narrow_free_priors_to_z` has already run.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+
+    A ``Fixed`` redshift has ``bounds == (z0, z0)``, so ``z_ceil <= z_floor``
+    and this returns immediately -- the warning never fires for a fixed
+    redshift. A z-capped parameter that is itself ``Fixed`` is skipped the
+    same way: fixing an onset value is exactly how a user opts out of the
+    z_floor-based cap's assumption, and this check does not second-guess
+    that choice.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.utils.cosmology import age_at_z
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None or redshift_dist.is_fixed:
+        return
+    try:
+        z_floor, z_ceil = redshift_dist.bounds
+    except (AttributeError, NotImplementedError, ValueError):
+        return
+    if z_floor is None or z_ceil is None or z_ceil <= z_floor:
+        return
+    age_at_z_ceil = float(age_at_z(float(z_ceil)))
+
+    offenders: list[tuple[str, float]] = []
+    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
+        dist = resolved.get(pname)
+        if dist is None or dist.is_fixed:
+            continue
+        hi = dist.bounds[1]
+        if hi is None or hi <= age_at_z_ceil:
+            continue
+        offenders.append((pname, float(hi)))
+    if not offenders:
+        return
+
+    age_at_z_floor = float(age_at_z(float(z_floor)))
+    named = ", ".join(f"{n} (ceiling {h:.4g} Gyr)" for n, h in sorted(offenders))
+    tightest_offender_ceiling = min(h for _, h in offenders)
+    warn_measured(
+        f"redshift is free over [{z_floor:g}, {z_ceil:g}], spanning cosmic ages "
+        f"{age_at_z_floor:.4g} down to {age_at_z_ceil:.4g} Gyr. The following free "
+        f"SF-onset/age/peak-time parameter(s) keep a prior ceiling above "
+        f"{age_at_z_ceil:.4g} Gyr, the age of the universe at the redshift range's "
+        f"upper end: {named}. A prior draw near redshift {z_ceil:g} paired with an "
+        f"onset value above that ceiling places star formation before the Big Bang; "
+        f"the forward model truncates it and still conserves the requested formed "
+        f"mass (#2521), so the fit runs and reports no error there -- only the SFH "
+        f"shape at that draw is wrong, and under jax.jit not even the eager "
+        f"SFHBeforeBigBangWarning fires. Narrow the redshift prior, or give the "
+        f"affected parameter(s) an explicit tighter ceiling, e.g. "
+        f"{offenders[0][0]}=Uniform(lo, {age_at_z_ceil:.4g}).",
+        FreeRedshiftOnsetCeilingWarning,
+        stacklevel=3,
+        z_floor=z_floor,
+        z_ceil=z_ceil,
+        age_at_z_floor=age_at_z_floor,
+        age_at_z_ceil=age_at_z_ceil,
+        n_offending_params=len(offenders),
+        tightest_offender_ceiling_gyr=tightest_offender_ceiling,
+    )
 
 
 def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:

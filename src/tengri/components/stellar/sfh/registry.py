@@ -175,6 +175,17 @@ class ParamDef(NamedTuple):
         SFH family cannot reintroduce the gap by omission the way the old
         3-entry ``_Z_CAPPED_ONSET_PARAMS`` tuple did (18 of 21 such params
         were missing from it). Default ``False``.
+
+        The ``z_floor`` cap only ever binds the LOWEST redshift a free
+        ``redshift`` prior admits, since that is the only end common to
+        every build. A wide free ``redshift`` prior can therefore still
+        admit a draw near its upper (younger-universe) end whose
+        cosmologically valid onset window is narrower than this parameter's
+        z_floor-capped ceiling; ``groups.py``'s
+        ``_warn_free_redshift_onset_ceiling`` reports that case with a
+        :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning` at
+        build time, since the forward model itself only truncates and
+        conserves mass there without raising or (under ``jax.jit``) warning.
     """
 
     description: str

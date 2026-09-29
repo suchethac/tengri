@@ -14,14 +14,60 @@
   by construction: the 21 onset/age/peak-time `ParamDeclaration`s are marked
   in the registry (`ParamDef.z_capped_onset`) and `_narrow_free_priors_to_z`
   derives its capped set from that flag instead of a 3-entry hand tuple;
-  formed mass is pinned to `10**log_total_mass` on the CIC age-weight path
-  (`_mass_conserving_total`), which is the closed-form equivalent of masking
-  each shape to `[0, age(z)]` before normalizing; `exp`/`dexp` get a genuine
-  `[0, start]` formation window (`T = start - t_lookback`, matching
-  `declining_exponential`) instead of their previous `[start, inf)`; and
-  `psb_wild2020`'s burst DPL anchors to its own `age` instead of the
-  hardcoded `AGEMAX_YR`. Closes the dpl `tau_gyr` flat-likelihood-direction
-  conditioning problem as a side effect (#2521, #2457).
+  formed mass is pinned to `10**log_total_mass` (`_mass_conserving_total`),
+  which is the closed-form equivalent of masking each shape to `[0, age(z)]`
+  before normalizing; `exp`/`dexp` get a genuine `[0, start]` formation
+  window (`T = start - t_lookback`, matching `declining_exponential`)
+  instead of their previous `[start, inf)`; and `psb_wild2020`'s burst DPL
+  anchors to its own `age` instead of the hardcoded `AGEMAX_YR`. Closes the
+  dpl `tau_gyr` flat-likelihood-direction conditioning problem as a side
+  effect (#2521, #2457).
+
+  `_mass_conserving_total` is applied once, after both the `"cic"` (dense
+  integrand, the default) and `"dsps"` (histogram kernel; every GP-field
+  build, or an explicit `age_kernel='dsps'` choice) age-weight paths
+  converge, in both `StellarSEDComponent.apply` and
+  `.compute_joint_weights`, rather than duplicated per branch: it had
+  initially landed inside the `"cic"` branches only, so the `"dsps"` kernel
+  (and therefore every stochastic-field SFH) kept leaking mass outside
+  `[0, age(z)]` (measured: dpl at z=2.5, age_gyr=2×age(z), formed/requested
+  1.000000 on `"cic"` vs 0.429997 on `"dsps"`, before the shared call). A
+  composite (list) `sfh_model` is explicitly NOT covered by this
+  correction: `["dpl", "const"]` at z=2.5 with the dpl member's age_gyr at
+  2×age(z) forms 0.7846438391594264 of the requested total, pinned as a
+  known, tracked gap in
+  `tests/physics/conservation/test_sfh_support_bounded_to_age_of_universe.py::test_composite_sfh_mass_is_not_yet_conserved`
+  rather than fixed here.
+
+  `_narrow_free_priors_to_z` caps a z-capped onset parameter's ceiling
+  against `age_at_z(z_floor)`, the LOWEST redshift a free `redshift` prior
+  admits — the only end common to every build. It does not also bind that
+  range's upper (younger-universe) end: a wide free `redshift` prior can
+  still admit a draw near its upper end whose onset value, though inside
+  the z_floor-capped ceiling, places star formation before the Big Bang at
+  that draw (`_mass_conserving_total` still conserves the formed mass
+  there, so nothing raises or, under `jax.jit`, warns). `SEDModel.build`
+  now emits one `FreeRedshiftOnsetCeilingWarning` at build time when this
+  is possible, naming the affected parameter(s) and both ages; the
+  convention is documented on `ParamDef.z_capped_onset` and in
+  `docs/model_reference/sfh.md`. No parameter-dependent/joint prior-bound
+  mechanism exists in tengri to *prevent* the draw itself (only a static,
+  once-per-build cap and, separately, `Parameters._validate_orderings`'s
+  build-time rejection of overlapping pairs); building one is future work
+  tracked alongside #2436's `neb_fesc + neb_fdust <= 1` constraint.
+
+  The nonparametric age-bin ladder (`continuity`, `dirichlet`,
+  `bursty_continuity`, `prospector_beta`) is unchanged by this release and
+  still defaults to fixed 0–13.7 Gyr edges regardless of redshift: 2 of 7
+  bins lie entirely beyond `age_at_z(2.5) = 2.62` Gyr and 3 of 7 beyond
+  `age_at_z(6) = 0.93` Gyr (0 of 7 at z=0.5). Mass is still conserved to the
+  request — an unreachable bin's nominal share is redistributed across the
+  bins that remain within cosmic time — but the recovered SFH *shape* is
+  biased toward the ages the ladder does offer a bin for. Pass
+  `sfh={'bin_edges_gyr': tengri.make_agebins_from_zred(zred=...)}` for a
+  redshift-appropriate ladder; this is not done automatically. Tracked via
+  `xfail(strict=True)` in
+  `tests/components/sfh/test_nonparametric_bin_ladder_not_scaled_to_age_of_universe.py`.
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
