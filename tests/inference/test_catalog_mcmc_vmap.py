@@ -425,3 +425,67 @@ def test_catalog_init_from_rejects_mismatched_counts(synthetic_ssp, simple_obser
         fitter.run("mcmc_hmc", init_from=[_MULTI_D_TRUTHS[0]], **kw)
     with pytest.raises(ValueError, match="init_from must be"):
         fitter.run("mcmc_hmc", init_from="nonsense", **kw)
+
+
+def test_profile_mass_reinserts_each_galaxys_own_mass(synthetic_ssp, simple_observation):
+    """The vmapped engine reinserts THIS galaxy's marginalized mass, not galaxy 0's.
+
+    The shared dummy fitter carries galaxy 0's data, so a reinsertion that reads
+    the fitter instead of the per-galaxy channels hands every galaxy galaxy 0's
+    mass — the fit still runs, the shapes are right, and the posteriors are
+    quietly wrong. Mass is profiled out of the sampled dimensions here (alpha
+    stays free so the sampler has a nonzero dimension), so the per-slot
+    distinctness below can only come from the reinsertion path itself.
+    """
+    from tengri import CatalogFitter, Fixed, Parameters, SEDModel, Uniform
+
+    spec = Parameters(
+        sfh_dpl_log_total_mass=Uniform(_MASS_LO, _MASS_HI),
+        sfh_dpl_alpha=Uniform(1.0, 3.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
+        sfh_dpl_beta=Fixed(2.0),
+        sfh_dpl_tau_gyr=Fixed(3.0),
+        met_logzsol=Fixed(1.0),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        redshift=Fixed(0.1),
+        mean_sfh_type="dpl",
+    )
+    model = SEDModel(spec, synthetic_ssp, observation=simple_observation)
+    galaxies = _catalog_from_truths(model, _DISTINCT_TRUTHS, jax.random.PRNGKey(11))
+    cat = CatalogFitter(model, galaxies, data_type="photometry")
+
+    cp = cat.run(
+        "mcmc_nuts",
+        key=jax.random.PRNGKey(12),
+        forward_chunk_size=3,
+        n_warmup=120,
+        n_burnin=40,
+        n_samples=300,
+        verbose=False,
+    )
+    assert cp.diagnostics.get("vectorized") is True
+
+    mass = []
+    for i in range(3):
+        post = cp[i]
+        # Engagement, not attachment: the resolved choice is recorded per
+        # galaxy, and it must be True — a silently-not-engaged run would leave
+        # the placeholder mass identical across galaxies AND pass a weaker test.
+        assert post.diagnostics.get("profile_mass_resolved") is True, (
+            f"profile_mass did not engage on galaxy {i}: "
+            f"{post.diagnostics.get('profile_mass_reason')!r}"
+        )
+        m = np.asarray(post.samples["sfh_dpl_log_total_mass"])
+        a = np.asarray(post.samples["sfh_dpl_alpha"])
+        assert m.shape == a.shape[:1] + m.shape[1:] and m.shape[0] == a.shape[0]
+        assert np.all(np.isfinite(m))
+        mass.append(float(np.mean(m)))
+
+    # Order preserved and per-slot: galaxy i's OWN channels fed its reinsertion.
+    # Galaxy-0 channels for everyone collapses all three toward _DISTINCT_MASSES[0].
+    assert mass[0] < mass[1] < mass[2], f"reinserted mass not monotonic across slots: {mass}"
+    for i, truth in enumerate(_DISTINCT_MASSES):
+        assert abs(mass[i] - truth) < 0.6, (
+            f"galaxy {i} reinserted mass {mass[i]:.3f} far from truth {truth}"
+        )
