@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- Student-t noise Hamiltonian now includes the dof-dependent normalisation, so a free `noise_dof` is sampled under a correctly normalised density (#2525).
 - **Breaking**: `delayed_bq`, `periodic` and `buat08` now evaluate CIGALE's formulas
   in time since formation (T = age − t_lookback), as `sfhdelayed`/`sfh2exp` and #549's
   `dpl`/`lognormal` do; previously they read CIGALE's forward time as lookback, giving
