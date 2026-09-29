@@ -691,41 +691,56 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     # bump (c4).
     #
     # c1 controls continuum amplitude; c2 the curvature (steepness of UV rise);
-    # c3 an offset; c4 the bump amplitude. Presets from Li et al. 2008 Table 1:
-    # MW-like: (6.0, 4.0, 2.0, 0.04); SMC-like: (5.0, 5.5, 1.5, 0.0);
-    # Calzetti-like: (3.5, 2.5, 3.0, 0.0). The free_prior ranges are set to
-    # encompass observed variations (Markov et al. 2023, 2025).
+    # c3 an offset; c4 the bump amplitude. Defaults are the Li et al. (2008)
+    # Table 1 Milky Way (R_V=3.1) values. Table 1 templates, verified against
+    # the independent Synthesizer ``Li08`` implementation:
+    # Calzetti (44.9, 7.56, 61.2, 0.0); SMC (38.7, 3.83, 6.34, 0.0);
+    # MW R_V=3.1 (14.4, 6.52, 2.04, 0.0519); LMC (4.47, 2.39, -0.988, 0.0221).
+    #
+    # free_prior ranges span all four templates with margin, chosen so the
+    # law's two internal denominators never cross zero over the full tengri
+    # wavelength grid (0.0413 A - 3e11 A, which spans the SSP grid's 91 A -
+    # 1e8 A and so reaches the term-1 pole at lam=0.08 um=800 A):
+    # denom_1(lam) = (lam/0.08)^c2 + (0.08/lam)^c2 + c3 has global minimum
+    # 2 + c3 at lam = 0.08 um for ANY c2 >= 0 (AM-GM: x + 1/x >= 2). The same
+    # expression (at lam-independent reference points 6.88, 0.145) also gates
+    # term 2's normalization constant. c3's declared lower bound must stay
+    # strictly above -2 to keep both denominators positive; c3=-2 hits an
+    # exact zero at lam=800 A (measured), c3=-1.5 keeps a comfortable
+    # denom >= 0.5 margin while remaining well below the LMC template's
+    # -0.988 (#2542 cross-code check against Synthesizer verified this).
     ParamDeclaration(
         "dust_c1",
-        Fixed(6.0),
+        Fixed(14.4),
         "Li et al. (2008) continuum amplitude parameter",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        free_prior=Uniform(1.0, 10.0, "Li et al. c1 continuum amplitude", default=6.0),
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 60.0, "Li et al. c1 continuum amplitude", default=14.4),
     ),
     ParamDeclaration(
         "dust_c2",
-        Fixed(4.0),
+        Fixed(6.52),
         "Li et al. (2008) continuum curvature parameter",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        free_prior=Uniform(1.0, 8.0, "Li et al. c2 continuum curvature", default=4.0),
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 10.0, "Li et al. c2 continuum curvature", default=6.52),
     ),
     ParamDeclaration(
         "dust_c3",
-        Fixed(2.0),
+        Fixed(2.04),
         "Li et al. (2008) continuum offset parameter",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        free_prior=Uniform(0.0, 5.0, "Li et al. c3 continuum offset", default=2.0),
+        lambda lo, hi: lo > -2.0,
+        "must be > -2.0 (both Eq. 1 denominators sharing this reference point "
+        "cross zero at c3 = -2, at lam = 0.08 um = 800 A on the SSP grid)",
+        free_prior=Uniform(-1.5, 70.0, "Li et al. c3 continuum offset", default=2.04),
     ),
     ParamDeclaration(
         "dust_c4",
-        Fixed(0.04),
+        Fixed(0.0519),
         "Li et al. (2008) UV bump amplitude at 2175A",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        free_prior=Uniform(0.0, 0.1, "Li et al. c4 UV bump amplitude", default=0.04),
+        lambda lo, hi: lo >= -0.1,
+        "must be >= -0.1",
+        free_prior=Uniform(-0.005, 0.1, "Li et al. c4 UV bump amplitude", default=0.0519),
     ),
     # ── UV bump center and width: noll09 and salim_sbl18 (#2542) ─────────────
     # The two bump-profile parameters (wavelength center and FWHM) are read by
@@ -777,6 +792,16 @@ DEFAULT_DUST_F_OBSCURATION = declared_default(ATTENUATION_PARAMS, "dust_f_obscur
 DEFAULT_DUST_BUMP_STRENGTH = declared_default(ATTENUATION_PARAMS, "dust_bump_strength")
 DEFAULT_DUST_DELTA = declared_default(ATTENUATION_PARAMS, "dust_delta")
 DEFAULT_DUST_RV = declared_default(ATTENUATION_PARAMS, "dust_Rv")
+# li08, noll09/salim_sbl18 and tea signature defaults (#2542): read off the
+# same declarations rather than repeated as bare literals (check_literal_
+# param_defaults.py).
+DEFAULT_DUST_C1 = declared_default(ATTENUATION_PARAMS, "dust_c1")
+DEFAULT_DUST_C2 = declared_default(ATTENUATION_PARAMS, "dust_c2")
+DEFAULT_DUST_C3 = declared_default(ATTENUATION_PARAMS, "dust_c3")
+DEFAULT_DUST_C4 = declared_default(ATTENUATION_PARAMS, "dust_c4")
+DEFAULT_DUST_BUMP_X0 = declared_default(ATTENUATION_PARAMS, "dust_bump_x0")
+DEFAULT_DUST_BUMP_GAMMA = declared_default(ATTENUATION_PARAMS, "dust_bump_gamma")
+DEFAULT_DUST_TEA_SCATTER = declared_default(ATTENUATION_PARAMS, "dust_tea_scatter")
 # No per-screen counterparts of the five constants above: the 12 per-screen
 # names (#2428) have no consumer that reads a bare Python float default off
 # this module the way the shared stems' aggregation-point ``.get(...)``

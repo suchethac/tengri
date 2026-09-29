@@ -147,8 +147,7 @@ class TestEveryLawKeywordDeclared:
             subset = kw_set - {"wavelength", "redshift"}
             missing = subset - declared_names
             assert not missing, (
-                f"Law {law_name!r} has undeclared kwargs: {missing}. "
-                f"Declared: {declared_names}"
+                f"Law {law_name!r} has undeclared kwargs: {missing}. Declared: {declared_names}"
             )
 
 

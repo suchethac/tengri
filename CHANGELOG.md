@@ -10,7 +10,7 @@
 
 ### Fixed
 
-- The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542).
+- The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542). **Breaking**: `li08`'s default is now the Li et al. (2008) Milky-Way (R_V=3.1) curve (c1..c4 = 14.4, 6.52, 2.04, 0.0519); the previous default and docstring presets did not correspond to the paper.
 
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and

@@ -259,11 +259,8 @@ def resolve_bc_diff_law_params(
             if flat_name in params:
                 # These are law-specific: map flat_name -> law_kw (usually identical)
                 law_kw = flat_name
-                for target, overrides, screen in (
-                    (bc, bc_overrides, "bc"),
-                    (diff, diff_overrides, "diff"),
-                ):
-                    # Only shared spelling supported; no per-screen variants like dust_c1_bc
+                # Only shared spelling supported; no per-screen variants like dust_c1_bc
+                for target in (bc, diff):
                     target[law_kw] = params[flat_name]
     if redshift is not None:
         bc["redshift"] = redshift
