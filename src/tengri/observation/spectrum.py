@@ -22,10 +22,15 @@ import numpy as np
 
 from tengri.units import lnu_to_fnu
 
-# ── SSP library spectral resolutions (velocity dispersion in km/s)
+# ── SSP library spectral resolutions (velocity dispersion in km/s) ──
+# Flat fallback used only when the loaded SSP grid has no per-wavelength
+# resolution curve (SSPData.ssp_resolution_kms, #2518); see
+# tengri.components.stellar.sps.dsps_wrapper for the curve itself, read
+# from FSPS's own per-node tables.
 SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
-    "miles": 70.0,  # R ~ 2500 at 5000 A, sigma ~ 70 km/s
-    "c3k": 15.0,  # R ~ 10000, sigma ~ 15 km/s
+    "miles": 70.0,  # mid-range approximation; true resolution runs ~92-43 km/s
+    "c3k_a": 42.4,  # R = 3000 over the shipped grid's densest 2750-9100 A core
+    "c3k": 42.4,  # alias of c3k_a
     "fsps_default": 70.0,  # MILES-based (default FSPS)
 }
 
@@ -332,6 +337,64 @@ def _apply_lsf_variable_r(
     total_weight = jnp.maximum(total_weight, 1e-30)
 
     return result / total_weight
+
+
+def resolve_sigma_lib_kms(
+    wave_obs: jnp.ndarray,
+    redshift: jnp.ndarray | float,
+    sigma_lib_kms: jnp.ndarray | float,
+    sigma_lib_curve: tuple[jnp.ndarray, jnp.ndarray] | None = None,
+) -> jnp.ndarray | float:
+    r"""Resolve ``sigma_lib_kms`` for :func:`apply_lsf`/:func:`project_spectrum` (#2518).
+
+    When ``sigma_lib_curve`` is given, interpolates the loaded SSP library's
+    own per-wavelength resolution curve (:attr:`SSPData.ssp_resolution_kms`,
+    tabulated on the library's rest-frame wavelength grid) onto the
+    observed pixel grid mapped into the rest frame,
+    :math:`\lambda_{\rm rest} = \lambda_{\rm obs} / (1 + z)`, and returns
+    that per-pixel array in place of ``sigma_lib_kms``. Otherwise returns
+    ``sigma_lib_kms`` unchanged -- the flat per-library scalar fallback
+    (:attr:`~tengri.observation.spectroscopy.Spectroscopy.sigma_lib_kms`,
+    used when the loaded library has no documented per-wavelength curve).
+
+    Parameters
+    ----------
+    wave_obs : array, shape (n_pix,)
+        Observed-frame wavelength grid [Angstrom].
+    redshift : float or array
+        Source redshift z.
+    sigma_lib_kms : float or array, shape (n_pix,)
+        Flat fallback library velocity dispersion [km/s], returned as-is
+        when ``sigma_lib_curve`` is ``None``.
+    sigma_lib_curve : tuple[array, array] or None, optional
+        ``(ssp_wave_rest, ssp_resolution_kms)`` [Angstrom], [km/s] --
+        :attr:`SSPData.ssp_wave` and :attr:`SSPData.ssp_resolution_kms` from
+        the loaded SSP grid. ``None`` (default) skips the curve; that is a
+        structural (pre-trace) choice, which SSP library is loaded is
+        resolved once at model-build time, not per call on a traced value,
+        so branching on ``sigma_lib_curve is None`` stays JIT/grad-safe.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,), or float
+        Per-pixel σ_lib [km/s] when ``sigma_lib_curve`` is given, else
+        ``sigma_lib_kms`` unchanged.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes with respect to
+    ``redshift`` (``jnp.interp`` is differentiable); ``sigma_lib_curve``'s
+    two arrays are ordinary JIT inputs, not differentiated through.
+
+    See Also
+    --------
+    apply_lsf : Consumes the resolved ``sigma_lib_kms``.
+    """
+    if sigma_lib_curve is None:
+        return sigma_lib_kms
+    curve_wave_rest, curve_sigma_kms = sigma_lib_curve
+    wave_rest = jnp.asarray(wave_obs) / (1.0 + jnp.asarray(redshift))
+    return jnp.interp(wave_rest, curve_wave_rest, curve_sigma_kms)
 
 
 def apply_lsf(

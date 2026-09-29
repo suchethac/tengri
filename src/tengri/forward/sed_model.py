@@ -4794,10 +4794,171 @@ class SEDModel:
             self._sigma_lib_kms = sc.sigma_lib_kms
             self._lsf_resolution = sc.resolution
             self._lsf_n_bins = sc.lsf_n_bins
+
+            # Per-wavelength SSP library LSF curve (#2518): when the loaded
+            # library documents its own resolution (SSPData.ssp_resolution_kms,
+            # populated by load_ssp_data from FSPS's own per-node resolution
+            # table), every prediction path interpolates it into the observed
+            # frame at trace time (tengri.observation.spectrum.resolve_sigma_lib_kms)
+            # instead of subtracting the flat sigma_lib_kms scalar. This is a
+            # one-time, build-time (pre-trace) check on self.ssp_data -- a
+            # concrete array at __init__ time, not a traced value -- so the
+            # curve-vs-scalar choice is structural, like every other
+            # None-vs-array dispatch in this pipeline (resolution_matrix,
+            # cal_coeffs, ...), never a per-call branch on a traced input.
+            curve_kms = self.ssp_data.ssp_resolution_kms
+            if curve_kms is None:
+                warnings.warn(
+                    f"SSP library {self.ssp_data.source!r} has no per-wavelength "
+                    f"LSF curve; every spectroscopic prediction falls back to "
+                    f"the flat sigma_lib_kms={self._sigma_lib_kms} across the "
+                    "whole spectrum. This over/under-subtracts the library's "
+                    "own broadening away from the wavelength the flat value "
+                    "was set at (#2518).",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            else:
+                redshift_dist = spec.get_distribution("redshift")
+                z_for_check = float(redshift_dist.bounds[0]) if redshift_dist.is_fixed else None
+                self._warn_if_sigma_lib_exceeds_inst(
+                    self.ssp_data.ssp_wave, curve_kms, self.ssp_data.source, z_for_check
+                )
         else:
             self._sigma_lib_kms = getattr(spec, "sigma_lib_kms", 0.0)
             self._lsf_resolution = getattr(spec, "lsf_resolution", None)
             self._lsf_n_bins = getattr(spec, "lsf_n_bins", 16)
+
+    def _warn_if_sigma_lib_exceeds_inst(
+        self,
+        curve_wave_rest: np.ndarray,
+        curve_sigma_kms: np.ndarray,
+        library_name: str,
+        z_for_check: float | None,
+    ) -> None:
+        r"""Warn (don't silently clamp) where the instrument can't resolve the library (#2518).
+
+        Static, build-time (pre-trace) NumPy check: maps the SSP library's
+        per-wavelength resolution curve into the observed frame at
+        ``z_for_check`` and compares it against the instrument LSF
+        (``self._lsf_resolution``) on ``self.observation.spectroscopy.wave_obs``.
+        Where :math:`\sigma_{\rm inst}^2 < \sigma_{\rm lib}^2`,
+        :func:`~tengri.observation.spectrum.apply_lsf` clamps the deficit to
+        zero (no broadening applied) rather than raising -- correct as a
+        numerical floor, but silent about an unresolvable regime the
+        instrument cannot see through the library template (#2518's own
+        MILES example: a negative deficit at the blue end). Skipped (no
+        false claim either way) when the LSF resolution is unset or
+        redshift is free, since there is then no single z to check a static
+        curve against; the in-jit clamp still protects every pixel
+        numerically in that case.
+
+        Parameters
+        ----------
+        curve_wave_rest : ndarray, shape (n_wave,)
+            SSP library rest-frame wavelength grid [Angstrom]
+            (``SSPData.ssp_wave``).
+        curve_sigma_kms : ndarray, shape (n_wave,)
+            SSP library resolution curve [km/s]
+            (``SSPData.ssp_resolution_kms``).
+        library_name : str
+            SSP grid provenance name (``SSPData.source``), named in the warning.
+        z_for_check : float or None
+            Redshift to map ``curve_wave_rest`` into the observed frame at.
+            ``None`` skips the check (free redshift: no single z to use).
+
+        Notes
+        -----
+        Also reports how many of the flagged pixels sit in the library's
+        approximate (FSPS-extrapolated, not directly measured) resolution
+        range, when a resolution table for this library is registered
+        (:data:`~tengri.components.stellar.sps.dsps_wrapper._LIBRARY_RESOLUTION_DATA_FILES`).
+        """
+        if self._lsf_resolution is None or z_for_check is None:
+            return
+        if self.observation is None or self.observation.spectroscopy is None:
+            return
+        from tengri.components.stellar.sps.dsps_wrapper import (
+            _detect_library_resolution_key,
+            _resolve_ssp_resolution,
+        )
+        from tengri.observation.spectrum import _resolution_to_sigma_kms
+
+        wave_obs = np.asarray(self.observation.spectroscopy.wave_obs, dtype=float)
+        sigma_inst = np.asarray(
+            _resolution_to_sigma_kms(np.asarray(self._lsf_resolution, dtype=float))
+        )
+        sigma_inst = np.broadcast_to(sigma_inst, wave_obs.shape)
+        wave_rest = wave_obs / (1.0 + z_for_check)
+
+        library_key = _detect_library_resolution_key(library_name)
+        if library_key is not None:
+            sigma_lib, approximate = _resolve_ssp_resolution(wave_rest, library_key)
+            sigma_lib = np.asarray(sigma_lib)
+        else:
+            sigma_lib = np.interp(
+                wave_rest, np.asarray(curve_wave_rest, dtype=float), np.asarray(curve_sigma_kms)
+            )
+            approximate = np.zeros_like(sigma_lib, dtype=bool)
+
+        deficient = sigma_inst**2 < sigma_lib**2
+        n_bad = int(np.sum(deficient))
+        if n_bad > 0:
+            frac = n_bad / deficient.size
+            n_approx = int(np.sum(deficient & approximate))
+            approx_clause = (
+                f" ({n_approx} of those also fall in the library's approximate, "
+                "FSPS-extrapolated resolution range rather than its own measured "
+                "templates.)"
+                if n_approx > 0
+                else ""
+            )
+            warn_measured(
+                f"{n_bad}/{deficient.size} ({frac:.1%}) spectral pixels have "
+                f"instrument resolution narrower than SSP library "
+                f"{library_name!r}'s own LSF at z={z_for_check:.4g}: "
+                "sigma_inst^2 - sigma_lib^2 is clamped to zero there (no "
+                "broadening applied) rather than raising, which "
+                "under-broadens the model in that unresolvable regime "
+                f"(#2518).{approx_clause} Use a coarser instrument resolution "
+                "or a library with finer native resolution at these wavelengths.",
+                UserWarning,
+                stacklevel=3,
+                deficient_pixel_count=n_bad,
+                deficient_pixel_fraction=frac,
+                deficient_and_approximate_pixel_count=n_approx,
+                redshift=z_for_check,
+            )
+
+    @staticmethod
+    def _sigma_lib_curve_for(ssp_data) -> tuple[jnp.ndarray, jnp.ndarray] | None:
+        """``(ssp_wave, ssp_resolution_kms)`` from ``ssp_data``, or ``None`` (#2518).
+
+        Shared by every eager prediction call site
+        (:meth:`_predict_spectrum_on_grid`, :meth:`_spectrum_via_state`) that
+        resolves ``sigma_lib_kms`` via
+        :func:`~tengri.observation.spectrum.resolve_sigma_lib_kms`. The
+        compiled hot path
+        (:meth:`_get_or_build_predict_observables_jit`) builds the same pair
+        inline from its own *runtime* ``ssp_data`` argument instead of
+        calling this on ``self.ssp_data``, so an ``ssp_data=`` override at
+        call time (#1753) carries its own curve without recompiling.
+
+        Parameters
+        ----------
+        ssp_data : SSPData or None
+            SSP grid to read the curve from.
+
+        Returns
+        -------
+        tuple[ndarray, ndarray] or None
+            ``(ssp_data.ssp_wave, ssp_data.ssp_resolution_kms)``, or
+            ``None`` when ``ssp_data`` is ``None`` or has no curve.
+        """
+        if ssp_data is None:
+            return None
+        curve = ssp_data.ssp_resolution_kms
+        return (ssp_data.ssp_wave, curve) if curve is not None else None
 
     def _init_cosmology(self, spec):
         """Precompute luminosity distance if redshift is fixed."""
@@ -6155,7 +6316,7 @@ class SEDModel:
         """
         del wave_chunk_size  # see Parameters note
         from tengri.cosmology import luminosity_distance
-        from tengri.observation.spectrum import project_spectrum
+        from tengri.observation.spectrum import project_spectrum, resolve_sigma_lib_kms
 
         # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
         # dict (both of predict_spectrum's explicit-wave_obs branches route
@@ -6176,9 +6337,14 @@ class SEDModel:
         resolution = (
             getattr(spectroscopy, "resolution", None) if spectroscopy is not None else None
         )
-        sigma_lib_kms = (
+        sigma_lib_flat = (
             getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
         )
+        # Per-wavelength SSP library LSF curve (#2518), same source
+        # (self.ssp_data) and same structural (pre-trace) None-check as
+        # _init_instrument / _get_or_build_predict_observables_jit.
+        sigma_lib_curve = self._sigma_lib_curve_for(self.ssp_data)
+        sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
         cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
         cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
         # Static (pre-trace) resolution of the resample mode (#1166): the model
@@ -8432,6 +8598,7 @@ class SEDModel:
             sigma_v_kms=self._get_sigma_v_kms(params),
             lsf_resolution=self._lsf_resolution,
             lsf_sigma_lib_kms=self._sigma_lib_kms,
+            lsf_sigma_lib_curve=self._sigma_lib_curve_for(self.ssp_data),
             lsf_n_bins=self._lsf_n_bins,
         )["spec_fnu"]
 
@@ -9132,6 +9299,19 @@ class SEDModel:
                 avail = {k: v for k, v in out.items() if k in observables_type._fields}
                 return observables_type(**avail)
             if observation.can_do_spectroscopy:
+                # Per-wavelength SSP library LSF curve (#2518): read off the
+                # *runtime* ssp_data argument, not the closure-captured
+                # self.ssp_data, so an ssp_data= override at call time
+                # (_resolve_threaded_data, #1753) carries its own curve
+                # without recompiling and without baking a stale one as a
+                # Constant. ssp_data.ssp_resolution_kms is None-vs-array as
+                # part of ssp_data's pytree structure, which is static
+                # within one trace, so this "is not None" is the same kind
+                # of structural (pre-trace) branch as every other
+                # None-checked JIT input in this pipeline, not a per-call
+                # branch on a traced value.
+                curve_kms = ssp_data.ssp_resolution_kms
+                sigma_lib_curve = (ssp_data.ssp_wave, curve_kms) if curve_kms is not None else None
                 return observation.predict(
                     state,
                     full,
@@ -9139,6 +9319,7 @@ class SEDModel:
                     sigma_v_kms=sigma_v_getter(full),
                     lsf_resolution=lsf_resolution,
                     lsf_sigma_lib_kms=sigma_lib_kms,
+                    lsf_sigma_lib_curve=sigma_lib_curve,
                     lsf_n_bins=lsf_n_bins,
                     observables_type=observables_type,
                 )

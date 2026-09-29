@@ -6,8 +6,8 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.components.stellar.sps.dsps_wrapper import (
-    _LIBRARY_FWHM_ANGSTROM,
-    _compute_ssp_resolution_kms,
+    _detect_library_resolution_key,
+    _resolve_ssp_resolution,
 )
 from tengri.observation.spectrum import apply_lsf
 
@@ -15,41 +15,29 @@ pytestmark = pytest.mark.bounds
 
 
 class TestLibraryResolutionComputation:
-    """Test per-wavelength σ_lib(λ) computation from FWHM."""
+    """Test per-wavelength σ_lib(λ) computation from the FSPS reference tables (#2518)."""
 
-    def test_compute_miles_resolution(self):
-        """Validate MILES constant FWHM → wavelength-dependent σ_lib."""
-        wave = jnp.array([3525.0, 5000.0, 7500.0])
-        fwhm = _LIBRARY_FWHM_ANGSTROM["ssp_prsc_miles"]
+    def test_miles_resolution_blue_to_red(self):
+        """MILES σ_lib falls from the blue to the red across its native window."""
+        wave = jnp.array([3530.0, 5000.0, 7490.0])
+        sigma_lib, approximate = _resolve_ssp_resolution(wave, "miles")
 
-        sigma_lib = _compute_ssp_resolution_kms(wave, fwhm)
-
-        # Verify inverse λ behavior: σ_v(λ) ∝ 1/λ
         assert sigma_lib.shape == (3,)
         assert sigma_lib[0] > sigma_lib[1] > sigma_lib[2]
-        # MILES blue 3525 Å: ~91 km/s, red 7500 Å: ~43 km/s (literature)
-        assert 88 < sigma_lib[0] < 94
-        assert 41 < sigma_lib[2] < 45
+        assert not bool(approximate[0]) and not bool(approximate[2])
 
-    def test_compute_c3k_resolution(self):
-        """Validate C3K constant FWHM → σ_lib."""
-        wave = jnp.array([1500.0, 10000.0, 25000.0])
-        fwhm = _LIBRARY_FWHM_ANGSTROM["ssp_mist_c3k_a_chabrier"]
+    def test_c3k_resolution_wings_coarser_than_core(self):
+        """C3K's R=500/250 wings have larger σ_lib than the R=3000 core."""
+        wave = jnp.array([500.0, 5000.0, 15000.0])
+        sigma_lib, _ = _resolve_ssp_resolution(wave, "c3k_a")
 
-        sigma_lib = _compute_ssp_resolution_kms(wave, fwhm)
-
-        # C3K (FWHM ≈ 0.55 Å) is finer than MILES (2.51 Å)
         assert sigma_lib.shape == (3,)
-        assert sigma_lib[0] > sigma_lib[1] > sigma_lib[2]
-        # Check monotonic and magnitude (exact values depend on FWHM)
-        assert sigma_lib[0] > 0
-        assert sigma_lib[2] > 0
+        assert sigma_lib[0] > sigma_lib[1] < sigma_lib[2]
+        assert bool(jnp.all(sigma_lib > 0))
 
-    def test_none_library_fwhm(self):
-        """Test graceful None return for unknown library."""
-        wave = jnp.array([5000.0])
-        sigma_lib = _compute_ssp_resolution_kms(wave, None)
-        assert sigma_lib is None
+    def test_unknown_library_key(self):
+        """An unregistered library key has no resolution table (contract, not #2518)."""
+        assert _detect_library_resolution_key("ssp_prsc_bc03_chabrier") is None
 
 
 class TestArraySigmaLibSupport:
@@ -167,8 +155,7 @@ class TestSigmaVRecovery:
         )
 
         # Per-wavelength library resolution (MILES actual)
-        fwhm = _LIBRARY_FWHM_ANGSTROM["ssp_prsc_miles"]
-        sigma_lib_curve = _compute_ssp_resolution_kms(wave, fwhm)
+        sigma_lib_curve, _ = _resolve_ssp_resolution(wave, "miles")
         result_curve = apply_lsf(
             spec_narrow, wave, resolution=R, sigma_lib_kms=sigma_lib_curve, sigma_v_kms=sigma_v
         )

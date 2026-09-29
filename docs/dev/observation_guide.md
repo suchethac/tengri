@@ -270,10 +270,18 @@ spec_config = SpectroscopyConfig(
 
 Two parameters control the line-spread function convolution:
 
-- `sigma_lib_kms` (default: 70.0) -- the velocity dispersion of the SSP
-  library in km/s. This is subtracted in quadrature so the model only adds
-  the *difference* between library and instrument resolution. Set to 70.0 for
-  MILES, 0.0 if your SSP library has negligible broadening.
+- `sigma_lib_kms` (default: 70.0) -- the flat velocity dispersion of the SSP
+  library in km/s, subtracted in quadrature so the model only adds the
+  *difference* between library and instrument resolution. This is the
+  fallback value only: when the loaded SSP grid documents its own
+  per-wavelength resolution (`SSPData.ssp_resolution_kms`, populated by
+  `load_ssp_data` from FSPS's own per-node tables for MILES and C3K grids),
+  every prediction path uses that curve instead, interpolated into the
+  observed frame. MILES's true resolution (FWHM = 2.54 A, Beifiori et al.
+  2011, A&A 531, A109; Falcon-Barroso et al. 2011, A&A 532, A95, measured
+  2.51 +/- 0.07 A) varies from about 92 km/s at 3530 A to 43 km/s at
+  7490 A, so 70.0 is a mid-range approximation used only when no curve is
+  available.
 - `lsf_n_bins` (default: 16) -- number of piecewise-constant bins for
   approximating wavelength-dependent LSF convolution. More bins = more
   accurate but slower compilation.

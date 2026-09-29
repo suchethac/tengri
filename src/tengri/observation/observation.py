@@ -655,6 +655,7 @@ class Observation:
         dl_cm: float,
         sigma_v_kms: float = 0.0,
         cal_coeffs: jnp.ndarray | None = None,
+        sigma_lib_curve: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         """Project an observed-frame SED onto spectroscopic pixel grid.
 
@@ -671,6 +672,13 @@ class Observation:
         cal_coeffs : ndarray, shape (order,), or None, optional
             Calibration polynomial coefficients to apply after LSF.
             If ``None`` (default), no calibration is applied.
+        sigma_lib_curve : tuple[ndarray, ndarray] or None, optional
+            ``(ssp_wave_rest, ssp_resolution_kms)`` [Angstrom], [km/s] from
+            the loaded SSP grid's :attr:`~tengri.SSPData.ssp_resolution_kms`
+            (#2518). When given, overrides
+            ``self.spectroscopy.sigma_lib_kms`` with this per-wavelength
+            curve, interpolated onto the observed pixel grid mapped into
+            the rest frame. ``None`` (default) keeps the flat scalar.
 
         Returns
         -------
@@ -688,11 +696,14 @@ class Observation:
         if self.spectroscopy is None:
             raise ValueError("No spectroscopy configured in this Observation.")
 
-        from tengri.observation.spectrum import project_spectrum
+        from tengri.observation.spectrum import project_spectrum, resolve_sigma_lib_kms
 
         wave_rest = sed_result.wavelength / (1.0 + z)
         wave_obs = self.spectroscopy.wave_obs
         conserving = self.spectroscopy.resolve_conserving(sed_result.wavelength)
+        sigma_lib_kms = resolve_sigma_lib_kms(
+            wave_obs, z, self.spectroscopy.sigma_lib_kms, sigma_lib_curve
+        )
         flux = project_spectrum(
             sed_result.sed,
             wave_rest,
@@ -700,7 +711,7 @@ class Observation:
             z,
             dl_cm,
             resolution=self.spectroscopy.resolution,
-            sigma_lib_kms=self.spectroscopy.sigma_lib_kms,
+            sigma_lib_kms=sigma_lib_kms,
             sigma_v_kms=sigma_v_kms,
             cal_coeffs=cal_coeffs,
             cal_wave_range=self.spectroscopy.calibration_wave_range,
@@ -721,6 +732,7 @@ class Observation:
         sigma_v_kms: float = 0.0,
         lsf_resolution=None,
         lsf_sigma_lib_kms: float | None = None,
+        lsf_sigma_lib_curve: tuple[jnp.ndarray, jnp.ndarray] | None = None,
         lsf_n_bins: int | None = None,
         observables_type=None,
     ) -> dict[str, jnp.ndarray]:
@@ -751,7 +763,16 @@ class Observation:
             ``self.spectroscopy.resolution``.
         lsf_sigma_lib_kms : float, optional
             Override SSP library sigma [km/s]. ``None`` reuses
-            ``self.spectroscopy.sigma_lib_kms``.
+            ``self.spectroscopy.sigma_lib_kms``. Ignored when
+            ``lsf_sigma_lib_curve`` is given.
+        lsf_sigma_lib_curve : tuple[ndarray, ndarray] or None, optional
+            ``(ssp_wave_rest, ssp_resolution_kms)`` [Angstrom], [km/s] from
+            the loaded SSP grid's :attr:`~tengri.SSPData.ssp_resolution_kms`
+            (#2518). When given, takes priority over ``lsf_sigma_lib_kms``
+            / ``self.spectroscopy.sigma_lib_kms``: the per-wavelength curve
+            is interpolated onto the observed pixel grid mapped into the
+            rest frame and used in place of the flat scalar. ``None``
+            (default) keeps the flat-scalar behavior.
         lsf_n_bins : int, optional
             Override piecewise-constant LSF bin count. ``None`` reuses
             ``self.spectroscopy.lsf_n_bins``.
@@ -793,7 +814,7 @@ class Observation:
         """
         from tengri.cosmology import luminosity_distance
         from tengri.observation.photometry import compute_flux_density_batch, project_photometry
-        from tengri.observation.spectrum import project_spectrum
+        from tengri.observation.spectrum import project_spectrum, resolve_sigma_lib_kms
 
         z = jnp.asarray(require_redshift(params, "observation.observation.predict"))
         if dl_cm is None:
@@ -848,11 +869,12 @@ class Observation:
             resolution = (
                 lsf_resolution if lsf_resolution is not None else self.spectroscopy.resolution
             )
-            sigma_lib = (
+            sigma_lib_flat = (
                 lsf_sigma_lib_kms
                 if lsf_sigma_lib_kms is not None
                 else self.spectroscopy.sigma_lib_kms
             )
+            sigma_lib = resolve_sigma_lib_kms(wo, z, sigma_lib_flat, lsf_sigma_lib_curve)
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
             conserving = self.spectroscopy.resolve_conserving(state.wave)
             flux = project_spectrum(

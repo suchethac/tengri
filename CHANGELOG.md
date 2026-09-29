@@ -46,15 +46,15 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
-- `SSPData` gains an optional `ssp_resolution_kms` field holding per-wavelength
-  SSP library resolution [km/s] derived from the loaded library's documented LSF
-  (#2518). `apply_lsf` now accepts array-like `sigma_lib_kms` to subtract
-  per-wavelength library resolution in quadrature from instrument LSF, improving
-  continuum deconvolution compared to the flat-scalar approximation. Example:
-  MILES has constant FWHM ≈ 2.51 Å (wavelength space), giving σ_v(λ) ∝ 1/λ,
-  from ≈91 km/s at 3525 Å to ≈43 km/s at 7500 Å. Where σ_inst² < σ_lib²,
-  no additional broadening is applied (library is already better-resolved than
-  instrument). `project_spectrum` signature updated to match (#2518).
+- The default Gaussian LSF path now subtracts the loaded SSP library's own
+  per-wavelength resolution instead of a flat scalar (#2518): `SSPData` gains
+  `ssp_resolution_kms`, read from FSPS's own per-node tables (MILES σ_v ≈
+  92→43 km/s, 3530–7490 Å, FWHM = 2.54 Å, Beifiori et al. 2011, A&A 531,
+  A109; C3K σ_v ≈ 42.4 km/s, R = 3000, 2750–9100 Å;
+  `SSP_LIBRARY_RESOLUTIONS["c3k"]` corrected 15.0 → 42.4 km/s). Every
+  spectroscopic path uses this curve in place of the flat
+  `Spectroscopy.sigma_lib_kms` fallback, and warns instead of silently
+  clamping wherever the instrument is sharper than the library.
 
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments
