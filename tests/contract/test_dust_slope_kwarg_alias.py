@@ -37,13 +37,17 @@ def test_old_keyword_warns_and_matches_new():
     np.testing.assert_array_equal(result_old, result_new)
 
 
-def test_conroy2010_old_keyword_warns_and_matches_new():
-    """Old n_slope keyword works for conroy2010 with a DeprecationWarning."""
+def test_conroy2010_replaced_dust_slope_with_bump_strength():
+    """conroy2010 (issue #2522) replaced dust_slope with dust_bump_strength.
+
+    Unlike power_law, conroy2010 implements CCM89 (Cardelli curve) with a
+    scalable 2175 Å bump. It takes dust_bump_strength (0-1 scale of bump)
+    not dust_slope (power-law tail). The old test here is not applicable.
+    """
     wave = jnp.linspace(1000.0, 30000.0, 50)
-    with pytest.warns(DeprecationWarning, match="dust_slope"):
-        result_old = conroy2010(wave, dust_Rv=3.1, n_slope=-0.9)
-    result_new = conroy2010(wave, dust_Rv=3.1, dust_slope=-0.9)
-    np.testing.assert_array_equal(result_old, result_new)
+    # Verify conroy2010 takes dust_bump_strength, not dust_slope or n_slope
+    result = conroy2010(wave, dust_Rv=3.1, dust_bump_strength=1.0)
+    assert result.shape == wave.shape
 
 
 def test_new_keyword_is_silent():
@@ -64,10 +68,17 @@ def test_both_keywords_raise():
 
 
 def test_registry_reports_only_the_new_name():
-    """Registry law_kwarg_names reports dust_slope, not n_slope."""
-    for law in ("power_law", "conroy2010"):
-        assert "dust_slope" in law_kwarg_names(law)
-        assert "n_slope" not in law_kwarg_names(law)
+    """Registry law_kwarg_names reports dust_slope for power_law, dust_bump_strength for conroy2010.
+
+    power_law keeps dust_slope; conroy2010 (#2522) replaced it with dust_bump_strength.
+    """
+    # power_law still uses dust_slope
+    assert "dust_slope" in law_kwarg_names("power_law")
+    assert "n_slope" not in law_kwarg_names("power_law")
+    # conroy2010 uses dust_bump_strength (issue #2522)
+    assert "dust_bump_strength" in law_kwarg_names("conroy2010")
+    assert "dust_slope" not in law_kwarg_names("conroy2010")
+    assert "n_slope" not in law_kwarg_names("conroy2010")
 
 
 def test_resolver_dicts_stay_strict_after_the_swap():
@@ -76,18 +87,27 @@ def test_resolver_dicts_stay_strict_after_the_swap():
     Registering the wrapper (#2257) must not loosen the resolver. ``select_law_kwargs``
     narrows to the declared names, so ``n_slope`` is dropped, and
     ``reject_unread_law_kwargs`` refuses it as read by none of the laws in play.
+
+    For conroy2010 (#2522), dust_slope is no longer valid; bump_strength is used instead.
     """
     from tengri.components.dust.laws._registry import (
         reject_unread_law_kwargs,
         select_law_kwargs,
     )
 
-    for law in ("power_law", "conroy2010"):
-        narrowed = select_law_kwargs(law, {"n_slope": -0.9, "dust_slope": -0.9, "dust_Rv": 3.1})
-        assert "n_slope" not in narrowed
-        assert narrowed["dust_slope"] == -0.9
-        with pytest.raises(ValueError, match="n_slope"):
-            reject_unread_law_kwargs({"n_slope": -0.9}, (law,), context="test")
+    # Test power_law (still uses dust_slope)
+    narrowed = select_law_kwargs("power_law", {"n_slope": -0.9, "dust_slope": -0.9, "dust_Rv": 3.1})
+    assert "n_slope" not in narrowed
+    assert narrowed["dust_slope"] == -0.9
+    with pytest.raises(ValueError, match="n_slope"):
+        reject_unread_law_kwargs({"n_slope": -0.9}, ("power_law",), context="test")
+
+    # Test conroy2010 (uses dust_bump_strength, not dust_slope)
+    narrowed = select_law_kwargs("conroy2010", {"dust_slope": 1.0, "dust_bump_strength": 0.8, "dust_Rv": 3.1})
+    assert "dust_slope" not in narrowed  # conroy2010 doesn't read dust_slope anymore
+    assert narrowed["dust_bump_strength"] == 0.8
+    with pytest.raises(ValueError, match="dust_slope"):
+        reject_unread_law_kwargs({"dust_slope": 1.0}, ("conroy2010",), context="test")
 
 
 def test_registry_callable_accepts_old_name_with_warning():
@@ -105,15 +125,18 @@ def test_registry_callable_accepts_old_name_with_warning():
 
 
 def test_registry_callable_accepts_old_name_conroy2010():
-    """Registry callable for conroy2010 accepts old n_slope name with a DeprecationWarning.
+    """Registry callable for conroy2010 does NOT accept old n_slope (issue #2522).
 
-    Same as test_registry_callable_accepts_old_name_with_warning but for conroy2010.
+    conroy2010 replaced dust_slope with dust_bump_strength (not a slope parameter,
+    but a scaling factor for the 2175 Å bump). It does not have n_slope or dust_slope.
     """
     wave = jnp.linspace(1000.0, 30000.0, 50)
-    with pytest.warns(DeprecationWarning, match="dust_slope"):
-        result_old = DUST_LAWS["conroy2010"](wave, dust_Rv=3.1, n_slope=-0.9)
-    result_new = DUST_LAWS["conroy2010"](wave, dust_Rv=3.1, dust_slope=-0.9)
-    np.testing.assert_array_equal(result_old, result_new)
+    # conroy2010 does not accept n_slope or dust_slope anymore
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        DUST_LAWS["conroy2010"](wave, dust_Rv=3.1, n_slope=-0.9)
+    # conroy2010 uses dust_bump_strength instead
+    result = DUST_LAWS["conroy2010"](wave, dust_Rv=3.1, dust_bump_strength=0.8)
+    assert result.shape == wave.shape
 
 
 def test_list_laws_callable_accepts_alias():

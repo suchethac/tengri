@@ -1570,6 +1570,10 @@ def conroy2010(
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
+    **Identity at full strength:** This implementation is bit-identical to :func:`cardelli`
+    when ``dust_bump_strength=1.0``, which is its default. Both return the unmodified
+    Cardelli, Clayton & Mathis (1989) extinction law for that value of the parameter.
+
     The UV branch (3.3 ≤ x ≤ 8 μm⁻¹) of CCM89 is modified by scaling the two
     Drude profile coefficients:
 
