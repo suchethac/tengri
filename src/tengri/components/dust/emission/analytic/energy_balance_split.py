@@ -127,7 +127,10 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     #: float32-safe form of the ~2.4e43 erg/s ``L_ir`` (``inf`` in float32).
     #: Declared alongside the inherited linear ``L_ir`` so both reach
     #: :meth:`predict`; only the log form is used.
-    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s", "log_L_ir": "dex"}
+    optional_inputs: ClassVar[dict[str, str]] = {
+        "L_ir": "erg/s",
+        "log_L_ir": "dex",
+    }
 
     def predict(
         self,
