@@ -781,6 +781,40 @@ def prevot_smc(
     return k_norm * ramp_factor
 
 
+def _ccm89_far_uv_ab(x: jnp.ndarray, x_cap: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""CCM89 far-UV cubic polynomial a(x), b(x), held constant beyond ``x_cap``.
+
+    Shared by :func:`cardelli` and :func:`conroy2010`, which declare different
+    domains for the SAME Cardelli, Clayton & Mathis (1989) far-UV cubic: the
+    two must never carry independent copies of this polynomial, or they could
+    silently drift apart. Evaluates the polynomial for
+    :math:`8.0 \le x \le {\tt x\_cap}` (clipping the input, not the output,
+    so the value is held constant for :math:`x > {\tt x\_cap}`).
+
+    Parameters
+    ----------
+    x : array_like, shape (n_wave,)
+        :math:`1/\lambda` [μm⁻¹].
+    x_cap : float
+        Upper bound of the polynomial's domain; the curve is held constant
+        beyond it. ``cardelli`` uses 10.0 (CCM89's own fitted range);
+        ``conroy2010`` uses 12.0 (FSPS's ``attn_curve.f90`` extrapolation).
+
+    Returns
+    -------
+    tuple of ndarray, shape (n_wave,)
+        ``(a_fuv, b_fuv)``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+    """
+    y_fuv = jnp.clip(x, 8.0, x_cap) - 8.0
+    a_fuv = -1.073 - 0.628 * y_fuv + 0.137 * y_fuv**2 - 0.070 * y_fuv**3
+    b_fuv = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
+    return a_fuv, b_fuv
+
+
 @register_dust_law(
     "cardelli",
     citation="Cardelli et al. 1989 (ApJ 345, 245) MW extinction",
@@ -814,6 +848,11 @@ def cardelli(
     Uses piecewise polynomials in infrared, optical, UV, and far-UV regimes.
     Parameterized by :math:`x = 1/\lambda` [μm⁻¹] with :math:`a(x)` and :math:`b(x)`
     coefficients fitted to extinction curves.
+
+    Held constant for :math:`x > 10\,\mu\mathrm{m}^{-1}` (:math:`\lambda <
+    1000` Å): this stops at CCM89's own fitted far-UV domain, unlike
+    :func:`conroy2010`, which extrapolates the same polynomial to
+    :math:`x=12` to match FSPS's ``attn_curve.f90`` exactly.
 
     References
     ----------
@@ -856,10 +895,11 @@ def cardelli(
     a_uv = 1.752 - 0.316 * x - 0.104 / ((x - 4.67) ** 2 + 0.341) + f_a
     b_uv = -3.090 + 1.825 * x + 1.206 / ((x - 4.62) ** 2 + 0.263) + f_b
 
-    # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4)
-    y_fuv = jnp.clip(x, 8.0, 10.0) - 8.0
-    a_fuv = -1.073 - 0.628 * y_fuv + 0.137 * y_fuv**2 - 0.070 * y_fuv**3
-    b_fuv = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
+    # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4), held constant beyond x=10 --
+    # tengri stops at CCM89's own fitted domain, matching the community-standard
+    # `dust_extinction` package (CCM89's declared x_range is [0.3, 10.0]) and
+    # CCM89 (1989) itself, which fits the far-UV branch for 8 <= x <= 10 only.
+    a_fuv, b_fuv = _ccm89_far_uv_ab(x, 10.0)
 
     a = jnp.where(
         x < 1.1,
@@ -1627,6 +1667,13 @@ def conroy2010(
       continuation), so its junction with the scaled mid-UV segment also steps;
       :math:`\approx 0.7\%` of :math:`k` for :math:`s=0` at :math:`R_V=3.1`.
 
+    **Far-UV domain (x > 10):** unlike :func:`cardelli`, which stops at CCM89's
+    own fitted range, this evaluates the far-UV cubic out to
+    :math:`x=12\,\mu\mathrm{m}^{-1}` (:math:`\lambda \approx 833` Å) before
+    holding it constant, matching FSPS's ``attn_curve.f90`` (``mwdindex(6)``)
+    exactly; the two curves therefore differ below 1000 Å even at bump
+    strength 1.
+
     References
     ----------
     .. [1] D. E. Cardelli, G. C. Clayton, and J. S. Mathis, "The Relationship
@@ -1723,10 +1770,12 @@ def conroy2010(
         k_opt_at_boundary - k_uv_at_boundary
     )
 
-    # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4)
-    y_fuv = jnp.clip(x, 8.0, 10.0) - 8.0
-    a_fuv = -1.073 - 0.628 * y_fuv + 0.137 * y_fuv**2 - 0.070 * y_fuv**3
-    b_fuv = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
+    # Far-UV: 8.0 <= x <= 12.0, held constant beyond x=12 -- FSPS's
+    # attn_curve.f90 evaluates this same CCM89 cubic out to x=12 (mwdindex(6),
+    # sps_setup.f90) before holding it constant, beyond CCM89's own 8-10 fit;
+    # conroy2010 is labeled as the FSPS dust_type=1 form, so it matches FSPS
+    # exactly here rather than stopping at CCM89's fitted domain like cardelli.
+    a_fuv, b_fuv = _ccm89_far_uv_ab(x, 12.0)
 
     a = jnp.where(
         x < 1.1,

@@ -51,6 +51,15 @@ def _ccm89_ab_nuv_bump1(x):
     return a, b
 
 
+def _ccm89_far_uv_ab(x, x_cap):
+    """CCM89 far-UV cubic a(x), b(x), held constant beyond ``x_cap`` (mirrors
+    ``attenuation.py``'s ``_ccm89_far_uv_ab``, independently re-derived here)."""
+    y_fuv = np.clip(x, 8.0, x_cap) - 8.0
+    a = -1.073 - 0.628 * y_fuv + 0.137 * y_fuv**2 - 0.070 * y_fuv**3
+    b = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
+    return a, b
+
+
 class TestConroy2010CCM89Equivalence:
     """conroy2010 relates to cardelli(CCM89) by an exact, known relation.
 
@@ -64,11 +73,18 @@ class TestConroy2010CCM89Equivalence:
 
     @pytest.mark.parametrize("dust_Rv", [2.0, 3.1, 5.0])
     def test_conroy2010_equals_cardelli_at_full_strength(self, dust_Rv):
-        """Outside near-UV: N=1 equality (rtol 1e-9). Inside: exact Delta relation (atol 1e-9)."""
-        lam_b33, lam_b59 = 1e4 / 3.3, 1e4 / 5.9
+        """3.3<=x<5.9: exact Delta relation. Elsewhere up to x=10: N=1 equality.
 
-        # x < 3.3 or x >= 5.9, with points within 1 A of every reachable
-        # segment boundary (x=1.1, 5.9, 8.0, and the outside face of x=3.3).
+        x > 10 um^-1 (lambda < 1000 A): conroy2010 (labeled as the FSPS form)
+        continues the CCM89 far-UV cubic to x=12 and holds it constant beyond,
+        matching FSPS's attn_curve.f90 exactly; cardelli holds constant from
+        x=10 (CCM89's own fitted domain). The two therefore differ there by
+        an exact, closed-form amount asserted below.
+        """
+        lam_b33, lam_b59, lam_b10, lam_b12 = 1e4 / 3.3, 1e4 / 5.9, 1e4 / 10.0, 1e4 / 12.0
+
+        # x < 3.3 or 5.9 <= x <= 10, with points within 1 A of every boundary
+        # in that range (x=1.1, 5.9, 8.0, 10.0, and the outside face of x=3.3).
         lam_outside = np.array(
             sorted(
                 {
@@ -77,12 +93,13 @@ class TestConroy2010CCM89Equivalence:
                     lam_b59 - 1.0,  # x = 5.9 + eps (outside)
                     1e4 / 8.0 - 1.0,
                     1e4 / 8.0 + 1.0,
+                    lam_b10 + 1.0,  # x = 10 - eps
                     lam_b33 + 1.0,  # x = 3.3 - eps (outside)
                     22000.0,
                     30000.0,
                 }
                 | set(np.geomspace(lam_b33 + 2.0, 9000.0, 10))
-                | set(np.geomspace(950.0, lam_b59 - 2.0, 10))
+                | set(np.geomspace(lam_b10, lam_b59 - 2.0, 10))
             )
         )
         # N = 1: cardelli and conroy2010 use the identical k(5500 A)
@@ -115,6 +132,28 @@ class TestConroy2010CCM89Equivalence:
         k_cardelli_in = np.asarray(cardelli(jnp.array(lam_inside), dust_Rv=dust_Rv))
         predicted = (3.3 / x_inside) ** 6 * delta / k5500
         np.testing.assert_allclose(k_conroy_in - k_cardelli_in, predicted, atol=1e-9)
+
+        # x > 10: conroy2010 continues to x=12 (held constant beyond);
+        # cardelli holds constant from x=10. Points within 1 A of x=10 and
+        # x=12, plus samples spanning 10 < x <= 12 and x > 12.
+        lam_far_uv = np.array(
+            sorted(
+                {lam_b10 - 1.0, lam_b12 + 1.0, lam_b12 - 1.0, 700.0}
+                | set(np.linspace(lam_b12 + 2.0, lam_b10 - 2.0, 10))
+            )
+        )
+        x_far_uv = 1e4 / lam_far_uv
+        a_conroy_fuv, b_conroy_fuv = _ccm89_far_uv_ab(x_far_uv, 12.0)
+        a_cardelli_fuv, b_cardelli_fuv = _ccm89_far_uv_ab(x_far_uv, 10.0)
+        predicted_far_uv = (
+            (a_conroy_fuv - a_cardelli_fuv) + (b_conroy_fuv - b_cardelli_fuv) / dust_Rv
+        ) / k5500
+
+        k_conroy_fuv = np.asarray(
+            conroy2010(jnp.array(lam_far_uv), dust_Rv=dust_Rv, dust_bump_strength=1.0)
+        )
+        k_cardelli_fuv = np.asarray(cardelli(jnp.array(lam_far_uv), dust_Rv=dust_Rv))
+        np.testing.assert_allclose(k_conroy_fuv - k_cardelli_fuv, predicted_far_uv, atol=1e-9)
 
     def test_conroy2010_bump_strength_zero_removes_bump(self):
         """With dust_bump_strength=0.0, k(2175 Å) has no local maximum."""

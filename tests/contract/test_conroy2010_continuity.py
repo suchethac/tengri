@@ -15,16 +15,14 @@ mid-UV.
 of the Fortran, used only for parity checks -- it must never call
 ``conroy2010`` itself, or a test built on it would tautologically pass.
 
-Scope note (far-UV domain): tengri's ``cardelli``/``conroy2010`` clip the
-far-UV branch to CCM89's own published domain, x in [8, 10] ("CCM89 Table 4"),
-rather than continuing FSPS's unclamped cubic out to x=12 before FSPS's own
-constant-extrapolation cap. That clip is a pre-existing design choice shared
-by ``cardelli`` and predates this fix; it is reproduced (not altered) by the
-reference below and is unrelated to the near-UV continuity term this file
-tests. Consequently the reference below matches tengri's actual domain
-(x <= 10, held constant beyond) rather than FSPS's raw x=12 cap -- there is no
-wavelength in the 912 Angstrom - 3 micron range (x <= 10.96) where tengri's
-own x=12 behavior could be exercised in the first place.
+Scope note (far-UV domain): ``conroy2010`` is labeled as the FSPS dust_type=1
+form, so its far-UV branch evaluates the CCM89 cubic out to x=12 um^-1
+(lambda ~ 833 Angstrom) before holding it constant, exactly matching FSPS's
+``attn_curve.f90`` (``mwdindex(6)``, x > 12). ``cardelli`` stops at CCM89's
+own fitted domain (x <= 10) instead -- the two share one helper
+(``_ccm89_far_uv_ab``) with different caps, so they diverge below 1000
+Angstrom even at bump strength 1. The reference below reproduces FSPS's x=12
+cap, not tengri's ``cardelli`` domain.
 """
 
 from __future__ import annotations
@@ -44,7 +42,7 @@ _X_IR_OPT = 1.1
 _X_OPT_NUV = 3.3
 _X_NUV_MUV = 5.9
 _X_MUV_FUV = 8.0
-_X_FUV_CAP = 10.0  # tengri's own far-UV domain cap (CCM89 Table 4); see module docstring.
+_X_FUV_CAP = 12.0  # FSPS's far-UV extrapolation cap (mwdindex(6)); see module docstring.
 
 
 def _k5500_ccm89(rv: float) -> float:
@@ -124,8 +122,8 @@ def _fsps_ccm89_reference(wavelength: np.ndarray, uvb: float, rv: float) -> np.n
     -----
     Independent of ``tengri.components.dust.attenuation`` -- never calls it.
     The continuity ``hack`` term is added only on 3.3 <= x < 5.9 (attn_curve.f90
-    ``tmp(mwdindex(4):mwdindex(3))``); the far-UV branch is clipped to x in
-    [8, 10] rather than FSPS's own x=12 cap (see module docstring scope note).
+    ``tmp(mwdindex(4):mwdindex(3))``); the far-UV branch is evaluated to x=12
+    (FSPS's ``mwdindex(6)`` cap) and held constant beyond (see module docstring).
     """
     wave_aa = np.asarray(wavelength, dtype=np.float64)
     x = 1.0e4 / wave_aa
@@ -214,12 +212,11 @@ def _analytic_drude_delta_at(x: float, rv: float) -> float:
     return da + db / rv
 
 
-# ── Wavelength grid: 912 Angstrom - 3 micron, bracketing every reachable ──
-# ── segment boundary (x = 1.1, 3.3, 5.9, 8.0, and tengri's own far-UV cap ──
-# ── at x = 10; FSPS's x = 12 cap is not reachable -- see module docstring) ─
+# ── Wavelength grid: 700 Angstrom - 3 micron, bracketing every segment ────
+# ── boundary (x = 1.1, 3.3, 5.9, 8.0, 10.0, and FSPS's far-UV cap x = 12) ──
 
-_BOUNDARIES_X = (1.1, 3.3, 5.9, 8.0, 10.0)
-_BASE_WAVE_AA = np.geomspace(912.0, 30000.0, 50)
+_BOUNDARIES_X = (1.1, 3.3, 5.9, 8.0, 10.0, 12.0)
+_BASE_WAVE_AA = np.geomspace(700.0, 30000.0, 50)
 _BRACKET_WAVE_AA = np.concatenate(
     [[1.0e4 / (xb - 0.02), 1.0e4 / (xb + 0.02)] for xb in _BOUNDARIES_X]
 )
