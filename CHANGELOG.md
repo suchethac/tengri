@@ -10,8 +10,10 @@
 
 ### Fixed
 
-- The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542). **Breaking**: `li08`'s default is now the Li et al. (2008) Milky-Way (R_V=3.1) curve (c1..c4 = 14.4, 6.52, 2.04, 0.0519); the previous default and docstring presets did not correspond to the paper.
-
+- `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
+  since formation (T = age − t_lookback) and take a required keyword-only `age`;
+  both previously treated lookback time as cosmic time and returned mirror-imaged
+  histories (#2524).
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
@@ -110,18 +112,6 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
-- `conroy2010` is now CCM89 with a scalable 2175 Å bump (`dust_bump_strength`), as in
-  Conroy et al. (2010); it was a sigmoid Cardelli/power-law blend that over-attenuated
-  the NIR by up to 3.3× and had no bump control; `dust_slope` is removed from this law.
-  The FSPS `attn_curve.f90` continuity correction at the optical/near-UV junction
-  (x=3.3 μm⁻¹) is applied on the near-UV segment only (3.3 ≤ x < 5.9 μm⁻¹), matching
-  FSPS's `attn_curve.f90` exactly; applying it out to x=8.0 μm⁻¹ over-corrected the
-  mid-UV by up to ~2×10⁻³ in k. `conroy2010(dust_bump_strength=1.0)` is not
-  bit-identical to `cardelli` (up to ~2×10⁻⁴ near x=3.3 μm⁻¹): FSPS applies the
-  correction unconditionally, even where the CCM89 optical and near-UV pieces
-  already fail to meet exactly (#2522).
-
-- `reddy15` is continuous at 0.6 µm (red branch offset −0.0362) and constant below 1500 Å (#2523).
 - Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
   metal-line blanketing term (eq. 15), 0.0017·(λ_obs/λ_α)^1.68 blueward of
   Lyα(1+z); this adds up to ~1% attenuation in the Lyα–Lyβ forest at z = 2–4 (#2516).
@@ -286,6 +276,16 @@
   count/scale-floor classification — the filter integral of a loaded filter
   cannot vanish by construction.
 
+- `conroy2010` is CCM89 with a scalable 2175 Å bump (`dust_bump_strength`), as in
+  Conroy et al. (2010) and FSPS `dust_type=1`; it was a sigmoid Cardelli/power-law
+  blend that over-attenuated the NIR by up to 3.3× and had no bump control.
+  `dust_slope` is no longer a parameter of this law. The curve carries the FSPS
+  continuity term on the near-UV segment (3.3 ≤ x < 5.9 μm⁻¹), so it is continuous
+  at x = 3.3 μm⁻¹ for any bump strength, and at bump strength 1 it differs from
+  `cardelli` by that term (up to 2×10⁻⁴) (#2522).
+- `reddy15` is continuous at 0.6 µm (red-branch offset −0.0362, as in FSPS
+  `dust_type=6`) and constant below 1500 Å (#2523).
+- The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542). **Breaking**: `li08`'s default is now the Li et al. (2008) Milky-Way (R_V=3.1) curve (c1..c4 = 14.4, 6.52, 2.04, 0.0519); the previous default and docstring presets did not correspond to the paper.
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
