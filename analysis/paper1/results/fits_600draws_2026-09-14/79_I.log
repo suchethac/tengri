@@ -1,0 +1,34 @@
+2026-09-14 16:07:58,295 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.257e-29 erg/s/cm2/Hz
+2026-09-14 16:08:01,975 - __main__ - INFO - Galaxy 79 (z=1.012): 11 detected bands
+2026-09-14 16:08:01,975 - __main__ - INFO - Config I: 5 free parameters
+2026-09-14 16:08:01,975 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 600, diagonal mass
+2026-09-14 16:08:06,247 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 16:08:23,637 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 600 warmup, 600 samples, target_accept=0.85
+2026-09-14 16:15:31,320 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (427.7s). Step size: 0.0406. Divergent in the final warmup window: 3%
+2026-09-14 16:39:07,342 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1843.6s. Divergences: 2/2400 (0.1%). Tree depth: mean 6.1, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-14 16:39:07,356 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=2, rhat_max=1.0013
+2026-09-14 16:41:15,129 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/79_I.npz
+2026-09-14 16:41:15,130 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/79_I.json
+2026-09-14 16:41:15,131 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=2) before retuning
+2026-09-14 16:41:15,131 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 600, diagonal mass
+2026-09-14 16:41:15,580 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 16:41:15,583 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 600 warmup, 600 samples, target_accept=0.95
+2026-09-14 16:51:09,212 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (593.6s). Step size: 0.0441. Divergent in the final warmup window: 2%
+2026-09-14 17:20:55,634 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2379.7s. Divergences: 4/2400 (0.2%). Tree depth: mean 6.1, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-14 17:20:55,643 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=4, rhat_max=1.0006
+2026-09-14 17:23:38,692 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/79_I.npz
+2026-09-14 17:23:38,695 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/79_I.json
+2026-09-14 17:23:38,697 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 2, divergences=2) before retuning
+2026-09-14 17:23:38,697 - __main__ - INFO - Attempt 3/3: target_accept 0.99, warmup 600, diagonal mass
+2026-09-14 17:23:39,569 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 17:23:39,578 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 600 warmup, 600 samples, target_accept=0.99
+2026-09-14 17:43:09,870 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1170.3s). Step size: 0.0078. Divergent in the final warmup window: 2%
+2026-09-14 19:25:09,957 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 7290.3s. Divergences: 0/2400 (0.0%). Tree depth: mean 8.2, at cap on 4% of iterations (max_num_doublings=10)
+2026-09-14 19:25:09,963 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0044
+2026-09-14 19:27:11,036 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/79_I.npz
+2026-09-14 19:27:11,037 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/79_I.json
+2026-09-14 19:27:11,039 - __main__ - INFO - ✓ Fit complete for galaxy 79 config I
+  MAP initialization (1000 steps)...
+  MAP init done (loss=7.68)
+  MAP initialization: reusing cached MAP point
+  MAP initialization: reusing cached MAP point

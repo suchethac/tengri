@@ -49,32 +49,13 @@ pip install -e ".[all]"
 [JAX's CUDA notes](https://jax.readthedocs.io/en/latest/installation.html#gpu-support)
 to match the driver and CUDA versions on the host.
 
-**Apple Silicon.** Apple's own `jax-metal` (0.1.1, 2024-10) is not viable
-against this JAX version. The supported path is the community `jax-mps`
-plugin (MLX-backed, float32 only) -- see `notebooks/apple_mps.py` for setup
-and `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy
-check. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust without it.
+**Apple Silicon:** Apple's own `jax-metal` (0.1.1, 2024-10) is not viable with this JAX version. The supported path is the community `jax-mps` plugin (MLX-backed, float32 only). See `notebooks/apple_mps.py` for setup and `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust without it.
 
-On every backend, `import tengri` enables 64-bit precision globally
-(`jax_enable_x64`); float64 is the reference. Pure float32 is supported
-end-to-end as well (2026-09, #1206): set `JAX_ENABLE_X64=0` **before
-Python starts** (not after `import tengri`) and the forward model, the
-emission-line channel and the default photometry + line fit reproduce the
-float64 optimum to ~1e-5 on CPU and CUDA, at 2x the galaxies per GiB.
-The quantities that overflow float32 (`4 pi d_L^2` ~ 1e57 cm^2 at any
-redshift, erg/s luminosities) are carried as log10 offsets internally,
-which is also why the linear line and X-ray luminosity properties are in
-`Lsun` and the ionizing rate is `log_q_h` only. `import tengri` also
-raises the default matmul precision to `"highest"` so float32 matmuls
-never lower to TF32 on Ampere+ GPUs. Details and measurements:
-`docs/dev/float32-tier-b-boundary.md`.
+On every backend, `import tengri` enables 64-bit precision globally (`jax_enable_x64`), with float64 as the reference. Pure float32 is supported end-to-end (2026-09, #1206): set `JAX_ENABLE_X64=0` before Python starts (not after `import tengri`), and the forward model, emission-line channel, and default photometry plus line fit reproduce the float64 optimum to ~1e-5 on CPU and CUDA, achieving 2x the galaxies per GiB. Quantities that overflow float32 (e.g., `4 pi d_L^2` at ~1e57 cm^2 at any redshift, erg/s luminosities) are carried as log10 offsets internally. This is why linear line and X-ray luminosity properties are in `Lsun` and the ionizing rate is `log_q_h` only. `import tengri` also raises the default matmul precision to `"highest"`, ensuring float32 matmuls never lower to TF32 on Ampere+ GPUs. Details and measurements are in `docs/dev/float32-tier-b-boundary.md`.
 
 ## SSP grids
 
-Tengri needs a pre-computed Simple Stellar Population grid in DSPS
-HDF5 format. The default is FSPS with PARSEC isochrones and the MILES
-library (Chabrier IMF) — bare-stellar, so the Cue and Cloudy nebular
-backends can sit on top. It is the grid the quickstart notebook uses.
+Tengri needs a pre-computed Simple Stellar Population grid in DSPS HDF5 format. The default is FSPS with PARSEC isochrones and the MILES library (Chabrier IMF), bare-stellar so the Cue and Cloudy nebular backends can sit on top. It is the grid the quickstart notebook uses.
 
 ```python
 import tengri
@@ -82,7 +63,7 @@ tengri.download_ssp()          # → data/fsps_prsc_miles_chabrier.h5 (or $TENGR
 tengri.list_known_ssps()       # other grids
 ```
 
-Or via shell — either the wrapper script or a direct fetch:
+Or via shell, using either the wrapper script or a direct fetch:
 
 ```bash
 bash scripts/setup_ssp.sh
@@ -112,19 +93,13 @@ tengri.doctor()        # install + JAX backend + SSP files
 
 ## Persistent JAX cache
 
-`import tengri` enables a persistent on-disk JAX compile cache at
-`~/.cache/tengri_jax_cache`, so notebook restarts, slurm tasks, and
-benchmark worker subprocesses skip the expensive first compile. After
-upgrading JAX, wipe stale entries:
+`import tengri` enables a persistent on-disk JAX compile cache at `~/.cache/tengri_jax_cache`, allowing notebook restarts, slurm tasks, and benchmark worker subprocesses to skip the expensive first compile. After upgrading JAX, wipe stale entries:
 
 ```python
 import tengri; tengri.clear_cache()
 ```
 
-A sibling cache at `~/.cache/tengri_precomp` persists the photometry
-redshift table that free-redshift models precompute at build time, so
-the first `SEDModel.build` of a given SSP + filter set pays the cost
-once and subsequent builds — in any session — take seconds.
+A sibling cache at `~/.cache/tengri_precomp` persists the photometry redshift table that free-redshift models precompute at build time, so the first `SEDModel.build` of a given SSP plus filter set pays the cost once, and subsequent builds (in any session) take seconds.
 
 Override the location or disable via env:
 

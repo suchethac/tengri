@@ -230,19 +230,23 @@ class TestSalimSBL18:
         np.testing.assert_allclose(tng, ref, rtol=1e-6)
 
     def test_reference_with_mods(self):
-        """SBL18 ampl=3, slope=-0.1. Reference from dust_attenuation."""
-        # Re-pinned after #1731: normalized to k(5500)=1 exactly.
-        # Rescale factor from k(5500)_old ≈ 1.00367: 1.0 / 1.00367 ≈ 0.996345
+        """SBL18 ampl=3, slope=-0.1. Reference from Salim+2018 Eq. 4.
+
+        Re-pinned after #2397: UV bump now normalized by R_V,mod(δ) instead of
+        fixed R_V,Cal = 4.05. Most wavelengths shift <0.1%; only 2175 Å (bump peak)
+        moves significantly.
+        """
+        # Values computed from fixed salim_sbl18 implementing Eq. 3+4
         ref = np.array(
             [
-                4.05579532,
-                3.43214982,
-                2.92046727,
-                3.02663578,
-                1.85229535,
+                4.05459977,
+                3.43186492,
+                2.92268209,
+                3.10925810,
+                1.85620888,
                 1.00000000,
-                0.43609830,
-                0.10724022,
+                0.43600419,
+                0.10721557,
             ]
         )
         tng = np.array(salim_sbl18(jnp.array(WAVS), dust_bump_strength=3.0, dust_delta=-0.1))

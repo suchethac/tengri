@@ -252,14 +252,9 @@ def _neb_cases():
     * ``ssp`` (baked-in) declares no free parameters, so there is no superset.
     * ``cloudy`` needs a grid file that is not shipped and has no synthetic
       stand-in, so the build raises outright in CI.
-    * ``cb19`` builds, because ``conftest`` synthesizes a stand-in grid when the
-      real one is absent — but that stand-in is ``np.broadcast_to`` of a single
-      line-ratio vector, so it is **constant along every interpolation axis**,
-      including the three this suite would test. On it, moving ``neb_log_nH``
-      changes the prediction by ~1e-9 of floating-point interpolation noise
-      whether or not the value reaches the backend. A case that passes on noise
-      is a case that passes for the wrong reason, and it would keep passing if
-      the threading regressed.
+    * ``cb19`` is tested with a self-synthesized grid that varies along every
+      interpolation axis, ensuring the test measures a real grid it owns rather
+      than relying on whatever the locator finds (#2318).
 
     The threading those cases would have covered is asserted directly instead,
     at the wiring, by :func:`test_backend_declared_nebular_params_are_threaded`
@@ -619,7 +614,9 @@ def test_backend_declared_nebular_params_are_threaded():
         )
 
 
-def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panchromatic_obs):
+def test_the_threaded_values_actually_reach_the_backend(
+    synthetic_ssp_wide, panchromatic_obs, tmp_path
+):
     """The sampler's value, not the signature default, must arrive at the call.
 
     The acceptance filter being correct is not the same as the component using
@@ -627,7 +624,13 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
     restore it exactly. Spy on the call and compare against the *default*, which
     is what the backend received for as long as the bug existed.
     """
+    from tests._cb19_grid import write_synthetic_cb19_grid
+
     backend_cls = pytest.importorskip("tengri.components.nebular.cloudy_cb19").CB19Backend
+
+    # Build a varying grid explicitly and pass it to the model, ensuring the test
+    # owns its fixture and does not depend on whatever the locator finds (#2318).
+    grid_path = write_synthetic_cb19_grid(tmp_path / "cb19_templates.h5")
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -640,7 +643,7 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
                 "law": "calzetti",
                 "all_params": Fixed(DEFAULT),
             },
-            neb={"type": "cb19", "all_params": FREE},
+            neb={"type": "cb19", "all_params": FREE, "grid": str(grid_path)},
             redshift=Fixed(0.5),
         )
 

@@ -44,6 +44,7 @@ pytestmark = pytest.mark.regression_bug
 import tengri
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.observation.photometry import FilterCurve
+from tengri.parameters.resolve import merge_fixed_params
 from tengri.utils.scale import pow10
 
 HALPHA_AA = 6564.72
@@ -117,9 +118,29 @@ def _dust_group(law, **shape) -> dict:
 
 
 def _sampled_params(model, seed: int = 0) -> dict:
+    """Free-only sample (#2296): the shape the model's public ``predict_*``
+    surfaces require (``predict_state``, ``predict_line_fluxes``). Direct,
+    no-state component calls that bypass ``predict_state``'s own
+    merge-then-refuse boundary (``_attenuate_line_catalog``,
+    ``_resolved_transmission``'s resolver + law calls) need the COMPLETE
+    free+Fixed dict instead -- see :func:`_full_params`.
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return dict(model.spec.sample(jax.random.PRNGKey(seed)))
+
+
+def _full_params(model, params: dict) -> dict:
+    """Merge Fixed values into a free-only ``params`` dict (#2296).
+
+    For the direct, no-state component calls this file exercises
+    (``_attenuate_line_catalog``, ``resolve_bc_diff_law_params``): they
+    bypass ``predict_state``'s merge-then-refuse boundary entirely, so the
+    shape kwargs under test (``dust_delta``, ``dust_Rv``) and ``redshift``,
+    all declared ``Fixed`` on this fixture's models, would otherwise be
+    silently absent rather than at their pinned value.
+    """
+    return merge_fixed_params(model.spec, params)
 
 
 def _resolved_transmission(model, params, wave) -> np.ndarray:
@@ -147,6 +168,7 @@ def _resolved_transmission(model, params, wave) -> np.ndarray:
     )
     from tengri.components.dust.laws._registry import resolve_dust_law, select_law_kwargs
 
+    params = _full_params(model, params)
     component = model._line_dust_component()
     config = component.config
     wave = jnp.asarray(wave)
@@ -174,7 +196,7 @@ def _resolved_transmission(model, params, wave) -> np.ndarray:
 
 def _line_transmission(model, params, wave, lum) -> np.ndarray:
     """Fallback line transmission: attenuated / intrinsic, dimensionless."""
-    atten = np.asarray(model._attenuate_line_catalog(params, wave, lum))
+    atten = np.asarray(model._attenuate_line_catalog(_full_params(model, params), wave, lum))
     return atten / np.asarray(lum)
 
 
@@ -328,7 +350,7 @@ def test_lyman_clip_and_f_obscuration_reach_the_fallback(ssp_bare, observation):
     log_line_lums = state.derived["log_line_lums"]
 
     fallback_atten = model._attenuate_line_catalog(
-        params, jnp.asarray(line_waves), pow10(jnp.asarray(log_line_lums))
+        _full_params(model, params), jnp.asarray(line_waves), pow10(jnp.asarray(log_line_lums))
     )
     np.testing.assert_allclose(
         np.asarray(fallback_atten), np.asarray(pow10(log_atten_live)), rtol=1e-10, atol=0.0

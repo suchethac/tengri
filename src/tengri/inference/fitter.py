@@ -77,6 +77,7 @@ from tengri.inference.loss_functions import (
     build_logprior_fn,
     build_loss_fn,
 )
+from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
 
 # ── Method name validation ────────────────────────────────────────────
@@ -895,10 +896,36 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         stays exact, never break a fit that worked, only make its cost
         visible.
     """
-    if approx is None:
-        return model
     if getattr(model, "with_approx", None) is None:
         return model
+    if approx is None:
+        # Nothing attached is already the exact path, and cloning to strip an
+        # absent LUT is "a clone that buys nothing" — the thing
+        # ``test_a_model_already_carrying_the_lut_is_not_rewrapped`` exists to
+        # forbid. Strip only when there is something to strip.
+        _state = getattr(model, "approx", None)
+        if _state is None or not (
+            getattr(_state, "wave_precomp", False)
+            or getattr(_state, "spectrum_precomp", False)
+            or getattr(_state, "feature_precomp", False)
+        ):
+            return model
+        # #2377: force the exact path here too, mirroring the ``None`` branch of
+        # ``Fitter._resolve_fit_approx``, whose docstring is explicit that ``None``
+        # "overrides a build-time approx" and "means exact and stays exact". This
+        # returned ``model`` untouched, so a catalog or population fit built with
+        # ``approx=(WavePrecomp(), FeaturePrecomp())`` kept BOTH tables on after the
+        # caller asked, in the documented spelling, for the exact path. One word
+        # meant two opposite things depending on which fitter you reached for, and
+        # the surface that kept the approximation is the one whose fits are largest.
+        #
+        # Not a speed regression to protect: it is the contract being honored. It
+        # also makes the advice in ``PrecompBiasWarning`` actionable -- that warning
+        # tells the reader "for final inference at this SNR, rerun with approx=None
+        # (the exact path)", which on these surfaces previously changed nothing.
+        # #1671 is precisely about WavePrecomp's forward bias entering the posterior
+        # gradient multiplied by SNR, so a reference run is exactly where it bites.
+        return _memoized_approx_clone(model, None)
 
     if isinstance(approx, str):
         if approx != "auto":
@@ -1225,6 +1252,17 @@ class Fitter:
         Compile modes are passed to ``compile(modes=...)`` and determine which
         inference engines are pre-JIT-compiled before the first ``run()`` call.
         See ``compile()`` docstring for valid mode names.
+    params_override : dict or None, optional
+        The sanctioned way to pin a Fixed parameter at a *different* value for
+        this one fit (e.g. a per-galaxy redshift), without rebuilding the
+        model (#1329). Validated at construction: every key must name a
+        parameter the spec declared ``Fixed`` (a free parameter raises
+        ``ValueError``, naming the free parameters instead). This is NOT the
+        same channel as a ``params`` dict handed to a predict surface --
+        those refuse a Fixed key outright (#2296) and never accept an
+        override; ``params_override`` is the one place a Fixed value can be
+        re-pinned, and it is checked, not merged silently. Default ``None``
+        (use the spec's declared Fixed values unchanged).
     profile_mass : bool or "auto", optional
         Analytically marginalize the total-stellar-mass amplitude (the free
         parameter named ``*_log_total_mass``) instead of sampling it, so
@@ -1568,6 +1606,18 @@ class Fitter:
                     raise ValueError(
                         f"Parameter {key!r} is not a valid parameter name. "
                         f"Valid parameters: {all_params}"
+                    )
+                # Check if the built likelihood can read this parameter.
+                # Noise parameters are only wired into the likelihood when
+                # has_noise_model(spec) is True. If not, a noise_* override is
+                # silently accepted but has no effect on the fit (issue #2193).
+                if is_noise_parameter(key) and not has_noise_model(self.spec):
+                    raise ValueError(
+                        f"params_override names {key!r}, but this model's likelihood does not "
+                        f"read it: noise parameters are only consumed when declared in the spec "
+                        f"(free, or Fixed at a nonzero value). Declare it via "
+                        f"Observation(noise=NoiseModel(calibration_floor=...)) instead of "
+                        f"overriding it at fit time."
                     )
             # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
@@ -2057,11 +2107,8 @@ class Fitter:
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
-        _spec_config = getattr(model, "_spectroscopy_config", None)
-        if _spec_config is None:
-            obs = getattr(model, "observation", None)
-            if obs is not None:
-                _spec_config = getattr(obs, "spectroscopy", None)
+        obs = model.observation
+        _spec_config = obs.spectroscopy if obs is not None else None
 
         # Marginalization mode
         if eline_marginalize is None:
@@ -3101,15 +3148,19 @@ class Fitter:
         return params
 
     def _to_physical(self, params_unbounded: dict) -> dict:
-        """Convert a single unbounded param dict to physical space."""
+        """Convert a single unbounded param dict to physical space.
+
+        Returns free parameters only. Fixed parameters are accessible via
+        :attr:`Posterior.fixed_values` (#2296).
+        """
         params = {}
         for name in self._free_names:
             dist = self.spec.get_distribution(name)
             params[name] = dist.unstandardize(params_unbounded[name])
-        for name, val in self._fixed_values.items():
-            # self._fixed_values already carries any per-fit params override
-            # (#1329, merged at construction), no separate merge needed here.
-            params[name] = jnp.array(val)
+        # NOTE: Fixed parameters are omitted. Callers should use
+        # spec.get_fixed_values() or posterior.fixed_values for those.
+        # This ensures that model.predict(posterior.params) never receives
+        # an overridden Fixed key (#2296).
         if self.spec.stochastic and "psd_xi" in params_unbounded:
             # Publish under both names so the returned ``Posterior.params``
             # evaluates to the model that was actually fitted: ``psd_xi`` is the
@@ -4978,6 +5029,28 @@ class Fitter:
                 },
                 _model=self.model,
             )
+            # See ``_fit_batch_vmap_map`` for why this batch path must
+            # reinsert the profiled mass itself (#2296): it never goes
+            # through ``Fitter.run()``'s ``finalize_profile_mass`` call, so
+            # under ``profile_mass`` the working spec's placeholder-pinned
+            # mass would otherwise never reach ``samples_phys``/``best_params``
+            # at all (free-only ``_to_physical``, #2296's own point). One call
+            # per galaxy, with that galaxy's own flux/noise -- ``self.data``/
+            # ``self.noise`` are whichever galaxy this batch Fitter happens to
+            # have been built with, not the one being finalized here.
+            if self._profile_mass:
+                from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                reinsert_profiled_mass(
+                    self,
+                    result_i,
+                    data=flux_batch[g_idx],
+                    noise=noise_batch[g_idx],
+                    presence=None,
+                    line_obs=None,
+                    line_err=None,
+                    key=gal_keys[g_idx],
+                )
             results.append(result_i)
 
         return results
@@ -5167,6 +5240,30 @@ class Fitter:
                     _model=self.model,
                     _fitter=self,
                 )
+                # ``self._to_physical`` is free-only w.r.t. the WORKING spec
+                # (#2296): under ``profile_mass`` that spec pinned the mass
+                # parameter to an analytic placeholder, so it never reaches
+                # ``bounded_i`` at all, let alone at its real value. The
+                # single-fit path closes this through ``finalize_profile_mass``
+                # (called once from ``Fitter.run()``); this vmap batch path
+                # bypasses ``run()`` entirely, so it must call the same
+                # reinsertion itself -- once per galaxy, with THAT galaxy's own
+                # data/noise (``self.data``/``self.noise`` are whichever galaxy
+                # this batch Fitter happens to have been built with, not the
+                # one being finalized here).
+                if self._profile_mass:
+                    from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                    reinsert_profiled_mass(
+                        self,
+                        result_i,
+                        data=flux_batch[g_idx],
+                        noise=noise_batch[g_idx],
+                        presence=None,
+                        line_obs=None,
+                        line_err=None,
+                        key=init_keys[g_idx],
+                    )
                 results.append(result_i)
 
             return results
@@ -5261,6 +5358,22 @@ class Fitter:
                 _model=self.model,
                 _fitter=self,
             )
+            # See the scipy/L-BFGS branch above for why this batch path must
+            # reinsert the profiled mass itself (#2296): it never goes through
+            # ``Fitter.run()``'s ``finalize_profile_mass`` call.
+            if self._profile_mass:
+                from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                reinsert_profiled_mass(
+                    self,
+                    result_i,
+                    data=flux_batch[g_idx],
+                    noise=noise_batch[g_idx],
+                    presence=None,
+                    line_obs=None,
+                    line_err=None,
+                    key=init_keys[g_idx],
+                )
             results.append(result_i)
 
         return results

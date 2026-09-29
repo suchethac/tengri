@@ -65,9 +65,9 @@ def _model(approx, *, emission=True):
 
 
 def _params(m):
-    p = {k: jnp.asarray(v) for k, v in m.spec.sample(jax.random.PRNGKey(0)).items()}
-    p.update({k: jnp.asarray(float(v)) for k, v in m.spec.get_fixed_values().items()})
-    return p
+    # Free-only (#2296): every call site hands this to a public predict_*
+    # surface, which merges the model's own Fixed values internally.
+    return {k: jnp.asarray(v) for k, v in m.spec.sample(jax.random.PRNGKey(0)).items()}
 
 
 def test_prediction_photometry_carries_dust_ir_under_wave_precomp():

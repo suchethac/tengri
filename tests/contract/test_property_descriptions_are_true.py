@@ -136,9 +136,9 @@ def real_model(ssp_data_fsps):
 
 @pytest.fixture(scope="module")
 def real_props(real_model):
-    params = dict(real_model.spec.get_fixed_values())
-    if real_model.spec.free_params:
-        params.update(real_model.spec.sample(jax.random.PRNGKey(0)))
+    # Free-only (#2296): predict() fills in every Fixed value internally,
+    # and refuses a params dict that names one explicitly.
+    params = dict(real_model.spec.sample(jax.random.PRNGKey(0)))
     return real_model.predict(params).properties
 
 
@@ -214,8 +214,9 @@ class TestTheTwoMasses:
 
     def test_stellar_mass_is_the_formed_mass(self, real_model, real_props):
         """It reads log_mstar_formed — so it must equal 10**log_mstar_formed."""
-        params = dict(real_model.spec.get_fixed_values())
-        state = real_model.predict_state(params)
+        # real_model has zero free params (#2296): predict_state fills in every
+        # Fixed value internally and refuses a params dict that names one.
+        state = real_model.predict_state({})
         formed = float(10.0 ** np.asarray(state.derived["log_mstar_formed"]))
         assert np.isclose(float(real_props["stellar_mass"]), formed, rtol=1e-12, atol=0.0)
 

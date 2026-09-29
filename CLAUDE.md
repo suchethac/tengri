@@ -342,6 +342,17 @@ Deprecated (warn + delegate; do not use, do not teach):
 - **Nebular constants**: `components/nebular/_constants.py` re-exports from `physics_constants` — don't break these re-exports.
 - **AGN shared physics**: `_planck_lnu` in `components/agn/_phys.py` — do NOT duplicate the Planck function.
 - **Notebooks**: edit `.py` files (jupytext percent format), never `.ipynb`.
+- **No developmental language in a published page.** Every notebook under
+  `notebooks/`, every `examples/` script and every `reproduction/` page is written
+  for an astronomer using the code, not for someone maintaining it. Banned in their
+  prose, markdown cells and code comments: issue or PR numbers, "we changed", "used
+  to", "now", "previously", "this was fixed", sampler-tuning or benchmark history,
+  and — the easiest one to write by accident — explanations of *why an internal
+  optimization cannot apply* ("the dust screen reads the nebular continuum the table
+  would have replaced"). A limitation is stated as what the reader should do, or it
+  is left out; the mechanism behind it belongs in the docstring or `docs/dev/`.
+  Recommend one path and show its numbers. #2335 removed this class of text from
+  01, 06, jwst, stochastic and custom_filters_7dt; do not reintroduce it anywhere.
 
 ## Adding a new physics block
 

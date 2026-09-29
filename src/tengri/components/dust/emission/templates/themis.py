@@ -10,6 +10,12 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    DEFAULT_DUST_ALPHA,
+    DEFAULT_DUST_GAMMA_DL,
+    DEFAULT_DUST_QHAC,
+    DEFAULT_DUST_UMIN,
+)
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
@@ -50,10 +56,10 @@ class ThemisIRSEDComponent(EmissionComponent):
     name: str = "themis"
 
     # Free parameters (user-facing names, prefix-stripped)
-    umin = Fixed(1.0)
-    gamma_dl = Fixed(0.01)
-    qhac = Fixed(0.17)
-    alpha = Fixed(2.0)
+    umin = Fixed(DEFAULT_DUST_UMIN)
+    gamma_dl = Fixed(DEFAULT_DUST_GAMMA_DL)
+    qhac = Fixed(DEFAULT_DUST_QHAC)
+    alpha = Fixed(DEFAULT_DUST_ALPHA)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("jones2017",)
 

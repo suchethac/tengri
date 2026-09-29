@@ -56,46 +56,30 @@ this order.
    - CHANGELOG (or release notes) entry for the version, including any
      behavior changes flagged `breaking-change`
 
-6. **Version bump.** Nothing derives the version — there is no
-   `[tool.setuptools_scm]` section — so it is hand-copied into multiple files
-   that have to move together:
+6. **Version bump.** The canonical version lives in `pyproject.toml`. Two copies
+   derive automatically:
 
-   | File | Form |
+   | File | Source |
    |---|---|
-   | `pyproject.toml` | `version = "0.1.0"` |
-   | `src/tengri/__init__.py` | `__version__ = "0.1.0"` |
-   | `docs/conf.py` | `release = "0.1.0"` |
-   | `CITATION.cff` | `version: 0.1.0` |
+   | `pyproject.toml` | **THE SOURCE** — hand-update `version = "0.1.0"` |
+   | `src/tengri/__init__.py` | Derives via `importlib.metadata.version("astro-tengri")` with fallback to reading `pyproject.toml` |
+   | `docs/conf.py` | Derives via `import tengri; release = tengri.__version__` |
+   | `CITATION.cff` | **MUST BE MANUALLY SYNCED** — hand-update `version: 0.1.0` (guarded by `tools/check_version_single_source.py`) |
 
-   Plus these shadow sites that go stale silently:
-
-   | File | Form | Note |
-   |---|---|---|
-   | `src/tengri/results.py` | `'0.1.0'` (doctest expected value) | The docstring example prints `tengri.__version__`; no doctest runner executes it in CI (see the comment above the `tools/check_doc_examples.py` step in `.github/workflows/tests.yml`), so a stale expected value ships silently. |
-   | `docs/known_limitations.md` | `(v0.1.0)` in prose | Goes silently stale on bump. |
-
-   To catch any site this list does not know about, run:
+   To catch any legacy hard-coded version strings, run:
 
    ```bash
    git grep -n '0\.1\.0' -- ':!*.ipynb' ':!CHANGELOG.md' ':!docs/changelog.md' ':!notebooks/archive'
    ```
 
-   Expected hits: the four canonical files (`pyproject.toml` twice — its
-   `version =` line, plus `jax-metal>=0.1.0` on the `metal` extra, which is a
-   dependency floor and never bumps), the two shadow sites, one comment in
-   `.github/workflows/publish.yml` naming an example tag (`v0.1.0a1`), and this
-   checklist's own tables and commands (update them with the bump). **Any other
-   hit is a version-copy site this list does not know: add it to the tables
-   above.** Run the same grep again *after* the bump, on the old version
-   string — the only survivors should be the `jax-metal` floor and the
+   Expected hits: `pyproject.toml` (the `version =` line, and `jax-metal>=0.1.0`
+   on the `metal` extra, which is a dependency floor and never bumps), `CITATION.cff`,
+   one comment in `.github/workflows/publish.yml` naming an example tag (`v0.1.0a1`),
+   and this checklist's own text (update it with the bump). **Any other hit is a
+   legacy hard-coded version this list does not know: add it and make it derive
+   from `pyproject.toml`.** Run the same grep again *after* the bump on the old
+   version string — survivors should only be the `jax-metal` floor and the
    publish.yml example tag.
-
-   Missing `src/tengri/__init__.py` is the quiet one. Wheel metadata comes from
-   `pyproject.toml`, so the build still succeeds and `twine check` still passes;
-   the only thing that notices is `publish.yml`'s own import smoke test, which
-   prints a `tengri.__version__` disagreeing with the version just published.
-   PyPI does not allow re-uploading a version, so that is not recoverable
-   in place (#1818).
 
    Commit the bump together with the `CHANGELOG.md` update — `## [Unreleased]`
    becomes the version heading, per Keep a Changelog.

@@ -192,7 +192,6 @@ class TestXiIonPropertyFactoryBitEquality:
 
         model = build_minimal_cue_model(ssp_bare, "float64")
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        p["redshift"] = 1.0
 
         pred = model.predict(p)
         state = model.predict_state(p)
@@ -214,7 +213,6 @@ class TestXiIonPropertyFactoryBitEquality:
 
         model = build_minimal_cue_model(ssp_bare, "float64")
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        p["redshift"] = 1.0
 
         pred = model.predict(p)
         with pytest.raises(KeyError, match="log_q_h"):
@@ -225,7 +223,6 @@ class TestXiIonPropertyFactoryBitEquality:
         """(5c) xi_ion finite and positive for the young stellar population."""
         model = build_minimal_cue_model(ssp_bare, "float64")
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        p["redshift"] = 1.0
 
         pred = model.predict(p)
 

@@ -30,6 +30,37 @@ SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
 }
 
 
+def first_invalid_wavelength(
+    w: np.ndarray,
+) -> tuple[int, str] | None:
+    """Return the first offending wavelength index and the violation rule.
+
+    Checks for non-finite, non-positive, and non-increasing violations in order.
+
+    Parameters
+    ----------
+    w : ndarray, shape (n,)
+        Wavelength grid [Angstrom].
+
+    Returns
+    -------
+    tuple[int, str] | None
+        (first_offending_index, rule_violated) or None if valid. Rules are
+        "non-finite" (NaN/inf), "non-positive" (<=0), "non-increasing" (not
+        strictly monotonic).
+    """
+    if not np.all(np.isfinite(w)):
+        idx = int(np.where(~np.isfinite(w))[0][0])
+        return idx, "non-finite"
+    if np.any(w <= 0.0):
+        idx = int(np.where(w <= 0.0)[0][0])
+        return idx, "non-positive"
+    if len(w) > 1 and not np.all(np.diff(w) > 0.0):
+        idx = int(np.where(np.diff(w) <= 0.0)[0][0])
+        return idx, "non-increasing"
+    return None
+
+
 # ── Speed of light ────────────────────────────────────────────────
 _C_KM_S = 299792.458  # km/s
 _FWHM_TO_SIGMA = 2.354820045030949  # 2*sqrt(2*ln(2))
@@ -138,7 +169,7 @@ def _is_log_uniform(wave) -> bool:
     if isinstance(wave, jax.core.Tracer):
         return True
     w = np.asarray(wave, dtype=np.float64)
-    if w.size < 3 or not np.all(np.isfinite(w)) or np.any(w <= 0.0):
+    if w.size < 3 or first_invalid_wavelength(w) is not None:
         return True  # not a grid this helper can speak about; let the caller fail
     dln = np.diff(np.log(w))
     mean = float(np.mean(dln))
@@ -540,10 +571,13 @@ def project_spectrum(
         spectroscopy where point sampling aliases; see #1166.
     resolution_matrix : BandedMatrix or None, optional
         Banded instrument resolution operator (DESI/PFS spectro-perfectionism;
-        Bolton & Schlegel 2010). When supplied, the flux-conserving-resampled
-        model is projected through ``R @ model`` at pixel resolution and this
-        **replaces** the Gaussian ``apply_lsf``, the matrix already encodes the
-        true LSF (the Redrock/FastSpecFit convention). Default ``None`` (Gaussian
+        Bolton & Schlegel 2010). When supplied, ``sigma_v_kms`` is applied to the
+        resampled model first (the matrix is the *instrument* LSF only and does
+        not carry the galaxy's own kinematic broadening; #2506), then the result
+        is projected through ``R @ model`` at pixel resolution. This **replaces**
+        the Gaussian ``apply_lsf``, the matrix already encodes the true instrument
+        LSF (the Redrock/FastSpecFit convention); ``sigma_lib_kms`` is **not**
+        subtracted on this path (see #2506 follow-up). Default ``None`` (Gaussian
         LSF from ``resolution``). See :func:`~tengri.observation.banded.banded_matvec`.
         #1163.
 
@@ -617,14 +651,21 @@ def project_spectrum(
     resampler = compute_spectrum_conserving if conserving else compute_spectrum
     flux = resampler(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
     if resolution_matrix is not None:
-        # The banded resolution matrix (DESI/PFS spectro-perfectionism; Bolton &
-        # Schlegel 2010) encodes the true instrument LSF at pixel resolution and
-        # is applied to the model *after* resampling onto the pixel grid, it
-        # REPLACES the Gaussian ``apply_lsf`` (Redrock/FastSpecFit convention).
-        # ``resolution_matrix`` is static structural config, so this branch
-        # resolves at trace time. #1163.
+        # The banded matrix (DESI/PFS spectro-perfectionism; Bolton & Schlegel 2010)
+        # is the *instrument* LSF and replaces the Gaussian apply_lsf (#1163). The
+        # galaxy's own kinematic broadening is not in it, so sigma_v is applied to
+        # the resampled model first (#2506: it was silently dropped here, leaving
+        # d spectrum / d sigma_v = 0). The piecewise path is used because DESI
+        # pixels are linear in lambda (#1742/#1791); at sigma_v = 0 the kernel is
+        # the identity, so existing fits are unchanged.
         from tengri.observation.banded import banded_matvec
 
+        sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=flux.dtype), 0.0)
+        flux = jnp.where(
+            sigma_v > 0.0,
+            _apply_lsf_variable_r(flux, wave_obs, jnp.broadcast_to(sigma_v, flux.shape), n_bins),
+            flux,
+        )
         flux = banded_matvec(resolution_matrix.offsets, resolution_matrix.data, flux)
     elif resolution is not None:
         flux = apply_lsf(
@@ -824,7 +865,7 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
     if isinstance(wave, jax.core.Tracer):
         return
     w = np.asarray(wave, dtype=np.float64)
-    if w.size < 3 or not np.all(np.isfinite(w)) or np.any(w <= 0.0):
+    if w.size < 3 or first_invalid_wavelength(w) is not None:
         return  # not a grid this check can speak about; let the caller fail
     dln = np.diff(np.log(w))
     mean = float(np.mean(dln))

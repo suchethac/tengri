@@ -1,0 +1,16 @@
+2026-09-14 03:48:54,548 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.257e-29 erg/s/cm2/Hz
+<repo>/src/tengri/components/stellar/sps/dsps_wrapper.py:384: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only: adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+  return load_ssp_data(str(candidate))
+2026-09-14 03:49:03,028 - __main__ - INFO - Galaxy 79 (z=1.012): 11 detected bands
+2026-09-14 03:49:03,028 - __main__ - INFO - Config II: 8 free parameters
+2026-09-14 03:49:03,028 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 600, diagonal mass
+2026-09-14 03:49:06,234 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 03:49:07,532 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 7 parameters, 600 warmup, 600 samples, target_accept=0.85
+2026-09-14 03:49:21,707 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (14.2s). Step size: 0.0525. Divergent in the final warmup window: 2%
+2026-09-14 03:50:17,659 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 70.1s. Divergences: 0/2400 (0.0%). Tree depth: mean 6.0, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-14 03:50:18,725 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0017
+2026-09-14 03:50:45,360 - __main__ - INFO - Saved results to <repo>/analysis/paper1/results/fits/79_II.npz
+2026-09-14 03:50:45,360 - __main__ - INFO - Saved diagnostics to <repo>/analysis/paper1/results/fits/79_II.json
+2026-09-14 03:50:45,361 - __main__ - INFO - ✓ Fit complete for galaxy 79 config II
+  MAP initialization (1000 steps)...
+  MAP init done (loss=12.06)

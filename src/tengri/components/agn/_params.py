@@ -806,8 +806,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_grahsp_a_bc",
         Fixed(0.0),
-        "GRAHSP Balmer continuum strength relative to the powerlaw at 3000 nm "
-        "(Grandi 1982; paper ABC). 0 disables; only added for agn_type=1.",
+        "GRAHSP Balmer continuum strength relative to the powerlaw at 5100 Å "
+        "(510 nm; Grandi 1982, paper ABC). 0 disables; only added for agn_type=1.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         # Deliberately NO free_prior, on evidence rather than physics: the

@@ -184,9 +184,10 @@ def _model(name, *, approx, free_shape=False, bands=None):
 
 
 def _params(m):
-    p = {k: jnp.asarray(v) for k, v in m.spec.sample(jax.random.PRNGKey(0)).items()}
-    p.update({k: jnp.asarray(float(v)) for k, v in m.spec.get_fixed_values().items()})
-    return p
+    # Free-only (#2296): the standard predict_* funnel merges Fixed values in
+    # on its own; a params dict naming a key the spec already declared Fixed
+    # is refused on presence.
+    return {k: jnp.asarray(v) for k, v in m.spec.sample(jax.random.PRNGKey(0)).items()}
 
 
 @pytest.mark.parametrize("name", sorted(EMITTERS))

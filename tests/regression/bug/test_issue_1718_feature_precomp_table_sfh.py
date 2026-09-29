@@ -182,7 +182,6 @@ def test_the_lut_agrees_with_the_exact_line_path_on_a_tabulated_sfh(line_obs):
 
     import tengri
     from tengri import FeaturePrecomp, WavePrecomp
-    from tengri.parameters.resolve import resolve_fixed_params
 
     obs, waves = line_obs
     ssp = tengri.load_ssp()
@@ -199,12 +198,8 @@ def test_the_lut_agrees_with_the_exact_line_path_on_a_tabulated_sfh(line_obs):
             "sfh_t_gyr": jnp.asarray(_T),
             "sfh_sfr": jnp.asarray(sfr),
         }
-        a = np.asarray(
-            exact.predict_line_fluxes(resolve_fixed_params(exact, p), target_wavelengths=waves)
-        )
-        b = np.asarray(
-            lut.predict_line_fluxes(resolve_fixed_params(lut, p), target_wavelengths=waves)
-        )
+        a = np.asarray(exact.predict_line_fluxes(p, target_wavelengths=waves))
+        b = np.asarray(lut.predict_line_fluxes(p, target_wavelengths=waves))
         worst = max(worst, float(np.abs(b / a - 1).max()))
     assert worst < 0.01, f"LUT departs from exact by {worst:.2%} (measured 0.35%)"
 

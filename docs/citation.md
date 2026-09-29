@@ -1,11 +1,6 @@
 # Citing tengri
 
-If tengri shows up in a publication, cite the methods paper
-(in preparation) and the upstream codes providing physics, grids, and
-samplers. `tengri.print_components_bibtex(result)` prints BibTeX for every
-model, SSP, and inference backend that ran in your fit, so the acknowledgement
-stays in sync with the components you used. (`tengri.cite_all()` — no argument —
-returns every citation registered in tengri, regardless of your fit.)
+If tengri appears in a publication, cite the methods paper (in preparation) and the upstream codes providing physics, grids, and samplers. `tengri.print_components_bibtex(result)` prints BibTeX for every model, SSP, and inference backend that ran in your fit, keeping the acknowledgement in sync with the components you used. (`tengri.cite_all()` with no argument returns every citation registered in tengri, regardless of your fit.)
 
 ## The tengri methods papers
 
@@ -22,12 +17,12 @@ returns every citation registered in tengri, regardless of your fit.)
 Three papers are planned, and the citation keys are stable now even though
 the metadata is not:
 
-- **Paper I** — Cooray (2026), framework and mock recovery. Registry key
+- **Paper I**: Cooray (2026), framework and mock recovery. Registry key
   `tengri`, BibTeX key `Cooray_2026`.
-- **Paper II** — Cooray (2026), stochastic SFHs with IFT correlated-field
+- **Paper II**: Cooray (2026), stochastic SFHs with IFT correlated-field
   priors and hierarchical population inference through geoVI. Registry key
   `tengri_paper2`, BibTeX key `Cooray_2026a`.
-- **Paper III** — Cooray (2026), application to deep JWST surveys.
+- **Paper III**: Cooray (2026), application to deep JWST surveys.
   Registry key `tengri_paper3`, BibTeX key `Cooray_2026b`.
 
 DOIs, volumes, and ADS bibcodes are backfilled on acceptance. See
@@ -36,71 +31,67 @@ for the entries as shipped, or call `tengri.paper_citation()`.
 
 ## Acknowledgements
 
-Tengri is built on a long stack of open-source astronomy and Bayesian
-inference projects, and we are grateful to the authors and maintainers of
-each one. They shape what tengri can do; we have just glued them together.
+Tengri is built on a long stack of open-source astronomy and Bayesian inference projects. We are grateful to the authors and maintainers of each one: their work shapes what tengri can do, and tengri brings it together in one place.
 
 Everything below is registered in
 [`src/tengri/citations/references.bib`](https://github.com/suchethac/tengri/blob/main/src/tengri/citations/references.bib),
-which is the single source of truth — `tengri.cite("dsps")` returns the same
-record this page quotes, and a CI guard fails the build when an entry in that
-file has no acknowledgement here. Papers are grouped by the role they play in
+the single source of truth. `tengri.cite("dsps")` returns the same record this page quotes, and a CI guard fails the build when an entry in that file has no acknowledgement here. Papers are grouped by the role they play in
 the forward model, and listed oldest first within each group.
 
 ### Framework and inference
 
-- [JAX](https://github.com/jax-ml/jax) — autodiff, JIT, and XLA compilation.
+- [JAX](https://github.com/jax-ml/jax): autodiff, JIT, and XLA compilation.
   Bradbury et al. (2018).
-- [optax](https://github.com/google-deepmind/optax) — gradient-based
+- [optax](https://github.com/google-deepmind/optax): gradient-based
   optimizers behind the MAP routes.
-- [NIFTy](https://github.com/NIFTy-PPL/NIFTy) — original NIFTy signal-inference
+- [NIFTy](https://github.com/NIFTy-PPL/NIFTy): original NIFTy signal-inference
   library, foundation for the correlated-field SFH prior. Selig et al. (2013),
   [arXiv:1301.4499](https://arxiv.org/abs/1301.4499).
-- Information Field Theory — the theoretical foundation for tengri's
+- Information Field Theory: the theoretical foundation for tengri's
   correlated-field SFH priors. Enßlin (2019),
   [arXiv:1804.03350](https://arxiv.org/abs/1804.03350).
 - Bayesian Model Averaging. Hoeting et al. (1999),
   [doi:10.1214/ss/1009212519](https://doi.org/10.1214/ss/1009212519).
-- Elliptical Slice Sampling — MCMC for Gaussian-prior models. Murray, Adams
+- Elliptical Slice Sampling: MCMC for Gaussian-prior models. Murray, Adams
   & MacKay (2010), [arXiv:1001.0175](https://arxiv.org/abs/1001.0175).
 - Importance-sampling evidence estimation. Perrakis, Ntzoufras &
   Tsamardinos (2014), [arXiv:1106.5578](https://arxiv.org/abs/1106.5578).
-- The Barker proposal — gradient-based MCMC robust to a step size that is
+- The Barker proposal: gradient-based MCMC robust to a step size that is
   wrong for one direction's scale. Livingstone & Zanella (2022),
   [arXiv:1908.11812](https://arxiv.org/abs/1908.11812).
-- Optimal scaling of Langevin diffusions — the 0.574 acceptance rate the
+- Optimal scaling of Langevin diffusions: the 0.574 acceptance rate the
   Barker and MALA backends tune to. Roberts & Rosenthal (1998),
   [doi:10.1111/1467-9868.00123](https://doi.org/10.1111/1467-9868.00123).
-- Pathfinder — fast approximate-posterior sampler. Zhang et al. (2022),
+- Pathfinder: fast approximate-posterior sampler. Zhang et al. (2022),
   *Journal of Machine Learning Research* **23**(306), 1–49.
-- [NIFTy.re](https://github.com/NIFTy-PPL/NIFTy) — information field theory,
+- [NIFTy.re](https://github.com/NIFTy-PPL/NIFTy): information field theory,
   geoVI and MGVI. Edenhofer et al. (2024),
   [arXiv:2402.16683](https://arxiv.org/abs/2402.16683).
-- [BlackJAX](https://github.com/blackjax-devs/blackjax) — NUTS, HMC, MCLMC
+- [BlackJAX](https://github.com/blackjax-devs/blackjax): NUTS, HMC, MCLMC
   and friends. Cabezas et al. (2024),
   [arXiv:2402.10797](https://arxiv.org/abs/2402.10797).
-- Ray Tracing Sampler — noise-robust MCMC for high-dimensional fits.
+- Ray Tracing Sampler: noise-robust MCMC for high-dimensional fits.
   Behroozi (2025), [arXiv:2510.25824](https://arxiv.org/abs/2510.25824).
-- Nested Slice Sampling — vectorized nested sampling for Bayesian evidence.
+- Nested Slice Sampling: vectorized nested sampling for Bayesian evidence.
   Yallup, Kroupa & Handley (2026),
   [arXiv:2601.23252](https://arxiv.org/abs/2601.23252).
 
 ### Stellar populations, isochrones, and spectral libraries
 
-- Starburst99 — ionizing-spectrum synthesis. Leitherer et al. (1999),
+- Starburst99: ionizing-spectrum synthesis. Leitherer et al. (1999),
   [arXiv:astro-ph/9902334](https://arxiv.org/abs/astro-ph/9902334).
-- BaSeL — theoretical stellar spectral library. Westera et al. (2002),
+- BaSeL: theoretical stellar spectral library. Westera et al. (2002),
   [arXiv:astro-ph/0111175](https://arxiv.org/abs/astro-ph/0111175).
-- BC03 — stellar population synthesis, used as a grid generator. Bruzual
+- BC03: stellar population synthesis, used as a grid generator. Bruzual
   & Charlot (2003),
   [arXiv:astro-ph/0309134](https://arxiv.org/abs/astro-ph/0309134).
-- STELIB — empirical stellar spectral library. Le Borgne et al. (2003),
+- STELIB: empirical stellar spectral library. Le Borgne et al. (2003),
   [arXiv:astro-ph/0302334](https://arxiv.org/abs/astro-ph/0302334).
-- BaSTI — stellar evolution isochrones. Pietrinferni et al. (2004),
+- BaSTI: stellar evolution isochrones. Pietrinferni et al. (2004),
   [arXiv:astro-ph/0405193](https://arxiv.org/abs/astro-ph/0405193).
-- Padova — stellar evolution isochrones. Marigo et al. (2008),
+- Padova: stellar evolution isochrones. Marigo et al. (2008),
   [arXiv:0711.4922](https://arxiv.org/abs/0711.4922).
-- [FSPS](https://github.com/cconroy20/fsps) — flexible stellar population
+- [FSPS](https://github.com/cconroy20/fsps): flexible stellar population
   synthesis, used as a grid generator. Conroy, Gunn & White (2009),
   [arXiv:0809.4261](https://arxiv.org/abs/0809.4261); and the reference
   implementation, Conroy & Gunn (2010),
@@ -108,28 +99,28 @@ the forward model, and listed oldest first within each group.
 - Carbon-star spectral library extending the FSPS TP-AGB stars redward of
   K. Aringer et al. (2009),
   [arXiv:0905.4415](https://arxiv.org/abs/0905.4415).
-- MILES — empirical stellar spectral library. Falcón-Barroso et al. (2011),
+- MILES: empirical stellar spectral library. Falcón-Barroso et al. (2011),
   [arXiv:1107.2303](https://arxiv.org/abs/1107.2303).
-- PARSEC — stellar evolution isochrones. Bressan et al. (2012),
+- PARSEC: stellar evolution isochrones. Bressan et al. (2012),
   [arXiv:1208.4498](https://arxiv.org/abs/1208.4498).
-- [python-fsps](https://github.com/dfm/python-fsps) — the Python interface
+- [python-fsps](https://github.com/dfm/python-fsps): the Python interface
   used to generate the SSP grids. Foreman-Mackey et al. (2014),
   [doi:10.5281/zenodo.12157](https://doi.org/10.5281/zenodo.12157).
 - Circumstellar AGB dust-shell SEDs in FSPS (`add_agb_dust_model`).
   Villaume et al. (2015),
   [arXiv:1504.00900](https://arxiv.org/abs/1504.00900).
-- MIST — stellar isochrones. Choi et al. (2016),
+- MIST: stellar isochrones. Choi et al. (2016),
   [arXiv:1604.08592](https://arxiv.org/abs/1604.08592); isochrone
   construction method, Dotter (2016),
   [arXiv:1601.05144](https://arxiv.org/abs/1601.05144).
-- BPASS — binary stellar population and spectral synthesis. Eldridge,
+- BPASS: binary stellar population and spectral synthesis. Eldridge,
   Stanway et al. (2017), [arXiv:1710.02154](https://arxiv.org/abs/1710.02154).
-- [DSPS](https://github.com/ArgonneCPAC/dsps) — differentiable stellar
+- [DSPS](https://github.com/ArgonneCPAC/dsps): differentiable stellar
   population synthesis, the engine tengri evaluates SSPs with. Hearin et al.
   (2023), [arXiv:2112.06830](https://arxiv.org/abs/2112.06830).
-- ProGeny — stellar population spectra generator. Robotham & Bellstedt
+- ProGeny: stellar population spectra generator. Robotham & Bellstedt
   (2025), [arXiv:2410.17697](https://arxiv.org/abs/2410.17697).
-- APOGEE Milky Way disk metallicity distribution functions — the measured
+- APOGEE Milky Way disk metallicity distribution functions: the measured
   MDF widths sourcing the `met_logzsol_scatter` prior interval. Hayden et
   al. (2015), [arXiv:1503.02110](https://arxiv.org/abs/1503.02110).
 
@@ -148,7 +139,7 @@ the forward model, and listed oldest first within each group.
 - Prospector model description; source of the continuity SFH prior. Leja et
   al. (2017),
   [doi:10.3847/1538-4357/aa5ffe](https://doi.org/10.3847/1538-4357/aa5ffe).
-- Non-parametric SFH priors — Dirichlet, continuity, and bursty continuity.
+- Non-parametric SFH priors: Dirichlet, continuity, and bursty continuity.
   Leja et al. (2019), [arXiv:1811.03637](https://arxiv.org/abs/1811.03637).
 - Stochastic SFH power-spectral-density model for main-sequence scatter.
   Caplar & Tacchella (2019),
@@ -161,22 +152,20 @@ the forward model, and listed oldest first within each group.
 
 ### Nebular emission
 
-- MAPPINGS III — radiative shock and nebular models. Allen et al. (2008),
+- MAPPINGS III: radiative shock and nebular models. Allen et al. (2008),
   [arXiv:0805.0204](https://arxiv.org/abs/0805.0204).
-- [CLOUDY](https://gitlab.nublado.org/cloudy/cloudy) — the photoionization
+- [CLOUDY](https://gitlab.nublado.org/cloudy/cloudy): the photoionization
   code behind the nebular grids. Ferland et al. (2017),
   [arXiv:1705.10877](https://arxiv.org/abs/1705.10877).
 - FSPS nebular emission grids baked into the with-nebular SSP files. Byler
   et al. (2017), [arXiv:1611.08305](https://arxiv.org/abs/1611.08305).
-- [Cue](https://github.com/yi-jia-li/cue) — neural emulator for nebular
+- [Cue](https://github.com/yi-jia-li/cue): neural emulator for nebular
   emission lines. Li et al. (2025),
   [arXiv:2405.04598](https://arxiv.org/abs/2405.04598).
 - Galactic H-alpha background implies pervasive diffuse ionized gas (DIG
   mixing motivation). Reynolds (1984),
   [doi:10.1086/162190](https://doi.org/10.1086/162190).
-- [Synthesizer](https://github.com/synthesizer-project/synthesizer) —
-  synthetic observables package, source of the Cloudy AGN NLR/BLR grids and
-  much nebular and SSP machinery. Lovell et al. (2025),
+- [Synthesizer](https://github.com/synthesizer-project/synthesizer): synthetic observables package, source of the Cloudy AGN NLR/BLR grids and much nebular and SSP machinery. Lovell et al. (2025),
   [doi:10.33232/001c.145766](https://doi.org/10.33232/001c.145766); and the
   software paper, Roper et al. (2026),
   [doi:10.21105/joss.09436](https://doi.org/10.21105/joss.09436).
@@ -224,7 +213,7 @@ the forward model, and listed oldest first within each group.
   [arXiv:1206.1595](https://arxiv.org/abs/1206.1595).
 - CMB-heating and CMB-contrast corrections for high-redshift dust. da Cunha
   et al. (2013), [arXiv:1302.0844](https://arxiv.org/abs/1302.0844).
-- THEMIS — amorphous-hydrocarbon dust foundation. Jones et al. (2013),
+- THEMIS: amorphous-hydrocarbon dust foundation. Jones et al. (2013),
   [arXiv:1411.6293](https://arxiv.org/abs/1411.6293); and the global dust
   modeling framework, Jones et al. (2017),
   [arXiv:1703.00775](https://arxiv.org/abs/1703.00775).
@@ -266,9 +255,9 @@ the forward model, and listed oldest first within each group.
   [doi:10.1051/0004-6361:20035714](https://doi.org/10.1051/0004-6361:20035714).
 - UV Fe II emission template from I Zw 1. Bruhweiler & Verner (2008),
   [doi:10.1086/525557](https://doi.org/10.1086/525557).
-- CLUMPY — clumpy-medium AGN torus model. Nenkova et al. (2008),
+- CLUMPY: clumpy-medium AGN torus model. Nenkova et al. (2008),
   [arXiv:0806.0511](https://arxiv.org/abs/0806.0511).
-- [SKIRTOR](https://sites.google.com/site/skirtorus/) — 3D AGN torus
+- [SKIRTOR](https://sites.google.com/site/skirtorus/): 3D AGN torus
   radiative transfer, isotropic case. Stalevski et al. (2012),
   [arXiv:1109.1286](https://arxiv.org/abs/1109.1286); and the dust covering
   factor treatment, Stalevski et al. (2016),
@@ -277,17 +266,17 @@ the forward model, and listed oldest first within each group.
   [doi:10.1111/j.1365-2966.2011.20060.x](https://doi.org/10.1111/j.1365-2966.2011.20060.x).
 - Thin and slim accretion-disc bolometric relation. Netzer & Trakhtenbrot
   (2014), [arXiv:1311.4215](https://arxiv.org/abs/1311.4215).
-- AGNSED — accretion disc with warm and hot Comptonization. Kubota & Done
+- AGNSED: accretion disc with warm and hot Comptonization. Kubota & Done
   (2018), [arXiv:1804.00171](https://arxiv.org/abs/1804.00171).
 - Mid-IR--X-ray luminosity correlation behind the AGNfitter-rX informative
   AGN priors (`agn_priors.py`). Stern (2015),
   [arXiv:1506.00162](https://arxiv.org/abs/1506.00162).
-- QSOgen — composite-quasar SED for BLR emission. Temple, Hewett & Banerji
+- QSOgen: composite-quasar SED for BLR emission. Temple, Hewett & Banerji
   (2021),
   [doi:10.1093/mnras/stab2586](https://doi.org/10.1093/mnras/stab2586).
 - RELAGN relativistic accretion disc with general-relativistic ray tracing.
   Hagen & Done (2023), [arXiv:2304.01253](https://arxiv.org/abs/2304.01253).
-- GRAHSP — composable AGN and host SED model. Buchner et al. (2024),
+- GRAHSP: composable AGN and host SED model. Buchner et al. (2024),
   [arXiv:2405.19297](https://arxiv.org/abs/2405.19297).
 
 ### Radio and X-ray
@@ -352,21 +341,21 @@ cover, so the reproduction studies configure the public dict API to mimic
 each of them to the extent the models overlap. They are not ports, and
 residual differences are expected.
 
-- [BAGPIPES](https://github.com/ACCarnall/bagpipes) — reference SED fitting
+- [BAGPIPES](https://github.com/ACCarnall/bagpipes): reference SED fitting
   framework. Carnall et al. (2018),
   [arXiv:1712.04452](https://arxiv.org/abs/1712.04452).
-- [CIGALE](https://cigale.lam.fr/) — reference panchromatic SED fitting
+- [CIGALE](https://cigale.lam.fr/): reference panchromatic SED fitting
   code. Boquien et al. (2019),
   [arXiv:1811.03094](https://arxiv.org/abs/1811.03094). See
   [Reproduction → CIGALE](reproduction/cigale).
-- [ProSpect](https://github.com/asgr/ProSpect) — SED generator with complex
+- [ProSpect](https://github.com/asgr/ProSpect): SED generator with complex
   star formation and metallicity histories. Robotham et al. (2020),
   [arXiv:2002.06980](https://arxiv.org/abs/2002.06980).
-- [Prospector](https://github.com/bd-j/prospector) — Bayesian SED inference
+- [Prospector](https://github.com/bd-j/prospector): Bayesian SED inference
   on FSPS. Johnson et al. (2021),
   [arXiv:2012.01426](https://arxiv.org/abs/2012.01426). See
   [Reproduction → Prospector](reproduction/prospector).
-- AGNfitter-rx — radio-to-X-ray AGN SED fitting. Martínez-Ramírez et al.
+- AGNfitter-rx: radio-to-X-ray AGN SED fitting. Martínez-Ramírez et al.
   (2024), [arXiv:2405.12111](https://arxiv.org/abs/2405.12111).
 
 ## Inheriting credit automatically
@@ -379,6 +368,5 @@ tengri.print_components_bibtex(result)   # BibTeX for every component that ran
 ```
 
 `print_components_bibtex` walks the model and inference call graph and emits
-BibTeX for everything that contributed, including the SSP grid — the easiest
-way to keep a paper's acknowledgements in sync with the fit. (For the table
+BibTeX for everything that contributed (including the SSP grid), the easiest way to keep a paper's acknowledgements in sync with the fit. (For the table
 form, use `tengri.cite_components(result)`.)

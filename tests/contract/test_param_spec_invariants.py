@@ -10,9 +10,9 @@ Bug classes covered:
 
 No SSP data required. All tests use pure Parameters construction.
 
-Key invariant (corrected from naive expectation):
-    sample() returns ALL params (fixed + free + sfh_field_xi if stochastic),
-    NOT just free params. free_params is the list of non-fixed params only.
+Key invariant (updated per #2296):
+    sample() returns only FREE params (not Fixed; +sfh_field_xi if stochastic).
+    Fixed params come from get_fixed_values() / Posterior.fixed_values instead.
 """
 
 from __future__ import annotations
@@ -80,33 +80,38 @@ def stochastic_spec() -> Parameters:
 
 
 class TestSampleKeys:
-    """sample() must return exactly all_params (fixed + free), plus sfh_field_xi if stochastic."""
+    """sample() returns exactly free_params (+ sfh_field_xi if stochastic), never Fixed (#2296)."""
 
     def test_sample_keys_equal_all_params(self, dpl_spec: Parameters) -> None:
         key = jax.random.PRNGKey(0)
         sample = dpl_spec.sample(key)
-        assert set(sample.keys()) == set(dpl_spec.all_params), (
-            f"sample() keys differ from all_params.\n"
-            f"  In sample but not all_params: {set(sample.keys()) - set(dpl_spec.all_params)}\n"
-            f"  In all_params but not sample: {set(dpl_spec.all_params) - set(sample.keys())}"
+        # sample() returns only free params, not Fixed ones (#2296)
+        assert set(sample.keys()) == set(dpl_spec.free_params), (
+            f"sample() keys differ from free_params.\n"
+            f"  In sample but not free_params: {set(sample.keys()) - set(dpl_spec.free_params)}\n"
+            f"  In free_params but not sample: {set(dpl_spec.free_params) - set(sample.keys())}"
         )
 
     def test_sample_includes_fixed_params(self, dpl_spec: Parameters) -> None:
-        """Fixed params must appear in sample() output at their fixed value."""
+        """Fixed params must NOT appear in sample(); use get_fixed_values() instead (#2296)."""
         key = jax.random.PRNGKey(1)
         sample = dpl_spec.sample(key)
         for name in dpl_spec.fixed_params:
-            assert name in sample, f"Fixed param {name!r} missing from sample()"
+            assert name not in sample, f"Fixed param {name!r} should not be in sample()"
 
     def test_sample_fixed_params_at_fixed_value(self, dpl_spec: Parameters) -> None:
-        """Fixed params in sample() must equal the value they were Fixed to."""
+        """Fixed params come from get_fixed_values(), not from sample() (#2296)."""
         key = jax.random.PRNGKey(2)
         sample = dpl_spec.sample(key)
         fixed_vals = dpl_spec.get_fixed_values()
+        # Fixed params should not be in sample()
+        for name in fixed_vals:
+            assert name not in sample, f"Fixed param {name!r} should not be in sample()"
+        # But get_fixed_values() should have the correct fixed values
         for name, expected in fixed_vals.items():
-            actual = float(sample[name])
+            actual = expected  # Values come from get_fixed_values(), not sample()
             assert abs(actual - expected) < 1e-7, (
-                f"Fixed param {name!r}: sample()={actual}, expected={expected}"
+                f"Fixed param {name!r}: get_fixed_values()={actual}, expected={expected}"
             )
 
     def test_sample_keys_stochastic_has_xi(self, stochastic_spec: Parameters) -> None:

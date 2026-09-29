@@ -35,6 +35,19 @@ from typing import NamedTuple
 import jax.numpy as jnp
 
 from tengri._data_setup import find_data_str
+from tengri.components.dust._params import (
+    DEFAULT_DUST_ALPHA,
+    DEFAULT_DUST_ALPHA_DALE,
+    DEFAULT_DUST_ALPHA_DL14,
+    DEFAULT_DUST_F_PAH,
+    DEFAULT_DUST_FRAC_AGN,
+    DEFAULT_DUST_GAMMA_DL,
+    DEFAULT_DUST_LOG_SSFR,
+    DEFAULT_DUST_QHAC,
+    DEFAULT_DUST_QPAH,
+    DEFAULT_DUST_UMIN,
+    SCHREIBER2018_T_K_DEFAULT,
+)
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
@@ -149,9 +162,9 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
     def dl07_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 2.5,
+        dust_umin: float = DEFAULT_DUST_UMIN,
+        dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+        dust_qpah: float = DEFAULT_DUST_QPAH,
         **_kwargs,
     ) -> jnp.ndarray:
         """DL07 emission from tabulated templates (Draine & Li 2007).
@@ -351,10 +364,10 @@ def dl14_sed_from_grid(
     templates: dict,
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
-    dust_umin: float = 1.0,
-    dust_gamma_dl: float = 0.01,
-    dust_qpah: float = 2.5,
-    dust_alpha_dl14: float = 2.0,
+    dust_umin: float = DEFAULT_DUST_UMIN,
+    dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+    dust_qpah: float = DEFAULT_DUST_QPAH,
+    dust_alpha_dl14: float = DEFAULT_DUST_ALPHA_DL14,
     **_kwargs,
 ) -> jnp.ndarray:
     """DL14 emission from tabulated templates.
@@ -614,8 +627,8 @@ def dale2014_emission_lnu(
     templates_sf: jnp.ndarray,
     templates_qso: jnp.ndarray | None,
     has_qso: bool,
-    dust_alpha_dale: float = 2.0,
-    dust_frac_agn: float = 0.0,
+    dust_alpha_dale: float = DEFAULT_DUST_ALPHA_DALE,
+    dust_frac_agn: float = DEFAULT_DUST_FRAC_AGN,
 ) -> jnp.ndarray:
     r"""Dale+2014 star-forming + AGN dust emission, mixed and scaled to L_nu.
 
@@ -1012,8 +1025,8 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     def dale2014_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_alpha_dale: float = 2.0,
-        dust_frac_agn: float = 0.0,
+        dust_alpha_dale: float = DEFAULT_DUST_ALPHA_DALE,
+        dust_frac_agn: float = DEFAULT_DUST_FRAC_AGN,
         **_kwargs,
     ) -> jnp.ndarray:
         return dale2014_emission_lnu(
@@ -1149,8 +1162,8 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
     def schreiber2018_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_T: float = 30.0,
-        dust_f_pah: float = 0.05,
+        dust_T: float = SCHREIBER2018_T_K_DEFAULT,
+        dust_f_pah: float = DEFAULT_DUST_F_PAH,
         **_kwargs,
     ) -> jnp.ndarray:
         """Schreiber+2018 (S17) cold-dust emission from tabulated templates.
@@ -1163,7 +1176,8 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
             Total absorbed luminosity. The output L_nu is in the same units
             per Hz.
         dust_T : float
-            Dust temperature [K]. Clipped to the grid range. Default: 30.0.
+            Dust temperature [K]. Clipped to the grid range. Default: 25.0
+            (``SCHREIBER2018_T_K_DEFAULT``).
         dust_f_pah : float
             Fractional PAH contribution in [0, 1]. Default: 0.05.
         **_kwargs
@@ -1605,7 +1619,7 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     -------
     Callable
         Model function with signature
-        ``(wavelength_aa, L_absorbed, dust_log_lir=10.0, **kw) -> L_nu``.
+        ``(wavelength_aa, L_absorbed, log_L_ir=None, **kw) -> L_nu``.
 
     Notes
     -----
@@ -1630,7 +1644,8 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     def dh02_ce01_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_log_lir: float = 10.0,
+        log_L_ir: float,
+        redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
         """DH02_CE01 dust emission from tabulated templates (Dale & Helou 2002).
@@ -1640,17 +1655,23 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
         wavelength_aa : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
         L_absorbed : float
-            Total absorbed luminosity [Lsun].
-        dust_log_lir : float
-            Log₁₀ of the infrared luminosity [log₁₀(L_IR/L_sun)].
-            Clipped to the grid range [8.3, 14.3]. Default: 10.0.
+            Unused; retained for framework call convention.
+        log_L_ir : float
+            ``log10(L_absorbed)`` [dex, **erg/s** -- the tengri-wide SED
+            contract], pre-computed upstream. Used for the grid-axis lookup, and
+            (after converting to the grid's own Lsun-relative axis, see below)
+            for selecting the template shape (#2366): ``L_absorbed`` is ~1e43 erg/s
+            and therefore ``inf`` in pure float32, while its log is finite, so
+            this parameter avoids materializing the overflowed linear value.
+        redshift : float
+            Source redshift (for CMB contrast correction; currently unused).
         **_kwargs
             Extra keyword arguments (ignored).
 
         Returns
         -------
         ndarray, shape (n_wave,)
-            Dust emission L_ν [Lsun/Hz].
+            Dust emission L_ν [erg/s/Hz].
 
         Notes
         -----
@@ -1658,8 +1679,27 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
         **Gradient-safe**: yes, differentiable everywhere via linear interpolation.
         """
+        # L_TIR ~ L_absorbed (energy balance). ``log_lir_ergs`` feeds the
+        # NORMALIZATION below and stays in erg/s throughout -- the delivered
+        # SED must integrate to the erg/s budget regardless of what unit the
+        # grid's own axis uses.
+        log_lir_ergs = jnp.asarray(log_L_ir)
+        # The packaged grid's axis is log10(L_TIR / Lsun) -- the
+        # Dale & Helou 2002 convention (grid spans 8.3–14.3 in Lsun) --
+        # while ``log_L_ir`` is erg/s (the tengri-wide SED contract).
+        # Convert for the AXIS LOOKUP only, via the #2273 precedent
+        # (``dust_log_L_ir + LOG10_L_SUN`` in ``components/dust/component.py``
+        # etc.): without this, any astrophysically realistic L_ir (~1e42-1e45
+        # erg/s, i.e. dex 42-45) numerically saturates the grid's ceiling
+        # node (14.3) regardless of the real budget, pinning the shape to a
+        # single (incorrect) template rather than letting it track the L_IR
+        # that the library is designed to use (#2366).
+        from tengri.utils.sed_quantities import LOG10_L_SUN
+
+        lir_axis = log_lir_ergs - LOG10_L_SUN
+
         # Clip input to grid bounds
-        lir_c = jnp.clip(dust_log_lir, irlum_axis[0], irlum_axis[-1])
+        lir_c = jnp.clip(lir_axis, irlum_axis[0], irlum_axis[-1])
 
         # Linear interpolation index and fraction
         i = jnp.clip(
@@ -1681,9 +1721,16 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
         wave_cm = wavelength_aa * _AA_TO_CM
         nu = _C_CGS / wave_cm
         integral = -jnp.trapezoid(sed, nu)
-        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
-        return norm * sed
+        # log-domain rescale: equal to (L_absorbed / integral) * sed to fp
+        # roundoff, but never materializes L_absorbed (~1e43, inf in float32).
+        # Uses log_lir_ergs (the log of L_absorbed in erg/s) directly for
+        # normalization, same as bosa_emission (#2272, #2366).
+        from tengri.utils.scale import apply_log10_scale, representable_floor
+
+        log_integral = jnp.log10(jnp.clip(jnp.abs(integral), representable_floor(1.0e-300), None))
+        log_norm = jnp.where(integral > 0.0, log_lir_ergs - log_integral, -jnp.inf)
+        return apply_log10_scale(sed, log_norm)
 
     return dh02_ce01_tabulated
 
@@ -1825,9 +1872,9 @@ def create_astrodust_from_grid(
     def astrodust_emission(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 3.0,
+        dust_umin: float = DEFAULT_DUST_UMIN,
+        dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+        dust_qpah: float = DEFAULT_DUST_QPAH,
         redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -2084,7 +2131,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
     def bosa_emission(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_log_ssfr: float = -10.0,
+        dust_log_ssfr: float = DEFAULT_DUST_LOG_SSFR,
         redshift: float = 0.0,
         log_L_ir: float | None = None,
         **_kwargs,
@@ -3057,10 +3104,10 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     def themis_emission(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qhac: float = 0.17,
-        dust_alpha: float = 2.0,
+        dust_umin: float = DEFAULT_DUST_UMIN,
+        dust_gamma_dl: float = DEFAULT_DUST_GAMMA_DL,
+        dust_qhac: float = DEFAULT_DUST_QHAC,
+        dust_alpha: float = DEFAULT_DUST_ALPHA,
         redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:

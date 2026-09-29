@@ -58,7 +58,6 @@ import pytest
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.observation import Observation, Photometry
 from tengri.observation.line_measurement import default_line_defs
-from tengri.parameters.resolve import resolve_fixed_params
 
 pytestmark = pytest.mark.regression_bug
 
@@ -108,18 +107,22 @@ def _base(zspec):
 
 
 def _truth(sed):
-    """Standardized-origin truth dict, with Fixed params resolved in (#1206).
+    """Standardized-origin truth dict, free parameters only.
 
-    The fast nebular grid path's no-state fallback (``_compute_log_nion``) reads
-    ``params["redshift"]`` directly rather than through a :class:`ForwardState`, so
-    a truth dict that omits a ``Fixed`` redshift raises ``KeyError`` there even
-    though every other operator in this module tolerates it.
+    Both ``_cue_model`` and ``_wne_model`` build with ``approx=None`` (the
+    exact path), so ``predict_line_fluxes`` / ``measure_line_fluxes`` reach
+    ``predict_state``, which merges ``{**fixed_values, **params}`` itself --
+    the fast nebular grid path's no-state ``_compute_log_nion`` fallback this
+    docstring used to warn about only applies once ``enable_fast_nebular`` /
+    ``FeaturePrecomp`` is engaged, which neither model here is. A dict that
+    already carries a Fixed key (as ``resolve_fixed_params`` used to return)
+    is refused on presence at these public surfaces (#2296); free-only is
+    both correct and sufficient here.
     """
-    free = {
+    return {
         n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
         for n in sed.spec.free_params
     }
-    return resolve_fixed_params(sed, free)
 
 
 def _cue_model(ssp_bare):

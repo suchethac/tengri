@@ -243,17 +243,29 @@ class TestNoAdmittedParameterIsInert:
     @pytest.mark.parametrize("law", _all_laws())
     def test_every_admitted_per_screen_key_moves(self, dust_ssp, uv_obs, law):
         admitted = _admitted_screen_keys(law)
-        base_model = _build(dust_ssp, uv_obs, _two(law, all_params=Fixed(DEFAULT)))
-        pinned = {"dust_tau_bc": jnp.asarray(1.0), "dust_tau_diff": jnp.asarray(0.5)}
-        base = _phot(base_model, pinned)
+        # dust_tau_bc/dust_tau_diff are pinned at this specific (non-default)
+        # combo on every model in the comparison -- baked in at BUILD time
+        # (never "tau" among the swept stems, see TWO_COMPONENT_OVERRIDE_KEYS)
+        # rather than handed to predict_photometry as a runtime params dict,
+        # since #2296 refuses a params key the spec already declared Fixed.
+        base_model = _build(
+            dust_ssp, uv_obs, _two(law, all_params=Fixed(DEFAULT), tau_bc=1.0, tau_diff=0.5)
+        )
+        base = _phot(base_model, {})
         for stem in admitted:
             lo, hi = _SCREEN_SWEEP[stem]
             model = _build(
                 dust_ssp,
                 uv_obs,
-                _two(law, all_params=Fixed(DEFAULT), **{f"{stem}_bc": lo, f"{stem}_diff": hi}),
+                _two(
+                    law,
+                    all_params=Fixed(DEFAULT),
+                    tau_bc=1.0,
+                    tau_diff=0.5,
+                    **{f"{stem}_bc": lo, f"{stem}_diff": hi},
+                ),
             )
-            moved = _rel(base, _phot(model, pinned))
+            moved = _rel(base, _phot(model, {}))
             assert moved > _LIVE_FLOOR, (
                 f"law {law!r}: the grammar admits {stem}_bc/{stem}_diff, but setting "
                 f"them to ({lo}, {hi}) left predict_photometry bit-identical to "
@@ -326,6 +338,8 @@ class TestMixedLawScreensStillWork:
 
     def test_a_lone_screen_key_is_complete_when_the_partner_cannot_read_it(self, dust_ssp, uv_obs):
         """``power_law`` reads a slope; ``noll09`` has none to give."""
+        # dust_tau_bc/dust_tau_diff pinned at build time on both models (#2296:
+        # a predict-time params dict cannot override an already-Fixed key).
         model = _build(
             dust_ssp,
             uv_obs,
@@ -335,6 +349,8 @@ class TestMixedLawScreensStillWork:
                 "law_diff": "noll09",
                 "all_params": Fixed(DEFAULT),
                 "slope_bc": -1.4,
+                "tau_bc": 1.0,
+                "tau_diff": 0.5,
             },
         )
         base = _build(
@@ -345,10 +361,11 @@ class TestMixedLawScreensStillWork:
                 "law_bc": "power_law",
                 "law_diff": "noll09",
                 "all_params": Fixed(DEFAULT),
+                "tau_bc": 1.0,
+                "tau_diff": 0.5,
             },
         )
-        pinned = {"dust_tau_bc": jnp.asarray(1.0), "dust_tau_diff": jnp.asarray(0.5)}
-        assert _rel(_phot(base, pinned), _phot(model, pinned)) > _LIVE_FLOOR
+        assert _rel(_phot(base, {}), _phot(model, {})) > _LIVE_FLOOR
 
 
 def test_per_screen_keys_are_refused_on_a_single_screen_model(dust_ssp, uv_obs):

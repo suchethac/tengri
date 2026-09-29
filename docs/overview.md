@@ -1,12 +1,12 @@
 # Overview
 
-Galaxy SEDs encode stellar mass assembly, chemical enrichment, and dust processing. Tengri recovers these from broadband photometry and spectra using one forward model that spans stellar populations through X-ray, all driven by shared parameters.
+Galaxy SEDs encode stellar mass assembly, chemical enrichment, and dust processing. Tengri recovers these from broadband photometry and spectra using one forward model spanning stellar populations through X-ray, all driven by shared parameters.
 
 Built on [JAX](https://jax.readthedocs.io) and [DSPS](https://github.com/ArgonneCPAC/DSPS). Inference backends (optimizers, samplers, variational inference) plug in as registrations. `tengri.summary()` prints the live count for every registry; new components register themselves.
 
 ## Philosophy
 
-The forward model is the artifact. Inference is a thin shell, so backend swaps are one-line changes. Physics lives in components; instruments in observation. Adding a dust law or sampler is a registration, not a rewrite.
+The forward model is the artifact. Inference is a thin shell, so backend swaps are one-line changes. Physics lives in components and instruments in observation, so adding a dust law or sampler is a registration rather than a rewrite.
 
 ## What's modular
 
@@ -64,13 +64,7 @@ the layer below it through one small Protocol.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The rule the whole stack follows is the one above: physics in
-components, instruments in observation. A fiber aperture correction
-lives in `FiberSpectroscopyObservation`, not in any component. A
-per-age spatial profile lives in a `SpatialComponent`, not in
-`ImagingObservation`. Keeping that line straight is what makes the
-codebase still legible after eight or nine layers of physics get
-stacked into a single fit.
+The rule the whole stack follows is physics in components and instruments in observation. A fiber aperture correction lives in `FiberSpectroscopyObservation`, not in any component, and a per-age spatial profile lives in a `SpatialComponent`, not in `ImagingObservation`. Keeping that line straight allows the codebase to stay legible after eight or nine layers of physics stack into a single fit.
 
 ### Components
 
@@ -88,7 +82,7 @@ What inference talks to. Owns `Parameters`, holds populations (sub-model + optio
 
 ### Observation
 
-Instruments live here. `Photometry` integrates through filter curves. `Spectroscopy` resamples + LSF. `FiberSpectroscopy` corrects aperture via spatial profile integration—making joint photo + fiber fits one-liners rather than hacks in components. `Imaging` and joint observations follow the same pattern.
+Instruments live here. `Photometry` integrates through filter curves. `Spectroscopy` resamples plus LSF. `FiberSpectroscopy` corrects aperture via spatial profile integration, making joint photo plus fiber fits one-liners rather than hacks in components. `Imaging` and joint observations follow the same pattern.
 
 ### Likelihood and inference
 

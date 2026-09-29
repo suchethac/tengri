@@ -138,6 +138,20 @@ class DerivedState:
     stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
     stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
 
+    # Stellar: Lyman continuum photometry (rest λ < 912 Å) LUT per filter,
+    # and its per-age twin (R3d). Published only when ``approx=WavePrecomp()``
+    # is set AND ``lyc_gate=True`` was resolved at build time (a photoionized
+    # nebular component whose ``neb_fesc`` is not pinned at exactly ``1.0``;
+    # #2439, #2427) -- a model without a live mask never computes or caches
+    # either. NebularSEDComponent.apply uses them to apply the escape-fraction
+    # mask the exact path applies to ``sed_intrinsic``:
+    # ``stellar_phot_lnu_precomp - (1 - neb_fesc) * stellar_phot_lnu_precomp_lyc``
+    # and the per-age analog, so that ``sum(stellar_phot_lnu_per_age_precomp,
+    # axis=age) == stellar_phot_lnu_precomp`` still holds after the
+    # correction. Shape (n_filter,) / (n_age, n_filter), units erg/s/Hz.
+    stellar_phot_lnu_precomp_lyc: jnp.ndarray | None = None
+    stellar_phot_lnu_per_age_precomp_lyc: jnp.ndarray | None = None
+
     # Sub-band quadrature for the multiplicative dust screen (#1122), shape
     # ``(n_age, n_filter, n_subbands)``. ``..._subband_precomp`` is the filter
     # integral restricted to each sub-band (sums over k to the per-age LUT);
@@ -145,8 +159,28 @@ class DerivedState:
     # template's own flux-weighted centroid, rest frame [Angstrom]. Both are
     # build-time constants, so the dust screen is EVALUATED at K points per band
     # rather than Taylor-extrapolated from one (which diverges in the rest-UV).
+    # ``n_subbands`` is ``n_subbands + 1`` wide, not ``n_subbands``, when this
+    # model's ``lyc_gate`` was also True: a physical edge at 912 Å(1+z) is then
+    # forced into the partition (#2439, #2427, R1;
+    # :func:`tengri.utils.grid_interp.subband_quadrature`), so every chunk lies
+    # wholly on one side of the Lyman limit and the per-chunk mask below is
+    # exact rather than approximate.
     stellar_phot_lnu_per_age_subband_precomp: jnp.ndarray | None = None
     stellar_subband_waves_rest_precomp: jnp.ndarray | None = None
+
+    # Per-chunk Lyman-continuum multiplicative factor at the sub-band
+    # quadrature nodes above, shape ``(n_age, n_filter, n_subbands)``,
+    # dimensionless (#2439, #2427, R1/R2). Published by NebularSEDComponent,
+    # flat across age (``where(node < 912, fesc, 1)``, matching this
+    # component's own ``sed_intrinsic`` mask); overwritten by
+    # ``DustSEDComponent`` (two_component), when it runs, with its own
+    # birth-cloud-graded ``1 - y(a)(1-fesc)`` (same key -- the component that
+    # runs last for a given model wins, so there is exactly one factor and no
+    # double-count). ``observation.predict_via_precomp`` multiplies it into
+    # every sub-band reconstruction it builds (dusty, single-component, and
+    # dust-free-with-mean-IGM alike). ``None`` when this model has no live
+    # nebular Lyman-continuum mask.
+    stellar_subband_lyc_factor_precomp: jnp.ndarray | None = None
 
     #: The same sub-band tensor with the IGM transmission folded in at the
     #: quadrature nodes, shape ``(n_age, n_filter, n_subbands)`` [erg/s/Hz]

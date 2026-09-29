@@ -33,6 +33,7 @@ import pytest
 
 from tengri import (
     DEFAULT,
+    FREE,
     Data,
     Fixed,
     ForwardModel,
@@ -57,11 +58,17 @@ def sed_and_mock(ssp_data_fsps):
     sed = SEDModel.build(
         ssp_data=ssp_data_fsps,
         observation=obs,
-        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        # One free parameter (#2296): a fully-pinned model makes
+        # Posterior.params legitimately {} (free-only), which the tests
+        # below use as their load-bearing "the fit produced real values"
+        # signal -- give the fit something to actually fit.
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": FREE},
         dust_attenuation={"type": "none"},
         redshift=Fixed(0.05),
     )
-    params = {**sed.spec.get_fixed_values(), **sed.spec.sample(jax.random.PRNGKey(0))}
+    # Free-only (#2296): the forward pipeline merges every remaining Fixed
+    # value in on its own.
+    params = dict(sed.spec.sample(jax.random.PRNGKey(0)))
     mock = sed.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
     return sed, np.asarray(mock.flux_obs), np.asarray(mock.noise)
 

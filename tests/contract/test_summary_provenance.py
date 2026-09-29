@@ -187,7 +187,11 @@ class TestSummaryRendering:
             redshift=Fixed(0.1),
         )
         out = spec.summary_str()
-        lines = [ln for ln in out.splitlines() if "dust_Rv" in ln]
+        # Exact-name match, not substring (#2428): the two-component spec now
+        # also declares the three wildcard-inert per-screen names
+        # dust_Rv_bc/dust_Rv_diff/dust_Rv_neb, and "dust_Rv" in ln would match
+        # all four rows.
+        lines = [ln for ln in out.splitlines() if ln.split() and ln.split()[0] == "dust_Rv"]
         assert len(lines) == 1
         assert "[all_params Fixed(DEFAULT) -> inactive]" in lines[0]
         assert spec._group_provenance["dust_Rv"] == "wildcard_fixed_inactive"

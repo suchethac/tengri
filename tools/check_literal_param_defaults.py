@@ -27,26 +27,25 @@ whether the two numbers currently happen to match.
 
 Scope
 -----
-``src/tengri/components/dust/emission/`` by default (pass ``--scope`` to
-widen). The disease is not confined to dust emission:
-``components/dust/emission_templates.py`` -- one directory above the default
-scope, despite its name -- holds 20 literal copies of its own
-(``dl07_tabulated``, ``dale2014_emission_lnu``, ``schreiber2018_tabulated``,
-``themis_emission`` and siblings each repeat a ``dust_umin`` / ``dust_qpah`` /
-``dust_alpha_dale`` / ... default as a bare numeral); and
-``attenuation.py``'s ``kriek_conroy`` law repeats
-``dust_bump_strength: float = 1.0`` against a declared ``Fixed(0.0)`` in
-``ATTENUATION_PARAMS`` (plausibly deliberate -- KC13's own published value --
-but still an unguarded second copy). Widening this guard to those two files
-and beyond is tracked as a follow-up to #2241; see the PR body for the count
-and sites a ``--scope src/tengri/components`` run turns up today.
+Four trees by default (``DEFAULT_SCOPES``): ``src/tengri/components/dust/``,
+``.../radio/``, ``.../stellar/``, ``.../igm/``. A no-argument run makes one pass
+per tree and covers all four; the dust pass alone covers emission models,
+attenuation laws, and their shared parameter table ``_params.py``, widened
+from the earlier ``dust/emission/``-only scope (#2265). That narrower scope
+addressed template closures (``dl07_tabulated``, ``dale2014_emission_lnu``,
+``schreiber2018_tabulated``, ``themis_emission`` and siblings); #2265 extends
+the dust sweep to ``attenuation.py`` (e.g. ``kriek_conroy``, ``tea``),
+``component.py``, ``_apply.py``, ``two_component.py``,
+``energy_balance_precompute.py``, and other aggregation points. Pass
+``--scope`` to target a single different tree instead of all four.
 
 How the declared-name set is built
 -----------------------------------
 1. Every ``ParamDeclaration("<name>", ...)`` string literal found by walking
    every ``_params.py`` file inside ``--scope``, plus the dust component's
-   own ``components/dust/_params.py`` (which sits one directory above the
-   default scope and would otherwise never be seen).
+   own ``components/dust/_params.py``, read explicitly so a narrower
+   ``--scope .../emission`` run (one directory below it) still sees the names
+   it declares.
 2. Every class-level attribute assignment inside ``--scope`` whose value is a
    call to a known :class:`~tengri.parameters.priors.Distribution`
    constructor (``Fixed``, ``Uniform``, ``LogNormal``, ``LogUniform``,
@@ -109,22 +108,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 #: Default scopes: the trees already swept clean of literal copies (#2241's
-#: dust emission; #2265's radio, stellar, igm). A no-argument run covers all
-#: of them and must report zero sites; the remaining component trees join
-#: this tuple as #2297's per-tree rulings land and their sweeps go in.
+#: dust emission, #2265's dust tree widening, #2265's radio, stellar, igm).
+#: A no-argument run covers all of them and must report zero sites; the
+#: remaining component trees join this tuple as #2297's per-tree decisions
+#: land and their sweeps go in.
 DEFAULT_SCOPES: tuple[Path, ...] = (
-    ROOT / "src" / "tengri" / "components" / "dust" / "emission",
+    ROOT / "src" / "tengri" / "components" / "dust",
     ROOT / "src" / "tengri" / "components" / "radio",
     ROOT / "src" / "tengri" / "components" / "stellar",
     ROOT / "src" / "tengri" / "components" / "igm",
 )
 _DUST_TREE = ROOT / "src" / "tengri" / "components" / "dust"
 
-#: The dust component's own shared table. Sits one directory above the
-#: default scope, so a narrow ``--scope`` run would otherwise never see the
-#: ``ParamDeclaration`` names it owns (``dust_T_warm``, ``dust_f_cold``, ...,
-#: read by ``energy_balance_split``, which declares nothing on its own class
-#: -- see that component's docstring).
+#: The dust component's own shared table. Read explicitly regardless of
+#: ``--scope`` so a narrower ``--scope .../emission`` run (one directory below
+#: it) still sees the ``ParamDeclaration`` names it owns (``dust_T_warm``,
+#: ``dust_f_cold``, ..., read by ``energy_balance_split``, which declares
+#: nothing on its own class -- see that component's docstring).
 _DUST_PARAMS_FILE = _DUST_TREE / "_params.py"
 
 #: The ONLY bare-name fallback prefix this guard knows, and only for a file
