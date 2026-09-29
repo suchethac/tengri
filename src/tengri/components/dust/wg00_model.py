@@ -76,6 +76,20 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
     #: a component built directly with no spec to ask) keeps strict/relaxed
     #: energy balance unchanged. A static Python bool, not a traced value.
     log_l_ir_requested: bool = False
+    #: FSPS/Prospector-parity toggle (#961, #2539 item 1): include the Lyman
+    #: continuum in the energy-balance integral instead of the canonical
+    #: LyC-masked ``L_absorbed`` (default; #922). Threaded from
+    #: ``dust={'eb_include_lyc': True}`` the same way
+    #: ``DustAttenuationSEDComponentConfig.eb_include_lyc`` /
+    #: ``DustSEDComponentConfig.eb_include_lyc`` are: WG00's absorbed-energy
+    #: integral (:meth:`WG00AttenuationSEDComponent.apply`) calls the SAME
+    #: :func:`tengri.forward.energy_balance.bolometric_absorbed_log10` with
+    #: the SAME 912 Å switch point as ``single_component``, so there is one
+    #: physical choice to thread, not a second convention to invent. Before
+    #: this field existed the grammar accepted the key for ``dust_type=3``
+    #: (wg00) but ``component_factory.py`` never passed it through: a silent
+    #: no-op. Static, non-fittable.
+    eb_include_lyc: bool = False
 
 
 @dataclass(frozen=True)
@@ -193,6 +207,14 @@ class WG00AttenuationSEDComponent(TemplateThreading):
                 "erg/s/Hz",
                 "Nebular continuum folded into sed_intrinsic before the screen",
             ),
+            DerivedKey(
+                "log_L_lyc_dust",
+                "dex",
+                "LyC energy neb_fdust assigns to dust in HII regions (#2539), added "
+                "into log_L_absorbed unconditionally (not gated on eb_include_lyc, "
+                "which concerns only the screen's own LyC absorption); read via the "
+                "sed_nebular edge above for ordering. Absent/-inf when neb_fdust == 0.",
+            ),
         )
 
     def _build_curve_fn(self) -> Any | None:
@@ -277,15 +299,24 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         attenuated = state.sed_intrinsic * attenuation
 
         # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
-        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust: #922).
-        from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
+        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust: #922), unless
+        # eb_include_lyc opts into the FSPS/Prospector convention (#2539 item
+        # 1): None disables the mask so all absorbed energy heats dust, the
+        # same expression DustAttenuationSEDComponent/DustSEDComponent use, so
+        # every dust model agrees on which convention is active.
+        from tengri.forward.energy_balance import (
+            LYMAN_CUTOFF_AA,
+            bolometric_absorbed_log10,
+            warn_if_corrupt,
+        )
         from tengri.utils.physics_constants import C_AA
         from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave
+        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_CUTOFF_AA
         # Log-space integral: ~1e43 erg/s is outside float32 (#1206).
         log_l_absorbed, _ = bolometric_absorbed_log10(
-            state.sed_intrinsic, attenuated, nu, wave=state.wave
+            state.sed_intrinsic, attenuated, nu, wave=state.wave, lyman_cutoff_aa=_eb_cutoff
         )
 
         # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).

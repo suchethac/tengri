@@ -1,100 +1,372 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression test for neb_fdust LyC energy credited to dust IR budget (#2539).
+"""Regression test: neb_fdust LyC energy credited to the dust IR budget (#2539).
 
-Tests that Lyman-continuum photons absorbed by dust inside HII regions
-(neb_fdust) are properly credited to the dust IR budget (L_absorbed),
-matching CIGALE behavior. Previously, neb_fdust only suppressed nebular
-emission via the k-factor but the absorbed energy vanished.
+``neb_fdust`` (CIGALE semantics: fraction of Lyman-continuum photons absorbed
+by dust inside HII regions) used to only rescale the nebular *emission*
+amplitude (via ``lyc_dust_escape_factor``, the ``k`` factor) -- the energy it
+diverts to dust never entered the dust IR budget (``L_absorbed`` /
+``log_L_absorbed``). ``NebularSEDComponent`` now publishes
+``log_L_lyc_dust = log10(neb_fdust) + log_L_lyc`` and every dust attenuator
+(``single_component``, ``two_component``, ``wg00``) adds it into
+``log_L_absorbed``, matching CIGALE's own
+``dust.luminosity = (lum_ly_young + lum_ly_old) * fdust``
+(``pcigale/sed_modules/nebular.py:191-193``).
+
+Design notes (read before editing this file)
+----------------------------------------------
+**Why the identity test compares (fesc=0.3, fdust=0.0) against
+(fesc=0.0, fdust=0.3) instead of (fdust=0.3) against (fdust=0.0) directly**:
+``lyc_dust_escape_factor``'s ``k(fesc, fdust)`` depends on ``fesc + fdust``
+only, and it scales the nebular *emission* amplitude, which is itself an
+input to the SAME dust attenuator's ``log_L_absorbed`` integral (the
+attenuated nebular continuum is absorbed by the same screen). So varying
+``fdust`` alone at fixed ``fesc = 0`` changes ``log_L_absorbed`` two ways at
+once: (1) the new #2539 credit, and (2) the pre-existing, correct reduction
+in nebular-continuum absorption from a smaller ``k``. Holding
+``f_total = fesc + fdust`` fixed (by trading one for the other) holds ``k``,
+hence the nebular-continuum contribution, EXACTLY fixed, isolating (1) alone.
+Since ``eb_include_lyc=False`` (default) masks the LyC region out of the
+screen's own integral regardless of how much of it (fesc vs 0) remains in
+``sed_intrinsic``, the *entire* measured difference is attributable to the
+credit. This is a stronger, cleaner test of the identity the brief asked for
+than comparing fdust values directly would have been.
+
+**Population match (#2539 item 2)**: ``single_component``, ``wg00``, and
+``two_component`` with ``lyc_absorb_all=True`` credit the WHOLE stellar
+population's LyC (matching the population the nebular fesc/fdust mask
+actually ran over). ``two_component`` with ``lyc_absorb_all=False`` (default)
+only routes the YOUNG/birth-cloud population's LyC through the gas
+(``two_component.py``'s ``lyc_factor = 1 - y_age*(1-lyc_t)``), so its credit
+uses the SAME ``y_age``-weighted population, computed independently in this
+file from ``lnu_age`` via ``tengri.components.dust.two_component._young_indicator``.
+
+**No double counting (#2539 item 2)**: ``NebularSEDComponent`` masks
+``sed_intrinsic``'s LyC region to ``neb_fesc`` fraction UNCONDITIONALLY
+(independent of ``neb_fdust``); the credited ``fdust`` fraction, and the
+``(1 - fesc - fdust)`` fraction that ionizes gas, never reach
+``sed_intrinsic`` at all, so a dust screen (even with ``eb_include_lyc=True``)
+can only ever re-absorb the ``fesc`` remainder, never energy already credited
+to HII-region dust. This is verified two ways here: directly (the LyC content
+of ``sed_intrinsic`` equals ``fesc`` times the raw stellar LyC, to machine
+precision) and via an invariant (the EXTRA energy ``eb_include_lyc=True``
+finds is independent of ``fdust`` at fixed ``fesc``, since it can only ever
+draw on the ``fesc``-sized remainder).
+
+**Exact per-photon budget (owner ruling, #2539)**: the LyC of the credited
+population splits into three ADDITIVE, non-overlapping shares -- ``fesc``
+escapes, ``fdust`` heats HII-region dust, ``1 - fesc - fdust`` ionizes gas --
+not a sequential/product form (``lyc_dust_escape_factor`` combines them as
+``f_total = f_esc + f_dust`` before anything else; CIGALE's own
+``nebular.py`` masks the emergent SED by ``(1 - fesc)`` alone and separately
+credits dust with ``fdust`` of the RAW luminosity: two independent parallel
+shares, never a fesc-depleted remainder). See
+``tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor``'s
+docstring for the full derivation. tengri does not attempt to further
+apportion the ``1 - fesc - fdust`` share between "observable nebular
+emission" and case-B recombination-cascade losses in erg/s terms: ``k``
+already governs the nebular amplitude and this file does not re-derive it.
 
 Markers
 -------
-- `@pytest.mark.regression_bug` — Bug regression test
+- ``@pytest.mark.regression_bug`` -- Bug regression test
 """
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import DEFAULT, FREE, Fixed, SEDModel
+from tengri.components.dust.two_component import _young_indicator
+from tengri.forward.energy_balance import log10_fdust_lyc_credit
+from tengri.utils.physics_constants import C_AA
+
 pytestmark = pytest.mark.regression_bug
 
+LYC_CUTOFF_AA = 912.0
+T_BIRTH_YR = 1e7
+TRANSITION_WIDTH_DEX = 0.3  # two_component's declared defaults
 
-class TestFdustEnergyInIRBudget:
-    """Test that neb_fdust LyC energy enters the dust IR budget (#2539)."""
 
-    def test_log_L_lyc_dust_published_when_fdust_nonzero(self):
-        """Test that log_L_lyc_dust is published only when neb_fdust > 0."""
-        from tengri.forward.energy_balance import bolometric_absorbed_log10
-        from tengri.utils.physics_constants import C_AA
-        import jax
+def _l_lyc(wave, lnu) -> float:
+    """Independently integrate L_LyC = |int_{lambda<912} L_nu dnu|, float64."""
+    wave64 = np.asarray(wave, dtype=np.float64)
+    lnu64 = np.asarray(lnu, dtype=np.float64)
+    nu64 = np.asarray(C_AA, dtype=np.float64) / wave64
+    integrand = np.where(wave64 < LYC_CUTOFF_AA, lnu64, 0.0)
+    return float(abs(np.trapezoid(integrand, nu64)))
 
-        # Create a mock stellar SED
-        wave = jnp.logspace(np.log10(100), np.log10(10000), 1000)  # 100-10000 Å
-        nu = C_AA / wave
-        sed = jnp.ones_like(wave) * 1e29  # [erg/s/Hz]
 
-        # Test computing L_LyC
-        lyc_mask = wave < 912.0
-        lyc_intrinsic = jnp.where(lyc_mask, sed, 0.0)
-        lyc_attenuated = jnp.zeros_like(lyc_intrinsic)
-
-        log_L_lyc, _ = bolometric_absorbed_log10(
-            lyc_intrinsic, lyc_attenuated, nu, wave=wave, lyman_cutoff_aa=None
+def _credited_lnu(state, *, young_only: bool) -> np.ndarray:
+    """The raw (pre-fesc) per-wavelength L_nu of the credited population."""
+    lnu_age = np.asarray(state.derived["lnu_age"])
+    if young_only:
+        ssp_ages_yr = np.asarray(state.derived["ssp_ages_yr"])
+        y_age = np.asarray(
+            _young_indicator(jnp.asarray(ssp_ages_yr), T_BIRTH_YR, TRANSITION_WIDTH_DEX)
         )
+        return np.sum(y_age[:, None] * lnu_age, axis=0)
+    return np.sum(lnu_age, axis=0)
 
-        # Check that we get a finite LyC luminosity
-        # log_L_lyc will be finite for wavelengths < 912 Å
-        assert jnp.isfinite(log_L_lyc), f"log_L_lyc should be finite, got {log_L_lyc}"
-        assert float(log_L_lyc) > 0, f"log_L_lyc should be positive for this SED, got {log_L_lyc}"
 
-        # Test log_L_lyc_dust computation: log10(fdust) + log_L_lyc
-        fdust = 0.3
-        log_L_lyc_dust = jnp.log10(fdust) + log_L_lyc
+def _sfh() -> dict:
+    return {
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(10.0),
+        "all_params": Fixed(DEFAULT),
+    }
 
-        # Check it's less than log_L_lyc (because we multiplied by 0.3)
-        assert float(log_L_lyc_dust) < float(log_L_lyc), (
-            "log_L_lyc_dust should be less than log_L_lyc after multiplying by fdust < 1"
+
+def _build(
+    ssp,
+    dust_type: str,
+    *,
+    fesc=0.0,
+    fdust=0.0,
+    free_fdust: bool = False,
+    lyc_absorb_all: bool = False,
+    eb_include_lyc: bool = False,
+    tau: float = 1.0,
+    neb_type: str = "cue",
+) -> SEDModel:
+    neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
+    if neb_type != "none":
+        neb["neb_fesc"] = Fixed(fesc)
+        neb["neb_fdust"] = FREE if free_fdust else Fixed(fdust)
+    dust: dict = {"type": dust_type, "all_params": Fixed(DEFAULT)}
+    if dust_type == "two_component":
+        dust.update(
+            law_bc="calzetti",
+            law_diff="calzetti",
+            tau_bc=Fixed(tau),
+            tau_diff=Fixed(tau),
+            lyc_absorb_all=lyc_absorb_all,
         )
+    elif dust_type == "single_component":
+        dust.update(law="calzetti", tau_v=Fixed(tau))
+    elif dust_type == "wg00":
+        dust.update(dust_curve="mw", geometry="shell", structure="homogeneous", tau_v=Fixed(tau))
+    else:
+        raise ValueError(dust_type)
+    if eb_include_lyc:
+        dust["eb_include_lyc"] = True
+    return SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        sfh=_sfh(),
+        neb=neb,
+        dust_attenuation=dust,
+        redshift=Fixed(0.0),
+    )
 
-    def test_defaults_with_fdust_zero(self):
-        """Test that when neb_fdust=0, log_L_lyc_dust is -inf (represents zero)."""
-        # When neb_fdust = 0:
-        # log_fdust = log10(0) = -inf
-        # log_L_lyc_dust = -inf + log_L_lyc = -inf
-        fdust = 0.0
-        log_L_lyc = 45.0  # arbitrary positive value
 
-        log_fdust = jnp.log10(jnp.where(fdust > 0, fdust, 1.0))
-        log_L_lyc_dust = jnp.where(
-            fdust > 0.0, log_fdust + log_L_lyc, -jnp.inf
+# (dust_type, lyc_absorb_all, is young-credited population)
+ATTENUATORS = [
+    pytest.param("single_component", False, False, id="single_component"),
+    pytest.param("two_component", False, True, id="two_component-lyc_absorb_all_False"),
+    pytest.param("two_component", True, False, id="two_component-lyc_absorb_all_True"),
+    pytest.param("wg00", False, False, id="wg00"),
+]
+
+
+class TestFdustCreditIdentity:
+    """The core identity for every attenuator: reassigning 0.3 of the LyC
+    budget from escape to HII-region dust changes ``log_L_absorbed`` by
+    EXACTLY ``0.3 * L_LyC`` of the credited population. See the module
+    docstring for why the comparison is fesc-for-fdust rather than
+    fdust-vs-zero directly.
+    """
+
+    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
+    def test_identity(self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only):
+        m_escape = _build(
+            synthetic_ssp_wide, dust_type, fesc=0.3, fdust=0.0, lyc_absorb_all=lyc_absorb_all
         )
-
-        # Should be -inf
-        assert jnp.isinf(log_L_lyc_dust) and float(log_L_lyc_dust) < 0, (
-            f"log_L_lyc_dust should be -inf when neb_fdust=0, got {log_L_lyc_dust}"
+        m_dust = _build(
+            synthetic_ssp_wide, dust_type, fesc=0.0, fdust=0.3, lyc_absorb_all=lyc_absorb_all
         )
+        s_escape = m_escape.predict_state({})
+        s_dust = m_dust.predict_state({})
+        L_escape = float(10.0 ** np.asarray(s_escape.derived["log_L_absorbed"]))
+        L_dust = float(10.0 ** np.asarray(s_dust.derived["log_L_absorbed"]))
+        assert np.isfinite(L_escape) and np.isfinite(L_dust)
 
-    def test_log_L_lyc_dust_increases_with_fdust(self):
-        """Test that log_L_lyc_dust increases monotonically with neb_fdust."""
-        log_L_lyc = 45.0  # Mock stellar LyC luminosity
+        lnu_credited = _credited_lnu(s_escape, young_only=young_only)
+        expected = 0.3 * _l_lyc(np.asarray(s_escape.wave), lnu_credited)
+        assert expected > 0.0, "setup: credited population has zero LyC luminosity"
+        np.testing.assert_allclose(L_dust - L_escape, expected, rtol=1e-6)
 
-        # Test multiple fdust values
-        fdust_values = jnp.array([0.0, 0.1, 0.2, 0.3, 0.5, 0.9])
+    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
+    def test_sed_intrinsic_lyc_region_no_double_count(
+        self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only
+    ):
+        """The LyC that gas/HII-dust consumed is actually removed from the
+        SED a screen would see (#2539 item 2): the final (tau=0, so
+        attenuation-transparent) ``sed_intrinsic`` -- what every attenuator
+        threads on to downstream components -- has EXACTLY ``fesc`` of the
+        credited population's raw LyC below 912 A -- never the fdust or
+        gas-ionizing shares -- so there is nothing left for
+        ``eb_include_lyc=True`` to double-count against the #2539 credit.
 
-        def compute_lyc_dust(fdust):
-            log_fdust = jnp.log10(jnp.where(fdust > 0, fdust, 1.0))
-            return jnp.where(fdust > 0.0, log_fdust + log_L_lyc, -jnp.inf)
+        single_component/wg00 (and two_component with lyc_absorb_all=True)
+        mask the WHOLE population uniformly by fesc. two_component with
+        lyc_absorb_all=False (default) only masks the YOUNG/birth-cloud
+        population -- the per-age lyc_factor leaves old-star LyC completely
+        unmasked (point 3: "populations not reprocessed... their LyC meets
+        the screen as usual") -- so the expected observed LyC there is
+        ``fesc * L_lyc(young) + 1.0 * L_lyc(old)``, not ``fesc *
+        L_lyc(total)``.
+        """
+        m = _build(synthetic_ssp_wide, dust_type, fesc=0.3, fdust=0.3, tau=0.0, lyc_absorb_all=lyc_absorb_all)
+        s = m.predict_state({})
+        wave = np.asarray(s.wave)
+        lnu_total = np.sum(np.asarray(s.derived["lnu_age"]), axis=0)
+        raw_lyc_total = _l_lyc(wave, lnu_total)
+        observed_lyc = _l_lyc(wave, np.asarray(s.sed_intrinsic))
 
-        results = jnp.array([float(compute_lyc_dust(f)) for f in fdust_values])
+        if dust_type == "two_component" and not lyc_absorb_all:
+            lnu_young = _credited_lnu(s, young_only=True)
+            raw_lyc_young = _l_lyc(wave, lnu_young)
+            raw_lyc_old = raw_lyc_total - raw_lyc_young
+            expected = 0.3 * raw_lyc_young + 1.0 * raw_lyc_old
+        else:
+            expected = 0.3 * raw_lyc_total
+        np.testing.assert_allclose(observed_lyc, expected, rtol=1e-6)
 
-        # Check monotonicity (ignoring -inf for fdust=0)
-        # First non-inf value should be smallest, then increasing
-        nonzero_mask = results > -np.inf
-        nonzero_results = results[nonzero_mask]
-
-        if len(nonzero_results) > 1:
-            diffs = jnp.diff(nonzero_results)
-            assert jnp.all(diffs >= 0), (
-                "log_L_lyc_dust should be monotonically increasing with neb_fdust"
+    @pytest.mark.parametrize("dust_type", ["single_component", "two_component", "wg00"])
+    def test_screen_absorbed_lyc_independent_of_fdust(self, synthetic_ssp_wide, dust_type):
+        """No double counting (#2539 item 2), the invariant form: the EXTRA
+        energy ``eb_include_lyc=True`` finds over the default (the screen's
+        own absorption of whatever LyC still remains in ``sed_intrinsic``)
+        must depend on ``fesc`` alone -- it can only draw on the ``fesc``
+        remainder, which does not depend on ``fdust`` -- never on ``fdust``,
+        or the HII-region credit and the screen's own absorption would be
+        drawing on the same photons twice.
+        """
+        screen_absorbed = []
+        for fdust in (0.0, 0.15, 0.3):
+            m_default = _build(synthetic_ssp_wide, dust_type, fesc=0.4, fdust=fdust)
+            m_full = _build(
+                synthetic_ssp_wide, dust_type, fesc=0.4, fdust=fdust, eb_include_lyc=True
             )
+            L_default = float(
+                10.0 ** np.asarray(m_default.predict_state({}).derived["log_L_absorbed"])
+            )
+            L_full = float(10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"]))
+            assert L_full > L_default, "setup: eb_include_lyc should add energy"
+            screen_absorbed.append(L_full - L_default)
+        np.testing.assert_allclose(screen_absorbed, screen_absorbed[0], rtol=1e-6)
+
+
+class TestWG00EbIncludeLyc:
+    """wg00 + eb_include_lyc (#2539 item 1): the grammar accepted the key for
+    dust_type='wg00' but a bug in ``groups.py``'s wg00 branch (an early
+    ``return`` before the generic eb_include_lyc translation) meant it was
+    silently never read; ``component_factory.py`` also never forwarded it.
+    Both are fixed; wg00's absorbed-energy integral uses the SAME
+    ``bolometric_absorbed_log10`` call with the SAME 912 A switch as
+    single_component, verified here by an independent manual integral
+    (not by comparing to single_component's numerically different curve).
+    """
+
+    def test_toggle_reaches_forward_pass_and_matches_manual_integral(self, synthetic_ssp_wide):
+        m_default = _build(synthetic_ssp_wide, "wg00", fesc=0.2, fdust=0.0)
+        m_full = _build(synthetic_ssp_wide, "wg00", fesc=0.2, fdust=0.0, eb_include_lyc=True)
+        assert m_default.spec.to_groups()["dust_attenuation"].get("eb_include_lyc") is not True
+        assert m_full.spec.to_groups()["dust_attenuation"]["eb_include_lyc"] is True
+
+        s_default = m_default.predict_state({})
+        s_full = m_full.predict_state({})
+        L_default = float(10.0 ** np.asarray(s_default.derived["log_L_absorbed"]))
+        L_full = float(10.0 ** np.asarray(s_full.derived["log_L_absorbed"]))
+        assert L_full > L_default * 1.0001, "eb_include_lyc is a no-op for wg00"
+
+        # Independent manual integral of the extra (now-unmasked) LyC energy
+        # the SAME screen (sed_intrinsic -> sed_attenuated) absorbs, using
+        # the wg00 curve's own attenuated SED (dense/exact path only).
+        wave = np.asarray(s_full.wave)
+        sed_intrinsic = np.asarray(s_full.sed_intrinsic)
+        sed_attenuated = np.asarray(s_full.derived["sed_dust_attenuated"])
+        nu = np.asarray(C_AA, dtype=np.float64) / wave.astype(np.float64)
+        absorbed = sed_intrinsic.astype(np.float64) - sed_attenuated.astype(np.float64)
+        extra_lyc_absorbed = float(
+            abs(np.trapezoid(np.where(wave < LYC_CUTOFF_AA, absorbed, 0.0), nu))
+        )
+        np.testing.assert_allclose(L_full - L_default, extra_lyc_absorbed, rtol=1e-6)
+
+
+class TestDefaultsBitIdentical:
+    """neb_fdust unset (Fixed(0.0), the declared default) must leave
+    log_L_absorbed identical to a model with the #2539 credit path disabled,
+    and every output finite. The cheapest faithful means of comparing against
+    origin/main behavior without checking out a second copy of the repo:
+    log_L_lyc_dust must be EXACTLY -inf (log10_fdust_lyc_credit's value
+    branch, not merely small), and log10_add(x, -inf) == x exactly by
+    log10_add's own -inf sentinel contract (tengri.utils.scale.log10_add) --
+    so the addition this fix adds to every attenuator is verified to be a
+    true no-op at the default, not just numerically negligible.
+    """
+
+    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
+    def test_defaults_are_noop_and_finite(self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only):
+        m = _build(synthetic_ssp_wide, dust_type, lyc_absorb_all=lyc_absorb_all)
+        s = m.predict_state({})
+        log_lyc_dust = s.derived.get("log_L_lyc_dust")
+        if log_lyc_dust is not None:
+            assert float(np.asarray(log_lyc_dust)) == float("-inf")
+        log_l_absorbed = np.asarray(s.derived["log_L_absorbed"])
+        assert np.all(np.isfinite(np.asarray(s.sed_intrinsic)))
+        assert np.isfinite(float(log_l_absorbed))
+
+        # Independent recomputation with NO #2539 involvement at all: the
+        # exact pre-#2539 formula (LyC-masked absorbed_integrand over the
+        # dust-free-twin's sed_intrinsic vs this model's attenuated SED).
+        from tengri.forward.energy_balance import bolometric_absorbed_log10
+
+        m_free = _build(synthetic_ssp_wide, dust_type, lyc_absorb_all=lyc_absorb_all, tau=0.0)
+        sed_intrinsic = np.asarray(m_free.predict_state({}).sed_intrinsic)
+        sed_attenuated = np.asarray(s.derived["sed_dust_attenuated"])
+        wave = np.asarray(s.wave)
+        nu = np.asarray(C_AA) / wave
+        expected_log_l, _ = bolometric_absorbed_log10(
+            jnp.asarray(sed_intrinsic), jnp.asarray(sed_attenuated), jnp.asarray(nu), wave=jnp.asarray(wave)
+        )
+        np.testing.assert_allclose(float(log_l_absorbed), float(expected_log_l), rtol=1e-6)
+
+
+class TestGradientSafety:
+    """Item 3: the log-add is exact at neb_fdust == 0 AND has a finite
+    gradient everywhere, including neb_fdust -> 0 (double-where idiom, see
+    log10_fdust_lyc_credit's docstring).
+    """
+
+    @pytest.mark.parametrize("fdust", [0.0, 1e-8, 0.3])
+    def test_log10_fdust_lyc_credit_gradient_finite(self, fdust):
+        log_l_lyc = jnp.asarray(45.0)  # representative dex value, independent of fdust
+        grad_fn = jax.grad(lambda f: log10_fdust_lyc_credit(log_l_lyc, f))
+        g = grad_fn(jnp.asarray(fdust))
+        assert jnp.isfinite(g), f"grad at fdust={fdust} is not finite: {g}"
+
+    def test_log10_fdust_lyc_credit_value_bit_identical_at_zero(self):
+        log_l_lyc = jnp.asarray(45.0)
+        value = log10_fdust_lyc_credit(log_l_lyc, jnp.asarray(0.0))
+        assert float(value) == float("-inf")
+
+    def test_end_to_end_gradient_finite_through_single_component(self, synthetic_ssp_wide):
+        """Finite gradient through the full forward pass, not just the helper."""
+        m = _build(synthetic_ssp_wide, "single_component", fesc=0.1, free_fdust=True)
+        base_params = dict(m.spec.sample(jax.random.PRNGKey(0)))
+
+        def loss(fdust):
+            p = dict(base_params)
+            p["neb_fdust"] = fdust
+            state = m.predict_state(p)
+            return jnp.asarray(state.derived["log_L_absorbed"])
+
+        for fdust in (0.0, 1e-8, 0.3):
+            g = jax.grad(loss)(jnp.asarray(fdust))
+            assert jnp.isfinite(g), f"end-to-end grad at fdust={fdust} is not finite: {g}"

@@ -350,6 +350,20 @@
   to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
   precision versus ~10% prior miss.
 
+- The Lyman-continuum energy `neb_fdust` assigns to dust inside HII regions now
+  enters the dust IR budget (`L_absorbed`), as in CIGALE
+  (`dust.luminosity = (lum_ly_young + lum_ly_old) * fdust`,
+  `pcigale/sed_modules/nebular.py:191-193`), for the population the nebular
+  component reprocesses: the whole stellar SED for `single_component`, `wg00`,
+  and `two_component` with `lyc_absorb_all=True`, and only the young/birth-cloud
+  population for `two_component` with `lyc_absorb_all=False` (the population its
+  own `neb_fesc`/`neb_fdust` screen actually applies to). Previously this energy
+  only suppressed nebular emission and vanished from the energy balance. The
+  log-add is gradient-safe at `neb_fdust == 0` (bit-identical value, finite
+  gradient). Also threads the `eb_include_lyc` (FSPS/Prospector-parity) toggle
+  to `wg00` (`dust_type=3`), which the grammar already accepted but
+  `component_factory.py` silently dropped (#2539).
+
 ### Fixed
 
 - SKIRTOR grid caches are keyed on the process float dtype, so a float32
