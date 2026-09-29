@@ -1,16 +1,32 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Cosmology utilities backed by DSPS.
+"""Cosmology utilities: a flat FRW cosmology with its own E(z) (#2517).
 
-Thin wrappers around dsps.cosmology.flat_wcdm (Hearin+ JAX-based flat w0-wa-CDM).
-All functions accept either a CosmoParams object or convenience h0/om0 kwargs.
-All distances are returned in cm unless otherwise noted (e.g., _mpc suffix).
+Distances (comoving, luminosity, angular diameter) and ages/lookback times
+are computed from a single normalized Hubble parameter E(z) = H(z)/H0
+covering matter, CPL dark energy (w0, wa; Chevallier & Polarski 2001;
+Linder 2003), photons, and massive neutrinos (the Komatsu et al. 2011
+fitting function used by ``astropy.cosmology``) — not delegated to DSPS's
+radiation-free ``dsps.cosmology.flat_wcdm``. E(z) is integrated with fixed
+512-node Gauss-Legendre quadrature: a z-linear substitution for the
+comoving-distance integral, and an a=1/(1+z') substitution for the age
+integral (matches astropy's Planck18 to <1e-4 relative for D_L and age(z)
+at z <= 10). All functions accept either a :class:`CosmoParams` object or
+convenience h0/om0 kwargs. All distances are returned in cm unless
+otherwise noted (e.g., ``_mpc`` suffix).
 
-This module replaces the previous local quadrature implementation with DSPS,
-which uses higher-order numerical integration and is fully JIT-compatible.
-dsps and blackjax are imported inside functions (lazy imports) to defer the
-allocation of device buffers at import time, allowing a bare `import tengri`
-to succeed on float64-less backends (jax-mps); the first use of a dsps or
-blackjax path still fails loudly, which is the acceptable failure mode.
+Pure JAX throughout: JIT- and grad-safe with a traced redshift, and
+float32-safe (no linear erg/s-scale intermediate; the radiation guard
+against Tcmb0=0 uses ``jnp.where`` on a safe argument, never a Python
+branch on a traced value). No distance, time, or volume function in this
+module calls ``dsps.cosmology.flat_wcdm`` any more; the only remaining
+``dsps.cosmology`` dependency is the Om0/w0/wa/h values of the lazily
+loaded :data:`PLANCK15`/``WMAP5`` named cosmologies, whose radiation
+fields come from ``astropy.cosmology`` instead (see :func:`__getattr__`).
+dsps and blackjax are imported inside functions (lazy imports) to defer
+the allocation of device buffers at import time, allowing a bare `import
+tengri` to succeed on float64-less backends (jax-mps); the first use of a
+dsps or blackjax path still fails loudly, which is the acceptable failure
+mode.
 """
 
 from __future__ import annotations
@@ -37,10 +53,12 @@ from tengri.utils.physics_constants import (
 
 
 class CosmoParams(NamedTuple):
-    """Field-for-field mirror of dsps.cosmology.flat_wcdm.CosmoParams.
+    """Field-for-field mirror of dsps.cosmology.flat_wcdm.CosmoParams, extended
+    with the radiation fields needed for a radiation-inclusive E(z) (#2517).
 
-    A flat w0-wa CDM cosmology defined by four parameters.
-    dsps functions receive these fields positionally in this order.
+    A flat w0-wa CDM cosmology defined by four parameters plus three
+    optional radiation fields. dsps functions receive the first four
+    fields positionally in this order.
 
     Attributes
     ----------
@@ -53,28 +71,47 @@ class CosmoParams(NamedTuple):
     h : float
         Hubble parameter h = H0 / (100 km/s/Mpc).
     Tcmb0 : float, optional
-        CMB temperature at z=0 in Kelvin. Default: 2.7255 K (astropy Planck18).
+        CMB temperature at z=0 in Kelvin. Default: 0.0 K (radiation off).
     Neff : float, optional
-        Effective number of relativistic species. Default: 3.046.
+        Effective number of relativistic species. Default: 3.04.
     m_nu_eV : tuple[float, float, float], optional
-        Neutrino masses in eV (one per species). Default: (0, 0, 0.06) eV.
+        Neutrino masses in eV (one per species). Default: (0, 0, 0) eV.
+
+    Notes
+    -----
+    The field defaults are radiation-free (``Tcmb0=0.0``), matching
+    ``astropy.cosmology.FLRW``'s own default and reproducing exactly the
+    Om0/w0/wa/h-only physics this NamedTuple had before #2517: a bare
+    ``CosmoParams(Om0=..., w0=..., wa=..., h=...)`` built without radiation
+    fields gets Ω_γ = Ω_ν = 0 identically, not the Planck18 defaults a
+    prior revision of this fix silently applied to every custom cosmology.
+    Named cosmologies (:data:`PLANCK18`, and the lazily-loaded
+    ``PLANCK15``/``WMAP5``) each state their own published Tcmb0/Neff/m_nu
+    explicitly at construction — see :func:`__getattr__` — rather than
+    relying on these defaults.
     """
 
     Om0: float
     w0: float
     wa: float
     h: float
-    Tcmb0: float = 2.7255
-    Neff: float = 3.046
-    m_nu_eV: tuple[float, float, float] = (0.0, 0.0, 0.06)
+    Tcmb0: float = 0.0
+    Neff: float = 3.04
+    m_nu_eV: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 # Planck 2018 cosmology (tengri default).
 # Values from Planck Collaboration 2020, A&A 641, A6 (TT,TE,EE+lowE+lensing):
 #   H0 = 67.66 km/s/Mpc → h = 0.6766
 #   Om0 = 0.30966
-# These also match astropy.cosmology.Planck18: see #401 for the drift fix.
-PLANCK18 = CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
+# Radiation fields match astropy.cosmology.Planck18 exactly (printed and
+# pinned in tests/regression/test_cosmology_radiation_2517.py):
+#   Tcmb0 = 2.7255 K, Neff = 3.046, m_nu = (0, 0, 0.06) eV.
+# These also match astropy.cosmology.Planck18's Om0/H0: see #401 for the
+# drift fix, #2517 for the radiation fields.
+PLANCK18 = CosmoParams(
+    Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766, Tcmb0=2.7255, Neff=3.046, m_nu_eV=(0.0, 0.0, 0.06)
+)
 DEFAULT_COSMO = PLANCK18
 
 # Backward-compat scalar defaults (for positional arg parsing).
@@ -489,7 +526,18 @@ def __getattr__(name: str):
     """Lazy load PLANCK15 and WMAP5 from dsps.cosmology on access (PEP 562).
 
     These are vendored here as CosmoParams objects when accessed, so a bare
-    import tengri does not pull in dsps.cosmology.
+    import tengri does not pull in dsps.cosmology. dsps's own
+    ``PLANCK15``/``WMAP5`` are 4-field ``(Om0, w0, wa, h)`` tuples with no
+    radiation information at all, so each one's Tcmb0/Neff/m_nu_eV are
+    stated explicitly here from ``astropy.cosmology`` (#2517) rather than
+    left to fall through to :class:`CosmoParams`'s radiation-free field
+    defaults, which would silently drop each cosmology's real photon and
+    neutrino content:
+
+    - ``PLANCK15``: Tcmb0=2.7255 K, Neff=3.046, m_nu=(0, 0, 0.06) eV
+      (``astropy.cosmology.Planck15`` — same radiation content as Planck18).
+    - ``WMAP5``: Tcmb0=2.725 K, Neff=3.04, m_nu=(0, 0, 0) eV (massless
+      neutrinos; ``astropy.cosmology.WMAP5``).
 
     Parameters
     ----------
@@ -500,7 +548,8 @@ def __getattr__(name: str):
     -------
     CosmoParams or other
         For PLANCK15 and WMAP5, returns a CosmoParams object with the
-        corresponding values from dsps.cosmology.
+        corresponding Om0/w0/wa/h from dsps.cosmology and the published
+        radiation fields from astropy.cosmology.
 
     Raises
     ------
@@ -511,12 +560,12 @@ def __getattr__(name: str):
         with hold_x64_preference():
             from dsps.cosmology import PLANCK15 as _dsps_planck15
 
-        return CosmoParams(*_dsps_planck15)
+        return CosmoParams(*_dsps_planck15, Tcmb0=2.7255, Neff=3.046, m_nu_eV=(0.0, 0.0, 0.06))
     if name == "WMAP5":
         with hold_x64_preference():
             from dsps.cosmology import WMAP5 as _dsps_wmap5
 
-        return CosmoParams(*_dsps_wmap5)
+        return CosmoParams(*_dsps_wmap5, Tcmb0=2.725, Neff=3.04, m_nu_eV=(0.0, 0.0, 0.0))
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

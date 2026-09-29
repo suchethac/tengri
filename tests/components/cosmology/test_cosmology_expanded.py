@@ -308,8 +308,17 @@ class TestFlexibleAPI:
         assert not jnp.allclose(result1, result2)
 
     def test_all_functions_support_flexible_api(self):
-        """All distance functions should support flexible API."""
+        """All distance functions should support flexible API.
+
+        The scalar ``h0``/``om0`` path builds a bare, radiation-free
+        CosmoParams (#2517: CosmoParams' field defaults are
+        radiation-free), so it is compared here against an explicit bare
+        ``cosmo=`` object with the matching Om0/h -- not against
+        ``func(z)``'s PLANCK18 default, which carries Planck18's Tcmb0/Neff/
+        m_nu and so differs from the radiation-free scalar path by design.
+        """
         z = 0.5
+        cosmo = CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
         funcs = [
             luminosity_distance,
             comoving_distance,
@@ -321,14 +330,17 @@ class TestFlexibleAPI:
             kpc_per_arcsec,
         ]
         for func in funcs:
-            result1 = func(z)
+            result1 = func(z, cosmo=cosmo)
             result2 = func(z, h0=67.66, om0=0.30966)
             assert jnp.allclose(result1, result2), f"{func.__name__} failed"
 
     def test_distance_modulus_supports_flexible_api(self):
-        """distance_modulus should support flexible API."""
+        """distance_modulus should support flexible API (see
+        test_all_functions_support_flexible_api for why the comparison is
+        against a bare ``cosmo=`` object rather than the PLANCK18 default)."""
         z = 0.5
-        result1 = distance_modulus(z)
+        cosmo = CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
+        result1 = distance_modulus(z, cosmo=cosmo)
         result2 = distance_modulus(z, h0=67.66, om0=0.30966)
         assert jnp.allclose(result1, result2)
 

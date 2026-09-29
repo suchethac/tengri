@@ -10,6 +10,13 @@ a=1/(1+z') substitution (the z'-linear substitution alone left a ~0.09%
 residual at z=10 from under-resolving the rapidly-varying near-z part of the
 integrand). Both now agree with astropy's Planck18 to <1e-4 relative at every
 z in {0.01, 0.1, 0.5, 1, 2, 3, 6, 10}.
+
+Each named cosmology (PLANCK18, PLANCK15, WMAP5) states its own published
+Tcmb0/Neff/m_nu explicitly at construction -- CosmoParams' field defaults
+are radiation-free (Tcmb0=0.0), so a user-built cosmology is unaffected by
+this fix unless it opts in to radiation. Both are pinned here to rtol 1e-6
+against the matching astropy object, not the looser 1e-4 above (which
+tracks the issue's original ask; 1e-6 is what the fix actually achieves).
 """
 
 from __future__ import annotations
@@ -128,25 +135,18 @@ def test_grad_traced_redshift():
 
 
 @pytest.mark.parametrize(
-    "cosmo_name,cosmology,tol",
+    "cosmo_name,cosmology",
     [
-        # PLANCK15's Tcmb0/Neff/m_nu happen to match astropy's Planck18
-        # defaults exactly, so it reaches the same <1e-4 precision.
-        ("PLANCK15", PLANCK15, 1e-4),
-        # dsps.cosmology.WMAP5 carries no Tcmb0/Neff/m_nu of its own; the
-        # lazy loader (CosmoParams(*dsps_wmap5)) falls back to the
-        # CosmoParams class defaults (Planck18-like: Neff=3.046, massive
-        # 0.06 eV neutrino), while astropy's WMAP5 realization actually has
-        # Neff=3.04 and MASSLESS neutrinos (m_nu=0) — a real, pre-existing
-        # gap in the DSPS-vintage lazy loader unrelated to #2517's E(z) fix.
-        # Measured: <1.7e-3 (D_L) / <2.2e-3 (age) at every z in the grid.
-        ("WMAP5", WMAP5, 5e-3),
+        ("PLANCK15", PLANCK15),
+        ("WMAP5", WMAP5),
     ],
 )
 @pytest.mark.parametrize("z", _Z_GRID)
-def test_luminosity_distance_vs_astropy_other_cosmologies(z, cosmo_name, cosmology, tol):
-    """Sanity check: DSPS-vintage lazy-loaded cosmologies stay in the right
-    ballpark against their astropy counterparts (see per-cosmology `tol`)."""
+def test_luminosity_distance_vs_astropy_other_cosmologies(z, cosmo_name, cosmology):
+    """PLANCK15 and WMAP5 each state their own published Tcmb0/Neff/m_nu
+    explicitly at construction (see the lazy loader in ``__getattr__``),
+    so both reach the same <1e-4 precision as PLANCK18 — no per-cosmology
+    tolerance widening."""
     astropy_cosmo = pytest.importorskip("astropy.cosmology")
     import astropy.units as u
 
@@ -158,8 +158,8 @@ def test_luminosity_distance_vs_astropy_other_cosmologies(z, cosmo_name, cosmolo
     dl_tengri = float(np.asarray(luminosity_distance_mpc(z, cosmo=cosmology)))
 
     rel_err = abs(dl_tengri / dl_astropy - 1.0)
-    assert rel_err < tol, (
-        f"{cosmo_name} z={z}: D_L relative error = {rel_err:.2e} (limit {tol:.0e}). "
+    assert rel_err < 1e-4, (
+        f"{cosmo_name} z={z}: D_L relative error = {rel_err:.2e} (limit 1e-4). "
         f"tengri={dl_tengri:.6f}, astropy={dl_astropy:.6f}"
     )
 
@@ -190,3 +190,103 @@ def test_radiation_fields_default_for_foreign_cosmo():
     assert tcmb0 == CosmoParams._field_defaults["Tcmb0"]
     assert neff == CosmoParams._field_defaults["Neff"]
     assert m_nu_eV == CosmoParams._field_defaults["m_nu_eV"]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Named cosmologies state their own radiation content explicitly, and a
+# bare (radiation-free) CosmoParams reproduces a plain astropy
+# FlatLambdaCDM exactly -- neither depends on CosmoParams' field defaults.
+# ─────────────────────────────────────────────────────────────────────
+
+_TIGHT_Z_GRID = (0.01, 0.5, 1.0, 3.0, 6.0, 10.0)
+
+
+@pytest.mark.parametrize(
+    "cosmo_name,cosmology",
+    [("WMAP5", WMAP5), ("PLANCK15", PLANCK15), ("PLANCK18", PLANCK18)],
+)
+@pytest.mark.parametrize("z", _TIGHT_Z_GRID)
+def test_named_cosmologies_match_astropy_tightly(z, cosmo_name, cosmology):
+    """D_L and age(z) for WMAP5/PLANCK15/PLANCK18 vs the matching
+    astropy object, rtol 1e-6 -- each named cosmology states its own
+    published Tcmb0/Neff/m_nu explicitly at construction (#2517),
+    not the (now radiation-free) CosmoParams field defaults."""
+    astropy_cosmo = pytest.importorskip("astropy.cosmology")
+    import astropy.units as u
+
+    astropy_obj = getattr(astropy_cosmo, cosmo_name.title().replace("Wmap", "WMAP"))
+
+    dl_tengri = float(luminosity_distance_mpc(z, cosmo=cosmology))
+    dl_astropy = astropy_obj.luminosity_distance(z).to(u.Mpc).value
+    assert dl_tengri == pytest.approx(dl_astropy, rel=1e-6)
+
+    age_tengri = float(age_at_z(z, cosmo=cosmology))
+    age_astropy = astropy_obj.age(z).value
+    assert age_tengri == pytest.approx(age_astropy, rel=1e-6)
+
+
+@pytest.mark.parametrize("z", _TIGHT_Z_GRID)
+def test_bare_cosmoparams_matches_flatlambdacdm_radiation_free(z):
+    """a bare CosmoParams(Om0=0.3, w0=-1.0, wa=0.0, h=0.7) --
+    no radiation fields given -- must match
+    astropy.cosmology.FlatLambdaCDM(H0=70, Om0=0.3) (also radiation-free
+    by default) to rtol 1e-6. This is #2517: CosmoParams'
+    field defaults are radiation-free, so a user-built cosmology is
+    unaffected by the radiation fix unless it opts in."""
+    astropy_cosmo = pytest.importorskip("astropy.cosmology")
+    import astropy.units as u
+
+    bare = CosmoParams(Om0=0.3, w0=-1.0, wa=0.0, h=0.7)
+    ap = astropy_cosmo.FlatLambdaCDM(H0=70, Om0=0.3)
+
+    dl_tengri = float(luminosity_distance_mpc(z, cosmo=bare))
+    dl_astropy = ap.luminosity_distance(z).to(u.Mpc).value
+    assert dl_tengri == pytest.approx(dl_astropy, rel=1e-6)
+
+    age_tengri = float(age_at_z(z, cosmo=bare))
+    age_astropy = ap.age(z).value
+    assert age_tengri == pytest.approx(age_astropy, rel=1e-6)
+
+
+@pytest.mark.parametrize("z", _TIGHT_Z_GRID)
+def test_bare_cosmoparams_matches_flatlambdacdm_with_radiation(z):
+    """the same bare cosmology, this time with Planck18's
+    radiation fields given explicitly, must match
+    astropy.cosmology.FlatLambdaCDM(H0=70, Om0=0.3, Tcmb0=2.7255,
+    Neff=3.046, m_nu=[0,0,0.06]*u.eV) to rtol 1e-6 -- opting in to
+    radiation on a non-named cosmology works identically to a named one."""
+    astropy_cosmo = pytest.importorskip("astropy.cosmology")
+    import astropy.units as u
+
+    bare = CosmoParams(
+        Om0=0.3, w0=-1.0, wa=0.0, h=0.7, Tcmb0=2.7255, Neff=3.046, m_nu_eV=(0.0, 0.0, 0.06)
+    )
+    ap = astropy_cosmo.FlatLambdaCDM(
+        H0=70, Om0=0.3, Tcmb0=2.7255, Neff=3.046, m_nu=[0.0, 0.0, 0.06] * u.eV
+    )
+
+    dl_tengri = float(luminosity_distance_mpc(z, cosmo=bare))
+    dl_astropy = ap.luminosity_distance(z).to(u.Mpc).value
+    assert dl_tengri == pytest.approx(dl_astropy, rel=1e-6)
+
+    age_tengri = float(age_at_z(z, cosmo=bare))
+    age_astropy = ap.age(z).value
+    assert age_tengri == pytest.approx(age_astropy, rel=1e-6)
+
+
+def test_grad_finite_nonzero_for_radiation_free_bare_cosmology():
+    """jax.grad of D_L and age w.r.t. z must be finite and
+    non-zero for a bare radiation-free cosmology (Tcmb0=0.0) -- exercises
+    the ``jnp.where``-on-a-safe-argument guard in
+    :func:`tengri.utils.cosmology._nu_relative_density` against a 0/0 from
+    dividing by Tcmb0 (#2517)."""
+    bare = CosmoParams(Om0=0.3, w0=-1.0, wa=0.0, h=0.7)
+    assert bare.Tcmb0 == 0.0
+
+    d_dl_dz = jax.grad(lambda z: luminosity_distance_mpc(z, cosmo=bare))(1.0)
+    d_age_dz = jax.grad(lambda z: age_at_z(z, cosmo=bare))(1.0)
+
+    assert jnp.isfinite(d_dl_dz), "d(D_L)/dz is non-finite for Tcmb0=0"
+    assert d_dl_dz != 0.0, "d(D_L)/dz is identically zero for Tcmb0=0"
+    assert jnp.isfinite(d_age_dz), "d(age)/dz is non-finite for Tcmb0=0"
+    assert d_age_dz != 0.0, "d(age)/dz is identically zero for Tcmb0=0"
