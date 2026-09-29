@@ -71,10 +71,7 @@ class EmissionComponent(SEDModelComponent):
     # SEDModelComponent.__init_subclass__ collects these dicts into the DerivedKey
     # tuples and rebinds the shadowed accessor methods onto concrete subclasses.
     # EmissionComponent itself is abstract (defines no own ``name``) so it does not register.
-    optional_inputs: ClassVar[dict[str, str]] = {
-        "L_ir": "erg/s",
-        "dust_diff_transmission": "",
-    }
+    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
     outputs: ClassVar[dict[str, str]] = {
         "sed_dust_ir": "erg/s/Hz",
         "log_L_ir_emergent": "dex",
@@ -300,7 +297,7 @@ class EmissionComponent(SEDModelComponent):
             # after passing through the diffuse screen. Only published when diffuse_screen=True.
             published_full = dict(published_full) if published_full else {}
             if self.diffuse_screen:
-                from tengri.components.dust._physics import integrate_lnu_over_nu
+                from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 
                 # Compute transmission-weighted integral: ∫ sed_ir·T dν / ∫ sed_ir dν
                 # sed_ir is at unit L_ir scale, so this gives the transmission fraction
@@ -391,7 +388,7 @@ class EmissionComponent(SEDModelComponent):
                 )
                 # Compute log_L_ir_emergent before applying the screen (exact path)
                 if self.diffuse_screen:
-                    from tengri.components.dust._physics import integrate_lnu_over_nu
+                    from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 
                     integral_full = integrate_lnu_over_nu(sed_ir, state.wave)
                     integral_transmitted = integrate_lnu_over_nu(sed_ir * dust_diff_t, state.wave)

@@ -88,7 +88,6 @@ class BosaIRSEDComponent(EmissionComponent):
     optional_inputs: ClassVar[dict[str, str]] = {
         "L_ir": "erg/s",
         "log_L_ir": "dex",
-        "dust_diff_transmission": "",
     }
 
     def load(self, wave: jnp.ndarray | None = None):
