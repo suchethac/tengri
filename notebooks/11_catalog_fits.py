@@ -17,7 +17,7 @@
 # # Catalog fitting in parallel
 #
 # ## What you will do
-# Fit thousands of independent galaxies as one vectorized program, advancing them all together on each sampler step. You'll implement a Rubin-LSST-style photometric redshift survey with free dust and compare single-galaxy-at-a-time fitting to the vectorized catalog approach.
+# Fit thousands of independent galaxies as one vectorized program, advancing them all together on each sampler step. You will implement a Rubin-LSST-style photometric redshift survey with free dust and compare single-galaxy-at-a-time fitting to the vectorized catalog approach.
 #
 # ## What you need
 # An SSP grid with baked-in nebular emission (wNE), a photometric filter set spanning optical to near-IR, and a vectorized sampler infrastructure (`Catalog` class).
@@ -27,7 +27,7 @@
 #
 # ---
 #
-# Notebooks [`05`](05_fitting_photometry.py)–[`10`](10_fastspecfit_joint_fit.py) fit one galaxy at a time. A survey is not one galaxy. Rubin LSST will deliver billions of galaxies; the DESI/Euclid value-added catalogs are already tens of millions. A catalog of independent galaxies is embarrassingly parallel—each galaxy is its own low-dimensional posterior. The naive Python `for` loop over per-galaxy fits is correct but walks them one at a time, paying the JIT compile repeatedly. The `Catalog` class does the same fits as one vectorized program: K galaxies advance their chains together on every sampler step, the compiled graph is O(1) in catalog size N, and on a GPU those K chains fill the card's compute lanes at once. This notebook builds a Rubin-LSST-style scenario (LSST *ugrizy* plus Euclid near-IR) with free redshift and dust, fits a mock catalog, and prints detailed timings.
+# Notebooks [`05`](05_fitting_photometry.py)–[`10`](10_fastspecfit_joint_fit.py) fit one galaxy at a time; Rubin LSST will deliver billions of galaxies and the DESI/Euclid value-added catalogs already hold tens of millions. A catalog of independent galaxies is embarrassingly parallel: each galaxy is its own low-dimensional posterior. The naive Python `for` loop over per-galaxy fits is correct but processes them serially, paying the JIT compilation overhead repeatedly. The `Catalog` class runs the same fits as one vectorized program: K galaxies advance their chains together on every sampler step, the compiled graph is O(1) in catalog size N, and on a GPU those K chains fill the accelerator's compute lanes at once. This notebook builds a Rubin-LSST-style scenario (LSST *ugrizy* plus Euclid near-IR) with free redshift and dust, fits a mock catalog, and prints detailed timings.
 
 # %%
 from _setup import FIG_DIR, quiet
@@ -66,8 +66,8 @@ print(
 # that constrains a photometric redshift well below z ≈ 1, where the 4000 Å break
 # still sits inside the optical. The Rubin–Euclid overlap adds the Euclid NISP
 # *Y/J/H* near-IR (1.0–2.0 μm), which follows the break to higher redshift and
-# pins the stellar mass — the "other bands that may be there" in a real LSST-era
-# catalog. Nine bands total; the same machinery takes any set your survey has.
+# pins the stellar mass (the "other bands that may be there" in a real LSST-era
+# catalog). Nine bands total; the same machinery takes any set your survey has.
 
 # %%
 # A "wNE" SSP: nebular emission (lines + continuum) is baked into the templates
@@ -88,12 +88,12 @@ print(f"{phot_obs.n_filters} bands: {', '.join(phot_obs.names)}")
 # %% [markdown]
 # ## A free-redshift photometry model with dust and nebular emission
 #
-# The model has **three free parameters** — the redshift, the stellar mass, and
-# the diffuse dust optical depth — over a **stellar + nebular + dust** continuum.
+# The model has **three free parameters** (the redshift, the stellar mass, and
+# the diffuse dust optical depth) over a **stellar + nebular + dust** continuum.
 # The nebular emission is not a fitted backend: it is *baked into the SSP* at a
 # fixed ionization parameter and escape fraction (the wNE grid loaded above), so
 # the emission lines shift through the LSST/Euclid bands with redshift and boost
-# the broadband colors at **zero per-step cost** — no nebular emulator runs inside
+# the broadband colors at **zero per-step cost**: no nebular emulator runs inside
 # the sampler. Only the SFH *shape*, the metallicity, and the nebular
 # logU/escape-fraction are held fixed.
 #
@@ -107,8 +107,8 @@ print(f"{phot_obs.n_filters} bands: {', '.join(phot_obs.names)}")
 # because a catalog of thousands rewards a cheap gradient.
 #
 # We build on the **`WavePrecomp` fast path**. Its lookup table is tabulated over
-# a redshift grid, so a *free*-redshift fit just interpolates the table — nebular
-# lines and all — instead of re-integrating the SSP × filter product on every
+# a redshift grid, so a free-redshift fit just interpolates the table (nebular
+# lines and all) instead of re-integrating the SSP × filter product on every
 # sampler step. One `WavePrecomp()` build is shared by every galaxy in the catalog.
 
 # %%
@@ -178,14 +178,14 @@ print(
 )
 
 # %% [markdown]
-# ## Fit the catalog in parallel — timed in detail
+# ## Fit the catalog in parallel: timed in detail
 #
 # One call fits the whole catalog. `Catalog.fit(method="mcmc_hmc",
 # forward_chunk_size=K)` builds a **single** JIT'd program and streams the `N`
 # galaxies through the sampler: `K` galaxies advance their chains together on
 # every step, and the compiled graph is `O(1)` in catalog size `N`. We choose
 # **HMC** here because its fixed-length trajectories keep per-galaxy cost
-# predictable — NUTS can spend a whole step building a deep tree on the photo-z
+# predictable: NUTS can spend a whole step building a deep tree on the photo-z
 # posterior, which adds up. We set `K = N` (fit all at once), a diagonal mass
 # matrix, and one chain per galaxy. `K = N` suits a model this light; on heavier models (nonparametric SFHs, many bands, line channels) leave `forward_chunk_size` at its `"auto"` default so it sizes `K` from a memory budget. We time a single forward evaluation first,
 # then the full catalog.
@@ -223,7 +223,7 @@ def fit_catalog(K):
     return time.perf_counter() - t0, cp
 
 
-# One forward photometry evaluation — the inner cost the sampler pays per leapfrog.
+# One forward photometry evaluation: the inner cost the sampler pays per leapfrog.
 _probe = {
     "redshift": jnp.asarray(0.5),
     "sfh_dpl_log_total_mass": jnp.asarray(10.0),
@@ -280,8 +280,8 @@ print(
 # `forward_chunk_size=K` sets how many galaxy-chains advance *together* per sampler
 # step: `K=1` runs them one at a time (the serial baseline), `K=N` batches the whole
 # catalog. `K` changes *only* the throughput, never the posterior (the vectorization
-# is bit-exact). We re-fit the same catalog at both ends of the range — `K=1` and
-# `K=N` — **same sampler settings as above**, so the `K=N` row *is* the headline
+# is bit-exact). We re-fit the same catalog at both ends of the range (`K=1` and
+# `K=N`) with **same sampler settings as above**, so the `K=N` row *is* the headline
 # number. Two points give the size of the win, not its shape: whether the gain is
 # linear in `K` or saturates early needs intermediate chunk sizes, and those cost
 # a full extra fit each, which is why this page buys the endpoints only. The wall
@@ -291,7 +291,7 @@ print(
 # %%
 K_VALUES = [1, N_GAL]
 
-# Same `fit_catalog` (and so the same FIT_KW) as the science fit above — the K=N
+# Same `fit_catalog` (and so the same FIT_KW) as the science fit above: the K=N
 # point *is* that fit, reused rather than re-run.
 sweep_wall = [fit_catalog(1)[0], fit_wall]
 sweep_per_gal = [w / N_GAL for w in sweep_wall]
@@ -415,7 +415,7 @@ plt.show()
 # - **`Catalog.fit(method="mcmc_hmc", forward_chunk_size=K)`** fits the whole
 #   catalog as *one* vectorized program: `K` galaxies advance per sampler step and
 #   the compiled graph is `O(1)` in catalog size. `K = 1` is serial; `K = N` is
-#   fully vectorized. Changing `K` changes only throughput, never the posterior —
+#   fully vectorized. Changing `K` changes only throughput, never the posterior:
 #   vectorization is bit-exact.
 # - **The per-posterior cost is the sampler, not the dimensionality.** Each fit is
 #   ~220 HMC iterations × 20 leapfrog steps, ~4400 forward-model gradient
@@ -427,7 +427,7 @@ plt.show()
 #   per-step cost.
 # - The vectorized fit **recovers photo-z, stellar mass, and dust** across the
 #   catalog, even with the dust–redshift degeneracy left free.
-# - A **GPU** extends batching much further — `K` chains run across thousands of
+# - A **GPU** extends batching much further: `K` chains run across thousands of
 #   lanes at once, so the same call scales to thousands of galaxies. For GPU
 #   throughput see `bench/scripts/benchmark_catalog_throughput.py`; for
 #   cluster-scale catalogs see `scripts/slurm/`.

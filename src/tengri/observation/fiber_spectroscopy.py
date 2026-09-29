@@ -112,8 +112,8 @@ class FiberSpectroscopyObservation:
         z = jnp.asarray(require_redshift(params, "observation.fiber_spectroscopy.predict"))
         radius_kpc = arcsec_to_kpc(self.fiber_radius_arcsec, z)
         center_kpc = (
-            float(arcsec_to_kpc(self.fiber_center_arcsec[0], z)),
-            float(arcsec_to_kpc(self.fiber_center_arcsec[1], z)),
+            arcsec_to_kpc(self.fiber_center_arcsec[0], z),
+            arcsec_to_kpc(self.fiber_center_arcsec[1], z),
         )
         frac = aperture_fraction(profile, grid, radius_kpc, center_kpc, self.softness)
         pred["spec_fnu"] = pred["spec_fnu"] * frac

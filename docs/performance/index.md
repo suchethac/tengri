@@ -1,11 +1,8 @@
 # Performance guide
 
-The forward model is pure JAX, so every backend (MAP, NUTS, geoVI, …)
-runs against the same compiled graph. "How fast is tengri?" therefore
-reduces to a small set of numbers that travel together.
+The forward model is pure JAX, so every backend (MAP, NUTS, geoVI, …) runs against the same compiled graph. The speed of tengri therefore reduces to a small set of numbers that travel together.
 
-Headline numbers (last full run August 2026) and how to reproduce them.
-Scripts live under
+Headline numbers (last full run August 2026) and how to reproduce them live under
 [`bench/scripts/benchmark_*.py`](https://github.com/suchethac/tengri/tree/main/bench/scripts);
 the single entry point is [Health check & dispatcher](#health-check-and-dispatcher).
 
@@ -29,23 +26,11 @@ running on a single CPU core (DPL parametric SFH, D=6):
 | **Kitchen sink (all emitters)** | **19.1 ms** | **12.5 ms** | **1.5×** |
 
 The forward path is fixed at `SEDModel` construction:
-**Exact** (`approx=None`, default) does full-wavelength SED + filter integration.
-**WavePrecomp** (`approx=WavePrecomp()`) uses a precomputed SSP×filter LUT.
-
-Construction defaults to exact, but since 2026-08-10 every fit surface (`Fitter`, `PopulationFitter`, `CatalogFitter`) resolves `approx="auto"` to the LUT at fit time — pass `approx=None` to a fitter to force the exact path.
-
-— *full table at [`bench/reports/2026-08-31_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-31_forward_model_speedup.md)*
+**Exact** (`approx=None`, default) does full-wavelength SED plus filter integration. **WavePrecomp** (`approx=WavePrecomp()`) uses a precomputed SSP×filter LUT. Construction defaults to exact, but since 2026-08-10, every fit surface (`Fitter`, `PopulationFitter`, `CatalogFitter`) resolves `approx="auto"` to the LUT at fit time. Pass `approx=None` to a fitter to force the exact path. The full table is at [`bench/reports/2026-08-31_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-31_forward_model_speedup.md).
 
 ### AGN dense integrators: where precompute does not help
 
-WavePrecomp delivers no speedup (K&D 3-zone: **1.0×**, SKIRTOR torus: **0.9×**)
-because these AGN components require dense integration of the full-resolution SED
-per call. They do not take the band-projection fast branch in
-`components/_band_projection.py` (#1022) — instead, every band integral is computed
-by dense quadrature on the full wavelength grid, and the precompute LUT lookup
-cost drowns any savings. When AGN-dominated models are slow, the precompute does
-not help. Use exact mode, or trim the AGN complexity to composable (disc+torus)
-or analytic (QSOgen) variants, which do benefit from precompute (2–2.1×).
+WavePrecomp delivers no speedup (K&D 3-zone: **1.0×**, SKIRTOR torus: **0.9×**) because these AGN components require dense integration of the full-resolution SED per call. They skip the band-projection fast branch in `components/_band_projection.py` (#1022), so every band integral must be computed by dense quadrature on the full wavelength grid. The precompute LUT lookup cost drowns any savings, so when AGN-dominated models are slow, the precompute does not help. Use exact mode, or trim AGN complexity to composable (disc+torus) or analytic (QSOgen) variants, which do benefit from precompute (2–2.1×).
 
 Inference backends on a 7-parameter mock fit (compile + sample wall):
 
@@ -58,13 +43,9 @@ Inference backends on a 7-parameter mock fit (compile + sample wall):
 | `vi_nonlinear_fast` (geoVI, NIFTy fast path) | ~10 s | **2.3 s** |
 | `vi` (NIFTy.re) | ~75 s | 43.7 s |
 
-— *full breakdowns: [`2026-04-17_native_vs_nifty.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-17_native_vs_nifty.md), [`2026-04-22_pathfinder_vs_window_nuts.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-22_pathfinder_vs_window_nuts.md), [`2026-05-06_compile_vs_sampling_breakdown.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_compile_vs_sampling_breakdown.md)*
+Full breakdowns: see [`2026-04-17_native_vs_nifty.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-17_native_vs_nifty.md), [`2026-04-22_pathfinder_vs_window_nuts.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-22_pathfinder_vs_window_nuts.md), and [`2026-05-06_compile_vs_sampling_breakdown.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_compile_vs_sampling_breakdown.md).
 
-`vi_nonlinear_fast` is **19–25× faster** than the full NIFTy path on
-smooth-SFH fits on some problems but may show differences in posterior geometry
-on stochastic fits. These backends (`vi_nonlinear_fast`, `vi_linear_fast`)
-are the NIFTy geoVI/MGVI paths with Python-level logging overhead removed — validate per
-problem before swapping to ensure posterior equivalence on your science case.
+`vi_nonlinear_fast` is **19–25× faster** than the full NIFTy path on smooth-SFH fits on some problems, but may show differences in posterior geometry on stochastic fits. These backends (`vi_nonlinear_fast`, `vi_linear_fast`) are the NIFTy geoVI/MGVI paths with Python-level logging overhead removed. Validate per problem before swapping to ensure posterior equivalence on your science case.
 
 ## Persistent compile cache
 
@@ -92,15 +73,13 @@ including how to trace what is recompiling and why.
 
 ## Health check and dispatcher
 
-A one-command quick read of *your* install:
+Run one command to quickly read your install:
 
 ```bash
 python -m tengri.bench
 ```
 
-prints the JAX backend, default device, persistent compile-cache size,
-and a 1-galaxy + 100-galaxy timing on SDSS *ugriz*. ~30 s on CPU after
-the cache is warm.
+This prints the JAX backend, default device, persistent compile-cache size, and a 1-galaxy and 100-galaxy timing on SDSS *ugriz*. Expect about 30 seconds on CPU after the cache is warm.
 
 Every benchmark script under `bench/scripts/` is also reachable
 through one entry point:
@@ -148,32 +127,14 @@ tracks which scripts are due for a re-run.
 
 - All numbers above are **single CPU core** on Apple M-series. See
   [JAX installation](https://docs.jax.dev/en/latest/installation.html) for setup.
-- **CUDA GPUs are benchmarked** as of 2026-08-20, on an RTX 3060 against a Ryzen 9
-  5900X: see
+- **CUDA GPUs are benchmarked** as of 2026-08-20 on an RTX 3060 against a Ryzen 9
+  5900X; see
   [`bench/reports/2026-08-20_cuda_device_matrix.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-20_cuda_device_matrix.md)
   and `notebooks/nvidia_cuda.py`. Nothing needs changing to run on CUDA, and
-  float64 results are bit-comparable with the CPU — but the GPU is a *width*
-  instrument. One galaxy: the CPU wins by 33x (forward) and 13x (gradient), and a
-  single MAP fit by 8.8x. The crossover is between 128 and 512 galaxies; at 2048 the
-  GPU leads by 4.3x (forward) to 14.7x (gradient, float32). tengri's forward model
-  runs at ~0.12 FLOP/byte, so the card is waiting on memory and dispatch, not
-  arithmetic. Note also that consumer GeForce cards run float64 at 1/64 rate, which
-  puts this GPU *below* this CPU on dense float64 arithmetic.
-- Apple's own `jax-metal` (0.1.1, 2024-10) is not viable against this JAX version;
-  CPU is the reference platform here. Set `JAX_PLATFORMS=cpu` explicitly. For the Apple
-  GPU, the community `jax-mps` plugin is the supported path -- see
-  `notebooks/apple_mps.py` for the install recipe and measured throughput, and
-  `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check.
-- **Pure float32** (`JAX_ENABLE_X64=0` before Python starts) is supported end-to-end
-  as of 2026-09 (#1206): the full panchromatic model and the default photometry +
-  emission-line fit converge to the float64 optimum to ~1e-5 on CPU and CUDA, and to
-  ~4e-5 on Apple GPU via `jax-mps`. It is a *memory* knob, not a clock: 2.02x galaxies
-  per GiB at batch 8192 on the fitting path, 1.25x at 2048, nothing at one galaxy.
-  Measurements and the acceptance criterion: `docs/dev/float32-tier-b-boundary.md`.
-- **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS
-  warmup with `dense_mass_matrix=True` peaks 3–6× steady state; can hit 20+ GB on D
-  ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass_matrix=False`.
-  See [Memory expectations](memory.md).
+  float64 results are bit-comparable with the CPU. The GPU is a *width* instrument. On one galaxy, the CPU wins by 33× (forward) and 13× (gradient), and a single MAP fit by 8.8×. The crossover is between 128 and 512 galaxies; at 2048 the GPU leads by 4.3× (forward) to 14.7× (gradient, float32). Because tengri's forward model runs at ~0.12 FLOP/byte, the card waits on memory and dispatch, not arithmetic. Consumer GeForce cards run float64 at 1/64 rate, which puts this GPU below this CPU on dense float64 arithmetic.
+- Apple's own `jax-metal` (0.1.1, 2024-10) is not viable against this JAX version, so CPU is the reference platform here. Set `JAX_PLATFORMS=cpu` explicitly. For the Apple GPU, the community `jax-mps` plugin is the supported path. See `notebooks/apple_mps.py` for the install recipe and measured throughput, and `bench/scripts/benchmark_float32_mps_parity.py` for the float32 accuracy check.
+- **Pure float32** (`JAX_ENABLE_X64=0` before Python starts) is supported end-to-end as of 2026-09 (#1206). The full panchromatic model and the default photometry plus emission-line fit converge to the float64 optimum to ~1e-5 on CPU and CUDA, and to ~4e-5 on Apple GPU via `jax-mps`. This is a *memory* knob, not a clock: 2.02× galaxies per GiB at batch 8192 on the fitting path, 1.25× at 2048, nothing at one galaxy. See `docs/dev/float32-tier-b-boundary.md` for measurements and the acceptance criterion.
+- **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS warmup with `dense_mass_matrix=True` peaks 3–6× steady state and can hit 20+ GB on D ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass_matrix=False`. See [Memory expectations](memory.md).
 
 ## When numbers look wrong
 

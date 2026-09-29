@@ -18,7 +18,7 @@
 #
 # > ⚠️ **Experimental.** A research demonstration using experimental APIs that may change between releases.
 #
-# Star formation is bursty: it flickers on tens-to-hundreds-Myr timescales. tengri models that directly — a smooth backbone times a stochastic Gaussian-process field governed by a power spectrum:
+# Star formation is bursty: it flickers on tens-to-hundreds-Myr timescales. Tengri models this directly as a smooth backbone times a stochastic Gaussian-process field governed by a power spectrum:
 #
 # $$
 # \mathrm{SFR}(t) \;=\; \mathrm{SFR}_{\mathrm{DPL}}(t) \times \exp\!\bigl(\mathrm{GP}(t) - \tfrac12 K_0\bigr),
@@ -26,7 +26,7 @@
 # P(\omega) = \frac{\sigma^2\,\tau}{1 + (\tau\,\omega)^2}.
 # $$
 #
-# The problem: the field adds one free parameter per age bin, so it can fit *almost any* history. A fit will always return bursts, whether the data measured them or not. **Which parts of the SFH answer are real, and which are the prior?**
+# The problem: the field adds one free parameter per age bin, so it can fit *almost any* history. A fit will always return bursts, whether the data measured them or not. We ask which parts of the SFH answer are real, and which are the prior.
 #
 # This notebook injects one known bursty history into a galaxy and observes it three ways:
 #
@@ -36,7 +36,7 @@
 # | Same + 8 optical emission lines | the last 15 Myr, directly |
 # | Same + R = 2000 optical spectrum | the above, plus old mass budget |
 #
-# Truth, model, noise, and random seed stay fixed across all three. Only the observable changes — so any difference in the recovered history reflects the information content of the data.
+# Truth, model, noise, and random seed stay fixed across all three. Only the observable changes, so any difference in the recovered history reflects the information content of the data.
 
 # %%
 import warnings
@@ -102,8 +102,8 @@ C_TRUTH = "0.05"
 #
 # A **wNE** stellar library bakes nebular emission into the templates, so the
 # Balmer and forbidden lines that trace the last few megayears come along with the
-# stellar continuum — no separate emission model, and the line fluxes are
-# *measured off the model spectrum* the way a pipeline measures data.
+# stellar continuum. No separate emission model is needed, and the line fluxes are
+# measured off the model spectrum the way a pipeline measures data.
 
 # %%
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
@@ -155,8 +155,8 @@ LABEL = {
 }
 
 
-#: The SSP x filter lookup table every fit on this page rides. One instance,
-#: shared by all three observables — see the note under the builds below.
+#: The SSP x filter lookup table shared by every fit on this page. One instance
+#: across all three observables (see the note under the builds below).
 FAST_PATH = WavePrecomp()
 
 
@@ -197,7 +197,7 @@ print(
 # ## 2. One known history, injected
 #
 # The truth is a rising backbone with a moderately bursty field on top
-# ($\sigma = 0.4$ dex, $\tau = 120$ Myr — the molecular-cloud decorrelation time of
+# ($\sigma = 0.4$ dex, $\tau = 120$ Myr, the molecular-cloud decorrelation time of
 # Tacchella, Forbes & Caplar 2020). We rescale the mass so the *mean* present-day
 # rate is 20 $M_\odot$ yr$^{-1}$, which leaves the rising shape and the bursts
 # untouched.
@@ -209,9 +209,6 @@ DPL = {"sfh_dpl_alpha": 2.0, "sfh_dpl_beta": 1.5, "sfh_dpl_age_gyr": 12.0, "sfh_
 truth = {
     **spec.sample(jax.random.PRNGKey(SEED)),  # a field realization, xi ~ N(0, I)
     **{k: jnp.array(v) for k, v in DPL.items()},
-    # met_logzsol is Fixed(-0.3) in build() above -- this key was a no-op
-    # restating that exact pin, and #2296 now refuses any Fixed key's
-    # presence regardless of value, so it is dropped rather than kept.
     "dust_tau_bc": jnp.array(0.3),
     "dust_tau_diff": jnp.array(0.15),
     "sfh_field_psd_sigma": jnp.array(0.4),
@@ -296,8 +293,7 @@ print(
 # %% [markdown]
 # ### What each observable sees
 #
-# The faint gray curve is the same true spectrum in all three panels. Only the
-# markers change.
+# The faint gray curve is the same true spectrum in all three panels; the markers differ.
 
 # %%
 wave_wide = jnp.linspace(1300.0, 11000.0, 3000)
@@ -416,7 +412,7 @@ for key in "ABC":
 #
 # Two scores per fit:
 #
-# - **RMS error in dex** (per age window) — recovery accuracy of the SFH shape.
+# - **RMS error in dex** (per age window): recovery accuracy of the SFH shape.
 # - **Old mass fraction**: the fraction of stellar mass formed > 1 Gyr ago. Use mass, not per-node SFR, because below 1 Gyr the rising history has near-zero rate where per-node error ratios diverge.
 
 
@@ -562,9 +558,9 @@ fig.savefig(FIG_DIR / "sfh_scorecard.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 5. A full posterior, not just a mode
+# ## 5. Full posterior inference
 #
-# The MAP comparison answers *where does the mode land* versus how wide it is.
+# The MAP comparison shows where the mode lands and how wide the posterior is.
 # With 15 measured numbers (7 fluxes, 8 lines) and the model dimension in Section 1,
 # the width matters. We run a Hamiltonian Monte Carlo posterior on case **B**.
 #
@@ -611,12 +607,12 @@ plt.show()
 # %% [markdown]
 # Read that figure carefully, because it shows the failure as well as the success.
 # Below ~0.1 Gyr the posterior tracks the injected history and the band is
-# honestly narrow — that is the emission lines doing their work. Between 0.1 and
+# narrow: that is the emission lines doing their work. Between 0.1 and
 # 1 Gyr the band is *too* narrow: the truth sits outside it at the burst peaks,
 # so those intervals under-cover rather than merely being wide.
 #
 # That is the geometry problem, not a budget problem, and it is the
-# concrete reason for the advice in the next section — quote integrated
+# concrete reason for the advice in the next section: quote integrated
 # quantities, whose errors are dominated by the well-measured part of the
 # history, rather than the star-formation rate in an individual age bin.
 
@@ -635,12 +631,12 @@ plt.show()
 #
 # **2. The spectrum's distinctive contribution is the old mass budget.** The
 # fraction of mass formed more than 1 Gyr ago improves monotonically from A to C and
-# lands on the truth once the continuum is included — the same ordering as the
-# three-realization study (truth 0.798; 0.758 photometry, 0.780 with lines, 0.804
+# lands on the truth once the continuum is included (the same ordering as the
+# three-realization study: truth 0.798; 0.758 photometry, 0.780 with lines, 0.804
 # with a spectrum). The 4000 Å break and Balmer absorption carry that information
 # and a list of line fluxes throws it away.
 #
-# **3. Below 15 Myr, lines and a spectrum are equivalent — and one galaxy cannot
+# **3. Below 15 Myr, lines and a spectrum are equivalent; one galaxy cannot
 # rank them.** That equivalence is expected: the lines *are* the part of the
 # spectrum carrying recent-SFH information, and over three realizations both give
 # 0.10 dex. The intermediate window (15 Myr – 1 Gyr) is noisier still. In the single
@@ -650,24 +646,24 @@ plt.show()
 # ordering of one realization.
 #
 # **4. Report integrals, not per-node rates.** The old population's *mass* is well
-# measured even where its per-node *SFR* is not constrained at all — which is why
+# measured even where its per-node *SFR* is not constrained at all, which is why
 # the mass-fraction panel is meaningful while a per-node comparison beyond 1 Gyr is
-# not. Quote physically defined integrals — SFR averaged over 0–10 and 0–100 Myr,
-# $M_\star$, mass-weighted age — rather than the star-formation rate in an
+# not. Quote physically defined integrals (SFR averaged over 0–10 and 0–100 Myr,
+# $M_\star$, mass-weighted age) rather than the star-formation rate in an
 # individual age bin.
 #
 # **5. More age bins do not mean more resolution.** `n_grid` sets how *smooth* the
 # field is, not how much the data can say: quadrupling it from 16 to 64 leaves the
 # recovered information flat while tripling the dimension a sampler has to explore.
-# `n_grid=32` is a good default — as smooth as 64, and small enough that HMC still
-# behaves.
+# `n_grid=32` is a good default (as smooth as 64, and small enough that HMC still
+# behaves).
 #
 # ### Scope of this demonstration
 #
 # One galaxy, one burstiness ($\sigma = 0.4$ dex), one redshift, and a pessimistic
 # line signal-to-noise of 10. The population-level versions of these
-# experiments — paired photometry-versus-lines contrasts, the burstiness ladder,
-# and the `n_grid` sweep — live in `scripts/field_sfh_recovery_study.py`, which is
+# experiments (paired photometry-versus-lines contrasts, the burstiness ladder,
+# and the `n_grid` sweep) live in `scripts/field_sfh_recovery_study.py`, which is
 # where the multi-realization numbers quoted above come from:
 #
 # ```bash

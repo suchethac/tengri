@@ -36,6 +36,10 @@
   gains `row_sigma_kms` and `deconvolve_library_lsf` to remove the SSP library's LSF
   from a banded resolution matrix before it is applied, so the library and DESI
   resolution contributions are not double-counted (#2506).
+- `FiberSpectroscopyObservation.predict` is now jit/grad-safe in redshift: the
+  fiber centre stays a traced array instead of being concretized via `float()`,
+  which previously raised `ConcretizationTypeError` whenever `predict` was
+  wrapped in `jax.jit` or differentiated with respect to redshift.
 - A `Fixed` redshift now reaches the emission-line paths the same way it reaches
   photometry. Under `WavePrecomp(catalog_z_range=...)` the build keeps redshift out
   of the compiled kernel (so `model.z_fixed` is `None` by design), and
