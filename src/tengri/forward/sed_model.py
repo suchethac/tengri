@@ -9695,6 +9695,14 @@ class SEDModel:
         :meth:`DustSEDComponent.apply` replaces the per-call dense filter
         integral (#622) with the exact ``L_ir × R``. Returns ``None`` otherwise
         (free shape/z → keep the per-call integral, or ``fast_dust_emission``).
+
+        Probes the emitter by calling ``predict`` at two luminosities. Some
+        emitters declare a logarithmic luminosity input (``log_L_ir``) in
+        addition to the linear form; this method passes both when declared,
+        matching the application path. A probe SED that is identically zero or
+        non-finite indicates the emitter did not reach its emission budget; this
+        is not evidence of homogeneity but rather that the probe never activated
+        the emitter, so the precompute is declined with a clear reason.
         """
         cached = getattr(self, "_dust_band_response_cache", "unset")
         if cached != "unset":
@@ -9744,6 +9752,19 @@ class SEDModel:
             # template parameters and returns confidently wrong IR photometry.
             p = emitter.slice_params({k: jnp.asarray(v) for k, v in fixed.items()})
 
+            # Check if the emitter declares log_L_ir as an optional input.
+            # optional_inputs may be a dict attribute or a callable method.
+            declared_optional = getattr(emitter, "optional_inputs", None)
+            if callable(declared_optional):
+                try:
+                    declared_optional = declared_optional()
+                except Exception:
+                    declared_optional = None
+            accepts_log_l_ir = (
+                declared_optional is not None
+                and "log_L_ir" in declared_optional
+            )
+
             # HOMOGENEITY CHECK. The band response is exact only because an additive
             # emitter is linear (degree-1 homogeneous) in its luminosity:
             #
@@ -9755,9 +9776,36 @@ class SEDModel:
             # builds a response that is wrong by ~13% in W4. Luminosity-dependent
             # shapes (L-T relations) are common in IR SED models, so verify the
             # property rather than maintaining a list of which models have it:
-            # probe at two luminosities and require the SED to scale.
-            lo, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
-            hi, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=_L_IR_PROBE)
+            # probe at two luminosities and require the SED to scale. When the
+            # emitter declares a log-luminosity input, pass it alongside the linear
+            # form so it reaches the full declared contract (#2553).
+            lo_kwargs = {"L_ir": 1.0}
+            hi_kwargs = {"L_ir": _L_IR_PROBE}
+            if accepts_log_l_ir:
+                lo_kwargs["log_L_ir"] = 0.0
+                hi_kwargs["log_L_ir"] = jnp.log10(_L_IR_PROBE)
+
+            lo, _ = emitter.predict(p, jnp.zeros_like(wave), wave, **lo_kwargs)
+            hi, _ = emitter.predict(p, jnp.zeros_like(wave), wave, **hi_kwargs)
+
+            # FAIL-SAFE: Decline if either probe SED is identically zero or
+            # non-finite. A zero SED is not evidence of homogeneity; it means the
+            # emitter never reached its budget (e.g., log_L_ir defaulted to -inf).
+            # The homogeneity check cannot distinguish a legitimately zero emission
+            # (homogeneous and proportional to zero input) from an emitter that was
+            # never activated, so record a clear reason and return None (#2553).
+            if (
+                jnp.all(lo == 0) or not jnp.all(jnp.isfinite(lo))
+                or jnp.all(hi == 0) or not jnp.all(jnp.isfinite(hi))
+            ):
+                self._dust_band_response_decline = (
+                    "the probe SED is identically zero or contains non-finite values; "
+                    "the emitter did not reach its emission budget (e.g., a required "
+                    "log-luminosity input was not provided)"
+                )
+                self._dust_band_response_cache = None
+                return None
+
             if not bool(jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)):
                 # Record WHY, or the refusal is invisible. Every gate a caller
                 # can re-check from outside is satisfied here, so
