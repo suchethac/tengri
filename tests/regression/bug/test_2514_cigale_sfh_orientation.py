@@ -1,21 +1,27 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for #2514: CIGALE SFH time-reversal correction.
 
-Issues: delayed_bq, periodic, buat08 were reading CIGALE's forward time
-(time since formation) as lookback time, giving time-reversed histories.
+Issues: delayed_bq, periodic, buat08, sfhdelayed, sfh2exp were reading CIGALE's
+forward time (time since formation) as lookback time, giving time-reversed histories.
 The fix evaluates each model's CIGALE formula in T = age - t_lookback.
 
-Reference NumPy implementations of the same models as CIGALE's ``_init_code``
-(1 Myr grid, index = Myr since formation, last element = present), validated
-against pcigale, are compared against tengri evaluated at lookback cell centers,
-after reversing the CIGALE array to lookback order.
+Reference NumPy implementations of all five CIGALE-derived SFHs, matching CIGALE's
+``_init_code`` (1 Myr grid, index = Myr since formation, last element = present),
+validated against pcigale, are compared against tengri evaluated at lookback cell
+centers, after reversing the CIGALE array to lookback order.
 """
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.stellar.sfh.mean_sfh import buat08, delayed_bq, periodic
+from tengri.components.stellar.sfh.mean_sfh import (
+    buat08,
+    delayed_bq,
+    periodic,
+    sfh2exp,
+    sfhdelayed,
+)
 
 pytestmark = pytest.mark.regression_bug
 
@@ -30,6 +36,14 @@ def cig_delayed(age, tau):
     """CIGALE delayed: t * exp(-t / tau) / tau^2, t in [0, age)."""
     t = np.arange(age)
     return t * np.exp(-t / tau) / tau**2
+
+
+def cig_2exp(age, tau_m, tau_b, f, b_age):
+    """CIGALE 2exp: double exponential main + burst, both declining from formation."""
+    s = np.exp(-np.arange(age) / tau_m)
+    sb = np.exp(-np.arange(b_age) / tau_b)
+    s[-b_age:] += sb * f / (1 - f) * s.sum() / sb.sum()
+    return s
 
 
 def cig_delayedbq(age, tau, age_bq, r):
@@ -244,5 +258,86 @@ class TestBuat08Orientation:
 
         assert d_reversed < 1e-3, f"Distance to CIGALE reversed: {d_reversed:.2e} (too large)"
         assert d_unreversed > d_unrev_min, (
+            f"Distance to CIGALE unreversed: {d_unreversed:.2e} (should be large)"
+        )
+
+
+class TestSfhdelayedOrientation:
+    """Verify sfhdelayed uses cosmic time since formation (T = age - t_lb), not lookback."""
+
+    # Measured on the fixed code: D_reversed varies by tau but all < 1e-3.
+    # D_unreversed is 0.3-0.4 across all cases. Thresholds set a little
+    # above/below measured values.
+    @pytest.mark.parametrize(
+        "tau_yr",
+        [
+            0.5e9,
+            2e9,
+            6e9,
+        ],
+    )
+    def test_sfhdelayed_vs_cigale(self, tau_yr):
+        """Compare tengri sfhdelayed against CIGALE (reversed to lookback)."""
+        cig_sfh = cig_delayed(_AGE_MYR, tau_yr / 1e6)
+        cig_reversed = cig_sfh[::-1]
+
+        sfr_tengri = np.asarray(
+            sfhdelayed(
+                jnp.array(_LB_CENTER),
+                log_total_mass=10.0,
+                tau=tau_yr,
+                age=_AGE_YR,
+            )
+        )
+
+        d_reversed = _l1_distance(sfr_tengri, cig_reversed)
+        d_unreversed = _l1_distance(sfr_tengri, cig_sfh)
+
+        assert d_reversed < 1e-3, f"Distance to CIGALE reversed: {d_reversed:.2e} (too large)"
+        assert d_unreversed > 0.2, (
+            f"Distance to CIGALE unreversed: {d_unreversed:.2e} (should be large)"
+        )
+
+
+class TestSfh2expOrientation:
+    """Verify sfh2exp uses cosmic time since formation (T = age - t_lb), not lookback."""
+
+    # Measured on the fixed code: D_reversed < 1e-3 for both cases.
+    # D_unreversed is 0.35-0.4. Thresholds set a little above/below those values.
+    @pytest.mark.parametrize(
+        "tau_main_yr,tau_burst_yr,f_burst,burst_age_yr",
+        [
+            (3e9, 0.1e9, 0.1, 0.3e9),
+            (1e9, 0.05e9, 0.3, 1e9),
+        ],
+    )
+    def test_sfh2exp_vs_cigale(self, tau_main_yr, tau_burst_yr, f_burst, burst_age_yr):
+        """Compare tengri sfh2exp against CIGALE (reversed to lookback)."""
+        cig_sfh = cig_2exp(
+            _AGE_MYR,
+            tau_main_yr / 1e6,
+            tau_burst_yr / 1e6,
+            f_burst,
+            int(burst_age_yr / 1e6),
+        )
+        cig_reversed = cig_sfh[::-1]
+
+        sfr_tengri = np.asarray(
+            sfh2exp(
+                jnp.array(_LB_CENTER),
+                log_total_mass=10.0,
+                tau_main_yr=tau_main_yr,
+                tau_burst_yr=tau_burst_yr,
+                f_burst=f_burst,
+                age_yr=_AGE_YR,
+                burst_age_yr=burst_age_yr,
+            )
+        )
+
+        d_reversed = _l1_distance(sfr_tengri, cig_reversed)
+        d_unreversed = _l1_distance(sfr_tengri, cig_sfh)
+
+        assert d_reversed < 1e-3, f"Distance to CIGALE reversed: {d_reversed:.2e} (too large)"
+        assert d_unreversed > 0.2, (
             f"Distance to CIGALE unreversed: {d_unreversed:.2e} (should be large)"
         )
