@@ -3921,6 +3921,19 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 if val not in allowed:
                     raise ValueError(f"Invalid WG00 {key} {val!r}; choose one of {allowed}.")
                 result[result_key] = val
+        # Include the LyC in the dust energy-balance integral (FSPS/Prospector
+        # parity) vs the canonical LyC-masked L_absorbed (default; #922/#961).
+        # wg00's absorbed-luminosity integral calls the SAME
+        # bolometric_absorbed_log10 with the SAME 912 Å switch point as
+        # single_component/two_component (#2539 item 1), so this key threads
+        # here too instead of being refused the way 'lyman_cutoff' is above.
+        # This early ``return`` meant this key, though never explicitly
+        # rejected, was silently never read for dust_type='wg00' before this
+        # line existed -- the actual defect: not (only) component_factory.py
+        # forgetting to forward it, but this function never producing
+        # 'dust_eb_include_lyc' for wg00 in the first place.
+        if "eb_include_lyc" in dust_atten_dict:
+            result["dust_eb_include_lyc"] = bool(dust_atten_dict["eb_include_lyc"])
         return
 
     # Extract and validate dust laws. Attenuation laws are now EXPLICIT and required.

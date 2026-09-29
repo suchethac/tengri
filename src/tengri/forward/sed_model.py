@@ -9541,6 +9541,7 @@ class SEDModel:
         )
         from tengri.components.dust.laws._registry import law_kwarg_names
         from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
 
         lut = None
         dust = next(
@@ -9665,6 +9666,35 @@ class SEDModel:
                 transition_width_dex = dust.config.transition_width_dex
                 eb_include_lyc = dust.config.eb_include_lyc
 
+                # #2539 item 1: the LUT's stellar B/G terms
+                # (energy_balance_precompute.build_energy_balance_lut) are
+                # integrated from the raw SSP cube alone -- on their own they
+                # carry no nebular-fesc dependence, unlike
+                # DustSEDComponent.apply()'s exact path, which reads the SAME
+                # per-age, gas-reprocessed population ``sed_attenuated``
+                # attenuates (see the §2a/§3 comments in two_component.py).
+                # ``neb_fesc`` can be a runtime FREE parameter, so that
+                # per-age masking cannot be baked into a build-time LUT the
+                # way (tau_bc, tau_diff) are -- but the absorbed integral IS
+                # affine in fesc (A(fesc) = A_0 + fesc*A_1), so build the
+                # SECOND (fesc-linear) B/G family instead of declining the
+                # LUT outright: ``lut_l_absorbed_stellar_log10`` then combines
+                # it with the runtime fesc exactly, no approximation. Only
+                # worth the extra build-time cost when a live photoionized
+                # nebular component is in the chain (BakedIn/no-nebular
+                # models never publish ``lyc_transmission``/``lyc_fesc``, so
+                # the runtime fesc combine is a no-op there regardless) and
+                # ``eb_include_lyc=True`` unmasks the LyC region in the first
+                # place (otherwise B/G alone are already exact, LyC-masked
+                # out unconditionally).
+                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+                _live_neb = any(
+                    isinstance(c, NebularSEDComponent)
+                    and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+                    for c in chain
+                )
+                _fesc_exact = eb_include_lyc and _live_neb
+
                 def _grid(name):
                     if name in free:
                         dist = self.spec.get_distribution(name)
@@ -9698,6 +9728,8 @@ class SEDModel:
                     eb_include_lyc=eb_include_lyc,
                     tau_bc_grid=tau_bc_grid,
                     tau_diff_grid=tau_diff_grid,
+                    fesc_exact=_fesc_exact,
+                    lyc_absorb_all=dust.config.lyc_absorb_all,
                 )
 
         self._energy_balance_lut_cache = lut
