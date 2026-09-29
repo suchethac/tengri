@@ -359,10 +359,10 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         continuum are attenuated by the same function evaluated at their
         respective wavelengths. A caller with no
         :class:`~tengri.protocols.component.ForwardState` (the no-state
-        fallback in ``SEDModel._attenuate_line_catalog``, used when
-        ``dust_model`` is off/wg00 or on the #950 ``enable_fast_nebular()``
-        grid path) gets exactly the ``τ_V`` and closure the live forward pass
-        calls for its continuum, since both call this same method.
+        fallback in ``SEDModel._attenuate_line_catalog``, used on the #950
+        ``enable_fast_nebular()`` grid path) gets exactly the ``τ_V`` and
+        closure the live forward pass calls for its continuum, since both
+        call this same method.
 
         Parameters
         ----------
