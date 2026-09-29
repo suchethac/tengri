@@ -1469,7 +1469,7 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float, *, age: float)
     :math:`t_{\\rm lookback} \\ge \\mathrm{age}`).
 
     See :func:`sfhdelayed` for the mass-conserving registry-wired version
-    (Resolves the time-reversal of #514).
+    (Resolves the time-reversal of #2524).
 
     Examples
     --------
