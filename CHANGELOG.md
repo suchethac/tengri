@@ -6,6 +6,14 @@
 
 ### Fixed
 
+- WG00 attenuation now reaches the emission-line catalog (``predict_line_fluxes``,
+  ``predict_line_ratios``, line properties, ``predict_emission_lines``); previously
+  lines passed through unattenuated under dust type wg00 while the continuum and
+  SED-measured lines were attenuated. ``_line_dust_component`` now selects the dust
+  component by capability (``hasattr(c, "attenuate_line_catalog")``) instead of name,
+  enabling wg00 to publish attenuated lines on the same surfaces as single_component
+  and two_component. The mismatch broke joint-fit consistency for dust parameters (#2541).
+
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls
