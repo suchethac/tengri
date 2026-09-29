@@ -67,7 +67,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import log10_magnitude, pow10, representable_floor
+from tengri.utils.scale import log10_magnitude, pow10
 
 __all__ = [
     "DustSEDComponent",
@@ -406,6 +406,9 @@ class DustSEDComponent(TemplateThreading):
     #: Structural flag: when True, this component reads the nebular continuum from
     #: the per-Q_H grid channels instead of declaring sed_nebular as an input.
     nebular_from_grid: bool = False
+    #: Optical-depth nodes ``(tau_a, tau_b)`` of the grid's energy-balance channel,
+    #: as tuples of floats; set with ``nebular_from_grid``.
+    nebular_eb_tau_grids: tuple | None = None
 
     def materialized(self) -> DustSEDComponent:
         """Return a copy with nebular_from_grid reset to False for full-state exact path.
@@ -415,7 +418,11 @@ class DustSEDComponent(TemplateThreading):
         so the dust component reads the full sed_nebular continuum for
         the exact path even when the fast path has set this flag.
         """
-        return replace(self, nebular_from_grid=False) if self.nebular_from_grid else self
+        return (
+            replace(self, nebular_from_grid=False, nebular_eb_tau_grids=None)
+            if self.nebular_from_grid
+            else self
+        )
 
     def citations(self) -> tuple[str, ...]:
         """Structurally implements Charlot & Fall (2000) two-component dust;
@@ -956,6 +963,23 @@ class DustSEDComponent(TemplateThreading):
         )
         return jnp.asarray(log_line_lums) + log10_magnitude(transmission)
 
+    def _nebular_grid_absorbed(self, state, tau_a, tau_b):
+        """(log10 magnitude, sign) of the absorbed nebular luminosity read from the grid."""
+        from tengri.components.dust.energy_balance_precompute import nebular_grid_absorbed_log10
+
+        if self.nebular_eb_tau_grids is None:
+            raise ValueError(
+                f"{type(self).__name__}: nebular_from_grid is set without nebular_eb_tau_grids; "
+                "both are set together by SEDModel._chain_with_nebular_grid."
+            )
+        return nebular_grid_absorbed_log10(
+            jnp.asarray(state.derived["nebular_eb_absorbed_per_qh_grid_precomp"]),
+            jnp.asarray(state.derived["log_nion"]),
+            self.nebular_eb_tau_grids,
+            tau_a,
+            tau_b,
+        )
+
     def apply(
         self,
         state: ForwardState,
@@ -1291,7 +1315,7 @@ class DustSEDComponent(TemplateThreading):
                 lut_l_absorbed_stellar_log10,
             )
             from tengri.forward.energy_balance import bolometric_absorbed_log10
-            from tengri.utils.scale import log10_add
+            from tengri.utils.scale import log10_add, log10_add_signed
 
             log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
                 eb_lut,
@@ -1309,17 +1333,10 @@ class DustSEDComponent(TemplateThreading):
                 # per unit Q_H on the stellar LUT's (tau_bc, tau_diff) grid,
                 # contracted with the same two-node brackets, then scaled by
                 # Q_H in the log domain. Shock + AGN keep their exact integral
-                # and join through log10_add, so the closing step below is the
-                # one every variant shares.
-                from tengri.components.dust.energy_balance_precompute import _interp_bracket
-
-                grid_abs = jnp.asarray(state.derived["nebular_eb_absorbed_per_qh_grid_precomp"])
-                ia, wa = _interp_bracket(eb_lut.tau_bc_grid, _tau_bc)
-                ib, wb = _interp_bracket(eb_lut.tau_diff_grid, _tau_diff)
-                sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
-                absorbed_per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
-                log_neb_grid = jnp.asarray(state.derived["log_nion"]) + jnp.log10(
-                    jnp.maximum(absorbed_per_qh, representable_floor(1e-300))
+                # and join through log10_add_signed, each term keeping the sign of
+                # its own integral.
+                log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
+                    state, _tau_bc, _tau_diff
                 )
                 log_other, sign_other = bolometric_absorbed_log10(
                     sed_shock + sed_agn,
@@ -1328,8 +1345,9 @@ class DustSEDComponent(TemplateThreading):
                     wave=wave,
                     lyman_cutoff_aa=_eb_cutoff,
                 )
-                log_neb = log10_add(log_neb_grid, log_other, sign_a=1.0, sign_b=sign_other)
-                sign_neb = jnp.ones(())
+                log_neb, sign_neb = log10_add_signed(
+                    log_neb_grid, log_other, sign_a=sign_neb_grid, sign_b=sign_other
+                )
             else:
                 log_neb, sign_neb = bolometric_absorbed_log10(
                     sed_neb + sed_shock + sed_agn,
@@ -1344,13 +1362,23 @@ class DustSEDComponent(TemplateThreading):
         else:
             from tengri.forward.energy_balance import bolometric_absorbed_log10
 
-            log_L_absorbed, _ = bolometric_absorbed_log10(
+            log_L_absorbed, sign_all = bolometric_absorbed_log10(
                 sed_intrinsic_stellar + sed_neb + sed_shock + sed_agn,
                 sed_attenuated + sed_neb_attenuated + sed_shock_attenuated + sed_agn_attenuated,
                 nu,
                 wave=wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+            if self.nebular_from_grid:
+                # ``sed_nebular`` is all zeros here; its absorbed share comes from the grid.
+                from tengri.utils.scale import log10_add
+
+                log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
+                    state, jnp.asarray(params["dust_tau_bc"]), jnp.asarray(params["dust_tau_diff"])
+                )
+                log_L_absorbed = log10_add(
+                    log_L_absorbed, log_neb_grid, sign_a=sign_all, sign_b=sign_neb_grid
+                )
         from tengri.forward.energy_balance import warn_if_corrupt
 
         warn_if_corrupt(log_L_absorbed, component="two_component")

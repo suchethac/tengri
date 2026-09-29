@@ -211,8 +211,9 @@ def _nebular_eb_channel(
     Returns
     -------
     ndarray, shape (n_points, n_tau_a, n_tau_b)
-        LINEAR absorbed luminosity per unit nion [erg/s per (photon/s)];
-        exactly 0 where the screen is unity.
+        SIGNED absorbed luminosity per unit nion [erg/s per (photon/s)], in the
+        orientation of the frequency integral (negative on an ascending wavelength
+        grid); exactly 0 where the screen is unity.
 
     Notes
     -----
@@ -234,21 +235,24 @@ def _nebular_eb_channel(
     @jax.jit
     def _node(sed):
         def one(t):
-            return bolometric_absorbed_log10(sed, sed * t, nu, wave=wave, lyman_cutoff_aa=cutoff)[
-                0
-            ]
+            log_abs, sign = bolometric_absorbed_log10(
+                sed, sed * t, nu, wave=wave, lyman_cutoff_aa=cutoff
+            )
+            return log_abs, sign
 
         return jax.lax.map(one, t_stack)
 
-    log_abs = np.stack(
+    results = np.stack(
         [
             np.asarray(_node(jnp.asarray(row)), dtype=np.float64)
             for row in np.asarray(sed_nodes_rest)
         ]
-    )  # (n_points, n_a * n_b)
+    )  # (n_points, 2, n_a * n_b)
+    log_abs = results[:, 0, :]
+    sign = results[:, 1, :]
     finite = np.isfinite(log_abs)
     exponent = np.where(finite, log_abs + np.asarray(neg_log_qh, dtype=np.float64)[:, None], 0.0)
-    eb = np.where(finite, 10.0**exponent, 0.0)
+    eb = np.where(finite, sign * 10.0**exponent, 0.0)
     return eb.reshape(eb.shape[0], tau_a.size, tau_b.size)
 
 

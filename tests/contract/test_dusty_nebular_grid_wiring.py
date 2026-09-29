@@ -129,12 +129,18 @@ def _grad_flops(model):
 def test_auto_fit_attaches_a_grid_that_serves_the_dust(ssp, data):
     f = _auto_fit(_dusty_model(ssp), data)
     chain = f.model._cached_component_chain
+    dust_comp = _find(chain, _DUST_TYPES)
 
     assert fast_nebular_can_engage(f.model) is True
     assert getattr(f.model, "_nebular_grid_table", None) is not None
     assert f.model._nebular_grid_table.serves_dust
-    assert _find(chain, _DUST_TYPES).nebular_from_grid is True
+    assert dust_comp.nebular_from_grid is True
     assert _find(chain, NebularSEDComponent).must_materialize_sed is False
+    # The dust component's tau grids match the table
+    assert dust_comp.nebular_eb_tau_grids == (
+        tuple(f.model._nebular_grid_table.eb_tau_a_grid),
+        tuple(f.model._nebular_grid_table.eb_tau_b_grid),
+    )
 
 
 def test_gradient_flops_drop_at_least_five_fold(ssp, data):
@@ -195,6 +201,31 @@ def test_a_table_without_dust_channels_keeps_the_exact_path(ssp, monkeypatch):
 
     assert _find(chain, _DUST_TYPES).nebular_from_grid is False
     assert _find(chain, NebularSEDComponent).must_materialize_sed is True
+
+
+def test_a_remaining_continuum_consumer_keeps_the_dust_on_the_exact_path(ssp, monkeypatch):
+    # Build a model but don't fit it yet
+    m = _dusty_model(ssp)
+
+    # Monkeypatch before enabling fast nebular so the dust stays unflagged
+    monkeypatch.setattr(
+        "tengri.forward.sed_model._nebular_continuum_consumers", lambda chain: ["stub_consumer"]
+    )
+
+    # Enable fast nebular with the monkeypatch in place
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m.enable_fast_nebular(jnp.asarray([]), n_grid=4)
+
+    chain = m._cached_component_chain
+    dust_comp = _find(chain, _DUST_TYPES)
+    neb_comp = _find(chain, NebularSEDComponent)
+
+    # The dust component stays on the exact path because a consumer claims the continuum
+    assert dust_comp.nebular_from_grid is False
+    assert dust_comp.nebular_eb_tau_grids is None
+    # The nebular component materializes the continuum
+    assert neb_comp.must_materialize_sed is True
 
 
 def test_shape_free_attenuation_stays_disarmed(ssp):

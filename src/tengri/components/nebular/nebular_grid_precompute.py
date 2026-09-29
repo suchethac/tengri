@@ -257,8 +257,9 @@ class NebularGridTable:
     restband_subband_waves_rest : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
         Rest-frame twin of the node wavelengths.
     eb_absorbed_per_qh : ndarray, shape ``(*grid_dims, n_tau_a, n_tau_b)`` or None
-        LINEAR LyC-masked absorbed nebular luminosity per unit nion through the model's
-        NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)]; >= 0; exactly 0
+        SIGNED LyC-masked absorbed nebular luminosity per unit nion through the model's
+        NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)], in the orientation
+        of the frequency integral (negative on an ascending wavelength grid); exactly 0
         where the screen is unity.
     eb_tau_a_grid : ndarray, shape (n_tau_a,) or None
         The stellar EnergyBalanceLUT's tau_bc_grid (two_component) or
@@ -1599,7 +1600,8 @@ def reconstruct_nebular_eb_absorbed_per_qh(params, table) -> jnp.ndarray:
     Returns
     -------
     ndarray, shape (n_tau_a, n_tau_b)
-        LINEAR per unit nion, interpolated over the nebular axes [erg/s per (photon/s)].
+        SIGNED per unit nion, interpolated over the nebular axes [erg/s per (photon/s)], in
+        the orientation of the frequency integral (negative on an ascending wavelength grid).
 
     Notes
     -----

@@ -27,7 +27,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-import jax
 import jax.numpy as jnp
 
 from tengri.components.dust._params import DEFAULT_DUST_ETA_BALANCE
@@ -42,7 +41,6 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.utils.scale import representable_floor
 
 __all__ = ["DustAttenuationSEDComponent", "DustAttenuationSEDComponentConfig"]
 
@@ -160,10 +158,17 @@ class DustAttenuationSEDComponent(TemplateThreading):
     parameter_prefix: str = "dust_"
     _state: DustAttenuationSEDComponentState | None = None
     nebular_from_grid: bool = False
+    #: Optical-depth nodes ``(tau_a, tau_b)`` of the grid's energy-balance channel,
+    #: as tuples of floats; set with ``nebular_from_grid``.
+    nebular_eb_tau_grids: tuple | None = None
 
     def materialized(self) -> DustAttenuationSEDComponent:
         """Return a copy with nebular_from_grid reset to False for full-state exact path."""
-        return replace(self, nebular_from_grid=False) if self.nebular_from_grid else self
+        return (
+            replace(self, nebular_from_grid=False, nebular_eb_tau_grids=None)
+            if self.nebular_from_grid
+            else self
+        )
 
     def nebular_screen_transmission(
         self,
@@ -457,6 +462,23 @@ class DustAttenuationSEDComponent(TemplateThreading):
             k = law_fn(wave_grid)
         return DustAttenuationSEDComponentState(name=self.name, k_lambda=k)
 
+    def _nebular_grid_absorbed(self, state, tau_a, tau_b):
+        """(log10 magnitude, sign) of the absorbed nebular luminosity read from the grid."""
+        from tengri.components.dust.energy_balance_precompute import nebular_grid_absorbed_log10
+
+        if self.nebular_eb_tau_grids is None:
+            raise ValueError(
+                f"{type(self).__name__}: nebular_from_grid is set without nebular_eb_tau_grids; "
+                "both are set together by SEDModel._chain_with_nebular_grid."
+            )
+        return nebular_grid_absorbed_log10(
+            jnp.asarray(state.derived["nebular_eb_absorbed_per_qh_grid_precomp"]),
+            jnp.asarray(state.derived["log_nion"]),
+            self.nebular_eb_tau_grids,
+            tau_a,
+            tau_b,
+        )
+
     def apply(
         self,
         state: ForwardState,
@@ -577,21 +599,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
             # zero-valued integral there and changes nothing.
             _sed_neb = state.derived.get("sed_nebular")
             if self.nebular_from_grid:
-                # Nebular half from the per-Q_H grid on the LUT's (tau_bc,
-                # tau_diff) axes: tau_bc pinned at 0, tau_diff = tau_v, the
-                # same degenerate mapping the stellar term above uses.
-                from tengri.components.dust.energy_balance_precompute import _interp_bracket
-
-                grid_abs = jnp.asarray(state.derived["nebular_eb_absorbed_per_qh_grid_precomp"])
-                ia, wa = _interp_bracket(eb_lut.tau_bc_grid, jnp.asarray(0.0))
-                ib, wb = _interp_bracket(eb_lut.tau_diff_grid, tau_v)
-                sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
-                absorbed_per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
-                log_neb = jnp.asarray(state.derived["log_nion"]) + jnp.log10(
-                    jnp.maximum(absorbed_per_qh, representable_floor(1e-300))
+                log_neb, sign_neb = self._nebular_grid_absorbed(
+                    state, jnp.asarray(0.0), jnp.asarray(params["dust_tau_v"])
                 )
                 log_l_absorbed = log10_add(
-                    log_stellar, log_neb, sign_a=sign_stellar, sign_b=jnp.ones(())
+                    log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb
                 )
             elif _sed_neb is None:
                 log_l_absorbed = log_stellar
@@ -610,13 +622,31 @@ class DustAttenuationSEDComponent(TemplateThreading):
         else:
             # Slow path (exact integral): full-wavelength integration over all
             # components (stellar, nebular, shock, AGN). Same as before.
-            log_l_absorbed, _ = bolometric_absorbed_log10(
-                state.sed_intrinsic,
-                attenuated,
+            _sed_neb_full = state.derived.get("sed_nebular")
+            sed_to_integrate = state.sed_intrinsic
+            attenuated_to_integrate = attenuated
+            if _sed_neb_full is not None and not self.nebular_from_grid:
+                sed_to_integrate = sed_to_integrate + jnp.asarray(_sed_neb_full)
+                attenuated_to_integrate = (
+                    attenuated_to_integrate + jnp.asarray(_sed_neb_full) * attenuation
+                )
+            log_l_absorbed, sign_all = bolometric_absorbed_log10(
+                sed_to_integrate,
+                attenuated_to_integrate,
                 nu,
                 wave=state.wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+            if self.nebular_from_grid:
+                # ``sed_nebular`` is all zeros here; its absorbed share comes from the grid.
+                from tengri.utils.scale import log10_add
+
+                log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
+                    state, jnp.asarray(0.0), jnp.asarray(params["dust_tau_v"])
+                )
+                log_l_absorbed = log10_add(
+                    log_l_absorbed, log_neb_grid, sign_a=sign_all, sign_b=sign_neb_grid
+                )
 
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:

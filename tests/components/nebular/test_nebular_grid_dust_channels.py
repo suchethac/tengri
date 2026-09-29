@@ -189,7 +189,6 @@ def test_energy_balance_channel_is_exact_at_every_tau_node(built, which):
     log_nion = float(state.derived["log_nion"])
     cutoff = None if dust_comp.config.eb_include_lyc else 912.0
     got = np.asarray(table.eb_absorbed_per_qh)[(0,) * n_ax]
-    assert got.min() >= 0.0 and got[-1, -1] > 0.0
     for a, ta in enumerate(tau_a):
         for b, tb in enumerate(tau_b):
             q = dict(p)
@@ -198,13 +197,24 @@ def test_energy_balance_channel_is_exact_at_every_tau_node(built, which):
             else:
                 q["dust_tau_v"] = float(tb)
             t = _nebular_screen_for(dust_comp, q, wave)
-            log_abs = float(
-                bolometric_absorbed_log10(
-                    sed_neb, sed_neb * t, nu, wave=wave, lyman_cutoff_aa=cutoff
-                )[0]
+            log_abs, sign = bolometric_absorbed_log10(
+                sed_neb, sed_neb * t, nu, wave=wave, lyman_cutoff_aa=cutoff
             )
-            want = 10.0 ** (log_abs - log_nion) if np.isfinite(log_abs) else 0.0
+            log_abs = float(log_abs)
+            sign = float(sign)
+            want = sign * 10.0 ** (log_abs - log_nion) if np.isfinite(log_abs) else 0.0
             np.testing.assert_allclose(got[a, b], want, rtol=1e-6, atol=1e-30)
+    # the channel has the expected sign orientation
+    assert got[0, 0] == 0.0
+    assert got[-1, -1] != 0.0
+    np.testing.assert_equal(
+        np.sign(got[-1, -1]),
+        float(
+            bolometric_absorbed_log10(
+                sed_neb, 0.5 * sed_neb, nu, wave=wave, lyman_cutoff_aa=cutoff
+            )[1]
+        ),
+    )
     # a unit screen absorbs nothing
     assert got[0, 0] == 0.0
     # the reconstruction returns the stored node exactly

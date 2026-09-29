@@ -9543,10 +9543,11 @@ class SEDModel:
     def _chain_with_nebular_grid(self, chain, table):
         """``chain`` with the nebular grid attached and the dust flagged to read it.
 
-        The dust component is flagged (``nebular_from_grid``) BEFORE the
-        continuum census, so the census sees a dust component that does not
-        read ``sed_nebular`` and ``must_materialize_sed`` follows from it. Both
-        happen here so the flag and the census cannot drift between call sites.
+        The dust component is flagged (``nebular_from_grid``) and its tau grids are set
+        BEFORE the continuum census, but only when no other component consumes the continuum,
+        so the census sees a dust component that does not read ``sed_nebular`` and
+        ``must_materialize_sed`` follows from it. Both happen here so the flag and the
+        census cannot drift between call sites.
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
@@ -9568,11 +9569,31 @@ class SEDModel:
                         f"{None if grid_tab is None else jnp.shape(grid_tab)} vs "
                         f"{jnp.shape(grid_lut)}."
                     )
-            chain = [
-                dataclasses.replace(c, nebular_from_grid=True) if isinstance(c, dust_types) else c
+            # Build flagged chain with both fields set
+            flagged = [
+                dataclasses.replace(
+                    c,
+                    nebular_from_grid=True,
+                    nebular_eb_tau_grids=(
+                        tuple(float(x) for x in np.asarray(table.eb_tau_a_grid)),
+                        tuple(float(x) for x in np.asarray(table.eb_tau_b_grid)),
+                    ),
+                )
+                if isinstance(c, dust_types)
+                else c
                 for c in chain
             ]
-        sed_consumers = _nebular_continuum_consumers(chain)
+            # Check if any other component consumes the continuum
+            sed_consumers = _nebular_continuum_consumers(flagged)
+            # If another component consumes continuum, nebular will materialize it
+            # and not publish grid keys, so use unflagged chain instead
+            if sed_consumers:
+                chain = list(chain)
+                sed_consumers = _nebular_continuum_consumers(chain)
+            else:
+                chain = flagged
+        else:
+            sed_consumers = _nebular_continuum_consumers(chain)
         return [
             dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
             if isinstance(c, NebularSEDComponent)
