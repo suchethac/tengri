@@ -12,6 +12,7 @@ Pinned:
 from __future__ import annotations
 
 import functools
+import types
 import warnings
 from pathlib import Path
 
@@ -30,7 +31,7 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
-from tengri.components.nebular.component import NebularSEDComponent
+from tengri.components.nebular.nebular_grid_precompute import grid_baked_free_params
 from tengri.forward.sed_model import FeaturePrecomp
 from tengri.inference import Fitter
 from tengri.inference.fitter import fast_nebular_can_engage
@@ -41,6 +42,17 @@ _BARE = "data/fsps_prsc_miles_chabrier.h5"
 _BANDS = ["galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1"]
 Z = 0.15
 
+_RTOL_PHOT = 4e-3
+_RTOL_LINES = 1e-4
+_RTOL_GRAD = 2e-2
+_TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v")
+_BAKED = {
+    "neb_fesc_lya": ("fesc_lya", Uniform(0.0, 0.9)),
+    "ionspec_index1": ("ionspec_index1", Uniform(1.0, 20.0)),
+    "gas_logco": ("gas_logco", Uniform(-1.0, 0.5)),
+    "neb_eline_sigma_kms": ("eline_sigma_kms", Uniform(50.0, 300.0)),
+}
+
 _TWO = {
     "type": "two_component",
     "law": "calzetti",
@@ -48,6 +60,8 @@ _TWO = {
     "tau_bc": Uniform(0.0, 2.0),
     "tau_diff": Uniform(0.0, 2.0),
 }
+
+_SSP = None
 
 
 def _require():
@@ -58,8 +72,10 @@ def _require():
 
 @pytest.fixture(scope="module")
 def ssp():
+    global _SSP
     _require()
-    return load_ssp_data(_BARE)
+    _SSP = load_ssp_data(_BARE)
+    return _SSP
 
 
 @pytest.fixture(scope="module")
@@ -70,7 +86,7 @@ def data():
 
 def _model(dusty, neb_extra):
     kw = dict(
-        ssp_data=load_ssp_data(_BARE),
+        ssp_data=_SSP,
         observation=Observation(photometry=Photometry.from_names(_BANDS)),
         approx=WavePrecomp(),
         redshift=Fixed(Z),
@@ -80,7 +96,12 @@ def _model(dusty, neb_extra):
             "age_gyr": Uniform(0.05, 10.0),
             "log_total_mass": Uniform(8, 12),
         },
-        neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Uniform(-3.5, -2.0), **neb_extra},
+        neb={
+            "type": "cue",
+            "all_params": Fixed(DEFAULT),
+            "neb_logU": Uniform(-3.5, -2.0),
+            **neb_extra,
+        },
     )
     if dusty:
         kw["dust_attenuation"] = _TWO
@@ -90,220 +111,183 @@ def _model(dusty, neb_extra):
         return SEDModel.build(**kw)
 
 
-def test_free_escape_fraction_moves_the_grid_served_emission_dust_free(ssp, data):
-    m = _model(False, {"fesc": Uniform(0.0, 0.8)})
-    fnu, sigma = data
+@functools.cache
+def _views(dusty: bool, key: str, lo: float, hi: float):
+    """(model, grid-served model, evaluation point) for one free nebular parameter."""
+    m = _model(dusty, {key: Uniform(lo, hi)})
+    p = _point(m)
+    flux = np.asarray(m.predict_photometry(p))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
+        fast = Fitter(
+            m, data=flux, noise=0.05 * np.abs(flux), data_type="photometry", approx="auto"
+        ).model
+    return m, fast, p
 
-    assert m_fast._nebular_grid_table is not None
+
+def _point(m) -> dict:
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    assert "sfh_dpl_age_gyr" in p
+    p["sfh_dpl_age_gyr"] = 0.1
+    for name in _TAU_NAMES:
+        if name in m.spec.free_params:
+            p[name] = 1.0
+    assert set(p) == set(m.spec.free_params)
+    return p
+
+
+def _nebular_share(m, p) -> np.ndarray:
+    d = m.predict_state(p).derived
+    neb = np.asarray(d["nebular_phot_lnu_precomp"], dtype=float)
+    star = np.asarray(d["stellar_phot_lnu_precomp"], dtype=float)
+    return neb / (neb + star)
+
+
+@pytest.mark.parametrize("dusty", [False, True])
+def test_free_escape_fraction_moves_the_grid_served_emission(ssp, dusty):
+    m, fast, p = _views(dusty, "fesc", 0.0, 0.8)
+
+    assert fast._nebular_grid_table is not None
     assert fast_nebular_can_engage(m)
 
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
-
-    nebular_share = m.predict_state(p).derived["nebular_phot_lnu_precomp"] / (
-        m.predict_state(p).derived["nebular_phot_lnu_precomp"] + m.predict_state(p).derived.get("stellar_phot_lnu", 1e-50)
-    )
-    assert jnp.max(nebular_share) > 0.10
+    shares = _nebular_share(m, p)
+    assert np.max(shares) > 0.10
+    sh_min, sh_max = np.min(shares), np.max(shares)
+    print(f"test_free_escape_fraction[dusty={dusty}]: shares={sh_min:.4f}-{sh_max:.4f}")
 
     measured_worst = 0.0
     for fesc in (0.0, 0.2, 0.4, 0.6, 0.8):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fesc": fesc})
+        phot_fast = fast.predict_photometry({**p, "neb_fesc": fesc})
         phot_exact = m.predict_photometry({**p, "neb_fesc": fesc})
         rel_diff = jnp.abs((phot_fast - phot_exact) / jnp.maximum(jnp.abs(phot_exact), 1e-30))
         measured_worst = jnp.maximum(measured_worst, jnp.max(rel_diff))
 
-    rtol_set = max(5e-3, 2 * float(measured_worst))
-    print(f"test_free_escape_fraction[dust_free]: measured worst={measured_worst}, rtol={rtol_set}")
+    print(f"test_free_escape_fraction[dusty={dusty}]: measured worst={float(measured_worst):.2e}")
 
     for fesc in (0.0, 0.2, 0.4, 0.6, 0.8):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fesc": fesc})
+        phot_fast = fast.predict_photometry({**p, "neb_fesc": fesc})
         phot_exact = m.predict_photometry({**p, "neb_fesc": fesc})
-        np.testing.assert_allclose(phot_fast, phot_exact, rtol=rtol_set)
+        np.testing.assert_allclose(phot_fast, phot_exact, rtol=_RTOL_PHOT)
+
+    sensitivities = [
+        float(
+            jnp.max(
+                jnp.abs(
+                    (
+                        m.predict_photometry({**p, "neb_fesc": 0.8})
+                        - m.predict_photometry({**p, "neb_fesc": 0.0})
+                    )
+                    / jnp.maximum(jnp.abs(m.predict_photometry({**p, "neb_fesc": 0.0})), 1e-30)
+                )
+            )
+        )
+    ]
+    assert sensitivities[0] > 10 * _RTOL_PHOT
 
 
-def test_free_escape_fraction_moves_the_grid_served_emission_dusty(ssp, data):
-    m = _model(True, {"fesc": Uniform(0.0, 0.8)})
-    fnu, sigma = data
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
+@pytest.mark.parametrize("dusty", [False, True])
+def test_free_dust_fraction_moves_the_grid_served_emission(ssp, dusty):
+    m, fast, p = _views(dusty, "fdust", 0.0, 0.5)
 
-    assert m_fast._nebular_grid_table is not None
+    assert fast._nebular_grid_table is not None
     assert fast_nebular_can_engage(m)
-
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
-
-    nebular_share = m.predict_state(p).derived["nebular_phot_lnu_precomp"] / (
-        m.predict_state(p).derived["nebular_phot_lnu_precomp"] + m.predict_state(p).derived.get("stellar_phot_lnu", 1e-50)
-    )
-    assert jnp.max(nebular_share) > 0.10
-
-    measured_worst = 0.0
-    for fesc in (0.0, 0.2, 0.4, 0.6, 0.8):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fesc": fesc})
-        phot_exact = m.predict_photometry({**p, "neb_fesc": fesc})
-        rel_diff = jnp.abs((phot_fast - phot_exact) / jnp.maximum(jnp.abs(phot_exact), 1e-30))
-        measured_worst = jnp.maximum(measured_worst, jnp.max(rel_diff))
-
-    rtol_set = max(5e-3, 2 * float(measured_worst))
-    print(f"test_free_escape_fraction[dusty]: measured worst={measured_worst}, rtol={rtol_set}")
-
-    for fesc in (0.0, 0.2, 0.4, 0.6, 0.8):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fesc": fesc})
-        phot_exact = m.predict_photometry({**p, "neb_fesc": fesc})
-        np.testing.assert_allclose(phot_fast, phot_exact, rtol=rtol_set)
-
-
-def test_free_dust_fraction_moves_the_grid_served_emission_dust_free(ssp, data):
-    m = _model(False, {"fdust": Uniform(0.0, 0.5)})
-    fnu, sigma = data
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
-
-    assert m_fast._nebular_grid_table is not None
-    assert fast_nebular_can_engage(m)
-
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
 
     measured_worst = 0.0
     for fdust in (0.0, 0.1, 0.25, 0.4, 0.5):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fdust": fdust})
+        phot_fast = fast.predict_photometry({**p, "neb_fdust": fdust})
         phot_exact = m.predict_photometry({**p, "neb_fdust": fdust})
         rel_diff = jnp.abs((phot_fast - phot_exact) / jnp.maximum(jnp.abs(phot_exact), 1e-30))
         measured_worst = jnp.maximum(measured_worst, jnp.max(rel_diff))
 
-    rtol_set = max(5e-3, 2 * float(measured_worst))
-    print(f"test_free_dust_fraction[dust_free]: measured worst={measured_worst}, rtol={rtol_set}")
+    print(f"test_free_dust_fraction[dusty={dusty}]: measured worst={float(measured_worst):.2e}")
 
     for fdust in (0.0, 0.1, 0.25, 0.4, 0.5):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fdust": fdust})
+        phot_fast = fast.predict_photometry({**p, "neb_fdust": fdust})
         phot_exact = m.predict_photometry({**p, "neb_fdust": fdust})
-        np.testing.assert_allclose(phot_fast, phot_exact, rtol=rtol_set)
+        np.testing.assert_allclose(phot_fast, phot_exact, rtol=_RTOL_PHOT)
+
+    sensitivities = [
+        float(
+            jnp.max(
+                jnp.abs(
+                    (
+                        m.predict_photometry({**p, "neb_fdust": 0.5})
+                        - m.predict_photometry({**p, "neb_fdust": 0.0})
+                    )
+                    / jnp.maximum(jnp.abs(m.predict_photometry({**p, "neb_fdust": 0.0})), 1e-30)
+                )
+            )
+        )
+    ]
+    assert sensitivities[0] > 10 * _RTOL_PHOT
 
 
-def test_free_dust_fraction_moves_the_grid_served_emission_dusty(ssp, data):
-    m = _model(True, {"fdust": Uniform(0.0, 0.5)})
-    fnu, sigma = data
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
-
-    assert m_fast._nebular_grid_table is not None
-    assert fast_nebular_can_engage(m)
-
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
-
-    measured_worst = 0.0
-    for fdust in (0.0, 0.1, 0.25, 0.4, 0.5):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fdust": fdust})
-        phot_exact = m.predict_photometry({**p, "neb_fdust": fdust})
-        rel_diff = jnp.abs((phot_fast - phot_exact) / jnp.maximum(jnp.abs(phot_exact), 1e-30))
-        measured_worst = jnp.maximum(measured_worst, jnp.max(rel_diff))
-
-    rtol_set = max(5e-3, 2 * float(measured_worst))
-    print(f"test_free_dust_fraction[dusty]: measured worst={measured_worst}, rtol={rtol_set}")
-
-    for fdust in (0.0, 0.1, 0.25, 0.4, 0.5):
-        phot_fast = m_fast.predict_photometry({**p, "neb_fdust": fdust})
-        phot_exact = m.predict_photometry({**p, "neb_fdust": fdust})
-        np.testing.assert_allclose(phot_fast, phot_exact, rtol=rtol_set)
-
-
-def test_a_fixed_escape_fraction_is_applied_at_reconstruction(ssp, data):
+def test_a_fixed_escape_fraction_is_applied_at_reconstruction(ssp):
     m = _model(True, {"fesc": Fixed(0.3), "fdust": Fixed(0.1)})
-    fnu, sigma = data
+    p = _point(m)
+    flux = np.asarray(m.predict_photometry(p))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
+        fast = Fitter(
+            m, data=flux, noise=0.05 * np.abs(flux), data_type="photometry", approx="auto"
+        ).model
 
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
-
-    phot_fast = m_fast.predict_photometry(p)
+    phot_fast = fast.predict_photometry(p)
     phot_exact = m.predict_photometry(p)
-    np.testing.assert_allclose(phot_fast, phot_exact, rtol=5e-3)
+    np.testing.assert_allclose(phot_fast, phot_exact, rtol=_RTOL_PHOT)
 
-
-def test_total_photon_loss_gives_no_nebular_emission(ssp, data):
-    m = _model(False, {"fesc": Uniform(0.0, 1.0)})
-    fnu, sigma = data
+    m_zero = _model(True, {"fesc": Fixed(0.0), "fdust": Fixed(0.0)})
+    p_zero = _point(m_zero)
+    flux_zero = np.asarray(m_zero.predict_photometry(p_zero))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
+        fast_zero = Fitter(
+            m_zero,
+            data=flux_zero,
+            noise=0.05 * np.abs(flux_zero),
+            data_type="photometry",
+            approx="auto",
+        ).model
 
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
+    sensitivity = float(
+        jnp.max(
+            jnp.abs(
+                (fast.predict_photometry(p) - fast_zero.predict_photometry(p_zero))
+                / jnp.maximum(jnp.abs(fast_zero.predict_photometry(p_zero)), 1e-30)
+            )
+        )
+    )
+    assert sensitivity > 10 * _RTOL_PHOT
 
-    phot_fast = m_fast.predict_photometry({**p, "neb_fesc": 1.0})
+
+def test_total_photon_loss_gives_no_nebular_emission(ssp):
+    m, fast, p = _views(False, "fesc", 0.0, 1.0)
+
+    phot_fast = fast.predict_photometry({**p, "neb_fesc": 1.0})
     phot_exact = m.predict_photometry({**p, "neb_fesc": 1.0})
-    np.testing.assert_allclose(phot_fast, phot_exact, rtol=5e-3)
+    np.testing.assert_allclose(phot_fast, phot_exact, rtol=_RTOL_PHOT)
     assert jnp.all(jnp.isfinite(phot_fast))
 
     def loss_fast(q):
-        return jnp.sum(m_fast.predict_photometry(q))
+        return jnp.sum(fast.predict_photometry(q))
 
     grad_fast = jax.grad(loss_fast)
     grad_at_one = grad_fast({**p, "neb_fesc": 1.0})
-    assert jnp.all(jnp.isfinite(jax.tree_util.tree_leaves(grad_at_one)))
+    assert all(
+        bool(jnp.all(jnp.isfinite(leaf))) for leaf in jax.tree_util.tree_leaves(grad_at_one)
+    )
 
     grad_at_half = grad_fast({**p, "neb_fesc": 0.5})
-    assert jnp.all(jnp.isfinite(jax.tree_util.tree_leaves(grad_at_half)))
+    assert all(
+        bool(jnp.all(jnp.isfinite(leaf))) for leaf in jax.tree_util.tree_leaves(grad_at_half)
+    )
 
 
-def test_the_gradient_with_respect_to_the_escape_fraction_matches(ssp, data):
-    m = _model(True, {"fesc": Uniform(0.0, 0.8)})
-    fnu, sigma = data
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
-
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
+def test_the_gradient_with_respect_to_the_escape_fraction_matches(ssp):
+    m, fast, p = _views(True, "fesc", 0.0, 0.8)
 
     def loss_fast(q):
-        return jnp.sum(m_fast.predict_photometry(q))
+        return jnp.sum(fast.predict_photometry(q))
 
     def loss_exact(q):
         return jnp.sum(m.predict_photometry(q))
@@ -320,70 +304,107 @@ def test_the_gradient_with_respect_to_the_escape_fraction_matches(ssp, data):
 
     assert float(g_fesc_fast) != 0.0
     assert float(g_fesc_exact) != 0.0
-    np.testing.assert_allclose(g_fesc_fast, g_fesc_exact, rtol=2e-2)
+    np.testing.assert_allclose(g_fesc_fast, g_fesc_exact, rtol=_RTOL_GRAD)
 
 
-def test_line_fluxes_follow_the_escape_fraction(ssp, data):
-    m = _model(True, {"fesc": Uniform(0.0, 0.8)})
-    fnu, sigma = data
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        flux = fnu
-        m_fast = Fitter(m, data=flux, noise=sigma, data_type="photometry", approx="auto").model
+def test_line_fluxes_follow_the_escape_fraction(ssp):
+    m, fast, p = _views(True, "fesc", 0.0, 0.8)
 
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["sfh_dpl_age_gyr"] = 0.1
-    for tau in [1.0]:
-        for dust_param in ["tau_bc", "tau_diff"]:
-            if dust_param in p:
-                p[dust_param] = tau
+    m_lines = m.with_approx((WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67])))
+    fast_lines = fast.with_approx((WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67])))
 
     target_wavelengths = jnp.asarray([6564.6, 4862.7, 1215.67])
 
+    measured_worst = 0.0
     for neb_fesc in (0.0, 0.6):
-        lines_fast = m_fast.predict_line_fluxes({**p, "neb_fesc": neb_fesc}, target_wavelengths=target_wavelengths)
-        lines_exact = m.predict_line_fluxes({**p, "neb_fesc": neb_fesc}, target_wavelengths=target_wavelengths)
+        lines_fast = fast_lines.predict_line_fluxes(
+            {**p, "neb_fesc": neb_fesc}, target_wavelengths=target_wavelengths
+        )
+        lines_exact = m_lines.predict_line_fluxes(
+            {**p, "neb_fesc": neb_fesc}, target_wavelengths=target_wavelengths
+        )
+        rel_diff = jnp.abs((lines_fast - lines_exact) / jnp.maximum(jnp.abs(lines_exact), 1e-30))
+        measured_worst = jnp.maximum(measured_worst, jnp.max(rel_diff))
 
-        measured_worst = float(jnp.max(jnp.abs((lines_fast - lines_exact) / jnp.maximum(jnp.abs(lines_exact), 1e-30))))
-        rtol_set = max(2e-3, 2 * measured_worst)
-        print(f"test_line_fluxes[fesc={neb_fesc}]: measured worst={measured_worst}, rtol={rtol_set}")
-        np.testing.assert_allclose(lines_fast, lines_exact, rtol=rtol_set)
+    print(
+        f"test_line_fluxes_follow_the_escape_fraction: measured worst={float(measured_worst):.2e}"
+    )
+    np.testing.assert_allclose(lines_fast, lines_exact, rtol=_RTOL_LINES)
+
+    lya_fast_0 = fast_lines.predict_line_fluxes(
+        {**p, "neb_fesc": 0.0}, target_wavelengths=target_wavelengths
+    )[2]
+    lya_fast_6 = fast_lines.predict_line_fluxes(
+        {**p, "neb_fesc": 0.6}, target_wavelengths=target_wavelengths
+    )[2]
+    lya_exact_0 = m_lines.predict_line_fluxes(
+        {**p, "neb_fesc": 0.0}, target_wavelengths=target_wavelengths
+    )[2]
+    lya_exact_6 = m_lines.predict_line_fluxes(
+        {**p, "neb_fesc": 0.6}, target_wavelengths=target_wavelengths
+    )[2]
+
+    assert float(lya_fast_6) < float(lya_fast_0)
+    assert float(lya_exact_6) < float(lya_exact_0)
 
 
-@pytest.mark.parametrize("name", ["neb_fesc_lya", "ionspec_type", "gas_logOH"])
+@pytest.mark.parametrize("name", list(_BAKED.keys()))
 def test_a_baked_free_parameter_is_refused(ssp, name):
-    neb_component = NebularSEDComponent(log_z_abs=0.0)
-    declared_params = {p.name for p in neb_component.declared_parameters()}
+    key, prior = _BAKED[name]
+    m = _model(False, {key: prior})
 
-    if name not in declared_params:
-        pytest.skip(f"parameter {name} not declared")
+    assert grid_baked_free_params(m.spec) == (name,)
+    assert fast_nebular_can_engage(m) is False
 
-    neb_extra_dict = {name.replace("neb_", ""): Uniform(0.0, 1.0)} if name.startswith("neb_") else {}
+    with pytest.raises(ValueError, match=name):
+        m.with_approx((WavePrecomp(), FeaturePrecomp()))
 
-    if not neb_extra_dict and (name.startswith("ionspec_") or name.startswith("gas_")):
-        pytest.skip(f"parameter {name} not handled in neb dict")
-
-    m = _model(True, neb_extra_dict if name.startswith("neb_") else {})
-
-    if not fast_nebular_can_engage(m):
-        assert m._nebular_grid_table is None or not hasattr(m, "_nebular_grid_table")
-        with pytest.raises(ValueError, match="reference value"):
-            m.with_approx((WavePrecomp(), FeaturePrecomp()))
+    with pytest.raises(ValueError, match="reference value"):
+        m.with_approx((WavePrecomp(), FeaturePrecomp()))
 
 
 def test_every_nebular_parameter_has_exactly_one_disposition(ssp):
     from tengri.components.nebular.nebular_grid_precompute import (
         _CANDIDATE_AXES,
-        _RECONSTRUCTION_SCALED,
         _RECONSTRUCTION_MIXED,
+        _RECONSTRUCTION_SCALED,
     )
 
-    neb_component = NebularSEDComponent(log_z_abs=0.0)
-    declared_params = neb_component.declared_parameters()
+    m = _model(False, {})
+    declared_params = set(m.spec.free_params) | set(m.spec.get_fixed_values().keys())
+    nebular_params = sorted(
+        [p for p in declared_params if p.startswith(("neb_", "ionspec_", "gas_"))]
+    )
+    print(f"nebular params: {nebular_params}")
 
-    handled = set(_CANDIDATE_AXES) | set(_RECONSTRUCTION_SCALED) | set(_RECONSTRUCTION_MIXED)
+    assert "neb_fesc" in nebular_params
+    assert "neb_fdust" in nebular_params
+    assert "neb_fesc_lya" in nebular_params
+    assert "neb_logU" in nebular_params
+    assert "neb_dig_frac" in nebular_params
 
-    for param in declared_params:
-        param_name = param.name
-        in_handled = param_name in handled
-        assert in_handled, f"Parameter {param_name} not in any disposition set"
+    for param_name in nebular_params:
+        stand_in = types.SimpleNamespace(free_params=[param_name])
+        count = sum(
+            [
+                param_name in _CANDIDATE_AXES,
+                param_name in _RECONSTRUCTION_SCALED,
+                param_name in _RECONSTRUCTION_MIXED,
+                grid_baked_free_params(stand_in) == (param_name,),
+            ]
+        )
+        assert count == 1, f"Parameter {param_name} has disposition count {count}, expected 1"
+
+    axes_count = sum(1 for p in nebular_params if p in _CANDIDATE_AXES)
+    scaled_count = sum(1 for p in nebular_params if p in _RECONSTRUCTION_SCALED)
+    mixed_count = sum(1 for p in nebular_params if p in _RECONSTRUCTION_MIXED)
+    baked_count = sum(
+        1
+        for p in nebular_params
+        if grid_baked_free_params(types.SimpleNamespace(free_params=[p])) == (p,)
+    )
+
+    assert axes_count > 0
+    assert scaled_count > 0
+    assert mixed_count > 0
+    assert baked_count > 0
