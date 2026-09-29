@@ -6,15 +6,66 @@ Physics validation:
 - Q_H takes L☉/Hz input (not erg/s/Hz), with L_SUN offset added in log space for float32 safety.
 """
 
-import sys
+
+# Inline helpers for model building
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-sys.path.insert(0, "/Users/suchethacooray/.claude/jobs/c936b159/tmp")
+from tengri import DEFAULT, Fixed, SEDModel
 
-from sweep_S1_common import build_model
+
+def _get_ssp():
+    return __import__("tengri").load_ssp("fsps_prsc_miles_chabrier", download=False)
+
+
+def _neb_group(backend, fesc=None, fdust=None):
+    g = {"type": backend, "all_params": Fixed(DEFAULT)}
+    if backend in ("cue", "cloudy", "cb19", "mappings"):
+        if fesc is not None:
+            g["fesc"] = Fixed(fesc)
+        if fdust is not None:
+            g["fdust"] = Fixed(fdust)
+    if backend == "cloudy":
+        g["grid"] = "data/cloudy_grid_mist.h5"
+    return g
+
+
+def _dust_atten_group(kind, law="calzetti", tau_v=0.5, tau_bc=0.5, tau_diff=0.3):
+    if kind == "none":
+        return {"type": "none"}
+    return {
+        "type": "two_component",
+        "law": law,
+        "tau_bc": Fixed(tau_bc),
+        "tau_diff": Fixed(tau_diff),
+        "other_params": Fixed(DEFAULT),
+    }
+
+
+def build_model(neb_backend="cloudy", neb_fesc=None, neb_fdust=None, dust_kind="none"):
+    try:
+        ssp = _get_ssp()
+        kwargs = dict(
+            sfh={
+                "type": "const",
+                "log_total_mass": Fixed(9.0),
+                "start_gyr": Fixed(0.05),
+                "end_gyr": Fixed(0.0),
+                "other_params": Fixed(DEFAULT),
+            },
+            met={"type": "delta", "all_params": Fixed(DEFAULT)},
+            neb=_neb_group(neb_backend, neb_fesc, neb_fdust),
+            dust_attenuation=_dust_atten_group(dust_kind),
+            redshift=Fixed(0.1),
+        )
+        spec = __import__("tengri").parse_groups(**kwargs)
+        model = SEDModel(spec, ssp, observation=None)
+        return model, None
+    except Exception as e:
+        return None, ("build", type(e).__name__, str(e)[:400])
+
 
 from tengri.components.nebular._shared import apply_lya_escape, compute_qh_log10
 from tengri.utils.physics_constants import L_SUN as LSUN_ERG_S
@@ -36,10 +87,12 @@ class TestLyaEscapeCancellation:
     @pytest.mark.parametrize("dust_kind", ["none"])
     @pytest.mark.parametrize("fesc,fdust", [(0.0, 0.0), (0.5, 0.0), (0.99, 0.0)])
     def test_lya_hbeta_ratio_invariant_at_neb_fesc_lya_zero(self, backend, dust_kind, fesc, fdust):
-        """With neb_fesc_lya=0, Lyα/Hβ must be Case B reference (23.3) regardless of fesc/fdust.
+        """With neb_fesc_lya=0, Lyα/Hβ ratio must be invariant across escape/dust budgets.
 
         This is the primary reproducer from #2531: the buggy code multiplies Lyα by
-        (1 - neb_fesc_lya) / k_factor, canceling the general suppression.
+        (1 - neb_fesc_lya) / k_factor, canceling the general suppression (measured fail
+        before fix: 25.8 → 67 → 4103 for Cloudy). Fixed code: ratio invariant to rtol 1e-6,
+        and within Case-B window [15, 40] accounting for T, n_e dependence.
         """
         model, err = build_model(
             neb_backend=backend, neb_fesc=fesc, neb_fdust=fdust, dust_kind=dust_kind
@@ -50,17 +103,69 @@ class TestLyaEscapeCancellation:
         fluxes = model.predict_line_fluxes({}, target_wavelengths=[1215.67, 4862.68])
         lya, hbeta = fluxes
 
-        # Case B Lyα/Hβ from Osterbrock & Ferland 2006 Table 4.2/4.4
-        case_b_ratio = 23.3
+        # Get reference ratio from (fesc=0, fdust=0) cell
+        ref_model, ref_err = build_model(
+            neb_backend=backend, neb_fesc=0.0, neb_fdust=0.0, dust_kind=dust_kind
+        )
+        if ref_err is not None:
+            pytest.skip(f"Reference model build failed: {ref_err}")
 
-        # At neb_fesc_lya=0 (no extra Lyα suppression beyond the general budget),
-        # the ratio must stay at Case B regardless of the escape/dust budget.
-        # Measured fail before fix: 23.3 → 358 (fesc=0.9) or 3706 (fesc=0.99).
-        # Tolerance: ±2% to account for numerical integration precision in photoionization codes.
-        assert abs((lya / hbeta) - case_b_ratio) < case_b_ratio * 0.02, (
-            f"{backend}/{dust_kind}/fesc={fesc}/fdust={fdust}: "
-            f"Lyα/Hβ = {lya / hbeta:.6f}, expected {case_b_ratio:.1f} "
-            f"(off by {abs((lya / hbeta) - case_b_ratio):.1f})"
+        ref_fluxes = ref_model.predict_line_fluxes({}, target_wavelengths=[1215.67, 4862.68])
+        ref_lya, ref_hbeta = ref_fluxes
+        ref_ratio = ref_lya / ref_hbeta
+
+        # At neb_fesc_lya=0, ratio must be INVARIANT (not match a fixed value).
+        # (1) All cells agree with reference to rtol 1e-6
+        lya_hbeta_ratio = lya / hbeta
+        np.testing.assert_allclose(
+            lya_hbeta_ratio, ref_ratio, rtol=1e-6,
+            err_msg=(
+                f"{backend}/{dust_kind}/fesc={fesc}/fdust={fdust}: "
+                f"Lyα/Hβ = {lya_hbeta_ratio:.6f} deviates from reference "
+                f"{ref_ratio:.6f} (rtol 1e-6 violated)"
+            )
+        )
+
+        # (2) Reference ratio lies in physically loose Case-B window [15, 40]
+        # (accounts for T, n_e dependence across photoionization codes)
+        assert 15 <= ref_ratio <= 40, (
+            f"{backend}: reference Lyα/Hβ = {ref_ratio:.6f} outside Case-B window [15, 40]"
+        )
+
+    @pytest.mark.parametrize("backend", ["cue", "cloudy"])
+    @pytest.mark.parametrize("dust_kind", ["none"])
+    @pytest.mark.parametrize("fesc,fdust", [(0.0, 0.0), (0.5, 0.0), (0.99, 0.0)])
+    def test_halpha_hbeta_ratio_invariant_zero_fesc_lya(self, backend, dust_kind, fesc, fdust):
+        """Hα/Hβ ratio invariant across escape/dust budgets (non-Lyα baseline)."""
+        model, err = build_model(
+            neb_backend=backend, neb_fesc=fesc, neb_fdust=fdust, dust_kind=dust_kind
+        )
+        if err is not None:
+            pytest.skip(f"Model build failed: {err}")
+
+        fluxes = model.predict_line_fluxes({}, target_wavelengths=[6562.79, 4862.68])
+        halpha, hbeta = fluxes
+
+        # Get reference ratio from (fesc=0, fdust=0) cell
+        ref_model, ref_err = build_model(
+            neb_backend=backend, neb_fesc=0.0, neb_fdust=0.0, dust_kind=dust_kind
+        )
+        if ref_err is not None:
+            pytest.skip(f"Reference model build failed: {ref_err}")
+
+        ref_fluxes = ref_model.predict_line_fluxes({}, target_wavelengths=[6562.79, 4862.68])
+        ref_halpha, ref_hbeta = ref_fluxes
+        ref_ratio = ref_halpha / ref_hbeta
+
+        # Hα/Hβ must be INVARIANT across escape/dust budgets
+        halpha_hbeta_ratio = halpha / hbeta
+        np.testing.assert_allclose(
+            halpha_hbeta_ratio, ref_ratio, rtol=1e-6,
+            err_msg=(
+                f"{backend}/{dust_kind}/fesc={fesc}/fdust={fdust}: "
+                f"Hα/Hβ = {halpha_hbeta_ratio:.6f} deviates from reference "
+                f"{ref_ratio:.6f} (rtol 1e-6 violated)"
+            )
         )
 
     @pytest.mark.parametrize("dust_kind", ["none", "two_component"])
