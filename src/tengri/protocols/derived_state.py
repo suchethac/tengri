@@ -270,6 +270,11 @@ class DerivedState:
     #: eta == 1 and no override is declared.
     log_L_absorbed: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
+    #: Full-grid diffuse dust transmission (dimensionless): T(λ) on the full
+    #: state.wave grid, evaluated by the dust attenuator. Published by all
+    #: dust-attenuation models for use by dust-emission components when
+    #: diffuse_screen=True.
+    dust_diff_transmission: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
     #: Bolometric IR luminosity from dust emission component [erg/s].
