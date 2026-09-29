@@ -1195,6 +1195,10 @@ class Parameters:
         # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
         # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
         self.dust_eb_include_lyc = bool(kwargs.pop("dust_eb_include_lyc", False))
+        # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
+        # emission (#2533). When True, emitted photons pass through the diffuse
+        # dust screen once (no iteration). Default False (off, bit-identical).
+        self.dust_ir_diffuse_screen = bool(kwargs.pop("dust_ir_diffuse_screen", False))
 
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
@@ -2528,6 +2532,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dl07_grid_path": content("DL07 grid path determines available parameters"),
     "dust_approx": content("dust approximation type determines parameters"),
     "dust_eb_include_lyc": content("dust LyC treatment determines parameters"),
+    "dust_ir_diffuse_screen": content("opt-in diffuse-screen attenuation of IR emission (#2533)"),
     "dust_emission": content("dust emission model selection determines parameters"),
     "dust_law_bc": content("birth cloud dust law determines parameters"),
     "dust_law_diff": content("diffuse dust law determines parameters"),
