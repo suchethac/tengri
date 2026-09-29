@@ -6,6 +6,19 @@
 
 ### Fixed
 
+- Every SFH family's star-formation support is now bounded to `[0, age(z)]`
+  by construction: the 21 onset/age/peak-time `ParamDeclaration`s are marked
+  in the registry (`ParamDef.z_capped_onset`) and `_narrow_free_priors_to_z`
+  derives its capped set from that flag instead of a 3-entry hand tuple;
+  formed mass is pinned to `10**log_total_mass` on the CIC age-weight path
+  (`_mass_conserving_total`), which is the closed-form equivalent of masking
+  each shape to `[0, age(z)]` before normalizing; `exp`/`dexp` get a genuine
+  `[0, start]` formation window (`T = start - t_lookback`, matching
+  `declining_exponential`) instead of their previous `[start, inf)`; and
+  `psb_wild2020`'s burst DPL anchors to its own `age` instead of the
+  hardcoded `AGEMAX_YR`. Closes the dpl `tau_gyr` flat-likelihood-direction
+  conditioning problem as a side effect (#2521, #2457).
+
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls

@@ -165,6 +165,16 @@ class ParamDef(NamedTuple):
     -----
     **JIT-compatible**: no; Python dataclass for registry initialization.
 
+    z_capped_onset : bool, optional
+        Marks this parameter as a star-formation onset/age/peak-time lookback
+        time: its :attr:`free_prior` ceiling is only ever correct at z=0, and
+        ``parameters/groups.py``'s ``_narrow_free_priors_to_z`` caps it at
+        ``age_at_z(z_floor)`` at parse time for whatever build declares it.
+        Derived, not hand-listed (#2521): that function iterates every
+        ``ParamDef`` across :data:`SFH_REGISTRY` with this flag set, so a new
+        SFH family cannot reintroduce the gap by omission the way the old
+        3-entry ``_Z_CAPPED_ONSET_PARAMS`` tuple did (18 of 21 such params
+        were missing from it). Default ``False``.
     """
 
     description: str
@@ -172,6 +182,7 @@ class ParamDef(NamedTuple):
     bound_error: str
     default: Distribution
     free_prior: Distribution | None = None
+    z_capped_onset: bool = False
 
 
 class SFHModelSpec(NamedTuple):
@@ -311,6 +322,7 @@ _tsnorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_tsnorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -358,6 +370,7 @@ _snorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_snorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -397,6 +410,7 @@ _snorm_burst_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_snorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -486,6 +500,7 @@ _tsnorm_burst_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_tsnorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -564,6 +579,7 @@ _norm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_norm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -611,6 +627,7 @@ _lnorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+            z_capped_onset=True,
         ),
     },
     settings={},
@@ -656,6 +673,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                z_capped_onset=True,
             ),
             "sfh_dpl_log_total_mass": ParamDef(
                 "log10 total stellar mass formed [Msun]",
@@ -716,6 +734,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                z_capped_onset=True,
             ),
             "sfh_dpl_lookback_end_gyr": ParamDef(
                 "Younger truncation lookback time (Gyr) "
@@ -793,6 +812,7 @@ _register(
                 # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
                 # above.
                 Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                z_capped_onset=True,
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
@@ -872,6 +892,7 @@ _register(
                 "must have lo >= 0",
                 Fixed(0.0),
                 Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -912,6 +933,7 @@ _register(
                 "must have lo >= 0",
                 Fixed(0.0),
                 Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -966,6 +988,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1015,6 +1038,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_trunc_exp_end_gyr": ParamDef(
                 "Lookback time at which SF ceases (Gyr) (0 = still forming stars)",
@@ -1067,6 +1091,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1110,6 +1135,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1161,6 +1187,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_sfh2exp_burst_age_gyr": ParamDef(
                 "Lookback time of burst onset (Gyr)",
@@ -1207,6 +1234,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_delayed_bq_age_bq_gyr": ParamDef(
                 "Lookback time of burst/quench onset (Gyr)",
@@ -1276,6 +1304,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1340,6 +1369,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_psb_tau_gyr": ParamDef(
                 "Old-component e-folding timescale (Gyr)",
@@ -1784,6 +1814,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
+                z_capped_onset=True,
             ),
             "sfh_psb2022_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex); large positive = recent burst",
@@ -1878,6 +1909,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
+                z_capped_onset=True,
             ),
             "sfh_psb_flex_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex_0); large positive = recent burst",

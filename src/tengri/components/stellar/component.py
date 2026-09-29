@@ -940,6 +940,65 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), total_mass
 
 
+def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=False):
+    r"""Pin formed stellar mass to ``10**log_total_mass`` on the CIC path (#2521).
+
+    The CIC age weights (:func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`,
+    via :func:`_cic_parcels`) already zero the integrand at lookback ages older
+    than ``age_at_z(z)`` and renormalize the surviving weights to sum to 1 --
+    the star-formation *shape* is already correctly bounded to ``[0, age(z)]``.
+    What those functions measure as ``total_mass`` is the trapezoid integral of
+    that shape restricted to the surviving support, computed AFTER
+    :func:`~tengri.components.stellar.sfh.mean_sfh._renormalize_to_mass`
+    already rescaled the full (unbounded) shape to ``10**log_total_mass`` --
+    so it is strictly less than the declared mass whenever any of the shape
+    fell outside ``[0, age(z)]`` (#683's clamp truncating it away, silently).
+
+    Because :func:`~tengri.components.stellar.sfh.mean_sfh._renormalize_to_mass`
+    applies one *uniform* rescale to the whole shape, masking commutes with
+    it: pinning the returned scale to the declared ``10**log_total_mass`` here
+    is the exact closed-form equivalent of masking the shape to
+    ``[0, age(z)]`` *before* that first normalization and renormalizing within
+    that support, which is the physical statement #2521 asks for. Derivation::
+
+        SFR_before(t)     = shape(t) * 10**log_total_mass / integral_full(shape)
+        C                 = 10**log_total_mass / integral_[0,age(z)](SFR_before)
+        SFR_before(t) * C = shape(t) * 10**log_total_mass / integral_[0,age(z)](shape)
+
+    which is exactly ``shape`` renormalized over the restricted support.
+
+    Parameters
+    ----------
+    sfh_kwargs : dict
+        Internal SFH kwargs built by :meth:`StellarSEDComponent.apply` /
+        :meth:`StellarSEDComponent.compute_joint_weights`.
+    measured_total_mass : ndarray, shape ()
+        The truncated mass :func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`
+        measured [Msun].
+    is_composite : bool, optional
+        A composite (list) ``sfh_model`` sums multiple additive members under
+        one flat ``sfh_kwargs["log_total_mass"]`` key that cannot be
+        disentangled here, so the measured value is returned unchanged.
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``10**sfh_kwargs["log_total_mass"]`` when this (non-composite) family
+        declares that parameter, else ``measured_total_mass`` unchanged --
+        e.g. ``sfh_model='table'`` has no ``log_total_mass`` at all: its
+        formed mass is legitimately whatever the table integrates to.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes; a plain ``jnp.where``-free branch on a
+    Python-static condition (``is_composite`` and dict-key membership are
+    both resolved at trace time, never on a traced value).
+    """
+    if is_composite or "log_total_mass" not in sfh_kwargs:
+        return measured_total_mass
+    return 10.0 ** jnp.asarray(sfh_kwargs["log_total_mass"])
+
+
 def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     """Shared parcel machinery for the CIC weight builders (#964).
 
@@ -2761,6 +2820,9 @@ class StellarSEDComponent:
                 age_w_cic, total_mass = _age_weights_cic(
                     _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
                 )
+                total_mass = _mass_conserving_total(
+                    sfh_kwargs, total_mass, is_composite=is_composite
+                )
                 lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
                 joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
                 _used_cic = True
@@ -2807,6 +2869,9 @@ class StellarSEDComponent:
                     lgmet_on_ssp_ages,
                     lgmet_scatter,
                     ssp.ssp_lgmet,
+                )
+                total_mass = _mass_conserving_total(
+                    sfh_kwargs, total_mass, is_composite=is_composite
                 )
                 _used_cic = True
             else:
@@ -3644,20 +3709,20 @@ class StellarSEDComponent:
         # spreads each mass parcel over the metallicity axis with the MDF
         # centered on that parcel's own Z. It normalizes internally.
         if lgmet_on_ssp_ages is not None:
-            return (
-                *_joint_weights_cic_met_table(
-                    _fine_age_yr,
-                    _fine_sfr,
-                    ssp_ages_yr,
-                    t_obs_gyr,
-                    lgmet_on_ssp_ages,
-                    lgmet_scatter,
-                    ssp.ssp_lgmet,
-                ),
+            joint_weights, total_mass = _joint_weights_cic_met_table(
+                _fine_age_yr,
+                _fine_sfr,
                 ssp_ages_yr,
+                t_obs_gyr,
+                lgmet_on_ssp_ages,
+                lgmet_scatter,
+                ssp.ssp_lgmet,
             )
+            total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
+            return joint_weights, total_mass, ssp_ages_yr
 
         age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
+        total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
         lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
         joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
         joint_weights = joint_weights / jnp.maximum(

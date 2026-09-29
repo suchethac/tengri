@@ -924,10 +924,14 @@ def exponential(
     tau: float,
     start: float = 0.0,
 ) -> jnp.ndarray:
-    """Declining exponential SFH (in lookback time, from ``start`` outward).
+    """Declining exponential SFH: forms stars in ``[0, start]``, from ``start`` outward.
 
-    Shape is ``exp(-(t - start) / tau)`` for ``t >= start``, zero otherwise.
-    Rescaled so the integrated mass equals ``10**log_total_mass``.
+    ``start`` is the lookback time of SF onset (galaxy formation): shape is
+    ``exp(-(start - t) / tau)`` for ``0 <= t <= start``, zero outside --
+    maximal at formation (``t = start``), declining toward the present, the
+    same ``T = age - t_lookback`` convention as :func:`declining_exponential`
+    with ``start`` playing the role ``age`` does there. Rescaled so the
+    integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
@@ -938,7 +942,8 @@ def exponential(
     tau : float
         e-folding timescale [yr].
     start : float
-        Start lookback time [yr]. Default 0 (present).
+        Lookback time of SF onset (galaxy formation) [yr]. Default 0
+        (formed at the present, degenerate).
 
     Returns
     -------
@@ -949,20 +954,28 @@ def exponential(
     -----
     **JIT-compatible**: yes, uses ``jnp`` primitives for exponential and masking.
 
+    Before this, the window was ``[start, inf)`` -- mass sat at lookback
+    ``>= start``, unbounded toward the oldest SSP template age, with zero SFR
+    between ``start`` and the present: the mirror image of this docstring's
+    own "declining exponential from start" and of the verified-correct
+    :func:`declining_exponential` (#2521, sweep_S3_report.md finding F-new-1).
+
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = exponential(t, log_total_mass=10.0, tau=2e9, start=1e8)
+    >>> sfr = exponential(t, log_total_mass=10.0, tau=2e9, start=5e9)
     >>> sfr.shape
     (64,)
     """
     # Clamped so the exponential is finite where the window is zero, then the
     # cell-averaged window multiplies (#1374; a hard ``dt >= 0`` step left
-    # ``start`` with exactly zero autodiff gradient).
-    dt = jnp.maximum(t_lookback - start, 0.0)
-    shape = jnp.exp(-dt / tau) * window_weight(t_lookback, start, jnp.inf)
+    # ``start`` with exactly zero autodiff gradient). Mirrors
+    # ``declining_exponential``'s ``age - t_lookback`` exactly, with ``start``
+    # in the role ``age`` plays there.
+    dt = jnp.maximum(start - t_lookback, 0.0)
+    shape = jnp.exp(-dt / tau) * window_weight(t_lookback, 0.0, start)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -972,10 +985,15 @@ def delayed_exponential(
     tau: float,
     start: float = 0.0,
 ) -> jnp.ndarray:
-    """Delayed exponential SFH: shape peaks at start + tau.
+    """Delayed exponential SFH: forms stars in ``[0, start]``, peaking cosmic-time tau after formation.
 
-    Shape is ``(dt/tau) * exp(-dt/tau + 1)`` for ``t >= start``. Rescaled
-    so the integrated mass equals ``10**log_total_mass``.
+    ``start`` is the lookback time of SF onset (galaxy formation). In cosmic
+    time since formation ``T = start - t_lookback`` (``0 <= T <= start``, the
+    same convention :func:`sfhdelayed` uses with ``start`` playing the role
+    ``age`` does there), shape is ``(T/tau) * exp(-T/tau + 1)``: rises from 0
+    at formation, peaks at cosmic time ``T = tau`` (lookback ``start - tau``),
+    declines toward the present. Zero outside ``[0, start]``. Rescaled so the
+    integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
@@ -984,9 +1002,11 @@ def delayed_exponential(
     log_total_mass : float
         log10 of total stellar mass formed [Msun].
     tau : float
-        Timescale [yr]. Peak shape value occurs at start + tau.
+        Timescale [yr]. Peak shape value occurs at cosmic time ``tau`` after
+        formation (lookback ``start - tau``).
     start : float
-        Start lookback time [yr]. Default 0 (present).
+        Lookback time of SF onset (galaxy formation) [yr]. Default 0
+        (formed at the present, degenerate).
 
     Returns
     -------
@@ -997,19 +1017,24 @@ def delayed_exponential(
     -----
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
+    Before this, the window was ``[start, inf)`` -- mass sat at lookback
+    ``>= start``, unbounded toward the oldest SSP template age, with zero SFR
+    between ``start`` and the present (#2521, sweep_S3_report.md finding
+    F-new-1; shares the mechanism :func:`exponential` had).
+
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import delayed_exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = delayed_exponential(t, log_total_mass=10.0, tau=2e9, start=1e8)
+    >>> sfr = delayed_exponential(t, log_total_mass=10.0, tau=2e9, start=5e9)
     >>> sfr.shape
     (64,)
     """
-    dt = jnp.maximum(t_lookback - start, 0.0)  # finite outside the window too
+    dt = jnp.maximum(start - t_lookback, 0.0)  # finite outside the window too
     ratio = dt / tau
     raw = ratio * jnp.exp(-ratio + 1.0)
-    shape = jnp.maximum(raw, 0.0) * window_weight(t_lookback, start, jnp.inf)
+    shape = jnp.maximum(raw, 0.0) * window_weight(t_lookback, 0.0, start)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -1486,10 +1511,16 @@ def psb_wild2020(
     t_cosmic_old = jnp.maximum(age - t_lookback, 0.0)
     sfr_exp = jnp.exp(-t_cosmic_old / tau) * window_weight(t_lookback, burstage, age)
 
-    # --- Burst component: DPL in cosmic time, peaks at (age_universe - burstage) ---
-    age_universe = AGEMAX_YR
-    t_cosmic = age_universe - t_lookback
-    tau_burst = age_universe - burstage
+    # --- Burst component: DPL in cosmic time, peaks at (age - burstage) ---
+    # Anchored to the family's own ``age`` [yr] (galaxy age / lookback of
+    # formation), not the hardcoded ``AGEMAX_YR`` (14 Gyr) module constant:
+    # the burst episode is part of THIS galaxy's history, so its cosmic-time
+    # coordinate must track the galaxy's own age (and hence its redshift)
+    # like every other component here does, rather than sit at a fixed
+    # lookback regardless of ``age`` (#2521, sweep_S3_report.md finding
+    # F-new-4).
+    t_cosmic = age - t_lookback
+    tau_burst = age - burstage
     log_ratio = jnp.log(jnp.maximum(t_cosmic, 1.0) / jnp.maximum(tau_burst, 1.0))
     sfr_burst = jnp.exp(-jnp.logaddexp(alpha * log_ratio, -beta * log_ratio))
     sfr_burst = sfr_burst * window_weight(t_lookback, -jnp.inf, burstage)

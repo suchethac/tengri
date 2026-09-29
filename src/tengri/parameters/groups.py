@@ -1714,26 +1714,58 @@ def _narrow_free_priors_to_grid(
             provenance[pname] = provenance[pname] + _GRID_NARROWED_SUFFIX
 
 
-#: SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
-#: correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
-#: each one at ``age_at_z(z)`` when the build's redshift floor is known.
-#: Membership here is purely "this narrows", not "this is freeable" -- that is
-#: the declaration's business (``free_prior`` in the SFH registry, see
-#: ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr`` in
-#: ``components/stellar/sfh/registry.py``). A model that does not declare one
-#: of these (e.g. a ``dpl``-only build) simply never resolves it, and this
-#: tuple has nothing to narrow.
-_Z_CAPPED_ONSET_PARAMS: tuple[str, ...] = (
-    "sfh_exp_start_gyr",
-    "sfh_dexp_start_gyr",
-    "sfh_const_start_gyr",
-)
+@lru_cache(maxsize=8)
+def _z_capped_onset_params(_registry_keys: frozenset[str]) -> tuple[str, ...]:
+    """SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
+    correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
+    each one at ``age_at_z(z)`` when the build's redshift floor is known.
+
+    Derived from :data:`~tengri.components.stellar.sfh.registry.SFH_REGISTRY`
+    (#2521): every ``ParamDef`` across every registered family whose
+    ``z_capped_onset`` flag is set, rather than a hand-written tuple. Before
+    this, a 3-entry tuple (``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` /
+    ``sfh_const_start_gyr``) covered only 3 of the 21 onset/age/peak-time
+    parameters across the registry -- the other 18 kept a static ceiling of
+    today's cosmic age even when the build's redshift prior made that
+    unphysical, so a free or high-z prior could silently place star
+    formation before the Big Bang with no warning (#2521). Deriving the set
+    from the registry means a new SFH family cannot reintroduce the gap by
+    omission.
+
+    Membership here is purely "this narrows", not "this is freeable" -- that
+    is the declaration's own business (``free_prior`` in the SFH registry). A
+    model that does not declare one of these (e.g. a ``dpl_lookback``-only
+    build never resolving ``sfh_dpl_age_gyr``) simply never resolves it, and
+    this set has nothing to narrow.
+
+    Parameters
+    ----------
+    _registry_keys : frozenset of str
+        Snapshot of ``SFH_REGISTRY`` keys. Only a cache key -- passing it
+        makes a plugin registering a new SFH type invalidate the memo rather
+        than being shadowed by a stale one (mirrors :func:`_sfh_type_prefixes`).
+
+    Returns
+    -------
+    tuple of str
+        Every marked public parameter name, deduplicated (aliases such as
+        ``psb_wild2020`` / ``psb`` share one ``SFHModelSpec`` instance).
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    names: dict[str, None] = {}
+    for spec in SFH_REGISTRY.values():
+        for pname, pdef in spec.params.items():
+            if getattr(pdef, "z_capped_onset", False):
+                names[pname] = None
+    return tuple(names)
 
 
 def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None:
     """Cap SF-onset lookback priors at the age of the universe at the source z.
 
-    :data:`_Z_CAPPED_ONSET_PARAMS` each declare a static ``free_prior``
+    :func:`_z_capped_onset_params`'s marked parameters each declare a static
+    ``free_prior``
     ceiling of today's cosmic age (``_AGE_UNIV_GYR``, z=0) -- the widest value
     that is ever correct, since a registry declaration cannot know the source
     redshift a given build will use. This intersects that declared range with
@@ -1798,6 +1830,7 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
     z-narrowed onset parameter free beside a ``redshift_col``; see
     :func:`_z_narrowed_onset_params`.
     """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
     from tengri.parameters.priors import Uniform
     from tengri.utils.cosmology import age_at_z
 
@@ -1818,7 +1851,7 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
         return
     cap = float(age_at_z(float(z_floor)))
 
-    for pname in _Z_CAPPED_ONSET_PARAMS:
+    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
         if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
             continue
         dist = resolved.get(pname)
@@ -1958,7 +1991,7 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
 
 
 def _z_narrowed_onset_params(spec) -> frozenset[str]:
-    """Free :data:`_Z_CAPPED_ONSET_PARAMS` on ``spec`` whose prior was z-narrowed.
+    """Free :func:`_z_capped_onset_params` names on ``spec`` whose prior was z-narrowed.
 
     Parameters
     ----------
@@ -1968,7 +2001,7 @@ def _z_narrowed_onset_params(spec) -> frozenset[str]:
     Returns
     -------
     frozenset of str
-        Names from :data:`_Z_CAPPED_ONSET_PARAMS` that are free on ``spec``
+        Names from :func:`_z_capped_onset_params` that are free on ``spec``
         and whose provenance carries :data:`_Z_NARROWED_SUFFIX` -- i.e.
         ``all_params: FREE`` (or an explicit per-parameter ``FREE``) was
         capped at ``age_at_z`` of the build's own redshift. Empty for a spec
@@ -1983,13 +2016,15 @@ def _z_narrowed_onset_params(spec) -> frozenset[str]:
     Exists so a caller that CAN see a catalog's per-galaxy redshift --
     :class:`~tengri.inference.catalog.Catalog` -- can detect a cap computed
     against a single placeholder redshift without duplicating
-    :data:`_Z_CAPPED_ONSET_PARAMS` or the provenance-suffix convention.
+    :func:`_z_capped_onset_params` or the provenance-suffix convention.
     """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
     provenance = getattr(spec, "_group_provenance", None) or {}
     free = set(getattr(spec, "free_params", ()))
     return frozenset(
         name
-        for name in _Z_CAPPED_ONSET_PARAMS
+        for name in _z_capped_onset_params(frozenset(SFH_REGISTRY))
         if name in free and str(provenance.get(name, "")).endswith(_Z_NARROWED_SUFFIX)
     )
 

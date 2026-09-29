@@ -54,21 +54,27 @@ def _integrate(sfr_fn, t=T_GRID, **kwargs):
 
 
 class TestExponentialSFHMassConservation:
-    """exponential(t, log_total_mass, tau) integrates to 10**log_total_mass."""
+    """exponential(t, log_total_mass, tau, start) integrates to 10**log_total_mass.
+
+    ``start`` is the lookback time of SF onset (galaxy formation): the window
+    is ``[0, start]`` (#2521), so every case here anchors ``start`` at the
+    grid's own maximum age rather than relying on the function's ``start=0``
+    default, which is now a zero-width degenerate window.
+    """
 
     @pytest.mark.parametrize(
         "log_total_mass, tau",
         [(10.0, 1e9), (9.5, 5e9), (11.0, 2e9), (8.5, 3e9)],
     )
     def test_integral_matches_log_total_mass(self, log_total_mass, tau):
-        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
+        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau, start=T_MAX)
         expected = 10.0**log_total_mass
         assert abs(numerical - expected) / expected < 0.01
 
     def test_start_offset_preserves_total_mass(self):
-        """start != 0 just truncates the grid; renormalization still hits target mass."""
-        log_total_mass, tau, start = 10.0, 2e9, 1e9
-        t = np.linspace(start, T_MAX, N_GRID)
+        """A start inside the grid still hits target mass, renormalized over [0, start]."""
+        log_total_mass, tau, start = 10.0, 2e9, 8e9
+        t = np.linspace(T_MIN, T_MAX, N_GRID)
         sfr = np.array(
             exponential(jnp.array(t), log_total_mass=log_total_mass, tau=tau, start=start)
         )
@@ -80,14 +86,22 @@ class TestExponentialSFHMassConservation:
 
 
 class TestDelayedExponentialSFHMassConservation:
-    """delayed_exponential(t, log_total_mass, tau) integrates to 10**log_total_mass."""
+    """delayed_exponential(t, log_total_mass, tau, start) integrates to 10**log_total_mass.
+
+    ``start`` is the lookback time of SF onset (galaxy formation): the window
+    is ``[0, start]`` (#2521), so every case here anchors ``start`` at the
+    grid's own maximum age rather than relying on the function's ``start=0``
+    default, which is now a zero-width degenerate window.
+    """
 
     @pytest.mark.parametrize(
         "log_total_mass, tau",
         [(10.0, 1e9), (9.5, 5e9), (11.0, 3e9)],
     )
     def test_integral_matches_log_total_mass(self, log_total_mass, tau):
-        numerical = _integrate(delayed_exponential, log_total_mass=log_total_mass, tau=tau)
+        numerical = _integrate(
+            delayed_exponential, log_total_mass=log_total_mass, tau=tau, start=T_MAX
+        )
         expected = 10.0**log_total_mass
         assert abs(numerical - expected) / expected < 0.01
 
