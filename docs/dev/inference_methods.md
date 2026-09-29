@@ -1809,9 +1809,10 @@ per-galaxy `Fitter` with no `profile_mass` argument, so `"auto"` applies, and it
 `profile_mass=False` (#2254), because their shared dummy fitter's `.run()` is never called
 and the mass would have stayed at its placeholder for every galaxy.
 
-Since 2026-09-17 the vmapped MCMC engine profiles too. The reinsertion is lifted out of
-`Fitter.run()` and called per galaxy in the posterior-assembly loop, with that galaxy's own
-channels passed through `mass_profile.ObservedChannels` -- necessary because the shared dummy
+The vmapped MCMC engine profiles too. The reinsertion is called per galaxy in the
+posterior-assembly loop via `mass_profile.reinsert_profiled_mass` (the shared body
+`finalize_profile_mass` defers to), with that galaxy's own
+channels passed explicitly -- necessary because the shared dummy
 fitter carries **galaxy 0's** data, and reinserting from it would hand every galaxy galaxy 0's
 mass. `_reinsert_mass_fn` already takes data/noise/presence as *traced* arguments and is
 cached on the model, so all `n_gal` calls reuse one compiled program. The call sits *before*

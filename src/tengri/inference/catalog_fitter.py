@@ -32,7 +32,7 @@ from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
 from tengri.inference.backends.mcmc.catalog import CATALOG_CHEES_ENSEMBLE, DEFAULT_MAP_INIT_STEPS
-from tengri.inference.mass_profile import ObservedChannels, finalize_profile_mass
+from tengri.inference.mass_profile import reinsert_profiled_mass
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
 """Percentile levels used when ``percentiles=`` is not given."""
@@ -2220,21 +2220,30 @@ class _CatalogFitterOriginal:
             # placeholder would propagate into every one of them.
             #
             # The shared dummy fitter carries galaxy 0's data, so the channels
-            # are passed explicitly. ``_reinsert_mass_fn`` takes them as traced
+            # are passed explicitly through ``reinsert_profiled_mass`` (the
+            # shared body ``finalize_profile_mass`` defers to on the
+            # single-galaxy path). ``_reinsert_mass_fn`` takes them as traced
             # arguments and is cached on the model, so all ``n_gal`` calls reuse
             # ONE compiled program rather than compiling per galaxy.
             if getattr(fitter, "_profile_mass", False):
-                post_i = finalize_profile_mass(
+                post_i.diagnostics = {
+                    **post_i.diagnostics,
+                    "profile_mass": fitter._profile_mass_resolved,
+                    "profile_mass_resolved": fitter._profile_mass_resolved,
+                    "profile_mass_reason": fitter._profile_mass_reason,
+                }
+                _presence_i = all_presence_orig[i]
+                _line_obs_i = all_line_flux_orig[i] if per_galaxy_lines else None
+                _line_err_i = all_line_err_orig[i] if per_galaxy_lines else None
+                post_i = reinsert_profiled_mass(
                     fitter,
                     post_i,
+                    data=all_data_orig[i],
+                    noise=all_noise_orig[i],
+                    presence=None if _presence_i is None else jnp.asarray(_presence_i),
+                    line_obs=None if _line_obs_i is None else jnp.asarray(_line_obs_i),
+                    line_err=None if _line_err_i is None else jnp.asarray(_line_err_i),
                     key=jax.random.fold_in(key, i),
-                    observed=ObservedChannels(
-                        data=all_data_orig[i],
-                        noise=all_noise_orig[i],
-                        presence=all_presence_orig[i],
-                        line_obs=all_line_flux_orig[i] if per_galaxy_lines else None,
-                        line_err=all_line_err_orig[i] if per_galaxy_lines else None,
-                    ),
                 )
 
             _attach_summaries(post_i, store, percentiles, reducers, properties)
