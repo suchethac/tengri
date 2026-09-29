@@ -46,7 +46,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
-from tengri.components.nebular.component import _BACKEND_OPTIONAL_PARAMS
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.nebular.nebular_grid_dust_build import (
     _build_dust_channels,
@@ -68,6 +67,42 @@ from tengri.utils.scale import apply_log10_scale, pow10
 #: ``neb_logU`` also joins the axes whenever DIG mixing could be active, even
 #: when it is itself Fixed (#2222): see ``_dig_may_be_active``.
 _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
+
+#: Nebular parameters applied at reconstruction as one scalar on every channel
+#: (``lyc_dust_escape_factor``). The table is built at zero for both.
+_RECONSTRUCTION_SCALED = ("neb_fesc", "neb_fdust")
+#: Nebular parameters applied at reconstruction by mixing two lookups (#2222).
+_RECONSTRUCTION_MIXED = ("neb_dig_frac", "neb_dig_delta_logU")
+#: Prefixes of the parameters the nebular component owns.
+_NEBULAR_PREFIXES = ("neb_", "ionspec_", "gas_")
+
+
+def grid_baked_free_params(spec) -> tuple[str, ...]:
+    """Free nebular parameters the per-Q_H grid holds at their build value.
+
+    A nebular parameter is either a grid axis, applied at reconstruction, or
+    baked into every node. Derived from the parameter namespace, so a
+    parameter the grid does not handle is reported without being listed here.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter specification.
+
+    Returns
+    -------
+    tuple of str
+        Sorted names; empty when the grid represents every free nebular parameter.
+    """
+    handled = set(_CANDIDATE_AXES) | set(_RECONSTRUCTION_SCALED) | set(_RECONSTRUCTION_MIXED)
+    return tuple(
+        sorted(
+            name
+            for name in spec.free_params
+            if name.startswith(_NEBULAR_PREFIXES) and name not in handled
+        )
+    )
+
 
 #: Fallback grid bounds used ONLY when a free axis's prior exposes no finite
 #: support (e.g. an unbounded Gaussian). Kept at least as wide as the standard
@@ -492,13 +527,12 @@ def _refuse_tabulated_metallicity(model):
 
 
 def _refuse_freed_optional_axes(spec):
-    """Refuse optional axes freed but baked into the per-Q_H grid (#2307).
+    """Refuse parameters freed but baked into the per-Q_H grid (#2307).
 
-    Optional parameters (``neb_log_nH``, ``neb_co``, ``neb_dno``,
-    ``neb_hbfrac``) are not grid axes in the per-Q_H table — they are baked
-    in at reference values. A fit that frees one silently samples a parameter
-    the likelihood cannot see: the fast grid holds it at its reference value
-    while the sampler explores it freely. This guard refuses the mismatch.
+    Nebular parameters that are neither grid axes nor applied at reconstruction
+    are baked in at reference values. A fit that frees one silently samples a
+    parameter the likelihood cannot see: the fast grid holds it at its reference
+    value while the sampler explores it freely. This guard refuses the mismatch.
 
     Parameters
     ----------
@@ -508,28 +542,26 @@ def _refuse_freed_optional_axes(spec):
     Raises
     ------
     ValueError
-        When any optional parameter is freed.
+        When any baked parameter is freed.
     """
-    # Optional params that are free in the spec
-    offenders = sorted(name for name in _BACKEND_OPTIONAL_PARAMS if name in spec.free_params)
+    offenders = list(grid_baked_free_params(spec))
     if not offenders:
         return
 
-    # Convert full names to short dict-grammar keys by stripping "neb_" prefix
     short_keys = [name.removeprefix("neb_") for name in offenders]
     detail = ", ".join(offenders)
 
     raise ValueError(
-        f"enable_fast_nebular refuses to proceed with freed optional parameters: "
+        f"enable_fast_nebular refuses to proceed with free parameters the grid bakes in: "
         f"{detail}. The fast grid's axes are {', '.join(_CANDIDATE_AXES)} only; "
-        f"every other backend parameter is baked in at its reference value, so a "
+        f"every other parameter is baked in at its reference value, so a "
         f"freed one is held fixed by the grid while the sampler varies it, and "
         f"the likelihood never sees the freed dimension.\n"
         f"Fix (one of):\n"
         f"  1. Pin the parameters instead: "
-        f"neb={{'type': 'cb19', '{short_keys[0]}': Fixed(value)}}.\n"
+        f"neb={{..., '{short_keys[0]}': Fixed(value)}}.\n"
         f"  2. Do not call enable_fast_nebular; the exact line path takes "
-        f"every backend parameter."
+        f"every parameter."
     )
 
 
@@ -733,6 +765,64 @@ def _preserve_spacing_n(base_n, own_lo, own_hi, ext_lo, ext_hi):
     dx = (own_hi - own_lo) / max(base_n - 1, 1)
     width = ext_hi - ext_lo
     return max(_MIN_N_GRID, math.ceil(width / dx) + 1)
+
+
+def reconstruction_escape_factor(params) -> jnp.ndarray:
+    """``lyc_dust_escape_factor`` at the evaluation's ``neb_fesc`` and ``neb_fdust``.
+
+    This is the single place the grid reads the escape and dust-destruction
+    fractions; every other reference to them in the reconstruction path is
+    through the amplitude scaling.
+
+    Parameters
+    ----------
+    params : Mapping
+        Evaluation parameters; ``neb_fesc`` and ``neb_fdust`` default to 0.
+
+    Returns
+    -------
+    ndarray, shape ()
+        The escape factor [dimensionless].
+    """
+    from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
+
+    return lyc_dust_escape_factor(
+        jnp.asarray(params.get("neb_fesc", 0.0)), jnp.asarray(params.get("neb_fdust", 0.0))
+    )
+
+
+def reconstruction_amplitude_log10(log_nion, params) -> jnp.ndarray:
+    r"""log10 of the amplitude every grid channel is scaled by.
+
+    .. math::
+
+        \log_{10} A = \log_{10} Q_H + \log_{10} k(f_{\rm esc}, f_{\rm dust})
+
+    where :math:`Q_H` is the ionizing photon rate [photon/s] and :math:`k` the
+    escape factor of
+    :func:`~tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor`
+    [dimensionless].
+
+    Parameters
+    ----------
+    log_nion : ndarray, shape ()
+        :math:`\log_{10} Q_H` [dex re photon/s].
+    params : Mapping
+        Evaluation parameters; ``neb_fesc`` and ``neb_fdust`` default to 0.
+
+    Returns
+    -------
+    ndarray, shape ()
+        The amplitude [dex]; ``-inf`` when every ionizing photon is lost.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe: the ``k = 0`` case takes the where-dummy path.
+    """
+    k = reconstruction_escape_factor(params)
+    positive = k > 0
+    log_k = jnp.where(positive, jnp.log10(jnp.where(positive, k, 1.0)), -jnp.inf)
+    return jnp.asarray(log_nion) + log_k
 
 
 def precompute_nebular_grid(
@@ -950,6 +1040,11 @@ def precompute_nebular_grid(
     # build, regardless of the reference model's disposition, so the stored
     # per-Q_H value is always the undiluted HII term.
     ref_params["neb_dig_frac"] = 0.0
+    # The table stores the emission of a nebula that reprocesses every ionizing
+    # photon; the escape and dust-destruction fractions rescale every channel by
+    # one scalar and are applied at reconstruction from the evaluation's values.
+    for _name in _RECONSTRUCTION_SCALED:
+        ref_params[_name] = 0.0
     log10_ref_divisor = _log10_four_pi_dl2(ref_z)  # observed flux -> luminosity
 
     axes, axis_kinds = [], []

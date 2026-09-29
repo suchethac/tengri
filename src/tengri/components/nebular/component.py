@@ -932,9 +932,11 @@ class NebularSEDComponent(TemplateThreading):
                 reconstruct_nebular_restband,
                 reconstruct_nebular_restband_subband,
                 reconstruct_nebular_subband_waves,
+                reconstruction_amplitude_log10,
+                reconstruction_escape_factor,
             )
 
-            log_nion = state.derived["log_nion"]
+            log_nion = reconstruction_amplitude_log10(state.derived["log_nion"], params)
             interp_point = self._grid_interp_point(
                 grid, params, state, neb_logU=common_kwargs["neb_logU"]
             )
@@ -1009,7 +1011,8 @@ class NebularSEDComponent(TemplateThreading):
                 )
                 # Energy balance: linear per unit Q_H, mixed linearly
                 derived_overrides["nebular_eb_absorbed_per_qh_grid_precomp"] = (
-                    mix_dig_grid_reconstruction(
+                    reconstruction_escape_factor(params)
+                    * mix_dig_grid_reconstruction(
                         lambda log_nion_, point, tbl: reconstruct_nebular_eb_absorbed_per_qh(
                             point, tbl
                         ),

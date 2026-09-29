@@ -6539,6 +6539,7 @@ class SEDModel:
                 _dig_may_be_active,
                 _log_nion_of_state,
                 reconstruct_nebular_line_log_lums,
+                reconstruction_amplitude_log10,
             )
 
             # Q_H is ~1e53 photons/s and the table value ~1e-13, so the linear
@@ -6550,6 +6551,7 @@ class SEDModel:
             else:
                 log_nion = self._compute_log_nion(params, fixed_values=fixed_values)
                 log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
+            log_nion = reconstruction_amplitude_log10(log_nion, full_params)
             all_waves = jnp.asarray(grid.wavelengths)
             # Both lookups (HII and DIG) go through the log10 form: the
             # linear sibling ``reconstruct_nebular_line_lums`` is ~1e40
@@ -9548,6 +9550,12 @@ class SEDModel:
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.nebular_grid_precompute import (
+            grid_baked_free_params,
+        )
+
+        if grid_baked_free_params(self.spec):
+            return False
 
         chain = getattr(self, "_cached_component_chain", None)
         if chain is None:
