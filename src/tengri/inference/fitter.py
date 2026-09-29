@@ -813,7 +813,9 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
     return bias
 
 
-def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, *, surface, user_likelihood=False):
+def _warn_if_lut_bias_amplified(
+    exact_model, lut_model, data, noise, data_type, *, surface, user_likelihood=False
+):
     """#1671's measurement made operational: warn when ``bias x SNR`` is material.
 
     The LUT's forward bias is constant in SNR, so no forward check can see
@@ -873,7 +875,9 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
                 # Determine photometry/spectroscopy split
                 try:
                     params = _central_params(exact_model.spec)
-                    n_phot = len(np.asarray(lut_model.predict_photometry(params), dtype=float).reshape(-1))
+                    n_phot = len(
+                        np.asarray(lut_model.predict_photometry(params), dtype=float).reshape(-1)
+                    )
                     if channel_idx < n_phot:
                         return f"photometry band {channel_idx}"
                     else:
@@ -889,6 +893,7 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
                 return
             channel_str = _format_channel_name(max_bias_idx, data_type)
             from tengri.config.exceptions import PrecompBiasWarning, warn_measured
+
             warn_measured(
                 f"{surface}: the precompute LUT's forward bias reaches {max_bias:.2%} "
                 f"({channel_str}). This bias is constant in SNR but its posterior "
@@ -914,6 +919,7 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
                 return
             channel_str = _format_channel_name(channel, data_type)
             from tengri.config.exceptions import PrecompBiasWarning, warn_measured
+
             warn_measured(
                 f"{surface}: the precompute LUT's forward bias, amplified by this "
                 f"fit's SNR, gives an estimated relative posterior-gradient error "

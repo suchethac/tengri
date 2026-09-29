@@ -227,9 +227,7 @@ def test_joint_fit_with_biased_spectrum_warns_per_channel():
     noise = np.abs(data) / 100.0  # SNR 100 everywhere
 
     with pytest.warns(PrecompBiasWarning) as rec:
-        _warn_if_lut_bias_amplified(
-            exact, lut, data, noise, "joint", surface="Fitter"
-        )
+        _warn_if_lut_bias_amplified(exact, lut, data, noise, "joint", surface="Fitter")
     msg = str(rec[0].message)
     assert "spectrum pixel" in msg, "worst channel should be named as spectrum pixel"
     assert "#1671" in msg
@@ -242,9 +240,7 @@ def test_joint_fit_with_biased_photometry_warns_per_channel():
     noise = np.abs(data) / 100.0  # SNR 100 everywhere
 
     with pytest.warns(PrecompBiasWarning) as rec:
-        _warn_if_lut_bias_amplified(
-            exact, lut, data, noise, "joint", surface="Fitter"
-        )
+        _warn_if_lut_bias_amplified(exact, lut, data, noise, "joint", surface="Fitter")
     msg = str(rec[0].message)
     assert "photometry band" in msg, "worst channel should be named as photometry band"
 
@@ -257,9 +253,7 @@ def test_joint_low_snr_stays_silent():
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", PrecompBiasWarning)
-        _warn_if_lut_bias_amplified(
-            exact, lut, data, noise, "joint", surface="Fitter"
-        )
+        _warn_if_lut_bias_amplified(exact, lut, data, noise, "joint", surface="Fitter")
 
 
 def test_cache_distinguishes_data_type():
