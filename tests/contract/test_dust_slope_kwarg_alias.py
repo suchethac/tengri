@@ -68,7 +68,7 @@ def test_both_keywords_raise():
 
 
 def test_registry_reports_only_the_new_name():
-    """Registry law_kwarg_names reports dust_slope for power_law, dust_bump_strength for conroy2010.
+    """Registry law_kwarg_names reports correct names per law.
 
     power_law keeps dust_slope; conroy2010 (#2522) replaced it with dust_bump_strength.
     """
@@ -96,14 +96,18 @@ def test_resolver_dicts_stay_strict_after_the_swap():
     )
 
     # Test power_law (still uses dust_slope)
-    narrowed = select_law_kwargs("power_law", {"n_slope": -0.9, "dust_slope": -0.9, "dust_Rv": 3.1})
+    narrowed = select_law_kwargs(
+        "power_law", {"n_slope": -0.9, "dust_slope": -0.9, "dust_Rv": 3.1}
+    )
     assert "n_slope" not in narrowed
     assert narrowed["dust_slope"] == -0.9
     with pytest.raises(ValueError, match="n_slope"):
         reject_unread_law_kwargs({"n_slope": -0.9}, ("power_law",), context="test")
 
     # Test conroy2010 (uses dust_bump_strength, not dust_slope)
-    narrowed = select_law_kwargs("conroy2010", {"dust_slope": 1.0, "dust_bump_strength": 0.8, "dust_Rv": 3.1})
+    narrowed = select_law_kwargs(
+        "conroy2010", {"dust_slope": 1.0, "dust_bump_strength": 0.8, "dust_Rv": 3.1}
+    )
     assert "dust_slope" not in narrowed  # conroy2010 doesn't read dust_slope anymore
     assert narrowed["dust_bump_strength"] == 0.8
     with pytest.raises(ValueError, match="dust_slope"):
