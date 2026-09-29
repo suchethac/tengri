@@ -1,13 +1,21 @@
 """Run 20×6 grid of NUTS fits: 20 galaxies × 6 SED configurations.
 
-CLI: python run_candels_fits.py [--only-missing] [--jobs N]
+CLI: python run_candels_fits.py [--only-missing] [--jobs N] [--profile-mass {auto,on,off}]
+     [--retune-attempts N]
 
 ``--only-missing`` is the second pass: it skips a cell whose JSON already records
 ``adoption_pass: true`` and reuses that JSON for the summary. Without it every cell
 runs, as before.
 
-``--jobs`` sets the maximum number of concurrent fit_one subprocesses (default 3).
+``--jobs`` sets the maximum number of concurrent fit_one subprocesses
+(default: max(1, cpu_count // 4), which is ~4.5 cores per cell measured 2026-09-14).
 Stagger launches with ~20s delay to avoid compile-phase collisions.
+
+``--profile-mass {auto,on,off}`` is passed through to every fit_one cell.
+Default: auto (the library's own default for intelligent margin selection).
+
+``--retune-attempts`` is passed through to every fit_one cell.
+Default: 2 (the two-rung ladder: 0.85, then 0.95).
 
 Logs output to results/fits/<ID>_<config>.log.
 Aggregates diagnostics into results/fit_summary.json.
@@ -106,6 +114,16 @@ def get_config_dimensions() -> dict[str, int]:
 
 
 CONFIG_DIMENSIONS = get_config_dimensions()
+
+
+def default_jobs() -> int:
+    """Default number of concurrent fit_one cells.
+
+    One cell uses ~4.5 of 14 cores at steady state (measured 2026-09-14),
+    so max(1, cpu_count // 4) avoids oversubscription on the box.
+    """
+    return max(1, (os.cpu_count() or 4) // 4)
+
 
 #: Per-cell subprocess timeout. 600 s killed the first retune of the grid (#2089).
 #: Measured 2026-08-30, the simplest cell (configuration I, 5 free parameters) needs
@@ -296,11 +314,12 @@ def run_fit_subprocess(
 def run_fit_cells_concurrent(
     cells: list[tuple[int, str]],
     results_dir: Path,
-    max_jobs: int = 3,
+    max_jobs: int | None = None,
     only_missing: bool = False,
     stagger_seconds: float = 20.0,
     cell_command: list[str] | None = None,
-    profile_mass: bool = False,
+    profile_mass: str = "auto",
+    retune_attempts: int | None = None,
 ) -> tuple[list[dict], list[tuple[int, str]], list[tuple[int, str]]]:
     """Run fit cells concurrently with at most max_jobs subprocesses alive at once.
 
@@ -334,7 +353,7 @@ def run_fit_cells_concurrent(
             return [c.format(gal_id=gal_id, config_key=config_key) for c in cell_command]
         else:
             # Default: use fit_one
-            return [
+            cmd = [
                 sys.executable,
                 "-m",
                 "analysis.paper1.fit_one",
@@ -348,8 +367,12 @@ def run_fit_cells_concurrent(
                 str(results_dir),
                 "--seed",
                 str(42),
-                *(["--profile-mass"] if profile_mass else []),
+                "--profile-mass",
+                profile_mass,
             ]
+            if retune_attempts is not None:
+                cmd.extend(["--retune-attempts", str(retune_attempts)])
+            return cmd
 
     # Track running subprocesses: list of (gal_id, config_key, Popen, start_time)
     running = []
@@ -637,16 +660,23 @@ def print_summary_table(summary_data: list[dict]) -> None:
     print("=" * 140)
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse the driver's command line.
+class ValidateJobsAction(argparse.Action):
+    """Custom action to validate --jobs does not exceed cpu_count // 2."""
 
-    ``--only-missing`` is opt-in: without it the driver runs every cell, exactly
-    as it always has.
+    def __call__(self, parser, namespace, values, option_string=None):
+        if values > max(1, (os.cpu_count() or 4) // 2):
+            parser.error(
+                f"--jobs {values} exceeds max(1, cpu_count // 2) = "
+                f"{max(1, (os.cpu_count() or 4) // 2)}"
+            )
+        setattr(namespace, self.dest, values)
 
-    ``--summary-only`` rebuilds fit_summary.json from the cell JSONs on disk
-    without running any fits.
 
-    ``--jobs`` sets the maximum number of concurrent cell subprocesses (default 3).
+def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for run_candels_fits.py.
+
+    Returns:
+        ArgumentParser configured with all run_candels_fits CLI arguments.
     """
     parser = argparse.ArgumentParser(description="Run the 20x6 grid of CANDELS NUTS fits")
     parser.add_argument(
@@ -665,20 +695,46 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--jobs",
         type=int,
-        default=3,
-        help="Maximum number of concurrent fit_one subprocesses (default 3)",
+        action=ValidateJobsAction,
+        default=default_jobs(),
+        help=f"Maximum number of concurrent fit_one subprocesses (default: {default_jobs()}, "
+        "cpu_count // 4; one cell uses ~4.5 cores at steady state)",
     )
+
     parser.add_argument(
         "--profile-mass",
-        action="store_true",
+        type=str,
+        default="auto",
+        choices=("auto", "on", "off"),
         help=(
-            "Pass --profile-mass to every fit_one cell: the stellar mass amplitude is "
-            "marginalized analytically (exact for a Gaussian likelihood) instead of "
-            "sampled. Rows whose photometry is not linear in the mass (VI, whose AGN "
-            "components carry their own luminosity) refuse it loudly and fail their "
-            "cell; run those rows without the flag. Recorded per attempt in the JSON."
+            "Profile mass marginalization passed to every fit_one cell: auto (analytic when "
+            "guards pass, else sample), on (force analytic, raise if guards refuse), "
+            "off (sample always). Default: auto"
         ),
     )
+    parser.add_argument(
+        "--retune-attempts",
+        type=int,
+        default=None,  # Will use fit_one's default if not specified
+        help="Retune attempts passed to every fit_one cell (default: fit_one default)",
+    )
+
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse the driver's command line.
+
+    ``--only-missing`` is opt-in: without it the driver runs every cell, exactly
+    as it always has.
+
+    ``--summary-only`` rebuilds fit_summary.json from the cell JSONs on disk
+    without running any fits.
+
+    ``--jobs`` sets the maximum number of concurrent cell subprocesses
+    (default: max(1, cpu_count // 4)).
+    """
+    parser = build_parser()
     parser.add_argument(
         "--configs",
         type=str,
