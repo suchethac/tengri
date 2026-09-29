@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Student-t noise Hamiltonian now includes the dof-dependent normalisation, so a free `noise_dof` is sampled under a correctly normalised density (#2525).
+
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls
