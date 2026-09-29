@@ -9773,6 +9773,18 @@ class SEDModel:
                 self._dust_band_response_cache = None
                 return None
 
+            # Decline band response when diffuse screen is active: the emission
+            # passes through the dust screen, so the effective response depends
+            # on the diffuse dust transmission T(λ), which varies with wavelength
+            # and cannot be factored into a constant per-filter response.
+            if self._dust_ir_diffuse_screen:
+                self._dust_band_response_decline = (
+                    "the IR emission passes through the diffuse screen "
+                    "(dust_emission diffuse_screen=True), so its band response depends on tau"
+                )
+                self._dust_band_response_cache = None
+                return None
+
             response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
 
         self._dust_band_response_decline = None
