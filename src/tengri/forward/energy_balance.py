@@ -282,9 +282,7 @@ def bolometric_absorbed_log10(
     return log_magnitude, jnp.where(corrupt, jnp.nan, sign)
 
 
-def log10_fdust_lyc_credit(
-    log_l_lyc: jnp.ndarray, neb_fdust: jnp.ndarray
-) -> jnp.ndarray:
+def log10_fdust_lyc_credit(log_l_lyc: jnp.ndarray, neb_fdust: jnp.ndarray) -> jnp.ndarray:
     r"""``log10(neb_fdust * L_LyC)``, gradient-safe at ``neb_fdust == 0`` (#2539).
 
     ``neb_fdust`` is the fraction of Lyman-continuum photons that dust grains

@@ -374,9 +374,15 @@ class TestLycConservationClosure:
         # by trading fesc for fdust at fixed total (holds k, hence the
         # nebular-continuum absorption term, exactly fixed; see module
         # docstring) --
-        m_default = _build(synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all)
+        m_default = _build(
+            synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all
+        )
         m_escape_only = _build(
-            synthetic_ssp_wide, dust_type, fesc=fesc + fdust, fdust=0.0, lyc_absorb_all=lyc_absorb_all
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=fesc + fdust,
+            fdust=0.0,
+            lyc_absorb_all=lyc_absorb_all,
         )
         s_default = m_default.predict_state({})
         L_absorbed_default = float(10.0 ** np.asarray(s_default.derived["log_L_absorbed"]))
@@ -402,7 +408,9 @@ class TestLycConservationClosure:
             lyc_absorb_all=lyc_absorb_all,
             eb_include_lyc=True,
         )
-        L_absorbed_full = float(10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"]))
+        L_absorbed_full = float(
+            10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"])
+        )
         screen_absorbed_measured = L_absorbed_full - L_absorbed_default
 
         post_screen_measured = _l_lyc(wave, np.asarray(s_default.sed_intrinsic))
@@ -496,7 +504,9 @@ class TestDefaultsBitIdentical:
     """
 
     @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
-    def test_defaults_are_noop_and_finite(self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only):
+    def test_defaults_are_noop_and_finite(
+        self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only
+    ):
         m = _build(synthetic_ssp_wide, dust_type, lyc_absorb_all=lyc_absorb_all)
         s = m.predict_state({})
         log_lyc_dust = s.derived.get("log_L_lyc_dust")
@@ -522,7 +532,10 @@ class TestDefaultsBitIdentical:
         wave = np.asarray(s.wave)
         nu = np.asarray(C_AA) / wave
         expected_log_l, _ = bolometric_absorbed_log10(
-            jnp.asarray(sed_intrinsic), jnp.asarray(sed_attenuated), jnp.asarray(nu), wave=jnp.asarray(wave)
+            jnp.asarray(sed_intrinsic),
+            jnp.asarray(sed_attenuated),
+            jnp.asarray(nu),
+            wave=jnp.asarray(wave),
         )
         np.testing.assert_allclose(float(log_l_absorbed), float(expected_log_l), rtol=1e-6)
 
