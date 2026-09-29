@@ -590,3 +590,30 @@ class TestSourcesSupportOnlyTheirClaims:
         cfg = XLIKE_CONFIGS["beagle_like"]
         srcs = [s for s in cfg["mismatch_sources"] if "BEAGLE_summary_catalogue" in s]
         assert srcs and "tauV_eff" in srcs[0] and "mu" in srcs[0]
+
+    def test_cloudy_version_no_17_02(self):
+        """Verify unsourced 'Cloudy 17.02' has been replaced with 'Cloudy 17'."""
+        for key, cfg in XLIKE_CONFIGS.items():
+            # Check both mismatches and mismatches_text for the outdated version string
+            for text in cfg.get("mismatches", []):
+                assert "17.02" not in text, f"{key} mismatches contains unsourced '17.02': {text}"
+            for text in cfg.get("mismatches_text", []):
+                assert "17.02" not in text, (
+                    f"{key} mismatches_text contains unsourced '17.02': {text}"
+                )
+
+    def test_cigale_bc03_row_no_version_word(self):
+        """Verify cigale_like BC03 row has been reworded without 'version' word."""
+        cfg = XLIKE_CONFIGS["cigale_like"]
+        # The first row should be about BC03 differences
+        first_mismatch = cfg["mismatches"][0]
+        first_mismatch_text = cfg["mismatches_text"][0]
+        assert "version" not in first_mismatch.lower(), (
+            f"cigale_like BC03 row should not use 'version': {first_mismatch}"
+        )
+        assert "version" not in first_mismatch_text.lower(), (
+            f"cigale_like BC03 text row should not use 'version': {first_mismatch_text}"
+        )
+        # Verify the new wording is present
+        assert "CIGALE-like configuration" in first_mismatch_text
+        assert "registered BC03" in first_mismatch_text
