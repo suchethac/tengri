@@ -620,19 +620,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb
                 )
         else:
-            # Slow path (exact integral): full-wavelength integration over all
-            # components (stellar, nebular, shock, AGN). Same as before.
-            _sed_neb_full = state.derived.get("sed_nebular")
-            sed_to_integrate = state.sed_intrinsic
-            attenuated_to_integrate = attenuated
-            if _sed_neb_full is not None and not self.nebular_from_grid:
-                sed_to_integrate = sed_to_integrate + jnp.asarray(_sed_neb_full)
-                attenuated_to_integrate = (
-                    attenuated_to_integrate + jnp.asarray(_sed_neb_full) * attenuation
-                )
+            # Full integral: ``state.sed_intrinsic`` is the sum of every emitter that ran
+            # before this component, the nebular emission included, so one integral counts
+            # each of them once.
             log_l_absorbed, sign_all = bolometric_absorbed_log10(
-                sed_to_integrate,
-                attenuated_to_integrate,
+                state.sed_intrinsic,
+                attenuated,
                 nu,
                 wave=state.wave,
                 lyman_cutoff_aa=_eb_cutoff,

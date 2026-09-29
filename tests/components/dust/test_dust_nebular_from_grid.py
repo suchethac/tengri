@@ -133,7 +133,12 @@ def _grid_channels(kind: str) -> dict:
     }
 
 
-def _state(wave, *, derived=None) -> ForwardState:
+def _state(wave, *, derived=None, nebular=None) -> ForwardState:
+    """A hand-made state as the dust component receives it from the pipeline.
+
+    The nebular component adds its emission to ``sed_intrinsic`` and publishes it
+    as ``sed_nebular``; ``nebular`` does both. ``None`` leaves both untouched.
+    """
     wave = jnp.asarray(wave)
     lnu_age = jnp.ones((_N_AGE, wave.shape[0])) * 1.0e27
     base = {
@@ -142,7 +147,12 @@ def _state(wave, *, derived=None) -> ForwardState:
         "log_nion": jnp.asarray(_LOG_NION),
     }
     base.update(derived or {})
-    return ForwardState(wave=wave, sed_intrinsic=jnp.sum(lnu_age, axis=0), derived=base)
+    sed_intrinsic = jnp.sum(lnu_age, axis=0)
+    if nebular is not None:
+        nebular = jnp.asarray(nebular)
+        base["sed_nebular"] = nebular
+        sed_intrinsic = sed_intrinsic + nebular
+    return ForwardState(wave=wave, sed_intrinsic=sed_intrinsic, derived=base)
 
 
 def _flagged_state(kind: str, *, with_bands: bool = True) -> ForwardState:
@@ -176,7 +186,7 @@ def _apply(comp, kind, state, params=None, *, with_lut=True):
 def _exact_screen(kind: str, wavelength: np.ndarray, params=None) -> np.ndarray:
     """The screen the exact path applies to the continuum, read from an unflagged apply()."""
     wavelength = np.asarray(wavelength).reshape(-1)
-    state = _state(wavelength, derived={"sed_nebular": jnp.ones(wavelength.shape)})
+    state = _state(wavelength, nebular=np.ones(wavelength.shape))
     out = _apply(_component(kind, flagged=False), kind, state, params, with_lut=False)
     key = "sed_nebular" if kind == _TWO else "dust_attenuation_factor"
     return np.asarray(out.derived[key])
@@ -315,15 +325,12 @@ def test_flagged_energy_balance_equals_the_materialized_continuum(kind, with_lut
         "joint_weights": jnp.asarray(np.random.default_rng(3).random((_N_MET, _N_AGE))),
         "log_stellar_mass_scale": jnp.asarray(40.0),
     }
-    exact_state = _state(_WAVE, derived=stellar | {"sed_nebular": jnp.asarray(sed)})
-    dark_state = _state(_WAVE, derived=stellar | {"sed_nebular": jnp.zeros(_WAVE.shape)})
+    exact_state = _state(_WAVE, derived=stellar, nebular=sed)
+    dark_state = _state(_WAVE, derived=stellar, nebular=np.zeros(_WAVE.shape))
     grid_state = _state(
         _WAVE,
-        derived=stellar
-        | {
-            "sed_nebular": jnp.zeros(_WAVE.shape),
-            "nebular_eb_absorbed_per_qh_grid_precomp": jnp.asarray(slab),
-        },
+        derived=stellar | {"nebular_eb_absorbed_per_qh_grid_precomp": jnp.asarray(slab)},
+        nebular=np.zeros(_WAVE.shape),
     )
     want = float(
         _apply(plain, kind, exact_state, params, with_lut=with_lut).derived["log_L_absorbed"]
@@ -338,6 +345,38 @@ def test_flagged_energy_balance_equals_the_materialized_continuum(kind, with_lut
     )
     assert want - dark > 1e-3  # the nebular term is a real share, and it ADDS
     np.testing.assert_allclose(got, want, rtol=0.0, atol=1e-9)
+
+
+@pytest.mark.parametrize("flagged", [False, True], ids=["materialized", "grid"])
+def test_single_screen_full_integral_counts_the_nebular_once(flagged):
+    from tengri.components.nebular.nebular_grid_dust_build import _nebular_eb_channel
+
+    params = dict(_PARAMS, dust_tau_v=1.0) | {"redshift": 0.5}
+    sed = _nebular_sed(_WAVE)
+    plain = _component(_ONE, flagged=False)
+    stellar = np.asarray(jnp.sum(jnp.ones((_N_AGE, _WAVE.shape[0])) * 1.0e27, axis=0))
+    wave = jnp.asarray(_WAVE)
+    screen = np.asarray(plain.nebular_screen_transmission(params, wave))
+    total = jnp.asarray(stellar + sed)
+    want = float(bolometric_absorbed_log10(total, total * screen, C_AA / wave, wave=wave)[0])
+    if flagged:
+        slab = _nebular_eb_channel(
+            sed[None, :],
+            np.asarray([-_LOG_NION]),
+            _WAVE,
+            plain,
+            params,
+            (np.zeros(1), _TAU_B_GRID),
+        )[0]
+        state = _state(
+            _WAVE,
+            derived={"nebular_eb_absorbed_per_qh_grid_precomp": jnp.asarray(slab)},
+            nebular=np.zeros(_WAVE.shape),
+        )
+    else:
+        state = _state(_WAVE, nebular=sed)
+    out = _apply(_component(_ONE, flagged=flagged), _ONE, state, params, with_lut=False)
+    np.testing.assert_allclose(float(out.derived["log_L_absorbed"]), want, rtol=0.0, atol=1e-9)
 
 
 @pytest.mark.parametrize("kind", [_TWO, _ONE])
