@@ -247,7 +247,7 @@ class TestXlikeMismatchTable:
         # Find problematic unescaped underscores (not in \_ form)
         # Remove LaTeX commands and labels first to avoid false positives
         # Remove \label{...} and citation keys (bib keys carry underscores)
-        cleaned = re.sub(r"\\(label|cite[tp]?)\{[^}]*\}", "", content)
+        cleaned = re.sub(r"\\(label|cite[a-z]*)(\[[^\]]*\])?\{[^}]*\}", "", content)
         # Split by $ to handle math mode
         parts = cleaned.split("$")
         for i, part in enumerate(parts):
@@ -509,7 +509,13 @@ class TestCompilesInPaperClass:
         for n in needed:
             shutil.copy(n, tmp_path / n.name)
         (tmp_path / "xlike_mismatch_table.tex").write_text(render_latex())
-        (tmp_path / "wrap.tex").write_text(_WRAPPER)
+        tex = render_latex()
+        own = {"tab:xlike_choices", "tab:xlike_differences"}
+        stubs = "".join(
+            rf"\section{{Stub}}\label{{{lab}}}"
+            for lab in sorted(set(re.findall(r"\\ref\{([^}]+)\}", tex)) - own)
+        )
+        (tmp_path / "wrap.tex").write_text(_WRAPPER.replace("See Tables", stubs + "See Tables"))
 
         flags = ["-interaction=nonstopmode", "-halt-on-error", "wrap.tex"]
         first = _run(["pdflatex", *flags], tmp_path)
@@ -531,7 +537,40 @@ class TestCompilesInPaperClass:
 
 
 _REPO_ROOT = PAPER1_DIR.parent.parent
+_UPSTREAM = ("pcigale", "bagpipes", "prospect", "dense_basis")
 _FILE_LINES = re.compile(r"((?:[\w.\-]+/)+[\w.\-]+\.py):(\d+(?:,\d+)*)(?:--(\d+))?")
+
+
+def _site_packages_root(top: str):
+    """Return the directory holding installed package ``top`` (found without importing it)."""
+    import importlib.util
+
+    spec = importlib.util.find_spec(top)
+    if spec is None or not spec.submodule_search_locations:
+        return None
+    return Path(next(iter(spec.submodule_search_locations))).parent
+
+
+def _resolve_source_file(rel: str):
+    """Resolve a repo-relative or package-relative path; None when neither exists."""
+    repo = _REPO_ROOT / rel
+    if repo.is_file():
+        return repo
+    root = _site_packages_root(rel.split("/")[0])
+    if root is not None and (root / rel).is_file():
+        return root / rel
+    return None
+
+
+def _cited_file_lines(raw: str):
+    """Yield (path string, [line numbers]) for each file:line cited in a raw source."""
+    for part in raw.split(";"):
+        m = _FILE_LINES.search(part)
+        if m:
+            lines = [int(x) for x in m.group(2).split(",")]
+            if m.group(3):
+                lines.append(int(m.group(3)))
+            yield m.group(1), lines
 
 
 def _all_rows():
@@ -572,16 +611,13 @@ class TestSourcesSupportOnlyTheirClaims:
         for key, cfg in XLIKE_CONFIGS.items():
             raws = [*cfg["mismatch_sources"], *cfg.get("notes_sources", [])]
             for raw in raws:
-                for part in raw.split(";"):
-                    m = _FILE_LINES.search(part)
-                    if not m or "site-packages" in m.group(1):
-                        continue
-                    path = _REPO_ROOT / m.group(1)
-                    assert path.is_file(), (key, raw, m.group(1))
+                for rel, lines in _cited_file_lines(raw):
+                    path = _resolve_source_file(rel)
+                    top = rel.split("/")[0]
+                    if path is None and top in _UPSTREAM and _site_packages_root(top) is None:
+                        continue  # upstream package not installed in this environment
+                    assert path is not None, (key, raw, rel)
                     n_lines = len(path.read_text(errors="replace").splitlines())
-                    lines = [int(x) for x in m.group(2).split(",")]
-                    if m.group(3):
-                        lines.append(int(m.group(3)))
                     assert min(lines) >= 1 and max(lines) <= n_lines, (key, raw, n_lines)
                     checked += 1
         assert checked >= 10
@@ -617,3 +653,128 @@ class TestSourcesSupportOnlyTheirClaims:
         # Verify the new wording is present
         assert "CIGALE-like configuration" in first_mismatch_text
         assert "registered BC03" in first_mismatch_text
+
+
+_COLUMN_LIST_SOURCE = "art_sedfitting/code_outputs/header"
+
+
+def _display_strings():
+    """Every reader-facing string of both tables and the JSON display fields."""
+    for cfg in XLIKE_CONFIGS.values():
+        yield from cfg["mismatches_text"]
+        yield from cfg.get("notes", [])
+    yield render_latex()
+
+
+def _only_column_list(raw: str) -> bool:
+    parts = [part.strip() for part in raw.split(";")]
+    return all(part.startswith(_COLUMN_LIST_SOURCE) for part in parts)
+
+
+def _rows_matching(key: str, needle: str) -> list[str]:
+    return [t for t in XLIKE_CONFIGS[key]["mismatches_text"] if needle in t]
+
+
+class TestTablesFollowEachCodesOwnSource:
+    """Table A lists options, not run settings; Table B rows rest on upstream code or this work."""
+
+    def test_no_fiducial_or_specification_wording(self):
+        for text in _display_strings():
+            assert "fiducial" not in text.lower()
+            assert "specification" not in text.lower()
+
+    def test_choices_header_says_options(self):
+        header = next(ln for ln in render_latex().splitlines() if ln.startswith("Code & Parity"))
+        assert "Options" in header
+        assert "Table~1" in header
+
+    def test_cigale_attenuation_row_is_one_screen(self):
+        rows = _rows_matching("cigale_like", "modified-starburst")
+        assert len(rows) == 1
+        text = rows[0]
+        assert not re.search(r"\bratio\b", text)
+        assert "birth-cloud/diffuse ratio" not in text
+        assert "one" in text
+        assert "0.44" in text
+
+    def test_cigale_metallicity_row_lists_the_six_values(self):
+        rows = _rows_matching("cigale_like", "six metallicities")
+        assert len(rows) == 1
+        for z in ("0.0001", "0.0004", "0.004", "0.008", "0.02", "0.05"):
+            assert z in rows[0]
+        assert "continuously" in rows[0]
+
+    def test_only_cigale_has_a_metallicity_row(self):
+        for key, cfg in XLIKE_CONFIGS.items():
+            if key != "cigale_like":
+                for text in cfg["mismatches_text"]:
+                    assert "metallicit" not in text.lower(), (key, text)
+
+    def test_no_prospector_sfh_prior_difference_row(self):
+        for text in XLIKE_CONFIGS["prospector_like"]["mismatches_text"]:
+            assert "Student" not in text and "prior" not in text.lower(), text
+        assert any(
+            "identical to Prospector" in n for n in XLIKE_CONFIGS["prospector_like"]["notes"]
+        )
+
+    def test_no_difference_row_rests_only_on_the_column_list(self):
+        for key, _, mismatch, src in _all_rows():
+            assert not _only_column_list(src), (key, mismatch)
+
+    def test_column_list_only_backs_a_not_recorded_statement(self):
+        for key, text, _, src in _all_rows():
+            if _COLUMN_LIST_SOURCE in src:
+                assert "not recorded" in text, (key, text)
+        for cfg in XLIKE_CONFIGS.values():
+            for note, src in zip(cfg.get("notes", []), cfg.get("notes_sources", []), strict=True):
+                if _COLUMN_LIST_SOURCE in src:
+                    assert "not record" in note, note
+
+    def test_beagle_dust_row_is_a_reparametrization(self):
+        rows = _rows_matching("beagle_like", "Charlot")
+        assert len(rows) == 1
+        assert "in place of BEAGLE's (tau_V, mu)" in rows[0]
+        assert "same" in rows[0]
+        assert r"($\tau_V$, $\mu$)" in render_latex()
+
+    def test_bagpipes_nebular_row_states_both_cloudy_versions(self):
+        rows = _rows_matching("bagpipes_like", "Cloudy")
+        assert len(rows) == 1
+        assert "Cloudy 17 (C17)" in rows[0] and "Cloudy 25" in rows[0]
+        assert "trained on Cloudy 17" in rows[0]
+
+    def test_dense_basis_nebular_row_says_no_version_year(self):
+        rows = _rows_matching("dense_basis_like", "Cloudy")
+        assert len(rows) == 1 and "no version year" in rows[0]
+
+    def test_unsourced_rows_stay_out_of_the_differences(self):
+        assert not _rows_matching("bagpipes_like", "uniform distributions")
+        assert not _rows_matching("beagle_like", "burst")
+        assert not _rows_matching("dense_basis_like", "FSPS library")
+        assert any("FSPS isochrone" in n for n in XLIKE_CONFIGS["dense_basis_like"]["notes"])
+
+    def test_energy_balance_row_cites_the_paper_data_section(self):
+        cfg = XLIKE_CONFIGS["prospector_like"]
+        idx = next(i for i, t in enumerate(cfg["mismatches_text"]) if "912" in t)
+        latex, plain = source_display(cfg["mismatch_sources"][idx])
+        assert r"Section~\ref{subsec:demonstration:data}" in latex
+        assert "tengri reproduction notebook (Prospector)" in latex
+        assert "subsec:demonstration:data" in plain
+
+    def test_upstream_sources_resolve_to_installed_packages(self):
+        cited = [
+            (key, rel, lines)
+            for key, cfg in XLIKE_CONFIGS.items()
+            for raw in (*cfg["mismatch_sources"], *cfg.get("notes_sources", []))
+            for rel, lines in _cited_file_lines(raw)
+            if rel.split("/")[0] in _UPSTREAM
+        ]
+        assert {rel.split("/")[0] for _, rel, _ in cited} == set(_UPSTREAM)
+        for top in _UPSTREAM:
+            if _site_packages_root(top) is None:
+                pytest.skip(f"upstream package {top} is not installed here")
+        for key, rel, lines in cited:
+            path = _resolve_source_file(rel)
+            assert path is not None, (key, rel)
+            n_lines = len(path.read_text(errors="replace").splitlines())
+            assert min(lines) >= 1 and max(lines) <= n_lines, (key, rel, n_lines)

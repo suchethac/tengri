@@ -83,6 +83,7 @@ _TENGRI_DISPLAY = {
 # file:line stays in the JSON; a reader of the paper gets a citation or a data product.
 _REPRO_CODE = {"cigale": "CIGALE", "prospector": "Prospector", "bagpipes": "BAGPIPES"}
 _REPRO_PATTERN = re.compile(r"^reproduction/(\w+)/")
+_PAPER_SECTION = re.compile(r"^paper Section (\S+)$")
 _SOURCE_RULES = (
     (
         r"^Pacifici et al\. \(2023\) Table 1",
@@ -91,13 +92,29 @@ _SOURCE_RULES = (
     ),
     (
         r"^art_sedfitting/code_outputs/BEAGLE_summary_catalogue_z1\.fits",
-        r"BEAGLE workshop catalog (tauV\_eff and mu columns) \citep{Pacifici_2023}",
-        "BEAGLE workshop catalog (tauV_eff and mu columns), Pacifici et al. (2023)",
+        r"BEAGLE workshop catalog (\texttt{tauV\_eff} and \texttt{mu} outputs) "
+        r"\citep{Pacifici_2023}",
+        "BEAGLE workshop catalog (tauV_eff and mu outputs), Pacifici et al. (2023)",
     ),
     (
         r"^art_sedfitting/code_outputs/header",
         r"Workshop catalog (column list) \citep{Pacifici_2023}",
         "workshop catalog (column list), Pacifici et al. (2023)",
+    ),
+    (
+        r"^pcigale/",
+        r"CIGALE source code \citep{Boquien_2019}",
+        "CIGALE source code (Boquien et al. 2019)",
+    ),
+    (
+        r"^bagpipes/",
+        r"BAGPIPES source code \citep{Carnall_2018}",
+        "BAGPIPES source code (Carnall et al. 2018)",
+    ),
+    (
+        r"^prospect/",
+        r"Prospector source code \citep{Johnson_2021b}",
+        "Prospector source code (Johnson et al. 2021)",
     ),
     (
         r"dense_basis/priors\.py",
@@ -115,6 +132,9 @@ def _source_part(part: str) -> tuple[str, str]:
     if m and m.group(1) in _REPRO_CODE:
         text = f"tengri reproduction notebook ({_REPRO_CODE[m.group(1)]})"
         return text, text
+    m = _PAPER_SECTION.match(part)
+    if m:
+        return rf"Section~\ref{{{m.group(1)}}}", f"Section {m.group(1)} of the paper"
     for pattern, latex, plain in _SOURCE_RULES:
         if re.search(pattern, part):
             return latex, plain
@@ -158,8 +178,15 @@ def tengri_display(field: str, raw: str) -> str:
 
 
 def _prose(text: str) -> str:
-    """Escape prose for LaTeX and typeset the optical-depth symbol."""
-    return _escape_latex(text).replace(r"tau\_V", r"$\tau_V$")
+    """Escape prose for LaTeX and typeset the optical-depth and reddening symbols."""
+    out = _escape_latex(text)
+    for raw, math in (
+        (r"(tau\_V, mu)", r"($\tau_V$, $\mu$)"),
+        (r"tau\_V", r"$\tau_V$"),
+        ("E(B-V)", r"$E(B{-}V)$"),
+    ):
+        out = out.replace(raw, math)
+    return out
 
 
 _PARITY_NOTE = (
@@ -172,6 +199,7 @@ _PARITY_NOTE = (
 _TABLE_A_COLUMNS = r"@{}lllll@{}"
 _TABLE_B_COLUMNS = r"@{}lll@{}"
 _WIDTH_TENGRI = "5.4cm"
+_WIDTH_OPTIONS = "3.4cm"
 _WIDTH_DIFFERENCE = "9.6cm"
 _WIDTH_SOURCE = "4.6cm"
 
@@ -236,14 +264,20 @@ def render_latex() -> str:
     table_a = [
         r"\begin{table*}[!t]",
         r"\centering",
-        r"\caption{Configuration choices of the X-like models beside the specifications "
-        r"in Table~1 of \citet{Pacifici_2023}. " + _PARITY_NOTE + "}",
+        r"\caption{Configuration choices of the X-like models beside the options each code "
+        r"offers, as listed in Table~1 of \citet{Pacifici_2023}. That table does not record "
+        r"the configuration of the workshop runs. ``C'' is Cloudy with no version year. "
+        + _PARITY_NOTE
+        + "}",
         r"\label{tab:xlike_choices}",
         r"\scriptsize",
         r"\setlength{\tabcolsep}{4pt}",
         r"\begin{tabular}{" + _TABLE_A_COLUMNS + "}",
         r"\toprule",
-        r"Code & Parity & Component & \citet{Pacifici_2023} & \textsc{tengri} X-like" + _ROW_END,
+        r"Code & Parity & Component & "
+        + _wrap(r"Options in each code (\citealp[Table~1]{Pacifici_2023})", _WIDTH_OPTIONS)
+        + r" & \textsc{tengri} X-like"
+        + _ROW_END,
         r"\midrule",
         *_table_a_rows(),
         r"\bottomrule",

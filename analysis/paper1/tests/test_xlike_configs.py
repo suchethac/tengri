@@ -59,10 +59,10 @@ class TestXlikeMetadata:
             assert XLIKE_CONFIGS[key]["parity_check"] is False
 
     def test_mismatches_present(self):
-        """Each config has at least 3 mismatches listed."""
+        """Each config lists at least 2 differences (rows rest on upstream code, not a count)."""
         for key, cfg in XLIKE_CONFIGS.items():
             mismatches = cfg.get("mismatches", [])
-            assert len(mismatches) >= 3, f"{key} has only {len(mismatches)} mismatches"
+            assert len(mismatches) >= 2, f"{key} has only {len(mismatches)} mismatches"
 
     def test_mass_definition(self):
         """Mass definition correctly reflects code convention."""

@@ -2,33 +2,29 @@
   "bagpipes_like": {
     "code": "BAGPIPES",
     "parity_check": true,
-    "n_mismatches": 5,
+    "n_mismatches": 4,
     "mismatches": [
       "BAGPIPES's default stellar library, BC03 with MILES and a Kroupa IMF, against tengri's registered BC03 (Padova 1994 tracks, STELIB, Chabrier IMF)",
-      "dpl priors Uniform(alpha, beta); the workshop catalog does not record BAGPIPES's priors",
-      "Cue emulator (trained on Cloudy 17) vs BAGPIPES Cloudy 17 grids",
+      "Table 1 lists Cloudy 17 (C17) for the workshop-era BAGPIPES; current BAGPIPES releases ship Cloudy 25 grids; tengri uses Cue, trained on Cloudy 17",
       "Formation age restricted to at least 1 Gyr, the grid's convention; the workshop run's age prior is not recorded",
       "Single dust screen (Calzetti et al. 2000), as in the parity reproduction, which switches the birth-cloud term off; the workshop run's dust configuration is not recorded"
     ],
     "mismatches_text": [
-      "Stellar library configuration: BC03 library version difference (MILES spectral library with Kroupa initial mass function versus Padova 1994 isochrones with STELIB and Chabrier IMF)",
-      "Star formation history priors: uniform distributions on the power-law slopes; the priors of the BAGPIPES workshop run are not recorded in the workshop catalog",
-      "Nebular emission models: Cue photoionization emulator (trained on Cloudy 17) matched to BAGPIPES Cloudy 17 grids",
+      "Stellar library configuration: BC03 with the MILES spectral library and a Kroupa initial mass function (BAGPIPES) versus Padova 1994 isochrones with STELIB and a Chabrier IMF (tengri)",
+      "Nebular emission models: Table 1 lists Cloudy 17 (C17) for the workshop-era BAGPIPES; current BAGPIPES releases ship Cloudy 25 grids; tengri uses the Cue emulator, trained on Cloudy 17",
       "Formation age restricted to at least 1 Gyr, the grid's convention; the workshop run's age prior is not recorded",
       "Single dust screen (Calzetti et al. 2000), as in the parity reproduction, which switches the birth-cloud term off; the workshop run's dust configuration is not recorded"
     ],
     "mismatch_sources": [
-      "reproduction/bagpipes/01_bagpipes.py:123; reproduction/bagpipes/_drivers/bagpipes_ssp_to_dsps.py:178",
-      "art_sedfitting/code_outputs/header (absence of the setting)",
-      "reproduction/bagpipes/01_bagpipes.py:43--46",
+      "reproduction/bagpipes/01_bagpipes.py:123; reproduction/bagpipes/_drivers/bagpipes_ssp_to_dsps.py:178; bagpipes/config.py:106--107",
+      "Pacifici et al. (2023) Table 1; bagpipes/config.py:106--107; reproduction/cigale/01_cigale.py:38",
       "analysis/paper1/configs.py:30--36; analysis/paper1/xlike_configs.py:148",
       "reproduction/bagpipes/01_bagpipes.py:962--964"
     ],
     "display_code": "BAGPIPES",
     "mismatch_sources_display": [
-      "tengri reproduction notebook (BAGPIPES)",
-      "workshop catalog (column list), Pacifici et al. (2023)",
-      "tengri reproduction notebook (BAGPIPES)",
+      "tengri reproduction notebook (BAGPIPES); BAGPIPES source code (Carnall et al. 2018)",
+      "Pacifici et al. (2023), Table 1; BAGPIPES source code (Carnall et al. 2018); tengri reproduction notebook (CIGALE)",
       "this work",
       "tengri reproduction notebook (BAGPIPES)"
     ]
@@ -41,21 +37,21 @@
       "No reproduction notebook available; parity check not performed",
       "BC03 2003 (Padova 1994 tracks, STELIB, Chabrier) vs BEAGLE Table 1: BC03(16)",
       "Cue emulator (trained on Cloudy 17) vs BEAGLE's Cloudy 13 nebular grids",
-      "Power law attenuation (Charlot & Fall 2000) without BEAGLE's mu/tau_V parametrization",
+      "Two-component Charlot and Fall (2000) attenuation parametrized by (birth-cloud, diffuse) optical depths in place of BEAGLE's (tau_V, mu)",
       "Formation age restricted to at least 1 Gyr, the grid's convention; the workshop run's age prior is not recorded"
     ],
     "mismatches_text": [
       "No reproduction notebook available; parity check against BEAGLE was not performed",
-      "BC03 library version: registered BC03 (Padova 1994 isochrones, STELIB spectra, Chabrier IMF) versus BEAGLE uses BC03(16) variant",
+      "BC03 library: registered BC03 (Padova 1994 isochrones, STELIB spectra, Chabrier IMF) versus the BC03(16) entry of Table 1 for BEAGLE",
       "Nebular emission models: Cue photoionization emulator (trained on Cloudy 17) versus BEAGLE Cloudy 13 grids",
-      "Dust attenuation parametrization: power-law form of Charlot and Fall (2000) without BEAGLE's mu and tau_V parametrization",
+      "Two-component Charlot and Fall (2000) attenuation parametrized by (birth-cloud, diffuse) optical depths in place of BEAGLE's (tau_V, mu); the number of free parameters is the same",
       "Formation age restricted to at least 1 Gyr, the grid's convention; the workshop run's age prior is not recorded"
     ],
     "mismatch_sources": [
-      "analysis/paper1/config_metadata.py:262 (parity_check False)",
+      "analysis/paper1/config_metadata.py:264 (parity_check False)",
       "Pacifici et al. (2023) Table 1",
       "Pacifici et al. (2023) Table 1 (C13)",
-      "art_sedfitting/code_outputs/BEAGLE_summary_catalogue_z1.fits HDU3 columns tauV_eff, mu",
+      "art_sedfitting/code_outputs/BEAGLE_summary_catalogue_z1.fits HDU3 columns tauV_eff, mu; analysis/paper1/xlike_configs.py:207--216",
       "analysis/paper1/configs.py:30--36; analysis/paper1/xlike_configs.py:203"
     ],
     "display_code": "BEAGLE",
@@ -63,36 +59,40 @@
       "this work",
       "Pacifici et al. (2023), Table 1",
       "Pacifici et al. (2023), Table 1",
-      "BEAGLE workshop catalog (tauV_eff and mu columns), Pacifici et al. (2023)",
+      "BEAGLE workshop catalog (tauV_eff and mu outputs), Pacifici et al. (2023); this work",
       "this work"
     ]
   },
   "cigale_like": {
     "code": "CIGALE",
     "parity_check": true,
-    "n_mismatches": 4,
+    "n_mismatches": 5,
     "mismatches": [
       "The CIGALE-like configuration uses tengri's registered BC03 grid (Padova 1994 tracks, STELIB, Chabrier IMF) rather than the CIGALE-bundled BC03 grid used in the parity reproduction",
-      "CIGALE ties the birth-cloud and diffuse reddening by a fixed factor (0.44); the CIGALE-like configuration fits the two optical depths independently",
+      "CIGALE's modified-starburst attenuation applies one Calzetti and Leitherer et al. (2002) screen to all stars, with continuum E(B-V) = 0.44 times the line E(B-V); the CIGALE-like configuration fits two screens with free birth-cloud and diffuse optical depths (the parity reproduction sets the birth-cloud depth to zero). Which attenuation module the workshop run used is not recorded",
+      "CIGALE's BC03 module accepts only six metallicities (Z = 0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05); the CIGALE-like configuration samples metallicity continuously within the grid",
       "Cue emulator (trained on Cloudy 17) vs CIGALE's Cloudy 13 grids",
       "Formation age restricted to at least 1 Gyr, the grid's convention; the workshop run's age prior is not recorded"
     ],
     "mismatches_text": [
       "The CIGALE-like configuration uses tengri's registered BC03 grid (Padova 1994 tracks, STELIB spectra, Chabrier IMF) rather than the CIGALE-bundled BC03 grid used in the parity reproduction",
-      "CIGALE ties the birth-cloud and diffuse reddening by a fixed factor (0.44); the CIGALE-like configuration fits the two optical depths independently",
+      "CIGALE's modified-starburst attenuation applies one Calzetti and Leitherer et al. (2002) screen to all stars, with continuum E(B-V) = 0.44 times the line E(B-V); the CIGALE-like configuration fits two screens with free birth-cloud and diffuse optical depths (the parity reproduction sets the birth-cloud depth to zero). Which attenuation module the workshop run used is not recorded",
+      "CIGALE's BC03 module accepts only six metallicities (Z = 0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05); the CIGALE-like configuration samples metallicity continuously within the grid",
       "Nebular emission models: Cue photoionization emulator (trained on Cloudy 17) versus CIGALE's Cloudy 13 grids",
       "Formation age restricted to at least 1 Gyr, the grid's convention; the workshop run's age prior is not recorded"
     ],
     "mismatch_sources": [
       "analysis/paper1/config_metadata.py (XLIKE_SSP cigale_like); reproduction/cigale/01_cigale.py:24--26",
-      "reproduction/cigale/01_cigale.py:126--134; reproduction/cigale/01_cigale.py:1312--1314",
+      "pcigale/sed_modules/dustatt_modified_starburst.py:311--316; reproduction/cigale/01_cigale.py:126--134; reproduction/cigale/01_cigale.py:1241; art_sedfitting/code_outputs/header (absence of the setting)",
+      "pcigale/sed_modules/bc03.py:33--38; analysis/paper1/xlike_configs.py:44",
       "reproduction/cigale/01_cigale.py:38; Pacifici et al. (2023) Table 1",
       "analysis/paper1/configs.py:30--36; analysis/paper1/xlike_configs.py:42"
     ],
     "display_code": "CIGALE",
     "mismatch_sources_display": [
       "this work; tengri reproduction notebook (CIGALE)",
-      "tengri reproduction notebook (CIGALE)",
+      "CIGALE source code (Boquien et al. 2019); tengri reproduction notebook (CIGALE); workshop catalog (column list), Pacifici et al. (2023)",
+      "CIGALE source code (Boquien et al. 2019); this work",
       "tengri reproduction notebook (CIGALE); Pacifici et al. (2023), Table 1",
       "this work"
     ]
@@ -100,67 +100,65 @@
   "dense_basis_like": {
     "code": "Dense_Basis",
     "parity_check": false,
-    "n_mismatches": 4,
+    "n_mismatches": 3,
     "mismatches": [
       "No reproduction notebook available; parity check not performed",
       "Dense Basis draws the mass-time quantiles from a Dirichlet prior (concentration 5 by default); tengri draws three independent uniform fractions and sorts them, so its prior is their order statistics",
-      "FSPS library isochrone and spectral library versions are not recorded in the workshop catalog",
-      "Cue emulator (trained on Cloudy 17) vs Cloudy, version not listed in Pacifici et al. (2023) Table 1"
+      "Cue emulator (trained on Cloudy 17) vs Cloudy with no version year in Pacifici et al. (2023) Table 1 (entry C)"
     ],
     "mismatches_text": [
       "No reproduction notebook available; parity check against Dense Basis was not performed",
       "Star formation history priors: Dense Basis uses a Dirichlet prior with concentration parameter 5, while tengri uses order statistics of independent uniform fractions, yielding different prior distributions",
-      "FSPS library configuration: isochrone and spectral library versions are not recorded in the workshop catalog",
-      "Nebular emission models: Cue photoionization emulator (trained on Cloudy 17) versus Cloudy, whose version Table 1 of Pacifici et al. (2023) does not list"
+      "Nebular emission models: Cue photoionization emulator (trained on Cloudy 17) versus Cloudy, for which Table 1 of Pacifici et al. (2023) lists no version year (entry C)"
     ],
     "mismatch_sources": [
-      "analysis/paper1/config_metadata.py:309 (parity_check False)",
-      "site-packages/dense_basis/priors.py:84,121; src/tengri/components/stellar/sfh/dense_basis.py:487",
-      "art_sedfitting/code_outputs/header (absence of the setting)",
+      "analysis/paper1/config_metadata.py:311 (parity_check False)",
+      "dense_basis/priors.py:84,121; src/tengri/components/stellar/sfh/dense_basis.py:487",
       "Pacifici et al. (2023) Table 1 (C)"
     ],
     "display_code": "Dense Basis",
     "mismatch_sources_display": [
       "this work",
       "Dense Basis source (Iyer et al. 2019); this work",
-      "workshop catalog (column list), Pacifici et al. (2023)",
       "Pacifici et al. (2023), Table 1"
     ],
     "notes": [
-      "Age of universe set to cosmic age at redshift z (tengri's registry default is 13.47 Gyr at z=0)"
+      "Age of universe set to cosmic age at redshift z (tengri's registry default is 13.47 Gyr at z=0)",
+      "The workshop catalog does not record the FSPS isochrone and spectral library versions used by Dense Basis"
     ],
     "notes_sources": [
-      "src/tengri/components/stellar/sfh/registry.py:2007"
+      "src/tengri/components/stellar/sfh/registry.py:2007",
+      "art_sedfitting/code_outputs/header (absence of the setting)"
     ]
   },
   "prospector_like": {
     "code": "Prospector",
     "parity_check": true,
-    "n_mismatches": 4,
+    "n_mismatches": 2,
     "mismatches": [
-      "Continuity with Student-t prior vs Prospector workshop priors (unrecorded in output)",
       "Cue emulator (trained on Cloudy 17) vs FSPS default Cloudy 13",
-      "7-bin continuity SFH edges; the workshop catalog does not record Prospector's bins",
       "Energy balance excludes lambda<912 A (far-IR ~11% lower than exact integration, outside the fitted UV-to-IRAC bands)"
     ],
     "mismatches_text": [
-      "Star formation history prior: Student-t distribution on continuity parameters versus Prospector's priors (not recorded in workshop outputs)",
       "Nebular emission models: Cue photoionization emulator (trained on Cloudy 17) versus FSPS Cloudy 13 grids via Byler et al. (2017)",
-      "Star formation history bins: the seven-bin continuity model uses tengri's age edges; the workshop catalog does not record Prospector's binning, so it is not recorded here",
       "Dust energy balance: the absorbed luminosity excludes radiation shortward of 912 Angstrom, which lowers the far-infrared output by about 11 percent relative to exact integration; the far-infrared lies outside the fitted UV-to-IRAC wavelength range"
     ],
     "mismatch_sources": [
-      "analysis/paper1/configs.py:178 (_continuity_sfh)",
       "reproduction/prospector/01_prospector.py:33--38; Pacifici et al. (2023) Table 1",
-      "art_sedfitting/code_outputs/header (absence of the setting)",
-      "reproduction/prospector/01_prospector.py:1379--1382"
+      "reproduction/prospector/01_prospector.py:1379--1382; paper Section subsec:demonstration:data"
     ],
     "display_code": "Prospector",
     "mismatch_sources_display": [
-      "this work",
       "tengri reproduction notebook (Prospector); Pacifici et al. (2023), Table 1",
-      "workshop catalog (column list), Pacifici et al. (2023)",
-      "tengri reproduction notebook (Prospector)"
+      "tengri reproduction notebook (Prospector); Section subsec:demonstration:data of the paper"
+    ],
+    "notes": [
+      "The continuity prior on the log SFR ratios, Student-t (mean 0, scale 0.3, 2 degrees of freedom), is identical to Prospector's continuity_sfh template",
+      "The workshop catalog does not record Prospector's age bins; the seven-bin continuity model uses tengri's age edges"
+    ],
+    "notes_sources": [
+      "prospect/models/templates.py:556--559; src/tengri/components/stellar/sfh/registry.py:1543",
+      "art_sedfitting/code_outputs/header (absence of the setting)"
     ]
   }
 }
