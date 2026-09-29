@@ -34,7 +34,7 @@ Available Attenuation Curves
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
 - **tea**: Haskell et al. (2024) TEA 3-param empirical (NIHAO-SKIRT bump-slope correlation)
 - **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (MUFASA RT)
-- **conroy2010**: Conroy+2010 mixed MW + power-law (FSPS dust_type=1)
+- **conroy2010**: Conroy+2010 CCM89 with scalable 2175 Å bump (FSPS dust_type=1)
 - **vw07_bc**: Wild+2007 birth cloud power-law (n=-1.3)
 - **vw07_diff**: Wild+2007 diffuse ISM power-law (n=-0.7)
 
@@ -367,9 +367,11 @@ def reddy15(
     then normalized: :math:`k(\lambda) = k(\lambda) / R_V` with :math:`R_V = 2.505`.
     The normalization ensures :math:`k(5500 \, \text{\AA}) = 1`.
 
-    The red branch includes a continuity offset (−0.036221981) to match the FSPS/Prospector
-    convention and ensure continuity at 0.6 μm. For λ < 1500 Å, the blue branch value is held
-    constant rather than extrapolated.
+    The red-branch polynomial carries an additive −0.036221981 that is not in Reddy
+    et al. (2015) Eq. 8; it makes the two published branches meet at 0.6 μm (the
+    unmodified branches differ by 0.0362 there). FSPS dust_type=6 applies the same
+    constant. For λ < 1500 Å, the blue branch value is held constant rather than
+    extrapolated.
 
     **Approximation**: The polynomial form is valid over 0.15–2.85 μm. Extrapolation
     beyond this range follows the functional form but is not empirically constrained
@@ -1570,9 +1572,19 @@ def conroy2010(
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Identity at full strength:** This implementation is bit-identical to :func:`cardelli`
-    when ``dust_bump_strength=1.0``, which is its default. Both return the unmodified
-    Cardelli, Clayton & Mathis (1989) extinction law for that value of the parameter.
+    **Near-identity at full strength:** At ``dust_bump_strength=1.0`` (the default)
+    this recovers the unmodified Cardelli, Clayton & Mathis (1989) Drude/polynomial
+    coefficients, but is **not** bit-identical to :func:`cardelli`: FSPS's
+    ``attn_curve.f90`` (dust_type=1) applies the near-UV continuity correction
+    below unconditionally, including at ``dust_bump_strength=1``, where the CCM89
+    optical polynomial and near-UV Drude profile already fail to meet exactly at
+    :math:`x=3.3\,\mu\mathrm{m}^{-1}` (:math:`k_{\rm opt}(3.3) - k_{\rm uv}(3.3)
+    = -1.80\times 10^{-4}` at :math:`R_V=3.1`). :func:`cardelli` has no such
+    correction, so the two curves differ by up to :math:`\sim 2\times 10^{-4}`
+    (relative :math:`\sim 1\times 10^{-4}`) near :math:`x=3.3\,\mu\mathrm{m}^{-1}`,
+    even at ``dust_bump_strength=1.0``. This reproduces FSPS's published behavior
+    deliberately (attn_curve.f90 applies ``hack`` for every ``uvb``, not only
+    ``uvb != 1``).
 
     The UV branch (3.3 ≤ x ≤ 8 μm⁻¹) of CCM89 is modified by scaling the two
     Drude profile coefficients:
@@ -1587,6 +1599,23 @@ def conroy2010(
     (0.104 and 1.206), leaving the polynomial continuum and far-UV corrections unchanged.
     At :math:`s=1`, this recovers the exact CCM89 extinction law. At :math:`s=0`,
     the 2175 Å feature is suppressed while the overall UV slope remains CCM89-like.
+
+    **Continuity correction and its residual steps for** :math:`s \neq 1`: the
+    near-UV/optical junction correction (``hack`` in ``attn_curve.f90``) is defined
+    on the near-UV segment :math:`3.3 \le x < 5.9\,\mu\mathrm{m}^{-1}` only; the
+    adjoining mid-UV segment (:math:`5.9 \le x < 8.0\,\mu\mathrm{m}^{-1}`) carries
+    no such term in FSPS. Two residual discontinuities are therefore properties of
+    the published FSPS dust_type=1 form for :math:`s \neq 1`, reproduced here
+    deliberately rather than smoothed away:
+
+    - At :math:`x=5.9\,\mu\mathrm{m}^{-1}`: a step of size
+      :math:`(3.3/5.9)^6 \cdot \Delta \approx 0.0306\,\Delta`, where
+      :math:`\Delta = k_{\rm opt}(3.3) - k_{\rm uv}(3.3; s)` is the same
+      near-UV/optical mismatch corrected at :math:`x=3.3`.
+    - At :math:`x=8\,\mu\mathrm{m}^{-1}`: the far-UV polynomial (CCM89 Table 4)
+      carries no bump-strength scaling of its own (an implicit :math:`s=1`
+      continuation), so its junction with the scaled mid-UV segment also steps;
+      :math:`\approx 0.7\%` of :math:`k` for :math:`s=0` at :math:`R_V=3.1`.
 
     References
     ----------
@@ -1628,11 +1657,61 @@ def conroy2010(
     )
 
     # UV: 3.3 <= x <= 8.0 with scaled bump strength
+    # FSPS continuity hack (attn_curve.f90 lines 61-76): applies a correction term
+    # on the near-UV segment only (3.3 <= x < 5.9, tmp(mwdindex(4):mwdindex(3)))
+    # to smooth the discontinuity caused by variable UVB strength. The Drude
+    # profile's amplitude scales with dust_bump_strength, creating a step at the
+    # optical/UV boundary when bump_strength != 1.0. This correction vanishes at
+    # the boundary (x=3.3); the mid-UV segment (5.9 <= x < 8.0) carries no such
+    # term in FSPS, so a residual step of size (3.3/5.9)^6 * hack_amplitude
+    # remains at x=5.9 for bump_strength != 1.0 -- this is the published FSPS
+    # dust_type=1 form, reproduced deliberately (see Notes).
     f_a = jnp.where(x >= 5.9, -0.04473 * (x - 5.9) ** 2 - 0.009779 * (x - 5.9) ** 3, 0.0)
     f_b = jnp.where(x >= 5.9, 0.2130 * (x - 5.9) ** 2 + 0.1207 * (x - 5.9) ** 3, 0.0)
     # Scale only the Drude bump terms: 0.104 and 1.206
     a_uv = 1.752 - 0.316 * x - 0.104 * dust_bump_strength / ((x - 4.67) ** 2 + 0.341) + f_a
     b_uv = -3.090 + 1.825 * x + 1.206 * dust_bump_strength / ((x - 4.62) ** 2 + 0.263) + f_b
+
+    # Compute the discontinuity at x=3.3 boundary
+    x_boundary = 3.3
+    y_boundary = x_boundary - 1.82
+    a_opt_boundary = (
+        1.0
+        + 0.17699 * y_boundary
+        - 0.50447 * y_boundary**2
+        - 0.02427 * y_boundary**3
+        + 0.72085 * y_boundary**4
+        + 0.01979 * y_boundary**5
+        - 0.77530 * y_boundary**6
+        + 0.32999 * y_boundary**7
+    )
+    b_opt_boundary = (
+        1.41338 * y_boundary
+        + 2.28305 * y_boundary**2
+        + 1.07233 * y_boundary**3
+        - 5.38434 * y_boundary**4
+        - 0.62251 * y_boundary**5
+        + 5.30260 * y_boundary**6
+        - 2.09002 * y_boundary**7
+    )
+    k_opt_at_boundary = a_opt_boundary + b_opt_boundary / dust_Rv
+
+    a_uv_boundary = (
+        1.752
+        - 0.316 * x_boundary
+        - 0.104 * dust_bump_strength / ((x_boundary - 4.67) ** 2 + 0.341)
+    )
+    b_uv_boundary = (
+        -3.090
+        + 1.825 * x_boundary
+        + 1.206 * dust_bump_strength / ((x_boundary - 4.62) ** 2 + 0.263)
+    )
+    k_uv_at_boundary = a_uv_boundary + b_uv_boundary / dust_Rv
+
+    # Apply hack term: smoothly correct the discontinuity from boundary to large x
+    hack_term = (x_boundary / jnp.clip(x, x_boundary, jnp.inf)) ** 6 * (
+        k_opt_at_boundary - k_uv_at_boundary
+    )
 
     # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4)
     y_fuv = jnp.clip(x, 8.0, 10.0) - 8.0
@@ -1651,6 +1730,10 @@ def conroy2010(
     )
 
     k = a + b / dust_Rv
+    # Add continuity correction to the near-UV segment only (attn_curve.f90
+    # applies `hack` on tmp(mwdindex(4):mwdindex(3)), i.e. 3.3 <= x < 5.9; the
+    # mid-UV segment 5.9 <= x < 8.0 carries no such term).
+    k = k + jnp.where((x >= 3.3) & (x < 5.9), hack_term, 0.0)
     # Normalize by k(5500) to ensure k(5500) = 1.0
     # Compute k(5500) for the current dust_Rv and dust_bump_strength values
     x_5500 = 1.0 / 0.55  # 5500 Å = 0.55 μm

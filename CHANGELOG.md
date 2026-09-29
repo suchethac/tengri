@@ -108,7 +108,14 @@
 
 - `conroy2010` is now CCM89 with a scalable 2175 Å bump (`dust_bump_strength`), as in
   Conroy et al. (2010); it was a sigmoid Cardelli/power-law blend that over-attenuated
-  the NIR by up to 3.3× and had no bump control; `dust_slope` is removed from this law (#2522).
+  the NIR by up to 3.3× and had no bump control; `dust_slope` is removed from this law.
+  The FSPS `attn_curve.f90` continuity correction at the optical/near-UV junction
+  (x=3.3 μm⁻¹) is applied on the near-UV segment only (3.3 ≤ x < 5.9 μm⁻¹), matching
+  FSPS's `attn_curve.f90` exactly; applying it out to x=8.0 μm⁻¹ over-corrected the
+  mid-UV by up to ~2×10⁻³ in k. `conroy2010(dust_bump_strength=1.0)` is not
+  bit-identical to `cardelli` (up to ~2×10⁻⁴ near x=3.3 μm⁻¹): FSPS applies the
+  correction unconditionally, even where the CCM89 optical and near-UV pieces
+  already fail to meet exactly (#2522).
 
 - `reddy15` is continuous at 0.6 µm (red branch offset −0.0362) and constant below 1500 Å (#2523).
 - Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
