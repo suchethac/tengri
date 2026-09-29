@@ -118,12 +118,14 @@ class TestLyaEscapeCancellation:
         # (1) All cells agree with reference to rtol 1e-6
         lya_hbeta_ratio = lya / hbeta
         np.testing.assert_allclose(
-            lya_hbeta_ratio, ref_ratio, rtol=1e-6,
+            lya_hbeta_ratio,
+            ref_ratio,
+            rtol=1e-6,
             err_msg=(
                 f"{backend}/{dust_kind}/fesc={fesc}/fdust={fdust}: "
                 f"Lyα/Hβ = {lya_hbeta_ratio:.6f} deviates from reference "
                 f"{ref_ratio:.6f} (rtol 1e-6 violated)"
-            )
+            ),
         )
 
         # (2) Reference ratio lies in physically loose Case-B window [15, 40]
@@ -160,12 +162,14 @@ class TestLyaEscapeCancellation:
         # Hα/Hβ must be INVARIANT across escape/dust budgets
         halpha_hbeta_ratio = halpha / hbeta
         np.testing.assert_allclose(
-            halpha_hbeta_ratio, ref_ratio, rtol=1e-6,
+            halpha_hbeta_ratio,
+            ref_ratio,
+            rtol=1e-6,
             err_msg=(
                 f"{backend}/{dust_kind}/fesc={fesc}/fdust={fdust}: "
                 f"Hα/Hβ = {halpha_hbeta_ratio:.6f} deviates from reference "
                 f"{ref_ratio:.6f} (rtol 1e-6 violated)"
-            )
+            ),
         )
 
     @pytest.mark.parametrize("dust_kind", ["none", "two_component"])

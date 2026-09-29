@@ -8,10 +8,6 @@ X-ray Emission
 X-ray binaries (HMXB, LMXB) scaled with SFR and stellar mass. AGN coronae: luminosity, photon index γ, exponential cutoff E_cut, UV-to-X-ray slope α_ox. Model-family comparison included.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 

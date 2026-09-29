@@ -8,10 +8,6 @@ Showcase
 Full-stack demonstrations: population forward modeling, gradient diagnostics, end-to-end workflows.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
