@@ -25,6 +25,7 @@ import pytest
 
 from tengri import (
     ForwardModel,
+    NoiseModel,
     Observation,
     Photometry,
     SEDModel,
@@ -87,8 +88,56 @@ def _model_joint(ssp_data):
     return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipe), obs
 
 
-def _fitter(model, obs, ssp_data, profile_mass="auto", likelihood=None, data_type=None):
-    """Build a fitter with the given configuration."""
+def _model_spec_with_covariance(ssp_data):
+    """Spectroscopy with a spectral covariance (small grid, for speed)."""
+    wave_obs = jnp.logspace(2.0, 5.0, 50)
+    cov = np.eye(len(wave_obs)) * 0.01
+    obs = Observation(
+        spectroscopy=Spectroscopy(wave_obs=wave_obs, calibration_order=0, covariance=cov),
+    )
+    recipe = recipes.mock_recovery_minimal()
+    recipe["neb"] = builders.neb.ssp()
+    return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipe), obs
+
+
+def _model_joint_with_covariance(ssp_data):
+    """Joint photometry + spectroscopy-with-covariance (small grid, for speed)."""
+    wave_obs = jnp.logspace(2.0, 5.0, 50)
+    cov = np.eye(len(wave_obs)) * 0.01
+    obs = Observation(
+        photometry=Photometry.from_names(_FILTERS),
+        spectroscopy=Spectroscopy(wave_obs=wave_obs, calibration_order=0, covariance=cov),
+    )
+    recipe = recipes.mock_recovery_minimal()
+    recipe["neb"] = builders.neb.ssp()
+    return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipe), obs
+
+
+def _model_phot_with_noise(ssp_data, *, calibration_floor=0.0, student_t_dof=None):
+    """Photometry with a variable-noise model (calibration floor and/or Student-t dof).
+
+    ``calibration_floor > 0`` alone (``student_t_dof=None``) exercises the
+    ``has_noise_model`` branch of ``build_base_likelihood`` / the "a
+    variable-noise model (noise_frac_cal) is configured" guard.
+    ``student_t_dof`` set exercises the ``uses_student_t`` branch / the
+    "likelihood is Student-t (noise_dof != 0)" guard.
+    """
+    obs = Observation(
+        photometry=Photometry.from_names(_FILTERS),
+        noise=NoiseModel(calibration_floor=calibration_floor, student_t_dof=student_t_dof),
+    )
+    recipe = recipes.mock_recovery_minimal()
+    recipe["neb"] = builders.neb.ssp()
+    return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipe), obs
+
+
+def _fitter(model, obs, ssp_data, profile_mass="auto", likelihood=None, data_type=None, **kwargs):
+    """Build a fitter with the given configuration.
+
+    ``**kwargs`` forwards additional ``Fitter`` constructor arguments (e.g.
+    ``data_mask=``, ``calibration_marginalize=``) for configurations the
+    plain phot/spec/joint call sites above don't need.
+    """
     key_truth, key_mock = jax.random.split(jax.random.PRNGKey(0))
     truth = model.spec.sample(key_truth)
 
@@ -116,6 +165,7 @@ def _fitter(model, obs, ssp_data, profile_mass="auto", likelihood=None, data_typ
         profile_mass=profile_mass,
         likelihood=likelihood,
         data_type=data_type,
+        **kwargs,
     )
     return fitter
 
@@ -352,51 +402,201 @@ class TestSpectralCovarianceRefusal:
         assert fitter._profile_mass
 
 
-class TestContractProfileMassLikelihood:
-    """Contract test: when profile_mass is engaged, likelihood must be plain Gaussian."""
+def _is_plain_gaussian_likelihood(likelihood) -> bool:
+    """Whether ``likelihood`` is a plain diagonal Gaussian the profiled quadratic may absorb.
 
-    def _is_plain_gaussian_likelihood(self, likelihood):
-        """Check if likelihood is a plain Gaussian (no special modifiers)."""
-        from tengri.inference.composite_likelihood import CompositeLikelihood
-        from tengri.inference.photometry_likelihood import PhotometryLikelihood
-        from tengri.inference.spectroscopy_likelihood import SpectroscopyLikelihood
+    Per ``mass_profile``'s guards (module docstring, "Guards" section): a plain
+    ``PhotometryLikelihood`` / ``SpectroscopyLikelihood`` with zero ``sigma_floor``,
+    or a ``CompositeLikelihood`` made ENTIRELY of such members (joint phot+spec).
+    Everything else -- ``None`` (no Protocol adapter built, e.g. the legacy
+    censored-spec/joint bail-out), ``StudentTLikelihood``, ``CensoredLikelihood``,
+    ``MultivariateGaussianLikelihood``, ``CalibrationMarginalizedLikelihood``,
+    ``ELineMarginalizedLikelihood``/``ELineFittedLikelihood``, or a user-supplied
+    object -- is not.
+    """
+    from tengri.inference.composite_likelihood import CompositeLikelihood
+    from tengri.inference.photometry_likelihood import PhotometryLikelihood
+    from tengri.inference.spectroscopy_likelihood import SpectroscopyLikelihood
 
-        if likelihood is None:
-            return False
-
-        # Plain Photometry or Spectroscopy with zero sigma_floor
-        if isinstance(likelihood, (PhotometryLikelihood, SpectroscopyLikelihood)):
-            sigma_floor = getattr(likelihood, "sigma_floor", 0.0)
-            return sigma_floor == 0.0
-
-        # Composite of plain Gaussians
-        if isinstance(likelihood, CompositeLikelihood):
-            for member in likelihood.likelihoods:
-                if not self._is_plain_gaussian_likelihood(member):
-                    return False
-            return True
-
+    if likelihood is None:
         return False
 
-    @pytest.mark.parametrize(
-        "model_fn,data_type",
-        [
-            (_model_phot_only, "photometry"),
-            (_model_spec_only, "spectroscopy"),
-            (_model_joint, "joint"),
-        ],
-    )
-    def test_contract_standard_configs(self, ssp_data_wne, model_fn, data_type):
-        """Standard configs: if profile_mass engages, likelihood is plain Gaussian."""
-        model, obs = model_fn(ssp_data_wne)
-        fitter = _fitter(model, obs, ssp_data_wne, profile_mass="auto", data_type=data_type)
+    if isinstance(likelihood, (PhotometryLikelihood, SpectroscopyLikelihood)):
+        return getattr(likelihood, "sigma_floor", 0.0) == 0.0
 
-        # If profiling was resolved (engaged), the likelihood must be plain Gaussian
-        if fitter._profile_mass_resolved:
-            assert fitter._profile_mass, "resolved should mean _profile_mass is True"
-            # Check that the fitter's built likelihood is plain Gaussian
-            likelihood = getattr(fitter, "_user_likelihood", None)
-            lk_type = type(likelihood).__name__
-            assert self._is_plain_gaussian_likelihood(likelihood), (
-                f"Engaged profile_mass on {data_type} has non-Gaussian likelihood: {lk_type}"
+    if isinstance(likelihood, CompositeLikelihood):
+        return all(_is_plain_gaussian_likelihood(member) for member in likelihood.likelihoods)
+
+    return False
+
+
+# ── One cheap Fitter-builder per ``build_base_likelihood`` branch ──────────
+# (``tengri.inference.likelihood``), plus the user-supplied-likelihood path
+# that sits outside that dispatch entirely (``Fitter(likelihood=...)``).
+# Each entry is ``(builder, both_directions, case_id)``:
+# - ``builder(ssp_data) -> Fitter``, built with ``profile_mass="auto"``.
+# - ``both_directions``: assert the full iff (engaged <=> plain Gaussian) when
+#   True; when False, assert only "never engaged on a non-plain likelihood"
+#   because this is a should-refuse case whose disengagement is expected for
+#   a *different* reason than the guard under test (documented per-case below)
+#   and the reverse direction would just re-assert that unrelated guard.
+
+
+def _case_plain(model_fn, data_type):
+    def _build(ssp_data):
+        model, obs = model_fn(ssp_data)
+        return _fitter(model, obs, ssp_data, profile_mass="auto", data_type=data_type)
+
+    return _build
+
+
+def _case_user_likelihood(model_fn, data_type):
+    def _build(ssp_data):
+        model, obs = model_fn(ssp_data)
+        return _fitter(
+            model,
+            obs,
+            ssp_data,
+            profile_mass="auto",
+            likelihood=_user_likelihood(),
+            data_type=data_type,
+        )
+
+    return _build
+
+
+def _case_student_t(ssp_data):
+    model, obs = _model_phot_with_noise(ssp_data, student_t_dof=5.0)
+    return _fitter(model, obs, ssp_data, profile_mass="auto", data_type="photometry")
+
+
+def _case_noise_model(ssp_data):
+    model, obs = _model_phot_with_noise(ssp_data, calibration_floor=0.05)
+    return _fitter(model, obs, ssp_data, profile_mass="auto", data_type="photometry")
+
+
+def _case_censored_photometry(ssp_data):
+    model, obs = _model_phot_only(ssp_data)
+    mask = jnp.zeros(len(_FILTERS), dtype=jnp.int32).at[0].set(1)
+    return _fitter(
+        model, obs, ssp_data, profile_mass="auto", data_type="photometry", data_mask=mask
+    )
+
+
+def _case_censored_spectroscopy(ssp_data):
+    # build_base_likelihood only builds an explicit CensoredLikelihood for
+    # data_type="photometry"; for spectroscopy/joint it returns None (bails
+    # to the legacy censored dispatch) -- see likelihood.py's comment "Censored
+    # mask on spec / joint isn't covered by a single-channel adapter". This
+    # case pins that distinction: the guard still refuses on `fitter.data_mask`
+    # directly (independent of which likelihood object gets built), so
+    # `_user_likelihood` stays None here rather than becoming a CensoredLikelihood.
+    model, obs = _model_spec_only(ssp_data)
+    n_pix = obs.spectroscopy.wave_obs.shape[0]
+    mask = jnp.zeros(n_pix, dtype=jnp.int32).at[0].set(1)
+    return _fitter(
+        model, obs, ssp_data, profile_mass="auto", data_type="spectroscopy", data_mask=mask
+    )
+
+
+def _case_covariance(model_fn, data_type):
+    def _build(ssp_data):
+        model, obs = model_fn(ssp_data)
+        return _fitter(model, obs, ssp_data, profile_mass="auto", data_type=data_type)
+
+    return _build
+
+
+def _case_calibration_marginalize(ssp_data):
+    model, obs = _model_spec_only(ssp_data)
+    return _fitter(
+        model,
+        obs,
+        ssp_data,
+        profile_mass="auto",
+        data_type="spectroscopy",
+        calibration_marginalize=True,
+    )
+
+
+_CONTRACT_CASES = [
+    pytest.param(_case_plain(_model_phot_only, "photometry"), True, id="plain_photometry"),
+    pytest.param(_case_plain(_model_spec_only, "spectroscopy"), True, id="plain_spectroscopy"),
+    pytest.param(_case_plain(_model_joint, "joint"), True, id="plain_joint"),
+    pytest.param(
+        _case_user_likelihood(_model_phot_only, "photometry"),
+        True,
+        id="user_likelihood_photometry",
+    ),
+    pytest.param(
+        _case_user_likelihood(_model_spec_only, "spectroscopy"),
+        True,
+        id="user_likelihood_spectroscopy",
+    ),
+    pytest.param(_case_user_likelihood(_model_joint, "joint"), True, id="user_likelihood_joint"),
+    pytest.param(_case_student_t, True, id="student_t_photometry"),
+    pytest.param(_case_noise_model, True, id="noise_model_photometry"),
+    pytest.param(_case_censored_photometry, True, id="censored_photometry"),
+    pytest.param(_case_censored_spectroscopy, True, id="censored_spectroscopy"),
+    pytest.param(
+        _case_covariance(_model_spec_with_covariance, "spectroscopy"),
+        True,
+        id="spectral_covariance_spectroscopy",
+    ),
+    pytest.param(
+        _case_covariance(_model_joint_with_covariance, "joint"),
+        True,
+        id="spectral_covariance_joint",
+    ),
+    pytest.param(_case_calibration_marginalize, True, id="calibration_marginalize_spectroscopy"),
+]
+
+
+class TestContractProfileMassLikelihood:
+    """Contract test: profile_mass engages if, and only if, the likelihood is plain Gaussian.
+
+    This is the class sweep for #2509: one cheap configuration per
+    ``build_base_likelihood`` branch (``tengri.inference.likelihood``), plus
+    the user-supplied-likelihood path. For each, the contract asserted is
+
+        fitter._profile_mass_resolved == _is_plain_gaussian_likelihood(actual)
+
+    in BOTH directions: a non-plain likelihood must never get profiled (the
+    #2509 defect class), and every plain config must actually engage (so the
+    guards aren't silently over-broad). ``actual`` is read off
+    ``fitter._user_likelihood`` *after* ``Fitter.__init__`` returns: that
+    attribute is set to the user-supplied object (or ``None``) early in
+    ``__init__``, read by ``mass_profile._check_guards`` in that state, and
+    then -- for the auto-protocol path (default) -- overwritten in place with
+    the auto-built adapter cohort (``PhotometryLikelihood`` /
+    ``SpectroscopyLikelihood`` / ``CompositeLikelihood`` / ``StudentTLikelihood``
+    / ``CensoredLikelihood`` / ``MultivariateGaussianLikelihood`` /
+    ``CalibrationMarginalizedLikelihood`` / e-line adapters) once the guard
+    check is behind it. By the time a caller outside ``__init__`` reads
+    ``fitter._user_likelihood``, it names the likelihood the fit actually
+    scores with.
+    """
+
+    @pytest.mark.parametrize("build_fitter,both_directions", _CONTRACT_CASES)
+    def test_contract(self, ssp_data_wne, build_fitter, both_directions):
+        fitter = build_fitter(ssp_data_wne)
+        actual = getattr(fitter, "_user_likelihood", None)
+        resolved = fitter._profile_mass_resolved
+        plain = _is_plain_gaussian_likelihood(actual)
+        lk_type = type(actual).__name__
+
+        if both_directions:
+            assert resolved == plain, (
+                f"contract violated: _profile_mass_resolved={resolved} but "
+                f"is_plain_gaussian(likelihood)={plain} (likelihood={lk_type}, "
+                f"reason={fitter._profile_mass_reason!r})"
+            )
+        else:
+            # Only "never engage on a non-plain likelihood": this case's
+            # disengagement is expected for an unrelated guard (documented at
+            # its builder), so asserting the reverse direction here would
+            # merely re-assert that unrelated guard instead of this contract.
+            assert not resolved or plain, (
+                f"profile_mass engaged on a non-plain likelihood: {lk_type} "
+                f"(reason={fitter._profile_mass_reason!r})"
             )
