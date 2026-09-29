@@ -42,6 +42,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.scale import representable_floor
 
 __all__ = ["DustAttenuationSEDComponent", "DustAttenuationSEDComponentConfig"]
 
@@ -587,7 +588,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
                 absorbed_per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
                 log_neb = jnp.asarray(state.derived["log_nion"]) + jnp.log10(
-                    jnp.maximum(absorbed_per_qh, 1e-300)
+                    jnp.maximum(absorbed_per_qh, representable_floor(1e-300))
                 )
                 log_l_absorbed = log10_add(
                     log_stellar, log_neb, sign_a=sign_stellar, sign_b=jnp.ones(())

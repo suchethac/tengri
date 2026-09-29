@@ -67,7 +67,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import log10_magnitude, pow10
+from tengri.utils.scale import log10_magnitude, pow10, representable_floor
 
 __all__ = [
     "DustSEDComponent",
@@ -1319,7 +1319,7 @@ class DustSEDComponent(TemplateThreading):
                 sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
                 absorbed_per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
                 log_neb_grid = jnp.asarray(state.derived["log_nion"]) + jnp.log10(
-                    jnp.maximum(absorbed_per_qh, 1e-300)
+                    jnp.maximum(absorbed_per_qh, representable_floor(1e-300))
                 )
                 log_other, sign_other = bolometric_absorbed_log10(
                     sed_shock + sed_agn,
