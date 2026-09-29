@@ -467,14 +467,18 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         ), {}
     # Spectral covariance check: if the fit will use a MultivariateGaussianLikelihood
     # for the spectroscopy channel, the profiled diagonal Gaussian cannot absorb it.
-    obs = getattr(fitter.model, "observation", None)
-    if obs is not None:
-        spec_cfg = getattr(obs, "spectroscopy", None)
-        if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
-            return (
-                "a spectral covariance makes the likelihood a full multivariate Gaussian, "
-                "which the diagonal profiled quadratic cannot absorb"
-            ), {}
+    # This guard only applies to spectroscopy/joint data types, since photometry fits
+    # do not use the spectral covariance (MultivariateGaussianLikelihood is only
+    # instantiated in build_base_likelihood for spectroscopy/joint data_type).
+    if fitter.data_type in ("spectroscopy", "joint"):
+        obs = getattr(fitter.model, "observation", None)
+        if obs is not None:
+            spec_cfg = getattr(obs, "spectroscopy", None)
+            if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
+                return (
+                    "a spectral covariance makes the likelihood a full multivariate Gaussian, "
+                    "which the diagonal profiled quadratic cannot absorb"
+                ), {}
     # Guard #8, as three cases rather than one. ``Fitter._fits_lines`` is the OR
     # of three unrelated situations and only the third is a plain data channel
     # with a mass-proportional prediction, so refusing them together refused a
