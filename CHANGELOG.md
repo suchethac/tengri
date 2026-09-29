@@ -112,6 +112,22 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
+- Spectral indices (`predict_spectral_indices`, both the FeaturePrecomp
+  window-LUT path and the exact path) now read the evaluation's fixed values,
+  including a runtime redshift, like the line methods did in #2499. The redshift
+  affects age-sensitive indices via the cosmic age truncation of the SFH: it
+  reaches the same `age_at_z` cutoff in `compute_joint_weights` (window-LUT
+  path) and in the orchestrator's stellar `apply()` (exact path), so an
+  evaluation-time override changes which lookback ages are truncated on both
+  paths alike. Two sibling gaps in the SAME class of call, found while
+  covering this: `_feature_fast_indices`'s one-off exact measurement for a
+  slope index (e.g. `uv_slope_beta`, not a single-window functional) dropped
+  the evaluation's fixed values even though the window-LUT slots in the same
+  call honored them, so a slope index in `index_defs` could silently disagree
+  with a break/EW index measured alongside it; and `measure_line_fluxes`'s
+  exact (`state=None`) branch rescaled the luminosity distance to the
+  overridden redshift but measured the rest-frame SED itself at the model's
+  own build-time redshift. Both now thread the same `fixed_values` (#2510).
 - Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
   metal-line blanketing term (eq. 15), 0.0017·(λ_obs/λ_α)^1.68 blueward of
   Lyα(1+z); this adds up to ~1% attenuation in the Lyα–Lyβ forest at z = 2–4 (#2516).
