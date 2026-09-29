@@ -820,12 +820,18 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     ssp_wave : array, shape (n_wave,)
         SSP wavelength grid in Å (rest-frame, increasing).
     ssp_flux : array, shape (n_wave,)
-        SSP spectral luminosity density. [erg/s/Hz/Msun]
+        SSP spectral luminosity density [L☉/Hz/Msun]. **Unlike the pipeline
+        standard** (:func:`_integrate_nion_log10` on the stellar path takes
+        `erg/s/Hz`), this function preserves the grid's native units and carries
+        the L_sun → erg/s conversion in log space via :func:`compute_qh_log10` to
+        maintain float32 safety: Q_H ~ 10^46 photons/s overflows float32 in
+        linear form, so the conversion is deferred to log-space summation
+        (log-space L_sun precedent: #1568, #1491, #1206).
 
     Returns
     -------
     float
-        Hydrogen-ionizing photon production rate. [photons/s/Msun]
+        Hydrogen-ionizing photon production rate [photons/s/Msun].
 
     Notes
     -----
@@ -837,24 +843,30 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
         .. math::
 
-            Q_H = \int_0^{\nu_{\rm LL}} \frac{L_\nu}{h\nu} \, \mathrm{d}\nu
+            Q_H = \int_{\lambda<912\,\mathrm{\AA}} \frac{L_\nu}{h\nu} \, \mathrm{d}\nu
 
-        where ν_LL = 13.6 eV / h ≈ 3.29 × 10^15 Hz (Lyman limit, λ < 911.76 Å),
-        L_ν is the SSP flux [erg/s/Hz/Msun], and h is Planck's constant.
-
-        The integral is computed via trapezoidal quadrature in frequency space
-        (not wavelength space) to avoid nonlinear Jacobian effects.
+        where λ < 911.76 Å (Lyman limit), L_ν is the SSP flux [L☉/Hz/Msun], and h
+        is Planck's constant. The integral is computed via trapezoidal quadrature
+        in frequency space (not wavelength space) to avoid nonlinear Jacobian
+        effects. The implementation defers L_sun → erg/s conversion to log space
+        via :func:`compute_qh_log10` for float32 safety.
 
     **Warning (wNE SSPs)**:
         Returns ~0 for "with Nebular Emission" (wNE) SSP spectra because CLOUDY
         consumes ionizing photons during SSP generation. If you see Q_H ≈ 0 for
-        young SSPs (which should have Q_H > 1e50 photons/s), check that your
+        young SSPs (which should have Q_H ~ 1e46-1e47 photons/s per M☉), check that your
         SSP templates are non-nebular variants (BC03, FSPS/Conroy+Gunn models, etc.).
 
-    **Numerical safety**:
-        Clamps per-wavelength integrand to prevent float64 overflow during
-        trapezoidal accumulation (only relevant for artificially young/pure SSPs
-        with Q_H > 1e100). Does not affect physically realistic rates (~1e31).
+    **Float32 safety**:
+        :func:`compute_qh_log10` (called internally) keeps every intermediate
+        in float32 range. This function does not: it returns
+        ``pow10(log10 Q_H)``, and Q_H ~ 1e46-1e47 photons/s exceeds the
+        float32 ceiling (~3.4e38, log10 ~38.53), so ``compute_qh`` itself
+        returns ``inf`` under float32 on healthy input (measured: 861 of 1395
+        grid entries non-finite in float32 for ``fsps_prsc_miles_chabrier.h5``,
+        #1491). **Float32 callers must use** :func:`compute_qh_log10`
+        **directly** and keep the quantity in log10 space, the same treatment
+        as the stellar path's :func:`_integrate_nion_log10` (#1206).
 
     """
     return pow10(compute_qh_log10(ssp_wave, ssp_flux))
@@ -883,12 +895,13 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     ssp_wave : array, shape (n_wave,)
         SSP wavelength grid [Angstrom], rest-frame, increasing.
     ssp_flux : array, shape (n_wave,)
-        SSP spectral luminosity density [Lsun/Hz/Msun]. **Unlike the pipeline
+        SSP spectral luminosity density [L☉/Hz/Msun]. **Unlike the pipeline
         standard** (:func:`_integrate_nion_log10` on the stellar path takes
         `erg/s/Hz`), this function preserves the grid's native units and carries
-        the L_sun → erg/s conversion in log space (`_LOG10_LSUN_ERG`) to maintain
-        float32 safety: Q_H ~ 10^46 photons/s overflows float32 in linear form,
-        so the `_LSUN_ERG` term is deferred to a log-space sum.
+        the L_sun → erg/s conversion in log space via `_LOG10_LSUN_ERG` to
+        maintain float32 safety: Q_H ~ 10^46 photons/s overflows float32 in
+        linear form, so the conversion is deferred to log-space summation
+        (log-space L_sun precedent: #1568, #1491, #1206).
 
     Returns
     -------

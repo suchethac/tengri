@@ -766,9 +766,12 @@ class CloudyGridBackend:
             k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
                      {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
-        Ly-alpha (1215.67 A) is treated separately: its luminosity is scaled
-        by (1-neb_fesc_lya)/(1-k*fesc) relative to other lines, reflecting
-        resonant scattering that suppresses Ly-alpha escape independently.
+        All emission lines are scaled by the Case B recombination cascading
+        factor k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust).
+        Ly-alpha (1215.67 A) is treated separately: after k_factor scaling,
+        its luminosity is additionally multiplied by (1 - neb_fesc_lya) to
+        account for resonant scattering that suppresses Ly-alpha escape
+        independently of the general ionizing photon and dust budget.
 
         Parameters
         ----------
