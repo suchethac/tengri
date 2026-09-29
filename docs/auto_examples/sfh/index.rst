@@ -1,4 +1,4 @@
-:orphan:
+
 
 .. _sphx_glr_auto_examples_sfh:
 
@@ -7,10 +7,6 @@ Star Formation Histories
 
 Parametric forms (DPL, delayed-exponential, lognormal) and non-parametric (PSD-governed stochastic). Quenching pathways, burst observability, and SFH form comparison.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html

@@ -1,4 +1,4 @@
-:orphan:
+
 
 .. _sphx_glr_auto_examples_dust_attenuation:
 
@@ -15,10 +15,6 @@ Dust emission templates load from ``data/``. There is no analytic fallback: a
 missing template raises ``FileNotFoundError`` rather than quietly substituting
 a worse model.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html

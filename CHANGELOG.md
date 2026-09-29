@@ -6,6 +6,10 @@
 
 ### Fixed
 
+- `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
+  since formation (T = age − t_lookback) and take a required keyword-only `age`;
+  both previously treated lookback time as cosmic time and returned mirror-imaged
+  histories (#2524).
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls
