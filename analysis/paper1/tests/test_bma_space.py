@@ -190,7 +190,9 @@ def test_parse_model_key_round_trip_all():
         # Check all fields were preserved
         for field in ["sfh", "ssp", "attenuation", "dust_emission", "nebular"]:
             assert field in parsed, f"Field {field} missing from parsed key"
-            assert parsed[field] == model[field], f"Field {field} mismatch: {parsed[field]} != {model[field]}"
+            assert parsed[field] == model[field], (
+                f"Field {field} mismatch: {parsed[field]} != {model[field]}"
+            )
 
 
 def test_named_grid_5_models():
@@ -212,14 +214,74 @@ def test_enumerate_factorial_has_all_components():
         assert required_keys <= model_keys, f"Model {i} missing keys: {required_keys - model_keys}"
 
 
+def test_all_keys_are_filename_safe():
+    """Every key in all three sets matches ^[A-Za-z0-9_.-]+$ (no spaces/commas/+).
+
+    Named configs used to be keyed from config_metadata's display strings
+    ("Kriek+13, 2-comp", "Draine+2014"), which contain spaces, commas and
+    "+" -- not safe filename characters. A real evidence run wrote its NPZ
+    tmp path with one of those keys and failed the subsequent os.replace.
+    """
+    import re
+
+    pattern = re.compile(r"^[A-Za-z0-9_.-]+$")
+    for models, label in (
+        (enumerate_factorial(), "factorial"),
+        (enumerate_named_grid(), "named_grid"),
+        (enumerate_named_all(), "named_all"),
+    ):
+        for model in models:
+            key = model_key(model)
+            assert pattern.match(key), f"{label} key {key!r} is not filename-safe"
+
+
+def test_named_keys_are_config_or_xlike_prefixed():
+    """Named-grid keys are 'config-<id>'; X-like keys (if present) are 'xlike-<id>'."""
+    for model in enumerate_named_grid():
+        key = model_key(model)
+        assert key == f"config-{model['config']}", key
+
+    for model in enumerate_named_all():
+        cfg = model["config"]
+        key = model_key(model)
+        if cfg in ["I", "II", "III", "IV", "V"]:
+            assert key == f"config-{cfg}", key
+        else:
+            assert key == f"xlike-{cfg}", key
+
+
+def test_named_key_round_trip():
+    """parse_model_key(model_key(m)) recovers the bare config id for named models.
+
+    Unlike the factorial format, a named key encodes only the id (see
+    model_key's docstring): the rest of that configuration's fields live in
+    CONFIGS/XLIKE_CONFIGS, keyed by this same id.
+    """
+    for model in enumerate_named_grid():
+        key = model_key(model)
+        parsed = parse_model_key(key)
+        assert parsed == {"config": model["config"]}
+
+    for model in enumerate_named_all():
+        key = model_key(model)
+        parsed = parse_model_key(key)
+        assert parsed == {"config": model["config"]}
+
+
+def test_model_key_unknown_config_raises():
+    """model_key refuses a 'config' id that is neither a grid config nor an X-like key."""
+    with pytest.raises(ValueError, match="Unknown config id"):
+        model_key({"config": "not_a_real_config"})
+
+
 def test_xlike_import_error_raises():
     """Broken xlike_configs import raises, doesn't silently return empty dict.
 
     Tests issue: xlike imports must raise on error, not swallow silently.
     """
-    from paper1.bma_space import _load_xlike_builders
-    from pathlib import Path
     from unittest.mock import patch
+
+    from paper1.bma_space import _load_xlike_builders
 
     # Monkeypatch xlike_configs.py to simulate import failure
     here = PAPER1
@@ -232,6 +294,8 @@ def test_xlike_import_error_raises():
     # Monkeypatch sys.modules to make xlike_configs import fail
     import sys
 
-    with patch.dict(sys.modules, {"xlike_configs": None}):
-        with pytest.raises(ImportError, match="Failed to import xlike_configs"):
-            _load_xlike_builders()
+    with (
+        patch.dict(sys.modules, {"xlike_configs": None}),
+        pytest.raises(ImportError, match="Failed to import xlike_configs"),
+    ):
+        _load_xlike_builders()

@@ -2,12 +2,14 @@
 """Test BMA evidence runner CLI contract.
 
 Pinned invariants:
-- --help lists expected flags (--galaxy, --set, --models, --out, --n-restarts, --seed, --force, --dry-run, --max-models)
+- --help lists expected flags (--galaxy, --set, --models, --out, --n-restarts, --seed, --force, --dry-run, --max-models, --profile)
 - --dry-run lists models without running them
 - Failed models write JSON with error field and valid=false
 - Valid JSON has all required fields
 - JSON writer produces exactly the SPEC keys
 - Validity rule: newton_decrement <= 0.1, n_clipped_eigenvalues == 0, log_evidence finite
+- save_npz_atomic writes a loadable .npz via a same-suffix temp file and
+  cleans it up on failure (the fix for a real run's ENOENT on every cell's NPZ)
 """
 
 from __future__ import annotations
@@ -25,9 +27,50 @@ for entry in [str(ANALYSIS), str(PAPER1)]:
 
 import numpy as np
 import pytest
-from paper1.bma_evidence import fit_one_model
+from paper1.bma_evidence import fit_one_model, save_npz_atomic
 
 pytestmark = pytest.mark.contract
+
+
+def test_save_npz_atomic_writes_and_reloads(tmp_path):
+    """save_npz_atomic writes a loadable .npz via a same-suffix temp file.
+
+    np.savez appends ".npz" to a target name that does not already end in
+    it, so a temp path like "<key>.npz.tmp" is actually written to disk as
+    "<key>.npz.tmp.npz" and the following os.replace(tmp, final) then raises
+    FileNotFoundError -- exactly what a real evidence run hit on every cell.
+    This pins the fix: the temp file keeps the ".npz" suffix, ends up at the
+    requested path, and leaves no temp file behind.
+    """
+    target = tmp_path / "79" / "config-I.npz"
+    target.parent.mkdir(parents=True)
+    arrays = {
+        "log_stellar_mass_formed": np.array([10.1, 10.2, 10.3]),
+        "log_stellar_mass_survived": np.array([9.9, 10.0, 10.1]),
+        "log_sfr_100myr": np.array([0.5, 0.6, 0.7]),
+        "log_sfr_10myr": np.array([0.4, 0.5, 0.6]),
+    }
+
+    save_npz_atomic(target, **arrays)
+
+    assert target.exists(), "the requested .npz path must exist after the atomic write"
+    leftover_tmp = target.with_name(f"{target.stem}.tmp.npz")
+    assert not leftover_tmp.exists(), "the temp file must not remain after a successful write"
+
+    loaded = np.load(target)
+    for key, values in arrays.items():
+        np.testing.assert_array_equal(loaded[key], values)
+
+
+def test_save_npz_atomic_cleans_up_temp_on_failure(tmp_path):
+    """A write that fails (missing parent directory) leaves no temp file and re-raises."""
+    target = tmp_path / "missing_dir" / "config-I.npz"  # parent directory does not exist
+
+    with pytest.raises(OSError):
+        save_npz_atomic(target, log_stellar_mass_formed=np.array([1.0]))
+
+    assert not target.exists()
+    assert not target.with_name(f"{target.stem}.tmp.npz").exists()
 
 
 def test_cli_help_lists_flags():
@@ -55,6 +98,7 @@ def test_cli_help_lists_flags():
         "--force",
         "--dry-run",
         "--max-models",
+        "--profile",
     ]
     for flag in required_flags:
         assert flag in help_text, f"Flag {flag} not in help text"
@@ -259,4 +303,4 @@ def test_validity_rule_nan_evidence():
         and result["newton_decrement"] <= 0.1
         and result["n_clipped_eigenvalues"] == 0
     )
-    assert is_valid == False
+    assert not is_valid

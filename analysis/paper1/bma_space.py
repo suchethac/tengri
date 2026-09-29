@@ -22,19 +22,18 @@ no copy-paste of priors or parameters.
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
-import tengri
-from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
-from tengri.cosmology import age_at_z
-
-from config_metadata import CONFIGS, SSP_FOR_CONFIG
+from config_metadata import CONFIGS, SSP_FOR_CONFIG, XLIKE_KEYS
 from configs import (
     _continuity_sfh,
     _kriek_conroy_two_component,
     met_prior_for,
 )
+
+import tengri
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
+from tengri.cosmology import age_at_z
 
 LOG10_ZSUN = -1.848
 MET_EDGE_INSET_DEX = 0.02
@@ -154,15 +153,42 @@ _ATTENUATION_BUILDERS = {
 
 
 def model_key(components: dict[str, str]) -> str:
-    """Generate a deterministic model key from component names.
+    """Generate a deterministic, filename-safe model key from component names.
 
     Args:
         components: dict with keys "sfh", "ssp", "attenuation", "dust_emission",
             "nebular", optionally "config" (for named sets).
 
     Returns:
-        String like "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__neb-cue"
+        For a named configuration or X-like model (a "config" key present):
+        the bare id alone, prefixed by its kind -- "config-I" .. "config-V"
+        for a grid configuration, "xlike-cigale_like" etc. for an X-like
+        model. The rest of that configuration's fields (attenuation,
+        dust_emission, nebular) live in ``CONFIGS``/``XLIKE_CONFIGS``, keyed
+        by this same bare id -- never folded into the key itself, because
+        those fields are display strings ("Kriek+13, 2-comp", "Draine+2014")
+        with spaces, commas and "+", none of which are safe filename
+        characters (a real run wrote ``.../<key>.npz.tmp`` where ``<key>``
+        contained a literal ", " and directory separators would have been
+        worse had one of them been "/").
+
+        For a factorial model (no "config" key): a string like
+        "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__nebular-cue"
+        built from the component axis values, which are already
+        filename-safe slugs.
+
+        Every returned key matches ``^[A-Za-z0-9_.-]+$``.
     """
+    if "config" in components:
+        cfg = components["config"]
+        if cfg in XLIKE_KEYS:
+            return f"xlike-{cfg}"
+        if cfg in CONFIGS:
+            return f"config-{cfg}"
+        raise ValueError(
+            f"Unknown config id {cfg!r}: not a grid configuration in CONFIGS "
+            f"({sorted(CONFIGS)}) or an X-like key in XLIKE_KEYS ({XLIKE_KEYS})"
+        )
     parts = []
     for key in ["sfh", "ssp", "attenuation", "dust_emission", "nebular"]:
         if key == "dust_emission":
@@ -178,11 +204,21 @@ def parse_model_key(key: str) -> dict[str, str]:
     """Inverse of model_key: parse a model key into components.
 
     Args:
-        key: String like "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__neb-cue"
+        key: Either "config-<id>" / "xlike-<id>" (a named configuration or
+            X-like model) or a factorial key like
+            "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__nebular-cue".
 
     Returns:
-        dict with keys "sfh", "ssp", "attenuation", "dust_emission", "nebular"
+        For "config-*"/"xlike-*": ``{"config": "<id>"}`` -- the rest of that
+        configuration's fields are not encoded in the key (see ``model_key``);
+        look them up in ``CONFIGS``/``XLIKE_CONFIGS`` by this same id.
+        For a factorial key: dict with keys "sfh", "ssp", "attenuation",
+        "dust_emission", "nebular".
     """
+    if key.startswith("config-"):
+        return {"config": key[len("config-") :]}
+    if key.startswith("xlike-"):
+        return {"config": key[len("xlike-") :]}
     components = {}
     for part in key.split("__"):
         axis, value = part.split("-", 1)
@@ -257,6 +293,7 @@ def _load_xlike_builders() -> dict[str, callable]:
     # If file exists, import must succeed (don't swallow errors)
     try:
         import sys
+
         sys.path.insert(0, str(here))
         try:
             import xlike_configs as module
