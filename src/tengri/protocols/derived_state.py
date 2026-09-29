@@ -269,6 +269,11 @@ class DerivedState:
     #: reading ``log_L_ir`` as a stand-in, which is only correct when
     #: eta == 1 and no override is declared.
     log_L_absorbed: jnp.ndarray | None = None
+    #: log10(L_LyC_dust / (erg/s)) [dex]: the Lyman-continuum energy absorbed
+    #: by dust inside HII regions (neb_fdust), not credited to nebular
+    #: emission but to dust heating. Added to ``log_L_absorbed`` by dust
+    #: components (#2539). Published only when neb_fdust > 0.
+    log_L_lyc_dust: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None

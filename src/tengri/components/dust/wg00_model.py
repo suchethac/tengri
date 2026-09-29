@@ -287,6 +287,17 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         log_l_absorbed, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave
         )
+
+        # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+        # neb_fdust assigns a fraction of LyC photons to dust heating, which
+        # NebularSEDComponent publishes as log_L_lyc_dust. This energy enters
+        # the dust IR budget unconditionally (not gated on eb_include_lyc).
+        from tengri.utils.scale import log10_add
+
+        _log_lyc_dust = state.derived.get("log_L_lyc_dust")
+        if _log_lyc_dust is not None:
+            log_l_absorbed = log10_add(log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0)
+
         warn_if_corrupt(log_l_absorbed, component="wg00")
         if self.config.log_l_ir_requested:
             # Total dust IR budget override (#2187-series): a STATIC branch

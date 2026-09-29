@@ -36,6 +36,7 @@ from tengri.components.nebular.dig import (
 )
 from tengri.components.template_threading import TemplateThreading
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
+from tengri.forward.energy_balance import LYMAN_CUTOFF_AA, bolometric_absorbed_log10
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -1118,6 +1119,41 @@ class NebularSEDComponent(TemplateThreading):
         if stellar_spec is not None and spec_eff is not None:
             spec_lyc_mask = jnp.where(spec_eff < 912.0, neb_fesc, jnp.ones_like(spec_eff))
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec * spec_lyc_mask
+
+        # ── Lyman-continuum dust absorption energy (#2539) ────────────────────
+        # neb_fdust assigns a fraction of LyC photons to dust heating inside HII
+        # regions, not nebular emission. This energy must be credited to the dust
+        # IR budget. Compute the stellar LyC luminosity below 912 Å, multiply by
+        # neb_fdust, and publish as log_L_lyc_dust for dust components to add to
+        # their absorbed-luminosity integral.
+        neb_fdust = jnp.asarray(params.get("neb_fdust", 0.0))
+        _stellar_sed = state.sed_intrinsic
+        if _stellar_sed is not None:
+            # Compute the stellar LyC luminosity as the integral of the stellar SED
+            # below 912 Å (no attenuation, just the intrinsic stellar spectrum).
+            # Use the stellar SED from state.sed_intrinsic (before nebular processing).
+            # Create a zero attenuated SED for the LyC part (λ < 912 Å,
+            # no attenuation in HII regions before dust absorption).
+            # The absorbed energy is: intrinsic - attenuated = intrinsic - 0 = intrinsic
+            # for the LyC-only region.
+            lyc_intrinsic = jnp.where(lyc_mask, _stellar_sed, 0.0)
+            lyc_attenuated = jnp.zeros_like(lyc_intrinsic)
+            log_L_lyc, _ = bolometric_absorbed_log10(
+                lyc_intrinsic,
+                lyc_attenuated,
+                state.nu,
+                wave=state.wave,
+                lyman_cutoff_aa=LYMAN_CUTOFF_AA,
+            )
+            # Combine neb_fdust and L_LyC in log space: log_L_lyc_dust = log10(fdust) + log_L_lyc
+            # Only publish when neb_fdust > 0; use -inf for zero to keep default models
+            # bit-identical (since log10(0) = -inf, which represents zero energy).
+            log_fdust = jnp.log10(jnp.where(neb_fdust > 0, neb_fdust, 1.0))
+            log_L_lyc_dust = log_fdust + log_L_lyc
+            # Publish only when neb_fdust is nonzero, to keep defaults bit-identical
+            derived_overrides["log_L_lyc_dust"] = jnp.where(
+                neb_fdust > 0.0, log_L_lyc_dust, -jnp.inf
+            )
 
         return state.with_(
             sed_intrinsic=(sed_intrinsic + nebular_sed)
