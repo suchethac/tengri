@@ -203,7 +203,9 @@ class TestMeanSFHCrossval:
         peak_t = float(t[np.argmax(sfr)])
         # Expected: age - tau*(beta/alpha)^{1/(alpha+beta)} ≈ 13.8 - 3.9 ≈ 9.9
         expected_peak = age - 3.0 * (1.5) ** (1.0 / 2.5)
-        assert abs(peak_t - expected_peak) < 0.5, f"DPL peak at {peak_t:.1f} Gyr, expected {expected_peak:.1f}"
+        assert abs(peak_t - expected_peak) < 0.5, (
+            f"DPL peak at {peak_t:.1f} Gyr, expected {expected_peak:.1f}"
+        )
 
     def test_dpl_integral_positive(self):
         """DPL integral should be positive."""
