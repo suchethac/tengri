@@ -47,6 +47,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.scale import log10_magnitude
+from tengri.utils.wavelength import lyman_edge_transmission as _lyman_edge_transmission
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 
@@ -111,112 +112,6 @@ def _backend_accepted_params(backend_cls: type) -> frozenset[str]:
             return frozenset()
         accepted &= named
     return frozenset(accepted)
-
-
-def _lyman_edge_transmission(
-    wave_rest: jnp.ndarray, neb_fesc: jnp.ndarray, edge_aa: float = 912.0
-) -> jnp.ndarray:
-    r"""Node-wise stellar LyC transmission, exact under trapezoid quadrature.
-
-    ``where(wave_rest < edge_aa, neb_fesc, 1)`` places the Lyman-limit step at
-    whichever SSP grid node sits just below ``edge_aa`` rather than at the
-    physical edge itself (#2447): on ``fsps_mist_c3k_a_chabrier`` the nodes
-    bracketing 912 Å are 911.5716 and 913.3967 Å, so a trapezoid band integral
-    over the naively-masked spectrum ramps transmission linearly across that
-    1.8 Å interval instead of stepping at 912 Å. This replaces only the two
-    nodes bracketing the edge with the trapezoid weights that make the SAME
-    single-panel quadrature integrate the true split -- ``neb_fesc`` below
-    912 Å, 1 above -- exactly, to round-off; every other node keeps the plain
-    step.
-
-    Parameters
-    ----------
-    wave_rest : array_like, shape (n_wave,)
-        Ascending rest-frame wavelength grid [Angstrom].
-    neb_fesc : array_like, scalar
-        Lyman-continuum escape fraction, in [0, 1].
-    edge_aa : float, optional
-        Rest-frame Lyman-limit wavelength [Angstrom]. Default 912.0.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Per-node transmission factor: ``neb_fesc`` below the edge and 1
-        above it, except at the two nodes bracketing ``edge_aa``, which
-        carry the trapezoid-exact split weights below.
-
-    Notes
-    -----
-    **JIT/grad-safe.** Pure ``jnp`` primitives, fully vectorized via boolean
-    masks and shifted-array differences (no data-dependent indexing). The two
-    bracketing-interval widths are guarded against a zero denominator
-    (``edge_aa`` outside the grid's range, never true for a real SSP grid) so
-    the unselected ``jnp.where`` branch never carries a 0/0 that would poison
-    the ``neb_fesc`` gradient.
-
-    **Derivation.** Let :math:`[\lambda_a, \lambda_b]` (width :math:`h`) be
-    the grid interval straddling the edge, :math:`s = (912 - \lambda_a)/h \in
-    [0, 1]`, and :math:`F` the SSP spectrum, linear between grid nodes by
-    construction (the quadrature's own assumption). The exact split integral
-    of :math:`F` over :math:`[\lambda_a, \lambda_b]` (weight ``neb_fesc``
-    below 912 Å, 1 above) equals the ordinary trapezoid formula
-    :math:`(h/2)(w_a F_a + w_b F_b)` with
-
-    .. math::
-
-        w_a &= 2\left[f_{\rm esc}\left(s - \frac{s^2}{2}\right)
-               + \left(\frac{1}{2} - s + \frac{s^2}{2}\right)\right] \\
-        w_b &= 2\left[f_{\rm esc}\frac{s^2}{2} + \frac{1}{2} - \frac{s^2}{2}\right]
-
-    Node :math:`a` also closes the (fully-masked) interval to its left
-    (width :math:`h_l`, weight ``neb_fesc``) and node :math:`b` the
-    (fully-unmasked) interval to its right (width :math:`h_r`, weight 1), so
-    the single per-node factors that make the *ordinary* (unmodified)
-    trapezoid sum exact overall are
-
-    .. math::
-
-        T_a = \frac{f_{\rm esc} h_l + w_a h}{h_l + h}, \qquad
-        T_b = \frac{w_b h + h_r}{h + h_r}
-
-    Both are affine in ``neb_fesc`` (:math:`T = 1 - C(1 - f_{\rm esc})` for a
-    fesc-independent :math:`C`), so composing this array with a further
-    per-age young/old blend (``dust/two_component.py``'s
-    ``1 - y(a)(1 - lyc_transmission)``) commutes: substituting an
-    age-blended escape fraction into :math:`T_a`/:math:`T_b` gives the
-    identical result as blending :math:`T_a`/:math:`T_b` themselves, so this
-    fix is exact for that consumer too with no changes there.
-    """
-    wave = jnp.asarray(wave_rest)
-    fesc = jnp.asarray(neb_fesc)
-    below = wave < edge_aa
-
-    below_next = jnp.concatenate([below[1:], jnp.array([True])])
-    below_prev = jnp.concatenate([jnp.array([True]), below[:-1]])
-    is_a = below & (~below_next)  # last node below the edge
-    is_b = (~below) & below_prev  # first node at/above the edge
-
-    wave_prev = jnp.concatenate([wave[:1], wave[:-1]])
-    wave_next = jnp.concatenate([wave[1:], wave[-1:]])
-    h_left = wave - wave_prev
-    h_right = wave_next - wave
-
-    lam_a = jnp.sum(jnp.where(is_a, wave, 0.0))
-    h_l = jnp.sum(jnp.where(is_a, h_left, 0.0))
-    h = jnp.sum(jnp.where(is_a, h_right, 0.0))
-    h_r = jnp.sum(jnp.where(is_b, h_right, 0.0))
-
-    h_safe = jnp.where(h > 0.0, h, 1.0)
-    s = (edge_aa - lam_a) / h_safe
-    w_a = 2.0 * (fesc * (s - s * s / 2.0) + (0.5 - s + s * s / 2.0))
-    w_b = 2.0 * (fesc * s * s / 2.0 + 0.5 - s * s / 2.0)
-    left_denom = jnp.where((h_l + h) > 0.0, h_l + h, 1.0)
-    right_denom = jnp.where((h + h_r) > 0.0, h + h_r, 1.0)
-    t_a = (fesc * h_l + w_a * h) / left_denom
-    t_b = (w_b * h + h_r) / right_denom
-
-    base = jnp.where(below, fesc, jnp.ones_like(wave))
-    return jnp.where(is_a, t_a, jnp.where(is_b, t_b, base))
 
 
 @dataclass(frozen=True)
@@ -1317,6 +1212,14 @@ class NebularSEDComponent(TemplateThreading):
         if _stellar_sed is not None:
             from tengri.utils.physics_constants import C_AA
 
+            # Published unmasked (pre-fesc) so a consumer needing the exact
+            # 912 A edge on a FINER quadrature grid than this component's own
+            # ``state.wave`` (the photometric union grid, #2447) can redo the
+            # trapezoid-exact split there instead of re-interpolating this
+            # component's already-node-blended ``lyc_transmission`` -- see
+            # ``observation.photometry._filter_integral_union``.
+            derived_overrides["lyc_unmasked_stellar_sed"] = _stellar_sed
+
             # LyC-ONLY luminosity: keep wave < 912 Å. This is the OPPOSITE
             # selection from the canonical dust-EB mask (which EXCLUDES the
             # LyC region), so the manual pre-mask below must be paired with
@@ -1324,8 +1227,18 @@ class NebularSEDComponent(TemplateThreading):
             # the internal "keep wave >= cutoff" mask on top of values that
             # are already zero there, zeroing the entire integrand and
             # silently making log_L_lyc == -inf always (measured; #2539 RED).
+            # ``lyc_weight`` is the SAME trapezoid-exact split as
+            # ``lyc_transmission`` above, evaluated at fesc=0 (#2447): its
+            # docstring shows the result is exactly ``1 - C``, the RAW
+            # (fesc-independent) fraction of each node's quadrature weight
+            # that falls below the edge -- so the credit and the mask share
+            # one definition instead of the boolean ``wave < 912`` this
+            # replaces (that undefined ``lyc_mask`` name was a merge
+            # conflict between #2539 and #2447, never exercised together
+            # before this PR).
             nu_lyc = C_AA / state.wave
-            lyc_intrinsic = jnp.where(lyc_mask, _stellar_sed, 0.0)
+            lyc_weight = 1.0 - _lyman_edge_transmission(state.wave, jnp.zeros_like(neb_fesc))
+            lyc_intrinsic = lyc_weight * _stellar_sed
             lyc_attenuated = jnp.zeros_like(lyc_intrinsic)
             log_L_lyc, _ = bolometric_absorbed_log10(
                 lyc_intrinsic,

@@ -437,6 +437,15 @@ class DerivedState:
     #: combine, the same cross-component reason ``lyc_fdust`` exists (a dust
     #: component's ``parameter_prefix`` never sees a "neb_"-prefixed key).
     lyc_fesc: jnp.ndarray | None = None
+    #: Stellar SED on ``state.wave`` BEFORE ``lyc_transmission`` is applied
+    #: (#2447 exact-photometry seam): ``lyc_transmission`` is only exact under
+    #: trapezoid quadrature for a SINGLE panel straddling 912 A, which no
+    #: longer holds once a photometric filter table's own nodes subdivide
+    #: that panel (real, finely-sampled filters like GALEX NUV). Published so
+    #: ``observation.photometry._filter_integral_union`` can redo the
+    #: trapezoid-exact split directly on its own (finer) union grid instead
+    #: of re-interpolating the already node-blended masked SED.
+    lyc_unmasked_stellar_sed: jnp.ndarray | None = None
     # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).

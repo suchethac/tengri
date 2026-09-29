@@ -197,6 +197,23 @@ def lyc_ssp_edge(lyc_ssp):
     return _augment_ssp_at_edge(lyc_ssp)
 
 
+def _lyc_correction(state):
+    """Build the ``lnu_filter_integral`` exact-edge correction from a state.
+
+    Mirrors ``observation.photometry.project_photometry``'s own construction
+    (#2447 MAKE-IT-EXACT seam): the three keys are published together by
+    ``NebularSEDComponent``, so this reproduces exactly what the PRODUCTION
+    exact photometry path does automatically, letting this module's direct
+    ``lnu_filter_integral`` calls exercise the identical fix.
+    """
+    unmasked = state.derived.get("lyc_unmasked_stellar_sed") if state.derived is not None else None
+    transmission = state.derived.get("lyc_transmission") if state.derived is not None else None
+    fesc = state.derived.get("lyc_fesc") if state.derived is not None else None
+    if unmasked is None or transmission is None or fesc is None:
+        return None
+    return (unmasked, transmission, fesc)
+
+
 # ── Band flux: exact path vs. the augmented-grid (edge-exact) reference ────
 
 
@@ -213,7 +230,14 @@ def test_band_flux_matches_split_at_edge(lyc_ssp, lyc_ssp_edge, fesc, z, dust, i
     s_ref = m_ref.predict_state({})
 
     exact = float(
-        lnu_filter_integral(s_exact.sed_intrinsic, s_exact.wave, filt.wave, filt.trans, z)
+        lnu_filter_integral(
+            s_exact.sed_intrinsic,
+            s_exact.wave,
+            filt.wave,
+            filt.trans,
+            z,
+            lyc_correction=_lyc_correction(s_exact),
+        )
     )
     ref = float(lnu_filter_integral(s_ref.sed_intrinsic, s_ref.wave, filt.wave, filt.trans, z))
 
@@ -319,7 +343,14 @@ def test_gradient_wrt_fesc_finite_and_analytic(lyc_ssp):
 
     def straddle_flux(fesc_value):
         state = model.predict_state({fesc_name: fesc_value})
-        return lnu_filter_integral(state.sed_intrinsic, state.wave, filt.wave, filt.trans, z)
+        return lnu_filter_integral(
+            state.sed_intrinsic,
+            state.wave,
+            filt.wave,
+            filt.trans,
+            z,
+            lyc_correction=_lyc_correction(state),
+        )
 
     for fesc0 in (0.1, 0.5, 0.9):
         grad = float(jax.grad(straddle_flux)(fesc0))
@@ -348,18 +379,40 @@ class TestRealGridIssueRows:
     finer (rest-frame node spacing ~0.33 A at z=2) than either real grid's
     spacing near 912 A (MIST/C3K h=1.83 A, MILES h=10 A), so the filter's own
     nodes subdivide the straddling SSP interval and the single-trapezoid-
-    panel exactness the node-wise fix relies on (module docstring) no longer
-    holds exactly -- measured (2026-09, post #2447 fix) residual against the
-    augmented-grid reference: MIST/C3K z=2 GALEX NUV 6.7e-4, MILES z=2 GALEX
-    NUV 1.8e-2, both z=3 SDSS u rows below 1e-2. These ratchets bound that
-    residual (a real, understood filter-oversampling effect, not the #2447
-    node-quantization defect itself, which this same measurement shows fell
-    from -2.0651% to +0.0671% on MIST/C3K) from getting WORSE or from the fix
-    being silently disabled again (which reopens the multi-percent defect),
-    not from shrinking to round-off -- that would need
-    inserting 912 A into the SSP grid itself (a much larger change than this
-    fix's nebular-component scope; see the module docstring's mechanism
-    discussion).
+    panel exactness ``NebularSEDComponent``'s own node-wise fix relies on
+    (module docstring) no longer holds exactly on the SSP grid alone.
+
+    MAKE-IT-EXACT seam (photometry-side, #2447 follow-up): rather than
+    inserting 912 A into the SSP grid itself (the whole-model change the
+    module docstring's mechanism discussion once ruled out here),
+    ``observation.photometry._filter_integral_union`` redoes the
+    trapezoid-exact split directly on ITS OWN (finer) union grid, using the
+    UNMASKED stellar SED published by ``NebularSEDComponent``
+    (``lyc_unmasked_stellar_sed``) -- see ``_lyc_photometry_correction``'s
+    docstring for the derivation. ``lnu_filter_integral``'s ``lyc_correction``
+    kwarg (built by this module's ``_lyc_correction`` helper) opts a caller
+    into it; ``project_photometry`` (the production forward path) does so
+    automatically whenever a nebular component published the three keys.
+
+    Measured (2026-09, post seam) residual against the augmented-grid
+    reference, stellar-only (no nebular component -- isolates the fesc MASK
+    defect #2447 is about): MIST/C3K and MILES both ~1e-9, i.e. round-off,
+    down from the pre-seam 6.7e-4 (MIST/C3K) / 1.8e-2 (MILES) and the
+    original (pre-#2447) -2.0651% / +11.3813%. WITH the issue's own Cue
+    nebular backend (fesc=0, maximal reprocessing) the residual is smaller
+    but does not fully close: MIST/C3K ~3e-9-3e-7 (round-off), MILES
+    ~2-6e-4. Isolated (bare stellar vs. Cue-on, same grid/filter/z/fesc) to
+    Cue's OWN nebular continuum: published on the same (coarse, for MILES)
+    SSP wave grid, it carries its own near-912-A structure that this seam
+    does not correct (it only redoes the STELLAR mask's split); naively
+    re-interpolating that structure onto the union grid reproduces the SAME
+    class of defect #2447 fixed for the stellar term, scaled by how coarse
+    the native grid is there (tiny for MIST/C3K's h=1.83 A, an order of
+    magnitude larger for MILES's h=10 A) -- consistent with the measured
+    ratio. This is a DISTINCT, follow-on numerical question (the nebular
+    continuum's own shape near the Lyman edge, not the fesc step mask) and
+    is out of THIS issue's scope; the MILES-with-Cue ratchets below bound it
+    at the measured level with margin rather than asserting round-off.
     """
 
     MILES_PATH = "fsps_prsc_miles_chabrier"
@@ -382,7 +435,14 @@ class TestRealGridIssueRows:
         s_exact = m_exact.predict_state({})
         s_ref = m_ref.predict_state({})
         exact = float(
-            lnu_filter_integral(s_exact.sed_intrinsic, s_exact.wave, filt.wave, filt.trans, z)
+            lnu_filter_integral(
+                s_exact.sed_intrinsic,
+                s_exact.wave,
+                filt.wave,
+                filt.trans,
+                z,
+                lyc_correction=_lyc_correction(s_exact),
+            )
         )
         ref = float(lnu_filter_integral(s_ref.sed_intrinsic, s_ref.wave, filt.wave, filt.trans, z))
         assert ref != 0.0, f"z={z} {filt_name}: reference flux is exactly zero"
@@ -395,23 +455,39 @@ class TestRealGridIssueRows:
         return rel
 
     def test_miles_z2_galex_nuv(self):
+        # Measured (2026-09, post seam): 6.26e-4 -- the residual nebular
+        # continuum edge effect described in the class docstring, not the
+        # fesc mask defect (which this same measurement shows collapses to
+        # round-off with no nebular component). ~1.6x margin.
         ssp = self._load(self.MILES_PATH)
-        self._measure(ssp, 2.0, "galex_nuv", 0.0, ceiling=0.05)
+        self._measure(ssp, 2.0, "galex_nuv", 0.0, ceiling=1e-3)
 
     def test_miles_z3_sdss_u(self):
+        # Measured: 2.56e-4; ~2x margin. See test_miles_z2_galex_nuv.
         ssp = self._load(self.MILES_PATH)
-        self._measure(ssp, 3.0, "sdss_u", 0.0, ceiling=0.02)
+        self._measure(ssp, 3.0, "sdss_u", 0.0, ceiling=6e-4)
 
     def test_miles_fesc1_floor(self):
-        """fesc=1 must collapse to near the ordinary (mask-free) floor."""
+        """fesc=1 must collapse to near the ordinary (mask-free) floor.
+
+        At fesc=1 the nebular reprocessing fraction ``(1 - fesc)`` is zero,
+        so Cue's continuum (and the residual it otherwise leaves, see the
+        class docstring) vanishes along with the LyC mask itself: measured
+        1.04e-9, true round-off.
+        """
         ssp = self._load(self.MILES_PATH)
-        rel = self._measure(ssp, 2.0, "galex_nuv", 1.0, ceiling=0.01)
-        assert rel < 0.001, f"fesc=1 floor {rel * 100:.4f}% not near-zero"
+        rel = self._measure(ssp, 2.0, "galex_nuv", 1.0, ceiling=1e-6)
+        assert rel < 1e-7, f"fesc=1 floor {rel:.3e} not near round-off"
 
     def test_mist_c3k_z2_galex_nuv(self):
+        # Measured (2026-09, post seam): 2.77e-9, round-off (MIST/C3K's
+        # finer h=1.83 A native grid near 912 A leaves the residual nebular-
+        # continuum edge effect below any margin worth asserting tighter
+        # than -- unlike MILES, see the class docstring).
         ssp = self._load(self.MIST_C3K_PATH)
-        self._measure(ssp, 2.0, "galex_nuv", 0.0, ceiling=0.003)
+        self._measure(ssp, 2.0, "galex_nuv", 0.0, ceiling=1e-6)
 
     def test_mist_c3k_z3_sdss_u(self):
+        # Measured: 2.67e-7, round-off. See test_mist_c3k_z2_galex_nuv.
         ssp = self._load(self.MIST_C3K_PATH)
-        self._measure(ssp, 3.0, "sdss_u", 0.0, ceiling=0.003)
+        self._measure(ssp, 3.0, "sdss_u", 0.0, ceiling=1e-5)
