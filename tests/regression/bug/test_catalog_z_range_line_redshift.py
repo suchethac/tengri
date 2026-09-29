@@ -628,7 +628,7 @@ def _build_bare_stellar_model(ssp, obs, z, approx):
 #: ``_cic_parcels``) never actually engages and every index comparison built
 #: on it would be vacuously equal -- the exact failure mode this file's
 #: rejected draft shipped (see test_compute_log_nion_respects_fixed_values_
-#: redshift_override's comment for the line-flux analogue, measured 0.26 dex
+#: redshift_override's comment for the line-flux analog, measured 0.26 dex
 #: apart there). age_at_z(2.0) ~ 3.3 Gyr, age_at_z(0.1) ~ 12.4 Gyr: 13.0 Gyr
 #: is clipped hard at z=2.0 and (almost) not at all at z=0.1.
 _OLD_AGE_PARAMS = {**PARAMS, "sfh_dpl_age_gyr": 13.0}
