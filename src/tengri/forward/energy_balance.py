@@ -335,6 +335,75 @@ def log10_fdust_lyc_credit(log_l_lyc: jnp.ndarray, neb_fdust: jnp.ndarray) -> jn
     return jnp.where(neb_fdust > 0.0, candidate, -jnp.inf)
 
 
+def log10_add_fdust_credit(
+    log_l_absorbed: jnp.ndarray, log_l_lyc: jnp.ndarray, neb_fdust: jnp.ndarray
+) -> jnp.ndarray:
+    r"""``log10(L_absorbed + neb_fdust * L_LyC)``, smooth in ``neb_fdust`` (#2539 item 3).
+
+    Replaces the ``log10_fdust_lyc_credit(...)`` + ``log10_add(...)`` pairing
+    with the fused, exact form the owner asked for:
+
+    .. math::
+
+        \log_{10}(L_{\rm abs} + f_{\rm dust} L_{\rm LyC}) = \log_{10} L_{\rm abs}
+        + \log_{10}\!\left(1 + f_{\rm dust} \cdot 10^{\log_{10} L_{\rm LyC}
+        - \log_{10} L_{\rm abs}}\right)
+
+    computed with ``jnp.log1p`` so the argument to the log is never literally
+    zero. ``log10_fdust_lyc_credit`` computes ``log10(fdust) + log_l_lyc`` in
+    isolation and clamps its OWN gradient to exactly 0.0 at ``fdust == 0``
+    (see its docstring) -- correct for that isolated quantity, but wrong once
+    chained into this combine: the zero upstream gradient multiplies through
+    and zeroes the gradient of the COMBINED ``log_l_absorbed`` too, even
+    though ``L_absorbed`` is exactly LINEAR in ``fdust``
+    (:math:`dL_{\rm abs}/d f_{\rm dust} = L_{\rm LyC}`, a finite nonzero
+    constant at every ``fdust``, including 0). This form never computes
+    ``log10(fdust)`` at all, so there is no singularity to clamp around.
+
+    Parameters
+    ----------
+    log_l_absorbed : array_like, shape ()
+        log10(L_absorbed / (erg/s)) [dex], the running absorbed-luminosity
+        sum this component has accumulated so far. A plain (positively
+        oriented) magnitude, not a signed quantity -- every call site on this
+        seam reaches this function only after its own sum has already been
+        reduced to a magnitude (#2539 item 2).
+    log_l_lyc : array_like, shape ()
+        log10(L_LyC / (erg/s)) [dex]: the RAW (pre-``fdust``) Lyman-continuum
+        luminosity of the credited population. ``-inf`` if that population
+        has no LyC luminosity.
+    neb_fdust : array_like, shape ()
+        Dust-absorption fraction of ionizing photons, in [0, 1].
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``log10(L_absorbed + neb_fdust * L_LyC)`` [dex]. Bit-identical to
+        ``log_l_absorbed`` at ``neb_fdust == 0`` (``jnp.log1p(0) == 0``
+        exactly) and to ``log10_fdust_lyc_credit(log_l_lyc, neb_fdust)`` when
+        ``log_l_absorbed`` is ``-inf`` (nothing else absorbed).
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. Robust to ``log_l_absorbed == -inf`` (e.g. a
+    fully-transparent, ``tau == 0`` screen): the smooth ratio form would
+    otherwise divide a zero base into a possibly-nonzero credit
+    (``10**(log_l_lyc - (-inf)) == inf``, ``inf * 0 == NaN`` under naive
+    evaluation), so that case is guarded by a where-dummy and falls back to
+    :func:`log10_fdust_lyc_credit`'s own ``-inf``-safe value -- a condition
+    that depends on ``tau``, not on ``neb_fdust``, so it does not reintroduce
+    the singularity this function exists to avoid.
+    """
+    from tengri.utils.scale import LN10, pow10
+
+    absorbed_is_zero = jnp.isneginf(log_l_absorbed)
+    safe_log_l_absorbed = jnp.where(absorbed_is_zero, 0.0, log_l_absorbed)
+    ratio = pow10(log_l_lyc - safe_log_l_absorbed)
+    smooth = safe_log_l_absorbed + jnp.log1p(jnp.asarray(neb_fdust) * ratio) / LN10
+    fallback = log10_fdust_lyc_credit(log_l_lyc, neb_fdust)
+    return jnp.where(absorbed_is_zero, fallback, smooth)
+
+
 def bolometric_absorbed(
     sed_intrinsic: jnp.ndarray,
     sed_attenuated: jnp.ndarray,

@@ -274,6 +274,17 @@ class DerivedState:
     #: emission but to dust heating. Added to ``log_L_absorbed`` by dust
     #: components (#2539). Published only when neb_fdust > 0.
     log_L_lyc_dust: jnp.ndarray | None = None
+    #: log10(L_LyC / (erg/s)) [dex]: the RAW (pre-fesc, pre-fdust)
+    #: Lyman-continuum luminosity of the whole stellar population (#2539 item
+    #: 3). Published alongside ``lyc_fdust`` so a dust component can credit
+    #: ``neb_fdust * L_LyC`` into ``log_L_absorbed`` via the smooth
+    #: (``log1p``-based) combine in ``energy_balance.log10_add_fdust_credit``
+    #: instead of ``log10_add``ing the already-``fdust``-multiplied
+    #: ``log_L_lyc_dust`` (whose own gradient is deliberately clamped to zero
+    #: at ``neb_fdust == 0``, which would zero the combined gradient too even
+    #: though ``L_absorbed`` is linear in ``fdust``). Published only when a
+    #: stellar SED is present.
+    log_L_lyc: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     #: Full-grid diffuse dust transmission (dimensionless): T(λ) on the full
     #: state.wave grid, evaluated by the dust attenuator. Published by all
@@ -419,6 +430,13 @@ class DerivedState:
     #: ``params["neb_fdust"]`` (which would silently see only the 0.0
     #: default) to compute its own young-weighted HII-region dust credit.
     lyc_fdust: jnp.ndarray | None = None
+    #: Raw ``neb_fesc`` value (#2539 item 1), the ``lyc_fdust`` analog for
+    #: the escape fraction: published so ``two_component``'s WavePrecomp
+    #: energy-balance LUT branch can pass the runtime fesc into
+    #: ``lut_l_absorbed_stellar_log10``'s exact affine (A_0 + fesc*A_1)
+    #: combine, the same cross-component reason ``lyc_fdust`` exists (a dust
+    #: component's ``parameter_prefix`` never sees a "neb_"-prefixed key).
+    lyc_fesc: jnp.ndarray | None = None
     # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).

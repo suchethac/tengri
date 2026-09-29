@@ -245,12 +245,6 @@ SIGNATURE_POLICY: KeyPolicy = {
         "structure as the cache, and read by no numerical path"
     ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
-    "_energy_balance_lut_decline_reason": exclude(
-        "the verdict that accompanies _energy_balance_lut_cache when it declines "
-        "for the #2539 sibling condition (live nebular fesc + eb_include_lyc=True): "
-        "why the LUT was refused, recorded for precompute_report. Derived from the "
-        "same keyed structure as the cache, and read by no numerical path"
-    ),
     "_*_term_response_cache": exclude(
         "memo cache computed from keyed structure; pattern matches all additive "
         "emitters (radio, xray, and any new ones)"

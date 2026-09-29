@@ -208,12 +208,22 @@ class WG00AttenuationSEDComponent(TemplateThreading):
                 "Nebular continuum folded into sed_intrinsic before the screen",
             ),
             DerivedKey(
-                "log_L_lyc_dust",
+                "log_L_lyc",
                 "dex",
-                "LyC energy neb_fdust assigns to dust in HII regions (#2539), added "
-                "into log_L_absorbed unconditionally (not gated on eb_include_lyc, "
-                "which concerns only the screen's own LyC absorption); read via the "
-                "sed_nebular edge above for ordering. Absent/-inf when neb_fdust == 0.",
+                "RAW (pre-fdust) LyC luminosity of the whole stellar population "
+                "(#2539 item 3), combined with lyc_fdust below into log_L_absorbed "
+                "unconditionally (not gated on eb_include_lyc, which concerns only "
+                "the screen's own LyC absorption); read via the sed_nebular edge "
+                "above for ordering. Absent when sed_intrinsic was not yet "
+                "populated when the nebular component ran.",
+            ),
+            DerivedKey(
+                "lyc_fdust",
+                "",
+                "Raw neb_fdust value (#2539 item 2/3), the cross-prefix analog of "
+                "lyc_transmission; combined with log_L_lyc above via the smooth "
+                "log10_add_fdust_credit. Absent/0.0 for BakedIn or at the "
+                "Fixed(0.0) default.",
             ),
         )
 
@@ -320,14 +330,20 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         )
 
         # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
-        # neb_fdust assigns a fraction of LyC photons to dust heating, which
-        # NebularSEDComponent publishes as log_L_lyc_dust. This energy enters
-        # the dust IR budget unconditionally (not gated on eb_include_lyc).
-        from tengri.utils.scale import log10_add
+        # neb_fdust assigns a fraction of LyC photons to dust heating;
+        # NebularSEDComponent publishes the RAW (pre-fdust) LyC luminosity as
+        # log_L_lyc and the raw fraction as lyc_fdust (#2539 item 3), combined
+        # here with the smooth (log1p) log10_add_fdust_credit -- see that
+        # function's docstring for why log10_add-ing the already
+        # fdust-multiplied form has a gradient defect at fdust == 0. This
+        # energy enters the dust IR budget unconditionally (not gated on
+        # eb_include_lyc).
+        from tengri.forward.energy_balance import log10_add_fdust_credit
 
-        _log_lyc_dust = state.derived.get("log_L_lyc_dust")
-        if _log_lyc_dust is not None:
-            log_l_absorbed = log10_add(log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0)
+        _log_l_lyc = state.derived.get("log_L_lyc")
+        if _log_l_lyc is not None:
+            _neb_fdust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+            log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _neb_fdust)
 
         warn_if_corrupt(log_l_absorbed, component="wg00")
         if self.config.log_l_ir_requested:

@@ -405,12 +405,29 @@ class NebularSEDComponent(TemplateThreading):
                 "lyc_absorb_all=False to compute its own young-weighted credit.",
             ),
             DerivedKey(
+                "lyc_fesc",
+                "",
+                "Raw neb_fesc value (#2539 item 1), same cross-prefix reason as "
+                "lyc_fdust: two_component's WavePrecomp energy-balance LUT branch "
+                "reads this to combine its A_0 + fesc*A_1 stellar tables.",
+            ),
+            DerivedKey(
                 "log_L_lyc_dust",
                 "dex",
                 "log10(L_LyC_dust / (erg/s)): LyC energy neb_fdust assigns to dust "
-                "inside HII regions (#2539); dust attenuators add this into "
-                "log_L_absorbed. Absent/-inf when neb_fdust == 0 (the default) or "
-                "sed_intrinsic has not been populated yet.",
+                "inside HII regions (#2539); introspection value, kept "
+                "bit-identical to the pre-item-3 credit. Absent/-inf when "
+                "neb_fdust == 0 (the default) or sed_intrinsic has not been "
+                "populated yet.",
+            ),
+            DerivedKey(
+                "log_L_lyc",
+                "dex",
+                "log10(L_LyC / (erg/s)): the RAW (pre-fesc, pre-fdust) "
+                "Lyman-continuum luminosity of the whole stellar population "
+                "(#2539 item 3); dust attenuators combine this with lyc_fdust via "
+                "energy_balance.log10_add_fdust_credit to credit log_L_absorbed "
+                "with a nonzero gradient at neb_fdust == 0.",
             ),
         ]
         # ``sed_shock`` is owned by this component ONLY on the mutually-exclusive
@@ -1075,6 +1092,13 @@ class NebularSEDComponent(TemplateThreading):
         neb_fdust = jnp.asarray(params.get("neb_fdust", 0.0))
         derived_overrides["lyc_fdust"] = neb_fdust
 
+        # Raw neb_fesc value, same cross-prefix reason (#2539 item 1): the
+        # two-component WavePrecomp energy-balance LUT branch needs the
+        # runtime fesc to combine its A_0 + fesc*A_1 stellar tables, and
+        # can no more read params["neb_fesc"] directly than the dust
+        # attenuators above can read params["neb_fdust"].
+        derived_overrides["lyc_fesc"] = neb_fesc
+
         sed_intrinsic = state.sed_intrinsic
         if sed_intrinsic is not None:
             sed_intrinsic = jnp.where(lyc_mask, sed_intrinsic * neb_fesc, sed_intrinsic)
@@ -1198,6 +1222,14 @@ class NebularSEDComponent(TemplateThreading):
             # bit-identical to -inf at neb_fdust == 0, gradient finite
             # everywhere (see log10_fdust_lyc_credit).
             derived_overrides["log_L_lyc_dust"] = log10_fdust_lyc_credit(log_L_lyc, neb_fdust)
+            # RAW (pre-fdust) LyC luminosity of the whole population (#2539
+            # item 3): published alongside ``lyc_fdust`` so dust attenuators
+            # can credit it into log_L_absorbed with the smooth
+            # log10_add_fdust_credit combine instead of log10_add-ing the
+            # already fdust-multiplied log_L_lyc_dust above (see that
+            # function's docstring for why the pre-multiplied form has a
+            # gradient defect at neb_fdust == 0).
+            derived_overrides["log_L_lyc"] = log_L_lyc
 
         return state.with_(
             sed_intrinsic=(sed_intrinsic + nebular_sed)

@@ -78,9 +78,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
 from tengri.components.dust.two_component import _young_indicator
-from tengri.forward.energy_balance import log10_fdust_lyc_credit
+from tengri.forward.energy_balance import log10_add_fdust_credit, log10_fdust_lyc_credit
 from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.regression_bug
@@ -534,18 +534,52 @@ class TestDefaultsBitIdentical:
         np.testing.assert_allclose(float(log_l_absorbed), float(expected_log_l), rtol=1e-6)
 
 
+def _fd_grad(f, x: float, h: float = 1e-6) -> float:
+    """Central finite difference, one-sided when ``x - h`` would go negative.
+
+    ``neb_fdust`` is bounded at 0, so the finite-difference estimate near
+    that boundary (fdust=0, 1e-8) must not sample a negative fdust.
+    """
+    if x - h < 0.0:
+        return (f(x + h) - f(x)) / h
+    return (f(x + h) - f(x - h)) / (2.0 * h)
+
+
 class TestGradientSafety:
-    """Item 3: the log-add is exact at neb_fdust == 0 AND has a finite
-    gradient everywhere, including neb_fdust -> 0 (double-where idiom, see
-    log10_fdust_lyc_credit's docstring).
+    """Item 3: ``log10_add_fdust_credit`` (the fused combine that replaced the
+    double-where ``log10_fdust_lyc_credit`` + ``log10_add`` pairing) is exact
+    at neb_fdust == 0 AND has a FINITE, NONZERO gradient everywhere --
+    including at fdust == 0, where L_absorbed's TRUE derivative w.r.t. fdust
+    is L_LyC (a finite nonzero constant: L_absorbed is exactly LINEAR in
+    fdust). ``log10_fdust_lyc_credit`` alone still (correctly, for that
+    isolated quantity) clamps its own gradient to zero at fdust == 0 -- see
+    its docstring and ``log10_add_fdust_credit``'s -- so gradient assertions
+    here target the COMBINED quantity, matching how every dust attenuator
+    actually uses it.
     """
 
     @pytest.mark.parametrize("fdust", [0.0, 1e-8, 0.3])
-    def test_log10_fdust_lyc_credit_gradient_finite(self, fdust):
-        log_l_lyc = jnp.asarray(45.0)  # representative dex value, independent of fdust
-        grad_fn = jax.grad(lambda f: log10_fdust_lyc_credit(log_l_lyc, f))
-        g = grad_fn(jnp.asarray(fdust))
-        assert jnp.isfinite(g), f"grad at fdust={fdust} is not finite: {g}"
+    def test_log10_add_fdust_credit_gradient_matches_finite_difference(self, fdust):
+        log_l_absorbed = jnp.asarray(44.0)  # representative dex value
+        log_l_lyc = jnp.asarray(45.0)  # independent of fdust
+
+        def value(f):
+            return log10_add_fdust_credit(log_l_absorbed, log_l_lyc, jnp.asarray(f))
+
+        g = float(jax.grad(lambda f: value(f))(jnp.asarray(fdust)))
+        assert np.isfinite(g), f"grad at fdust={fdust} is not finite: {g}"
+        assert g != 0.0, (
+            f"grad at fdust={fdust} collapsed to zero -- L_absorbed is linear "
+            "in fdust, so its gradient must be a nonzero constant everywhere"
+        )
+        fd = _fd_grad(lambda x: float(value(x)), fdust)
+        np.testing.assert_allclose(g, fd, rtol=1e-4)
+
+    def test_log10_add_fdust_credit_value_bit_identical_at_zero(self):
+        log_l_absorbed = jnp.asarray(44.0)
+        log_l_lyc = jnp.asarray(45.0)
+        value = log10_add_fdust_credit(log_l_absorbed, log_l_lyc, jnp.asarray(0.0))
+        assert float(value) == float(log_l_absorbed)
 
     def test_log10_fdust_lyc_credit_value_bit_identical_at_zero(self):
         log_l_lyc = jnp.asarray(45.0)
@@ -553,7 +587,8 @@ class TestGradientSafety:
         assert float(value) == float("-inf")
 
     def test_end_to_end_gradient_finite_through_single_component(self, synthetic_ssp_wide):
-        """Finite gradient through the full forward pass, not just the helper."""
+        """Finite, NONZERO gradient through the full forward pass, matching a
+        finite-difference estimate -- not just the helper (item 3)."""
         m = _build(synthetic_ssp_wide, "single_component", fesc=0.1, free_fdust=True)
         base_params = dict(m.spec.sample(jax.random.PRNGKey(0)))
 
@@ -564,5 +599,377 @@ class TestGradientSafety:
             return jnp.asarray(state.derived["log_L_absorbed"])
 
         for fdust in (0.0, 1e-8, 0.3):
-            g = jax.grad(loss)(jnp.asarray(fdust))
-            assert jnp.isfinite(g), f"end-to-end grad at fdust={fdust} is not finite: {g}"
+            g = float(jax.grad(loss)(jnp.asarray(fdust)))
+            assert np.isfinite(g), f"end-to-end grad at fdust={fdust} is not finite: {g}"
+            assert g != 0.0, (
+                f"end-to-end grad at fdust={fdust} collapsed to zero -- "
+                "L_absorbed is linear in fdust"
+            )
+            fd = _fd_grad(lambda x: float(loss(x)), fdust, h=1e-4)
+            np.testing.assert_allclose(g, fd, rtol=1e-4)
+
+
+def _build_two_component_lut(
+    ssp,
+    approx,
+    *,
+    fesc=0.0,
+    fdust=0.0,
+    lyc_absorb_all=False,
+    eb_include_lyc=False,
+    tau=0.5,
+    neb_type="cue",
+) -> SEDModel:
+    """Like module-level ``_build``, but carries a ``dust_emission`` block (so
+    ``needs_l_ir`` engages the WavePrecomp energy-balance LUT at all, #2539
+    item 1) and an explicit ``approx``.
+    """
+    neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
+    if neb_type != "none":
+        neb["neb_fesc"] = Fixed(fesc)
+        neb["neb_fdust"] = Fixed(fdust)
+    return SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        sfh=_sfh(),
+        neb=neb,
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(tau),
+            "tau_diff": Fixed(tau),
+            "lyc_absorb_all": lyc_absorb_all,
+            "eb_include_lyc": eb_include_lyc,
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "modified_blackbody", "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.0),
+        approx=approx,
+    )
+
+
+class TestLutFescExact:
+    """#2539 item 1: the WavePrecomp energy-balance LUT is now EXACT in a
+    live nebular ``neb_fesc`` (affine combine A(fesc) = A_0 + fesc*A_1)
+    instead of declining to the exact path whenever ``eb_include_lyc=True``
+    meets a live photoionized nebular component. Also item 4: the fdust
+    identity, the LyC closure, and the fdust sign relation must hold on the
+    LUT path exactly as they do on the exact path.
+    """
+
+    @pytest.mark.parametrize("eb_include_lyc", [False, True])
+    @pytest.mark.parametrize("lyc_absorb_all", [False, True])
+    @pytest.mark.parametrize("fesc", [0.1, 0.3, 0.9])
+    def test_lut_matches_exact_l_absorbed(
+        self, synthetic_ssp_wide, eb_include_lyc, lyc_absorb_all, fesc
+    ):
+        """LUT vs exact parity for the full L_absorbed (integration check),
+        across every combination of eb_include_lyc and lyc_absorb_all, at
+        three fesc values.
+
+        ``tau_bc``/``tau_diff`` are ``Fixed`` (a single LUT node), so this is
+        not exercising the bilinear tau interpolation at all. ``rtol=0.02``
+        is the LUT's own documented approximation budget
+        (``tests/contract/test_energy_balance_lut.py::
+        test_eb_lut_engages_and_matches_exact``).
+
+        This end-to-end L_absorbed is NOT, on its own, a sensitive probe of
+        the stellar fesc-affine combine specifically: the credited LyC-only
+        term is a ~0.1% correction against the dominant non-LyC absorption
+        (measured on this fixture), and the nebular-continuum term (a
+        SEPARATE combine, unaffected by item 1) carries its own, much
+        larger, correctly-computed fesc dependence via
+        ``lyc_dust_escape_factor``'s k-factor -- so a bug confined to the
+        stellar B_fesc/G_fesc combine can hide under a 2% end-to-end budget.
+        ``test_lut_stellar_term_matches_exact_affine_combine`` below isolates
+        the stellar term directly, with no such dilution.
+        """
+        m_lut = _build_two_component_lut(
+            synthetic_ssp_wide,
+            WavePrecomp(),
+            fesc=fesc,
+            lyc_absorb_all=lyc_absorb_all,
+            eb_include_lyc=eb_include_lyc,
+        )
+        m_exact = _build_two_component_lut(
+            synthetic_ssp_wide,
+            None,
+            fesc=fesc,
+            lyc_absorb_all=lyc_absorb_all,
+            eb_include_lyc=eb_include_lyc,
+        )
+        assert getattr(m_lut, "_energy_balance_lut_cache", None) is not None
+        lut = m_lut._energy_balance_lut_cache
+        if eb_include_lyc:
+            # The fesc-exact family only needs to exist when it can matter.
+            assert lut.B_fesc is not None and lut.G_fesc is not None
+        L_lut = float(10.0 ** np.asarray(m_lut.predict_state({}).derived["log_L_absorbed"]))
+        L_exact = float(10.0 ** np.asarray(m_exact.predict_state({}).derived["log_L_absorbed"]))
+        assert np.isfinite(L_lut) and np.isfinite(L_exact)
+        np.testing.assert_allclose(L_lut, L_exact, rtol=0.02)
+
+    @pytest.mark.parametrize("lyc_absorb_all", [False, True])
+    @pytest.mark.parametrize("fesc", [0.1, 0.3, 0.9])
+    def test_lut_stellar_term_matches_exact_affine_combine(
+        self, synthetic_ssp_wide, lyc_absorb_all, fesc
+    ):
+        """Direct, undiluted check of ``lut_l_absorbed_stellar_log10``'s
+        fesc-affine combine (#2539 item 1): the STELLAR-only contribution
+        against an independent exact per-age integral, built by hand from
+        the raw SSP cube with the SAME ``lyc_factor(age) = 1 -
+        y_age*(1-fesc)`` weighting ``two_component.py``'s §2a applies (or,
+        under ``lyc_absorb_all=True``, the uniform ``fesc`` weight over every
+        age). See ``test_lut_matches_exact_l_absorbed`` above for why the
+        full end-to-end ``log_L_absorbed`` cannot be trusted to catch a bug
+        confined to this term alone.
+        """
+        ssp = synthetic_ssp_wide
+        ssp_ages_yr = (10.0 ** np.asarray(ssp.ssp_lg_age_gyr)) * 1e9
+        tau_bc = tau_diff = 0.5
+        t_birth_yr, transition_width_dex = 1e7, 0.3
+
+        from tengri.components.dust.attenuation import two_component_dust
+        from tengri.components.dust.energy_balance_precompute import (
+            build_energy_balance_lut,
+            lut_l_absorbed_stellar_log10,
+        )
+
+        lut = build_energy_balance_lut(
+            jnp.asarray(ssp.ssp_flux),
+            jnp.asarray(ssp.ssp_wave),
+            jnp.asarray(ssp_ages_yr),
+            law_bc="calzetti",
+            law_diff="calzetti",
+            f_obscuration=0.0,
+            t_birth_yr=t_birth_yr,
+            transition_width_dex=transition_width_dex,
+            lyman_cutoff_aa=0.0,
+            eb_include_lyc=True,
+            tau_bc_grid=jnp.asarray([tau_bc]),
+            tau_diff_grid=jnp.asarray([tau_diff]),
+            fesc_exact=True,
+            lyc_absorb_all=lyc_absorb_all,
+        )
+        assert lut.B_fesc is not None and lut.G_fesc is not None
+
+        n_met, n_age = ssp.ssp_flux.shape[:2]
+        rng = np.random.default_rng(7)
+        joint_weights = np.abs(rng.random((n_met, n_age)))
+        joint_weights /= joint_weights.sum()
+        log_mass_scale = 43.0  # representative dex offset
+
+        transmission = two_component_dust(
+            wavelength=jnp.asarray(ssp.ssp_wave),
+            age_grid=jnp.asarray(ssp_ages_yr),
+            tau_v1=jnp.asarray(tau_bc),
+            tau_v2=jnp.asarray(tau_diff),
+            law_bc="calzetti",
+            law_diff="calzetti",
+            f_obscuration=jnp.asarray(0.0),
+            t_birth=t_birth_yr,
+            transition_width=transition_width_dex,
+            bc_params={},
+            diff_params={},
+            lyman_cutoff_aa=0.0,
+        )  # (n_age, n_wave)
+        lnu_age = jnp.einsum("ma,maw->aw", jnp.asarray(joint_weights), jnp.asarray(ssp.ssp_flux))
+        lnu_age_attenuated = lnu_age * transmission
+        y_age = _young_indicator(jnp.asarray(ssp_ages_yr), t_birth_yr, transition_width_dex)
+        nu = C_AA / jnp.asarray(ssp.ssp_wave)
+
+        lyc_t = jnp.where(jnp.asarray(ssp.ssp_wave) < LYC_CUTOFF_AA, fesc, 1.0)
+        if lyc_absorb_all:
+            lyc_factor = jnp.broadcast_to(lyc_t[None, :], lnu_age.shape)
+        else:
+            lyc_factor = 1.0 - y_age[:, None] * (1.0 - lyc_t[None, :])
+        sed_intrinsic = jnp.sum(lnu_age * lyc_factor, axis=0)
+        sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
+        from tengri.forward.energy_balance import bolometric_absorbed_log10
+
+        log_exact, _ = bolometric_absorbed_log10(
+            sed_intrinsic,
+            sed_attenuated,
+            nu,
+            wave=jnp.asarray(ssp.ssp_wave),
+            lyman_cutoff_aa=None,
+        )
+        log_exact = float(log_exact) + log_mass_scale
+
+        log_lut, sign_lut = lut_l_absorbed_stellar_log10(
+            lut,
+            jnp.asarray(joint_weights),
+            jnp.asarray(log_mass_scale),
+            jnp.asarray(tau_bc),
+            jnp.asarray(tau_diff),
+            fesc=jnp.asarray(fesc),
+        )
+        assert np.isfinite(float(log_lut))
+        assert float(sign_lut) == -1.0, "grid-orientation sign must stay -1 (see module docstring)"
+        np.testing.assert_allclose(float(log_lut), log_exact, rtol=1e-5)
+
+    def test_fdust_identity_holds_on_lut_path(self, synthetic_ssp_wide):
+        """TestFdustCreditIdentity.test_identity's fesc-for-fdust identity,
+        reproduced under approx=WavePrecomp() -- the fdust credit
+        (log10_add_fdust_credit, item 2/3) is unconditional and applied
+        AFTER the fast/slow branches converge to one log_l_absorbed, so it
+        must give the identical answer either way, exactly as it does on the
+        exact path.
+
+        ``eb_include_lyc=False`` (the default, left unset here) is
+        deliberate, matching the module docstring's warning: with
+        ``eb_include_lyc=True`` the screen's OWN LyC absorption also differs
+        between the two builds (``sed_intrinsic``'s LyC content depends on
+        fesc), confounding this identity with a second effect. That
+        eb_include_lyc=True + live-fesc combination is exactly what
+        ``test_lut_matches_exact_l_absorbed`` already covers (the fesc-exact
+        LUT family, item 1); this test isolates the credit (item 2/3) alone,
+        so the LUT's B_fesc family need not even engage here (it does not,
+        at eb_include_lyc=False) -- the credit itself is what is under test.
+        ``lyc_absorb_all=True`` gives a whole-population credit, so
+        ``_credited_lnu`` needs no per-age reconstruction.
+        """
+        m_escape = _build_two_component_lut(
+            synthetic_ssp_wide,
+            WavePrecomp(),
+            fesc=0.3,
+            fdust=0.0,
+            lyc_absorb_all=True,
+        )
+        m_dust = _build_two_component_lut(
+            synthetic_ssp_wide,
+            WavePrecomp(),
+            fesc=0.0,
+            fdust=0.3,
+            lyc_absorb_all=True,
+        )
+        s_escape = m_escape.predict_state({})
+        s_dust = m_dust.predict_state({})
+        L_escape = float(10.0 ** np.asarray(s_escape.derived["log_L_absorbed"]))
+        L_dust = float(10.0 ** np.asarray(s_dust.derived["log_L_absorbed"]))
+        assert np.isfinite(L_escape) and np.isfinite(L_dust)
+
+        lnu_credited = _credited_lnu(s_escape, young_only=False)
+        expected = 0.3 * _l_lyc(np.asarray(s_escape.wave), lnu_credited)
+        assert expected > 0.0, "setup: credited population has zero LyC luminosity"
+        np.testing.assert_allclose(L_dust - L_escape, expected, rtol=1e-6)
+        # Sign check (#2539 item 4): trading escape for HII-region dust
+        # strictly increases L_absorbed, since expected > 0 above.
+        assert L_dust > L_escape
+
+    def test_lyc_closure_holds_on_lut_path(self, synthetic_ssp_wide):
+        """TestLycConservationClosure.test_closure's four-way LyC budget,
+        reproduced under approx=WavePrecomp() for the three legs that measure
+        actual ``log_L_absorbed`` differences (the pre-screen twin needs a
+        real tau=0 exact build regardless of approx, unrelated to LUT
+        engagement -- see ``_pre_screen_state``).
+        """
+        fesc, fdust = 0.3, 0.3
+        dust_type, lyc_absorb_all, young_only = "two_component", True, False
+
+        s0, wave = _pre_screen_state(
+            synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all
+        )
+        lnu_total = np.sum(np.asarray(s0.derived["lnu_age"]), axis=0)
+        lnu_credited = _credited_lnu(s0, young_only=young_only)
+        lnu_uncredited = lnu_total - lnu_credited
+        L_lyc_total = _l_lyc(wave, lnu_total)
+        L_lyc_credited = _l_lyc(wave, lnu_credited)
+        L_lyc_uncredited = _l_lyc(wave, lnu_uncredited)
+        assert L_lyc_credited > 0.0, "setup: credited population has zero LyC"
+
+        escaped_measured = _l_lyc(wave, np.asarray(s0.sed_intrinsic))
+        escaped_expected = fesc * L_lyc_credited + L_lyc_uncredited
+        np.testing.assert_allclose(escaped_measured, escaped_expected, rtol=1e-6)
+
+        gas_ionizing = (1.0 - fesc - fdust) * L_lyc_credited
+
+        m_default = _build_two_component_lut(
+            synthetic_ssp_wide,
+            WavePrecomp(),
+            fesc=fesc,
+            fdust=fdust,
+            lyc_absorb_all=lyc_absorb_all,
+        )
+        m_escape_only = _build_two_component_lut(
+            synthetic_ssp_wide,
+            WavePrecomp(),
+            fesc=fesc + fdust,
+            fdust=0.0,
+            lyc_absorb_all=lyc_absorb_all,
+        )
+        s_default = m_default.predict_state({})
+        L_absorbed_default = float(10.0 ** np.asarray(s_default.derived["log_L_absorbed"]))
+        L_absorbed_escape_only = float(
+            10.0 ** np.asarray(m_escape_only.predict_state({}).derived["log_L_absorbed"])
+        )
+        hii_dust_credit = L_absorbed_default - L_absorbed_escape_only
+        np.testing.assert_allclose(hii_dust_credit, fdust * L_lyc_credited, rtol=1e-6)
+
+        m_full = _build_two_component_lut(
+            synthetic_ssp_wide,
+            WavePrecomp(),
+            fesc=fesc,
+            fdust=fdust,
+            lyc_absorb_all=lyc_absorb_all,
+            eb_include_lyc=True,
+        )
+        L_absorbed_full = float(
+            10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"])
+        )
+        screen_absorbed_measured = L_absorbed_full - L_absorbed_default
+
+        # ``s_default`` comes from a dust_emission-carrying build (needed to
+        # engage the LUT at all, #2539 item 1), whose wave grid has far-IR
+        # points APPENDED past the pre-screen twin's (dust-emission-free)
+        # grid (tengri always extends the wavelength axis by appending, never
+        # rewriting existing nodes), so use ITS OWN wave here rather than the
+        # pre-screen twin's ``wave``: the LyC-region nodes ``_l_lyc`` actually
+        # integrates over are identical either way, only the irrelevant
+        # far-IR tail differs in length.
+        post_screen_measured = _l_lyc(
+            np.asarray(s_default.wave), np.asarray(s_default.sed_intrinsic)
+        )
+        screen_absorbed_derived = escaped_measured - post_screen_measured
+        np.testing.assert_allclose(screen_absorbed_measured, screen_absorbed_derived, rtol=1e-6)
+
+        np.testing.assert_allclose(
+            post_screen_measured + screen_absorbed_derived + gas_ionizing + hii_dust_credit,
+            L_lyc_total,
+            rtol=1e-6,
+        )
+
+    @pytest.mark.parametrize("use_lut", [False, True])
+    def test_l_absorbed_increases_with_fdust(self, synthetic_ssp_wide, use_lut):
+        """Sign check (#2539 item 4): L_absorbed with 0.3 of the LyC budget
+        assigned to HII-region dust (fdust=0.3) exceeds the same budget left
+        as escape (fdust=0.0), on BOTH the exact path and the LUT path.
+
+        Holds fesc+fdust fixed at 0.3 (module docstring's own technique,
+        also used by TestFdustCreditIdentity.test_identity): comparing
+        fdust=0.3 against fdust=0.0 at a FIXED fesc instead would vary two
+        things at once (the credit AND the nebular-continuum absorption via
+        the fesc+fdust-dependent k-factor, module docstring) and the second
+        effect can dominate and flip the sign -- measured, not hypothetical.
+        Trading escape for dust at fixed total isolates the credit alone,
+        which is strictly positive whenever the credited population has any
+        LyC luminosity (verified directly in
+        ``test_fdust_identity_holds_on_lut_path``); this test only re-checks
+        the resulting sign, on both paths, as its own explicit assertion.
+        """
+        approx = WavePrecomp() if use_lut else None
+        m_escape = _build_two_component_lut(
+            synthetic_ssp_wide, approx, fesc=0.3, fdust=0.0, lyc_absorb_all=True
+        )
+        m_dust = _build_two_component_lut(
+            synthetic_ssp_wide, approx, fesc=0.0, fdust=0.3, lyc_absorb_all=True
+        )
+        if use_lut:
+            assert getattr(m_escape, "_energy_balance_lut_cache", None) is not None
+        L_escape = float(10.0 ** np.asarray(m_escape.predict_state({}).derived["log_L_absorbed"]))
+        L_dust = float(10.0 ** np.asarray(m_dust.predict_state({}).derived["log_L_absorbed"]))
+        assert np.isfinite(L_escape) and np.isfinite(L_dust)
+        assert L_dust > L_escape, (
+            f"L_absorbed did not increase with fdust (use_lut={use_lut}): "
+            f"L(fdust=0)={L_escape:.6e}, L(fdust=0.3)={L_dust:.6e}"
+        )

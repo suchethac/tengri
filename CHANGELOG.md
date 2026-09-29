@@ -425,18 +425,32 @@
   population for `two_component` with `lyc_absorb_all=False` (the population its
   own `neb_fesc`/`neb_fdust` screen actually applies to). Previously this energy
   only suppressed nebular emission and vanished from the energy balance. The
-  log-add is gradient-safe at `neb_fdust == 0` (bit-identical value, finite
-  gradient). Also threads the `eb_include_lyc` (FSPS/Prospector-parity) toggle
-  to `wg00` (`dust_type=3`), which the grammar already accepted but
+  combine (`energy_balance.log10_add_fdust_credit`, a fused `log1p` form) is
+  bit-identical to the pre-credit value at `neb_fdust == 0` and has a FINITE,
+  NONZERO gradient there too (`L_LyC / (L_absorbed * ln 10)`), since
+  `L_absorbed` is exactly linear in `neb_fdust`; a first version log-added an
+  already `fdust`-multiplied credit term whose own double-where derivative was
+  deliberately zero at the boundary, which zeroed the combined gradient as
+  well. Also threads the `eb_include_lyc` (FSPS/Prospector-parity) toggle to
+  `wg00` (`dust_type=3`), which the grammar already accepted but
   `component_factory.py` silently dropped (#2539). A sibling defect in the same
   budget is fixed alongside it: `two_component`'s own `eb_include_lyc=True`
   screen-absorption integral for `lyc_absorb_all=False` now reads the same
   per-age, fesc-aware population `sed_attenuated` itself attenuates rather
   than a uniform all-ages bookkeeping value, in both the exact and WavePrecomp
-  LUT paths (the LUT, which cannot represent a runtime `neb_fesc`, declines in
-  favor of the exact integral instead), bit-identical at the
-  `eb_include_lyc=False` default; `single_component` and `wg00` already
-  integrated the same SED they attenuate.
+  LUT paths, bit-identical at the `eb_include_lyc=False` default;
+  `single_component` and `wg00` already integrated the same SED they
+  attenuate. The WavePrecomp energy-balance LUT is now EXACT in a live
+  `neb_fesc` rather than declining to the exact integral whenever
+  `eb_include_lyc=True` met a live photoionized nebular component: the
+  stellar absorbed integral is affine in `fesc`
+  (`A(fesc) = A_0 + fesc * A_1`, `A_1` the young/birth-cloud-weighted -- or,
+  under `lyc_absorb_all=True`, unweighted -- Lyman-continuum-only term), so
+  `build_energy_balance_lut` now bakes both the `fesc`-independent `A_0`
+  family and the `fesc`-linear `A_1` family, and
+  `lut_l_absorbed_stellar_log10` combines them with the runtime `fesc` at
+  evaluation time -- an exact, O(1) linear combine (no interpolation, no
+  approximation), not a fallback.
 
 ### Fixed
 

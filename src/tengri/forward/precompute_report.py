@@ -175,16 +175,6 @@ def _infer_lut_decline_reason(model: Any) -> str | None:
     str | None
         Reason string, or None if unable to determine.
     """
-    # A verdict the builder recorded beats one inferred from outside -- same
-    # pattern as ``_dust_band_response_decline`` below. Covers the #2539
-    # sibling decline (live nebular fesc + eb_include_lyc=True, see
-    # ``SEDModel._energy_balance_lut``), which no gate re-checked here can
-    # see (it depends on the resolved chain's nebular backend, not just the
-    # spec).
-    recorded = getattr(model, "_energy_balance_lut_decline_reason", None)
-    if recorded:
-        return str(recorded)
-
     from tengri.components.dust.two_component import DustSEDComponent
 
     free = set(model.spec.free_params)
