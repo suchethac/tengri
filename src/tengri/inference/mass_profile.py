@@ -715,7 +715,9 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         return "censored data (upper/lower limits) is present", {}
 
     try:
-        max_dev, tol, kind = _linearity_max_deviation(fitter, mass_name, bounds)
+        max_dev, tol, kind = _linearity_max_deviation(
+            fitter, mass_name, bounds, params_override=params_override
+        )
     except ValueError as exc:
         return str(exc), {}
 

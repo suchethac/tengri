@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 
 from tengri import (
+    Fixed,
     ForwardModel,
     NoiseModel,
     Observation,
@@ -600,3 +601,72 @@ class TestContractProfileMassLikelihood:
                 f"profile_mass engaged on a non-plain likelihood: {lk_type} "
                 f"(reason={fitter._profile_mass_reason!r})"
             )
+
+
+def test_linearity_probe_at_construction_uses_params_override_redshift(ssp_data_wne, monkeypatch):
+    """_check_guards passes params_override to _linearity_max_deviation at construction.
+
+    This exercises the construction-time code path where configure_profile_mass
+    calls _check_guards BEFORE self._fixed_values/self._params_override are set
+    on the fitter (fitter.py ~1570 vs ~1574/~1630). The linearity probe must
+    evaluate at the fit's own params_override redshift, not the spec's declared
+    Fixed value, so profile_mass="auto" engages iff the probe passes at the
+    correct redshift. With profile_mass=True and a params_override redshift
+    different from the spec's Fixed value, a model that is linear at one but
+    not the other should accept at the runtime redshift and reject at the
+    spec's value.
+    """
+    from tengri.inference import mass_profile
+
+    z_spec = 0.3
+    z_override = 2.0
+
+    # Build a model with Fixed redshift z_spec, then construct Fitter with
+    # params_override redshift z_override. The linearity probe should use z_override.
+    recipe_kwargs = recipes.mock_recovery_minimal()
+    recipe_kwargs["redshift"] = Fixed(z_spec)
+    obs = Observation(photometry=Photometry.from_names(_FILTERS))
+    model = SEDModel.build(ssp_data=ssp_data_wne, observation=obs, **recipe_kwargs)
+
+    key_truth, key_mock = jax.random.split(jax.random.PRNGKey(0))
+    truth = model.spec.sample(key_truth)
+    mock = generate_mock(model, truth, key=key_mock, snr=30.0)
+    flux_obs = jnp.asarray(mock["flux_obs"])
+    noise = jnp.asarray(mock["noise"])
+
+    forward = ForwardModel.build(sed=model, observation=obs)
+
+    # Track which redshifts are used during the linearity probe.
+    recorded_redshifts = []
+    original_predict = mass_profile._predict_full_vector
+
+    def track_redshift_predict(model_arg, data_type, params, **kwargs):
+        z_val = params.get("redshift", None)
+        if z_val is not None:
+            recorded_redshifts.append(float(z_val))
+        return original_predict(model_arg, data_type, params, **kwargs)
+
+    with monkeypatch.context() as mp:
+        mp.setattr(mass_profile, "_predict_full_vector", track_redshift_predict)
+        # Construct with profile_mass="auto" and params_override redshift.
+        # This runs configure_profile_mass -> _check_guards -> _linearity_max_deviation
+        # BEFORE fitter._fixed_values/_params_override are set.
+        fitter = Fitter(
+            forward,
+            flux_obs,
+            noise,
+            profile_mass="auto",
+            params_override={"redshift": z_override},
+        )
+
+    # The linearity probe must have been called during construction and must have
+    # evaluated at z_override, not z_spec.
+    assert len(recorded_redshifts) >= 1, (
+        "Linearity probe should call _predict_full_vector at least once during "
+        "profile_mass='auto' construction"
+    )
+    for z_recorded in recorded_redshifts:
+        assert abs(z_recorded - z_override) < 1e-12, (
+            f"Expected redshift {z_override} (from params_override) during linearity probe, "
+            f"but recorded {z_recorded} (spec's Fixed value is {z_spec})"
+        )
