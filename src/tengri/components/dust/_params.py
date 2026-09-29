@@ -474,6 +474,7 @@ ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
 # own default, not the shared table's; pinned by
 # ``TestKriekConroyMatchesFSPS::test_bump_excess_matches_fsps_at_delta_zero``.
 KRIEK_CONROY_BUMP_STRENGTH_DEFAULT = 1.0  # Kriek & Conroy 2013 Eq. 3, E_b = 0.85 fiducial
+CONROY2010_BUMP_STRENGTH_DEFAULT = 1.0  # Conroy, White & Gunn 2010, full CCM89 bump (f_bump=1)
 TEA_DELTA_DEFAULT = -0.2  # Haskell et al. 2024 NIHAO-SKIRT median, 0.5 < z < 2 SF galaxies
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
@@ -733,6 +734,7 @@ __all__ = [
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
     "CASEY_T_K_DEFAULT",
+    "CONROY2010_BUMP_STRENGTH_DEFAULT",
     "DEFAULT_DUST_ALPHA",
     "DEFAULT_DUST_ALPHA_DALE",
     "DEFAULT_DUST_ALPHA_DL14",

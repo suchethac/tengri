@@ -46,6 +46,12 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
+- `conroy2010` is now CCM89 with a scalable 2175 Å bump (`dust_bump_strength`), as in
+  Conroy et al. (2010); it was a sigmoid Cardelli/power-law blend that over-attenuated
+  the NIR by up to 3.3× and had no bump control; `dust_slope` is removed from this law (#2522).
+
+- `reddy15` is continuous at 0.6 µm (red branch offset −0.0362) and constant below 1500 Å (#2523).
+
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments
   raised `IndexError: tuple index out of range`. Both functions now resolve
