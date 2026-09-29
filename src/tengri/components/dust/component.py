@@ -529,6 +529,17 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 log_l_absorbed = log10_add(
                     log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb
                 )
+
+            # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+            # neb_fdust assigns a fraction of LyC photons to dust heating, which
+            # NebularSEDComponent publishes as log_L_lyc_dust. This energy enters
+            # the dust IR budget unconditionally (not gated on eb_include_lyc,
+            # which concerns the screen's own LyC absorption, not HII-region dust).
+            _log_lyc_dust = state.derived.get("log_L_lyc_dust")
+            if _log_lyc_dust is not None:
+                log_l_absorbed = log10_add(
+                    log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0
+                )
         else:
             # Slow path (exact integral): full-wavelength integration over all
             # components (stellar, nebular, shock, AGN). Same as before.
@@ -539,6 +550,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 wave=state.wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+
+            # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+            # Same unconditional addition as the fast path above.
+            _log_lyc_dust = state.derived.get("log_L_lyc_dust")
+            if _log_lyc_dust is not None:
+                log_l_absorbed = log10_add(
+                    log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0
+                )
 
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:

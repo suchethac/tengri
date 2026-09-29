@@ -1119,6 +1119,40 @@ class NebularSEDComponent(TemplateThreading):
             spec_lyc_mask = jnp.where(spec_eff < 912.0, neb_fesc, jnp.ones_like(spec_eff))
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec * spec_lyc_mask
 
+        # ── Lyman-continuum dust absorption energy (#2539) ────────────────────
+        # neb_fdust assigns a fraction of LyC photons to dust heating inside HII
+        # regions, not nebular emission. This energy must be credited to the dust
+        # IR budget. Compute the stellar LyC luminosity below 912 Å, multiply by
+        # neb_fdust, and publish as log_L_lyc_dust for dust components to add to
+        # their absorbed-luminosity integral.
+        neb_fdust = jnp.asarray(params.get("neb_fdust", 0.0))
+        fdust_nonzero = neb_fdust > 0.0
+        if fdust_nonzero:
+            from tengri.forward.energy_balance import bolometric_absorbed_log10, LYMAN_CUTOFF_AA
+
+            # Compute the stellar LyC luminosity as the integral of the stellar SED
+            # below 912 Å (no attenuation, just the intrinsic stellar spectrum).
+            # Use the stellar SED from state.sed_intrinsic (before nebular processing).
+            _stellar_sed = state.sed_intrinsic
+            if _stellar_sed is not None:
+                # Create a zero attenuated SED for the LyC part (0 < L_ν < 912 Å,
+                # no attenuation in HII regions before dust absorption).
+                # The absorbed energy is: intrinsic - attenuated = intrinsic - 0 = intrinsic
+                # for the LyC-only region.
+                lyc_intrinsic = jnp.where(lyc_mask, _stellar_sed, 0.0)
+                lyc_attenuated = jnp.zeros_like(lyc_intrinsic)
+                log_L_lyc, _ = bolometric_absorbed_log10(
+                    lyc_intrinsic,
+                    lyc_attenuated,
+                    state.nu,
+                    wave=state.wave,
+                    lyman_cutoff_aa=LYMAN_CUTOFF_AA,
+                )
+                # Combine neb_fdust and L_LyC in log space: log_L_lyc_dust = log10(fdust) + log_L_lyc
+                log_fdust = jnp.log10(neb_fdust)
+                log_L_lyc_dust = log_fdust + log_L_lyc
+                derived_overrides["log_L_lyc_dust"] = log_L_lyc_dust
+
         return state.with_(
             sed_intrinsic=(sed_intrinsic + nebular_sed)
             if sed_intrinsic is not None

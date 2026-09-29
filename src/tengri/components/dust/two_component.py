@@ -1198,6 +1198,19 @@ class DustSEDComponent(TemplateThreading):
                 wave=wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+
+        # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+        # neb_fdust assigns a fraction of LyC photons to dust heating, which
+        # NebularSEDComponent publishes as log_L_lyc_dust. This energy enters
+        # the dust IR budget unconditionally (not gated on eb_include_lyc).
+        from tengri.utils.scale import log10_add
+
+        _log_lyc_dust = state.derived.get("log_L_lyc_dust")
+        if _log_lyc_dust is not None:
+            log_L_absorbed = log10_add(
+                log_L_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0
+            )
+
         from tengri.forward.energy_balance import warn_if_corrupt
 
         warn_if_corrupt(log_L_absorbed, component="two_component")
