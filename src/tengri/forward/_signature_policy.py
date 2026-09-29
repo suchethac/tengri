@@ -139,6 +139,7 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_dust_lyman_cutoff_aa": content("Lyman-limit clip wavelength changes the FUV curve"),
     "_dust_lyc_absorb_all": content("young-only vs absorb-all stellar LyC changes the chain"),
     "_dust_eb_include_lyc": content("LyC-in-energy-balance flag rescales L_IR"),
+    "_dust_ir_diffuse_screen": content("diffuse-screen pass changes the emitted IR SED"),
     "_astrodust_spinning_dust": content("astrodust AME enable flag changes the emitted SED"),
     "_astrodust_f_cnm": content("astrodust cold-neutral-medium filling fraction"),
     "_wg00_dust_curve": content("WG00 dust curve selector (dust_type=3 only)"),

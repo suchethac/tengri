@@ -375,9 +375,15 @@ class TestSFHNormalizationContract:
 
     def test_buat08_normalization(self):
         """buat08(log_total_mass) must conserve mass."""
-        self._check_normalization(buat08, T_LOOKBACK, log_total_mass=1.0, velocity_km_s=200.0)
-        self._check_normalization(buat08, T_LOOKBACK, log_total_mass=0.5, velocity_km_s=100.0)
-        self._check_normalization(buat08, T_LOOKBACK, log_total_mass=2.0, velocity_km_s=300.0)
+        self._check_normalization(
+            buat08, T_LOOKBACK, log_total_mass=1.0, velocity_km_s=200.0, age_yr=_AGE_UNIV_YR
+        )
+        self._check_normalization(
+            buat08, T_LOOKBACK, log_total_mass=0.5, velocity_km_s=100.0, age_yr=_AGE_UNIV_YR
+        )
+        self._check_normalization(
+            buat08, T_LOOKBACK, log_total_mass=2.0, velocity_km_s=300.0, age_yr=_AGE_UNIV_YR
+        )
 
     def test_normalization_scales_linearly(self):
         """Doubling log_total_mass should double the integral (linear scaling)."""
