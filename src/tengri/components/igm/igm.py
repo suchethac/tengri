@@ -820,10 +820,12 @@ def igm_transmission_madau(
 ) -> jnp.ndarray:
     r"""Mean IGM transmission using the Madau (1995) model.
 
-    Computes line-of-sight Lyman-series absorption from 17 lines plus
-    continuum absorption below the Lyman limit. This is the simpler of the
-    two IGM models available in tengri; the default is :func:`igm_transmission`
-    (Inoue+2014) which includes 39 lines and DLA contributions.
+    Computes line-of-sight Lyman-series absorption from three additive
+    components: Lyman-series line absorption (eq. 14), Lyman-continuum
+    absorption (eq. 16), and metal-line blanketing (eq. 15).
+    This is the simpler of the two IGM models available in tengri; the
+    default is :func:`igm_transmission` (Inoue+2014) which includes 39 lines
+    and DLA contributions.
 
     Parameters
     ----------
@@ -845,7 +847,13 @@ def igm_transmission_madau(
     **JIT-compatible**: yes, pure ``jnp`` operations with ``jax.lax.scan``
     for the line summation.
 
-    **Line opacity formula**: The optical depth from each Lyman-series line is:
+    **Total opacity**: The optical depth is the sum of three terms:
+
+    .. math::
+
+        \tau_\mathrm{total} = (\tau_\mathrm{line} + \tau_\mathrm{cont} + \tau_\mathrm{metal}) \times \mathrm{igm\_factor}
+
+    **Line opacity (eq. 14)**: The optical depth from each Lyman-series line is:
 
     .. math::
 
@@ -855,11 +863,22 @@ def igm_transmission_madau(
     :math:`\lambda_j` are the rest-frame Lyman-series wavelengths [Angstrom], and
     the formula applies for :math:`\lambda_j \leq \lambda_\mathrm{obs} \leq \lambda_j(1+z)`.
 
+    **Metal-line blanketing (eq. 15)**: Accounts for absorption by metal resonance
+    lines (Fe II, Mg II, Al II/III, Si II, etc.) in the Lyman-series forest:
+
+    .. math::
+
+        \tau_\mathrm{metal}(\lambda_\mathrm{obs}) = 0.0017 \left(\frac{\lambda_\mathrm{obs}}{\lambda_\alpha}\right)^{1.68}
+
+    for :math:`\lambda_\mathrm{obs} \leq \lambda_\alpha(1+z)`, and zero otherwise,
+    where :math:`\lambda_\alpha = 1215.67\,\mathrm{\AA}` is the rest-frame Lyα wavelength.
+
     ``wave_obs`` is **observed-frame** wavelength (consistent with tengri's
     IGM convention). The Madau+1995 model takes observed-frame wavelengths
     directly.
 
-    Implements Prospector ``add_igm`` in ``fake_fsps.py`` (Johnson+2021 [2]_).
+    Based on Prospector ``add_igm`` (Johnson+2021 [2]_), but now includes the
+    metal-line blanketing term (eq. 15) for the full Madau+1995 model.
     The Inoue+2014 model (:func:`igm_transmission`) supersedes this for science
     use; Madau+1995 is provided for comparison and backward compatibility.
 
@@ -918,7 +937,16 @@ def igm_transmission_madau(
     # Continuum only applies blueward of Lyman limit in the observed frame
     tau_cont = jnp.where(wave_obs < _MADAU_LYLIM * (1.0 + z), tau_cont, 0.0)
 
-    tau_total = (tau_line + tau_cont) * igm_factor
+    # ── Metal-line blanketing ────────────────────────────────────────
+    # Madau+1995 Eq. 15: metal resonance line absorption in the forest
+    lya_rest = float(_MADAU_LYW[0])  # 1215.67 A, rest-frame Lyman-alpha
+    tau_metal = jnp.where(
+        wave_obs <= lya_rest * (1.0 + z),
+        0.0017 * (wave_obs / lya_rest) ** 1.68,
+        0.0,
+    )
+
+    tau_total = (tau_line + tau_cont + tau_metal) * igm_factor
     return jnp.exp(-jnp.clip(tau_total, 0.0, None))
 
 

@@ -46,6 +46,10 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
+- Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
+  metal-line blanketing term (eq. 15), 0.0017·(λ_obs/λ_α)^1.68 blueward of
+  Lyα(1+z); this adds up to ~1% attenuation in the Lyα–Lyβ forest at z = 2–4 (#2516).
+
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments
   raised `IndexError: tuple index out of range`. Both functions now resolve
