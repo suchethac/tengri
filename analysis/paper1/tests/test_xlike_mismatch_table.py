@@ -440,8 +440,8 @@ class TestReaderFacingText:
             source_display("scratch/notes.txt:3")
 
     def test_source_forms_match_the_ruling(self):
-        assert source_display("art_sedfitting/code_outputs/header (absence)")[1].startswith(
-            "workshop catalog (column list)"
+        assert source_display("art_sedfitting/code_outputs/header (absence)")[1] == (
+            "Pacifici et al. (2023), Table 1"
         )
         assert source_display("reproduction/cigale/01_cigale.py:24")[1] == (
             "tengri reproduction notebook (CIGALE)"
@@ -741,7 +741,7 @@ class TestTablesFollowEachCodesOwnSource:
         rows = _rows_matching("bagpipes_like", "Cloudy")
         assert len(rows) == 1
         assert "Cloudy 17 (C17)" in rows[0] and "Cloudy 25" in rows[0]
-        assert "trained on Cloudy 17" in rows[0]
+        assert "trained on Cloudy 22.00" in rows[0]
 
     def test_dense_basis_nebular_row_says_no_version_year(self):
         rows = _rows_matching("dense_basis_like", "Cloudy")
@@ -778,3 +778,43 @@ class TestTablesFollowEachCodesOwnSource:
             assert path is not None, (key, rel)
             n_lines = len(path.read_text(errors="replace").splitlines())
             assert min(lines) >= 1 and max(lines) <= n_lines, (key, rel, n_lines)
+
+
+class TestCueTrainingVersion:
+    """Cue was trained on Cloudy 22.00 (Li et al. 2025, Section 2); no row may say otherwise."""
+
+    def test_no_cue_mention_says_cloudy_17(self):
+        for key, cfg in XLIKE_CONFIGS.items():
+            for text in (*cfg["mismatches"], *cfg["mismatches_text"], *cfg.get("notes", [])):
+                for m in re.finditer(r"Cloudy 17", text):
+                    # The only legitimate use is Table 1's C17 entry for workshop-era BAGPIPES.
+                    assert "Cloudy 17 (C17)" in text[m.start() :][:20], (key, text)
+                    assert "Table 1" in text, (key, text)
+                assert "trained on Cloudy 17" not in text, (key, text)
+
+    def test_every_cue_training_mention_says_22_and_cites_li(self):
+        seen = 0
+        for key, text, mismatch, src in _all_rows():
+            for claim in (text, mismatch):
+                if "trained on" in claim:
+                    assert "trained on Cloudy 22.00" in claim, (key, claim)
+                    seen += 1
+            if "trained on" in text:
+                assert "Li et al. 2025" in src and "2405.04598" in src, (key, src)
+                assert r"\citet{Li_2025}" in source_display(src)[0], (key, src)
+        assert seen >= 10  # five configurations, two wordings each
+
+    def test_cue_version_is_not_sourced_to_the_cigale_notebook(self):
+        for key, _, _, src in _all_rows():
+            assert "01_cigale.py:38" not in src, (key, src)
+
+    def test_no_difference_row_source_says_column_list(self):
+        for key, _, _, src in _all_rows():
+            latex, plain = source_display(src)
+            assert "column list" not in latex + plain, (key, src)
+
+    def test_workshop_module_row_cites_pacifici_table_1(self):
+        cfg = XLIKE_CONFIGS["cigale_like"]
+        idx = next(i for i, t in enumerate(cfg["mismatches_text"]) if "not recorded" in t)
+        latex, _ = source_display(cfg["mismatch_sources"][idx])
+        assert r"\citet{Pacifici_2023}, Table~1" in latex

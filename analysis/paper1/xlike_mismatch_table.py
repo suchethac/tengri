@@ -91,6 +91,11 @@ _SOURCE_RULES = (
         "Pacifici et al. (2023), Table 1",
     ),
     (
+        r"^Li et al\. 2025, ApJ 986, 9 \(arXiv:2405\.04598\), Section 2",
+        r"\citet{Li_2025}",
+        "Li et al. (2025), Section 2",
+    ),
+    (
         r"^art_sedfitting/code_outputs/BEAGLE_summary_catalogue_z1\.fits",
         r"BEAGLE workshop catalog (\texttt{tauV\_eff} and \texttt{mu} outputs) "
         r"\citep{Pacifici_2023}",
@@ -98,8 +103,8 @@ _SOURCE_RULES = (
     ),
     (
         r"^art_sedfitting/code_outputs/header",
-        r"Workshop catalog (column list) \citep{Pacifici_2023}",
-        "workshop catalog (column list), Pacifici et al. (2023)",
+        r"\citet{Pacifici_2023}, Table~1",
+        "Pacifici et al. (2023), Table 1",
     ),
     (
         r"^pcigale/",
