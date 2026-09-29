@@ -42,6 +42,7 @@ ANALYSIS_DIR = Path(__file__).resolve().parent
 if str(ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(ANALYSIS_DIR))
 
+from paper1._atomic_io import _atomic_replace_write
 from paper1.bma_space import (
     build_model,
     enumerate_factorial,
@@ -90,29 +91,6 @@ def peak_rss_gb() -> float | None:
             return maxrss_kb / 1024.0
     except Exception:
         return None
-
-
-def save_npz_atomic(path: Path, **arrays: np.ndarray) -> None:
-    """Write ``arrays`` to ``path`` atomically via a same-suffix temp file.
-
-    ``numpy.savez`` appends ``.npz`` to any target whose name does not
-    already end in it, so a temp name built as ``<key>.npz.tmp`` is actually
-    written to disk as ``<key>.npz.tmp.npz`` -- the ``os.replace`` of
-    ``<key>.npz.tmp`` that follows then raises ``FileNotFoundError`` (a real
-    pilot run hit exactly this on every cell's NPZ). The temp name here keeps
-    the ``.npz`` suffix (``<key>.tmp.npz``) so ``savez`` writes precisely the
-    path given, then ``os.replace`` swaps it into place atomically. On any
-    failure the temp file is removed and the exception re-raised; the caller
-    decides whether a failed NPZ should fail the whole cell.
-    """
-    path = Path(path)
-    tmp_path = path.with_name(f"{path.stem}.tmp.npz")
-    try:
-        np.savez(tmp_path, **arrays)
-        os.replace(tmp_path, path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
 
 
 #: Draws per vmapped forward pass when computing derived quantities. Mirrors
@@ -708,7 +686,11 @@ def main():
         t_write = time.perf_counter()
         if npz_data is not None:
             try:
-                save_npz_atomic(npz_path, **npz_data)
+                _atomic_replace_write(
+                    npz_path,
+                    lambda tmp_path: np.savez(tmp_path, **npz_data),  # noqa: B023
+                    tmp_suffix=".npz",
+                )
             except Exception as e:
                 logger.error(f"Failed to write {npz_path}: {e}")
                 print("ERROR writing NPZ", flush=True)
@@ -718,13 +700,13 @@ def main():
             result["stage_times_s"]["write_s"] = write_elapsed
 
         # Save JSON atomically
-        json_tmp = json_path.with_suffix(".json.tmp")
         try:
-            json_tmp.write_text(json.dumps(result, indent=2))
-            os.replace(json_tmp, json_path)
+            _atomic_replace_write(
+                json_path,
+                lambda tmp_path: tmp_path.write_text(json.dumps(result, indent=2)),  # noqa: B023
+            )
         except Exception as e:
             logger.error(f"Failed to write {json_path}: {e}")
-            json_tmp.unlink(missing_ok=True)
             print("ERROR writing JSON", flush=True)
             continue
 

@@ -8,7 +8,7 @@ Pinned invariants:
 - Valid JSON has all required fields
 - JSON writer produces exactly the SPEC keys
 - Validity rule: newton_decrement <= 0.1, n_clipped_eigenvalues == 0, log_evidence finite
-- save_npz_atomic writes a loadable .npz via a same-suffix temp file and
+- _atomic_replace_write with tmp_suffix writes a loadable .npz via a same-suffix temp file and
   cleans it up on failure (the fix for a real run's ENOENT on every cell's NPZ)
 """
 
@@ -27,13 +27,15 @@ for entry in [str(ANALYSIS), str(PAPER1)]:
 
 import numpy as np
 import pytest
-from paper1.bma_evidence import fit_one_model, save_npz_atomic
+
+from paper1._atomic_io import _atomic_replace_write
+from paper1.bma_evidence import fit_one_model
 
 pytestmark = pytest.mark.contract
 
 
 def test_save_npz_atomic_writes_and_reloads(tmp_path):
-    """save_npz_atomic writes a loadable .npz via a same-suffix temp file.
+    """_atomic_replace_write with tmp_suffix writes a loadable .npz.
 
     np.savez appends ".npz" to a target name that does not already end in
     it, so a temp path like "<key>.npz.tmp" is actually written to disk as
@@ -51,7 +53,9 @@ def test_save_npz_atomic_writes_and_reloads(tmp_path):
         "log_sfr_10myr": np.array([0.4, 0.5, 0.6]),
     }
 
-    save_npz_atomic(target, **arrays)
+    _atomic_replace_write(
+        target, lambda tmp_path: np.savez(tmp_path, **arrays), tmp_suffix=".npz"
+    )
 
     assert target.exists(), "the requested .npz path must exist after the atomic write"
     leftover_tmp = target.with_name(f"{target.stem}.tmp.npz")
@@ -67,7 +71,11 @@ def test_save_npz_atomic_cleans_up_temp_on_failure(tmp_path):
     target = tmp_path / "missing_dir" / "config-I.npz"  # parent directory does not exist
 
     with pytest.raises(OSError):
-        save_npz_atomic(target, log_stellar_mass_formed=np.array([1.0]))
+        _atomic_replace_write(
+            target,
+            lambda tmp_path: np.savez(tmp_path, log_stellar_mass_formed=np.array([1.0])),
+            tmp_suffix=".npz",
+        )
 
     assert not target.exists()
     assert not target.with_name(f"{target.stem}.tmp.npz").exists()

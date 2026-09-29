@@ -27,6 +27,8 @@ from typing import Any
 
 import numpy as np
 
+from ._atomic_io import _atomic_replace_write
+
 
 def softmax_weights(log_z: dict[str, float]) -> dict[str, float]:
     """Compute Bayesian model averaging weights from log evidences.
@@ -103,7 +105,12 @@ def _validate_cell(cell: dict[str, Any]) -> tuple[bool, str | None]:
 
     # Check if the flag disagrees
     flag_valid = cell.get("valid", False)
-    if not flag_valid and (log_z is not None and np.isfinite(log_z) and (newton_dec is None or (np.isfinite(newton_dec) and newton_dec <= 0.1)) and n_clipped == 0):
+    if not flag_valid and (
+        log_z is not None
+        and np.isfinite(log_z)
+        and (newton_dec is None or (np.isfinite(newton_dec) and newton_dec <= 0.1))
+        and n_clipped == 0
+    ):
         # Flag says invalid but re-check says valid, that's a disagreement
         return False, "flag disagrees with diagnostics"
 
@@ -240,9 +247,27 @@ def _enumerate_model_sets() -> dict[str, list[str]]:
 
     # named_grid: I-V (5 configs)
     named_grid = []
-    config_ssp = {"I": "mist_c3k", "II": "mist_miles", "III": "prsc_c3k", "IV": "prsc_miles", "V": "bpass_c3k"}
-    config_sfh = {"I": "continuity", "II": "dpl", "III": "delayed", "IV": "dirichlet", "V": "lnorm"}
-    config_att = {"I": "calzetti", "II": "calzetti", "III": "cf00_2c", "IV": "calzetti", "V": "smc"}
+    config_ssp = {
+        "I": "mist_c3k",
+        "II": "mist_miles",
+        "III": "prsc_c3k",
+        "IV": "prsc_miles",
+        "V": "bpass_c3k",
+    }
+    config_sfh = {
+        "I": "continuity",
+        "II": "dpl",
+        "III": "delayed",
+        "IV": "dirichlet",
+        "V": "lnorm",
+    }
+    config_att = {
+        "I": "calzetti",
+        "II": "calzetti",
+        "III": "cf00_2c",
+        "IV": "calzetti",
+        "V": "smc",
+    }
 
     for cfg_key in ["I", "II", "III", "IV", "V"]:
         components = {
@@ -258,7 +283,16 @@ def _enumerate_model_sets() -> dict[str, list[str]]:
     sets["named_grid"] = named_grid
 
     # named_all: named_grid + X-like keys (assume 5 X-like keys)
-    sets["named_all"] = named_grid + [f"X-like-{key}" for key in ["cigale_like", "prospector_like", "bagpipes_like", "beagle_like", "dense_basis_like"]]
+    sets["named_all"] = named_grid + [
+        f"X-like-{key}"
+        for key in [
+            "cigale_like",
+            "prospector_like",
+            "bagpipes_like",
+            "beagle_like",
+            "dense_basis_like",
+        ]
+    ]
 
     # factorial: 100 models (5 * 5 * 4 * 1 * 1)
     factorial = []
@@ -405,7 +439,15 @@ def _compute_prior_mass() -> dict[str, dict[str, dict[str, float]]]:
         prior["named_grid"][axis] = {}
 
     prior["named_all"] = {}
-    for axis in ["sfh", "ssp", "attenuation", "dust_emission", "nebular", "isochrone", "spectral_library"]:
+    for axis in [
+        "sfh",
+        "ssp",
+        "attenuation",
+        "dust_emission",
+        "nebular",
+        "isochrone",
+        "spectral_library",
+    ]:
         prior["named_all"][axis] = {}
 
     # factorial: 100 models, so 1/100 = 0.01 per model
@@ -529,9 +571,7 @@ def combine_bma(
 
         # Validate route consistency
         if len(routes) > 1:
-            raise ValueError(
-                f"Galaxy {galaxy_id}: multiple routes found: {routes}"
-            )
+            raise ValueError(f"Galaxy {galaxy_id}: multiple routes found: {routes}")
         route_used = routes.pop() if routes else None
 
         # Process each weight set
@@ -588,9 +628,7 @@ def combine_bma(
                         "beagle_like",
                         "dense_basis_like",
                     ]:
-                        adoption = _load_adoption_status(
-                            xlike_fits_dir, galaxy_id, config
-                        )
+                        adoption = _load_adoption_status(xlike_fits_dir, galaxy_id, config)
                     else:
                         adoption = _load_adoption_status(fits_dir, galaxy_id, config)
                     model_info["nuts_adoption_pass"] = adoption
@@ -625,9 +663,7 @@ def combine_bma(
                 weights = softmax_weights(valid_log_z)
                 for model_info in model_list:
                     if model_info["valid"]:
-                        model_info["weight"] = weights.get(
-                            model_info["model_key"], None
-                        )
+                        model_info["weight"] = weights.get(model_info["model_key"], None)
             else:
                 # No valid cells
                 galaxies[galaxy_id]["sets"][set_name] = {
@@ -643,9 +679,7 @@ def combine_bma(
                 continue
 
             # Resample and get BMA percentiles
-            bma_perc = _resample_mixture(
-                cells, valid_indices, weights, n_draws, seed
-            )
+            bma_perc = _resample_mixture(cells, valid_indices, weights, n_draws, seed)
 
             # Compute max weight and close flag
             valid_weights = [w for w in weights.values() if w is not None]
@@ -707,16 +741,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Combine BMA evidence results across galaxies and models"
     )
-    parser.add_argument(
-        "--evidence-dir", default="analysis/paper1/results/bma_evidence"
-    )
+    parser.add_argument("--evidence-dir", default="analysis/paper1/results/bma_evidence")
     parser.add_argument("--fits-dir", default="analysis/paper1/results/fits")
-    parser.add_argument(
-        "--xlike-fits-dir", default="analysis/paper1/results/fits_xlike"
-    )
-    parser.add_argument(
-        "--out", default="analysis/paper1/results/bma_summary.json"
-    )
+    parser.add_argument("--xlike-fits-dir", default="analysis/paper1/results/fits_xlike")
+    parser.add_argument("--out", default="analysis/paper1/results/bma_summary.json")
     parser.add_argument("--draws", type=int, default=4000)
     parser.add_argument("--seed", type=int, default=0)
 
@@ -741,13 +769,10 @@ def main():
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write to temp file first
-    temp_path = out_path.with_suffix(".tmp")
-    with open(temp_path, "w") as f:
-        json.dump(summary, f, indent=2)
-
-    # Atomic rename
-    temp_path.replace(out_path)
+    _atomic_replace_write(
+        out_path,
+        lambda tmp_path: tmp_path.write_text(json.dumps(summary, indent=2)),
+    )
 
     return 0
 
