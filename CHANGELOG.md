@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- `profile_mass="auto"` no longer engages when a user-supplied likelihood owns the data (any data type; previously only the line-flux case was refused, so the mass was profiled against the Fitter's placeholder data and the user's likelihood silently replaced in the mass direction), nor when a spectral covariance is used (#2509); `PrecompBiasWarning` now covers joint photometry+spectroscopy fits per channel and states the LUT forward bias when a user likelihood owns the data (#2510).
+
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls
