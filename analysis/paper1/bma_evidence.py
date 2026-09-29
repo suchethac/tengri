@@ -11,7 +11,7 @@ For each model: build the SED model, run MAP with n_restarts keeping the best re
 and recording max-min loss spread, then run Laplace to get evidence and diagnostics.
 Outputs are saved atomically to JSON and NPZ files.
 
-JSON fields: galaxy, z, model_key, model_set, components, route, log_evidence,
+JSON fields: galaxy, z, model_key, model_set, weight_sets, components, route, log_evidence,
     map_loss, n_free, newton_decrement, n_clipped_eigenvalues, condition_number,
     valid, n_map_restarts, map_restart_loss_spread, wall_time_s, peak_rss_gb,
     code_revision, seed, error.
@@ -43,22 +43,24 @@ if str(ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(ANALYSIS_DIR))
 
 from paper1._atomic_io import _atomic_replace_write
-from paper1.bma_space import (
-    build_model,
+from paper1._bma_keys import (
     enumerate_factorial,
     enumerate_named_all,
     enumerate_named_grid,
     model_key as make_model_key,
+    set_membership,
+    ssp_entry,
+    ssp_grid_for_config,
 )
 from paper1.candels_io import load_candels_z1, photometry_for_row
-from paper1.config_metadata import SSP_FOR_CONFIG, XLIKE_CONFIGS
-from paper1.configs import CONFIGS, load_ssp_for
-from paper1.fit_one import apply_systematic_error_floor
+from paper1.config_metadata import XLIKE_CONFIGS
+
+# jax-dependent imports (paper1.bma_space, paper1.configs, paper1.fit_one) are
+# deferred into fit_one_model / main, so this module's key, result-assembly and
+# writer code path imports without loading a JAX backend.
 
 logger = logging.getLogger(__name__)
 
-# Reverse map: SSP name -> config key
-_SSP_NAME_TO_CONFIG_KEY = {v: k for k, v in SSP_FOR_CONFIG.items()}
 _SYSTEMATIC_FLOOR_FRAC = 0.05
 
 
@@ -217,6 +219,144 @@ def get_galaxy_data(galaxy_id: int) -> tuple[float, dict, np.ndarray, np.ndarray
     return z, {"names": names, "fnu": fnu, "fnu_err": fnu_err}, np.array(fnu), np.array(fnu_err)
 
 
+def build_cell_result(
+    *,
+    galaxy_id: int,
+    z: float,
+    model_dict: dict[str, str],
+    components: dict[str, str] | None = None,
+    laplace=None,
+    map_loss: float | None = None,
+    n_free: int | None = None,
+    n_map_restarts: int = 0,
+    map_restart_loss_spread: float | None = None,
+    started: float,
+    stage_times: dict | None = None,
+    seed: int,
+    error: str | None = None,
+) -> dict:
+    """Assemble one evidence cell's JSON dict (jax-free; the runner's only assembler).
+
+    ``laplace`` is any object with ``log_evidence`` and a ``diagnostics`` mapping
+    (``newton_decrement``, ``n_clipped_eigenvalues``, ``condition_number``), or
+    ``None`` for a cell that failed before Laplace. The model key, ``model_set``
+    and ``weight_sets`` all come from ``_bma_keys``, so the combiner reads the
+    same identity the runner wrote. A missing diagnostic stays ``null`` and makes
+    the cell invalid.
+
+    Parameters
+    ----------
+    galaxy_id : int
+        Galaxy id.
+    z : float
+        Redshift.
+    model_dict : dict
+        Component dict of the model (``_bma_keys`` format).
+    components : dict, optional
+        Components to record; defaults to ``model_dict``.
+    laplace : object, optional
+        Laplace posterior (``log_evidence``, ``diagnostics``).
+    map_loss : float, optional
+        Best MAP loss [nats].
+    n_free : int, optional
+        Number of free parameters.
+    n_map_restarts : int
+        Restarts that produced a loss.
+    map_restart_loss_spread : float, optional
+        Max minus min restart loss [nats].
+    started : float
+        ``time.time()`` at the start of the cell.
+    stage_times : dict, optional
+        Per-stage wall times [s].
+    seed : int
+        PRNG seed.
+    error : str, optional
+        Failure description; a cell with an error is never valid.
+
+    Returns
+    -------
+    dict
+        The cell JSON dict.
+    """
+    key = make_model_key(model_dict)
+    log_evidence_out = None
+    newton_decrement = None
+    n_clipped = None
+    condition_number = None
+    valid = False
+    if laplace is not None:
+        diag = getattr(laplace, "diagnostics", None) or {}
+        log_evidence = float(laplace.log_evidence)
+        nd = diag.get("newton_decrement")
+        nc = diag.get("n_clipped_eigenvalues")
+        cn = diag.get("condition_number")
+        newton_decrement = float(nd) if nd is not None else None
+        n_clipped = int(nc) if nc is not None else None
+        condition_number = float(cn) if cn is not None else None
+        finite = bool(np.isfinite(log_evidence))
+        log_evidence_out = log_evidence if finite else None
+        valid = bool(
+            finite
+            and newton_decrement is not None
+            and newton_decrement <= 0.1
+            and n_clipped is not None
+            and n_clipped == 0
+            and error is None
+        )
+    return {
+        "galaxy": int(galaxy_id),
+        "z": float(z),
+        "model_key": key,
+        "model_set": "named" if "config" in model_dict else "factorial",
+        "weight_sets": sorted(set_membership(key)),
+        "components": dict(model_dict if components is None else components),
+        "route": "laplace",
+        "log_evidence": log_evidence_out,
+        "map_loss": None if map_loss is None else float(map_loss),
+        "n_free": n_free,
+        "newton_decrement": newton_decrement,
+        "n_clipped_eigenvalues": n_clipped,
+        "condition_number": condition_number,
+        "valid": valid,
+        "n_map_restarts": int(n_map_restarts),
+        "map_restart_loss_spread": map_restart_loss_spread,
+        "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
+        "profile_mass": False,
+        "wall_time_s": time.time() - started,
+        "peak_rss_gb": peak_rss_gb(),
+        "code_revision": code_revision(),
+        "seed": seed,
+        "stage_times_s": {} if stage_times is None else stage_times,
+        "error": error,
+    }
+
+
+def write_cell(out_dir: Path, result: dict, npz_data: dict | None) -> tuple[Path, Path | None]:
+    """Write a cell's NPZ (if any) then its JSON, both atomically, named by model key.
+
+    Returns the JSON path and the NPZ path (``None`` when no draws were written).
+    """
+    key = result["model_key"]
+    json_path = Path(out_dir) / f"{key}.json"
+    npz_path = Path(out_dir) / f"{key}.npz"
+    written_npz = None
+    t_write = time.perf_counter()
+    if npz_data is not None:
+        _atomic_replace_write(
+            npz_path,
+            lambda tmp_path: np.savez(tmp_path, **npz_data),
+            tmp_suffix=".npz",
+        )
+        written_npz = npz_path
+    if isinstance(result.get("stage_times_s"), dict):
+        result["stage_times_s"]["write_s"] = time.perf_counter() - t_write
+    _atomic_replace_write(
+        json_path,
+        lambda tmp_path: tmp_path.write_text(json.dumps(result, indent=2)),
+    )
+    return json_path, written_npz
+
+
 def fit_one_model(
     galaxy_id: int,
     model_dict: dict[str, str],
@@ -236,6 +376,9 @@ def fit_one_model(
         On error, result_dict has error field set and valid=False.
     """
     import jax
+    from paper1.bma_space import build_model
+    from paper1.configs import CONFIGS, load_ssp_for
+    from paper1.fit_one import apply_systematic_error_floor
 
     from tengri import Data, ForwardModel, Observation, Photometry
 
@@ -243,7 +386,7 @@ def fit_one_model(
 
     started = time.time()
     rss_start = peak_rss_gb()
-    # bma_space.model_key() keys named configurations by their id
+    # _bma_keys.model_key() keys named configurations by their id
     # ("config-I", "xlike-cigale_like"), never by the display strings
     # config_metadata carries for attenuation/dust_emission/nebular ("Kriek+13,
     # 2-comp", "Draine+2014"), which are not filename-safe.
@@ -283,7 +426,7 @@ def fit_one_model(
                 )
                 components_to_report = {
                     "sfh": cfg["sfh_type"],
-                    "ssp": cfg.get("ssp", "unknown"),
+                    "ssp": ssp_grid_for_config(cfg_key),
                     "attenuation": cfg.get("attenuation", "unknown"),
                     "dust_emission": cfg.get("dust_ir", "unknown"),
                     "nebular": cfg.get("nebular", "unknown"),
@@ -291,11 +434,7 @@ def fit_one_model(
                 }
         else:
             # Factorial model
-            ssp_name = model_dict["ssp"]
-            ssp_key = _SSP_NAME_TO_CONFIG_KEY.get(ssp_name)
-            if ssp_key is None:
-                raise ValueError(f"Unknown SSP name in model: {ssp_name}")
-            ssp_data = load_ssp_for(ssp_key)
+            ssp_data = load_ssp_for(ssp_entry(model_dict["ssp"]).config)
             builder = None
             components_to_report = model_dict.copy()
 
@@ -371,31 +510,18 @@ def fit_one_model(
         stage_times["map_restarts_s"] = map_restart_times_s
 
         if best_map_posterior is None:
-            return {
-                "galaxy": int(galaxy_id),
-                "z": float(z),
-                "model_key": model_key,
-                "model_set": model_dict.get("set", "unknown"),
-                "components": components_to_report,
-                "route": "laplace",
-                "log_evidence": None,
-                "map_loss": None,
-                "n_free": n_free,
-                "newton_decrement": None,
-                "n_clipped_eigenvalues": None,
-                "condition_number": None,
-                "valid": False,
-                "n_map_restarts": len(map_losses),
-                "map_restart_loss_spread": None,
-                "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
-                "profile_mass": False,
-                "wall_time_s": time.time() - started,
-                "peak_rss_gb": peak_rss_gb(),
-                "code_revision": code_revision(),
-                "seed": seed,
-                "stage_times_s": stage_times,
-                "error": f"MAP failed on all {n_restarts} restarts",
-            }, None
+            return build_cell_result(
+                galaxy_id=galaxy_id,
+                z=z,
+                model_dict=model_dict,
+                components=components_to_report,
+                n_free=n_free,
+                n_map_restarts=len(map_losses),
+                started=started,
+                stage_times=stage_times,
+                seed=seed,
+                error=f"MAP failed on all {n_restarts} restarts",
+            ), None
 
         map_restart_loss_spread = None
         if len(map_losses) > 1:
@@ -412,57 +538,25 @@ def fit_one_model(
         except Exception as e:
             stage_times["laplace_s"] = time.perf_counter() - t0
             logger.error(f"{cell_key} Laplace failed: {e}")
-            return {
-                "galaxy": int(galaxy_id),
-                "z": float(z),
-                "model_key": model_key,
-                "model_set": model_dict.get("set", "unknown"),
-                "components": components_to_report,
-                "route": "laplace",
-                "log_evidence": None,
-                "map_loss": float(best_loss),
-                "n_free": n_free,
-                "newton_decrement": None,
-                "n_clipped_eigenvalues": None,
-                "condition_number": None,
-                "valid": False,
-                "n_map_restarts": len(map_losses),
-                "map_restart_loss_spread": map_restart_loss_spread,
-                "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
-                "wall_time_s": time.time() - started,
-                "peak_rss_gb": peak_rss_gb(),
-                "code_revision": code_revision(),
-                "seed": seed,
-                "stage_times_s": stage_times,
-                "error": f"Laplace failed: {e}",
-            }, None
+            return build_cell_result(
+                galaxy_id=galaxy_id,
+                z=z,
+                model_dict=model_dict,
+                components=components_to_report,
+                map_loss=best_loss,
+                n_free=n_free,
+                n_map_restarts=len(map_losses),
+                map_restart_loss_spread=map_restart_loss_spread,
+                started=started,
+                stage_times=stage_times,
+                seed=seed,
+                error=f"Laplace failed: {e}",
+            ), None
         stage_times["laplace_s"] = time.perf_counter() - t0
         logger.info("%s Laplace: %.2fs", cell_key, stage_times["laplace_s"])
 
-        # Extract Laplace diagnostics (null for missing, not default to 0)
-        diag = laplace_posterior.diagnostics or {}
-        log_evidence = laplace_posterior.log_evidence
-        newton_decrement = diag.get("newton_decrement")
-        n_clipped_eigenvalues = diag.get("n_clipped_eigenvalues")
-        condition_number = diag.get("condition_number")
-
-        # Convert to float/int or None (issue 2: missing -> None, not default)
-        newton_decrement_val = float(newton_decrement) if newton_decrement is not None else None
-        n_clipped_val = int(n_clipped_eigenvalues) if n_clipped_eigenvalues is not None else None
-        condition_number_val = float(condition_number) if condition_number is not None else None
-
-        # Validity check: log_evidence finite, newton_decrement <= 0.1, no clipped eigenvalues
-        # Missing diagnostics make it invalid (issue 2)
-        valid = (
-            np.isfinite(log_evidence)
-            and newton_decrement_val is not None
-            and newton_decrement_val <= 0.1
-            and n_clipped_val is not None
-            and n_clipped_val == 0
-        )
-
-        # log_evidence: record float if finite, null if not (issue 3)
-        log_evidence_out = float(log_evidence) if np.isfinite(log_evidence) else None
+        # Diagnostics, validity and log_evidence nulling all live in
+        # build_cell_result (a missing diagnostic stays null and makes the cell invalid).
 
         # Derived quantities via the jit/vmap surface, chunked (mirrors
         # fit_one.derived_over_draws): a pilot cell spent the bulk of its
@@ -505,32 +599,20 @@ def fit_one_model(
         stage_times["derived_draws_s"] = time.perf_counter() - t0
         logger.info("%s derived draws: %.2fs", cell_key, stage_times["derived_draws_s"])
 
-        # Build result JSON
-        result = {
-            "galaxy": int(galaxy_id),
-            "z": float(z),
-            "model_key": model_key,
-            "model_set": model_dict.get("set", "unknown"),
-            "components": components_to_report,
-            "route": "laplace",
-            "log_evidence": log_evidence_out,
-            "map_loss": float(best_loss),
-            "n_free": n_free,
-            "newton_decrement": newton_decrement_val,
-            "n_clipped_eigenvalues": n_clipped_val,
-            "condition_number": condition_number_val,
-            "valid": valid,
-            "n_map_restarts": len(map_losses),
-            "map_restart_loss_spread": map_restart_loss_spread,
-            "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
-            "profile_mass": False,
-            "wall_time_s": time.time() - started,
-            "peak_rss_gb": peak_rss_gb(),
-            "code_revision": code_revision(),
-            "seed": seed,
-            "stage_times_s": stage_times,
-            "error": None,
-        }
+        result = build_cell_result(
+            galaxy_id=galaxy_id,
+            z=z,
+            model_dict=model_dict,
+            components=components_to_report,
+            laplace=laplace_posterior,
+            map_loss=best_loss,
+            n_free=n_free,
+            n_map_restarts=len(map_losses),
+            map_restart_loss_spread=map_restart_loss_spread,
+            started=started,
+            stage_times=stage_times,
+            seed=seed,
+        )
 
         # Clear JAX/tengri caches after model (issue 5)
         with contextlib.suppress(Exception):
@@ -542,33 +624,18 @@ def fit_one_model(
 
     except Exception as e:
         logger.error(f"{cell_key} Unexpected error: {e}", exc_info=True)
-        return {
-            "galaxy": int(galaxy_id),
-            "z": float(z),
-            "model_key": model_key,
-            "model_set": model_dict.get("set", "unknown"),
-            "components": model_dict
+        return build_cell_result(
+            galaxy_id=galaxy_id,
+            z=z,
+            model_dict=model_dict,
+            components=model_dict
             if "config" not in model_dict
             else {"config": model_dict["config"]},
-            "route": "laplace",
-            "log_evidence": None,
-            "map_loss": None,
-            "n_free": None,
-            "newton_decrement": None,
-            "n_clipped_eigenvalues": None,
-            "condition_number": None,
-            "valid": False,
-            "n_map_restarts": 0,
-            "map_restart_loss_spread": None,
-            "systematic_floor_frac": _SYSTEMATIC_FLOOR_FRAC,
-            "profile_mass": False,
-            "wall_time_s": time.time() - started,
-            "peak_rss_gb": peak_rss_gb(),
-            "code_revision": code_revision(),
-            "seed": seed,
-            "stage_times_s": stage_times,
-            "error": str(e),
-        }, None
+            started=started,
+            stage_times=stage_times,
+            seed=seed,
+            error=str(e),
+        ), None
 
 
 def main():
@@ -659,7 +726,6 @@ def main():
     for i, model_dict in enumerate(all_models, 1):
         model_key_str = make_model_key(model_dict)
         json_path = out_dir / f"{model_key_str}.json"
-        npz_path = out_dir / f"{model_key_str}.npz"
 
         # Skip if exists and not forced
         if json_path.exists() and not args.force:
@@ -667,7 +733,6 @@ def main():
             continue
 
         print(f"[{i}/{n_models}] {model_key_str}: running...", end=" ", flush=True)
-        model_dict["set"] = args.set
 
         # Fit model
         result, npz_data = fit_one_model(
@@ -681,33 +746,13 @@ def main():
             seed=args.seed,
         )
 
-        # Save NPZ first (if we have draw data) so its write time can be
-        # recorded into the JSON's own stage_times_s before that gets dumped.
-        t_write = time.perf_counter()
-        if npz_data is not None:
-            try:
-                _atomic_replace_write(
-                    npz_path,
-                    lambda tmp_path: np.savez(tmp_path, **npz_data),  # noqa: B023
-                    tmp_suffix=".npz",
-                )
-            except Exception as e:
-                logger.error(f"Failed to write {npz_path}: {e}")
-                print("ERROR writing NPZ", flush=True)
-                # Don't fail the whole run, but log it
-        write_elapsed = time.perf_counter() - t_write
-        if isinstance(result.get("stage_times_s"), dict):
-            result["stage_times_s"]["write_s"] = write_elapsed
-
-        # Save JSON atomically
+        # NPZ first, then JSON, each atomic; write_cell records the write time
+        # into the JSON's stage_times_s.
         try:
-            _atomic_replace_write(
-                json_path,
-                lambda tmp_path: tmp_path.write_text(json.dumps(result, indent=2)),  # noqa: B023
-            )
+            write_cell(out_dir, result, npz_data)
         except Exception as e:
-            logger.error(f"Failed to write {json_path}: {e}")
-            print("ERROR writing JSON", flush=True)
+            logger.error(f"Failed to write cell {model_key_str}: {e}")
+            print("ERROR writing cell", flush=True)
             continue
 
         print(f"done ({result['wall_time_s']:.1f}s)", flush=True)

@@ -27,6 +27,7 @@ from typing import Any
 
 import numpy as np
 
+from . import _bma_keys as bk
 from ._atomic_io import _atomic_replace_write
 
 
@@ -218,122 +219,22 @@ def _resample_mixture(
     return result
 
 
-def _enumerate_model_sets() -> dict[str, list[str]]:
-    """Enumerate expected weight sets and their model keys.
+def _key_disagreement(cell_stem: str, cell: dict[str, Any]) -> str | None:
+    """Reason a cell's identity fields disagree with its model key, else None.
 
-    Returns: {set_name: [model_keys]}
+    The key is the identity; the runner also writes ``weight_sets`` (derived from
+    the same key) and names the file after it. Any of the three differing means
+    the cell was written under another key format, so it is excluded rather than
+    averaged. A cell without a ``weight_sets`` field is not cross-checked on it.
     """
-
-    # Define model axes statically to avoid import issues
-    SFH_TYPES = ["continuity", "dirichlet", "delayed", "dpl", "lnorm"]
-    SSP_KEYS = ["mist_c3k", "mist_miles", "prsc_c3k", "prsc_miles", "bpass_c3k"]
-    ATTENUATION_TYPES = ["calzetti", "smc", "kriek_conroy_2c", "cf00_2c"]
-    DUST_EMISSION = "dl14"
-    NEBULAR = "cue"
-
-    def model_key(components: dict) -> str:
-        """Generate model key from components."""
-        parts = []
-        for key in ["sfh", "ssp", "attenuation", "dust_emission", "nebular"]:
-            if key == "dust_emission":
-                parts.append(f"ir-{components[key]}")
-            elif key == "attenuation":
-                parts.append(f"att-{components[key]}")
-            else:
-                parts.append(f"{key}-{components[key]}")
-        return "__".join(parts)
-
-    sets = {}
-
-    # named_grid: I-V (5 configs)
-    named_grid = []
-    config_ssp = {
-        "I": "mist_c3k",
-        "II": "mist_miles",
-        "III": "prsc_c3k",
-        "IV": "prsc_miles",
-        "V": "bpass_c3k",
-    }
-    config_sfh = {
-        "I": "continuity",
-        "II": "dpl",
-        "III": "delayed",
-        "IV": "dirichlet",
-        "V": "lnorm",
-    }
-    config_att = {
-        "I": "calzetti",
-        "II": "calzetti",
-        "III": "cf00_2c",
-        "IV": "calzetti",
-        "V": "smc",
-    }
-
-    for cfg_key in ["I", "II", "III", "IV", "V"]:
-        components = {
-            "sfh": config_sfh[cfg_key],
-            "ssp": config_ssp[cfg_key],
-            "attenuation": config_att[cfg_key],
-            "dust_emission": DUST_EMISSION,
-            "nebular": NEBULAR,
-            "config": cfg_key,
-        }
-        named_grid.append(model_key(components))
-
-    sets["named_grid"] = named_grid
-
-    # named_all: named_grid + X-like keys (assume 5 X-like keys)
-    sets["named_all"] = named_grid + [
-        f"X-like-{key}"
-        for key in [
-            "cigale_like",
-            "prospector_like",
-            "bagpipes_like",
-            "beagle_like",
-            "dense_basis_like",
-        ]
-    ]
-
-    # factorial: 100 models (5 * 5 * 4 * 1 * 1)
-    factorial = []
-    for sfh_type in SFH_TYPES:
-        for ssp_name in SSP_KEYS:
-            for att_type in ATTENUATION_TYPES:
-                components = {
-                    "sfh": sfh_type,
-                    "ssp": ssp_name,
-                    "attenuation": att_type,
-                    "dust_emission": DUST_EMISSION,
-                    "nebular": NEBULAR,
-                }
-                factorial.append(model_key(components))
-
-    sets["factorial"] = factorial
-
-    return sets
-
-
-def _parse_model_key(key: str) -> dict[str, str]:
-    """Parse a model key into components.
-
-    Args:
-        key: String like "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__neb-cue"
-
-    Returns:
-        dict with keys "sfh", "ssp", "attenuation", "dust_emission", "nebular"
-    """
-    components = {}
-    for part in key.split("__"):
-        if "-" not in part:
-            continue
-        axis, value = part.split("-", 1)
-        if axis == "ir":
-            components["dust_emission"] = value
-        elif axis == "att":
-            components["attenuation"] = value
-        else:
-            components[axis] = value
-    return components
+    key = cell.get("model_key")
+    if cell_stem != key:
+        return f"file name {cell_stem!r} disagrees with model_key {key!r}"
+    recorded = cell.get("weight_sets")
+    expected = sorted(bk.set_membership(key))
+    if recorded is not None and sorted(recorded) != expected:
+        return f"weight_sets {sorted(recorded)} disagree with model_key membership {expected}"
+    return None
 
 
 def _compute_factorial_marginals(
@@ -352,7 +253,7 @@ def _compute_factorial_marginals(
     total_weight = 0.0
 
     # Axes: sfh, ssp, attenuation, dust_emission, nebular
-    axes = ["sfh", "ssp", "attenuation", "dust_emission", "nebular"]
+    axes = list(bk.AXES)
 
     for axis in axes:
         marginals[axis] = {}
@@ -364,7 +265,7 @@ def _compute_factorial_marginals(
 
         model_key = model["model_key"]
         weight = weights[model_key]
-        components = _parse_model_key(model_key)
+        components = bk.parse_model_key(model_key)
 
         for axis in axes:
             value = components.get(axis)
@@ -381,41 +282,12 @@ def _compute_factorial_marginals(
             for value in marginals[axis]:
                 marginals[axis][value] /= total_weight
 
-    # Add derived marginals for isochrone and spectral_library from ssp axis
-    derived_marginals = {}
-
-    if "ssp" in marginals:
-        isochrone_map = {
-            "mist_c3k": "mist",
-            "mist_miles": "mist",
-            "prsc_c3k": "prsc",
-            "prsc_miles": "prsc",
-            "bpass_c3k": "bpass",
-        }
-        spectral_map = {
-            "mist_c3k": "c3k",
-            "mist_miles": "miles",
-            "prsc_c3k": "c3k",
-            "prsc_miles": "miles",
-            "bpass_c3k": "c3k",
-        }
-
-        derived_marginals["isochrone"] = {}
-        derived_marginals["spectral_library"] = {}
-
-        for ssp_value, weight in marginals["ssp"].items():
-            iso = isochrone_map.get(ssp_value)
-            spec = spectral_map.get(ssp_value)
-
-            if iso:
-                if iso not in derived_marginals["isochrone"]:
-                    derived_marginals["isochrone"][iso] = 0.0
-                derived_marginals["isochrone"][iso] += weight
-
-            if spec:
-                if spec not in derived_marginals["spectral_library"]:
-                    derived_marginals["spectral_library"][spec] = 0.0
-                derived_marginals["spectral_library"][spec] += weight
+    # Derived marginals (isochrone, spectral_library) come from the ssp axis
+    derived_marginals = {axis: {} for axis in bk.DERIVED_AXES}
+    for ssp_value, weight in marginals["ssp"].items():
+        for axis in bk.DERIVED_AXES:
+            value = bk.derived_axis_value(axis, ssp_value)
+            derived_marginals[axis][value] = derived_marginals[axis].get(value, 0.0) + weight
 
     marginals.update(derived_marginals)
 
@@ -429,67 +301,14 @@ def _compute_prior_mass() -> dict[str, dict[str, dict[str, float]]]:
         {set_name: {axis: {value: prior_mass}}}
     """
 
-    prior = {}
-
-    # named_grid: 5 models, flat prior = 1/5 each
-    # Placeholder for named_grid and named_all priors
-    # The combiner doesn't use these, as they're only needed for display
-    prior["named_grid"] = {}
-    for axis in ["sfh", "ssp", "attenuation", "dust_emission", "nebular"]:
-        prior["named_grid"][axis] = {}
-
-    prior["named_all"] = {}
-    for axis in [
-        "sfh",
-        "ssp",
-        "attenuation",
-        "dust_emission",
-        "nebular",
-        "isochrone",
-        "spectral_library",
-    ]:
-        prior["named_all"][axis] = {}
-
-    # factorial: 100 models, so 1/100 = 0.01 per model
-    # Marginalized: sfh has 5 values -> 20 models each -> 0.2 per value
-    # ssp has 5 values -> 20 models each -> 0.2 per value
-    # attenuation has 4 values -> 25 models each -> 0.25 per value
-    # dust_emission, nebular are fixed -> 1.0
-    prior["factorial"] = {
-        "sfh": {
-            "continuity": 0.2,
-            "dirichlet": 0.2,
-            "delayed": 0.2,
-            "dpl": 0.2,
-            "lnorm": 0.2,
-        },
-        "ssp": {
-            "mist_c3k": 0.2,
-            "mist_miles": 0.2,
-            "prsc_c3k": 0.2,
-            "prsc_miles": 0.2,
-            "bpass_c3k": 0.2,
-        },
-        "attenuation": {
-            "calzetti": 0.25,
-            "smc": 0.25,
-            "kriek_conroy_2c": 0.25,
-            "cf00_2c": 0.25,
-        },
-        "dust_emission": {"dl14": 1.0},
-        "nebular": {"cue": 1.0},
-        "isochrone": {
-            "mist": 0.4,
-            "prsc": 0.4,
-            "bpass": 0.2,
-        },
-        "spectral_library": {
-            "c3k": 0.6,
-            "miles": 0.4,
-        },
+    # The named sets are reported without per-axis marginals (their models do not
+    # share a factorial structure), so their prior tables stay empty.
+    axes = [*bk.AXES, *bk.DERIVED_AXES]
+    return {
+        "named_grid": {axis: {} for axis in bk.AXES},
+        "named_all": {axis: {} for axis in axes},
+        "factorial": bk.factorial_prior_mass(),
     }
-
-    return prior
 
 
 def combine_bma(
@@ -519,7 +338,7 @@ def combine_bma(
         raise FileNotFoundError(f"Evidence directory not found: {evidence_dir}")
 
     # Enumerate expected model sets
-    model_sets = _enumerate_model_sets()
+    model_sets = {name: bk.expected_keys(name) for name in bk.WEIGHT_SETS}
 
     # Scan for galaxy IDs and cells
     galaxies = {}
@@ -543,6 +362,7 @@ def combine_bma(
         # Load cells for this galaxy
         cells_by_set = {set_name: [] for set_name in model_sets}
         routes = set()
+        unrecognized: list[dict[str, str]] = []
 
         for cell_file in sorted(gal_dir.glob("*.json")):
             cell_name = cell_file.stem
@@ -553,26 +373,30 @@ def combine_bma(
                 continue
 
             model_key = cell.get("model_key")
-            model_set = cell.get("model_set")
             route = cell.get("route")
 
-            if model_key and model_set:
-                routes.add(route)
+            if not model_key:
+                continue
+            routes.add(route)
 
-                # Categorize into sets
-                if model_set == "named":
-                    # Could be named_grid or named_all
-                    if model_key in model_sets.get("named_grid", []):
-                        cells_by_set["named_grid"].append(cell)
-                    if model_key in model_sets.get("named_all", []):
-                        cells_by_set["named_all"].append(cell)
-                elif model_set == "factorial":
-                    cells_by_set["factorial"].append(cell)
+            # Membership is derived from the key by _bma_keys (the runner's own
+            # module); the cell's file name and weight_sets field are cross-checks.
+            membership = bk.set_membership(model_key)
+            if not membership:
+                unrecognized.append(
+                    {"file": cell_file.name, "model_key": model_key, "reason": "unknown model key"}
+                )
+                continue
+            cell["_key_disagreement"] = _key_disagreement(cell_name, cell)
+            for set_name in membership:
+                cells_by_set[set_name].append(cell)
 
         # Validate route consistency
         if len(routes) > 1:
             raise ValueError(f"Galaxy {galaxy_id}: multiple routes found: {routes}")
         route_used = routes.pop() if routes else None
+
+        galaxies[galaxy_id]["unrecognized_cells"] = unrecognized
 
         # Process each weight set
         for set_name, expected_models in model_sets.items():
@@ -598,8 +422,10 @@ def combine_bma(
 
             for i, cell in enumerate(cells):
                 model_key = cell.get("model_key")
-                config = cell.get("components", {}).get("config")
+                config = bk.parse_model_key(model_key).get("config")
                 is_valid, reason = _validate_cell(cell)
+                if cell.get("_key_disagreement"):
+                    is_valid, reason = False, cell["_key_disagreement"]
 
                 if is_valid:
                     valid_log_z[model_key] = cell["log_evidence"]
@@ -621,13 +447,7 @@ def combine_bma(
                 # Load NUTS adoption status for named sets
                 if set_name in ["named_grid", "named_all"] and config and is_valid:
                     # Determine which fits dir to use
-                    if config.startswith("_like") or config in [
-                        "cigale_like",
-                        "prospector_like",
-                        "bagpipes_like",
-                        "beagle_like",
-                        "dense_basis_like",
-                    ]:
+                    if config in bk.XLIKE_IDS:
                         adoption = _load_adoption_status(xlike_fits_dir, galaxy_id, config)
                     else:
                         adoption = _load_adoption_status(fits_dir, galaxy_id, config)

@@ -27,6 +27,7 @@ for entry in [str(ANALYSIS), str(PAPER1)]:
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
+from paper1 import _bma_keys as bk
 from paper1.bma_combine import (
     _compute_factorial_marginals,
     _compute_prior_mass,
@@ -44,26 +45,29 @@ pytestmark = pytest.mark.unit
 # ============================================================================
 
 
+def _fkey(sfh: str = "continuity", ssp: int = 0, att: str = "calzetti") -> str:
+    """A factorial model key, generated through _bma_keys (never hand-written)."""
+    return bk.model_key(
+        {
+            "sfh": sfh,
+            "ssp": bk.SSP_LABELS[ssp],
+            "attenuation": att,
+            "dust_emission": bk.DUST_EMISSION,
+            "nebular": bk.NEBULAR,
+        }
+    )
+
+
 def _make_evidence_cell(
     model_key: str,
-    config: str | None = None,
-    model_set: str = "factorial",
     log_evidence: float = 0.0,
     valid: bool = True,
     newton_decrement: float = 0.01,
     n_clipped_eigenvalues: int = 0,
     route: str = "laplace",
 ) -> dict:
-    """Create a synthetic evidence cell."""
-    components = {
-        "sfh": "continuity",
-        "ssp": "mist_c3k",
-        "attenuation": "calzetti",
-        "dust_emission": "dl14",
-        "nebular": "cue",
-    }
-    if config:
-        components["config"] = config
+    """Create a synthetic evidence cell whose identity fields come from _bma_keys."""
+    parsed = bk.parse_model_key(model_key)
 
     # For invalid cells, set diagnostics to invalid values
     if not valid:
@@ -79,8 +83,9 @@ def _make_evidence_cell(
         "galaxy": 1000,
         "z": 0.5,
         "model_key": model_key,
-        "model_set": model_set,
-        "components": components,
+        "model_set": bk.model_set_kind(model_key),
+        "weight_sets": sorted(bk.set_membership(model_key)),
+        "components": parsed,
         "route": route,
         "log_evidence": actual_log_evidence,
         "map_loss": 100.0,
@@ -97,6 +102,14 @@ def _make_evidence_cell(
         "seed": 0,
         "error": None if valid else "test error",
     }
+
+
+def _write_cell(gal_dir: Path, cell: dict, with_npz: bool = True) -> None:
+    """Write a cell as <model_key>.json (+ .npz), the layout the runner produces."""
+    stem = cell["model_key"]
+    (gal_dir / f"{stem}.json").write_text(json.dumps(cell))
+    if with_npz:
+        np.savez(gal_dir / f"{stem}.npz", **_make_npz_data(cell["galaxy"]))
 
 
 def _make_npz_data(galaxy_id: int, n_samples: int = 100) -> dict[str, np.ndarray]:
@@ -162,8 +175,7 @@ def test_softmax_weights_single():
 def test_validate_cell_valid():
     """A valid cell passes validation."""
     cell = _make_evidence_cell(
-        "model_key",
-        config="I",
+        _fkey(),
         log_evidence=10.0,
         newton_decrement=0.05,
         n_clipped_eigenvalues=0,
@@ -175,9 +187,7 @@ def test_validate_cell_valid():
 
 def test_validate_cell_invalid_newton():
     """Newton decrement > 0.1 fails validation."""
-    cell = _make_evidence_cell(
-        "model_key", log_evidence=10.0, newton_decrement=0.5
-    )
+    cell = _make_evidence_cell(_fkey(), log_evidence=10.0, newton_decrement=0.5)
     is_valid, reason = _validate_cell(cell)
     assert is_valid is False
     assert "newton_decrement" in reason
@@ -186,7 +196,7 @@ def test_validate_cell_invalid_newton():
 def test_validate_cell_invalid_clipped():
     """n_clipped_eigenvalues > 0 fails validation."""
     cell = _make_evidence_cell(
-        "model_key",
+        _fkey(),
         log_evidence=10.0,
         newton_decrement=0.05,
         n_clipped_eigenvalues=1,
@@ -198,7 +208,7 @@ def test_validate_cell_invalid_clipped():
 
 def test_validate_cell_invalid_log_evidence():
     """Infinite log_evidence fails validation."""
-    cell = _make_evidence_cell("model_key", log_evidence=np.inf)
+    cell = _make_evidence_cell(_fkey(), log_evidence=np.inf)
     is_valid, reason = _validate_cell(cell)
     assert is_valid is False
     assert "log_evidence" in reason
@@ -206,14 +216,14 @@ def test_validate_cell_invalid_log_evidence():
 
 def test_validate_cell_invalid_nan():
     """NaN log_evidence fails validation."""
-    cell = _make_evidence_cell("model_key", log_evidence=np.nan)
+    cell = _make_evidence_cell(_fkey(), log_evidence=np.nan)
     is_valid, _ = _validate_cell(cell)
     assert is_valid is False
 
 
 def test_validate_cell_wrong_route():
     """Non-laplace route fails validation."""
-    cell = _make_evidence_cell("model_key", route="hmc")
+    cell = _make_evidence_cell(_fkey(), route="hmc")
     is_valid, reason = _validate_cell(cell)
     assert is_valid is False
     assert "route" in reason
@@ -222,7 +232,7 @@ def test_validate_cell_wrong_route():
 def test_validate_cell_flag_disagrees_with_diagnostics():
     """Flag says invalid but diagnostics say valid."""
     cell = _make_evidence_cell(
-        "model_key",
+        _fkey(),
         log_evidence=10.0,
         newton_decrement=0.05,
         n_clipped_eigenvalues=0,
@@ -235,54 +245,31 @@ def test_validate_cell_flag_disagrees_with_diagnostics():
     assert "disagrees" in reason
 
 
+def _combine(tmp_path: Path, evidence_dir: Path, n_draws: int = 100) -> dict:
+    return combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", n_draws, 0)
+
+
 def test_combine_bma_basic(tmp_path):
     """Basic BMA combining with synthetic data."""
-    # Create evidence directory structure
     evidence_dir = tmp_path / "bma_evidence"
     gal_dir = evidence_dir / "1000"
     gal_dir.mkdir(parents=True)
 
-    # Write three factorial cells with different keys
-    keys = [
-        "sfh-continuity__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue",
-        "sfh-dirichlet__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue",
-        "sfh-delayed__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue",
-    ]
-    for i, (key, log_z) in enumerate(zip(keys, [10.0, 0.0, 0.0])):
-        cell = _make_evidence_cell(
-            key,
-            model_set="factorial",
-            log_evidence=log_z,
-        )
-        cell_file = gal_dir / f"cell_{i}.json"
-        with open(cell_file, "w") as f:
-            json.dump(cell, f)
+    keys = [_fkey("continuity"), _fkey("dirichlet"), _fkey("delayed")]
+    for key, log_z in zip(keys, [10.0, 0.0, 0.0]):
+        _write_cell(gal_dir, _make_evidence_cell(key, log_evidence=log_z))
 
-        # Write NPZ
-        npz_file = cell_file.with_suffix(".npz")
-        npz_data = _make_npz_data(1000)
-        np.savez(npz_file, **npz_data)
+    summary = _combine(tmp_path, evidence_dir)
 
-    # Combine
-    summary = combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0)
-
-    assert "galaxies" in summary
     assert "1000" in summary["galaxies"]
-
     gal_data = summary["galaxies"]["1000"]
-    assert "sets" in gal_data
     assert "factorial" in gal_data["sets"]
 
     w_set = gal_data["sets"]["factorial"]
-    assert "models" in w_set
     assert len(w_set["models"]) == 3
 
-    # Check weights sum to 1
     weights = {m["model_key"]: m["weight"] for m in w_set["models"] if m["weight"]}
     assert abs(sum(weights.values()) - 1.0) < 1e-10
-
-    # Check max weight
-    assert w_set["max_weight"] is not None
     assert w_set["max_weight"] > 0.9  # Highest evidence dominates
 
 
@@ -292,42 +279,20 @@ def test_combine_bma_weights_valid_only(tmp_path):
     gal_dir = evidence_dir / "2000"
     gal_dir.mkdir(parents=True)
 
-    # Use proper factorial model keys
-    key_valid = "sfh-continuity__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue"
-    key_invalid = "sfh-dirichlet__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue"
+    key_valid = _fkey("continuity")
+    key_invalid = _fkey("dirichlet")
 
-    # Write one valid and one invalid cell
-    cell_valid = _make_evidence_cell(
-        key_valid,
-        model_set="factorial",
-        log_evidence=10.0,
-        valid=True,
-    )
-    # Create invalid cell with bad newton_decrement (but valid log_evidence to test that specifically)
-    cell_invalid = _make_evidence_cell(
-        key_invalid,
-        model_set="factorial",
-        log_evidence=9.0,
-        valid=True,  # Set to True so diagnostics are not None
-        newton_decrement=0.5,  # This should fail
-    )
-    cell_invalid["valid"] = False  # Override flag to test conflict
+    cell_valid = _make_evidence_cell(key_valid, log_evidence=10.0)
+    # Valid log_evidence but a bad newton decrement, flag overridden to test conflict
+    cell_invalid = _make_evidence_cell(key_invalid, log_evidence=9.0, newton_decrement=0.5)
+    cell_invalid["valid"] = False
 
-    with open(gal_dir / "valid.json", "w") as f:
-        json.dump(cell_valid, f)
-    with open(gal_dir / "invalid.json", "w") as f:
-        json.dump(cell_invalid, f)
+    _write_cell(gal_dir, cell_valid)
+    _write_cell(gal_dir, cell_invalid, with_npz=False)
 
-    # NPZ for valid only
-    npz_data = _make_npz_data(2000)
-    np.savez(gal_dir / "valid.npz", **npz_data)
+    summary = _combine(tmp_path, evidence_dir)
 
-    summary = combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0)
-
-    w_set = summary["galaxies"]["2000"]["sets"]["factorial"]
-    models = w_set["models"]
-
-    # Find the valid and invalid models
+    models = summary["galaxies"]["2000"]["sets"]["factorial"]["models"]
     valid_model = next((m for m in models if m["model_key"] == key_valid), None)
     invalid_model = next((m for m in models if m["model_key"] == key_invalid), None)
 
@@ -337,33 +302,22 @@ def test_combine_bma_weights_valid_only(tmp_path):
     assert invalid_model is not None
     assert invalid_model["weight"] is None
     assert invalid_model["valid"] is False
-    # Should be marked as disagreement or newton error
     assert any(x in invalid_model["excluded_reason"] for x in ["newton", "disagrees"])
 
 
 def test_combine_bma_invalid_counts(tmp_path):
     """Invalid counts are aggregated correctly."""
     evidence_dir = tmp_path / "bma_evidence"
+    key = _fkey("dpl", ssp=2, att="smc")
 
-    # Create two galaxies, each with one invalid cell
     for gal_id in [1000, 2000]:
         gal_dir = evidence_dir / str(gal_id)
         gal_dir.mkdir(parents=True)
+        _write_cell(gal_dir, _make_evidence_cell(key, valid=False), with_npz=False)
 
-        cell = _make_evidence_cell(
-            "problem_model",
-            model_set="factorial",
-            valid=False,
-            newton_decrement=0.5,
-        )
-        with open(gal_dir / "cell.json", "w") as f:
-            json.dump(cell, f)
+    summary = _combine(tmp_path, evidence_dir)
 
-    summary = combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0)
-
-    # Check invalid_counts
-    invalid_counts = summary["invalid_counts"]["factorial"]
-    assert invalid_counts.get("problem_model", 0) == 2
+    assert summary["invalid_counts"]["factorial"] == {key: 2}
 
 
 def test_combine_bma_mixed_route_fails(tmp_path):
@@ -372,19 +326,11 @@ def test_combine_bma_mixed_route_fails(tmp_path):
     gal_dir = evidence_dir / "3000"
     gal_dir.mkdir(parents=True)
 
-    # Write cells with different routes
-    cell1 = _make_evidence_cell("model_A", route="laplace")
-    cell2 = _make_evidence_cell("model_B", route="hmc")
-
-    with open(gal_dir / "cell1.json", "w") as f:
-        json.dump(cell1, f)
-    with open(gal_dir / "cell2.json", "w") as f:
-        json.dump(cell2, f)
+    _write_cell(gal_dir, _make_evidence_cell(_fkey("continuity"), route="laplace"), False)
+    _write_cell(gal_dir, _make_evidence_cell(_fkey("dirichlet"), route="hmc"), False)
 
     with pytest.raises(ValueError, match="multiple routes"):
-        combine_bma(
-            evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0
-        )
+        _combine(tmp_path, evidence_dir)
 
 
 def test_combine_bma_close_flag(tmp_path):
@@ -393,22 +339,10 @@ def test_combine_bma_close_flag(tmp_path):
     gal_dir = evidence_dir / "4000"
     gal_dir.mkdir(parents=True)
 
-    # Create three cells with similar evidence (weights ~ 0.33 each)
-    for i in range(3):
-        cell = _make_evidence_cell(
-            f"model_{i}",
-            model_set="factorial",
-            log_evidence=0.0,  # All equal
-        )
-        with open(gal_dir / f"cell_{i}.json", "w") as f:
-            json.dump(cell, f)
+    for sfh in ("continuity", "dirichlet", "delayed"):
+        _write_cell(gal_dir, _make_evidence_cell(_fkey(sfh), log_evidence=0.0))
 
-        npz_data = _make_npz_data(4000)
-        np.savez(gal_dir / f"cell_{i}.npz", **npz_data)
-
-    summary = combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0)
-
-    w_set = summary["galaxies"]["4000"]["sets"]["factorial"]
+    w_set = _combine(tmp_path, evidence_dir)["galaxies"]["4000"]["sets"]["factorial"]
     assert w_set["close"] is True  # max weight ~0.333 < 0.9
 
 
@@ -418,22 +352,10 @@ def test_combine_bma_not_close_flag(tmp_path):
     gal_dir = evidence_dir / "5000"
     gal_dir.mkdir(parents=True)
 
-    # Create one dominant cell and one weak one
-    cell_strong = _make_evidence_cell("model_A", log_evidence=10.0)
-    cell_weak = _make_evidence_cell("model_B", log_evidence=0.0)
+    _write_cell(gal_dir, _make_evidence_cell(_fkey("continuity"), log_evidence=10.0))
+    _write_cell(gal_dir, _make_evidence_cell(_fkey("dirichlet"), log_evidence=0.0))
 
-    with open(gal_dir / "cell_strong.json", "w") as f:
-        json.dump(cell_strong, f)
-    with open(gal_dir / "cell_weak.json", "w") as f:
-        json.dump(cell_weak, f)
-
-    for i in range(2):
-        npz_data = _make_npz_data(5000)
-        np.savez(gal_dir / f"cell_{chr(ord('A') + i)}.npz", **npz_data)
-
-    summary = combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0)
-
-    w_set = summary["galaxies"]["5000"]["sets"]["factorial"]
+    w_set = _combine(tmp_path, evidence_dir)["galaxies"]["5000"]["sets"]["factorial"]
     assert w_set["close"] is False  # max weight >> 0.9
 
 
@@ -443,34 +365,15 @@ def test_combine_bma_factorial_marginals(tmp_path):
     gal_dir = evidence_dir / "6000"
     gal_dir.mkdir(parents=True)
 
-    # Create two models with different sfh
-    cell1 = _make_evidence_cell(
-        "sfh-continuity__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue",
-        log_evidence=1.0,
-    )
-    cell2 = _make_evidence_cell(
-        "sfh-dirichlet__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue",
-        log_evidence=1.0,
-    )
+    _write_cell(gal_dir, _make_evidence_cell(_fkey("continuity"), log_evidence=1.0))
+    _write_cell(gal_dir, _make_evidence_cell(_fkey("dirichlet"), log_evidence=1.0))
 
-    with open(gal_dir / "cell1.json", "w") as f:
-        json.dump(cell1, f)
-    with open(gal_dir / "cell2.json", "w") as f:
-        json.dump(cell2, f)
-
-    for i in range(2):
-        npz_data = _make_npz_data(6000)
-        np.savez(gal_dir / f"cell{i + 1}.npz", **npz_data)
-
-    summary = combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0)
-
-    w_set = summary["galaxies"]["6000"]["sets"]["factorial"]
-    marginal = w_set.get("marginal", {})
-
-    # Check sfh marginal sums to 1
-    if "sfh" in marginal:
-        sfh_sum = sum(marginal["sfh"].values())
-        assert abs(sfh_sum - 1.0) < 1e-10
+    marginal = _combine(tmp_path, evidence_dir)["galaxies"]["6000"]["sets"]["factorial"][
+        "marginal"
+    ]
+    assert marginal["sfh"] == pytest.approx({"continuity": 0.5, "dirichlet": 0.5})
+    for axis in [*bk.AXES, *bk.DERIVED_AXES]:
+        assert sum(marginal[axis].values()) == pytest.approx(1.0), axis
 
 
 def test_combine_bma_zero_valid_cells(tmp_path):
@@ -479,18 +382,9 @@ def test_combine_bma_zero_valid_cells(tmp_path):
     gal_dir = evidence_dir / "7000"
     gal_dir.mkdir(parents=True)
 
-    # All cells invalid
-    cell = _make_evidence_cell(
-        "model_A",
-        valid=False,
-        newton_decrement=0.5,
-    )
-    with open(gal_dir / "cell.json", "w") as f:
-        json.dump(cell, f)
+    _write_cell(gal_dir, _make_evidence_cell(_fkey(), valid=False), with_npz=False)
 
-    summary = combine_bma(evidence_dir, tmp_path / "fits", tmp_path / "fits_xlike", 100, 0)
-
-    w_set = summary["galaxies"]["7000"]["sets"]["factorial"]
+    w_set = _combine(tmp_path, evidence_dir)["galaxies"]["7000"]["sets"]["factorial"]
     assert w_set["n_valid"] == 0
     assert "reason" in w_set
     assert w_set["bma_percentiles"] == {}
@@ -507,14 +401,8 @@ def test_compute_factorial_marginals():
     """Factorial marginals computed correctly."""
     # Create mock models with equal weights
     models = [
-        {
-            "model_key": "sfh-continuity__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue",
-            "valid": True,
-        },
-        {
-            "model_key": "sfh-dirichlet__ssp-mist_c3k__att-calzetti__ir-dl14__neb-cue",
-            "valid": True,
-        },
+        {"model_key": _fkey("continuity"), "valid": True},
+        {"model_key": _fkey("dirichlet"), "valid": True},
     ]
     weights = {
         models[0]["model_key"]: 0.5,

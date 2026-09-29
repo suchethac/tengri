@@ -27,7 +27,7 @@ for entry in [str(ANALYSIS), str(PAPER1)]:
 
 import numpy as np
 import pytest
-
+from paper1 import _bma_keys as bk
 from paper1._atomic_io import _atomic_replace_write
 from paper1.bma_evidence import fit_one_model
 
@@ -53,9 +53,7 @@ def test_save_npz_atomic_writes_and_reloads(tmp_path):
         "log_sfr_10myr": np.array([0.4, 0.5, 0.6]),
     }
 
-    _atomic_replace_write(
-        target, lambda tmp_path: np.savez(tmp_path, **arrays), tmp_suffix=".npz"
-    )
+    _atomic_replace_write(target, lambda tmp_path: np.savez(tmp_path, **arrays), tmp_suffix=".npz")
 
     assert target.exists(), "the requested .npz path must exist after the atomic write"
     leftover_tmp = target.with_name(f"{target.stem}.tmp.npz")
@@ -153,7 +151,7 @@ def test_failed_model_writes_json_with_error(tmp_path):
 
     model_dict = {
         "sfh": "invalid_sfh_type",  # This will cause build_model to fail
-        "ssp": "mist_c3k",
+        "ssp": bk.SSP_LABELS[0],
         "attenuation": "calzetti",
         "dust_emission": "dl14",
         "nebular": "cue",
@@ -185,7 +183,7 @@ def test_json_has_all_required_fields():
     # Use a factorial model that will likely fail quickly (no real fit)
     model_dict = {
         "sfh": "continuity",
-        "ssp": "mist_c3k",
+        "ssp": bk.SSP_LABELS[0],
         "attenuation": "calzetti",
         "dust_emission": "dl14",
         "nebular": "cue",
@@ -207,6 +205,7 @@ def test_json_has_all_required_fields():
         "z",
         "model_key",
         "model_set",
+        "weight_sets",
         "components",
         "route",
         "log_evidence",

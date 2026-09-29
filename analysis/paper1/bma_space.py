@@ -9,12 +9,9 @@ The factorial model space is a Cartesian product of component axes:
 
 Total: 5 * 5 * 4 * 1 * 1 = 100 factorial models.
 
-Named sets:
-- named_grid: configurations I-V (6th configuration excluded from BMA)
-- named_all: configurations I-V + X-like models (cigale_like, prospector_like, etc.)
-
-The model_key function generates deterministic strings like:
-  "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__neb-cue"
+The axes, model keys, enumeration and weight-set membership live in
+``_bma_keys`` (jax-free, shared with the evidence runner and the combiner); this
+module holds only the jax-dependent model builders.
 
 Component dicts are extracted from configs.py to guarantee exact parity;
 no copy-paste of priors or parameters.
@@ -22,9 +19,6 @@ no copy-paste of priors or parameters.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from config_metadata import CONFIGS, SSP_FOR_CONFIG, XLIKE_KEYS
 from configs import (
     _continuity_sfh,
     _kriek_conroy_two_component,
@@ -34,6 +28,8 @@ from configs import (
 import tengri
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.cosmology import age_at_z
+
+from ._bma_keys import ATTENUATION_TYPES, DUST_EMISSION, NEBULAR, SFH_TYPES
 
 LOG10_ZSUN = -1.848
 MET_EDGE_INSET_DEX = 0.02
@@ -128,13 +124,6 @@ def _lnorm_sfh(ssp_data: tengri.SSPData, z: float) -> dict:
     }
 
 
-# Axes for the factorial model space
-FACTORIAL_SFH_TYPES = ["continuity", "dirichlet", "delayed", "dpl", "lnorm"]
-FACTORIAL_SSP_KEYS = ["I", "II", "III", "IV", "V"]
-FACTORIAL_ATTENUATION_TYPES = ["calzetti", "smc", "kriek_conroy_2c", "cf00_2c"]
-FIXED_DUST_EMISSION = "dl14"
-FIXED_NEBULAR = "cue"
-
 # Mapping from axis names to dict builders
 _SFH_BUILDERS = {
     "continuity": _continuity_sfh,
@@ -151,181 +140,9 @@ _ATTENUATION_BUILDERS = {
     "cf00_2c": _charlot_fall_two_component,
 }
 
-
-def model_key(components: dict[str, str]) -> str:
-    """Generate a deterministic, filename-safe model key from component names.
-
-    Args:
-        components: dict with keys "sfh", "ssp", "attenuation", "dust_emission",
-            "nebular", optionally "config" (for named sets).
-
-    Returns:
-        For a named configuration or X-like model (a "config" key present):
-        the bare id alone, prefixed by its kind -- "config-I" .. "config-V"
-        for a grid configuration, "xlike-cigale_like" etc. for an X-like
-        model. The rest of that configuration's fields (attenuation,
-        dust_emission, nebular) live in ``CONFIGS``/``XLIKE_CONFIGS``, keyed
-        by this same bare id -- never folded into the key itself, because
-        those fields are display strings ("Kriek+13, 2-comp", "Draine+2014")
-        with spaces, commas and "+", none of which are safe filename
-        characters (a real run wrote ``.../<key>.npz.tmp`` where ``<key>``
-        contained a literal ", " and directory separators would have been
-        worse had one of them been "/").
-
-        For a factorial model (no "config" key): a string like
-        "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__nebular-cue"
-        built from the component axis values, which are already
-        filename-safe slugs.
-
-        Every returned key matches ``^[A-Za-z0-9_.-]+$``.
-    """
-    if "config" in components:
-        cfg = components["config"]
-        if cfg in XLIKE_KEYS:
-            return f"xlike-{cfg}"
-        if cfg in CONFIGS:
-            return f"config-{cfg}"
-        raise ValueError(
-            f"Unknown config id {cfg!r}: not a grid configuration in CONFIGS "
-            f"({sorted(CONFIGS)}) or an X-like key in XLIKE_KEYS ({XLIKE_KEYS})"
-        )
-    parts = []
-    for key in ["sfh", "ssp", "attenuation", "dust_emission", "nebular"]:
-        if key == "dust_emission":
-            parts.append(f"ir-{components[key]}")
-        elif key == "attenuation":
-            parts.append(f"att-{components[key]}")
-        else:
-            parts.append(f"{key}-{components[key]}")
-    return "__".join(parts)
-
-
-def parse_model_key(key: str) -> dict[str, str]:
-    """Inverse of model_key: parse a model key into components.
-
-    Args:
-        key: Either "config-<id>" / "xlike-<id>" (a named configuration or
-            X-like model) or a factorial key like
-            "sfh-continuity__ssp-mist_c3k__att-kriek_conroy_2c__ir-dl14__nebular-cue".
-
-    Returns:
-        For "config-*"/"xlike-*": ``{"config": "<id>"}`` -- the rest of that
-        configuration's fields are not encoded in the key (see ``model_key``);
-        look them up in ``CONFIGS``/``XLIKE_CONFIGS`` by this same id.
-        For a factorial key: dict with keys "sfh", "ssp", "attenuation",
-        "dust_emission", "nebular".
-    """
-    if key.startswith("config-"):
-        return {"config": key[len("config-") :]}
-    if key.startswith("xlike-"):
-        return {"config": key[len("xlike-") :]}
-    components = {}
-    for part in key.split("__"):
-        axis, value = part.split("-", 1)
-        if axis == "ir":
-            components["dust_emission"] = value
-        elif axis == "att":
-            components["attenuation"] = value
-        else:
-            components[axis] = value
-    return components
-
-
-def enumerate_factorial() -> list[dict[str, str]]:
-    """Enumerate all 100 factorial models in deterministic order.
-
-    Returns:
-        List of component dicts, one per model. Order is:
-        sfh (outer loop) -> ssp -> attenuation -> dust_emission, nebular (fixed).
-    """
-    models = []
-    for sfh_type in FACTORIAL_SFH_TYPES:
-        for ssp_key in FACTORIAL_SSP_KEYS:
-            ssp_name = SSP_FOR_CONFIG[ssp_key]
-            for att_type in FACTORIAL_ATTENUATION_TYPES:
-                components = {
-                    "sfh": sfh_type,
-                    "ssp": ssp_name,
-                    "attenuation": att_type,
-                    "dust_emission": FIXED_DUST_EMISSION,
-                    "nebular": FIXED_NEBULAR,
-                }
-                models.append(components)
-    return models
-
-
-def enumerate_named_grid() -> list[dict[str, str]]:
-    """Enumerate the five grid configurations I-V as named models (excluding VI).
-
-    Returns:
-        List of 5 component dicts. Each includes a "config" key.
-    """
-    models = []
-    for cfg_key in ["I", "II", "III", "IV", "V"]:
-        cfg = CONFIGS[cfg_key]
-        components = {
-            "sfh": cfg["sfh_type"],
-            "ssp": SSP_FOR_CONFIG[cfg_key],
-            "attenuation": cfg["attenuation"],  # plain string like "Kriek+13, 2-comp"
-            "dust_emission": cfg["dust_ir"],  # plain string
-            "nebular": cfg["nebular"],  # plain string
-            "config": cfg_key,
-        }
-        models.append(components)
-    return models
-
-
-def _load_xlike_builders() -> dict[str, callable]:
-    """Load xlike config builders if the module exists.
-
-    Raises:
-        ImportError: If xlike_configs.py exists but fails to import (don't swallow).
-
-    Returns:
-        Dict mapping xlike keys to builder functions, or empty dict if absent.
-    """
-    here = Path(__file__).resolve().parent
-    xlike_module_path = here / "xlike_configs.py"
-
-    if not xlike_module_path.is_file():
-        return {}
-
-    # If file exists, import must succeed (don't swallow errors)
-    try:
-        import sys
-
-        sys.path.insert(0, str(here))
-        try:
-            import xlike_configs as module
-        finally:
-            if str(here) in sys.path:
-                sys.path.remove(str(here))
-    except (ImportError, ModuleNotFoundError, AttributeError) as e:
-        # If the file exists but import fails, raise (don't silently drop X-like)
-        raise ImportError(f"Failed to import xlike_configs from {xlike_module_path}: {e}") from e
-
-    builders = {}
-    if hasattr(module, "XLIKE_BUILDERS"):
-        builders.update(module.XLIKE_BUILDERS)
-    return builders
-
-
-def enumerate_named_all() -> list[dict[str, str]]:
-    """Enumerate grid I-V plus X-like models if available.
-
-    Returns:
-        List of 5+ component dicts. Each includes a "config" key naming the
-        configuration or xlike key. Returns just the grid if xlike module absent.
-    """
-    models = enumerate_named_grid()
-    xlike_builders = _load_xlike_builders()
-    for key in sorted(xlike_builders.keys()):
-        components = {
-            "config": key,
-            # Other fields are not populated here; they depend on per-galaxy SSP
-        }
-        models.append(components)
-    return models
+# The builders must cover exactly the axis values the keys enumerate.
+if tuple(_SFH_BUILDERS) != SFH_TYPES or tuple(_ATTENUATION_BUILDERS) != ATTENUATION_TYPES:
+    raise RuntimeError("bma_space builders are out of step with the _bma_keys axes")
 
 
 def build_model(
@@ -358,12 +175,12 @@ def build_model(
         raise ValueError(f"Unknown sfh type: {sfh_type}")
     if att_type not in _ATTENUATION_BUILDERS:
         raise ValueError(f"Unknown attenuation type: {att_type}")
-    if dust_em_type != FIXED_DUST_EMISSION:
+    if dust_em_type != DUST_EMISSION:
         raise ValueError(
-            f"Only {FIXED_DUST_EMISSION!r} dust emission is supported; got {dust_em_type!r}"
+            f"Only {DUST_EMISSION!r} dust emission is supported; got {dust_em_type!r}"
         )
-    if neb_type != FIXED_NEBULAR:
-        raise ValueError(f"Only {FIXED_NEBULAR!r} nebular is supported; got {neb_type!r}")
+    if neb_type != NEBULAR:
+        raise ValueError(f"Only {NEBULAR!r} nebular is supported; got {neb_type!r}")
 
     sfh_builder = _SFH_BUILDERS[sfh_type]
     sfh = sfh_builder(ssp_data, z)
@@ -371,8 +188,8 @@ def build_model(
     att_builder = _ATTENUATION_BUILDERS[att_type]
     dust_attenuation = att_builder()
 
-    dust_emission = {"type": FIXED_DUST_EMISSION, "all_params": Fixed(DEFAULT)}
-    neb = {"type": FIXED_NEBULAR, "all_params": Fixed(DEFAULT), "neb_logU": Fixed(-2.5)}
+    dust_emission = {"type": DUST_EMISSION, "all_params": Fixed(DEFAULT)}
+    neb = {"type": NEBULAR, "all_params": Fixed(DEFAULT), "neb_logU": Fixed(-2.5)}
 
     return SEDModel.build(
         ssp_data=ssp_data,
