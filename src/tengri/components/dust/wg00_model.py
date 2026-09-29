@@ -171,6 +171,11 @@ class WG00AttenuationSEDComponent(TemplateThreading):
             ),
             DerivedKey("dust_attenuation_factor", "", "exp(-A(lambda; tau_v)) on pipeline grid"),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
+            DerivedKey(
+                "log_line_lums_attenuated",
+                "dex",
+                "log10 of dust-attenuated emission-line luminosities [erg/s] (#2541)",
+            ),
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
@@ -326,11 +331,67 @@ class WG00AttenuationSEDComponent(TemplateThreading):
             log_L_absorbed=log_l_absorbed,
             sed_dust_attenuated=attenuated,
         )
+        # Attenuate line catalog if present in state (#2541).
+        if state.log_line_lums is not None:
+            log_line_lums_attenuated = self.attenuate_line_catalog(
+                params, state.line_wavelengths, state.log_line_lums
+            )
+            derived_overrides["log_line_lums_attenuated"] = log_line_lums_attenuated
         return state.with_(
             sed_intrinsic=attenuated,
             sed_attenuated=attenuated,
             derived=state.derived.with_(**derived_overrides),
         )
+
+    def attenuate_line_catalog(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        line_wave: jnp.ndarray,
+        log_line_lums: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """THE single source of the WG00 line attenuation (#2541).
+
+        Reuses the WG00 interpolation closure evaluated at the line wavelengths,
+        using the identical transmission calculation as :meth:`apply`: same
+        structural selectors, same ``τ_V`` interpolation, so the line and
+        continuum are attenuated by the same function evaluated at their
+        respective wavelengths. A caller with no
+        :class:`~tengri.protocols.component.ForwardState` (the no-state
+        fallback in ``SEDModel._attenuate_line_catalog``, used when
+        ``dust_model`` is off/wg00 or on the #950 ``enable_fast_nebular()``
+        grid path) gets exactly the ``τ_V`` and closure the live forward pass
+        calls for its continuum, since both call this same method.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives ``dust_tau_v`` (required).
+        line_wave : ndarray, shape (n_lines,)
+            Rest-frame line wavelengths [Å].
+        log_line_lums : ndarray, shape (n_lines,)
+            log10 of the INTRINSIC line luminosities [dex, erg/s]. The log
+            form, never the linear one, which overflows float32 at typical
+            line luminosities (#1206/#1837).
+
+        Returns
+        -------
+        ndarray, shape (n_lines,)
+            log10 of the ATTENUATED line luminosities [dex, erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: yes, pure ``jnp`` plus the grid closure.
+        """
+        wg00_fn = self._state.wg00_fn if self._state is not None else None
+        if wg00_fn is None:
+            wg00_fn = self._build_curve_fn()
+        if wg00_fn is None:
+            # Grid unavailable: return unattenuated lines (consistent with apply()).
+            return jnp.asarray(log_line_lums)
+        tau_v = jnp.asarray(params["dust_tau_v"])
+        a_lambda = wg00_fn(jnp.asarray(line_wave), tau_v)
+        log10_e = 1.0 / jnp.log(10.0)
+        return jnp.asarray(log_line_lums) - a_lambda * log10_e
 
 
 # Register in the unified component dispatch table so the grammar type

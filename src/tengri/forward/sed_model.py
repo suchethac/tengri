@@ -6317,26 +6317,27 @@ class SEDModel:
         return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
 
     def _line_dust_component(self):
-        """The chain's dust component (``name`` "dust"/"dust_attenuation"), or
-        ``None`` for dust off/wg00 (neither declares ``attenuate_line_catalog``).
+        """The chain's dust component with line-attenuation capability, or
+        ``None`` if no dust component declares ``attenuate_line_catalog``
+        (only dust off passes lines through unchanged).
         """
         chain = getattr(self, "_cached_component_chain", None) or self._build_component_chain()
         for component in chain:
-            if getattr(component, "name", None) in ("dust", "dust_attenuation"):
+            if hasattr(component, "attenuate_line_catalog"):
                 return component
         return None
 
     def _attenuate_line_catalog(self, params, line_waves, line_lums):
         """Dust-redden a line catalog with no :class:`ForwardState` (#2223).
 
-        THE no-state fallback for :meth:`predict_line_fluxes` (dust
-        off/wg00, or the #950 ``enable_fast_nebular()`` grid path) and the
-        deprecated :meth:`predict_emission_lines`. Dispatches to
+        THE no-state fallback for :meth:`predict_line_fluxes` (dust off or the
+        #950 ``enable_fast_nebular()`` grid path) and the deprecated
+        :meth:`predict_emission_lines`. Dispatches to
         :meth:`_line_dust_component`'s own ``attenuate_line_catalog`` -- the
         SAME method the live forward pass calls for its continuum -- so this
         path cannot thread a different ``dust_delta``/``dust_Rv``/``redshift``/
         per-screen override than the live one. ``line_lums`` is INTRINSIC and
-        LINEAR [erg/s]; returns it unchanged when dust is off/wg00. JIT-safe
+        LINEAR [erg/s]; returns it unchanged when dust is off. JIT-safe
         (pure ``jnp`` once the static component lookup completes); the linear
         contract can itself overflow float32 at typical line luminosities, a
         pre-existing caveat (#1206 §3), not introduced here.
@@ -8500,7 +8501,7 @@ class SEDModel:
         configured dust component (the ``nebular_screen`` choice -- default
         ``"birth_cloud"``, Charlot & Fall 2000 [1]_ -- for ``two_component``;
         the single screen for ``single_component``; unattenuated for
-        ``off``/``wg00``), the same dispatch :meth:`_attenuate_line_catalog`
+        ``off``), the same dispatch :meth:`_attenuate_line_catalog`
         uses (#2223). The mode-selectable nebular screen this docstring used
         to describe as dead config (``_neb_dust_mode`` / ``neb_dust_law_bc``,
         write-only since #923/#2230) is live again as explicit config (#2234,
@@ -8563,7 +8564,7 @@ class SEDModel:
             atten_lums = pow10(jnp.asarray(_log_atten))
         else:
             # Fallback for a chain that published no attenuated catalog
-            # (dust off/wg00): the SAME no-state screen `predict_line_fluxes`
+            # (dust off): the SAME no-state screen `predict_line_fluxes`
             # falls back to (#2223), so this deprecated surface cannot drift
             # from its replacement even off that published-catalog fast path.
             # _attenuate_line_catalog reads params["dust_tau_bc"] etc. with no
