@@ -683,6 +683,86 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "must be > 0",
         free_prior=Uniform(2.0, 6.0, "R_V (neb)", default=3.1),
     ),
+    # ── Li et al. (2008) dust law parameters (#2542) ──────────────────────────
+    # Reached only by the li08 law; read from its signature. These are reached
+    # through the grammar: a caller that omits these parameters gets the law's
+    # own default. Four dimensionless shape parameters that partition the
+    # Li et al. analytical curve into UV/optical continuum (c1-c3) and far-UV
+    # bump (c4).
+    #
+    # c1 controls continuum amplitude; c2 the curvature (steepness of UV rise);
+    # c3 an offset; c4 the bump amplitude. Presets from Li et al. 2008 Table 1:
+    # MW-like: (6.0, 4.0, 2.0, 0.04); SMC-like: (5.0, 5.5, 1.5, 0.0);
+    # Calzetti-like: (3.5, 2.5, 3.0, 0.0). The free_prior ranges are set to
+    # encompass observed variations (Markov et al. 2023, 2025).
+    ParamDeclaration(
+        "dust_c1",
+        Fixed(6.0),
+        "Li et al. (2008) continuum amplitude parameter",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(1.0, 10.0, "Li et al. c1 continuum amplitude", default=6.0),
+    ),
+    ParamDeclaration(
+        "dust_c2",
+        Fixed(4.0),
+        "Li et al. (2008) continuum curvature parameter",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(1.0, 8.0, "Li et al. c2 continuum curvature", default=4.0),
+    ),
+    ParamDeclaration(
+        "dust_c3",
+        Fixed(2.0),
+        "Li et al. (2008) continuum offset parameter",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 5.0, "Li et al. c3 continuum offset", default=2.0),
+    ),
+    ParamDeclaration(
+        "dust_c4",
+        Fixed(0.04),
+        "Li et al. (2008) UV bump amplitude at 2175A",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 0.1, "Li et al. c4 UV bump amplitude", default=0.04),
+    ),
+    # ── UV bump center and width: noll09 and salim_sbl18 (#2542) ─────────────
+    # The two bump-profile parameters (wavelength center and FWHM) are read by
+    # noll09 and salim_sbl18 when they apply a Drude profile UV bump to the
+    # base attenuation. Defaults (0.2175 μm, 0.035 μm) match CIGALE's
+    # dustatt_modified_starburst defaults (217.5 nm, 35 nm central wavelength
+    # and width, Ciesla et al. 2015 Table 2). The free_prior ranges encompass
+    # published measurements and variations (CIGALE v2.0+ range 0.10-0.30 μm
+    # for center, 0.020-0.050 μm for width; Boquien et al. 2019 Table 4).
+    ParamDeclaration(
+        "dust_bump_x0",
+        Fixed(0.2175),
+        "UV bump center wavelength (Drude profile)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(0.20, 0.25, "UV bump center wavelength [μm]", default=0.2175),
+    ),
+    ParamDeclaration(
+        "dust_bump_gamma",
+        Fixed(0.035),
+        "UV bump FWHM (Drude profile)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(0.020, 0.050, "UV bump FWHM [μm]", default=0.035),
+    ),
+    # ── TEA dust attenuation scatter parameter (#2542) ──────────────────────
+    # The TEA attenuation law (Haskell et al. 2024) derives the UV bump
+    # amplitude from the power-law slope via a tight relation calibrated on
+    # NIHAO-SKIRT simulations. This parameter controls the scatter around that
+    # median relation in dex: E_b = 2.5 × exp(3.5 × delta) × 10^scatter.
+    # Default 0.0 recovers the median; ±0.1-0.3 dex is typical intrinsic scatter.
+    ParamDeclaration(
+        "dust_tea_scatter",
+        Fixed(0.0),
+        "TEA attenuation scatter around median E_b relation",
+        free_prior=Uniform(-0.3, 0.3, "TEA scatter in dex", default=0.0),
+    ),
 )
 
 # ── Derived defaults for direct import, attenuation table (#2265) ─────
