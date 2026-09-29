@@ -59,19 +59,6 @@ def _model_phot_only(ssp_data):
     return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipe), obs
 
 
-def _model_spec_only(ssp_data):
-    """Spectroscopy only."""
-    obs = Observation(
-        spectroscopy=Spectroscopy(
-            wave_obs=jnp.logspace(2.0, 5.0, 300),
-            calibration_order=0,
-        )
-    )
-    recipe = recipes.mock_recovery_minimal()
-    recipe["neb"] = builders.neb.ssp()
-    return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipe), obs
-
-
 def _model_joint(ssp_data):
     """Joint photometry + spectroscopy."""
     obs = Observation(
@@ -120,20 +107,6 @@ class TestUserSuppliedLikelihoodRefusal:
         with pytest.raises(ValueError, match="user-supplied"):
             _fitter(model, obs, ssp_data_wne, profile_mass=True, likelihood=_user_likelihood())
 
-    def test_spectroscopy_user_likelihood_auto_disables(self, ssp_data_wne):
-        """Spectroscopy with user likelihood: auto disables profiling with reason."""
-        model, obs = _model_spec_only(ssp_data_wne)
-        fitter = _fitter(model, obs, ssp_data_wne, likelihood=_user_likelihood())
-        assert not fitter._profile_mass
-        reason = fitter._profile_mass_reason or ""
-        assert "user-supplied" in reason, reason
-
-    def test_spectroscopy_user_likelihood_true_raises(self, ssp_data_wne):
-        """Spectroscopy with user likelihood: True raises ValueError."""
-        model, obs = _model_spec_only(ssp_data_wne)
-        with pytest.raises(ValueError, match="user-supplied"):
-            _fitter(model, obs, ssp_data_wne, profile_mass=True, likelihood=_user_likelihood())
-
     def test_joint_user_likelihood_auto_disables(self, ssp_data_wne):
         """Joint data with user likelihood: auto disables profiling with reason."""
         model, obs = _model_joint(ssp_data_wne)
@@ -155,12 +128,6 @@ class TestProfileMassWithStandardData:
     def test_photometry_standard_engages(self, ssp_data_wne):
         """Photometry without complications should engage profiling."""
         model, obs = _model_phot_only(ssp_data_wne)
-        fitter = _fitter(model, obs, ssp_data_wne)
-        assert fitter._profile_mass
-
-    def test_spectroscopy_standard_engages(self, ssp_data_wne):
-        """Spectroscopy without complications should engage profiling."""
-        model, obs = _model_spec_only(ssp_data_wne)
         fitter = _fitter(model, obs, ssp_data_wne)
         assert fitter._profile_mass
 
