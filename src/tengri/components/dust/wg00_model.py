@@ -332,9 +332,11 @@ class WG00AttenuationSEDComponent(TemplateThreading):
             sed_dust_attenuated=attenuated,
         )
         # Attenuate line catalog if present in state (#2541).
-        if state.log_line_lums is not None:
+        _line_waves = state.derived.get("line_waves")
+        _log_line_lums = state.derived.get("log_line_lums")
+        if _line_waves is not None and _log_line_lums is not None:
             log_line_lums_attenuated = self.attenuate_line_catalog(
-                params, state.line_wavelengths, state.log_line_lums
+                params, _line_waves, _log_line_lums
             )
             derived_overrides["log_line_lums_attenuated"] = log_line_lums_attenuated
         return state.with_(
