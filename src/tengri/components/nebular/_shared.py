@@ -863,7 +863,7 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
         ``pow10(log10 Q_H)``, and Q_H ~ 1e46-1e47 photons/s exceeds the
         float32 ceiling (~3.4e38, log10 ~38.53), so ``compute_qh`` itself
         returns ``inf`` under float32 on healthy input (every young,
-        ionising node of ``fsps_prsc_miles_chabrier.h5``, #1491).
+        ionizing node of ``fsps_prsc_miles_chabrier.h5``, #1491).
         **Float32 callers must use** :func:`compute_qh_log10`
         **directly** and keep the quantity in log10 space, the same treatment
         as the stellar path's :func:`_integrate_nion_log10` (#1206).
