@@ -282,6 +282,61 @@ def bolometric_absorbed_log10(
     return log_magnitude, jnp.where(corrupt, jnp.nan, sign)
 
 
+def log10_fdust_lyc_credit(
+    log_l_lyc: jnp.ndarray, neb_fdust: jnp.ndarray
+) -> jnp.ndarray:
+    r"""``log10(neb_fdust * L_LyC)``, gradient-safe at ``neb_fdust == 0`` (#2539).
+
+    ``neb_fdust`` is the fraction of Lyman-continuum photons that dust grains
+    inside HII regions absorb (CIGALE convention:
+    ``dust.luminosity = (lum_ly_young + lum_ly_old) * fdust``,
+    ``pcigale/sed_modules/nebular.py:191-193``). That energy is credited to
+    the dust IR budget as ``log10(neb_fdust) + log_L_lyc``, a plain log-add
+    that is exact but has a singular derivative at ``neb_fdust == 0``
+    (:math:`d/d(\mathrm{fdust})\,\log_{10}(\mathrm{fdust}) = 1/(\mathrm{fdust}
+    \cdot \ln 10) \to \infty`) which a naive ``jnp.where`` around
+    ``jnp.log10`` can turn into ``NaN`` under ``grad`` (``inf * 0``).
+
+    This is the *double-where* idiom used elsewhere for a value with a
+    removable singularity at a boundary (see :func:`tengri.components.stellar.
+    sfh.mean_sfh.dpl`'s ``T_safe`` treatment): the argument to :func:`jnp.log10`
+    is clamped to a finite dummy (1.0) *before* the log, so the log itself
+    never sees zero, and the ``-inf`` sentinel for "no credit" is selected
+    by a *second*, independent ``jnp.where`` whose off-branch is a bare
+    constant (zero backward-pass contribution, not ``NaN``).
+
+    Parameters
+    ----------
+    log_l_lyc : array_like, shape ()
+        log10(L_LyC / (erg/s)) [dex]: the Lyman-continuum luminosity of
+        whichever stellar population the nebular escape/dust factor was
+        applied to (the *same* population, #2539 item 2). Independent of
+        ``neb_fdust``.
+    neb_fdust : array_like, shape ()
+        Dust-absorption fraction of ionizing photons, in [0, 1].
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``log10(neb_fdust) + log_l_lyc`` [dex] where ``neb_fdust > 0``,
+        ``-inf`` (bit-identical to the exact zero-credit value) otherwise.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, including at
+    ``neb_fdust == 0`` (grad is exactly 0.0 there, the same "flat at the
+    dead boundary" choice :func:`~tengri.components.stellar.sfh.mean_sfh.dpl`
+    makes, rather than blowing up); finite and growing for
+    ``neb_fdust -> 0+`` (e.g. ``~4.3e7`` at ``1e-8``), moderate away from the
+    boundary (e.g. ``~1.09`` at ``0.3``, when ``log_l_lyc`` does not itself
+    depend on ``neb_fdust``).
+    """
+    safe_fdust = jnp.where(neb_fdust > 0.0, neb_fdust, 1.0)
+    log_fdust = jnp.log10(safe_fdust)
+    candidate = log_fdust + log_l_lyc
+    return jnp.where(neb_fdust > 0.0, candidate, -jnp.inf)
+
+
 def bolometric_absorbed(
     sed_intrinsic: jnp.ndarray,
     sed_attenuated: jnp.ndarray,

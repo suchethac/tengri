@@ -264,6 +264,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 "dex",
                 "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
             ),
+            DerivedKey(
+                "log_L_lyc_dust",
+                "dex",
+                "LyC energy neb_fdust assigns to dust in HII regions (#2539), added "
+                "into log_L_absorbed unconditionally (not gated on eb_include_lyc, "
+                "which concerns only the screen's own LyC absorption); read via the "
+                "sed_nebular edge above for ordering. Absent/-inf when neb_fdust == 0.",
+            ),
         )
 
     def _curve(self, params: Mapping[str, jnp.ndarray]):
@@ -539,6 +547,18 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 wave=state.wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+
+        # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+        # neb_fdust assigns a fraction of LyC photons to dust heating, which
+        # NebularSEDComponent publishes as log_L_lyc_dust. This energy enters
+        # the dust IR budget unconditionally (not gated on eb_include_lyc,
+        # which concerns the screen's own LyC absorption, not HII-region dust).
+        # Placed AFTER the fast/slow branches converge to a single
+        # log_l_absorbed (one post-sum edit covers both paths, including a
+        # LUT-served nebular term landing in the same closing log10_add).
+        _log_lyc_dust = state.derived.get("log_L_lyc_dust")
+        if _log_lyc_dust is not None:
+            log_l_absorbed = log10_add(log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0)
 
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:
