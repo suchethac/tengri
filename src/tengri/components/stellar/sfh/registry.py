@@ -1339,11 +1339,18 @@ _register(
                 "must have 40 <= lo and hi <= 360",
                 Uniform(80.0, 360.0, default=200.0),
             ),
+            "sfh_buat08_age_gyr": ParamDef(
+                "Galaxy age / lookback to formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+            ),
         },
         settings={},
         internal_param_map={
             "sfh_buat08_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_buat08_velocity_km_s": ("velocity_km_s", 1.0, 0.0),
+            "sfh_buat08_age_gyr": ("age_yr", 1e9, 0.0),
         },
         composition_type="additive",
     ),

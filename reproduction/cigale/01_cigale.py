@@ -659,11 +659,13 @@ save_fig("cigale_02_sfh2exp.png")
 # rotational velocity, with the same parameters in Gyr as `sfh.delayed_bq`,
 # `sfh.periodic`, `sfh.buat08`. Seven cases: τ_main=2, age_main=8,
 # age_bq=0.5 Gyr, r_sfr ∈ {0.1, 5}; burst_type ∈ {0, 1, 2} at δ=1, τ=0.2,
-# age=8 Gyr; velocity ∈ {150, 250} km/s at age=8 Gyr. `buat08` normalizes
-# over tengri's full age (13.8 Gyr), not CIGALE's 8 Gyr window. Worst case:
-# periodic rectangular, 100% of peak SFR, and the on/off edges land at
-# different lookback times. Tabulated histories enter tengri via
-# `Catalog.from_histories`, so `sfhfromfile` is not compared.
+# age=8 Gyr; velocity ∈ {150, 250} km/s at age=8 Gyr. The shapes agree
+# (median ratio 1.000 in every case; 0.993 for periodic rectangular). The
+# large maximum deviations sit on discontinuities, the delayed_bq
+# burst/quench step at T = age_main − age_bq and the periodic burst onsets
+# at T = kΔ, where each code's time grid samples the edge differently.
+# Tabulated histories enter tengri via `Catalog.from_histories`, so
+# `sfhfromfile` is not compared.
 
 # %%
 _AGE_2C_GYR = 8.0
@@ -739,6 +741,7 @@ for _v in (150, 250):
         sfh={
             "type": "buat08",
             "velocity_km_s": Fixed(float(_v)),
+            "age_gyr": Fixed(_AGE_2C_GYR),
             "log_total_mass": Fixed(0.0),
             "all_params": Fixed(DEFAULT),
         },
@@ -4166,7 +4169,7 @@ plt.show()
 #
 # | Block | § | Cases | Worst tengri/CIGALE | Where |
 # |---|---|---|---|---|
-# | SFH families beyond delayed | §2c | 7 | 100 % of peak SFR (periodic rectangular) | Fig |
+# | SFH families beyond delayed | §2c | 7 | median 1.000×; max abs Δ at step edges | Fig |
 # | τ × age grid | §3b | 7 | 0.836× | Fig |
 # | Attenuation knobs | §5b | 9 | 0.579× | 2 figs |
 # | IR library sweep | §6c | 15 | 2.484× | 2 figs |

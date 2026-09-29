@@ -2,6 +2,10 @@
 
 ### Added
 
+- The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
+
+- `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
+
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 
 ### Fixed
@@ -18,6 +22,63 @@
   `psb_wild2020`'s burst DPL anchors to its own `age` instead of the
   hardcoded `AGEMAX_YR`. Closes the dpl `tau_gyr` flat-likelihood-direction
   conditioning problem as a side effect (#2521, #2457).
+- `profile_mass` now reaches six backends it had been silently skipping:
+  `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
+  `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
+  `resolve_profile_mass_for_method` disabled profiling before they ran. The
+  clearest case is `nss`: `build_profiled_loglikelihood_fn` was written for
+  nested sampling and says so in its docstring, but the omission made it
+  unreachable, so every NSS evidence run scored its live points at the mass
+  placeholder instead of the marginal likelihood — exactly what that docstring
+  warns about. Each of the six was audited to its call site into the Fitter's
+  loss; the set goes 16 to 22 of 29 registered backends, the remaining 7 being
+  the NIFTy and native-VI backends that build their objective from the model
+  and spec directly. `tests/inference/test_profile_mass_backend_coverage.py`
+  now pins a *partition* (registry == allowlist | excluded-with-reason) rather
+  than a membership list, so a newly registered backend fails the test until
+  someone classifies it; a membership list would have stayed green through all
+  six omissions.
+- The `profile_mass` linearity guard reports which of **three** kinds it
+  measured — `proportional`, `affine` or `nonlinear` — where it previously
+  answered only proportional-or-not. The distinction is load-bearing:
+  `chi2(M)` stays exactly quadratic for an affine prediction
+  `M f(theta) + g(theta)`, so such a model is marginalizable once the offset is
+  known, while a nonlinear one never is. The extra mass evaluation that
+  separates the two is taken only on the refusal branch, so the proportional
+  fast path (every SFH that renormalizes to the mass, hence eight of the nine
+  shipped recipes) is unchanged.
+- The linearity refusal no longer misdiagnoses. It asserted that an order-1
+  deviation "indicates a mass-independent additive component such as an AGN
+  continuum" on every model; measured on a `dense_basis` photometry fit with no
+  AGN block, the deviation is order 1 and the cause is a mass-dependent SFH
+  *shape* (`_build_quantile_points` builds its GP knots from
+  `sfr_inst*age/M`, making `log_total_mass` a shape parameter rather than an
+  amplitude). #2374 improved the wording without covering that case. The
+  message now names the measured kind and names an additive component only
+  when the model carries one. An audit of every registered SFH found
+  `dense_basis` is the only one that leaks the mass into its shape: the other
+  20 measurable ones sit at 9e-15 to 1.3e-14, the roundoff floor, via
+  `mean_sfh._renormalize_to_mass`. The linearity probe now evaluates at the
+  fit's own fixed values (including a `params_override` redshift) and lets
+  model-evaluation errors propagate instead of logging them as invalid thetas.
+  The same fix now covers the whole guard chain rather than just that one
+  evaluation loop: the affine-vs-nonlinear retest's own third-mass evaluation
+  (`_classify_nonproportional`) and the `profile_mass="auto"` guard-check
+  dispatch (`configure_profile_mass`) no longer fold a model-evaluation error
+  into a silent `"nonlinear"` classification or `"auto-disabled"` reason
+  either, and the probe's fixed-values resolution takes the raw
+  `params_override` argument directly, so a call reached during
+  `Fitter.__init__` — before `self._fixed_values`/`self._params_override`
+  exist — no longer silently falls back to the spec's own declared value.
+- Student-t noise Hamiltonian now includes the dof-dependent normalisation, so a free `noise_dof` is sampled under a correctly normalised density (#2525).
+- **Breaking**: `delayed_bq`, `periodic` and `buat08` now evaluate CIGALE's formulas
+  in time since formation (T = age − t_lookback), as `sfhdelayed`/`sfh2exp` and #549's
+  `dpl`/`lognormal` do; previously they read CIGALE's forward time as lookback, giving
+  the time-reversed history (a "recent" delayed_bq burst formed at the oldest end with
+  SFR(now) = 0; periodic bursts rose slowly and cut off at their onset; buat08 SFR → 0
+  today). `periodic` no longer stops after 100 bursts (#2515). `buat08` gains
+  `sfh_buat08_age_gyr` (default: age of the universe). Every fit using these three SFHs
+  changes meaning; re-fit before comparing (#2514, #2515).
 
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
@@ -58,6 +119,10 @@
   merges the spec's Fixed values with the evaluation's own, and the line methods
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
+
+- Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
+  metal-line blanketing term (eq. 15), 0.0017·(λ_obs/λ_α)^1.68 blueward of
+  Lyα(1+z); this adds up to ~1% attenuation in the Lyα–Lyβ forest at z = 2–4 (#2516).
 
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments

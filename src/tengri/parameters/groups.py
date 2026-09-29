@@ -1512,6 +1512,31 @@ def parse_groups(**kwargs) -> Parameters:
     _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)
 
+    # Validate diffuse_screen (#2533): requires both attenuation and emission.
+    # The translated structural keys are `dust_model` (attenuation type, "off"
+    # when disabled/omitted -- see the "omitted = off" injection above) and
+    # `dust_emission` (the emission engine name, absent when no type was
+    # given): NOT `dust_attenuation`, which is only ever a raw *user* kwarg
+    # key, never written into `structural_kwargs` by the translators.
+    if structural_kwargs.get("dust_ir_diffuse_screen"):
+        # Check that dust_attenuation is active
+        atten_type = structural_kwargs.get("dust_model")
+        if not atten_type or atten_type == "off":
+            raise ValueError(
+                "dust_emission={'diffuse_screen': True} requires dust_attenuation to be active. "
+                "Attenuation off or set to 'none' cannot provide dust_diff_transmission. "
+                "Enable dust attenuation with dust_attenuation={'type': 'single_component' "
+                "or 'two_component'} or set diffuse_screen=False."
+            )
+        # Check that dust_emission is active
+        emis_type = structural_kwargs.get("dust_emission")
+        if not emis_type:
+            raise ValueError(
+                "dust_emission={'diffuse_screen': True} requires a dust_emission type to be "
+                "specified. Set dust_emission={'type': ...} (e.g., 'modified_blackbody', "
+                "'dale2014', ...) or set diffuse_screen=False."
+            )
+
     return final_params
 
 
@@ -4290,7 +4315,8 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
     """Translate dust_emission group to dust_emission type and settings.
 
     Handles IR re-emission model selection and associated structural
-    configuration (e.g., astrodust spinning dust and f_cnm).
+    configuration (e.g., astrodust spinning dust and f_cnm, and the opt-in
+    diffuse-screen attenuation flag).
     """
     emission_type = _normalize_off_switch(dust_emis_dict.get("type"))
     if emission_type == "none":
@@ -4320,6 +4346,12 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
                 result["astrodust_spinning_dust"] = bool(dust_emis_dict["spinning_dust"])
             if "f_cnm" in dust_emis_dict:
                 result["astrodust_f_cnm"] = float(dust_emis_dict["f_cnm"])
+
+    # Opt-in single-pass diffuse-screen attenuation of re-emitted IR
+    # dust emission (#2533): re-emitted photons pass through the diffuse
+    # dust screen. Off by default (bit-identical to today).
+    if "diffuse_screen" in dust_emis_dict:
+        result["dust_ir_diffuse_screen"] = bool(dust_emis_dict["diffuse_screen"])
 
 
 # Backend *implementations* are named after their physics (BakedInBackend,
@@ -4958,6 +4990,10 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # be accepted whichever type is selected rather than scoped to one
             # engine's own wildcard.
             "log_L_ir",
+            # Opt-in single-pass diffuse-screen attenuation of re-emitted IR
+            # dust emission (#2533). Applied by the emission component's apply()
+            # method when diffuse_screen=True.
+            "diffuse_screen",
         }
     ),
     # "grid" is NOT here (#2220 follow-up): it is legal only for the neb
@@ -5140,6 +5176,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # fraction. Structural config, forwarded to component_factory (#1093).
         _Structural("spinning_dust", "astrodust_spinning_dust", False, only_types=("astrodust",)),
         _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
+        # Opt-in single-pass diffuse-screen attenuation of re-emitted IR (#2533).
+        # Plain boolean, valid for every emission type (not restricted via
+        # only_types), so a straight default comparison round-trips it.
+        _Structural("diffuse_screen", "dust_ir_diffuse_screen", False),
         # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
         # so it has no attribute for this table to target; it is covered by the
         # test's hand_written allowlist instead. log_L_ir (dust_log_L_ir) is the
