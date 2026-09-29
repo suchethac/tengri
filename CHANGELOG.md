@@ -298,11 +298,12 @@
   `dust_slope` is no longer a parameter of this law. The curve carries the FSPS
   continuity term on the near-UV segment (3.3 ≤ x < 5.9 μm⁻¹), so it is continuous
   at x = 3.3 μm⁻¹ for any bump strength, and at bump strength 1 it differs from
-  `cardelli` by that term (up to 2×10⁻⁴). Its far-UV branch now matches FSPS
-  exactly too: the CCM89 cubic is evaluated to x = 12 μm⁻¹ (λ ≈ 833 Å) and held
-  constant beyond, rather than stopping at x = 10 like `cardelli`; the two laws
-  differ by 36-48% between 1000 and 833 Å, and by ~83% (a constant offset)
-  below 833 Å (#2522).
+  `cardelli` by that term (up to 2×10⁻⁴). In the far-UV it follows FSPS as well:
+  the CCM89 cubic is evaluated to x = 12 μm⁻¹ (833 Å) and held constant beyond,
+  while `cardelli` holds it constant from x = 10 μm⁻¹ (1000 Å), the limit of the
+  range Cardelli et al. (1989) fitted. The two agree at 1000 Å and differ by a
+  factor 1.83 at and below 833 Å for R_V = 3.1 (1.92 for R_V = 2, 1.57 for
+  R_V = 5) (#2522).
 - `reddy15` is continuous at 0.6 µm (red-branch offset −0.0362, as in FSPS
   `dust_type=6`) and constant below 1500 Å (#2523).
 - The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542). **Breaking**: `li08`'s default is now the Li et al. (2008) Milky-Way (R_V=3.1) curve (c1..c4 = 14.4, 6.52, 2.04, 0.0519); the previous default and docstring presets did not correspond to the paper.
