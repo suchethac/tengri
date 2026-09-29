@@ -206,7 +206,7 @@ XLIKE_CONFIGS = {
             "Star formation history discretization: seven-bin continuity model with specific age edges versus Prospector's binning scheme (workshop metadata unavailable)",
             "Metallicity treatment: continuous interpolation over the stellar library grid versus discrete metallicity values",
             "Minimum stellar age: 1 Gyr floor versus Prospector workshop default (not recorded in external metadata)",
-            "Dust--star energy balance: computed up to 912 Angstrom (excludes far-infrared, about 11 percent lower than exact integration) but outside the fitted UV-to-IRAC wavelength range",
+            "Dust energy balance: the absorbed luminosity excludes radiation shortward of 912 Angstrom, which lowers the far-infrared output by about 11 percent relative to exact integration; the far-infrared lies outside the fitted UV-to-IRAC wavelength range",
         ],
         "mismatch_sources": [
             "analysis/paper1/configs.py:178 (_continuity_sfh)",

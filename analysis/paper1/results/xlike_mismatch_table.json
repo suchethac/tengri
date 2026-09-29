@@ -26,6 +26,15 @@
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "art_sedfitting/code_outputs/header (absence of the setting)"
+    ],
+    "display_code": "BAGPIPES",
+    "mismatch_sources_display": [
+      "tengri reproduction notebook (BAGPIPES)",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "tengri reproduction notebook (BAGPIPES)",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)"
     ]
   },
   "beagle_like": {
@@ -55,6 +64,15 @@
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "art_sedfitting/code_outputs/header (absence of the setting)"
+    ],
+    "display_code": "BEAGLE",
+    "mismatch_sources_display": [
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "Pacifici et al. (2023), Table 1",
+      "Pacifici et al. (2023), Table 1",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)"
     ]
   },
   "cigale_like": {
@@ -81,6 +99,14 @@
       "Pacifici et al. (2023) Table 1",
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "art_sedfitting/code_outputs/header (absence of the setting)"
+    ],
+    "display_code": "CIGALE",
+    "mismatch_sources_display": [
+      "tengri reproduction notebook (CIGALE)",
+      "tengri reproduction notebook (CIGALE)",
+      "Pacifici et al. (2023), Table 1",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)"
     ]
   },
   "dense_basis_like": {
@@ -104,6 +130,13 @@
       "site-packages/dense_basis/priors.py:84,121; src/tengri/components/stellar/sfh/dense_basis.py:487",
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "art_sedfitting/code_outputs/header (absence of the setting)"
+    ],
+    "display_code": "Dense Basis",
+    "mismatch_sources_display": [
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "Dense Basis source (Iyer et al. 2019); this work",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)"
     ],
     "notes": [
       "Age of universe set to cosmic age at redshift z (tengri's registry default is 13.47 Gyr at z=0)"
@@ -130,7 +163,7 @@
       "Star formation history discretization: seven-bin continuity model with specific age edges versus Prospector's binning scheme (workshop metadata unavailable)",
       "Metallicity treatment: continuous interpolation over the stellar library grid versus discrete metallicity values",
       "Minimum stellar age: 1 Gyr floor versus Prospector workshop default (not recorded in external metadata)",
-      "Dust--star energy balance: computed up to 912 Angstrom (excludes far-infrared, about 11 percent lower than exact integration) but outside the fitted UV-to-IRAC wavelength range"
+      "Dust energy balance: the absorbed luminosity excludes radiation shortward of 912 Angstrom, which lowers the far-infrared output by about 11 percent relative to exact integration; the far-infrared lies outside the fitted UV-to-IRAC wavelength range"
     ],
     "mismatch_sources": [
       "analysis/paper1/configs.py:178 (_continuity_sfh)",
@@ -139,6 +172,15 @@
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "art_sedfitting/code_outputs/header (absence of the setting)",
       "reproduction/prospector/01_prospector.py:1379--1382"
+    ],
+    "display_code": "Prospector",
+    "mismatch_sources_display": [
+      "this work",
+      "tengri reproduction notebook (Prospector)",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "workshop catalog (column list), Pacifici et al. (2023)",
+      "tengri reproduction notebook (Prospector)"
     ]
   }
 }

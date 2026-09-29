@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Generate mismatch tables for X-like configurations vs external codes.
 
-Reads metadata from config_metadata.py and writes two AASTeX deluxetables:
+Reads metadata from config_metadata.py and writes two booktabs tables (table*):
 (A) Configuration choices: side-by-side Pacifici et al. (2023) Table 1 vs tengri choices
 (B) Where the X-like configurations differ: detailed mismatches with sources
 """
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -46,173 +47,237 @@ def _escape_latex(text: str) -> str:
     return text
 
 
-def _format_config_row(
-    code_name: str, parity_status: str, table1_row: dict, config_text: dict
-) -> tuple[str, list[str]]:
-    """Format configuration comparison row for Table A.
+# Reader-facing wording for the tengri column of Table A, keyed by the raw metadata
+# value other code reads. A value without an entry raises, so a new configuration
+# cannot reach the paper in shorthand.
+_TENGRI_DISPLAY = {
+    "sfh": {
+        "delayed-tau": r"Delayed-$\tau$",
+        "double power law": "Double power law",
+        "continuity, 7 bins": "Continuity, seven age bins",
+        "dense basis quantiles": r"Dense Basis quantile form \citep{Iyer_2019}",
+    },
+    "library": {
+        "BC03 2003 STELIB Chabrier": (
+            r"\citet{Bruzual_2003} with STELIB spectra, \citet{Chabrier_2003} IMF"
+        ),
+        "FSPS MIST/MILES": (
+            r"FSPS with MIST isochrones and MILES spectra, \citet{Chabrier_2003} IMF"
+        ),
+    },
+    "nebular": {"Cue": r"\textsc{Cue} \citep{Li_2025}"},
+    "attenuation": {
+        "Calzetti, 1-comp": r"\citet{Calzetti_2000}, single screen",
+        "Calzetti, 2-comp": r"\citet{Calzetti_2000}, birth-cloud and diffuse screens",
+        "Leitherer+02, 2-comp": r"\citet{Leitherer_2002}, birth-cloud and diffuse screens",
+        "Charlot+Fall 2000, 2-comp": r"\citet{Charlot_2000}, birth-cloud and diffuse screens",
+    },
+    "dust_ir": {
+        "Draine+2007": r"\citet{Draine_2007}",
+        "Dale+2014 CIGALE": r"\citet{Dale_2014}, CIGALE template set",
+        "None": "None",
+    },
+}
+
+# (pattern, LaTeX form, plain form) for the Source column of Table B. The exact
+# file:line stays in the JSON; a reader of the paper gets a citation or a data product.
+_REPRO_CODE = {"cigale": "CIGALE", "prospector": "Prospector", "bagpipes": "BAGPIPES"}
+_REPRO_PATTERN = re.compile(r"^reproduction/(\w+)/")
+_SOURCE_RULES = (
+    (
+        r"^Pacifici et al\. \(2023\) Table 1",
+        r"\citet{Pacifici_2023}, Table~1",
+        "Pacifici et al. (2023), Table 1",
+    ),
+    (
+        r"^art_sedfitting/code_outputs/header",
+        r"Workshop catalog (column list) \citep{Pacifici_2023}",
+        "workshop catalog (column list), Pacifici et al. (2023)",
+    ),
+    (
+        r"dense_basis/priors\.py",
+        r"Dense Basis source \citep{Iyer_2019}",
+        "Dense Basis source (Iyer et al. 2019)",
+    ),
+    (r"^(analysis/paper1/|src/tengri/)", "this work", "this work"),
+)
+
+
+def _source_part(part: str) -> tuple[str, str]:
+    """Map one raw source (a file:line or a citation) to (LaTeX, plain) reader wording."""
+    part = part.strip()
+    m = _REPRO_PATTERN.match(part)
+    if m and m.group(1) in _REPRO_CODE:
+        text = f"tengri reproduction notebook ({_REPRO_CODE[m.group(1)]})"
+        return text, text
+    for pattern, latex, plain in _SOURCE_RULES:
+        if re.search(pattern, part):
+            return latex, plain
+    raise ValueError(f"No reader-facing form for source {part!r}; add a rule to _SOURCE_RULES")
+
+
+def source_display(raw: str) -> tuple[str, str]:
+    """Return (LaTeX, plain) reader-facing wording for a raw source string.
 
     Parameters
     ----------
-    code_name : str
-        Code name (e.g., "CIGALE").
-    parity_status : str
-        "Yes" or "No".
-    table1_row : dict
-        Pacifici et al. (2023) Table 1 row (sampler, sfh, ssp, nebular, dust_att, dust_em, agn).
-    config_text : dict
-        Tengri configuration fields (sfh, library, nebular, attenuation, dust_ir).
+    raw : str
+        Raw source, possibly several ``;``-separated parts.
 
     Returns
     -------
-    tuple
-        (latex_header_row, list of component rows as strings)
+    tuple of str
+        The LaTeX cell text and its plain-text equivalent, duplicates removed.
     """
-    components = [
-        "Star formation history",
-        "Stellar library",
-        "Nebular emission",
-        "Dust attenuation",
-        "Dust emission",
+    pairs = []
+    for part in raw.split(";"):
+        pair = _source_part(part)
+        if pair not in pairs:
+            pairs.append(pair)
+    return "; ".join(p[0] for p in pairs), "; ".join(p[1] for p in pairs)
+
+
+def display_code(code: str) -> str:
+    """Return the reader-facing code name (``Dense_Basis`` -> ``Dense Basis``)."""
+    return code.replace("_", " ")
+
+
+def tengri_display(field: str, raw: str) -> str:
+    """Return the journal wording (LaTeX) of one tengri configuration value."""
+    try:
+        return _TENGRI_DISPLAY[field][raw]
+    except KeyError:
+        raise ValueError(
+            f"No reader-facing wording for {field}={raw!r}; add it to _TENGRI_DISPLAY"
+        ) from None
+
+
+def _prose(text: str) -> str:
+    """Escape prose for LaTeX and typeset the optical-depth symbol."""
+    return _escape_latex(text).replace(r"tau\_V", r"$\tau_V$")
+
+
+_PARITY_NOTE = (
+    "Parity is Yes where a reproduction notebook checks the configuration against the "
+    "external code; BEAGLE and Dense Basis have none."
+)
+# AASTeX 6.3.1 breaks every p/m/b column type (its table tools redefine the array
+# preamble parser; "! Extra \or." at \begin{tabular}, deluxetable or not), so wrapped
+# cells are \parbox[t] in plain l columns.
+_TABLE_A_COLUMNS = r"@{}lllll@{}"
+_TABLE_B_COLUMNS = r"@{}lll@{}"
+_WIDTH_TENGRI = "5.4cm"
+_WIDTH_DIFFERENCE = "9.6cm"
+_WIDTH_SOURCE = "4.6cm"
+
+
+def _wrap(text: str, width: str) -> str:
+    """Return ``text`` as a top-aligned ragged-right paragraph cell of the given width."""
+    return rf"\parbox[t]{{{width}}}{{\raggedright {text}}}"
+
+
+_ROW_END = r" \\"
+# (component label, tengri metadata key, Pacifici Table 1 key)
+_COMPONENTS = (
+    ("Star formation history", "sfh", "sfh"),
+    ("Stellar library", "library", "ssp"),
+    ("Nebular emission", "nebular", "nebular"),
+    ("Dust attenuation", "attenuation", "dust_att"),
+    ("Dust emission", "dust_ir", "dust_em"),
+)
+
+
+def _table_a_rows() -> list[str]:
+    """Return the body rows of Table A, one block of five components per code."""
+    lines = []
+    for n, key in enumerate(sorted(XLIKE_CONFIGS)):
+        cfg = XLIKE_CONFIGS[key]
+        table1 = cfg.get("fiducial_table1", {})
+        if n:
+            lines.append(r"\midrule")
+        for i, (comp, cfg_key, p_key) in enumerate(_COMPONENTS):
+            if i == 0:
+                head = f"{_escape_latex(display_code(cfg['code']))} & "
+                head += "Yes" if cfg["parity_check"] else "No"
+            else:
+                head = " & "
+            lines.append(
+                f"{head} & {comp} & {_escape_latex(table1.get(p_key, '---'))} & "
+                f"{_wrap(tengri_display(cfg_key, cfg[cfg_key]), _WIDTH_TENGRI)}{_ROW_END}"
+            )
+    return lines
+
+
+def _table_b_rows() -> list[str]:
+    """Return the body rows of Table B, one row per mismatch."""
+    lines = []
+    for n, key in enumerate(sorted(XLIKE_CONFIGS)):
+        cfg = XLIKE_CONFIGS[key]
+        if n:
+            lines.append(r"\midrule")
+        sources = cfg.get("mismatch_sources", [])
+        for i, text in enumerate(cfg.get("mismatches_text", [])):
+            code = _escape_latex(display_code(cfg["code"])) if i == 0 else ""
+            src = source_display(sources[i])[0] if i < len(sources) else "this work"
+            lines.append(
+                f"{code} & {_wrap(_prose(text), _WIDTH_DIFFERENCE)} & "
+                f"{_wrap(src, _WIDTH_SOURCE)}{_ROW_END}"
+            )
+    return lines
+
+
+def render_latex() -> str:
+    """Return both tables as ``table*`` blocks in the paper's house style."""
+    table_a = [
+        r"\begin{table*}[!t]",
+        r"\centering",
+        r"\caption{Configuration choices of the X-like models beside the specifications "
+        r"in Table~1 of \citet{Pacifici_2023}. " + _PARITY_NOTE + "}",
+        r"\label{tab:xlike_choices}",
+        r"\scriptsize",
+        r"\setlength{\tabcolsep}{4pt}",
+        r"\begin{tabular}{" + _TABLE_A_COLUMNS + "}",
+        r"\toprule",
+        r"Code & Parity & Component & \citet{Pacifici_2023} & \textsc{tengri} X-like" + _ROW_END,
+        r"\midrule",
+        *_table_a_rows(),
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\end{table*}",
     ]
-    component_keys = ["sfh", "library", "nebular", "attenuation", "dust_ir"]
-    pacifici_keys = ["sfh", "ssp", "nebular", "dust_att", "dust_em"]
-
-    rows = []
-    for i, (comp, cfg_key, p_key) in enumerate(zip(components, component_keys, pacifici_keys)):
-        pacifici_val = table1_row.get(p_key, "---")
-        config_val = _escape_latex(config_text.get(cfg_key, "---"))
-
-        if i == 0:
-            # First row includes the code name and parity check
-            row = (
-                f"{_escape_latex(code_name):<12} & "
-                f"{parity_status:<3} & "
-                f"{comp:<25} & "
-                f"{_escape_latex(pacifici_val):<18} & "
-                f"{config_val}\\\\"
-            )
-        else:
-            # Subsequent rows are component-only
-            row = (
-                f"{'':12} & {'':3} & {comp:<25} & "
-                f"{_escape_latex(pacifici_val):<18} & "
-                f"{config_val}\\\\"
-            )
-        rows.append(row)
-
-    return rows
+    table_b = [
+        r"\begin{table*}[!t]",
+        r"\centering",
+        r"\caption{Differences between each X-like configuration and the external code "
+        r"it stands in for, with the source of each statement. " + _PARITY_NOTE + "}",
+        r"\label{tab:xlike_differences}",
+        r"\scriptsize",
+        r"\setlength{\tabcolsep}{4pt}",
+        r"\begin{tabular}{" + _TABLE_B_COLUMNS + "}",
+        r"\toprule",
+        "Code & Difference & Source" + _ROW_END,
+        r"\midrule",
+        *_table_b_rows(),
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\end{table*}",
+    ]
+    return "\n".join(table_a) + "\n\n" + "\n".join(table_b) + "\n"
 
 
 def write_latex_tables(output_file: Path) -> None:
-    """Write two AASTeX deluxetables (configuration choices and differences).
+    """Write the configuration-choices and differences tables.
+
+    The tables use ``table*`` with ``booktabs`` like the paper's own tables.
+    AASTeX 6.3.1 cannot take ``p{}`` column types in any table: its column parser
+    fails with a run of ``Extra \\or`` errors and no PDF is produced.
 
     Parameters
     ----------
     output_file : Path
         Output .tex file.
     """
-    with open(output_file, "w") as f:
-        # =====================================================================
-        # TABLE A: Configuration choices
-        # =====================================================================
-        f.write(r"\begin{deluxetable*}{llp{3.5cm}p{3.5cm}p{3.5cm}}")
-        f.write("\n")
-        f.write(
-            r"\tablecaption{X-like configuration choices. Each row shows "
-            r"Pacifici et al. (2023) Table 1 specifications beside tengri's "
-            r"X-like configuration. BEAGLE and Dense Basis have no reproduction "
-            r"notebook parity check.}"
-        )
-        f.write("\n")
-        f.write(
-            r"\tablehead{Code & Parity & Component & "
-            r"Pacifici et al. (2023) & tengri X-like}"
-        )
-        f.write("\n")
-        f.write(r"\startdata")
-        f.write("\n")
-
-        for key in sorted(XLIKE_CONFIGS.keys()):
-            cfg = XLIKE_CONFIGS[key]
-            code = cfg["code"]
-            parity = "Yes" if cfg["parity_check"] else "No"
-
-            fiducial_table1 = cfg.get("fiducial_table1", {})
-            config_text = {
-                "sfh": cfg.get("sfh", "---"),
-                "library": cfg.get("library", "---"),
-                "nebular": cfg.get("nebular", "---"),
-                "attenuation": cfg.get("attenuation", "---"),
-                "dust_ir": cfg.get("dust_ir", "---"),
-            }
-
-            rows = _format_config_row(code, parity, fiducial_table1, config_text)
-            for row in rows:
-                f.write(row)
-                f.write("\n")
-
-        f.write(r"\enddata")
-        f.write("\n")
-        f.write(r"\label{tab:xlike_choices}")
-        f.write("\n")
-        f.write(r"\end{deluxetable*}")
-        f.write("\n\n")
-
-        # =====================================================================
-        # TABLE B: Where the X-like configurations differ
-        # =====================================================================
-        f.write(r"\begin{deluxetable*}{lp{6cm}l}")
-        f.write("\n")
-        f.write(
-            r"\tablecaption{Mismatches between tengri's X-like configurations and their "
-            r"corresponding external codes. Each row lists one difference and its source. "
-            r"BEAGLE and Dense Basis have no reproduction notebook parity check.}"
-        )
-        f.write("\n")
-        f.write(r"\tablehead{Code & Difference & Source}")
-        f.write("\n")
-        f.write(r"\startdata")
-        f.write("\n")
-
-        for key in sorted(XLIKE_CONFIGS.keys()):
-            cfg = XLIKE_CONFIGS[key]
-            code = cfg["code"]
-            mismatches_text = cfg.get("mismatches_text", [])
-            sources = cfg.get("mismatch_sources", [])
-
-            for i, mismatch in enumerate(mismatches_text):
-                source = sources[i] if i < len(sources) else "(no source)"
-                # Truncate source to file name only for brevity in table
-                if "/" in source:
-                    # Extract filename from path before colon
-                    file_part = source.split(":")[0]
-                    source_display = file_part.split("/")[-1]
-                else:
-                    source_display = source.split(":")[0]
-
-                if i == 0:
-                    # First row includes the code name
-                    row = (
-                        f"{_escape_latex(code):<12} & "
-                        f"{_escape_latex(mismatch):<40} & "
-                        f"{_escape_latex(source_display)}\\\\"
-                    )
-                else:
-                    # Subsequent rows are mismatch-only
-                    row = (
-                        f"{'':12} & "
-                        f"{_escape_latex(mismatch):<40} & "
-                        f"{_escape_latex(source_display)}\\\\"
-                    )
-                f.write(row)
-                f.write("\n")
-
-        f.write(r"\enddata")
-        f.write("\n")
-        f.write(r"\label{tab:xlike_differences}")
-        f.write("\n")
-        f.write(r"\end{deluxetable*}")
-        f.write("\n")
+    output_file.write_text(render_latex())
 
 
 def write_json(output_file: Path) -> None:
@@ -233,6 +298,10 @@ def write_json(output_file: Path) -> None:
             "mismatches": cfg.get("mismatches", []),
             "mismatches_text": cfg.get("mismatches_text", []),
             "mismatch_sources": cfg.get("mismatch_sources", []),
+            "display_code": display_code(cfg["code"]),
+            "mismatch_sources_display": [
+                source_display(src)[1] for src in cfg.get("mismatch_sources", [])
+            ],
         }
         if "notes" in cfg:
             summary[key]["notes"] = cfg["notes"]

@@ -9,7 +9,9 @@ parity flags, and no developmental language.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +23,13 @@ sys.path.insert(0, str(PAPER1_DIR.parent))
 sys.path.insert(0, str(PAPER1_DIR))
 
 from config_metadata import XLIKE_CONFIGS
+from xlike_mismatch_table import (
+    _TENGRI_DISPLAY,
+    display_code,
+    render_latex,
+    source_display,
+    tengri_display,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -160,7 +169,7 @@ class TestXlikeMismatchTable:
                     )
 
     def test_latex_output_structure(self, tmp_path):
-        """LaTeX output is valid dual deluxetable environment."""
+        """LaTeX output is two table* blocks, and never a deluxetable."""
         script = PAPER1_DIR / "xlike_mismatch_table.py"
         out_tex = tmp_path / "xlike_mismatches.tex"
         subprocess.run(
@@ -174,11 +183,12 @@ class TestXlikeMismatchTable:
         with open(out_tex) as f:
             content = f.read()
 
-        # Two deluxetable* blocks
-        assert content.count(r"\begin{deluxetable*}") == 2
-        assert content.count(r"\end{deluxetable*}") == 2
-        assert content.count(r"\startdata") == 2
-        assert content.count(r"\enddata") == 2
+        # deluxetable cannot take p{} columns (the cause of the "Extra \or" errors)
+        assert "deluxetable" not in content
+        assert content.count(r"\begin{table*}") == 2
+        assert content.count(r"\end{table*}") == 2
+        assert content.count(r"\begin{tabular}") == 2
+        assert content.count(r"\toprule") == 2
 
     def test_latex_contains_both_labels(self, tmp_path):
         """LaTeX output contains required labels."""
@@ -236,8 +246,8 @@ class TestXlikeMismatchTable:
 
         # Find problematic unescaped underscores (not in \_ form)
         # Remove LaTeX commands and labels first to avoid false positives
-        # Remove \label{...} and \tablehead{...} content
-        cleaned = re.sub(r"\\(label|tablehead|tablecaption)\{[^}]*\}", "", content)
+        # Remove \label{...} and citation keys (bib keys carry underscores)
+        cleaned = re.sub(r"\\(label|cite[tp]?)\{[^}]*\}", "", content)
         # Split by $ to handle math mode
         parts = cleaned.split("$")
         for i, part in enumerate(parts):
@@ -396,3 +406,125 @@ class TestXlikeMismatchTable:
                     assert word not in text.lower(), (
                         f"Developmental language '{word}' found in {key}: {text}"
                     )
+
+
+# Reader-facing forms of the sources (raw file:line stays in the JSON only).
+_RAW_FILE_HINTS = (".py", ".csv", "header", "site-packages", "art_sedfitting", "reproduction/")
+
+
+class TestReaderFacingText:
+    """The published tables name citations and data products, never files or codes."""
+
+    def test_code_display_has_no_underscore(self):
+        assert display_code("Dense_Basis") == "Dense Basis"
+        for cfg in XLIKE_CONFIGS.values():
+            assert "_" not in display_code(cfg["code"])
+
+    def test_rendered_tex_has_no_escaped_code_names_or_file_names(self):
+        tex = render_latex()
+        assert r"Dense\_Basis" not in tex
+        assert "Dense Basis" in tex
+        for hint in _RAW_FILE_HINTS:
+            assert hint not in tex, f"raw source fragment {hint!r} reached the table"
+
+    def test_every_source_has_a_reader_facing_form(self):
+        for key, cfg in XLIKE_CONFIGS.items():
+            for raw in cfg["mismatch_sources"]:
+                latex, plain = source_display(raw)
+                assert latex and plain, (key, raw)
+                for hint in _RAW_FILE_HINTS:
+                    assert hint not in plain, (key, raw, plain)
+
+    def test_unknown_source_raises(self):
+        with pytest.raises(ValueError, match="reader-facing form"):
+            source_display("scratch/notes.txt:3")
+
+    def test_source_forms_match_the_ruling(self):
+        assert source_display("art_sedfitting/code_outputs/header (absence)")[1].startswith(
+            "workshop catalog (column list)"
+        )
+        assert source_display("reproduction/cigale/01_cigale.py:24")[1] == (
+            "tengri reproduction notebook (CIGALE)"
+        )
+        assert source_display("analysis/paper1/configs.py:178")[1] == "this work"
+        assert "Iyer et al. 2019" in source_display("site-packages/dense_basis/priors.py:84")[1]
+
+    def test_every_tengri_value_has_journal_wording(self):
+        for key, cfg in XLIKE_CONFIGS.items():
+            for field in _TENGRI_DISPLAY:
+                shown = tengri_display(field, cfg[field])
+                assert shown, (key, field)
+        for shorthand in ("Calzetti, 1-comp", "Draine+2007", "Leitherer+02, 2-comp"):
+            assert shorthand not in render_latex()
+
+    def test_unknown_tengri_value_raises(self):
+        with pytest.raises(ValueError, match="reader-facing wording"):
+            tengri_display("attenuation", "Kriek+13, 2-comp")
+
+    def test_json_keeps_raw_sources_and_adds_display(self, tmp_path):
+        out = tmp_path / "t.json"
+        subprocess.run(
+            [sys.executable, str(PAPER1_DIR / "xlike_mismatch_table.py"), "--out-json", str(out)],
+            cwd=str(PAPER1_DIR),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        data = json.loads(out.read_text())
+        assert data["dense_basis_like"]["code"] == "Dense_Basis"
+        assert data["dense_basis_like"]["display_code"] == "Dense Basis"
+        for key, cfg in XLIKE_CONFIGS.items():
+            assert data[key]["mismatch_sources"] == cfg["mismatch_sources"]
+            assert len(data[key]["mismatch_sources_display"]) == len(cfg["mismatch_sources"])
+
+
+PAPER_DIR = Path(
+    os.environ.get("TENGRI_PAPER_DIR", "/Users/suchethacooray/writing-workspace/projects/tengri")
+)
+_WRAPPER = r"""\documentclass[twocolumn]{aastex631}
+\usepackage{booktabs}
+\begin{document}
+\input{xlike_mismatch_table}
+See Tables~\ref{tab:xlike_choices} and \ref{tab:xlike_differences}.
+\bibliographystyle{aasjournal}
+\bibliography{99-references}
+\end{document}
+"""
+
+
+def _run(cmd, cwd):
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600)
+
+
+class TestCompilesInPaperClass:
+    """The tables must build under the paper's own class, with every reference resolved."""
+
+    def test_pdflatex_builds_the_tables(self, tmp_path):
+        needed = [PAPER_DIR / n for n in ("aastex631.cls", "aasjournal.bst", "99-references.bib")]
+        if shutil.which("pdflatex") is None or shutil.which("bibtex") is None:
+            pytest.skip("pdflatex/bibtex not installed")
+        missing = [str(n) for n in needed if not n.exists()]
+        if missing:
+            pytest.skip(f"paper files absent: {missing}")
+        for n in needed:
+            shutil.copy(n, tmp_path / n.name)
+        (tmp_path / "xlike_mismatch_table.tex").write_text(render_latex())
+        (tmp_path / "wrap.tex").write_text(_WRAPPER)
+
+        flags = ["-interaction=nonstopmode", "-halt-on-error", "wrap.tex"]
+        first = _run(["pdflatex", *flags], tmp_path)
+        assert first.returncode == 0, first.stdout[-2000:]
+        _run(["bibtex", "wrap"], tmp_path)
+        _run(["pdflatex", *flags], tmp_path)
+        last = _run(["pdflatex", *flags], tmp_path)
+        assert last.returncode == 0, last.stdout[-2000:]
+
+        log = (tmp_path / "wrap.log").read_text(errors="replace")
+        errors = [ln for ln in log.splitlines() if ln.startswith("!")]
+        assert not errors, errors[:5]
+        assert (tmp_path / "wrap.pdf").exists()
+        for label in ("tab:xlike_choices", "tab:xlike_differences"):
+            assert f"Reference `{label}' on page" not in log
+        assert "There were undefined references" not in log
+        undefined_cites = re.findall(r"Citation `([^']+)' on page \d+ undefined", log)
+        assert not undefined_cites, undefined_cites
