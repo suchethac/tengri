@@ -734,6 +734,14 @@ def _has_line_adjacent_channel(model) -> bool:
 #: going materially wrong while every forward check stayed clean.
 _LUT_BIAS_GRAD_WARN = 0.05
 
+#: Maximum forward bias threshold for emitting a note advisory when user
+#: likelihood owns the data. When a user supplies their own likelihood,
+#: the Fitter's data/noise are placeholders and SNR-based estimates are
+#: meaningless, so if forward bias exceeds this threshold, emit a note
+#: stating the max forward bias and that its posterior impact scales with
+#: the user's likelihood SNR.
+_LUT_FORWARD_BIAS_NOTE = 1e-3
+
 
 def _central_params(spec):
     """Free parameters at their declared prior medians, via ``unstandardize(0)``.
@@ -756,9 +764,11 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
     """Per-channel relative forward bias of the LUT, ``|lut - exact| / |exact|``.
 
     One exact and one LUT forward at the central parameters. Cached on the
-    LUT clone keyed to the exact model's identity: a catalog constructs a
-    fitter per galaxy against the same resolved clone, and the bias is a
-    property of the model pair, not of the galaxy.
+    LUT clone keyed to the exact model's identity and data_type: a catalog
+    constructs a fitter per galaxy against the same resolved clone, and the
+    bias is a property of the model pair, not of the galaxy. The cache
+    distinguishes data_type (same model probed as photometry then joint must
+    return different lengths).
 
     Parameters
     ----------
@@ -768,31 +778,42 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         anything but the LUT measures physics, not approximation.
     lut_model : SEDModel or ForwardModel
         The resolved clone.
-    data_type : {"photometry", "spectroscopy"}
+    data_type : {"photometry", "spectroscopy", "joint"}
 
     Returns
     -------
     ndarray, shape (n_channels,)
-        Relative bias per band / pixel [dimensionless].
+        Relative bias per band / pixel / concatenated pixel (joint) [dimensionless].
+        For "joint", array is concatenated as [bias_phot, bias_spec].
     """
     cache = getattr(lut_model, "_lut_forward_bias_cache", None)
-    if cache is not None and cache[0] is exact_model:
+    if cache is not None and cache[0] is exact_model and cache[2] == data_type:
         return cache[1]
     params = _central_params(exact_model.spec)
     if data_type == "photometry":
         m_exact = np.asarray(exact_model.predict_photometry(params), dtype=float)
         m_lut = np.asarray(lut_model.predict_photometry(params), dtype=float)
-    else:
+    elif data_type == "spectroscopy":
         m_exact = np.asarray(exact_model.predict_spectrum(params), dtype=float)
         m_lut = np.asarray(lut_model.predict_spectrum(params), dtype=float)
+    elif data_type == "joint":
+        m_exact_phot = np.asarray(exact_model.predict_photometry(params), dtype=float)
+        m_lut_phot = np.asarray(lut_model.predict_photometry(params), dtype=float)
+        m_exact_spec = np.asarray(exact_model.predict_spectrum(params), dtype=float)
+        m_lut_spec = np.asarray(lut_model.predict_spectrum(params), dtype=float)
+        # Joint data vector order is always photometry then spectrum
+        m_exact = np.concatenate([m_exact_phot, m_exact_spec])
+        m_lut = np.concatenate([m_lut_phot, m_lut_spec])
+    else:
+        return np.array([])  # Unknown data_type, return empty
     bias = np.abs(m_lut - m_exact) / np.maximum(np.abs(m_exact), np.finfo(float).tiny)
     # A frozen model just recomputes; the advisory still works.
     with contextlib.suppress(Exception):
-        lut_model._lut_forward_bias_cache = (exact_model, bias)
+        lut_model._lut_forward_bias_cache = (exact_model, bias, data_type)
     return bias
 
 
-def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, *, surface):
+def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, *, surface, user_likelihood=False):
     """#1671's measurement made operational: warn when ``bias x SNR`` is material.
 
     The LUT's forward bias is constant in SNR, so no forward check can see
@@ -804,61 +825,115 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
     and this fit's data, and warns with the number and the remedy above
     :data:`_LUT_BIAS_GRAD_WARN`.
 
+    When a user supplies their own likelihood (``user_likelihood=True``),
+    the Fitter's data/noise are placeholders and SNR-based estimates are
+    meaningless. Instead, if the maximum forward bias exceeds
+    :data:`_LUT_FORWARD_BIAS_NOTE`, emit a note advisory stating the max
+    forward bias and clarifying that its posterior impact scales with the
+    SNR the user's likelihood applies.
+
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
     mismatches, exotic data layouts) degrades to silence, the fit proceeds
-    exactly as it did before the advisory existed. ``data_type="joint"`` is
-    deliberately skipped: its data vector interleaves both channels and a
-    wrong pairing would produce a wrong number, which is worse than none.
+    exactly as it did before the advisory existed.
 
     Parameters
     ----------
     data, noise : array_like
         The fit's observed vector and 1-sigma noise, flattened; batch
         surfaces pass the per-galaxy concatenation.
+    data_type : str
+        One of "photometry", "spectroscopy", "joint".
     surface : str
         The fitting surface name, quoted in the warning.
+    user_likelihood : bool, optional
+        Whether a user-supplied likelihood owns the data. When True, the
+        Fitter's data/noise are placeholders and the SNR-based estimate
+        is replaced with a forward-bias-only note.
     """
-    if data_type not in ("photometry", "spectroscopy"):
+    if data_type not in ("photometry", "spectroscopy", "joint"):
         return
     try:
         bias = _lut_forward_bias(exact_model, lut_model, data_type)
+        if bias.size == 0:
+            return
         flat_data = np.asarray(data, dtype=float).reshape(-1)
         flat_noise = np.asarray(noise, dtype=float).reshape(-1)
         n = int(bias.shape[0])
         if n == 0 or flat_data.size == 0 or flat_data.size % n != 0:
             return
-        snr = np.abs(flat_data) / np.maximum(flat_noise, np.finfo(float).tiny)
-        est_all = bias[None, :] * snr.reshape(-1, n)
-        i_flat = int(np.nanargmax(est_all))
-        est = float(est_all.reshape(-1)[i_flat])
-        channel = i_flat % n
-        snr_at = float(snr[i_flat])
-        bias_at = float(bias[channel])
+
+        # Helper to format channel name based on data_type and channel index
+        def _format_channel_name(channel_idx, data_type_inner):
+            if data_type_inner == "photometry":
+                return f"photometry band {channel_idx}"
+            elif data_type_inner == "spectroscopy":
+                return f"spectrum pixel {channel_idx}"
+            else:  # joint
+                # Determine photometry/spectroscopy split
+                try:
+                    params = _central_params(exact_model.spec)
+                    n_phot = len(np.asarray(lut_model.predict_photometry(params), dtype=float).reshape(-1))
+                    if channel_idx < n_phot:
+                        return f"photometry band {channel_idx}"
+                    else:
+                        return f"spectrum pixel {channel_idx - n_phot}"
+                except Exception:
+                    return f"channel {channel_idx}"
+
+        if user_likelihood:
+            # For user likelihood, report max forward bias only
+            max_bias_idx = int(np.nanargmax(bias))
+            max_bias = float(bias[max_bias_idx])
+            if not np.isfinite(max_bias) or max_bias <= _LUT_FORWARD_BIAS_NOTE:
+                return
+            channel_str = _format_channel_name(max_bias_idx, data_type)
+            from tengri.config.exceptions import PrecompBiasWarning, warn_measured
+            warn_measured(
+                f"{surface}: the precompute LUT's forward bias reaches {max_bias:.2%} "
+                f"({channel_str}). This bias is constant in SNR but its posterior "
+                f"impact scales with the SNR your likelihood applies (which tengri "
+                f"cannot see). For final inference, consider rerunning with "
+                f"approx=None (the exact path) or comparing LUT and exact "
+                f"posteriors. Filter PrecompBiasWarning if this trade is deliberate.",
+                PrecompBiasWarning,
+                stacklevel=3,
+                forward_bias=max_bias,
+                worst_channel=max_bias_idx,
+            )
+        else:
+            # SNR-based estimate for regular fits
+            snr = np.abs(flat_data) / np.maximum(flat_noise, np.finfo(float).tiny)
+            est_all = bias[None, :] * snr.reshape(-1, n)
+            i_flat = int(np.nanargmax(est_all))
+            est = float(est_all.reshape(-1)[i_flat])
+            channel = i_flat % n
+            snr_at = float(snr[i_flat])
+            bias_at = float(bias[channel])
+            if not np.isfinite(est) or est <= _LUT_BIAS_GRAD_WARN:
+                return
+            channel_str = _format_channel_name(channel, data_type)
+            from tengri.config.exceptions import PrecompBiasWarning, warn_measured
+            warn_measured(
+                f"{surface}: the precompute LUT's forward bias, amplified by this "
+                f"fit's SNR, gives an estimated relative posterior-gradient error "
+                f"of {est:.0%} (worst {channel_str}: forward bias "
+                f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
+                f"(invisible to any forward check) but enters the gradient "
+                f"multiplied by SNR, moves the mode, and better data makes it "
+                f"worse (#1671; spectroscopy sibling measured in #1688). For "
+                f"final inference at this SNR, rerun with approx=None (the exact "
+                f"path) or compare the two posteriors. Filter PrecompBiasWarning "
+                f"if this trade is deliberate.",
+                PrecompBiasWarning,
+                stacklevel=3,
+                gradient_error_estimate=est,
+                worst_channel=channel,
+                forward_bias=bias_at,
+                snr=snr_at,
+            )
     except Exception:
         return
-    if not np.isfinite(est) or est <= _LUT_BIAS_GRAD_WARN:
-        return
-    from tengri.config.exceptions import PrecompBiasWarning, warn_measured
-
-    warn_measured(
-        f"{surface}: the precompute LUT's forward bias, amplified by this "
-        f"fit's SNR, gives an estimated relative posterior-gradient error "
-        f"of {est:.0%} (worst channel {channel}: forward bias "
-        f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
-        f"(invisible to any forward check) but enters the gradient "
-        f"multiplied by SNR, moves the mode, and better data makes it "
-        f"worse (#1671; spectroscopy sibling measured in #1688). For "
-        f"final inference at this SNR, rerun with approx=None (the exact "
-        f"path) or compare the two posteriors. Filter PrecompBiasWarning "
-        f"if this trade is deliberate.",
-        PrecompBiasWarning,
-        stacklevel=3,
-        gradient_error_estimate=est,
-        worst_channel=channel,
-        forward_bias=bias_at,
-        snr=snr_at,
-    )
 
 
 def _resolve_batch_fit_approx(model, approx, data_type):
@@ -3729,6 +3804,7 @@ class Fitter:
                 self.noise,
                 self.data_type,
                 surface="Fitter",
+                user_likelihood=self._likelihood_is_user_supplied,
             )
 
         # --- Smart lean: drop only stale L3 entries before this run ---
