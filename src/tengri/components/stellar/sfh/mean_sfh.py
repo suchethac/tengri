@@ -1631,9 +1631,9 @@ def delayed_bq(
     sfr_at_bq = (T_bq / tau_main_yr) * jnp.exp(-T_bq / tau_main_yr) / tau_main_yr
     sfr_post_bq = r_sfr * sfr_at_bq
 
-    # Select: in the burst/quench window (T >= T_bq, i.e., t_lb <= age_bq_yr) use
+    # Select: in the burst/quench window (T_bq <= T, i.e., t_lb <= age_bq_yr) use
     # burst/quench level, otherwise use delayed-tau shape.
-    raw = jnp.where(T >= T_bq, sfr_post_bq, sfr_delayed)
+    raw = jnp.where(T_bq <= T, sfr_post_bq, sfr_delayed)
 
     # Cell-averaged window so ``age_main_yr`` has a gradient (#1374).
     shape = raw * window_weight(t_lookback, 0.0, age_main_yr)
@@ -1757,16 +1757,14 @@ def periodic(
     r_n = jnp.exp(-n * delta / tau)  # r**n
 
     # Geometric sum: sum_{j=0}^{n} r**j = (1 - r**(n+1)) / (1 - r)
-    S0 = (1.0 - r_np1) / jnp.maximum(one_minus_r, representable_denominator(1e-30))
+    # 1 - r = -expm1(-delta/tau) > 0 for delta, tau > 0: no clamp needed
+    S0 = (1.0 - r_np1) / one_minus_r
 
     # Weighted sum for delayed type: sum_{j=0}^{n} j * r**j
     # = r * (1 - (n+1)*r**n + n*r**(n+1)) / (1 - r)**2
+    # 1 - r = -expm1(-delta/tau) > 0 for delta, tau > 0: no clamp needed
     r = 1.0 - one_minus_r
-    S1 = (
-        r
-        * (1.0 - (n + 1.0) * r_n + n * r_np1)
-        / jnp.maximum(one_minus_r**2, representable_denominator(1e-30))
-    )
+    S1 = r * (1.0 - (n + 1.0) * r_n + n * r_np1) / (one_minus_r**2)
 
     # Rectangular: count bursts j with u + j*delta <= tau, i.e., j <= (tau - u) / delta.
     # Use floor-then-clamp to get integer count: min(floor((tau - u)/delta) + 1, n + 1).

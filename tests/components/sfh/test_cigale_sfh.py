@@ -415,6 +415,16 @@ class TestBuat08:
             sfr = buat08(t, log_total_mass=10.0, velocity_km_s=v, age_yr=age)
             assert_non_negative(sfr, name="sfr")
 
+    def test_zero_beyond_age(self):
+        """SFR is zero before formation (t_lookback > age_yr)."""
+        t = jnp.array([1e7, 1e9, 7e9, 9e9, 12e9])
+        sfr = buat08(t, log_total_mass=10.0, velocity_km_s=220.0, age_yr=8e9)
+        assert float(sfr[3]) == 0.0
+        assert float(sfr[4]) == 0.0
+        assert float(sfr[0]) > 0.0
+        assert float(sfr[1]) > 0.0
+        assert float(sfr[2]) > 0.0
+
     def test_velocity_clipping(self):
         """Velocities outside [40, 360] are clipped."""
         t = jnp.logspace(7, 9, 50)

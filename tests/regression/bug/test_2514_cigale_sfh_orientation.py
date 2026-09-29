@@ -5,10 +5,10 @@ Issues: delayed_bq, periodic, buat08 were reading CIGALE's forward time
 (time since formation) as lookback time, giving time-reversed histories.
 The fix evaluates each model's CIGALE formula in T = age - t_lookback.
 
-Verbatim NumPy ports of CIGALE's ``_init_code`` (1 Myr grid, index = Myr
-since formation, last element = present) are compared against tengri
-evaluated at lookback cell centers, after reversing the CIGALE array to
-lookback order.
+Reference NumPy implementations of the same models as CIGALE's ``_init_code``
+(1 Myr grid, index = Myr since formation, last element = present), validated
+against pcigale, are compared against tengri evaluated at lookback cell centers,
+after reversing the CIGALE array to lookback order.
 """
 
 import jax.numpy as jnp
