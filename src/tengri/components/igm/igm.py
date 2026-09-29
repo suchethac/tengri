@@ -941,7 +941,7 @@ def igm_transmission_madau(
     # Madau+1995 Eq. 15: metal resonance line absorption in the forest
     lya_rest = float(_MADAU_LYW[0])  # 1215.67 A, rest-frame Lyman-alpha
     tau_metal = jnp.where(
-        wave_obs <= lya_rest * (1.0 + z),
+        (wave_obs >= lya_rest) & (wave_obs <= lya_rest * (1.0 + z)),
         0.0017 * (wave_obs / lya_rest) ** 1.68,
         0.0,
     )

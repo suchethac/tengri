@@ -92,20 +92,39 @@ class TestMadauMetalBlanketing:
         )
 
     def test_metal_tau_zero_at_z_zero(self):
-        """Test that at z=0, metal term gives no additional attenuation.
+        """Test that at z=0, transmission is 1.0 everywhere.
 
-        At z=0, the forest edge is at λ_α, and beyond this the metal term
-        should not apply. Wavelengths above λ_α should have T ≈ 1.0
-        (very minimal line/continuum contribution at z=0).
+        At z=0, there is no IGM (observer at source). The forest window is
+        [λ_α, λ_α(1+z)] = [1215.67, 1215.67], so no metal term applies.
+        Transmission must be exactly 1.0 for all wavelengths.
         """
-        lam_obs = jnp.array([2000.0, 5000.0, 10000.0])  # all > Lyα
+        lam_obs = jnp.linspace(500.0, 20000.0, 100)
         T = jnp.asarray(igm_transmission_madau(lam_obs, z=0.0, igm_factor=1.0))
 
-        # Wavelengths well beyond Lyα at z=0 should have T very close to 1.0
-        # (minimal absorption since no forest)
-        assert np.allclose(T, 1.0, rtol=1e-2), (
-            f"Transmission not close to 1.0 at z=0 for red wavelengths: "
-            f"min={np.min(T)}, max={np.max(T)}"
+        # At z=0, transmission must be exactly 1.0 everywhere (no IGM)
+        assert np.allclose(T, 1.0, rtol=1e-10), (
+            f"Transmission not 1.0 at z=0: min={np.min(T)}, max={np.max(T)}"
+        )
+
+    def test_metal_tau_zero_blueward_of_lya(self):
+        """Test that metal term is zero blueward of λ_α at any z > 0.
+
+        The metal-line forest only applies in [λ_α, λ_α(1+z)].
+        Wavelengths below λ_α should have zero metal attenuation.
+        """
+        LYA_REST = 1215.67
+        z = 3.0
+
+        # Test wavelengths: some blueward of Lyα, some in forest
+        lam_rest = np.array([700.0, 900.0, 1100.0, 1215.0, 1300.0])
+        lam_obs = lam_rest * (1.0 + z)
+
+        T = np.asarray(igm_transmission_madau(jnp.asarray(lam_obs), z=z, igm_factor=1.0))
+
+        # Wavelengths blueward of Lyα (lam_obs < LYA_REST) have T=1 (no metal term)
+        blueward = lam_obs < LYA_REST
+        assert np.allclose(T[blueward], 1.0, rtol=1e-10), (
+            f"Transmission not 1.0 blueward of Lyα at z={z}: T={T[blueward]}"
         )
 
     @pytest.mark.parametrize("z", [2.0, 3.0, 4.0, 6.0])
