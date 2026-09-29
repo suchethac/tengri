@@ -75,10 +75,17 @@ import numpy as np
 from tengri._deprecated import renamed_kwarg as renamed_kwarg
 from tengri.components.dust._params import (
     CONROY2010_BUMP_STRENGTH_DEFAULT,
+    DEFAULT_DUST_BUMP_GAMMA,
     DEFAULT_DUST_BUMP_STRENGTH,
+    DEFAULT_DUST_BUMP_X0,
+    DEFAULT_DUST_C1,
+    DEFAULT_DUST_C2,
+    DEFAULT_DUST_C3,
+    DEFAULT_DUST_C4,
     DEFAULT_DUST_DELTA,
     DEFAULT_DUST_RV,
     DEFAULT_DUST_SLOPE,
+    DEFAULT_DUST_TEA_SCATTER,
     KRIEK_CONROY_BUMP_STRENGTH_DEFAULT,
     TEA_DELTA_DEFAULT,
 )
@@ -882,10 +889,10 @@ def cardelli(
 )
 def li08(
     wavelength: jnp.ndarray,
-    dust_c1: float = 6.0,
-    dust_c2: float = 4.0,
-    dust_c3: float = 2.0,
-    dust_c4: float = 0.04,
+    dust_c1: float = DEFAULT_DUST_C1,
+    dust_c2: float = DEFAULT_DUST_C2,
+    dust_c3: float = DEFAULT_DUST_C3,
+    dust_c4: float = DEFAULT_DUST_C4,
 ) -> jnp.ndarray:
     """Li et al. (2008) analytical dust attenuation/extinction curve.
 
@@ -908,13 +915,17 @@ def li08(
     wavelength : array, shape (n_wave,)
         Wavelength grid in Angstrom.
     dust_c1 : float
-        Continuum amplitude. Controls overall UV-optical shape.
+        Continuum amplitude. Controls overall UV-optical shape. Default 14.4
+        is the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
     dust_c2 : float
-        Continuum curvature. Higher values produce steeper UV rises.
+        Continuum curvature. Higher values produce steeper UV rises. Default
+        6.52 is the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
     dust_c3 : float
-        Continuum offset. Shifts the overall curve level.
+        Continuum offset. Shifts the overall curve level. Default 2.04 is
+        the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
     dust_c4 : float
-        UV bump amplitude at 2175 Angstrom. Set to 0 for bump-free.
+        UV bump amplitude at 2175 Angstrom. Set to 0 for bump-free. Default
+        0.0519 is the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
 
     Returns
     -------
@@ -923,17 +934,16 @@ def li08(
 
     Notes
     -----
-    Approximate presets for common curves (Markov et al. 2023, 2025):
+    Templates for common curves (Li et al. 2008, Table 1):
 
-    - **MW-like**: c1~6.0, c2~4.0, c3~2.0, c4~0.04
-    - **SMC-like**: c1~5.0, c2~5.5, c3~1.5, c4~0.0
-    - **Calzetti-like**: c1~3.5, c2~2.5, c3~3.0, c4~0.0
+    - **Calzetti**: c1=44.9, c2=7.56, c3=61.2, c4=0.0
+    - **SMC**: c1=38.7, c2=3.83, c3=6.34, c4=0.0
+    - **Milky Way (R_V=3.1)**: c1=14.4, c2=6.52, c3=2.04, c4=0.0519 (the default)
+    - **LMC**: c1=4.47, c2=2.39, c3=-0.988, c4=0.0221
 
     References
     ----------
-    Li, A., Liang, S. L., Kann, D. A., et al. 2008, ApJ, 685, 1046
-    Markov, V., Gallerani, S., Pallottini, A., et al. 2023, A&A, 679, A12
-    Markov, V., Gallerani, S., Pallottini, A., et al. 2025, A&A (arXiv:2504.12378)
+    Li, A., Liang, S. L., Kann, D. A., et al. 2008, ApJ, 685, 1046, Table 1
     """
     lam = wavelength / 1e4  # Angstrom -> micron
 
@@ -1096,8 +1106,8 @@ def noll09(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
     dust_delta: float = DEFAULT_DUST_DELTA,
-    dust_bump_x0: float = 0.2175,
-    dust_bump_gamma: float = 0.035,
+    dust_bump_x0: float = DEFAULT_DUST_BUMP_X0,
+    dust_bump_gamma: float = DEFAULT_DUST_BUMP_GAMMA,
 ) -> jnp.ndarray:
     r"""Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
 
@@ -1236,8 +1246,8 @@ def salim_sbl18(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
     dust_delta: float = DEFAULT_DUST_DELTA,
-    dust_bump_x0: float = 0.2175,
-    dust_bump_gamma: float = 0.035,
+    dust_bump_x0: float = DEFAULT_DUST_BUMP_X0,
+    dust_bump_gamma: float = DEFAULT_DUST_BUMP_GAMMA,
 ) -> jnp.ndarray:
     r"""Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
 
@@ -1348,7 +1358,7 @@ def salim_sbl18(
 def tea(
     wavelength: jnp.ndarray,
     dust_delta: float = TEA_DELTA_DEFAULT,
-    dust_tea_scatter: float = 0.0,
+    dust_tea_scatter: float = DEFAULT_DUST_TEA_SCATTER,
 ) -> jnp.ndarray:
     r"""TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).
 

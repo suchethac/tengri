@@ -231,6 +231,8 @@ def resolve_bc_diff_law_params(
     diff_overrides = diff_overrides or {}
     bc: dict = {}
     diff: dict = {}
+    # Process tabled parameters first (slope, bump_strength, delta, Rv)
+    tabled = {flat for _, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
     for law_kw, flat_name, default in _TWO_COMPONENT_LAW_PARAMS:
         requested = live_shape_params is None or flat_name in live_shape_params
         shared = params.get(flat_name, default) if requested else None
@@ -249,6 +251,17 @@ def resolve_bc_diff_law_params(
                 target[law_kw] = overrides[law_kw]
             elif requested:
                 target[law_kw] = shared
+    # Process law-specific parameters (dust_c1-c4, dust_bump_x0/gamma, dust_tea_scatter)
+    # that live_shape_params may include but _TWO_COMPONENT_LAW_PARAMS does not (#2542).
+    # These parameters do NOT support per-screen spelling (only shared).
+    if live_shape_params is not None:
+        for flat_name in live_shape_params - tabled:
+            if flat_name in params:
+                # These are law-specific: map flat_name -> law_kw (usually identical)
+                law_kw = flat_name
+                # Only shared spelling supported; no per-screen variants like dust_c1_bc
+                for target in (bc, diff):
+                    target[law_kw] = params[flat_name]
     if redshift is not None:
         bc["redshift"] = redshift
         diff["redshift"] = redshift
@@ -315,10 +328,19 @@ def merge_neb_screen_live_overrides(
     result = dict(neb_overrides)
     if live_shape_params is None:
         return result
+    tabled = {flat for _, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
+    # Process tabled parameters first (slope, bump_strength, delta, Rv)
     for law_kw, flat_name, _default in _TWO_COMPONENT_LAW_PARAMS:
         live_key = f"{flat_name}_neb"
         if live_key in params and live_key in live_shape_params:
             result[law_kw] = params[live_key]
+    # Process law-specific parameters (dust_c1-c4, dust_bump_x0/gamma, dust_tea_scatter) (#2542).
+    # These parameters do NOT support per-screen spelling (only shared).
+    for flat_name in live_shape_params - tabled:
+        if flat_name in params:
+            law_kw = flat_name
+            # Only shared spelling supported; no per-screen variants like dust_c1_neb
+            result[law_kw] = params[flat_name]
     return result
 
 
