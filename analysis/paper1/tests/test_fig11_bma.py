@@ -26,6 +26,7 @@ REPO_ROOT = ANALYSIS_DIR.parents[1]
 FIG11 = ANALYSIS_DIR / "fig11_bma.py"
 
 sys.path.insert(0, str(ANALYSIS_DIR))
+sys.path.insert(0, str(ANALYSIS_DIR.parent))
 
 pytestmark = pytest.mark.contract
 
@@ -597,3 +598,18 @@ def test_multiple_galaxies_draws_all(tmp_path):
     assert 100001 in sidecar["galaxies_drawn"]
     assert 100002 in sidecar["galaxies_drawn"]
     assert len(sidecar["galaxies_drawn"]) == 2
+
+
+def test_every_axis_value_and_named_id_has_a_display_label():
+    """The figure labels through ``display_label``; an unlabeled value would raise at draw time."""
+    from paper1 import _bma_keys as bk
+
+    for axis in (*bk.AXES, *bk.DERIVED_AXES):
+        for value in bk.axis_values(axis):
+            assert bk.display_label(axis, value), (axis, value)
+    for named in (*bk.GRID_IDS, *bk.XLIKE_IDS):
+        assert bk.display_label("named", named), named
+    with pytest.raises(ValueError, match="No display label"):
+        bk.display_label("ssp", "mist_c3k")
+    with pytest.raises(ValueError, match="No display labels for axis"):
+        bk.display_label("nonsense", "x")

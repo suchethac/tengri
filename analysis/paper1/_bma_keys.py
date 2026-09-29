@@ -330,3 +330,68 @@ def factorial_prior_mass() -> dict[str, dict[str, float]]:
         for m in models:
             out[axis][derived_axis_value(axis, m["ssp"])] += 1.0 / n
     return out
+
+
+# --- display labels -------------------------------------------------------
+
+#: Short reader-facing label per axis value (matplotlib text, so mathtext is fine).
+#: ``named`` holds the grid configuration ids and the X-like ids. A figure labels
+#: every axis value and named model through ``display_label``, so a value that is
+#: not listed here is an error rather than a raw registry name on a page.
+DISPLAY_LABELS: dict[str, dict[str, str]] = {
+    "sfh": {
+        "continuity": "Continuity",
+        "dirichlet": "Dirichlet",
+        "delayed": r"Delayed-$\tau$",
+        "dpl": "Double power law",
+        "lnorm": "Log-normal",
+    },
+    "ssp": {
+        "fsps_mist_c3k_a_chabrier": "MIST + C3K",
+        "fsps_prsc_c3k_a_chabrier": "PARSEC + C3K",
+        "fsps_mist_miles_chabrier": "MIST + MILES",
+        "fsps_prsc_miles_chabrier": "PARSEC + MILES",
+        "bpss_stars_c3k_a_chabrier": "BPASS + C3K",
+    },
+    "attenuation": {
+        "calzetti": "Calzetti",
+        "smc": "SMC",
+        "kriek_conroy_2c": "Kriek & Conroy, 2-comp.",
+        "cf00_2c": "Charlot & Fall, 2-comp.",
+    },
+    "dust_emission": {"dl14": "DL14"},
+    "nebular": {"cue": "Cue"},
+    "isochrone": {"mist": "MIST", "prsc": "PARSEC", "bpass": "BPASS"},
+    "spectral_library": {"c3k": "C3K", "miles": "MILES"},
+    "named": {
+        "I": "I",
+        "II": "II",
+        "III": "III",
+        "IV": "IV",
+        "V": "V",
+        "cigale_like": "CIGALE-like",
+        "prospector_like": "Prospector-like",
+        "bagpipes_like": "BAGPIPES-like",
+        "beagle_like": "BEAGLE-like",
+        "dense_basis_like": "Dense Basis-like",
+    },
+}
+
+
+def display_label(axis: str, value: str) -> str:
+    """Reader label of an axis value or, for ``axis="named"``, of a named model id.
+
+    Raises
+    ------
+    ValueError
+        If the axis or the value has no label.
+    """
+    if axis not in DISPLAY_LABELS:
+        raise ValueError(f"No display labels for axis {axis!r}; axes are {list(DISPLAY_LABELS)}")
+    try:
+        return DISPLAY_LABELS[axis][value]
+    except KeyError:
+        raise ValueError(
+            f"No display label for {axis} value {value!r}; labeled values are "
+            f"{list(DISPLAY_LABELS[axis])}"
+        ) from None
