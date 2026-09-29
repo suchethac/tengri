@@ -10,12 +10,6 @@
 
 ### Fixed
 
-- DL07 template grids regenerated from the Draine & Li (2007) release: the U_min
-  axis is the published 22-node ladder (0.1, 0.15, …, 8.0, 12.0, 15.0, 20.0,
-  25.0; the shipped files had a spurious 10.0 and were missing 25.0, so U_min
-  above 8 selected the neighbouring template) and the q_PAH axis carries only
-  the MW3.1 nodes (7 values, no SMC/LMC2 grain models); `dust_umin` prior
-  widened to 25.0 (#2535, #2441).
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
@@ -144,6 +138,12 @@
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
   `StellarSEDComponentConfig`. The #2204 cosmic-age reachability check now judges the
   configured ladder when provided and names the key in the error message (#2433).
+- The shipped DL07 template grids carry the published axes of Draine & Li
+  (2007): the U_min axis is the 22-node ladder (0.1, 0.15, …, 8.0, 12.0, 15.0,
+  20.0, 25.0; the files had labelled the last four columns 10, 12, 15, 20, so
+  U_min above 8 selected the neighbouring template and 25 was unreachable) and
+  the q_PAH axis carries only the seven MW3.1 nodes (no SMC/LMC2 grain models).
+  Spectra are unchanged; `dust_umin`'s prior widens to 25.0 (#2535, #2441).
 - Two AGN-NLR fallback defaults read their own parameter declarations instead of
   literals: the `gas_logn` fallbacks in `components/nebular/agn_nebular.py` read
   `declared_default(AGN_PARAMS, "agn_nlr_logn")` and the `neb_logU` fallback in
