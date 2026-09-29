@@ -688,7 +688,7 @@ def double_powerlaw(
     T_safe = jnp.where(T > 0.0, T, tau)
     x = T_safe / tau
     shape = jnp.where(T > 0.0, 1.0 / (x**alpha + x ** (-beta)), 0.0)
-    return norm * jnp.maximum(shape, 0.0)
+    return norm * shape
 
 
 def dpl(
@@ -1482,12 +1482,13 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float, *, age: float)
     (64,)
     """
     # Cosmic time since formation; SFR is zero before formation (T <= 0).
-    # Clamp before the exponential so ``raw`` is finite outside the window too.
+    # Use double-where pattern for gradient safety: compute on a safe argument,
+    # then select between the result and zero based on the condition T > 0.
     T = age - t_lookback
-    T_safe = jnp.maximum(T, 0.0)
+    T_safe = jnp.where(T > 0.0, T, tau)  # Safe (positive) value for the exponential
     raw = T_safe * jnp.exp(-T_safe / tau)
     shape = jnp.where(T > 0.0, raw, 0.0)
-    return norm * jnp.maximum(shape, 0.0)
+    return norm * shape
 
 
 def psb_wild2020(

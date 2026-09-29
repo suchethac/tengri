@@ -168,6 +168,9 @@ def test_double_powerlaw_gradients_finite(alpha, beta, tau_yr, age_yr):
     grad_tau = grad_fn(tau_yr)
 
     assert np.isfinite(float(grad_tau)), f"Non-finite gradient w.r.t. tau: {grad_tau}"
+    assert abs(float(grad_tau)) > 1e-10, (
+        f"Zero gradient w.r.t. tau (sensitivity to time scale): {grad_tau}"
+    )
 
 
 def test_double_powerlaw_doctest():
