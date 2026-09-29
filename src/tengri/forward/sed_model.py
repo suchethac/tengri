@@ -3877,6 +3877,10 @@ class SEDModel:
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
         self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
+        # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
+        # emission (#2533). When True, emitted photons pass through the diffuse
+        # dust screen once. Default False (off, bit-identical).
+        self._dust_ir_diffuse_screen = bool(getattr(spec, "dust_ir_diffuse_screen", False))
 
         # Dust law resolution. Skip for dust_model='off' or 'wg00' (wg00 has no
         # attenuation law; 'off' means no dust at all). Both store placeholder
@@ -10223,6 +10227,7 @@ class SEDModel:
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
             dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
             dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
+            dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             astrodust_spinning_dust=bool(getattr(self, "_astrodust_spinning_dust", False)),
