@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542).
+
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
