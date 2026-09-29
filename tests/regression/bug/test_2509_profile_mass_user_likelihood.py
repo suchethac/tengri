@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from tengri import (
@@ -34,12 +33,10 @@ from tengri import (
     recipes,
 )
 from tengri.inference.fitter import Fitter
-from tengri.observation.covariance import CovarMatrixFlat
 
 pytestmark = pytest.mark.regression_bug
 
 _FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "des_g", "des_r", "des_i"]
-_MASS_NAME = "sfh_tsnorm_log_total_mass"
 
 
 def _user_likelihood():
@@ -66,7 +63,7 @@ def _model_spec_only(ssp_data):
     """Spectroscopy only."""
     obs = Observation(
         spectroscopy=Spectroscopy(
-            wavelength=jnp.logspace(2.0, 5.0, 300),
+            wave_obs=jnp.logspace(2.0, 5.0, 300),
             calibration_order=0,
         )
     )
@@ -80,7 +77,7 @@ def _model_joint(ssp_data):
     obs = Observation(
         photometry=Photometry.from_names(_FILTERS),
         spectroscopy=Spectroscopy(
-            wavelength=jnp.logspace(2.0, 5.0, 300),
+            wave_obs=jnp.logspace(2.0, 5.0, 300),
             calibration_order=0,
         ),
     )
@@ -89,25 +86,13 @@ def _model_joint(ssp_data):
     return SEDModel.build(ssp_data=ssp_data, observation=obs, **recipe), obs
 
 
-def _fitter(model, obs, ssp_data, profile_mass="auto", likelihood=None, spec_cov=False):
+def _fitter(model, obs, ssp_data, profile_mass="auto", likelihood=None):
     """Build a fitter with the given configuration."""
     key_truth, key_mock = jax.random.split(jax.random.PRNGKey(0))
     truth = model.spec.sample(key_truth)
     mock = generate_mock(model, truth, key=key_mock, snr=30.0)
 
     forward = ForwardModel.build(sed=model, observation=obs)
-
-    # Optionally add spectroscopic covariance
-    if spec_cov:
-        n_spec = mock["noise"].size - len(_FILTERS) if "flux_obs" in mock else mock["noise"].size
-        # Create a diagonal covariance (simple case)
-        cov = np.diag(mock["noise"][-n_spec:] ** 2)
-        try:
-            obs.spectroscopy.covariance = CovarMatrixFlat(matrix=cov)
-        except Exception:
-            # If spectroscopy doesn't have a simple way to set covariance, skip
-            pass
-
     fitter = Fitter(
         forward,
         jnp.asarray(mock["flux_obs"]),
@@ -162,32 +147,6 @@ class TestUserSuppliedLikelihoodRefusal:
         model, obs = _model_joint(ssp_data_wne)
         with pytest.raises(ValueError, match="user-supplied"):
             _fitter(model, obs, ssp_data_wne, profile_mass=True, likelihood=_user_likelihood())
-
-
-class TestSpectralCovarianceRefusal:
-    """Spectral covariance requires full multivariate likelihood, incompatible with profiling."""
-
-    def test_spec_covariance_auto_disables(self, ssp_data_wne):
-        """Spectroscopy with covariance: auto disables profiling with reason."""
-        model, obs = _model_spec_only(ssp_data_wne)
-        # Note: spec_cov parameter would need proper integration with the model
-        # For now, we test the guard logic directly
-        # A real test would set obs.spectroscopy.has_covariance = True
-        # and ensure the guard catches it
-        # This is a placeholder showing the intent
-        model, obs = _model_spec_only(ssp_data_wne)
-        fitter = _fitter(model, obs, ssp_data_wne)
-        # Without covariance configured, profiling should engage
-        # The test for covariance needs model setup that configures has_covariance
-        assert fitter._profile_mass or not fitter._profile_mass  # placeholder
-
-    def test_joint_with_covariance_auto_disables(self, ssp_data_wne):
-        """Joint data with spectral covariance: auto disables profiling."""
-        model, obs = _model_joint(ssp_data_wne)
-        # Similar placeholder - real test needs proper covariance setup
-        fitter = _fitter(model, obs, ssp_data_wne)
-        # Placeholder
-        assert True
 
 
 class TestProfileMassWithStandardData:
