@@ -21,6 +21,7 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import BARE_NAME_ALLOWLIST, ForwardState
@@ -36,6 +37,82 @@ _PRECOMP_UNITS: dict[str, str] = {
     "dust_emission_phot_lnu_precomp": "erg/s/Hz",
     "dust_emission_spec_lnu_precomp": "erg/s/Hz",
 }
+
+
+def _apply_diffuse_screen(
+    sed_ir: jnp.ndarray,
+    published: Mapping[str, Any],
+    dust_diff_t: jnp.ndarray,
+    wave: jnp.ndarray,
+    log_l_ir: jnp.ndarray | None,
+) -> tuple[jnp.ndarray, dict[str, Any]]:
+    r"""Single-pass diffuse-screen attenuation of re-emitted IR dust emission (#2533).
+
+    Shared by both dispatch branches of :meth:`EmissionComponent.apply` --
+    the WavePrecomp/SpectrumPrecomp LUT branch and the exact full-wave
+    branch -- which used to duplicate this computation verbatim.
+
+    Computes the transmission-weighted emergent luminosity
+
+    .. math::
+
+        \log_{10} L_{\rm ir,emergent} = \log_{10} L_{\rm ir}
+            + \log_{10}\!\left(\frac{\int {\rm sed\_ir} \cdot T\,d\nu}
+                                     {\int {\rm sed\_ir}\,d\nu}\right)
+
+    on the ``sed_ir`` scale passed in (unit-``L_ir`` under L_ir factoring, so
+    the ratio is exact regardless of any factoring upstream), publishes it as
+    ``log_L_ir_emergent`` (only when ``log_l_ir`` is available: energy
+    balance may be off upstream), then multiplies ``sed_ir`` by the screen
+    ONCE -- no iteration, no renormalization back to ``L_ir`` -- and
+    overwrites the published ``sed_dust_ir`` with the attenuated spectrum.
+    ``predict()`` bound that key to the pre-screen array, and rebinding the
+    local ``sed_ir`` name does not reach back into an already-returned dict
+    (arrays are immutable), so the published key would otherwise silently
+    keep reporting the unscreened emission.
+
+    Parameters
+    ----------
+    sed_ir : ndarray
+        Full-grid re-emitted IR SED, pre-screen [erg/s/Hz] (or unit-``L_ir``
+        scale under L_ir factoring).
+    published : mapping
+        The dict of keys ``predict()`` already returned (``sed_dust_ir`` at
+        minimum). Copied, never mutated in place.
+    dust_diff_t : ndarray
+        Diffuse dust screen transmission :math:`T(\lambda)` on the same grid
+        as ``sed_ir`` (``state.derived["dust_diff_transmission"]``).
+    wave : ndarray
+        Rest-frame wavelength grid matching ``sed_ir`` [Angstrom].
+    log_l_ir : ndarray or None
+        ``state.derived.get("log_L_ir")``. When ``None`` (no energy-balance
+        producer upstream), ``log_L_ir_emergent`` is not published.
+
+    Returns
+    -------
+    tuple[ndarray, dict]
+        ``(screened_sed_ir, published_with_screen_applied)``.
+    """
+    new_published = dict(published)
+
+    # Transmission-weighted integral, computed BEFORE screening sed_ir:
+    # (integral of sed_ir * T) / (integral of sed_ir) is the fraction of the
+    # pre-screen IR budget that escapes.
+    integral_full = integrate_lnu_over_nu(sed_ir, wave)
+    integral_transmitted = integrate_lnu_over_nu(sed_ir * dust_diff_t, wave)
+    # Avoid division by zero or log of zero.
+    transmission_factor = jnp.where(
+        integral_full > 0,
+        integral_transmitted / integral_full,
+        0.0,
+    )
+    transmission_factor = jnp.maximum(transmission_factor, 1e-40)  # Floor for log safety.
+    if log_l_ir is not None:
+        new_published["log_L_ir_emergent"] = jnp.asarray(log_l_ir) + jnp.log10(transmission_factor)
+
+    sed_ir = sed_ir * dust_diff_t
+    new_published["sed_dust_ir"] = sed_ir
+    return sed_ir, new_published
 
 
 class EmissionComponent(SEDModelComponent):
@@ -72,7 +149,10 @@ class EmissionComponent(SEDModelComponent):
     # tuples and rebinds the shadowed accessor methods onto concrete subclasses.
     # EmissionComponent itself is abstract (defines no own ``name``) so it does not register.
     optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
-    outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
+    outputs: ClassVar[dict[str, str]] = {
+        "sed_dust_ir": "erg/s/Hz",
+        "log_L_ir_emergent": "dex",
+    }
 
     #: Whether this backend renormalizes its template so that
     #: :math:`\\int L_\\nu\\,d\\nu = L_{\\rm ir}` — i.e. whether it carries the
@@ -92,6 +172,12 @@ class EmissionComponent(SEDModelComponent):
     #: (``tengri.parameters.groups._standalone_dust_emission_types``), so a new
     #: building block is refused the day it registers.
     energy_balanced: ClassVar[bool] = True
+
+    #: Whether the re-emitted IR dust emission passes through the diffuse dust
+    #: screen (single pass, not iterated). When True, the emitted SED is
+    #: multiplied by the diffuse dust transmission and the escaped IR luminosity
+    #: is published as log_L_ir_emergent. Default False (off, bit-identical to today).
+    diffuse_screen: ClassVar[bool] = False
 
     #: Fraction of ``L_ir`` a non-energy-balanced backend re-emits standalone,
     #: measured (``|int sed_dust_ir dnu| / L_ir`` at z = 0), quoted in the
@@ -254,6 +340,20 @@ class EmissionComponent(SEDModelComponent):
         spec_eff_waves = state.derived.get("spec_eff_waves")
         filter_eff_waves = state.derived.get("filter_eff_waves")
 
+        # When diffuse_screen is True, the emission passes through the diffuse
+        # dust screen: sed_ir gets multiplied by T(λ) before being added to the SED.
+        # This requires evaluating predict with zero input SED (never apply screen to sed_in).
+        dust_diff_t = None
+        if self.diffuse_screen:
+            dust_diff_t = state.derived.get("dust_diff_transmission")
+            if dust_diff_t is None:
+                raise ValueError(
+                    f"{type(self).__name__}: diffuse_screen=True requires a dust attenuator "
+                    "that publishes dust_diff_transmission. Check that dust_attenuation is "
+                    "enabled and before dust_emission in the pipeline."
+                )
+            dust_diff_t = jnp.asarray(dust_diff_t)
+
         if spec_eff_waves is not None or filter_eff_waves is not None:
             # ONE full-grid evaluation, shared by every consumer below. Each LUT branch
             # used to recompute it, which jit made free (CSE) but eager execution did not
@@ -269,6 +369,20 @@ class EmissionComponent(SEDModelComponent):
             sed_ir, published_full = self.predict(
                 p_sliced, jnp.zeros_like(state.wave), state.wave, **predict_kwargs
             )
+
+            # Apply the single-pass diffuse screen (log_L_ir_emergent + the
+            # sed_ir/sed_dust_ir attenuation) before the LUT projections
+            # below: see ``_apply_diffuse_screen``. Only published when
+            # diffuse_screen=True.
+            published_full = dict(published_full) if published_full else {}
+            if self.diffuse_screen:
+                sed_ir, published_full = _apply_diffuse_screen(
+                    sed_ir,
+                    published_full,
+                    dust_diff_t,
+                    state.wave,
+                    state.derived.get("log_L_ir"),
+                )
 
             # LUT path: publish the precomp families the LUT projectors consume...
             # These stay at the same (unit-L_ir) scale as ``sed_ir`` until the
@@ -331,15 +445,26 @@ class EmissionComponent(SEDModelComponent):
                 predict_kwargs["templates"] = self.threaded_templates(template_data)
             # Under L_ir factoring the emission must be evaluated on its own
             # (sed_in would otherwise be scaled with it), so pass zeros and add
-            # the upstream SED back after rescaling.
-            if log_l_ir_offset is None:
-                sed_out, published = self.predict(p_sliced, sed_in, state.wave, **predict_kwargs)
-            else:
+            # the upstream SED back after rescaling. When diffuse_screen is True,
+            # always evaluate with zeros so the screen applies only to the emission.
+            if self.diffuse_screen or log_l_ir_offset is not None:
                 sed_ir, published = self.predict(
                     p_sliced, jnp.zeros_like(state.wave), state.wave, **predict_kwargs
                 )
+                # Apply the single-pass diffuse screen (exact path); see
+                # ``_apply_diffuse_screen``.
+                if self.diffuse_screen:
+                    sed_ir, published = _apply_diffuse_screen(
+                        sed_ir,
+                        published,
+                        dust_diff_t,
+                        state.wave,
+                        state.derived.get("log_L_ir"),
+                    )
                 sed_ir, published = self._restore_l_ir_scale(sed_ir, published, log_l_ir_offset)
                 sed_out = sed_in + sed_ir
+            else:
+                sed_out, published = self.predict(p_sliced, sed_in, state.wave, **predict_kwargs)
             new_derived = self._merge_published(state.derived, published)
             return state.with_(sed_intrinsic=sed_out, derived=new_derived)
 

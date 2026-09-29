@@ -276,6 +276,7 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - `'lyman_cutoff'`: Zero attenuation below 912 Å (Lyman limit). Two-component only.
 - `'lyc_absorb_all'`: Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
 - `'eb_include_lyc'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
+  (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)
 
 Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,
 `'Rv_bc'`, `'delta_bc'`, and their `'_diff'`/`'_neb'` siblings) takes
@@ -328,6 +329,7 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - `'f_cnm'`: Cold neutral medium fraction (parametrization-dependent).
 - `'eta_balance'`: Energy-balance coupling: `Fixed(1.0)` (default, strict balance where `L_IR = eta * L_absorbed`). `FREE` selects the default free prior, `Gaussian(1.0, 0.2)` truncated at 0. Pass an explicit `Uniform(...)` or any other prior to override it. The `all_params` wildcard reaches it on **every** emission engine, since it scales the budget every template normalizes to, so it remains live regardless of the selected engine (#2286).
 - `'log_L_ir'`: Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright. Leaving it undeclared keeps energy balance. Because it renders `eta_balance` inert, declaring both (with `eta_balance` free or fixed not equal to 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard. An explicit `FREE` on it is refused; declare a real prior instead.
+- `'diffuse_screen'`: Opt-in single-pass attenuation of the re-emitted IR dust emission by the diffuse dust screen's transmission `T(λ)` (the `dust_diff_transmission` derived key, published by every `dust_attenuation` type). The escaping SED is `sed_dust_ir * T`: the IR energy absorbed on the way out is REMOVED, not re-emitted or iterated back into the budget (unlike FSPS, which iterates the IR to convergence; CIGALE never attenuates its re-emitted IR at all — this is a deliberate single pass). `log_L_ir_emergent` reports the escaping (post-screen) IR luminosity; `L_ir`/`L_absorbed` (and radio's FIRRC amplitudes, which read `L_ir`) keep the pre-screen absorbed budget unchanged. For single-screen attenuators (`dust_attenuation={'type': 'single_component', ...}`) and for `type='wg00'`, "diffuse" means the *single* screen — there is no separate birth-cloud/diffuse split to choose between. Default false (off, bit-identical to a build without this key). Requires an active, non-`'none'` `dust_attenuation` and a real `dust_emission` type; raises a clear `ValueError` at parse time otherwise.
 
 **Minimal example:**
 ```python
@@ -337,6 +339,7 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 **Gotchas:**
 - Energy balance: `eta_balance` defaults to `Fixed(1.0)`, which enforces `L_IR = L_absorbed`. `FREE` resolves to `Gaussian(1.0, 0.2)` truncated at 0. Setting it free or to a constant ≠ 1 decouples IR and absorption.
 - Missing dust_emission (or `{'type': 'none'}`) is valid and common for UV-only work.
+- `'diffuse_screen'` under `dust_attenuation={'type': 'wg00', ...}`: the vendored WG00 attenuation tables (`data/wg00_attenuation_grid.h5`) are tabulated only 1000–30001 Å (0.1–3 μm). Past that domain `T = 1` by construction, so under `wg00` the switch has **no effect in the far-IR** where dust re-emission actually peaks — this is a limitation of the vendored table's wavelength coverage, not a defect in the diffuse-screen feature itself.
 
 
 ### Nebular emission: `neb`
