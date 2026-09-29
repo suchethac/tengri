@@ -25,15 +25,15 @@ channel added                  measured max rel. gap   bound here
 =============================  ======================  ===================
 stellar only                   3.2e-05 - 7.8e-04       2e-03
 + nebular, two_component       3.1e-05 - 7.8e-04       2e-03
-+ nebular, single_component    1.8e-03 - 2.0e-03       5e-03
++ nebular, single_component    2.7e-04 - 6.1e-04       1.8e-03
 + shock (MAPPINGS V)           6.3e-04 - 6.3e-04       2e-03
 =============================  ======================  ===================
 
-**The two nebular rows differ because the #1738 fix reaches only one of them.** That
-row split is the point: a single "nebular" row would have averaged an exact channel
-together with a defective one and reported something true of neither. The
-``predict_via_precomp`` docstring claimed nebular was exact *full stop* for about a
-day before measurement contradicted it — the qualifier is load-bearing, not pedantry.
+**Both dust components publish the reddened nebular continuum integrated through
+each band** (``nebular_phot_lnu_attenuated_precomp`` and its rest-frame twin), and
+both projectors prefer it over the screen sampled at the effective wavelength, so
+the two nebular rows sit at the stellar floor. The single-component row is
+measured on the same three ``(tau_v, z)`` cases as the two-component row.
 
 **Shock attenuation unified (#1434)**: Before the fix, shock reached **37.7 %** worst-case
 disagreement at :math:`\tau_{\rm bc}=2`, :math:`z=1`, because the exact and precomp
@@ -69,10 +69,10 @@ pytestmark = pytest.mark.contract
 
 _STELLAR_FLOOR_BOUND = 2e-3
 _NEBULAR_BOUND = 2e-3
-#: Known-defect ceiling for nebular under ``single_component`` dust, which the #1738
-#: fix does not reach. Measured worst case 1.955e-03; not a target. See the module
-#: docstring — closing it is sequenced after #1808.
-_SINGLE_COMPONENT_NEBULAR_BOUND = 5e-3
+#: Ceiling for nebular under ``single_component`` dust. Measured worst case
+#: 6.082e-04 (2.74e-04, 6.08e-04, 5.73e-04 over the three screens below); the bound
+#: is 3x that, as the shock bound below is sized. Not a target.
+_SINGLE_COMPONENT_NEBULAR_BOUND = 1.825e-3
 #: Shock attenuation unified (#1434): both exact and precomp now apply consistent
 #: dust screen. Pre-fix: 37.7% worst case (tau_bc=2, z=1). Post-fix: 6.3e-04 measured.
 #: Bound set at 2e-03 (3× measurement) to allow filter/grid drift; the right way to
@@ -184,16 +184,12 @@ def test_shock_channel_stays_within_its_known_defect_bound(ssp_data_fsps, tau_di
 
 
 @pytest.mark.parametrize(("tau_diff", "tau_bc", "z"), _SCREENS)
-def test_single_component_nebular_stays_within_its_known_defect_bound(
-    ssp_data_fsps, tau_diff, tau_bc, z
-):
-    """The #1738 fix covers two-component dust only; bound what it does not reach.
+def test_single_component_nebular_stays_at_the_stellar_floor(ssp_data_fsps, tau_diff, tau_bc, z):
+    """Nebular under ``single_component`` dust stays below its measured ceiling.
 
-    ``single_component`` reddens nebular through a screen applied to the
-    already-summed ``sed_intrinsic``, so no separately reddened nebular SED exists
-    for the band projection to consume and the lambda_eff form survives. Measured
-    ~3x over the stellar floor — an order of magnitude better than the 26x removed on
-    two-component, and still worth pinning so it cannot drift while it waits on #1808.
+    ``DustAttenuationSEDComponent`` publishes the reddened nebular continuum
+    integrated through each band, so the screen is applied where the emission is.
+    Measured worst case 6.082e-04 against a stellar floor of 6.3e-04.
     """
     gap = _gap(
         ssp_data_fsps,
@@ -205,19 +201,17 @@ def test_single_component_nebular_stays_within_its_known_defect_bound(
         dust_type="single_component",
     )
     assert gap < _SINGLE_COMPONENT_NEBULAR_BOUND, (
-        f"single_component nebular precomp gap {gap:.3e} exceeds the known-defect "
-        f"ceiling {_SINGLE_COMPONENT_NEBULAR_BOUND:.2e} at tau_v={tau_diff}, z={z}."
+        f"single_component nebular precomp gap {gap:.3e} exceeds the ceiling "
+        f"{_SINGLE_COMPONENT_NEBULAR_BOUND:.2e} at tau_v={tau_diff}, z={z}."
     )
 
 
-def test_the_two_component_fix_did_not_reach_single_component(ssp_data_fsps):
-    """Pin the SCOPE of #1738, not just its effect.
+def test_both_dust_components_screen_nebular_at_the_emission(ssp_data_fsps):
+    """Both dust components put the nebular gap at the stellar floor.
 
-    Two assertions that must both hold, because either alone is misleading. The
-    two-component arm proves the exact band-integrated screen is engaging at all;
-    the single-component arm proves this test is still measuring a real gap. If the
-    single-component arm ever drops to the floor, the fix has been extended and this
-    test plus the bound above are stale — tighten them in that change.
+    The floor is the gap with no nebular emission; a nebular channel screened at the
+    effective wavelength sits several times above it. Measured: floor 6.299e-04,
+    two_component 6.277e-04, single_component 6.082e-04.
     """
     kw = dict(tau_diff=1.0, tau_bc=1.0, z=0.05, neb="cue", shock=False)
     floor = _gap(ssp_data_fsps, neb="none", tau_diff=1.0, tau_bc=1.0, z=0.05, shock=False)
@@ -225,14 +219,12 @@ def test_the_two_component_fix_did_not_reach_single_component(ssp_data_fsps):
     single = _gap(ssp_data_fsps, dust_type="single_component", **kw)
 
     assert two_comp <= floor * 1.5 + 1e-5, (
-        f"two_component nebular ({two_comp:.3e}) is no longer at the stellar floor "
-        f"({floor:.3e}); the exact band-integrated screen has stopped engaging."
+        f"two_component nebular ({two_comp:.3e}) is above the stellar floor "
+        f"({floor:.3e}); the band-integrated screen is not engaging."
     )
-    assert single > 2.0 * two_comp, (
-        f"single_component nebular ({single:.3e}) is no longer materially worse than "
-        f"two_component ({two_comp:.3e}). Either the fix was extended — in which case "
-        "tighten _SINGLE_COMPONENT_NEBULAR_BOUND and delete this test — or the "
-        "two-component path regressed."
+    assert single <= floor * 1.5 + 1e-5, (
+        f"single_component nebular ({single:.3e}) is above the stellar floor "
+        f"({floor:.3e}); the band-integrated screen is not engaging."
     )
 
 

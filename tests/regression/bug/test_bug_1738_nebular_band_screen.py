@@ -31,15 +31,14 @@ disarms the fast nebular grid (#1281, #1748) — and that component already comp
 republishes its *reddened* form. Integrating that through the band is exact and reads a
 dense array already live in the compiled graph.
 
-**Scope — this covers two-component dust only.** An earlier draft of this paragraph
-said "on any model with dust", which measurement contradicted within a day.
-``single_component`` reddens nebular too, but via a screen applied to the
-already-summed ``sed_intrinsic``: it declares ``sed_nebular`` an *optional* input
-purely as a topological ordering edge, so no separately reddened nebular SED exists
-there to project, and the λ_eff form survives (measured ~3x over the stellar floor;
-bounded in ``tests/contract/test_precomp_channel_drift.py``). Deliberately sequenced
-after #1808 — see the ``predict_via_precomp`` accuracy ledger for why building on
-today's cached ``k(λ)`` would make the two screens disagree later.
+**Scope — both dust components.** ``DustAttenuationSEDComponent`` (the single
+screen) declares ``sed_nebular`` and ``nebular_phot_lnu_precomp`` optional inputs
+and publishes the same two reddened band integrals, so both projectors prefer them
+under either dust type. The fixture below builds the two-component model; the
+single-screen cases are pinned in
+``tests/contract/test_single_screen_nebular_band_screen.py`` (against the exact
+model) and ``tests/contract/test_precomp_channel_drift.py`` (against the stellar
+floor).
 
 Where the dense continuum is genuinely **not** materialized there is no dust consumer,
 hence no screen, hence nothing to fix.

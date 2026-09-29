@@ -259,9 +259,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
         (the single-screen analog of the two-component bug fixed in #668).
 
         BakedIn backends publish ``sed_nebular`` as zeros (emission is
-        already in the SSP grid), so this is a no-op there. The screen does
-        not read that key directly: it acts on the already-summed
-        ``sed_intrinsic``: so it is purely an ordering edge.
+        already in the SSP grid), so this is a no-op there. The screen acts on
+        the already-summed ``sed_intrinsic``; it also reads ``sed_nebular``
+        together with ``nebular_phot_lnu_precomp`` to publish the reddened
+        nebular continuum integrated through each observed and rest-frame band
+        (``nebular_phot_lnu_attenuated_precomp`` and
+        ``nebular_restband_lnu_attenuated_precomp``), so the photometry
+        projectors apply the screen where the emission is.
 
         ``line_waves`` / ``line_lums`` ARE read directly: :meth:`apply`
         reddens the discrete catalog and publishes ``line_lums_attenuated``
@@ -319,6 +323,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     "sed_nebular",
                     "erg/s/Hz",
                     "Nebular continuum folded into sed_intrinsic before the screen",
+                ),
+                DerivedKey(
+                    "nebular_phot_lnu_precomp",
+                    "erg/s/Hz",
+                    "Nebular band-integrated flux at filter effective wavelengths; "
+                    "screened by this component at the emission wavelengths and published "
+                    "as nebular_phot_lnu_attenuated_precomp",
                 ),
                 DerivedKey(
                     "line_waves",
@@ -738,6 +749,8 @@ class DustAttenuationSEDComponent(TemplateThreading):
             # The nebular continuum is not materialized when the per-Q_H grid
             # serves it: its band integral is the K-point sum over sub-band
             # chunks, screened at each chunk's rest wavelength.
+            _neb_phot = state.derived.get("nebular_phot_lnu_precomp")
+            _sed_neb = state.derived.get("sed_nebular")
             if self.nebular_from_grid:
                 for _phi_key, _lam_key, _out_key in (
                     (
@@ -757,6 +770,36 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     )
                     derived_overrides[_out_key] = jnp.sum(
                         jnp.asarray(state.derived[_phi_key]) * _t, axis=-1
+                    )
+            elif _neb_phot is not None and _sed_neb is not None:
+                # The reddened continuum integrated through each band: the screen is
+                # applied where the emission is. ``A(lambda_eff) * Phi_neb`` is only
+                # correct where the screen is flat across the filter, and nebular
+                # emission is line-dominated.
+                from tengri.components._band_projection import project_additive_onto_photometry
+                from tengri.parameters.resolve import require_redshift
+
+                z_neb = jnp.asarray(require_redshift(params, "components.dust.component.apply"))
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                sed_neb_reddened = jnp.asarray(_sed_neb) * attenuation
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None, sed_neb_reddened, state.wave, filter_eff, fw_pad, ft_pad, z_neb
+                    )
+                )
+                _rb_eff = state.derived.get("filter_restband_eff_waves")
+                if _rb_eff is not None:
+                    derived_overrides["nebular_restband_lnu_attenuated_precomp"] = (
+                        project_additive_onto_photometry(
+                            None,
+                            sed_neb_reddened,
+                            state.wave,
+                            _rb_eff,
+                            fw_pad,
+                            ft_pad,
+                            jnp.zeros_like(z_neb),
+                        )
                     )
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
