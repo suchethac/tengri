@@ -1,10 +1,67 @@
-\begin{deluxetable}{lcp{10cm}}
-\tablehead{Code & Parity & Mismatches vs Paper 1 Implementation}
+\begin{deluxetable*}{llp{3.5cm}p{3.5cm}p{3.5cm}}
+\tablecaption{X-like configuration choices. Each row shows Pacifici et al. (2023) Table 1 specifications beside tengri's X-like configuration. BEAGLE and Dense Basis have no reproduction notebook parity check.}
+\tablehead{Code & Parity & Component & Pacifici et al. (2023) & tengri X-like}
 \startdata
-BAGPIPES           & Yes & \textbullet~BAGPIPES's default stellar library, BC03 with MILES and a Kroupa IMF, against tengri's registered BC03 (Padova 1994 tracks, STELIB, Chabrier IMF)\newline \textbullet~dpl priors Uniform(alpha, beta) vs BAGPIPES log-uniform convention (exact workshop priors unrecorded in output)\newline \textbullet~Cue emulator (trained on Cloudy 17) vs BAGPIPES Cloudy 17 grids\newline \textbullet~(3 more)\\
-BEAGLE             & No  & \textbullet~No reproduction notebook available; parity check not performed\newline \textbullet~BC03 2003 (Padova 1994 tracks, STELIB, Chabrier) vs BEAGLE Table 1: BC03(16)\newline \textbullet~Cue emulator (trained on Cloudy 17) vs BEAGLE's Cloudy 13 nebular grids\newline \textbullet~(3 more)\\
-CIGALE             & Yes & \textbullet~BC03 grid shipped with CIGALE (workshop run) vs tengri's registered BC03 (Padova 1994 tracks, STELIB, Chabrier IMF)\newline \textbullet~Two-component leitherer02 screens with free tau_bc and tau_diff vs CIGALE's fixed birth-cloud/diffuse ratio (0.44 factor)\newline \textbullet~Cue emulator (trained on Cloudy 17) vs CIGALE's Cloudy 13 grids\newline \textbullet~(2 more)\\
-Dense_Basis        & No  & \textbullet~No reproduction notebook available; parity check not performed\newline \textbullet~Dense Basis draws the mass-time quantiles from a Dirichlet prior (concentration 5 by default); tengri draws three independent uniform fractions and sorts them, so its prior is their order statistics\newline \textbullet~FSPS library isochrone and spectral library versions not recorded in external metadata\newline \textbullet~(1 more)\\
-Prospector         & Yes & \textbullet~Continuity with Student-t prior vs Prospector workshop priors (unrecorded in output)\newline \textbullet~Cue emulator (trained on Cloudy 17) vs FSPS default Cloudy 13\newline \textbullet~7-bin continuity SFH edges vs Prospector's parameter bins (workshop metadata unrecorded)\newline \textbullet~(3 more)\\
+BAGPIPES     & Yes & Star formation history    & Flex.              & double power law\\
+             &     & Stellar library           & Multiple           & BC03 2003 STELIB Chabrier\\
+             &     & Nebular emission          & C17                & Cue\\
+             &     & Dust attenuation          & Multiple           & Calzetti, 1-comp\\
+             &     & Dust emission             & Single             & Draine+2007\\
+BEAGLE       & No  & Star formation history    & Flex. param.       & delayed-tau\\
+             &     & Stellar library           & BC03(16)           & BC03 2003 STELIB Chabrier\\
+             &     & Nebular emission          & C13                & Cue\\
+             &     & Dust attenuation          & 2 comp.            & Charlot+Fall 2000, 2-comp\\
+             &     & Dust emission             & No                 & None\\
+CIGALE       & Yes & Star formation history    & Flex.              & delayed-tau\\
+             &     & Stellar library           & Multiple           & BC03 2003 STELIB Chabrier\\
+             &     & Nebular emission          & C13                & Cue\\
+             &     & Dust attenuation          & Multiple           & Leitherer+02, 2-comp\\
+             &     & Dust emission             & Multiple           & Dale+2014 CIGALE\\
+Dense\_Basis & No  & Star formation history    & Non-param.         & dense basis quantiles\\
+             &     & Stellar library           & FSPS               & FSPS MIST/MILES\\
+             &     & Nebular emission          & C                  & Cue\\
+             &     & Dust attenuation          & Multiple           & Calzetti, 1-comp\\
+             &     & Dust emission             & Single             & Draine+2007\\
+Prospector   & Yes & Star formation history    & Non-param.         & continuity, 7 bins\\
+             &     & Stellar library           & FSPS               & FSPS MIST/MILES\\
+             &     & Nebular emission          & C13                & Cue\\
+             &     & Dust attenuation          & 2 comp.            & Calzetti, 2-comp\\
+             &     & Dust emission             & Single             & Draine+2007\\
 \enddata
-\end{deluxetable}
+\label{tab:xlike_choices}
+\end{deluxetable*}
+
+\begin{deluxetable*}{lp{6cm}l}
+\tablecaption{Mismatches between tengri's X-like configurations and their corresponding external codes. Each row lists one difference and its source. BEAGLE and Dense Basis have no reproduction notebook parity check.}
+\tablehead{Code & Difference & Source}
+\startdata
+BAGPIPES     & Stellar library configuration: BC03 library version difference (MILES spectral library with Kroupa initial mass function versus Padova 1994 isochrones with STELIB and Chabrier IMF) & 01\_bagpipes.py\\
+             & Star formation history priors: uniform distributions on power-law slopes versus BAGPIPES log-uniform convention (exact workshop priors not recorded in external metadata) & header (absence of the setting)\\
+             & Nebular emission models: Cue photoionization emulator (trained on Cloudy 17.02) matched to BAGPIPES Cloudy 17 grids & 01\_bagpipes.py\\
+             & Metallicity treatment: continuous interpolation over the stellar library grid versus discrete metallicity values & header (absence of the setting)\\
+             & Minimum stellar age: 1 Gyr floor versus BAGPIPES workshop default (not recorded in external metadata) & header (absence of the setting)\\
+             & Dust attenuation model: single Calzetti screen (optical depth tau\_V) versus BAGPIPES two-component Calzetti with birth-cloud contribution turned off, which is physically equivalent & header (absence of the setting)\\
+BEAGLE       & No reproduction notebook available; parity check against BEAGLE was not performed & header (absence of the setting)\\
+             & BC03 library version: registered BC03 (Padova 1994 isochrones, STELIB spectra, Chabrier IMF) versus BEAGLE uses BC03(16) variant & Pacifici et al. (2023) Table 1\\
+             & Nebular emission models: Cue photoionization emulator (trained on Cloudy 17.02) versus BEAGLE Cloudy 13 grids & Pacifici et al. (2023) Table 1 (C13)\\
+             & Dust attenuation parametrization: power-law form of Charlot and Fall (2000) without BEAGLE's additional mu and tau\_V degrees of freedom & header (absence of the setting)\\
+             & Star formation history: no optional starburst component (BEAGLE offers this as an optional feature) & header (absence of the setting)\\
+             & Minimum stellar age: 1 Gyr floor versus BEAGLE workshop default (not recorded in external metadata) & header (absence of the setting)\\
+CIGALE       & BC03 library version differences (workshop grid vs. registered Padova 1994 isochrones with STELIB spectra) & 01\_cigale.py\\
+             & Attenuation law details differ: Leitherer et al. (2002) two-screen model with free birth-cloud and diffuse optical depths versus CIGALE's fixed screen ratio & 01\_cigale.py\\
+             & Nebular emission models: Cue photoionization emulator (trained on Cloudy 17.02) versus CIGALE's Cloudy 13 grids & Pacifici et al. (2023) Table 1\\
+             & Metallicity treatment: continuous interpolation over the stellar library grid versus discrete metallicity values & header (absence of the setting)\\
+             & Minimum stellar age: 1 Gyr floor versus CIGALE workshop default (not recorded in external metadata) & header (absence of the setting)\\
+Dense\_Basis & No reproduction notebook available; parity check against Dense Basis was not performed & header (absence of the setting)\\
+             & Star formation history priors: Dense Basis uses a Dirichlet prior with concentration parameter 5, while tengri uses order statistics of independent uniform fractions, yielding different prior distributions & priors.py\\
+             & FSPS library configuration: isochrone and spectral library versions not recorded in Dense Basis external metadata & header (absence of the setting)\\
+             & Nebular emission models: Cue photoionization emulator (trained on Cloudy 17.02) versus FSPS default Cloudy grids & header (absence of the setting)\\
+Prospector   & Star formation history prior: Student-t distribution on continuity parameters versus Prospector's priors (not recorded in workshop outputs) & configs.py\\
+             & Nebular emission models: Cue photoionization emulator (trained on Cloudy 17.02) versus FSPS default Cloudy 13 grids & 01\_prospector.py\\
+             & Star formation history discretization: seven-bin continuity model with specific age edges versus Prospector's binning scheme (workshop metadata unavailable) & header (absence of the setting)\\
+             & Metallicity treatment: continuous interpolation over the stellar library grid versus discrete metallicity values & header (absence of the setting)\\
+             & Minimum stellar age: 1 Gyr floor versus Prospector workshop default (not recorded in external metadata) & header (absence of the setting)\\
+             & Dust--star energy balance: computed up to 912 Angstrom (excludes far-infrared, about 11 percent lower than exact integration) but outside the fitted UV-to-IRAC wavelength range & 01\_prospector.py\\
+\enddata
+\label{tab:xlike_differences}
+\end{deluxetable*}
