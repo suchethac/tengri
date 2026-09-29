@@ -21,12 +21,29 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Fixed, Observation, Photometry, SEDModel, recipes
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.inference import mass_profile
 from tengri.inference.fitter import Fitter
 
 pytestmark = pytest.mark.regression_bug
 
 _FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+
+
+def synthetic_ssp_wide():
+    """Minimal synthetic SSP for testing — no untracked data files required."""
+    n_met, n_age = 3, 25
+    wave = jnp.logspace(2.0, 7.0, 1600)
+    ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
+    lgmet = jnp.array([-4.0, -2.65, -1.3])
+    base = (5000.0 / wave) ** 2
+    flux = (
+        base[None, None, :]
+        * (1.0 + 0.15 * (ages_gyr - ages_gyr.mean()))[None, :, None]
+        * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
+    )
+    flux = jnp.abs(flux) + 1e-12
+    return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 
 
 def _minimal_photometry_model(ssp_data):
@@ -62,9 +79,9 @@ def _dummy_obs_data():
     return jnp.array([1.0] * n_bands)
 
 
-def test_linearity_probe_model_error_propagates(ssp_data_bc03, monkeypatch, caplog):
+def test_linearity_probe_model_error_propagates(monkeypatch, caplog):
     """Model-evaluation errors propagate out instead of being logged as invalid thetas."""
-    model = _minimal_photometry_model(ssp_data_bc03)
+    model = _minimal_photometry_model(synthetic_ssp_wide())
     obs_data = _dummy_obs_data()
     # Build with profile_mass=False so probe doesn't run during construction
     fitter = Fitter(model, data=obs_data, noise=0.1, profile_mass=False)
@@ -93,14 +110,14 @@ def test_linearity_probe_model_error_propagates(ssp_data_bc03, monkeypatch, capl
     assert "linearity probe:" not in caplog.text
 
 
-def test_linearity_probe_evaluates_at_fitter_fixed_values(ssp_data_bc03, monkeypatch):
+def test_linearity_probe_evaluates_at_fitter_fixed_values(monkeypatch):
     """Probe evaluates at Fitter's resolved fixed values, including params_override redshift."""
     # Build model with redshift Fixed at z1; the fit itself runs at z2 via
     # params_override, so a probe reading the spec's OWN fixed value instead
     # of the override would evaluate at the wrong redshift entirely.
     z1 = 0.5
     z2 = 1.5
-    model = _minimal_photometry_model_at_redshift(ssp_data_bc03, z1)
+    model = _minimal_photometry_model_at_redshift(synthetic_ssp_wide(), z1)
 
     # Create fitter with params_override for runtime redshift
     obs_data = _dummy_obs_data()
@@ -140,9 +157,9 @@ def test_linearity_probe_evaluates_at_fitter_fixed_values(ssp_data_bc03, monkeyp
         )
 
 
-def test_linearity_probe_numeric_invalid_path_works(ssp_data_bc03, monkeypatch):
+def test_linearity_probe_numeric_invalid_path_works(monkeypatch):
     """Numeric-invalid (NaN) predictions skip without raising when other thetas valid."""
-    model = _minimal_photometry_model(ssp_data_bc03)
+    model = _minimal_photometry_model(synthetic_ssp_wide())
     obs_data = _dummy_obs_data()
     # Build with profile_mass=False so probe doesn't run during construction
     fitter = Fitter(model, data=obs_data, noise=0.1, profile_mass=False)
@@ -217,9 +234,7 @@ def _call_configure_profile_mass_auto(fitter, mass_name, mass_bounds):
     ],
     ids=["linearity_max_deviation", "classify_nonproportional", "configure_profile_mass_auto"],
 )
-def test_linearity_probe_every_changed_swallow_site_propagates(
-    ssp_data_bc03, monkeypatch, caplog, call_site
-):
+def test_linearity_probe_every_changed_swallow_site_propagates(monkeypatch, caplog, call_site):
     """Every site this fix touched propagates a model-evaluation error.
 
     Parametrized over the three (b)-class sites the whole-class fix changed:
@@ -232,7 +247,7 @@ def test_linearity_probe_every_changed_swallow_site_propagates(
     real configuration bug behind unrelated-looking text instead of letting
     it surface.
     """
-    model = _minimal_photometry_model(ssp_data_bc03)
+    model = _minimal_photometry_model(synthetic_ssp_wide())
     obs_data = _dummy_obs_data()
     # Build with profile_mass=False so the probe doesn't run during
     # construction; each call_site re-invokes the relevant function directly.
@@ -261,9 +276,7 @@ def test_linearity_probe_every_changed_swallow_site_propagates(
     [False, True],
     ids=["direct_call_post_construction", "construction_time_fixed_values_absent"],
 )
-def test_linearity_probe_honors_params_override_redshift(
-    ssp_data_bc03, monkeypatch, simulate_construction_time
-):
+def test_linearity_probe_honors_params_override_redshift(monkeypatch, simulate_construction_time):
     """The fit's own redshift override is used, not the spec's declared Fixed value.
 
     Parametrized over the two states ``_linearity_max_deviation``'s own
@@ -293,7 +306,7 @@ def test_linearity_probe_honors_params_override_redshift(
             recorded_redshifts.append(float(z_val))
         return original_predict(model, data_type, params, **kwargs)
 
-    model = _minimal_photometry_model_at_redshift(ssp_data_bc03, z1)
+    model = _minimal_photometry_model_at_redshift(synthetic_ssp_wide(), z1)
     obs_data = _dummy_obs_data()
     fitter = Fitter(
         model,
