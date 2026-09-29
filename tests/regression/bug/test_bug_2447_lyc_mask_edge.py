@@ -32,8 +32,8 @@ spacing, matching ``tests/regression/bug/test_bug_2439_precomp_lyc_mask.py``'s
 own ``_straddle_filter``) so the single-panel exactness claim can be
 verified to a tight tolerance; the real-grid class documents the larger,
 measured residual this filter-oversampling effect leaves on GALEX NUV /
-SDSS u specifically, and ratchets it rather than asserting the brief's
-aspirational 1e-4 (see that class's docstring for the measurement).
+SDSS u specifically, and ratchets it rather than asserting a
+round-off tolerance (see that class's docstring for the measurement).
 
 Reference construction: rather than algebraically reconstructing the split
 (error-prone once dust and IGM are layered on), ``_augment_ssp_at_edge``
@@ -356,7 +356,7 @@ class TestRealGridIssueRows:
     node-quantization defect itself, which this same measurement shows fell
     from -2.0651% to +0.0671% on MIST/C3K) from getting WORSE or from the fix
     being silently disabled again (which reopens the multi-percent defect),
-    not from shrinking to the brief's aspirational 1e-4 -- that would need
+    not from shrinking to round-off -- that would need
     inserting 912 A into the SSP grid itself (a much larger change than this
     fix's nebular-component scope; see the module docstring's mechanism
     discussion).
