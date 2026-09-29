@@ -9753,14 +9753,18 @@ class SEDModel:
             p = emitter.slice_params({k: jnp.asarray(v) for k, v in fixed.items()})
 
             # Check if the emitter declares log_L_ir as an optional input.
-            # optional_inputs may be a dict attribute or a callable method.
+            # optional_inputs may be a dict attribute (dust-emission components)
+            # or a callable method returning tuple[DerivedKey] (Protocol components).
+            # Extract the name from DerivedKey objects, which are NamedTuple with
+            # a .name field; dict keys are strings. Do not catch exceptions.
             declared_optional = getattr(emitter, "optional_inputs", None)
             if callable(declared_optional):
-                try:
-                    declared_optional = declared_optional()
-                except Exception:
-                    declared_optional = None
-            accepts_log_l_ir = declared_optional is not None and "log_L_ir" in declared_optional
+                declared_optional = declared_optional()
+            if declared_optional is not None:
+                declared_names = {getattr(key, "name", key) for key in declared_optional}
+                accepts_log_l_ir = "log_L_ir" in declared_names
+            else:
+                accepts_log_l_ir = False
 
             # HOMOGENEITY CHECK. The band response is exact only because an additive
             # emitter is linear (degree-1 homogeneous) in its luminosity:
