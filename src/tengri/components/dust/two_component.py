@@ -1207,9 +1207,7 @@ class DustSEDComponent(TemplateThreading):
 
         _log_lyc_dust = state.derived.get("log_L_lyc_dust")
         if _log_lyc_dust is not None:
-            log_L_absorbed = log10_add(
-                log_L_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0
-            )
+            log_L_absorbed = log10_add(log_L_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0)
 
         from tengri.forward.energy_balance import warn_if_corrupt
 

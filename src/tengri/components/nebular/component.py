@@ -36,6 +36,7 @@ from tengri.components.nebular.dig import (
 )
 from tengri.components.template_threading import TemplateThreading
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
+from tengri.forward.energy_balance import LYMAN_CUTOFF_AA, bolometric_absorbed_log10
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -1125,8 +1126,6 @@ class NebularSEDComponent(TemplateThreading):
         # IR budget. Compute the stellar LyC luminosity below 912 Å, multiply by
         # neb_fdust, and publish as log_L_lyc_dust for dust components to add to
         # their absorbed-luminosity integral.
-        from tengri.forward.energy_balance import bolometric_absorbed_log10, LYMAN_CUTOFF_AA
-
         neb_fdust = jnp.asarray(params.get("neb_fdust", 0.0))
         _stellar_sed = state.sed_intrinsic
         if _stellar_sed is not None:

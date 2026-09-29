@@ -537,9 +537,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
             # which concerns the screen's own LyC absorption, not HII-region dust).
             _log_lyc_dust = state.derived.get("log_L_lyc_dust")
             if _log_lyc_dust is not None:
-                log_l_absorbed = log10_add(
-                    log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0
-                )
+                log_l_absorbed = log10_add(log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0)
         else:
             # Slow path (exact integral): full-wavelength integration over all
             # components (stellar, nebular, shock, AGN). Same as before.
@@ -555,9 +553,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
             # Same unconditional addition as the fast path above.
             _log_lyc_dust = state.derived.get("log_L_lyc_dust")
             if _log_lyc_dust is not None:
-                log_l_absorbed = log10_add(
-                    log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0
-                )
+                log_l_absorbed = log10_add(log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0)
 
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:

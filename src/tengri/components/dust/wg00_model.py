@@ -296,9 +296,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
         _log_lyc_dust = state.derived.get("log_L_lyc_dust")
         if _log_lyc_dust is not None:
-            log_l_absorbed = log10_add(
-                log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0
-            )
+            log_l_absorbed = log10_add(log_l_absorbed, _log_lyc_dust, sign_a=1.0, sign_b=1.0)
 
         warn_if_corrupt(log_l_absorbed, component="wg00")
         if self.config.log_l_ir_requested:
