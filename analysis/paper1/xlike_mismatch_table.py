@@ -90,6 +90,11 @@ _SOURCE_RULES = (
         "Pacifici et al. (2023), Table 1",
     ),
     (
+        r"^art_sedfitting/code_outputs/BEAGLE_summary_catalogue_z1\.fits",
+        r"BEAGLE workshop catalog (tauV\_eff and mu columns) \citep{Pacifici_2023}",
+        "BEAGLE workshop catalog (tauV_eff and mu columns), Pacifici et al. (2023)",
+    ),
+    (
         r"^art_sedfitting/code_outputs/header",
         r"Workshop catalog (column list) \citep{Pacifici_2023}",
         "workshop catalog (column list), Pacifici et al. (2023)",

@@ -528,3 +528,65 @@ class TestCompilesInPaperClass:
         assert "There were undefined references" not in log
         undefined_cites = re.findall(r"Citation `([^']+)' on page \d+ undefined", log)
         assert not undefined_cites, undefined_cites
+
+
+_REPO_ROOT = PAPER1_DIR.parent.parent
+_FILE_LINES = re.compile(r"((?:[\w.\-]+/)+[\w.\-]+\.py):(\d+(?:,\d+)*)(?:--(\d+))?")
+
+
+def _all_rows():
+    """Yield (key, text, mismatch, exact source) for every Table B row."""
+    for key, cfg in XLIKE_CONFIGS.items():
+        for mismatch, text, src in zip(
+            cfg["mismatches"], cfg["mismatches_text"], cfg["mismatch_sources"], strict=True
+        ):
+            yield key, text, mismatch, src
+
+
+class TestSourcesSupportOnlyTheirClaims:
+    """A source may support only what it contains: an absent setting says nothing about the code."""
+
+    def test_no_mismatch_claims_discrete_metallicity(self):
+        for key, text, mismatch, _ in _all_rows():
+            for claim in (text, mismatch):
+                assert "discrete" not in claim.lower(), (key, claim)
+                assert "metallicity treatment" not in claim.lower(), (key, claim)
+
+    def test_prospector_has_no_age_floor_row(self):
+        # The continuity SFH has no age parameter, so there is no floor to differ on.
+        for claim in (
+            *XLIKE_CONFIGS["prospector_like"]["mismatches"],
+            *XLIKE_CONFIGS["prospector_like"]["mismatches_text"],
+        ):
+            assert "Gyr" not in claim or "912" in claim, claim
+            assert "age floor" not in claim.lower() and "formation age" not in claim.lower()
+
+    def test_catalog_absence_rows_only_claim_not_recorded(self):
+        for key, text, mismatch, src in _all_rows():
+            if "header (absence" in src:
+                assert "not recorded" in text, (key, text)
+                assert "not recorded" in mismatch or "does not record" in mismatch, (key, mismatch)
+
+    def test_repo_file_line_sources_exist_and_in_range(self):
+        checked = 0
+        for key, cfg in XLIKE_CONFIGS.items():
+            raws = [*cfg["mismatch_sources"], *cfg.get("notes_sources", [])]
+            for raw in raws:
+                for part in raw.split(";"):
+                    m = _FILE_LINES.search(part)
+                    if not m or "site-packages" in m.group(1):
+                        continue
+                    path = _REPO_ROOT / m.group(1)
+                    assert path.is_file(), (key, raw, m.group(1))
+                    n_lines = len(path.read_text(errors="replace").splitlines())
+                    lines = [int(x) for x in m.group(2).split(",")]
+                    if m.group(3):
+                        lines.append(int(m.group(3)))
+                    assert min(lines) >= 1 and max(lines) <= n_lines, (key, raw, n_lines)
+                    checked += 1
+        assert checked >= 10
+
+    def test_beagle_dust_row_cites_catalog_columns(self):
+        cfg = XLIKE_CONFIGS["beagle_like"]
+        srcs = [s for s in cfg["mismatch_sources"] if "BEAGLE_summary_catalogue" in s]
+        assert srcs and "tauV_eff" in srcs[0] and "mu" in srcs[0]
