@@ -28,8 +28,7 @@ for entry in (str(ANALYSIS), str(PAPER1)):
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
-from unittest.mock import patch, MagicMock
-from subprocess import CompletedProcess
+from unittest.mock import MagicMock, patch
 
 from paper1.fit_one import (
     DEFAULT_RETUNE_ATTEMPTS,
@@ -76,15 +75,12 @@ class TestRetuneLadder:
 class TestProfileMassRecord:
     def test_resolve_profile_mass_with_resolved_false(self):
         requested = "auto"
-        diagnostics = {
-            "profile_mass_resolved": False,
-            "profile_mass_reason": "guard failed"
-        }
+        diagnostics = {"profile_mass_resolved": False, "profile_mass_reason": "guard failed"}
         result = resolve_profile_mass_record(requested, diagnostics)
         assert result == {
             "profile_mass_requested": "auto",
             "profile_mass": False,
-            "profile_mass_reason": "guard failed"
+            "profile_mass_reason": "guard failed",
         }
 
     def test_resolve_profile_mass_with_empty_diagnostics(self):
@@ -101,13 +97,13 @@ class TestProfileMassRecord:
         requested = "on"
         diagnostics = {
             "profile_mass_resolved": True,
-            "profile_mass_reason": "all linearity guards passed"
+            "profile_mass_reason": "all linearity guards passed",
         }
         result = resolve_profile_mass_record(requested, diagnostics)
         assert result == {
             "profile_mass_requested": "on",
             "profile_mass": True,
-            "profile_mass_reason": "all linearity guards passed"
+            "profile_mass_reason": "all linearity guards passed",
         }
 
 
@@ -173,8 +169,9 @@ class TestCommandTemplatePassthrough:
 
     def test_fit_one_cell_command_with_custom_values(self):
         """fit_one_cell_command respects profile_mass and retune_attempts parameters."""
-        cmd = fit_one_cell_command(79, "II", Path("results/fits"),
-                                    profile_mass="off", retune_attempts=3)
+        cmd = fit_one_cell_command(
+            79, "II", Path("results/fits"), profile_mass="off", retune_attempts=3
+        )
         # Check profile-mass value
         assert "--profile-mass" in cmd
         profile_mass_idx = cmd.index("--profile-mass")
@@ -189,18 +186,18 @@ class TestCommandTemplatePassthrough:
         # Mock subprocess.run and json.load
         fake_diagnostics = {"gal_id": 79, "adoption_pass": True}
 
-        with patch("paper1.run_candels_fits.subprocess.run") as mock_run, \
-             patch("builtins.open", create=True) as mock_open, \
-             patch("paper1.run_candels_fits.json.load", return_value=fake_diagnostics):
-
+        with (
+            patch("paper1.run_candels_fits.subprocess.run") as mock_run,
+            patch("builtins.open", create=True) as mock_open,
+            patch("paper1.run_candels_fits.json.load", return_value=fake_diagnostics),
+        ):
             # Mock Popen to capture the command
             mock_process = MagicMock()
             mock_process.returncode = 0
             mock_run.return_value = mock_process
 
             result = run_fit_subprocess(
-                79, "II", Path("results/fits"),
-                profile_mass="off", retune_attempts=3
+                79, "II", Path("results/fits"), profile_mass="off", retune_attempts=3
             )
 
             # Verify subprocess.run was called with the right command
