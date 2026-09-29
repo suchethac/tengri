@@ -1342,6 +1342,24 @@ class DustSEDComponent(TemplateThreading):
             + sed_attenuated
         )
 
+        # ── Diffuse dust transmission on full wave grid ──────────────────
+        # Publish the full-grid diffuse-screen transmission T(λ) for downstream
+        # dust-emission components that apply the single-pass attenuation when
+        # diffuse_screen=True. Evaluate the diffuse law on the full wavelength
+        # grid with the same Lyman clip applied to the stellar/nebular screens.
+        k_diff_full = _resolve_law(self.config.law_diff)(
+            wave, **select_law_kwargs(self.config.law_diff, diff_kw)
+        )
+        k_diff_full = _lyman_clip(k_diff_full, wave, self.config.lyman_cutoff_aa)
+        dust_diff_transmission = _screen_transmission(
+            "diffuse",
+            k_bc=jnp.zeros_like(k_diff_full),  # unused for diffuse branch
+            k_diff=k_diff_full,
+            tau_bc=jnp.asarray(params["dust_tau_bc"]),
+            tau_diff=jnp.asarray(params["dust_tau_diff"]),
+            f_obsc=jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)),
+        )
+
         # Per-filter LUTs for two-component attenuation.
         # T(a, λ) factorizes as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
         # path we publish A_diff = exp(-τ_diff·k_diff(λ_eff)) and
@@ -1349,6 +1367,7 @@ class DustSEDComponent(TemplateThreading):
         # wavelength derivatives via central finite difference. The young
         # indicator ``y(a)`` is exposed for downstream consumers.
         derived_overrides = dict(
+            dust_diff_transmission=dust_diff_transmission,
             L_ir=L_ir,
             L_absorbed=L_absorbed,
             log_L_ir=log_L_ir,

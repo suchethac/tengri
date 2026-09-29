@@ -274,23 +274,21 @@ class DerivedState:
     #: emission but to dust heating. Added to ``log_L_absorbed`` by dust
     #: components (#2539). Published only when neb_fdust > 0.
     log_L_lyc_dust: jnp.ndarray | None = None
-    #: Raw ``neb_fdust`` value [0, 1], echoed by ``NebularSEDComponent`` so
-    #: ``DustSEDComponent`` (two_component) can recompute a population-
-    #: matched LyC-dust credit when ``lyc_absorb_all=False`` (#2539 item 2).
-    #: Cross-component reads of another component's *parameters* are
-    #: disallowed (``slice_params_for_component`` only exposes a component's
-    #: own prefix plus ``BARE_NAME_ALLOWLIST``); ``neb_fdust`` carries the
-    #: "neb_" prefix, so ``params.get("neb_fdust", ...)`` inside a dust
-    #: component silently reads the 0.0 fallback instead of raising -- this
-    #: field is the documented, typed channel around that (the
-    #: ``lyc_fdust`` analog of ``lyc_transmission`` above).
-    lyc_fdust: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
+    #: Full-grid diffuse dust transmission (dimensionless): T(λ) on the full
+    #: state.wave grid, evaluated by the dust attenuator. Published by all
+    #: dust-attenuation models for use by dust-emission components when
+    #: diffuse_screen=True.
+    dust_diff_transmission: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
     #: Bolometric IR luminosity from dust emission component [erg/s].
     #: Published by dust-emission components that close the energy balance.
     L_ir_emission: jnp.ndarray | None = None
+    #: log10(L_ir_emergent / (erg/s)) [dex]: the IR luminosity escaping the diffuse
+    #: dust screen after single-pass attenuation (diffuse_screen=True only).
+    #: When diffuse_screen is off, this key is absent (not published).
+    log_L_ir_emergent: jnp.ndarray | None = None
     # Dust attenuation per filter. A(λ_eff) and its
     # wavelength derivative A'(λ_eff) at each filter pivot, used
     # to apply Taylor-expansion attenuation in

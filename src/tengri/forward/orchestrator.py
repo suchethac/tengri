@@ -238,11 +238,13 @@ _CANONICAL_UNITS: dict[str, str] = {
     "dust_diff_attenuation_precomp": "",
     "dust_diff_attenuation_slope_precomp": "1/Angstrom",
     "dust_young_indicator": "",
+    "dust_diff_transmission": "",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
     "log_L_ir": "dex",
     "log_L_absorbed": "dex",
+    "log_L_ir_emergent": "dex",
     "log_L_lyc_dust": "dex",
     "lyc_fdust": "",
     "log_L_agn_bol": "dex",
