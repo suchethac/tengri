@@ -14,6 +14,11 @@
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
   histories (#2524).
+- The exact (non-precomputed) forward path's Lyman-continuum mask now steps at
+  the physical 912 A edge instead of at whichever SSP grid node sits just
+  below it: a photometric band whose rest-frame coverage straddles 912 A no
+  longer carries an edge-placement bias of up to a few percent when
+  `neb_fesc < 1` (#2447).
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
