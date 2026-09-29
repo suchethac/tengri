@@ -269,6 +269,11 @@ class DerivedState:
     #: reading ``log_L_ir`` as a stand-in, which is only correct when
     #: eta == 1 and no override is declared.
     log_L_absorbed: jnp.ndarray | None = None
+    #: log10(L_LyC_dust / (erg/s)) [dex]: the Lyman-continuum energy absorbed
+    #: by dust inside HII regions (neb_fdust), not credited to nebular
+    #: emission but to dust heating. Added to ``log_L_absorbed`` by dust
+    #: components (#2539). Published only when neb_fdust > 0.
+    log_L_lyc_dust: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     #: Full-grid diffuse dust transmission (dimensionless): T(λ) on the full
     #: state.wave grid, evaluated by the dust attenuator. Published by all
@@ -406,6 +411,14 @@ class DerivedState:
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
+    #: Raw ``neb_fdust`` value (#2539 item 2), the ``lyc_transmission``
+    #: analog for the dust-absorption fraction: a dust component's
+    #: ``parameter_prefix`` ("dust_") means ``slice_params_for_component``
+    #: (ADR-0006) never hands it a "neb_"-prefixed key, so
+    #: ``two_component`` reads this cross-component value instead of
+    #: ``params["neb_fdust"]`` (which would silently see only the 0.0
+    #: default) to compute its own young-weighted HII-region dust credit.
+    lyc_fdust: jnp.ndarray | None = None
     # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).
