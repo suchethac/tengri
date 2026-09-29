@@ -338,7 +338,7 @@ def apply_lsf(
     spectrum: jnp.ndarray,
     wave_obs: jnp.ndarray,
     resolution: jnp.ndarray | float,
-    sigma_lib_kms: float = 0.0,
+    sigma_lib_kms: jnp.ndarray | float = 0.0,
     n_bins: int = 16,
     sigma_v_kms: float = 0.0,
 ) -> jnp.ndarray:
@@ -386,15 +386,17 @@ def apply_lsf(
         - Scalar: constant resolution across wavelength (fast path)
         - Array: per-pixel wavelength-dependent resolution (e.g., JWST NIRSpec PRISM)
 
-    sigma_lib_kms : float, optional
+    sigma_lib_kms : float or array, shape (n_pix,), optional
         SSP library velocity dispersion [km/s]. Subtracted in quadrature
-        from instrument LSF. Default 0.0 (no subtraction). Common values:
+        from instrument LSF. Default 0.0 (no subtraction).
 
-        - MILES-based (FSPS default): 70 km/s
-        - C3K: 15 km/s
-        - IRTF: 20 km/s
-
-        Use ``SSP_LIBRARY_RESOLUTIONS[library_name]`` for pre-defined values.
+        - Scalar (float): constant library resolution across spectrum.
+          Common values: MILES-based (FSPS default) 70 km/s, C3K 15 km/s, IRTF 20 km/s.
+          Use ``SSP_LIBRARY_RESOLUTIONS[library_name]`` for pre-defined values.
+        - Array (n_pix,): per-wavelength library resolution derived from the
+          loaded SSP template's LSF. Example: MILES has FWHM ≈ 2.51 Å (constant
+          in wavelength), giving σ_v(λ) ∝ 1/λ, from ~91 km/s at 3525 Å to ~43 km/s
+          at 7500 Å. Retrieved from ``SSPData.ssp_resolution_kms`` after load.
     n_bins : int, optional
         Number of piecewise-constant segments for variable-R approximation.
         Ignored for scalar R. Higher values are more accurate but slower.
@@ -470,6 +472,7 @@ def apply_lsf(
     sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
 
     resolution = jnp.asarray(resolution)
+    sigma_lib_kms = jnp.asarray(sigma_lib_kms)
 
     # Compute instrument sigma at each pixel
     sigma_inst_kms = _C_KM_S / (_FWHM_TO_SIGMA * resolution)
@@ -481,7 +484,11 @@ def apply_lsf(
     # templates; σ_v is the intrinsic galaxy velocity dispersion.
     sigma_lib2 = sigma_lib_kms**2
     sigma_v2 = sigma_v_kms**2
-    sigma_eff_kms = jnp.sqrt(jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0) + sigma_v2)
+
+    # Compute the effective broadening kernel, clamping to zero when
+    # the library resolution exceeds the instrument resolution at some pixels.
+    deficit = sigma_inst_kms**2 - sigma_lib2
+    sigma_eff_kms = jnp.sqrt(jnp.maximum(deficit, 0.0) + sigma_v2)
 
     # The single-FFT path reads one pixel scale, ``log(wave[1]/wave[0])``, which
     # describes the whole array only on a grid uniform in ln(lambda). On any other
@@ -491,11 +498,12 @@ def apply_lsf(
     # observed grids, send them through the piecewise path, which carries a
     # per-bin pixel scale. Nothing is resampled, so the FFT normalization still
     # conserves flux exactly and a zero-width kernel is still the identity.
-    if resolution.ndim == 0 and _is_log_uniform(wave_obs):
-        # Scalar R on a log-uniform grid: one FFT, and the scale is exact.
+    if resolution.ndim == 0 and sigma_lib_kms.ndim == 0 and _is_log_uniform(wave_obs):
+        # Scalar R and scalar σ_lib on a log-uniform grid: one FFT, and the scale is exact.
         return _apply_lsf_constant_r(spectrum, wave_obs, sigma_eff_kms)
 
-    # Per-pixel R, or a grid whose pixel scale varies: piecewise-constant in both.
+    # Per-pixel R, or per-pixel σ_lib, or a grid whose pixel scale varies:
+    # piecewise-constant in all three.
     sigma_per_pixel = jnp.broadcast_to(jnp.atleast_1d(sigma_eff_kms), spectrum.shape)
     return _apply_lsf_variable_r(spectrum, wave_obs, sigma_per_pixel, n_bins)
 
@@ -508,7 +516,7 @@ def project_spectrum(
     dl_cm: float,
     *,
     resolution: jnp.ndarray | float | None = None,
-    sigma_lib_kms: float = 0.0,
+    sigma_lib_kms: jnp.ndarray | float = 0.0,
     n_bins: int = 16,
     sigma_v_kms: float = 0.0,
     cal_coeffs: jnp.ndarray | None = None,
@@ -544,10 +552,12 @@ def project_spectrum(
         Spectral resolution :math:`R(\lambda) = \lambda / \Delta\lambda`.
         If ``None``, LSF is skipped. If scalar, constant resolution; if array,
         per-pixel wavelength-dependent resolution (e.g., JWST NIRSpec PRISM).
-    sigma_lib_kms : float, optional
+    sigma_lib_kms : float or array, shape (n_pix,), optional
         SSP library velocity dispersion [km/s], subtracted in quadrature from
-        instrument LSF. Default 0.0 (no subtraction). Common values: MILES 70 km/s,
-        C3K 15 km/s.
+        instrument LSF. Default 0.0 (no subtraction).
+
+        - Scalar (float): constant library resolution (e.g., MILES 70 km/s, C3K 15 km/s).
+        - Array (n_pix,): per-wavelength library resolution from ``SSPData.ssp_resolution_kms``.
     n_bins : int, optional
         Number of piecewise-constant segments for variable-R LSF approximation.
         Ignored when resolution is scalar. Default 16.

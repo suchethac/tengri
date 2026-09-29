@@ -46,6 +46,16 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
+- `SSPData` gains an optional `ssp_resolution_kms` field holding per-wavelength
+  SSP library resolution [km/s] derived from the loaded library's documented LSF
+  (#2518). `apply_lsf` now accepts array-like `sigma_lib_kms` to subtract
+  per-wavelength library resolution in quadrature from instrument LSF, improving
+  continuum deconvolution compared to the flat-scalar approximation. Example:
+  MILES has constant FWHM ≈ 2.51 Å (wavelength space), giving σ_v(λ) ∝ 1/λ,
+  from ≈91 km/s at 3525 Å to ≈43 km/s at 7500 Å. Where σ_inst² < σ_lib²,
+  no additional broadening is applied (library is already better-resolved than
+  instrument). `project_spectrum` signature updated to match (#2518).
+
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments
   raised `IndexError: tuple index out of range`. Both functions now resolve

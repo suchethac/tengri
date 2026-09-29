@@ -166,6 +166,13 @@ class SSPData(NamedTuple):
     ssp_lg_age_gyr: jnp.ndarray
     ssp_lgmet: jnp.ndarray
     ssp_mass_remaining: jnp.ndarray | None = None
+    # Per-wavelength SSP library resolution [km/s] (#2518): velocity dispersion
+    # σ_lib(λ) derived from the loaded library's documented LSF. Used to
+    # subtract library broadening in apply_lsf (and project_spectrum) when
+    # convolving spectra. Example: MILES has FWHM ≈ 2.51 Å (constant in
+    # wavelength), giving σ_v(λ) ∝ 1/λ, from 91 km/s at 3525 Å to 43 km/s
+    # at 7500 Å. None if not populated (e.g., loaded from older file format).
+    ssp_resolution_kms: jnp.ndarray | None = None
     # Future: ssp_alpha_fe grid for alpha-enhanced templates (Vazdekis+2015, MIST)
     # When available, ssp_flux becomes (n_met, n_alpha, n_age, n_wave) and
     # interpolation adds a third dimension. The current met_alpha_fe parameter
@@ -223,13 +230,16 @@ def _sspdata_flatten(s):
         s.ssp_lgmet,
         s.ssp_mass_remaining,
         s.ssp_alpha_fe,
+        s.ssp_resolution_kms,
     )
     aux = (s.imf, s.source, s.nebular)
     return children, aux
 
 
 def _sspdata_unflatten(aux, children):
-    return SSPData(*children, imf=aux[0], source=aux[1], nebular=aux[2])
+    return SSPData(
+        *children[:6], ssp_resolution_kms=children[6], imf=aux[0], source=aux[1], nebular=aux[2]
+    )
 
 
 jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
@@ -242,6 +252,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "ssp_lgmet": content("metallicity grid defines the Z discretization"),
     "ssp_mass_remaining": content("stellar mass fractions define mass normalization"),
     "ssp_alpha_fe": content("alpha enhancement grid defines the stellar templates"),
+    "ssp_resolution_kms": content("per-wavelength library resolution affects LSF subtraction"),
     "imf": content("initial mass function affects stellar population synthesis"),
     "source": content("source/library identity affects stellar templates"),
     "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
@@ -653,13 +664,35 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         if "ssp_alpha_fe" in f:
             alpha_fe = _load_float(f["ssp_alpha_fe"], dtype=dtype)
 
+        # Per-wavelength library resolution (#2518): lookup the FWHM from the
+        # per-library table and compute σ_lib(λ) in velocity space [km/s].
+        ssp_wave = _load_float(f["ssp_wave"], dtype=dtype)
+        library_stem = fp.stem
+        fwhm = _LIBRARY_FWHM_ANGSTROM.get(library_stem)
+        if fwhm is not None:
+            ssp_resolution_kms = _compute_ssp_resolution_kms(ssp_wave, fwhm)
+        else:
+            ssp_resolution_kms = None
+            if library_stem not in _LIBRARY_FWHM_ANGSTROM:
+                warnings.warn(
+                    f"SSP library '{library_stem}' has no documented spectral "
+                    f"resolution (LSF/FWHM) in the tengri registry. "
+                    f"LSF deconvolution (apply_lsf) will use σ_eff = sqrt(σ_inst² + σ_v²) "
+                    f"without subtracting σ_lib; cross-code parity may degrade. "
+                    f"File an issue with the library's documented LSF to enable "
+                    f"per-wavelength σ_lib(λ) subtraction.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
         return SSPData(
-            ssp_wave=_load_float(f["ssp_wave"], dtype=dtype),
+            ssp_wave=ssp_wave,
             ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,
             ssp_mass_remaining=mass_remaining,
             ssp_alpha_fe=alpha_fe,
+            ssp_resolution_kms=ssp_resolution_kms,
             imf=imf,
             source=fp.stem,
             nebular=nebular,
@@ -763,6 +796,61 @@ def _detect_nebular(h5_file, filename: str) -> str:
     if "wne" in filename.lower():
         return "included"
     return "unknown"
+
+
+#: Per-library spectral resolution: FWHM [Angstrom] constant in wavelength space
+#: (#2518). The resolution σ_lib(λ) [km/s] is computed as c·FWHM/(2.3548·λ),
+#: where 2.3548 converts FWHM to σ. Libraries without documented LSF are
+#: marked with None and yield None (no library resolution subtraction).
+_LIBRARY_FWHM_ANGSTROM: dict[str, float | None] = {
+    # MILES: constant ~2.51 Å (Sanchez-Blazquez et al. 2006, MILES stellar-lib paper)
+    # Grid: 3525–7500 Å. Yields σ_lib ∝ 1/λ from 91 km/s to 43 km/s.
+    "ssp_prsc_miles": 2.51,
+    "ssp_prsc_miles_chabrier": 2.51,
+    "ssp_prsc_miles_kroupa": 2.51,
+    "ssp_prsc_miles_salpeter": 2.51,
+    "ssp_prsc_miles_chabrier_wNE": 2.51,
+    "ssp_prsc_miles_kroupa_wNE": 2.51,
+    "ssp_prsc_miles_salpeter_wNE": 2.51,
+    # C3K: constant ~0.55 Å (C3K stellar library). Fine resolution.
+    # Grid: 1500–25000 Å. Yields σ_lib ∝ 1/λ from 55 km/s down to ~11 km/s.
+    "ssp_mist_c3k_a_chabrier": 0.55,
+    "ssp_mist_c3k_a_chabrier_wNE": 0.55,
+}
+
+
+def _compute_ssp_resolution_kms(
+    wave: jnp.ndarray, fwhm_angstrom: float | None
+) -> jnp.ndarray | None:
+    """Compute per-wavelength library resolution in velocity space [km/s].
+
+    Converts a constant FWHM [Angstrom] in wavelength space to velocity
+    dispersion σ_v(λ) [km/s] via:
+
+    .. math::
+
+        σ_v(λ) = (c / 2.3548) · (FWHM / λ)
+
+    where c ≈ 299792 km/s, 2.3548 converts FWHM to σ (Gaussian), and λ is
+    wavelength [Angstrom].
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+    fwhm_angstrom : float or None
+        Constant spectral resolution FWHM [Angstrom] of the SSP library.
+        None returns None (no resolution subtraction).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,) or None
+        Per-wavelength σ_lib [km/s], or None if fwhm_angstrom is None.
+    """
+    if fwhm_angstrom is None:
+        return None
+    # c / 2.3548 ≈ 127585 km/s (Gaussian conversion)
+    return jnp.asarray((127585.0 * fwhm_angstrom) / wave, dtype=jnp.result_type(float))
 
 
 def _synthesize_mass_remaining(
