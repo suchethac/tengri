@@ -82,6 +82,10 @@ STRUCTURAL_KEYS: frozenset[str] = frozenset(
         "dust_lyman_cutoff_aa",
         "dust_lyc_absorb_all",
         "dust_eb_include_lyc",
+        # #2533: opt-in single-pass diffuse-screen attenuation of re-emitted
+        # IR dust emission. Flat spelling / grammar key "diffuse_screen" on
+        # dust_emission; never a fittable parameter.
+        "dust_ir_diffuse_screen",
         "dust_emission_model",
         "agn_model",
         "agn_disc_block",
