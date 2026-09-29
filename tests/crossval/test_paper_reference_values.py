@@ -630,7 +630,10 @@ class TestSFHMassConservation:
             peak_age,
             age - tau,
             rtol=0.01,
-            err_msg="DPL SFH: peak lookback time should be age-tau when alpha=beta (Carnall+2018 Eq. 1)",
+            err_msg=(
+                "DPL SFH: peak lookback time should be age-tau when alpha=beta "
+                "(Carnall+2018 Eq. 1)"
+            ),
         )
 
 
