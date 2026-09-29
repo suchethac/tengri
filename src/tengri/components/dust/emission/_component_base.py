@@ -309,15 +309,22 @@ class EmissionComponent(SEDModelComponent):
                     integral_transmitted / integral_full,
                     0.0,
                 )
-                transmission_factor = jnp.maximum(transmission_factor, 1e-40)  # Floor for log safety
+                transmission_factor = jnp.maximum(
+                    transmission_factor, 1e-40
+                )  # Floor for log safety
                 log_l_ir = state.derived.get("log_L_ir")
                 if log_l_ir is not None:
                     log_L_ir_emergent = jnp.asarray(log_l_ir) + jnp.log10(transmission_factor)
                     published_full["log_L_ir_emergent"] = log_L_ir_emergent
 
-            # Apply diffuse dust screen to sed_ir if enabled (single pass, no iteration)
+            # Apply diffuse dust screen to sed_ir if enabled (single pass, no iteration).
+            # Overwrite the published sed_dust_ir too: predict() bound it to the
+            # pre-screen array, and rebinding the local `sed_ir` name does not
+            # reach back into that dict (arrays are immutable), so the published
+            # key would otherwise silently keep reporting the unscreened emission.
             if self.diffuse_screen:
                 sed_ir = sed_ir * dust_diff_t
+                published_full["sed_dust_ir"] = sed_ir
 
             # LUT path: publish the precomp families the LUT projectors consume...
             # These stay at the same (unit-L_ir) scale as ``sed_ir`` until the
@@ -402,8 +409,12 @@ class EmissionComponent(SEDModelComponent):
                     if log_l_ir is not None:
                         log_L_ir_emergent = jnp.asarray(log_l_ir) + jnp.log10(transmission_factor)
                         published["log_L_ir_emergent"] = log_L_ir_emergent
-                    # Apply diffuse dust screen to sed_ir
+                    # Apply diffuse dust screen to sed_ir, and overwrite the
+                    # published sed_dust_ir (same reasoning as the LUT branch
+                    # above: rebinding the local name does not update the dict
+                    # predict() already returned).
                     sed_ir = sed_ir * dust_diff_t
+                    published["sed_dust_ir"] = sed_ir
                 sed_ir, published = self._restore_l_ir_scale(sed_ir, published, log_l_ir_offset)
                 sed_out = sed_in + sed_ir
             else:

@@ -1512,24 +1512,29 @@ def parse_groups(**kwargs) -> Parameters:
     _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)
 
-    # Validate diffuse_screen (#2533): requires both attenuation and emission
+    # Validate diffuse_screen (#2533): requires both attenuation and emission.
+    # The translated structural keys are `dust_model` (attenuation type, "off"
+    # when disabled/omitted -- see the "omitted = off" injection above) and
+    # `dust_emission` (the emission engine name, absent when no type was
+    # given): NOT `dust_attenuation`, which is only ever a raw *user* kwarg
+    # key, never written into `structural_kwargs` by the translators.
     if structural_kwargs.get("dust_ir_diffuse_screen"):
         # Check that dust_attenuation is active
-        atten_type = structural_kwargs.get("dust_attenuation")
-        if not atten_type or atten_type == "none":
+        atten_type = structural_kwargs.get("dust_model")
+        if not atten_type or atten_type == "off":
             raise ValueError(
                 "dust_emission={'diffuse_screen': True} requires dust_attenuation to be active. "
                 "Attenuation off or set to 'none' cannot provide dust_diff_transmission. "
-                "Enable dust attenuation with dust_attenuation={'type': 'single_component' or 'two_component'} "
-                "or set diffuse_screen=False."
+                "Enable dust attenuation with dust_attenuation={'type': 'single_component' "
+                "or 'two_component'} or set diffuse_screen=False."
             )
         # Check that dust_emission is active
         emis_type = structural_kwargs.get("dust_emission")
         if not emis_type:
             raise ValueError(
-                "dust_emission={'diffuse_screen': True} requires a dust_emission type to be specified. "
-                "Set dust_emission={'type': ...} (e.g., 'modified_blackbody', 'dale2014', ...) "
-                "or set diffuse_screen=False."
+                "dust_emission={'diffuse_screen': True} requires a dust_emission type to be "
+                "specified. Set dust_emission={'type': ...} (e.g., 'modified_blackbody', "
+                "'dale2014', ...) or set diffuse_screen=False."
             )
 
     return final_params
@@ -5136,6 +5141,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # fraction. Structural config, forwarded to component_factory (#1093).
         _Structural("spinning_dust", "astrodust_spinning_dust", False, only_types=("astrodust",)),
         _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
+        # Opt-in single-pass diffuse-screen attenuation of re-emitted IR (#2533).
+        # Plain boolean, valid for every emission type (not restricted via
+        # only_types), so a straight default comparison round-trips it.
+        _Structural("diffuse_screen", "dust_ir_diffuse_screen", False),
         # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
         # so it has no attribute for this table to target; it is covered by the
         # test's hand_written allowlist instead. log_L_ir (dust_log_L_ir) is the
