@@ -10,64 +10,10 @@
 
 ### Fixed
 
-- Every SFH family's star-formation support is now bounded to `[0, age(z)]`
-  by construction: the 21 onset/age/peak-time `ParamDeclaration`s are marked
-  in the registry (`ParamDef.z_capped_onset`) and `_narrow_free_priors_to_z`
-  derives its capped set from that flag instead of a 3-entry hand tuple;
-  formed mass is pinned to `10**log_total_mass` (`_mass_conserving_total`),
-  which is the closed-form equivalent of masking each shape to `[0, age(z)]`
-  before normalizing; `exp`/`dexp` get a genuine `[0, start]` formation
-  window (`T = start - t_lookback`, matching `declining_exponential`)
-  instead of their previous `[start, inf)`; and `psb_wild2020`'s burst DPL
-  anchors to its own `age` instead of the hardcoded `AGEMAX_YR`. Closes the
-  dpl `tau_gyr` flat-likelihood-direction conditioning problem as a side
-  effect (#2521, #2457).
-
-  `_mass_conserving_total` is applied once, after both the `"cic"` (dense
-  integrand, the default) and `"dsps"` (histogram kernel; every GP-field
-  build, or an explicit `age_kernel='dsps'` choice) age-weight paths
-  converge, in both `StellarSEDComponent.apply` and
-  `.compute_joint_weights`, rather than duplicated per branch: it had
-  initially landed inside the `"cic"` branches only, so the `"dsps"` kernel
-  (and therefore every stochastic-field SFH) kept leaking mass outside
-  `[0, age(z)]` (measured: dpl at z=2.5, age_gyr=2×age(z), formed/requested
-  1.000000 on `"cic"` vs 0.429997 on `"dsps"`, before the shared call). A
-  composite (list) `sfh_model` is explicitly NOT covered by this
-  correction: `["dpl", "const"]` at z=2.5 with the dpl member's age_gyr at
-  2×age(z) forms 0.7846438391594264 of the requested total, pinned as a
-  known, tracked gap in
-  `tests/physics/conservation/test_sfh_support_bounded_to_age_of_universe.py::test_composite_sfh_mass_is_not_yet_conserved`
-  rather than fixed here.
-
-  `_narrow_free_priors_to_z` caps a z-capped onset parameter's ceiling
-  against `age_at_z(z_floor)`, the LOWEST redshift a free `redshift` prior
-  admits — the only end common to every build. It does not also bind that
-  range's upper (younger-universe) end: a wide free `redshift` prior can
-  still admit a draw near its upper end whose onset value, though inside
-  the z_floor-capped ceiling, places star formation before the Big Bang at
-  that draw (`_mass_conserving_total` still conserves the formed mass
-  there, so nothing raises or, under `jax.jit`, warns). `SEDModel.build`
-  now emits one `FreeRedshiftOnsetCeilingWarning` at build time when this
-  is possible, naming the affected parameter(s) and both ages; the
-  convention is documented on `ParamDef.z_capped_onset` and in
-  `docs/model_reference/sfh.md`. No parameter-dependent/joint prior-bound
-  mechanism exists in tengri to *prevent* the draw itself (only a static,
-  once-per-build cap and, separately, `Parameters._validate_orderings`'s
-  build-time rejection of overlapping pairs); building one is future work
-  tracked alongside #2436's `neb_fesc + neb_fdust <= 1` constraint.
-
-  The nonparametric age-bin ladder (`continuity`, `dirichlet`,
-  `bursty_continuity`, `prospector_beta`) is unchanged by this release and
-  still defaults to fixed 0–13.7 Gyr edges regardless of redshift: 2 of 7
-  bins lie entirely beyond `age_at_z(2.5) = 2.62` Gyr and 3 of 7 beyond
-  `age_at_z(6) = 0.93` Gyr (0 of 7 at z=0.5). Mass is still conserved to the
-  request — an unreachable bin's nominal share is redistributed across the
-  bins that remain within cosmic time — but the recovered SFH *shape* is
-  biased toward the ages the ladder does offer a bin for. Pass
-  `sfh={'bin_edges_gyr': tengri.make_agebins_from_zred(zred=...)}` for a
-  redshift-appropriate ladder; this is not done automatically. Tracked via
-  `xfail(strict=True)` in
-  `tests/components/sfh/test_nonparametric_bin_ladder_not_scaled_to_age_of_universe.py`.
+- `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
+  since formation (T = age − t_lookback) and take a required keyword-only `age`;
+  both previously treated lookback time as cosmic time and returned mirror-imaged
+  histories (#2524).
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
@@ -166,6 +112,22 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
+- Spectral indices (`predict_spectral_indices`, both the FeaturePrecomp
+  window-LUT path and the exact path) now read the evaluation's fixed values,
+  including a runtime redshift, like the line methods did in #2499. The redshift
+  affects age-sensitive indices via the cosmic age truncation of the SFH: it
+  reaches the same `age_at_z` cutoff in `compute_joint_weights` (window-LUT
+  path) and in the orchestrator's stellar `apply()` (exact path), so an
+  evaluation-time override changes which lookback ages are truncated on both
+  paths alike. Two sibling gaps in the SAME class of call, found while
+  covering this: `_feature_fast_indices`'s one-off exact measurement for a
+  slope index (e.g. `uv_slope_beta`, not a single-window functional) dropped
+  the evaluation's fixed values even though the window-LUT slots in the same
+  call honored them, so a slope index in `index_defs` could silently disagree
+  with a break/EW index measured alongside it; and `measure_line_fluxes`'s
+  exact (`state=None`) branch rescaled the luminosity distance to the
+  overridden redshift but measured the rest-frame SED itself at the model's
+  own build-time redshift. Both now thread the same `fixed_values` (#2510).
 - Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
   metal-line blanketing term (eq. 15), 0.0017·(λ_obs/λ_α)^1.68 blueward of
   Lyα(1+z); this adds up to ~1% attenuation in the Lyα–Lyβ forest at z = 2–4 (#2516).
@@ -358,6 +320,64 @@
   gated on `packaging.version` comparison. The orphan-atime repair stays
   load-bearing on JAX < 0.11.2 and remains useful for recovery on all versions.
 
+- Every SFH family's star-formation support is now bounded to `[0, age(z)]`
+  by construction: the 21 onset/age/peak-time `ParamDeclaration`s are marked
+  in the registry (`ParamDef.z_capped_onset`) and `_narrow_free_priors_to_z`
+  derives its capped set from that flag instead of a 3-entry hand tuple;
+  formed mass is pinned to `10**log_total_mass` (`_mass_conserving_total`),
+  which is the closed-form equivalent of masking each shape to `[0, age(z)]`
+  before normalizing; `exp`/`dexp` get a genuine `[0, start]` formation
+  window (`T = start - t_lookback`, matching `declining_exponential`)
+  instead of their previous `[start, inf)`; and `psb_wild2020`'s burst DPL
+  anchors to its own `age` instead of the hardcoded `AGEMAX_YR`. Closes the
+  dpl `tau_gyr` flat-likelihood-direction conditioning problem as a side
+  effect (#2521, #2457).
+
+  `_mass_conserving_total` is applied once, after both the `"cic"` (dense
+  integrand, the default) and `"dsps"` (histogram kernel; every GP-field
+  build, or an explicit `age_kernel='dsps'` choice) age-weight paths
+  converge, in both `StellarSEDComponent.apply` and
+  `.compute_joint_weights`, rather than duplicated per branch: it had
+  initially landed inside the `"cic"` branches only, so the `"dsps"` kernel
+  (and therefore every stochastic-field SFH) kept leaking mass outside
+  `[0, age(z)]` (measured: dpl at z=2.5, age_gyr=2×age(z), formed/requested
+  1.000000 on `"cic"` vs 0.429997 on `"dsps"`, before the shared call). A
+  composite (list) `sfh_model` is explicitly NOT covered by this
+  correction: `["dpl", "const"]` at z=2.5 with the dpl member's age_gyr at
+  2×age(z) forms 0.7846438391594264 of the requested total, pinned as a
+  known, tracked gap in
+  `tests/physics/conservation/test_sfh_support_bounded_to_age_of_universe.py::test_composite_sfh_mass_is_not_yet_conserved`
+  rather than fixed here.
+
+  `_narrow_free_priors_to_z` caps a z-capped onset parameter's ceiling
+  against `age_at_z(z_floor)`, the LOWEST redshift a free `redshift` prior
+  admits — the only end common to every build. It does not also bind that
+  range's upper (younger-universe) end: a wide free `redshift` prior can
+  still admit a draw near its upper end whose onset value, though inside
+  the z_floor-capped ceiling, places star formation before the Big Bang at
+  that draw (`_mass_conserving_total` still conserves the formed mass
+  there, so nothing raises or, under `jax.jit`, warns). `SEDModel.build`
+  now emits one `FreeRedshiftOnsetCeilingWarning` at build time when this
+  is possible, naming the affected parameter(s) and both ages; the
+  convention is documented on `ParamDef.z_capped_onset` and in
+  `docs/model_reference/sfh.md`. No parameter-dependent/joint prior-bound
+  mechanism exists in tengri to *prevent* the draw itself (only a static,
+  once-per-build cap and, separately, `Parameters._validate_orderings`'s
+  build-time rejection of overlapping pairs); building one is future work
+  tracked alongside #2436's `neb_fesc + neb_fdust <= 1` constraint.
+
+  The nonparametric age-bin ladder (`continuity`, `dirichlet`,
+  `bursty_continuity`, `prospector_beta`) is unchanged by this release and
+  still defaults to fixed 0–13.7 Gyr edges regardless of redshift: 2 of 7
+  bins lie entirely beyond `age_at_z(2.5) = 2.62` Gyr and 3 of 7 beyond
+  `age_at_z(6) = 0.93` Gyr (0 of 7 at z=0.5). Mass is still conserved to the
+  request — an unreachable bin's nominal share is redistributed across the
+  bins that remain within cosmic time — but the recovered SFH *shape* is
+  biased toward the ages the ladder does offer a bin for. Pass
+  `sfh={'bin_edges_gyr': tengri.make_agebins_from_zred(zred=...)}` for a
+  redshift-appropriate ladder; this is not done automatically. Tracked via
+  `xfail(strict=True)` in
+  `tests/components/sfh/test_nonparametric_bin_ladder_not_scaled_to_age_of_universe.py`.
 - Composable AGN torus no longer collapses at the 1 mm node (#1512): the
   composable disc+skirtor path with cigale_joint normalization computes an
   inclination-attenuation ratio `disk(i)/disk(0)` by resampling the SKIRTOR

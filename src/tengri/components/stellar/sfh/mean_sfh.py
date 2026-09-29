@@ -590,7 +590,13 @@ lnorm = lognormal
 
 
 def double_powerlaw(
-    t_lookback: jnp.ndarray, alpha: float, beta: float, tau: float, norm: float
+    t_lookback: jnp.ndarray,
+    alpha: float,
+    beta: float,
+    tau: float,
+    norm: float,
+    *,
+    age: float,
 ) -> jnp.ndarray:
     """Double power law star formation history (Carnall+2018, BAGPIPES).
 
@@ -602,16 +608,23 @@ def double_powerlaw(
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     alpha : float
-        Falling slope exponent [dimensionless]. Controls the decline from peak
-        to present. Larger alpha = steeper decline. Typical range: 0.5-4.
+        Falling (late-time) slope exponent [dimensionless].
+        Controls the decline from peak to present. Larger alpha = steeper decline.
+        Typical range: 0.5-4.
     beta : float
-        Rising slope exponent [dimensionless]. Controls the rise from early times
-        to peak. Larger beta = steeper rise. Typical range: 0.3-3.
+        Rising (early-time) slope exponent [dimensionless].
+        Controls the rise from formation to peak. Larger beta = steeper rise.
+        Typical range: 0.3-3.
     tau : float
-        Turnover timescale [yr]. Approximately when SFR peaks (in cosmic time).
+        Turnover timescale [yr]. Approximately when SFR peaks in cosmic time since
+        formation.
     norm : float
         Normalization factor [Msun/yr]. Note: this controls overall amplitude,
         not stellar mass. :math:`M_\\star = \\int \\mathrm{SFR}(t) \\, dt` is derived.
+    age : float
+        Cosmic time available for star formation [yr]. Set to the age of the
+        universe at the source redshift. SFR is zero for ``t_lookback > age``
+        (before formation).
 
     Returns
     -------
@@ -622,25 +635,28 @@ def double_powerlaw(
     -----
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-    **Gradient-safe**: yes, differentiable everywhere for positive tau.
+    **Gradient-safe**: yes, differentiable everywhere for positive tau and age.
 
-    The double power law SFH is:
+    The double power law SFH is evaluated in cosmic time since formation:
 
     .. math::
 
-        \\mathrm{SFR}(t_{\\rm cosmic}) = \\frac{n}{(t_{\\rm cosmic}/\\tau)^\\alpha + (t_{\\rm cosmic}/\\tau)^{-\\beta}}  # noqa: E501
+        \\mathrm{SFR}(T) = \\frac{n}{(T/\\tau)^\\alpha + (T/\\tau)^{-\\beta}}
 
-    where :math:`t_{\\rm cosmic} = t_{\\mathrm{H}} - t_{\\rm lookback}` is cosmic time
-    since the Big Bang, :math:`t_{\\mathrm{H}}` is the age of the universe,
-    :math:`\\tau` is the turnover timescale, and :math:`\\alpha`, :math:`\\beta`
-    are the falling and rising slopes [dimensionless].
+    where :math:`T = \\mathrm{age} - t_{\\rm lookback}` is cosmic time since
+    formation, :math:`\\tau` is the turnover timescale, and :math:`\\alpha`,
+    :math:`\\beta` are the falling and rising slopes [dimensionless].
+    The SFR is exactly zero for :math:`T \\le 0` (before formation, i.e.
+    :math:`t_{\\rm lookback} \\ge \\mathrm{age}`).
 
-    In **cosmic time**: :math:`\\alpha` controls the declining phase (after peak),
+    In **cosmic time T** (age since formation):
+    :math:`\\alpha` controls the declining phase (after peak at :math:`T = \\tau`),
     :math:`\\beta` controls the rising phase (before peak).
 
-    In **lookback time** (as plotted): :math:`\\alpha` controls the RIGHT side
-    (early universe, large lookback), :math:`\\beta` controls the LEFT side
-    (near present, small lookback).
+    In **lookback time** (as plotted, left-to-right with increasing age):
+    The peak is at lookback :math:`t_{\\rm lb} = \\mathrm{age} - \\tau`.
+    Left side (small lookback, recent): declining phase (controlled by alpha).
+    Right side (large lookback, ancient): rising phase (controlled by beta).
 
     References
     ----------
@@ -657,12 +673,22 @@ def double_powerlaw(
     >>> import jax.numpy as jnp
     >>> from tengri import double_powerlaw
     >>> t = jnp.linspace(1e6, 13.7e9, 100)
-    >>> sfr = double_powerlaw(t, alpha=1.5, beta=2.0, tau=3e9, norm=10.0)
+    >>> age = 13.7e9
+    >>> sfr = double_powerlaw(t, alpha=1.5, beta=2.0, tau=3e9, norm=10.0, age=age)
     >>> sfr.shape
     (100,)
     """
-    x = t_lookback / tau
-    return norm / (x**alpha + x ** (-beta))
+    # Cosmic time since formation; SFR is zero before formation (T <= 0).
+    # Use a finite positive dummy (tau) for the masked T <= 0 region rather than
+    # jnp.inf: inf**alpha and its derivative are NaN/inf, and the NaN leaks through
+    # the jnp.where VJP, poisoning the gradient w.r.t. alpha whenever any grid point
+    # has lookback >= age. The double-where keeps both branches finite so the mask
+    # cleanly zeroes the dead region in forward and backward passes.
+    T = age - t_lookback
+    T_safe = jnp.where(T > 0.0, T, tau)
+    x = T_safe / tau
+    shape = jnp.where(T > 0.0, 1.0 / (x**alpha + x ** (-beta)), 0.0)
+    return norm * shape
 
 
 def dpl(
@@ -1423,17 +1449,27 @@ def triweight_burst(
 # ── Historical SFH parameterizations ────────────────────────────
 
 
-def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray:
-    """Delayed-tau SFH: SFR(t) = norm * t * exp(-t/tau). Peaks at t=tau.
+def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float, *, age: float) -> jnp.ndarray:
+    """Delayed-tau SFH: SFR(T) = norm * T * exp(-T/tau). Peaks at T=tau.
+
+    A rising-exponential SFH that reaches maximum SFR at cosmic time T = tau
+    since galaxy formation, then declines. Used as the bare shape in
+    :func:`sfhdelayed` for the CIGALE/Bagpipes ``delayed`` model (#406).
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     tau : float
-        Timescale [yr].
+        Timescale [yr]. Cosmic-time location of the SFR peak relative to
+        galaxy formation.
     norm : float
-        Normalization factor [Msun/yr].
+        Normalization factor [Msun/yr]. Controls overall amplitude, not
+        integrated mass. Use :func:`sfhdelayed` for mass-conserving version.
+    age : float
+        Cosmic time available for star formation [yr]. Set to the age of the
+        universe at the source redshift. SFR is zero for ``t_lookback > age``
+        (before formation).
 
     Returns
     -------
@@ -1444,16 +1480,40 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
     -----
     **JIT-compatible**: yes, uses ``jnp`` primitives.
 
+    **Gradient-safe**: yes, differentiable everywhere for positive tau and age.
+
+    The delayed-tau SFH is evaluated in cosmic time since formation:
+
+    .. math::
+
+        \\mathrm{SFR}(T) = n \\cdot T \\cdot \\exp(-T / \\tau)
+
+    where :math:`T = \\mathrm{age} - t_{\\rm lookback}` is cosmic time since
+    galaxy formation, :math:`\\tau` is the timescale, and the SFR is exactly
+    zero for :math:`T \\le 0` (before formation, i.e.
+    :math:`t_{\\rm lookback} \\ge \\mathrm{age}`).
+
+    See :func:`sfhdelayed` for the mass-conserving registry-wired version
+    (Resolves the time-reversal of #2524).
+
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri import delayed_tau
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = delayed_tau(t, tau=2e9, norm=10.0)
+    >>> age = 13.7e9
+    >>> sfr = delayed_tau(t, tau=2e9, norm=10.0, age=age)
     >>> sfr.shape
     (64,)
     """
-    return norm * t_lookback * jnp.exp(-t_lookback / tau)
+    # Cosmic time since formation; SFR is zero before formation (T <= 0).
+    # Use double-where pattern for gradient safety: compute on a safe argument,
+    # then select between the result and zero based on the condition T > 0.
+    T = age - t_lookback
+    T_safe = jnp.where(T > 0.0, T, tau)  # Safe (positive) value for the exponential
+    raw = T_safe * jnp.exp(-T_safe / tau)
+    shape = jnp.where(T > 0.0, raw, 0.0)
+    return norm * shape
 
 
 def psb_wild2020(
