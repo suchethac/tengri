@@ -2,10 +2,137 @@
 
 ### Added
 
+- The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
+
+- `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
+
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 
 ### Fixed
 
+- `profile_mass` now reaches six backends it had been silently skipping:
+  `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
+  `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
+  `resolve_profile_mass_for_method` disabled profiling before they ran. The
+  clearest case is `nss`: `build_profiled_loglikelihood_fn` was written for
+  nested sampling and says so in its docstring, but the omission made it
+  unreachable, so every NSS evidence run scored its live points at the mass
+  placeholder instead of the marginal likelihood — exactly what that docstring
+  warns about. Each of the six was audited to its call site into the Fitter's
+  loss; the set goes 16 to 22 of 29 registered backends, the remaining 7 being
+  the NIFTy and native-VI backends that build their objective from the model
+  and spec directly. `tests/inference/test_profile_mass_backend_coverage.py`
+  now pins a *partition* (registry == allowlist | excluded-with-reason) rather
+  than a membership list, so a newly registered backend fails the test until
+  someone classifies it; a membership list would have stayed green through all
+  six omissions.
+- The `profile_mass` linearity guard reports which of **three** kinds it
+  measured — `proportional`, `affine` or `nonlinear` — where it previously
+  answered only proportional-or-not. The distinction is load-bearing:
+  `chi2(M)` stays exactly quadratic for an affine prediction
+  `M f(theta) + g(theta)`, so such a model is marginalizable once the offset is
+  known, while a nonlinear one never is. The extra mass evaluation that
+  separates the two is taken only on the refusal branch, so the proportional
+  fast path (every SFH that renormalizes to the mass, hence eight of the nine
+  shipped recipes) is unchanged.
+- The linearity refusal no longer misdiagnoses. It asserted that an order-1
+  deviation "indicates a mass-independent additive component such as an AGN
+  continuum" on every model; measured on a `dense_basis` photometry fit with no
+  AGN block, the deviation is order 1 and the cause is a mass-dependent SFH
+  *shape* (`_build_quantile_points` builds its GP knots from
+  `sfr_inst*age/M`, making `log_total_mass` a shape parameter rather than an
+  amplitude). #2374 improved the wording without covering that case. The
+  message now names the measured kind and names an additive component only
+  when the model carries one. An audit of every registered SFH found
+  `dense_basis` is the only one that leaks the mass into its shape: the other
+  20 measurable ones sit at 9e-15 to 1.3e-14, the roundoff floor, via
+  `mean_sfh._renormalize_to_mass`. The linearity probe now evaluates at the
+  fit's own fixed values (including a `params_override` redshift) and lets
+  model-evaluation errors propagate instead of logging them as invalid thetas.
+  The same fix now covers the whole guard chain rather than just that one
+  evaluation loop: the affine-vs-nonlinear retest's own third-mass evaluation
+  (`_classify_nonproportional`) and the `profile_mass="auto"` guard-check
+  dispatch (`configure_profile_mass`) no longer fold a model-evaluation error
+  into a silent `"nonlinear"` classification or `"auto-disabled"` reason
+  either, and the probe's fixed-values resolution takes the raw
+  `params_override` argument directly, so a call reached during
+  `Fitter.__init__` — before `self._fixed_values`/`self._params_override`
+  exist — no longer silently falls back to the spec's own declared value.
+- Student-t noise Hamiltonian now includes the dof-dependent normalisation, so a free `noise_dof` is sampled under a correctly normalised density (#2525).
+- **Breaking**: `delayed_bq`, `periodic` and `buat08` now evaluate CIGALE's formulas
+  in time since formation (T = age − t_lookback), as `sfhdelayed`/`sfh2exp` and #549's
+  `dpl`/`lognormal` do; previously they read CIGALE's forward time as lookback, giving
+  the time-reversed history (a "recent" delayed_bq burst formed at the oldest end with
+  SFR(now) = 0; periodic bursts rose slowly and cut off at their onset; buat08 SFR → 0
+  today). `periodic` no longer stops after 100 bursts (#2515). `buat08` gains
+  `sfh_buat08_age_gyr` (default: age of the universe). Every fit using these three SFHs
+  changes meaning; re-fit before comparing (#2514, #2515).
+
+- `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
+  already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
+  and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls
+  cannot bypass the rule the build path enforces. `dirichlet()` refuses unknown
+  `z_frac_*` keywords naming the accepted range instead of ignoring them
+  (#2479, #2503).
+
+- The eline fitted-mode test mocks now attach `Spectroscopy` through
+  `observation.spectroscopy` instead of the private `_spectroscopy_config` that #2455
+  stopped reading. The loss builder's channel-scale probe drew its reference
+  parameter point from `spec.sample()` (free-only per #2296) that lacked Fitter-registered
+  eline amplitudes, raising `KeyError` in fitted mode; it now samples the fitter's
+  working spec and merges the fixed values (#2502).
+
+- Lazy DSPS imports (deferred to function-local scope via #2276) now hold the x64 preference where the caller left it. DSPS modules run `jax.config.update("jax_enable_x64", True)` at import time, and lazy imports that execute after the user has set `JAX_ENABLE_X64=0` would silently flip x64 back on mid-run, inflating float32 dtypes to float64. Every lazy DSPS import now runs under `hold_x64_preference()`, a shared context manager that snapshots the current `jax.config.jax_enable_x64` flag at entry and restores it on exit, preserving the caller's preference regardless of whether it was set via environment variable or `jax.config.update()` call. All 10 function-local DSPS imports across `utils/cosmology.py`, `components/stellar/component.py`, `components/stellar/sps/dsps_wrapper.py`, and `observation/filters/custom.py` are wrapped (#2504).
+- `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
+  (previously silently skipped there, so intrinsic galaxy velocity dispersion had
+  zero effect and zero gradient on the DESI spectroscopy path). `observation/banded.py`
+  gains `row_sigma_kms` and `deconvolve_library_lsf` to remove the SSP library's LSF
+  from a banded resolution matrix before it is applied, so the library and DESI
+  resolution contributions are not double-counted (#2506).
+- `FiberSpectroscopyObservation.predict` is now jit/grad-safe in redshift: the
+  fiber centre stays a traced array instead of being concretized via `float()`,
+  which previously raised `ConcretizationTypeError` whenever `predict` was
+  wrapped in `jax.jit` or differentiated with respect to redshift.
+- A `Fixed` redshift now reaches the emission-line paths the same way it reaches
+  photometry. Under `WavePrecomp(catalog_z_range=...)` the build keeps redshift out
+  of the compiled kernel (so `model.z_fixed` is `None` by design), and
+  `predict_line_fluxes`, `predict_line_ratios`, `measure_line_fluxes`, and the
+  `FeaturePrecomp` catalog snap resolved z only from that baked value, raising
+  `KeyError: Redshift not in params and not fixed in spec` at build time with
+  `FeaturePrecomp` and at likelihood setup with line-flux data. The loss also
+  stripped the evaluation's fixed values before calling the line methods, so a
+  runtime redshift (`params_override={"redshift": z}` or a catalog row's z)
+  reached photometry but not lines, which silently computed line fluxes at the
+  model's build-time redshift. One resolver, `SEDModel._evaluation_params`, now
+  merges the spec's Fixed values with the evaluation's own, and the line methods
+  take it through a new `fixed_values=` argument, so lines, dust, and photometry
+  read one redshift.
+
+- Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
+  metal-line blanketing term (eq. 15), 0.0017·(λ_obs/λ_α)^1.68 blueward of
+  Lyα(1+z); this adds up to ~1% attenuation in the Lyα–Lyβ forest at z = 2–4 (#2516).
+
+- `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
+  `wavelength` as a keyword argument. Previously, calling with all keyword arguments
+  raised `IndexError: tuple index out of range`. Both functions now resolve
+  `wavelength` from positional or keyword argument and raise `TypeError` if omitted.
+  The CIGALE-era cross-validation test now calls `skirtor_analytic()` with the
+  current parameter names (`agn_tau_skirtor`, `agn_p_skirtor`, etc.) instead of
+  retired CIGALE-style names (`t`, `pl`, `q`, `oa`, `R`, `Mcl`, `i`) (#2464).
+- The numeric-guard ledger now skips `jnp.clip` calls whose results are assigned to a
+  plain Name and used only as gather indices (element of `Subscript.slice`, inside an
+  expression within a subscript slice such as `table[i + 1]`, argument to
+  `jnp.take` / `jnp.take_along_axis`, or slice of `.at[...]` access). These index bounds
+  with literal floor 0 do not present a subnormal-risk floor on the value path; the ledger
+  improves by ratcheting down count on seven files (#2327).
+- A wide log-normal SFH was a staircase in `age`: its support boundary moves with
+  the age parameter and a hard mask switched each dense-grid node on at full weight,
+  so the trapezoid integral jumped at every node crossing (89 steps above four times
+  the median step over a 161-point age sweep on FSPS MIST C3K at width 2.14 dex) and
+  autodiff could not see the jumps, which NUTS read as divergences. The boundary cell
+  now carries a smoothstep partial-cell weight at the grid's own spacing; bit-identical
+  wherever the kernel was already small at onset; ported from the paper-1 pin branch
+  (f01975f46). Periodic and tsnorm remain measured staircases (#2476).
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to

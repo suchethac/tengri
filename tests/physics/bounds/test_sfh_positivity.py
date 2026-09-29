@@ -98,7 +98,7 @@ class TestStepFunctionRegression:
         age_mid1 = jnp.array([1.5e9])
         age_mid2 = jnp.array([2.5e9])
 
-        kwargs = {f"ratio_{i}": 0.3 * (i - 3) for i in range(7)}
+        kwargs = {f"ratio_{i}": 0.3 * (i - 3) for i in range(6)}
         sfr1 = continuity(age_mid1, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
         sfr2 = continuity(age_mid2, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
 
@@ -113,7 +113,7 @@ class TestStepFunctionRegression:
         age_mid1 = jnp.array([1.5e9])
         age_mid2 = jnp.array([2.5e9])
 
-        kwargs = {f"z_frac_{i}": 0.3 + 0.1 * i for i in range(7)}
+        kwargs = {f"z_frac_{i}": 0.3 + 0.1 * i for i in range(6)}
         sfr1 = dirichlet(age_mid1, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
         sfr2 = dirichlet(age_mid2, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
 
@@ -131,7 +131,7 @@ class TestStepFunctionRegression:
 
         # ratio_i = log(SFR_{i+1} / SFR_i). Setting ratio_2 = 1.0 makes
         # SFR in bin 3 = 10^1.0 × SFR in bin 2 — a clear step.
-        kwargs = {f"ratio_{i}": 1.0 if i == 2 else 0.0 for i in range(7)}
+        kwargs = {f"ratio_{i}": 1.0 if i == 2 else 0.0 for i in range(6)}
         sfr_before = continuity(age_before, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
         sfr_after = continuity(age_after, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
 
@@ -377,7 +377,7 @@ class TestRegistryBinEdges:
     def test_custom_edges_passed_through(self):
         from tengri.components.stellar.sfh.registry import resolve_sfh
 
-        edges = make_agebins_from_zred(2.0, n_bins=6)
+        edges = make_agebins_from_zred(2.0, n_bins=7)
         fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=edges)
         age_yr = jnp.linspace(1e6, 3.3e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
@@ -397,7 +397,7 @@ class TestRegistryBinEdges:
     def test_dirichlet_custom_edges(self):
         from tengri.components.stellar.sfh.registry import resolve_sfh
 
-        edges = make_agebins_from_zred(3.0, n_bins=6)
+        edges = make_agebins_from_zred(3.0, n_bins=7)
         fn, _, param_map, _ = resolve_sfh("dirichlet", bin_edges_gyr=edges)
         age_yr = jnp.linspace(1e6, 2.0e9, 100)
         # param_map: {public_name: (internal_name, scale, offset)}

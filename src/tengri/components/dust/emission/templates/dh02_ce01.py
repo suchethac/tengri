@@ -117,7 +117,10 @@ class DH02CE01IRSEDComponent(EmissionComponent):
     #: (published by the attenuator before the overflow-prone linear cast),
     #: used for both the grid-axis lookup and the normalization -- mirrors
     #: ``BosaIRSEDComponent``, which declares the same pair for the same reason.
-    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s", "log_L_ir": "dex"}
+    optional_inputs: ClassVar[dict[str, str]] = {
+        "L_ir": "erg/s",
+        "log_L_ir": "dex",
+    }
 
     def load(self, wave: jnp.ndarray | None = None):
         """Load the grid so it can be threaded as an argument, not baked.
@@ -187,6 +190,20 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         **JIT-compatible**: yes.
         """
         del p
+        if log_L_ir is None:
+            # ``log_L_ir`` and ``L_ir`` are the same physical quantity, the
+            # infrared budget in erg/s, and the template family is indexed by
+            # it. They are separate arguments because ``dust_log_L_ir`` can be
+            # a free parameter carrying a budget of its own; when nobody
+            # supplies one, the energy-balance ``L_ir`` IS the budget.
+            #
+            # Deriving it rather than demanding it: a caller holding only
+            # ``L_ir`` used to reach ``jnp.asarray(None)`` and raise
+            # ``ValueError: None is not a valid value for jnp.array``. The
+            # build-time band-response probe is exactly such a caller, so the
+            # precompute crashed, was swallowed by the try/except around it,
+            # and reported itself as an unexplained decline (#2497).
+            log_L_ir = jnp.log10(jnp.asarray(L_ir))
         if templates is not None:
             # Closure built over the THREADED arrays: capturing a tracer is
             # fine, capturing a concrete array is what bakes (#1649).

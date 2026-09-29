@@ -799,7 +799,9 @@ def save_fit_outputs(
         model_photometry_p84 = np.percentile(ppd_stack, 84, axis=0)
     else:
         model_photometry_median = np.asarray(
-            sed_model.predict_photometry({k: float(np.median(v)) for k, v in samples_thin.items()})
+            sed_model.predict_photometry(
+                {k: float(np.median(v)) for k, v in samples_thin.items()}
+            )
         )
         model_photometry_p16 = None
         model_photometry_p84 = None

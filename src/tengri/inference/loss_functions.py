@@ -188,8 +188,11 @@ def _build_prediction(
     if _spec is not None and hasattr(_spec, "free_params"):
         _free_names = set(_spec.free_params)
         free_params = {k: v for k, v in params.items() if k in _free_names}
+        # Evaluation's fixed values (e.g., runtime redshift from data_args)
+        eval_fixed = {k: v for k, v in params.items() if k not in _free_names}
     else:
         free_params = params
+        eval_fixed = None
 
     # Single threaded forward for phot/spec/joint: one orchestrator call
     # returns an Observables carrying every configured channel. ``_obs`` is
@@ -282,17 +285,32 @@ def _build_prediction(
             # model spectrum the way a pipeline does (measure_line_fluxes). With
             # FeaturePrecomp the measurement runs against the SSP window LUT.
             prediction["line_fluxes"] = model.measure_line_fluxes(
-                free_params, measured_line_defs, approx=fast_lines, state=feature_state
+                free_params,
+                measured_line_defs,
+                approx=fast_lines,
+                state=feature_state,
+                fixed_values=eval_fixed,
             )
         else:
             prediction["line_fluxes"] = model.predict_line_fluxes(
-                free_params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
+                free_params,
+                target_wavelengths=data_args["line_flux_waves"],
+                state=feature_state,
+                fixed_values=eval_fixed,
             )
     if has_line_ratios:
         prediction["line_ratios"] = model.predict_line_ratios(
-            free_params, model.observation.line_ratios, state=feature_state
+            free_params,
+            model.observation.line_ratios,
+            state=feature_state,
+            fixed_values=eval_fixed,
         )
     if has_indices:
+        # predict_spectral_indices takes no fixed_values: indices are
+        # rest-frame quantities and this call always supplies feature_state
+        # (needs_state is unconditionally True whenever has_indices), so the
+        # exact branch reads the already-resolved state.sed_intrinsic; see
+        # SEDModel.predict_spectral_indices's docstring for the full reason.
         prediction["indices"] = model.predict_spectral_indices(
             free_params, index_defs, state=feature_state
         )
@@ -395,21 +413,16 @@ def _build_data_neg_log_likelihood_fn(fitter):
             _check_channel_scales,
         )
 
-        # Sample from ``model.spec`` when it exists, not the (possibly
-        # ``profile_mass``-rewritten) ``spec`` above: when profile_mass has
-        # engaged, ``spec`` is the working spec with the mass parameter
-        # turned ``Fixed`` for the analytic marginalization, so
-        # ``spec.sample()``'s now free-only output (#2296) omits it -- but
-        # the prediction below runs through ``model.predict_photometry``/etc.,
-        # which validate against the ORIGINAL ``model.spec`` (mass still free
-        # there) and raise ``MissingParameterError``. ``_build_prediction``
-        # re-filters to ``model.spec.free_params`` regardless, so drawing the
-        # reference from ``model.spec`` (a superset whenever the two specs
-        # differ) is always safe and never under-supplies either one.
-        # ``getattr`` falls back to ``spec`` (``fitter.spec``) for a bare
-        # test double that mocks the Fitter interface without a ``.spec`` on
-        # its ``model`` (e.g. ``tests/contract/test_unified_loss.py``).
-        _ref_params = dict(getattr(model, "spec", spec).sample(_jax.random.PRNGKey(0)))
+        # The fitter's working spec carries every registered latent: ``merge_observation_params``
+        # merges eline amplitudes and noise calibration into the spec that
+        # ``model.spec`` lacks. ``spec.sample()`` returns free parameters only (#2296),
+        # so fixed values are merged in from ``fitter._fixed_values`` (always present:
+        # assigned at Fitter.__init__ and reassigned at mass_profile.py:705 when
+        # profile_mass engages). The reference point spans fitter's full parameter space
+        # (free + fixed) so the likelihood can read every name without KeyError.
+        # ``_build_prediction`` then filters to ``model.spec.free_params`` for validation.
+        _ref_params = dict(spec.sample(_jax.random.PRNGKey(0)))
+        _ref_params.update(fitter._fixed_values)
         _ref_prediction, _, _, _ = _build_prediction(
             model,
             _ref_params,

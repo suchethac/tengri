@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 """A free ``met_alpha_fe`` must move the model, and move it differentiably.
 
 ``met_alpha_fe`` is opt-in and has two implementations: bilinear interpolation

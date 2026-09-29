@@ -1310,11 +1310,18 @@ _register(
                 "must have 40 <= lo and hi <= 360",
                 Uniform(80.0, 360.0, default=200.0),
             ),
+            "sfh_buat08_age_gyr": ParamDef(
+                "Galaxy age / lookback to formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+            ),
         },
         settings={},
         internal_param_map={
             "sfh_buat08_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_buat08_velocity_km_s": ("velocity_km_s", 1.0, 0.0),
+            "sfh_buat08_age_gyr": ("age_yr", 1e9, 0.0),
         },
         composition_type="additive",
     ),
@@ -2256,6 +2263,29 @@ _NONPARAM_NAMES = frozenset(
 )
 
 
+def _refuse_ladder_edge_count_mismatch(sfh_type: str, arr, n_declared: int, kind: str) -> None:
+    """Raise if n_declared parameters do not match the bin-edge count.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of the SFH.
+    arr : ndarray
+        Bin edges array.
+    n_declared : int
+        Number of declared ratio or z_frac parameters.
+    kind : str
+        Parameter class name: "ratio" or "z_frac".
+    """
+    n_needed = arr.shape[0] - 2
+    if n_declared and n_needed != n_declared:
+        raise ValueError(
+            f"sfh type={sfh_type!r} declares {n_declared} {kind} parameters, which needs "
+            f"{n_declared + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
+            f"{n_declared + 2} edges (for example tengri.make_agebins_from_zred(zred=...))."
+        )
+
+
 def validate_bin_edges_gyr(sfh_type, edges) -> None:
     """Reject a ``bin_edges_gyr`` array that the named SFH cannot use.
 
@@ -2275,21 +2305,22 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
 
     Notes
     -----
-    Two families take a ratio-count rule, and they take the same arithmetic for
-    different reasons. The models whose shape function *is* :func:`continuity`
-    (``continuity``, ``bursty_continuity``, ``prospector_beta``) declare
-    ``n_bins - 1`` ratios, so ``n`` edges need exactly ``n - 2`` of them. The
-    post-starburst models on :func:`psb_continuity_flex` (``psb_suess2022``,
-    ``psb_flex``) read only the *length* and the last entry of the array, and
-    their ``ratio_old_*`` count the steps of the fixed section, which again
-    comes to ``n - 2``. ``continuity_flex`` spends some of its parameters on bin
-    *widths* and ``dirichlet`` declares no ratios at all, so the rule is not
-    applied to them.
+    Three families take a bin-count rule, each with its own parameter class.
+    The models whose shape function *is* :func:`continuity` (``continuity``,
+    ``bursty_continuity``, ``prospector_beta``) declare ``n_bins - 1`` ratio
+    parameters, so ``n`` edges need exactly ``n - 2`` of them. The post-starburst
+    models on :func:`psb_continuity_flex` (``psb_suess2022``, ``psb_flex``) read
+    only the *length* and the last entry of the array, and their ``ratio_old_*``
+    count the steps of the fixed section, which again comes to ``n - 2``. The
+    :func:`dirichlet` model declares ``n_bins - 1`` stick-breaking variables
+    ``z_frac_*``, one fewer than bins, so ``n`` edges again need ``n - 2`` of them.
+    ``continuity_flex`` spends some of its parameters on bin *widths*, so the
+    rule is not applied to it.
 
-    A mismatched count is not cosmetic: the surplus ratios are swallowed by the
-    SFH's ``**ratio_kwargs``, sample a prior that reaches no bin, and change no
-    output. That is the silent-config failure of #1975 one step later, so it is
-    refused rather than warned about.
+    A mismatched count is not cosmetic: the surplus parameters are swallowed by
+    the SFH's ``**ratio_kwargs`` / ``**z_frac_kwargs``, sample a prior that
+    reaches no bin, and change no output. That is the silent-config failure of
+    #1975 one step later, so it is refused rather than warned about.
     """
     import numpy as _np
 
@@ -2333,16 +2364,22 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
             )
         return
 
-    if spec.fn is not continuity:
+    if spec.fn is continuity:
+        n_declared = sum(1 for name in spec.params if "ratio" in name)
+        _refuse_ladder_edge_count_mismatch(sfh_type, arr, n_declared, "ratio")
         return
-    n_declared = sum(1 for name in spec.params if "ratio" in name)
-    n_needed = arr.shape[0] - 2  # n_bins - 1 ratios, with n_bins = len(edges) - 1
-    if n_declared and n_needed != n_declared:
-        raise ValueError(
-            f"sfh type={sfh_type!r} declares {n_declared} ratio parameters, which needs "
-            f"{n_declared + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
-            f"{n_declared + 2} edges (for example tengri.make_agebins_from_zred(zred=...))."
+
+    if spec.fn is dirichlet:
+        # Count z_frac_* from internal_param_map; the public names are
+        # sfh_dir_z_*, but we count only internal names to match the actual
+        # number of stick-breaking variables.
+        n_declared = sum(
+            1
+            for _, (internal, _, _) in spec.internal_param_map.items()
+            if internal.startswith("z_frac_")
         )
+        _refuse_ladder_edge_count_mismatch(sfh_type, arr, n_declared, "z_frac")
+        return
 
 
 #: SFH families whose flexible zone spans ``[tlast_gyr, tflex_gyr]`` and which
@@ -2672,7 +2709,9 @@ def resolve_sfh(
     KeyError
         If a model name is not in the registry.
     ValueError
-        If composition constraints are violated (e.g., >1 burst, no smooth component).
+        If composition constraints are violated (e.g., >1 burst, no smooth component),
+        or if ``bin_edges_gyr`` is provided for a nonparametric SFH and its bin count
+        does not match the declared parameter count (see ``validate_bin_edges_gyr``).
 
     Notes
     -----
@@ -2783,6 +2822,7 @@ def resolve_sfh(
         internal_names = {v[0] for v in pub_to_internal.values()}
         fn_i = s.fn
         if bin_edges_gyr is not None and s.name in _NONPARAM_NAMES:
+            validate_bin_edges_gyr(s.name, bin_edges_gyr)
             fn_i = functools.partial(fn_i, bin_edges_gyr=bin_edges_gyr)
         additive_info.append((fn_i, pub_to_internal, internal_names))
 

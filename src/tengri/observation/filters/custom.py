@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._x64_hold import hold_x64_preference
 from tengri.config.exceptions import warn_measured
 from tengri.observation.photometry import FilterCurve
 from tengri.registry import _RegistryTable
@@ -679,7 +680,8 @@ def load_filter_from_dsps_file(
     >>> fc = load_filter_from_dsps_file("/path/to/filter.h5", name="my_band")
     """
     try:
-        from dsps.data_loaders import load_transmission_curve as _load_dsps_curve
+        with hold_x64_preference():
+            from dsps.data_loaders import load_transmission_curve as _load_dsps_curve
     except ImportError as exc:
         raise ImportError(
             "dsps is required to load DSPS filter files. Install it with: pip install dsps"

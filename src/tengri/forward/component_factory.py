@@ -394,6 +394,7 @@ def build_components(
     dust_lyman_cutoff_aa: float = 0.0,
     dust_lyc_absorb_all: bool = False,
     dust_eb_include_lyc: bool = False,
+    dust_ir_diffuse_screen: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
     astrodust_f_cnm: float = 0.28,
@@ -597,6 +598,8 @@ def build_components(
                 law=dust_law_bc,
                 live_shape_params=frozenset(dust_live_shape_params or ()),
                 log_l_ir_requested=dust_log_l_ir_requested,
+                lyman_cutoff_aa=dust_lyman_cutoff_aa,
+                eb_include_lyc=dust_eb_include_lyc,
             )
         else:
             atten_type = "two_component"
@@ -664,11 +667,12 @@ def build_components(
                     f_cnm=astrodust_f_cnm,
                 )
 
-            components.append(
-                _resolve_registry_component(
-                    "dust_emission", dust_emission_model, config=emission_config, **emission_kwargs
-                )
+            emission_component = _resolve_registry_component(
+                "dust_emission", dust_emission_model, config=emission_config, **emission_kwargs
             )
+            # Set the opt-in diffuse-screen attenuation flag (#2533)
+            emission_component.diffuse_screen = dust_ir_diffuse_screen
+            components.append(emission_component)
 
     # 3. Nebular (optional)
     if nebular_backend is not None:

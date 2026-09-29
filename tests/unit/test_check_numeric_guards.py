@@ -250,6 +250,155 @@ class TestDriftNeutrality:
         assert counts_before == counts_after
 
 
+class TestIndexBoundSkipping:
+    """Test that jnp.clip used only as gather indices is not counted.
+
+    When a clip result is assigned to a Name and used only as an index
+    (Subscript.slice, jnp.take args, .at[...] slices), it should be skipped.
+    """
+
+    def test_clip_value_floor_counted(self):
+        """jnp.clip with value floor (used in arithmetic) is counted."""
+        source = """\
+import jax.numpy as jnp
+
+def example(v):
+    '''Value floor: multiply by clip result.'''
+    y = jnp.clip(v, 0.0, None)
+    return y * 2
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # Case 1: value floor. Must be counted.
+        assert len(visitor.violations) == 1
+        assert "jnp.clip with floor 0.0 < 1e-20" in visitor.violations[0][1]
+
+    def test_clip_index_bound_not_counted(self):
+        """jnp.clip with index bound (used only as subscript) is NOT counted."""
+        source = """\
+import jax.numpy as jnp
+
+def example(ax, table, m):
+    '''Index bound: clip used only as gather index.'''
+    i = jnp.clip(jnp.searchsorted(ax, m) - 1, 0, ax.shape[0] - 2)
+    return table[i]
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # Case 2: index bound. Should NOT be counted (currently fails).
+        assert len(visitor.violations) == 0, (
+            f"Index-bound clip should not be counted, but got {visitor.violations}"
+        )
+
+    def test_clip_index_bound_with_tuple_subscript_not_counted(self):
+        """jnp.clip index bound in Tuple within Subscript is not counted."""
+        source = """\
+import jax.numpy as jnp
+
+def example(ax, ay, table, m, n):
+    '''Index bound in tuple subscript.'''
+    i = jnp.clip(jnp.searchsorted(ax, m) - 1, 0, ax.shape[0] - 2)
+    j = jnp.clip(jnp.searchsorted(ay, n) - 1, 0, ay.shape[0] - 2)
+    return table[i, j]
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # Both clips are index bounds in tuple subscript. Should NOT be counted.
+        assert len(visitor.violations) == 0
+
+    def test_clip_with_jnp_take_not_counted(self):
+        """jnp.clip index bound passed to jnp.take is not counted."""
+        source = """\
+import jax.numpy as jnp
+
+def example(ax, table, m):
+    '''Index bound: clip passed to jnp.take.'''
+    i = jnp.clip(jnp.searchsorted(ax, m) - 1, 0, ax.shape[0] - 2)
+    return jnp.take(table, i)
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # Clip is an argument to jnp.take (index). Should NOT be counted.
+        assert len(visitor.violations) == 0
+
+    def test_clip_with_at_access_not_counted(self):
+        """jnp.clip index bound in .at[...] access is not counted."""
+        source = """\
+import jax.numpy as jnp
+
+def example(ax, table, m):
+    '''Index bound: clip in .at[i].get().'''
+    i = jnp.clip(jnp.searchsorted(ax, m) - 1, 0, ax.shape[0] - 2)
+    return table.at[i].get()
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # Clip is used as an index in .at[i]. Should NOT be counted.
+        assert len(visitor.violations) == 0
+
+    def test_clip_used_both_as_index_and_arithmetic_counted(self):
+        """jnp.clip used both as index AND arithmetically is counted (conservative)."""
+        source = """\
+import jax.numpy as jnp
+
+def example(ax, table, m):
+    '''Mixed: clip used as index AND in arithmetic.'''
+    i = jnp.clip(jnp.searchsorted(ax, m) - 1, 0, ax.shape[0] - 2)
+    result = table[i] + i  # i also used in arithmetic
+    return result
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # Clip used in arithmetic (+ i), so it IS counted (conservative).
+        assert len(visitor.violations) == 1
+
+    def test_clip_index_inside_arithmetic_within_subscript_not_counted(self):
+        """jnp.clip used in arithmetic inside subscript (e.g., i+1) is NOT counted.
+
+        The new definition: a Name is an "index use" if it has an ancestor that is
+        the slice of a Subscript, EVEN if that Name is inside an arithmetic
+        expression. Example: ax[i + 1] — the i is inside a BinOp, but that BinOp
+        is the subscript, so it counts as index use.
+        """
+        source = """\
+import jax.numpy as jnp
+
+def example(ax, m, grid, j):
+    '''Index use in arithmetic: clip result used only inside subscript slices.'''
+    i = jnp.clip(jnp.searchsorted(ax, m) - 1, 0, ax.shape[0] - 2)
+    return ax[i + 1] - ax[i] + grid[i + 1, j]
+"""
+        import ast
+
+        tree = ast.parse(source)
+        visitor = mod.NumericGuardVisitor(source, "test.py")
+        visitor.visit(tree)
+        # The clip result i is used only inside subscripts, even when part of
+        # arithmetic like (i + 1). Should NOT be counted.
+        assert len(visitor.violations) == 0, (
+            f"Clip used only in index expressions should not be counted, "
+            f"but got {visitor.violations}"
+        )
+
+
 class TestMainFunction:
     """Test the main() entrypoint with argv convention."""
 

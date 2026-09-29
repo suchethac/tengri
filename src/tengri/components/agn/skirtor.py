@@ -1774,11 +1774,24 @@ def skirtor_sed(*args, **kwargs):
     # is a SKIRTORGrid pytree of arrays (threads as a runtime arg, small
     # compile); a legacy closure is still accepted (#1198).
     _template = kwargs.pop("_template", None)
+
+    # Resolve wavelength from positional or keyword argument
+    if args:
+        wavelength = args[0]
+        rest_args = args[1:]
+    else:
+        try:
+            wavelength = kwargs.pop("wavelength")
+        except KeyError as e:
+            msg = "skirtor_sed() missing required argument 'wavelength'"
+            raise TypeError(msg) from e
+        rest_args = ()
+
     if isinstance(_template, SKIRTORGrid):
-        return _skirtor_grid_sed(args[0], _template, *args[1:], **kwargs)
+        return _skirtor_grid_sed(wavelength, _template, *rest_args, **kwargs)
     if _template is not None:
-        return _template(*args, **kwargs)
-    return _skirtor_grid_sed(args[0], _load_skirtor_default_grid(), *args[1:], **kwargs)
+        return _template(wavelength, *rest_args, **kwargs)
+    return _skirtor_grid_sed(wavelength, _load_skirtor_default_grid(), *rest_args, **kwargs)
 
 
 def skirtor_components(*args, **kwargs) -> SKIRTORComponents:

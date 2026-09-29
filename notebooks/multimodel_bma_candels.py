@@ -18,7 +18,7 @@
 #
 # > ⚠️ **Experimental.** Uses experimental APIs that may change between releases.
 #
-# SED fits are conditioned on modeling choices — SFH family, stellar library, dust law — that photometry alone cannot constrain. A single fit reports the posterior for one choice; BMA combines all four configurations by weighting each by its marginal likelihood (evidence). Evidence penalizes complexity (Occam factor) and requires nested sampling.
+# SED fits are conditioned on modeling choices (SFH family, stellar library, dust law) that photometry alone cannot constrain. A single fit reports the posterior for one choice, and BMA combines all four configurations by weighting each by its marginal likelihood (evidence). Evidence penalizes model complexity (the Occam factor) and requires nested sampling.
 #
 # Four configurations varying SFH family, stellar isochrone, dust law, and ionization:
 #
@@ -29,7 +29,7 @@
 # | C | Trunc. skew-normal | Padova/MILES | Kriek & Conroy | $\log U=-2$ |
 # | D | Double power-law | BaSTI/MILES | power-law | $\log U=-2$ |
 #
-# All include nebular emission (wNE SSP grids). No dust IR emission — at $z\sim1$ the reddest band is below 5 µm rest-frame, and without far-IR photometry, dust emission does not constrain the fit.
+# All include nebular emission (wNE SSP grids). Dust IR emission is not included: at $z\sim1$ the reddest band is below 5 µm rest-frame, and without far-IR photometry, dust emission does not constrain the fit.
 #
 # $$w_k = \frac{Z_k}{\sum_j Z_j}, \qquad Z_k = \int \mathcal{L}(d\mid\theta, M_k)\,\pi(\theta\mid M_k)\,\mathrm{d}\theta$$
 
@@ -223,13 +223,11 @@ print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 # Each config: nested-dict grammar, `all_params=Fixed(DEFAULT)` except those with explicit `Uniform` priors; `approx=WavePrecomp()` for speed.
 
 # %%
-# Shared priors. Configs A and B use the two standard non-parametric SFHs —
+# Shared priors. Configs A and B use the two standard non-parametric SFHs:
 # the continuity prior (Leja+2019) and the Dirichlet prior (Leja+2017). We keep
-# their native priors on the bin variables (the continuity log-SFR ratios and the
-# Dirichlet fractions), freeing them with the ``FREE`` sentinel; only total mass
-# and metallicity get explicit uniform priors. (We previously used the Dense
-# Basis prior here but dropped it: its quantile parameters are strongly
-# degenerate, leaving the nested-sampling weights unstable from seed to seed.)
+# their native priors on the bin variables (continuity log-SFR ratios and Dirichlet
+# fractions), freeing them with the ``FREE`` sentinel; only total mass and
+# metallicity receive explicit uniform priors.
 CONT_SFH = {
     "log_total_mass": Uniform(8.0, 12.5),
     **{f"ratio_{i}": FREE for i in range(6)},  # Leja+2019 continuity log-SFR ratios
@@ -238,9 +236,9 @@ DIR_SFH = {
     "log_total_mass": Uniform(8.0, 12.5),
     **{f"z_{i}": FREE for i in range(6)},  # Leja+2017 Dirichlet bin variables
 }
-# NO `law` here, deliberately: this fragment is splatted into each model's dict
-# AFTER that dict names its own law, so a `law` in here would silently override
-# all four and collapse the comparison to one curve (#1989 did exactly that).
+# The ``law`` key is deliberately left out of this dict: it is merged into each model's
+# dict after that dict names its own law, so a ``law`` here would silently override
+# all four and collapse the comparison to one curve.
 DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
 # Display metadata (colors/labels match the published proposal figure)
@@ -353,13 +351,13 @@ def build_configs(z, obs):
 # We compare three Bayesian evidence estimators:
 #
 # - **NSS** (nested slice sampling): the calibrated reference; `preset="fast"` at n_live=100 (2-3× faster than n_live=250).
-# - **Laplace**: seconds-fast Gaussian approximation. On these 17-band fits its own validity
-#   diagnostics (Newton decrement, clipped eigenvalues) flag most configs as untrustworthy —
-#   the point of printing them is that the failure is *visible*, not silent.
-# - **HMC+IS**: HMC posterior + importance-sampled log Z. Tracks NSS closely on smooth parametric
-#   configs (D here); on the curved non-parametric SFH posteriors (A, B) a single Student-t
-#   proposal can miss mass and bias log Z low — the quoted error bar does not capture that, so
-#   watch `ess`/`max_weight_frac` and fall back to NSS where they warn.
+# - **Laplace**: seconds-fast Gaussian approximation. On these 17-band fits, its own validity
+#   diagnostics (Newton decrement, clipped eigenvalues) flag most configs as untrustworthy.
+#   The point of printing them is that failures are visible, not silent.
+# - **HMC+IS**: HMC posterior plus importance-sampled log Z. Tracks NSS closely on smooth
+#   parametric configs (D); on the curved non-parametric SFH posteriors (A, B), a single
+#   Student-t proposal can miss mass and bias log Z low, so the quoted error bar does not
+#   capture that bias. Watch `ess` and `max_weight_frac` and fall back to NSS where they warn.
 #
 # The BMA *weights* are far more robust than the absolute log Z values: when one configuration
 # leads by tens-to-hundreds of nats (typical here), every route recovers the same weights even
@@ -421,19 +419,18 @@ for gal_idx in SELECTED_IDX:
     build_s = time.time() - t_build
     print(f"  built 4 models in {build_s:.1f}s")
 
-    # Run the routes SEQUENTIALLY, each with its own thread pool over the 4
-    # configs. Mixing all 12 fits on one pool spikes peak memory (4 concurrent
-    # HMC/Laplace fits at ~3-5 GB each on top of 4 SSP grids OOMs the kernel);
-    # per-route pools keep the proven 4-way NSS pattern, with the HMC-based
-    # route throttled to 2 workers. XLA releases the GIL during compute.
+    # Run the routes sequentially, each with its own thread pool over the 4 configs.
+    # Running all 12 fits on one pool spikes peak memory (4 concurrent HMC/Laplace
+    # fits at ~3–5 GB each on top of 4 SSP grids causes out-of-memory); separate pools
+    # keep the proven 4-way NSS pattern and throttle the HMC-based route to 2 workers.
+    # XLA releases the GIL during compute.
     posteriors, fit_timings = {}, {}
     for route in ROUTES:
         posteriors[route] = {}
         fit_timings[route] = {}
 
-    # NSS at 2: its unrolled slice-sampling graphs are enormous during XLA
-    # *compilation* (docs/dev/archive/2026-04-22-nss-memory-analysis.md), and on
-    # a cold compile cache 4 concurrent NSS compiles OOM-kill the kernel.
+    # NSS uses 2 workers because unrolled slice-sampling graphs are large during XLA
+    # compilation; on a cold compile cache, 4 concurrent NSS compiles would exhaust memory.
     ROUTE_WORKERS = {"nss": 2, "laplace": 4, "hmc_is": 2}
     t_wall = time.time()
     for route, route_kwargs in ROUTES.items():
@@ -463,11 +460,10 @@ for gal_idx in SELECTED_IDX:
     fit_wall_s = time.time() - t_wall
     print(f"  12 fits (threaded) wall-clock: {fit_wall_s:.1f}s")
 
-    # Evict this galaxy's compiled backend state. Each galaxy builds fresh model
-    # objects (per-z), so nothing is shared with the next galaxy — but the
-    # resident XLA executables (3 backends x 4 configs) otherwise accumulate
-    # across galaxies until the kernel OOMs. Later prediction cells re-JIT from
-    # the persistent disk cache in seconds.
+    # Clear this galaxy's compiled backend state. Each galaxy builds fresh models
+    # (per-z), so nothing is shared with the next; resident XLA executables (3 backends x 4
+    # configs) would otherwise accumulate and exhaust memory. Later predictions re-JIT
+    # from the persistent disk cache in seconds.
     from tengri.inference._model_cache import clear_model_cache
 
     for cfg in CONFIG_ORDER:
@@ -567,8 +563,9 @@ for gal_id, g in galaxies.items():
         print(f"  ⚠ BMA weight error: {e}")
 
 # %% [markdown]
-# Evidence comparison figure: relative logZ per config per route, across all galaxies.
-# Routes agreeing within error bars ⇒ consistent BMA weights; fast routes reproduce NSS ranking at a fraction of the cost.
+# ## 7. Evidence routes compared
+#
+# Relative logZ per config per route across all galaxies. Routes agreeing within error bars indicate consistent BMA weights; fast routes reproduce NSS ranking at a fraction of the cost.
 
 # %%
 # Compute per-route wall-times (summed over all galaxies).
@@ -685,10 +682,9 @@ WAVE_SPEC = np.logspace(np.log10(3000), np.log10(1e5), 300)  # observed-frame Å
 rng = np.random.default_rng(0)
 
 
-# Effective wavelengths + half-widths [Å] of the catalog bands, computed from
-# the *actual* filter transmission curves (single source of truth — not
-# hardcoded): mean effective wavelength and rectangular-equivalent half-width
-# W/2 = (1/2) ∫T dλ / max(T), used for the photometry x error bars.
+# Effective wavelengths and half-widths [Å] of the catalog bands, computed from
+# the actual filter transmission curves (a single source of truth, not hardcoded): mean effective wavelength and
+# rectangular-equivalent half-width W/2 = (1/2) ∫T dλ / max(T), used for the photometry x error bars.
 def _filter_eff_and_halfwidth(names):
     phot = Photometry.from_names(names)
     eff, half = {}, {}
@@ -1116,11 +1112,11 @@ show_timings(13097)
 # %% [markdown]
 # ## 11. Error floor: systematic + template uncertainty
 #
-# Above, the evidence is decisive and BMA collapses to one model. Catalog errors are statistical only; they omit systematics (zero-point, aperture, filter curves) and template imperfection (SPS models accurate to ~few percent). Adding a fractional error floor in quadrature makes evidences comparable and spreads BMA weight:
+# Above, the evidence is decisive and BMA collapses to one model. Catalog errors are statistical only (omitting systematics from zero-point, aperture, and filter curves, and template imperfection in SPS models). Adding a fractional error floor in quadrature makes evidences comparable and spreads BMA weight:
 #
 # $$\sigma_\mathrm{eff}^2 = \sigma_\mathrm{cat}^2 + (f_\mathrm{floor}\,f_\nu)^2$$
 #
-# With a 10% floor, the BMA averages configurations, reflecting honest model uncertainty.
+# With a 10% floor, the BMA averages configurations to reflect honest model uncertainty.
 
 # %%
 ERROR_FLOOR = 0.10  # 10% systematic + template-error floor, added in quadrature
@@ -1166,13 +1162,13 @@ for gal_idx in [int(np.where(ids == g)[0][0]) for g in FLOOR_IDS]:
     print(f"CANDELS {gal_id} (floor {ERROR_FLOOR:.0%}):  BMA weights ({weight_route})  {wstr}")
 
 # %% [markdown]
-# ### CANDELS 18160 — 10% error floor (BMA averages four configurations)
+# ### CANDELS 18160: 10% error floor (BMA averages four configurations)
 
 # %%
 plot_galaxy(18160, source=galaxies_floor, tag="_floor")
 
 # %% [markdown]
-# ### CANDELS 17418 — 10% error floor (BMA averages three configurations)
+# ### CANDELS 17418: 10% error floor (BMA averages three configurations)
 
 # %%
 plot_galaxy(17418, source=galaxies_floor, tag="_floor")

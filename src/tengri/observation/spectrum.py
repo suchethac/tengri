@@ -571,10 +571,13 @@ def project_spectrum(
         spectroscopy where point sampling aliases; see #1166.
     resolution_matrix : BandedMatrix or None, optional
         Banded instrument resolution operator (DESI/PFS spectro-perfectionism;
-        Bolton & Schlegel 2010). When supplied, the flux-conserving-resampled
-        model is projected through ``R @ model`` at pixel resolution and this
-        **replaces** the Gaussian ``apply_lsf``, the matrix already encodes the
-        true LSF (the Redrock/FastSpecFit convention). Default ``None`` (Gaussian
+        Bolton & Schlegel 2010). When supplied, ``sigma_v_kms`` is applied to the
+        resampled model first (the matrix is the *instrument* LSF only and does
+        not carry the galaxy's own kinematic broadening; #2506), then the result
+        is projected through ``R @ model`` at pixel resolution. This **replaces**
+        the Gaussian ``apply_lsf``, the matrix already encodes the true instrument
+        LSF (the Redrock/FastSpecFit convention); ``sigma_lib_kms`` is **not**
+        subtracted on this path (see #2506 follow-up). Default ``None`` (Gaussian
         LSF from ``resolution``). See :func:`~tengri.observation.banded.banded_matvec`.
         #1163.
 
@@ -648,14 +651,21 @@ def project_spectrum(
     resampler = compute_spectrum_conserving if conserving else compute_spectrum
     flux = resampler(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
     if resolution_matrix is not None:
-        # The banded resolution matrix (DESI/PFS spectro-perfectionism; Bolton &
-        # Schlegel 2010) encodes the true instrument LSF at pixel resolution and
-        # is applied to the model *after* resampling onto the pixel grid, it
-        # REPLACES the Gaussian ``apply_lsf`` (Redrock/FastSpecFit convention).
-        # ``resolution_matrix`` is static structural config, so this branch
-        # resolves at trace time. #1163.
+        # The banded matrix (DESI/PFS spectro-perfectionism; Bolton & Schlegel 2010)
+        # is the *instrument* LSF and replaces the Gaussian apply_lsf (#1163). The
+        # galaxy's own kinematic broadening is not in it, so sigma_v is applied to
+        # the resampled model first (#2506: it was silently dropped here, leaving
+        # d spectrum / d sigma_v = 0). The piecewise path is used because DESI
+        # pixels are linear in lambda (#1742/#1791); at sigma_v = 0 the kernel is
+        # the identity, so existing fits are unchanged.
         from tengri.observation.banded import banded_matvec
 
+        sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=flux.dtype), 0.0)
+        flux = jnp.where(
+            sigma_v > 0.0,
+            _apply_lsf_variable_r(flux, wave_obs, jnp.broadcast_to(sigma_v, flux.shape), n_bins),
+            flux,
+        )
         flux = banded_matvec(resolution_matrix.offsets, resolution_matrix.data, flux)
     elif resolution is not None:
         flux = apply_lsf(

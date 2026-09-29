@@ -21,20 +21,7 @@ os.environ["TENGRI_HOST_DEVICES"] = "4"  # four CPU devices, one per chain
 # %% [markdown]
 # # Quickstart: fit a mock galaxy
 #
-# A star-forming galaxy with 12 broadband fluxes from GALEX, SDSS, 2MASS,
-# and WISE (UV through near-IR), fitted with Hamiltonian Monte Carlo on a
-# differentiable JAX forward model.
-#
-# Deliberately minimal — the point is to show how *fast* the JIT-compiled
-# forward model and gradients are. Double power-law SFH that rises for ten
-# billion years, peaks about 3 Gyr before the epoch of observation, and
-# plateaus — still forming stars today. Single-component Calzetti dust
-# attenuation, baked-in nebular emission, free stellar metallicity, redshift
-# fixed at 0.05. Four free SFH parameters (alpha, beta, tau, log_total_mass;
-# the formation epoch is pinned at the Big Bang) plus dust V-band optical
-# depth and metallicity: six free parameters total. See `04_building_models.py`
-# for the recipe grammar and `02_sed_anatomy.py` for a panchromatic model with
-# dust IR re-emission, nebular, AGN, and IGM enabled.
+# A star-forming galaxy observed in 12 broadband filters from GALEX, SDSS, 2MASS, and WISE (ultraviolet through near-infrared) is fitted using Hamiltonian Monte Carlo on a differentiable JAX forward model. This example is deliberately minimal, demonstrating how fast the JIT-compiled forward model and its gradients are. The model uses a double power-law star formation history (SFH) that rises for 10 billion years, peaks about 3 Gyr before the epoch of observation, and then plateaus with ongoing star formation today. Dust attenuation follows a single-component Calzetti screen, nebular emission is baked into the stellar population synthesis grid, stellar metallicity is free to vary, and redshift is fixed at z = 0.05. The SFH shape parameters (alpha, beta, tau_gyr, log_total_mass) are free, the formation epoch is pinned at 13.1 Gyr lookback, and dust V-band optical depth and stellar metallicity are free, giving six free parameters total. See `02_sed_anatomy.py` for a panchromatic model with dust infrared re-emission, photoionized nebular emission, active galactic nucleus, and intergalactic medium absorption enabled.
 
 # %%
 # Shared notebook setup (see notebooks/_setup.py): quiets the framework notices
@@ -86,12 +73,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# An FSPS-generated SSP grid with nebular emission baked in at log(U) = −3.0
-# and solar gas-phase metallicity (Z_gas/Zsun = 1.0). Stellar metallicity is
-# free to vary; gas-phase metallicity is fixed by the grid. Per the project
-# contract, these are independent knobs, so the nebular contribution does not
-# respond to fitted stellar Z. `BakedInNebularWarning` on fit start marks this
-# assumption.
+# We use an FSPS-generated SSP grid with nebular emission baked in at log(U) = −3.0 and solar gas-phase metallicity (Z_gas/Z_sun = 1.0). Stellar metallicity is free to vary; gas-phase metallicity is fixed by the grid. These are independent parameters, so the nebular contribution does not respond to fitted stellar metallicity. The code marks this assumption by emitting a `BakedInNebularWarning` on fit start.
 
 # %%
 SSP_NAME = "prsc_miles_chabrier_wNE"
@@ -116,22 +98,9 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # %% [markdown]
 # ## Build the model
 #
-# Double power-law SFH with single-component Calzetti dust attenuation
-# (V-band optical depth τ_V free), baked-in nebular emission, and free stellar
-# metallicity; redshift fixed at z = 0.05: six free parameters. The DPL has
-# four free shape parameters (alpha, beta, tau_gyr, log_total_mass), giving
-# the SFR flexibility to rise, peak, and plateau while remaining star-forming
-# at the present epoch. The fifth, `age_gyr` — the formation epoch — is pinned
-# at 13.1 Gyr, the age of the universe at z = 0.05: formation at the Big Bang,
-# the same convention BAGPIPES uses for its `dblplaw` model. Pinning it also
-# removes a strong (age, tau, alpha) degeneracy from the posterior. Kept
-# minimal on purpose. Dust IR re-emission, full photoionized nebular grids,
-# and AGN are covered in `02_sed_anatomy.py`.
+# The model has a double power-law SFH with single-component Calzetti dust attenuation (V-band optical depth τ_V free), baked-in nebular emission, free stellar metallicity, and redshift fixed at z = 0.05: six free parameters. The double power-law has four free shape parameters (alpha, beta, tau_gyr, log_total_mass) that control whether the SFR rises, peaks, and plateaus while remaining star-forming at the present epoch. The formation epoch, `age_gyr`, is pinned at 13.1 Gyr lookback, the age of the universe at z = 0.05 (formation at the Big Bang), following the convention of BAGPIPES. Pinning the formation epoch removes a strong (age, tau, alpha) degeneracy from the posterior. Infrared dust re-emission, full photoionized nebular grids, and active galactic nucleus components are shown in `02_sed_anatomy.py`.
 #
-# A single Calzetti screen reddens the entire stellar population uniformly.
-# Its simplicity makes it suitable for a quickstart example — the model
-# prioritizes interpretability and speed over the realism of a stratified
-# ISM.
+# A single Calzetti screen reddens the entire stellar population uniformly. This simplicity makes the model suitable for a quickstart demonstration, prioritizing interpretability and speed over the realism of a stratified interstellar medium.
 
 # %%
 sed_model = SEDModel.build(
@@ -160,15 +129,7 @@ citations.print_citations(sed_model)
 # %% [markdown]
 # ## Mock observation
 #
-# The truth is an explicit double power-law: star formation rises for ten
-# billion years, peaks about 3 Gyr ago, then plateaus — the galaxy is still
-# forming stars today at ≈97% of its peak rate. The DPL turns over at cosmic
-# time T = τ·(β/α)^(1/(α+β)) after formation; with the formation epoch pinned
-# at the Big Bang in the build above, α = 0.5, β = 2.0 and
-# τ = 5.8 Gyr place that turnover 3 Gyr before the epoch of observation. The
-# shallow falling slope α is what buys the plateau. `generate_mock` returns
-# the noiseless model fluxes, Gaussian uncertainties at the requested S/N,
-# and a noisy realization.
+# The truth is an explicit double power-law: star formation rises for 10 billion years, peaks about 3 Gyr in the past, and then plateaus with the galaxy still forming stars at about 97% of its peak rate. The double power-law turns over at cosmic time T = τ·(β/α)^(1/(α+β)) after formation. With formation pinned at the Big Bang, α = 0.5, β = 2.0, and τ = 5.8 Gyr place the turnover 3 Gyr before the epoch of observation. The shallow falling slope (small α) permits the plateau. The function `generate_mock` returns the noiseless model fluxes, Gaussian noise at the requested signal-to-noise ratio, and a single noisy realization.
 
 # %%
 key = jax.random.PRNGKey(6)
@@ -216,8 +177,7 @@ wave_eff_um = effective_wavelengths_um(phot)
 # %% [markdown]
 # ## One-time JIT compile
 #
-# Cold compile is a few seconds; warm cache is milliseconds. The difference
-# between first and second call below shows the cost of compilation alone.
+# The first compilation is a few seconds; warm cache access is milliseconds. The comparison between the first and subsequent calls below isolates the compilation cost.
 
 # %%
 import time
@@ -245,10 +205,7 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # %% [markdown]
 # ## Fit
 #
-# The default sampler (`mcmc_nuts_fast`) runs four NUTS chains in parallel and
-# marginalizes the stellar mass analytically; the posterior below took about
-# 9 s on this machine. First we fit a throwaway prior draw so compilation is
-# cached on disk; the timed fits that follow pay only the inference cost.
+# The default sampler (`mcmc_nuts_fast`) runs four no-U-turn sampler (NUTS) chains in parallel and marginalizes the stellar mass analytically. The posterior shown below took about 9 seconds on this machine. First we fit a throwaway prior draw so the compiled kernel is cached to disk; subsequent timed fits then pay only the inference cost.
 
 # %%
 map_kwargs = dict(method="map", n_restarts=8, n_steps=500)
@@ -271,9 +228,7 @@ wall_nuts = time.perf_counter() - t
 print(f"  NUTS fast posterior wall: {wall_nuts:6.2f} s")
 posterior.summary()
 
-# Convergence: read R̂ together with the divergence count — divergent
-# transitions bias the draws, and R̂ alone cannot see a frozen chain. For
-# publication-grade intervals insist on R̂ < 1.01 (raise `n_samples`).
+# Convergence: read R̂ together with the divergence count, since divergent transitions bias the draws and R̂ alone cannot detect a frozen chain. For publication-grade credible intervals, insist on R̂ < 1.01 (increase `n_samples` if needed).
 rhat = posterior.rhat()
 ess = posterior.effective_sample_size()
 print(
@@ -283,18 +238,15 @@ print(
 )
 
 # %% [markdown]
-# `forward.fit(Data(photometry=(flux_obs, noise)), ...)` is the same call with
-# the channel named; that spelling is what the joint fits in 07 and 10 use.
+# The call `forward.fit(Data(photometry=(flux_obs, noise)), ...)` is equivalent, with the channel explicitly named; this form is used for joint fits across multiple data channels.
 
 # %% [markdown]
-# The fit recovers the mock truth: well-constrained parameters (stellar mass,
-# dust, metallicity) land on the input values. The SFH *shape* parameters are
-# broader — twelve broadband fluxes only weakly constrain how the plateau was
-# reached — but the posteriors are unimodal and contain the truth.
+# The fit recovers the mock truth: well-constrained parameters (stellar mass, dust, metallicity) land on the input values. The SFH shape parameters have broader posteriors because twelve broadband filters only weakly constrain the plateau trajectory, but the posteriors remain unimodal and contain the truth.
 
 # %% [markdown]
-# Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the
-# SFH integral, with the input truth in the first column.
+# ## Derived quantities
+#
+# Derived physical scalars (stellar mass, star formation rate, specific star formation rate) are rolled up from the SFH integral, with the input truth in the first column.
 
 # %%
 N_DRAWS = 200
@@ -325,9 +277,7 @@ for k in DERIVED_KEYS:
 # %% [markdown]
 # ## Posterior SED
 #
-# Full posterior spectrum in the background (median + 68 % band), truth
-# dashed, observed photometry with error bars, residuals against the
-# posterior median below.
+# The full posterior spectrum is shown in the background (median and 68% credible band); the truth is dashed, the observed photometry has error bars, and residuals against the posterior median appear below.
 
 # %%
 WAVE_OBS = np.geomspace(1300.0, 6e4, 1200)  # 0.13–6 μm covers GALEX → WISE W2
@@ -360,8 +310,8 @@ ax, ax_res = fig.add_subplot(gs[0]), fig.add_subplot(gs[1])
 
 wave_um = WAVE_OBS / 1e4
 
-# Filter transmission curves shaded behind the spectrum — Bagpipes/Prospector
-# style. Use the matplotlib default qualitative palette across bands.
+# Filter transmission curves are shaded behind the spectrum in the Bagpipes/Prospector style,
+# with one viridis color per band.
 band_palette = plt.cm.viridis(np.linspace(0.05, 0.95, len(phot.filter_waves)))
 ymin, ymax = 0.3 * spec_truth.min(), 3 * spec_truth.max()
 for fw, ft, color in zip(phot.filter_waves, phot.filter_trans, band_palette):

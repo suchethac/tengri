@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Discovering the model menu
 #
-# Tengri is plugin-aware. The library knows what physics it ships, which inference backends are installed and compatible with a given model, what filters are on disk, and how to fetch missing SSP grids. Asking Python is faster than reading docs.
+# Tengri is plugin-aware. The library knows which physics it ships, which inference backends are installed and compatible with a given model, which filters are on disk, and how to fetch missing stellar population synthesis grids. Asking Python is faster than reading documentation.
 
 # %%
 import os
@@ -75,10 +75,7 @@ tengri.summary()
 # %% [markdown]
 # ## SSP catalogs
 #
-# Bare-stellar grids (e.g. `fsps_prsc_miles_chabrier`) pair with the Cue
-# nebular emulator; "wNE" grids carry baked-in nebular emission and pair
-# with the `ssp` nebular backend. `download_ssp` fetches missing grids on
-# demand.
+# Bare-stellar grids (for example, `fsps_prsc_miles_chabrier`) pair with the Cue nebular emulator. Grids labeled "wNE" carry baked-in nebular emission and pair with the `ssp` nebular backend. The function `download_ssp` fetches missing grids on demand.
 
 # %%
 tengri.list_known_ssps()
@@ -89,8 +86,7 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
 # %% [markdown]
 # ## Star-formation history variants
 #
-# Each entry of `builders.sfh.available()` is a real callable whose
-# signature lists its parameters with default priors.
+# Each entry from `builders.sfh.available()` is a callable function whose signature documents its parameters and default priors.
 
 # %%
 builders.sfh.available()
@@ -145,10 +141,7 @@ fig.savefig(FIG_DIR / "03_sfh_variants.png", dpi=300, bbox_inches="tight")
 # %% [markdown]
 # ## Dust laws and IR templates
 #
-# Attenuation laws — Calzetti, Cardelli (MW/LMC/SMC), Prevot SMC, Li 2008,
-# Witt & Gordon 2000, Conroy/Charlot–Fall variants — and IR re-emission
-# templates (Dale 2014, Draine–Li, THEMIS, Astrodust, BOSA, Casey 2012,
-# modified blackbody) all live under `tengri.components.dust`.
+# Attenuation laws (Calzetti, Cardelli with MW/LMC/SMC options, Prevot SMC, Li 2008, Witt & Gordon 2000, and Conroy/Charlot–Fall variants) and infrared re-emission templates (Dale 2014, Draine–Li, THEMIS, Astrodust, BOSA, Casey 2012, and modified blackbody) all live under `tengri.components.dust`.
 
 # %%
 tengri.list_dust_laws()
@@ -159,12 +152,10 @@ tengri.list_dust_emission_models()
 # %% [markdown]
 # ## Nebular backends
 #
-# - **`cue`**: neural emulator on Cloudy 17.03 (Li+2024). Fast, smooth,
-#   requires bare-stellar SSP.
-# - **`ssp`**: baked-in nebular contribution from a wNE SSP grid.
-#   Cheapest, locked to grid choices.
-# - **`cloudy`**: direct Cloudy evaluation. Accurate, slow.
-# - **`none`**: disable.
+# - **`cue`**: A neural emulator on Cloudy 17.03 (Li+2024). Fast and smooth; requires a bare-stellar stellar population synthesis grid.
+# - **`ssp`**: Baked-in nebular contribution from a wNE grid. Lightest option, locked to grid choices.
+# - **`cloudy`**: Direct Cloudy evaluation. Accurate and slow.
+# - **`none`**: Disable nebular emission.
 
 # %%
 tengri.list_nebular_backends()
@@ -172,21 +163,15 @@ tengri.list_nebular_backends()
 # %% [markdown]
 # ## AGN composables
 #
-# AGN is built from six orthogonal stages — disc, nlr, blr, feii, torus,
-# attenuation — each with its own registry of swappable blocks. The
-# composable blocks are the recommended surface for mixing and matching AGN
-# components. `recipes.agn_panchromatic()` is one stable composition.
+# Active galactic nucleus (AGN) is built from six orthogonal stages: disc, narrow-line region, broad-line region, FeII, torus, and attenuation. Each stage has its own registry of swappable blocks. The composable blocks are the recommended interface for mixing and matching AGN components. `recipes.agn_panchromatic()` is one stable composition.
 
 # %%
 tengri.list_agn_models()
 
 # %% [markdown]
-# ### Composable AGN blocks — discovery and mixing
+# ### Composable AGN blocks: discovery and mixing
 #
-# The composable grammar groups blocks by pipeline stage. Use
-# `list_agn_blocks()` to see all available options, grouped by category.
-# Each block has a citation, status, and description accessible via
-# `describe_agn_block()`.
+# The composable grammar groups blocks by pipeline stage. Use `list_agn_blocks()` to see all available options grouped by category. Each block has a citation, status, and description accessible via `describe_agn_block()`.
 
 # %%
 tengri.list_agn_blocks()
@@ -196,7 +181,7 @@ tengri.list_agn_blocks()
 tengri.describe_agn_block("skirtor", category="torus")
 
 # %% [markdown]
-# ## Recipes — five curated starting points
+# ## Recipes: five curated starting points
 
 # %%
 print(list(recipes.__all__))
@@ -207,9 +192,7 @@ recipes.star_forming_photometry()
 # %% [markdown]
 # ## Inference backends
 #
-# The `status` column reports whether each backend's dependencies are
-# importable. Compatibility against a specific model is rechecked at
-# `Fitter.run` time.
+# The `status` column reports whether each backend's dependencies are importable. Compatibility with a specific model is rechecked at `Fitter.run` time.
 
 # %%
 tengri.list_inference_methods()
@@ -226,13 +209,7 @@ tengri.list_all()
 # %% [markdown]
 # ### Star-formation history models
 #
-# Thirty-five SFH variants span parametric (exponentials, delayed-τ, power-laws)
-# and non-parametric (spline, Dirichlet, dense basis) families. **Eight of these
-# are marked `status='unvalidated'`: they are registered but not yet validated
-# against the DSPS forward path.** Attempting to use an unvalidated SFH raises
-# `ValueError("SFH type '...' is registered but not yet validated against the
-# DSPS forward path, so it is not available via the builder...")`. Use the
-# `status` column to filter the menu.
+# Thirty-five SFH variants span parametric (exponentials, delayed-τ, power-laws) and non-parametric (spline, Dirichlet, dense basis) families. **Eight are marked `status='unvalidated'`: they are registered but not yet validated against the Differentiable Stellar Population Synthesis (DSPS) forward path.** Attempting to use an unvalidated SFH raises `ValueError("SFH type '...' is registered but not yet validated against the DSPS forward path, so it is not available via the builder...")`. Use the `status` column to filter the menu.
 
 # %%
 tengri.list_sfh_models()
@@ -295,12 +272,7 @@ tengri.list_components()
 # %% [markdown]
 # ### All instruments and filters
 #
-# Instruments group filters by survey or facility; 424 filter curves span X-ray to radio,
-# including medium-band sets (ALHAMBRA, SHARDS, ZFOURGE/FourStar, NMBS/NEWFIRM, HST) and
-# narrow-band sets (J-PAS, J-PLUS, HST emission-line, Subaru/HSC, VISTA NB118).
-# Bands with no published response curve — ALMA, Chandra, NuSTAR, SPT-3G, ACT, TolTEC —
-# are served as synthetic top-hats; see `tengri.list_synthetic_bands()`.
-# Display sample surveys:
+# Instruments group filters by survey or facility. Four hundred twenty-four filter curves span X-ray to radio, including medium-band sets (ALHAMBRA, SHARDS, ZFOURGE/FourStar, NMBS/NEWFIRM, HST) and narrow-band sets (J-PAS, J-PLUS, HST emission-line, Subaru/HSC, VISTA NB118). Bands without published response curves (ALMA, Chandra, NuSTAR, SPT-3G, ACT, TolTEC) are served as synthetic top-hat functions; see `tengri.list_synthetic_bands()` for these. Below is a sample of available surveys:
 
 # %%
 tengri.list_instruments()
@@ -315,7 +287,7 @@ tengri.list_filters().filter(survey="SDSS")
 tengri.list_plots()
 
 # %% [markdown]
-# ### Recipes — full registry
+# ### Recipes: full registry
 
 # %%
 tengri.list_recipes()
@@ -324,11 +296,7 @@ tengri.list_recipes()
 #
 # ## Parameter and physics provenance
 #
-# Two introspection surfaces close the loop:
-# `model.spec.summary()` tags every parameter with where its value came
-# from (`[user]` / `[all_params FREE]` / `[all_params Fixed(DEFAULT)]` / `[default]`).
-# `citations.collect_citations(model)` returns the bibliography of every
-# physics ingredient.
+# Two introspection tools document the complete model: `model.spec.summary()` tags every parameter with its source (`[user]` / `[all_params FREE]` / `[all_params Fixed(DEFAULT)]` / `[default]`), and `citations.collect_citations(model)` returns the bibliography of every physics component.
 
 # %%
 example = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.star_forming_photometry())
@@ -339,7 +307,7 @@ bib = citations.collect_citations(example)
 citations.print_citations(example)
 
 # %% [markdown]
-# Export to BibTeX in one call:
+# Export to BibTeX in a single call:
 
 # %%
 bibtex = citations.citations_bibtex(example)
@@ -362,33 +330,17 @@ print(bibtex[:600], "…")
 tengri.search("Calzetti")
 
 # %% [markdown]
-# ## Sub-namespaces — where to look for what
+# ## Sub-namespaces: where to look for what
 #
-# - **`tengri.cosmology`**: Planck 2018 distance and time integrals
-#   (`luminosity_distance_mpc`, `age_at_z`, …).
-# - **`tengri.units`**: F_ν ↔ L_ν ↔ AB-mag conversions, vacuum-air, Jy.
-# - **`tengri.plot`**: `plot_sed_fit`, `plot_sfh`, `plot_corner_comparison`,
-#   `setup_style`, `diagnostics_table`. Re-exports of
-#   `tengri.analysis.plotting`.
-# - **`tengri.observation`**: `Photometry`, `Spectroscopy`, `Observation`,
-#   `NoiseModel`, `LineList`, filter loaders.
-# - **`tengri.inference`**: `Catalog` (many galaxies, one call),
-#   `VIConfig`, `InferenceContext`. Single-galaxy fits go through
-#   `ForwardModel.fit`; `Fitter` is an internal engine, not a surface to
-#   call directly.
-# - **`tengri.results`**: `Posterior`, `CatalogPosterior`,
-#   `PopulationPosterior`, `FitResult`, `MockData`, `Provenance`,
-#   `generate_mock`.
-# - **`tengri.config`**: `SEDModelConfig`, `SFHConfig`, `DustConfig`,
-#   `NebularConfig`, `AGNConfig`.
-# - **`tengri.protocols`**: Protocol shapes (`SEDComponent`, `Likelihood`,
-#   `ObservationModel`, `DerivedKey`, `ForwardState`).
-# - **`tengri.builders`**: config-dict factories with introspectable
-#   signatures (`builders.sfh.*`, `builders.dust.*`, `builders.neb.*`,
-#   `builders.agn.*`, `builders.igm.*`).
-# - **`tengri.citations`**: `Bibliography`, `Citation`,
-#   `collect_citations`, `citations_report`, `citations_bibtex`,
-#   `print_citations`, `print_bibtex`, `paper_citation`.
+# - **`tengri.cosmology`**: Planck 2018 distance and time integrals (`luminosity_distance_mpc`, `age_at_z`, and others).
+# - **`tengri.units`**: Conversions between F_ν, L_ν, and AB magnitude; vacuum-air wavelength; Jansky.
+# - **`tengri.plot`**: Plotting functions `plot_sed_fit`, `plot_sfh`, `plot_corner_comparison`, `setup_style`, `diagnostics_table` re-exported from `tengri.analysis.plotting`.
+# - **`tengri.observation`**: Data types `Photometry`, `Spectroscopy`, `Observation`, `NoiseModel`, `LineList` and filter loaders.
+# - **`tengri.inference`**: `Catalog` (fit many galaxies in one call), `VIConfig`, `InferenceContext`. Single-galaxy fits go through `ForwardModel.fit`. `Fitter` is an internal engine, not a surface to call directly.
+# - **`tengri.results`**: `Posterior`, `CatalogPosterior`, `PopulationPosterior`, `FitResult`, `MockData`, `Provenance`, `generate_mock`.
+# - **`tengri.config`**: `SEDModelConfig`, `SFHConfig`, `DustConfig`, `NebularConfig`, `AGNConfig`.
+# - **`tengri.protocols`**: Protocol shapes: `SEDComponent`, `Likelihood`, `ObservationModel`, `DerivedKey`, `ForwardState`.
+# - **`tengri.builders`**: Config-dictionary factories with introspectable signatures (`builders.sfh.*`, `builders.dust.*`, `builders.neb.*`, `builders.agn.*`, `builders.igm.*`).
+# - **`tengri.citations`**: `Bibliography`, `Citation`, `collect_citations`, `citations_report`, `citations_bibtex`, `print_citations`, `print_bibtex`, `paper_citation`.
 #
-# From here: try `tengri.help()` for topic-indexed pointers, or
-# `dir(tengri.components.<area>)` for any physics sub-namespace.
+# From here: try `tengri.help()` for topic-indexed pointers, or `dir(tengri.components.<area>)` to explore any physics sub-namespace.

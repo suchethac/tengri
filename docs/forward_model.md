@@ -39,8 +39,8 @@ Tengri's forward model is split into two clearly separated layers.
 └─────────────────────────────────────────────────────────┘
 ```
 
-The outer-shell signature stays uniform across all SubModel variants —
-construction is always ``ForwardModel.build(<slot>=..., observation=obs)``
+The outer-shell signature stays uniform across all SubModel variants.
+Construction is always ``ForwardModel.build(<slot>=..., observation=obs)``
 and inference is always through ``forward.fit(...)``, whatever the
 SubModel underneath happens to be.
 
@@ -75,20 +75,20 @@ posterior.summary()
 
 The SED chain ("the physics") and the surface that inference consumes
 ("the prediction dict") have always been two different responsibilities.
-Before the split, `SEDModel` carried one method per channel combination —
-`predict_photometry`, `predict_spectrum`, `predict_joint` and friends —
-encoding "which channels exist" inside the method *name*. Inference backends
+Before the split, `SEDModel` carried one method per channel combination:
+`predict_photometry`, `predict_spectrum`, `predict_joint` and others. Each
+encoded "which channels exist" in the method *name*. Inference backends
 therefore had to know whether they were fitting photometry, spectroscopy, or
 both, and pick the right method. (`predict_joint` is gone; the others remain.)
 
 After the split:
 
 - Adding a new observation channel is one new key in the prediction
-  dict — no inference-side branching.
+  dict, with no inference-side branching.
 - Existing user code that calls `sed.predict_photometry(params)`
   directly still works; nothing about `SEDModel` changed.
 - The dev-side surface area is smaller (a Protocol with two
-  methods — `declared_parameters`, `run` — instead of a handful of
+  methods: `declared_parameters` and `run`, instead of a handful of
   channel-specific predict methods).
 
 ## `ForwardModel.build(...)` reference
@@ -108,15 +108,15 @@ Pick exactly one of `sed=`, `population=`, or `populations=`. Returns
 a frozen dataclass. What you call afterwards is
 `forward.fit(data, noise, method=...)`; everything else is posterior
 helpers. To inspect a prediction rather than fit one, use
-`forward.predict(params)`. On a fitting hot path prefer
-`forward.predict_photometry(params)` — `predict_observables` returns the
-full channel dict and bypasses the photometry lookup table.
+`forward.predict(params)`. On a fitting hot path prefer `forward.predict_photometry(params)`. The
+`predict_observables` method returns the full channel dict and bypasses the
+photometry lookup table.
 
 ## Hierarchical population fits
 
-When you have many galaxies that share an underlying parameter — the
-canonical case is the PSD hyperparameters ``σ_PSD``, ``τ_PSD`` of the
-stochastic-SFH prior — wrap them in a ``PopulationSEDModel`` and pass it
+When you have many galaxies that share an underlying parameter (the
+canonical case: PSD hyperparameters ``σ_PSD``, ``τ_PSD`` of the
+stochastic-SFH prior), wrap them in a ``PopulationSEDModel`` and pass it
 to ``ForwardModel.build(population=...)``:
 
 ```python
@@ -143,18 +143,18 @@ forward = ForwardModel.build(population=pop, observation=obs)
 posterior = forward.fit(method='vi')
 ```
 
-The PSD priors live on the ``PopulationSEDModel`` construction — not on a
-separate hierarchical fitter class — so there is one place that
+The PSD priors live on the ``PopulationSEDModel`` construction, not on a
+separate hierarchical fitter class. Thus there is one place that
 parameterizes the hierarchy.
 
 Inference routes through the same machinery natively. There is **one**
-information-Hamiltonian path — ``forward.fit(method='vi')`` — whether
+information-Hamiltonian path (``forward.fit(method='vi')``) whether
 ``forward`` holds an :class:`SEDModel` (single galaxy), a
 :class:`PopulationSEDModel` (hierarchical), or
 :class:`SpatialSEDModel`. The
 :class:`PopulationSEDModel` publishes its batched axes
 (``{'galaxy': 0}``) and the spec view publishes per-param shapes
-(``(N_gal,)`` for per-galaxy, ``()`` for shared); the existing
+(``(N_gal,)`` for per-galaxy, ``()`` for shared). The existing
 inference backends consume the batched output without any
 type-specific code.
 
@@ -164,7 +164,7 @@ this canonical path; the legacy class will be removed in v1.0.
 
 ## Composing SubModels
 
-The SubModel lattice composes — every variant either contains the
+The SubModel lattice composes. Every variant either contains the
 others or runs alongside them, but each is a strict ``SubModel`` from
 ``ForwardModel``'s perspective:
 
@@ -176,8 +176,8 @@ others or runs alongside them, but each is a strict ``SubModel`` from
 | `PopulationSEDModel` | many galaxies, hierarchical shared parameters (PSD) |
 | `PopulationSpatialSED` *(far future)* | many galaxies with shared parameters and morphology |
 
-Adding a new SubModel is one Python file plus one entry in the
-ForwardModel-build kwargs table — the inference layer doesn't change.
+Adding a new SubModel requires one Python file plus one entry in the
+ForwardModel-build kwargs table. The inference layer remains unchanged.
 
 ## Forward chain — the SED physics
 
