@@ -322,6 +322,23 @@ DECLARED_COINCIDENT: list[dict] = [
     },
     {
         "group": "dust",
+        "names": {"cardelli", "conroy2010"},
+        "reason": (
+            "conroy2010 is the Cardelli, Clayton & Mathis (1989) MW extinction law "
+            "with a scalable 2175 Å UV bump parametrized by dust_bump_strength. "
+            "At the default dust_bump_strength=1.0, the full CCM89 bump is applied, "
+            "making conroy2010 exactly identical to cardelli by construction. The "
+            "dust_bump_strength parameter is the sole knob distinguishing them: "
+            "setting it to 0.0 removes the bump while keeping the optical/IR continuum "
+            "from CCM89, which is where cardelli always lives."
+        ),
+        "separator": (
+            {"type": "single_component", "law": "cardelli"},
+            {"type": "single_component", "law": "conroy2010", "dust_bump_strength": 0.0},
+        ),
+    },
+    {
+        "group": "dust",
         "names": {"power_law", "vw07_diff"},
         "reason": (
             "vw07_diff is a fixed curve taking no parameters -- the Wild+2007 "
