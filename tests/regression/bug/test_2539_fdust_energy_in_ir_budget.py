@@ -262,6 +262,103 @@ class TestFdustCreditIdentity:
         np.testing.assert_allclose(screen_absorbed, screen_absorbed[0], rtol=1e-6)
 
 
+class TestLycConservationClosure:
+    """LyC conservation closure for a mixed-age SFH (governing requirement
+    #2): the raw ionizing budget of every star (young and old) splits,
+    without loss or double counting, into exactly four dispositions --
+
+    - **escaped** (reaches the observer): ``fesc`` of the credited
+      population's raw LyC, plus the WHOLE raw LyC of any population the
+      nebular step does not reprocess (#2539 item 3), minus whatever the
+      dust screen itself further removes;
+    - **screen-absorbed**: the above screen removal, credited to
+      ``log_L_absorbed`` only when ``eb_include_lyc=True``;
+    - **gas-ionizing**: the credited population's ``1 - fesc - fdust``
+      share, which photoionizes hydrogen (by construction of the
+      fesc/fdust/k-factor split -- not independently re-measurable in
+      erg/s post-recombination, see the module docstring);
+    - **HII-dust credit**: the credited population's ``fdust`` share,
+      which heats dust and enters ``log_L_absorbed`` (#2539 item 1).
+
+    Three of the four terms are measured from ACTUAL model outputs (an
+    ``log_L_absorbed`` difference for the credit and for the screen
+    contribution, a direct SED integral for the escaping fraction); only
+    the gas-ionizing share is asserted by construction. ``_sfh()``'s
+    delayed law (tau=1 Gyr, age=5 Gyr) spans stellar ages from ~0 to 5 Gyr,
+    giving every attenuator (including two_component's young/old split) a
+    genuinely mixed-age population to close the budget over.
+    """
+
+    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
+    def test_closure(self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only):
+        fesc, fdust = 0.3, 0.3
+
+        # Pre-screen twin (tau=0 -> T(lambda)=1 exactly, dust transparent):
+        # nebular fesc/fdust masking runs upstream of, and independent of,
+        # the dust screen's tau, so this twin's sed_intrinsic is bit-exact
+        # for "what the dust screen received" in the nonzero-tau models below.
+        m0 = _build(synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all, tau=0.0)
+        s0 = m0.predict_state({})
+        wave = np.asarray(s0.wave)
+
+        lnu_total = np.sum(np.asarray(s0.derived["lnu_age"]), axis=0)
+        lnu_credited = _credited_lnu(s0, young_only=young_only)
+        lnu_uncredited = lnu_total - lnu_credited
+        L_lyc_total = _l_lyc(wave, lnu_total)
+        L_lyc_credited = _l_lyc(wave, lnu_credited)
+        L_lyc_uncredited = _l_lyc(wave, lnu_uncredited)
+        assert L_lyc_credited > 0.0, "setup: credited population has zero LyC"
+
+        # -- escaped (pre-screen): formula vs. the actual sed_intrinsic --
+        escaped_measured = _l_lyc(wave, np.asarray(s0.sed_intrinsic))
+        escaped_expected = fesc * L_lyc_credited + L_lyc_uncredited
+        np.testing.assert_allclose(escaped_measured, escaped_expected, rtol=1e-6)
+
+        # -- gas-ionizing: by construction (see class docstring) --
+        gas_ionizing = (1.0 - fesc - fdust) * L_lyc_credited
+
+        # -- HII-dust credit: an ACTUAL log_L_absorbed difference, isolated
+        # by trading fesc for fdust at fixed total (holds k, hence the
+        # nebular-continuum absorption term, exactly fixed; see module
+        # docstring) --
+        m_default = _build(synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all)
+        m_escape_only = _build(
+            synthetic_ssp_wide, dust_type, fesc=fesc + fdust, fdust=0.0, lyc_absorb_all=lyc_absorb_all
+        )
+        s_default = m_default.predict_state({})
+        L_absorbed_default = float(10.0 ** np.asarray(s_default.derived["log_L_absorbed"]))
+        L_absorbed_escape_only = float(
+            10.0 ** np.asarray(m_escape_only.predict_state({}).derived["log_L_absorbed"])
+        )
+        hii_dust_credit = L_absorbed_default - L_absorbed_escape_only
+        np.testing.assert_allclose(hii_dust_credit, fdust * L_lyc_credited, rtol=1e-6)
+
+        # -- screen-absorbed: an ACTUAL log_L_absorbed difference across the
+        # eb_include_lyc toggle, cross-checked against a direct SED integral
+        # of the pre-screen vs. post-screen LyC content --
+        m_full = _build(
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=fesc,
+            fdust=fdust,
+            lyc_absorb_all=lyc_absorb_all,
+            eb_include_lyc=True,
+        )
+        L_absorbed_full = float(10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"]))
+        screen_absorbed = L_absorbed_full - L_absorbed_default
+
+        post_screen_measured = _l_lyc(wave, np.asarray(s_default.derived["sed_dust_attenuated"]))
+        screen_absorbed_manual = escaped_measured - post_screen_measured
+        np.testing.assert_allclose(screen_absorbed, screen_absorbed_manual, rtol=1e-6)
+
+        # -- closure: nothing counted twice, nothing lost --
+        np.testing.assert_allclose(
+            post_screen_measured + screen_absorbed + gas_ionizing + hii_dust_credit,
+            L_lyc_total,
+            rtol=1e-6,
+        )
+
+
 class TestWG00EbIncludeLyc:
     """wg00 + eb_include_lyc (#2539 item 1): the grammar accepted the key for
     dust_type='wg00' but a bug in ``groups.py``'s wg00 branch (an early
