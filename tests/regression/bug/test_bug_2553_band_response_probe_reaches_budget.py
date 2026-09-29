@@ -260,10 +260,9 @@ def test_zero_emitting_probe_is_declined_with_reason(synthetic_ssp_wide, monkeyp
 
     # Monkeypatch the emitter's predict method to return an all-zero SED.
     emitter = next((c for c in chain if getattr(c, "name", "") == "dust_emission"), None)
-    if emitter is None:
-        pytest.skip("dust_emission component not found in chain")
-
-    original_predict = emitter.predict
+    assert emitter is not None, (
+        "no dust_emission component in the model chain, so this test cannot pin the fail-safe"
+    )
 
     def zero_emitting_predict(p, sed_in, wave, **kwargs):
         """Return an all-zero SED regardless of input."""
