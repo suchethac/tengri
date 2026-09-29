@@ -40,7 +40,7 @@ template-grid HDF5 loading happens on first invocation.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import jax
@@ -403,6 +403,19 @@ class DustSEDComponent(TemplateThreading):
     #: re-emission at the filter effective wavelength rather than integrating the
     #: dense template through each bandpass: much cheaper, slightly approximate.
     fast_emission: bool = False
+    #: Structural flag: when True, this component reads the nebular continuum from
+    #: the per-Q_H grid channels instead of declaring sed_nebular as an input.
+    nebular_from_grid: bool = False
+
+    def materialized(self) -> DustSEDComponent:
+        """Return a copy with nebular_from_grid reset to False for full-state exact path.
+
+        The orchestrator calls this on every component when building the
+        materialized SED chain for predict_state (observables_only=False),
+        so the dust component reads the full sed_nebular continuum for
+        the exact path even when the fast path has set this flag.
+        """
+        return replace(self, nebular_from_grid=False) if self.nebular_from_grid else self
 
     def citations(self) -> tuple[str, ...]:
         """Structurally implements Charlot & Fall (2000) two-component dust;
@@ -477,13 +490,11 @@ class DustSEDComponent(TemplateThreading):
 
         When a source is not screened (screen choice is "none"), its optional
         input is omitted, allowing it to run after dust in the pipeline.
+
+        When ``nebular_from_grid`` is True, the nebular continuum is read from
+        the per-Q_H grid channels instead of the full SED.
         """
         keys: list[DerivedKey] = [
-            DerivedKey(
-                "sed_nebular",
-                "erg/s/Hz",
-                "Nebular continuum to attenuate (Cue/CloudyGrid); zeros for BakedIn",
-            ),
             DerivedKey(
                 "lyc_transmission",
                 "",
@@ -507,6 +518,46 @@ class DustSEDComponent(TemplateThreading):
                 "invisible to topological_sort and can silently return None, defeating the fix.",
             ),
         ]
+        if self.nebular_from_grid:
+            keys = [
+                DerivedKey(
+                    "nebular_phot_lnu_subband_precomp",
+                    "erg/s/Hz",
+                    "Intrinsic nebular L_nu per sub-band chunk from the per-Q_H grid; "
+                    "screened here at the chunk nodes",
+                ),
+                DerivedKey(
+                    "nebular_subband_waves_rest_precomp",
+                    "Angstrom",
+                    "Rest wavelength of each nebular sub-band chunk",
+                ),
+                DerivedKey(
+                    "nebular_restband_lnu_subband_precomp",
+                    "erg/s/Hz",
+                    "Rest-frame twin of the sub-band nebular photometry",
+                ),
+                DerivedKey(
+                    "nebular_restband_subband_waves_precomp",
+                    "Angstrom",
+                    "Rest-frame twin of the chunk wavelengths",
+                ),
+                DerivedKey(
+                    "nebular_eb_absorbed_per_qh_grid_precomp",
+                    "erg/s per (photon/s)",
+                    "Absorbed nebular luminosity per unit Q_H on the energy-balance tau "
+                    "grid, through the nebular screen",
+                ),
+                *keys,
+            ]
+        else:
+            keys = [
+                DerivedKey(
+                    "sed_nebular",
+                    "erg/s/Hz",
+                    "Nebular continuum to attenuate (Cue/CloudyGrid); zeros for BakedIn",
+                ),
+                *keys,
+            ]
         # AGN SED: declare as optional input only when screened, so AGN runs
         # before dust when a screen is active. When agn_screen == "none" this
         # is omitted, and AGN runs after dust (pre-PR-D2 behavior).
@@ -761,6 +812,81 @@ class DustSEDComponent(TemplateThreading):
             tau_diff=jnp.asarray(params["dust_tau_diff"]),
             f_obsc=jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)),
         )
+
+    def nebular_screen_transmission(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        wavelength: jnp.ndarray,
+    ) -> jnp.ndarray:
+        r"""``config.nebular_screen`` transmission at arbitrary rest wavelengths.
+
+        Resolves the nebular birth-cloud and diffuse ISM attenuation laws
+        exactly as :meth:`apply` §2b resolves them, then evaluates the screen
+        transmission via :func:`_screen_transmission`. This is the single source
+        of the nebular continuum attenuation; the dust-grid fast path calls this
+        to screen each sub-band chunk.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives ``dust_tau_bc`` / ``dust_tau_diff`` (required),
+            the shared ``dust_*`` shape parameters, the bare ``redshift``,
+            and optionally ``dust_f_obscuration``.
+        wavelength : ndarray, shape (n_wave,)
+            Rest-frame wavelengths [Å] at which to evaluate the transmission.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Transmission in ``[0, 1]``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes, pure ``jnp`` plus build-time registry lookups.
+        """
+        bc_law_params, diff_law_params = resolve_bc_diff_law_params(
+            params,
+            dict(self.config.bc_law_overrides),
+            dict(self.config.diff_law_overrides),
+            self.config.live_shape_params,
+            bc_law=self.config.law_bc,
+            diff_law=self.config.law_diff,
+            redshift=params.get("redshift"),
+        )
+        neb_law = self.config.law_neb or self.config.law_bc
+        neb_overrides = merge_neb_screen_live_overrides(
+            params, self.config.neb_law_overrides, self.config.live_shape_params
+        )
+        neb_bc_params = {
+            k: jnp.asarray(v)
+            for k, v in select_law_kwargs(neb_law, {**bc_law_params, **neb_overrides}).items()
+        }
+        diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
+        return self._line_transmission(
+            params, jnp.asarray(wavelength), neb_law, neb_bc_params, diff_law_kw
+        )
+
+    def _screened_subband_sum(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        phi_sub: jnp.ndarray,
+        lam_sub: jnp.ndarray,
+        neb_law: str,
+        neb_bc_params: Mapping[str, jnp.ndarray],
+        diff_law_kw: Mapping[str, jnp.ndarray],
+    ) -> jnp.ndarray:
+        """``sum_k Phi_k T(lambda_k)`` per filter, from already-resolved law kwargs.
+
+        ``phi_sub`` and ``lam_sub`` are ``(n_filter, K)``: the intrinsic band
+        integral of each sub-band chunk and its rest wavelength. The screen is
+        the one :meth:`nebular_screen_transmission` evaluates.
+        """
+        phi = jnp.asarray(phi_sub)
+        lam = jnp.asarray(lam_sub)
+        t_sub = self._line_transmission(
+            params, lam.reshape(-1), neb_law, neb_bc_params, diff_law_kw
+        ).reshape(lam.shape)
+        return jnp.sum(phi * t_sub, axis=-1)
 
     def attenuate_line_catalog(
         self,
@@ -1178,13 +1304,40 @@ class DustSEDComponent(TemplateThreading):
             # multiple log10_add terms) so no intermediate sign has to be
             # invented for a partial sum: bolometric_absorbed_log10 already
             # returns the sign of ITS integral, exactly like the stellar term does.
-            log_neb, sign_neb = bolometric_absorbed_log10(
-                sed_neb + sed_shock + sed_agn,
-                sed_neb_attenuated + sed_shock_attenuated + sed_agn_attenuated,
-                nu,
-                wave=wave,
-                lyman_cutoff_aa=_eb_cutoff,
-            )
+            if self.nebular_from_grid:
+                # The nebular half comes from the per-Q_H grid: absorbed power
+                # per unit Q_H on the stellar LUT's (tau_bc, tau_diff) grid,
+                # contracted with the same two-node brackets, then scaled by
+                # Q_H in the log domain. Shock + AGN keep their exact integral
+                # and join through log10_add, so the closing step below is the
+                # one every variant shares.
+                from tengri.components.dust.energy_balance_precompute import _interp_bracket
+
+                grid_abs = jnp.asarray(state.derived["nebular_eb_absorbed_per_qh_grid_precomp"])
+                ia, wa = _interp_bracket(eb_lut.tau_bc_grid, _tau_bc)
+                ib, wb = _interp_bracket(eb_lut.tau_diff_grid, _tau_diff)
+                sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
+                absorbed_per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
+                log_neb_grid = jnp.asarray(state.derived["log_nion"]) + jnp.log10(
+                    jnp.maximum(absorbed_per_qh, 1e-300)
+                )
+                log_other, sign_other = bolometric_absorbed_log10(
+                    sed_shock + sed_agn,
+                    sed_shock_attenuated + sed_agn_attenuated,
+                    nu,
+                    wave=wave,
+                    lyman_cutoff_aa=_eb_cutoff,
+                )
+                log_neb = log10_add(log_neb_grid, log_other, sign_a=1.0, sign_b=sign_other)
+                sign_neb = jnp.ones(())
+            else:
+                log_neb, sign_neb = bolometric_absorbed_log10(
+                    sed_neb + sed_shock + sed_agn,
+                    sed_neb_attenuated + sed_shock_attenuated + sed_agn_attenuated,
+                    nu,
+                    wave=wave,
+                    lyman_cutoff_aa=_eb_cutoff,
+                )
             # Signed log-space sum: reproduces abs(stellar + neb + shock + agn)
             # exactly, including the case where the terms carry opposite signs.
             log_L_absorbed = log10_add(log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb)
@@ -1377,7 +1530,23 @@ class DustSEDComponent(TemplateThreading):
             # there is no λ_eff screening to correct: including BakedIn nebular,
             # whose emission is already inside the stellar LUT.
             _neb_phot = state.derived.get("nebular_phot_lnu_precomp")
-            if _neb_phot is not None and _sed_neb is not None:
+            if self.nebular_from_grid:
+                # The nebular continuum is not materialized: the per-Q_H grid
+                # supplies the intrinsic band integral of each sub-band chunk and
+                # the chunk's flux-weighted rest wavelength, and the screen is
+                # applied at those nodes, ``sum_k Phi_k T(lambda_k)``, the same
+                # K-point form the stellar continuum uses (#1122).
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
+                    self._screened_subband_sum(
+                        params,
+                        state.derived["nebular_phot_lnu_subband_precomp"],
+                        state.derived["nebular_subband_waves_rest_precomp"],
+                        neb_law,
+                        neb_bc_params,
+                        diff_law_kw,
+                    )
+                )
+            elif _neb_phot is not None and _sed_neb is not None:
                 from tengri.components._band_projection import (
                     project_additive_onto_photometry,
                 )
@@ -1542,7 +1711,18 @@ class DustSEDComponent(TemplateThreading):
             # one is #1665: every rest-frame consumer silently kept the λ_eff screen
             # and 13/13 spectral indices moved with nothing raised. ``redshift=0``
             # puts the filter in the rest frame, where ``phot_rest_fnu`` projects.
-            if rb_eff is not None and _neb_phot is not None and _sed_neb is not None:
+            if rb_eff is not None and self.nebular_from_grid:
+                derived_overrides["nebular_restband_lnu_attenuated_precomp"] = (
+                    self._screened_subband_sum(
+                        params,
+                        state.derived["nebular_restband_lnu_subband_precomp"],
+                        state.derived["nebular_restband_subband_waves_precomp"],
+                        neb_law,
+                        neb_bc_params,
+                        diff_law_kw,
+                    )
+                )
+            elif rb_eff is not None and _neb_phot is not None and _sed_neb is not None:
                 derived_overrides["nebular_restband_lnu_attenuated_precomp"] = (
                     project_additive_onto_photometry(
                         None,
