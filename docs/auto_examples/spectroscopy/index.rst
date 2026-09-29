@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_spectroscopy:
 
@@ -7,6 +7,10 @@ Spectroscopy
 
 Absorption-line indices (D4000, Hδ) from stellar age and metallicity. Spectral indices vs age. Velocity dispersion, line broadening, and velocity offset. Instrumental resolution effects. High-redshift example: z ≈ 6 Lyα emitter.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html

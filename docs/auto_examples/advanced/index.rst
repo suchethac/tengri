@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_advanced:
 
@@ -7,6 +7,10 @@ Advanced Topics
 
 Extension-point demonstration (SEDModelComponent), Fisher degeneracy, and validation techniques: gradient vs finite-difference, mass conservation, redshift-frame invariance, WavePrecomp accuracy.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
