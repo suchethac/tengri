@@ -15,12 +15,11 @@ synthetic-SSP/SFH/met setup, same WavePrecomp-vs-exact tolerance.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.observation.photometry import FilterCurve
 from tengri.parameters.groups import parse_groups
@@ -97,17 +96,41 @@ def _build(ssp, dust_attenuation: dict, dust_emission: dict, *, redshift: float 
     )
 
 
-def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
-    wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
-    trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
-    return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
+#: Real Spitzer/Herschel curves vendored in ``data/filters/`` (no network
+#: access needed: Spitzer_MIPS_24mu.dat, Herschel_Pacs_blue/red.dat), used in
+#: place of a UV/optical tophat because dust *emission* -- not attenuation --
+#: is what the diffuse screen re-attenuates here, and it contributes nothing
+#: at optical wavelengths. Ordered blue-to-red so a ratio array's indices
+#: read MIPS24, PACS70, PACS160.
+IR_BAND_NAMES = ("mips_24", "herschel_70", "herschel_160")
 
 
-def _build_emitting(ssp, diffuse_screen: bool, approx):
-    dust = _two_component(tau_diff=0.3, law="power_law")
-    dust["tau_bc"] = Uniform(0.0, 1.0)
-    centers = (3500.0, 6200.0, 1.0e6)
-    obs = Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in centers)))
+def _ir_filter_curves() -> tuple[FilterCurve, ...]:
+    from tengri.observation.filters import load_filter_set
+
+    _, _, curves = load_filter_set(list(IR_BAND_NAMES))
+    return tuple(curves)
+
+
+def _build_emitting(ssp, diffuse_screen: bool, approx, *, tau_diff: float = 3.0):
+    """Two-component power_law diffuse screen, evaluated through real IR bands.
+
+    ``tau_diff=3`` (matching :class:`TestTransmissionRatioIdentity`) and
+    ``redshift=0`` so the Charlot & Fall (n=-0.7) power-law curve gives a
+    transmission that is actually far from 1 at these rest-frame wavelengths
+    (T ~= 0.81 at 24um, ~= 0.90 at 70um, ~= 0.95 at 160um) -- unlike the
+    previous ``tau_diff=0.3`` tophat-at-100um fixture, where T ~= 0.992 was
+    indistinguishable from a no-op at the tolerances a LUT-vs-exact comparison
+    can use, which is exactly why the mutation-testing three (#2533) survived
+    here: dropping the screen multiply moved the LUT photometry by less than
+    the assertion's slack. ``tau_bc``/birth-cloud dust play no role in the
+    *diffuse* screen (:func:`tengri.components.dust.two_component._screen_transmission`
+    with ``choice="diffuse"`` reads only ``tau_diff``/``k_diff``), so it is
+    held Fixed at the two_component helper's default (0) to keep every build
+    here fully pinned (no free params to sample).
+    """
+    dust = _two_component(tau_diff=tau_diff, law="power_law")
+    obs = Observation(photometry=Photometry(filters=_ir_filter_curves()))
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
@@ -115,7 +138,7 @@ def _build_emitting(ssp, diffuse_screen: bool, approx):
         dust_attenuation=dust,
         dust_emission=_emission(diffuse_screen=diffuse_screen),
         neb={"type": "none"},
-        redshift=Fixed(0.05),
+        redshift=Fixed(0.0),
         **_sfh_met_kwargs(),
     )
 
@@ -277,25 +300,98 @@ class TestPointwiseScreenMultiplication:
 
 
 # ── 6. WavePrecomp vs exact + band-response decline recorded ───────────────
+#
+# Modeled on the diagnosis behind the #2533 mutation-testing three: the
+# previous version of this class used UV/optical tophats (blind to dust
+# emission) plus a single very-long-wavelength tophat at tau_diff=0.3, where
+# the diffuse screen's transmission at that wavelength was ~0.992 -- a <1%
+# effect invisible at the rtol=5e-2 the LUT-vs-exact comparison used. Real
+# Spitzer/Herschel bands at tau_diff=3 make the screen's effect (5-19%
+# depending on band) large enough to fail with any of the three lines
+# mutated, and the full-state assertions below target the published dict
+# mutations directly rather than only through a projected photometry number.
 
 
 class TestWavePrecompAgreesWithExact:
-    def test_lut_matches_exact_and_declines_band_response(self, synthetic_ssp_wide):
-        ssp = synthetic_ssp_wide
-        m_lut = _build_emitting(ssp, True, WavePrecomp())
-        m_exact = _build_emitting(ssp, True, None)
+    def test_declines_band_response(self, synthetic_ssp_wide):
+        """diffuse_screen=True must decline the linear-model band-response LUT.
 
+        ``_apply_photometry_precomp``'s ``band_response`` branch reads
+        ``L_ir * band_response`` directly and never touches ``sed_ir``, so if
+        the band-response cache were not declined, the diffuse screen would
+        be silently invisible to any photometry that hits that fast path.
+        """
+        m_lut = _build_emitting(synthetic_ssp_wide, True, WavePrecomp())
         decline = getattr(m_lut, "_dust_band_response_decline", None)
         assert decline is not None, "diffuse_screen=True must decline the band-response LUT"
         assert "diffuse" in decline.lower() or "screen" in decline.lower(), decline
 
-        base = m_lut.spec.sample(jax.random.PRNGKey(0))
-        for tau in (0.0, 0.5, 1.0):
-            p = dict(base)
-            p["dust_tau_bc"] = jnp.asarray(float(tau))
-            a = np.asarray(m_lut.predict_photometry(p))
-            b = np.asarray(m_exact.predict_photometry(p))
-            np.testing.assert_allclose(a[-1], b[-1], rtol=5e-2)  # far-IR band carries L_ir
+    def test_lut_photometry_matches_exact_and_is_observably_switched(self, synthetic_ssp_wide):
+        """WavePrecomp photometry: on == exact's on, and on != off by a real amount."""
+        ssp = synthetic_ssp_wide
+        m_lut_on = _build_emitting(ssp, True, WavePrecomp())
+        m_lut_off = _build_emitting(ssp, False, WavePrecomp())
+        m_exact_on = _build_emitting(ssp, True, None)
+
+        phot_on = np.asarray(m_lut_on.predict_photometry({}))
+        phot_off = np.asarray(m_lut_off.predict_photometry({}))
+        phot_exact_on = np.asarray(m_exact_on.predict_photometry({}))
+
+        # The LUT path (switch on) must agree with the exact path (switch on):
+        # both read the same published sed_dust_ir/T once band_response is
+        # declined, so this is a tight numerical check, not a 5%-slack one.
+        np.testing.assert_allclose(phot_on, phot_exact_on, rtol=1e-6)
+
+        # The switch must be OBSERVABLE in every band (mutant (a): removing
+        # ``sed_ir = sed_ir * dust_diff_t`` would make this ratio 1.0).
+        ratio = phot_on / phot_off
+        assert np.all(ratio < 0.999), (
+            f"diffuse screen must measurably reduce every IR band "
+            f"({dict(zip(IR_BAND_NAMES, ratio, strict=True))})"
+        )
+        # A power-law screen's k(lambda) decreases toward longer wavelengths,
+        # so the fractional loss must shrink from MIPS24 -> PACS70 -> PACS160
+        # (i.e. the ratio must increase): a flat, band-independent ratio would
+        # mean the screen is not really being evaluated at each band's own
+        # wavelength.
+        assert ratio[0] < ratio[1] < ratio[2], (
+            f"MIPS24/PACS70/PACS160 on/off ratios must increase with wavelength: "
+            f"{dict(zip(IR_BAND_NAMES, ratio, strict=True))}"
+        )
+
+    def test_lut_full_grid_sed_and_log_l_ir_emergent_match_exact(self, synthetic_ssp_wide):
+        """Full-state (not just projected) assertions targeting all three mutants.
+
+        Built from ``predict_state`` (not ``predict_photometry``) on a
+        WavePrecomp model so ``state.derived`` is read straight out of the LUT
+        branch of ``EmissionComponent.apply``, the branch every #2533 mutant
+        lived in.
+        """
+        ssp = synthetic_ssp_wide
+        m_lut_on = _build_emitting(ssp, True, WavePrecomp())
+        m_lut_off = _build_emitting(ssp, False, WavePrecomp())
+        m_exact_on = _build_emitting(ssp, True, None)
+
+        s_lut_on = m_lut_on.predict_state({})
+        s_lut_off = m_lut_off.predict_state({})
+        s_exact_on = m_exact_on.predict_state({})
+
+        # Mutants (a) + (b): the LUT branch's own published sed_dust_ir must
+        # equal the switch-off spectrum times the published transmission,
+        # exactly like the exact-path pointwise test above.
+        T = np.asarray(s_lut_on.derived["dust_diff_transmission"])
+        S_off = np.asarray(s_lut_off.derived["sed_dust_ir"])
+        S_on = np.asarray(s_lut_on.derived["sed_dust_ir"])
+        np.testing.assert_allclose(S_on, S_off * T, rtol=1e-10, atol=0.0)
+        assert np.any(S_on < S_off * (1.0 - 1e-9)), (
+            "LUT-path published sed_dust_ir must not be a silent no-op"
+        )
+
+        # Mutant (c): the LUT branch's log_L_ir_emergent numerator must
+        # include the ``* dust_diff_t`` factor, matching the exact path.
+        log_emergent_lut = float(jnp.asarray(s_lut_on.derived["log_L_ir_emergent"]))
+        log_emergent_exact = float(jnp.asarray(s_exact_on.derived["log_L_ir_emergent"]))
+        np.testing.assert_allclose(log_emergent_lut, log_emergent_exact, rtol=1e-6)
 
 
 # ── 7. Grammar round-trip + parse-time refusals ─────────────────────────────
