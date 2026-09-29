@@ -12,11 +12,19 @@ This module also tests the closure-level physics of the DL07 model at these
 grid points to confirm that interpolation works correctly.
 """
 
+import sys
+from pathlib import Path
+
 import pytest
 
 pytestmark = pytest.mark.regression_bug
 
 import numpy as np
+
+# Layout: tests/components/dust/<this_file> -> repo root is 3 levels up.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+
+from convert_dl07_templates import DUST_MODELS, UMIN_VALUES
 
 
 @pytest.fixture
@@ -176,6 +184,65 @@ class TestDL07AxisesAreCorrect:
                 assert lmc2_val not in qpah, (
                     f"q_PAH contains LMC2 ({lmc2_val}), violating issue #2441. Axis: {qpah}"
                 )
+
+
+class TestDL07ConverterLabelTablesMatchShippedGrids:
+    """The converter's own label tables must be the single source of truth.
+
+    #2441 found the converter's ``DUST_MODELS`` mixing LMC2/SMC compositions
+    onto the MW3.1 q_PAH axis; this class pins that the converter's constants
+    (imported directly from ``scripts/convert_dl07_templates.py``, not
+    restated here) match the shipped grids exactly, so a from-scratch
+    regeneration can never drift from what is checked in.
+    """
+
+    @pytest.mark.parametrize("file_format", ["v1", "v2"])
+    def test_qpah_grid_matches_dust_models(self, dl07_v1_path, dl07_v2_path, file_format):
+        """Shipped q_PAH axis equals ``sorted(DUST_MODELS.values())``."""
+        import h5py
+
+        path = dl07_v1_path if file_format == "v1" else dl07_v2_path
+        with h5py.File(path, "r") as f:
+            qpah = np.asarray(f["qpah_grid"] if file_format == "v1" else f["grid"]["qpah"])
+
+        np.testing.assert_array_almost_equal(qpah, sorted(DUST_MODELS.values()))
+
+    @pytest.mark.parametrize("file_format", ["v1", "v2"])
+    def test_umin_grid_matches_umin_values(self, dl07_v1_path, dl07_v2_path, file_format):
+        """Shipped U_min axis equals ``UMIN_VALUES`` exactly."""
+        import h5py
+
+        path = dl07_v1_path if file_format == "v1" else dl07_v2_path
+        with h5py.File(path, "r") as f:
+            umin = np.asarray(f["umin_grid"] if file_format == "v1" else f["grid"]["umin"])
+
+        np.testing.assert_array_almost_equal(umin, UMIN_VALUES)
+
+    def test_dust_models_keys_are_all_mw3_1(self):
+        """Every ``DUST_MODELS`` key names an MW3.1 model -- no LMC2/SMC entries."""
+        for key in DUST_MODELS:
+            assert key.startswith("MW3.1_"), (
+                f"DUST_MODELS key {key!r} is not an MW3.1 model; LMC2/SMC "
+                f"compositions belong in OTHER_COMPOSITIONS, never on the "
+                f"q_PAH axis (issue #2441)."
+            )
+
+    @pytest.mark.parametrize("file_format", ["v1", "v2"])
+    def test_composition_attribute_is_present(self, dl07_v1_path, dl07_v2_path, file_format):
+        """Both shipped files name their grain composition."""
+        import h5py
+
+        path = dl07_v1_path if file_format == "v1" else dl07_v2_path
+        with h5py.File(path, "r") as f:
+            attrs = f.attrs if file_format == "v1" else f["metadata"].attrs
+            composition = attrs.get("composition")
+
+        assert composition is not None, (
+            f"{path} is missing a 'composition' attribute naming the grain model."
+        )
+        assert "MW3.1" in composition, (
+            f"{path} 'composition' attribute {composition!r} does not name MW3.1."
+        )
 
 
 class TestDL07ParameterBounds:

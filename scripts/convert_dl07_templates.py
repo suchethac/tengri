@@ -21,8 +21,10 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-# DL07 dust models and their q_PAH values (percent)
-# From Draine & Li 2007 Table 1
+# DL07 MW3.1 (Milky Way, R_V=3.1) dust models and their q_PAH values (percent).
+# From Draine & Li 2007 Table 1. This is the ladder tengri's q_PAH axis is
+# built from -- every value below shares one grain composition (MW3.1), so
+# interpolating between them stays within one physical model.
 DUST_MODELS = {
     "MW3.1_00": 0.47,
     "MW3.1_10": 1.12,
@@ -31,6 +33,15 @@ DUST_MODELS = {
     "MW3.1_40": 3.19,
     "MW3.1_50": 3.90,
     "MW3.1_60": 4.58,
+}
+
+# DL07 also publishes LMC2 (LMC supershell) and SMC dust models (Draine & Li
+# 2007 Table 1) at these nominal q_PAH values. These are DIFFERENT grain
+# compositions from MW3.1, not further points on the MW3.1 PAH-fraction
+# ladder above: interpolating a q_PAH value between an MW3.1 node and one of
+# these would blend two distinct grain models and report the blend as a PAH
+# fraction. ``convert()`` never places them on the q_PAH axis.
+OTHER_COMPOSITIONS = {
     "LMC2_00": 0.75,
     "LMC2_05": 1.49,
     "LMC2_10": 2.37,
@@ -180,10 +191,10 @@ def convert(input_dir: str, output_path: str) -> None:
       - Power-law template: file U{umin}_{umax}_model.txt
     Then: j_nu_total = (1-gamma) * j_nu_single + gamma * j_nu_powerlaw
     """
-    # Focus on MW models (most commonly used in SED fitting)
-    mw_models = {k: v for k, v in DUST_MODELS.items() if k.startswith("MW")}
-    qpah_values = sorted(set(mw_models.values()))
-    model_by_qpah = {v: k for k, v in mw_models.items()}
+    # DUST_MODELS is MW3.1-only (see its definition); OTHER_COMPOSITIONS is
+    # never placed on the q_PAH axis.
+    qpah_values = sorted(set(DUST_MODELS.values()))
+    model_by_qpah = {v: k for k, v in DUST_MODELS.items()}
 
     # Read one file to get wavelength grid
     test_file = None
@@ -315,6 +326,7 @@ def convert(input_dir: str, output_path: str) -> None:
         f.attrs["source"] = "Draine & Li 2007, ApJ 657, 810"
         f.attrs["url"] = "https://www.astro.princeton.edu/~draine/dust/irem4/"
         f.attrs["dust_models"] = "MW3.1 (Milky Way R_V=3.1)"
+        f.attrs["composition"] = "MW3.1 (Milky Way, R_V = 3.1)"
         f.attrs["n_qpah"] = n_qpah
         f.attrs["n_umin"] = n_umin
         f.attrs["n_wave"] = n_wave
@@ -326,6 +338,18 @@ def convert(input_dir: str, output_path: str) -> None:
             "R = U_max*ln(U_max/U_min)/(U_max-U_min) (DL07 Eq. 33 PDR luminosity "
             "weight), then multiply by L_absorbed for energy-balance normalization."
         )
+
+    # Write-time axis assertion: the written grid must match DUST_MODELS and
+    # UMIN_VALUES exactly, so the from-scratch path can never write another
+    # axis (guards against a repeat of #2535/#2441).
+    with h5py.File(output_path, "r") as f:
+        written_umin = np.asarray(f["umin_grid"])
+        written_qpah = np.asarray(f["qpah_grid"])
+    expected_qpah = np.array(sorted(DUST_MODELS.values()))
+    assert len(written_umin) == len(UMIN_VALUES)
+    np.testing.assert_array_almost_equal(written_umin, UMIN_VALUES)
+    assert len(written_qpah) == len(DUST_MODELS)
+    np.testing.assert_array_almost_equal(written_qpah, expected_qpah)
 
     # Summary
     print("\nDL07 template grid:")
@@ -369,7 +393,7 @@ def relabel_shipped_grid(
     out_v1_path, out_v2_path : str
         Paths to write the corrected v1/v2 grid files to.
     """
-    mw_qpah = np.array(sorted(v for k, v in DUST_MODELS.items() if k.startswith("MW")))
+    mw_qpah = np.array(sorted(DUST_MODELS.values()))
 
     # -- v1 (legacy flat format) --
     with h5py.File(old_v1_path, "r") as f:
@@ -399,6 +423,7 @@ def relabel_shipped_grid(
         for key in ("model", "reference", "spectra_unit", "wavelength_unit"):
             if key in old_attrs:
                 f.attrs[key] = old_attrs[key]
+        f.attrs["composition"] = "MW3.1 (Milky Way, R_V = 3.1)"
         f.attrs["description"] = (
             "Regenerated 2026-09-29 to correct the U_min axis (true 22-node "
             "Draine & Li 2007 grid ending 25.0, no spurious 10.0 node) and "
@@ -454,6 +479,7 @@ def relabel_shipped_grid(
         metadata_group = f.create_group("metadata")
         metadata_group.attrs["model_name"] = "Draine & Li 2007"
         metadata_group.attrs["reference"] = "Draine, B. T. & Li, A. 2007, ApJ, 657, 810"
+        metadata_group.attrs["composition"] = "MW3.1 (Milky Way, R_V = 3.1)"
         metadata_group.attrs["wavelength_unit"] = "Angstrom"
         metadata_group.attrs["flux_unit"] = "Lsun_Hz_per_Msun (per solar mass of dust)"
         metadata_group.attrs["created_by"] = "tengri template converter"

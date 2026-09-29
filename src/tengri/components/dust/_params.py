@@ -158,10 +158,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_qpah",
         Fixed(2.5),
-        # Measured from the shipped grids: dl07 ``qpah_grid`` spans [0.1, 4.58]
-        # (11 nodes) and dl14 [0.47, 7.32] (11). The prose previously gave the
-        # DL07 floor as 0.47, which is DL14's.
-        "Draine & Li PAH mass fraction (%, grid: 0.1-4.58 DL07, 0.47-7.32 DL14)",
+        # Measured from the shipped grids: dl07 ``qpah_grid`` spans [0.47, 4.58]
+        # (7 MW3.1 nodes; issue #2441 removed the LMC2/SMC compositions that had
+        # been mixed onto this axis, which lowered the apparent floor to 0.10)
+        # and dl14 [0.47, 7.32] (11).
+        "Draine & Li PAH mass fraction (%, grid: 0.47-4.58 DL07, 0.47-7.32 DL14)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         # Intersection of the two grids, for the same reason as ``dust_umin``.
