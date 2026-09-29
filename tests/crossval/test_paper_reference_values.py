@@ -613,22 +613,24 @@ class TestSFHMassConservation:
     def test_dpl_peak_time(self):
         """DPL SFH peaks at t_peak = tau × (beta/alpha)^{1/(alpha+beta)}. Carnall+2018 Eq. 1.
 
-        SFR(t) = norm / [(t/tau)^alpha + (t/tau)^{-beta}].
-        Setting d/dt = 0 gives t_peak = tau × (beta/alpha)^{1/(alpha+beta)}.
-        When alpha == beta the formula reduces to t_peak = tau exactly.
+        SFR(T) = norm / [(T/tau)^alpha + (T/tau)^{-beta}], where T = age - t_lookback.
+        Setting d/dT = 0 gives T_peak = tau × (beta/alpha)^{1/(alpha+beta)}.
+        When alpha == beta the formula reduces to T_peak = tau exactly.
+        Peak lookback time is t_peak = age - tau.
         """
         from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         tau = 3e9  # yr
-        # alpha == beta → t_peak == tau exactly (no grid-resolution ambiguity)
+        age = 13.7e9  # yr (universe age at z=0)
+        # alpha == beta → T_peak == tau exactly (no grid-resolution ambiguity)
         alpha = beta = 2.0
-        sfr = double_powerlaw(self.AGE_GRID, alpha=alpha, beta=beta, tau=tau, norm=1.0)
+        sfr = double_powerlaw(self.AGE_GRID, alpha=alpha, beta=beta, tau=tau, norm=1.0, age=age)
         peak_age = float(self.AGE_GRID[jnp.argmax(sfr)])
         np.testing.assert_allclose(
             peak_age,
-            tau,
+            age - tau,
             rtol=0.01,
-            err_msg="DPL SFH: peak age should match tau when alpha=beta (Carnall+2018 Eq. 1)",
+            err_msg="DPL SFH: peak lookback time should be age-tau when alpha=beta (Carnall+2018 Eq. 1)",
         )
 
 
