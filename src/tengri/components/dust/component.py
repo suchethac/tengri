@@ -579,6 +579,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # ``approx=WavePrecomp()`` is set on SEDModel.
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
+            dust_diff_transmission=attenuation,
             L_ir=l_ir,
             L_absorbed=l_absorbed,
             log_L_ir=log_l_ir,
