@@ -6,6 +6,12 @@
 
 ### Fixed
 
+- DL07 template grids regenerated from the Draine & Li (2007) release: the U_min
+  axis is the published 22-node ladder (0.1, 0.15, …, 8.0, 12.0, 15.0, 20.0,
+  25.0; the shipped files had a spurious 10.0 and were missing 25.0, so U_min
+  above 8 selected the neighbouring template) and the q_PAH axis carries only
+  the MW3.1 nodes (7 values, no SMC/LMC2 grain models); `dust_umin` prior
+  widened to 25.0 (#2535, #2441).
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls

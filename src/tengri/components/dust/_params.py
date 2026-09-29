@@ -134,17 +134,17 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_umin",
         Fixed(1.0),
         # Bounds measured from the shipped grids, not quoted: data/dl07_templates.h5
-        # ``umin_grid`` spans [0.1, 20] (22 nodes), dl14 [0.1, 50] (36), themis
-        # [0.1, 80] (37). The prose here previously said "0.1-25 for DL07", which
-        # no grid supports.
-        "Draine & Li minimum radiation field (grid: 0.1-20 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
+        # ``umin_grid`` spans [0.1, 25] (22 nodes, published DL07 axis), dl14 [0.1, 50]
+        # (36), themis [0.1, 80] (37). Issue #2535 corrected the shipped DL07 grid from
+        # the spurious 0.1-20 range (which had a 10.0 node and was missing 25.0).
+        "Draine & Li minimum radiation field (grid: 0.1-25 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         # This bucket is the static superset registered for every IR backend, so
         # the free range is the grid *intersection*: a prior valid under DL14 but
-        # not DL07 would be clipped to the DL07 edge, and everything above 20
-        # would carry exactly zero gradient (#1586).
-        free_prior=Uniform(0.1, 20.0, "DL/THEMIS minimum radiation field", default=1.0),
+        # not DL07 would be clipped to the DL07 edge. DL14 and THEMIS both support
+        # higher values, so the DL07 ceiling (25.0) is the constraint.
+        free_prior=Uniform(0.1, 25.0, "DL/THEMIS minimum radiation field", default=1.0),
     ),
     ParamDeclaration(
         "dust_gamma_dl",
