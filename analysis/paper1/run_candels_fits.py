@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 
 from .configs import CONFIGS as CONFIGS_REGISTRY
-from .fit_one import DEFAULT_RETUNE_ATTEMPTS, ESS_FLOOR
+from .fit_one import ESS_FLOOR
 
 logger = logging.getLogger(__name__)
 
