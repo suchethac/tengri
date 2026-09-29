@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- `PLANCK18` includes radiation and massive-neutrino densities; D_L and age(z) match astropy's Planck18 to < 1e-4 (previously +0.09 % at z=1, +0.21 % at z=10 in D_L) (#2517).
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
   and `resolve_sfh` now runs `validate_bin_edges_gyr` itself so direct calls

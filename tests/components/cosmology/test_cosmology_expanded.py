@@ -379,24 +379,41 @@ class TestComovingVolumeElement:
 
 
 class TestConsistencyWithDSPS:
-    """Test that values match expected DSPS outputs."""
+    """tengri's quadrature must reduce EXACTLY to DSPS's radiation-free
+    flat_wcdm formula when radiation/massive neutrinos are switched off
+    (Tcmb0=Neff=0, m_nu_eV=(0,0,0)) — the #2517 fix adds radiation terms on
+    top of the existing Om0/w0/wa physics, it does not replace it. With
+    PLANCK18 defaults (Tcmb0=2.7255 K, nonzero Onu0), tengri and DSPS
+    intentionally disagree by the physical radiation contribution DSPS
+    omits (see test_cosmology_radiation_2517.py for the astropy-referenced
+    <1e-4 contract)."""
 
-    def test_age_at_z0_planck18_vs_dsps(self):
-        """age_at_z0() should match DSPS directly."""
+    def test_age_at_z0_reduces_to_dsps_without_radiation(self):
+        """age_at_z0() with radiation off should match DSPS directly.
+
+        rtol=2e-4 (not tighter): DSPS's own 512-node quadrature carries its
+        own ~7e-5 discretization error against the true integral (measured);
+        tengri's a=1/(1+z')-substitution quadrature is independently more
+        accurate (see test_cosmology_radiation_2517.py's <1e-4 astropy
+        contract), so the two do not agree to arbitrary precision even with
+        identical physics — only to DSPS's own quadrature error budget.
+        """
         from dsps.cosmology.flat_wcdm import age_at_z0 as dsps_age_at_z0
 
-        age0 = age_at_z0(cosmo=PLANCK18)
-        expected = dsps_age_at_z0(PLANCK18.Om0, PLANCK18.w0, PLANCK18.wa, PLANCK18.h)
-        assert jnp.allclose(age0, expected, rtol=1e-12)
+        cold = PLANCK18._replace(Tcmb0=0.0, Neff=0.0, m_nu_eV=(0.0, 0.0, 0.0))
+        age0 = age_at_z0(cosmo=cold)
+        expected = dsps_age_at_z0(cold.Om0, cold.w0, cold.wa, cold.h)
+        assert jnp.allclose(age0, expected, rtol=2e-4)
 
-    def test_luminosity_distance_vs_dsps(self):
-        """luminosity_distance should match DSPS directly."""
+    def test_luminosity_distance_reduces_to_dsps_without_radiation(self):
+        """luminosity_distance with radiation off should match DSPS directly."""
         from dsps.cosmology.flat_wcdm import luminosity_distance_to_z as dsps_dl
 
+        cold = PLANCK18._replace(Tcmb0=0.0, Neff=0.0, m_nu_eV=(0.0, 0.0, 0.0))
         z = 0.5
-        dl = luminosity_distance_mpc(z, cosmo=PLANCK18)
-        expected = dsps_dl(z, PLANCK18.Om0, PLANCK18.w0, PLANCK18.wa, PLANCK18.h)
-        assert jnp.allclose(dl, expected, rtol=1e-12)
+        dl = luminosity_distance_mpc(z, cosmo=cold)
+        expected = dsps_dl(z, cold.Om0, cold.w0, cold.wa, cold.h)
+        assert jnp.allclose(dl, expected, rtol=1e-6)
 
 
 class TestEdgeCases:
@@ -566,20 +583,44 @@ class TestZAtLookbackTime:
 
 
 @pytest.mark.parametrize("cosmo_obj", [PLANCK18, PLANCK15, WMAP5])
-def test_age_at_z0_host_matches_dsps(cosmo_obj):
-    """Verify numpy twin of dsps age_at_z0 calculation.
+def test_age_at_z0_host_matches_dsps_without_radiation(cosmo_obj):
+    """Verify the numpy host twin reduces to DSPS when radiation is off.
 
-    age_at_z0_host should produce results identical (within float64 rounding)
-    to the DSPS implementation, using the same 512-node trapezoidal quadrature
-    without importing JAX or allocating device buffers.
+    age_at_z0_host is a pure-numpy twin of age_at_z0 (#2517: matter + CPL
+    dark energy + photons + massive neutrinos), not of DSPS's radiation-free
+    age_at_z0 — see test_age_at_z0_host_matches_age_at_z0 for the contract
+    it actually needs to hold. With radiation switched off it must still
+    reduce to DSPS's own (Om0, w0, wa, h)-only formula.
     """
     from dsps.cosmology.flat_wcdm import age_at_z0 as dsps_age_at_z0
 
+    cold = cosmo_obj._replace(Tcmb0=0.0, Neff=0.0, m_nu_eV=(0.0, 0.0, 0.0))
+    host_age = age_at_z0_host(cold)
+    dsps_age_val = float(dsps_age_at_z0(cold.Om0, cold.w0, cold.wa, cold.h))
+
+    # rtol, not the old absolute float64-rounding tolerance: DSPS's own
+    # log-spaced/trapezoidal quadrature and this function's Gauss-Legendre
+    # a-substitution are independently-accurate approximations of the same
+    # integral, not bit-identical schemes (see test_cosmology_radiation_2517.py).
+    assert abs(host_age / dsps_age_val - 1.0) < 2e-4
+
+
+@pytest.mark.parametrize("cosmo_obj", [PLANCK18, PLANCK15, WMAP5])
+def test_age_at_z0_host_matches_age_at_z0(cosmo_obj):
+    """age_at_z0_host (pure numpy) must match age_at_z0 (JAX) to high
+    precision -- both implement the same #2517 radiation-inclusive
+    physics on the same Gauss-Legendre quadrature grid, so they should
+    agree far tighter than either agrees with astropy.
+
+    Rounded values must also match: registry.py's ``_AGE_UNIV_GYR`` is
+    ``round(age_at_z0_host(), 3)``, and the onset-age z-narrowing pass
+    (tests/contract/test_onset_age_z_narrowing.py) compares that against
+    a fresh ``age_at_z(z_floor)`` call -- if the two implementations
+    disagreed even in the 4th decimal, the rounded registry ceiling could
+    drift a full 0.001 Gyr from the dynamic cap for no physical reason.
+    """
     host_age = age_at_z0_host(cosmo_obj)
-    dsps_age_val = float(dsps_age_at_z0(*cosmo_obj))
+    jax_age = float(age_at_z0(cosmo=cosmo_obj))
 
-    # Absolute tolerance: float64 rounding error
-    assert abs(host_age - dsps_age_val) < 1e-9 * max(abs(dsps_age_val), 1.0)
-
-    # Rounded values must match (used in registry)
-    assert round(host_age, 3) == round(dsps_age_val, 3)
+    assert abs(host_age / jax_age - 1.0) < 1e-9
+    assert round(host_age, 3) == round(jax_age, 3)

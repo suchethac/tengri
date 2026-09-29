@@ -124,6 +124,13 @@ the forward model, and listed oldest first within each group.
   MDF widths sourcing the `met_logzsol_scatter` prior interval. Hayden et
   al. (2015), [arXiv:1503.02110](https://arxiv.org/abs/1503.02110).
 
+### Cosmology
+
+- Massive-neutrino energy-density fitting formula (eq. 26), used in
+  `CosmoParams`' radiation-inclusive E(z) so `PLANCK18` matches
+  `astropy.cosmology.Planck18`'s luminosity distance and age(z). Komatsu
+  et al. (2011), [arXiv:1001.4538](https://arxiv.org/abs/1001.4538).
+
 ### Initial mass functions
 
 - Salpeter (1955), [doi:10.1086/145971](https://doi.org/10.1086/145971).
