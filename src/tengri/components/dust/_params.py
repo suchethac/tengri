@@ -135,8 +135,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(1.0),
         # Bounds measured from the shipped grids, not quoted: data/dl07_templates.h5
         # ``umin_grid`` spans [0.1, 25] (22 nodes, published DL07 axis), dl14 [0.1, 50]
-        # (36), themis [0.1, 80] (37). Issue #2535 corrected the shipped DL07 grid from
-        # the spurious 0.1-20 range (which had a 10.0 node and was missing 25.0).
+        # (36), themis [0.1, 80] (37). The 22-node DL07 ladder is the one in
+        # Draine & Li (2007) Table 3 and FSPS's own ``uminarr``; CIGALE's dl2007
+        # module instead lists a 23-node ladder that also contains U_min=10.0.
         "Draine & Li minimum radiation field (grid: 0.1-25 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
         lambda lo, hi: lo > 0,
         "must be > 0",

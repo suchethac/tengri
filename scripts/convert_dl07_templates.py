@@ -20,7 +20,6 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-from scipy.integrate import trapezoid
 
 # DL07 dust models and their q_PAH values (percent)
 # From Draine & Li 2007 Table 1
@@ -203,47 +202,19 @@ def convert(input_dir: str, output_path: str) -> None:
         sys.exit(1)
 
     test_data = read_dl07_template(test_file)
-    wave_um_native = test_data["wavelength_um"]
-    n_wave = len(wave_um_native)
-    # Regrid onto a clean log-uniform micron axis spanning the native range.
-    # The DL07spec continuous-spectrum rows are already log-uniform in
-    # wavelength but printed to 4 significant figures, which is not exactly
-    # reproducible; a canonical ``logspace`` axis is what tengri's shipped
-    # grids actually carry as their ``wavelength`` dataset (verified against
-    # the pre-#2535 file: bit-identical to
-    # ``np.logspace(log10(wave_um_native[0]), log10(wave_um_native[-1]),
-    # n_wave)``), so every node resamples onto the same reproducible grid.
-    wave_um = np.logspace(np.log10(wave_um_native[0]), np.log10(wave_um_native[-1]), n_wave)
+    wave_um = test_data["wavelength_um"]
+    n_wave = len(wave_um)
     print(f"Wavelength grid: {n_wave} points, {wave_um[0]:.3f} - {wave_um[-1]:.3f} um")
 
     # Build grids for single-U and power-law templates
     n_qpah = len(qpah_values)
     n_umin = len(UMIN_VALUES)
 
-    # Single-U templates: L_lambda(qpah, umin, wave) — for the (1-gamma) component
+    # Single-U templates: j_nu(qpah, umin, wave) — for the (1-gamma) component
     single_u = np.zeros((n_qpah, n_umin, n_wave))
-    # Power-law templates: L_lambda(qpah, umin, wave) — for the gamma component
+    # Power-law templates: j_nu(qpah, umin, wave) — for the gamma component
     # Using Umax=1e6 (standard DL07)
     powerlaw = np.zeros((n_qpah, n_umin, n_wave))
-
-    c_um = 2.99792458e14  # c in um/s
-
-    def _read_as_l_lambda_per_aa(path: str) -> np.ndarray:
-        """Read a DL07 template and convert its ``j_nu`` column to L_lambda.
-
-        The raw ``j_nu`` column is a frequency-space emissivity (Jy cm^2
-        sr^-1 H^-1). ``emission_templates.dl07_tabulated`` treats the loaded
-        grid as an L_lambda shape and applies its own L_lambda -> L_nu
-        Jacobian at runtime, so the written grid must already be in that
-        convention: multiply by ``|dnu/dlambda| = nu/lambda`` and resample
-        onto the shared ``wave_um`` grid, per Angstrom.
-        """
-        data = read_dl07_template(path)
-        wl_native = data["wavelength_um"]
-        nu_native = c_um / wl_native
-        l_lambda_per_um = data["j_nu"] * (nu_native / wl_native)
-        l_lambda_per_aa = l_lambda_per_um / 1.0e4
-        return np.interp(wave_um, wl_native, l_lambda_per_aa)
 
     found = 0
     missing = 0
@@ -260,7 +231,8 @@ def convert(input_dir: str, output_path: str) -> None:
             single_path = os.path.join(input_dir, u_str, single_fname)
 
             if os.path.exists(single_path):
-                single_u[iq, iu, :] = _read_as_l_lambda_per_aa(single_path)
+                data = read_dl07_template(single_path)
+                single_u[iq, iu, :] = np.interp(wave_um, data["wavelength_um"], data["j_nu"])
                 found += 1
             else:
                 missing += 1
@@ -272,7 +244,8 @@ def convert(input_dir: str, output_path: str) -> None:
             pl_path = os.path.join(input_dir, u_str, pl_fname)
 
             if os.path.exists(pl_path):
-                powerlaw[iq, iu, :] = _read_as_l_lambda_per_aa(pl_path)
+                data = read_dl07_template(pl_path)
+                powerlaw[iq, iu, :] = np.interp(wave_um, data["wavelength_um"], data["j_nu"])
                 found += 1
             else:
                 missing += 1
@@ -295,26 +268,22 @@ def convert(input_dir: str, output_path: str) -> None:
     # ``emission_templates.dl07_tabulated`` so that ``gamma`` is applied as a
     # mass fraction, not a luminosity fraction. Do NOT bake R in here as well.
 
-    # Normalize each template to unit WAVELENGTH integral (shape only; forward
-    # restores R). The grid is already L_lambda (per Angstrom), so the
-    # consuming ``dl07_tabulated`` -- which applies its own L_lambda -> L_nu
-    # Jacobian -- must find each template pre-normalized in the SAME variable
-    # it was written in: integral over ``wave_aa``, not frequency. Normalizing
-    # over frequency here (the pre-#2535 bug) silently hands the consumer a
-    # template whose stored shape is off by a wavelength-dependent factor
-    # once its Jacobian is applied.
-    wave_aa = wave_um * 1.0e4  # Angstrom
+    # Normalize each template to unit integral (shape only; forward restores R)
+    c_um = 2.99792458e14  # c in um/s
+    nu_from_um = c_um / wave_um  # Hz
 
     for iq in range(n_qpah):
         for iu in range(n_umin):
             for grid in [single_u, powerlaw]:
-                total = trapezoid(grid[iq, iu, :], wave_aa)
+                total = -np.trapz(grid[iq, iu, :], nu_from_um)
                 if total > 0:
                     grid[iq, iu, :] /= total
 
     # Write HDF5
     print(f"Writing: {output_path}")
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    wave_aa = wave_um * 1e4  # convert to Angstrom for tengri convention
 
     with h5py.File(output_path, "w") as f:
         f.create_dataset("wavelength", data=wave_aa)
@@ -333,14 +302,14 @@ def convert(input_dir: str, output_path: str) -> None:
         f["single_u"].attrs["shape"] = "(n_qpah, n_umin, n_wave)"
         f["single_u"].attrs["description"] = (
             "Single-U template: dust heated by U=U_min only. "
-            "L_lambda convention, normalized to unit wavelength integral (shape only)."
+            "Normalized to unit frequency integral (shape only)."
         )
 
         f.create_dataset("powerlaw", data=powerlaw)
         f["powerlaw"].attrs["shape"] = "(n_qpah, n_umin, n_wave)"
         f["powerlaw"].attrs["description"] = (
             "Power-law template: dust heated by U^{-2} from U_min to 1e6. "
-            "L_lambda convention, normalized to unit wavelength integral (shape only)."
+            "Normalized to unit frequency integral (shape only)."
         )
 
         f.attrs["source"] = "Draine & Li 2007, ApJ 657, 810"
@@ -351,232 +320,15 @@ def convert(input_dir: str, output_path: str) -> None:
         f.attrs["n_wave"] = n_wave
         f.attrs["umax_powerlaw"] = 1e6
         f.attrs["description"] = (
-            "DL07 IR emission templates for tengri. single_u and powerlaw are each "
-            "in L_lambda convention, shape-normalized to unit wavelength integral. "
-            "Usage: j_nu = (1-gamma)*single_u[iq,iu] + gamma*R*powerlaw[iq,iu] with "
+            "DL07 IR emission templates for tengri. single_u and powerlaw are "
+            "each shape-normalized (unit integral). Usage: "
+            "j_nu = (1-gamma)*single_u[iq,iu] + gamma*R*powerlaw[iq,iu] with "
             "R = U_max*ln(U_max/U_min)/(U_max-U_min) (DL07 Eq. 33 PDR luminosity "
-            "weight), then multiply by L_absorbed for energy-balance normalization. "
-            "Regenerated 2026-09-29 to correct the U_min axis (true 22-node Draine "
-            "& Li 2007 grid ending 25.0, no spurious 10.0 node) and restrict q_PAH "
-            "to the 7 genuine MW3.1 nodes (#2535, #2441). Source: "
-            "https://www.astro.princeton.edu/~draine/dust/irem4/DL07spec.tgz"
+            "weight), then multiply by L_absorbed for energy-balance normalization."
         )
-
-    # Verify the written grids match the published axes
-    # This guard prevents a repeat of issue #2535 where the shipped files had
-    # wrong axes (10.0 in U_min, SMC/LMC2 in q_PAH)
-    with h5py.File(output_path, "r") as f:
-        written_umin = np.asarray(f["umin_grid"])
-        written_qpah = np.asarray(f["qpah_grid"])
-
-    # U_min: verify it matches the DL07 published 22-node axis exactly
-    assert len(written_umin) == 22, f"U_min has {len(written_umin)} nodes, expected 22"
-    assert not np.any(written_umin == 10.0), "U_min contains spurious 10.0 node"
-    assert 25.0 in written_umin, "U_min missing the top published node 25.0"
-    np.testing.assert_array_almost_equal(
-        written_umin,
-        UMIN_VALUES,
-        err_msg=f"Written U_min axis {written_umin} does not match declared {UMIN_VALUES}",
-    )
-
-    # q_PAH: verify it contains only MW3.1 nodes, not SMC/LMC2
-    assert len(written_qpah) == 7, f"q_PAH has {len(written_qpah)} nodes, expected 7 MW3.1"
-    mw_qpah_expected = sorted([v for k, v in DUST_MODELS.items() if k.startswith("MW")])
-    np.testing.assert_array_almost_equal(
-        written_qpah,
-        mw_qpah_expected,
-        err_msg=f"Written q_PAH {written_qpah} does not match MW3.1 nodes {mw_qpah_expected}",
-    )
-    assert 0.10 not in written_qpah, "q_PAH contains SMC (0.10)"
-    assert 0.75 not in written_qpah, "q_PAH contains LMC2_00 (0.75)"
-    assert 1.49 not in written_qpah, "q_PAH contains LMC2_05 (1.49)"
-    assert 2.37 not in written_qpah, "q_PAH contains LMC2_10 (2.37)"
 
     # Summary
     print("\nDL07 template grid:")
-    print(f"  q_PAH: {qpah_values} ({n_qpah} values)")
-    print(f"  U_min: {UMIN_VALUES} ({n_umin} values)")
-    print(f"  Wavelength: {n_wave} points ({wave_um[0]:.3f} - {wave_um[-1]:.3f} um)")
-    print(
-        f"  Grid size: {single_u.nbytes / 1e6:.1f} MB (single) + "
-        f"{powerlaw.nbytes / 1e6:.1f} MB (power-law)"
-    )
-    print(f"\nWrote: {output_path}")
-
-
-def convert_v2(input_dir: str, output_path: str) -> None:
-    """Convert DL07 templates to v2 hierarchical HDF5 format.
-
-    The v2 format uses a hierarchical structure:
-    - /wavelength: wavelength grid in Angstrom
-    - /grid/qpah: q_PAH values (MW3.1 only)
-    - /grid/umin: U_min values (published 22-node DL07 grid)
-    - /spectra/single_u: single-U templates
-    - /spectra/pdr: power-law (PDR) templates
-    """
-    # Focus on MW models only
-    mw_models = {k: v for k, v in DUST_MODELS.items() if k.startswith("MW")}
-    qpah_values = sorted(set(mw_models.values()))
-    model_by_qpah = {v: k for k, v in mw_models.items()}
-
-    # Read one file to get wavelength grid
-    test_file = None
-    for d in sorted(os.listdir(input_dir)):
-        dpath = os.path.join(input_dir, d)
-        if os.path.isdir(dpath):
-            for f in os.listdir(dpath):
-                if f.endswith(".txt"):
-                    test_file = os.path.join(dpath, f)
-                    break
-        if test_file:
-            break
-
-    if test_file is None:
-        print(f"Error: no template files found in {input_dir}")
-        sys.exit(1)
-
-    test_data = read_dl07_template(test_file)
-    wave_um_native = test_data["wavelength_um"]
-    n_wave = len(wave_um_native)
-    wave_um = np.logspace(np.log10(wave_um_native[0]), np.log10(wave_um_native[-1]), n_wave)
-    print(f"Wavelength grid: {n_wave} points, {wave_um[0]:.3f} - {wave_um[-1]:.3f} um")
-
-    # Build grids
-    n_qpah = len(qpah_values)
-    n_umin = len(UMIN_VALUES)
-
-    single_u = np.zeros((n_qpah, n_umin, n_wave))
-    powerlaw = np.zeros((n_qpah, n_umin, n_wave))
-
-    c_um = 2.99792458e14
-
-    def _read_as_l_lambda_per_aa(path: str) -> np.ndarray:
-        """See ``convert._read_as_l_lambda_per_aa``: same L_nu -> L_lambda Jacobian."""
-        data = read_dl07_template(path)
-        wl_native = data["wavelength_um"]
-        nu_native = c_um / wl_native
-        l_lambda_per_um = data["j_nu"] * (nu_native / wl_native)
-        l_lambda_per_aa = l_lambda_per_um / 1.0e4
-        return np.interp(wave_um, wl_native, l_lambda_per_aa)
-
-    found = 0
-    missing = 0
-
-    for iq, qpah in enumerate(qpah_values):
-        model_name = model_by_qpah[qpah]
-        for iu, umin in enumerate(UMIN_VALUES):
-            u_str = _umin_to_str(umin)
-            u_val = u_str[1:]
-            single_fname = f"{u_str}_{u_val}_{model_name}.txt"
-            single_path = os.path.join(input_dir, u_str, single_fname)
-
-            if os.path.exists(single_path):
-                single_u[iq, iu, :] = _read_as_l_lambda_per_aa(single_path)
-                found += 1
-            else:
-                missing += 1
-
-            pl_fname = f"{u_str}_1e6_{model_name}.txt"
-            pl_path = os.path.join(input_dir, u_str, pl_fname)
-
-            if os.path.exists(pl_path):
-                powerlaw[iq, iu, :] = _read_as_l_lambda_per_aa(pl_path)
-                found += 1
-            else:
-                missing += 1
-
-    print(f"Templates read: {found} found, {missing} missing")
-
-    # Normalize each template to unit WAVELENGTH integral (see ``convert``).
-    wave_aa = wave_um * 1e4
-
-    for iq in range(n_qpah):
-        for iu in range(n_umin):
-            for grid in [single_u, powerlaw]:
-                total = trapezoid(grid[iq, iu, :], wave_aa)
-                if total > 0:
-                    grid[iq, iu, :] /= total
-
-    # Write v2 HDF5
-    print(f"Writing: {output_path}")
-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-
-    with h5py.File(output_path, "w") as f:
-        # Top-level wavelength
-        f.create_dataset("wavelength", data=wave_aa)
-        f["wavelength"].attrs["unit"] = "Angstrom"
-        f["wavelength"].attrs["description"] = "Rest-frame wavelength grid"
-
-        # /grid group
-        grid_group = f.create_group("grid")
-        grid_group.create_dataset("qpah", data=np.array(qpah_values))
-        grid_group["qpah"].attrs["unit"] = "percent"
-        grid_group["qpah"].attrs["description"] = "PAH mass fraction (0.47-4.58%)"
-        grid_group.create_dataset("umin", data=np.array(UMIN_VALUES))
-        grid_group["umin"].attrs["unit"] = "dimensionless"
-        grid_group["umin"].attrs["description"] = (
-            "Minimum radiation field intensity (U_min in units of local ISRF)"
-        )
-
-        # /spectra group
-        spectra_group = f.create_group("spectra")
-        spectra_group.create_dataset("single_u", data=single_u)
-        spectra_group["single_u"].attrs["shape"] = "(n_qpah, n_umin, n_wave)"
-        spectra_group["single_u"].attrs["description"] = (
-            "Emission at single radiation field U=U_min (diffuse ISM component)"
-        )
-        spectra_group.create_dataset("pdr", data=powerlaw)
-        spectra_group["pdr"].attrs["shape"] = "(n_qpah, n_umin, n_wave)"
-        spectra_group["pdr"].attrs["description"] = (
-            "Power-law U distribution from U_min to U_max=1e6 with alpha=2 (PDR component)"
-        )
-
-        # /metadata group -- self-documenting provenance, read by nothing at
-        # runtime (the loader only reads /wavelength, /grid, /spectra) but
-        # kept so the file matches its pre-#2535 structure and is inspectable
-        # with h5dump/h5py alone.
-        metadata_group = f.create_group("metadata")
-        metadata_group.attrs["model_name"] = "Draine & Li 2007"
-        metadata_group.attrs["reference"] = "Draine, B. T. & Li, A. 2007, ApJ, 657, 810"
-        metadata_group.attrs["wavelength_unit"] = "Angstrom"
-        metadata_group.attrs["flux_unit"] = "Lsun_Hz_per_Msun (per solar mass of dust)"
-        metadata_group.attrs["created_by"] = "tengri template converter"
-        metadata_group.attrs["description"] = (
-            "Silicate-graphite-PAH grain model. Two components: single radiation "
-            "field (diffuse ISM) and power-law radiation field distribution (PDR "
-            "regions). Regenerated 2026-09-29 to correct the U_min axis (true "
-            "22-node Draine & Li 2007 grid ending 25.0, no spurious 10.0 node) and "
-            "restrict q_PAH to the 7 genuine MW3.1 nodes (#2535, #2441). Source: "
-            "https://www.astro.princeton.edu/~draine/dust/irem4/DL07spec.tgz"
-        )
-
-    # Verify the written grids
-    with h5py.File(output_path, "r") as f:
-        written_umin = np.asarray(f["grid"]["umin"])
-        written_qpah = np.asarray(f["grid"]["qpah"])
-
-    assert len(written_umin) == 22, f"U_min has {len(written_umin)} nodes, expected 22"
-    assert not np.any(written_umin == 10.0), "U_min contains spurious 10.0 node"
-    assert 25.0 in written_umin, "U_min missing the top published node 25.0"
-    np.testing.assert_array_almost_equal(
-        written_umin,
-        UMIN_VALUES,
-        err_msg=f"Written U_min axis {written_umin} does not match declared {UMIN_VALUES}",
-    )
-
-    assert len(written_qpah) == 7, f"q_PAH has {len(written_qpah)} nodes, expected 7 MW3.1"
-    mw_qpah_expected = sorted([v for k, v in DUST_MODELS.items() if k.startswith("MW")])
-    np.testing.assert_array_almost_equal(
-        written_qpah,
-        mw_qpah_expected,
-        err_msg=f"Written q_PAH {written_qpah} does not match MW3.1 nodes {mw_qpah_expected}",
-    )
-    assert 0.10 not in written_qpah, "q_PAH contains SMC (0.10)"
-    assert 0.75 not in written_qpah, "q_PAH contains LMC2_00 (0.75)"
-    assert 1.49 not in written_qpah, "q_PAH contains LMC2_05 (1.49)"
-    assert 2.37 not in written_qpah, "q_PAH contains LMC2_10 (2.37)"
-
-    print("\nDL07 template grid (v2):")
     print(f"  q_PAH: {qpah_values} ({n_qpah} values)")
     print(f"  U_min: {UMIN_VALUES} ({n_umin} values)")
     print(f"  Wavelength: {n_wave} points ({wave_um[0]:.3f} - {wave_um[-1]:.3f} um)")
@@ -715,7 +467,9 @@ def relabel_shipped_grid(
             "Source: https://www.astro.princeton.edu/~draine/dust/irem4/DL07spec.tgz"
         )
 
-    # Same axis guards as ``convert``/``convert_v2``.
+    # Node-list assertion: the axis this function writes must match the
+    # published 22-node DL07 U_min ladder and the 7 genuine MW3.1 q_PAH
+    # nodes exactly -- guards against a repeat of #2535/#2441.
     for path, umin_key, qpah_key in (
         (out_v1_path, ("umin_grid",), ("qpah_grid",)),
         (out_v2_path, ("grid", "umin"), ("grid", "qpah")),
@@ -777,12 +531,7 @@ def main():
         repo_root = script_dir.parent
         args.input_dir = str(repo_root / "data" / "dl07_raw")
 
-    # Generate v1 format (top-level keys)
     convert(args.input_dir, args.output)
-
-    # Also generate v2 format (hierarchical structure)
-    output_v2 = args.output.replace(".h5", "_v2.h5")
-    convert_v2(args.input_dir, output_v2)
 
 
 if __name__ == "__main__":
