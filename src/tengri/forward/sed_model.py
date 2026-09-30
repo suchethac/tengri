@@ -124,12 +124,18 @@ _L_IR_PROBE = 1.0e44
 #: near-discontinuity of the mean-IGM curve (photons redward of the Ly-alpha
 #: *rest* wavelength never cross the resonance at any lower redshift, so
 #: T jumps from the forest value to ~1 right at the line): measured
-#: (independent numpy quadrature, z=3, sigma_gas=100 km/s) a coarse 9-point
-#: stencil under-resolves that step and converges to 0.785 vs the resolved
-#: 0.834; 201 points gives 0.833, within 0.002 of the resolved value at
-#: negligible extra cost (one extra ``igm_absorption`` call over a small
-#: array, not a per-iteration cost driver).
-_IGM_LINE_PROFILE_N_POINTS = 201
+#: (independent numpy quadrature, Lya, sigma_gas=100 km/s, inoue14) against a
+#: 50001-point reference, a coarse 9-point stencil under-resolves that step
+#: and converges to 0.785 vs the resolved 0.834 at z=3. The point count was
+#: 201 until a 2026-09-30 review measured it against z=6 too, where the step
+#: is sharper (the trough is deeper and the line sits further into it): 201
+#: points gives 0.499219 vs the reference 0.505134, a 1.17% relative error --
+#: nearly 6x the 0.2% bound that same count meets at z=3 (0.833 vs 0.835,
+#: 0.24%). Swept 201/401/1001/2001 against the reference at z=6: 401 -> 0.58%,
+#: 1001 -> 0.23%, 2001 -> 0.11%, the first of the four under 0.2%. Set to the
+#: smallest of those, at negligible extra cost (one extra ``igm_absorption``
+#: call over a small array, not a per-iteration cost driver): 2001 points.
+_IGM_LINE_PROFILE_N_POINTS = 2001
 _IGM_LINE_PROFILE_N_SIGMA = 3.0
 
 #: Properties whose value is read off the rest-frame SED, which the fast-nebular
@@ -7551,14 +7557,16 @@ class SEDModel:
         (nebular emission already in the flux tables, ``neb={'type': 'ssp'}``);
         for either it yields a quantity directly comparable to a catalog's
         continuum-subtracted line flux and carries the stellar Balmer absorption
-        under the line self-consistently. With ``neb={'type': 'none'}`` (no
-        nebular backend at all) it measures the stellar continuum/absorption at
-        the line's rest wavelength, which is a legitimate use (e.g. isolating
-        non-nebular physics from a nebular-emission channel) but carries no
-        nebular emission whatsoever -- unlike a bare-stellar grid explicitly
-        paired with ``neb={'type': 'ssp'}``, which raises rather than silently
-        returning that same continuum-only number under a nebular-emission-line
-        method's name (#2540).
+        under the line self-consistently. With an explicit ``neb={'type':
+        'none'}`` it measures the stellar continuum/absorption at the line's
+        rest wavelength, which is a legitimate use (e.g. isolating non-nebular
+        physics from a nebular-emission channel) but carries no nebular
+        emission whatsoever -- unlike a bare-stellar grid paired with
+        ``neb={'type': 'ssp'}`` (or the omitted-``neb=`` default, which makes
+        the same baked-in assumption), which never reaches this method at
+        all: ``BakedInBackend.__init__`` already raises at model-construction
+        time rather than silently returning that same continuum-only number
+        under a nebular-emission-line method's name (#2540).
 
         Parameters
         ----------
@@ -7601,17 +7609,20 @@ class SEDModel:
         jnp.ndarray, shape (n_line,)
             Observed emission-line fluxes [erg/s/cm^2], in ``line_defs`` order.
 
-        Raises
-        ------
-        ValueError
+        Warns
+        -----
+        :class:`~tengri.components.nebular.baked_in.BakedInNebularGridWarning`
             If the configured nebular backend contributes no nebular flux of
             its own (BakedIn, i.e. ``neb={'type': 'ssp'}`` or the model's
-            default) and the SSP grid's ``nebular`` metadata is ``'bare'``
-            (#2540): the grid unambiguously carries no emission anywhere.
-            Not raised for ``neb={'type': 'none'}`` (see Notes) or for a
-            BakedIn backend on an ``'unknown'`` grid, which instead warns
-            (:class:`~tengri.components.nebular.baked_in.BakedInNebularGridWarning`)
-            since that status cannot be resolved either way.
+            default) and the SSP grid's ``nebular`` metadata is not
+            ``'included'`` (#2540): the measured flux is stellar
+            continuum/absorption only, indistinguishable from
+            ``neb={'type': 'none'}``. A ``'bare'``-stamped grid in this mode
+            cannot reach this method at all -- ``BakedInBackend.__init__``
+            already raises ``BakedInNebularBareError`` (a ``ValueError``) at
+            model-construction time. Never warns for an explicit
+            ``neb={'type': 'none'}`` (see Notes): nothing about that mode
+            asserts the grid carries baked-in emission in the first place.
 
         Notes
         -----
@@ -7646,24 +7657,43 @@ class SEDModel:
         # selected explicitly via ``neb={'type': 'ssp'}`` or the model's default)
         # contributes zero ADDITIONAL nebular flux and relies entirely on the SSP
         # grid's own flux tables already carrying the emission (a wNE grid).
-        # ``ssp_data.nebular`` records what is known about that: ``'bare'`` is
-        # unambiguous (stamped by a user or ``tools/stamp_ssp_nebular_attrs.py``
-        # as carrying no emission at all) and refused outright, the same way
-        # ``predict_line_fluxes`` refuses when it has no line source at all
-        # (#2296's grid check, ``sed_model.py`` ~6551). ``'unknown'`` (the
-        # unstamped default -- most shipped grids) cannot be resolved either
-        # way by any heuristic (#2362: a retained-LyC wNE grid is
-        # indistinguishable from bare by ionizing-photon rate alone), so a hard
-        # refusal there would be a false positive for a genuinely-baked,
-        # merely-unstamped grid; downgrade to a warning instead; naming the
-        # same remedy (#2540). ``neb={'type': 'none'}`` itself is NEVER
-        # refused or warned about here: measuring the stellar
+        # ``ssp_data.nebular`` records what is known about that: ``'unknown'``
+        # (the unstamped default -- most shipped grids) cannot be resolved
+        # either way by any heuristic (#2362: a retained-LyC wNE grid is
+        # indistinguishable from bare by ionizing-photon rate alone), so this
+        # warns rather than refuses. ``'bare'`` never reaches here in this
+        # mode: ``BakedInBackend.__init__`` (``baked_in.py``) already raises
+        # ``BakedInNebularBareError`` at model-construction time for a bare
+        # grid whenever ``ssp_data`` was threaded to it, which it always is
+        # for ``neb={'type': 'ssp'}`` and the omitted-``neb=`` default (#2540
+        # review: a ``ssp_status == 'bare'`` branch here was measured
+        # unreachable and removed rather than kept untested).
+        #
+        # ``neb={'type': 'none'}`` is the ONE mode this check must never see
+        # (#2540 review): it also constructs a ``BakedInBackend`` (the class
+        # check below cannot tell it apart from ``'ssp'``/default by
+        # ``hasattr`` alone), but nothing about ``'none'`` asserts the grid
+        # carries baked-in emission -- measuring the stellar
         # continuum/absorption with no nebular backend at all is this
         # method's documented, exercised fallback (see the class Notes), not
-        # a mismeasurement of a nebular emission that was supposed to be
-        # there.
+        # a mismeasurement of an emission the user never claimed was there.
+        # ``spec.nebular_mode == 'off' and spec._nebular_explicit`` is the
+        # exact condition ``_init_nebular`` (``sed_model.py`` ~4136) already
+        # uses to decide whether to thread ``ssp_data`` to ``BakedInBackend``
+        # at all -- mirrored here rather than re-derived, since it is the
+        # authoritative "did the user explicitly say no nebular emission"
+        # signal. An omitted ``neb=`` is ALSO ``nebular_mode == 'off'`` but
+        # with ``_nebular_explicit`` False, so it still reaches the same
+        # warn-on-unstamped behavior as ``'ssp'`` -- the default backend
+        # makes the same baked-in assumption ``neb={'type': 'ssp'}`` states
+        # explicitly, just without silencing the construction-time advisory.
+        neb_is_explicit_none = self.spec.nebular_mode == "off" and self.spec._nebular_explicit
         backend = self._nebular_backend
-        if backend is not None and not hasattr(backend, "predict_nebular_line_luminosities"):
+        if (
+            not neb_is_explicit_none
+            and backend is not None
+            and not hasattr(backend, "predict_nebular_line_luminosities")
+        ):
             ssp_status = getattr(self.ssp_data, "nebular", "unknown")
             if ssp_status != "included":
                 grid_name = getattr(self.ssp_data, "source", "") or "<unnamed SSP grid>"
@@ -7687,12 +7717,6 @@ class SEDModel:
                     f"stamp its metadata with tools/stamp_ssp_nebular_attrs.py "
                     f"so this check (and BakedInBackend's own advisory) can see it."
                 )
-                if ssp_status == "bare":
-                    raise ValueError(
-                        f"No usable nebular emission for measure_line_fluxes: the "
-                        f"configured nebular backend ({type(backend).__name__}) "
-                        f"{remedy}"
-                    )
                 from tengri.components.nebular.baked_in import BakedInNebularGridWarning
 
                 warnings.warn(

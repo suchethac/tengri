@@ -33,7 +33,7 @@ pytestmark = pytest.mark.regression_bug
 
 # Matches SEDModel._IGM_LINE_PROFILE_N_POINTS / _N_SIGMA and the declared
 # Fixed default of neb_eline_sigma_kms (components/nebular/_params.py).
-_N_POINTS = 201
+_N_POINTS = 2001
 _N_SIGMA = 3.0
 _SIGMA_GAS_KMS = 100.0
 
