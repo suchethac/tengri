@@ -9630,12 +9630,14 @@ class SEDModel:
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.nebular.nebular_grid_dust_build import _lyc_cutoff_for
 
         dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
         serves_bands = self._redshift_is_a_build_constant()
         chain = list(chain)
         if serves_bands and table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
             eb_lut = self._energy_balance_lut(chain)
+            dust_c = next((c for c in chain if isinstance(c, dust_types)), None)
             for name_table, name_lut, grid_lut in (
                 ("eb_tau_a_grid", "tau_bc_grid", eb_lut.tau_bc_grid),
                 ("eb_tau_b_grid", "tau_diff_grid", eb_lut.tau_diff_grid),
@@ -9648,6 +9650,14 @@ class SEDModel:
                         f"{None if grid_tab is None else jnp.shape(grid_tab)} vs "
                         f"{jnp.shape(grid_lut)}."
                     )
+            if bool(table.eb_include_lyc) != (_lyc_cutoff_for(dust_c) is None):
+                table_lyc = bool(table.eb_include_lyc)
+                dust_lyc = _lyc_cutoff_for(dust_c) is None
+                raise RuntimeError(
+                    f"nebular grid table was built with eb_include_lyc={table_lyc} "
+                    f"but the dust component has eb_include_lyc={dust_lyc}; "
+                    f"rebuild the table with enable_fast_nebular()"
+                )
             # Build flagged chain with both fields set
             flagged = [
                 dataclasses.replace(

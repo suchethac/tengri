@@ -35,10 +35,26 @@ from tengri.utils.grid_interp import (
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import representable_denominator
 
-__all__ = ["_nebular_eb_channel", "_nebular_screen_for", "_nebular_subband_channels"]
+__all__ = [
+    "_lyc_cutoff_for",
+    "_nebular_eb_channel",
+    "_nebular_screen_for",
+    "_nebular_subband_channels",
+]
 
 _LYMAN_CUTOFF_AA = 912.0
 _MIN_LOG_ARG = 1e-300
+
+
+def _lyc_cutoff_for(dust) -> float | None:
+    """The short-wavelength edge of the dust component's energy-balance integral [Angstrom].
+
+    ``None`` when the component counts the Lyman continuum in the absorbed
+    luminosity (``dust.config.eb_include_lyc``), the Lyman edge otherwise. The
+    grid's absorbed-energy channel and the table's record of the choice both
+    read it here, so the configuration key is spelled in one place.
+    """
+    return None if dust.config.eb_include_lyc else _LYMAN_CUTOFF_AA
 
 
 def _nebular_subband_channels(
@@ -224,7 +240,7 @@ def _nebular_eb_channel(
     tau_b = np.asarray(eb_tau_grids[1], dtype=float)
     wave = jnp.asarray(wave_rest)
     nu = C_AA / wave
-    cutoff = None if dust.config.eb_include_lyc else _LYMAN_CUTOFF_AA
+    cutoff = _lyc_cutoff_for(dust)
     t_stack = jnp.stack(
         [
             _nebular_screen_for(dust, _tau_params(dust, ref_params, ta, tb), wave)
@@ -387,6 +403,6 @@ def _build_dust_channels(
             eb_absorbed_per_qh=jnp.asarray(eb.reshape(*grid_shape, *eb.shape[1:])),
             eb_tau_a_grid=jnp.asarray(eb_tau_grids[0]),
             eb_tau_b_grid=jnp.asarray(eb_tau_grids[1]),
-            eb_include_lyc=bool(dust_component.config.eb_include_lyc),
+            eb_include_lyc=_lyc_cutoff_for(dust_component) is None,
         )
     return out

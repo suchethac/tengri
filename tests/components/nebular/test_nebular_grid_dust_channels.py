@@ -230,3 +230,86 @@ def test_without_dust_the_channels_stay_none(built):
     assert not plain.serves_dust
     assert plain.log_phot_per_qh is not None
     assert plain.eb_absorbed_per_qh is None and plain.log_phot_subband_per_qh is None
+
+
+def test_lyc_cutoff_follows_the_dust_configuration(built):
+    import dataclasses
+
+    from tengri.components.nebular.nebular_grid_dust_build import _lyc_cutoff_for
+
+    _, _, _, dust, _ = built["two"]
+    assert _lyc_cutoff_for(dust) == 912.0
+    dust_with_lyc_true = dataclasses.replace(
+        dust, config=dataclasses.replace(dust.config, eb_include_lyc=True)
+    )
+    assert _lyc_cutoff_for(dust_with_lyc_true) is None
+
+
+def test_the_table_records_the_lyc_choice(built):
+    m_default, _, _, _, table_default = built["two"]
+    assert table_default.eb_include_lyc is False
+    m_with_lyc_true = SEDModel.build(
+        ssp_data=m_default.ssp_data,
+        observation=m_default.observation,
+        approx=WavePrecomp(),
+        redshift=Fixed(Z),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_bc": Uniform(0.0, 2.0),
+            "tau_diff": Uniform(0.0, 2.0),
+            "eb_include_lyc": True,
+        },
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Uniform(-3.5, -2.0)},
+    )
+    chain_lyc_true = m_with_lyc_true._build_component_chain()
+    eb_lyc_true = m_with_lyc_true._energy_balance_lut(chain_lyc_true)
+    dust_lyc_true = next(c for c in chain_lyc_true if c.name in ("dust", "dust_attenuation"))
+    table_with_lyc_true = precompute_nebular_grid(
+        m_with_lyc_true,
+        jnp.asarray([]),
+        n_grid=5,
+        dust_component=dust_lyc_true,
+        eb_tau_grids=(eb_lyc_true.tau_bc_grid, eb_lyc_true.tau_diff_grid),
+        n_subbands=_K,
+    )
+    assert table_with_lyc_true.eb_include_lyc is True
+    assert table_default.eb_include_lyc is not table_with_lyc_true.eb_include_lyc
+
+
+def test_attaching_a_table_with_the_other_lyc_choice_is_refused(built):
+    m_default, _, _, _, _ = built["two"]
+    m_with_lyc_true = SEDModel.build(
+        ssp_data=m_default.ssp_data,
+        observation=m_default.observation,
+        approx=WavePrecomp(),
+        redshift=Fixed(Z),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_bc": Uniform(0.0, 2.0),
+            "tau_diff": Uniform(0.0, 2.0),
+            "eb_include_lyc": True,
+        },
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Uniform(-3.5, -2.0)},
+    )
+    chain_lyc_true = m_with_lyc_true._build_component_chain()
+    eb_lyc_true = m_with_lyc_true._energy_balance_lut(chain_lyc_true)
+    dust_lyc_true = next(c for c in chain_lyc_true if c.name in ("dust", "dust_attenuation"))
+    table_with_lyc_true = precompute_nebular_grid(
+        m_with_lyc_true,
+        jnp.asarray([]),
+        n_grid=5,
+        dust_component=dust_lyc_true,
+        eb_tau_grids=(eb_lyc_true.tau_bc_grid, eb_lyc_true.tau_diff_grid),
+        n_subbands=_K,
+    )
+    chain_default = m_default._build_component_chain()
+    with pytest.raises(RuntimeError, match="eb_include_lyc"):
+        m_default._chain_with_nebular_grid(chain_default, table_with_lyc_true)
