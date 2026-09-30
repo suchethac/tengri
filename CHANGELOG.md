@@ -477,6 +477,11 @@
   R_V,Cal / R_V,mod ≈ 0.673), and A(2175) / A_V at (δ = 0.3, B = 3) from 2.317
   to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
   precision versus ~10% prior miss.
+- Student-t and Gaussian noise energies now share one convention: both return
+  the negative log-density up to a parameter-independent constant, with the
+  Student-t branch tending to the Gaussian branch as dof → ∞. A fit at fixed
+  dof is unchanged; comparing evidence across noise families no longer carries
+  an offset of n·½·log(2π) (#2560).
 
 ### Fixed
 
