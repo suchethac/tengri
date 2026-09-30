@@ -54,14 +54,12 @@ class TestStudentTdofLimit:
         for i in range(len(gaps) - 1):
             assert gaps[i] > gaps[i + 1], (
                 f"Gaps should decrease: gap(dof={dof_values[i]})={gaps[i]:.6e} "
-                f"vs gap(dof={dof_values[i+1]})={gaps[i+1]:.6e}"
+                f"vs gap(dof={dof_values[i + 1]})={gaps[i + 1]:.6e}"
             )
 
         # At dof=10000, gap should be very small (below 1e-3 per datum)
         n_data = float(data.shape[0])
-        assert abs(gaps[-1]) < 1e-3, (
-            f"Gap at dof=10000 should be < 1e-3: {abs(gaps[-1]):.6e}"
-        )
+        assert abs(gaps[-1]) < 1e-3, f"Gap at dof=10000 should be < 1e-3: {abs(gaps[-1]):.6e}"
 
         # At dof=1000, gap should be small (rtol ~1e-2 from Gaussian)
         npt.assert_allclose(
