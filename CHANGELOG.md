@@ -478,6 +478,12 @@
   to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
   precision versus ~10% prior miss.
 
+- Student-t and Gaussian noise energies now share one convention: both return
+  the negative log-density up to a parameter-independent constant, with the
+  Student-t branch tending to the Gaussian branch as dof → ∞. A fit at fixed
+  dof is unchanged; comparing evidence across noise families no longer carries
+  an offset of n·½·log(2π) (#2560).
+
 - Nebular backends' parameter reach. `neb_logU` (Cloudy, CB19 and both
   MAPPINGS backends) and `neb_logZ_gas` (Cloudy) are now narrowed to the
   vendored grid's axis at build time and warn when a value cannot be
