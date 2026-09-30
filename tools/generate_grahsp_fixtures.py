@@ -252,11 +252,11 @@ def torus_upstream(wave_torus_nm, wave_si_nm, params):
     lum5100A = p["lum5100A"]
 
     l_torus = 2.5 * lum5100A * fcov  # at 12 um (lambda * L_lambda)
-    cool_spectrum = np.exp(-(((log_wave - logCOOLlam) / COOLwidth) ** 2))
+    cool_spectrum = np.exp(-0.5 * ((log_wave - logCOOLlam) / COOLwidth) ** 2)  # W = sigma (upstream drops the 1/2)
     hot_spectrum = (
         HOTfcov
         * 10 ** (logCOOLlam - logHOTlam)
-        * np.exp(-(((log_wave - logHOTlam) / HOTwidth) ** 2))
+        * np.exp(-0.5 * ((log_wave - logHOTlam) / HOTwidth) ** 2)
     )
     total_spectrum = cool_spectrum + hot_spectrum
     torus_spectrum = l_torus / 12000.0 * total_spectrum / total_spectrum[norm_index]

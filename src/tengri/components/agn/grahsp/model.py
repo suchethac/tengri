@@ -136,9 +136,9 @@ class GRAHSPParams:
     si : float
         Si feature strength (paper ``Si``).
     cool_lam_um, cool_width : float
-        Cool dust component peak [um] and log-width [dex].
+        Cool dust component peak [um] and log-Gaussian standard deviation [dex].
     hot_lam_um, hot_width, hot_fcov : float
-        Hot dust peak [um], log-width [dex], peak ratio
+        Hot dust peak [um], log-Gaussian standard deviation [dex], peak ratio
         (paper :math:`f_\mathrm{hot}`).
     ebv : float
         Galaxy E(B-V) [mag].

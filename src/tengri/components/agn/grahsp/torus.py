@@ -5,7 +5,10 @@ Implements the ``activategtorus`` module from upstream
 ``JohannesBuchner/GRAHSP`` (CeCILL-v2). The infrared continuum is the sum of
 two log-quadratic ("log-Gaussian") components in :math:`L_\\lambda`:
 a cool dust peak at :math:`\\lambda_{\\rm COOL}` and a hot dust peak at
-:math:`\\lambda_{\\rm HOT}`, each with log-width :math:`W` (dex). The hot
+:math:`\\lambda_{\\rm HOT}`, each :math:`\\propto \\exp[-(\\log_{10}\\lambda - \\log_{10}\\lambda_0)^2 / (2W^2)]`, so the width
+:math:`W` is the standard deviation in dex. (Upstream's code drops the 2 and its
+``W`` is therefore :math:`\\sqrt{2}` times the standard deviation, contradicting its
+own parameter documentation and the paper; tengri uses the standard deviation.) The hot
 component is scaled by :math:`f_{\\rm hot}` (Eq. fhot in the paper) relative
 to the cool peak in :math:`\\lambda L_\\lambda`. Normalization at 12 um is
 set by the covering factor :math:`f_{\\rm cov}` via Eq. fcov:
@@ -58,11 +61,11 @@ def _log_gaussian_pair(
     hot_width: float,
     hot_fcov: float,
 ) -> Array:
-    cool = jnp.exp(-(((log_wave_um - log_cool_um) / cool_width) ** 2))
+    cool = jnp.exp(-0.5 * ((log_wave_um - log_cool_um) / cool_width) ** 2)
     hot = (
         hot_fcov
         * 10.0 ** (log_cool_um - log_hot_um)
-        * jnp.exp(-(((log_wave_um - log_hot_um) / hot_width) ** 2))
+        * jnp.exp(-0.5 * ((log_wave_um - log_hot_um) / hot_width) ** 2)
     )
     return cool + hot
 
@@ -92,11 +95,11 @@ def torus_dust_continuum(
         Cool component peak wavelength :math:`\lambda_{\rm COOL}` [um].
         Reasonable: 15-30 um.
     cool_width : float
-        Cool component log-width :math:`W_{\rm COOL}` [dex]. Reasonable: 0.2-0.65.
+        Cool component log-normal standard deviation :math:`W_{\rm COOL}` [dex]. Reasonable: 0.2-0.65.
     hot_lam_um : float
         Hot component peak wavelength [um]. Reasonable: 1-5.5 um.
     hot_width : float
-        Hot component log-width [dex].
+        Hot component log-normal standard deviation [dex].
     hot_fcov : float
         Peak-to-peak ratio :math:`f_{\rm hot} =
         \lambda_{\rm HOT} L_{\rm HOT} / (\lambda_{\rm COOL} L_{\rm COOL})`
