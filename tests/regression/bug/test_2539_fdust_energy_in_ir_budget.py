@@ -94,24 +94,49 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
 from tengri.components.dust.two_component import _young_indicator
-from tengri.components.lyc import lyc_shares
+from tengri.components.lyc import LYMAN_LIMIT_AA, lyc_shares
 from tengri.forward.energy_balance import log10_add_fdust_credit, log10_fdust_lyc_credit
 from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.regression_bug
 
-LYC_CUTOFF_AA = 912.0
+# One Lyman edge (tengri.components.lyc): 911.76 A, not the retired bare
+# 912.0 literal this constant used to hold.
+LYC_CUTOFF_AA = LYMAN_LIMIT_AA
 T_BIRTH_YR = 1e7
 TRANSITION_WIDTH_DEX = 0.3  # two_component's declared defaults
 
 
 def _l_lyc(wave, lnu) -> float:
-    """Independently integrate L_LyC = |int_{lambda<912} L_nu dnu|, float64."""
+    """Independent step-model integral of the ionizing side, float64.
+
+    ``L_LyC = |int_{lambda < edge} L_nu dnu|`` with the grid cell straddling
+    the edge held at the step model's rectangle (the last-ionizing-node
+    value times the ionizing portion of that cell's width) rather than
+    ramped linearly to zero -- an ordinary ``np.where(wave < edge, lnu, 0)``
+    trapezoid reproduces the #537/#2447 partial-bin bug this task removes.
+    Written independently in numpy (not calling ``tengri.components.lyc``,
+    the code under test) so this oracle and ``edge_trapezoid`` cannot share
+    a bug; verified to agree with ``edge_trapezoid(..., side="ionizing")``
+    to float64 round-off on a synthetic check during development.
+    """
     wave64 = np.asarray(wave, dtype=np.float64)
     lnu64 = np.asarray(lnu, dtype=np.float64)
     nu64 = np.asarray(C_AA, dtype=np.float64) / wave64
-    integrand = np.where(wave64 < LYC_CUTOFF_AA, lnu64, 0.0)
-    return float(abs(np.trapezoid(integrand, nu64)))
+    edge = LYC_CUTOFF_AA
+    nu_edge = np.asarray(C_AA, dtype=np.float64) / edge
+
+    w_lo, w_hi = wave64[:-1], wave64[1:]
+    y_lo = lnu64[:-1]
+    nu_lo, nu_hi = nu64[:-1], nu64[1:]
+    fully_ionizing = w_hi < edge
+    is_bracket = (w_lo < edge) & (w_hi >= edge)
+
+    ordinary = np.where(
+        fully_ionizing, 0.5 * (lnu64[:-1] + lnu64[1:]) * np.abs(nu_hi - nu_lo), 0.0
+    )
+    bracket = np.where(is_bracket, y_lo * np.abs(nu_edge - nu_lo), 0.0)
+    return abs(float(np.sum(ordinary + bracket)))
 
 
 def _credited_lnu(state, *, young_only: bool) -> np.ndarray:
@@ -481,7 +506,7 @@ class TestWG00EbIncludeLyc:
     ``return`` before the generic eb_include_lyc translation) meant it was
     silently never read; ``component_factory.py`` also never forwarded it.
     Both are fixed; wg00's absorbed-energy integral uses the SAME
-    ``bolometric_absorbed_log10`` call with the SAME 912 A switch as
+    ``bolometric_absorbed_log10`` call with the SAME Lyman-edge switch as
     single_component, verified here by an independent manual integral
     (not by comparing to single_component's numerically different curve).
     """
@@ -510,11 +535,13 @@ class TestWG00EbIncludeLyc:
         sed_intrinsic = np.asarray(m_nodust.predict_state({}).sed_intrinsic)
         wave = np.asarray(s_full.wave)
         sed_attenuated = np.asarray(s_full.sed_intrinsic)
-        nu = np.asarray(C_AA, dtype=np.float64) / wave.astype(np.float64)
         absorbed = sed_intrinsic.astype(np.float64) - sed_attenuated.astype(np.float64)
-        extra_lyc_absorbed = float(
-            abs(np.trapezoid(np.where(wave < LYC_CUTOFF_AA, absorbed, 0.0), nu))
-        )
+        # side="all" (eb_include_lyc=True) minus side="nonionizing" (default)
+        # is exactly side="ionizing" of the SAME integrand -- reuse the same
+        # independent step-model oracle as the LyC credit (_l_lyc) rather
+        # than a second, plain-masked-trapezoid formula for what is the same
+        # quantity.
+        extra_lyc_absorbed = _l_lyc(wave, absorbed)
         assert extra_lyc_absorbed > 0.0, "setup: eb_include_lyc should unmask nonzero LyC energy"
         np.testing.assert_allclose(L_full - L_default, extra_lyc_absorbed, rtol=1e-6)
 
@@ -846,7 +873,12 @@ class TestLutFescExact:
             fesc=jnp.asarray(fesc),
         )
         assert np.isfinite(float(log_lut))
-        assert float(sign_lut) == -1.0, "grid-orientation sign must stay -1 (see module docstring)"
+        # Sign convention (L2, one-Lyman-edge): B/G are now reduced through
+        # edge_trapezoid, which is positively oriented (follows the sign of
+        # the integrand itself), not the grid orientation of a descending
+        # nu -- see the module docstring of ``tengri.forward.energy_balance``.
+        # A normal positive absorbed integrand now gives +1.0, not -1.0.
+        assert float(sign_lut) == 1.0, "positively-oriented sign must stay +1 (module docstring)"
         np.testing.assert_allclose(float(log_lut), log_exact, rtol=1e-5)
 
     def test_fdust_identity_holds_on_lut_path(self, synthetic_ssp_wide):
