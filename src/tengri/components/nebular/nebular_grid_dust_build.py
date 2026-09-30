@@ -33,7 +33,7 @@ from tengri.utils.grid_interp import (
     subband_quadrature,
 )
 from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import representable_denominator
+from tengri.utils.scale import representable_denominator, representable_floor
 
 __all__ = [
     "_lyc_cutoff_for",
@@ -43,7 +43,6 @@ __all__ = [
 ]
 
 _LYMAN_CUTOFF_AA = 912.0
-_MIN_LOG_ARG = 1e-300
 
 
 def _lyc_cutoff_for(dust) -> float | None:
@@ -323,7 +322,9 @@ def _check_conservation(parts: np.ndarray, whole, label: str) -> float:
 
 def _log_channel(per_qh: np.ndarray, grid_shape: tuple) -> jnp.ndarray:
     return jnp.asarray(
-        np.log10(np.maximum(per_qh, _MIN_LOG_ARG)).reshape(*grid_shape, *per_qh.shape[1:])
+        np.log10(np.maximum(per_qh, representable_floor(1e-300))).reshape(
+            *grid_shape, *per_qh.shape[1:]
+        )
     )
 
 
