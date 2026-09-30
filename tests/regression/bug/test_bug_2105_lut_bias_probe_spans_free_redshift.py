@@ -10,7 +10,7 @@ inside the prior) — takes the worst case, and names the peak redshift.
 Stub design: only the LUT stub carries the z-dependent bias term. An earlier
 draft applied the same triangle bias to both stubs, so the relative bias
 ``|lut - exact| / |exact|`` was a constant at every z and the z dependence
-the file claims to test cancelled out.
+the file claims to test canceled out.
 """
 
 from __future__ import annotations
