@@ -260,6 +260,7 @@ class TestGradients:
 
         grad = jax.grad(f)(y0)
         assert jnp.all(jnp.isfinite(grad))
+        assert jnp.any(grad != 0.0), "gradient wrt y must not be identically zero (#2100 shape)"
 
         eps = 1e-6
         fd = np.array(
@@ -280,6 +281,7 @@ class TestGradients:
 
         grad = jax.grad(f)(y0)
         assert jnp.all(jnp.isfinite(grad))
+        assert jnp.any(grad != 0.0), "gradient wrt y must not be identically zero (#2100 shape)"
 
         eps = 1e-6
         fd = np.array(
