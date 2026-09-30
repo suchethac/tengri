@@ -538,7 +538,7 @@ def xray_xrb_terms(
     metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     E_cut: float = 100.0,
     log_L_hmxb_offset: float = 0.0,
     log_L_lmxb_offset: float = 0.0,
@@ -569,7 +569,7 @@ def xray_xrb_terms(
     gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
     gamma_lmxb : float, optional
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     E_cut : float, optional
         Exponential cutoff energy for both populations. Default: 100 keV. [keV]
     log_L_hmxb_offset : float, optional
@@ -742,7 +742,7 @@ def xray_xrb(
     metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     E_cut: float = 100.0,
     log_L_hmxb_offset: float = 0.0,
     log_L_lmxb_offset: float = 0.0,
@@ -774,7 +774,7 @@ def xray_xrb(
     gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
     gamma_lmxb : float, optional
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     E_cut : float, optional
         Exponential cutoff energy for both populations. Default: 100 keV. [keV]
     log_L_hmxb_offset : float, optional
@@ -1230,7 +1230,7 @@ def xray_agn_corona_from_disc(
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / 1.6022e-9  # convert to keV
     E_ref = 2.0  # keV
-    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-(E_keV - E_ref) / E_cut)
 
     # Normalize at 2 keV. ``l_2kev_erg_hz`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
@@ -1484,7 +1484,7 @@ def xray_total_terms(
     stellar_age_gyr: float = 1.0,
     l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     delta_alpha_ox: float = 0.0,
@@ -1528,7 +1528,7 @@ def xray_total_terms(
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
     E_cut : float
@@ -1632,7 +1632,7 @@ def xray_total(
     stellar_age_gyr: float = 1.0,
     l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     delta_alpha_ox: float = 0.0,
@@ -1676,7 +1676,7 @@ def xray_total(
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
     E_cut : float
@@ -1957,7 +1957,7 @@ def xray_total_lopez24_terms(
     l_12um_erg_hz: float = 0.0,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     log_nh: float = 20.0,
@@ -1997,7 +1997,7 @@ def xray_total_lopez24_terms(
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN photon index. Default: 1.8.
     E_cut : float
@@ -2069,7 +2069,7 @@ def xray_total_lopez24(
     l_12um_erg_hz: float = 0.0,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     log_nh: float = 20.0,
@@ -2105,7 +2105,7 @@ def xray_total_lopez24(
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN photon index. Default: 1.8.
     E_cut : float
