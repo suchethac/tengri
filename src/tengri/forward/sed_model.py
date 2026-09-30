@@ -365,17 +365,18 @@ class WavePrecomp:
             Integrate transmission inside the bandpass integral:
             ∫ S·T_IGM·T_b·w dλ. Slower build (recomputes sub-band integrals
             per redshift node), cost amortized over inference. Exact when
-            T_IGM(λ, z) is tabulated. Fails loudly if free parameters
-            (patchy reionization, DLAs) make transmission non-tabulated.
+            T_IGM(λ, z) is tabulated. Works with both fixed and free redshifts.
+            Fails loudly if free parameters (patchy reionization, DLAs) make
+            transmission non-tabulated.
 
         ``"auto"``
             ``"exact"`` wherever it can be built, ``"node"`` everywhere else.
-            The exact fold refuses a free redshift and a transmission carrying
-            free parameters, so ``"exact"`` cannot simply be asked for on a
-            model whose redshift is being fit. ``"auto"`` asks for it and takes
-            the node fold where it is unavailable, without raising. An explicit
-            ``"exact"`` still raises in those cases: a mode named by the caller
-            is never silently downgraded.
+            The exact fold refuses a transmission carrying free parameters
+            (patchy reionization, DLAs), but supports free redshift. ``"auto"``
+            asks for the exact fold and takes the node fold where it is
+            unavailable, without raising. An explicit ``"exact"`` still raises
+            in those cases: a mode named by the caller is never silently
+            downgraded.
 
     Examples
     --------
@@ -1799,88 +1800,36 @@ def _state_has_content(state) -> bool:
     return any(getattr(state, f.name, None) is not None for f in fields if f.name != "name")
 
 
-def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, redshift_spec):
-    r"""Rebuild the sub-band weights with IGM transmission inside the integrand.
+def _exact_igm_subband_ratio(igm_comp, ssp_data, filters, z, n_subbands):
+    """Compute the exact IGM fold ratio for a single redshift.
 
-    The node fold of :func:`_fold_igm_into_subbands` evaluates the transmission
-    once per sub-band, at the node wavelength, and multiplies:
-
-    .. math::
-        \Phi^{\rm IGM}_{ijbk} = \Phi_{ijbk}\,
-            T_{\rm IGM}(\lambda^{\star}_{ijbk}(1+z),\, z).
-
-    That forms :math:`\langle S\rangle\langle T\rangle` where the flux needs
-    :math:`\langle S\,T\rangle`, which is accurate while :math:`T` is smooth
-    across the sub-band and wrong when a Lyman break falls inside it. The exact
-    fold puts the transmission in the integrand instead:
-
-    .. math::
-        \Phi^{\rm IGM}_{ijbk}(z) = \frac{\int_{\mathcal{B}_{bk}}
-            F_\nu^{\rm SSP}(Z_i,t_j,\lambda)\,
-            T_{\rm IGM}(\lambda(1+z), z)\,T_b(\lambda)\,w(\lambda)\,d\lambda}
-           {\int T_b(\lambda)\,w(\lambda)\,d\lambda}.
-
-    Implemented as a *ratio* against the same quadrature run without
-    transmission, applied to the sub-band tensor the caller already holds. Two
-    properties follow that a standalone reimplementation would not have. Any
-    constant of the quadrature -- luminosity distance, flux scale -- cancels,
-    so this cannot disagree with the caller's normalization. And when
-    :math:`T_{\rm IGM}\equiv 1` the ratio is exactly one, so an IGM-free model
-    is bit-identical to no fold at all rather than merely close.
+    Computes the ratio of sub-band integrals with IGM transmission to those
+    without, at a fixed redshift. The ratio when applied to an existing
+    sub-band tensor produces the exact IGM-folded photometry.
 
     Parameters
     ----------
     igm_comp : IGMSEDComponent
-        Supplies the transmission and the fixed-function gate.
-    stellar_state : StellarSEDComponentState
-        Carrying the fixed-z photometry LUT.
+        Supplies the transmission and IGM model configuration.
     ssp_data : SSPData
         Template grid, shape ``(n_met, n_age, n_wave)`` [erg/s/Hz/Msun].
     filters : sequence of (wave, trans) pairs
         Filter curves [Angstrom], [dimensionless].
-    redshift_spec : dict or None
-        Redshift specification; only a fixed redshift is supported.
+    z : float
+        Redshift at which to compute the transmission.
+    n_subbands : int
+        Number of sub-band quadrature nodes per band.
 
     Returns
     -------
-    StellarSEDComponentState
-        With the exact-folded sub-band tensor attached, or unchanged when there
-        is nothing to fold.
-
-    Notes
-    -----
-    **Build-time only**; the runtime contraction is untouched in shape and
-    cost. The build pays in proportion to the number of redshift nodes.
-
-    :math:`T_{\rm IGM}` is a function of OBSERVED-frame wavelength. The SSP grid
-    is rest-frame, so the conversion happens exactly once, at the single call
-    below. Applying it twice is not caught by any shape or dtype check and
-    leaves a transmission that still varies plausibly with redshift.
+    ndarray
+        Ratio array, shape ``(n_met, n_age, n_filters, n_subbands)``.
+        Where the bare quadrature is zero, the ratio is zero (no flux).
     """
-    from dataclasses import replace as _replace
-
     import numpy as np
 
     from tengri.components.igm import igm_absorption
     from tengri.utils.grid_interp import preintegrate_grid
-
-    if stellar_state is None or ssp_data is None or not filters:
-        return stellar_state
-
-    blocker = _exact_fold_blocker(igm_comp, stellar_state)
-    if blocker is not None:
-        raise blocker
-
-    lut = getattr(stellar_state, "ssp_phot_lut", None)
-    if lut is None or lut.ssp_subband_phot is None:
-        return stellar_state
-
-    subband = np.asarray(lut.ssp_subband_phot)
-    n_subbands = int(subband.shape[-1])
-    if n_subbands <= 0:
-        return stellar_state
-
-    z = float(redshift_spec.get("value", 0.0)) if redshift_spec else float(lut.redshift)
 
     wave_rest = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
     templates = np.asarray(ssp_data.ssp_flux, dtype=np.float64)
@@ -1933,10 +1882,118 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
         without_igm != 0.0, with_igm / np.where(without_igm != 0.0, without_igm, 1.0), 0.0
     )
 
-    return _replace(
-        stellar_state,
-        ssp_phot_lut=lut._replace(ssp_subband_phot_igm=subband * ratio),
-    )
+    return ratio
+
+
+def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, redshift_spec):
+    r"""Rebuild the sub-band weights with IGM transmission inside the integrand.
+
+    The node fold of :func:`_fold_igm_into_subbands` evaluates the transmission
+    once per sub-band, at the node wavelength, and multiplies:
+
+    .. math::
+        \Phi^{\rm IGM}_{ijbk} = \Phi_{ijbk}\,
+            T_{\rm IGM}(\lambda^{\star}_{ijbk}(1+z),\, z).
+
+    That forms :math:`\langle S\rangle\langle T\rangle` where the flux needs
+    :math:`\langle S\,T\rangle`, which is accurate while :math:`T` is smooth
+    across the sub-band and wrong when a Lyman break falls inside it. The exact
+    fold puts the transmission in the integrand instead:
+
+    .. math::
+        \Phi^{\rm IGM}_{ijbk}(z) = \frac{\int_{\mathcal{B}_{bk}}
+            F_\nu^{\rm SSP}(Z_i,t_j,\lambda)\,
+            T_{\rm IGM}(\lambda(1+z), z)\,T_b(\lambda)\,w(\lambda)\,d\lambda}
+           {\int T_b(\lambda)\,w(\lambda)\,d\lambda}.
+
+    Implemented as a *ratio* against the same quadrature run without
+    transmission, applied to the sub-band tensor the caller already holds. Two
+    properties follow that a standalone reimplementation would not have. Any
+    constant of the quadrature -- luminosity distance, flux scale -- cancels,
+    so this cannot disagree with the caller's normalization. And when
+    :math:`T_{\rm IGM}\equiv 1` the ratio is exactly one, so an IGM-free model
+    is bit-identical to no fold at all rather than merely close.
+
+    Parameters
+    ----------
+    igm_comp : IGMSEDComponent
+        Supplies the transmission and the fixed-function gate.
+    stellar_state : StellarSEDComponentState
+        Carrying either the fixed-z photometry LUT or the free-z z-table.
+    ssp_data : SSPData
+        Template grid, shape ``(n_met, n_age, n_wave)`` [erg/s/Hz/Msun].
+    filters : sequence of (wave, trans) pairs
+        Filter curves [Angstrom], [dimensionless].
+    redshift_spec : dict or None
+        Redshift specification; a fixed redshift only.
+
+    Returns
+    -------
+    StellarSEDComponentState
+        With the exact-folded sub-band tensor attached, or unchanged when there
+        is nothing to fold.
+
+    Notes
+    -----
+    **Build-time only**; the runtime contraction is untouched in shape and
+    cost. The build pays in proportion to the number of redshift nodes.
+
+    :math:`T_{\rm IGM}` is a function of OBSERVED-frame wavelength. The SSP grid
+    is rest-frame, so the conversion happens exactly once, at the single call
+    below. Applying it twice is not caught by any shape or dtype check and
+    leaves a transmission that still varies plausibly with redshift.
+    """
+    from dataclasses import replace as _replace
+
+    import numpy as np
+
+    if stellar_state is None or ssp_data is None or not filters:
+        return stellar_state
+
+    blocker = _exact_fold_blocker(igm_comp, stellar_state)
+    if blocker is not None:
+        raise blocker
+
+    # Fixed-z branch
+    lut = getattr(stellar_state, "ssp_phot_lut", None)
+    if lut is not None and lut.ssp_subband_phot is not None:
+        subband = np.asarray(lut.ssp_subband_phot)
+        n_subbands = int(subband.shape[-1])
+        if n_subbands <= 0:
+            return stellar_state
+
+        z = float(redshift_spec.get("value", 0.0)) if redshift_spec else float(lut.redshift)
+        ratio = _exact_igm_subband_ratio(igm_comp, ssp_data, filters, z, n_subbands)
+
+        return _replace(
+            stellar_state,
+            ssp_phot_lut=lut._replace(ssp_subband_phot_igm=subband * ratio),
+        )
+
+    # Free-z branch: compute ratio at each z in the ztable grid
+    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
+    if ztable is not None and ztable.ssp_subband_phot_table is not None:
+        subband_table = np.asarray(ztable.ssp_subband_phot_table)
+        n_subbands = int(subband_table.shape[-1])
+        if n_subbands <= 0:
+            return stellar_state
+
+        z_grid = np.asarray(ztable.z_grid)
+        n_z = len(z_grid)
+
+        # Compute the ratio at each redshift node in the ztable
+        ratio_stack = np.zeros((n_z,) + subband_table.shape[1:], dtype=np.float64)
+        for zi, z in enumerate(z_grid):
+            ratio_stack[zi] = _exact_igm_subband_ratio(igm_comp, ssp_data, filters, z, n_subbands)
+
+        return _replace(
+            stellar_state,
+            ssp_phot_ztable=ztable._replace(
+                ssp_subband_phot_igm_table=subband_table * ratio_stack
+            ),
+        )
+
+    return stellar_state
 
 
 def _exact_fold_blocker(igm_comp, stellar_state):
@@ -1979,25 +2036,16 @@ def _exact_fold_blocker(igm_comp, stellar_state):
             "or igm_fold='auto' to take that fall-back automatically."
         )
 
-    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
-    if ztable is not None and ztable.ssp_subband_phot_table is not None:
-        return NotImplementedError(
-            "igm_fold='exact' is implemented for a fixed redshift only. A free "
-            "redshift would need the sub-band tensor rebuilt at every node of "
-            "the z table. Use igm_fold='node' or fix the redshift, or "
-            "igm_fold='auto' to take that fall-back automatically."
-        )
-
     return None
 
 
 def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None) -> str:
     """Resolve ``"auto"`` to the fold that can actually be built here.
 
-    ``"exact"`` cannot be the default: it raises for a free redshift and for a
-    transmission carrying free parameters, so flipping the default would break
-    those fits rather than speed them up. ``"auto"`` is the mode that can be
-    proposed as one -- it asks for the exact fold and takes the node fold
+    ``"exact"`` cannot be the default: it raises for a transmission carrying
+    free parameters (patchy reionization, DLAs), so flipping the default would
+    break those fits rather than speed them up. ``"auto"`` is the mode that can
+    be proposed as one -- it asks for the exact fold and takes the node fold
     wherever the exact fold is unavailable.
 
     Parameters
