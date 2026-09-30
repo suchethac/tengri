@@ -150,7 +150,7 @@ def grahsp_sbpl_disc_block(
 
     If ``agn_grahsp_log_l5100`` is unset (``None``), normalize so the BBB-only
     bolometric integral matches ``10**agn_log_lbol * L_sun``. Otherwise use
-    the explicit ``λL_λ(5100Å)`` value (matches upstream's parametric mode).
+    the explicit ``λL_λ(5100Å)`` value.
 
     Parameters
     ----------
@@ -235,12 +235,16 @@ def grahsp_netzer_disc_block(
     - Eddington ratio Mdot: (0.03, 0.3) [erg/s units]
 
     Interpolation is multilinear between the nearest grid nodes. At each of the
-    16 nodes, the output is **exactly equal** to the upstream GRAHSP component
-    API; between nodes, the output is differentiable and fittable.
+    16 nodes, the output equals the component API's ``netzer_disc`` spectrum;
+    between nodes, the output is differentiable and fittable. The disc
+    satisfies :math:`\lambda L_\lambda(5100\,\mathrm{\AA}) = \mathrm{l5100}`,
+    the convention of every other GRAHSP block (upstream GRAHSP's Netzer disc
+    is 510 times brighter than its stated L5100; this block does not
+    reproduce that).
 
     If ``agn_grahsp_log_l5100`` is unset (``None``), normalize so the disc-only
     bolometric integral matches ``10**agn_log_lbol * L_sun``. Otherwise use
-    the explicit ``λL_λ(5100Å)`` value (matches upstream's parametric mode).
+    the explicit ``λL_λ(5100Å)`` value.
 
     Parameters
     ----------
@@ -283,7 +287,7 @@ def grahsp_netzer_disc_block(
         )
 
     # Interpolate disc spectrum at the given mass, spin, Eddington ratio.
-    # Returns spectrum normalized to l5100 = 1 (i.e., L_lambda(5100 A) = 1 erg/s).
+    # Returns the spectrum normalized to lambda*L_lambda(5100 A) = 1 erg/s.
     spec_unit_nm = netzer_disc_interp(
         wave_nm=wave_nm,
         l5100=1.0,

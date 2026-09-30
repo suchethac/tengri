@@ -183,12 +183,6 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
     }
 )
 
-#: Discs whose native normalisation anchors ``L_lambda(510 nm)`` [erg/s/nm]
-#: (not ``lambda*L_lambda``) at the ``l5100`` parameter: the factor turning the
-#: runner's measured ``lambda*L_lambda(5100 A)`` back into that parameter, so
-#: downstream blocks match ``evaluate_grahsp_agn`` (see ``l5100_disc`` below).
-_DISC_L5100_ANCHOR_SCALE: dict[str, float] = {"grahsp_netzer": 1.0 / 510.0}
-
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.utils.physics_constants import C_AA as C_AA_PER_S
@@ -768,13 +762,6 @@ agn_torus_block, agn_attenuation_block : str
     # polar-dust extinction (LOS reddening now lives exclusively downstream,
     # in the standalone ``polar_dust`` attenuation block).
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
-    # GRAHSP's Netzer disc is ``l5100 * T(lambda)`` with ``T(510 nm) = 1``, so
-    # its L_lambda [erg/s/nm] at 510 nm equals ``l5100`` and its measured
-    # lambda*L_lambda(5100 A) is ``510 * l5100``; upstream (and
-    # ``evaluate_grahsp_agn``) hand the *parameter* ``l5100`` to the torus,
-    # lines and FeII. Undo the factor so downstream blocks see the same anchor
-    # as the component API (an sbpl disc is already lambda*L_lambda-anchored).
-    l5100_disc = l5100_disc * _DISC_L5100_ANCHOR_SCALE.get(agn_disc_block, 1.0)
 
     # ── Energy ledger (energy-conserving policies) ───────────────────────
     # The disc carries the intrinsic L_bol; the torus reprocesses a fraction of

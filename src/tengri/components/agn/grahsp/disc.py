@@ -6,14 +6,16 @@ Implements the ``activatedisk`` module from upstream
 pre-computed template grid spanning black-hole mass :math:`M_{\\rm BH}`,
 spin parameter :math:`a`, and Eddington accretion rate :math:`\\dot{M}`.
 Each template :math:`T(\\lambda)` is normalized to 1 at 510 nm (rest-frame
-5100 Å) and scaled by the bolometric luminosity via:
+5100 Å) and scaled so that :math:`\\lambda L_\\lambda(5100\\,\\mathrm{\\AA})` equals
+``l5100`` [erg/s], the same convention as the power-law disc, torus, lines
+and FeII:
 
 .. math::
 
-   L_\\lambda(\\lambda) = \\mathrm{l5100} \\cdot T(\\lambda)
+   L_\\lambda(\\lambda) = \\frac{\\mathrm{l5100}}{510\\,\\mathrm{nm}} \\cdot T(\\lambda)
 
-where :math:`\\mathrm{l5100}` is :math:`\\lambda L_\\lambda` at 5100 Å [erg/s]
-and :math:`T(\\lambda)` is interpolated onto the user's wavelength grid.
+where :math:`T(\\lambda)` is interpolated onto the user's wavelength grid and
+re-normalised to 1 at 510 nm on that interpolation.
 
 References
 ----------
@@ -26,12 +28,39 @@ References
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn.grahsp.bbb import LAMBDA_5100_NM
 from tengri.utils.grid_interp import resample_template
 
 __all__ = ["netzer_disc", "netzer_disc_interp", "select_disc_model"]
+
+
+def _resample_anchored(
+    wave_nm: Array,
+    disc_wave_nm: Array,
+    template: Array,
+) -> Array:
+    r"""Resample a disc template so that :math:`\lambda L_\lambda(510\,\mathrm{nm}) = 1`.
+
+    The stored templates are normalised to 1 at 510 nm on a linear
+    interpolation of their native grid; the log-space resampler used here
+    differs from that by about 1e-3 at 510 nm. Dividing by the resampled value
+    at 510 nm (and by 510 nm for the :math:`\lambda L_\lambda` convention)
+    makes the anchor exact on whatever wavelength grid the caller evaluates.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        :math:`L_\lambda` [1/nm] with :math:`\lambda L_\lambda(510\,\mathrm{nm}) = 1`.
+    """
+    shape = resample_template(wave_nm, disc_wave_nm, template, left=0.0, right=0.0)
+    anchor = resample_template(
+        jnp.asarray([LAMBDA_5100_NM]), disc_wave_nm, template, left=0.0, right=0.0
+    )[0]
+    return shape / (LAMBDA_5100_NM * anchor)
 
 
 def netzer_disc(
@@ -44,11 +73,12 @@ def netzer_disc(
 
     Interpolates a single disc template (pre-selected by M, a, Mdot)
     onto an arbitrary wavelength grid and scales by the 5100 Å
-    bolometric luminosity.
+    luminosity :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`.
 
     .. math::
 
-       L_\lambda(\lambda) = \mathrm{l5100} \cdot T(\lambda)
+       L_\lambda(\lambda) = \frac{\mathrm{l5100}}{510\,\mathrm{nm}} \cdot T(\lambda),
+       \qquad \lambda L_\lambda(510\,\mathrm{nm}) = \mathrm{l5100}
 
     Parameters
     ----------
@@ -71,9 +101,16 @@ def netzer_disc(
 
     Notes
     -----
-    JIT/grad/vmap-compatible. Numerical agreement < 1e-9 with upstream
-    ``ActivateDisk.process`` (the same native disc wave grid is used for
-    fixture comparison).
+    JIT/grad/vmap-compatible. The convention is
+    :math:`\lambda L_\lambda(5100\,\mathrm{\AA}) = \mathrm{l5100}`, exact on any
+    evaluation grid that brackets 510 nm.
+
+    Upstream GRAHSP's ``activatedisk`` instead scales :math:`L_\lambda(510\,
+    \mathrm{nm})` by ``l5100``, which makes its Netzer disc 510 times brighter
+    than its stated :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` and
+    inconsistent with the power-law disc, torus, lines and FeII that use the
+    same ``l5100``. tengri deliberately does not reproduce this; the spectral
+    shape is the upstream template's.
     """
     wave = jnp.asarray(wave_nm)
     disc_wave = jnp.asarray(disc_wave_nm)
@@ -81,8 +118,7 @@ def netzer_disc(
 
     # Scale template by l5100 and interpolate onto output grid.
     # Zero padding outside disc template support.
-    spectrum = l5100 * resample_template(wave, disc_wave, disc_lumin, left=0.0, right=0.0)
-    return spectrum
+    return l5100 * _resample_anchored(wave, disc_wave, disc_lumin)
 
 
 def netzer_disc_interp(
@@ -146,7 +182,14 @@ def netzer_disc_interp(
 
     Notes
     -----
-    JIT/grad/vmap-compatible. Exact at all 16 grid nodes (rtol 1e-12).
+    JIT/grad/vmap-compatible. Exact at all 16 grid nodes (rtol 1e-12) against
+    :func:`netzer_disc`, so :math:`\lambda L_\lambda(5100\,\mathrm{\AA}) =
+    \mathrm{l5100}` at every node and, because each corner spectrum is anchored
+    at 510 nm before the (unit-sum) weights mix them, between nodes too. Upstream GRAHSP's
+    ``activatedisk`` scales :math:`L_\lambda(510\,\mathrm{nm})` by ``l5100``
+    instead, making its Netzer disc 510 times brighter than its stated
+    :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`; tengri deliberately does not
+    reproduce this.
     Midpoint interpolation (e.g. log_mbh=7.5 between 7.0 and 8.0) equals
     the arithmetic mean of the two node spectra. Out-of-bounds inputs clip
     to grid edges (no NaN).
@@ -217,21 +260,27 @@ def netzer_disc_interp(
     lumin_011 = disc_lum[idx_011]
     lumin_111 = disc_lum[idx_111]
 
-    # Multilinear interpolation of templates
-    lumin_interp = (
-        (1 - w_m) * (1 - w_a) * (1 - w_mdot) * lumin_000
-        + w_m * (1 - w_a) * (1 - w_mdot) * lumin_100
-        + (1 - w_m) * w_a * (1 - w_mdot) * lumin_010
-        + w_m * w_a * (1 - w_mdot) * lumin_110
-        + (1 - w_m) * (1 - w_a) * w_mdot * lumin_001
-        + w_m * (1 - w_a) * w_mdot * lumin_101
-        + (1 - w_m) * w_a * w_mdot * lumin_011
-        + w_m * w_a * w_mdot * lumin_111
+    # Multilinear interpolation of the 8 corner spectra. Each corner is
+    # resampled and anchored (lambda*L_lambda(510 nm) = 1) BEFORE mixing, so the
+    # weights (which sum to 1) keep the anchor exact between nodes and the
+    # interpolation stays linear in the node spectra.
+    corners = jnp.stack(
+        [lumin_000, lumin_100, lumin_010, lumin_110, lumin_001, lumin_101, lumin_011, lumin_111]
     )
-
-    # Scale by l5100 and interpolate onto output wavelength grid
-    spectrum = l5100 * resample_template(wave, disc_wave, lumin_interp, left=0.0, right=0.0)
-    return spectrum
+    weights = jnp.stack(
+        [
+            (1 - w_m) * (1 - w_a) * (1 - w_mdot),
+            w_m * (1 - w_a) * (1 - w_mdot),
+            (1 - w_m) * w_a * (1 - w_mdot),
+            w_m * w_a * (1 - w_mdot),
+            (1 - w_m) * (1 - w_a) * w_mdot,
+            w_m * (1 - w_a) * w_mdot,
+            (1 - w_m) * w_a * w_mdot,
+            w_m * w_a * w_mdot,
+        ]
+    )
+    anchored = jax.vmap(lambda t: _resample_anchored(wave, disc_wave, t))(corners)
+    return l5100 * jnp.tensordot(weights, anchored, axes=1)
 
 
 def select_disc_model(

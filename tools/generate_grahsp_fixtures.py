@@ -586,6 +586,59 @@ def make_balmer_fixture():
     return len(wave_nm), len(cases)
 
 
+# ---------------------------------------------------------------------------
+# 6. Netzer accretion disc (activatedisk.py template grid), lambda*L_lambda(5100 A) = l5100
+# ---------------------------------------------------------------------------
+
+
+def make_netzer_disc_fixture():
+    """Netzer disc spectra on the template's native grid, in tengri's convention.
+
+    Upstream ``activatedisk`` returns ``l5100 * T(lambda)`` with ``T(510 nm) = 1``,
+    i.e. it scales ``L_lambda(510 nm)``, which is 510 times brighter than its
+    stated ``lambda*L_lambda(5100 A)``. tengri's convention is
+    ``lambda*L_lambda(5100 A) = l5100`` (as for the power-law disc, torus and
+    lines), so the oracle is ``l5100 / 510 * T(lambda) / T(510 nm)`` with
+    ``T(510 nm)`` from log-log interpolation of the native template (the
+    stored normalisation used a linear interpolation).
+    """
+    import h5py
+
+    with h5py.File(REPO_ROOT / "data" / "grahsp" / "grahsp_templates.h5", "r") as h:
+        wave_nm = np.asarray(h["netzer_disc/wave_nm"][:], dtype=np.float64)
+        lumin = np.asarray(h["netzer_disc/lumin"][:], dtype=np.float64)
+        m_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/m"][:]]
+        a_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/a"][:]]
+        mdot_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/mdot"][:]]
+    cases = [
+        (l5100, idx)
+        for l5100 in (1.0e43, 1.0e44)
+        for idx in (0, 2, 10, 15)
+    ]
+    spectra = np.zeros((len(cases), wave_nm.size))
+    params = np.empty((len(cases), 5, 2), dtype=object)
+    j = int(np.searchsorted(wave_nm, 510.0))  # bracketing native nodes j-1, j
+    frac = np.log(510.0 / wave_nm[j - 1]) / np.log(wave_nm[j] / wave_nm[j - 1])
+    for i, (l5100, idx) in enumerate(cases):
+        lo, hi = lumin[idx, j - 1], lumin[idx, j]
+        t_510 = np.exp((1.0 - frac) * np.log(lo) + frac * np.log(hi))
+        spectra[i] = (l5100 / 510.0) * lumin[idx] / t_510
+        params[i] = [
+            ["l5100", l5100],
+            ["model_idx", idx],
+            ["M", m_lab[idx]],
+            ["a", a_lab[idx]],
+            ["Mdot", mdot_lab[idx]],
+        ]
+    np.savez(
+        FIXTURE_DIR / "netzer_disc.npz",
+        wave_disc_nm=wave_nm,
+        disc_spectra=spectra,
+        params=params,
+    )
+    return len(cases), wave_nm.size
+
+
 def main():
     n_wave_sbpl, n_cases = make_sbpl_fixture()
     print(f"  sbpl_bbb.npz: {n_cases} cases x {n_wave_sbpl} wavelengths")
@@ -597,6 +650,8 @@ def main():
     print(f"  lines.npz: 3 cases x {n_lines} lines")
     n_wave_balmer, n_cases_balmer = make_balmer_fixture()
     print(f"  balmer.npz: {n_cases_balmer} cases x {n_wave_balmer} wavelengths")
+    n_cases_disc, n_wave_disc = make_netzer_disc_fixture()
+    print(f"  netzer_disc.npz: {n_cases_disc} cases x {n_wave_disc} wavelengths")
 
 
 if __name__ == "__main__":

@@ -637,35 +637,16 @@ class TestNetzerDiscGrahsp:
 
     @staticmethod
     def _component_l_nu(wave_nm, templates, m, a, mdot):
-        """Component-API L_nu, with the runner's disc anchor for the non-disc parts.
-
-        The runner hands the torus/lines/FeII the disc's *measured* L_lambda at
-        5100 A, while ``evaluate_grahsp_agn`` hands them the parameter ``l5100``
-        itself. For the Netzer template these differ by the template's own
-        (log-space resampled) value at 510 nm, ``anchor = bbb(510 nm)/l5100``
-        (0.9988 at the default node), so the reference for the non-disc parts is
-        the component API at ``l5100 * anchor``. The disc itself is compared
-        at ``l5100 = 1e44`` exactly.
-        """
-        l5100 = 1e44
+        """Component-API L_nu (disc + torus) at a Netzer grid node, from ``evaluate_grahsp_agn``."""
         wave_aa = wave_nm * 10.0
-
-        def sed(l5100_value):
-            return evaluate_grahsp_agn(
-                jnp.asarray(wave_nm),
-                GRAHSPParams(
-                    l5100=l5100_value, disc_model="netzer",
-                    disc_m=m, disc_a=a, disc_mdot=mdot,
-                ),
-                templates,
-            )
-
-        full = sed(l5100)
-        anchor = float(np.interp(510.0, wave_nm, np.asarray(full.bbb))) / l5100
-        anchored = sed(l5100 * anchor)
-        # ebv = ebv_agn = 0 in GRAHSPParams defaults, so attenuation is unity.
-        non_disc = (anchored.bbb_attenuated - anchored.bbb) + anchored.torus_attenuated
-        l_lambda = np.asarray(full.bbb + non_disc)
+        sed = evaluate_grahsp_agn(
+            jnp.asarray(wave_nm),
+            GRAHSPParams(
+                l5100=1e44, disc_model="netzer", disc_m=m, disc_a=a, disc_mdot=mdot,
+            ),
+            templates,
+        )
+        l_lambda = np.asarray(sed.bbb_attenuated + sed.torus_attenuated)
         return l_lambda * 0.1 * wave_aa ** 2 / C_AA
 
     def test_block_equality_netzer_default(self, wave_nm, templates, disc_block):
