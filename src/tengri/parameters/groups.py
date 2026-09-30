@@ -2039,9 +2039,11 @@ def _default_nonparametric_bin_edges_from_z(resolved: dict) -> None:
     remaining interior edges are log-spaced up to 90% of the universe age;
     for ``> 3`` the universe is too young to hold a 100 Myr bin and still
     resolve the rest of cosmic time, so none of the youngest edges are
-    fixed and every interior edge is log-spaced from 1 Myr instead. Either
-    way the oldest edge is set to ``age_at_z`` of the source redshift -- so
-    no default bin can lie beyond cosmic time.
+    fixed: the edges are log-spaced against a grid anchored at 13.47 Myr
+    (Prospector-beta's own ``amin = 7.1295`` in log10 yr), which the youngest
+    edge itself skips past, matching that scheme's own construction exactly.
+    Either way the oldest edge is set to ``age_at_z`` of the source
+    redshift -- so no default bin can lie beyond cosmic time.
 
     An explicit user-supplied ``bin_edges_gyr`` is never touched here, the
     same convention the z-capped onset/age/peak-time *parameters* follow

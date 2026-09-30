@@ -573,9 +573,11 @@ def make_agebins_from_zred(
     log-spaced from 100 Myr to 90% of the universe age, and the oldest bin
     spans 90-100% of the universe age. For ``zred > 3`` the universe is too
     young to hold a 100 Myr bin and still resolve the rest of cosmic time, so
-    none of the youngest edges are fixed: every interior edge is log-spaced
-    from 1 Myr to 90% of the universe age instead, with the oldest bin again
-    spanning 90-100%.
+    none of the youngest edges are fixed: the grid is an ``n_bins``-point
+    log-spacing from ``10**7.1295 yr`` (13.47 Myr, Prospector-beta's own
+    ``amin``) to 90% of the universe age, but ``amin`` only anchors that
+    grid -- it is dropped, and the youngest edge is the grid's SECOND point
+    -- with the oldest bin again spanning 90-100%.
 
     This is a **setup-time utility**: call it when building a
     :class:`~tengri.Parameters` object, not inside the forward
@@ -603,9 +605,13 @@ def make_agebins_from_zred(
     **Not JIT-compatible**: uses Python control flow and NumPy. Call once
     at model-construction time, then pass the edges as a static array.
 
-    Implements Prospector ``zred_to_agebins_pbeta`` (Johnson et al. 2021
-    [1]_), with two changes: uses tengri's Planck 2018 cosmology instead of
-    WMAP9, and returns edges in Gyr rather than log10(yr).
+    Implements Prospector ``zred_to_agebins_pbeta``
+    (``prospect/models/transforms.py``, Johnson et al. 2021 [1]_), including
+    its ``amin = 7.1295`` (log10 yr; 13.47 Myr) grid anchor for ``zred > 3``
+    -- itself dropped from the edges, matching that function's own
+    ``agelims[0] = 0`` overwrite -- with two changes: uses tengri's Planck
+    2018 cosmology instead of WMAP9, and returns edges in Gyr rather than
+    log10(yr).
 
     References
     ----------
@@ -641,8 +647,12 @@ def make_agebins_from_zred(
             log_middle = []
         log_edges = [log_30myr, log_100myr, *log_middle, log_tuniv]
     else:
-        log_amin = 6.0  # 1 Myr
-        log_edges_inner = list(np.linspace(log_amin, log_90pct, n_bins - 1))
+        # amin (13.47 Myr) anchors the grid but is itself discarded, exactly
+        # as Prospector-beta's own ``agelims[0] = 0`` overwrite discards its
+        # own first linspace point: the youngest edge here is the SECOND
+        # point of an n_bins-point linspace from amin, not amin itself.
+        log_amin = 7.1295  # 13.47 Myr; Prospector-beta's own amin (transforms.py)
+        log_edges_inner = list(np.linspace(log_amin, log_90pct, n_bins)[1:])
         log_edges = [*log_edges_inner, log_tuniv]
 
     edges_gyr = np.array([0.0, *[10.0**le / 1e9 for le in log_edges]])

@@ -189,3 +189,81 @@ def test_free_redshift_emits_exactly_one_ceiling_warning_at_the_prior_ceiling(re
     assert len(ceiling_warnings) == 1
     expected_edges = make_agebins_from_zred(zred=6.0, n_bins=DEFAULT_N_BINS)
     np.testing.assert_allclose(np.asarray(resolved["bin_edges_gyr"]), expected_edges)
+
+
+def _prospect_zred_to_agebins_pbeta():
+    """Import Prospector's own ``zred_to_agebins_pbeta``, or ``None`` if this
+    environment cannot load it.
+
+    ``prospect.models.transforms`` pulls in ``prospect.sources`` at import
+    time, and ``prospect.sources.__init__`` unconditionally imports
+    ``fake_fsps``, which reads an FSPS torus template off ``SPS_HOME`` at
+    MODULE level -- even though ``zred_to_agebins_pbeta`` itself never
+    touches FSPS or that submodule. An environment with ``prospect``
+    installed but no FSPS data directory (this one) fails that unrelated
+    import with ``FileNotFoundError``, not ``ModuleNotFoundError``, so it is
+    stubbed out before importing, the same way a test double replaces an
+    unrelated heavy dependency it never calls.
+    """
+    import sys
+    import types
+
+    if "prospect.sources.fake_fsps" not in sys.modules:
+        stub = types.ModuleType("prospect.sources.fake_fsps")
+        stub.add_dust = None
+        stub.add_igm = None
+        stub.agn_torus = None
+        sys.modules["prospect.sources.fake_fsps"] = stub
+    try:
+        from prospect.models.transforms import zred_to_agebins_pbeta
+    except (ImportError, FileNotFoundError):
+        return None
+    return zred_to_agebins_pbeta
+
+
+@pytest.mark.parametrize("zred", (4.0, 6.0, 10.0))
+def test_z_gt_3_edges_match_the_installed_prospector_beta_transform(zred):
+    """For zred > 3, tengri's edges match Prospector's own function exactly.
+
+    Both sides are evaluated under the same (WMAP9) cosmology, since
+    tengri's own default cosmology is Planck 2018 (see the module
+    docstring): this isolates the binning formula itself -- including the
+    ``amin = 7.1295`` floor on the youngest edge -- from a cosmology-driven
+    difference in the age of the universe. DSPS's ``age_at_z`` and
+    astropy's ``WMAP9.age`` agree on that shared cosmology to ~1e-7
+    relative at these redshifts, comfortably inside the 1e-6 Gyr tolerance
+    below.
+    """
+    zred_to_agebins_pbeta = _prospect_zred_to_agebins_pbeta()
+    if zred_to_agebins_pbeta is None:
+        pytest.skip("prospect.models.transforms is not importable in this environment")
+
+    from astropy.cosmology import WMAP9
+
+    from tengri.utils.cosmology import CosmoParams
+
+    wmap9_like = CosmoParams(
+        Om0=float(WMAP9.Om0),
+        w0=-1.0,
+        wa=0.0,
+        h=float(WMAP9.H0.value) / 100.0,
+        Tcmb0=float(WMAP9.Tcmb0.value),
+        Neff=float(WMAP9.Neff),
+        m_nu_eV=(0.0, 0.0, 0.0),
+    )
+    tengri_edges_gyr = make_agebins_from_zred(zred=zred, n_bins=DEFAULT_N_BINS, cosmo=wmap9_like)
+
+    prospect_agebins_log_yr = zred_to_agebins_pbeta(
+        zred=np.atleast_1d(zred), agebins=[None] * DEFAULT_N_BINS
+    )
+    prospect_edges_log_yr = np.concatenate(
+        ([prospect_agebins_log_yr[0, 0]], prospect_agebins_log_yr[:, 1])
+    )
+    # Prospector's leading edge is the literal sentinel 0.0 (log10(1 yr)
+    # standing in for "age 0"), the same convention tengri's own leading
+    # 0.0 Gyr edge uses -- both are compared as an exact 0.0 below.
+    prospect_edges_gyr = np.where(
+        prospect_edges_log_yr == 0.0, 0.0, 10.0**prospect_edges_log_yr / 1e9
+    )
+
+    np.testing.assert_allclose(tengri_edges_gyr, prospect_edges_gyr, atol=1e-6, rtol=0.0)
