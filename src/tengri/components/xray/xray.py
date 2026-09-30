@@ -1456,11 +1456,11 @@ def _xray_agn_corona_bolometric(
 
     # Power-law spectrum
     E_ref = 2.0  # keV
-    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-(E_keV - E_ref) / E_cut)
 
     # Normalize at 2 keV. ``L_2keV`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
-    # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
+    # multiplying by the dimensionless ``spec`` (=1 at E=E_ref after cutoff) gives L_nu(E).
     L_intr = L_2keV * spec
 
     # Ricci+2017 / Matsumoto+2026 Eq. B6:

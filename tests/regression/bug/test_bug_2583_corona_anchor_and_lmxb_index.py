@@ -14,13 +14,12 @@ adopt Γ = 1.56 (Fabbiano 2006). PCigale and the literature use 1.56.
 import jax.numpy as jnp
 import numpy as np
 import pytest
-import scipy.special
 
 from tengri.components.xray.xray import (
+    _xray_agn_corona_bolometric,
     xray_agn_corona,
     xray_xrb_terms,
 )
-
 
 pytestmark = pytest.mark.regression_bug
 
@@ -38,8 +37,11 @@ class TestCoronaAnchorAtReferenceEnergy:
         HC = 12.398419843  # keV·Angstrom
         w_2kev = HC / 2.0
         for ecut_kev in (50.0, 100.0, 300.0, 500.0, 1000.0):
-            lnu2 = float(xray_agn_corona(jnp.asarray([w_2kev]), l2500, gamma=1.8,
-                                          E_cut=ecut_kev, log_nh=0.0)[0])
+            lnu2 = float(
+                xray_agn_corona(
+                    jnp.asarray([w_2kev]), l2500, gamma=1.8, E_cut=ecut_kev, log_nh=0.0
+                )[0]
+            )
             ratio = lnu2 / anchor
             # With scatter ON (default), ratio should be ~1.01.
             # The shape alone gives 1.0 (fixed after cutoff); scatter adds 1%.
@@ -54,10 +56,39 @@ class TestCoronaAnchorAtReferenceEnergy:
         HC = 12.398419843
         w_2kev = HC / 2.0
         for gamma in (1.4, 1.6, 1.8, 2.0, 2.4):
-            lnu2 = float(xray_agn_corona(jnp.asarray([w_2kev]), l2500, gamma=gamma,
-                                          E_cut=300.0, log_nh=0.0)[0])
+            lnu2 = float(
+                xray_agn_corona(
+                    jnp.asarray([w_2kev]), l2500, gamma=gamma, E_cut=300.0, log_nh=0.0
+                )[0]
+            )
             ratio = lnu2 / anchor
             assert ratio == pytest.approx(1.01, abs=1e-4)
+
+    def test_deprecated_bolometric_corona_anchor_at_2kev(self):
+        """The deprecated _xray_agn_corona_bolometric has the same anchor shape."""
+        l_agn_bol = 1e45  # erg/s
+        HC = 12.398419843
+        w_2kev = HC / 2.0
+        # At log_nh=0 (unobscured), L_ν(2 keV) should equal L_2keV × (1 + scattered_frac).
+        # L_2keV is computed from L_bol via Hopkins+2007 bolometric correction.
+        lnu2 = float(
+            _xray_agn_corona_bolometric(
+                jnp.asarray([w_2kev]),
+                l_agn_bol,
+                gamma=1.8,
+                E_cut=300.0,
+                log_nh=0.0,
+                scattered_frac=0.01,
+            )[0]
+        )
+        # Recompute L_2keV the same way as the function
+        _NU_2500 = 1.199e15
+        _BC_2500 = 5.15
+        l_2500 = l_agn_bol / (_BC_2500 * _NU_2500)
+        alpha_ox = -1.4
+        l_2kev = l_2500 * 10.0 ** (alpha_ox / 0.3838)
+        expected = l_2kev * (1.0 + 0.01)
+        assert lnu2 == pytest.approx(expected, rel=1e-6)
 
 
 class TestLMXBPhotonIndexDefault:
@@ -71,9 +102,16 @@ class TestLMXBPhotonIndexDefault:
         gamma = 1.56
         HC = 12.398419843
         w = HC / np.linspace(0.3, 12.0, 4000)  # wavelength grid
-        lmxb_lnu = np.asarray(xray_xrb_terms(jnp.asarray(w), sfr=1.0,
-                                              stellar_mass=1e10, metallicity_z=0.02,
-                                              stellar_age_gyr=3.0, gamma_lmxb=gamma)["lmxb"])
+        lmxb_lnu = np.asarray(
+            xray_xrb_terms(
+                jnp.asarray(w),
+                sfr=1.0,
+                stellar_mass=1e10,
+                metallicity_z=0.02,
+                stellar_age_gyr=3.0,
+                gamma_lmxb=gamma,
+            )["lmxb"]
+        )
 
         def band_integral(lnu, e1, e2, w=w):
             E_keV = HC / w
@@ -92,6 +130,7 @@ class TestLMXBPhotonIndexDefault:
     def test_default_gamma_lmxb_is_1p56(self):
         """The declared default for xray_gamma_lmxb is 1.56."""
         import inspect
+
         from tengri.components.xray.xray import xray_xrb_terms
 
         sig = inspect.signature(xray_xrb_terms)
