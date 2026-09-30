@@ -13,6 +13,11 @@ The builder has two modes:
   2. Driver (default): loop parameter sets, spawn a worker subprocess per set,
      collect results, write HDF5 file with provenance attributes.
 
+ATTENUATION CONVENTION: `attenuation.*` contributions are upstream's signed
+differences: (attenuated - intrinsic) ≤ 0 (except Torus_Si which can be
+negative even for intrinsic). The identity attenuated = intrinsic + attenuation.*
+holds exactly. Values are 0 everywhere when both E(B-V) = 0.
+
 Upstream sources (file:line for parameter ranges):
   - activate.py:46-61 (fracAGN=-1 -> lum5100A=1, free normalization)
   - activatepl.py:77-107 (plslope, plbendloc, plbendwidth, uvslope, cutoff)
@@ -306,7 +311,7 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
     print(f"\nWriting {out_h5}...")
     with h5py.File(out_h5, "w") as f:
         # Root attributes
-        f.attrs["upstream_repo"] = "https://github.com/kuntzer/GRAHSP"
+        f.attrs["upstream_repo"] = "https://github.com/JohannesBuchner/GRAHSP"
         f.attrs["upstream_commit"] = "45054ddf44eef7bb1abb0ab3b54eee5574a28f77"
         f.attrs["upstream_modules"] = (
             "pcigale/creation_modules/activate.py:46-61, activatepl.py:77-107, "
@@ -315,8 +320,37 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
         )
         f.attrs["wavelength_unit"] = "nm"
         f.attrs["luminosity_unit"] = "L_lambda [1/nm]"
+        f.attrs["attenuation_convention"] = (
+            "attenuation.* contributions are upstream's signed differences: "
+            "(attenuated - intrinsic) ≤ 0 except Torus_Si. Identity: "
+            "attenuated = intrinsic + attenuation.*. Zero everywhere when E(B-V)=E(B-V)-AGN=0."
+        )
         f.attrs["build_date"] = datetime.utcnow().isoformat()
-        f.attrs["build_command"] = " ".join(sys.argv)
+        # Record build command with machine-specific paths replaced by placeholders
+        # Parse sys.argv to replace paths with placeholders
+        cmd_parts = ["python", "scripts/build_grahsp_reference.py"]
+        i = 1
+        while i < len(sys.argv):
+            arg = sys.argv[i]
+            if arg == "--upstream":
+                cmd_parts.append("--upstream")
+                cmd_parts.append("<upstream>")
+                i += 2  # Skip flag and value
+            elif arg == "--python":
+                cmd_parts.append("--python")
+                cmd_parts.append("<python>")
+                i += 2  # Skip flag and value
+            elif arg == "--out":
+                cmd_parts.append("--out")
+                if i + 1 < len(sys.argv):
+                    cmd_parts.append(sys.argv[i + 1])
+                    i += 2
+                else:
+                    i += 1
+            else:
+                cmd_parts.append(arg)
+                i += 1
+        f.attrs["build_command"] = " ".join(cmd_parts)
 
         # Get numpy/scipy versions from upstream venv
         versions = subprocess.run(

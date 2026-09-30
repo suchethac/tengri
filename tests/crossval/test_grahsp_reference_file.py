@@ -36,14 +36,29 @@ def test_provenance_attributes(ref_file):
         "upstream_modules",
         "wavelength_unit",
         "luminosity_unit",
+        "attenuation_convention",
         "build_date",
         "build_command",
     ]
     for attr in required_attrs:
         assert attr in ref_file.attrs, f"Missing attribute: {attr}"
 
+    # Verify upstream repo is the correct source
+    repo = ref_file.attrs["upstream_repo"]
+    if isinstance(repo, bytes):
+        repo = repo.decode('utf-8', errors='replace')
+    assert "JohannesBuchner/GRAHSP" in repo, f"Wrong upstream repo: {repo}"
+
     # Verify commit
     assert ref_file.attrs["upstream_commit"] == "45054ddf44eef7bb1abb0ab3b54eee5574a28f77"
+
+    # Verify build_command has no hardcoded machine paths
+    build_cmd = ref_file.attrs["build_command"]
+    if isinstance(build_cmd, bytes):
+        build_cmd = build_cmd.decode('utf-8', errors='replace')
+    assert "/Users/" not in build_cmd, f"build_command has hardcoded /Users/ path: {build_cmd}"
+    assert "<upstream>" in build_cmd and "<python>" in build_cmd, \
+        f"build_command should use <upstream> and <python> placeholders: {build_cmd}"
 
 
 def test_shared_wavelength_grid(ref_file):
@@ -162,3 +177,77 @@ def test_sweep_sets_differ_from_fiducial(ref_file):
         # Most sweeps should have exactly 1 difference (unless AGNtype=2 which might affect more)
         # For now, just check there's at least 1
         assert len(diffs) >= 1, f"Sweep {group_name} identical to fiducial"
+
+
+def test_attenuation_identity(ref_file):
+    """Verify attenuation identity: attenuated = intrinsic + attenuation.*"""
+    tol = 1e-14  # Numerical precision of float64
+
+    for group_name in ref_file:
+        if group_name == "wavelength_nm":
+            continue
+        grp = ref_file[group_name]
+
+        # Get parameters to check if attenuation should be zero
+        params = {k.replace("param_", ""): v for k, v in grp.attrs.items() if k.startswith("param_")}
+        ebv = params.get("ebv", 0.0)
+        ebv_agn = params.get("ebv_agn", 0.0)
+
+        # Map contribution names to attenuated version
+        contributions = list(grp.keys())
+        for contrib_name in contributions:
+            if contrib_name.startswith("attenuation."):
+                continue
+
+            if contrib_name == "stellar.dummy":
+                # Host contribution, not part of AGN attenuation identity
+                continue
+
+            atten_name = f"attenuation.{contrib_name}"
+            if atten_name not in grp:
+                continue
+
+            intrinsic = grp[contrib_name][:]
+            attenuation = grp[atten_name][:]
+
+            # When no attenuation, difference should be zero
+            if ebv == 0.0 and ebv_agn == 0.0:
+                assert np.allclose(attenuation, 0, atol=tol), \
+                    f"{group_name}/{atten_name} should be zero when ebv=ebv_agn=0"
+
+            # Attenuation factors (except where intrinsic is zero or very small) should be negative
+            # or zero (multiplicative: attenuated = intrinsic * factor, so attenuation = intrinsic * (factor - 1) ≤ 0)
+            # except for Si which can be negative for intrinsic too
+            if "Si" not in contrib_name:
+                # For non-Si contributions, where intrinsic is significant, attenuation should be ≤ small positive value
+                significant = np.abs(intrinsic) > 1e-30
+                if np.any(significant):
+                    assert np.all(attenuation[significant] <= tol), \
+                        f"{group_name}/{atten_name} has unexpectedly positive values where intrinsic is large"
+
+
+def test_balmer_continuum_presence(ref_file):
+    """BC (Balmer Continuum) present when ABC > 0, absent when ABC = 0."""
+    fiducial_grp = ref_file["fiducial"]
+    fiducial_params = {k.replace("param_", ""): v for k, v in fiducial_grp.attrs.items() if k.startswith("param_")}
+
+    # Fiducial should have ABC = 0 and no BC
+    assert fiducial_params.get("abc", 0.0) == 0.0, "Fiducial ABC should be 0"
+    assert "agn.activate_BC" not in fiducial_grp, "Fiducial should not have BC when ABC=0"
+
+    # Find ABC > 0 sets
+    for group_name in ref_file:
+        if group_name in ("fiducial", "wavelength_nm"):
+            continue
+        if not group_name.startswith("abc_"):
+            continue
+
+        grp = ref_file[group_name]
+        params = {k.replace("param_", ""): v for k, v in grp.attrs.items() if k.startswith("param_")}
+        abc_val = params.get("abc", 0.0)
+
+        if abc_val > 0:
+            assert "agn.activate_BC" in grp, \
+                f"{group_name} has ABC={abc_val} > 0 but no BC contribution"
+            bc = grp["agn.activate_BC"][:]
+            assert np.any(bc > 0), f"{group_name} has BC contribution but all zeros"
