@@ -22,6 +22,7 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 from tengri.config.exceptions import FreeRedshiftOnsetCeilingWarning
+from tengri.utils.cosmology import age_at_z
 
 pytestmark = pytest.mark.contract
 
@@ -35,7 +36,11 @@ def _warnings_of(category, ssp, **build_kwargs):
 
 def test_fires_for_a_wide_free_redshift_with_the_default_dpl_prior(synthetic_ssp_wide):
     """redshift=Uniform(2, 6) leaves sfh_dpl_age_gyr's z_floor-capped ceiling
-    (age_at_z(2) = 3.288 Gyr) above age_at_z(6) = 0.934 Gyr: exactly the gap.
+    (age_at_z(2)) above age_at_z(6): exactly the gap.
+
+    The expected ages are derived from :func:`age_at_z` itself, formatted the
+    same way the warning message formats them (``:.4g``), so this holds
+    under any cosmology rather than pinning one cosmology's numbers.
     """
     fired = _warnings_of(
         FreeRedshiftOnsetCeilingWarning,
@@ -46,8 +51,8 @@ def test_fires_for_a_wide_free_redshift_with_the_default_dpl_prior(synthetic_ssp
     assert len(fired) == 1, f"expected exactly one warning, got {len(fired)}"
     msg = str(fired[0].message)
     assert "sfh_dpl_age_gyr" in msg
-    assert "0.9342" in msg or "0.934" in msg  # age_at_z(6), to 4 sig figs
-    assert "3.288" in msg  # age_at_z(2)
+    assert f"{float(age_at_z(6.0)):.4g}" in msg
+    assert f"{float(age_at_z(2.0)):.4g}" in msg
 
 
 def test_does_not_fire_for_a_fixed_redshift(synthetic_ssp_wide):
@@ -64,12 +69,13 @@ def test_does_not_fire_for_a_fixed_redshift(synthetic_ssp_wide):
 def test_does_not_fire_when_the_onset_ceiling_is_already_safe(synthetic_ssp_wide):
     """An explicit onset ceiling already below age_at_z(z_ceil) needs no warning.
 
-    ``age_at_z(6) = 0.9342`` Gyr; a user-supplied ``Uniform(0.05, 0.5)`` never
-    reaches it, so the same free-redshift range that triggers the default-prior
-    case above must stay silent here. This also exercises the "final declared
-    ceiling" read (post- :func:`_narrow_free_priors_to_z`), not the pre-cap
-    declaration, for a parameter provenance the z_floor cap never touches
-    (an explicit user prior).
+    A user-supplied ``Uniform(0.05, 0.5)`` sits well under any plausible
+    ``age_at_z(6)`` (order 1 Gyr across reasonable cosmologies), so the same
+    free-redshift range that triggers the default-prior case above must stay
+    silent here. This also exercises the "final declared ceiling" read
+    (post- :func:`_narrow_free_priors_to_z`), not the pre-cap declaration,
+    for a parameter provenance the z_floor cap never touches (an explicit
+    user prior).
     """
     fired = _warnings_of(
         FreeRedshiftOnsetCeilingWarning,
