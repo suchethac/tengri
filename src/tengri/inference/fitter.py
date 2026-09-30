@@ -542,11 +542,13 @@ def fast_nebular_can_engage(model) -> bool:
     4.77x (#1770): this answers one of ``FeaturePrecomp``'s two jobs, not both.
 
     * **Photometry**: served from a per-Q_H grid, which requires zeroing
-      ``sed_nebular``. Since #1281 that is only permitted when nothing downstream
-      reads the continuum, and ``DustSEDComponent`` declares it as an input, so
-      **any model with dust disarms this shortcut entirely**. That is what this
-      predicate reports, and why #1748 stopped attaching the config for a
-      photometry-only fit.
+      ``sed_nebular``. That is only permitted when nothing downstream reads the
+      continuum. A dust component reads it, unless it takes the nebular from the
+      grid instead, which it can whenever the stellar energy-balance LUT exists.
+      A dust component whose LUT is absent (shape-free attenuation, WG00, a free
+      redshift with a redshift-reading law) disarms the shortcut. That is what
+      this predicate reports, and why #1748 stopped attaching the config for a
+      photometry-only fit on such a model.
     * **A line channel**: served by supplying the line fluxes from the table, so
       ``loss_functions`` need not set ``needs_state=True`` and rebuild the
       full-grid SED through ``predict_state`` on every likelihood evaluation.
@@ -561,8 +563,8 @@ def fast_nebular_can_engage(model) -> bool:
     ``WavePrecomp`` alone against 405,825 with the LUT added, beside a dust-free
     control identical to the digit either way.
 
-    Measured on main, one run, dust-free control in the same run, gradient FLOPs off
-    the compiled HLO:
+    History, measured when any dust component disarmed the shortcut, one run,
+    dust-free control in the same run, gradient FLOPs off the compiled HLO:
 
     ==========  ==============  ==============  ========
     model       ``WavePrecomp`` ``+Feature``    ratio
@@ -574,11 +576,12 @@ def fast_nebular_can_engage(model) -> bool:
     Exact FLOP equality is the signature of a config that never reaches the graph,
     not of a lever with little left to pull (#1748).
 
-    This is not a regression to undo. On the pre-#1281 tree the fast pair's photometry
+    The 1.00x row is the signature of a disarmed shortcut, not a result to
+    restore. On the pre-#1281 tree the fast pair's photometry
     for a dusty model differed from exact by **0.41 %**, against 0.0115 % for a
     dust-free control, the shortcut was buying a biased answer, and a constant
     forward bias enters the gradient multiplied by SNR (#1671). What was wrong was
-    advertising a speedup that no longer existed.
+    advertising a speedup the graph did not contain.
 
     Parameters
     ----------
@@ -589,16 +592,26 @@ def fast_nebular_can_engage(model) -> bool:
     -------
     bool
         ``True`` when the grid could serve photometry. ``False`` for any model whose
-        chain reads ``sed_nebular``.
+        chain reads ``sed_nebular`` after dust that can take the nebular from the
+        grid is excluded.
 
     Notes
     -----
-    Delegates to ``tengri.forward.sed_model._nebular_continuum_consumers``, the
-    same expression ``enable_fast_nebular`` uses to set ``must_materialize_sed``, so
-    the advice and the behavior cannot drift apart.
+    Delegates to ``SEDModel.nebular_grid_can_serve_photometry``, which applies the
+    same census (``_nebular_continuum_consumers``) and the same dust exclusion
+    ``enable_fast_nebular`` uses to set ``must_materialize_sed``, so the advice and
+    the behavior cannot drift apart.
     """
     from tengri.forward.sed_model import _nebular_continuum_consumers
 
+    fn = getattr(model, "nebular_grid_can_serve_photometry", None)
+    if callable(fn):
+        return bool(fn())
+    populations = getattr(model, "populations", None) or ()
+    seds = [getattr(pop, "sed", None) for pop in populations]
+    if seds and all(sed is not None for sed in seds):
+        # A wrapper (ForwardModel): every population's SED must be clear.
+        return all(fast_nebular_can_engage(sed) for sed in seds)
     chains = _component_chains(model)
     if not chains:
         # Deliberately permissive, and deliberately NOT changed with #1790.
@@ -648,8 +661,9 @@ def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:
       line-flux fit (#1770). Available only where
       :func:`~tengri.forward.sed_model.feature_lut_serves_line_channel` is True.
     * The **per-Q_H grid** stands in for a Cue-like emulator in the photometry
-      channel, which requires that nothing downstream read ``sed_nebular``; any
-      dust component disarms it (#1281/#1748).
+      channel, which requires that nothing downstream read ``sed_nebular``; a dust
+      component whose stellar energy-balance LUT is absent (shape-free attenuation,
+      WG00, free redshift with a redshift-reading law) disarms it (#1281/#1748).
 
     A Cue model therefore has exactly one lever, the photometry one, whatever
     channels the fit carries. Treating its line channel as a second lever attached
