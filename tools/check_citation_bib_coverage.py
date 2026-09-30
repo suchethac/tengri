@@ -229,7 +229,6 @@ UNCURATED_DOIS = frozenset(
         "10.3847/1538-4357/ac6959",  # _apply.py
         "10.3847/1538-4365/aa6541",  # mappings_photo.py +3
         "10.3847/1538-4365/aa96ad",  # unified.py
-        "10.3847/2041-8213/aa6838",  # cat3d_precompute.py
         "10.48550/arxiv.1008.4686",  # noise.py
         "10.5281/zenodo.14140949",  # mappings_photo.py
         "10.7910/dvn/3b6e6s",  # astrodust_hd23.py +1
