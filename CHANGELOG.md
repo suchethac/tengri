@@ -200,6 +200,17 @@
   attributes the Madau+1995 residual to line-wavelength conventions at the
   Lyman-series edges (vacuum 1025.72 Å vs rounded 1026 Å; 14.6% at z=3,
   21.1% at z=5, single node). The parity matrix's M4 bagpipes arm is closed.
+- `PLANCK18` includes radiation and massive-neutrino densities; D_L and age(z) match
+  astropy's Planck18 to < 1e-4 (previously +0.09 % at z=1, +0.21 % at z=10 in D_L)
+  (#2517). Every named cosmology (`PLANCK18`, `PLANCK15`, `WMAP5`) states its own
+  published Tcmb0/Neff/m_nu explicitly (`WMAP5`: Tcmb0=2.725 K, Neff=3.04, massless
+  neutrinos), matching astropy's Planck18/Planck15/WMAP5 to rtol 1e-6; `CosmoParams`'
+  field defaults are radiation-free (Tcmb0=0.0), so a user-built `CosmoParams(Om0=...,
+  w0=..., wa=..., h=...)` is unaffected by this fix unless it passes `Tcmb0` explicitly.
+  D_L and age(z), and their gradients with respect to z, Om0, and h, are all finite in
+  float32. `luminosity_distance_mpc` is exactly 0 at z = 0 (`distance_modulus` keeps
+  the 10 pc convention at its own log10), and the age of the universe that the SFH
+  age defaults derive from follows the same cosmology: 13.787 Gyr, where it was 13.81.
 - Unknown-name errors recognize citation keys and name the registry entry they
   cite (#2429): when a user provides a citation key (e.g., `charlot_fall2000`)
   instead of a registry name (e.g., `power_law`), the error message now
@@ -311,6 +322,21 @@
   count/scale-floor classification — the filter integral of a loaded filter
   cannot vanish by construction.
 
+- `conroy2010` is CCM89 with a scalable 2175 Å bump (`dust_bump_strength`), as in
+  Conroy et al. (2010) and FSPS `dust_type=1`; it was a sigmoid Cardelli/power-law
+  blend that over-attenuated the NIR by up to 3.3× and had no bump control.
+  `dust_slope` is no longer a parameter of this law. The curve carries the FSPS
+  continuity term on the near-UV segment (3.3 ≤ x < 5.9 μm⁻¹), so it is continuous
+  at x = 3.3 μm⁻¹ for any bump strength, and at bump strength 1 it differs from
+  `cardelli` by that term (up to 2×10⁻⁴). In the far-UV it follows FSPS as well:
+  the CCM89 cubic is evaluated to x = 12 μm⁻¹ (833 Å) and held constant beyond,
+  while `cardelli` holds it constant from x = 10 μm⁻¹ (1000 Å), the limit of the
+  range Cardelli et al. (1989) fitted. The two agree at 1000 Å and differ by a
+  factor 1.83 at and below 833 Å for R_V = 3.1 (1.92 for R_V = 2, 1.57 for
+  R_V = 5) (#2522).
+- `reddy15` is continuous at 0.6 µm (red-branch offset −0.0362, as in FSPS
+  `dust_type=6`) and constant below 1500 Å (#2523).
+- The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542). **Breaking**: `li08`'s default is now the Li et al. (2008) Milky-Way (R_V=3.1) curve (c1..c4 = 14.4, 6.52, 2.04, 0.0519); the previous default and docstring presets did not correspond to the paper.
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the

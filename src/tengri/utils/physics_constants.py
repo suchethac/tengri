@@ -402,3 +402,57 @@ Reference: Oke & Gunn 1983, ApJ, 266, 713.
 The zeropoint corresponds to f_ν = 3.631e-20 erg s⁻¹ cm⁻² Hz⁻¹ = 3631 Jy
 at all wavelengths.
 """
+
+# ── Cosmological radiation / massive-neutrino constants (#2517) ───
+
+K_BOLTZ_EV: float = 8.617333262e-5
+"""Boltzmann constant k_B [eV K⁻¹].
+
+Derivation: k_B = 1.380649e-23 J K⁻¹  (exact, CODATA 2018 / SI 2019)
+            / 1.602176634e-19 J/eV  (exact)
+            = 8.617333262e-5 eV K⁻¹
+
+Sibling of :data:`K_BOLTZ` (erg/K) and :data:`K_BOLTZ_KEV` (keV/K) at a
+third unit scale. Used to convert a massive-neutrino rest mass in eV to the
+dimensionless ``m_nu c² / (k_B T_nu)`` ratio in the Komatsu et al. (2011)
+neutrino energy-density fitting formula.
+"""
+
+NU_TO_CMB_TEMP_RATIO: float = 0.7137658555036082
+"""Neutrino-to-photon temperature ratio T_ν0 / T_cmb0, (4/11)^(1/3).
+
+Standard-model thermal history: neutrinos decouple before e⁺e⁻ annihilation
+reheats the photon bath, so today's neutrino temperature is a fixed factor
+below the CMB temperature. Matches astropy.cosmology's ``TEMP_NEUTRINO``.
+"""
+
+NEUTRINO_FERMI_DIRAC_CORRECTION: float = 0.22710731766
+"""Neutrino energy-density prefactor, 7/8 × (4/11)^(4/3).
+
+The 7/8 is the Fermi-Dirac vs. Bose-Einstein statistical weight; the
+(4/11)^(4/3) is :data:`NU_TO_CMB_TEMP_RATIO` to the 4th power (energy
+density ∝ T⁴). Multiplying by N_eff gives the massless-neutrino density
+relative to the photon density; Komatsu et al. (2011), ApJS 192, 18,
+eq. 26, https://doi.org/10.1088/0067-0049/192/2/18
+"""
+
+KOMATSU_NU_SHAPE_SCALE: float = 0.3173
+"""Scale parameter ``k`` in the Komatsu et al. (2011) massive-neutrino
+energy-density fitting formula (eq. 26), https://doi.org/10.1088/0067-0049/192/2/18.
+"""
+
+KOMATSU_NU_SHAPE_INDEX: float = 1.83
+"""Shape index ``p`` in the Komatsu et al. (2011) massive-neutrino
+energy-density fitting formula (eq. 26), https://doi.org/10.1088/0067-0049/192/2/18.
+"""
+
+JULIAN_YEAR_S: float = 3.15576e7
+"""Julian year [s].
+
+Derivation: 1 Julian year = 365.25 days (IAU definition)
+            × 86400 s/day
+            = 3.15576e7 s (exact)
+
+Matches astropy.units.yr / Gyr, used for the Hubble-time unit conversion
+in cosmological age integrals.
+"""

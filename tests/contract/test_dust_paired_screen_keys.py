@@ -37,13 +37,14 @@ from tengri import FREE, Uniform, parse_groups
 
 pytestmark = pytest.mark.contract
 
-#: Per-screen stem -> a law that reads it. ``conroy2010`` reads ``dust_slope`` and
-#: ``dust_Rv``; ``noll09`` reads ``dust_delta`` and ``dust_bump_strength``.
+#: Per-screen stem -> a law that reads it. ``power_law`` reads ``dust_slope``;
+#: ``conroy2010`` reads ``dust_Rv`` and ``dust_bump_strength``; ``noll09`` reads
+#: ``dust_delta`` and ``dust_bump_strength``.
 PAIR_STEM_LAWS = {
     "tau": "calzetti",
     "Rv": "conroy2010",
     "delta": "noll09",
-    "slope": "conroy2010",
+    "slope": "power_law",
     "bump_strength": "noll09",
 }
 PAIR_STEMS = tuple(PAIR_STEM_LAWS)
