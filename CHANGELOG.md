@@ -12,6 +12,10 @@
 
 ### Fixed
 
+- Meiksin (2006) IGM model now evaluates the Lyman-series optical depths (n ≥ 3)
+  at the absorber redshift z_n instead of the source redshift z, per Table 1
+  of the paper. Transmission at z ≥ 3 blueward of Lyβ is now correct; the far-UV
+  of high-z galaxies and Lyman-series indices are significantly affected (#2585).
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant
