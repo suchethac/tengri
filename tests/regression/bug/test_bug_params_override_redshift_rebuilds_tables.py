@@ -26,6 +26,8 @@ import pytest
 
 from tengri import DEFAULT, FREE, FeaturePrecomp, Fitter, Fixed, Observation, SEDModel, Uniform
 from tengri.forward import convenience
+from tengri.forward.forward_model import ForwardModel
+from tengri.forward.population import Population
 from tengri.forward.sed_model import WavePrecomp
 from tengri.inference.context import InferenceContext
 from tengri.observation.photometry_config import Photometry
@@ -295,6 +297,10 @@ def _mass_only(ssp, obs, z, approx, *, cue=False, dust_emission=False):
     return _build_mass_only(ssp, obs, z, approx, blocks)
 
 
+def _mass_only_builder(ssp, obs, z, approx):
+    return _mass_only(ssp, obs, z, approx)
+
+
 def _build_mass_only(ssp, obs, z, approx, blocks):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -402,3 +408,115 @@ def test_catalog_rebuilds_once_per_distinct_redshift(synthetic_ssp_wide):
     assert sorted(round(c.args[1], 6) for c in spy.call_args_list) == [0.3, 0.9], (
         "expected exactly one rebuild per distinct catalog redshift"
     )
+
+
+# ── Multi-population forwards ─────────────────────────────────────────────
+
+
+def _two_pop(base_builder, ssp, obs, z):
+    """Two populations (a galaxy decomposition) sharing one redshift."""
+    return ForwardModel.build(
+        populations=[
+            Population(name="a", sed=base_builder(ssp, obs, z, WavePrecomp())),
+            Population(name="b", sed=base_builder(ssp, obs, z, WavePrecomp())),
+        ],
+        observation=obs,
+    )
+
+
+def test_multi_population_override_matches_direct_build(synthetic_ssp_wide):
+    """Every population is rebuilt at the override redshift, names and mode kept."""
+    obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
+    base = _two_pop(_mass_only_builder, synthetic_ssp_wide, obs, Z_BASE)
+    direct = _two_pop(_mass_only_builder, synthetic_ssp_wide, obs, Z_OVERRIDE)
+
+    rebuilt = base.with_fixed_redshift(Z_OVERRIDE)
+    assert [p.name for p in rebuilt.populations] == ["a", "b"]
+    assert rebuilt.mode == base.mode
+    for pop in rebuilt.populations:
+        assert pop.sed.spec.get_fixed_values()["redshift"] == Z_OVERRIDE
+    assert base.populations[0].sed.spec.get_fixed_values()["redshift"] == Z_BASE
+
+    params = {"sfh_dpl_log_total_mass": 10.0}
+    phot = lambda m: np.asarray(m.predict_observables(params)["phot_fnu"])  # noqa: E731
+    np.testing.assert_allclose(phot(rebuilt), phot(direct), rtol=RTOL)
+    assert np.max(np.abs(phot(base) - phot(direct)) / np.abs(phot(direct))) > VACUITY_FLOOR
+
+
+def test_hierarchical_population_override_rebuilds_the_template(synthetic_ssp_wide):
+    """A hierarchical forward rebuilds its template SED and keeps galaxies and priors."""
+    from tengri.forward.population_sed_model import PopulationSEDModel
+
+    obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
+    template = _mass_only(synthetic_ssp_wide, obs, Z_BASE, WavePrecomp())
+    flux = np.asarray(template.predict_photometry({"sfh_dpl_log_total_mass": TRUTH_LOGM}))
+    galaxies = [{"flux_obs": flux, "noise": 0.05 * flux}, {"flux_obs": flux, "noise": 0.1 * flux}]
+    pop = PopulationSEDModel(template, galaxies)
+    fm = ForwardModel.build(population=pop, observation=obs)
+
+    rebuilt = fm.with_fixed_redshift(Z_OVERRIDE)
+    sub = rebuilt.populations[0].sed
+    assert rebuilt.mode == "hierarchical"
+    assert sub.sed.spec.get_fixed_values()["redshift"] == Z_OVERRIDE
+    assert len(sub.galaxies) == 2
+    assert sub.shared == pop.shared
+    assert dict(sub.priors) == dict(pop.priors)
+    assert pop.sed.spec.get_fixed_values()["redshift"] == Z_BASE
+
+
+def test_a_free_redshift_population_refuses_the_rebuild(synthetic_ssp_wide):
+    """A free redshift is fit, not pinned: the error names the parameter, not NotImplemented."""
+    from tengri.config.exceptions import ParameterError
+
+    obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
+    fixed = _phot_only(synthetic_ssp_wide, obs, Z_BASE, WavePrecomp())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        free = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=obs,
+            redshift=Uniform(0.01, 0.2),
+            sfh=_SFH,
+            met={"logzsol": Fixed(0.0)},
+            dust_attenuation={"type": "none"},
+            dust_emission={"type": "none"},
+        )
+    fm = ForwardModel.build(
+        populations=[Population(name="a", sed=fixed), Population(name="b", sed=free)],
+        observation=obs,
+    )
+    with pytest.raises(ParameterError, match="redshift"):
+        fm.with_fixed_redshift(Z_OVERRIDE)
+
+
+# ── The default path: profile_mass at its default, real SSP ───────────────
+
+
+def test_default_profile_mass_override_matches_direct_build_on_real_ssp(ssp_data_fsps):
+    """Fits default to profile_mass="auto"; the override must hold on that objective too."""
+    obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
+    approx = WavePrecomp()
+    base = _mass_only(ssp_data_fsps, obs, Z_BASE, approx)
+    direct = _mass_only(ssp_data_fsps, obs, Z_OVERRIDE, approx)
+    params = {"sfh_dpl_log_total_mass": TRUTH_LOGM}
+    data = np.asarray(direct.predict_photometry(params))
+    noise = 0.05 * data
+
+    def make(model, **kw):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return Fitter(  # profile_mass left at its default
+                model, data=data, noise=noise, data_type="photometry", approx=approx, **kw
+            )
+
+    f_over = make(base, params_override={"redshift": Z_OVERRIDE})
+    f_direct = make(direct)
+    f_base = make(base)
+    assert f_over._profile_mass_reason == f_direct._profile_mass_reason
+    loss_o, loss_d, loss_b = _loss(f_over), _loss(f_direct), _loss(f_base)
+    np.testing.assert_allclose(loss_o, loss_d, rtol=RTOL)
+    assert abs(loss_b - loss_d) > VACUITY_FLOOR * abs(loss_d), (
+        "vacuity: the un-overridden model has the same default-path loss"
+    )
+    phot_o = np.asarray(f_over.model.predict_photometry(params))
+    np.testing.assert_allclose(phot_o, data, rtol=RTOL)

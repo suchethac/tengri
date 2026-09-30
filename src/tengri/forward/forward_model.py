@@ -1005,9 +1005,12 @@ class ForwardModel:
     def with_fixed_redshift(self, redshift):
         """Return a copy of this forward model built at a different Fixed redshift.
 
-        Clones the wrapped SED via :meth:`SEDModel.with_fixed_redshift` (which
-        rebuilds every redshift-dependent table) and re-wraps it, preserving
-        the observation.
+        Rebuilds the SED of **every** population via
+        :meth:`SEDModel.with_fixed_redshift` (which rebuilds each
+        redshift-dependent table) and re-wraps them with the same population
+        names, spatial submodels, observation and mode. A bare ``redshift`` is
+        the galaxy's redshift and flows to every population (see
+        :meth:`predict_observables`), so the rebuild pins all of them.
 
         Parameters
         ----------
@@ -1017,28 +1020,54 @@ class ForwardModel:
         Returns
         -------
         ForwardModel
-            The rebuilt forward model, or ``self`` when the redshift is unchanged.
+            The rebuilt forward model, or ``self`` when every population is
+            already at that redshift.
 
         Raises
         ------
-        NotImplementedError
-            For multi-population, spatial and hierarchical forwards, which
-            cannot be rebuilt here.
+        tengri.config.exceptions.ParameterError
+            If any population's redshift is free: a free redshift is fit, not
+            pinned, so an override cannot address it and the galaxy would have
+            populations at different redshifts.
+
+        Notes
+        -----
+        Hierarchical populations rebuild their template SED and keep the
+        galaxies, shared names, priors and data type. Spatial submodels are
+        kept as they are: they describe a profile in physical kpc and read no
+        redshift.
         """
-        if len(self.populations) != 1 or self.populations[0].spatial is not None:
-            raise NotImplementedError(
-                "with_fixed_redshift supports a single-population, non-spatial forward model."
-            )
-        sub = self.populations[0].sed
+        import dataclasses
+
+        new_pops = tuple(self._population_at_redshift(pop, redshift) for pop in self.populations)
+        if all(new is old for new, old in zip(new_pops, self.populations, strict=True)):
+            return self
+        return dataclasses.replace(self, populations=new_pops)
+
+    @staticmethod
+    def _population_at_redshift(pop, redshift):
+        import dataclasses
+
+        sub = pop.sed
         inner = getattr(sub, "sed", sub)
-        if inner is not sub or not hasattr(inner, "with_fixed_redshift"):
+        if not hasattr(inner, "with_fixed_redshift"):
             raise NotImplementedError(
-                "with_fixed_redshift supports a plain SEDModel-backed forward model."
+                f"population {pop.name!r}: {type(inner).__name__} has no with_fixed_redshift, "
+                "so a redshift override cannot rebuild its redshift-dependent tables."
             )
         new_inner = inner.with_fixed_redshift(redshift)
         if new_inner is inner:
-            return self
-        return ForwardModel.build(sed=new_inner, observation=self.observation)
+            return pop
+        if inner is sub:
+            return dataclasses.replace(pop, sed=new_inner)
+        new_sub = type(sub)(
+            new_inner,
+            sub.galaxies,
+            shared=sub.shared,
+            priors=sub.priors,
+            data_type=sub.data_type,
+        )
+        return dataclasses.replace(pop, sed=new_sub)
 
     def fit(
         self,
