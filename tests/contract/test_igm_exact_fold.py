@@ -121,22 +121,32 @@ def test_an_unknown_fold_is_refused_by_name():
     assert "'node'" in message and "'exact'" in message
 
 
-def test_a_free_redshift_accepts_the_exact_fold(ssp, observation):
-    """The exact fold now works for free redshift."""
-    model = SEDModel.build(
-        ssp_data=ssp,
-        observation=observation,
-        sfh={
-            "type": "delayed",
-            "all_params": Fixed(DEFAULT),
-            "met_logzsol": Fixed(0.0),
-        },
-        redshift=tengri.Uniform(0.5, 1.5),
-        igm={"type": "inoue"},
-        approx=WavePrecomp(igm_fold="exact", n_z=FREE_Z_NODES),
-    )
-    photometry = model.predict_photometry({"redshift": PROBE_Z})
-    assert photometry is not None
+def test_a_free_redshift_builds_the_exact_fold(ssp, observation):
+    """A free redshift gets the exact fold it asked for, not the node answer under its label.
+
+    Accuracy on a free redshift is measured in ``test_igm_exact_fold_free_z.py``;
+    this pins that the request reaches the z-table at all.
+    """
+
+    def _igm_table(fold):
+        model = SEDModel.build(
+            ssp_data=ssp,
+            observation=observation,
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "met_logzsol": Fixed(0.0),
+            },
+            redshift=tengri.Uniform(0.5, 1.5),
+            igm={"type": "inoue"},
+            approx=WavePrecomp(igm_fold=fold, n_z=FREE_Z_NODES),
+        )
+        ztable = model._build_component_chain()[0]._state.ssp_phot_ztable
+        return np.asarray(ztable.ssp_subband_phot_igm_table)
+
+    exact, node = _igm_table("exact"), _igm_table("node")
+    assert exact.shape == node.shape
+    assert not np.array_equal(exact, node)
 
 
 @pytest.mark.parametrize("fold", ["node", "exact"])
@@ -307,11 +317,7 @@ def _free_z_photometry(ssp, observation, fold):
 
 
 def test_auto_resolves_to_exact_for_a_free_redshift(ssp, observation):
-    """auto now resolves to exact for free redshift.
-
-    The exact fold now works for free redshift, so ``"auto"`` uses it rather
-    than falling back to the node fold.
-    """
+    """``"auto"`` takes the exact fold on a free redshift, where it can be built."""
     np.testing.assert_array_equal(
         _free_z_photometry(ssp, observation, "auto"),
         _free_z_photometry(ssp, observation, "exact"),

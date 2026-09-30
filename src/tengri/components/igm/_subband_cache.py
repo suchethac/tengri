@@ -47,11 +47,29 @@ import numpy as np
 
 from tengri._cache_keys import array_key, frozen_dataclass_key, stable_digest
 
-__all__ = ["cache_dir", "cache_key", "clear_memo", "load", "memo_get", "memo_put", "store"]
+__all__ = [
+    "EXACT_FOLD_PREFIX",
+    "cache_dir",
+    "cache_key",
+    "clear_memo",
+    "exact_fold_key",
+    "load",
+    "memo_get",
+    "memo_put",
+    "store",
+]
 
 #: Bump when the stored table's meaning changes (transmission formula, node
 #: layout, dtype convention). Entries keyed with an older version are ignored.
 _CACHE_VERSION = 3
+
+#: Version of the exact-fold ratio table (:class:`ExactFoldRequest`), separate
+#: from :data:`_CACHE_VERSION` because the two tables change for different
+#: reasons. Bump when :mod:`tengri.components.igm.exact_fold` changes what it stores.
+_EXACT_FOLD_CACHE_VERSION = 1
+
+#: File prefix of the exact-fold ratio tables; the node tables use the default.
+EXACT_FOLD_PREFIX = "igm_exact_fold"
 
 #: In-process memo. The on-disk layer alone still costs an npz read per build,
 #: and #1453 measured repeat builds *within* one process re-paying in full.
@@ -100,6 +118,39 @@ class SubbandBandRequest(SubbandRequest):
     filters: tuple
     #: Filter convolution convention (str)
     convention: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ExactFoldRequest:
+    """Every input of the exact-fold ratio table (:func:`exact_fold.subband_ratio_table`).
+
+    ``n_subbands``, ``lyc_gate`` and ``convention`` fix the sub-band partition
+    the ratio is taken over; a table built under one partition multiplies a
+    tensor built under another with no shape error, so each is its own field.
+    """
+
+    #: Schema version (:data:`_EXACT_FOLD_CACHE_VERSION`)
+    version: int
+    #: Array key for the rest-frame SSP wavelength grid
+    ssp_wave: tuple
+    #: Array key for the SSP template cube
+    ssp_flux: tuple
+    #: Tuple of (wave_key, trans_key) per filter, in order
+    filters: tuple
+    #: Array key for the redshift grid
+    z_grid: tuple
+    #: IGM transmission law name
+    igm_model: str
+    #: Base sub-band count K
+    n_subbands: int
+    #: Whether the partition carries the forced Lyman-limit edge
+    lyc_gate: bool
+    #: Filter convolution convention (the bandpass weight)
+    convention: str
+    #: Whether JAX X64 mode is enabled
+    x64: bool
+    #: JAX backend name
+    backend: str
 
 
 def cache_dir() -> Path | None:
@@ -227,6 +278,54 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     return stable_digest(repr(frozen_dataclass_key(req)).encode())
 
 
+def exact_fold_key(
+    ssp_data, filters, z_grid, *, igm_model, n_subbands, lyc_gate, convention
+) -> str:
+    """Content hash for the exact-fold ratio table.
+
+    Includes session precision and backend for the reason given on
+    :func:`cache_key` (#2024): the transmission is evaluated through JAX.
+
+    Parameters
+    ----------
+    ssp_data : SSPData
+        Template grid; hashed by wavelength grid and flux cube.
+    filters : sequence of (wave, trans) pairs
+        Filter curves, hashed in order.
+    z_grid : array_like
+        Redshift nodes.
+    igm_model : str
+        Transmission law name.
+    n_subbands : int
+        Base sub-band count K.
+    lyc_gate : bool
+        Whether the partition carries the forced Lyman-limit edge.
+    convention : Any
+        Filter convolution convention.
+
+    Returns
+    -------
+    str
+        Hex digest.
+    """
+    import jax
+
+    req = ExactFoldRequest(
+        version=_EXACT_FOLD_CACHE_VERSION,
+        ssp_wave=array_key(ssp_data.ssp_wave),
+        ssp_flux=array_key(ssp_data.ssp_flux),
+        filters=tuple((array_key(fw), array_key(ft)) for fw, ft in filters),
+        z_grid=array_key(z_grid),
+        igm_model=str(igm_model),
+        n_subbands=int(n_subbands),
+        lyc_gate=bool(lyc_gate),
+        convention=str(convention),
+        x64=bool(jax.config.jax_enable_x64),
+        backend=jax.default_backend(),
+    )
+    return stable_digest(repr(frozen_dataclass_key(req)).encode())
+
+
 def _enabled() -> bool:
     """Whether caching is on at all.
 
@@ -259,7 +358,7 @@ def clear_memo() -> None:
     _MEMO.clear()
 
 
-def load(key: str):
+def load(key: str, *, prefix: str = "igm_subband"):
     """Load a cached table from disk, or ``None`` on any miss.
 
     Fails soft on a corrupt or unreadable entry: a cache is an optimization,
@@ -269,7 +368,7 @@ def load(key: str):
     directory = cache_dir()
     if directory is None:
         return None
-    path = directory / f"igm_subband_{key}.npz"
+    path = directory / f"{prefix}_{key}.npz"
     if not path.is_file():
         return None
     try:
@@ -279,7 +378,7 @@ def load(key: str):
         return None
 
 
-def store(key: str, table) -> None:
+def store(key: str, table, *, prefix: str = "igm_subband") -> None:
     """Persist a table, silently declining if the cache is unwritable.
 
     Writes via a temporary file and renames, so a process interrupted
@@ -291,13 +390,13 @@ def store(key: str, table) -> None:
         return
     try:
         directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f"igm_subband_{key}.npz"
+        path = directory / f"{prefix}_{key}.npz"
         # The temp name must itself end in ``.npz``: ``savez_compressed``
         # appends the extension when it is absent, so a name like
         # ``foo.npz.tmp123`` is written as ``foo.npz.tmp123.npz`` and the
         # rename below silently finds nothing. That failure is invisible;
         # every build recomputes and the cache simply never hits.
-        tmp = directory / f"igm_subband_{key}.{os.getpid()}.tmp.npz"
+        tmp = directory / f"{prefix}_{key}.{os.getpid()}.tmp.npz"
         np.savez_compressed(tmp, table=np.asarray(table))
         os.replace(tmp, path)
     except Exception:

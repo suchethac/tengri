@@ -2,6 +2,8 @@
 
 ### Added
 
+- `WavePrecomp(igm_fold="exact")` and `"auto"` now fold the IGM exactly on a free redshift: the sub-band ratio is taken at every node of the photometry z-table, where it previously refused. Measured on a z = 6.5-7.5 bare-stellar model against `approx=None`, worst over bands with more than 5 % surviving flux: exact 0.42 % at `n_z=32` (1.6 % at 16), node fold 105 %. What remains is the triweight z-interpolation, so it shrinks with the z spacing. Bands redward of Ly-alpha skip the quadrature (their ratio is exactly one) and the table is content-cached beside the z-table in `~/.cache/tengri_precomp`, so the exact build costs about what the node build does.
+
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
 - `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
@@ -10,6 +12,7 @@
 
 ### Fixed
 
+- The exact IGM fold now takes its sub-band ratio over the partition of the tensor it multiplies. A model with a live nebular Lyman-continuum mask (every Cue model: `neb_fesc` is fixed below one by default) splits each band into K + 1 chunks with a forced edge at 912 Å; the ratio was built as K + 1 equal-mass chunks without the edge, so shapes matched and nothing raised. Band fluxes straddling the Lyman limit were off by 12.7 % (GALEX NUV, z = 2) to 44 % (z = 2.5); a Cue model at z = 7.3 read i +11.6 % under the exact fold, now -1.2 %. The filter convention is passed through for the same reason.
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged

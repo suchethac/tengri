@@ -1,15 +1,26 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Exact IGM fold for free redshift: arms differ, auto resolution, node accuracy.
+"""The exact IGM fold on a free redshift, against the wavelength-grid integrator.
 
-Tests the exact IGM fold for free-redshift models:
-1. ``ssp_subband_phot_igm_table`` differs from node fold (arms differ test)
-2. ``"auto"`` resolves to ``"exact"`` for free z (auto resolution test)
-3. Accuracy at z-table nodes (exact = no z-interpolation error)
-4. Accuracy between nodes (measure exact vs node fold relative error)
+On a free redshift the sub-band tensor lives on a z-table and is interpolated to
+the runtime redshift. The exact fold multiplies each node of that table by the
+ratio of :mod:`tengri.components.igm.exact_fold`; the node fold multiplies by the
+transmission at each sub-band's node wavelength. The two differ where Ly-alpha
+sweeps across a sub-band, which on a z = 6.5-7.5 source is i, z and F090W.
 
-The Lyman-continuum tensor (``ssp_phot_lyc_table``) is not affected by the
-IGM exact fold; the fold applies only to sub-band integrals, not to the
-whole-band LyC split. This test does not verify LyC handling.
+Measured on the bare FSPS grid (dpl SFH, no nebular, inoue), worst over bands
+still carrying more than 5 % of their flux, at z-table nodes and midpoints:
+
+========  =========  ==========
+``n_z``   node fold  exact fold
+========  =========  ==========
+8         81.8 %     9.9 %
+16        86.6 %     1.6 %
+32        104.8 %    0.42 %
+========  =========  ==========
+
+The exact fold converges with the z spacing; what is left is the triweight
+z-interpolation shared by every z-table (which is why it is not zero at the
+nodes either). The node fold does not converge: its error is the fold.
 """
 
 from __future__ import annotations
@@ -20,240 +31,107 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, SEDModel, WavePrecomp
-from tengri.components.igm.igm import IGM_TRANSMISSION_MODELS
 from tengri.parameters import Fixed, Uniform
 
 pytestmark = pytest.mark.contract
 
-
-# Test bands spanning Lyman break across z = 3-9 (F090W straddles Ly-alpha at z=7)
-BANDS = [
-    "sdss_g",
-    "sdss_r",
-    "sdss_z",
-    "JWST_NIRCam_F090W",
-    "JWST_NIRCam_F115W",
-    "JWST_NIRCam_F150W",
-    "JWST_NIRCam_F200W",
-]
-
-# Redshift nodes for node/between-node accuracy tests
-Z_NODES_FOR_ACCURACY = [3.0, 5.0, 7.0]
+BANDS = ["sdss_i", "sdss_z", "JWST_NIRCam_F090W", "JWST_NIRCam_F115W"]
+Z_RANGE = (6.5, 7.5)
+N_Z = 32
+#: Bands with less surviving flux than this are dark; their relative error is noise.
+T_FLOOR = 0.05
+#: Measured worst 0.42 % at N_Z = 32.
+_EXACT_TOL = 0.01
+#: Measured worst 104.8 % at N_Z = 32: the arms must be far apart for the test to mean anything.
+_NODE_FLOOR = 0.5
 
 
 @pytest.fixture(scope="module")
 def ssp(ssp_data_fsps):
-    """Use bare-stellar FSPS SSP for hermeticity (#2329)."""
     return ssp_data_fsps
 
 
 @pytest.fixture(scope="module")
 def observation():
-    """Observation with the 7 test bands."""
     return tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
 
-def _bare_stellar_free_z(ssp, observation, igm_model, igm_fold, n_z=30):
-    """Build a bare-stellar free-z model with specified IGM fold mode.
-
-    Parameters
-    ----------
-    igm_fold : str
-        "node" or "exact"
-    igm_model : str
-        IGM model name
-    n_z : int
-        Number of z-table nodes
-
-    Returns
-    -------
-    SEDModel
-        Built model with free z in [0.5, 10.0]
-    """
+def _model(ssp, observation, *, igm="inoue", approx=None, redshift=None):
     return SEDModel.build(
         ssp_data=ssp,
         observation=observation,
-        sfh={
-            "type": "dpl",
-            "all_params": Fixed(DEFAULT),
-        },
-        redshift=Uniform(0.5, 10.0),
-        igm={"type": igm_model},
-        approx=WavePrecomp(igm_fold=igm_fold, n_z=n_z),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
+        redshift=Uniform(*Z_RANGE) if redshift is None else redshift,
+        igm={"type": igm},
+        approx=approx,
     )
 
 
-def _photometry(model, z):
-    """Evaluate photometry at a specific redshift."""
-    return np.asarray(model.predict_photometry({"redshift": jnp.asarray(z)}), dtype=np.float64)
+def _photometry(model, z=None):
+    params = {} if z is None else {"redshift": jnp.asarray(z)}
+    return np.asarray(model.predict_photometry(params), dtype=np.float64)
 
 
-@pytest.mark.parametrize("igm_model", sorted(IGM_TRANSMISSION_MODELS))
-def test_arms_differ_exact_vs_node_fold(ssp, observation, igm_model):
-    """ssp_subband_phot_igm_table differs from node fold (arms differ).
+def _ztable(model):
+    return model._build_component_chain()[0]._state.ssp_phot_ztable
 
-    The exact fold should produce different sub-band IGM tables than the
-    node fold (assuming transmission has structure within bands). This test
-    verifies the two folds actually produce different intermediate tables.
-    """
-    exact_model = _bare_stellar_free_z(ssp, observation, igm_model, "exact")
-    node_model = _bare_stellar_free_z(ssp, observation, igm_model, "node")
 
-    # Extract the IGM tables
-    exact_ztable = exact_model._state.ssp_phot_ztable
-    node_ztable = node_model._state.ssp_phot_ztable
+@pytest.fixture(scope="module")
+def folds(ssp, observation):
+    return {
+        fold: _model(ssp, observation, approx=WavePrecomp(igm_fold=fold, n_z=N_Z))
+        for fold in ("node", "exact", "auto")
+    }
 
-    assert exact_ztable.ssp_subband_phot_igm_table is not None
-    assert node_ztable.ssp_subband_phot_igm_table is not None
 
-    # The tables should differ (not allclose)
-    exact_table = np.asarray(exact_ztable.ssp_subband_phot_igm_table)
-    node_table = np.asarray(node_ztable.ssp_subband_phot_igm_table)
+def test_the_exact_fold_tracks_the_integrator_across_the_z_table(ssp, observation, folds):
+    reference = _model(ssp, observation)
+    bare = _model(ssp, observation, igm="none")
+    z_grid = np.asarray(_ztable(folds["exact"]).z_grid)
+    nodes = z_grid[(z_grid > Z_RANGE[0]) & (z_grid < Z_RANGE[1])]
+    probes = np.concatenate([nodes, 0.5 * (nodes[:-1] + nodes[1:])])
 
-    # They should not be bit-identical
-    assert not np.allclose(exact_table, node_table), (
-        f"Exact and node fold sub-band IGM tables are identical for {igm_model}; "
-        "the folds are not different"
+    worst = {"node": 0.0, "exact": 0.0}
+    for z in probes:
+        exact_flux = _photometry(reference, z)
+        live = exact_flux / _photometry(bare, z) > T_FLOOR
+        for fold in worst:
+            error = np.abs(_photometry(folds[fold], z) / exact_flux - 1.0)
+            worst[fold] = max(worst[fold], float(np.max(np.where(live, error, 0.0))))
+
+    assert worst["exact"] < _EXACT_TOL, f"exact fold off the integrator by {worst['exact']:.3%}"
+    assert worst["node"] > _NODE_FLOOR, (
+        f"node fold off by only {worst['node']:.3%}: the probe no longer puts "
+        "Ly-alpha inside a sub-band"
     )
 
 
-@pytest.mark.parametrize("igm_model", sorted(IGM_TRANSMISSION_MODELS))
-def test_auto_resolves_exact_for_free_z(ssp, observation, igm_model):
-    """``"auto"`` resolves to ``"exact"`` for free z."""
-    auto_model = _bare_stellar_free_z(ssp, observation, igm_model, "auto")
-    exact_model = _bare_stellar_free_z(ssp, observation, igm_model, "exact")
-
-    # Extract the IGM tables
-    auto_ztable = auto_model._state.ssp_phot_ztable
-    exact_ztable = exact_model._state.ssp_phot_ztable
-
-    auto_table = np.asarray(auto_ztable.ssp_subband_phot_igm_table)
-    exact_table = np.asarray(exact_ztable.ssp_subband_phot_igm_table)
-
-    # They should be bit-identical
-    np.testing.assert_array_equal(auto_table, exact_table)
-
-
-@pytest.mark.parametrize("igm_model", sorted(IGM_TRANSMISSION_MODELS))
-def test_accuracy_at_ztable_nodes(ssp, observation, igm_model):
-    """At z-table nodes, exact fold is accurate (no z-interpolation error).
-
-    At a redshift that coincides with a z-table node, the exact fold table
-    can be compared directly to the wavelength-grid integrator with no
-    interpolation error in z. This should be very accurate.
-    """
-    exact_model = _bare_stellar_free_z(ssp, observation, igm_model, "exact", n_z=30)
-    integrator_model = _bare_stellar_free_z(ssp, observation, igm_model, "node", n_z=30)
-    integrator_model._approx_config_wave = None  # Force exact wavelength-grid path
-
-    ztable = exact_model._state.ssp_phot_ztable
-    z_grid = np.asarray(ztable.z_grid)
-
-    # Pick redshifts near the accuracy test nodes that exist in z_grid
-    test_z_vals = []
-    for target_z in Z_NODES_FOR_ACCURACY:
-        idx = np.argmin(np.abs(z_grid - target_z))
-        test_z_vals.append(z_grid[idx])
-
-    for z in test_z_vals:
-        lut_photo = _photometry(exact_model, z)
-        integrator_photo = _photometry(integrator_model, z)
-
-        # Compute worst-band relative error
-        errors = np.abs(lut_photo - integrator_photo) / np.where(
-            integrator_photo != 0, np.abs(integrator_photo), 1.0
-        )
-        worst_band_error = np.max(errors)
-
-        assert worst_band_error < 0.01, (
-            f"At z={z:.2f} ({igm_model}): exact fold vs integrator error "
-            f"{worst_band_error:.3%} exceeds 1%"
-        )
-
-
-@pytest.mark.parametrize("igm_model", sorted(IGM_TRANSMISSION_MODELS))
-def test_accuracy_between_nodes(ssp, observation, igm_model):
-    """Between nodes: measure exact vs node fold error (with T transmission).
-
-    This is the key test: at redshifts between z-table nodes, measure how
-    much better the exact fold is versus the node fold. Report the worst-band
-    relative error and the surviving flux fraction T for each band.
-    """
-    exact_model = _bare_stellar_free_z(ssp, observation, igm_model, "exact", n_z=20)
-    node_model = _bare_stellar_free_z(ssp, observation, igm_model, "node", n_z=20)
-
-    # Sample redshifts between z=3 and z=9, including midpoints between nodes
-    ztable = exact_model._state.ssp_phot_ztable
-    z_grid = np.asarray(ztable.z_grid)
-
-    # Filter z_grid to be in [3, 9]
-    z_in_range = z_grid[(z_grid >= 3.0) & (z_grid <= 9.0)]
-
-    # Collect midpoints between consecutive nodes in this range
-    test_z_vals = []
-    for i in range(len(z_in_range) - 1):
-        midpoint = (z_in_range[i] + z_in_range[i + 1]) / 2
-        test_z_vals.append(midpoint)
-
-    # Ensure at least 20 test points
-    if len(test_z_vals) < 20:
-        # Add more points spread across [3, 9]
-        test_z_vals.extend(np.linspace(3.0, 9.0, 25)[1:-1])
-        test_z_vals = sorted(list(set(test_z_vals)))[:20]
-
-    errors_exact = []
-    errors_node = []
-    transmissions = []
-
-    for z in test_z_vals:
-        exact_photo = _photometry(exact_model, z)
-        node_photo = _photometry(node_model, z)
-
-        # For no-IGM reference (to compute T)
-        # Build a model with no IGM to get reference
-        no_igm_model = SEDModel.build(
-            ssp_data=ssp,
-            observation=observation,
-            sfh={
-                "type": "dpl",
-                "all_params": Fixed(DEFAULT),
-            },
-            redshift=Fixed(z),
-            igm={"type": "none"},
-            approx=WavePrecomp(igm_fold="node"),
-        )
-        no_igm_photo = _photometry(no_igm_model, z)
-
-        # Compute transmission per band
-        T_per_band = np.where(no_igm_photo > 0, exact_photo / no_igm_photo, 0.0)
-        transmissions.append(T_per_band)
-
-        # Relative error vs no-IGM: (exact - no_igm) / no_igm
-        # But we want to compare exact vs node fold
-        errors_exact.append(exact_photo)
-        errors_node.append(node_photo)
-
-    errors_exact = np.array(errors_exact)
-    errors_node = np.array(errors_node)
-    transmissions = np.array(transmissions)
-
-    # Compute worst-band relative error: |exact - node| / node
-    relative_errors = np.abs(errors_exact - errors_node) / np.where(
-        errors_node > 0, np.abs(errors_node), 1.0
+def test_a_z_table_node_is_folded_as_a_fixed_redshift_would_be(ssp, observation, folds):
+    """The free-z branch reads each node's own redshift and the table's partition."""
+    table = _ztable(folds["exact"])
+    k = int(np.argmin(np.abs(np.asarray(table.z_grid) - 7.0)))
+    z_node = float(table.z_grid[k])
+    fixed = (
+        _model(ssp, observation, approx=WavePrecomp(igm_fold="exact"), redshift=Fixed(z_node))
+        ._build_component_chain()[0]
+        ._state.ssp_phot_lut
     )
-    worst_band_idx = np.argmax(np.max(relative_errors, axis=0))
-    worst_band = BANDS[worst_band_idx]
-    max_error = np.max(relative_errors[:, worst_band_idx])
 
-    # Report average transmission in worst band
-    avg_transmission = np.mean(transmissions[:, worst_band_idx])
+    def _ratio(folded, bare):
+        folded, bare = np.asarray(folded), np.asarray(bare)
+        return np.where(bare != 0.0, folded / np.where(bare != 0.0, bare, 1.0), 0.0)
 
-    # The measurement-based tolerance: set at 2x the worst case
-    # For measurement: tolerances are typically ~1-2% for exact fold between nodes
-    # If exact fold error exceeds 1% in a band with T > 0.05, report and stop
-    if avg_transmission > 0.05 and max_error > 0.01:
-        pytest.skip(
-            f"{igm_model}: Between-node error in {worst_band} is {max_error:.3%} "
-            f"(T={avg_transmission:.3f}); exceeds 1% with significant flux. "
-            f"Review z-grid density."
-        )
+    np.testing.assert_allclose(
+        _ratio(table.ssp_subband_phot_igm_table[k], table.ssp_subband_phot_table[k]),
+        _ratio(fixed.ssp_subband_phot_igm, fixed.ssp_subband_phot),
+        rtol=1e-12,
+        atol=0,
+    )
+
+
+def test_auto_takes_the_exact_fold_on_a_free_redshift(folds):
+    np.testing.assert_array_equal(
+        np.asarray(_ztable(folds["auto"]).ssp_subband_phot_igm_table),
+        np.asarray(_ztable(folds["exact"]).ssp_subband_phot_igm_table),
+    )
