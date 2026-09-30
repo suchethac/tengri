@@ -72,8 +72,7 @@ this order.
    git grep -n '0\.1\.0' -- ':!*.ipynb' ':!CHANGELOG.md' ':!docs/changelog.md' ':!notebooks/archive'
    ```
 
-   Expected hits: `pyproject.toml` (the `version =` line, and `jax-metal>=0.1.0`
-   on the `metal` extra, which is a dependency floor and never bumps), `CITATION.cff`,
+   Expected hits: `pyproject.toml` (the `version =` line), `CITATION.cff`,
    one comment in `.github/workflows/publish.yml` naming an example tag (`v0.1.0a1`),
    and this checklist's own text (update it with the bump). **Any other hit is a
    legacy hard-coded version this list does not know: add it and make it derive

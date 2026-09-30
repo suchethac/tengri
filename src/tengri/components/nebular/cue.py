@@ -115,6 +115,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    apply_lya_escape,
     interp_continuum_with_freefree_tail,
     render_nebular_lines,
 )
@@ -1352,21 +1353,9 @@ class CueBackend:
         # recombination coefficient ratio alpha_1 / alpha_B.
         k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
         lum = lum * k
-        # Ly-alpha special handling. All lines (incl. Ly-alpha) are already
-        # scaled by the general ionization-budget factor ``k`` above. Ly-alpha
-        # is *additionally* suppressed by its own resonant escape/destruction
-        # fraction ``neb_fesc_lya``, so the surviving Ly-alpha is
-        # ``L_orig · k · (1 - neb_fesc_lya)``.
-        #
-        # The previous code multiplied by ``(1 - neb_fesc_lya) / (1 - neb_fesc)``,
-        # which divided out the general suppression: as ``neb_fesc → 1`` that
-        # ratio diverges (``1 / 1e-10``) and *amplified* Ly-alpha by ~60×
-        # instead of suppressing it (P-11 BUG: lines not suppressed at fesc=1).
-        # It was also unphysical: with all ionizing photons escaped (k → 0),
-        # Ly-alpha would have survived at ``L_orig · (1 - neb_fesc_lya)``.
-        lya_idx = jnp.argmin(jnp.abs(wav - 1215.67))
-        lya_scale = 1.0 - neb_fesc_lya
-        lum = lum.at[lya_idx].multiply(lya_scale)
+        # Apply Lyα-specific resonant scattering escape via the shared helper.
+        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        lum = apply_lya_escape(lum, wav, neb_fesc_lya)
         if cloudyfsps_only:
             old_idx = weights.line_old_idx
             return wav[old_idx], lum[old_idx]

@@ -17,9 +17,8 @@
 # # Running tengri on the Apple GPU (MPS) — experimental
 #
 # **Status: experimental.** This is a working recipe with measured numbers, not a
-# supported configuration. The approach requires a JAX version that the standard
-# tengri installation does not pin, and it runs in pure float32, where parts of the
-# model are still open work. On CPU with float64, nothing below applies.
+# supported configuration. It runs in pure float32, where parts of the model are
+# still open work. On CPU with float64, nothing below applies.
 #
 # The one-line summary, measured on an Apple M4 Pro:
 #
@@ -61,29 +60,24 @@
 # community PJRT plugin built on MLX. It is not Apple's `jax-metal`, which last
 # released in October 2024.
 #
-# **Use a separate environment.** `jax-mps` pins a JAX version that tengri's main
-# environment does not use, and you do not want to move JAX under your working
-# installation.
+# **Use a separate environment.** Installing `jax-mps` makes the Apple GPU the
+# default JAX device for every process in that environment, and the GPU has no
+# float64, so an ordinary float64 tengri fit there fails. Keep it apart from the
+# environment you fit in.
 #
 # ```bash
 # python3.12 -m venv ~/.venvs/tengri-mps
 # source ~/.venvs/tengri-mps/bin/activate
-# pip install "jax>=0.10,<0.11" "jaxlib>=0.10,<0.11" "jax-mps==0.10.10"
-# pip install -e /path/to/tengri
+# pip install -e "/path/to/tengri[all,mps]"
 # ```
 #
-# Version constraints, because they are tighter than they look:
-#
-# | you have | you need |
-# |---|---|
-# | Python 3.12 | `jax-mps` 0.10.10 → **jax 0.10.x** |
-# | jax 0.9.x | `jax-mps` 0.9.9 → **Python 3.13** (cp313-only wheel) |
-#
-# Either JAX or Python has to move from tengri's usual pairing. There is no
-# combination that leaves both where they are.
+# The `mps` extra installs `jax-mps` 0.11.0 or later, which needs Python 3.12 or
+# later and JAX 0.11, the same JAX tengri installs. Do not go below 0.11.0: earlier releases compute some expressions on
+# reversed arrays wrongly on the GPU, and tengri's far-infrared AGN torus is one of
+# them.
 
 # %% [markdown]
-# ## 2. The three rules
+# ## 2. The two rules
 #
 # **Rule 1: MPS has no float64, at all.** Not "slower"; absent. A float64 array
 # does not get downcast, it raises:
@@ -102,20 +96,11 @@
 # ```bash
 # export JAX_ENABLE_X64=0
 # export JAX_PLATFORMS=mps
-# export MLX_DISABLE_COMPILE=1
 # ```
 #
 # tengri honors that and holds it for the whole import. It will
 # warn once that you are in float32 and that cosmological distances are the known
 # hazard (that warning is expected here, not a problem).
-#
-# **Rule 3: turn MLX kernel fusion off** (`MLX_DISABLE_COMPILE=1`). With it on,
-# a reversed array combined with a broadcast scalar is silently wrong on MPS
-# (`y[::-1] * 2.0` keeps its first element and zeros the rest;
-# [jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)). tengri hits
-# it in the SKIRTOR polar-dust integral, which puts the torus far-infrared 10x low;
-# with fusion off the float32 parity sweep passes 5 of 6 seams, and every seam ran
-# faster. Details and the measured table: `docs/internal/getting_started/gpu.md`.
 #
 # Optional, and worth setting: `JAX_MPS_ASYNC_DISPATCH=1`. It cut cold
 # compile from 8.1 s to 0.60 s. It changes warm time very little.
@@ -127,7 +112,6 @@ import os
 # first cell, before any other import touches JAX.
 os.environ["JAX_ENABLE_X64"] = "0"
 os.environ["JAX_PLATFORMS"] = "mps"
-os.environ["MLX_DISABLE_COMPILE"] = "1"
 os.environ["JAX_MPS_ASYNC_DISPATCH"] = "1"
 
 import jax
@@ -239,6 +223,8 @@ for n in (1, 32):
 #
 # The batch 1 and 32 rows were taken against an older tengri whose CPU path was
 # slower, so treat their CPU column as an upper bound.
+# The MPS column at batch 4096 reproduces with `jax-mps` 0.11.0 to within 12% (0.103-0.107
+# ms/galaxy for the gradient, 0.097-0.105 for the inference shape below).
 
 # %% [markdown]
 # ### Work shape and batch size

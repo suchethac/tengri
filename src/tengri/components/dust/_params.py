@@ -134,17 +134,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_umin",
         Fixed(1.0),
         # Bounds measured from the shipped grids, not quoted: data/dl07_templates.h5
-        # ``umin_grid`` spans [0.1, 20] (22 nodes), dl14 [0.1, 50] (36), themis
-        # [0.1, 80] (37). The prose here previously said "0.1-25 for DL07", which
-        # no grid supports.
-        "Draine & Li minimum radiation field (grid: 0.1-20 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
+        # ``umin_grid`` spans [0.1, 25] (22 nodes, published DL07 axis), dl14 [0.1, 50]
+        # (36), themis [0.1, 80] (37). The 22-node DL07 ladder is the one in
+        # Draine & Li (2007) Table 3 and FSPS's own ``uminarr``; CIGALE's dl2007
+        # module instead lists a 23-node ladder that also contains U_min=10.0.
+        "Draine & Li minimum radiation field (grid: 0.1-25 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         # This bucket is the static superset registered for every IR backend, so
         # the free range is the grid *intersection*: a prior valid under DL14 but
-        # not DL07 would be clipped to the DL07 edge, and everything above 20
-        # would carry exactly zero gradient (#1586).
-        free_prior=Uniform(0.1, 20.0, "DL/THEMIS minimum radiation field", default=1.0),
+        # not DL07 would be clipped to the DL07 edge. DL14 and THEMIS both support
+        # higher values, so the DL07 ceiling (25.0) is the constraint.
+        free_prior=Uniform(0.1, 25.0, "DL/THEMIS minimum radiation field", default=1.0),
     ),
     ParamDeclaration(
         "dust_gamma_dl",
@@ -157,10 +158,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_qpah",
         Fixed(2.5),
-        # Measured from the shipped grids: dl07 ``qpah_grid`` spans [0.1, 4.58]
-        # (11 nodes) and dl14 [0.47, 7.32] (11). The prose previously gave the
-        # DL07 floor as 0.47, which is DL14's.
-        "Draine & Li PAH mass fraction (%, grid: 0.1-4.58 DL07, 0.47-7.32 DL14)",
+        # Measured from the shipped grids: dl07 ``qpah_grid`` spans [0.47, 4.58]
+        # (7 MW3.1 nodes; issue #2441 removed the LMC2/SMC compositions that had
+        # been mixed onto this axis, which lowered the apparent floor to 0.10)
+        # and dl14 [0.47, 7.32] (11).
+        "Draine & Li PAH mass fraction (%, grid: 0.47-4.58 DL07, 0.47-7.32 DL14)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         # Intersection of the two grids, for the same reason as ``dust_umin``.
