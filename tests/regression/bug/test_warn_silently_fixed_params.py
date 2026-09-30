@@ -6,6 +6,7 @@ all parameters in that group are fixed by default, silently. The user
 believes they've configured an SFH, but gets zero free parameters.
 """
 
+import re
 import warnings
 
 import pytest
@@ -13,6 +14,7 @@ import pytest
 from tengri import DEFAULT, FREE, Fixed
 from tengri.config.exceptions import DefaultFixedParametersWarning
 from tengri.parameters import parse_groups
+from tengri.parameters.groups import _per_screen_full_names
 
 pytestmark = pytest.mark.regression_bug  # Frozen output for the silent-fixed-params bug
 
@@ -266,11 +268,44 @@ class TestDefect2MessageAccuracy:
             # this group sets tau_bc and tau_diff explicitly.
             assert "all parameters" not in message.lower()
 
-            # It must state how many defaulted, so the count is checkable against
-            # the list. Assert the requirement, not one particular phrasing.
-            n_listed = sum(1 for tok in message.split() if "=" in tok)
-            assert n_listed >= 1
-            assert str(n_listed) in message or "parameter was" in message
+            # Parse the message's own claim -- "remaining N parameters were
+            # fixed" (or, for exactly one, the unnumbered singular "remaining
+            # parameter was fixed") -- the list line's own "name=value" count,
+            # and its trailing "... and K more" (0 if absent, meaning every
+            # defaulted parameter is listed). These three must agree. Only the
+            # list line is counted: the usage hints below it also contain "=".
+            header, list_line = message.splitlines()[0], message.splitlines()[1]
+            plural_match = re.search(r"remaining (\d+) parameters were fixed", header)
+            if plural_match:
+                n_claimed = int(plural_match.group(1))
+            else:
+                assert "remaining parameter was fixed" in header, header
+                n_claimed = 1
+            n_listed = list_line.count("=")
+            more_match = re.search(r"and (\d+) more", list_line)
+            n_more = int(more_match.group(1)) if more_match else 0
+            assert n_claimed == n_listed + n_more, (
+                f"claimed {n_claimed} != listed {n_listed} + {n_more} more: {message!r}"
+            )
+
+            # The claimed count must equal the group's actual silently-fixed
+            # population, computed here from the parsed spec itself (not a
+            # literal), so a future law/parameter declaration cannot make
+            # this pass by coincidence again: every dust_* distribution,
+            # minus the wildcard-inert per-screen shape names (#2428 --
+            # never part of this warning's claim or remedy), minus the two
+            # this test set explicitly, that is still Fixed.
+            explicitly_set = {"dust_tau_bc", "dust_tau_diff"}
+            per_screen_inert = _per_screen_full_names()
+            n_actual = sum(
+                1
+                for name, dist in params._distributions.items()
+                if name.startswith("dust_")
+                and name not in per_screen_inert
+                and name not in explicitly_set
+                and dist.is_fixed
+            )
+            assert n_claimed == n_actual, f"claimed {n_claimed} != actual {n_actual}: {message!r}"
 
             # The parameters the user set explicitly must not be reported as
             # defaulted, and the ones that did default must be named.

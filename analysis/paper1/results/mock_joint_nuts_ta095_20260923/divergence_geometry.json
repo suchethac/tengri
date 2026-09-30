@@ -1,0 +1,262 @@
+{
+  "n_divergent": 2,
+  "parameters": [
+    {
+      "median_all": 0.18152018478688503,
+      "median_divergent": 0.5598748471103887,
+      "offset_sd": 2.0980752337909148,
+      "parameter": "agn_torus_frac",
+      "sd": 0.18033417306960542
+    },
+    {
+      "median_all": -0.15473260941810513,
+      "median_divergent": -0.34886931425925727,
+      "offset_sd": -1.8380415012995281,
+      "parameter": "met_logzsol",
+      "sd": 0.10562150240018739
+    },
+    {
+      "median_all": 1.6638314908223446,
+      "median_divergent": 1.3219453316060865,
+      "offset_sd": -1.3911672648965339,
+      "parameter": "agn_fe2_strength",
+      "sd": 0.24575489076195695
+    },
+    {
+      "median_all": 1475.0893895890795,
+      "median_divergent": 1585.0456026897764,
+      "offset_sd": 1.310629869922176,
+      "parameter": "neb_eline_sigma_kms",
+      "sd": 83.89570207737293
+    },
+    {
+      "median_all": 3.695726257104948,
+      "median_divergent": 3.0827166834972415,
+      "offset_sd": -1.201788929801501,
+      "parameter": "dust_qpah",
+      "sd": 0.5100808955770271
+    },
+    {
+      "median_all": 38.52666392070638,
+      "median_divergent": 22.620573025996325,
+      "offset_sd": -1.1668130695864165,
+      "parameter": "agn_oa_skirtor",
+      "sd": 13.632081529861559
+    },
+    {
+      "median_all": 0.8114516558990414,
+      "median_divergent": 1.0412623062159814,
+      "offset_sd": 1.0493643002011903,
+      "parameter": "dust_tau_bc",
+      "sd": 0.21899987475548696
+    },
+    {
+      "median_all": 0.4591243339244411,
+      "median_divergent": 0.16992857119602425,
+      "offset_sd": -0.9367043789730072,
+      "parameter": "neb_dig_frac",
+      "sd": 0.3087374941552937
+    },
+    {
+      "median_all": 0.10457825323931505,
+      "median_divergent": 0.1814633432533738,
+      "offset_sd": 0.9001619273648445,
+      "parameter": "neb_fdust",
+      "sd": 0.08541251043479921
+    },
+    {
+      "median_all": 21.329198183607318,
+      "median_divergent": 22.350647672278846,
+      "offset_sd": 0.8197125334763411,
+      "parameter": "xray_log_nh",
+      "sd": 1.246106954519331
+    },
+    {
+      "median_all": 10.50100430522182,
+      "median_divergent": 10.530228803332783,
+      "offset_sd": 0.7814377200253968,
+      "parameter": "sfh_cont_log_total_mass",
+      "sd": 0.03739837144029019
+    },
+    {
+      "median_all": 0.7834774283213666,
+      "median_divergent": 0.6809674222941784,
+      "offset_sd": -0.6210041990119819,
+      "parameter": "dust_eta_balance",
+      "sd": 0.16507135731172456
+    },
+    {
+      "median_all": 0.35919979665590074,
+      "median_divergent": 0.3313285655831142,
+      "offset_sd": -0.6192591203187536,
+      "parameter": "dust_tau_diff",
+      "sd": 0.045007380849619597
+    },
+    {
+      "median_all": 0.5988181893983902,
+      "median_divergent": 0.7524797143182644,
+      "offset_sd": 0.5792937203886619,
+      "parameter": "dust_gamma_dl",
+      "sd": 0.26525667293058025
+    },
+    {
+      "median_all": -0.014181770992206221,
+      "median_divergent": 0.09453046563131548,
+      "offset_sd": 0.5485507831877303,
+      "parameter": "sfh_cont_ratio_0",
+      "sd": 0.19818080650942604
+    },
+    {
+      "median_all": -0.2933855744722032,
+      "median_divergent": -0.4033138380053418,
+      "offset_sd": -0.4879277035125381,
+      "parameter": "neb_logZ_gas",
+      "sd": 0.2252962124138004
+    },
+    {
+      "median_all": 0.380356174653465,
+      "median_divergent": 0.25424553698519603,
+      "offset_sd": -0.4676911262454303,
+      "parameter": "agn_blr_cf",
+      "sd": 0.2696451366966708
+    },
+    {
+      "median_all": 9.96171365048493,
+      "median_divergent": 9.870207513035174,
+      "offset_sd": -0.42597352766144686,
+      "parameter": "agn_log_lbol",
+      "sd": 0.2148164886022735
+    },
+    {
+      "median_all": 0.41733666752810616,
+      "median_divergent": 0.307099765966445,
+      "offset_sd": -0.41354467473664525,
+      "parameter": "agn_ebv_disc",
+      "sd": 0.26656588343656595
+    },
+    {
+      "median_all": 0.7389241531835768,
+      "median_divergent": 0.8187653007257364,
+      "offset_sd": 0.379705811771532,
+      "parameter": "agn_nlr_line_efficiency",
+      "sd": 0.21027107056817912
+    },
+    {
+      "median_all": 0.03236392776917085,
+      "median_divergent": 0.11152412891175784,
+      "offset_sd": 0.3571989234956844,
+      "parameter": "sfh_cont_ratio_2",
+      "sd": 0.22161377298647816
+    },
+    {
+      "median_all": 0.0701823733167132,
+      "median_divergent": 0.08512601368879388,
+      "offset_sd": 0.3521796074780293,
+      "parameter": "agn_grahsp_ebv",
+      "sd": 0.04243187298405101
+    },
+    {
+      "median_all": 0.04402194547892191,
+      "median_divergent": -0.10783176517069579,
+      "offset_sd": -0.3074631596525411,
+      "parameter": "sfh_cont_ratio_4",
+      "sd": 0.4938923766386353
+    },
+    {
+      "median_all": 12.093914472441135,
+      "median_divergent": 10.537325374023109,
+      "offset_sd": -0.2887210116896002,
+      "parameter": "dust_umin",
+      "sd": 5.391326004674343
+    },
+    {
+      "median_all": 0.05523785293220352,
+      "median_divergent": -0.23400231581577943,
+      "offset_sd": -0.2828059746692549,
+      "parameter": "sfh_cont_ratio_5",
+      "sd": 1.0227512664336493
+    },
+    {
+      "median_all": 0.07089352885575297,
+      "median_divergent": 0.134243965965751,
+      "offset_sd": 0.28199835718365557,
+      "parameter": "sfh_cont_ratio_3",
+      "sd": 0.22464824881493947
+    },
+    {
+      "median_all": -0.07343718281400075,
+      "median_divergent": -0.1384784692150478,
+      "offset_sd": -0.2660492252135794,
+      "parameter": "sfh_cont_ratio_1",
+      "sd": 0.24447087319586489
+    },
+    {
+      "median_all": 1.384062708757339,
+      "median_divergent": 1.1571938689554808,
+      "offset_sd": -0.20685276065696567,
+      "parameter": "xray_det_hmxb",
+      "sd": 1.0967648634773897
+    },
+    {
+      "median_all": 0.7413233556304084,
+      "median_divergent": 0.7719771321498691,
+      "offset_sd": 0.1543464761925399,
+      "parameter": "agn_nlr_cf",
+      "sd": 0.1986036693265451
+    },
+    {
+      "median_all": -3.291877902458099,
+      "median_divergent": -3.4033759820457155,
+      "offset_sd": -0.11005083106322822,
+      "parameter": "neb_logU",
+      "sd": 1.0131507278082879
+    },
+    {
+      "median_all": 0.09617022694192484,
+      "median_divergent": 0.103352622795281,
+      "offset_sd": 0.08737228364078965,
+      "parameter": "neb_fesc",
+      "sd": 0.08220451101959139
+    },
+    {
+      "median_all": 1.8641054320740296,
+      "median_divergent": 1.8577183214706467,
+      "offset_sd": -0.07587045477363777,
+      "parameter": "dust_alpha_dl14",
+      "sd": 0.08418442491796038
+    },
+    {
+      "median_all": 0.3422624773456323,
+      "median_divergent": 0.3598256232682433,
+      "offset_sd": 0.0657228464845591,
+      "parameter": "agn_blr_line_efficiency",
+      "sd": 0.2672304512364246
+    },
+    {
+      "median_all": 1.9515484438793516,
+      "median_divergent": 1.9374447537918111,
+      "offset_sd": -0.05116350381614118,
+      "parameter": "xray_gamma_agn",
+      "sd": 0.2756591913294835
+    },
+    {
+      "median_all": -1.4755714993584697,
+      "median_divergent": -1.5076235108886016,
+      "offset_sd": -0.0338648701097934,
+      "parameter": "neb_dig_delta_logU",
+      "sd": 0.94646787146137
+    },
+    {
+      "median_all": -0.16969814845542305,
+      "median_divergent": -0.16894946263554114,
+      "offset_sd": 0.0051979079877951155,
+      "parameter": "xray_delta_alpha_ox",
+      "sd": 0.14403598940955745
+    }
+  ],
+  "verdict": {
+    "n_divergent": 2,
+    "note": "2 divergent draws is too few to locate a shape: the median offset this module reports carries an uncertainty of about 0.89 sd at this count, against a funnel threshold of 2.0 sd. Fewer than 10 is reported as no verdict rather than a weak one, because a weak verdict reads exactly like a strong one once it is quoted. This is not a clean geometry; it is an unmeasurable one.",
+    "shape": null
+  }
+}

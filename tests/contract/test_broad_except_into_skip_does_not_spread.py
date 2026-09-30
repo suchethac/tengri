@@ -21,6 +21,8 @@ quietly and a fixed site has to be struck off. Two directions, both enforced:
 The legitimate forms are already excluded by construction: ``except ImportError``
 and ``pytest.importorskip(...)`` name the condition they tolerate, so they are
 not broad and never appear here.
+
+The self-check proves the detector on a synthetic module, not on the live tree.
 """
 
 from __future__ import annotations
@@ -85,22 +87,7 @@ _BROAD = {"Exception", "BaseException"}
 #:     whose message is not about SSP data, and
 #:     ``test_fixed_params_reach_every_entry_point.py`` asserts the exception is
 #:     on a named table first.
-KNOWN: frozenset[tuple[str, str]] = frozenset(
-    {
-        # Narrowed on this branch to a named exemption table, but the handler is
-        # still shaped like the others: it catches Exception, then asserts the
-        # entry point is listed in RAISES_ON_BARE_PARAMS and the type matches.
-        (
-            "contract/test_fixed_params_reach_every_entry_point.py",
-            "test_entry_point_honors_a_fixed_redshift",
-        ),
-        ("contract/test_presets.py", "test_preset_can_sample"),
-        ("crossval/test_full_sed_crossval.py", "test_tengri_nonparametric_color_trend"),
-        ("crossval/test_full_sed_crossval.py", "test_tengri_vs_cigale_skirtor_shape"),
-        ("crossval/test_geovi_crossval.py", "test_converged_hamiltonian_close"),
-        ("crossval/test_geovi_crossval.py", "test_posterior_stds_agree"),
-    }
-)
+KNOWN: frozenset[tuple[str, str]] = frozenset()
 
 
 def _handler_is_broad(handler: ast.ExceptHandler) -> bool:
@@ -140,16 +127,15 @@ def _enclosing_function(tree: ast.Module, node: ast.AST) -> str:
     return best.name if best else "<module>"
 
 
-@functools.lru_cache(maxsize=1)
-def _scan() -> frozenset[tuple[str, str]]:
-    """Parse every test module once; three tests share the result."""
+def _scan_tree(root: pathlib.Path) -> frozenset[tuple[str, str]]:
+    """Parse every test module in root; paths relative to root."""
     found: set[tuple[str, str]] = set()
-    for path in sorted(_TESTS_ROOT.rglob("test_*.py")):
+    for path in sorted(root.rglob("test_*.py")):
         try:
             tree = ast.parse(path.read_text())
         except (SyntaxError, UnicodeDecodeError):  # pragma: no cover - not expected
             continue
-        rel = path.relative_to(_TESTS_ROOT).as_posix()
+        rel = path.relative_to(root).as_posix()
         for node in ast.walk(tree):
             if not isinstance(node, ast.Try):
                 continue
@@ -157,6 +143,12 @@ def _scan() -> frozenset[tuple[str, str]]:
                 if _handler_is_broad(handler) and _handler_skips(handler):
                     found.add((rel, _enclosing_function(tree, handler)))
     return frozenset(found)
+
+
+@functools.lru_cache(maxsize=1)
+def _scan() -> frozenset[tuple[str, str]]:
+    """Parse every test module once; three tests share the result."""
+    return _scan_tree(_TESTS_ROOT)
 
 
 def test_no_new_broad_except_into_skip():
@@ -199,40 +191,46 @@ def test_every_listed_file_exists(rel_path):
     )
 
 
-def test_the_scanner_actually_finds_the_shape_it_claims_to():
+def test_the_scanner_actually_finds_the_shape_it_claims_to(tmp_path):
     """A scanner that silently matched nothing would make every check above pass.
 
     Both directions: the broad form is caught, and the narrow form that this
     guard exists to encourage is not.
     """
-    broad = ast.parse(
-        "def test_x():\n"
-        "    try:\n"
-        "        thing()\n"
-        "    except Exception as e:\n"
-        "        pytest.skip(str(e))\n"
-    )
-    narrow = ast.parse(
-        "def test_x():\n"
-        "    try:\n"
-        "        thing()\n"
-        "    except ImportError as e:\n"
-        "        pytest.skip(str(e))\n"
-    )
-    reraise = ast.parse(
-        "def test_x():\n    try:\n        thing()\n    except Exception:\n        raise\n"
-    )
+    # Create a synthetic module with three test functions
+    synthetic_module = """
+def test_broad():
+    '''Test that catches broad Exception and skips.'''
+    try:
+        thing()
+    except Exception:
+        pytest.skip("broad exception skip")
 
-    def hits(tree):
-        return [
-            h
-            for n in ast.walk(tree)
-            if isinstance(n, ast.Try)
-            for h in n.handlers
-            if _handler_is_broad(h) and _handler_skips(h)
-        ]
+def test_narrow():
+    '''Test that catches narrow ImportError and skips.'''
+    try:
+        thing()
+    except ImportError:
+        pytest.skip("import error skip")
 
-    assert len(hits(broad)) == 1, "the scanner misses the shape it is named for"
-    assert not hits(narrow), "the scanner flags `except ImportError`, which is the fix"
-    assert not hits(reraise), "the scanner flags a broad except that re-raises"
-    assert _scan(), "the scan found nothing at all; the tests above would be vacuous"
+def test_broad_no_skip():
+    '''Test that catches broad Exception but does not skip.'''
+    try:
+        thing()
+    except Exception:
+        pass
+"""
+
+    # Write synthetic module to tmp_path
+    contract_dir = tmp_path / "contract"
+    contract_dir.mkdir()
+    synthetic_file = contract_dir / "test_synthetic.py"
+    synthetic_file.write_text(synthetic_module)
+
+    # Scan the synthetic tree
+    result = _scan_tree(tmp_path)
+
+    # Should find only test_broad, not test_narrow or test_broad_no_skip
+    assert result == {("contract/test_synthetic.py", "test_broad")}, (
+        f"Expected {{('contract/test_synthetic.py', 'test_broad')}}, got {result}"
+    )

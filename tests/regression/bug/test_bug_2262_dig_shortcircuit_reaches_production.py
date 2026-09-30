@@ -285,7 +285,40 @@ def test_dig_shortcircuit_gradient_flops(_cue_fixture_available):
     ``_grad_flops`` in ``test_bug_1748_feature_precomp_effect.py``. Measured
     pair: 147,434,528 (default) vs 159,926,608 (forced) -- see the module
     docstring for why this is not the ~50 % an earlier estimate claimed.
+
+    ``_build_exact`` pins ``sfh_delayed_log_total_mass`` (``all_params:
+    Fixed(DEFAULT)``, no per-param override), so a local variant frees it
+    here -- differentiating requires it be a genuine traced input, and a
+    params-dict key the spec declared Fixed is refused on presence (#2296).
+    Local rather than changing ``_build_exact`` itself: the other test
+    sharing that helper (``test_dig_shortcircuit_call_count_exact_path``)
+    builds its params from ``_params_for``, which is scoped to exactly
+    ``neb_dig_frac`` and would go ``MissingParameterError`` if
+    ``_build_exact``'s own free-parameter set grew.
     """
+
+    def _build_exact_free_mass(neb_extra: dict):
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+        from tengri.observation.filters import load_filter
+
+        obs = Observation(photometry=Photometry(filters=tuple(load_filter(n) for n in _FILTERS)))
+        return SEDModel.build(
+            ssp_data=load_ssp_data(str(_SSP_PATH)),
+            observation=obs,
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": FREE,
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), **neb_extra},
+            redshift=Fixed(_REDSHIFT),
+        )
 
     def _grad_flops(model):
         free = list(model.spec.free_params)
@@ -300,8 +333,8 @@ def test_dig_shortcircuit_gradient_flops(_cue_fixture_available):
             jax.jit(jax.grad(loss)).lower(jnp.asarray(10.0)).compile().cost_analysis()["flops"]
         )
 
-    default_model = _build_exact({})
-    forced_model = _build_exact({"dig_frac": FREE})
+    default_model = _build_exact_free_mass({})
+    forced_model = _build_exact_free_mass({"dig_frac": FREE})
 
     flops_default = _grad_flops(default_model)
     flops_forced = _grad_flops(forced_model)

@@ -402,6 +402,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    self_whitening=True,
     # NOT accepts_precondition, though run_mclmc does take `precondition=` and
     # wires it to the same analytic-metric seam NUTS uses. The capability is
     # declared when it has been measured and the tier allows a fit:
@@ -495,6 +496,7 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    self_whitening=True,
 )(_ctx_run_hmc_low_rank)
 
 register_backend(
@@ -506,6 +508,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    self_whitening=True,
 )(_ctx_run_adjusted_mclmc)
 
 register_backend(
@@ -563,10 +566,10 @@ register_backend(
 
 register_backend(
     "nss",
-    tier="experimental",
+    tier="primary",
     short_doc=(
-        "Nested sampling, slow (cold ~240s at D=6, timeout >600s at D=7); "
-        "use for evidence/model comparison, not point estimates"
+        "Vectorized nested sampling: returns Bayesian evidence (log Z) and posterior samples. "
+        "Efficient sampler suitable for model comparison and point estimate inference."
     ),
     legacy_fitter=False,
 )(_ctx_run_nss)

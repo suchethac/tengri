@@ -84,7 +84,7 @@ class TestTheMessage:
     @pytest.mark.parametrize("consumer", ["prediction", "predict_properties"])
     def test_an_absent_property_is_not_called_unknown(self, stellar_only_model, consumer):
         absent = _absent(stellar_only_model)[0]
-        params = dict(stellar_only_model.spec.get_fixed_values())
+        params = {k: 1.0 for k in stellar_only_model.spec.free_params}
         with pytest.raises(KeyError) as excinfo:
             if consumer == "prediction":
                 stellar_only_model.predict(params).properties[absent]

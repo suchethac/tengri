@@ -60,14 +60,18 @@ import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
+from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
+    apply_lya_escape,
     compute_qh,
     render_nebular_lines,
     sanitize_qh_table,
+    ssp_log_age_yr_axis,
 )
+from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -522,7 +526,7 @@ class MappingsPhotoStellarBackend:
         # produce non-finite Q_H values that would poison the interpolator.
         self._qh_table = sanitize_qh_table(qh_raw, backend_name="MappingsPhotoBackend")
         self._qh_log_met = ssp_data.ssp_lgmet
-        self._qh_log_age = ssp_data.ssp_lg_age_gyr + 9.0  # log(age/yr)
+        self._qh_log_age = np.asarray(ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr))  # log(age/yr)
 
         ssp_log_ages = np.array(self._qh_log_age)
         self._young_idx = np.where(ssp_log_ages <= _MAX_NEB_LOG_AGE_YR)[0]
@@ -647,10 +651,9 @@ class MappingsPhotoStellarBackend:
         all_contribs = jax.vmap(_contrib_one_age)(young_ages, young_weights)
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
-        # Differential Ly-alpha escape (same pattern as CloudyGridBackend)
-        lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
-        total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
+        # Apply differential Ly-alpha escape via the shared helper. This multiplies
+        # Lyα by (1 - neb_fesc_lya) after the general escape factor was already applied.
+        total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
 
@@ -1002,7 +1005,7 @@ class MappingsPhotoAGNBackend:
         self,
         agn_log_l_ion_erg: float,
         neb_logZ_gas: float = _LOG10_ZSUN,
-        neb_logU: float = -2.0,
+        neb_logU: float | None = None,
         agn_logmbh: float = 7.0,
         agn_logedd: float = -0.5,
         neb_logn: float = 3.0,
@@ -1062,6 +1065,11 @@ class MappingsPhotoAGNBackend:
             https://doi.org/10.3847/1538-4365/aa6541
 
         """
+        if neb_logU is None:
+            # neb_logU in AGN NLR context uses agn_nlr_logU (default -2.0), not
+            # galaxy neb_logU (-3.0). This function is AGN-specific, so it reads
+            # the AGN parameter declaration.
+            neb_logU = declared_default(AGN_PARAMS, "agn_nlr_logU")
         grid = self.grid
         zo_val = _log_z_abs_to_zo(neb_logZ_gas)
 
@@ -1098,7 +1106,7 @@ class MappingsPhotoAGNBackend:
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -2.0,
+        neb_logU: float | None = None,
         neb_logZ_gas: float | None = None,
         neb_logn: float = 3.0,
         neb_fesc: float = 0.0,

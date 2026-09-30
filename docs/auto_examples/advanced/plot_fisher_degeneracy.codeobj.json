@@ -626,6 +626,15 @@
    "name": "function"
   }
  ],
+ "free_truth": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
  "i": [
   {
    "is_class": false,
@@ -1308,7 +1317,7 @@
    "name": "SSPData"
   }
  ],
- "tengri.DEFAULT": [
+ "tengri.FREE": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1335,7 +1344,7 @@
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "DEFAULT"
+   "name": "FREE"
   }
  ],
  "tengri.Fixed": [
@@ -1488,15 +1497,6 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "dict"
-  }
- ],
- "true_params.copy": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
   }
  ],
  "warnings.filterwarnings": [

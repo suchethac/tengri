@@ -414,13 +414,17 @@ def variable_noise_hamiltonian(
 ) -> jnp.ndarray:
     """Hamiltonian (energy) for variable-covariance likelihood.
 
+    Returns the negative log-density up to a parameter-independent constant;
+    the Student-t branch tends to the Gaussian branch as dof -> inf.
+
     Gaussian (dof=None):
         E_lh = ½ Σ_k (d_k - m_k)² / σ²_eff,k + Σ_k log(σ_eff,k)
 
     Student-t (dof set):
         E_lh = (ν+1)/2 Σ_k log(1 + r²_k/ν) + Σ_k log(σ_eff,k)
+               - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
 
-    where r_k = (d_k - m_k) / σ_eff,k.
+    where r_k = (d_k - m_k) / σ_eff,k and n is the number of data points.
 
     The log-determinant term Σlog(σ_eff) prevents the trivial solution
     of σ → ∞. This matches NIFTy's ``VariableCovarianceGaussian`` and
@@ -474,7 +478,15 @@ def variable_noise_hamiltonian(
 
     if dof is not None:
         # Student-t: (ν+1)/2 · Σ log(1 + r²/ν) + Σ log(σ_eff)
-        return 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
+        #            - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
+        energy = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
+        n_data = data.shape[0]
+        norm_term = (
+            jax.scipy.special.gammaln((dof + 1.0) / 2.0)
+            - jax.scipy.special.gammaln(dof / 2.0)
+            - 0.5 * jnp.log(dof / 2.0)
+        )
+        return energy - n_data * norm_term
     else:
         # Gaussian: ½ Σ r² + Σ log(σ_eff)
         return 0.5 * jnp.sum(r**2) + logdet

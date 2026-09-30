@@ -164,9 +164,6 @@ SPELLING_ALLOWLIST: dict[str, str] = {
     "tests/contract/test_dust_slope_kwarg_alias.py::power_law::n_slope": (
         "the alias test calls the deprecated spelling on purpose; expires with the alias in v1.0"
     ),
-    "tests/contract/test_dust_slope_kwarg_alias.py::conroy2010::n_slope": (
-        "the alias test calls the deprecated spelling on purpose; expires with the alias in v1.0"
-    ),
 }
 
 

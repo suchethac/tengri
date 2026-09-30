@@ -103,9 +103,19 @@ def test_mapping_start_matches_the_posterior_it_came_from(ssp_data_fsps, fixture
 
 
 def test_fixed_parameters_in_the_mapping_are_accepted(ssp_data_fsps, fixture):
-    """``dict(map_result.params)`` carries fixed values; that must not be refused."""
+    """A mapping that also names Fixed keys is accepted at the ``init_from`` seam.
+
+    ``Posterior.params`` is free-only (#2296): a MAP's own ``dict(point.params)``
+    no longer carries Fixed values, so this builds the mixed free+Fixed mapping
+    by hand instead -- ``init_from``'s own key-set validator
+    (``known = free | fixed | {"psd_xi"}``) is a DIFFERENT, deliberately more
+    permissive seam than the params-dict refusal on predict_*/fit surfaces: a
+    Fixed-named key here is legal (just inert, since only free names seed the
+    unbounded starting point), not refused.
+    """
     sed, flux, noise, point = fixture
     as_dict = {k: float(np.asarray(v)) for k, v in point.params.items()}
+    as_dict.update(sed.spec.get_fixed_values())
     assert set(as_dict) - set(sed.spec.free_params), (
         "fixture no longer exercises fixed keys; the test would be vacuous"
     )

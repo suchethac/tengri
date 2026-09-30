@@ -58,7 +58,6 @@ import pytest
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.observation import Observation, Photometry
 from tengri.observation.line_measurement import default_line_defs
-from tengri.parameters.resolve import resolve_fixed_params
 
 pytestmark = pytest.mark.regression_bug
 
@@ -75,15 +74,20 @@ _DUST_FREE = {
     "tau_bc": 0.0,
 }
 
-#: ``predict_line_fluxes`` on the Cue model, float64, origin/main @ 18cf9fb9e (see
-#: module docstring). 12 significant digits.
+#: ``predict_line_fluxes`` on the Cue model, float64. Re-taken on this branch for
+#: #2517, which adds the photon and massive-neutrino density terms to ``E(z)``: the
+#: luminosity distance at z=0.1 (``_base``'s fixed redshift) shifts by a few parts in
+#: 1e4, and both operators pinned here return observed-frame fluxes carrying the
+#: ``(1+z)/(4 pi d_L^2)`` dimming factor (max relative movement 2.27e-4, matching the
+#: luminosity-distance shift). 17 significant digits.
 _CUE_F64_REF = np.array(
-    [4.81137256894e-16, 5.88262869721e-16, 1.69818364890e-15, 5.31329869121e-16]
+    [4.812464808957834e-16, 5.883964125382075e-16, 1.6985691572175287e-15, 5.3145048745591e-16]
 )
 
-#: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64, same capture.
+#: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64, same capture
+#: and #2517 re-take as ``_CUE_F64_REF``.
 _WNE_F64_REF = np.array(
-    [2.76902836687e-16, 4.08501587720e-16, 1.34668648728e-15, 3.21861572920e-18]
+    [2.769656969949378e-16, 4.085943225429073e-16, 1.3469922014700263e-15, 3.219346394066372e-18]
 )
 
 #: Relative sigma for the synthetic chi-square target the gradient checks use: not a
@@ -108,18 +112,22 @@ def _base(zspec):
 
 
 def _truth(sed):
-    """Standardized-origin truth dict, with Fixed params resolved in (#1206).
+    """Standardized-origin truth dict, free parameters only.
 
-    The fast nebular grid path's no-state fallback (``_compute_log_nion``) reads
-    ``params["redshift"]`` directly rather than through a :class:`ForwardState`, so
-    a truth dict that omits a ``Fixed`` redshift raises ``KeyError`` there even
-    though every other operator in this module tolerates it.
+    Both ``_cue_model`` and ``_wne_model`` build with ``approx=None`` (the
+    exact path), so ``predict_line_fluxes`` / ``measure_line_fluxes`` reach
+    ``predict_state``, which merges ``{**fixed_values, **params}`` itself --
+    the fast nebular grid path's no-state ``_compute_log_nion`` fallback this
+    docstring used to warn about only applies once ``enable_fast_nebular`` /
+    ``FeaturePrecomp`` is engaged, which neither model here is. A dict that
+    already carries a Fixed key (as ``resolve_fixed_params`` used to return)
+    is refused on presence at these public surfaces (#2296); free-only is
+    both correct and sufficient here.
     """
-    free = {
+    return {
         n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
         for n in sed.spec.free_params
     }
-    return resolve_fixed_params(sed, free)
 
 
 def _cue_model(ssp_bare):

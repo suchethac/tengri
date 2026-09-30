@@ -1,0 +1,6 @@
+
+# Cells from the pre-2026-09-20 configuration suite, kept on disk only so the
+# --only-missing resume path cannot pick them up. The filenames are identical
+# between suites, so they are not distinguishable by name -- which is exactly
+# why they were moved rather than left in place.
+results/fits_superseded_oldsuite_*/

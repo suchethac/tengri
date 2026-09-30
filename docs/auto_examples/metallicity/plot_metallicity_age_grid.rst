@@ -31,7 +31,7 @@ Physics: older stars redden due to turnoff mass loss; higher metallicity
 increases line blanketing, also reddening. At UV wavelengths the degeneracy
 breaks (young stars are bluer).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-119
+.. GENERATED FROM PYTHON SOURCE LINES 15-124
 
 
 
@@ -92,6 +92,11 @@ breaks (young stars are bluer).
                     "tau_bc": 0.0,
                     "tau_diff": 0.0,
                 },
+                # ``met_logzsol`` is overridden below (#2296: a params-dict key
+                # the spec declared Fixed is refused), so it must be free; no
+                # ``met=`` group was declared before, defaulting the whole group
+                # to ``Fixed(DEFAULT)``. Bounds cover the logz_grid.
+                met={"logzsol": tengri.Uniform(-2.0, 0.5)},
                 redshift=tengri.Fixed(0.0),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))

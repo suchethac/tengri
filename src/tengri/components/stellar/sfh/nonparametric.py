@@ -135,6 +135,11 @@ def continuity(
     ndarray, shape (n_age,)
         SFR at each lookback time [Msun/yr], non-negative.
 
+    Raises
+    ------
+    TypeError
+        If any unknown keyword arguments are supplied in ``**ratio_kwargs``.
+
     Notes
     -----
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
@@ -150,6 +155,15 @@ def continuity(
         bin_edges_gyr = device_table(DEFAULT_BIN_EDGES_GYR)
 
     n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
+
+    # Validate that all kwargs are expected ratio_* parameters
+    valid_ratio_keys = {f"ratio_{i}" for i in range(n_bins - 1)}
+    unknown = sorted(k for k in ratio_kwargs if k not in valid_ratio_keys)
+    if unknown:
+        raise TypeError(
+            f"continuity() got unexpected keyword argument(s) {unknown}; the "
+            f"{n_bins}-bin grid accepts 'ratio_0'..'ratio_{n_bins - 2}' only."
+        )
 
     # Collect ratios from kwargs in order (default 0.0 = flat SFH)
     log_sfr_ratios = jnp.array([ratio_kwargs.get(f"ratio_{i}", 0.0) for i in range(n_bins - 1)])
@@ -362,6 +376,11 @@ def dirichlet(
         [dimensionless]. They are mapped internally to the Beta variates the
         Dirichlet construction requires.
 
+    Raises
+    ------
+    TypeError
+        If any unknown keyword arguments are supplied in ``**z_kwargs``.
+
     Returns
     -------
     ndarray, shape (n_age,)
@@ -436,6 +455,14 @@ def dirichlet(
 
     n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
+    # Validate that all kwargs are expected z_frac_* parameters
+    valid_z_frac_keys = {f"z_frac_{i}" for i in range(n_bins - 1)}
+    unknown = sorted(k for k in z_kwargs if k not in valid_z_frac_keys)
+    if unknown:
+        raise TypeError(
+            f"dirichlet() got unexpected keyword argument(s) {unknown}; the "
+            f"{n_bins}-bin grid accepts 'z_frac_0'..'z_frac_{n_bins - 2}' only."
+        )
     # Collect the uniform latents from kwargs in order
     u_latents = jnp.array([z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)])
     u_latents = jnp.clip(u_latents, 0.0, 1.0)
