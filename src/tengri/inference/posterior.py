@@ -3257,9 +3257,7 @@ class Posterior:
         d = self._fitter.spec.n_free
         mcmc_method = "mcmc_nuts" if d <= 20 else "mcmc_raytrace"
 
-        mcmc_result = self._fitter.run(
-            mcmc_method, init_from=self, n_samples=n_samples, **kwargs
-        )
+        mcmc_result = self._fitter.run(mcmc_method, init_from=self, n_samples=n_samples, **kwargs)
 
         # Compute per-parameter marginal overlap (histogram intersection)
         overlap: dict[str, float] = {}
