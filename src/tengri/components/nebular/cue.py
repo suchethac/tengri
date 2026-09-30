@@ -150,6 +150,55 @@ from tengri.components.nebular.ionizing_spectrum import (
 _IONSPEC_DEFAULT_WARNED: bool = False
 
 
+# ── Trained parameter ranges (#2569) ────────────────────────────────
+#
+# Cue is a neural network, not a grid: nothing clips a value outside these
+# ranges, and the network keeps producing a smooth (not flat) prediction, so
+# the #1586 zero-gradient mechanism `components/grid_support.py` was built
+# for does not apply here -- see `grid_support.EXTRAPOLATING_SUPPORT`. They
+# are registered anyway (`GRID_SUPPORT[("neb", "cue")]`) because a value
+# outside them is extrapolating past where the emulator was ever validated
+# against CLOUDY, which is worth narrowing a free prior to and warning
+# about, the same way an unvalidated grid extrapolation would be.
+#
+# Source: Li et al. 2025 (ApJ 986, 9, arXiv:2405.04598), Table 1, the bottom
+# five rows ("the ionizing gas properties"), read directly off the published
+# table (not a paraphrase). The top seven rows (ionizing-spectrum shape:
+# ionspec_index1..4, ionspec_logLratio1..3) are set from the SSP at the
+# high-level path and are not user-facing free priors on the shared
+# declaration the way the five below are, so they are not registered here.
+#
+# Table 1 columns are dimensioned exactly as named; converting each to the
+# units tengri's OWN declaration uses (`_params.py` / `CUE_GAS_EXTRA_PARAMS`)
+# is noted per constant.
+
+#: log U (dimensionless): Table 1 gives ``[-4, -1]`` directly -- the same
+#: quantity and units as the declared ``neb_logU``/``gas_logu``.
+CUE_TRAINED_LOG_U: tuple[float, float] = (-4.0, -1.0)
+
+#: log n_H [cm^-3]: Table 1 gives ``[1, 4]`` directly -- the same quantity
+#: and units as the declared ``gas_logn`` (``CUE_GAS_EXTRA_PARAMS``).
+CUE_TRAINED_LOG_NH: tuple[float, float] = (1.0, 4.0)
+
+#: Gas-phase metallicity, ``log(O/H)/(O/H)_sun``: Table 1 gives
+#: ``[-2.2, 0.5]`` directly. This is the same relative-to-solar quantity
+#: `_resolve_cue_params` already treats ``gas_logz`` as (see its docstring:
+#: ``gas_logz = neb_logZ_gas - LOG10_ZSUN``, #2437) -- i.e. the declared
+#: ``neb_logZ_gas`` (log10(Z/Zsun) at the declaration) reaches this same
+#: trained axis, so no further conversion is applied here.
+CUE_TRAINED_LOG_Z_GAS: tuple[float, float] = (-2.2, 0.5)
+
+#: C/O and N/O: Table 1 gives ``(C/O)/(C/O)_sun`` and ``(N/O)/(N/O)_sun``
+#: as LINEAR ratios, ``[0.1, 5.4]`` each -- confirmed from the table
+#: image directly: these two rows' headers carry no "log", unlike the
+#: log U / log n_H / log(O/H)/(O/H)_sun rows above them. The declared
+#: ``gas_logco``/``gas_logno`` (``CUE_GAS_EXTRA_PARAMS``) are ``log10`` of
+#: that same ratio ("[C/O]"/"[N/O]" abundance ratio, dex), so the range is
+#: converted: log10(0.1) = -1.0, log10(5.4) ~= 0.7324.
+CUE_TRAINED_LOG_CO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
+CUE_TRAINED_LOG_NO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
+
+
 # ── Data containers (immutable NamedTuples for JAX tracing) ───────
 
 

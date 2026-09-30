@@ -9,6 +9,11 @@ and the gradient there is **exactly zero** (``jnp.clip`` is flat outside its
 bounds). Nothing raises, nothing warns, and no NaN appears -- the parameter
 simply stops doing anything (#1586).
 
+One registered entry, ``("neb", "cue")``, is not a grid at all but a neural
+network's trained footprint (#2569): nothing clips there either, so its
+support narrows and warns for a different reason -- see
+:data:`EXTRAPOLATING_SUPPORT`.
+
 Why this cannot live on the declaration
 ---------------------------------------
 The parameters concerned are shared. ``agn_log_mbh`` / ``agn_log_ledd`` are
@@ -138,7 +143,7 @@ def _cb19_grid_support() -> dict[str, tuple[float, float]]:
     """Read CB_19's default template grid's log U axis (#2460).
 
     ``CB19Backend`` clips ``neb_logU`` onto its grid axis exactly like
-    ``CloudyGridBackend`` (``cloudy_cb19.py``'s ``_val_to_frac_index``:
+    ``CloudyGridBackend`` (``cloudy_cb19.py``'s ``_frac_idx``:
     ``jnp.clip(val, grid[0], grid[-1])``), so it shares the #1586 mechanism
     and belongs in this registry. Only ``neb_logU`` is registered: the grid's
     metallicity axis is ``log_OH_total`` (12 + log10(O/H)), not
@@ -217,6 +222,41 @@ def _mappings_agn_grid_support() -> dict[str, tuple[float, float]]:
     return {"neb_logU": (float(log_U.min()), float(log_U.max()))}
 
 
+def _cue_grid_support() -> dict[str, tuple[float, float]]:
+    """Read Cue's trained parameter ranges (#2569 follow-up to #2460).
+
+    Cue (``cue.py``) is a Speculator neural network, not a grid -- there is
+    no ``jnp.clip`` and no #1586 zero-gradient-outside mechanism (see
+    :data:`EXTRAPOLATING_SUPPORT`, which this entry is the sole member of).
+    Registered anyway: Li et al. 2025's Table 1 documents an explicit
+    trained footprint for every one of these five parameters, and a build
+    that samples well outside it is extrapolating with no bound-check at
+    all -- worth narrowing a free prior to, and worth a warning, even
+    though the failure mode differs from a clipped grid.
+
+    The constants themselves, with the paper citation and the unit
+    conversion each needed (log U and log n_H match tengri's declared units
+    directly; C/O and N/O are converted from Table 1's linear ratio to the
+    declared log10 dex), live in ``cue.py`` next to the backend they
+    describe, not here.
+    """
+    from tengri.components.nebular.cue import (
+        CUE_TRAINED_LOG_CO,
+        CUE_TRAINED_LOG_NH,
+        CUE_TRAINED_LOG_NO,
+        CUE_TRAINED_LOG_U,
+        CUE_TRAINED_LOG_Z_GAS,
+    )
+
+    return {
+        "neb_logU": CUE_TRAINED_LOG_U,
+        "gas_logn": CUE_TRAINED_LOG_NH,
+        "neb_logZ_gas": CUE_TRAINED_LOG_Z_GAS,
+        "gas_logco": CUE_TRAINED_LOG_CO,
+        "gas_logno": CUE_TRAINED_LOG_NO,
+    }
+
+
 #: ``(selector, component name)`` -> accessor for that component's grid support.
 #:
 #: ``selector`` is the dotted path used by the build grammar (``"agn.disc"``,
@@ -231,6 +271,7 @@ GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
     ("neb", "cb19"): _cb19_grid_support,
     ("neb", "mappings"): _mappings_stellar_grid_support,
     ("neb", "mappings_agn"): _mappings_agn_grid_support,
+    ("neb", "cue"): _cue_grid_support,
     **{
         ("dust.emission", _name): _dust_emission_support(_name)
         # Every selectable spelling, aliases included: the menu exposes
@@ -257,22 +298,25 @@ GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
 # Nebular components registered (#2460): ("neb", "cloudy"), ("neb", "cb19"),
 # ("neb", "mappings"), ("neb", "mappings_agn") -- all four clip neb_logU onto
 # a grid axis (confirmed by reading each interpolator: CloudyGridBackend's
-# triweight/linear lookup, CB19Backend's _val_to_frac_index, MAPPINGS'
+# triweight/linear lookup, CB19Backend's _frac_idx, MAPPINGS'
 # _interp_index_weight), so all four share the #1586 zero-gradient-outside
 # mechanism this registry exists to narrow. Only "cloudy" also registers
 # neb_logZ_gas: CB19's metallicity axis is log_OH_total and MAPPINGS' is
 # ζ_O, neither log10(Z/Zsun), so narrowing them from the shared declaration
 # would need a unit conversion this fix does not establish.
 #
-# Cue ("cue") is deliberately excluded: it is a Speculator neural-network
-# emulator (cue.py), not a grid. Its inputs are normalized and extrapolated
-# smoothly outside the training footprint -- there is no jnp.clip onto an
-# edge node, so a draw beyond the training range does NOT zero the gradient
-# the way grid interpolation does; the failure mode there (if any) is
-# silently-untrustworthy physics, not dead inference signal, which is a
-# different problem this registry is not built to report. cue.py documents
-# no single trained (lo, hi) for gas_logu to register even if the mechanism
-# matched.
+# Cue ("cue", #2569) IS registered, but its mechanism differs from the four
+# above: it is a Speculator neural-network emulator (cue.py), not a grid, so
+# nothing clips and a draw beyond the trained range does NOT zero the
+# gradient the way grid interpolation does -- the failure mode is silently
+# untrustworthy extrapolation, not dead inference signal. It is registered
+# anyway against Li et al. 2025's Table 1 trained ranges (cue.py's
+# CUE_TRAINED_* constants) for neb_logU, gas_logn, neb_logZ_gas, gas_logco
+# and gas_logno, because a declared prior wider than the trained footprint
+# is exactly the kind of overhang this registry exists to narrow and flag --
+# see EXTRAPOLATING_SUPPORT, which ("neb", "cue") is the sole member of, and
+# which describe_clipping/_warn_on_grid_overhang consult to word the warning
+# for extrapolation rather than clipping.
 #
 # The grid support accessor returns empty dict {} if the grid file
 # is not found, so model construction does not fail when grids are unavailable.
@@ -389,7 +433,26 @@ def live_fraction(active: tuple[float, float], grid: tuple[float, float]) -> flo
     return max(0.0, min(1.0, overlap / width))
 
 
-def describe_clipping(active: tuple[float, float], grid: tuple[float, float]) -> str | None:
+#: ``(selector, name)`` pairs whose registered support is a smooth model's
+#: trained footprint, not a template grid's clipped interpolation axis.
+#: ``jnp.clip`` never runs for these -- exploring past the footprint does
+#: NOT zero the gradient or freeze the SED (#1586's mechanism is specific to
+#: grid interpolation); the model keeps predicting, smoothly but with no
+#: guarantee it is still accurate. :func:`describe_clipping` and
+#: :func:`check_grid_support` consult this set so the warning text says that
+#: instead of the (false, for these) clip claim. The only member today is
+#: ``("neb", "cue")``: a Speculator neural network (``cue.py``) registered
+#: against its trained parameter ranges (Li et al. 2025, Table 1) for the
+#: same reason a grid is registered against its axes -- a declared prior
+#: wider than what the model was ever validated on is worth narrowing and
+#: flagging -- but the failure mode past the edge is untrustworthy
+#: extrapolation, not inertness.
+EXTRAPOLATING_SUPPORT: frozenset[tuple[str, str]] = frozenset({("neb", "cue")})
+
+
+def describe_clipping(
+    active: tuple[float, float], grid: tuple[float, float], *, extrapolates: bool = False
+) -> str | None:
     """Describe how an active support overhangs a grid, or ``None`` if it fits.
 
     Returns only the component-agnostic clause, so each caller keeps its own
@@ -401,6 +464,12 @@ def describe_clipping(active: tuple[float, float], grid: tuple[float, float]) ->
         ``(lo, hi)`` the parameter can actually take.
     grid : tuple[float, float]
         ``(lo, hi)`` covered by the template grid.
+    extrapolates : bool
+        ``True`` for a ``(selector, name)`` in :data:`EXTRAPOLATING_SUPPORT`:
+        the component is a smooth emulator, not a clipped grid, so the
+        clause describes untrustworthy extrapolation instead of a frozen,
+        bit-identical SED. Default ``False`` (every grid-backed component)
+        keeps the original wording byte-identical.
 
     Returns
     -------
@@ -418,31 +487,40 @@ def describe_clipping(active: tuple[float, float], grid: tuple[float, float]) ->
     a_lo, a_hi = active
     g_lo, g_hi = grid
     extent = f"[{g_lo:g}, {g_hi:g}]"
+    footprint = "trained footprint" if extrapolates else "grid extent"
     if a_lo == a_hi:
-        return (
-            f"the fixed value {a_lo:g} lies outside the grid extent "
-            f"{extent}, so it is clipped onto the nearest edge node"
+        fate = (
+            "so it is extrapolated"
+            if extrapolates
+            else "so it is clipped onto the nearest edge node"
         )
+        return f"the fixed value {a_lo:g} lies outside the {footprint} {extent}, {fate}"
     if not (math.isfinite(a_lo) and math.isfinite(a_hi)):
         # An unbounded prior (e.g. an untruncated Gaussian) is NOT inert --
         # most of its mass may sit on the grid. Only the tails clip, so say
         # that and do not quote a percentage: the fraction of an infinite
         # support is not informative.
+        fate = "are extrapolated past it" if extrapolates else "are clipped onto an edge node"
         return (
             f"its support [{a_lo:g}, {a_hi:g}] is unbounded, so the tails "
-            f"beyond the grid extent {extent} are clipped onto an edge node"
+            f"beyond the {footprint} {extent} {fate}"
         )
     live = live_fraction(active, grid)
     if live == 0.0:
-        return (
-            f"its whole range [{a_lo:g}, {a_hi:g}] lies outside the grid "
-            f"extent {extent}, so the parameter is entirely inert -- every "
-            "value gives the same SED"
+        fate = (
+            "the parameter reaches only untrustworthy extrapolation -- every "
+            "value is outside where the model was validated"
+            if extrapolates
+            else "the parameter is entirely inert -- every value gives the same SED"
         )
+        return (
+            f"its whole range [{a_lo:g}, {a_hi:g}] lies outside the {footprint} "
+            f"{extent}, so {fate}"
+        )
+    fate = "extrapolated past it" if extrapolates else "silently clipped onto an edge node"
     return (
         f"{100.0 * (1.0 - live):.0f}% of its range [{a_lo:g}, {a_hi:g}] lies "
-        f"outside the grid extent {extent} and is silently clipped onto an "
-        "edge node"
+        f"outside the {footprint} {extent} and is {fate}"
     )
 
 
@@ -475,17 +553,19 @@ def check_grid_support(
     if not param_support:
         return findings
     for selector, name in selected:
+        extrapolates = (selector, name) in EXTRAPOLATING_SUPPORT
         for pname, extent in grid_support(selector, name).items():
             active = param_support.get(pname)
             if active is None:
                 continue
-            detail = describe_clipping(active, extent)
+            detail = describe_clipping(active, extent, extrapolates=extrapolates)
             if detail is not None:
                 findings.append((selector, name, pname, detail, extent))
     return findings
 
 
 __all__ = [
+    "EXTRAPOLATING_SUPPORT",
     "GRID_SUPPORT",
     "GridSupportFn",
     "check_grid_support",

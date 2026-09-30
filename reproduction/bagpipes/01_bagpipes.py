@@ -1529,7 +1529,7 @@ V.print_filter_table(
 # 1 %, and the free-free/free-bound continuum within 3 % in line-free windows.
 # [O II] 3727 is the outlier at 0.77×: a collisionally excited line, so it is
 # exponentially sensitive to electron temperature and to the O/H scaling each
-# code assumes, and it is the one place where the v17-vs-v25 Cloudy difference
+# code assumes, and it is the one place where the Cloudy 22.00-vs-v25 difference
 # is doing visible work.
 #
 # The **Balmer decrement** is the check that matters most, and it is not a
@@ -2390,7 +2390,7 @@ for _b, _f in zip(_sdss_bands, _filters):
 # ## §14 Forward-model timing — order-of-magnitude sanity check
 #
 # Timing a single forward evaluation on the fiducial galaxy (τ-delayed SFH,
-# Calzetti at A_V = 1, DL07 IR, Cloudy v25 / Cue v17 nebular, Inoue14 IGM).
+# Calzetti at A_V = 1, DL07 IR, Cloudy v25 / Cue Cloudy 22.00 nebular, Inoue14 IGM).
 # Both codes complete a full SED in ~10² ms. The real tengri advantage is
 # gradients: `jax.grad` differentiates the JIT'd objective for roughly one
 # extra forward pass, where a non-JAX code needs `2 × n_params`

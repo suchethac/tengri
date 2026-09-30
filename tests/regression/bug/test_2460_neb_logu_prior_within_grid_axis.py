@@ -10,6 +10,12 @@ mechanism, on a nebular backend). ``components/grid_support.py`` registers
 clip the same way) so the build narrows a free ``neb_logU`` prior to the
 grid's actual axis and warns when a value cannot be narrowed away from the
 dead region.
+
+Cue (``"cue"``) is registered too (#2569 follow-up), against Li et al. 2025's
+Table 1 trained ranges rather than a grid file: it is a neural network, so
+nothing clips and the failure mode past the trained footprint is
+untrustworthy extrapolation, not a dead gradient -- see
+``grid_support.EXTRAPOLATING_SUPPORT`` and the wording it selects.
 """
 
 from __future__ import annotations
@@ -31,12 +37,17 @@ from tengri.config.exceptions import GridSupportWarning
 pytestmark = pytest.mark.regression_bug
 
 _PRSC_GRID = find_data_str("cloudy_grid_prsc.h5")
+_CUE_WEIGHTS = find_data_str("cue_weights.npz")
 
 _needs_prsc = pytest.mark.skipif(
     _PRSC_GRID is None,
     reason=(
         "cloudy_grid_prsc.h5 is not shipped in git; set TENGRI_DATA_DIR to a checkout that has it"
     ),
+)
+_needs_cue = pytest.mark.skipif(
+    _CUE_WEIGHTS is None,
+    reason="cue_weights.npz is not shipped in git; set TENGRI_DATA_DIR to a checkout that has it",
 )
 
 
@@ -64,6 +75,20 @@ def synthetic_ssp() -> SSPData:
 def _prsc_model(ssp, **neb_overrides):
     obs = Observation(photometry=Photometry.from_names(["sdss_g"]))
     neb = {"type": "cloudy", "grid": _PRSC_GRID, "all_params": Fixed(DEFAULT)}
+    neb.update(neb_overrides)
+    return tengri.SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "const", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "none"},
+        neb=neb,
+        redshift=Fixed(0.0),
+    )
+
+
+def _cue_model(ssp, **neb_overrides):
+    obs = Observation(photometry=Photometry.from_names(["sdss_g"]))
+    neb = {"type": "cue", "all_params": Fixed(DEFAULT)}
     neb.update(neb_overrides)
     return tengri.SEDModel.build(
         ssp_data=ssp,
@@ -152,18 +177,66 @@ def test_neb_logu_fixed_outside_grid_warns(synthetic_ssp):
     assert np.isfinite(np.asarray(state.derived["sed_nebular"])).all()
 
 
-def test_cue_neb_backend_has_no_grid_support():
-    """Cue (an emulator, not a grid) is deliberately unregistered (#2460)."""
-    assert grid_support("neb", "cue") == {}
+def test_cue_trained_ranges_match_table_1():
+    """Cue's registered support matches Li et al. 2025 Table 1 exactly (#2569).
+
+    Pins the five numbers (not just presence) read directly off the
+    published table: log U and log n_H need no conversion (same units as
+    the declaration); C/O and N/O are LINEAR ratios in the table
+    (``(C/O)/(C/O)_sun``, no "log" in the header, unlike the three rows
+    above them) converted to the declared log10(dex).
+    """
+    support = grid_support("neb", "cue")
+    assert support.keys() == {"neb_logU", "gas_logn", "neb_logZ_gas", "gas_logco", "gas_logno"}
+    assert support["neb_logU"] == (-4.0, -1.0)
+    assert support["gas_logn"] == (1.0, 4.0)
+    assert support["neb_logZ_gas"] == (-2.2, 0.5)
+    lo, hi = support["gas_logco"]
+    assert abs(lo - (-1.0)) < 1e-9
+    assert abs(hi - 0.7324) < 1e-4
+    assert support["gas_logno"] == support["gas_logco"]
+
+
+@_needs_cue
+def test_cue_neb_logu_narrowed_to_trained_range(synthetic_ssp):
+    """A free neb_logU prior on a Cue build narrows to Li+2025's [-4, -1]."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = _cue_model(synthetic_ssp, logU=FREE)
+
+    dist = model.spec.get_distribution("neb_logU")
+    assert abs(dist.bounds[0] - (-4.0)) < 1e-9
+    assert abs(dist.bounds[1] - (-1.0)) < 1e-9
+
+
+@_needs_cue
+def test_cue_neb_logu_fixed_outside_range_warns_as_extrapolation(synthetic_ssp):
+    """Fixed(-0.5) past Cue's trained log U warns with extrapolation wording.
+
+    Not the grid-clip wording: Cue has no ``jnp.clip``, so the "bit-identical
+    / gradient exactly zero" claim would be false for it. The warning must
+    say so is extrapolating instead, and must NOT claim a zero gradient.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _cue_model(synthetic_ssp, logU=Fixed(-0.5))
+
+    grid_warnings = [w for w in caught if issubclass(w.category, GridSupportWarning)]
+    assert len(grid_warnings) == 1, [str(w.message) for w in caught]
+    msg = str(grid_warnings[0].message)
+    assert "neb_logU" in msg
+    assert "extrapolat" in msg
+    assert "gradient is exactly zero" not in msg
+    assert "bit-identical" not in msg
 
 
 def test_neb_grid_support_census():
-    """GRID_SUPPORT registers every Cloudy-grid-backed neb type that clips neb_logU.
+    """GRID_SUPPORT registers every neb type whose declared prior can overhang it.
 
     Pins the set rather than only checking presence: a regression that drops
-    one of the four (e.g. re-introducing the previous "cb19/mappings differ,
-    skip them" mistake) is caught even though each one, read in isolation,
-    would still look registered.
+    one of the five (e.g. re-introducing the previous "cb19/mappings differ,
+    skip them" mistake, or un-registering Cue) is caught even though each
+    one, read in isolation, would still look registered.
     """
     neb_keys = {name for selector, name in GRID_SUPPORT if selector == "neb"}
-    assert neb_keys == {"cloudy", "cb19", "mappings", "mappings_agn"}
+    assert neb_keys == {"cloudy", "cb19", "mappings", "mappings_agn", "cue"}

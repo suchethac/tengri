@@ -1568,17 +1568,32 @@ class Parameters:
         """
         import warnings
 
-        from tengri.components.grid_support import check_grid_support
+        from tengri.components.grid_support import EXTRAPOLATING_SUPPORT, check_grid_support
         from tengri.config.exceptions import GridSupportWarning
 
         findings = check_grid_support(self._selected_grid_components(), param_support)
         for selector, name, pname, detail, (g_lo, g_hi) in findings:
+            if (selector, name) in EXTRAPOLATING_SUPPORT:
+                # No jnp.clip here (a smooth emulator, not a grid): the SED is
+                # NOT bit-identical and the gradient is NOT exactly zero past
+                # the trained footprint, so the grid-clip framing below would
+                # be a false claim for this (selector, name).
+                consequence = (
+                    "The prediction there is live but untrustworthy -- it is "
+                    "extrapolating past where the model was validated."
+                )
+                remedy = f"Narrow {pname} to [{g_lo:g}, {g_hi:g}]."
+            else:
+                consequence = (
+                    "The SED there is bit-identical to the edge node and the "
+                    "gradient is exactly zero, so a fit cannot move it."
+                )
+                remedy = (
+                    f"Narrow {pname} to [{g_lo:g}, {g_hi:g}], or select a "
+                    f"{selector} component with no template grid."
+                )
             warnings.warn(
-                f"{selector}={name!r}: {pname}: {detail}. The SED there is "
-                "bit-identical to the edge node and the gradient is exactly "
-                f"zero, so a fit cannot move it. Narrow {pname} to "
-                f"[{g_lo:g}, {g_hi:g}], or select a {selector} component with "
-                "no template grid.",
+                f"{selector}={name!r}: {pname}: {detail}. {consequence} {remedy}",
                 GridSupportWarning,
                 stacklevel=3,
             )
@@ -2725,6 +2740,13 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "nebular_mappings_ionizing_source_warning": content("MAPPINGS ionizing source affects model"),
     "nebular_mappings_model": content("MAPPINGS model determines parameters"),
     "nebular_mode": content("nebular mode determines which parameters are used"),
+    "neb": content(
+        "mirrors nebular_mode (same value, set from it) so GRID_SUPPORT's "
+        "generic (selector, name) lookup has a 'neb' attribute to read the "
+        "same way 'dust_emission' already does (#2460); classified alongside "
+        "nebular_mode rather than excluded so a future edit that lets the two "
+        "diverge is caught by a key change, not silently absorbed"
+    ),
     "radio": content("radio component flag determines parameters"),
     "radio_agn_model": content("radio AGN model determines parameters"),
     "radio_include_freefree": content("thermal free-free on/off changes the emitted radio SED"),
@@ -2754,6 +2776,13 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
         "construction-time stash of the lgmet_scatter kwarg (#2255); lgmet_scatter "
         "(content) mirrors every behavioral state -- None and an explicit 0.1 both "
         "yield lgmet_scatter=0.1 with the same registered met_logzsol_scatter default"
+    ),
+    "_ssp_isochrone_tag": exclude(
+        "construction-time-only input to _default_cloudy_grid (#2426), consulted "
+        "once inside __init__ and never read again; every behavioral consequence "
+        "is already the resolved cloudy_grid_path (content, keyed above), so two "
+        "builds that resolve to the same grid via different tags (or no tag) are "
+        "functionally identical and should not get different cache keys"
     ),
     "_param_registry": exclude(
         "registry is a pure function of parameter names (keyed) and installed registry"
