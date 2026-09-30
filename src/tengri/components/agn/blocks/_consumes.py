@@ -343,7 +343,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ),
     ("blr", "synthesizer"): frozenset({"agn_blr_cf"}),
     ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf"}),
-    ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms", "agn_grahsp_a_bc"}),
     ("blr", "qsogen"): frozenset(),
     ("feii", "boroson_green"): frozenset(
         {

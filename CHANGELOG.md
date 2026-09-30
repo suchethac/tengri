@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- The GRAHSP Balmer continuum is now live on `blr:grahsp` block: `agn_grahsp_a_bc` is re-owned from the shared `"agn"` to `"agn.blr"` so the composable BLR block can read it, and a call to `balmer_continuum` is added to the block body when `agn_type==1`. Guard G1 (`test_agn_declared_params_have_composable_reader.py`) detects declared-but-inert parameters; `agn_grahsp_tor_temp` and `agn_grahsp_tor_cutoff_um` are added to a `_PENDING` ratchet (to be read by `torus:grahsp_mn12` in T2). Measured non-responses (`agn_delta`, `agn_tau_torus`) are allowlisted with reasons (#985).
 - The GRAHSP AGN model menu citation now correctly names Buchner et al. 2024, A&A, 692, A161 (arXiv:2405.19297) instead of a non-existent Kauffmann et al. 2025. A new contract test (`tests/contract/test_menu_citations_resolve.py`) verifies that every AGN model menu entry resolves its citation against `references.bib` (#985). The Balmer-continuum docstring was corrected to accurately describe its support: zero above the Balmer edge (364.6 nm), nonzero blueward of it.
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;

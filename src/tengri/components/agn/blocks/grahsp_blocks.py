@@ -31,6 +31,7 @@ from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
+from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
@@ -241,6 +242,7 @@ def grahsp_blr_block(
     *,
     agn_grahsp_a_lines: float = 1.0,
     agn_grahsp_linewidth_kms: float = 5000.0,
+    agn_grahsp_a_bc: float = 0.0,
     agn_type: int = 1,
     templates=None,
     **_params,
@@ -253,6 +255,10 @@ def grahsp_blr_block(
 
     Parameters
     ----------
+    agn_grahsp_a_bc : float
+        Balmer continuum strength (dimensionless). Added to the broad-line
+        spectrum when ``agn_type == 1`` (type-1 AGN). Set to 0.0 (default)
+        for type-2 AGN (edge-on systems with obscured BLR).
     templates : GRAHSPTemplates, optional
         Pre-loaded template bundle threaded in via the runner's
         ``template_state``. When ``None`` (default), the block falls back to
@@ -274,7 +280,13 @@ def grahsp_blr_block(
         linewidth_kms=agn_grahsp_linewidth_kms,
         agn_type=agn_type,
     )
-    return broad * 0.1  # nm -> Å
+    bc = balmer_continuum(
+        wave_nm=wave_nm,
+        l5100=l5100_disc,
+        a_bc=agn_grahsp_a_bc,
+        linewidth_kms=agn_grahsp_linewidth_kms,
+    ) if agn_type == 1 else jnp.zeros_like(wave_nm)
+    return (broad + bc) * 0.1  # nm -> Å
 
 
 # ──────────────────────────────────────────────────────────────────────
