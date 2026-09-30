@@ -1547,8 +1547,9 @@ class DustSEDComponent(TemplateThreading):
             # sets ``must_materialize_sed`` per #1281/#1748), so the dense array is
             # already live in the compiled graph and no dead-code elimination is given
             # up. Where it is NOT materialized there is no dust consumer, hence no
-            # screen, hence nothing to correct. A dust component that CAN take the
-            # nebular from the grid does not declare it as an input. Guarded on the
+            # screen, hence nothing to correct. A dust component flagged to take the
+            # nebular from the grid declares the grid channels as inputs instead
+            # (``inputs()`` reads ``nebular_from_grid``). Guarded on the
             # bucket this term REPLACES, not on the continuum it reads. A
             # ``neb={'type': 'none'}`` model still publishes ``sed_nebular``: as zeros:
             # so keying off the continuum does not discriminate, and the projection

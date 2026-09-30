@@ -2259,15 +2259,11 @@ def feature_lut_serves_line_channel(model) -> bool:
     Notes
     -----
     A Cue-like backend returns **False** because its line-flux service comes through
-    a different route: the per-Q_H grid with dust channels, which does not set the
-    ``_fast_line_measurement`` flag that this predicate screens for. For a dusty Cue
-    model with a dust component that takes the nebular from the grid (has a stellar
-    energy-balance LUT), the grid serves line fluxes from the dust-channel table,
-    providing significant performance benefit. For dust that cannot (no stellar
-    energy-balance LUT), the line fluxes go through ``predict_line_fluxes``, which
-    rebuilds the state either way. Callers that want to know whether a Cue model
-    gains any leverage at all must ask :func:`~tengri.inference.fitter.fast_nebular_can_engage`
-    instead.
+    a different route: the per-Q_H grid, which serves line fluxes whether or not the
+    dust component takes the continuum from it (#1770), and which does not set the
+    ``_fast_line_measurement`` flag this predicate screens for. Callers that want to
+    know whether a Cue model's photometry gains leverage must ask
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead.
     """
     backend = getattr(model, "_nebular_backend", None)
     if _is_q_h_linear_backend(backend):
@@ -6853,10 +6849,11 @@ class SEDModel:
         * When a dust component takes the nebular emission from the grid (has a
           stellar energy-balance LUT), its dust-channel fields are published:
           observed and rest-frame sub-band nebular photometry, flux-weighted
-          wavelength, and dust-absorbed nebular luminosity per unit Q_H. Only
-          models where all dust components either take the nebular from the grid
-          or are absent are supported; free attenuation-curve shape, WG00, or a
-          free redshift with a redshift-reading law are not.
+          wavelength, and dust-absorbed nebular luminosity per unit Q_H. Dust
+          components without a stellar energy-balance LUT (free attenuation-curve
+          shape, WG00, or a free redshift with a redshift-reading law) cannot take
+          the nebular from the grid; the grid serves line fluxes only while photometry
+          takes the exact nebular path.
         * The grid applies ``neb_fesc`` and ``neb_fdust`` at reconstruction
           (computed per-galaxy from parameters), not at table build (which uses
           zero for both); every other free nebular parameter held at the build
@@ -6865,8 +6862,10 @@ class SEDModel:
           enumeration of the namespace.
         * The grid holds the ionizing spectrum shape at the reference star
           formation history. For a population with no recent star formation and
-          zero birth-cloud optical depth the worst-case u-band errors are 3.9e-3
-          (configuration I) and 1.1e-2 (configuration II) over 32 prior draws.
+          zero birth-cloud optical depth the u bands were off by 3.3e-2 on one
+          prior draw of configuration I; over 32 prior draws as drawn the worst
+          band is 3.9e-3 (I) and 1.1e-2 (II); posterior draws are within 7.2e-4
+          (I) and 1.3e-3 (II).
 
         **JIT-compatible**: the resulting :meth:`predict_photometry` /
         :meth:`predict_line_fluxes` are JIT- and gradient-safe; the one-time grid

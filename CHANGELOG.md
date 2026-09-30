@@ -8,9 +8,9 @@
 
 - The grid applies `neb_fesc` and `neb_fdust` at reconstruction (computed per-galaxy from parameters); the table is built at zero for both and every channel is scaled by `lyc_dust_escape_factor`. Any other free nebular parameter held at the build value (`neb_fesc_lya`, `ionspec_*`, `gas_*`, `neb_eline_sigma_kms`, `neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is refused by enumeration of the namespace.
 
-- With a free redshift (``redshift=Uniform(...)``) or a runtime redshift (``WavePrecomp(catalog_z_range=...)``), the grid serves line fluxes only; band fluxes take the exact nebular path. Measured before: up to 7.35e-2 (#2387).
+- With a free redshift (``redshift=Uniform(...)``) or a runtime redshift (``WavePrecomp(catalog_z_range=...)``), the grid serves line fluxes only; band fluxes take the exact nebular path. Measured before: up to 7.35e-2.
 
-- **Known limits** (not changed by this feature): the grid holds the ionizing spectrum shape at the reference star formation history. For a population with no recent star formation and zero birth-cloud optical depth the worst-case u-band errors are 3.9e-3 (configuration I) and 1.1e-2 (configuration II) over 32 prior draws (#2387).
+- **Known limits** (not changed by this feature): the grid holds the ionizing spectrum shape at the reference star formation history. For a population with no recent star formation and zero birth-cloud optical depth the u bands were off by 3.3e-2 on one prior draw of configuration I; over 32 prior draws as drawn the worst band is 3.9e-3 (I) and 1.1e-2 (II); posterior draws are within 7.2e-4 (I) and 1.3e-3 (II).
 
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
