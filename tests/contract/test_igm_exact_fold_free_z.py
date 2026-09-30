@@ -14,10 +14,12 @@ whole-band LyC split. This test does not verify LyC handling.
 
 from __future__ import annotations
 
+import contextlib
+
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax.numpy as jnp
 import tengri
 from tengri import DEFAULT, SEDModel, WavePrecomp
 from tengri.components.igm.igm import IGM_TRANSMISSION_MODELS
@@ -262,8 +264,8 @@ def test_accuracy_between_nodes(ssp, observation, igm_model):
 @pytest.fixture(autouse=True)
 def lock_jax():
     """Acquire JAX lock before each test, release after."""
-    import time
     import os
+    import time
 
     lock_dir = "/Users/suchethacooray/.claude/jobs/be40c0bc/tmp/jax.lock"
     max_retries = 30
@@ -280,7 +282,5 @@ def lock_jax():
     try:
         yield
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.rmdir(lock_dir)
-        except OSError:
-            pass

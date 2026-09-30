@@ -1982,7 +1982,7 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
         n_z = len(z_grid)
 
         # Compute the ratio at each redshift node in the ztable
-        ratio_stack = np.zeros((n_z,) + subband_table.shape[1:], dtype=np.float64)
+        ratio_stack = np.zeros((n_z, *subband_table.shape[1:]), dtype=np.float64)
         for zi, z in enumerate(z_grid):
             ratio_stack[zi] = _exact_igm_subband_ratio(igm_comp, ssp_data, filters, z, n_subbands)
 
