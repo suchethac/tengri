@@ -42,6 +42,8 @@ _BARE = "data/fsps_prsc_miles_chabrier.h5"
 _BANDS = ["des_g", "des_r", "des_i", "des_z", "wise_w1"]
 _DUST_TYPES = (DustSEDComponent, DustAttenuationSEDComponent)
 
+_RTOL_LINES = 5.1e-4  # Twice the measured worst of 2.51e-4 at z=0.8 and z=1.2
+
 _TWO = {
     "type": "two_component",
     "law": "calzetti",
@@ -213,9 +215,9 @@ def test_an_explicit_grid_serves_lines_and_leaves_band_fluxes_exact(ssp, data, d
     )
 
     rel_dev_0p8 = np.abs(lines_x_0p8 - lines_exact_0p8) / np.abs(lines_exact_0p8)
-    measured_tol_0p8 = np.max(rel_dev_0p8)
-    tol_0p8 = max(2 * measured_tol_0p8, 1e-4)
-    np.testing.assert_allclose(lines_x_0p8, lines_exact_0p8, rtol=tol_0p8)
+    measured_0p8 = np.max(rel_dev_0p8)
+    print(f"test_an_explicit_grid_serves_lines[z=0.8]: measured={float(measured_0p8):.2e}")
+    np.testing.assert_allclose(lines_x_0p8, lines_exact_0p8, rtol=_RTOL_LINES)
 
     lines_exact_1p2 = m.predict_line_fluxes(
         {**p, "redshift": 1.2}, target_wavelengths=jnp.asarray([6564.6, 4862.7])
@@ -225,9 +227,9 @@ def test_an_explicit_grid_serves_lines_and_leaves_band_fluxes_exact(ssp, data, d
     )
 
     rel_dev_1p2 = np.abs(lines_x_1p2 - lines_exact_1p2) / np.abs(lines_exact_1p2)
-    measured_tol_1p2 = np.max(rel_dev_1p2)
-    tol_1p2 = max(2 * measured_tol_1p2, 1e-4)
-    np.testing.assert_allclose(lines_x_1p2, lines_exact_1p2, rtol=tol_1p2)
+    measured_1p2 = np.max(rel_dev_1p2)
+    print(f"test_an_explicit_grid_serves_lines[z=1.2]: measured={float(measured_1p2):.2e}")
+    np.testing.assert_allclose(lines_x_1p2, lines_exact_1p2, rtol=_RTOL_LINES)
 
 
 def test_a_runtime_redshift_keeps_band_fluxes_off_the_grid(ssp):

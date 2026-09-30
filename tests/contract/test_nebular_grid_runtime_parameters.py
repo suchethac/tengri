@@ -43,7 +43,7 @@ _BANDS = ["galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1"]
 Z = 0.15
 
 _RTOL_PHOT = 4e-3
-_RTOL_LINES = 1e-4
+_RTOL_LINES = 6e-4  # Twice the measured worst deviation of 2.7e-4 on grid vs exact
 _RTOL_GRAD = 2e-2
 _TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v")
 _BAKED = {
@@ -308,43 +308,43 @@ def test_the_gradient_with_respect_to_the_escape_fraction_matches(ssp):
 
 
 def test_line_fluxes_follow_the_escape_fraction(ssp):
-    m, fast, p = _views(True, "fesc", 0.0, 0.8)
+    m, _, p = _views(True, "fesc", 0.0, 0.8)
 
+    assert getattr(m, "_nebular_grid_table", None) is None
     m_lines = m.with_approx((WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67])))
-    fast_lines = fast.with_approx((WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67])))
+    assert m_lines._nebular_grid_table is not None
 
     target_wavelengths = jnp.asarray([6564.6, 4862.7, 1215.67])
 
-    measured_worst = 0.0
     for neb_fesc in (0.0, 0.6):
-        lines_fast = fast_lines.predict_line_fluxes(
+        grid = m_lines.predict_line_fluxes(
             {**p, "neb_fesc": neb_fesc}, target_wavelengths=target_wavelengths
         )
-        lines_exact = m_lines.predict_line_fluxes(
+        exact = m.predict_line_fluxes(
             {**p, "neb_fesc": neb_fesc}, target_wavelengths=target_wavelengths
         )
-        rel_diff = jnp.abs((lines_fast - lines_exact) / jnp.maximum(jnp.abs(lines_exact), 1e-30))
-        measured_worst = jnp.maximum(measured_worst, jnp.max(rel_diff))
+        rel_diff = jnp.abs((grid - exact) / jnp.maximum(jnp.abs(exact), 1e-30))
+        measured_worst = jnp.max(rel_diff)
+        print(
+            f"test_line_fluxes_follow_the_escape_fraction[neb_fesc={neb_fesc}]: "
+            f"measured worst={float(measured_worst):.2e}"
+        )
+        np.testing.assert_allclose(grid, exact, rtol=_RTOL_LINES)
 
-    print(
-        f"test_line_fluxes_follow_the_escape_fraction: measured worst={float(measured_worst):.2e}"
-    )
-    np.testing.assert_allclose(lines_fast, lines_exact, rtol=_RTOL_LINES)
-
-    lya_fast_0 = fast_lines.predict_line_fluxes(
+    lya_lines_0 = m_lines.predict_line_fluxes(
         {**p, "neb_fesc": 0.0}, target_wavelengths=target_wavelengths
     )[2]
-    lya_fast_6 = fast_lines.predict_line_fluxes(
+    lya_lines_6 = m_lines.predict_line_fluxes(
         {**p, "neb_fesc": 0.6}, target_wavelengths=target_wavelengths
     )[2]
-    lya_exact_0 = m_lines.predict_line_fluxes(
+    lya_exact_0 = m.predict_line_fluxes(
         {**p, "neb_fesc": 0.0}, target_wavelengths=target_wavelengths
     )[2]
-    lya_exact_6 = m_lines.predict_line_fluxes(
+    lya_exact_6 = m.predict_line_fluxes(
         {**p, "neb_fesc": 0.6}, target_wavelengths=target_wavelengths
     )[2]
 
-    assert float(lya_fast_6) < float(lya_fast_0)
+    assert float(lya_lines_6) < float(lya_lines_0)
     assert float(lya_exact_6) < float(lya_exact_0)
 
 
