@@ -676,9 +676,15 @@ agn_torus_block, agn_attenuation_block : str
     # eta(30 deg) here (it would double-count inclination for discs that model
     # their own, and be wrong for isotropic ones).
     _COS_30DEG = 0.86602540378443864
+    # Evaluate at the REFERENCE luminosity like every other block call in this
+    # function: under the float32 factoring the true agn_log_lbol here would
+    # form erg/s-scale linear intermediates inside the disc and overflow to
+    # NaN (the shape still sees the true L_bol via agn_log_lbol_shape in
+    # ``params``); the anchors are rescaled to the true magnitude with the
+    # rest of the outputs at the end. In float64 the two values are equal.
     L_lambda_disc_30deg = disc_fn(
         wave,
-        agn_log_lbol=agn_log_lbol,
+        agn_log_lbol=agn_log_lbol_eval,
         templates=disc_templates,
         **{**params, "agn_cos_inc": _COS_30DEG},
     )
