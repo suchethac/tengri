@@ -50,6 +50,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.stellar.sfh.mean_sfh import window_weight
 from tengri.utils.host_array import device_table, host_array
 
 # Default bin edges in Gyr (8 edges = 7 bins), log-spaced from 30 Myr to 13.7 Gyr.
@@ -100,6 +101,65 @@ def _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins):
     bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
     bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
     sfr = jnp.where(age_yr > bin_edges_yr[-1], 0.0, sfr_bins[bin_idx])
+    return jnp.maximum(sfr, 0.0)
+
+
+def _piecewise_constant_sfr_smooth(age_yr, bin_edges_yr, sfr_bins, n_bins):
+    """Evaluate a binned SFR with partial-cell weighting at each bin edge.
+
+    Generalizes :func:`window_weight`'s exact cell-coverage treatment of a
+    single boundary to an N-bin ladder: each grid cell's value is the
+    coverage-weighted average of every bin's SFR it overlaps, rather than a
+    point-sample lookup of whichever bin its own coordinate falls in. A grid
+    cell lying entirely inside one bin is unaffected (the one window with
+    nonzero coverage there contributes its full SFR, exactly the hard-lookup
+    value); only the 1-2 cells straddling a bin edge differ.
+
+    Use this in place of :func:`_piecewise_constant_sfr` where the bin edges
+    themselves are free parameters (e.g. ``tlast_gyr`` / ``tflex_gyr`` in
+    :func:`psb_continuity` and :func:`psb_continuity_flex`): a hard lookup
+    there makes the moving edge a staircase in that parameter, the same
+    mechanism `window_weight` exists to remove at a single support boundary
+    (#2476). Bins with static edges (:func:`continuity`, :func:`dirichlet`)
+    keep the point-sample lookup, which is exact and cheaper when nothing
+    moves.
+
+    Parameters
+    ----------
+    age_yr : array_like, shape (n_age,)
+        Lookback times to evaluate [yr].
+    bin_edges_yr : array_like, shape (n_bins+1,)
+        Bin edges [yr], ascending; may be traced (a function of free
+        parameters).
+    sfr_bins : array_like, shape (n_bins,)
+        SFR in each bin [Msun/yr].
+    n_bins : int
+        Number of bins, a static Python int (the loop below is unrolled at
+        trace time, matching :func:`_piecewise_constant_sfr`'s own
+        constraint on ``n_bins``).
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the Python ``for`` loop over ``n_bins`` unrolls
+    at trace time into ``n_bins`` calls to :func:`window_weight`, each
+    vectorized over ``age_yr``.
+
+    Ages older than ``bin_edges_yr[-1]`` fall outside every bin's window and
+    so are zero, matching :func:`_piecewise_constant_sfr` (#1978); ages
+    younger than ``bin_edges_yr[0]`` are covered by the youngest bin's own
+    window whenever the ladder starts at zero lookback (every ladder these
+    functions build does).
+    """
+    weights = jnp.stack(
+        [window_weight(age_yr, bin_edges_yr[i], bin_edges_yr[i + 1]) for i in range(n_bins)],
+        axis=0,
+    )
+    sfr = jnp.sum(weights * jnp.asarray(sfr_bins)[:, None], axis=0)
     return jnp.maximum(sfr, 0.0)
 
 
@@ -727,7 +787,10 @@ def psb_continuity(
     mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
     sfr_bins_norm = sfr_unnorm * (10.0**log_total_mass) / (mass_unnorm + 1e-30)
 
-    # Piecewise-constant lookup
+    # Piecewise-constant lookup. This function is not registered under any
+    # SFH type name (`psb_continuity_flex` is the registered generalization,
+    # #2184), so it is unreached by any moving free parameter through
+    # `SEDModel.build`; the hard lookup, exact at fixed edges, is unchanged.
     bin_edges_yr = all_edges_gyr * 1e9
     return _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins_norm, n_bins_total)
 
@@ -1022,7 +1085,10 @@ def continuity_flex(
     )
 
     n_bins_total = n_flex_bins + 2  # young + flex bins + old
-    return _piecewise_constant_sfr(age_yr, all_edges_yr, sfr_bins, n_bins_total)
+    # Partial-cell lookup: `tlast_gyr` and `tflex_gyr` move two of these
+    # edges, so the hard lookup would make the integrated photometry a
+    # staircase in either one as a grid node crosses the moving edge (#2476).
+    return _piecewise_constant_sfr_smooth(age_yr, all_edges_yr, sfr_bins, n_bins_total)
 
 
 def _continuity_flex_edges_yr(sfh_kwargs: dict, bin_edges_gyr=None) -> jnp.ndarray:

@@ -1486,6 +1486,7 @@ def parse_groups(**kwargs) -> Parameters:
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _narrow_free_priors_to_z(resolved_kwargs, provenance)
     _warn_free_redshift_onset_ceiling(resolved_kwargs)
+    _default_nonparametric_bin_edges_from_z(resolved_kwargs)
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
@@ -2003,6 +2004,125 @@ def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
         age_at_z_ceil=age_at_z_ceil,
         n_offending_params=len(offenders),
         tightest_offender_ceiling_gyr=tightest_offender_ceiling,
+    )
+
+
+#: SFH families whose default (unset) bin ladder is scaled to the source
+#: redshift rather than fixed at 0-13.7 Gyr. Distinct from
+#: :data:`_z_capped_onset_params`: this is a structural setting
+#: (``bin_edges_gyr``), not a free-parameter prior, and applies only to the
+#: families that share the plain ``DEFAULT_BIN_EDGES_GYR`` ladder --
+#: ``continuity_flex``, ``psb_suess2022`` and ``psb_flex`` derive their own
+#: edges from other declared parameters (``tflex_gyr`` and friends) and are
+#: out of scope here.
+_Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES = frozenset(
+    {"continuity", "dirichlet", "bursty_continuity", "prospector_beta"}
+)
+
+
+def _default_nonparametric_bin_edges_from_z(resolved: dict) -> None:
+    """Scale the default nonparametric age-bin ladder to the source redshift.
+
+    ``continuity``, ``dirichlet``, ``bursty_continuity`` and
+    ``prospector_beta`` share a bin ladder (``DEFAULT_BIN_EDGES_GYR``) fixed
+    at 0-13.7 Gyr when no explicit ``bin_edges_gyr`` is given, regardless of
+    redshift: at z=6 (age 0.93 Gyr) 3 of 7 default bins lie entirely beyond
+    the age of the universe, taking no likelihood while
+    ``_mass_conserving_total`` (#2521) still redistributes their nominal
+    mass share across the bins that remain reachable, biasing the recovered
+    shape toward ages the ladder happens to offer a bin for. This builds the
+    default ladder from the source redshift instead, via
+    :func:`~tengri.components.stellar.sfh.nonparametric.make_agebins_from_zred`
+    (the Prospector-beta scheme, Wang et al. 2024): the two youngest edges
+    stay fixed (30 Myr, 100 Myr) and the remainder are log-spaced up to the
+    oldest edge, which is set to ``age_at_z`` of the source redshift -- so no
+    default bin can lie beyond cosmic time.
+
+    An explicit user-supplied ``bin_edges_gyr`` is never touched here, the
+    same convention the z-capped onset/age/peak-time *parameters* follow
+    (:func:`_narrow_free_priors_to_z` only narrows a declaration-sourced free
+    prior, never a user's own explicit value): a caller who names their own
+    edges has already made the reachability decision, and nothing here
+    second-guesses it or warns about it.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, mutated in place by
+        setting ``resolved["bin_edges_gyr"]`` when applicable. Also reads the
+        structural ``resolved["mean_sfh_type"]`` (str or list) and
+        ``resolved["redshift"]``.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only --
+    ``make_agebins_from_zred`` is itself a NumPy, Python-control-flow
+    function and cannot be traced (see
+    :class:`~tengri.config.exceptions.NonparametricBinEdgesAtRedshiftCeilingWarning`
+    for what that costs when ``redshift`` is free).
+
+    For a ``Fixed`` redshift the ladder is built once, at that value: exact
+    for every draw, since there is only one. For a free ``redshift`` the
+    edges cannot be re-built per draw (they are not traced quantities), so
+    this builds them once, at ``age_at_z`` of the redshift prior's UPPER
+    bound -- the youngest universe the prior admits, and so the one ladder
+    that stays inside cosmic time for every draw. Emits
+    ``NonparametricBinEdgesAtRedshiftCeilingWarning`` in that case, since a
+    draw at a lower redshift then sees a ladder that stops short of its own
+    (older) age of the universe.
+    """
+    if resolved.get("bin_edges_gyr") is not None:
+        return  # explicit user edges: never overridden (see docstring)
+
+    mean_sfh_type = resolved.get("mean_sfh_type")
+    if mean_sfh_type is None:
+        return
+    types = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
+    if not (_Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES & set(types)):
+        return
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None:
+        return
+    try:
+        z_floor, z_ceil = redshift_dist.bounds
+    except (AttributeError, NotImplementedError, ValueError):
+        return
+    if z_floor is None:
+        return
+
+    from tengri.components.stellar.sfh.nonparametric import (
+        DEFAULT_N_BINS,
+        make_agebins_from_zred,
+    )
+
+    is_free = z_ceil is not None and z_ceil > z_floor
+    z_for_edges = float(z_ceil) if is_free else float(z_floor)
+    resolved["bin_edges_gyr"] = make_agebins_from_zred(zred=z_for_edges, n_bins=DEFAULT_N_BINS)
+
+    if not is_free:
+        return
+
+    from tengri.config.exceptions import NonparametricBinEdgesAtRedshiftCeilingWarning
+    from tengri.utils.cosmology import age_at_z
+
+    age_at_z_ceil = float(age_at_z(z_for_edges))
+    age_at_z_floor = float(age_at_z(float(z_floor)))
+    warn_measured(
+        f"redshift is free over [{z_floor:g}, {z_ceil:g}]: the default nonparametric "
+        f"age-bin ladder is built once, at age_at_z({z_ceil:g}) = {age_at_z_ceil:.4g} Gyr "
+        f"(the youngest universe the prior admits), so no bin lies beyond cosmic time "
+        f"for any draw. A draw near redshift {z_floor:g} (age {age_at_z_floor:.4g} Gyr) "
+        f"therefore has cosmic time between {age_at_z_ceil:.4g} and {age_at_z_floor:.4g} "
+        f"Gyr that no bin covers, even though it is available to that draw. Pass an "
+        f"explicit sfh={{'bin_edges_gyr': ...}} built from a fixed or point-estimate "
+        f"redshift to avoid the tradeoff.",
+        NonparametricBinEdgesAtRedshiftCeilingWarning,
+        stacklevel=3,
+        z_floor=z_floor,
+        z_ceil=z_ceil,
+        age_at_z_floor=age_at_z_floor,
+        age_at_z_ceil=age_at_z_ceil,
     )
 
 

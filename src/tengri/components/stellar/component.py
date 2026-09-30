@@ -976,25 +976,64 @@ def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=Fals
         The truncated mass :func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`
         measured [Msun].
     is_composite : bool, optional
-        A composite (list) ``sfh_model`` sums multiple additive members under
-        one flat ``sfh_kwargs["log_total_mass"]`` key that cannot be
-        disentangled here, so the measured value is returned unchanged.
+        A composite (list) ``sfh_model`` sums multiple additive members, each
+        under its OWN public-prefixed ``log_total_mass`` key (``apply``'s
+        internal-param-map loop writes both the internal and the public name
+        for a composite so two members sharing the internal name
+        ``log_total_mass`` do not collide, #372) -- read here as the sum of
+        every ``sfh_*_log_total_mass`` entry ``sfh_kwargs`` carries.
 
     Returns
     -------
     ndarray, shape ()
-        ``10**sfh_kwargs["log_total_mass"]`` when this (non-composite) family
-        declares that parameter, else ``measured_total_mass`` unchanged --
-        e.g. ``sfh_model='table'`` has no ``log_total_mass`` at all: its
-        formed mass is legitimately whatever the table integrates to.
+        A single-family build returns ``10**sfh_kwargs["log_total_mass"]``
+        when it declares that parameter, else ``measured_total_mass``
+        unchanged (e.g. ``sfh_model='table'`` has no ``log_total_mass`` at
+        all: its formed mass is legitimately whatever the table integrates
+        to). A composite build returns the sum of ``10**log_total_mass``
+        over every additive member's own key, or ``measured_total_mass``
+        unchanged if none is present.
 
     Notes
     -----
     **JIT/grad/vmap-safe**: yes; a plain ``jnp.where``-free branch on a
     Python-static condition (``is_composite`` and dict-key membership are
     both resolved at trace time, never on a traced value).
+
+    **Composite mass is conserved in AGGREGATE, not per member.** Every
+    additive member's own :func:`~tengri.components.stellar.sfh.mean_sfh
+    ._renormalize_to_mass` call scales its shape to ITS OWN declared mass
+    over the FULL (untruncated) domain; the composed callable then sums the
+    members into one SFR array before the CIC/DSPS kernel integrates and
+    z-caps it as a single unit, so only the pooled measured mass -- not each
+    member's own surviving fraction -- reaches this function. Pinning that
+    pooled measurement to the pooled declared total (here) is therefore
+    exact for the total, but is a single UNIFORM rescale applied across
+    every member: if two members are truncated by different amounts (their
+    onset parameters place different fractions of their own support beyond
+    ``age(z)``), the rescale over-corrects the more-truncated member and
+    under-corrects the less-truncated one relative to each member's own
+    declared mass, even though the pooled total lands exactly on target.
+    Achieving per-member exactness needs the CIC/DSPS kernel to integrate
+    and correct each additive member separately before summing (paralleling
+    how the burst *mixture* already keeps its own mass fraction exact,
+    :func:`_mix_burst_mass_fraction`) -- a larger change to the composite
+    dispatch in both :meth:`StellarSEDComponent.apply` and
+    :meth:`StellarSEDComponent.compute_joint_weights`, not attempted here.
     """
-    if is_composite or "log_total_mass" not in sfh_kwargs:
+    if is_composite:
+        member_masses = [
+            10.0 ** jnp.asarray(v)
+            for k, v in sfh_kwargs.items()
+            if k.startswith("sfh_") and k.endswith("_log_total_mass")
+        ]
+        if not member_masses:
+            return measured_total_mass
+        total = member_masses[0]
+        for m in member_masses[1:]:
+            total = total + m
+        return total
+    if "log_total_mass" not in sfh_kwargs:
         return measured_total_mass
     return 10.0 ** jnp.asarray(sfh_kwargs["log_total_mass"])
 

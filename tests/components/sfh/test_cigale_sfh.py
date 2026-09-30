@@ -252,7 +252,18 @@ class TestDelayedBq:
         # Normalize both to compare shapes, not absolute values.
         sfr_norm = sfr / jnp.max(sfr)
         expected_norm = expected / jnp.max(expected)
-        assert_allclose(sfr_norm, expected_norm, rtol=1e-6)
+        # The burst/quench switch at t_lb = age_bq_yr is cell-averaged
+        # (`window_weight`), not a hard `where`, so the integrated photometry
+        # is continuous as `age_bq_yr` sweeps across a grid node (#2476);
+        # CIGALE's own reference is the hard step this replaces. The two
+        # differ only in the 1-Myr-wide cell straddling the switch -- here
+        # exactly index 500, since the grid lands an integer node exactly on
+        # ``age_bq_yr`` -- which is excluded rather than loosening the
+        # tolerance for every other point.
+        boundary_idx = int(age_bq_myr)
+        keep = np.ones(sfr_norm.shape[0], dtype=bool)
+        keep[boundary_idx] = False
+        assert_allclose(sfr_norm[keep], expected_norm[keep], rtol=1e-6)
 
 
 # ── Tests for periodic ────────────────────────────────────────────

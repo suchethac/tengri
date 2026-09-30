@@ -447,6 +447,41 @@ class FreeRedshiftOnsetCeilingWarning(AdvisoryWarning):
     """
 
 
+class NonparametricBinEdgesAtRedshiftCeilingWarning(AdvisoryWarning):
+    """The default nonparametric age-bin ladder is built at a free redshift's
+    youngest admissible age, not at each draw's own age.
+
+    ``continuity``, ``dirichlet``, ``bursty_continuity`` and
+    ``prospector_beta`` default (when no explicit ``bin_edges_gyr`` is given)
+    to a ladder whose oldest edge is the age of the universe at the build's
+    source redshift, following the Prospector-beta convention
+    (:func:`~tengri.components.stellar.sfh.nonparametric.make_agebins_from_zred`).
+    That convention is a NumPy, Python-control-flow function -- it cannot be
+    traced, so it cannot be re-evaluated once per posterior draw the way a
+    JAX-traced quantity can. For a ``Fixed`` redshift this is exact: one
+    build, one age, one ladder. For a free ``redshift`` it is not: the ladder
+    is built ONCE, at ``age_at_z`` of the prior's UPPER bound (the youngest
+    universe the prior admits), so that no bin lies beyond age(z) anywhere in
+    the prior. A draw at a LOWER redshift then sees a ladder that stops
+    short of that draw's own (older) age of the universe -- cosmic time
+    between the ladder's oldest edge and the true age(z) at that draw is
+    unavailable to the fit, not merely unpopulated.
+
+    Warns rather than raises: every draw still gets a valid, mass-conserving
+    model (:func:`~tengri.components.stellar.sfh.nonparametric
+    ._piecewise_constant_sfr`); the cost is missing sensitivity at the old
+    end for draws away from the prior's upper redshift, not an ill-posed
+    forward pass. Pass an explicit ``bin_edges_gyr`` (e.g. built per-galaxy
+    from a fixed or point-estimate redshift) to avoid the tradeoff entirely.
+
+    See Also
+    --------
+    FreeRedshiftOnsetCeilingWarning
+        The same free-redshift blind spot for parametric onset/age/peak-time
+        parameters, which a per-draw cap could close but this ladder cannot.
+    """
+
+
 class DegenerateParameterPairWarning(AdvisoryWarning):
     """Two freed parameters that enter the model only through one combination.
 

@@ -39,6 +39,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tengri import Fixed
+
 pytestmark = pytest.mark.conservation
 
 
@@ -198,8 +200,8 @@ def test_formed_mass_conserved_and_sfr_zero_before_big_bang(
 
     # (1) formed mass == 10**log_total_mass by construction, on BOTH age
     # kernels: ``_mass_conserving_total`` sits at the one point every
-    # kernel's total_mass converges to (#2521 DEFECT 1), not only on the
-    # "cic" branch.
+    # kernel's total_mass converges to, after the "cic" and "dsps" branches
+    # have already produced their own (possibly z-truncated) integral.
     ratio = total_mass / 10.0**LOG_TOTAL_MASS
     assert ratio == pytest.approx(1.0, abs=1e-4), (
         f"{family} {age_kernel} z={z} mult={mult}: formed mass ratio {ratio} != 1"
@@ -237,8 +239,8 @@ def test_gp_field_formed_mass_conserved(synthetic_ssp_wide):
     """A GP-field build forces ``age_kernel='dsps'`` (#964); mass must still conserve.
 
     The field draw lives on the coarse lookback grid with no dense CIC
-    integrand, so every field build reaches the histogram kernel branch --
-    exactly the branch DEFECT 1 found bypassing ``_mass_conserving_total``.
+    integrand, so every field build reaches the histogram ("dsps") kernel
+    branch of ``_mass_conserving_total``, not the "cic" one.
     """
     from tengri import DEFAULT, Fixed, SEDModel
 
@@ -266,37 +268,80 @@ def test_gp_field_formed_mass_conserved(synthetic_ssp_wide):
     assert ratio == pytest.approx(1.0, abs=1e-4), f"GP-field z={z}: formed mass ratio {ratio} != 1"
 
 
-def test_composite_sfh_mass_is_not_yet_conserved(synthetic_ssp_wide):
-    """A composite (list) ``sfh_model`` is NOT covered by ``_mass_conserving_total`` (#2521).
+#: Four two-member additive composites, each pairing a family whose onset is
+#: fixed to 2 x age(z) (heavily truncated) with one fixed comfortably inside
+#: [0, age(z)] (untruncated), so the pooled truncation genuinely differs
+#: per member -- the regime ``_mass_conserving_total``'s composite branch
+#: pins to the AGGREGATE total, not per member (see its own docstring).
+_COMPOSITE_PAIRS: tuple[tuple[str, dict, str, dict], ...] = (
+    (
+        "dpl",
+        {"sfh_dpl_alpha": Fixed(1.5), "sfh_dpl_beta": Fixed(1.0), "sfh_dpl_tau_gyr": Fixed(3.0)},
+        "const",
+        {"sfh_const_start_gyr": Fixed(1.0), "sfh_const_end_gyr": Fixed(0.0)},
+    ),
+    (
+        "exp",
+        {"sfh_exp_tau_gyr": Fixed(2.0)},
+        "delayed",
+        {"sfh_delayed_tau_gyr": Fixed(1.0), "sfh_delayed_age_gyr": Fixed(0.9)},
+    ),
+    (
+        "declining_exp",
+        {"sfh_declining_exp_tau_gyr": Fixed(2.0)},
+        "dexp",
+        {"sfh_dexp_tau_gyr": Fixed(0.5), "sfh_dexp_start_gyr": Fixed(0.9)},
+    ),
+    (
+        "norm",
+        {"sfh_norm_width_gyr": Fixed(0.5)},
+        "const",
+        {"sfh_const_start_gyr": Fixed(1.0), "sfh_const_end_gyr": Fixed(0.0)},
+    ),
+)
 
-    Its flat internal ``sfh_kwargs`` carries every member's ``log_total_mass``
-    under one shared internal key (last write wins) alongside each member's
-    own public-prefixed key, so summing the requested mass per member is not
-    something ``_mass_conserving_total`` can do from its current arguments
-    alone. This pins the present (truncated) number for a two-member
-    ``["dpl", "const"]`` composite with the dpl member's age set to
-    2 x age(z) (the same truncating configuration DEFECT 1 measures for a
-    single family) as a known, tracked gap -- not a target this change
-    claims to fix. See the CHANGELOG entry for #2521.
+#: Onset/age/peak-time public param name per family used above, so the
+#: truncated member's own boundary can be set to 2 x age(z).
+_ONSET_PARAM = {
+    "dpl": "sfh_dpl_age_gyr",
+    "exp": "sfh_exp_start_gyr",
+    "declining_exp": "sfh_declining_exp_age_gyr",
+    "norm": "sfh_norm_peak_lbt_gyr",
+}
+
+
+@pytest.mark.parametrize("truncated,extra_t,untruncated,extra_u", _COMPOSITE_PAIRS)
+@pytest.mark.parametrize("z", (0.5, 2.5, 6.0))
+def test_composite_sfh_mass_conserved_in_aggregate(
+    synthetic_ssp_wide, truncated, extra_t, untruncated, extra_u, z
+):
+    """A composite's pooled formed mass equals the sum of its members' requests.
+
+    ``_mass_conserving_total``'s composite branch (#2521) pins the pooled
+    CIC/DSPS-measured mass to the sum of every ``sfh_*_log_total_mass`` key
+    present, which is exact for the AGGREGATE total but not necessarily for
+    each member individually when members are truncated by different
+    fractions (see that function's own docstring for why full per-member
+    exactness needs the CIC/DSPS kernel to integrate each additive member
+    separately -- a larger change not attempted here). This test pins the
+    aggregate guarantee only.
     """
     from tengri import DEFAULT, Fixed, SEDModel
     from tengri.utils.cosmology import age_at_z
 
-    z = 2.5
     age_gyr = float(age_at_z(z))
+    onset_param = _ONSET_PARAM[truncated]
+    sfh_group = {
+        "type": [truncated, untruncated],
+        f"sfh_{truncated}_log_total_mass": Fixed(LOG_TOTAL_MASS),
+        onset_param: Fixed(2.0 * age_gyr),
+        f"sfh_{untruncated}_log_total_mass": Fixed(LOG_TOTAL_MASS),
+        **extra_t,
+        **extra_u,
+    }
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        sfh={
-            "type": ["dpl", "const"],
-            "sfh_dpl_log_total_mass": Fixed(LOG_TOTAL_MASS),
-            "sfh_dpl_age_gyr": Fixed(2.0 * age_gyr),
-            "sfh_dpl_alpha": Fixed(1.5),
-            "sfh_dpl_beta": Fixed(1.0),
-            "sfh_dpl_tau_gyr": Fixed(3.0),
-            "sfh_const_log_total_mass": Fixed(LOG_TOTAL_MASS),
-            "sfh_const_start_gyr": Fixed(1.0),
-            "sfh_const_end_gyr": Fixed(0.0),
-        },
+        sfh=sfh_group,
         met={"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         dust_attenuation={"type": "none"},
         dust_emission={"type": "none"},
@@ -306,8 +351,6 @@ def test_composite_sfh_mass_is_not_yet_conserved(synthetic_ssp_wide):
     pred = model.predict({})
     requested = 2.0 * 10.0**LOG_TOTAL_MASS
     ratio = float(pred.stellar_mass) / requested
-    assert ratio == pytest.approx(0.7846438391594264, rel=1e-6), (
-        f"composite ['dpl', 'const'] z={z}: formed mass ratio {ratio}; if this moved, "
-        f"either the composite fix landed (update the CHANGELOG and this pin) or "
-        f"something else changed the truncated-mass mechanism"
+    assert ratio == pytest.approx(1.0, abs=1e-4), (
+        f"composite ['{truncated}', '{untruncated}'] z={z}: pooled formed mass ratio {ratio} != 1"
     )
