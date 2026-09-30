@@ -398,7 +398,11 @@ def parse_mor_netzer_lines(path: Path):
 
 
 def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, agn_type=1):
-    """Reproduce activatelines.add_lines for a flat user-provided wave grid."""
+    """activatelines.add_lines on a flat user-provided wave grid, with a unit-area Gaussian.
+
+    Upstream normalises with sqrt(pi sigma^2), making every line sqrt(2) too strong;
+    tengri uses sqrt(2 pi sigma^2), so each line integrates to its tabulated flux.
+    """
     l_agn = lum5100A / 510.0  # W/nm
     l_broad = 0.02 * l_agn * A_lines  # H-beta broad scale [erg/s] / [W/nm]
     l_narrow = 0.002 * l_agn * A_lines
@@ -408,7 +412,7 @@ def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, 
     for _name, lam0, broad, sy2, liner in lines_rows:
         width_nm = lam0 * (line_width_kms * 1000.0) / cst.c
         sigma = width_nm * FWHM_TO_SIGMA
-        norm_factor = 510.0 / np.sqrt(np.pi * sigma**2)
+        norm_factor = 510.0 / np.sqrt(2.0 * np.pi * sigma**2)  # unit-area Gaussian (upstream uses pi, not 2 pi)
         shape = np.exp(-0.5 * (wave_nm_grid - lam0) ** 2 / sigma**2)
         if agn_type == 1:
             bl_lumin += l_broad * broad * shape * norm_factor
