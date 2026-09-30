@@ -328,6 +328,7 @@ class TestGrammarProvenanceUnchanged:
             "dust_tau_bc": "user_fixed",
             "dust_tau_diff": "wildcard_fixed",
             "dust_tea_scatter": "wildcard_fixed",
+            "lsf_scale": "registry_default",
             "met_alpha_fe": "wildcard_fixed",
             "met_logzsol": "wildcard_fixed",
             "met_logzsol_scatter": "wildcard_fixed",
