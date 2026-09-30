@@ -39,7 +39,7 @@ class KeyMismatch(NamedTuple):
     # This guard parses markdown structure expecting:
     # - Section headings: ### Domain: `key`
     # - Subsection marker: **Structural keys:**
-    # - Bullet entries: - `'key'` — description
+    # - Bullet entries: - `'key'` — description (or - `'key'`: description)
     # If the markdown structure changes, update the regex patterns in _read_doc_keys_from_file()
     # and vice versa.
     A discrepancy between doc and code."""
@@ -96,22 +96,34 @@ def _read_doc_keys_from_file(doc_path: pathlib.Path) -> dict[str, set[str]]:
         keys_section = keys_match.group(1)
 
         # Extract keys from bullet lines like:
-        # - `'key_name'` —
-        # - `'key1'`, `'key2'`, `'key3'` —
+        # - `'key_name'` — description
+        # - `'key_name'`: description
+        # - `'key1'`, `'key2'`, `'key3'` — description
         # Only match keys that appear at the start of a bullet line (after "- ")
         bullet_lines = re.findall(r"^- .+$", keys_section, re.MULTILINE)
         keys = set()
         for line in bullet_lines:
-            # Only add keys that appear before the em-dash (—) separator.
-            # In practice, keys come before the em-dash, examples after: the
-            # `'type'` bullet's description names several backtick-quoted
-            # *type values* (`'dpl'`, `'delayed_tau'`, ...), and those must
-            # not be mistaken for documented keys.
+            # Only add keys that appear before the first separator (em-dash "—"
+            # or colon-space ": "). In practice, keys come before the separator;
+            # the description after contains examples like `'dpl'`, `'delayed_tau'`
+            # that must not be mistaken for documented keys.
             em_dash_pos = line.find("—")
-            if em_dash_pos == -1:
-                em_dash_pos = len(line)
-            before_dash = line[:em_dash_pos]
-            key_matches = re.findall(r"`['\"]([a-z_A-Z0-9]+)['\"]`", before_dash)
+            colon_space_pos = line.find(": ")
+
+            # Find the earliest separator position (at least one should exist)
+            positions = []
+            if em_dash_pos != -1:
+                positions.append(em_dash_pos)
+            if colon_space_pos != -1:
+                positions.append(colon_space_pos)
+
+            if positions:
+                cutoff_pos = min(positions)
+            else:
+                cutoff_pos = len(line)
+
+            before_separator = line[:cutoff_pos]
+            key_matches = re.findall(r"`['\"]([a-z_A-Z0-9]+)['\"]`", before_separator)
             keys.update(key_matches)
 
             # The wildcard bullet documents its exact synonym in the

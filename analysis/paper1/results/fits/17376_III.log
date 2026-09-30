@@ -1,0 +1,45 @@
+2026-09-21 16:26:37,241 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 4.125e-30 erg/s/cm2/Hz
+2026-09-21 16:29:17,413 - __main__ - INFO - Galaxy 17376 (z=1.038): 14 detected bands
+2026-09-21 16:29:17,416 - __main__ - INFO - Config III: 6 free parameters
+2026-09-21 16:29:17,416 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+E0921 16:29:34.366910 1956742 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
+
+  %sort.150 = f64[7127]{0} sort(%constant.6830), dimensions={0}, is_stable=true, to_apply=%region_44.148.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1684}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0921 16:29:34.406020 1956643 slow_operation_alarm.cc:140] The operation took 1.039298495s
+Constant folding an instruction is taking > 1s:
+
+  %sort.150 = f64[7127]{0} sort(%constant.6830), dimensions={0}, is_stable=true, to_apply=%region_44.148.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1684}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0921 16:29:41.114810 1956742 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 2s:
+
+  %sort.155 = f64[12844]{0} sort(%constant.7210), dimensions={0}, is_stable=true, to_apply=%region_74.278.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1684}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0921 16:29:41.149032 1956643 slow_operation_alarm.cc:140] The operation took 2.036024036s
+Constant folding an instruction is taking > 2s:
+
+  %sort.155 = f64[12844]{0} sort(%constant.7210), dimensions={0}, is_stable=true, to_apply=%region_74.278.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1684}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-21 16:36:28,801 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-21 16:46:59,082 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (630.3s). Step size: 0.0929. Divergent in the final warmup window: 0%
+2026-09-21 17:17:27,140 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2457.0s. Divergences: 0/1200 (0.0%). Tree depth: mean 5.7, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-21 17:17:27,952 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-21 17:17:27,952 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-21 17:23:22,251 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0078, ess_min=160
+2026-09-21 17:24:39,552 - __main__ - INFO - Saved results to analysis/paper1/results/fits/17376_III.npz
+2026-09-21 17:24:39,555 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/17376_III.json
+2026-09-21 17:24:39,562 - __main__ - INFO - ✓ Fit complete for galaxy 17376 config III
+  MAP initialization (1000 steps)...
+  MAP init done (loss=53.68)

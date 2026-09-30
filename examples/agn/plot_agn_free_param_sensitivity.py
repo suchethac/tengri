@@ -83,7 +83,10 @@ agn_fixed = {
     "all_params": tengri.Fixed(tengri.DEFAULT),
     "log_lbol": 12.0,
     "lum_ratio": 1.0,
-    **BLOCKS,
+    "disc": {"type": "multicolor", "log_mbh": tengri.FREE},
+    "torus": {"type": "nenkova", "tau": tengri.FREE, "theta_torus": tengri.FREE},
+    "nlr": {"type": "analytic"},
+    "blr": {"type": "none"},
 }
 model = tengri.SEDModel.build(
     ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0)
@@ -92,7 +95,7 @@ base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 SWEEPS = [
     ("agn_log_mbh", np.linspace(6.5, 9.5, 5), r"$\log_{10}(M_{\rm BH}/M_\odot)$"),
-    ("agn_log_ledd", np.linspace(-1.8, 0.3, 5), r"$\log_{10}(L/L_{\rm Edd})$"),
+    ("agn_theta_torus", np.linspace(20.0, 80.0, 5), r"Torus viewing angle $\theta$ [deg]"),
     ("agn_tau", np.linspace(10.0, 140.0, 5), r"Nenkova torus $\tau_{9.7}$"),
 ]
 

@@ -2142,10 +2142,13 @@ print(
 # Inoue+2014 and Madau+1995 at z = 2, 3, 5, 7, each evaluated on a shared
 # rest-frame grid (700-1300 Å, mapped through `(1+z)` to the observed frame
 # per model) so every redshift reads on one axis. Both codes agree on
-# Inoue+2014 to numerical precision at every z. Madau+1995's coarser absorber
-# statistics diverge as z increases and transmission approaches zero in the
-# Lyman forest. Window deviations |ΔT| in per cent of unit transmission over
-# 850–1210 Å, clear of the Lyα step at 1215.67 Å. Worst deviation printed below.
+# Inoue+2014 to numerical precision at every z. The Madau+1995 curves differ
+# only at the Lyman-series edges: tengri places each line at its vacuum wavelength
+# (Lyβ 1025.72 Å) while Synthesizer uses the paper's rounded values (1026 Å);
+# with the model's step at each edge the one-node offset reads as up to 21% of
+# unit transmission at z=5 and vanishes elsewhere. Window deviations |ΔT| in per cent
+# of unit transmission over 850–1210 Å, clear of the Lyα step at 1215.67 Å, where the
+# same wavelength-convention offset is larger. Worst deviation printed below.
 
 # %%
 _wave_rest_igm = np.linspace(700.0, 1300.0, 800)

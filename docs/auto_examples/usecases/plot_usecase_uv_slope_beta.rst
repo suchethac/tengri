@@ -57,8 +57,18 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1716: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.0612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=0.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.0612 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:2677: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.77 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.25 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.77 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:249: UserWarning: Glyph 946 (\N{GREEK SMALL LETTER BETA}) missing from font(s) cmr10.
+      ax_right.clabel(contours, inline=True, fontsize=8, fmt="β=%.1f")
+    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:251: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:251: UserWarning: Glyph 946 (\N{GREEK SMALL LETTER BETA}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:252: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
+    /tengri/examples/usecases/plot_usecase_uv_slope_beta.py:252: UserWarning: Glyph 946 (\N{GREEK SMALL LETTER BETA}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
 
 
 
@@ -197,7 +207,7 @@ References:
         sfh={
             "type": "tsnorm",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
+            "peak_lbt_gyr": tengri.FREE,
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
@@ -207,7 +217,7 @@ References:
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "tau_diff": 0.0,
+            "tau_diff": tengri.FREE,
             "tau_bc": 0.0,
         },
         redshift=tengri.Fixed(0.01),
@@ -298,7 +308,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.311 seconds)
+   **Total running time of the script:** (0 minutes 4.979 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

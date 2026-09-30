@@ -1,12 +1,6 @@
 # Units and conventions
 
-Tengri carries no `astropy.units`-style runtime tagging. Every array is
-a plain JAX array in a *fixed, documented unit*; conversions live as
-pure functions in `tengri.units`.
-
-This page lists the unit each layer expects, the conventions for
-metallicity / SFR / time, and the conversion helpers you'll reach for
-most often.
+Tengri carries no `astropy.units`-style runtime tagging. Every array is a plain JAX array in a fixed, documented unit, with conversions living as pure functions in `tengri.units`. This page lists the unit each layer expects, the conventions for metallicity, SFR, and time, and the conversion helpers you will reach for most often.
 
 ## The conventions, in one table
 
@@ -25,8 +19,7 @@ most often.
 | Distance modulus | mag | `distance_modulus_from_dl` |
 | Redshift | dimensionless | `redshift` parameter |
 
-Vacuum wavelengths throughout — including emission lines (`H_alpha = 6564.61 Å`).
-**Never use air wavelengths.** If you need them, convert at the boundary:
+Vacuum wavelengths are used throughout, including emission lines (`H_alpha = 6564.61 Å`). Never use air wavelengths. If you need them, convert at the boundary:
 
 ```python
 from tengri.units import vacuum_to_air
@@ -35,16 +28,14 @@ wave_air = vacuum_to_air(wave_vac)  # Å -> Å
 
 ## Where unit boundaries live
 
-Unit translations happen at three places. Everywhere else the unit is
-fixed:
+Unit translations happen at three places, with the unit fixed everywhere else:
 
 1. **`Parameters` → forward model.** User-facing names (`psd_tau_myr`,
    `agn_log_lbol`, `met_logzsol`) are translated to internal units
    (years, erg/s, `log10(Z)` absolute) by the `internal_param_map` on
    each registered component. The user only sees the friendly unit;
    the model only sees the internal one.
-2. **Forward model → observation.** `SEDModel.predict_*` returns flux
-   in the unit declared by the `Observation` — F_ν cgs by default.
+2. **Forward model → observation:** `SEDModel.predict_*` returns flux in the unit declared by the `Observation`, F_ν cgs by default.
 3. **Observation → user analysis.** Use the conversions below to take
    F_ν cgs to Jy, AB mag, maggies, etc., for plotting or comparison
    with catalog data.
@@ -106,8 +97,7 @@ units.attenuation_to_tau(att)
 
 ### Vega magnitudes
 
-`ab_to_vega` and `vega_to_ab` take a **float offset**, not a band name —
-`mag_Vega = mag_AB − offset`. The offsets ship as a dict:
+`ab_to_vega` and `vega_to_ab` take a float offset, not a band name: `mag_Vega = mag_AB − offset`. The offsets ship as a dict:
 
 ```python
 from tengri import units
@@ -124,48 +114,25 @@ list(units.AB_VEGA_OFFSETS)
 # ['U', 'B', 'V', 'R', 'I', 'J', 'H', 'K', 'u', 'g', 'r', 'i', 'z']
 ```
 
-So `AB_VEGA_OFFSETS["r"]`, never `AB_VEGA_OFFSETS["sdss_r"]` — there is no
-filter-registry lookup for the offset, and a registry id raises `KeyError`.
+So `AB_VEGA_OFFSETS["r"]`, never `AB_VEGA_OFFSETS["sdss_r"]`. There is no filter-registry lookup for the offset, and a registry id raises `KeyError`.
 Values are from Blanton & Roweis 2007, AJ, 133, 734 (Tables 3, 5).
 
-The full list (about 35 helpers) is `tengri.units.__all__` —
-`from tengri import units; help(units)` shows it.
+The full list (about 35 helpers) is `tengri.units.__all__` (run `from tengri import units; help(units)` to see it).
 
 ## Why no `astropy.units`
 
-Tengri is JAX-native and pre-1.0 research code. Wrapping every array in
-an `astropy.units.Quantity` would (a) break JIT, since `Quantity` is
-not a JAX type, (b) double the memory of every internal array, and
-(c) introduce subtle conversion edge cases at every `vmap` boundary.
+Tengri is JAX-native and pre-1.0 research code. Wrapping every array in an `astropy.units.Quantity` would break JIT (since `Quantity` is not a JAX type), double the memory of every internal array, and introduce subtle conversion edge cases at every `vmap` boundary.
 
-The convention here — *fixed unit per layer, conversion helpers at the
-boundary* — has been stable since v0.1 and matches what working
-SED-fitting codes (BAGPIPES, Prospector, FSPS) actually do under the
-hood. If you need to interoperate with `astropy.units` at the user
-layer, convert your inputs to plain arrays in tengri's units before
-the fit and tag the outputs after.
+The convention here (fixed unit per layer, conversion helpers at the boundary) has been stable since v0.1 and matches what working SED-fitting codes (BAGPIPES, Prospector, FSPS) do under the hood. If you need to interoperate with `astropy.units` at the user layer, convert your inputs to plain arrays in tengri's units before the fit and tag the outputs after.
 
 ## Common gotchas
 
-- **`agn_log_lbol`** is *always* `log10(L_bol / L_sun)` at the API
-  level. The AGN component converts to erg/s internally; user code
-  should never multiply by 3.828e33 itself.
-- **PSD timescale** is **Myr** as `psd_tau_myr` at the API level,
-  **years** as `psd_tau_yr` internally. The internal-param map handles
-  the `1e6` factor.
-- **Metallicity offset.** `met_logzsol` is `log10(Z/Z☉)` (user) but
-  the SSP grid is `log10(Z)` absolute. The translation adds
-  `LOG10_ZSUN = -1.848`, defined in `tengri.utils.physics_constants`.
-  Do not reproduce this constant by hand.
-- **Emission lines** are vacuum throughout. `H_alpha = 6564.61 Å`,
-  not 6562.8 Å (which is air).
-- **All SED components return `erg/s/Hz`** (standardized
-  2026-04-08). If you're implementing a component from another code,
-  normalize to this unit before returning.
-- **Per-band photometry units.** `predict_photometry` returns one F_ν
-  value per filter band, in cgs — the bandpass-averaged F_ν. The exact
-  weighting is the *filter-convolution convention*; see the dedicated
-  section below.
+- **`agn_log_lbol`** is always `log10(L_bol / L_sun)` at the API level. The AGN component converts to erg/s internally, so user code should never multiply by 3.828e33 itself.
+- **PSD timescale** is **Myr** as `psd_tau_myr` at the API level and **years** as `psd_tau_yr` internally, with the internal-param map handling the `1e6` factor.
+- **Metallicity offset:** `met_logzsol` is `log10(Z/Z☉)` at the user layer, but the SSP grid is `log10(Z)` absolute. The translation adds `LOG10_ZSUN = -1.848`, defined in `tengri.utils.physics_constants`. Do not reproduce this constant by hand.
+- **Emission lines** are vacuum throughout (`H_alpha = 6564.61 Å`, not 6562.8 Å, which is air).
+- **All SED components return `erg/s/Hz`** (standardized 2026-04-08). If you are implementing a component from another code, normalize to this unit before returning.
+- **Per-band photometry units:** `predict_photometry` returns one F_ν value per filter band in cgs (the bandpass-averaged F_ν). The exact weighting is the filter-convolution convention (see the dedicated section below).
 
 ## Photometric filter-convolution convention
 
@@ -197,23 +164,13 @@ equivalently the AB zero point enters as `AB₀ = 1.13492×10⁻¹³ L_⊙/Hz`
 | **`bessell`** (default) | `1/λ` | photon-counting | DSPS, FSPS, sedpy, Prospector |
 | **`energy`** | `1/λ²` | energy / flat-in-frequency | CIGALE, BAGPIPES |
 
-- **`bessell`** is the photon-counting AB convention — the physically
-  correct mean for photon-counting detectors (every optical/NIR CCD) and
-  how the AB system is realized by surveys. `∫ F_ν T dλ/λ ÷ ∫ T dλ/λ`.
-  This is the **default** and matches tengri's own SSP engine (DSPS).
+- **`bessell`** is the photon-counting AB convention (the physically correct mean for photon-counting detectors, including every optical/NIR CCD, and how the AB system is realized by surveys). Formula: `∫ F_ν T dλ/λ ÷ ∫ T dλ/λ`. This is the default and matches tengri's own SSP engine (DSPS).
 - **`energy`** is the flat-in-frequency mean, `∫ F_ν T dν ÷ ∫ T dν =
   ∫ F_ν T dλ/λ² ÷ ∫ T dλ/λ²`. Use it to reproduce CIGALE/BAGPIPES.
 
-The two agree exactly for a flat-`F_ν` source (the AB reference) and
-diverge by **5–40 mmag**, band- and SED-slope-dependent, for real SEDs.
-Pick the convention the observed catalog's fluxes were synthesized
-with: optical/NIR broadband → `bessell`; CIGALE-reduced products →
-`energy`.
+The two agree exactly for a flat-`F_ν` source (the AB reference) and diverge by 5–40 mmag (band- and SED-slope-dependent) for real SEDs. Pick the convention the observed catalog's fluxes were synthesized with: optical/NIR broadband uses `bessell`, while CIGALE-reduced products use `energy`.
 
-> **History / correctness note.** Through 2026-05, tengri weighted `F_ν`
-> by `λ` (not `1/λ`) — an f_λ→f_ν units transplant that matched neither
-> convention and biased colors. It is fixed; `bessell` is now bit-identical
-> to DSPS (pinned by `tests/crossval/test_filter_convention_parity.py`).
+> **History / correctness note:** Through 2026-05, tengri weighted `F_ν` by `λ` (not `1/λ`), an f_λ→f_ν units transplant that matched neither convention and biased colors. It is fixed now, with `bessell` bit-identical to DSPS (pinned by `tests/crossval/test_filter_convention_parity.py`).
 
 ### Choosing and introspecting
 
@@ -227,10 +184,7 @@ tengri.list_filter_conventions()
 # [2 results — filter_convention]
 ```
 
-Like every other `list_*` verb it returns a `_RegistryTable`, not a dict
-(unified across the `list_*` verbs), so index it by position or go through its helpers —
-`.names()` for the bare names, `.to_dict("name")` if you want the mapping
-this page used to show.
+Like every other `list_*` verb it returns a `_RegistryTable` (unified across the `list_*` verbs), not a dict. Index it by position or go through its helpers: `.names()` for the bare names, or `.to_dict("name")` if you want the mapping this page used to show.
 
 The convention is a **build-time** choice: it is baked into the
 preintegrated `WavePrecomp` lookup table, so the exact path
@@ -256,10 +210,6 @@ consistently with `w(λ)`.
 
 ## See also
 
-- [`docs/dev/NAMING_CONTRACT.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/NAMING_CONTRACT.md) —
-  parameter naming rules including unit suffixes (`_myr`, `_gyr`,
-  `_kms`) for user-facing parameters.
-- [`tengri.utils.physics_constants`](https://github.com/suchethac/tengri/blob/main/src/tengri/utils/physics_constants.py) —
-  the canonical source for `LOG10_ZSUN`, `L_SUN`, etc.
-- [`tengri.cosmology`](https://github.com/suchethac/tengri/blob/main/src/tengri/cosmology) —
-  Planck18 distance / age helpers for redshift conversions.
+- [`docs/dev/NAMING_CONTRACT.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/NAMING_CONTRACT.md): parameter naming rules including unit suffixes (`_myr`, `_gyr`, `_kms`) for user-facing parameters.
+- [`tengri.utils.physics_constants`](https://github.com/suchethac/tengri/blob/main/src/tengri/utils/physics_constants.py): the canonical source for `LOG10_ZSUN`, `L_SUN`, etc.
+- [`tengri.cosmology`](https://github.com/suchethac/tengri/blob/main/src/tengri/cosmology): Planck18 distance / age helpers for redshift conversions.

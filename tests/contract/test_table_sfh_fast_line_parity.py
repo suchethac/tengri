@@ -90,18 +90,25 @@ def _build(synthetic_ssp_wide, synthetic_tophat_obs, *, met_table=False):
 
 
 def _history_params(model, *, sfr_level=3.0, met=None, sfr=None):
-    """Full params dict + the runtime history arrays.
+    """Full (merged) params dict + the runtime history arrays.
 
-    Built from ``spec.sample`` rather than hand-assembled, because ``sample``
-    returns **Fixed** values too (``redshift``, ``met_logzsol``). A hand-built
-    dict omitting them sends ``compute_joint_weights`` down its
-    ``params.get("redshift", 0.0)`` default — z=0 instead of the model's fixed
+    ``compute_joint_weights`` is a low-level component method, called directly
+    here — it reads ``params["redshift"]`` etc. straight out of the dict, with
+    no merge of its own (``require_redshift``). ``spec.sample()`` is free-only
+    (#2296), so this merges the spec's Fixed values in explicitly: a dict
+    omitting ``redshift`` would send ``compute_joint_weights`` down its
+    "missing" branch — z absent entirely, rather than the model's fixed
     redshift — so the fast and exact routes would be compared at *different
     cosmic times*, and the parity assertion would fail for a reason that has
-    nothing to do with tabulated histories. (That default is the #1432 class;
-    real callers pass a full dict, which is what this mirrors.)
+    nothing to do with tabulated histories.
+
+    Callers that hand this dict to a **self-merging** public method (e.g.
+    ``model.predict_state``) must filter it back down to the free names first
+    — that method refuses a Fixed key of its own (#2296).
     """
-    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    from tengri.parameters.resolve import merge_fixed_params
+
+    params = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
     params["dust_tau_diff"] = jnp.asarray(0.3)
     if sfr is None:
         shape = np.ones(_T_GYR.shape[0])
@@ -147,10 +154,14 @@ def test_table_sfh_fast_weights_match_the_exact_forward(synthetic_ssp_wide, synt
     model = _build(synthetic_ssp_wide, synthetic_tophat_obs)
     stellar = _stellar_of(model)
 
+    fixed_names = set(model.spec.fixed_params)
+
     for level in (0.5, 3.0, 17.0):
         params = _history_params(model, sfr_level=level)
         jw_fast, mass_fast, _ = stellar.compute_joint_weights(params)
-        state = model.predict_state(params)
+        # predict_state self-merges (#2296): pass it everything EXCEPT the
+        # Fixed keys _history_params already merged in.
+        state = model.predict_state({k: v for k, v in params.items() if k not in fixed_names})
         jw_exact = np.asarray(state.derived["joint_weights"])
 
         assert np.array_equal(np.asarray(jw_fast), jw_exact), (
@@ -196,7 +207,11 @@ def test_table_metallicity_fast_weights_match_the_exact_forward(
     params = _history_params(model, met=met)
 
     jw_fast, mass_fast, _ = stellar.compute_joint_weights(params)
-    jw_exact = np.asarray(model.predict_state(params).derived["joint_weights"])
+    # predict_state self-merges (#2296): pass it everything EXCEPT the Fixed
+    # keys _history_params already merged in.
+    fixed_names = set(model.spec.fixed_params)
+    free_view = {k: v for k, v in params.items() if k not in fixed_names}
+    jw_exact = np.asarray(model.predict_state(free_view).derived["joint_weights"])
 
     # Relative to the peak weight, not per-cell: the smallest cells are ~1e-17
     # and a per-cell ratio there measures nothing but round-off. rtol=1e-13 sits

@@ -23,7 +23,6 @@ OIII_5007 17.5% wrong, NII_6584 5.3%. That is refused, not warned about.
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -32,18 +31,21 @@ pytestmark = [pytest.mark.regression_bug]
 
 
 def _find_data_file(name):
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "data" / name
-        if candidate.is_file():
-            return candidate
-    return None
+    """The file via the canonical locator, or None (honors the #2329 pin)."""
+    from tengri._data_setup import find_data
+
+    return find_data(name)
 
 
 # Cue needs its trained weights and a bare-stellar SSP; both are gitignored, so
-# the model-level arms skip on CI and run wherever the grids are present.
+# the model-level arms skip on CI and run wherever the grids are present. The
+# probe goes through the canonical locator, not a hand-rolled ancestor walk:
+# a walk finds the main checkout's weights from a nested worktree while the
+# model build (which honors the #2329 hermeticity pin) cannot, and the two
+# then disagree about whether the arm can run.
 requires_cue = pytest.mark.skipif(
     _find_data_file("cue_weights.npz") is None,
-    reason="Cue weights not found in any parent data/",
+    reason="Cue weights not on the data search path",
 )
 
 _N_T = 40
@@ -180,7 +182,6 @@ def test_the_lut_agrees_with_the_exact_line_path_on_a_tabulated_sfh(line_obs):
 
     import tengri
     from tengri import FeaturePrecomp, WavePrecomp
-    from tengri.parameters.resolve import resolve_fixed_params
 
     obs, waves = line_obs
     ssp = tengri.load_ssp()
@@ -197,12 +198,8 @@ def test_the_lut_agrees_with_the_exact_line_path_on_a_tabulated_sfh(line_obs):
             "sfh_t_gyr": jnp.asarray(_T),
             "sfh_sfr": jnp.asarray(sfr),
         }
-        a = np.asarray(
-            exact.predict_line_fluxes(resolve_fixed_params(exact, p), target_wavelengths=waves)
-        )
-        b = np.asarray(
-            lut.predict_line_fluxes(resolve_fixed_params(lut, p), target_wavelengths=waves)
-        )
+        a = np.asarray(exact.predict_line_fluxes(p, target_wavelengths=waves))
+        b = np.asarray(lut.predict_line_fluxes(p, target_wavelengths=waves))
         worst = max(worst, float(np.abs(b / a - 1).max()))
     assert worst < 0.01, f"LUT departs from exact by {worst:.2%} (measured 0.35%)"
 

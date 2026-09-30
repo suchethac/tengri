@@ -54,9 +54,11 @@ def test_eline_fitted_amplitude_names_in_free_names():
         spec=model_spec,
         wave_obs=wave,
         _spectral_resolution=2000.0,
-        _spectroscopy_config=cfg,
         predict_spectrum=lambda params, w=None, **kwargs: continuum,
-        observation=None,
+        observation=types.SimpleNamespace(
+            spectroscopy=cfg,
+            photometry=None,
+        ),
     )
 
     # Create Fitter without running fit — just construct

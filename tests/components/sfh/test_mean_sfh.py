@@ -114,41 +114,89 @@ class TestDoublePowerlaw:
     def test_positive_output(self):
         """SFR is positive for all lookback times."""
         t = jnp.logspace(6, 10, 200)
-        sfr = double_powerlaw(t, alpha=1.0, beta=1.0, tau=1e9, norm=10.0)
+        sfr = double_powerlaw(t, alpha=1.0, beta=1.0, tau=1e9, norm=10.0, age=_AGE_UNIV_YR)
         assert jnp.all(sfr > 0)
 
     def test_peak_near_tau(self):
-        """SFR peaks near t = tau for symmetric alpha=beta."""
-        t = jnp.logspace(6, 10, 1000)
+        """SFR peaks at cosmic time T=tau after formation (alpha=beta).
+
+        For symmetric alpha=beta, the double power law SFR(T) ∝ 1/(T/tau)^alpha
+        peaks at T = tau. In lookback time, this is at t = age - tau.
+        """
         tau = 1e9
-        sfr = double_powerlaw(t, alpha=2.0, beta=2.0, tau=tau, norm=10.0)
+        age = _AGE_UNIV_YR
+        expected_peak = age - tau  # cosmic-time peak at T=tau
+        # Use a wide range that includes the peak
+        t = jnp.linspace(1e6, expected_peak + 2e9, 1000)
+        sfr = double_powerlaw(t, alpha=2.0, beta=2.0, tau=tau, norm=10.0, age=age)
         peak_idx = jnp.argmax(sfr)
         peak_t = t[peak_idx]
-        assert 0.5 * tau < float(peak_t) < 2.0 * tau
+        assert_allclose(float(peak_t), expected_peak, rtol=0.02)
 
     def test_peak_value_equals_norm(self):
-        """At the exact peak (symmetric case), SFR = norm / 2."""
+        """At cosmic-time peak T=tau (symmetric case), SFR = norm / 2.
+
+        For alpha=beta=1, the peak is at T = tau where SFR = norm/(1+1) = norm/2.
+        In lookback time, this is at t = age - tau.
+        """
         tau = 1e9
-        sfr_at_tau = double_powerlaw(jnp.array(tau), alpha=1.0, beta=1.0, tau=tau, norm=10.0)
+        age = _AGE_UNIV_YR
+        t_peak = age - tau  # cosmic-time peak location in lookback time
+        sfr_at_tau = double_powerlaw(
+            jnp.array(t_peak), alpha=1.0, beta=1.0, tau=tau, norm=10.0, age=age
+        )
         assert_allclose(float(sfr_at_tau), 5.0, rtol=1e-10)
 
     def test_falling_at_late_times(self):
-        """SFR decreases at t >> tau (controlled by alpha)."""
+        """SFR shape matches formula: peaks at T=tau*(beta/alpha)^(1/(alpha+beta)).
+
+        For alpha=2, beta=1, the peak is at T = tau * 2^(-1/3) ≈ 0.63*tau.
+        Test that the function evaluates correctly at several points.
+        """
         tau = 1e8
-        t_late = jnp.array([1e9, 2e9, 5e9, 1e10])
-        sfr = double_powerlaw(t_late, alpha=2.0, beta=1.0, tau=tau, norm=10.0)
-        assert jnp.all(jnp.diff(sfr) < 0)
+        age = _AGE_UNIV_YR
+        alpha = 2.0
+        beta = 1.0
+
+        # Peak is at T = tau * (beta/alpha)^(1/(alpha+beta))
+        peak_T = tau * (beta / alpha) ** (1.0 / (alpha + beta))
+        peak_t_lookback = age - peak_T
+
+        # Test a point well after the peak (small T: rising phase controlled by beta)
+        t_before_peak = age - 0.1 * tau  # T = 0.1*tau, before peak
+        sfr_before = double_powerlaw(
+            jnp.array(t_before_peak), alpha=alpha, beta=beta, tau=tau, norm=10.0, age=age
+        )
+
+        # Test the peak location
+        sfr_at_peak = double_powerlaw(
+            jnp.array(peak_t_lookback), alpha=alpha, beta=beta, tau=tau, norm=10.0, age=age
+        )
+
+        # Test a point before the peak (large T: declining phase controlled by alpha)
+        t_after_peak = age - 5.0 * tau  # T = 5*tau, after peak
+        sfr_after = double_powerlaw(
+            jnp.array(t_after_peak), alpha=alpha, beta=beta, tau=tau, norm=10.0, age=age
+        )
+
+        # Peak should be higher than the points on either side
+        assert float(sfr_at_peak) > float(sfr_before), "SFR at peak should exceed early-time value"
+        assert float(sfr_at_peak) > float(sfr_after), "SFR at peak should exceed late-time value"
 
     def test_has_gradients(self):
-        """FD check: gradients w.r.t. all 4 DPL parameters (alpha, beta, tau, norm)."""
+        """FD check: gradients w.r.t. all 5 DPL parameters (alpha, beta, tau, norm, age)."""
         t = jnp.logspace(6, 10, 100)
         alpha0, beta0, tau0, norm0 = 1.0, 1.0, 1e9, 10.0
 
         # alpha
         def f_a(a):
-            return float(jnp.sum(double_powerlaw(t, a, beta0, tau0, norm0)))
+            return float(jnp.sum(double_powerlaw(t, a, beta0, tau0, norm0, age=_AGE_UNIV_YR)))
 
-        g_a = float(jax.grad(lambda a: jnp.sum(double_powerlaw(t, a, beta0, tau0, norm0)))(alpha0))
+        g_a = float(
+            jax.grad(
+                lambda a: jnp.sum(double_powerlaw(t, a, beta0, tau0, norm0, age=_AGE_UNIV_YR))
+            )(alpha0)
+        )
         np.testing.assert_allclose(
             g_a,
             fd_grad(f_a, alpha0),
@@ -158,9 +206,13 @@ class TestDoublePowerlaw:
 
         # beta
         def f_b(b):
-            return float(jnp.sum(double_powerlaw(t, alpha0, b, tau0, norm0)))
+            return float(jnp.sum(double_powerlaw(t, alpha0, b, tau0, norm0, age=_AGE_UNIV_YR)))
 
-        g_b = float(jax.grad(lambda b: jnp.sum(double_powerlaw(t, alpha0, b, tau0, norm0)))(beta0))
+        g_b = float(
+            jax.grad(
+                lambda b: jnp.sum(double_powerlaw(t, alpha0, b, tau0, norm0, age=_AGE_UNIV_YR))
+            )(beta0)
+        )
         np.testing.assert_allclose(
             g_b,
             fd_grad(f_b, beta0),
@@ -170,10 +222,14 @@ class TestDoublePowerlaw:
 
         # tau (large scale — eps=1e4 yr)
         def f_tau(tau):
-            return float(jnp.sum(double_powerlaw(t, alpha0, beta0, tau, norm0)))
+            return float(jnp.sum(double_powerlaw(t, alpha0, beta0, tau, norm0, age=_AGE_UNIV_YR)))
 
         g_tau = float(
-            jax.grad(lambda tau: jnp.sum(double_powerlaw(t, alpha0, beta0, tau, norm0)))(tau0)
+            jax.grad(
+                lambda tau: jnp.sum(
+                    double_powerlaw(t, alpha0, beta0, tau, norm0, age=_AGE_UNIV_YR)
+                )
+            )(tau0)
         )
         np.testing.assert_allclose(
             g_tau,
@@ -184,9 +240,13 @@ class TestDoublePowerlaw:
 
         # norm
         def f_n(n):
-            return float(jnp.sum(double_powerlaw(t, alpha0, beta0, tau0, n)))
+            return float(jnp.sum(double_powerlaw(t, alpha0, beta0, tau0, n, age=_AGE_UNIV_YR)))
 
-        g_n = float(jax.grad(lambda n: jnp.sum(double_powerlaw(t, alpha0, beta0, tau0, n)))(norm0))
+        g_n = float(
+            jax.grad(
+                lambda n: jnp.sum(double_powerlaw(t, alpha0, beta0, tau0, n, age=_AGE_UNIV_YR))
+            )(norm0)
+        )
         np.testing.assert_allclose(
             g_n,
             fd_grad(f_n, norm0),
@@ -210,7 +270,7 @@ class TestDpl:
         age = _AGE_UNIV_YR
         t = jnp.logspace(6, 10, 200)
         T = jnp.maximum(age - t, 0.0)
-        sfr_bare = double_powerlaw(T, alpha=1.5, beta=1.0, tau=3e9, norm=10.0)
+        sfr_bare = double_powerlaw(t, alpha=1.5, beta=1.0, tau=3e9, norm=10.0, age=age)
         sfr_new = dpl(t, alpha=1.5, beta=1.0, tau=3e9, age=age, log_total_mass=10.0)
         mask = (sfr_bare > 0) & (T > 0)
         ratio = sfr_new[mask] / sfr_bare[mask]
@@ -483,17 +543,25 @@ class TestDelayedTau:
     """Tests for delayed-tau SFH (legacy)."""
 
     def test_peaks_at_tau(self):
-        """SFR peaks at t = tau (analytic)."""
+        """SFR peaks at cosmic time T = tau after formation.
+
+        In cosmic time since formation (T = age - t_lookback), the
+        delayed-tau SFR = T * exp(-T/tau) peaks analytically at T = tau.
+        In lookback time, this corresponds to peak at t_lookback = age - tau.
+        """
         tau = 1e8
-        t = jnp.logspace(6, 10, 10000)
-        sfr = delayed_tau(t, tau=tau, norm=1.0)
+        age = _AGE_UNIV_YR
+        expected_peak = age - tau  # cosmic-time peak at T=tau
+        # Use a range that includes the expected peak
+        t = jnp.linspace(1e6, expected_peak + 2e8, 10000)
+        sfr = delayed_tau(t, tau=tau, norm=1.0, age=age)
         peak_t = float(t[jnp.argmax(sfr)])
-        assert_allclose(peak_t, tau, rtol=0.05)
+        assert_allclose(peak_t, expected_peak, rtol=0.02)
 
     def test_positive(self):
-        """SFR is positive."""
+        """SFR is positive for all lookback times."""
         t = jnp.logspace(6, 10, 100)
-        sfr = delayed_tau(t, tau=1e8, norm=1.0)
+        sfr = delayed_tau(t, tau=1e8, norm=1.0, age=_AGE_UNIV_YR)
         assert jnp.all(sfr > 0)
 
 

@@ -900,6 +900,29 @@
    "name": "builtin_function_or_method"
   }
  ],
+ "spec": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters.parameters",
+   "module_short": "tengri.parameters.parameters",
+   "name": "Parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Parameters"
+  }
+ ],
  "spec_out": [
   {
    "is_class": false,
@@ -1064,34 +1087,34 @@
    "name": "Observation"
   }
  ],
- "tengri.SEDModel.build": [
+ "tengri.SEDModel": [
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.build"
+   "name": "SEDModel"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.build"
+   "name": "SEDModel"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.build"
+   "name": "SEDModel"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.SEDModel",
-   "module_short": "tengri.SEDModel",
-   "name": "build"
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel"
   }
  ],
  "tengri.Spectroscopy": [
@@ -1124,6 +1147,57 @@
    "name": "Spectroscopy"
   }
  ],
+ "tengri.Uniform": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri",
+   "name": "Uniform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri",
+   "name": "Uniform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Uniform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri.parameters.priors",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Distribution"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Uniform"
+  }
+ ],
  "tengri.load_ssp": [
   {
    "is_class": false,
@@ -1138,6 +1212,22 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "load_ssp"
+  }
+ ],
+ "tengri.parse_groups": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "parse_groups"
   }
  ],
  "warnings.filterwarnings": [

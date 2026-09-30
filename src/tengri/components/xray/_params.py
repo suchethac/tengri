@@ -79,7 +79,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(20.0),
         "Line-of-sight equivalent hydrogen column density [log10(cm^-2)]. "
         "Typical range 20 (unobscured) to 24 (Compton-thick). Controls "
-        "photoelectric absorption below ~2 keV (Morrison & McCammon 1983).",
+        "photoelectric absorption below ~2 keV (wabs cross-sections, Morrison & McCammon 1983 — "
+        "not Wilms+2000 tbabs; the two differ by 10–30 % below ~1 keV).",
         lambda lo, hi: 0 <= lo <= 26,
         "must be in [0, 26]",
         # The [0, 26] bound is what the absorption model tolerates, not a

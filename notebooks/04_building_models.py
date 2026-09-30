@@ -16,11 +16,11 @@
 # %% [markdown]
 # # Building models
 #
-# A tengri model is a few blocks of physics — a star-formation history, a dust
-# law, a nebular backend, optionally an AGN — and a statement of which
-# parameters are free. The nested-dict grammar (after BAGPIPES) lets you write
-# that down one block at a time: a dict per group, with `'type'` for the
-# structural choice and an `'all_params'` wildcard for free/fixed.
+# A tengri model combines a few blocks of physics: a star-formation history, a dust
+# law, a nebular backend, and optionally an AGN, along with a statement of which
+# parameters are free. The nested-dict grammar (after BAGPIPES) expresses
+# this one block at a time: a dict per group, with `'type'` for the
+# structural choice and an `'all_params'` wildcard for free or fixed.
 # (`'all_params'` is the only wildcard spelling; the older `'*'` is retired
 # and raises ValueError with an error message naming the replacement.)
 
@@ -128,10 +128,10 @@ print(
 #
 # The nested-dict API offers four ways to build a model:
 #
-# 1. **Recipe** — curated template for a common scenario
-# 2. **Direct nested dict** — hand-built mapping, JSON-friendly
-# 3. **Builder factories** — `tengri.builders.sfh.dpl(...)` etc., autocomplete-friendly
-# 4. **Round-trip** — extract from existing model, tweak, rebuild
+# 1. **Recipe** (curated template for a common scenario)
+# 2. **Direct nested dict** (hand-built mapping, JSON-friendly)
+# 3. **Builder factories** (`tengri.builders.sfh.dpl(...)` etc., autocomplete-friendly)
+# 4. **Round-trip** (extract from existing model, tweak, rebuild)
 
 # %%
 # Path 1: Recipe (curated template)
@@ -168,7 +168,7 @@ print()
 # `tengri.builders.sfh.dpl(...)` carries a real signature listing the
 # variant's parameters by short name, so hovering or autocompleting in an
 # IDE surfaces `alpha`, `beta`, `tau_gyr`, `log_total_mass` directly. A typo
-# (`beat=...`) is rejected immediately with the list of valid names —
+# (`beat=...`) is rejected immediately with the list of valid names, so
 # you don't have to wait until SEDModel.build() runs.
 print("PATH 3: Builder factories")
 factory_groups = {
@@ -194,7 +194,7 @@ print()
 print("PATH 4: Round-trip")
 groups_from_model = model1.spec.to_groups()
 # Tweak: pin the redshift to a known value (e.g. a spectroscopic z) instead of
-# fitting it — a common real edit that drops one free parameter.
+# fitting it, a common real edit that drops one free parameter.
 groups_from_model["redshift"] = Fixed(2.0)
 model3 = SEDModel.build(ssp_data=ssp, observation=observation, **groups_from_model)
 print(f"  Model: {model3.spec.n_free} free params after pinning redshift")
@@ -206,7 +206,7 @@ print(f"  Redshift now fixed: {'redshift' not in model3.spec.free_params}")
 # `tengri.builders.*` factories provide autocomplete and early error detection.
 
 # %% [markdown]
-# ### SFH variants — 26+ parametrizations
+# ### SFH variants (26+ parametrizations)
 
 # %%
 print("SFH Variants Tour")
@@ -264,7 +264,7 @@ print(f"Summary:\n{spec_dust_tour.summary_str()}")
 print()
 
 # %% [markdown]
-# ### Nebular backends — cue, cloudy, cb19, ssp, none
+# ### Nebular backends: cue, cloudy, cb19, ssp, none
 
 # %%
 print("Nebular Backend Tour")
@@ -319,7 +319,7 @@ print("Note: Supplying log_n_hi auto-sets dla=True (Damped Lyman Alpha)")
 print()
 
 # %% [markdown]
-# ### Composable AGN — disc, torus, NLR, FeII, attenuation
+# ### Composable AGN (disc, torus, NLR, FeII, attenuation)
 
 # %%
 print("Composable AGN Tour")
@@ -348,15 +348,15 @@ print()
 # Use `model.spec.summary_str()` to inspect how each parameter got its value.
 # The tags show the source:
 #
-# - `[user]` — explicitly specified in your nested dict
-# - `[all_params FREE]` — matched by wildcard directive
-# - `[all_params Fixed(DEFAULT)]` — matched by wildcard directive
-# - `[default]` — registry default (usually fixed at median)
+# - `[user]`: explicitly specified in your nested dict
+# - `[all_params FREE]`: matched by wildcard directive
+# - `[all_params Fixed(DEFAULT)]`: matched by wildcard directive
+# - `[default]`: registry default (usually fixed at median)
 #
 # The `neb` group below deliberately states no disposition so the summary can
-# show `[default]` tags — and the `DefaultFixedParametersWarning` it triggers
+# show `[default]` tags. The `DefaultFixedParametersWarning` it triggers
 # is the grammar flagging exactly that: a group you engaged that yielded
-# nothing free. Stating `{'all_params': Fixed(DEFAULT)}` is how you say it was intentional.
+# nothing free. Stating `{'all_params': Fixed(DEFAULT)}` marks the choice as intentional.
 
 # %%
 # Build a model with mixed provenance
@@ -383,12 +383,12 @@ print(spec.summary_str())
 # %% [markdown]
 # ## Vary the SFH family
 #
-# The nested-dict interface makes it simple to swap structural choices.
-# Each SFH family carries different parameter names — the parser handles
-# this automatically.
+# Swapping a structural choice is a one-line edit in the nested dict. Each SFH
+# family carries different parameter names, and the parser resolves them
+# automatically.
 #
-# Below we show how a single base dict + one-line edits capture the same
-# physics as the old six Parameters(...) blocks.
+# Below we start from a single base dict and change one line at a time to
+# move between SFH families.
 
 # %%
 sfh_families = [
@@ -480,9 +480,9 @@ print("Example: tengri.describe('dpl') shows the parametrization and physics.")
 #
 # Radio emission combines star-formation-driven synchrotron (from the FIR–radio
 # correlation) and AGN jets. The grammar uses two peer sub-blocks:
-# `radio={'sf': {'type': ...}, 'agn': {'type': ...}}`.
-# The legacy flat `radio_sfr_mode` / `radio_agn_model` parameter form is retired;
-# the nested structure is now the canonical API.
+# `radio={'sf': {'type': ...}, 'agn': {'type': ...}}`, replacing the legacy flat
+# `radio_sfr_mode` and `radio_agn_model` parameters. The nested structure is the
+# canonical API.
 
 # %%
 print("Radio Emission Tour")
@@ -543,9 +543,9 @@ print()
 # Shock-driven line emission (MAPPINGS V models) adds to photoionized nebular
 # emission. The shock bucket defaults to all fixed; to free parameters, use
 # explicit priors (e.g. `shock={'frac': Uniform(0, 1)}`). The `all_params: FREE`
-# wildcard is deliberately refused for shock — it is not a silent no-op but a
-# guard against misconfiguration. Shock light passes the diffuse dust screen
-# by default (`dust_attenuation`'s `shock_screen`).
+# wildcard is deliberately refused for shock as a guard against misconfiguration.
+# Shock light passes the diffuse dust screen by default (`dust_attenuation`'s
+# `shock_screen`).
 
 # %%
 print("Shock Emission Tour")
@@ -794,8 +794,8 @@ fig.savefig(FIG_DIR / "04_sfh_family_grid.pdf", bbox_inches="tight")
 #
 # SFH fixed at tsnorm, sweep the attenuation law. Both the amount of
 # attenuation and the shape of the curve move the UV-to-optical ratio and the
-# overall tilt. Only the `law` value changes between models here — swapping
-# it re-declares the relevant dust parameters automatically.
+# overall tilt. Only the `law` value changes between models. Swapping it
+# re-declares the relevant dust parameters automatically.
 
 # %%
 dust_laws = [
@@ -907,7 +907,7 @@ pred_nodust = model_nodust.predict(truth_nodust)
 wave_obs_um = np.asarray(pred_nodust.wave_rest) * (1.0 + z) / 1e4
 sed_fnu_nodust = np.asarray(units.lnu_to_fnu(pred_nodust.rest_sed(), dl_cm, z))
 
-# Clip to visible window — keeps log-autoscale honest
+# Clip to visible window, which keeps log-autoscale honest
 _mask_ref = (wave_obs_um >= 0.1) & (wave_obs_um <= 30)
 ax_ref.loglog(
     wave_obs_um[_mask_ref],
@@ -1268,7 +1268,7 @@ print(f"  Fixed z has 'redshift': {'redshift' in spec_fixed_z.free_params}")
 # ## Forward-model timing
 #
 # A single prediction against 50 sequential ones. The first call pays the JIT
-# compile; after that each prediction is cheap, and a `vmap` over parameters
+# compile, and each subsequent prediction is cheap. A `vmap` over parameters
 # would collapse the 50 into one batched call.
 
 # %%
@@ -1338,10 +1338,10 @@ print("sensitivity study, vmap() when you want the whole batch at once.")
 #
 # Key methods and entry points worth remembering:
 #
-# - `recipes.*()` — curated starting points
-# - `SEDModel.build(..., filters=...)` — build and evaluate in one line
-# - `model.spec.to_groups()` — pull the structure back out to edit
-# - `model.spec.summary_str()` — where each parameter value came from
+# - `recipes.*()`: curated starting points
+# - `SEDModel.build(..., filters=...)`: build and evaluate in one line
+# - `model.spec.to_groups()`: pull the structure back out to edit
+# - `model.spec.summary_str()`: where each parameter value came from
 #
 # From here, the [`quickstart`](00_quickstart.py)
 # runs a real fit and reads its posterior;

@@ -140,31 +140,14 @@ class TestEveryLawKeywordDeclared:
         declared_names = {param.name for param in ATTENUATION_PARAMS}
         declared_names |= {param.name for param in SINGLE_COMPONENT_PARAMS}
 
-        # Known undeclared kwargs that are read by laws but not declared yet.
-        # dust_tea_scatter: read by tea_emission law; a follow-up commit declares it.
-        # dust_c1, dust_c2, dust_c3, dust_c4: read by li08 law; similar follow-up commit.
-        # dust_bump_x0, dust_bump_gamma: read by noll09 law; similar follow-up commit.
-        _KNOWN_UNDECLARED = frozenset(
-            {
-                "dust_tea_scatter",
-                "dust_c1",
-                "dust_c2",
-                "dust_c3",
-                "dust_c4",
-                "dust_bump_x0",
-                "dust_bump_gamma",
-            }
-        )
-
         # For each law, its kwargs (minus wavelength and redshift) must be in declared
         for law_name in DUST_LAWS:
             kw_set = law_kwarg_names(law_name)
             # law_kwarg_names may or may not include wavelength/redshift; check both
             subset = kw_set - {"wavelength", "redshift"}
-            missing = subset - declared_names - _KNOWN_UNDECLARED
+            missing = subset - declared_names
             assert not missing, (
-                f"Law {law_name!r} has undeclared kwargs: {missing}. "
-                f"Declared: {declared_names}, Undeclared OK: {_KNOWN_UNDECLARED}"
+                f"Law {law_name!r} has undeclared kwargs: {missing}. Declared: {declared_names}"
             )
 
 

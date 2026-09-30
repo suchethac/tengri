@@ -33,3 +33,10 @@ _LYMAN_LIMIT: float = 911.76
 #   offset = −3.07 − (−1.848) = −1.222
 _LOG_OH_SOLAR: float = -3.07
 _LOG_OH_OFFSET: float = _LOG_OH_SOLAR - _LOG10_ZSUN  # ≈ -1.222
+
+# Optically thin thermal bremsstrahlung spectral index (L_nu ∝ nu^alpha) used
+# to continue tabulated nebular continua past their last node (#2346).
+# The same value as the radio block's Murphy+2011 `radio_freefree` default
+# `alpha_ff`. pcigale's tabulated nebular continuum measures -0.096 over 1 cm
+# to 1 m, so -0.1 is a reasonable nominal value for the free-free extension.
+NEBULAR_FREEFREE_TAIL_ALPHA_NU: float = -0.1

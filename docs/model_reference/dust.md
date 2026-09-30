@@ -88,7 +88,7 @@ Table {ref}`1 <tab-dust-curves>` lists the attenuation curves registered in ten
 | `salim` | Salim+2018 (DSPS default) | Yes | $\delta$, $E_b$ |
 | `tea` | Haskell et al. (2024) | Yes | $p$, $b_{\rm UV}$ |
 | `narayanan_z` | Narayanan+2018 ($z$-dependent) | Yes | $z$ (redshift) |
-| `conroy2010` | Conroy+2010 (MW+power law) | Yes | $f_{\rm MW}$ |
+| `conroy2010` | Conroy+2010 (CCM89, scaled 2175 Å bump) | Yes | $R_V$, $B$ (bump strength) |
 
 : Attenuation curves available in tengri. Three dust geometry models (`wg00_shell`, `wg00_cloudy`, `wg00_dusty`; Witt and Gordon (2000)) are also available.
 

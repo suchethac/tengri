@@ -97,10 +97,10 @@ def test_both_public_predict_surfaces_work_on_one_model(synthetic_ssp_wide, synt
             },
             redshift=Fixed(2.0),
         )
-        params = {
-            **model.spec.get_fixed_values(),
-            **model.spec.sample(jax.random.PRNGKey(0)),
-        }
+        # spec.sample() is free-only (#2296); the spec merges its own Fixed
+        # values in, so a get_fixed_values() spread here would now be refused
+        # as a Fixed-key override.
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
         # Order matters: the lean path first, so it is the one that populates
         # the template cache from inside its trace. Reversing this hides the bug.

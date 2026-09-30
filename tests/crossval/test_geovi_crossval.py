@@ -482,19 +482,16 @@ class TestOptimizeKLConvergence:
         # --- NIFTy geoVI ---
         nifty_pos = jft.Vector(init_pos)
         _, opt_key = jax.random.split(jax.random.PRNGKey(42))
-        try:
-            samples_nifty, _ = jft.optimize_kl(
-                nifty_likelihood,
-                nifty_pos,
-                n_total_iterations=n_iterations,
-                n_samples=n_samples,
-                key=opt_key,
-                sample_mode="nonlinear_resample",
-                odir=None,
-                **_NIFTY_KW,
-            )
-        except Exception as e:
-            pytest.skip(f"NIFTy optimize_kl failed: {e}")
+        samples_nifty, _ = jft.optimize_kl(
+            nifty_likelihood,
+            nifty_pos,
+            n_total_iterations=n_iterations,
+            n_samples=n_samples,
+            key=opt_key,
+            sample_mode="nonlinear_resample",
+            odir=None,
+            **_NIFTY_KW,
+        )
 
         converged_nifty = samples_nifty.pos
         nifty_dict = (
@@ -569,19 +566,16 @@ class TestPosteriorWidthComparison:
         # --- NIFTy: converge + draw samples ---
         nifty_pos = jft.Vector(init_pos)
         _, opt_key = jax.random.split(jax.random.PRNGKey(77))
-        try:
-            samples_nifty, _ = jft.optimize_kl(
-                nifty_likelihood,
-                nifty_pos,
-                n_total_iterations=8,
-                n_samples=3,
-                key=opt_key,
-                sample_mode="nonlinear_resample",
-                odir=None,
-                **_NIFTY_KW,
-            )
-        except Exception as e:
-            pytest.skip(f"NIFTy optimize_kl failed: {e}")
+        samples_nifty, _ = jft.optimize_kl(
+            nifty_likelihood,
+            nifty_pos,
+            n_total_iterations=8,
+            n_samples=3,
+            key=opt_key,
+            sample_mode="nonlinear_resample",
+            odir=None,
+            **_NIFTY_KW,
+        )
 
         converged_nifty = samples_nifty.pos
         nifty_pos_dict = (

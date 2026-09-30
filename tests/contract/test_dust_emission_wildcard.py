@@ -76,7 +76,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 from tengri.config.exceptions import ParameterError
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
@@ -468,8 +468,27 @@ def test_dale2014_reads_alpha_dale_not_alpha(synthetic_ssp_wide, panchromatic_ob
     Without this, a fix could satisfy the sweep above by freeing *any* live
     parameter while leaving Dale+2014's slope unreachable.
     """
-    # Built with the wildcard Fixed(DEFAULT), since 'all_params': FREE now correctly refuses here.
+    # Built with the wildcard Fixed(DEFAULT), since 'all_params': FREE now
+    # correctly refuses here. Both dust_alpha (THEMIS's slope) and
+    # dust_alpha_dale (Dale+2014's own slope) are declared in the shared
+    # dust-emission parameter namespace regardless of the active variant --
+    # every dust_emission build carries both, Fixed by default -- but the
+    # grammar's per-variant key validation refuses setting either directly
+    # under a variant that does not read it ("'alpha' is not read by the
+    # 'dust_emission' type 'dale2014'"). merge_observation_params() bypasses
+    # that per-variant scoping (it replaces a distribution unconditionally,
+    # by name), so it is the route to freeing a variant-inert but
+    # spec-declared parameter -- needed here because #2296 refuses a
+    # params-dict key the spec declared Fixed on presence, so sweeping either
+    # value at predict time requires both to be genuinely free.
     model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=Fixed(DEFAULT))
+    model = SEDModel(
+        model.spec.merge_observation_params(
+            dust_alpha=Uniform(0.5, 4.0), dust_alpha_dale=Uniform(0.5, 4.0)
+        ),
+        synthetic_ssp_wide,
+        observation=panchromatic_obs,
+    )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     def photometry_at(name, value):

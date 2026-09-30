@@ -93,7 +93,7 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
         redshift=Fixed(0.05),
     )
     forward = ForwardModel.build(sed=model, observation=obs)
-    p = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     out = assert_jit_matches_eager(lambda pp: forward.predict(pp).photometry(), p)
     jax.block_until_ready(out)

@@ -81,40 +81,49 @@ def _filter_fixture_warnings() -> None:
 
 #: Bit-identity references for the laws that do NOT declare ``redshift``.
 #:
-#: Captured on 0ec4d492c, the merge base of this branch, before any source edit:
-#: this file was written with empty lists here and run, and the assertion
-#: message below printed the measured vectors. The seam change adds ``redshift``
-#: to a law's live shape parameters only when that law's own signature declares
-#: it, so every other law must be untouched to the last bit; these literals are
-#: what says so.
+#: The seam change adds ``redshift`` to a law's live shape parameters only when
+#: that law's own signature declares it, so every other law must be untouched
+#: to the last bit; these literals are what says so.
+#:
+#: Re-taken for #2517, which adds photon and massive-neutrino density terms to
+#: ``E(z)``. Two independent cosmology-derived quantities feed this fixture's
+#: photometry at its fixed z=0.5, and both moved: the luminosity distance
+#: (9.013776e27 -> 9.009021e27 cm, -0.0528%, entering as D_L^-2 dimming) and
+#: ``_AGE_UNIV_GYR`` (13.810 -> 13.787 Gyr, the ``sfh_dpl_age_gyr`` default
+#: this fixture's ``Fixed(DEFAULT)`` resolves to, which reweights the age axis
+#: of the synthetic SSP grid). Both quantities independently match
+#: astropy.cosmology.Planck18 to rtol < 1e-4
+#: (tests/regression/test_cosmology_radiation_2517.py); the measured shift
+#: here is their combined, deterministic propagation through this model, not
+#: a new approximation. rtol is unchanged at 1e-12.
 _UNTOUCHED_LAW_PHOTOMETRY: dict[tuple[str, str], tuple[float, ...]] = {
     ("single_component", "calzetti"): (
-        8.878652556210589e-14,
-        8.371162333895889e-14,
-        6.182259702195155e-14,
-        3.4508040030179384e-14,
-        2.228794472287952e-14,
+        8.92350905884793e-14,
+        8.413454907338874e-14,
+        6.213493557431676e-14,
+        3.468238067239084e-14,
+        2.2400547310367933e-14,
     ),
     ("single_component", "kriek_conroy"): (
-        8.892444564771738e-14,
-        8.348554091854069e-14,
-        6.013305551395232e-14,
-        3.423894018017045e-14,
-        2.2269787817749572e-14,
+        8.937370747043838e-14,
+        8.390732444511566e-14,
+        6.043685820768025e-14,
+        3.4411921282963596e-14,
+        2.2382298673383897e-14,
     ),
     ("two_component", "calzetti"): (
-        8.878652556210589e-14,
-        8.371162333895889e-14,
-        6.182259702195155e-14,
-        3.4508040030179384e-14,
-        2.228794472287952e-14,
+        8.923509058847929e-14,
+        8.413454907338874e-14,
+        6.213493557431676e-14,
+        3.468238067239084e-14,
+        2.2400547310367933e-14,
     ),
     ("two_component", "kriek_conroy"): (
-        8.892444564771738e-14,
-        8.348554091854068e-14,
-        6.013305551395232e-14,
-        3.423894018017045e-14,
-        2.2269787817749572e-14,
+        8.937370747043837e-14,
+        8.390732444511566e-14,
+        6.043685820768025e-14,
+        3.4411921282963596e-14,
+        2.2382298673383897e-14,
     ),
 }
 
@@ -571,7 +580,11 @@ def _build_ir(uv_ssp, ir_obs, law: str, redshift, approx, **shape):
 def _ir_photometry(model) -> np.ndarray:
     with warnings.catch_warnings():
         _filter_fixture_warnings()
-        params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+        # Free-only (#2296): the standard predict_photometry funnel merges
+        # Fixed values in on its own; spreading get_fixed_values() here would
+        # hand it a params dict naming keys the spec already declared Fixed,
+        # which is refused on presence regardless of value.
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
         params["dust_tau_bc"] = jnp.asarray(0.0)
         params["dust_tau_diff"] = jnp.asarray(_TAU)
         return np.asarray(model.predict_photometry(params))
@@ -646,7 +659,11 @@ def test_a_free_redshift_disables_the_lut_only_for_a_law_that_reads_it(uv_ssp, i
     exact = _build_ir(uv_ssp, ir_obs, "narayanan_z", free_z, None)
     with warnings.catch_warnings():
         _filter_fixture_warnings()
-        params = {**ours.spec.get_fixed_values(), **ours.spec.sample(jax.random.PRNGKey(0))}
+        # Free-only (#2296): redshift is free on `ours`/`exact` (free_z), so
+        # overriding it below is legal; the get_fixed_values() spread is not
+        # (it would restate every OTHER Fixed key, e.g. sfh_dpl_*, refused on
+        # presence).
+        params = dict(ours.spec.sample(jax.random.PRNGKey(0)))
         params["dust_tau_bc"] = jnp.asarray(0.0)
         params["dust_tau_diff"] = jnp.asarray(_TAU)
         params["redshift"] = jnp.asarray(2.0)
@@ -709,15 +726,16 @@ def test_a_law_that_does_not_read_redshift_is_unchanged_to_ulp(screen, law, uv_s
     """Threading z must not perturb a law whose signature never names it, to one ulp.
 
     ``select_law_kwargs`` narrows the seeded ``redshift`` away for every law but
-    ``narayanan_z``. The references were captured on the merge base (0ec4d492c)
-    on macOS, before any source edit, so this is a before/after comparison and
-    not a self-consistency check. Linux XLA differs from macOS XLA in the last
-    ulp of these ~1e-14 values (e.g. 2.2269787817749572e-14 vs
-    2.2269787817749566e-14), so the comparison uses ``rtol=1e-12`` rather than
-    exact equality -- tight enough to admit only that float noise, not a
-    genuine change in the photometry. The exact form of the invariant --
-    ``redshift`` never reaching a law that does not declare it -- is decided by
-    the resolver-level test below, which is ulp-free.
+    ``narayanan_z``, so this is a before/after comparison against a fixed
+    cosmology and not a self-consistency check -- see
+    :data:`_UNTOUCHED_LAW_PHOTOMETRY` for its current cosmology-dependent
+    provenance. Linux XLA differs from macOS XLA in the last ulp of these
+    ~1e-14 values (e.g. 2.2269787817749572e-14 vs 2.2269787817749566e-14), so
+    the comparison uses ``rtol=1e-12`` rather than exact equality -- tight
+    enough to admit only that float noise, not a genuine change in the
+    photometry. The exact form of the invariant -- ``redshift`` never reaching
+    a law that does not declare it -- is decided by the resolver-level test
+    below, which is ulp-free.
     """
     reference = np.asarray(_UNTOUCHED_LAW_PHOTOMETRY[(screen, law)])
     measured = _photometry(uv_ssp, uv_obs, screen, law, 0.5)

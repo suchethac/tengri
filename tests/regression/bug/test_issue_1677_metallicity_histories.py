@@ -31,7 +31,6 @@ the advice-message regression that #1678 fixed is in
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -49,25 +48,33 @@ pytestmark = [pytest.mark.regression_bug]
 # gitignored (data/.gitignore), so CI has none and these skip there. Cue is not
 # an option: it refuses the wNE-shaped synthetic fixture by design.
 #
-# Resolved by walking parents for a ``data/`` holding the file, the same way
-# ``load_ssp`` resolves grids — a git worktree is a fresh checkout without the
-# ignored data, so a path fixed to the repo root would skip locally too and the
-# arm would never be seen to run at all.
+# Resolved through the canonical locator, which honors the #2329 hermeticity
+# pin: under pytest the arm runs only where $TENGRI_DATA_DIR or the checkout's
+# own data/ provides the grid, and skips everywhere else -- the same verdict CI
+# reaches. (It previously walked parent directories so a nested worktree could
+# borrow the main checkout's grid; that made the probe say "run" while the
+# pinned model build could not see the file, and the arm failed instead of
+# skipping.)
 _CLOUDY_GRID_NAME = "cloudy_grid_prsc.h5"
 
 
 def _find_data_file(name):
-    """The nearest ``data/<name>`` walking up from this file, or None."""
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "data" / name
-        if candidate.is_file():
-            return candidate
-    return None
+    """The grid via the canonical locator, or None.
+
+    Not a hand-rolled ancestor walk: that found the main checkout's grid from
+    a nested worktree while ``SEDModel.build`` (which honors the #2329
+    hermeticity pin) could not, so the probe said "run" and the build raised.
+    Routing through the locator keeps the probe and the build in agreement in
+    every environment -- pinned local runs skip exactly where CI skips.
+    """
+    from tengri._data_setup import find_data
+
+    return find_data(name)
 
 
 requires_cloudy = pytest.mark.skipif(
     _find_data_file(_CLOUDY_GRID_NAME) is None,
-    reason=f"CLOUDY nebular grid {_CLOUDY_GRID_NAME} not found in any parent data/",
+    reason=f"CLOUDY nebular grid {_CLOUDY_GRID_NAME} not on the data search path",
 )
 
 _Z_OBS = 0.05
@@ -457,7 +464,6 @@ def test_the_gas_warning_is_silent_once_the_choice_is_made(
     from tengri.parameters.priors import Fixed
 
     t, sfr, _, params = histories
-    fwd = _build(synthetic_ssp_wide, synthetic_tophat_obs, met_mode="table", neb="cloudy")
     fwd_free = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
@@ -472,8 +478,15 @@ def test_the_gas_warning_is_silent_once_the_choice_is_made(
         neb={"type": "cloudy", "logZ_gas": Fixed(_ENRICHED_ENDPOINT)},
     )
 
+    # "met_gas= supplied" needs neb_logZ_gas FREE on the model, same as every
+    # other per-galaxy-varying column (#2296): met_gas= writes it into
+    # from_histories' per-galaxy columns, and a Fixed neb_logZ_gas would
+    # refuse that presence at construction (see
+    # test_met_gas_needs_a_free_gas_phase_metallicity below for the
+    # Fixed-build case, refused loudly rather than failing later inside
+    # predict()).
     cases = (
-        ("met_gas= supplied", fwd, {"met_gas": np.full(_N, 0.1), "params": params}),
+        ("met_gas= supplied", fwd_free, {"met_gas": np.full(_N, 0.1), "params": params}),
         (
             "neb_logZ_gas as a column",
             fwd_free,
@@ -485,9 +498,42 @@ def test_the_gas_warning_is_silent_once_the_choice_is_made(
         with warnings.catch_warnings():
             warnings.simplefilter("error", GasStellarMetallicityWarning)
             try:
-                Catalog.from_histories(model, t_gyr=t, sfr=sfr, met=enriched_history, **kwargs)
+                cat = Catalog.from_histories(
+                    model, t_gyr=t, sfr=sfr, met=enriched_history, **kwargs
+                )
             except GasStellarMetallicityWarning as exc:  # pragma: no cover
                 pytest.fail(f"{label} still warned: {exc}")
+            # The whole point of from_histories validating its columns is that
+            # a table it accepts must not then be refused by predict() (#2296);
+            # a Fixed-key conflict caught only here (not at construction) is
+            # the bug this test guards.
+            flux = cat.predict()
+            assert np.all(np.isfinite(flux)), f"{label}: predict() returned non-finite flux"
+
+
+@requires_cloudy
+def test_met_gas_needs_a_free_gas_phase_metallicity(
+    synthetic_ssp_wide, synthetic_tophat_obs, histories
+):
+    """met_gas= on a model with neb_logZ_gas Fixed is refused at construction, not late.
+
+    met_gas= writes a per-galaxy neb_logZ_gas column; if the model's
+    neb_logZ_gas is Fixed (the default disposition), that column is refused
+    by #2296's presence check the same way any other Fixed-key override is
+    -- but from_histories used to accept the table anyway and fail only
+    inside the first predict() call, which is exactly the fail-late trap
+    from_histories exists to prevent (see this file's module docstring, the
+    met={'type': 'table'} case). Refuse here, at construction, naming the
+    remedy: rebuild with the gas-phase metallicity FREE.
+    """
+    from tengri import Catalog
+    from tengri.config.exceptions import ParameterError
+
+    t, sfr, _, params = histories
+    fwd = _build(synthetic_ssp_wide, synthetic_tophat_obs, met_mode="table", neb="cloudy")
+
+    with pytest.raises(ParameterError, match="neb_logZ_gas"):
+        Catalog.from_histories(fwd, t_gyr=t, sfr=sfr, met_gas=np.full(_N, 0.1), params=params)
 
 
 # ── the precompute paths serve a tabulated metallicity ───────────────

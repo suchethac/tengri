@@ -91,7 +91,7 @@ class TestTheCensus:
 
     def test_every_line_property_really_is_nan_here(self, no_lines_model):
         """The warning is only owed because the values are unusable."""
-        params = dict(no_lines_model.spec.get_fixed_values())
+        params = {}  # All parameters are Fixed in this model
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             props = no_lines_model.predict(params).properties
@@ -106,7 +106,7 @@ class TestTheCensus:
 class TestEveryAccessorWarns:
     @pytest.mark.parametrize("label", sorted(_ACCESSORS))
     def test_it_says_why_the_value_is_nan(self, label, no_lines_model):
-        params = dict(no_lines_model.spec.get_fixed_values())
+        params = {}  # All parameters are Fixed in this model
         messages = _line_warnings(lambda: _ACCESSORS[label](no_lines_model, params))
         assert messages, (
             f"{label} returns NaN and says nothing. A silent NaN reaching a "
@@ -115,7 +115,7 @@ class TestEveryAccessorWarns:
 
     @pytest.mark.parametrize("label", sorted(_ACCESSORS))
     def test_it_names_a_backend_that_would_fix_it(self, label, no_lines_model):
-        params = dict(no_lines_model.spec.get_fixed_values())
+        params = {}  # All parameters are Fixed in this model
         messages = _line_warnings(lambda: _ACCESSORS[label](no_lines_model, params))
         assert any("cue" in m for m in messages), (
             f"{label} warns without naming a backend that produces lines: {messages}"
@@ -124,7 +124,7 @@ class TestEveryAccessorWarns:
     @pytest.mark.parametrize("label", sorted(_ACCESSORS))
     def test_it_warns_once_not_twice(self, label, no_lines_model):
         """Two warnings for one question is how the two copies drifted."""
-        params = dict(no_lines_model.spec.get_fixed_values())
+        params = {}  # All parameters are Fixed in this model
         messages = _line_warnings(lambda: _ACCESSORS[label](no_lines_model, params))
         assert len(messages) == 1, (
             f"{label} raised {len(messages)} per-line-catalog warnings; there is "
@@ -134,7 +134,7 @@ class TestEveryAccessorWarns:
 
 class TestItStaysQuietWhenItShould:
     def test_a_non_line_property_does_not_warn(self, no_lines_model):
-        params = dict(no_lines_model.spec.get_fixed_values())
+        params = {}  # All parameters are Fixed in this model
         messages = _line_warnings(
             lambda: no_lines_model.predict_properties(params, names=("stellar_mass",))
         )
@@ -147,7 +147,7 @@ class TestItStaysQuietWhenItShould:
         for every model without a line backend — noise that trains users to
         filter the warning that matters.
         """
-        params = dict(no_lines_model.spec.get_fixed_values())
+        params = {}  # All parameters are Fixed in this model
         messages = _line_warnings(lambda: no_lines_model.predict_properties(params))
         assert not messages, (
             f"the default predict_properties() call warned about lines: {messages}"

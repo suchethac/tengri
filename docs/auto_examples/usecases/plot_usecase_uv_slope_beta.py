@@ -153,7 +153,7 @@ model_age_dust = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
+        "peak_lbt_gyr": tengri.FREE,
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
@@ -163,7 +163,7 @@ model_age_dust = tengri.SEDModel.build(
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.Fixed(tengri.DEFAULT),
-        "tau_diff": 0.0,
+        "tau_diff": tengri.FREE,
         "tau_bc": 0.0,
     },
     redshift=tengri.Fixed(0.01),

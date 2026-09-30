@@ -1,0 +1,142 @@
+{
+  "provenance": {
+    "source": "analysis/paper1/fig04_gpu_crossover.py, transcribed from bench/reports/2026-08-20_cuda_device_matrix.md Findings 1-3",
+    "gpu": "NVIDIA GeForce RTX 3060 12GB",
+    "cpu": "AMD Ryzen 9 5900X",
+    "jax": "0.11.0",
+    "report_date": "2026-08-20",
+    "note": "Extracted programmatically from the module constants rather than retyped, so this file cannot disagree with the literals it replaces."
+  },
+  "forward": {
+    "batch": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      234.0,
+      113.5,
+      55.3,
+      27.6,
+      45.7,
+      48.3
+    ],
+    "cpu_f32": [
+      142.6,
+      95.9,
+      53.1,
+      26.1,
+      16.7,
+      20.0
+    ],
+    "gpu_f64": [
+      7344.4,
+      927.3,
+      238.1,
+      65.7,
+      22.0,
+      11.2
+    ],
+    "gpu_f32": [
+      7361.7,
+      899.3,
+      226.9,
+      56.8,
+      15.2,
+      4.5
+    ]
+  },
+  "gradient": {
+    "batch": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      499.4,
+      299.8,
+      131.2,
+      211.8,
+      206.6,
+      172.2
+    ],
+    "cpu_f32": [
+      435.6,
+      164.0,
+      93.6,
+      43.7,
+      67.4,
+      80.7
+    ],
+    "gpu_f64": [
+      7584.7,
+      977.0,
+      250.8,
+      77.9,
+      31.5,
+      19.8
+    ],
+    "gpu_f32": [
+      7473.8,
+      933.1,
+      233.2,
+      58.5,
+      16.3,
+      5.5
+    ]
+  },
+  "forward_ms_per_call": {
+    "batch": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      0.234,
+      0.908,
+      1.7696,
+      3.5328,
+      23.3984,
+      98.9184
+    ],
+    "cpu_f32": [
+      0.1426,
+      0.7672,
+      1.6992,
+      3.3408,
+      8.5504,
+      40.96
+    ],
+    "gpu_f64": [
+      7.3444,
+      7.4184,
+      7.6192,
+      8.4096,
+      11.264,
+      22.9376
+    ],
+    "gpu_f32": [
+      7.3617,
+      7.1944,
+      7.2608,
+      7.2704,
+      7.7824,
+      9.216
+    ]
+  },
+  "aa_control": null,
+  "caveats": [
+    "This campaign recorded no A/A repeat control, so no ratio from it is known to exceed measurement noise and none is annotated on the figure.",
+    "JAX 0.11.0 here against 0.7.0 for the H100 campaign: the cross-campaign contrast is indicative, not controlled.",
+    "Per-CALL wall time rises with batch on this GPU (7.3 to 22.9 ms), so unlike the H100 this card does leave the latency floor within the sweep."
+  ]
+}

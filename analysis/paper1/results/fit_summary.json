@@ -1,0 +1,532 @@
+{
+  "metadata": {
+    "n_galaxies": 20,
+    "n_configs": 6,
+    "total_fits": 120,
+    "successful_fits": 0,
+    "failed_fits": 120,
+    "adopted_fits": 0,
+    "summary_only": true
+  },
+  "galaxy_list": [
+    79,
+    267,
+    1826,
+    4056,
+    4171,
+    7837,
+    9884,
+    13097,
+    14099,
+    15336,
+    15775,
+    16049,
+    16455,
+    17376,
+    18160,
+    22173,
+    24786,
+    25206,
+    25489,
+    26398
+  ],
+  "config_list": [
+    "I",
+    "II",
+    "III",
+    "IV",
+    "V",
+    "VI"
+  ],
+  "config_dimensions": {
+    "I": 10,
+    "II": 0,
+    "III": 0,
+    "IV": 11,
+    "V": 6,
+    "VI": 11
+  },
+  "fits": [],
+  "failed": [
+    {
+      "gal_id": 79,
+      "config": "I"
+    },
+    {
+      "gal_id": 79,
+      "config": "II"
+    },
+    {
+      "gal_id": 79,
+      "config": "III"
+    },
+    {
+      "gal_id": 79,
+      "config": "IV"
+    },
+    {
+      "gal_id": 79,
+      "config": "V"
+    },
+    {
+      "gal_id": 79,
+      "config": "VI"
+    },
+    {
+      "gal_id": 267,
+      "config": "I"
+    },
+    {
+      "gal_id": 267,
+      "config": "II"
+    },
+    {
+      "gal_id": 267,
+      "config": "III"
+    },
+    {
+      "gal_id": 267,
+      "config": "IV"
+    },
+    {
+      "gal_id": 267,
+      "config": "V"
+    },
+    {
+      "gal_id": 267,
+      "config": "VI"
+    },
+    {
+      "gal_id": 1826,
+      "config": "I"
+    },
+    {
+      "gal_id": 1826,
+      "config": "II"
+    },
+    {
+      "gal_id": 1826,
+      "config": "III"
+    },
+    {
+      "gal_id": 1826,
+      "config": "IV"
+    },
+    {
+      "gal_id": 1826,
+      "config": "V"
+    },
+    {
+      "gal_id": 1826,
+      "config": "VI"
+    },
+    {
+      "gal_id": 4056,
+      "config": "I"
+    },
+    {
+      "gal_id": 4056,
+      "config": "II"
+    },
+    {
+      "gal_id": 4056,
+      "config": "III"
+    },
+    {
+      "gal_id": 4056,
+      "config": "IV"
+    },
+    {
+      "gal_id": 4056,
+      "config": "V"
+    },
+    {
+      "gal_id": 4056,
+      "config": "VI"
+    },
+    {
+      "gal_id": 4171,
+      "config": "I"
+    },
+    {
+      "gal_id": 4171,
+      "config": "II"
+    },
+    {
+      "gal_id": 4171,
+      "config": "III"
+    },
+    {
+      "gal_id": 4171,
+      "config": "IV"
+    },
+    {
+      "gal_id": 4171,
+      "config": "V"
+    },
+    {
+      "gal_id": 4171,
+      "config": "VI"
+    },
+    {
+      "gal_id": 7837,
+      "config": "I"
+    },
+    {
+      "gal_id": 7837,
+      "config": "II"
+    },
+    {
+      "gal_id": 7837,
+      "config": "III"
+    },
+    {
+      "gal_id": 7837,
+      "config": "IV"
+    },
+    {
+      "gal_id": 7837,
+      "config": "V"
+    },
+    {
+      "gal_id": 7837,
+      "config": "VI"
+    },
+    {
+      "gal_id": 9884,
+      "config": "I"
+    },
+    {
+      "gal_id": 9884,
+      "config": "II"
+    },
+    {
+      "gal_id": 9884,
+      "config": "III"
+    },
+    {
+      "gal_id": 9884,
+      "config": "IV"
+    },
+    {
+      "gal_id": 9884,
+      "config": "V"
+    },
+    {
+      "gal_id": 9884,
+      "config": "VI"
+    },
+    {
+      "gal_id": 13097,
+      "config": "I"
+    },
+    {
+      "gal_id": 13097,
+      "config": "II"
+    },
+    {
+      "gal_id": 13097,
+      "config": "III"
+    },
+    {
+      "gal_id": 13097,
+      "config": "IV"
+    },
+    {
+      "gal_id": 13097,
+      "config": "V"
+    },
+    {
+      "gal_id": 13097,
+      "config": "VI"
+    },
+    {
+      "gal_id": 14099,
+      "config": "I"
+    },
+    {
+      "gal_id": 14099,
+      "config": "II"
+    },
+    {
+      "gal_id": 14099,
+      "config": "III"
+    },
+    {
+      "gal_id": 14099,
+      "config": "IV"
+    },
+    {
+      "gal_id": 14099,
+      "config": "V"
+    },
+    {
+      "gal_id": 14099,
+      "config": "VI"
+    },
+    {
+      "gal_id": 15336,
+      "config": "I"
+    },
+    {
+      "gal_id": 15336,
+      "config": "II"
+    },
+    {
+      "gal_id": 15336,
+      "config": "III"
+    },
+    {
+      "gal_id": 15336,
+      "config": "IV"
+    },
+    {
+      "gal_id": 15336,
+      "config": "V"
+    },
+    {
+      "gal_id": 15336,
+      "config": "VI"
+    },
+    {
+      "gal_id": 15775,
+      "config": "I"
+    },
+    {
+      "gal_id": 15775,
+      "config": "II"
+    },
+    {
+      "gal_id": 15775,
+      "config": "III"
+    },
+    {
+      "gal_id": 15775,
+      "config": "IV"
+    },
+    {
+      "gal_id": 15775,
+      "config": "V"
+    },
+    {
+      "gal_id": 15775,
+      "config": "VI"
+    },
+    {
+      "gal_id": 16049,
+      "config": "I"
+    },
+    {
+      "gal_id": 16049,
+      "config": "II"
+    },
+    {
+      "gal_id": 16049,
+      "config": "III"
+    },
+    {
+      "gal_id": 16049,
+      "config": "IV"
+    },
+    {
+      "gal_id": 16049,
+      "config": "V"
+    },
+    {
+      "gal_id": 16049,
+      "config": "VI"
+    },
+    {
+      "gal_id": 16455,
+      "config": "I"
+    },
+    {
+      "gal_id": 16455,
+      "config": "II"
+    },
+    {
+      "gal_id": 16455,
+      "config": "III"
+    },
+    {
+      "gal_id": 16455,
+      "config": "IV"
+    },
+    {
+      "gal_id": 16455,
+      "config": "V"
+    },
+    {
+      "gal_id": 16455,
+      "config": "VI"
+    },
+    {
+      "gal_id": 17376,
+      "config": "I"
+    },
+    {
+      "gal_id": 17376,
+      "config": "II"
+    },
+    {
+      "gal_id": 17376,
+      "config": "III"
+    },
+    {
+      "gal_id": 17376,
+      "config": "IV"
+    },
+    {
+      "gal_id": 17376,
+      "config": "V"
+    },
+    {
+      "gal_id": 17376,
+      "config": "VI"
+    },
+    {
+      "gal_id": 18160,
+      "config": "I"
+    },
+    {
+      "gal_id": 18160,
+      "config": "II"
+    },
+    {
+      "gal_id": 18160,
+      "config": "III"
+    },
+    {
+      "gal_id": 18160,
+      "config": "IV"
+    },
+    {
+      "gal_id": 18160,
+      "config": "V"
+    },
+    {
+      "gal_id": 18160,
+      "config": "VI"
+    },
+    {
+      "gal_id": 22173,
+      "config": "I"
+    },
+    {
+      "gal_id": 22173,
+      "config": "II"
+    },
+    {
+      "gal_id": 22173,
+      "config": "III"
+    },
+    {
+      "gal_id": 22173,
+      "config": "IV"
+    },
+    {
+      "gal_id": 22173,
+      "config": "V"
+    },
+    {
+      "gal_id": 22173,
+      "config": "VI"
+    },
+    {
+      "gal_id": 24786,
+      "config": "I"
+    },
+    {
+      "gal_id": 24786,
+      "config": "II"
+    },
+    {
+      "gal_id": 24786,
+      "config": "III"
+    },
+    {
+      "gal_id": 24786,
+      "config": "IV"
+    },
+    {
+      "gal_id": 24786,
+      "config": "V"
+    },
+    {
+      "gal_id": 24786,
+      "config": "VI"
+    },
+    {
+      "gal_id": 25206,
+      "config": "I"
+    },
+    {
+      "gal_id": 25206,
+      "config": "II"
+    },
+    {
+      "gal_id": 25206,
+      "config": "III"
+    },
+    {
+      "gal_id": 25206,
+      "config": "IV"
+    },
+    {
+      "gal_id": 25206,
+      "config": "V"
+    },
+    {
+      "gal_id": 25206,
+      "config": "VI"
+    },
+    {
+      "gal_id": 25489,
+      "config": "I"
+    },
+    {
+      "gal_id": 25489,
+      "config": "II"
+    },
+    {
+      "gal_id": 25489,
+      "config": "III"
+    },
+    {
+      "gal_id": 25489,
+      "config": "IV"
+    },
+    {
+      "gal_id": 25489,
+      "config": "V"
+    },
+    {
+      "gal_id": 25489,
+      "config": "VI"
+    },
+    {
+      "gal_id": 26398,
+      "config": "I"
+    },
+    {
+      "gal_id": 26398,
+      "config": "II"
+    },
+    {
+      "gal_id": 26398,
+      "config": "III"
+    },
+    {
+      "gal_id": 26398,
+      "config": "IV"
+    },
+    {
+      "gal_id": 26398,
+      "config": "V"
+    },
+    {
+      "gal_id": 26398,
+      "config": "VI"
+    }
+  ]
+}

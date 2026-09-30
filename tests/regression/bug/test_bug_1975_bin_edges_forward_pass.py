@@ -42,7 +42,10 @@ def _build(ssp, sfh_dict):
 
 
 def _params(model):
-    p = dict(model.spec.get_fixed_values())
+    # Free-only (#2296): a params-dict key the spec declared Fixed (e.g.
+    # ``redshift``) is refused on presence, so this must not spread
+    # ``get_fixed_values()`` -- the forward pipeline merges those in itself.
+    p = {}
     mass_key = next(k for k in model.spec.free_params if k.endswith("log_total_mass"))
     p[mass_key] = 10.3
     p["met_logzsol"] = -0.3

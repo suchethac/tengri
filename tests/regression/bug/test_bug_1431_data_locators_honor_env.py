@@ -75,6 +75,10 @@ def test_find_data_preference_is_name_major(tmp_path, monkeypatch):
     """
     from tengri._data_setup import find_data
 
+    # Name-major ordering is proven ACROSS tiers (env dir vs cwd), so the
+    # cwd tier must exist: lift the suite-wide hermeticity pin (#2329), which
+    # drops it. tests/unit/test_data_locator_pin.py owns the pinned contract.
+    monkeypatch.delenv("TENGRI_DATA_NO_ANCESTOR_WALK", raising=False)
     preferred, fallback = tmp_path / "a", tmp_path / "b"
     preferred.mkdir()
     fallback.mkdir()

@@ -18,8 +18,9 @@ class TestSFRTrapezoidNonNegative:
         from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         age_yr = jnp.logspace(6, 10.1, 200)
+        age = 13.8e9  # yr (universe age)
         for norm in [0.01, 1.0, 100.0]:
-            sfr = double_powerlaw(age_yr, alpha=0.5, beta=2.0, tau=2e9, norm=norm)
+            sfr = double_powerlaw(age_yr, alpha=0.5, beta=2.0, tau=2e9, norm=norm, age=age)
             mask_100 = age_yr <= 1e8
             sfr_100_masked = jnp.where(mask_100, sfr, 0.0)
             # Fixed bug: use real ages as x-values, not zeroed array
@@ -31,7 +32,8 @@ class TestSFRTrapezoidNonNegative:
         from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         age_yr = jnp.logspace(6, 10.1, 200)
-        sfr = double_powerlaw(age_yr, alpha=0.3, beta=3.0, tau=5e8, norm=10.0)
+        age = 13.8e9  # yr (universe age)
+        sfr = double_powerlaw(age_yr, alpha=0.3, beta=3.0, tau=5e8, norm=10.0, age=age)
         mask_10 = age_yr <= 1e7
         sfr_10_masked = jnp.where(mask_10, sfr, 0.0)
         integral_10 = jnp.trapezoid(sfr_10_masked, age_yr)

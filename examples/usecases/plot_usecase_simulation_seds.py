@@ -69,6 +69,7 @@ model_zt = tengri.SEDModel.build(
         "type": "two_component",
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.4,
+        "tau_diff": tengri.FREE,
     },
     redshift=tengri.Fixed(Z_OBS),
 )
@@ -94,6 +95,7 @@ model_mean = tengri.SEDModel.build(
         "type": "two_component",
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.4,
+        "tau_diff": tengri.FREE,
     },
     redshift=tengri.Fixed(Z_OBS),
 )

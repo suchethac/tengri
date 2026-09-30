@@ -18,9 +18,11 @@ from tengri.components.nebular._constants import (
     _LOG_OH_OFFSET,
     _LSUN_ERG,
     _LYMAN_LIMIT,
+    NEBULAR_FREEFREE_TAIL_ALPHA_NU,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
 from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
+from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
 #: ``log10`` of the two constants deferred out of the Q_H integrand (#1568).
 #: Python floats, evaluated once at import in float64, so they enter the graph
@@ -603,6 +605,71 @@ def render_nebular_lines(
     )
 
 
+def interp_continuum_with_freefree_tail(
+    wave: jnp.ndarray,
+    cont_wave: jnp.ndarray,
+    cont_lum: jnp.ndarray,
+    *,
+    alpha_nu: float = NEBULAR_FREEFREE_TAIL_ALPHA_NU,
+) -> jnp.ndarray:
+    r"""Interpolate continuum onto a grid, extending past the last node as free-free.
+
+    Interpolates tabulated nebular continuum onto a model wavelength grid using
+    :func:`jnp.interp` with zero-fill at both edges. Past the tabulated maximum
+    wavelength, continues as optically thin thermal free-free: L_nu ∝ nu^α,
+    anchored at the last tabulated node. This extension is an analytic
+    continuation, NOT an emulator prediction. Cue and CloudyGrid both tabulate
+    only to 1 cm (1e8 Å), leaving a gap to 1 m (1e10 Å) that reference codes
+    (pcigale, bagpipes) cover (#2346).
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Model wavelength grid [Angstrom], rest-frame, increasing.
+    cont_wave : ndarray, shape (n_cont,)
+        Tabulated continuum wavelength grid [Angstrom], MUST be sorted ascending.
+    cont_lum : ndarray, shape (n_cont,)
+        Tabulated continuum luminosity density (units match output).
+    alpha_nu : float, optional
+        Spectral slope in frequency: L_nu ∝ nu^α. Default -0.1, the optically
+        thin thermal bremsstrahlung index. Same value as :func:`tengri.components.radio.radio.radio_freefree` (Murphy et al. 2011, ApJ, 737, 67) (#2346).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Interpolated continuum on the model grid (same units as ``cont_lum``).
+        Zero below the first node. Smooth power law past the last node.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+
+    **Gradient-safe**: yes, gradient flows through ``cont_lum`` (the edge
+    luminosity). The exponent ``alpha_nu`` is a Python float (not a pytree
+    leaf), so it does not block gradients.
+
+    **Boundary behavior**:
+    - Below the first node: zero-fill (``left=0.0`` in ``jnp.interp``).
+    - Between nodes: linear interpolation in linear space (``jnp.interp``).
+    - Above the last node: power-law tail with nu ∝ 1/λ giving
+      L_ν(λ) = edge_lum × (edge_λ / λ)^α_ν, which for α_ν = -0.1 rises as λ^0.1.
+    """
+    # Interpolate on the tabulated grid
+    inside = jnp.interp(wave, cont_wave, cont_lum, left=0.0, right=0.0)
+
+    # Extract the edge (last node)
+    edge_wave = cont_wave[-1]
+    edge_lum = cont_lum[-1]
+
+    # Free-free tail: L_nu ∝ nu^alpha_nu
+    # With nu ∝ 1/lambda, L_nu(wave) = edge_lum * (nu/nu_edge)^alpha_nu
+    #                                 = edge_lum * (wave_edge/wave)^alpha_nu
+    tail = edge_lum * (edge_wave / wave) ** alpha_nu
+
+    # Use interpolated result where wave <= edge_wave, tail where wave > edge_wave
+    return jnp.where(wave > edge_wave, tail, inside)
+
+
 # ── Ionizing photon rate ──────────────────────────────────────────
 
 
@@ -680,6 +747,65 @@ def sanitize_qh_table(qh_raw, *, backend_name: str):
     return jnp.where(finite, qh_raw, 0.0)
 
 
+def apply_lya_escape(
+    line_lum: jnp.ndarray, line_wavelengths: jnp.ndarray, neb_fesc_lya: float
+) -> jnp.ndarray:
+    """Apply Lyα-specific resonant scattering escape suppression to a line array.
+
+    Lyα is the sole recombination line with an independent escape fraction
+    channel (resonant scattering and destruction in neutral ISM). After all
+    lines have been multiplied by the general escape/dust suppression factor
+    `k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)`, apply an
+    *additional* suppression to Lyα alone: multiply the Lyα luminosity by
+    `(1 - neb_fesc_lya)`.
+
+    This helper exists to prevent code duplication across backends. The alternative
+    (multiplying by `(1 - neb_fesc_lya) / k_factor` inline) algebraically cancels
+    `k_factor` and decouples Lyα from the general escape/dust budget — a bug
+    discovered in #2531.
+
+    Parameters
+    ----------
+    line_lum : ndarray, shape (n_lines,)
+        Recombination line luminosities [erg/s/Hz], already multiplied by
+        `k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)` for all lines.
+    line_wavelengths : ndarray, shape (n_lines,)
+        Line rest-frame wavelengths [Angstrom]. Lyα is identified as the line
+        nearest 1215.67 Angstrom.
+    neb_fesc_lya : float
+        Lyα-specific resonant scattering escape fraction [dimensionless], in [0, 1].
+        At 0, Lyα gets no extra suppression beyond the general k_factor.
+        At 1, Lyα is completely removed.
+
+    Returns
+    -------
+    ndarray, shape (n_lines,)
+        Line luminosities with Lyα suppressed by `(1 - neb_fesc_lya)`.
+        All other lines are unchanged.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives. Safe inside
+    :func:`jax.jit`, :func:`jax.vmap`, and :func:`jax.grad`.
+
+    **Immutability**: returns a new array; does not mutate the input.
+
+    References
+    ----------
+    .. [1] Osterbrock, D. E., & Ferland, G. J. (2006).
+        Astrophysics of Gaseous Nebulae and Active Galactic Nuclei.
+        University Science Books. ISBN 978-1891389344.
+        (Case B recombination cascade: all lines suppressed equally by k_factor.)
+
+    """
+    # Find the Lyα line (1215.67 Angstrom, the Lyman-alpha line of neutral hydrogen)
+    lya_idx = jnp.argmin(jnp.abs(line_wavelengths - 1215.67))
+
+    # Apply (1 - neb_fesc_lya) suppression to Lyα only, after k_factor was already applied
+    lya_scale = 1.0 - neb_fesc_lya
+    return line_lum.at[lya_idx].multiply(lya_scale)
+
+
 @jax.jit
 def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     r"""Compute hydrogen-ionizing photon production rate Q_H from an SSP spectrum.
@@ -694,12 +820,18 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     ssp_wave : array, shape (n_wave,)
         SSP wavelength grid in Å (rest-frame, increasing).
     ssp_flux : array, shape (n_wave,)
-        SSP spectral luminosity density. [erg/s/Hz/Msun]
+        SSP spectral luminosity density [L☉/Hz/Msun]. **Unlike the pipeline
+        standard** (:func:`_integrate_nion_log10` on the stellar path takes
+        `erg/s/Hz`), this function preserves the grid's native units and carries
+        the L_sun → erg/s conversion in log space via :func:`compute_qh_log10` to
+        maintain float32 safety: Q_H ~ 10^46 photons/s overflows float32 in
+        linear form, so the conversion is deferred to log-space summation
+        (log-space L_sun precedent: #1568, #1491, #1206).
 
     Returns
     -------
     float
-        Hydrogen-ionizing photon production rate. [photons/s/Msun]
+        Hydrogen-ionizing photon production rate [photons/s/Msun].
 
     Notes
     -----
@@ -711,24 +843,30 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
         .. math::
 
-            Q_H = \int_0^{\nu_{\rm LL}} \frac{L_\nu}{h\nu} \, \mathrm{d}\nu
+            Q_H = \int_{\lambda<912\,\mathrm{\AA}} \frac{L_\nu}{h\nu} \, \mathrm{d}\nu
 
-        where ν_LL = 13.6 eV / h ≈ 3.29 × 10^15 Hz (Lyman limit, λ < 911.76 Å),
-        L_ν is the SSP flux [erg/s/Hz/Msun], and h is Planck's constant.
-
-        The integral is computed via trapezoidal quadrature in frequency space
-        (not wavelength space) to avoid nonlinear Jacobian effects.
+        where λ < 911.76 Å (Lyman limit), L_ν is the SSP flux [L☉/Hz/Msun], and h
+        is Planck's constant. The integral is computed via trapezoidal quadrature
+        in frequency space (not wavelength space) to avoid nonlinear Jacobian
+        effects. The implementation defers L_sun → erg/s conversion to log space
+        via :func:`compute_qh_log10` for float32 safety.
 
     **Warning (wNE SSPs)**:
         Returns ~0 for "with Nebular Emission" (wNE) SSP spectra because CLOUDY
         consumes ionizing photons during SSP generation. If you see Q_H ≈ 0 for
-        young SSPs (which should have Q_H > 1e50 photons/s), check that your
+        young SSPs (which should have Q_H ~ 1e46-1e47 photons/s per M☉), check that your
         SSP templates are non-nebular variants (BC03, FSPS/Conroy+Gunn models, etc.).
 
-    **Numerical safety**:
-        Clamps per-wavelength integrand to prevent float64 overflow during
-        trapezoidal accumulation (only relevant for artificially young/pure SSPs
-        with Q_H > 1e100). Does not affect physically realistic rates (~1e31).
+    **Float32 safety**:
+        :func:`compute_qh_log10` (called internally) keeps every intermediate
+        in float32 range. This function does not: it returns
+        ``pow10(log10 Q_H)``, and Q_H ~ 1e46-1e47 photons/s exceeds the
+        float32 ceiling (~3.4e38, log10 ~38.53), so ``compute_qh`` itself
+        returns ``inf`` under float32 on healthy input (every young,
+        ionizing node of ``fsps_prsc_miles_chabrier.h5``, #1491).
+        **Float32 callers must use** :func:`compute_qh_log10`
+        **directly** and keep the quantity in log10 space, the same treatment
+        as the stellar path's :func:`_integrate_nion_log10` (#1206).
 
     """
     return pow10(compute_qh_log10(ssp_wave, ssp_flux))
@@ -757,7 +895,13 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     ssp_wave : array, shape (n_wave,)
         SSP wavelength grid [Angstrom], rest-frame, increasing.
     ssp_flux : array, shape (n_wave,)
-        SSP spectral luminosity density [Lsun/Hz/Msun].
+        SSP spectral luminosity density [L☉/Hz/Msun]. **Unlike the pipeline
+        standard** (:func:`_integrate_nion_log10` on the stellar path takes
+        `erg/s/Hz`), this function preserves the grid's native units and carries
+        the L_sun → erg/s conversion in log space via `_LOG10_LSUN_ERG` to
+        maintain float32 safety: Q_H ~ 10^46 photons/s overflows float32 in
+        linear form, so the conversion is deferred to log-space summation
+        (log-space L_sun precedent: #1568, #1491, #1206).
 
     Returns
     -------
@@ -850,7 +994,8 @@ def _interp_index_weight(
     grid_at_idx = jnp.take(grid, idx)
     grid_at_idx_plus_1 = jnp.take(grid, idx + 1)
     dx = grid_at_idx_plus_1 - grid_at_idx
-    w = jnp.where(dx > 0, (x_clipped - grid_at_idx) / dx, 0.0)
+    # A non-finite axis node (an age-0 anchor, #2418) makes dx = inf and w = NaN.
+    w = jnp.where((dx > 0) & jnp.isfinite(dx), (x_clipped - grid_at_idx) / dx, 0.0)
     return idx, w
 
 
@@ -1417,3 +1562,37 @@ class NebularContinuumFallback:
             stacklevel=2,
         )
         return lines_sed
+
+
+# ── SSP age axis for the Q_H tables ─────────────────────────────
+
+
+def ssp_log_age_yr_axis(ssp_lg_age_gyr: jnp.ndarray) -> jnp.ndarray:
+    r"""SSP age axis in ``log10(age/yr)``, floored at 0.1 Myr.
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        SSP template ages, ``log10(age/Gyr)``, ascending. A leading ``-inf``
+        is an age-0 anchor template (BC03 STELIB).
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        ``log10(age/yr)`` [dex re yr], every node ``>= ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes (``jnp.maximum``). **Gradient-safe**: yes; the
+    axis is a constant of the SSP grid.
+
+    An age-0 anchor on a table axis makes the bracketing interval infinitely
+    wide, and every interpolation weight inside it ``NaN``; the nebular sum
+    then carries the ``NaN`` to every wavelength and line (#2418). The stellar
+    path floors the same anchor at 0.1 Myr for surviving mass (#1016); the
+    Q_H tables use that floor, so the anchor's ionizing photons count at
+    0.1 Myr, where no tabulated Q_H differs from its zero-age value. For a
+    grid whose youngest template is already ``>= 0.1 Myr`` (every other
+    shipped SSP) the result is bit-identical to ``ssp_lg_age_gyr + 9.0``.
+    """
+    return jnp.maximum(jnp.asarray(ssp_lg_age_gyr) + 9.0, ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR)

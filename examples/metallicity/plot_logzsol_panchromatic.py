@@ -54,6 +54,11 @@ model = tengri.SEDModel.build(
         "T": 30.0,
         "beta_ir": 1.8,
     },
+    # ``met_logzsol`` is swept below (#2296: a params-dict key the spec
+    # declared Fixed is refused), so it must be free; no ``met=`` group was
+    # declared before, defaulting the whole group to ``Fixed(DEFAULT)``.
+    # Bounds cover the -1.5..0.5 sweep.
+    met={"logzsol": tengri.Uniform(-2.0, 0.5)},
     redshift=tengri.Fixed(0.2),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

@@ -180,7 +180,7 @@ References:
     # Use dpl (double-power-law) SFH with free log_total_mass (normalization)
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.0},
+        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": tengri.FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",

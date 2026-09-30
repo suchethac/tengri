@@ -10,7 +10,6 @@ keep the direction live even under cigale_joint + skirtor.
 """
 
 import warnings
-from collections import namedtuple
 from unittest import mock
 
 import jax
@@ -327,12 +326,34 @@ class TestLBolFlatDirectionRefusal:
         self, issue_spec, synthetic_ssp_wide, simple_filters
     ):
         """Non-finite SED raises ConfigError with non-finite message (F1)."""
-        # Monkeypatch _predict_rest_sed to return NaN
-        SEDResult = namedtuple("SEDResult", ["sed"])
-        nan_sed = jnp.full((100,), jnp.nan)
+        # ``_check_agn_lbol_flat_direction`` no longer probes through
+        # ``_predict_rest_sed`` -> ``predict_state(params)``: since #2296 that
+        # path refuses a ``params`` dict carrying a Fixed key (R55's whole
+        # point is sweeping a Fixed ``agn_log_lbol``), so the check now calls
+        # ``self.predict_state(params, fixed_values=fixed_values)`` directly
+        # -- the "already resolved" escape hatch that merges without refusing
+        # (see the comment above ``params_lo``/``params_hi`` in
+        # ``_check_agn_lbol_flat_direction``). Monkeypatching
+        # ``_predict_rest_sed`` therefore no longer reaches this probe at
+        # all; patch ``predict_state`` instead, gated on the ``fixed_values``
+        # kwarg (unique to this one call site -- every other internal
+        # ``predict_state(params)`` call in ``sed_model.py`` omits it) so
+        # only the flat-direction probe's two evaluations see the injected
+        # NaN and nothing else in ``__init__`` is disturbed.
+        import dataclasses
+
+        real_predict_state = SEDModel.predict_state
+
+        def _predict_state_or_nan(self, params, fixed_values=None, **kwargs):
+            state = real_predict_state(self, params, fixed_values=fixed_values, **kwargs)
+            if fixed_values is not None:
+                state = dataclasses.replace(
+                    state, sed_intrinsic=jnp.broadcast_to(jnp.nan, state.sed_intrinsic.shape)
+                )
+            return state
 
         with (
-            mock.patch.object(SEDModel, "_predict_rest_sed", return_value=SEDResult(sed=nan_sed)),
+            mock.patch.object(SEDModel, "predict_state", _predict_state_or_nan),
             pytest.raises(ConfigError) as exc_info,
             warnings.catch_warnings(),
         ):

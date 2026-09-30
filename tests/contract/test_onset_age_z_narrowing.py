@@ -68,19 +68,35 @@ def test_cap_is_monotonic_in_redshift():
 
 
 def test_free_redshift_caps_at_its_own_floor():
-    """Uniform(0, 20) redshift narrows against z=0 -- i.e. no real narrowing.
+    """Uniform(0, 20) redshift narrows against z=0 -- i.e. at most a
+    sub-permille narrowing, from the registry's rounded declared ceiling
+    down to today's raw (unrounded) cosmic age.
 
     The floor of the redshift prior is what a build can guarantee about every
     galaxy this model will ever be asked to fit: at least as young as z=0.
+    ``sfh_dexp_start_gyr``'s static declared ceiling is
+    ``_AGE_UNIV_GYR = round(age_at_z0(), 3)`` (registry.py) -- a value
+    rounded UP or DOWN to the nearest 0.001 Gyr, while the dynamic cap here
+    is the raw (unrounded) ``age_at_z(0.0)``. Whenever rounding happens to
+    round up, the declared ceiling sits fractionally above the raw cap and
+    the z-narrowing pass correctly clips it back down -- this is not a
+    narrowing bug, it is the rounding direction of the specific cosmology
+    in use, so the test measures the narrowed bound against `age_at_z0()`
+    directly rather than assuming either provenance outcome.
     """
     spec = _build_dexp(redshift=Uniform(0.0, 20.0))
 
     hi = spec.get_distribution("sfh_dexp_start_gyr").bounds[1]
-    declared_ceiling = round(float(age_at_z0()), 3)  # matches _AGE_UNIV_GYR's own rounding
-    assert hi == pytest.approx(declared_ceiling, rel=1e-9)
-    # Genuinely un-narrowed: the declared range already sat inside the cap,
-    # so provenance carries no "_zcap" suffix.
-    assert spec._group_provenance["sfh_dexp_start_gyr"] == "wildcard_free"
+    raw_cap = float(age_at_z0())
+    declared_ceiling = round(raw_cap, 3)  # matches _AGE_UNIV_GYR's own rounding
+    expected_hi = min(declared_ceiling, raw_cap)
+    assert hi == pytest.approx(expected_hi, rel=1e-9)
+    # Sub-permille narrowing (registry rounding vs raw age) still tags
+    # "_zcap"; only an exact match would stay "wildcard_free".
+    expected_provenance = (
+        "wildcard_free" if expected_hi == declared_ceiling else "wildcard_free_zcap"
+    )
+    assert spec._group_provenance["sfh_dexp_start_gyr"] == expected_provenance
 
 
 # ── (d) a user's own explicit prior is never touched ────────────────────────

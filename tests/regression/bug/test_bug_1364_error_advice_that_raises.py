@@ -153,17 +153,17 @@ class TestAdvertisedSuppressionActuallySuppresses:
                 **extra,
             )
 
-        # The silent default still advises: exactly one advisory, else the
-        # probe below proves nothing (a build that never warns would "pass"
+        # The silent default still advises: two advisories (fixed-logU + grid-status),
+        # else the probe below proves nothing (a build that never warns would "pass"
         # the suppression assertion vacuously).
         with warnings.catch_warnings(record=True) as rec_default:
             warnings.simplefilter("always")
             build()
         baseline = [w for w in rec_default if issubclass(w.category, BakedInNebularWarning)]
-        assert len(baseline) == 1, (
+        assert len(baseline) == 2, (
             f"probe setup failed: the silent default emitted {len(baseline)} "
-            "BakedInNebularWarning, expected exactly 1 -- without it the "
-            "suppression check below is vacuous"
+            "BakedInNebularWarning, expected exactly 2 (fixed-logU + grid-status) -- "
+            "without them the suppression check below is vacuous"
         )
 
         # Now the route the message advertises, executed as written.

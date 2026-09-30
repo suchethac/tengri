@@ -240,7 +240,8 @@ def test_mass_is_independent_of_which_prior_was_fitted_first(ssp_data_fsps):
     truth_model = _mass_model(ssp_data_fsps, wide)
     truth = dict(truth_model.spec.sample(jax.random.PRNGKey(7)))
     truth[MASS] = 11.0
-    truth["redshift"] = 0.1
+    # redshift is Fixed(0.1) on _mass_model already (#2296: restating a
+    # Fixed key, even at its own pinned value, is refused on presence).
     data = np.asarray(truth_model.predict_photometry(truth))
     noise = data / 100.0
 

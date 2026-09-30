@@ -13,7 +13,7 @@ Measured on the shipped grids before this test was written:
 component            parameter         grid extent          declared
 ===================  ================  ===================  ==============
 astrodust            ``dust_lgU``      ``[-3, 6]``          ``U(0, 7)``
-dl07                 ``dust_umin``     ``[0.1, 20]``        no upper bound
+dl07                 ``dust_umin``     ``[0.1, 25]``        no upper bound
 dl14                 ``dust_umin``     ``[0.1, 50]``        no upper bound
 themis               ``dust_umin``     ``[0.1, 80]``        no upper bound
 schreiber2018        ``dust_T``        ``[14.24, 60.21]``   no upper bound
@@ -163,7 +163,7 @@ def test_menu_aliases_resolve_to_the_same_support(alias):
     ("name", "param", "expected"),
     [
         ("astrodust", "dust_lgU", (-3.0, 6.0)),
-        ("dl07", "dust_umin", (0.1, 20.0)),
+        ("dl07", "dust_umin", (0.1, 25.0)),
         ("dl14", "dust_umin", (0.1, 50.0)),
         ("themis", "dust_umin", (0.1, 80.0)),
     ],
@@ -402,7 +402,7 @@ def test_a_prior_inside_the_grid_is_silent():
 
 
 def test_the_same_prior_warns_on_a_narrower_backend():
-    """Identical prior, different backend: dl07 caps at 20 where dl14 caps at 50.
+    """Identical prior, different backend: dl07 caps at 25 where dl14 caps at 50.
 
     Paired with the control above this isolates the backend as the only
     difference, so the warning cannot be an artifact of the prior itself.
@@ -417,7 +417,7 @@ def test_the_same_prior_warns_on_a_narrower_backend():
         dust_emission={"type": "dl07", "umin": Uniform(0.1, 50.0)},
     )
     assert len(messages) == 1, messages
-    assert "[0.1, 20]" in messages[0]
+    assert "[0.1, 25]" in messages[0]
 
 
 # --------------------------------------------------------------------------
