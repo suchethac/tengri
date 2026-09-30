@@ -3877,6 +3877,10 @@ class SEDModel:
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
         self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
+        # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
+        # emission (#2533). When True, emitted photons pass through the diffuse
+        # dust screen once. Default False (off, bit-identical).
+        self._dust_ir_diffuse_screen = bool(getattr(spec, "dust_ir_diffuse_screen", False))
 
         # Dust law resolution. Skip for dust_model='off' or 'wg00' (wg00 has no
         # attenuation law; 'off' means no dust at all). Both store placeholder
@@ -5589,7 +5593,7 @@ class SEDModel:
         )
         return self._predict_rest_sed(params, wave=wave)
 
-    def _predict_rest_sed(self, params, wave=None):
+    def _predict_rest_sed(self, params, wave=None, *, fixed_values=None):
         """Compute rest-frame panchromatic SED luminosity spectrum.
 
         Evaluates all stellar populations, emission (nebular, AGN), and
@@ -5611,6 +5615,9 @@ class SEDModel:
             uses the model's default: SSP wavelength grid
             (``ssp_data.ssp_wave``), or auto-extended grid if
             ``radio=True`` or ``xray=True`` in spec.
+        fixed_values : dict, optional
+            Evaluation-time fixed values to override spec's Fixed
+            parameters.
 
         Returns
         -------
@@ -5663,7 +5670,7 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        state = self.predict_state(params)
+        state = self.predict_state(params, fixed_values=fixed_values)
         if wave is None:
             # Use ``state.wave`` (the orchestrator's runtime wavelength
             # grid, which may differ from ``self._rest_wavelength``,
@@ -6547,26 +6554,27 @@ class SEDModel:
         return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
 
     def _line_dust_component(self):
-        """The chain's dust component (``name`` "dust"/"dust_attenuation"), or
-        ``None`` for dust off/wg00 (neither declares ``attenuate_line_catalog``).
+        """The chain's dust component with line-attenuation capability, or
+        ``None`` if no dust component declares ``attenuate_line_catalog``
+        (only dust off passes lines through unchanged).
         """
         chain = getattr(self, "_cached_component_chain", None) or self._build_component_chain()
         for component in chain:
-            if getattr(component, "name", None) in ("dust", "dust_attenuation"):
+            if hasattr(component, "attenuate_line_catalog"):
                 return component
         return None
 
     def _attenuate_line_catalog(self, params, line_waves, line_lums):
         """Dust-redden a line catalog with no :class:`ForwardState` (#2223).
 
-        THE no-state fallback for :meth:`predict_line_fluxes` (dust
-        off/wg00, or the #950 ``enable_fast_nebular()`` grid path) and the
-        deprecated :meth:`predict_emission_lines`. Dispatches to
+        THE no-state fallback for :meth:`predict_line_fluxes` (dust off or the
+        #950 ``enable_fast_nebular()`` grid path) and the deprecated
+        :meth:`predict_emission_lines`. Dispatches to
         :meth:`_line_dust_component`'s own ``attenuate_line_catalog`` -- the
         SAME method the live forward pass calls for its continuum -- so this
         path cannot thread a different ``dust_delta``/``dust_Rv``/``redshift``/
         per-screen override than the live one. ``line_lums`` is INTRINSIC and
-        LINEAR [erg/s]; returns it unchanged when dust is off/wg00. JIT-safe
+        LINEAR [erg/s]; returns it unchanged when dust is off. JIT-safe
         (pure ``jnp`` once the static component lookup completes); the linear
         contract can itself overflow float32 at typical line luminosities, a
         pre-existing caveat (#1206 §3), not introduced here.
@@ -7277,7 +7285,7 @@ class SEDModel:
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
     def predict_spectral_indices(
-        self, params, index_defs, *, state=None, approx=False, fast=UNSET
+        self, params, index_defs, *, state=None, approx=False, fast=UNSET, fixed_values=None
     ):
         """Predict spectral index values from the model SED.
 
@@ -7295,14 +7303,15 @@ class SEDModel:
         state : ForwardState, optional
             A pre-computed forward state to measure on (shares one
             ``predict_state`` across channels). Ignored when ``approx=True``.
-            No ``fixed_values`` kwarg: indices are rest-frame quantities and
-            this method never resolves a redshift itself -- the ``approx=False``
-            branch reads ``state.sed_intrinsic`` (already resolved by whoever
-            built ``state``) or self-merges via ``_predict_rest_sed``, and the
-            ``approx=True`` branch (:meth:`_feature_fast_indices`) merges the
-            spec's own Fixed values with no evaluation-time override (unlike
-            :meth:`predict_line_fluxes`, this path has no Fitter call site that
-            ever exercises ``approx=True``).
+        fixed_values : dict, optional
+            Evaluation-time fixed values (e.g., runtime redshift from a
+            Fitter's ``params_override``). When supplied, these override the
+            spec's declared Fixed values. Required to be a complete fixed-value
+            dict (one entry per spec's Fixed parameter); absent keys will raise
+            ``KeyError`` during evaluation. Threaded to internal ``merge_fixed_params``
+            calls in both the fast (``approx=True``) and exact paths, ensuring
+            evaluation-time overrides (such as a runtime redshift affecting the
+            cosmic age and SFH truncation) reach all internal computations.
         approx : bool, default False
             Route through the FeaturePrecomp window-LUT path
             (:meth:`_feature_fast_indices`): contract precomputed SSP window
@@ -7352,7 +7361,7 @@ class SEDModel:
         # consumer was simply missing from that census.
 
         if approx:
-            return self._feature_fast_indices(params, tuple(index_defs))
+            return self._feature_fast_indices(params, tuple(index_defs), fixed_values=fixed_values)
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
         # quantities measured on the attenuated galaxy SED. Evaluate the
@@ -7371,7 +7380,7 @@ class SEDModel:
         # ``(state.wave, state.sed_intrinsic)`` on the native grid, so deriving
         # ``rest`` from a shared state is bit-identical to recomputing it.
         if state is None:
-            rest = self._predict_rest_sed(params)
+            rest = self._predict_rest_sed(params, fixed_values=fixed_values)
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
@@ -7510,7 +7519,7 @@ class SEDModel:
             )
         return stellar
 
-    def _feature_fast_indices(self, params, index_defs):
+    def _feature_fast_indices(self, params, index_defs, *, fixed_values=None):
         """FeaturePrecomp window-LUT measurement of ``index_defs`` (``approx=True``).
 
         Contracts the precomputed SSP window integrals with SED-free SFH+met
@@ -7539,7 +7548,9 @@ class SEDModel:
         # Fixed redshift (or any other Fixed value these two calls read
         # directly) is silently absent here even though it is legally
         # omitted from ``params`` on every ordinary predict_* surface.
-        full_params = merge_fixed_params(self.spec, params)
+        # Thread evaluation-time fixed_values (e.g. runtime redshift from a
+        # Fitter) through _evaluation_params to reach all downstream merges.
+        full_params = self._evaluation_params(params, fixed_values)
 
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
         joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
@@ -7562,8 +7573,14 @@ class SEDModel:
         # ``_predict_rest_sed`` self-merges via ``predict_state`` internally and
         # refuses a Fixed key of its own (#2296): pass the original free-only
         # ``params`` here, not ``full_params`` (which would then be refused).
+        # Thread the SAME evaluation-time ``fixed_values`` used above for the
+        # window-LUT slots: without it, a slope index (e.g. ``uv_slope_beta``)
+        # would silently read the model's own build-time Fixed values (spec
+        # default) instead of the caller's override, disagreeing with every
+        # other slot in the same ``index_defs`` under a runtime redshift
+        # override (same disease this method's fast path exists to avoid).
         if pc.has_slope:
-            rest = self._predict_rest_sed(params)
+            rest = self._predict_rest_sed(params, fixed_values=fixed_values)
             slots = pc.index_slots
             values = jnp.stack(
                 [
@@ -7707,7 +7724,15 @@ class SEDModel:
             )
 
         if state is None:
-            rest = self._predict_rest_sed(params)
+            # Thread the evaluation-time ``fixed_values`` used to resolve ``z``
+            # (and ``dl_cm``) above into the rest-frame SED too: before this,
+            # an explicit ``fixed_values={"redshift": ...}`` override moved the
+            # distance/luminosity scaling but not the SED itself, so a runtime
+            # z override under ``catalog_z_range`` silently measured the WRONG
+            # rest-frame SED (model's own build-time Fixed values) while
+            # correctly rescaling it to the OVERRIDDEN distance (same disease
+            # as the ``_feature_fast_indices`` slope-index gap).
+            rest = self._predict_rest_sed(params, fixed_values=fixed_values)
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         return jnp.stack(
@@ -8732,7 +8757,7 @@ class SEDModel:
         configured dust component (the ``nebular_screen`` choice -- default
         ``"birth_cloud"``, Charlot & Fall 2000 [1]_ -- for ``two_component``;
         the single screen for ``single_component``; unattenuated for
-        ``off``/``wg00``), the same dispatch :meth:`_attenuate_line_catalog`
+        ``off``), the same dispatch :meth:`_attenuate_line_catalog`
         uses (#2223). The mode-selectable nebular screen this docstring used
         to describe as dead config (``_neb_dust_mode`` / ``neb_dust_law_bc``,
         write-only since #923/#2230) is live again as explicit config (#2234,
@@ -8795,7 +8820,7 @@ class SEDModel:
             atten_lums = pow10(jnp.asarray(_log_atten))
         else:
             # Fallback for a chain that published no attenuated catalog
-            # (dust off/wg00): the SAME no-state screen `predict_line_fluxes`
+            # (dust off): the SAME no-state screen `predict_line_fluxes`
             # falls back to (#2223), so this deprecated surface cannot drift
             # from its replacement even off that published-catalog fast path.
             # _attenuate_line_catalog reads params["dust_tau_bc"] etc. with no
@@ -10017,6 +10042,18 @@ class SEDModel:
                 self._dust_band_response_cache = None
                 return None
 
+            # Decline band response when diffuse screen is active: the emission
+            # passes through the dust screen, so the effective response depends
+            # on the diffuse dust transmission T(λ), which varies with wavelength
+            # and cannot be factored into a constant per-filter response.
+            if self._dust_ir_diffuse_screen:
+                self._dust_band_response_decline = (
+                    "the IR emission passes through the diffuse screen "
+                    "(dust_emission diffuse_screen=True), so its band response depends on tau"
+                )
+                self._dust_band_response_cache = None
+                return None
+
             response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
 
         self._dust_band_response_decline = None
@@ -10471,6 +10508,7 @@ class SEDModel:
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
             dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
             dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
+            dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             astrodust_spinning_dust=bool(getattr(self, "_astrodust_spinning_dust", False)),

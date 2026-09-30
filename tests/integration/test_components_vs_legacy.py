@@ -1098,10 +1098,12 @@ def test_orchestrator_buat08_close_to_legacy(ssp):
     priors = {
         "sfh_buat08_log_total_mass": Uniform(8.0, 12.0),
         "sfh_buat08_velocity_km_s": Uniform(80.0, 360.0),
+        "sfh_buat08_age_gyr": Uniform(0.5, 13.0),
     }
     sfh_params = {
         "sfh_buat08_log_total_mass": 10.0,
         "sfh_buat08_velocity_km_s": 200.0,
+        "sfh_buat08_age_gyr": 8.0,
     }
     _check_with_priors(ssp, "buat08", priors, sfh_params)
 

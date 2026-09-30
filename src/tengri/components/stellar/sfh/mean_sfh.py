@@ -590,7 +590,13 @@ lnorm = lognormal
 
 
 def double_powerlaw(
-    t_lookback: jnp.ndarray, alpha: float, beta: float, tau: float, norm: float
+    t_lookback: jnp.ndarray,
+    alpha: float,
+    beta: float,
+    tau: float,
+    norm: float,
+    *,
+    age: float,
 ) -> jnp.ndarray:
     """Double power law star formation history (Carnall+2018, BAGPIPES).
 
@@ -602,16 +608,23 @@ def double_powerlaw(
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     alpha : float
-        Falling slope exponent [dimensionless]. Controls the decline from peak
-        to present. Larger alpha = steeper decline. Typical range: 0.5-4.
+        Falling (late-time) slope exponent [dimensionless].
+        Controls the decline from peak to present. Larger alpha = steeper decline.
+        Typical range: 0.5-4.
     beta : float
-        Rising slope exponent [dimensionless]. Controls the rise from early times
-        to peak. Larger beta = steeper rise. Typical range: 0.3-3.
+        Rising (early-time) slope exponent [dimensionless].
+        Controls the rise from formation to peak. Larger beta = steeper rise.
+        Typical range: 0.3-3.
     tau : float
-        Turnover timescale [yr]. Approximately when SFR peaks (in cosmic time).
+        Turnover timescale [yr]. Approximately when SFR peaks in cosmic time since
+        formation.
     norm : float
         Normalization factor [Msun/yr]. Note: this controls overall amplitude,
         not stellar mass. :math:`M_\\star = \\int \\mathrm{SFR}(t) \\, dt` is derived.
+    age : float
+        Cosmic time available for star formation [yr]. Set to the age of the
+        universe at the source redshift. SFR is zero for ``t_lookback > age``
+        (before formation).
 
     Returns
     -------
@@ -622,25 +635,28 @@ def double_powerlaw(
     -----
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-    **Gradient-safe**: yes, differentiable everywhere for positive tau.
+    **Gradient-safe**: yes, differentiable everywhere for positive tau and age.
 
-    The double power law SFH is:
+    The double power law SFH is evaluated in cosmic time since formation:
 
     .. math::
 
-        \\mathrm{SFR}(t_{\\rm cosmic}) = \\frac{n}{(t_{\\rm cosmic}/\\tau)^\\alpha + (t_{\\rm cosmic}/\\tau)^{-\\beta}}  # noqa: E501
+        \\mathrm{SFR}(T) = \\frac{n}{(T/\\tau)^\\alpha + (T/\\tau)^{-\\beta}}
 
-    where :math:`t_{\\rm cosmic} = t_{\\mathrm{H}} - t_{\\rm lookback}` is cosmic time
-    since the Big Bang, :math:`t_{\\mathrm{H}}` is the age of the universe,
-    :math:`\\tau` is the turnover timescale, and :math:`\\alpha`, :math:`\\beta`
-    are the falling and rising slopes [dimensionless].
+    where :math:`T = \\mathrm{age} - t_{\\rm lookback}` is cosmic time since
+    formation, :math:`\\tau` is the turnover timescale, and :math:`\\alpha`,
+    :math:`\\beta` are the falling and rising slopes [dimensionless].
+    The SFR is exactly zero for :math:`T \\le 0` (before formation, i.e.
+    :math:`t_{\\rm lookback} \\ge \\mathrm{age}`).
 
-    In **cosmic time**: :math:`\\alpha` controls the declining phase (after peak),
+    In **cosmic time T** (age since formation):
+    :math:`\\alpha` controls the declining phase (after peak at :math:`T = \\tau`),
     :math:`\\beta` controls the rising phase (before peak).
 
-    In **lookback time** (as plotted): :math:`\\alpha` controls the RIGHT side
-    (early universe, large lookback), :math:`\\beta` controls the LEFT side
-    (near present, small lookback).
+    In **lookback time** (as plotted, left-to-right with increasing age):
+    The peak is at lookback :math:`t_{\\rm lb} = \\mathrm{age} - \\tau`.
+    Left side (small lookback, recent): declining phase (controlled by alpha).
+    Right side (large lookback, ancient): rising phase (controlled by beta).
 
     References
     ----------
@@ -657,12 +673,22 @@ def double_powerlaw(
     >>> import jax.numpy as jnp
     >>> from tengri import double_powerlaw
     >>> t = jnp.linspace(1e6, 13.7e9, 100)
-    >>> sfr = double_powerlaw(t, alpha=1.5, beta=2.0, tau=3e9, norm=10.0)
+    >>> age = 13.7e9
+    >>> sfr = double_powerlaw(t, alpha=1.5, beta=2.0, tau=3e9, norm=10.0, age=age)
     >>> sfr.shape
     (100,)
     """
-    x = t_lookback / tau
-    return norm / (x**alpha + x ** (-beta))
+    # Cosmic time since formation; SFR is zero before formation (T <= 0).
+    # Use a finite positive dummy (tau) for the masked T <= 0 region rather than
+    # jnp.inf: inf**alpha and its derivative are NaN/inf, and the NaN leaks through
+    # the jnp.where VJP, poisoning the gradient w.r.t. alpha whenever any grid point
+    # has lookback >= age. The double-where keeps both branches finite so the mask
+    # cleanly zeroes the dead region in forward and backward passes.
+    T = age - t_lookback
+    T_safe = jnp.where(T > 0.0, T, tau)
+    x = T_safe / tau
+    shape = jnp.where(T > 0.0, 1.0 / (x**alpha + x ** (-beta)), 0.0)
+    return norm * shape
 
 
 def dpl(
@@ -1398,17 +1424,27 @@ def triweight_burst(
 # ── Historical SFH parameterizations ────────────────────────────
 
 
-def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray:
-    """Delayed-tau SFH: SFR(t) = norm * t * exp(-t/tau). Peaks at t=tau.
+def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float, *, age: float) -> jnp.ndarray:
+    """Delayed-tau SFH: SFR(T) = norm * T * exp(-T/tau). Peaks at T=tau.
+
+    A rising-exponential SFH that reaches maximum SFR at cosmic time T = tau
+    since galaxy formation, then declines. Used as the bare shape in
+    :func:`sfhdelayed` for the CIGALE/Bagpipes ``delayed`` model (#406).
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     tau : float
-        Timescale [yr].
+        Timescale [yr]. Cosmic-time location of the SFR peak relative to
+        galaxy formation.
     norm : float
-        Normalization factor [Msun/yr].
+        Normalization factor [Msun/yr]. Controls overall amplitude, not
+        integrated mass. Use :func:`sfhdelayed` for mass-conserving version.
+    age : float
+        Cosmic time available for star formation [yr]. Set to the age of the
+        universe at the source redshift. SFR is zero for ``t_lookback > age``
+        (before formation).
 
     Returns
     -------
@@ -1419,16 +1455,40 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
     -----
     **JIT-compatible**: yes, uses ``jnp`` primitives.
 
+    **Gradient-safe**: yes, differentiable everywhere for positive tau and age.
+
+    The delayed-tau SFH is evaluated in cosmic time since formation:
+
+    .. math::
+
+        \\mathrm{SFR}(T) = n \\cdot T \\cdot \\exp(-T / \\tau)
+
+    where :math:`T = \\mathrm{age} - t_{\\rm lookback}` is cosmic time since
+    galaxy formation, :math:`\\tau` is the timescale, and the SFR is exactly
+    zero for :math:`T \\le 0` (before formation, i.e.
+    :math:`t_{\\rm lookback} \\ge \\mathrm{age}`).
+
+    See :func:`sfhdelayed` for the mass-conserving registry-wired version
+    (Resolves the time-reversal of #2524).
+
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri import delayed_tau
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = delayed_tau(t, tau=2e9, norm=10.0)
+    >>> age = 13.7e9
+    >>> sfr = delayed_tau(t, tau=2e9, norm=10.0, age=age)
     >>> sfr.shape
     (64,)
     """
-    return norm * t_lookback * jnp.exp(-t_lookback / tau)
+    # Cosmic time since formation; SFR is zero before formation (T <= 0).
+    # Use double-where pattern for gradient safety: compute on a safe argument,
+    # then select between the result and zero based on the condition T > 0.
+    T = age - t_lookback
+    T_safe = jnp.where(T > 0.0, T, tau)  # Safe (positive) value for the exponential
+    raw = T_safe * jnp.exp(-T_safe / tau)
+    shape = jnp.where(T > 0.0, raw, 0.0)
+    return norm * shape
 
 
 def psb_wild2020(
@@ -1543,24 +1603,45 @@ def delayed_bq(
     age_bq_yr: float,
     r_sfr: float,
 ) -> jnp.ndarray:
-    """Delayed-tau SFH with burst or quench episode (Ciesla+2017).
+    r"""Delayed-tau SFH with burst or quench episode (CIGALE ``sfhdelayedbq``).
 
-    A delayed exponential SFR that peaks at tau_main_yr, followed by a burst
-    or quench at age_bq_yr. Before the burst/quench, the SFR follows the
-    delayed-tau form: SFR(t) = t * exp(-t/tau) / tau^2. After age_bq_yr,
-    the SFR is constant at r_sfr times the SFR at the burst/quench onset.
+    A delayed exponential SFR that peaks at cosmic time T = ``tau_main_yr`` after
+    formation, followed by a burst or quench at age ``age_bq_yr`` lookback. The
+    burst/quench covers the recent ``age_bq_yr`` lookback window.
+
+    .. math::
+
+       T = \mathrm{age\_main} - t_{\mathrm{lb}} \ge 0
+
+       \mathrm{SFR}(T) = \begin{cases}
+       \frac{T}{\tau^2} \exp(-T/\tau) & T < T_{\mathrm{bq}} \\
+       r_{\mathrm{sfr}} \times \mathrm{SFR}(T_{\mathrm{bq}}) & T \ge T_{\mathrm{bq}}
+       \end{cases}
+
+    where :math:`T` is **cosmic time since galaxy formation**, :math:`t_{\mathrm{lb}}`
+    is lookback time, :math:`\tau = \mathrm{tau\_main\_yr}` is the e-folding
+    timescale of the delayed component, :math:`T_{\mathrm{bq}} = \mathrm{age\_main} -
+    \mathrm{age\_bq}` is the cosmic time of the burst/quench onset, and
+    :math:`r_{\mathrm{sfr}}` is the post-episode SFR ratio [dimensionless].
+
+    The SFR is zero before formation (``t_lookback > age_main_yr``).
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so
+        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
     tau_main_yr : float
-        e-folding timescale of main component [yr]. Peak occurs at tau_main_yr.
+        e-folding timescale of main component [yr]. Peak occurs at cosmic
+        time T = ``tau_main_yr`` after formation.
     age_main_yr : float
-        Age of the main stellar population / galaxy age [yr]. The delayed tau
-        model extends from 0 to age_main_yr.
+        Galaxy age [yr] = lookback time of formation. SFR is zero before
+        formation (``t_lookback > age_main_yr``).
     age_bq_yr : float
-        Age at which burst/quench episode begins [yr].
+        Lookback time of burst/quench episode onset [yr]. The burst/quench
+        covers ``t_lookback <= age_bq_yr`` (the most recent ``age_bq_yr``).
     r_sfr : float
         Ratio of SFR after/before burst/quench [dimensionless].
         r_sfr < 1 is quenching, r_sfr > 1 is bursting.
@@ -1574,20 +1655,8 @@ def delayed_bq(
     -----
     **JIT-compatible**: yes, uses ``jnp`` primitives.
 
-    **Gradient-safe**: yes, differentiable everywhere for positive tau_main_yr.
-
-    The SFR is defined as:
-
-    .. math::
-
-        \\mathrm{SFR}(t) = \\begin{cases}
-        \\frac{t}{\\tau^2} \\exp(-t/\\tau) & t < t_{\\rm bq} \\\\
-        r_{\\rm sfr} \\times \\mathrm{SFR}(t_{\\rm bq}) & t \\geq t_{\\rm bq}
-        \\end{cases}
-
-    where :math:`\\tau` is ``tau_main_yr`` [yr], :math:`t_{\\rm bq}` is
-    ``age_main_yr - age_bq_yr`` [yr], and :math:`r_{\\rm sfr}` is the
-    post-episode SFR ratio [dimensionless].
+    **Gradient-safe**: yes, differentiable everywhere for positive tau_main_yr
+    and age_main_yr.
 
     **Reference**: Implements CIGALE ``sfhdelayedbq.py`` (Boquien et al. 2019 [2]_).
 
@@ -1610,15 +1679,23 @@ def delayed_bq(
     >>> sfr.shape
     (100,)
     """
-    t_bq = age_main_yr - age_bq_yr
-    t_tau = t_lookback / tau_main_yr
-    sfr_delayed = t_tau * jnp.exp(-t_tau) / tau_main_yr
-    sfr_at_bq = (t_bq / tau_main_yr) * jnp.exp(-t_bq / tau_main_yr) / tau_main_yr
+    # Cosmic time since formation; SFR is zero before the galaxy formed.
+    T = age_main_yr - t_lookback
+    T_bq = age_main_yr - age_bq_yr
+
+    # Delayed-tau formula: (T / tau^2) * exp(-T / tau)
+    T_safe = jnp.maximum(T, 0.0)
+    sfr_delayed = (T_safe / tau_main_yr) * jnp.exp(-T_safe / tau_main_yr) / tau_main_yr
+
+    # SFR at the burst/quench onset
+    sfr_at_bq = (T_bq / tau_main_yr) * jnp.exp(-T_bq / tau_main_yr) / tau_main_yr
     sfr_post_bq = r_sfr * sfr_at_bq
-    raw = jnp.where(t_lookback >= t_bq, sfr_post_bq, sfr_delayed)
-    # ``raw`` is finite for every t_lookback (both branches are), so the
-    # cell-averaged window can simply multiply: restoring a real gradient for
-    # ``age_main_yr`` (#1374).
+
+    # Select: in the burst/quench window (T_bq <= T, i.e., t_lb <= age_bq_yr) use
+    # burst/quench level, otherwise use delayed-tau shape.
+    raw = jnp.where(T_bq <= T, sfr_post_bq, sfr_delayed)
+
+    # Cell-averaged window so ``age_main_yr`` has a gradient (#1374).
     shape = raw * window_weight(t_lookback, 0.0, age_main_yr)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
@@ -1631,27 +1708,54 @@ def periodic(
     burst_type: int,
     age_yr: float,
 ) -> jnp.ndarray:
-    """Periodic SFH with regularly-spaced star formation events.
+    r"""Periodic SFH with regularly-spaced star formation events (CIGALE ``sfhperiodic``).
 
-    Regularly-spaced SF events at intervals of delta_bursts_yr, each with
-    duration/e-folding timescale tau_bursts_yr. The shape of each event
-    depends on burst_type: 0=exponential, 1=delayed, 2=rectangular.
+    Regularly-spaced SF bursts at cosmic times ``T = k * delta_bursts_yr``
+    (k = 0, 1, 2, ...) for ``0 <= T < age_yr``. Each burst follows one of
+    three shapes and decays forward in time from its onset. No burst cap.
+
+    .. math::
+
+       T = \mathrm{age} - t_{\mathrm{lb}} \ge 0
+
+       n = \lfloor T / \Delta \rfloor, \quad u = T - n \Delta
+
+    The SFR is a sum over all bursts:
+
+    .. math::
+
+       \mathrm{SFR}(T) = \begin{cases}
+       \exp(-u/\tau) \sum_{j=0}^{n} r^j & \text{exponential (type 0)} \\
+       \exp(-u/\tau) / \tau^2 \left( u \sum_{j=0}^{n} r^j + \Delta \sum_{j=0}^{n} j r^j \right)
+           & \text{delayed (type 1)} \\
+       \#\{j : u + j\Delta \le \tau, 0 \le j \le n\} & \text{rectangular (type 2)}
+       \end{cases}
+
+    where :math:`r = \exp(-\Delta/\tau)` is the decay between bursts,
+    :math:`\Delta = \mathrm{delta\_bursts\_yr}` [yr], and :math:`\tau = \mathrm{tau\_bursts\_yr}` [yr].
+
+    The SFR is zero before formation (``t_lookback > age_yr``).
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so
+        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
     delta_bursts_yr : float
         Elapsed time between the beginning of each burst [yr].
     tau_bursts_yr : float
         Duration (for rectangular) or e-folding timescale [yr] of each event.
     burst_type : int
         Type of burst event [dimensionless]:
-        0 = exponential: exp(-t/tau),
-        1 = delayed: (t/tau^2) * exp(-t/tau),
-        2 = rectangular: constant 1 for t < tau, 0 otherwise.
+        0 = exponential: exp(-u/tau),
+        1 = delayed: (u/tau^2) * exp(-u/tau),
+        2 = rectangular: constant 1 for u <= tau, 0 otherwise.
     age_yr : float
-        Age of the galaxy / maximum time [yr].
+        Galaxy age [yr] = lookback time of formation. Bursts occur at
+        cosmic times T = k * delta_bursts_yr for k = 0, 1, 2, ... while kΔ < age.
+        SFR is zero before formation (``t_lookback > age_yr``).
 
     Returns
     -------
@@ -1660,14 +1764,12 @@ def periodic(
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jnp.mod``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and closed-form summations.
 
     **Gradient-safe**: yes, differentiable everywhere except at event boundaries
     (discontinuities for rectangular type).
 
-    The SFR is a superposition of multiple burst events spaced delta_bursts_yr
-    apart, each following one of three shapes. The burst at event i starts at
-    time i * delta_bursts_yr and ends (or decays) within tau_bursts_yr.
+    Exact per-time-bin closed form: O(n_time), no burst cap.
 
     **Reference**: Implements CIGALE ``sfhperiodic.py`` (Boquien et al. 2019 [1]_).
 
@@ -1694,28 +1796,59 @@ def periodic(
     (100,)
     """
     tau = tau_bursts_yr
+    delta = delta_bursts_yr
 
-    # Vectorized: burst_starts shape (n_bursts, 1), t shape (1, n_time)
-    n_bursts = 100
-    burst_starts = jnp.arange(n_bursts) * delta_bursts_yr  # (n_bursts,)
-    dt = t_lookback[None, :] - burst_starts[:, None]  # (n_bursts, n_time)
+    # Cosmic time since formation; SFR is zero before the galaxy formed.
+    T = age_yr - t_lookback
+    T_safe = jnp.maximum(T, 0.0)
 
-    exp_decay = jnp.exp(-dt / tau)
-    delayed_exp = (dt / tau**2) * exp_decay
-    rectangular = jnp.where(dt <= tau, 1.0, 0.0)
+    # Burst index: k = floor(T / delta), which is the index of the latest burst
+    # with onset at cosmic time k * delta <= T.
+    n = jnp.floor(T_safe / delta)
 
-    burst = (
-        jnp.where(burst_type == 0, exp_decay, 0.0)
-        + jnp.where(burst_type == 1, delayed_exp, 0.0)
-        + jnp.where(burst_type == 2, rectangular, 0.0)
+    # Time since the latest burst onset: u = T - n * delta, in [0, delta).
+    u = T_safe - n * delta
+
+    # Geometric series terms.
+    # r = exp(-delta / tau): decay per burst interval
+    # r**(n+1), r**n: decay to the (n+1)-th and n-th burst
+    one_minus_r = -jnp.expm1(-delta / tau)  # 1 - r, stable near zero
+    r_np1 = jnp.exp(-(n + 1.0) * delta / tau)  # r**(n+1)
+    r_n = jnp.exp(-n * delta / tau)  # r**n
+
+    # Geometric sum: sum_{j=0}^{n} r**j = (1 - r**(n+1)) / (1 - r)
+    # 1 - r = -expm1(-delta/tau) > 0 for delta, tau > 0: no clamp needed
+    S0 = (1.0 - r_np1) / one_minus_r
+
+    # Weighted sum for delayed type: sum_{j=0}^{n} j * r**j
+    # = r * (1 - (n+1)*r**n + n*r**(n+1)) / (1 - r)**2
+    # 1 - r = -expm1(-delta/tau) > 0 for delta, tau > 0: no clamp needed
+    r = 1.0 - one_minus_r
+    S1 = r * (1.0 - (n + 1.0) * r_n + n * r_np1) / (one_minus_r**2)
+
+    # Rectangular: count bursts j with u + j*delta <= tau, i.e., j <= (tau - u) / delta.
+    # Use floor-then-clamp to get integer count: min(floor((tau - u)/delta) + 1, n + 1).
+    # The +1 accounts for the current burst (j=0); clamping at n+1 is the max.
+    rect_count = jnp.clip(jnp.floor((tau - u) / delta) + 1.0, 0.0, n + 1.0)
+
+    # Exponential (type 0): exp(-u/tau) * S0
+    exp_shape = jnp.exp(-u / tau) * S0
+
+    # Delayed (type 1): exp(-u/tau) / tau**2 * (u * S0 + delta * S1)
+    delayed_shape = jnp.exp(-u / tau) / (tau**2) * (u * S0 + delta * S1)
+
+    # Rectangular (type 2): rect_count
+    rect_shape = rect_count
+
+    # Select the shape based on burst_type.
+    raw = (
+        jnp.where(burst_type == 0, exp_shape, 0.0)
+        + jnp.where(burst_type == 1, delayed_shape, 0.0)
+        + jnp.where(burst_type == 2, rect_shape, 0.0)
     )
 
-    # ``dt >= 0`` gates each burst to lookback times after its own onset and stays
-    # a hard per-burst selector; the galaxy-age cut becomes a cell-averaged window
-    # so ``age_yr`` regains a gradient (#1374). Broadcast over the burst axis.
-    shape = jnp.sum(jnp.where(dt >= 0, burst, 0.0), axis=0) * window_weight(
-        t_lookback, 0.0, age_yr
-    )
+    # Cell-averaged window so ``age_yr`` has a gradient (#1374).
+    shape = raw * window_weight(t_lookback, 0.0, age_yr)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
@@ -1845,24 +1978,40 @@ def buat08(
     t_lookback: jnp.ndarray,
     log_total_mass: float,
     velocity_km_s: float,
+    age_yr: float,
 ) -> jnp.ndarray:
-    """Chemically-motivated SFH parameterized by galaxy rotational velocity.
+    r"""Chemically-motivated SFH parameterized by galaxy rotational velocity (CIGALE ``sfh_buat08``).
 
     A physically-motivated SFH derived from chemical evolution models.
-    The SFR is given by a polynomial in log10-space:
+    The SFR is parameterized by the galaxy's rotational velocity and follows
+    a formula in cosmic time since formation:
 
-        log10(SFR(t)) = a + b*log10(t) + c*t^0.5
+    .. math::
 
-    The coefficients a, b, c are interpolated from Buat+2008 Table 2
-    based on the galaxy's rotational velocity.
+       \log_{10}(\mathrm{SFR}(T)) = a(v) + b(v) \log_{10}(t_{\mathrm{gyr}})
+           + c(v) \sqrt{t_{\mathrm{gyr}}} - 9,
+       \quad t_{\mathrm{gyr}} = \frac{T}{10^9} + 10^{-3}, \quad
+       T = \mathrm{age} - t_{\mathrm{lb}} \ge 0
+
+    where :math:`T` is **cosmic time since galaxy formation**, :math:`t_{\mathrm{lb}}`
+    is lookback time, :math:`v` is rotational velocity [km/s], and the offset -9
+    converts from galaxy-integrated SFR to local SFR normalization.
+
+    The SFR is zero before formation (``t_lookback > age_yr``).
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so
+        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
     velocity_km_s : float
         Rotational velocity of the galaxy [km/s]. Must be between 40 and 360.
         Will be clipped to this range if necessary.
+    age_yr : float
+        Galaxy age [yr] = lookback time of formation. SFR is zero before
+        formation (``t_lookback > age_yr``). REQUIRED, no default.
 
     Returns
     -------
@@ -1873,20 +2022,10 @@ def buat08(
     -----
     **JIT-compatible**: yes, uses ``jnp`` primitives and ``jnp.interp``.
 
-    **Gradient-safe**: yes, differentiable with respect to velocity.
+    **Gradient-safe**: yes, differentiable with respect to velocity and age.
 
     Coefficients from Buat et al. (2008) Table 2, extended with additional
     data provided by S. Boissier for velocities down to 40 km/s.
-
-    The formula in log time is:
-
-    .. math::
-
-        \\log_{10}(\\mathrm{SFR}(t)) = a(v) + b(v) \\log_{10}(t/\\mathrm{Gyr}) +
-        c(v) (t/\\mathrm{Gyr})^{0.5} - 9
-
-    where :math:`v` is the rotational velocity [km/s], and the offset -9 converts
-    from galaxy-integrated SFR to local SFR normalization.
 
     **Reference**: Implements CIGALE ``sfh_buat08.py`` (Boquien et al. 2019 [2]_).
     Extended velocity coefficients (40–100 km/s) provided by S. Boissier
@@ -1907,7 +2046,7 @@ def buat08(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh.mean_sfh import buat08
     >>> t = jnp.logspace(6, 10.14, 100)
-    >>> sfr = buat08(t, log_total_mass=10.0, velocity_km_s=220.0)
+    >>> sfr = buat08(t, log_total_mass=10.0, velocity_km_s=220.0, age_yr=8e9)
     >>> sfr.shape
     (100,)
     """
@@ -1917,9 +2056,15 @@ def buat08(
     b = jnp.interp(v, device_table(_BUAT08_VELOCITIES), device_table(_BUAT08_B))
     c = jnp.interp(v, device_table(_BUAT08_VELOCITIES), device_table(_BUAT08_C))
 
-    t_gyr = jnp.maximum(t_lookback / 1e9, 1e-9)
+    # Cosmic time since formation; SFR is zero before the galaxy formed.
+    T = age_yr - t_lookback
+    T_safe = jnp.maximum(T, 0.0)
+
+    # Time in Gyr with 1 Myr floor: t_gyr = (T in Myr + 1) / 1000 Gyr
+    t_gyr = T_safe / 1e9 + 1e-3
+
     log_sfr = a + b * jnp.log10(t_gyr) + c * jnp.sqrt(t_gyr) - 9.0
-    shape = jnp.maximum(10.0**log_sfr, 0.0)
+    shape = jnp.maximum(10.0**log_sfr, 0.0) * window_weight(t_lookback, 0.0, age_yr)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 

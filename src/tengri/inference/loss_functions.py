@@ -306,13 +306,9 @@ def _build_prediction(
             fixed_values=eval_fixed,
         )
     if has_indices:
-        # predict_spectral_indices takes no fixed_values: indices are
-        # rest-frame quantities and this call always supplies feature_state
-        # (needs_state is unconditionally True whenever has_indices), so the
-        # exact branch reads the already-resolved state.sed_intrinsic; see
-        # SEDModel.predict_spectral_indices's docstring for the full reason.
+        # Spectral indices accept evaluation-time fixed_values (e.g. runtime z).
         prediction["indices"] = model.predict_spectral_indices(
-            free_params, index_defs, state=feature_state
+            free_params, index_defs, state=feature_state, fixed_values=eval_fixed
         )
 
     return prediction, predicted, pred_phot, pred_spec

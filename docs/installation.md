@@ -22,7 +22,7 @@ touches the forward model.
 | `[grain-dust]` | dust-extinction | Grain-model dust attenuation laws (wd01, d03, hd23) |
 | `[filters]` | astroquery | Downloading filter curves from SVO Filter Profile Service |
 | `[gpu]`  | jax with CUDA wheels | NVIDIA GPU fits |
-| `[metal]` | jax-metal | Apple Silicon acceleration (experimental) |
+| `[mps]` | jax-mps | Apple Silicon GPU, float32 only, in its own environment (experimental; see the Apple MPS notebook) |
 | `[all]`  | nuts, optax, grain-dust, filters | recommended for new users; does not include GPU backends |
 | `[dev]`  | pytest, ruff, jupytext, and testing backends | development |
 
