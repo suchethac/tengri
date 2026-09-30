@@ -2,6 +2,16 @@
 
 ### Added
 
+- The per-Q_H nebular grid serves broadband photometry and line fluxes to dusty models when the dust component has a stellar energy-balance LUT (`nebular_from_grid=True`). Dust channels populate the table: observed and rest-frame sub-band nebular photometry, flux-weighted wavelength per sub-band, and dust-absorbed nebular luminosity per unit Q_H on the optical-depth grid (signed). Measured on the paper's configurations, galaxy 79, quiet machine: fit-surface gradient 2.69 ms (configuration I) and 2.35 ms (II) against 25-32 ms; gradient FLOPs 4.0-4.1 M against 67-94 M (#2387).
+
+- Single-component dust now reddens the nebular band flux where the emission is (the band integral of the reddened continuum), matching two-component dust since #1738. `WavePrecomp()` against the exact model at tau_v = 2.3 on paper configuration II: 4.0e-2 before, 2.7e-3 after (#1738).
+
+- The grid applies `neb_fesc` and `neb_fdust` at reconstruction (computed per-galaxy from parameters); the table is built at zero for both and every channel is scaled by `lyc_dust_escape_factor`. Any other free nebular parameter held at the build value (`neb_fesc_lya`, `ionspec_*`, `gas_*`, `neb_eline_sigma_kms`, `neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is refused by enumeration of the namespace.
+
+- With a free redshift (``redshift=Uniform(...)``) or a runtime redshift (``WavePrecomp(catalog_z_range=...)``), the grid serves line fluxes only; band fluxes take the exact nebular path. Measured before: up to 7.35e-2.
+
+- **Known limits** (not changed by this feature): the grid holds the ionizing spectrum shape at the reference star formation history. For a population with no recent star formation and zero birth-cloud optical depth the u bands were off by 3.3e-2 on one prior draw of configuration I; over 32 prior draws as drawn the worst band is 3.9e-3 (I) and 1.1e-2 (II); posterior draws are within 7.2e-4 (I) and 1.3e-3 (II).
+
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
 - `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
