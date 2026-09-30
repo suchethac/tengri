@@ -51,6 +51,78 @@ _LOG10_LSUN_ERG: float = _math.log10(LSUN_ERG)
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Shared disc normalization helper
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _disc_log_l5100(
+    wave_nm: Array,
+    L_lambda_unit_nm: Array,
+    agn_log_lbol: float,
+    agn_grahsp_log_l5100: float | None,
+    **_params,
+) -> Array:
+    r"""Compute log10(L_lambda(5100A)) for disc blocks.
+
+    Normalizes a unit-spectrum disc (L_lambda_unit_nm at l5100=1.0) to either:
+    - The requested bolometric luminosity (if agn_grahsp_log_l5100 is None)
+    - An explicit value with float32 shape-hint pre-shift (if agn_grahsp_log_l5100 is set)
+
+    Parameters
+    ----------
+    wave_nm : array_like
+        Wavelength [nm].
+    L_lambda_unit_nm : array_like
+        Disc spectrum normalized to l5100=1 [erg/s/nm].
+    agn_log_lbol : float
+        Reference bolometric luminosity [dex(L_sun)].
+    agn_grahsp_log_l5100 : float or None
+        Explicit log10(L_lambda(5100A) / (erg/s)), or None to compute from bolometric.
+    **_params
+        Extra parameters; used to extract agn_log_lbol_shape (float32 pre-shift value).
+
+    Returns
+    -------
+    log_l5100 : array_like
+        log10(L_lambda(5100A) / (erg/s)).
+    """
+    if agn_grahsp_log_l5100 is None:
+        # Normalize by the requested bolometric luminosity above the Lyman limit.
+        from tengri.components.agn.grahsp.bolometric import (
+            bolometric_luminosity_bbb,
+        )
+
+        l_bol_unit = bolometric_luminosity_bbb(wave_nm, L_lambda_unit_nm)
+        # log10(target) = agn_log_lbol + log10(L_sun); log10(l5100) =
+        # log10(target) - log10(l_bol_unit). Never materializes the linear
+        # target (~1e42-1e47, #1206 §D).
+        log_l5100 = (
+            jnp.asarray(agn_log_lbol)
+            + _LOG10_LSUN_ERG
+            - jnp.log10(jnp.maximum(l_bol_unit, representable_floor(1e-300)))
+        )
+    else:
+        # ``agn_log_lbol`` here may be the runner's SAFE REFERENCE value
+        # rather than the true one (component.py's float32 shape-hint
+        # scheme, #1206): it hands every block ``agn_log_lbol_shape`` (the
+        # true value) alongside the reference ``agn_log_lbol``, then
+        # rescales the WHOLE block output by
+        # ``10**(agn_log_lbol_shape - agn_log_lbol)`` afterward. An
+        # explicit ``agn_grahsp_log_l5100`` is decoupled from
+        # ``agn_log_lbol`` entirely, so without this it would not be
+        # covered by that rescale and would overflow float32 on its own
+        # (measured: L_lambda(5100A) ~ 1e39-1e42 at typical priors, past
+        # the 3.4e38 ceiling). Pre-shifting by the SAME offset here means
+        # the caller's rescale restores the true l5100 exactly, reusing
+        # the existing mechanism rather than adding a second one.
+        agn_log_lbol_shape = _params.get("agn_log_lbol_shape", agn_log_lbol)
+        log_l5100 = jnp.asarray(agn_grahsp_log_l5100) - (
+            jnp.asarray(agn_log_lbol_shape) - jnp.asarray(agn_log_lbol)
+        )
+    return log_l5100
+
+
+# ──────────────────────────────────────────────────────────────────────
 # GRAHSP disc block: smooth bending power-law BBB (Ryde 1999)
 # ──────────────────────────────────────────────────────────────────────
 
@@ -119,44 +191,126 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
     # corona (#1168). Below the >=91.2 nm bolometric window, so normalization
     # is unchanged.
     L_lambda_unit_nm = floor_disc_xray(wave_nm, L_lambda_unit_nm)
-    if agn_grahsp_log_l5100 is None:
-        # Normalize by the requested bolometric luminosity above the Lyman limit.
-        from tengri.components.agn.grahsp.bolometric import (
-            bolometric_luminosity_bbb,
-        )
 
-        l_bol_unit = bolometric_luminosity_bbb(wave_nm, L_lambda_unit_nm)
-        # log10(target) = agn_log_lbol + log10(L_sun); log10(l5100) =
-        # log10(target) - log10(l_bol_unit). Never materializes the linear
-        # target (~1e42-1e47, #1206 §D).
-        log_l5100 = (
-            jnp.asarray(agn_log_lbol)
-            + _LOG10_LSUN_ERG
-            - jnp.log10(jnp.maximum(l_bol_unit, representable_floor(1e-300)))
-        )
-    else:
-        # ``agn_log_lbol`` here may be the runner's SAFE REFERENCE value
-        # rather than the true one (component.py's float32 shape-hint
-        # scheme, #1206): it hands every block ``agn_log_lbol_shape`` (the
-        # true value) alongside the reference ``agn_log_lbol``, then
-        # rescales the WHOLE block output by
-        # ``10**(agn_log_lbol_shape - agn_log_lbol)`` afterward. An
-        # explicit ``agn_grahsp_log_l5100`` is decoupled from
-        # ``agn_log_lbol`` entirely, so without this it would not be
-        # covered by that rescale and would overflow float32 on its own
-        # (measured: L_lambda(5100A) ~ 1e39-1e42 at typical priors, past
-        # the 3.4e38 ceiling). Pre-shifting by the SAME offset here means
-        # the caller's rescale restores the true l5100 exactly, reusing
-        # the existing mechanism rather than adding a second one.
-        agn_log_lbol_shape = _params.get("agn_log_lbol_shape", agn_log_lbol)
-        log_l5100 = jnp.asarray(agn_grahsp_log_l5100) - (
-            jnp.asarray(agn_log_lbol_shape) - jnp.asarray(agn_log_lbol)
-        )
+    # Compute the 5100 A normalization using the shared helper.
+    log_l5100 = _disc_log_l5100(
+        wave_nm=wave_nm,
+        L_lambda_unit_nm=L_lambda_unit_nm,
+        agn_log_lbol=agn_log_lbol,
+        agn_grahsp_log_l5100=agn_grahsp_log_l5100,
+        **_params,
+    )
 
     # ``l5100`` itself (~1e42-1e47 erg/s) is past float32's 3.4e38 ceiling as a
     # bare value; apply_log10_scale folds it into the O(1) shape array
     # instead of forming ``L_lambda_unit_nm * l5100`` directly (#1206 §D).
     L_lambda_nm = apply_log10_scale(L_lambda_unit_nm, log_l5100)
+    # nm grid output -> Å grid: L_lambda[erg/s/Å] = L_lambda[erg/s/nm] / 10.
+    return L_lambda_nm * 0.1
+
+
+@register_agn_block(
+    "disc",
+    "grahsp_netzer",
+    citation="Netzer & Trakhtenbrot 2014, MNRAS 438, 672; Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP Netzer & Trakhtenbrot 2014 disc templates",
+)
+def grahsp_netzer_disc_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    *,
+    agn_grahsp_log_l5100: float | None = None,
+    agn_grahsp_netzer_log_mbh: float = 8.0,
+    agn_grahsp_netzer_spin: float = 0.0,
+    agn_grahsp_netzer_log_mdot: float = -0.5228787452803376,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""GRAHSP Netzer & Trakhtenbrot 2014 disc templates as a disc-stage block.
+
+    Interpolates between 16 pre-computed disc spectra on a grid defined by:
+    - Black hole mass M: (6, 7, 8, 9) [dex(M_sun)]
+    - Spin a: (0.0, 0.998) [dimensionless]
+    - Eddington ratio Mdot: (0.03, 0.3) [erg/s units]
+
+    Interpolation is multilinear between the nearest grid nodes. At each of the
+    16 nodes, the output is **exactly equal** to the upstream GRAHSP component
+    API; between nodes, the output is differentiable and fittable.
+
+    If ``agn_grahsp_log_l5100`` is unset (``None``), normalize so the disc-only
+    bolometric integral matches ``10**agn_log_lbol * L_sun``. Otherwise use
+    the explicit ``λL_λ(5100Å)`` value (matches upstream's parametric mode).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
+    agn_grahsp_log_l5100 : float, optional
+        ``log10(lambda*L_lambda(5100A) / (erg/s))``. ``None`` triggers automatic
+        normalization from ``agn_log_lbol``.
+    agn_grahsp_netzer_log_mbh : float
+        log10(M_BH / M_sun). Priors: Uniform(6.0, 9.0); default 8.0.
+    agn_grahsp_netzer_spin : float
+        Black hole spin parameter a. Priors: Uniform(0.0, 0.998); default 0.0.
+    agn_grahsp_netzer_log_mdot : float
+        log10(Eddington ratio). Priors: Uniform(log10(0.03), log10(0.3));
+        default log10(0.3) = -0.5228787452803376.
+    templates : GRAHSPTemplates, optional
+        Pre-loaded template bundle threaded in via the runner's
+        ``template_state``. When ``None`` (default), the block falls back to
+        the lru_cache-backed :func:`load_grahsp_templates` for backwards
+        compatibility: keeps the block usable as a standalone callable.
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        Disc :math:`L_\lambda` [erg/s/Å].
+    """
+    from tengri.components.agn.grahsp.disc import netzer_disc_interp
+
+    wave_aa = jnp.asarray(wavelength)
+    wave_nm = wave_aa * 0.1
+
+    if templates is None:
+        templates = load_grahsp_templates()
+    if templates.disc_wave_nm is None:
+        raise ValueError(
+            "GRAHSP template bundle lacks disc_wave_nm; regenerate with "
+            "tools/build_grahsp_hdf5.py"
+        )
+
+    # Interpolate disc spectrum at the given mass, spin, Eddington ratio.
+    # Returns spectrum normalized to l5100 = 1 (i.e., L_lambda(5100 A) = 1 erg/s).
+    spec_unit_nm = netzer_disc_interp(
+        wave_nm=wave_nm,
+        l5100=1.0,
+        disc_wave_nm=templates.disc_wave_nm,
+        disc_lumin=templates.disc_lumin,
+        disc_m=templates.disc_m,
+        disc_a=templates.disc_a,
+        disc_mdot=templates.disc_mdot,
+        log_mbh=agn_grahsp_netzer_log_mbh,
+        spin=agn_grahsp_netzer_spin,
+        log_mdot=agn_grahsp_netzer_log_mdot,
+    )
+
+    # Apply X-ray floor to avoid double-counting with corona (#1168).
+    spec_unit_nm = floor_disc_xray(wave_nm, spec_unit_nm)
+
+    # Compute the 5100 A normalization using the shared helper.
+    log_l5100 = _disc_log_l5100(
+        wave_nm=wave_nm,
+        L_lambda_unit_nm=spec_unit_nm,
+        agn_log_lbol=agn_log_lbol,
+        agn_grahsp_log_l5100=agn_grahsp_log_l5100,
+        **_params,
+    )
+
+    # Scale by the computed l5100.
+    L_lambda_nm = apply_log10_scale(spec_unit_nm, log_l5100)
     # nm grid output -> Å grid: L_lambda[erg/s/Å] = L_lambda[erg/s/nm] / 10.
     return L_lambda_nm * 0.1
 

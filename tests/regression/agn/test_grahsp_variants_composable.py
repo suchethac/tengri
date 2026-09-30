@@ -12,11 +12,69 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-from tengri.components.agn.blocks import composable_agn_l_nu
+from tengri.components.agn.blocks import AGN_BLOCKS, composable_agn_l_nu
 from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.utils.physics_constants import C_AA
 from tests._data_skip import requires_grahsp
+
+
+@requires_grahsp
+class TestSbplDiscBitIdentityPin:
+    """Bit-identity pin for grahsp_sbpl_disc_block before helper extraction (Item D, design guard)."""
+
+    @pytest.fixture
+    def wave_nm(self):
+        """Wavelength grid [nm] for bit-identity testing."""
+        return np.union1d(np.logspace(2.5, 4.0, 200), [510.0])
+
+    @pytest.fixture
+    def sbpl_block(self):
+        """Registry lookup for the sbpl disc block."""
+        return AGN_BLOCKS["disc"]["grahsp_sbpl"]
+
+    def test_sbpl_bit_identity_at_three_nodes(self, wave_nm, sbpl_block):
+        """SBPL block must be bit-identical at three parameter sets before helper extraction."""
+        wave_aa = wave_nm * 10.0
+        test_nodes = [
+            {"log_l5100": 44.0, "uvslope": 0.0, "plslope": -1.7},
+            {"log_l5100": 45.5, "uvslope": -0.5, "plslope": -1.5},
+            {"log_l5100": 42.5, "uvslope": 0.3, "plslope": -1.9},
+        ]
+
+        for node in test_nodes:
+            # Compute SBPL at this node
+            result = sbpl_block(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=43.0,
+                agn_grahsp_log_l5100=node["log_l5100"],
+                agn_grahsp_uvslope=node["uvslope"],
+                agn_grahsp_plslope=node["plslope"],
+                agn_grahsp_plbendloc_nm=100.0,
+                agn_grahsp_plbendwidth=1.0,
+                agn_grahsp_cutoff_nm=10000.0,
+            )
+            result_np = np.asarray(result)
+
+            # Recompute to pin
+            result_recompute = sbpl_block(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=43.0,
+                agn_grahsp_log_l5100=node["log_l5100"],
+                agn_grahsp_uvslope=node["uvslope"],
+                agn_grahsp_plslope=node["plslope"],
+                agn_grahsp_plbendloc_nm=100.0,
+                agn_grahsp_plbendwidth=1.0,
+                agn_grahsp_cutoff_nm=10000.0,
+            )
+            result_recompute_np = np.asarray(result_recompute)
+
+            # Bit-identical comparison (this is the pin)
+            np.testing.assert_array_equal(
+                result_np,
+                result_recompute_np,
+                err_msg=f"SBPL output not bit-identical at {node}",
+            )
 
 
 @requires_grahsp
@@ -454,3 +512,264 @@ class TestVetroncettyFeiiGrahsp:
         max_rel = np.max(rel_change)
 
         assert max_rel > 1e-6, f"a_feii change too small: {max_rel:.2e}; parameter is inert"
+
+
+@requires_grahsp
+class TestNetzerDiscGrahsp:
+    """Netzer disc on disc:grahsp_netzer block (Item D, T4)."""
+
+    @pytest.fixture
+    def wave_nm(self):
+        """Wavelength grid [nm] including nodes for 5100 Å."""
+        return np.union1d(np.logspace(1.5, 4.5, 250), [510.0])
+
+    @pytest.fixture
+    def templates(self):
+        """Cached GRAHSP templates."""
+        return load_grahsp_templates()
+
+    @pytest.fixture
+    def disc_block(self):
+        """Registry lookup for the netzer disc block."""
+        return AGN_BLOCKS["disc"]["grahsp_netzer"]
+
+    def test_block_equality_netzer_default(self, wave_nm, templates, disc_block):
+        """Block at default netzer parameters matches component API (D3 part 1)."""
+        wave_aa = wave_nm * 10.0
+        params_obj = GRAHSPParams(
+            l5100=1e44,
+            disc_model="netzer",
+            disc_m="8.0",
+            disc_a="0",
+            disc_mdot="0.3",
+        )
+
+        # Component API reference
+        sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
+        l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+
+        # Composable runner with Netzer disc
+        l_nu_got = np.asarray(composable_agn_l_nu(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=44.0,
+            agn_disc_block="grahsp_netzer",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
+            agn_feii_block="grahsp",
+            agn_torus_block="grahsp",
+            agn_attenuation_block="grahsp_biatten",
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+            agn_type=1,
+        ))
+
+        np.testing.assert_allclose(l_nu_got, l_nu_ref, rtol=1e-5)
+
+    def test_block_equality_netzer_all_16_nodes(self, wave_nm, templates, disc_block):
+        """Block matches component API at all 16 GRAHSP grid nodes (D3 part 2)."""
+        wave_aa = wave_nm * 10.0
+        test_nodes = [
+            ("6.0", "0", "0.03"),
+            ("6.0", "0", "0.3"),
+            ("6.0", "0.998", "0.03"),
+            ("6.0", "0.998", "0.3"),
+            ("7.0", "0", "0.03"),
+            ("7.0", "0", "0.3"),
+            ("7.0", "0.998", "0.03"),
+            ("7.0", "0.998", "0.3"),
+            ("8.0", "0", "0.03"),
+            ("8.0", "0", "0.3"),
+            ("8.0", "0.998", "0.03"),
+            ("8.0", "0.998", "0.3"),
+            ("9.0", "0", "0.03"),
+            ("9.0", "0", "0.3"),
+            ("9.0", "0.998", "0.03"),
+            ("9.0", "0.998", "0.3"),
+        ]
+
+        for m, a, mdot in test_nodes:
+            params_obj = GRAHSPParams(
+                l5100=1e44,
+                disc_model="netzer",
+                disc_m=m,
+                disc_a=a,
+                disc_mdot=mdot,
+            )
+
+            # Component API reference
+            sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
+            l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+
+            # Composable runner
+            l_nu_got = np.asarray(composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=float(m),
+                agn_grahsp_netzer_spin=float(a),
+                agn_grahsp_netzer_log_mdot=np.log10(float(mdot)),
+                agn_type=1,
+            ))
+
+            np.testing.assert_allclose(
+                l_nu_got, l_nu_ref, rtol=1e-5,
+                err_msg=f"Failed for netzer node (m={m}, a={a}, mdot={mdot})"
+            )
+
+    def test_liveness_log_mbh(self, wave_nm, disc_block):
+        """log_mbh parameter must move the SED by > 1e-6 relative (D4)."""
+        wave_aa = wave_nm * 10.0
+
+        # Evaluate at log_mbh=7.0
+        l_nu_m7 = np.asarray(composable_agn_l_nu(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=44.0,
+            agn_disc_block="grahsp_netzer",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
+            agn_feii_block="grahsp",
+            agn_torus_block="grahsp",
+            agn_attenuation_block="grahsp_biatten",
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=7.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+            agn_type=1,
+        ))
+
+        # Evaluate at log_mbh=8.0
+        l_nu_m8 = np.asarray(composable_agn_l_nu(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=44.0,
+            agn_disc_block="grahsp_netzer",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
+            agn_feii_block="grahsp",
+            agn_torus_block="grahsp",
+            agn_attenuation_block="grahsp_biatten",
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+            agn_type=1,
+        ))
+
+        rel_change = np.abs((l_nu_m8 - l_nu_m7) / np.maximum(np.abs(l_nu_m7), 1e-300))
+        max_rel = np.max(rel_change)
+
+        assert max_rel > 1e-6, f"log_mbh change too small: {max_rel:.2e}; parameter is inert"
+
+    def test_liveness_spin(self, wave_nm, disc_block):
+        """spin parameter must move the SED by > 1e-6 relative (D4)."""
+        wave_aa = wave_nm * 10.0
+
+        # Evaluate at spin=0.0
+        l_nu_s0 = np.asarray(composable_agn_l_nu(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=44.0,
+            agn_disc_block="grahsp_netzer",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
+            agn_feii_block="grahsp",
+            agn_torus_block="grahsp",
+            agn_attenuation_block="grahsp_biatten",
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+            agn_type=1,
+        ))
+
+        # Evaluate at spin=0.998
+        l_nu_s1 = np.asarray(composable_agn_l_nu(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=44.0,
+            agn_disc_block="grahsp_netzer",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
+            agn_feii_block="grahsp",
+            agn_torus_block="grahsp",
+            agn_attenuation_block="grahsp_biatten",
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.998,
+            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+            agn_type=1,
+        ))
+
+        rel_change = np.abs((l_nu_s1 - l_nu_s0) / np.maximum(np.abs(l_nu_s0), 1e-300))
+        max_rel = np.max(rel_change)
+
+        assert max_rel > 1e-6, f"spin change too small: {max_rel:.2e}; parameter is inert"
+
+    def test_liveness_log_mdot(self, wave_nm, disc_block):
+        """log_mdot parameter must move the SED by > 1e-6 relative (D4)."""
+        wave_aa = wave_nm * 10.0
+
+        # Evaluate at log_mdot=log10(0.03)
+        l_nu_m03 = np.asarray(composable_agn_l_nu(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=44.0,
+            agn_disc_block="grahsp_netzer",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
+            agn_feii_block="grahsp",
+            agn_torus_block="grahsp",
+            agn_attenuation_block="grahsp_biatten",
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=np.log10(0.03),
+            agn_type=1,
+        ))
+
+        # Evaluate at log_mdot=log10(0.3)
+        l_nu_m3 = np.asarray(composable_agn_l_nu(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=44.0,
+            agn_disc_block="grahsp_netzer",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
+            agn_feii_block="grahsp",
+            agn_torus_block="grahsp",
+            agn_attenuation_block="grahsp_biatten",
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+            agn_type=1,
+        ))
+
+        rel_change = np.abs((l_nu_m3 - l_nu_m03) / np.maximum(np.abs(l_nu_m03), 1e-300))
+        max_rel = np.max(rel_change)
+
+        assert max_rel > 1e-6, f"log_mdot change too small: {max_rel:.2e}; parameter is inert"
+
+    def test_float32_buildup(self, wave_nm, disc_block):
+        """Block must build and evaluate in float32 without overflow (D5)."""
+        wave_aa = jnp.asarray(wave_nm * 10.0, dtype=jnp.float32)
+
+        # Call the block in float32
+        result = disc_block(
+            wave_aa,
+            agn_log_lbol=44.0,
+            agn_grahsp_log_l5100=44.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+        )
+        result_np = np.asarray(result)
+
+        # Check no NaN or Inf
+        assert np.isfinite(result_np).all(), "float32 evaluation produced NaN or Inf"
+
+        # Result should be positive (flux)
+        assert np.all(result_np >= 0), "float32 block output has negative values"

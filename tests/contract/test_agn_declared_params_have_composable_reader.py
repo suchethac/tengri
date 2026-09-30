@@ -32,11 +32,7 @@ pytestmark = pytest.mark.contract
 # Allowlist of declared parameters that are intentionally NOT read by any
 # composable block, with documented reasons. Each entry MUST carry a reason
 # string. This test also fails if an entry becomes stale (now read by a block).
-_PENDING = {
-    "agn_grahsp_netzer_log_mbh": "T4: read by disc:grahsp_netzer",
-    "agn_grahsp_netzer_spin": "T4: read by disc:grahsp_netzer",
-    "agn_grahsp_netzer_log_mdot": "T4: read by disc:grahsp_netzer",
-}
+_PENDING = {}
 
 # Measured non-response: these parameters exist but are documented to be
 # monolithic-class-only or have been verified not to move sed_agn when varied

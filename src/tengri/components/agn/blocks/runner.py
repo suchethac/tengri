@@ -173,11 +173,13 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 # (test_slone_netzer_vs_agnfitter.py / test_kd18_grid_vs_agnfitter.py) confirm
 # the standard UV/optical accretion-disc peak (< 1 um in L_nu), so 5100A is a
 # meaningful continuum for all three, not an edge case like ADAF's inner flow.
+# grahsp_netzer is similarly template-normalized to 1 at 510 nm (5100 A).
 _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
     {
         "slone_netzer",
         "kd18_agnfitter",
         "kd18_agnfitter_warmindex",
+        "grahsp_netzer",
     }
 )
 

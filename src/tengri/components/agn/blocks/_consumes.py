@@ -69,6 +69,14 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_grahsp_uvslope",
         }
     ),
+    ("disc", "grahsp_netzer"): frozenset(
+        {
+            "agn_grahsp_log_l5100",
+            "agn_grahsp_netzer_log_mbh",
+            "agn_grahsp_netzer_spin",
+            "agn_grahsp_netzer_log_mdot",
+        }
+    ),
     ("disc", "kubota_done"): frozenset(
         {
             "agn_a_spin",
