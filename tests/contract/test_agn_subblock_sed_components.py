@@ -144,7 +144,8 @@ class TestSubblockComponentsZeroForMonolithicViaPredictSed:
             },
             redshift=Fixed(0.05),
         )
-        pred = model.predict(model.spec.get_fixed_values())
+        params = {k: 1.0 for k in model.spec.free_params}
+        pred = model.predict(params)
         comp = pred.sed.components
         # sed_agn itself is genuinely nonzero -- this is not a "no AGN at
         # all" degenerate case, just a monolithic one with no sub-blocks.
@@ -180,7 +181,8 @@ class TestSubblockComponentsReachableViaPredictSed:
             },
             redshift=Fixed(0.05),
         )
-        pred = model.predict(model.spec.get_fixed_values())
+        params = {k: 1.0 for k in model.spec.free_params}
+        pred = model.predict(params)
         comp = pred.sed.components
         for key in ("sed_agn_disc", "sed_agn_torus", "sed_agn_lines", "sed_agn_polar"):
             assert key in comp

@@ -522,11 +522,29 @@ class PopulationFitter:
         # it exists to read the spec, and must not pay the LUT build.
         self._template = model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
         self._spec = self._template.spec
-        self._free_names = [
-            n
-            for n in self._spec.free_params
-            if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
-        ]
+
+        # Every runner (the flat seam, signal_response/_predict_cfm/
+        # _predict_single) varies the two shared PSD names by writing them
+        # into each galaxy's params dict every step -- a plain free-key
+        # write only if the factory's spec declares them free. A factory
+        # that pins either Fixed makes that write a refused presence
+        # override (#2296 fix-round 3); refuse it here, at construction,
+        # rather than lazily inside the first predict call deep in a fit.
+        _shared_names = ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
+        _not_free = [n for n in _shared_names if n not in self._spec.free_params]
+        if _not_free:
+            from tengri.config.exceptions import ParameterError
+
+            raise ParameterError(
+                f"model_factory's spec does not declare {_not_free} free: "
+                "PopulationFitter varies the shared PSD hyperparameters by "
+                "writing them into each galaxy's params dict every step, "
+                "which requires both to be free on the factory's spec. "
+                "Declare them with a prior (e.g. Uniform(*psd_sigma_prior, "
+                "default=...)) in model_factory instead of Fixed(...)."
+            )
+
+        self._free_names = [n for n in self._spec.free_params if n not in _shared_names]
 
         # Fit-time factory: every runner (per-galaxy MAP init, the flat seam,
         # geoVI, raytrace) builds its models through this, so the precompute
@@ -933,7 +951,6 @@ class PopulationFitter:
         for name in free_names:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
 
         # Precompute data
         all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
@@ -945,6 +962,17 @@ class PopulationFitter:
 
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -976,9 +1004,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
                 params["sfh_field_psd_sigma"] = psd_sigma
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
@@ -1293,7 +1318,6 @@ class PopulationFitter:
         for name in free_names:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
 
         # Precompute data
         all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
@@ -1305,6 +1329,17 @@ class PopulationFitter:
 
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -1339,9 +1374,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
                 params["sfh_field_psd_sigma"] = psd_sigma
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
@@ -1635,7 +1667,6 @@ class PopulationFitter:
         for name in free_names:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
 
         # Pre-build model
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
@@ -1643,6 +1674,17 @@ class PopulationFitter:
 
         def _predict_cfm(params):
             """Predict data from parameters (CorrelatedFieldMaker variant)."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             return model.predict_spectrum(params)
@@ -1730,9 +1772,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
 
                 # CFM already applies sqrt(P) * xi, so pass the full
                 # correlated field as the GP realization
@@ -1975,8 +2014,6 @@ class PopulationFitter:
             dist = spec.get_distribution(name)
             bounds[name] = dist.bounds
 
-        fixed_values = spec.get_fixed_values()
-
         if verbose:
             n_per_gal = len(free_names) + (n_grid if stochastic else 0)
             n_total = 2 + n_gal * n_per_gal
@@ -2028,6 +2065,17 @@ class PopulationFitter:
 
         def _predict_single(params):
             """Single-galaxy forward model (for vmap)."""
+            # predict_photometry/predict_spectrum self-merge the model's
+            # own Fixed values internally and refuse a params key the spec
+            # declared Fixed (#2296). The two population-shared PSD names
+            # are free on model.spec (varied per step by writing them into
+            # this dict); when the SFH is a GP field, params also carries
+            # sfh_field_xi, a runtime latent array that is neither free nor
+            # Fixed on the spec. A positive filter on model.spec.free_params
+            # silently dropped that key -- predict_photometry/predict_spectrum
+            # neither refuse nor require it, so the loss was silent: zero
+            # gradient on every per-galaxy latent and both PSD hyperparameters
+            # (#2296 fix-round 3). Pass params through unfiltered.
             if data_type == "photometry":
                 return model.predict_photometry(params)
             else:
@@ -2050,9 +2098,6 @@ class PopulationFitter:
                 for name in free_names:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
                 params["sfh_field_psd_sigma"] = psd_sigma
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:

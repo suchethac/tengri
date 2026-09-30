@@ -166,9 +166,9 @@ class FitRecord:
 
         Examples
         --------
-        >>> rec = FitRecord.capture(wall_time_seconds=123.4)
-        >>> rec.tengri_version
-        '0.1.0'
+        >>> rec = FitRecord.capture(wall_time_seconds=123.4)  # doctest: +SKIP
+        >>> rec.tengri_version  # doctest: +SKIP
+        '0.1.0'  # doctest: +SKIP — release version value drifts (#2103)
         """
         import tengri
 

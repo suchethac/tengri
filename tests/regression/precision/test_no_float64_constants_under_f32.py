@@ -220,3 +220,178 @@ def test_every_module_scope_float_table_is_a_plain_contiguous_host_array():
         f"{len(plain)} module-scope float tables are not plain contiguous numpy:\n"
         + "\n".join(plain)
     )
+
+
+def test_first_lazy_dsps_use_keeps_x64_off():
+    """Lazy dsps imports at first use must respect the caller's x64_preference (#2504).
+
+    Commit #2276 made DSPS imports lazy (function-local, inside __getattr__ or
+    function bodies). Before the fix, the first lazy import still flipped x64 on
+    unchecked, so ``JAX_ENABLE_X64=0`` would be honored at import, then silently
+    clobbered at first use of any lazy DSPS path (cosmology distance functions,
+    PLANCK15/WMAP5 attribute access). The result was silent dtype inflation for
+    the rest of the process.
+
+    This test runs in a subprocess with x64=off, touches the first lazy DSPS use,
+    and asserts that x64 is still off and dtypes are still float32 afterwards.
+    """
+    out = _run(
+        "0",
+        """
+        import warnings
+        warnings.simplefilter("ignore")
+        import jax
+        import jax.numpy as jnp
+        import tengri
+
+        # First lazy dsps import: access PLANCK15
+        _ = tengri.cosmology.PLANCK15
+        print("AFTER_PLANCK15", jax.config.jax_enable_x64)
+        print("DTYPE_AFTER_PLANCK15", (jnp.zeros(1) + 1.0).dtype)
+
+        # Another lazy import: call luminosity_distance which imports from dsps
+        _ = tengri.cosmology.luminosity_distance(0.1)
+        print("AFTER_LUMINOSITY_DISTANCE", jax.config.jax_enable_x64)
+        print("DTYPE_AFTER_LUMINOSITY_DISTANCE", (jnp.zeros(1) + 1.0).dtype)
+        """,
+    )
+    assert _parse(out, "AFTER_PLANCK15") == "False", (
+        "x64 flipped on at first lazy PLANCK15 access despite JAX_ENABLE_X64=0"
+    )
+    assert _parse(out, "DTYPE_AFTER_PLANCK15") == "float32", (
+        "dtype inflated to float64 after lazy PLANCK15 import"
+    )
+    assert _parse(out, "AFTER_LUMINOSITY_DISTANCE") == "False", (
+        "x64 flipped on at first lazy cosmology function call despite JAX_ENABLE_X64=0"
+    )
+    assert _parse(out, "DTYPE_AFTER_LUMINOSITY_DISTANCE") == "float32", (
+        "dtype inflated to float64 after lazy cosmology function import"
+    )
+
+
+def test_first_ssp_load_keeps_x64_off():
+    """Lazy dsps imports outside cosmology.py must respect x64_preference (#2504).
+
+    Before the fix, the first lazy import in a non-cosmology path still flipped
+    x64 on. This test exercises load_ssp_data (in dsps_wrapper.py), which is
+    a non-cosmology first import, and asserts that x64 is kept off and dtypes
+    remain float32 afterwards.
+    """
+    out = _run(
+        "0",
+        """
+        import warnings
+        warnings.simplefilter("ignore")
+        import jax
+        import jax.numpy as jnp
+        import tengri
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+        # First lazy dsps import: load SSP data via dsps_wrapper
+        # Use a relative path from repo root (where the test runs)
+        try:
+            ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+            print("SSP_LOAD_SUCCESS", True)
+        except FileNotFoundError:
+            # SSP data may not be available in all test environments
+            print("SSP_LOAD_SUCCESS", False)
+
+        print("AFTER_SSP_LOAD", jax.config.jax_enable_x64)
+        print("DTYPE_AFTER_SSP_LOAD", (jnp.zeros(1) + 1.0).dtype)
+        """,
+    )
+    # If SSP data is available, check that x64 is still off
+    ssp_success = _parse(out, "SSP_LOAD_SUCCESS")
+    if ssp_success == "True":
+        assert _parse(out, "AFTER_SSP_LOAD") == "False", (
+            "x64 flipped on at first SSP load despite JAX_ENABLE_X64=0"
+        )
+        assert _parse(out, "DTYPE_AFTER_SSP_LOAD") == "float32", (
+            "dtype inflated to float64 after SSP load"
+        )
+
+
+def test_x64_hold_snapshots_config_update_not_env():
+    """hold_x64_preference must snapshot jax.config, not parse JAX_ENABLE_X64 (#2504).
+
+    The old implementation parsed the environment variable, so it only restored
+    x64 if JAX_ENABLE_X64 was explicitly set to 0. If the caller set x64 to
+    False via jax.config.update() with no environment variable, the context
+    manager would not restore it. The new implementation snapshots the jax.config
+    flag regardless of how it was set, ensuring restoration in all cases.
+
+    This test sets x64 to False *after* importing tengri (which sets it to True
+    by default when no env var is present), then calls a lazy DSPS import inside
+    hold_x64_preference. If the context manager correctly snapshots jax.config
+    instead of parsing the environment variable, x64 should be restored to False.
+    """
+    out = _run(
+        None,  # No JAX_ENABLE_X64 env var
+        """
+        import warnings
+        warnings.simplefilter("ignore")
+        import jax
+        import jax.numpy as jnp
+
+        # Import tengri first (sets x64 to True by default)
+        import tengri
+        print("AFTER_IMPORT", jax.config.jax_enable_x64)
+
+        # Now set x64 to False via jax.config.update (not env var)
+        jax.config.update("jax_enable_x64", False)
+        print("AFTER_MANUAL_UPDATE", jax.config.jax_enable_x64)
+
+        # Trigger a lazy dsps import that uses hold_x64_preference
+        # This should snapshot the current state (False) and restore it
+        _ = tengri.cosmology.PLANCK15
+
+        print("AFTER_LAZY_DSPS", jax.config.jax_enable_x64)
+        print("DTYPE_AFTER", (jnp.zeros(1) + 1.0).dtype)
+        """,
+    )
+    assert _parse(out, "AFTER_IMPORT") == "True", "tengri should set x64=True by default"
+    assert _parse(out, "AFTER_MANUAL_UPDATE") == "False", "manual jax.config.update should work"
+    assert _parse(out, "AFTER_LAZY_DSPS") == "False", (
+        "x64 was not restored after lazy DSPS import: hold_x64_preference must "
+        "snapshot jax.config, not parse the environment variable"
+    )
+    assert _parse(out, "DTYPE_AFTER") == "float32", (
+        "dtype inflated despite x64 being restored via hold_x64_preference"
+    )
+
+
+@pytest.mark.parametrize(
+    ("env_value", "x64"),
+    [(None, "True"), ("0", "False")],
+    ids=["float64_default", "float32_requested"],
+)
+def test_bare_import_pulls_no_dsps_or_blackjax_module(env_value, x64):
+    """#2276: a bare import tengri imports no dsps or blackjax module.
+
+    dsps.cosmology allocates a float64 device buffer at import
+    (dsps/cosmology/defaults.py:8 TODAY = age_at_z0(...)), so an x64-on import
+    fails on float64-less backends (jax-mps). Lazy-importing dsps inside the
+    functions that use it allows the import to succeed; the first use of a dsps
+    path under x64 on on MPS still fails, loudly, which is the acceptable
+    failure mode.
+
+    blackjax fails at import as well. Every other dsps import in src/ is
+    already function-local; this test verifies the cosmology imports are too.
+    """
+    out = _run(
+        env_value,
+        """
+        import sys, tengri
+        thirdparty = sorted(m for m in sys.modules if m.split(".")[0] in ("dsps", "blackjax"))
+        print("THIRDPARTY", thirdparty)
+        """,
+    )
+    thirdparty = _parse(out, "THIRDPARTY")
+    # Parse the list representation: "[]" or "['dsps.foo', ...]"
+    import ast
+
+    thirdparty_list = ast.literal_eval(thirdparty)
+    assert not thirdparty_list, (
+        f"a bare import tengri imported {len(thirdparty_list)} third-party modules "
+        f"that allocate device buffers at import: {thirdparty_list} (#2276)"
+    )

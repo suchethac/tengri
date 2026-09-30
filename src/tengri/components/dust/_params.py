@@ -26,16 +26,23 @@ modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
 draine2021_pah returns only ``dust_lgU``, astrodust uses a different
 ``dust_lgU`` bound, etc. The flat-builder bucket is the static superset
 registered together when ``dust_emission`` is set. The priors agree
-where they overlap for most names, but NOT for ``dust_T``/``dust_beta_ir``:
-every analytic template's own class-level declaration (30.0/35.0 K, 1.8)
-disagrees with this table's ``PARAMS`` entries (35.0 K, 1.6) -- see the
-comments on those two entries below, and #2261, filed to resolve which
-value is correct. This file remains the source of truth for the static
-superset regardless; that disagreement is a live discrepancy, not a typo.
+where they overlap for most names, but NOT for ``dust_T`` (or, before
+#2265's correction, ``dust_beta_ir``): every analytic template's own
+class-level declaration (30.0/35.0/25.0 K for ``dust_T``) disagrees with
+this table's single ``dust_T`` entry (35.0 K) -- see the comment on that
+entry below, and #2261, filed to resolve which value is correct. This
+disagreement is measured to reach ``predict_photometry`` on the
+``SEDModel.build`` grammar path too, not only the legacy flat builder: a
+``dust_emission={'type': ..., 'all_params': Fixed(DEFAULT)}`` build
+resolves shared names like ``dust_T``/``dust_beta_ir`` from THIS table,
+not from the selected class's own attribute (#2265). This file remains
+the source of truth for the static superset regardless; the ``dust_T``
+disagreement is a live discrepancy, not a typo.
 """
 
 from __future__ import annotations
 
+from tengri.parameters._dust_keys import OVERRIDE_STEMS, SCREENS, short_to_full
 from tengri.parameters.priors import Fixed, Gaussian, Uniform
 from tengri.protocols.component import ParamDeclaration, declared_default
 
@@ -48,15 +55,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # T ~ 25-45 K for local (U)LIRGs, beta = 1.60 +/- 0.38, alpha = 2.0 +/- 0.5.
     ParamDeclaration(
         "dust_T",
-        # NOT the value any analytic template actually defaults to (#2241,
-        # #2261): modified_blackbody and schreiber2016 default to T=30.0 K,
-        # and casey2012/graybody's own class-level default happens to match
-        # this 35.0 only by coincidence. Whether this table or the templates
-        # are right is an open physics/sampler-geometry question filed as
-        # #2261; ``declared_default(PARAMS, "dust_T")`` is deliberately NOT
-        # used by the closures for this reason -- see
-        # ``MBB_T_K_DEFAULT``/``CASEY_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``
-        # below, which are each template's own value, not this one.
+        # Analytic templates split on this value (#2265, #2261): graybody and
+        # casey2012 declare Fixed(35.0); modified_blackbody and schreiber2016
+        # declare Fixed(30.0); Schreiber2018IRSEDComponent declares Fixed(25.0).
+        # This table stays at 35.0, left unchanged pending #2261, and the
+        # MBB/schreiber2016 closures read their own constants
+        # (``MBB_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``) instead of the table.
+        # Schreiber2018IRSEDComponent reads its own ``SCHREIBER2018_T_K_DEFAULT
+        # = 25.0``. Closures are free to disagree with the table while class
+        # declarations internally match their corresponding closures.
         Fixed(35.0),
         "Dust temperature (K) for graybody/Casey emission",
         lambda lo, hi: lo > 0,
@@ -71,12 +78,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "dust_beta_ir",
-        # NOT the value any analytic template actually defaults to (#2241,
-        # #2261): every template (modified_blackbody, graybody, casey2012)
-        # defaults ``dust_beta_ir`` to 1.8, not this table's 1.6. See the
-        # note on ``dust_T`` above -- ``ANALYTIC_BETA_IR_DEFAULT`` below is
-        # the templates' own value, deliberately not derived from this entry.
-        Fixed(1.6),
+        # Three analytic classes (ModifiedBlackbodyIRSEDComponent,
+        # GraybodyIRSEDComponent, Casey2012IRSEDComponent) declare Fixed(1.8),
+        # not the old table value 1.6 (#2265, #2261). Corrected to match those
+        # three; ``ANALYTIC_BETA_IR_DEFAULT = 1.8`` below is shared across their
+        # closures and components. Schreiber2016AnalyticIRSEDComponent declares
+        # no ``dust_beta_ir`` at all -- its closure pins beta=1.5 internally
+        # (``emission/analytic/_closures.py``'s ``schreiber2016``), so it never
+        # reads this entry.
+        Fixed(1.8),
         "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
@@ -84,8 +94,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # models put the physical minimum, and below the widely presumed 1.5 --
         # and carried to +2.4 sigma above the mean. Relaxed to >= 0 to support
         # pure blackbody (beta=0, emissivity ~ 1 everywhere); all closures are
-        # well-defined at beta=0.
-        free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.6),
+        # well-defined at beta=0. Empirical value 1.8 from the templates.
+        free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.8),
     ),
     ParamDeclaration(
         "dust_lambda_0_um",
@@ -124,17 +134,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_umin",
         Fixed(1.0),
         # Bounds measured from the shipped grids, not quoted: data/dl07_templates.h5
-        # ``umin_grid`` spans [0.1, 20] (22 nodes), dl14 [0.1, 50] (36), themis
-        # [0.1, 80] (37). The prose here previously said "0.1-25 for DL07", which
-        # no grid supports.
-        "Draine & Li minimum radiation field (grid: 0.1-20 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
+        # ``umin_grid`` spans [0.1, 25] (22 nodes, published DL07 axis), dl14 [0.1, 50]
+        # (36), themis [0.1, 80] (37). The 22-node DL07 ladder is the one in
+        # Draine & Li (2007) Table 3 and FSPS's own ``uminarr``; CIGALE's dl2007
+        # module instead lists a 23-node ladder that also contains U_min=10.0.
+        "Draine & Li minimum radiation field (grid: 0.1-25 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         # This bucket is the static superset registered for every IR backend, so
         # the free range is the grid *intersection*: a prior valid under DL14 but
-        # not DL07 would be clipped to the DL07 edge, and everything above 20
-        # would carry exactly zero gradient (#1586).
-        free_prior=Uniform(0.1, 20.0, "DL/THEMIS minimum radiation field", default=1.0),
+        # not DL07 would be clipped to the DL07 edge. DL14 and THEMIS both support
+        # higher values, so the DL07 ceiling (25.0) is the constraint.
+        free_prior=Uniform(0.1, 25.0, "DL/THEMIS minimum radiation field", default=1.0),
     ),
     ParamDeclaration(
         "dust_gamma_dl",
@@ -147,10 +158,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_qpah",
         Fixed(2.5),
-        # Measured from the shipped grids: dl07 ``qpah_grid`` spans [0.1, 4.58]
-        # (11 nodes) and dl14 [0.47, 7.32] (11). The prose previously gave the
-        # DL07 floor as 0.47, which is DL14's.
-        "Draine & Li PAH mass fraction (%, grid: 0.1-4.58 DL07, 0.47-7.32 DL14)",
+        # Measured from the shipped grids: dl07 ``qpah_grid`` spans [0.47, 4.58]
+        # (7 MW3.1 nodes; issue #2441 removed the LMC2/SMC compositions that had
+        # been mixed onto this axis, which lowered the apparent floor to 0.10)
+        # and dl14 [0.47, 7.32] (11).
+        "Draine & Li PAH mass fraction (%, grid: 0.47-4.58 DL07, 0.47-7.32 DL14)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         # Intersection of the two grids, for the same reason as ``dust_umin``.
@@ -295,6 +307,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "dust_lgU",
+        # Found while widening this table's class/closure audit (#2265): both
+        # classes declaring ``lgU`` (AstrodustIRSEDComponent,
+        # Draine2021PAHIRSEDComponent) agree at ``default=1.0``, disagreeing
+        # with this entry's ``Fixed(0.0)``. Correcting it would change every
+        # wildcard-``Fixed(DEFAULT)`` astrodust/draine2021_pah build -- the
+        # same table-wins-over-class path ``dust_beta_ir`` took for
+        # ``casey2012`` above -- so it stays a tracked discrepancy (#2261).
+        # ``test_dust_closure_defaults.py::test_dust_params_table_consistency``
+        # carries this pair as an explicit, reasoned exception.
         Fixed(0.0),
         "log10(U) starlight intensity in mMMP units for Draine+2021 PAHspec (0..7)",
         lambda lo, hi: lo >= 0.0 and hi <= 7.0,
@@ -408,22 +429,55 @@ DEFAULT_DUST_BETA_WARM = declared_default(PARAMS, "dust_beta_warm")
 DEFAULT_DUST_BETA_COLD = declared_default(PARAMS, "dust_beta_cold")
 DEFAULT_DUST_L_AGN_IR = declared_default(PARAMS, "dust_L_agn_ir")
 DEFAULT_DUST_ETA_BALANCE = declared_default(PARAMS, "dust_eta_balance")
+DEFAULT_DUST_UMIN = declared_default(PARAMS, "dust_umin")
+DEFAULT_DUST_GAMMA_DL = declared_default(PARAMS, "dust_gamma_dl")
+DEFAULT_DUST_QPAH = declared_default(PARAMS, "dust_qpah")
+DEFAULT_DUST_ALPHA_DL14 = declared_default(PARAMS, "dust_alpha_dl14")
+DEFAULT_DUST_ALPHA_DALE = declared_default(PARAMS, "dust_alpha_dale")
+DEFAULT_DUST_FRAC_AGN = declared_default(PARAMS, "dust_frac_agn")
+DEFAULT_DUST_LOG_SSFR = declared_default(PARAMS, "dust_log_ssfr")
+DEFAULT_DUST_QHAC = declared_default(PARAMS, "dust_qhac")
+DEFAULT_DUST_ALPHA = declared_default(PARAMS, "dust_alpha")
 
-# ``dust_T`` / ``dust_beta_ir`` are deliberately NOT declared_default(PARAMS,
-# ...) candidates (#2241, follow-up #2261): this table's own Fixed(35.0) /
-# Fixed(1.6) disagree with what every analytic template's own class-level
-# declaration actually defaults to (modified_blackbody/schreiber2016 use
-# T=30.0 K; every template uses beta_ir=1.8), so reading them off PARAMS
-# would silently CHANGE those templates' defaults -- a behavior change this
-# fix must not make. These four names are each template's own value today,
-# shared between its closure's signature default and its component's
-# class-level declaration so the two cannot drift from EACH OTHER, even
-# while both remain out of step with the table above until #2261 resolves
-# which value is correct.
+# ``dust_T`` is deliberately NOT a declared_default(PARAMS, ...) candidate
+# (#2241, follow-up #2261): this table's own Fixed(35.0) disagrees with what
+# some analytic templates' own class-level declaration actually defaults to
+# (modified_blackbody/schreiber2016 use T=30.0 K; schreiber2018 uses 25.0 K),
+# so reading it off PARAMS would silently CHANGE those templates' defaults --
+# a behavior change this fix must not make. These four T constants are each
+# template's own value today, shared between its closure's signature default
+# and its component's class-level declaration so the two cannot drift from
+# EACH OTHER, even while some remain out of step with the table above until
+# #2261 resolves which value is correct. ``dust_beta_ir`` now agrees with the
+# table (both 1.8, #2265); ``ANALYTIC_BETA_IR_DEFAULT`` stays a named constant
+# shared by the three classes that declare it (Casey2012IRSEDComponent,
+# GraybodyIRSEDComponent, ModifiedBlackbodyIRSEDComponent) and their closures,
+# for the same no-cross-drift reason as the T constants.
 MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
-SCHREIBER_T_K_DEFAULT = 30.0
+SCHREIBER_T_K_DEFAULT = 30.0  # schreiber2016 analytic component
+SCHREIBER2018_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent tabulated
 ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
+
+# ── Attenuation-law-own defaults (#2265) ──────────────────────────────
+# ``kriek_conroy``/``tea`` are plain functions, not ``SEDModelComponent``
+# subclasses, so their signature defaults are not interchangeable
+# placeholders for ``ATTENUATION_PARAMS``'s shared ``dust_bump_strength``/
+# ``dust_delta`` (both ``Fixed(0.0)``, correct as the "off" value for a
+# law like ``calzetti`` that discards them structurally). Each constant
+# here is instead the LAW's OWN citation-backed value:
+# ``dust_bump_strength=1.0`` is Kriek & Conroy (2013)'s own E_b=0.85
+# fiducial (``e_b = bump_strength * (0.85 - 1.9*delta)``, this module's
+# Eq. 3 comment); ``dust_delta=-0.2`` is Haskell et al. (2024) TEA's own
+# NIHAO-SKIRT median, 0.5 < z < 2 star-forming galaxies.
+# ``resolve_bc_diff_law_params`` in ``_apply.py`` (the ``live_shape_params``
+# gate, #1833) hands a caller that omits ``bump_strength``/``delta`` --
+# including a blanket ``all_params: Fixed(DEFAULT)`` wildcard -- the LAW's
+# own default, not the shared table's; pinned by
+# ``TestKriekConroyMatchesFSPS::test_bump_excess_matches_fsps_at_delta_zero``.
+KRIEK_CONROY_BUMP_STRENGTH_DEFAULT = 1.0  # Kriek & Conroy 2013 Eq. 3, E_b = 0.85 fiducial
+CONROY2010_BUMP_STRENGTH_DEFAULT = 1.0  # Conroy, White & Gunn 2010, full CCM89 bump (f_bump=1)
+TEA_DELTA_DEFAULT = -0.2  # Haskell et al. 2024 NIHAO-SKIRT median, 0.5 < z < 2 SF galaxies
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -532,13 +586,244 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # dense clouds at the high end.
         free_prior=Uniform(2.0, 6.0, "Total-to-selective extinction R_V", default=3.1),
     ),
+    # ── Per-screen dust law shape parameters (#2428) ──────────────────────────
+    # The 12 per-screen variants (slope, delta, bump_strength, Rv) x (bc, diff, neb)
+    # are declared as explicit-only free parameters. They become live parameters
+    # (in spec.free_params) when explicitly set to a Distribution/FREE; a caller
+    # must name the parameter itself to free it -- unlike the four SHARED shape
+    # stems (dust_slope/delta/bump_strength/Rv), these 12 are wildcard-INERT:
+    # per_screen_inert (parameters/groups.py::_dust_wildcard_scopes) excludes
+    # every one of them from `all_params: FREE`'s scope unconditionally, whether
+    # or not the given screen's law reads the stem -- a blanket `FREE` on the
+    # group can never double-parametrize a screen behind its own explicit
+    # setting. When given a plain number (not a Distribution), a per-screen
+    # key still routes through dust_law_overrides as a static config value,
+    # exactly as before this feature existed -- AND seeds the declared
+    # parameter itself at that same value (provenance user_fixed), so a
+    # Fixed(v) and the bare scalar v are indistinguishable from here on:
+    # same predicted SED, same get_fixed_values()/summary() value. See #2428.
+    ParamDeclaration(
+        "dust_slope_bc",
+        Fixed(-0.7),
+        "Dust slope on birth cloud screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (bc)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_slope_diff",
+        Fixed(-0.7),
+        "Dust slope on diffuse ISM screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (diff)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_slope_neb",
+        Fixed(-0.7),
+        "Dust slope on nebular cloud screen (explicit per-screen override)",
+        free_prior=Uniform(-1.5, -0.3, "Dust slope (neb)", default=-0.7),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_bc",
+        Fixed(0.0),
+        "UV bump strength on birth cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (bc)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_diff",
+        Fixed(0.0),
+        "UV bump strength on diffuse ISM screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (diff)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_bump_strength_neb",
+        Fixed(0.0),
+        "UV bump strength on nebular cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 4.0, "UV bump strength (neb)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_bc",
+        Fixed(0.0),
+        "Attenuation slope modification on birth cloud (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (bc)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_diff",
+        Fixed(0.0),
+        "Attenuation slope modification on diffuse ISM (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (diff)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_delta_neb",
+        Fixed(0.0),
+        "Attenuation slope modification on nebular cloud (explicit per-screen override)",
+        free_prior=Uniform(-1.0, 0.4, "Attenuation slope (neb)", default=0.0),
+    ),
+    ParamDeclaration(
+        "dust_Rv_bc",
+        Fixed(3.1),
+        "R_V on birth cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (bc)", default=3.1),
+    ),
+    ParamDeclaration(
+        "dust_Rv_diff",
+        Fixed(3.1),
+        "R_V on diffuse ISM screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (diff)", default=3.1),
+    ),
+    ParamDeclaration(
+        "dust_Rv_neb",
+        Fixed(3.1),
+        "R_V on nebular cloud screen (explicit per-screen override)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(2.0, 6.0, "R_V (neb)", default=3.1),
+    ),
+    # ── Li et al. (2008) dust law parameters (#2542) ──────────────────────────
+    # Reached only by the li08 law; read from its signature. These are reached
+    # through the grammar: a caller that omits these parameters gets the law's
+    # own default. Four dimensionless shape parameters that partition the
+    # Li et al. analytical curve into UV/optical continuum (c1-c3) and far-UV
+    # bump (c4).
+    #
+    # c1 controls continuum amplitude; c2 the curvature (steepness of UV rise);
+    # c3 an offset; c4 the bump amplitude. Defaults are the Li et al. (2008)
+    # Table 1 Milky Way (R_V=3.1) values. Table 1 templates, verified against
+    # the independent Synthesizer ``Li08`` implementation:
+    # Calzetti (44.9, 7.56, 61.2, 0.0); SMC (38.7, 3.83, 6.34, 0.0);
+    # MW R_V=3.1 (14.4, 6.52, 2.04, 0.0519); LMC (4.47, 2.39, -0.988, 0.0221).
+    #
+    # free_prior ranges span all four templates with margin, chosen so the
+    # law's two internal denominators never cross zero over the full tengri
+    # wavelength grid (0.0413 A - 3e11 A, which spans the SSP grid's 91 A -
+    # 1e8 A and so reaches the term-1 pole at lam=0.08 um=800 A):
+    # denom_1(lam) = (lam/0.08)^c2 + (0.08/lam)^c2 + c3 has global minimum
+    # 2 + c3 at lam = 0.08 um for ANY c2 >= 0 (AM-GM: x + 1/x >= 2). The same
+    # expression (at lam-independent reference points 6.88, 0.145) also gates
+    # term 2's normalization constant. c3's declared lower bound must stay
+    # strictly above -2 to keep both denominators positive; c3=-2 hits an
+    # exact zero at lam=800 A (measured), c3=-1.5 keeps a comfortable
+    # denom >= 0.5 margin while remaining well below the LMC template's
+    # -0.988 (#2542 cross-code check against Synthesizer verified this).
+    ParamDeclaration(
+        "dust_c1",
+        Fixed(14.4),
+        "Li et al. (2008) continuum amplitude parameter",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 60.0, "Li et al. c1 continuum amplitude", default=14.4),
+    ),
+    ParamDeclaration(
+        "dust_c2",
+        Fixed(6.52),
+        "Li et al. (2008) continuum curvature parameter",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        free_prior=Uniform(0.0, 10.0, "Li et al. c2 continuum curvature", default=6.52),
+    ),
+    ParamDeclaration(
+        "dust_c3",
+        Fixed(2.04),
+        "Li et al. (2008) continuum offset parameter",
+        lambda lo, hi: lo > -2.0,
+        "must be > -2.0 (both Eq. 1 denominators sharing this reference point "
+        "cross zero at c3 = -2, at lam = 0.08 um = 800 A on the SSP grid)",
+        free_prior=Uniform(-1.5, 70.0, "Li et al. c3 continuum offset", default=2.04),
+    ),
+    ParamDeclaration(
+        "dust_c4",
+        Fixed(0.0519),
+        "Li et al. (2008) UV bump amplitude at 2175A",
+        lambda lo, hi: lo >= -0.1,
+        "must be >= -0.1",
+        free_prior=Uniform(-0.005, 0.1, "Li et al. c4 UV bump amplitude", default=0.0519),
+    ),
+    # ── UV bump center and width: noll09 and salim_sbl18 (#2542) ─────────────
+    # The two bump-profile parameters (wavelength center and FWHM) are read by
+    # noll09 and salim_sbl18 when they apply a Drude profile UV bump to the
+    # base attenuation. Defaults (0.2175 μm, 0.035 μm) match CIGALE's
+    # dustatt_modified_starburst defaults (217.5 nm, 35 nm central wavelength
+    # and width, Ciesla et al. 2015 Table 2). The free_prior ranges encompass
+    # published measurements and variations (CIGALE v2.0+ range 0.10-0.30 μm
+    # for center, 0.020-0.050 μm for width; Boquien et al. 2019 Table 4).
+    ParamDeclaration(
+        "dust_bump_x0",
+        Fixed(0.2175),
+        "UV bump center wavelength (Drude profile)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(0.20, 0.25, "UV bump center wavelength [μm]", default=0.2175),
+    ),
+    ParamDeclaration(
+        "dust_bump_gamma",
+        Fixed(0.035),
+        "UV bump FWHM (Drude profile)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        free_prior=Uniform(0.020, 0.050, "UV bump FWHM [μm]", default=0.035),
+    ),
+    # ── TEA dust attenuation scatter parameter (#2542) ──────────────────────
+    # The TEA attenuation law (Haskell et al. 2024) derives the UV bump
+    # amplitude from the power-law slope via a tight relation calibrated on
+    # NIHAO-SKIRT simulations. This parameter controls the scatter around that
+    # median relation in dex: E_b = 2.5 × exp(3.5 × delta) × 10^scatter.
+    # Default 0.0 recovers the median; ±0.1-0.3 dex is typical intrinsic scatter.
+    ParamDeclaration(
+        "dust_tea_scatter",
+        Fixed(0.0),
+        "TEA attenuation scatter around median E_b relation",
+        free_prior=Uniform(-0.3, 0.3, "TEA scatter in dex", default=0.0),
+    ),
 )
+
+# ── Derived defaults for direct import, attenuation table (#2265) ─────
+# No component class declares any of these five names (checked by
+# ``git grep -n "= Fixed(" -- src/tengri/components/dust/``): the attenuation
+# curves in ``attenuation.py`` are plain functions, not
+# ``SEDModelComponent`` subclasses, so ``ATTENUATION_PARAMS`` is the sole
+# declaration and these constants are read by both the closures' signature
+# defaults and the aggregation-point ``.get(...)`` fallbacks.
+DEFAULT_DUST_SLOPE = declared_default(ATTENUATION_PARAMS, "dust_slope")
+DEFAULT_DUST_F_OBSCURATION = declared_default(ATTENUATION_PARAMS, "dust_f_obscuration")
+DEFAULT_DUST_BUMP_STRENGTH = declared_default(ATTENUATION_PARAMS, "dust_bump_strength")
+DEFAULT_DUST_DELTA = declared_default(ATTENUATION_PARAMS, "dust_delta")
+DEFAULT_DUST_RV = declared_default(ATTENUATION_PARAMS, "dust_Rv")
+# li08, noll09/salim_sbl18 and tea signature defaults (#2542): read off the
+# same declarations rather than repeated as bare literals (check_literal_
+# param_defaults.py).
+DEFAULT_DUST_C1 = declared_default(ATTENUATION_PARAMS, "dust_c1")
+DEFAULT_DUST_C2 = declared_default(ATTENUATION_PARAMS, "dust_c2")
+DEFAULT_DUST_C3 = declared_default(ATTENUATION_PARAMS, "dust_c3")
+DEFAULT_DUST_C4 = declared_default(ATTENUATION_PARAMS, "dust_c4")
+DEFAULT_DUST_BUMP_X0 = declared_default(ATTENUATION_PARAMS, "dust_bump_x0")
+DEFAULT_DUST_BUMP_GAMMA = declared_default(ATTENUATION_PARAMS, "dust_bump_gamma")
+DEFAULT_DUST_TEA_SCATTER = declared_default(ATTENUATION_PARAMS, "dust_tea_scatter")
+# No per-screen counterparts of the five constants above: the 12 per-screen
+# names (#2428) have no consumer that reads a bare Python float default off
+# this module the way the shared stems' aggregation-point ``.get(...)``
+# fallbacks do -- resolve_bc_diff_law_params/merge_neb_screen_live_overrides
+# both read a per-screen live value straight out of ``params``, never a
+# module-level constant. Twelve such constants were declared and exported
+# here regardless and had zero consumers; removed rather than kept as an
+# always-unread parallel copy of the registry.
 
 # Names within ATTENUATION_PARAMS that are skipped when
 # ``dust_model="single_component"`` (the single-screen geometry replaces
 # both Charlot-Fall optical depths with ``dust_tau_v`` from
-# SINGLE_COMPONENT_PARAMS).
-ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset({"dust_tau_bc", "dust_tau_diff"})
+# SINGLE_COMPONENT_PARAMS). The 12 per-screen shape names (#2428) join them
+# here for the same reason: a single screen has no ``bc``/``diff``/``neb``
+# distinction to name, so ``dust_slope_bc`` etc. would be a declared
+# parameter with nothing for the per-screen spelling to mean.
+ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset(
+    {"dust_tau_bc", "dust_tau_diff"}
+) | frozenset(short_to_full(f"{stem}_{screen}") for stem in OVERRIDE_STEMS for screen in SCREENS)
 
 SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -556,19 +841,37 @@ __all__ = [
     "ATTENUATION_PARAMS",
     "ATTENUATION_TWO_COMPONENT_ONLY",
     "CASEY_T_K_DEFAULT",
+    "CONROY2010_BUMP_STRENGTH_DEFAULT",
+    "DEFAULT_DUST_ALPHA",
+    "DEFAULT_DUST_ALPHA_DALE",
+    "DEFAULT_DUST_ALPHA_DL14",
     "DEFAULT_DUST_ALPHA_MIR",
     "DEFAULT_DUST_BETA_COLD",
     "DEFAULT_DUST_BETA_WARM",
+    "DEFAULT_DUST_BUMP_STRENGTH",
+    "DEFAULT_DUST_DELTA",
     "DEFAULT_DUST_EPSILON_MBB",
     "DEFAULT_DUST_ETA_BALANCE",
+    "DEFAULT_DUST_FRAC_AGN",
     "DEFAULT_DUST_F_COLD",
+    "DEFAULT_DUST_F_OBSCURATION",
     "DEFAULT_DUST_F_PAH",
+    "DEFAULT_DUST_GAMMA_DL",
     "DEFAULT_DUST_LAMBDA_0_UM",
+    "DEFAULT_DUST_LOG_SSFR",
     "DEFAULT_DUST_L_AGN_IR",
+    "DEFAULT_DUST_QHAC",
+    "DEFAULT_DUST_QPAH",
+    "DEFAULT_DUST_RV",
+    "DEFAULT_DUST_SLOPE",
     "DEFAULT_DUST_T_COLD",
     "DEFAULT_DUST_T_WARM",
+    "DEFAULT_DUST_UMIN",
+    "KRIEK_CONROY_BUMP_STRENGTH_DEFAULT",
     "MBB_T_K_DEFAULT",
     "PARAMS",
+    "SCHREIBER2018_T_K_DEFAULT",
     "SCHREIBER_T_K_DEFAULT",
     "SINGLE_COMPONENT_PARAMS",
+    "TEA_DELTA_DEFAULT",
 ]

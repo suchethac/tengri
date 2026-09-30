@@ -202,8 +202,11 @@ class TestPresetsConsistency:
             sample = params.sample(key)
             assert sample is not None
             assert len(sample) > 0
-        except Exception as e:
+        except (FileNotFoundError, ImportError) as e:
             # SSP data may not be available; skip
+            pytest.skip(f"Sampling requires SSP data: {e}")
+        except ValueError as e:
+            # ValueError can be a real defect. Only skip if it's about missing data.
             if "SSP" in str(e) or "data" in str(e).lower():
                 pytest.skip(f"Sampling requires SSP data: {e}")
             raise

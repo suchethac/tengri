@@ -172,19 +172,24 @@ def precompute_line_per_qh(
     else:
         ref_params = dict(ref_params)
 
+    # A Fixed redshift is legitimately absent from the sampled params
+    # (#2296's free-only ``spec.sample()``); the accessor returns the Fixed
+    # value and never a silent 0.0 (10 pc) default (NAMING_CONTRACT §4b.6 --
+    # the same spelling ``_snap_to_nebular_catalog`` uses).
+    ref_z = model._get_redshift(ref_params)
+
     # Same #1718 gap as the grid builder: `spec.sample` cannot produce the
     # runtime arrays of a tabulated SFH, which declares no parameters. Legitimate
     # to stand in for, and for the reason this module already states below:
     # the table is per-Q_H, a property of the gas, not of the reference SFH.
     ref_params = {
-        **reference_history_params(model, redshift=ref_params.get("redshift", 0.0)),
+        **reference_history_params(model, redshift=ref_z),
         **ref_params,
     }
 
     # Recover distance-independent LUMINOSITY: predict_line_fluxes returns
     # observed flux L / (4 pi d_L(z_ref)^2); multiply by the reference divisor
     # so the stored table carries L_line / nion, valid at any evaluation z.
-    ref_z = ref_params.get("redshift", 0.0)
     log10_ref_divisor = _log10_four_pi_dl2(ref_z)
 
     met_grid = jnp.linspace(met_lo, met_hi, n_met)
@@ -196,7 +201,13 @@ def precompute_line_per_qh(
         # luminosity per ionizing photon: a property of the gas, independent of
         # the reference SFH *and* the reference dust. Dust reddening (which now
         # defaults on in predict_line_fluxes) is applied downstream, not baked in.
-        flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths, redden=False)
+        # ``p`` is already the fully-merged dict (``reference_history_params``
+        # plus the per-node ``met_logzsol`` override above); declare it
+        # resolved rather than let the Fixed-key refusal (#2296) fire and
+        # catch it.
+        flux = model.predict_line_fluxes(
+            p, target_wavelengths=wavelengths, redden=False, params_are_resolved=True
+        )
         # Q_H is ~1e53 photons/s, so the LINEAR ``nion`` is ``inf`` in float32 and
         # a division by it silently flushes to 0 rather than raising (#1206). Take
         # the reciprocal as a log offset instead: ``jnp.maximum(..., -30.0)``

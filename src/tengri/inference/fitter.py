@@ -77,6 +77,7 @@ from tengri.inference.loss_functions import (
     build_logprior_fn,
     build_loss_fn,
 )
+from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
 
 # ── Method name validation ────────────────────────────────────────────
@@ -733,6 +734,14 @@ def _has_line_adjacent_channel(model) -> bool:
 #: going materially wrong while every forward check stayed clean.
 _LUT_BIAS_GRAD_WARN = 0.05
 
+#: Maximum forward bias threshold for emitting a note advisory when user
+#: likelihood owns the data. When a user supplies their own likelihood,
+#: the Fitter's data/noise are placeholders and SNR-based estimates are
+#: meaningless, so if forward bias exceeds this threshold, emit a note
+#: stating the max forward bias and that its posterior impact scales with
+#: the user's likelihood SNR.
+_LUT_FORWARD_BIAS_NOTE = 1e-3
+
 
 def _central_params(spec):
     """Free parameters at their declared prior medians, via ``unstandardize(0)``.
@@ -755,9 +764,11 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
     """Per-channel relative forward bias of the LUT, ``|lut - exact| / |exact|``.
 
     One exact and one LUT forward at the central parameters. Cached on the
-    LUT clone keyed to the exact model's identity: a catalog constructs a
-    fitter per galaxy against the same resolved clone, and the bias is a
-    property of the model pair, not of the galaxy.
+    LUT clone keyed to the exact model's identity and data_type: a catalog
+    constructs a fitter per galaxy against the same resolved clone, and the
+    bias is a property of the model pair, not of the galaxy. The cache
+    distinguishes data_type (same model probed as photometry then joint must
+    return different lengths).
 
     Parameters
     ----------
@@ -767,31 +778,44 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         anything but the LUT measures physics, not approximation.
     lut_model : SEDModel or ForwardModel
         The resolved clone.
-    data_type : {"photometry", "spectroscopy"}
+    data_type : {"photometry", "spectroscopy", "joint"}
 
     Returns
     -------
     ndarray, shape (n_channels,)
-        Relative bias per band / pixel [dimensionless].
+        Relative bias per band / pixel / concatenated pixel (joint) [dimensionless].
+        For "joint", array is concatenated as [bias_phot, bias_spec].
     """
     cache = getattr(lut_model, "_lut_forward_bias_cache", None)
-    if cache is not None and cache[0] is exact_model:
+    if cache is not None and cache[0] is exact_model and cache[2] == data_type:
         return cache[1]
     params = _central_params(exact_model.spec)
     if data_type == "photometry":
         m_exact = np.asarray(exact_model.predict_photometry(params), dtype=float)
         m_lut = np.asarray(lut_model.predict_photometry(params), dtype=float)
-    else:
+    elif data_type == "spectroscopy":
         m_exact = np.asarray(exact_model.predict_spectrum(params), dtype=float)
         m_lut = np.asarray(lut_model.predict_spectrum(params), dtype=float)
+    elif data_type == "joint":
+        m_exact_phot = np.asarray(exact_model.predict_photometry(params), dtype=float)
+        m_lut_phot = np.asarray(lut_model.predict_photometry(params), dtype=float)
+        m_exact_spec = np.asarray(exact_model.predict_spectrum(params), dtype=float)
+        m_lut_spec = np.asarray(lut_model.predict_spectrum(params), dtype=float)
+        # Joint data vector order is always photometry then spectrum
+        m_exact = np.concatenate([m_exact_phot, m_exact_spec])
+        m_lut = np.concatenate([m_lut_phot, m_lut_spec])
+    else:
+        return np.array([])  # Unknown data_type, return empty
     bias = np.abs(m_lut - m_exact) / np.maximum(np.abs(m_exact), np.finfo(float).tiny)
     # A frozen model just recomputes; the advisory still works.
     with contextlib.suppress(Exception):
-        lut_model._lut_forward_bias_cache = (exact_model, bias)
+        lut_model._lut_forward_bias_cache = (exact_model, bias, data_type)
     return bias
 
 
-def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, *, surface):
+def _warn_if_lut_bias_amplified(
+    exact_model, lut_model, data, noise, data_type, *, surface, user_likelihood=False
+):
     """#1671's measurement made operational: warn when ``bias x SNR`` is material.
 
     The LUT's forward bias is constant in SNR, so no forward check can see
@@ -803,61 +827,119 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
     and this fit's data, and warns with the number and the remedy above
     :data:`_LUT_BIAS_GRAD_WARN`.
 
+    When a user supplies their own likelihood (``user_likelihood=True``),
+    the Fitter's data/noise are placeholders and SNR-based estimates are
+    meaningless. Instead, if the maximum forward bias exceeds
+    :data:`_LUT_FORWARD_BIAS_NOTE`, emit a note advisory stating the max
+    forward bias and clarifying that its posterior impact scales with the
+    SNR the user's likelihood applies.
+
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
     mismatches, exotic data layouts) degrades to silence, the fit proceeds
-    exactly as it did before the advisory existed. ``data_type="joint"`` is
-    deliberately skipped: its data vector interleaves both channels and a
-    wrong pairing would produce a wrong number, which is worse than none.
+    exactly as it did before the advisory existed.
 
     Parameters
     ----------
     data, noise : array_like
         The fit's observed vector and 1-sigma noise, flattened; batch
         surfaces pass the per-galaxy concatenation.
+    data_type : str
+        One of "photometry", "spectroscopy", "joint".
     surface : str
         The fitting surface name, quoted in the warning.
+    user_likelihood : bool, optional
+        Whether a user-supplied likelihood owns the data. When True, the
+        Fitter's data/noise are placeholders and the SNR-based estimate
+        is replaced with a forward-bias-only note.
     """
-    if data_type not in ("photometry", "spectroscopy"):
+    if data_type not in ("photometry", "spectroscopy", "joint"):
         return
     try:
         bias = _lut_forward_bias(exact_model, lut_model, data_type)
+        if bias.size == 0:
+            return
         flat_data = np.asarray(data, dtype=float).reshape(-1)
         flat_noise = np.asarray(noise, dtype=float).reshape(-1)
         n = int(bias.shape[0])
         if n == 0 or flat_data.size == 0 or flat_data.size % n != 0:
             return
-        snr = np.abs(flat_data) / np.maximum(flat_noise, np.finfo(float).tiny)
-        est_all = bias[None, :] * snr.reshape(-1, n)
-        i_flat = int(np.nanargmax(est_all))
-        est = float(est_all.reshape(-1)[i_flat])
-        channel = i_flat % n
-        snr_at = float(snr[i_flat])
-        bias_at = float(bias[channel])
+
+        # Helper to format channel name based on data_type and channel index
+        def _format_channel_name(channel_idx, data_type_inner):
+            if data_type_inner == "photometry":
+                return f"photometry band {channel_idx}"
+            elif data_type_inner == "spectroscopy":
+                return f"spectrum pixel {channel_idx}"
+            else:  # joint
+                # Determine photometry/spectroscopy split
+                try:
+                    params = _central_params(exact_model.spec)
+                    n_phot = len(
+                        np.asarray(lut_model.predict_photometry(params), dtype=float).reshape(-1)
+                    )
+                    if channel_idx < n_phot:
+                        return f"photometry band {channel_idx}"
+                    else:
+                        return f"spectrum pixel {channel_idx - n_phot}"
+                except Exception:
+                    return f"channel {channel_idx}"
+
+        if user_likelihood:
+            # For user likelihood, report max forward bias only
+            max_bias_idx = int(np.nanargmax(bias))
+            max_bias = float(bias[max_bias_idx])
+            if not np.isfinite(max_bias) or max_bias <= _LUT_FORWARD_BIAS_NOTE:
+                return
+            channel_str = _format_channel_name(max_bias_idx, data_type)
+            from tengri.config.exceptions import PrecompBiasWarning, warn_measured
+
+            warn_measured(
+                f"{surface}: the precompute LUT's forward bias reaches {max_bias:.2%} "
+                f"({channel_str}). This bias is constant in SNR but its posterior "
+                f"impact scales with the SNR your likelihood applies (which tengri "
+                f"cannot see). For final inference, consider rerunning with "
+                f"approx=None (the exact path) or comparing LUT and exact "
+                f"posteriors. Filter PrecompBiasWarning if this trade is deliberate.",
+                PrecompBiasWarning,
+                stacklevel=3,
+                forward_bias=max_bias,
+                worst_channel=max_bias_idx,
+            )
+        else:
+            # SNR-based estimate for regular fits
+            snr = np.abs(flat_data) / np.maximum(flat_noise, np.finfo(float).tiny)
+            est_all = bias[None, :] * snr.reshape(-1, n)
+            i_flat = int(np.nanargmax(est_all))
+            est = float(est_all.reshape(-1)[i_flat])
+            channel = i_flat % n
+            snr_at = float(snr[i_flat])
+            bias_at = float(bias[channel])
+            if not np.isfinite(est) or est <= _LUT_BIAS_GRAD_WARN:
+                return
+            channel_str = _format_channel_name(channel, data_type)
+            from tengri.config.exceptions import PrecompBiasWarning, warn_measured
+
+            warn_measured(
+                f"{surface}: the precompute LUT's forward bias, amplified by this "
+                f"fit's SNR, gives an estimated relative posterior-gradient error "
+                f"of {est:.0%} (worst {channel_str}: forward bias "
+                f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
+                f"(invisible to any forward check) but enters the gradient "
+                f"multiplied by SNR, moves the mode, and better data makes it "
+                f"worse (#1671; spectroscopy sibling measured in #1688). For "
+                f"final inference at this SNR, rerun with approx=None (the exact "
+                f"path) or compare the two posteriors. Filter PrecompBiasWarning "
+                f"if this trade is deliberate.",
+                PrecompBiasWarning,
+                stacklevel=3,
+                gradient_error_estimate=est,
+                worst_channel=channel,
+                forward_bias=bias_at,
+                snr=snr_at,
+            )
     except Exception:
         return
-    if not np.isfinite(est) or est <= _LUT_BIAS_GRAD_WARN:
-        return
-    from tengri.config.exceptions import PrecompBiasWarning, warn_measured
-
-    warn_measured(
-        f"{surface}: the precompute LUT's forward bias, amplified by this "
-        f"fit's SNR, gives an estimated relative posterior-gradient error "
-        f"of {est:.0%} (worst channel {channel}: forward bias "
-        f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
-        f"(invisible to any forward check) but enters the gradient "
-        f"multiplied by SNR, moves the mode, and better data makes it "
-        f"worse (#1671; spectroscopy sibling measured in #1688). For "
-        f"final inference at this SNR, rerun with approx=None (the exact "
-        f"path) or compare the two posteriors. Filter PrecompBiasWarning "
-        f"if this trade is deliberate.",
-        PrecompBiasWarning,
-        stacklevel=3,
-        gradient_error_estimate=est,
-        worst_channel=channel,
-        forward_bias=bias_at,
-        snr=snr_at,
-    )
 
 
 def _resolve_batch_fit_approx(model, approx, data_type):
@@ -895,10 +977,36 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         stays exact, never break a fit that worked, only make its cost
         visible.
     """
-    if approx is None:
-        return model
     if getattr(model, "with_approx", None) is None:
         return model
+    if approx is None:
+        # Nothing attached is already the exact path, and cloning to strip an
+        # absent LUT is "a clone that buys nothing" — the thing
+        # ``test_a_model_already_carrying_the_lut_is_not_rewrapped`` exists to
+        # forbid. Strip only when there is something to strip.
+        _state = getattr(model, "approx", None)
+        if _state is None or not (
+            getattr(_state, "wave_precomp", False)
+            or getattr(_state, "spectrum_precomp", False)
+            or getattr(_state, "feature_precomp", False)
+        ):
+            return model
+        # #2377: force the exact path here too, mirroring the ``None`` branch of
+        # ``Fitter._resolve_fit_approx``, whose docstring is explicit that ``None``
+        # "overrides a build-time approx" and "means exact and stays exact". This
+        # returned ``model`` untouched, so a catalog or population fit built with
+        # ``approx=(WavePrecomp(), FeaturePrecomp())`` kept BOTH tables on after the
+        # caller asked, in the documented spelling, for the exact path. One word
+        # meant two opposite things depending on which fitter you reached for, and
+        # the surface that kept the approximation is the one whose fits are largest.
+        #
+        # Not a speed regression to protect: it is the contract being honored. It
+        # also makes the advice in ``PrecompBiasWarning`` actionable -- that warning
+        # tells the reader "for final inference at this SNR, rerun with approx=None
+        # (the exact path)", which on these surfaces previously changed nothing.
+        # #1671 is precisely about WavePrecomp's forward bias entering the posterior
+        # gradient multiplied by SNR, so a reference run is exactly where it bites.
+        return _memoized_approx_clone(model, None)
 
     if isinstance(approx, str):
         if approx != "auto":
@@ -1225,6 +1333,17 @@ class Fitter:
         Compile modes are passed to ``compile(modes=...)`` and determine which
         inference engines are pre-JIT-compiled before the first ``run()`` call.
         See ``compile()`` docstring for valid mode names.
+    params_override : dict or None, optional
+        The sanctioned way to pin a Fixed parameter at a *different* value for
+        this one fit (e.g. a per-galaxy redshift), without rebuilding the
+        model (#1329). Validated at construction: every key must name a
+        parameter the spec declared ``Fixed`` (a free parameter raises
+        ``ValueError``, naming the free parameters instead). This is NOT the
+        same channel as a ``params`` dict handed to a predict surface --
+        those refuse a Fixed key outright (#2296) and never accept an
+        override; ``params_override`` is the one place a Fixed value can be
+        re-pinned, and it is checked, not merged silently. Default ``None``
+        (use the spec's declared Fixed values unchanged).
     profile_mass : bool or "auto", optional
         Analytically marginalize the total-stellar-mass amplitude (the free
         parameter named ``*_log_total_mass``) instead of sampling it, so
@@ -1568,6 +1687,18 @@ class Fitter:
                     raise ValueError(
                         f"Parameter {key!r} is not a valid parameter name. "
                         f"Valid parameters: {all_params}"
+                    )
+                # Check if the built likelihood can read this parameter.
+                # Noise parameters are only wired into the likelihood when
+                # has_noise_model(spec) is True. If not, a noise_* override is
+                # silently accepted but has no effect on the fit (issue #2193).
+                if is_noise_parameter(key) and not has_noise_model(self.spec):
+                    raise ValueError(
+                        f"params_override names {key!r}, but this model's likelihood does not "
+                        f"read it: noise parameters are only consumed when declared in the spec "
+                        f"(free, or Fixed at a nonzero value). Declare it via "
+                        f"Observation(noise=NoiseModel(calibration_floor=...)) instead of "
+                        f"overriding it at fit time."
                     )
             # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
@@ -2057,11 +2188,8 @@ class Fitter:
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
-        _spec_config = getattr(model, "_spectroscopy_config", None)
-        if _spec_config is None:
-            obs = getattr(model, "observation", None)
-            if obs is not None:
-                _spec_config = getattr(obs, "spectroscopy", None)
+        obs = model.observation
+        _spec_config = obs.spectroscopy if obs is not None else None
 
         # Marginalization mode
         if eline_marginalize is None:
@@ -3101,15 +3229,19 @@ class Fitter:
         return params
 
     def _to_physical(self, params_unbounded: dict) -> dict:
-        """Convert a single unbounded param dict to physical space."""
+        """Convert a single unbounded param dict to physical space.
+
+        Returns free parameters only. Fixed parameters are accessible via
+        :attr:`Posterior.fixed_values` (#2296).
+        """
         params = {}
         for name in self._free_names:
             dist = self.spec.get_distribution(name)
             params[name] = dist.unstandardize(params_unbounded[name])
-        for name, val in self._fixed_values.items():
-            # self._fixed_values already carries any per-fit params override
-            # (#1329, merged at construction), no separate merge needed here.
-            params[name] = jnp.array(val)
+        # NOTE: Fixed parameters are omitted. Callers should use
+        # spec.get_fixed_values() or posterior.fixed_values for those.
+        # This ensures that model.predict(posterior.params) never receives
+        # an overridden Fixed key (#2296).
         if self.spec.stochastic and "psd_xi" in params_unbounded:
             # Publish under both names so the returned ``Posterior.params``
             # evaluates to the model that was actually fitted: ``psd_xi`` is the
@@ -3678,6 +3810,7 @@ class Fitter:
                 self.noise,
                 self.data_type,
                 surface="Fitter",
+                user_likelihood=self._likelihood_is_user_supplied,
             )
 
         # --- Smart lean: drop only stale L3 entries before this run ---
@@ -4978,6 +5111,28 @@ class Fitter:
                 },
                 _model=self.model,
             )
+            # See ``_fit_batch_vmap_map`` for why this batch path must
+            # reinsert the profiled mass itself (#2296): it never goes
+            # through ``Fitter.run()``'s ``finalize_profile_mass`` call, so
+            # under ``profile_mass`` the working spec's placeholder-pinned
+            # mass would otherwise never reach ``samples_phys``/``best_params``
+            # at all (free-only ``_to_physical``, #2296's own point). One call
+            # per galaxy, with that galaxy's own flux/noise -- ``self.data``/
+            # ``self.noise`` are whichever galaxy this batch Fitter happens to
+            # have been built with, not the one being finalized here.
+            if self._profile_mass:
+                from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                reinsert_profiled_mass(
+                    self,
+                    result_i,
+                    data=flux_batch[g_idx],
+                    noise=noise_batch[g_idx],
+                    presence=None,
+                    line_obs=None,
+                    line_err=None,
+                    key=gal_keys[g_idx],
+                )
             results.append(result_i)
 
         return results
@@ -5167,6 +5322,30 @@ class Fitter:
                     _model=self.model,
                     _fitter=self,
                 )
+                # ``self._to_physical`` is free-only w.r.t. the WORKING spec
+                # (#2296): under ``profile_mass`` that spec pinned the mass
+                # parameter to an analytic placeholder, so it never reaches
+                # ``bounded_i`` at all, let alone at its real value. The
+                # single-fit path closes this through ``finalize_profile_mass``
+                # (called once from ``Fitter.run()``); this vmap batch path
+                # bypasses ``run()`` entirely, so it must call the same
+                # reinsertion itself -- once per galaxy, with THAT galaxy's own
+                # data/noise (``self.data``/``self.noise`` are whichever galaxy
+                # this batch Fitter happens to have been built with, not the
+                # one being finalized here).
+                if self._profile_mass:
+                    from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                    reinsert_profiled_mass(
+                        self,
+                        result_i,
+                        data=flux_batch[g_idx],
+                        noise=noise_batch[g_idx],
+                        presence=None,
+                        line_obs=None,
+                        line_err=None,
+                        key=init_keys[g_idx],
+                    )
                 results.append(result_i)
 
             return results
@@ -5261,6 +5440,22 @@ class Fitter:
                 _model=self.model,
                 _fitter=self,
             )
+            # See the scipy/L-BFGS branch above for why this batch path must
+            # reinsert the profiled mass itself (#2296): it never goes through
+            # ``Fitter.run()``'s ``finalize_profile_mass`` call.
+            if self._profile_mass:
+                from tengri.inference.mass_profile import reinsert_profiled_mass
+
+                reinsert_profiled_mass(
+                    self,
+                    result_i,
+                    data=flux_batch[g_idx],
+                    noise=noise_batch[g_idx],
+                    presence=None,
+                    line_obs=None,
+                    line_err=None,
+                    key=init_keys[g_idx],
+                )
             results.append(result_i)
 
         return results

@@ -7,7 +7,7 @@
 - **MCMC (NUTS)**: cold ~90s at D=6 DPL; warmup blows past 5 min on D=7+ dense_basis SFH
 - **VI (geoVI)**: cold ~100s at D=6–7, ~20 GB RSS peak (memory-heavy)
 - **MCMC (HMC)**: cold ~21s at D=6–7 (faster than NUTS on high-D, recommended for D≥7)
-- **NSS**: cold ~240s at D=6, timeout >600s at D=7 (nested sampling; experimental)
+- **NSS**: cold ~37s at D=8 (vectorized nested sampling; primary)
 
 ## JIT Compilation (One-Time Cost)
 
@@ -99,11 +99,31 @@ SED per photometric call because they do not support the band-projection fast br
 drowns any savings from caching. If your model is dominated by K&D or SKIRTOR AGN
 and inference is slow, consider:
 
-1. Using composable disc + torus (`agn_type='composable'`, `agn.torus='composable'`)
-   instead: **2.0–2.2× speedup**.
-2. Using QSOgen (`agn_type='qsogen'`): **1.8–2.0× speedup**.
-3. Running with `approx=None` (exact path) instead of `approx=WavePrecomp()`:
-   the precompute cost already dominates.
+1. Selecting a lighter torus. The composable AGN takes one block per stage, so the
+   torus is named inside it — `agn={'type': 'composable', 'torus': {'type': ...}}`.
+   There is **no `'composable'` torus**: that is the AGN's own `type`, and passing it
+   as the torus raises `ValueError: Unknown agn_torus_block type 'composable'`. The
+   registered torus blocks are enumerated by the registry, not here, because a list
+   frozen into prose drifts; `skirtor`, `nenkova`, `fritz` and `cat3d_wind` are the
+   template-heavy ones this section is about. The **2.0–2.2×** was measured without
+   recording which torus it used, so it cannot be attributed to a particular one.
+2. Using QSOgen (`agn={'type': 'qsogen'}`): **1.8–2.0× speedup**.
+3. Trying `approx=None` (exact path) instead of `approx=WavePrecomp()`. The LUT
+   cannot help a model whose cost is AGN dense integration, but do not expect
+   switching it off to buy anything either: measured on the paper's z=1 joint
+   spectro-photometric mock (QSOgen disc + SKIRTOR torus, Cue nebular, D=36), the
+   gradient was 101.0 ms under `WavePrecomp` against 110.2 ms exact — a difference
+   inside a 31–78% run-to-run spread, so the two are indistinguishable on that model
+   rather than one being faster.
+
+**What actually costs, on that model.** Removing the AGN block entirely took the
+gradient from 135.5 ms to 41.2 ms and the forward pass from 101.0 ms to 29.0 ms, a
+factor of 3.3–3.5 — far outside the spread above. The AGN was also 10 of the 36 free
+parameters, so it is expensive twice over: once per gradient, and again by enlarging
+the space the sampler traverses. Neither cost is one precomputation can reach.
+Floor of 21 repeats, each arm in its own process (`analysis/paper1` in the paper
+repository); process isolation matters, because one arm's trace can poison the next
+through a shared template loader.
 
 ## MAP Optimization
 
@@ -172,14 +192,13 @@ mocks (validated 2026-05-22). Use `vi` (NIFTy geoVI) for science instead.
 
 ## Nested Sampling (NSS)
 
-**Experimental — slow; use for evidence or model comparison only.**
+**Primary backend — vectorized nested sampling for evidence and posterior inference.**
 
-- **Cold (D=6)**: ~240s
-- **Cold (D=7)**: timeout >600s (not recommended)
+- **Cold (D=8)**: ~37s (measured on real data)
 
 NSS computes log-evidence (Bayesian model comparison) alongside posteriors.
-The long runtime and experimental tier make it unsuitable for exploratory fits.
-Use `map`, `mcmc_nuts`, or `vi` for point estimates or credible regions instead.
+Use for model comparison, Bayesian model averaging, and posterior inference.
+Alternative primary backends for point estimates or quick exploration: `map`, `mcmc_nuts`, `vi`, or `mcmc_hmc`.
 
 ## Performance Tuning
 
@@ -206,7 +225,7 @@ Use `map`, `mcmc_nuts`, or `vi` for point estimates or credible regions instead.
 | Full posterior, low-D | NUTS | ≤6 | ~90s cold (D=6 DPL) |
 | Full posterior, mid-D | HMC | 6–20 | ~21s cold (D=6–7) |
 | Full posterior, high-D | geoVI or raytrace | ≥20 | ~100s (geoVI), O(1) steps (raytrace) |
-| Model comparison / evidence | NSS | ≤6 | ~240s cold (experimental) |
+| Model comparison / evidence | NSS | ≤8 | ~37s cold (D=8) |
 
 ## Known Performance Issues
 

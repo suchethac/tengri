@@ -9,7 +9,7 @@
 
 Tengri is a panchromatic galaxy SED inference library in JAX. One forward model covers stellar populations, dust, nebular emission, AGN, and IGM, from X-rays to radio. Inference backends plug in as registrations: optimizers from `optax`, samplers from `BlackJAX`, variational inference from `NIFTy.re`. Gradients are exact.
 
-Pre-1.0, developed as a community effort. The public API is still moving in places. The repository will move to the `tengri-project` GitHub organization shortly.
+Pre-1.0, developed as a community effort, with the public API still moving in places. The repository will move to the `tengri-project` GitHub organization shortly.
 
 ---
 
@@ -24,7 +24,7 @@ originates from; no religious claim or appropriation is intended.*
 
 ## At a glance
 
-One object manages everything: all components (stellar, dust, nebular, AGN, IGM, radio, X-ray) register into a single SED chain. Pure JAX means JIT, `vmap`, and autodiff work from SSP grid to log-likelihood. One code path serves both grid exploration and Bayesian inference.
+One object manages everything: all components (stellar, dust, nebular, AGN, IGM, radio, X-ray) register into a single SED chain. Pure JAX means JIT, `vmap`, and autodiff work from SSP grid to log-likelihood, with one code path serving both grid exploration and Bayesian inference.
 
 Build via recipe: `SEDModel.build(sfh={...}, dust_attenuation={...}, neb={...})`. The `tengri.recipes` module covers standard cases.
 
@@ -91,9 +91,9 @@ Built in close collaboration between a human author and AI agents. Components ar
 
 ## Get involved
 
-Contributors at every level are welcome. If a science case you care about isn't supported yet (a new emission mechanism, an observation mode, a sampler from a paper you read last week), that's exactly the conversation we want to have.
+Contributors at every level are welcome. If a science case you care about is not yet supported (a new emission mechanism, an observation mode, a sampler from a paper you read last week), that is the conversation we want to have.
 
-Contribute via the issue tracker at [github.com/suchethac/tengri](https://github.com/suchethac/tengri), or write [astro.tengri@gmail.com](mailto:astro.tengri@gmail.com) for anything that doesn't fit in an issue—collaborations, the org move, joining the project.
+Contribute via the issue tracker at [github.com/suchethac/tengri](https://github.com/suchethac/tengri), or write [astro.tengri@gmail.com](mailto:astro.tengri@gmail.com) for anything that does not fit in an issue (collaborations, the org move, joining the project).
 
 ## License
 

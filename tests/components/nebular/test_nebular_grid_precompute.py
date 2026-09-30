@@ -42,6 +42,7 @@ from tengri.components.nebular.nebular_grid_precompute import (
     reconstruct_nebular_phot,
 )
 from tengri.observation.line_flux_data import LineFluxData
+from tengri.parameters.resolve import merge_fixed_params
 from tengri.utils.scale import apply_log10_scale, pow10
 
 pytestmark = pytest.mark.contract
@@ -190,7 +191,10 @@ def test_reconstruct_matches_exact_variable_ionization():
     for i in range(6):
         p = dict(m.spec.sample(jax.random.PRNGKey(300 + i)))
         exact = np.asarray(m.predict_line_fluxes(p, target_wavelengths=_LW, redden=False))
-        fast = np.asarray(reconstruct_nebular_lines(_nion(m, p), p, float(p["redshift"]), table))
+        # redshift is Fixed(Z) on every `_model()` build (#2296): free-only
+        # `p` never carries it, so use the module constant directly rather
+        # than reading it back off the params dict.
+        fast = np.asarray(reconstruct_nebular_lines(_nion(m, p), p, Z, table))
         strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
         rel = np.max(np.abs(fast - exact)[strong] / (np.abs(exact)[strong] + 1e-40))
         worst = max(worst, rel)
@@ -413,7 +417,9 @@ def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
         for tag, table in (("snapped", snapped), ("uniform", uniform)):
             got = np.asarray(reconstruct_nebular_line_lums(nion, p, table))[o3]
             # luminosity -> observed flux; the ~1e57 divisor stays an exponent (#1859)
-            got = np.asarray(apply_log10_scale(got, -_log10_four_pi_dl2(float(p["redshift"]))))
+            # redshift is Fixed(Z) on `m` (#2296): free-only `p` never carries
+            # it, so use the module constant directly.
+            got = np.asarray(apply_log10_scale(got, -_log10_four_pi_dl2(Z)))
             worst[tag] = max(worst[tag], abs(got - exact) / max(abs(exact), 1e-40))
 
     assert worst["snapped"] < worst["uniform"], (
@@ -495,6 +501,13 @@ def _dig_parity(m, table, *, n_seeds, seed0):
     worst_phot = worst_line = 0.0
     for i in range(n_seeds):
         p = dict(m.spec.sample(jax.random.PRNGKey(seed0 + i)))
+        # `neb_dig_frac` / `neb_dig_delta_logU` may be Fixed on `m` (the
+        # "fixed_frac" fixture): free-only `p` then omits them entirely
+        # (#2296). Read their values off a separately merged dict rather
+        # than `p` itself -- `p` (free-only) is what still goes to
+        # `predict_state` / `predict_line_fluxes`, which refuse a Fixed key's
+        # presence regardless of whether the value matches the pin.
+        full_p = merge_fixed_params(m.spec, p)
         st = m.predict_state(p)
         exact_phot = np.asarray(st.derived["nebular_phot_lnu_precomp"])
         log_nion = float(np.asarray(st.derived["log_nion"]))
@@ -504,8 +517,8 @@ def _dig_parity(m, table, *, n_seeds, seed0):
                 log_nion,
                 p,
                 table,
-                neb_dig_frac=p["neb_dig_frac"],
-                neb_dig_delta_logU=p["neb_dig_delta_logU"],
+                neb_dig_frac=full_p["neb_dig_frac"],
+                neb_dig_delta_logU=full_p["neb_dig_delta_logU"],
             )
         )
         worst_phot = max(worst_phot, _worst_rel(fast_phot, exact_phot))
@@ -520,8 +533,8 @@ def _dig_parity(m, table, *, n_seeds, seed0):
                     log_nion,
                     p,
                     table,
-                    neb_dig_frac=p["neb_dig_frac"],
-                    neb_dig_delta_logU=p["neb_dig_delta_logU"],
+                    neb_dig_frac=full_p["neb_dig_frac"],
+                    neb_dig_delta_logU=full_p["neb_dig_delta_logU"],
                     log_domain=True,
                 )
             )

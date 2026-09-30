@@ -58,11 +58,33 @@ def batch_fitter(synthetic_ssp_wide):
     )
     # The precompute is what routes fit_batch through the vmap path where the bug lived.
     assert model.has_fixedz_photometry_precompute, "must take the vmap batch-MAP path"
+    # Synthetic flux must come from the model itself (#2296 follow-up): with
+    # profile_mass engaged (auto, since this model's mass amplitude is linear
+    # in the photometry -- see mass_profile.py), the batch-MAP path now
+    # reinserts the ANALYTICALLY profiled mass instead of silently returning
+    # the Fixed placeholder unconditionally (the pre-#2296 behavior this test
+    # never actually exercised: ``_to_physical`` used to blanket-merge every
+    # Fixed value, including the placeholder, into ``Posterior.params``,
+    # which is why an arbitrary ``flux ~ N(1.0, 0.1)`` -- disconnected from
+    # this model's own flux scale of order 1e-17 -- used to read back as a
+    # trivially in-bounds 10.0 without ever exercising the real formula).
+    # An analytically-profiled amplitude is only meaningful (and only
+    # guaranteed to land near the declared prior) when the data is actually
+    # consistent with the model at some mass inside that prior, so both
+    # galaxies are drawn from ``model.predict_photometry`` at a true mass
+    # inside [8, 12] plus realistic per-band noise.
     rng = np.random.default_rng(0)
-    flux = np.abs(rng.normal(1.0, 0.1, size=3))
+    truth_1 = {"sfh_dpl_log_total_mass": 10.0, "dust_tau_bc": 0.3}
+    truth_2 = {"sfh_dpl_log_total_mass": 9.5, "dust_tau_bc": 0.5}
+    flux_true_1 = np.asarray(model.predict_photometry(truth_1))
+    flux_true_2 = np.asarray(model.predict_photometry(truth_2))
+    noise_1 = 0.05 * flux_true_1
+    noise_2 = 0.05 * flux_true_2
+    flux_1 = flux_true_1 + rng.normal(0.0, noise_1)
+    flux_2 = flux_true_2 + rng.normal(0.0, noise_2)
     batch = [
-        {"flux_obs": jnp.asarray(flux), "noise": jnp.asarray(0.1 * flux)},
-        {"flux_obs": jnp.asarray(1.3 * flux), "noise": jnp.asarray(0.1 * flux)},
+        {"flux_obs": jnp.asarray(flux_1), "noise": jnp.asarray(noise_1)},
+        {"flux_obs": jnp.asarray(flux_2), "noise": jnp.asarray(noise_2)},
     ]
     f = Fitter(model, batch[0]["flux_obs"], batch[0]["noise"], data_type="photometry")
     return f, batch

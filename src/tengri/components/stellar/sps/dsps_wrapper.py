@@ -25,6 +25,7 @@ import numpy as np
 from jax import dtypes as jax_dtypes
 
 from tengri._cache_keys import KeyPolicy, baked, content
+from tengri._x64_hold import hold_x64_preference
 
 
 def canonical_dsps_kwargs(**kwargs):
@@ -87,6 +88,7 @@ def canonical_dsps_kwargs(**kwargs):
 # dependency of this module rather than a hidden one. ``_data_setup`` imports
 # only the standard library, so there is no cycle to avoid.
 from tengri._data_setup import download_ssp
+from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
 
 class SSPData(NamedTuple):
@@ -115,9 +117,12 @@ class SSPData(NamedTuple):
         at each (age, metallicity) [dimensionless, ∈ [0, 1]].
         Used for stellar mass normalization in CSP integral. Depends on IMF
         and isochrone library; None if unavailable.
-    ssp_alpha_fe : array, optional
-        Alpha enhancement grid (for future use). Currently None.
-        When implemented: ssp_flux will be (n_met, n_alpha, n_age, n_wave).
+    ssp_alpha_fe : array, shape (n_alpha,), optional
+        [alpha/Fe] grid values, relative to solar. Present only for a 4D
+        alpha-enhanced library; ``None`` for every library shipped here.
+        When present, ``ssp_flux`` is (n_met, n_alpha, n_age, n_wave) and
+        the alpha axis is collapsed by :func:`interpolate_alpha_only`
+        before the DSPS kernel sees a 3D grid.
     nebular : str, optional
         Nebular provenance: ``"included"`` (wNE: nebular continuum and
         lines baked in), ``"bare"``, or ``"unknown"`` (default). Resolved
@@ -130,9 +135,17 @@ class SSPData(NamedTuple):
     to solar. To convert user-supplied log10(Z/Z_sun) to grid coordinates,
     add LOG10_ZSUN ≈ −1.848.
 
-    **Future extension**: ssp_alpha_fe support for alpha-element abundance
-    variations (Vazdekis+2015, MIST, etc.) is planned. Currently, metallicity
-    is the only dimension; alpha is fixed (typically solar, α = 0).
+    **Alpha enhancement**: a 4D library carrying an [alpha/Fe] axis is
+    supported. :func:`has_alpha_grid` detects one and
+    :func:`interpolate_alpha_only` collapses the axis at ``met_alpha_fe``,
+    after which ``met_logzsol`` is used directly rather than through the
+    effective-metallicity approximation. What is missing is a grid file, not
+    the code path: every library shipped here is 3D, so ``ssp_alpha_fe`` is
+    ``None`` in practice and ``met_alpha_fe`` is instead folded into an
+    effective metallicity, ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``.
+    On such a grid the two are exactly degenerate: an alpha-enhanced spectrum
+    *is* the scaled-solar array 0.75 dex higher in Z, so freeing
+    ``met_alpha_fe`` there samples a flat ridge rather than a mode.
 
     **Survival mass**: ssp_mass_remaining encodes stellar mass loss due to
     stellar evolution (main-sequence turnoff, white dwarf cooling, etc.).
@@ -781,13 +794,14 @@ def _synthesize_mass_remaining(
     """
     import warnings
 
-    from dsps.imf.surviving_mstar import (
-        CHABRIER_PARAMS,
-        KROUPA_PARAMS,
-        SALPETER_PARAMS,
-        VAN_DOKKUM_PARAMS,
-        surviving_mstar,
-    )
+    with hold_x64_preference():
+        from dsps.imf.surviving_mstar import (
+            CHABRIER_PARAMS,
+            KROUPA_PARAMS,
+            SALPETER_PARAMS,
+            VAN_DOKKUM_PARAMS,
+            surviving_mstar,
+        )
 
     _IMF_PARAMS = {
         "chabrier": CHABRIER_PARAMS,
@@ -819,8 +833,9 @@ def _synthesize_mass_remaining(
     # surviving-mass sum downstream (log_mstar = NaN) regardless of the
     # anchor's weight. No star has died at age 0, so floor the age at
     # 0.1 Myr where f_surv = 1 to DSPS's own fit accuracy; a no-op for
-    # grids whose youngest template is already >= 0.1 Myr.
-    lg_age_yr = jnp.maximum(ssp_lg_age_gyr + 9.0, 5.0)
+    # grids whose youngest template is already >= 0.1 Myr. The floor is the
+    # one constant the nebular Q_H axes also read (#2418).
+    lg_age_yr = jnp.maximum(ssp_lg_age_gyr + 9.0, ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR)
     f_surv_age = surviving_mstar(lg_age_yr, **params)
     return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 
@@ -1110,7 +1125,8 @@ def compute_dsps_native_weights(
 
     """
     try:
-        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
+        with hold_x64_preference():
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
     except ImportError:
         raise ImportError(
             "dsps is required for csp_integration='dsps_native'. Install with: pip install dsps"
@@ -1247,7 +1263,8 @@ def compute_dsps_age_weights(
        Population Synthesis", arXiv:2112.06830, Eq. 9.
     """
     try:
-        from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
+        with hold_x64_preference():
+            from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
     except ImportError:
         raise ImportError(
             "dsps is required for DSPS-canonical age weights. Install with: pip install dsps"
@@ -1354,7 +1371,8 @@ def compute_dsps_met_table_weights(
 
     """
     try:
-        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+        with hold_x64_preference():
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
     except ImportError:
         raise ImportError(
             "dsps is required for csp_integration='dsps_met_table'. Install with: pip install dsps"

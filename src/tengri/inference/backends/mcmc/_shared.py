@@ -227,6 +227,28 @@ def _check_blackjax_floor():
 
 
 # ---------------------------------------------------------------------------
+# Platform detection for chain parallelism hint
+# ---------------------------------------------------------------------------
+
+
+def _pmap_hint_applies() -> bool:
+    """Decide whether the pmap hint should be emitted on this platform.
+
+    The TENGRI_HOST_DEVICES hint is counterproductive on CPU: vmap on a single
+    device that owns all cores beats pmapping across starved logical devices.
+    Same seed, same chain, same box: 418.3 s (vmap) vs 451.5 s (pmap) for a
+    600-iteration warmup (issue #2361). Hint only on platforms where pmap is
+    expected to help (GPU/TPU, not CPU).
+
+    Returns
+    -------
+    bool
+        True if TENGRI_HOST_DEVICES hint should be emitted; False on CPU.
+    """
+    return jax.devices()[0].platform != "cpu"
+
+
+# ---------------------------------------------------------------------------
 # Kernel getters (cached in Python so we don't rebuild on every JIT call)
 # ---------------------------------------------------------------------------
 
@@ -1092,17 +1114,26 @@ def _nuts_chain_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
-        """Advance NUTS one step: position, divergence flag, tree depth, leapfrogs."""
+        """Advance NUTS one step: position, divergence flag, tree depth, leapfrogs, energy."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, (
             s.position,
             info.is_divergent,
             info.num_trajectory_expansions,
             info.num_integration_steps,
+            # The Hamiltonian at the accepted state. Carried because the energy
+            # trace is what E-BFMI is computed from, and E-BFMI is the standard
+            # diagnostic for the failure this sampler actually hits on
+            # heavy-tailed priors: a chain that cannot traverse the energy
+            # distribution. A divergence count says something went wrong;
+            # E-BFMI says the geometry is why. One float per draw.
+            info.energy,
         )
 
-    _, (positions, divergent, expansions, n_leapfrog) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, expansions, n_leapfrog
+    _, (positions, divergent, expansions, n_leapfrog, energy) = jax.lax.scan(
+        _step, state, chain_keys
+    )
+    return positions, divergent, expansions, n_leapfrog, energy
 
 
 # ---------------------------------------------------------------------------
@@ -3182,14 +3213,24 @@ def _resolve_chain_parallel(chain_parallel: str, n_chains: int) -> bool:
         return False
     if chain_parallel == "pmap":
         if n_dev < n_chains:
-            raise ValueError(
-                f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
-                f"devices, found {n_dev}. Set the TENGRI_HOST_DEVICES environment "
-                f"variable to {n_chains} (or more) before the first `import jax` "
-                "-- tengri reads it at import time and appends "
-                "--xla_force_host_platform_device_count to XLA_FLAGS for you -- "
-                "or pass chain_parallel='vmap' / 'auto'."
-            )
+            if _pmap_hint_applies():
+                # GPU/TPU platform: suggest TENGRI_HOST_DEVICES
+                error_msg = (
+                    f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
+                    f"devices, found {n_dev}. Set the TENGRI_HOST_DEVICES environment "
+                    f"variable to {n_chains} (or more) before the first `import jax` "
+                    "-- tengri reads it at import time and appends "
+                    "--xla_force_host_platform_device_count to XLA_FLAGS for you -- "
+                    "or pass chain_parallel='vmap' / 'auto'."
+                )
+            else:
+                # CPU platform: vmap is faster
+                error_msg = (
+                    f"chain_parallel='pmap' needs at least n_chains={n_chains} JAX "
+                    f"devices, found {n_dev}. On CPU, vmap is faster than pmap "
+                    "(issue #2361); pass chain_parallel='auto' or 'vmap' instead."
+                )
+            raise ValueError(error_msg)
         return True
     if chain_parallel == "auto":
         return n_chains > 1 and n_dev >= n_chains
@@ -3371,8 +3412,20 @@ def _parallel_chains(
     per_chain_keys = jax.random.split(new_chain_key, n_chains * n_iter)
     per_chain_keys = per_chain_keys.reshape(n_chains, n_iter, 2)
     out = jax.pmap(chain_scan_fn, devices=devices)(states, per_chain_keys)
+    # Gather the draws to the host before they leave. pmap's outputs are
+    # sharded one chain per device, and every jitted consumer downstream --
+    # the whitening restore, the physical transform, and above all the
+    # profile-mass reinsertion's chunked lax.map -- would otherwise be
+    # compiled for those sharded inputs as an SPMD program across the host
+    # devices. Measured on a paper-1 III cell (4 chains, 4 host devices,
+    # 1200 draws): the reinsertion executed from sharded inputs held a
+    # 24 GB plateau for 4.5 min; the identical program on host-resident
+    # inputs peaks 1 GB above baseline in ~2 min. The draws are
+    # (n_chains, n_iter, D) floats -- kilobytes -- so the gather is free.
+    out = jax.device_get(out)
 
     def _trim_and_flatten(arr):
+        arr = jnp.asarray(arr)
         if n_burnin > 0:
             arr = arr[:, n_burnin:]
         if arr.ndim >= 3:

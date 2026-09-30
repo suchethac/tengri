@@ -584,14 +584,33 @@ def test_spectra_honors_a_fixed_redshift(model_with_spectroscopy, spec_posterior
     The exact spectrum path runs ``Observation.predict``, which takes the
     luminosity distance from the params **dict** — so if the draws did not carry
     the resolved redshift, every draw would come back at 10 pc.
+
+    Passing an explicit ``redshift`` into ``model.predict(...)`` is refused now
+    (#2296: a Fixed key in a params dict is always refused, not merely when it
+    disagrees with the pinned value), so the z=0 comparator below is a SEPARATE,
+    otherwise-identical model built at ``redshift=Fixed(0.0)`` rather than an
+    override on the same model.
     """
     assert "redshift" not in spec_posterior.samples  # vacuity guard: it IS omitted
 
     spec = np.asarray(spec_posterior.spectra())
     first = {k: v[0] for k, v in spec_posterior.samples.items()}
 
-    at_z = np.asarray(model_with_spectroscopy.predict({**first, "redshift": 0.5}).spectrum())
-    at_zero = np.asarray(model_with_spectroscopy.predict({**first, "redshift": 0.0}).spectrum())
+    model_at_zero = SEDModel.build(
+        ssp_data=model_with_spectroscopy.ssp_data,
+        observation=model_with_spectroscopy.observation,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.0),
+    )
+
+    at_z = np.asarray(model_with_spectroscopy.predict(first).spectrum())
+    at_zero = np.asarray(model_at_zero.predict(first).spectrum())
 
     # Power check: z must genuinely move the spectrum, or this proves nothing.
     assert np.nanmax(np.abs(at_zero / at_z)) > 1e3

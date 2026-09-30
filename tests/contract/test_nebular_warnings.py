@@ -20,6 +20,7 @@ _CB19_GRID_PATH = Path(__file__).resolve().parents[2] / "data" / "cb19_templates
 
 from tengri.components.nebular import (
     BakedInBackend,
+    BakedInNebularGridWarning,
     BakedInNebularWarning,
     CB19Backend,
     CB19IonizingSpectrumWarning,
@@ -47,9 +48,14 @@ def test_baked_in_raises_when_requested():
 
 
 def test_baked_in_suppress_is_silent():
-    """BakedInBackend is silent in 'suppress' mode."""
+    """BakedInBackend ionizing_source_warning='suppress' silences logU advisory.
+
+    Note: grid warning is NOT silenced (it's about data, not model choice).
+    Old: no warnings | New: BakedInNebularGridWarning (unsuppressible)
+    """
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        warnings.simplefilter("error")  # Any warning becomes an error
+        warnings.filterwarnings("ignore", category=BakedInNebularGridWarning)
         BakedInBackend(ionizing_source_warning="suppress")  # Must not raise
 
 

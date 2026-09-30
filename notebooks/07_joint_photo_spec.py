@@ -74,9 +74,9 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
+# Twelve UV-MIR bands (GALEX through WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
 # 3800–9200 Å observed). At z = 0.05 this covers the 4000 Å break, the Balmer lines Hβ and Hα,
-# the Mgb triplet, the Fe5270/Fe5335 blends and the Ca II triplet — the features that carry
+# the Mgb triplet, the Fe5270/Fe5335 blends, and the Ca II triplet, which carry
 # metallicity and light-weighted age. Sampling at 260 pixels resolves these indices.
 # The SSP grid carries its nebular emission (lines and continuum), so no separate nebular model is needed.
 
@@ -112,7 +112,7 @@ obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
 #
 # One builder, called twice: the same physics and the same free parameters
 # against two different observations. The spectrum's pixel count drives the fit
-# cost — each pixel adds a likelihood term and a gradient row.
+# cost, as each pixel adds a likelihood term and a gradient row.
 #
 # **Both channels assume Gaussian, uncorrelated errors.** That holds for the
 # photometry, but real spectral pixels share correlated noise (wavelength
@@ -176,10 +176,10 @@ truth = {
     "dust_tau_diff": jnp.array(0.25),
     "sfh_tsnorm_log_total_mass": jnp.array(10.5),
 }
-truth_full = {**model_joint.spec.get_fixed_values(), **{k: float(v) for k, v in truth.items()}}
+truth = {k: float(v) for k, v in truth.items()}
 
-p_phot = np.asarray(model_joint.predict_photometry(truth_full))
-p_spec = np.asarray(model_joint.predict_spectrum(truth_full, wave_obs=WAVE_OBS))
+p_phot = np.asarray(model_joint.predict_photometry(truth))
+p_spec = np.asarray(model_joint.predict_spectrum(truth, wave_obs=WAVE_OBS))
 n_phot = p_phot / 20.0  # SNR = 20 photometry
 n_spec = p_spec / 30.0  # SNR = 30 per spectral pixel
 _rng = np.random.default_rng(0)
@@ -240,7 +240,7 @@ post_joint, t_joint = run(
 print(f"Total fitting time: {t_phot + t_joint:.1f}s", flush=True)
 
 # %% [markdown]
-# ## Constraint widths: joint vs single-modality
+# ## Constraint widths (joint versus single-modality)
 #
 # The 68% credible width of each free parameter, normalized so the photometry-
 # only width is 1. Bars below 1 mean the joint fit tightened that parameter.
@@ -308,7 +308,7 @@ n_cov = 0
 for p in params:
     s = np.asarray(post_joint.samples[p])
     lo, med, hi = np.percentile(s, [16, 50, 84])
-    tv = float(truth_full[p])
+    tv = float(truth[p])
     ok = lo <= tv <= hi
     n_cov += ok
     print(
@@ -320,15 +320,14 @@ print(f"\n68% coverage: {n_cov}/{len(params)}", flush=True)
 # ## Posterior SED
 #
 # Observed photometry (labeled by band) and the optical spectrum on a single
-# F_ν axis, joint posterior model SED behind them. The shaded band marks the
+# F_ν axis, with the joint posterior model SED behind them. The shaded band marks the
 # spectral window, expanded in the inset. A single posterior explains the
-# broadband points and the spectrum at the same time.
+# broadband points and the spectrum simultaneously.
 
 # %%
 N_DRAW = 60
 idx = np.linspace(0, len(next(iter(post_joint.samples.values()))) - 1, N_DRAW).astype(int)
-fixed = model_joint.spec.get_fixed_values()
-draws = [{**fixed, **{k: float(v[i]) for k, v in post_joint.samples.items()}} for i in idx]
+draws = [{k: float(v[i]) for k, v in post_joint.samples.items()} for i in idx]
 
 DL = cosmology.luminosity_distance(Z_GAL)
 WAVE_FULL = np.geomspace(1300.0, 6.0e4, 1000)
@@ -346,7 +345,7 @@ def sed_fnu(p):
 
 sed_draws = np.stack([sed_fnu(p) for p in draws])
 sed_lo, sed_med, sed_hi = np.percentile(sed_draws, [16, 50, 84], axis=0)
-sed_truth = sed_fnu(truth_full)
+sed_truth = sed_fnu(truth)
 
 BAND_LABELS = ["FUV", "NUV", "u", "g", "r", "i", "z", "J", "H", "Ks", "W1", "W2"]
 
@@ -412,13 +411,13 @@ fig_h.savefig(FIG_DIR / "07_joint_sed.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Corner — joint posterior
+# ## Corner (joint posterior)
 #
 # Free parameters with truth dashed. The metallicity and dust columns are now
-# tight and centered on the truth — neither dataset managed that on its own.
+# tight and centered on the truth, which neither dataset managed alone.
 
 # %%
-fig_corner = post_joint.plot_corner(truths=truth_full, color=C_POST)
+fig_corner = post_joint.plot_corner(truths=truth, color=C_POST)
 for ax_c in fig_corner.axes:  # readable axis labels in place of parameter keys
     if ax_c.get_xlabel() in labels:
         ax_c.set_xlabel(labels[ax_c.get_xlabel()], fontsize=11)

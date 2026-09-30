@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -81,12 +81,12 @@ filters = ["astroquery>=0.4"]
 # Hardware-accelerator extras. JAX is installed by default with CPU support;
 # these extras pull the matching jax/jaxlib build for the target backend.
 # Linux x86_64 with CUDA 12: pip install -e ".[gpu]"
-# macOS arm64 (Apple Silicon): pip install -e ".[metal]"
-# Caveat (metal): jax-metal is experimental and known to produce numerical
-# discrepancies vs CPU/CUDA on tengri's stochastic SFH path — use
-# JAX_PLATFORMS=cpu for production fits until upstream stabilises.
+# macOS arm64 (Apple Silicon): pip install -e ".[all,mps]" in its own venv.
+# jax-mps (MLX-backed) is float32 only and becomes the default JAX device in the
+# environment it is installed in; 0.11.0 is the first release that is correct with
+# MLX fusion on and that targets JAX 0.11. Apple's jax-metal is not viable here.
 gpu = ["jax[cuda12]>=0.4.20"]
-metal = ["jax-metal>=0.1.0"]
+mps = ["jax-mps>=0.11.0"]
 all = [
     "blackjax>=1.6",
     "optax>=0.2",

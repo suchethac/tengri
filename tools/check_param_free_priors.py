@@ -69,8 +69,21 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from tengri.parameters._dust_keys import per_screen_keys, short_to_full
 from tengri.parameters.priors import Fixed
 from tengri.parameters.registry import registry
+
+#: Parameters that declare a ``free_prior`` (so they are not ``REFUSED``
+#: material) but are still never reached by ``all_params: FREE`` -- only by
+#: naming them explicitly (``FREE`` or a prior on the key itself). Per-screen
+#: dust law shapes (#2428) are the one case today: ``parse_groups``'
+#: ``per_screen_inert`` excludes every ``dust_<stem>_<screen>`` name from the
+#: ``dust_attenuation`` group's wildcard scope unconditionally, so a wildcard
+#: can never double-parametrize a screen alongside its own explicit setting
+#: (issue #2428). Derived from :mod:`tengri.parameters._dust_keys`, the
+#: same per-screen vocabulary ``parse_groups`` itself resolves against, so
+#: this cannot drift into a second, hand-typed copy of the grammar's rule.
+NAMED_ONLY_FREE: frozenset[str] = frozenset(short_to_full(k) for k in per_screen_keys())
 
 #: name -> (ground, reason). See the module docstring for the six grounds.
 REFUSED: dict[str, tuple[str, str]] = {
@@ -90,7 +103,6 @@ REFUSED: dict[str, tuple[str, str]] = {
     # freeing it against that file. That is a runtime data guard, not a
     # reason to withhold the declaration -- the sibling three were never
     # listed here for the same reason.)
-
     "shock_b_over_sqrt_n": (
         "inert",
         "real gradient since the index-space fix but ~18% autodiff-vs-FD "
@@ -220,8 +232,15 @@ def main() -> int:
     by_ground: dict[str, int] = {}
     for ground, _ in REFUSED.values():
         by_ground[ground] = by_ground.get(ground, 0) + 1
-    freeable = sum(1 for n in reg if getattr(reg.get(n), "free_prior", None) is not None)
+    has_free_prior = {n for n in reg if getattr(reg.get(n), "free_prior", None) is not None}
+    named_only = sorted(has_free_prior & NAMED_ONLY_FREE)
+    freeable = len(has_free_prior) - len(named_only)
     print(f"OK: {len(reg)} parameters, {freeable} freeable by 'all_params: FREE'.")
+    if named_only:
+        print(
+            f"{len(named_only)} more declare a free_prior reachable only by naming them "
+            f"(FREE or a prior on the key), never by 'all_params: FREE': " + ", ".join(named_only)
+        )
     print(
         f"{len(REFUSED)} deliberately pinned: "
         + ", ".join(f"{g} {c}" for g, c in sorted(by_ground.items()))

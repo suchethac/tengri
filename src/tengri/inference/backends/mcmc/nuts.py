@@ -53,6 +53,49 @@ _SATURATION_WARN_FRAC = 0.25
 _SATURATION_WARN_MIN_CAP = 7
 
 
+def _ebfmi_per_chain(energy, n_chains, n_samples):
+    r"""E-BFMI per chain, or ``None`` when the draw axis is not what we assume.
+
+    .. math::
+        \mathrm{E\text{-}BFMI} = \frac{\sum_n (E_n - E_{n-1})^2}
+                                       {\sum_n (E_n - \bar{E})^2}
+
+    Betancourt's diagnostic for whether the momentum resampling can move the
+    chain across the energy distribution. Values below ~0.3 mean it cannot,
+    which is the signature of a funnel or a heavy-tailed prior direction -- the
+    same geometry that produces divergences the step size cannot fix.
+
+    It MUST be computed per chain. ``_vmap_chains`` hands back a flattened
+    draw axis, and ``jnp.diff`` over it silently includes one difference per
+    chain boundary, between two states that have nothing to do with each other.
+
+    Measured, because the direction is not the obvious one: for two chains
+    sitting at different energy levels, flattening takes E-BFMI from 3.2 to
+    0.33. The boundary adds ONE term to the numerator but adds the entire
+    between-chain spread to the denominator, once per draw, so the denominator
+    wins and the answer is pushed DOWN. A flattened implementation therefore
+    manufactures false alarms rather than false reassurance -- it reports the
+    funnel signature on chains that are perfectly healthy. When the chains
+    happen to sit at similar energies the error is small, which is what makes
+    it easy to ship.
+
+    The reshape below recovers the chains, and the size check refuses rather
+    than reshaping blindly: a layout change here would not raise.
+    """
+    energy = jnp.asarray(energy).ravel()
+    if n_chains < 1 or n_samples < 1 or energy.size != n_chains * n_samples:
+        return None
+    per_chain = energy.reshape(n_chains, n_samples)
+    if n_samples < 2:
+        return None
+    delta = jnp.diff(per_chain, axis=1)
+    numerator = jnp.sum(delta**2, axis=1)
+    centered = per_chain - jnp.mean(per_chain, axis=1, keepdims=True)
+    denominator = jnp.sum(centered**2, axis=1)
+    safe = denominator > 0
+    return jnp.where(safe, numerator / jnp.where(safe, denominator, 1.0), jnp.nan)
+
+
 def _tree_depth_stats(expansions, max_num_doublings: int) -> dict:
     """Tree-depth diagnostics from per-iteration trajectory-expansion counts.
 
@@ -850,7 +893,7 @@ def run_nuts(
             )
 
         with compile_timer("nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent, expansions, n_leapfrog = _vmap_chains(
+            positions, divergent, expansions, n_leapfrog, energy = _vmap_chains(
                 _init,
                 _scan,
                 init_flat=init_flat,
@@ -867,7 +910,7 @@ def run_nuts(
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent, expansions, n_leapfrog = _nuts_chain_scan(
+            positions, divergent, expansions, n_leapfrog, energy = _nuts_chain_scan(
                 state,
                 chain_keys,
                 log_posterior_flat_2arg,
@@ -888,6 +931,7 @@ def run_nuts(
         divergent = divergent[n_burnin:]
         expansions = expansions[n_burnin:]
         n_leapfrog = n_leapfrog[n_burnin:]
+        energy = energy[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
     n_grad_sample = int(jnp.sum(n_leapfrog))
     depth_stats = _tree_depth_stats(expansions, max_num_doublings)
@@ -933,6 +977,16 @@ def run_nuts(
             max_num_doublings,
         )
 
+    _ebfmi = _ebfmi_per_chain(energy, n_chains, n_samples)
+    _ebfmi_record = (
+        {}
+        if _ebfmi is None
+        else {
+            "ebfmi_per_chain": [float(v) for v in _ebfmi],
+            "ebfmi_min": float(jnp.nanmin(_ebfmi)),
+        }
+    )
+
     return Posterior(
         samples=samples_phys,
         params=best_params,
@@ -945,6 +999,20 @@ def run_nuts(
             "n_chains": n_chains,
             "chain_parallel": chain_parallel_effective,
             "n_divergent": n_divergent,
+            # The per-draw flag behind that count, aligned with ``samples``
+            # (both are the burn-in-sliced, chain-flattened draw axis), so a
+            # caller can ask WHERE the divergences are rather than only how
+            # many. A count cannot distinguish 22 divergences spread over the
+            # posterior from 22 in one corner of it, and those have different
+            # causes and different fixes. Published as a plain bool array
+            # rather than a JAX one because every consumer so far serializes
+            # it. Additive: nothing reads this key yet, and the aggregate
+            # ``n_divergent`` above is unchanged.
+            "divergent_mask": jnp.asarray(divergent).astype(bool),
+            # The energy trace, on the same flattened draw axis as ``samples``
+            # and ``divergent_mask`` so the three can be joined row-wise.
+            "energy": jnp.asarray(energy),
+            **_ebfmi_record,
             "dense_mass_step_backoffs": dense_mass_backoffs,
             # Gradient counts, the unit bench/reports compare samplers on:
             # adaptation (0 when a cached adaptation was reused), the kept

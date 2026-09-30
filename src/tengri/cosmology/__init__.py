@@ -12,7 +12,8 @@ Examples
 >>> cosmo.luminosity_distance_mpc(0.5)
 DeviceArray(2867.4..., dtype=float64)
 >>> cosmo.PLANCK18
-CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
+CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766, Tcmb0=2.7255, Neff=3.046,
+            m_nu_eV=(0.0, 0.0, 0.06))
 """
 
 from __future__ import annotations
@@ -60,3 +61,28 @@ __all__ = [
     "z_at_cosmic_time",
     "z_at_lookback_time",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy load PLANCK15 and WMAP5 from utils.cosmology on access (PEP 562).
+
+    Parameters
+    ----------
+    name : str
+        The attribute name.
+
+    Returns
+    -------
+    CosmoParams
+        For PLANCK15 and WMAP5, returns a CosmoParams object from utils.cosmology.
+
+    Raises
+    ------
+    AttributeError
+        If the name is not PLANCK15 or WMAP5.
+    """
+    if name in ("PLANCK15", "WMAP5"):
+        import tengri.utils.cosmology as _cosmo_utils
+
+        return getattr(_cosmo_utils, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

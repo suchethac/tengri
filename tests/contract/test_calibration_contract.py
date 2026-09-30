@@ -63,7 +63,7 @@ def _model(ssp, calibration_order: int, **spec_kw) -> SEDModel:
 
 
 def _params(model: SEDModel, **cal) -> dict:
-    base = {name: float(v) for name, v in model.spec.get_fixed_values().items()}
+    base = {name: 1.0 for name in model.spec.free_params}
     return {**base, **cal}
 
 

@@ -226,13 +226,17 @@ class TestDale2014RadioDoubleCount1970:
             f"double-counting or other incompatibility at the template edge."
         )
 
-        # Physical pin: radio_alpha_sf/radio_alpha_ff are read from the sampled
-        # params (never hardcoded) since only the sampled value is meaningful
-        # per draw. L_nu ~ nu**-alpha_sf and L_nu ~ nu**alpha_ff give
+        # Physical pin: radio_alpha_sf/radio_alpha_ff are read from the value
+        # actually used to predict (never hardcoded) since only that value is
+        # meaningful here. Both are Fixed on this build (no 'all_params'
+        # disposition in the radio group defaults the remainder Fixed), so
+        # they are absent from `params` (free-only, #2296) -- read the pinned
+        # values instead. L_nu ~ nu**-alpha_sf and L_nu ~ nu**alpha_ff give
         # d log L_nu / d log wave = +alpha_sf (pure synchrotron) and
         # -alpha_ff (pure free-free) respectively.
-        alpha_sf = params["radio_alpha_sf"]
-        alpha_ff = params["radio_alpha_ff"]
+        fixed_values = model.spec.get_fixed_values()
+        alpha_sf = fixed_values["radio_alpha_sf"]
+        alpha_ff = fixed_values["radio_alpha_ff"]
         lowest_freq_slope = slopes[-1]  # nearest 6e9 Å / 0.5 GHz
         highest_freq_slope = slopes[0]  # nearest 1e8 Å / 30 GHz
 

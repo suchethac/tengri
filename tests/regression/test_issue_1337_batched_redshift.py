@@ -33,7 +33,7 @@ class TestBatchedRedshift:
     """Runtime per-galaxy redshift in the MCMC catalog path."""
 
     @staticmethod
-    def _model(ssp_data_wne, synthetic_tophat_obs, *, z_range):
+    def _model(ssp_data_wne, synthetic_tophat_obs, *, z_range, redshift=0.1):
         from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
 
         approx = WavePrecomp(catalog_z_range=z_range, n_z=50) if z_range else None
@@ -46,7 +46,7 @@ class TestBatchedRedshift:
                 "type": "two_component",
                 "all_params": Fixed(DEFAULT),
             },
-            redshift=Fixed(0.1),
+            redshift=Fixed(redshift),
             approx=approx,
         )
 
@@ -118,15 +118,17 @@ class TestBatchedRedshift:
         """
         import jax
 
-        model = self._model(ssp_data_wne, synthetic_tophat_obs, z_range=(0.05, 1.0))
+        # redshift is Fixed (not swept via the params dict, #2296): build a
+        # second model pinned at the other redshift instead of overriding the
+        # first model's Fixed value at predict time.
+        model = self._model(ssp_data_wne, synthetic_tophat_obs, z_range=(0.05, 1.0), redshift=0.1)
+        model_hi = self._model(
+            ssp_data_wne, synthetic_tophat_obs, z_range=(0.05, 1.0), redshift=0.8
+        )
         key = jax.random.PRNGKey(4)
         params = model.spec.sample(key)
-        flux_lo = np.asarray(
-            model.predict_photometry({**params, "redshift": 0.1}), dtype=np.float64
-        )
-        flux_hi = np.asarray(
-            model.predict_photometry({**params, "redshift": 0.8}), dtype=np.float64
-        )
+        flux_lo = np.asarray(model.predict_photometry(params), dtype=np.float64)
+        flux_hi = np.asarray(model_hi.predict_photometry(params), dtype=np.float64)
         # The two galaxies must be genuinely different data (guard the fixture).
         # atol=0 is mandatory: these fluxes are ~1e-30, and numpy's default
         # atol=1e-8 would call ANY two of them equal.

@@ -29,6 +29,33 @@ class BakedInNebularWarning(UserWarning):
     """
 
 
+class BakedInNebularGridWarning(BakedInNebularWarning):
+    """Warning raised when BakedInBackend receives an unstamped (unknown) SSP.
+
+    Indicates that the SSP grid's nebular status could not be determined from
+    metadata. The grid may or may not include nebular emission.
+
+    Notes
+    -----
+    This is a subclass of BakedInNebularWarning and is suppressible by the
+    same mechanisms: explicit neb={'type': 'ssp'} or neb={'type': 'none'}
+    when building via SEDModel.build, or ionizing_source_warning='suppress'
+    when constructing BakedInBackend directly.
+
+    """
+
+
+class BakedInNebularBareError(ValueError):
+    """Raised when BakedInBackend receives a bare (no-nebular) SSP.
+
+    The user has requested BakedInBackend on a bare-stellar SSP grid that
+    carries no nebular emission whatsoever. The backend has no choice but to
+    return zero nebular emission, resulting in a model with no emission lines
+    and no nebular continuum — silently incorrect.
+
+    """
+
+
 class BakedInBackend:
     """Nebular backend for SSP files with pre-included emission.
 
@@ -64,18 +91,66 @@ class BakedInBackend:
 
     """
 
-    def __init__(self, ionizing_source_warning: str = "warn") -> None:
+    def __init__(self, ionizing_source_warning: str = "warn", ssp_data=None) -> None:
         """Initialize BakedInBackend.
 
         Parameters
         ----------
         ionizing_source_warning : str, optional
-            Verbosity control. Default: "warn".
+            Verbosity control for the fixed-parameter advisory. Default: "warn".
+        ssp_data : SSPData, optional
+            SSP data to check for nebular content. If provided, will raise
+            on bare grids and warn on unknown grids.
+
+        Raises
+        ------
+        BakedInNebularBareError
+            If ssp_data.nebular == "bare" (unambiguously no nebular emission).
 
         """
         self.name = "baked_in"
         self.has_free_params = False
-        self.has_continuum = True
+
+        # Check SSP nebular status and emit appropriate warnings/errors
+        # Read directly: missing attribute is a bug to surface, not default
+        if ssp_data is None:
+            nebular_status = "unknown"
+        else:
+            nebular_status = ssp_data.nebular
+
+        if nebular_status == "bare":
+            # Bare grid: unambiguously wrong. Raise immediately.
+            raise BakedInNebularBareError(
+                "BakedInBackend received a bare-stellar SSP (no nebular emission): "
+                "the grid carries zero nebular continuum and zero emission lines. "
+                "BakedInBackend returns zero nebular contribution, which is correct "
+                "only if the SSP file already includes the emission. "
+                "\n"
+                "Fix (one of): "
+                "\n"
+                "  1. Download an SSP with nebular emission included (wNE grid): "
+                "\n"
+                "     tengri.download_ssp('ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0') "
+                "\n"
+                "     Then rebuild the model with that grid. "
+                "\n"
+                "  2. Keep this bare-stellar grid and drop neb={'type': 'ssp'}: "
+                "\n"
+                "     use neb={'type': 'cloudy_grid'} or neb={'type': 'cue'} "
+                "\n"
+                "     to add a separate nebular component. "
+                "\n"
+                "  3. If the grid has been processed to remove nebular emission "
+                "\n"
+                "     by hand, re-run tools/stamp_ssp_nebular_attrs.py --bare "
+                "\n"
+                "     to stamp the metadata so other backends are also warned."
+            )
+
+        # has_continuum is True only for "included"; "unknown" is an assumption
+        # stated by the warning below
+        self.has_continuum = nebular_status in ("included", "unknown")
+
         if ionizing_source_warning not in ("raise", "warn", "suppress"):
             raise ValueError("ionizing_source_warning must be 'raise', 'warn', or 'suppress'")
         if ionizing_source_warning != "suppress":
@@ -95,6 +170,25 @@ class BakedInBackend:
             if ionizing_source_warning == "raise":
                 raise ValueError(msg)
             warnings.warn(msg, BakedInNebularWarning, stacklevel=2)
+
+            # Also warn about unknown nebular status when ssp_data was provided.
+            # This warning is suppressible by the same routes as the fixed-logU advisory.
+            if ssp_data is not None and nebular_status == "unknown":
+                grid_msg = (
+                    "BakedInBackend received an SSP whose nebular status is unknown: "
+                    "the metadata does not declare whether the grid includes nebular "
+                    "emission. If this grid is bare-stellar, you will silently get "
+                    "a model with zero nebular emission and zero emission lines. "
+                    "\n"
+                    "Resolve the ambiguity with tools/stamp_ssp_nebular_attrs.py: "
+                    "\n"
+                    "  python tools/stamp_ssp_nebular_attrs.py [--included|--bare] <path.h5> "
+                    "\n"
+                    "This warning is silenced by the same routes as the fixed-logU advisory: "
+                    "neb={'type': 'ssp'} (or {'type': 'none'}) when building, "
+                    "or ionizing_source_warning='suppress' when constructing directly."
+                )
+                warnings.warn(grid_msg, BakedInNebularGridWarning, stacklevel=2)
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this backend's structure.

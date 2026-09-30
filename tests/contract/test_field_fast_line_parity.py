@@ -74,14 +74,15 @@ def test_field_fast_line_matches_exact():
         "sfh_dpl_tau_gyr": jnp.array(13.0),
         "sfh_field_psd_sigma": jnp.array(0.4),
         "sfh_field_psd_tau_myr": jnp.array(150.0),
-        "met_logzsol": jnp.array(-0.3),
+        # met_logzsol is Fixed(-0.3) above: measure_line_fluxes fills it in
+        # internally and refuses an explicit key here, even at the pinned
+        # value (#2296).
         "dust_tau_bc": jnp.array(0.3),
         "dust_tau_diff": jnp.array(0.15),
     }
-    params = {**model.spec.get_fixed_values(), **p}
 
-    fast = np.asarray(model.measure_line_fluxes(params, ld, approx=True))
-    exact = np.asarray(model.measure_line_fluxes(params, ld, approx=False))
+    fast = np.asarray(model.measure_line_fluxes(p, ld, approx=True))
+    exact = np.asarray(model.measure_line_fluxes(p, ld, approx=False))
     assert np.all(np.isfinite(fast))
     # Same window-LUT-vs-exact agreement the non-field path already meets (#1152).
     np.testing.assert_allclose(fast, exact, rtol=3e-3, atol=0.0)

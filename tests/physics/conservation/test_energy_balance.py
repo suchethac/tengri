@@ -48,7 +48,15 @@ def base_spec():
         dust_tau_bc=Fixed(0.5),
         dust_tau_diff=Fixed(0.3),
         dust_slope=Fixed(-0.7),
-        dust_eta_balance=Fixed(1.0),
+        # Free, not Fixed (#2296): _make_model_and_predict below sweeps this
+        # to 0.0/1.0/2.0 by writing straight into the sampled params dict,
+        # which is a refused presence override of a Fixed key regardless of
+        # whether the written value matches the pin. Declaring it free makes
+        # that write a plain free-key write; the per-name fold_in in
+        # Parameters.sample() (see the #548 comment above) guarantees this
+        # does not perturb the OTHER free params' sampled values, so the
+        # eta=0 reference comparison below is unaffected.
+        dust_eta_balance=Uniform(0.0, 3.0),
         redshift=Fixed(0.1),
         dust_emission="modified_blackbody",
     )

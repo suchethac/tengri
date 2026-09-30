@@ -64,8 +64,12 @@ def _model(ssp, calibration_order: int) -> SEDModel:
 
 
 def _params(model: SEDModel, **cal) -> dict:
-    base = {name: float(v) for name, v in model.spec.get_fixed_values().items()}
-    return {**base, **cal}
+    """Free-only params: everything but ``cal_c*`` is Fixed on this model (#2296),
+    so the params dict just carries the calibration override -- the spec merges
+    its own Fixed sfh/dust/redshift values in.
+    """
+    del model  # kept in the signature: call sites read as `_params(model, cal_c1=...)`
+    return dict(cal)
 
 
 def _cheb_x(wave: np.ndarray) -> np.ndarray:

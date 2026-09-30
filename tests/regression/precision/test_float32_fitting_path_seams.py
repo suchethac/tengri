@@ -1583,7 +1583,6 @@ def test_the_cue_fast_nebular_grid_builds_and_reconstructs_in_float32(ssp_bare):
 
     from tengri import FeaturePrecomp
     from tengri.observation.line_flux_data import LineFluxData
-    from tengri.parameters.resolve import resolve_fixed_params
 
     obs = Observation(
         photometry=Photometry.from_names(_PHOT2),
@@ -1608,17 +1607,15 @@ def test_the_cue_fast_nebular_grid_builds_and_reconstructs_in_float32(ssp_bare):
                 f"[{tag}] FeaturePrecomp resolved without attaching a nebular grid, so "
                 f"this seam never reached the code it exists to test ({_where()})"
             )
-            # The grid path reaches ``compute_joint_weights``, which refuses a dict
-            # without ``redshift`` rather than defaulting it to 10 pc.
-            truth = dict(
-                resolve_fixed_params(
-                    sed,
-                    {
-                        n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
-                        for n in sed.spec.free_params
-                    },
-                )
-            )
+            # Free-only (#2296): predict_line_fluxes merges the spec's Fixed
+            # values internally on both branches (merge_fixed_params), and
+            # refuses a params dict that already carries one of them. The
+            # pre-merge via resolve_fixed_params this test used to need is
+            # now exactly that redundant, refused case.
+            truth = {
+                n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
+                for n in sed.spec.free_params
+            }
             fluxes = sed.predict_line_fluxes(truth, target_wavelengths=jnp.asarray(_LINE_WAVES))
             out[tag] = (np.asarray(fluxes), fluxes.dtype)
 

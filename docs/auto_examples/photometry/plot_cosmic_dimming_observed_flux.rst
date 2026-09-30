@@ -43,7 +43,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-178
+.. GENERATED FROM PYTHON SOURCE LINES 32-182
 
 
 
@@ -164,8 +164,12 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             redshift=tengri.Fixed(float(z)),
         )
 
-        # Copy baseline params and update redshift key explicitly
-        params = {**baseline_params, "redshift": float(z)}
+        # ``z_model`` is already built with ``redshift=Fixed(float(z))`` above,
+        # so its own params dict must OMIT "redshift" (#2296: a params-dict key
+        # the spec declared Fixed is refused, even at the value it is already
+        # pinned to). Passing it explicitly here was always redundant --
+        # z_model resolves its own Fixed redshift internally.
+        params = dict(baseline_params)
 
         # Predict observed-frame photometric flux [erg/s/cm^2/Hz]
         flux = np.asarray(z_model.predict_photometry(params))
@@ -208,7 +212,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.008 seconds)
+   **Total running time of the script:** (0 minutes 4.239 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

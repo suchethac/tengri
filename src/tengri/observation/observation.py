@@ -1006,6 +1006,70 @@ class Observation:
           :math:`\tau_{\rm diff} \le 2`, :math:`z \le 1`. **This is the floor
           for the whole path**, no other channel can do better than the
           bucket that dominates the broadband.
+        - **Lyman continuum, under a photoionized nebular backend** (#2439,
+          #2427): *exact* for the whole-band bucket, and now *matched to each
+          consumer's own dense-path rule* for the sub-band buckets (fix
+          round, 2026-09; R1-R5 below). The whole-band
+          ``stellar_phot_lnu_precomp`` is corrected by
+          ``NebularSEDComponent.apply`` with an exact algebraic split of the
+          SSP × filter integral at the physical 912 Å edge
+          (``stellar_phot_lnu_precomp_lyc`` and its per-age twin
+          ``stellar_phot_lnu_per_age_precomp_lyc``, R3d, built alongside the
+          whole-band tensor in ``preintegrate_grid`` / the ztable twin,
+          clamped at zero against catastrophic cancellation in a fully-LyC
+          band), mirroring the dense path's ``sed_intrinsic`` mask
+          (``components/nebular/component.py``). Before the original fix,
+          any band whose observed passband sampled rest λ < 912 Å carried the
+          *full, unabsorbed* stellar Lyman continuum regardless of
+          ``neb_fesc``: measured +915 % (z=2 GALEX NUV) and +69 % (z=3 SDSS
+          u) on the issue's own model, K-invariant (the bug was never a
+          quadrature question).
+
+          The K-node sub-band tensors (``stellar_phot_lnu_per_age_subband_precomp``
+          and its IGM-folded twin, read below as ``sub_per_age`` /
+          ``sub_per_age_igm``) are themselves left RAW: R1 forces an extra
+          quadrature edge exactly at the physical 912 Å (observed-frame)
+          boundary whenever a live nebular mask is present
+          (``lyc_gate``, a build-time-only performance/cache-size gate —
+          the correction below always applies when nebular is present,
+          gate or not; live means a PHOTOIONIZED backend, ``cue``/
+          ``cloudy_grid``/``cb19``/``mappings`` — ``backend="baked_in"``
+          (``neb={'type': 'none'}``) and ``backend="shock"`` both put a
+          ``NebularSEDComponent`` in the chain but return from ``apply``
+          before ever reaching the ``neb_fesc`` masking block, so neither
+          counts), so no chunk can straddle the break. R2: each
+          consumer multiplies the raw chunks by the SAME shared factor,
+          ``stellar_subband_lyc_factor_precomp`` — published flat by
+          ``NebularSEDComponent`` (``where(node<912, fesc, 1)``, the only
+          rule available where there is no birth-cloud concept, e.g. the
+          dust-free mean-IGM branch), then OVERWRITTEN by
+          :class:`~tengri.components.dust.two_component.DustSEDComponent`
+          with its own y(age)-graded ``1-y(a)(1-fesc)`` rule (or the flat
+          rule under ``lyc_absorb_all=True``) when a dusty model runs it —
+          same key, so whichever component is later in the chain wins, and
+          there is exactly one factor per model, never a double-count. R3
+          conservation invariants (tested explicitly, not just implied):
+          (a) the raw partition sums to the raw whole band; (b) fesc=1 is
+          bit-for-bit identical to no nebular component at all; (c) the
+          corrected sub-band sum matches the corrected whole band to ~1e-9
+          relative; (d) the per-age LyC split sums over age to its
+          whole-band twin. R4: every tolerance here and in the regression
+          test is a measured floor times a stated factor, never sized to an
+          observed residual. Measured (2026-09, synthetic fixture, K=5):
+          dusty worst-band error 0.16-0.18 % against a K=5 fesc=1 floor of
+          ~0.29 % (the pre-existing K-node dust-quadrature floor, unrelated
+          to this fix); both converge together as K rises (0.02 %/0.008 % at
+          K=16/32).
+
+          R5: a real-grid residual remains after this fix (measured, real
+          ``fsps_prsc_miles_chabrier.h5`` + Cue, this fix round's own SFH:
+          z=2 GALEX NUV ~10 %, z=3 SDSS u ~5 %, K-invariant) — this is the
+          EXACT PATH's own SSP-grid-node quantization of the 912 Å edge (the
+          dense mask cuts at whichever SSP wavelength node sits just below
+          912 Å, not at 912 Å itself, while this LUT's split is exact at the
+          TRUE physical edge), filed as #2447 and NOT fixed this round. The
+          magnitude is SFH- and filter-dependent; re-measure, do not quote.
+          See ``tests/regression/bug/test_bug_2439_precomp_lyc_mask.py``.
         - **Nebular, under** ``dust_attenuation={'type': 'two_component'}``: *exact* since
           #1738. That component publishes the reddened continuum integrated
           through each band (``nebular_phot_lnu_attenuated_precomp``), so there
@@ -1245,6 +1309,16 @@ class Observation:
         sub_per_age_igm = state.derived.get("stellar_phot_lnu_per_age_subband_igm_precomp")
         stellar_attenuated_igm = None
 
+        # Sub-band Lyman-continuum factor (#2439, #2427, R1/R2): published by
+        # NebularSEDComponent (flat across age) and, on a dusty
+        # ``two_component`` model, overwritten there with the birth-cloud-
+        # graded rule -- see either component's ``apply`` for why the rule
+        # differs and why exactly one of them wins. ``None`` when this model
+        # has no live nebular Lyman-continuum mask (R1's zero-diff
+        # guarantee): every branch below is then an unweighted sum, bit-for-
+        # bit identical to before this fix existed.
+        lyc_factor_sub = state.derived.get("stellar_subband_lyc_factor_precomp")
+
         if a_bc_lut is not None and (_have_subband or per_age is not None):
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
@@ -1261,6 +1335,16 @@ class Observation:
                 # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
                 t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+                if lyc_factor_sub is not None:
+                    # two_component's own birth-cloud-graded rule (#2439,
+                    # #2427, R2); see nebular/component.py and
+                    # dust/two_component.py's publish for why this is exact
+                    # (not "y_age-weighted twice": the graded factor stands
+                    # in for the dense path's ``lyc_factor``, a SEPARATE
+                    # multiplicative term from the dust screen ``t_sub``
+                    # already carries, not folded into ``a_bc_sub`` before
+                    # its own ``**y_age``).
+                    t_sub = t_sub * lyc_factor_sub
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
                 if sub_per_age_igm is not None:
                     # Same screen, same nodes, only the weights carry T (#1135).
@@ -1359,10 +1443,16 @@ class Observation:
                 # it: without this branch a single-component model would silently
                 # drop to the bare A(λ_eff) form once ``taylor_correction``
                 # defaulted off, worse than what it replaced.
-                stellar_attenuated = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
+                # Lyman-continuum factor (#2439, #2427): single-component dust
+                # never publishes a graded rule (no birth-cloud/diffuse
+                # split, matching its dense path, which reddens the already
+                # nebular-masked ``sed_intrinsic`` directly), so this is
+                # NebularSEDComponent's flat publish, unmodified.
+                a_sub_lyc = a_sub if lyc_factor_sub is None else a_sub * lyc_factor_sub
+                stellar_attenuated = jnp.sum(sub_per_age * a_sub_lyc, axis=(0, 2))
                 if sub_per_age_igm is not None:
                     # Same screen, same nodes, only the weights carry T (#1135).
-                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub, axis=(0, 2))
+                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub_lyc, axis=(0, 2))
                 # Nebular (if any) publishes no sub-band tensors; keep it at λ_eff.
                 dust_attenuated = stellar_attenuated + a_lut * nebular_phi_for_dust
             else:
@@ -1385,8 +1475,22 @@ class Observation:
             # Rebuild the stellar term from the sub-band sums so the IGM-free and
             # IGM-folded halves are consistent (Σ_k Φ_k = Φ exactly, the partition
             # is flux-conserving by construction, asserted in subband_quadrature).
-            stellar_attenuated = jnp.sum(sub_per_age, axis=(0, 2))
-            stellar_attenuated_igm = jnp.sum(sub_per_age_igm, axis=(0, 2))
+            #
+            # Lyman-continuum factor (#2439, #2427, R1/R2, BLOCKER): this
+            # branch previously discarded the exact whole-band split
+            # entirely -- no dust component runs here, so nothing else
+            # applies ANY neb_fesc correction to these sub-band sums, and the
+            # #2427 rows sat at -69% (z=2 NUV) with Inoue IGM, swinging
+            # non-monotonically with K. Apply NebularSEDComponent's flat
+            # publish (no birth-cloud concept without a dust screen).
+            sub_per_age_lyc = (
+                sub_per_age if lyc_factor_sub is None else sub_per_age * lyc_factor_sub
+            )
+            sub_per_age_igm_lyc = (
+                sub_per_age_igm if lyc_factor_sub is None else sub_per_age_igm * lyc_factor_sub
+            )
+            stellar_attenuated = jnp.sum(sub_per_age_lyc, axis=(0, 2))
+            stellar_attenuated_igm = jnp.sum(sub_per_age_igm_lyc, axis=(0, 2))
             total_lnu = stellar_attenuated + (total_phi - stellar_phi)
         else:
             total_lnu = total_phi

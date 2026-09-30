@@ -53,6 +53,7 @@ from tengri.components.dust.wg00_model import (
 # from _REGISTRY via the dispatch seam (single dispatch, #844/#845), only their
 # config dataclasses are imported. Stellar stays a direct import (the permanent
 # exception: rich SFH+SSP orchestrator, never registry-dispatched).
+from tengri.components.nebular._models import nebular_backend_carries_freefree
 from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
@@ -331,6 +332,8 @@ def build_components(
     age_kernel: str | None = None,
     # Non-parametric SFH bin edges [Gyr]; None uses the model default (#1975).
     sfh_bin_edges_gyr: Any = None,
+    # Metallicity-history bin edges [log Gyr]; None uses the model default (#2433).
+    met_bin_edges_log_yr: Any = None,
     # GP-field parameterization: 1.0 = non-centered (shipped), a < 1 moves
     # amplitude dependence out of the xi -> SFH map (#1355).
     field_centering: float = 1.0,
@@ -391,6 +394,7 @@ def build_components(
     dust_lyman_cutoff_aa: float = 0.0,
     dust_lyc_absorb_all: bool = False,
     dust_eb_include_lyc: bool = False,
+    dust_ir_diffuse_screen: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
     astrodust_f_cnm: float = 0.28,
@@ -522,6 +526,12 @@ def build_components(
         If ``False`` no dust component is added (no attenuation, no IR).
     use_radio, use_xray, use_igm : bool
         Add the corresponding adapter to the chain.
+    radio_include_freefree : bool or None
+        Murphy+2011 thermal free-free inclusion. ``None`` (default) means "auto":
+        ``False`` when the declared nebular backend carries a free-free continuum
+        (``"cue"``, ``"cloudy_grid"``; issue #2346), otherwise the
+        :class:`RadioSEDComponentConfig` default rule (``True``; ``False`` for
+        ``sfr_mode="bell2003_split"``). Explicit ``True``/``False`` always wins.
 
     Returns
     -------
@@ -553,6 +563,7 @@ def build_components(
                 age_kernel=age_kernel,
                 field_centering=field_centering,
                 sfh_bin_edges_gyr=sfh_bin_edges_gyr,
+                met_bin_edges_log_yr=met_bin_edges_log_yr,
             ),
             ssp_data=ssp_data,
         )
@@ -587,6 +598,8 @@ def build_components(
                 law=dust_law_bc,
                 live_shape_params=frozenset(dust_live_shape_params or ()),
                 log_l_ir_requested=dust_log_l_ir_requested,
+                lyman_cutoff_aa=dust_lyman_cutoff_aa,
+                eb_include_lyc=dust_eb_include_lyc,
             )
         else:
             atten_type = "two_component"
@@ -654,11 +667,12 @@ def build_components(
                     f_cnm=astrodust_f_cnm,
                 )
 
-            components.append(
-                _resolve_registry_component(
-                    "dust_emission", dust_emission_model, config=emission_config, **emission_kwargs
-                )
+            emission_component = _resolve_registry_component(
+                "dust_emission", dust_emission_model, config=emission_config, **emission_kwargs
             )
+            # Set the opt-in diffuse-screen attenuation flag (#2533)
+            emission_component.diffuse_screen = dust_ir_diffuse_screen
+            components.append(emission_component)
 
     # 3. Nebular (optional)
     if nebular_backend is not None:
@@ -738,6 +752,14 @@ def build_components(
     if use_radio:
         from tengri.components.radio.component import RadioSEDComponentConfig
 
+        # Resolve include_freefree=None to False if the declared nebular backend
+        # carries a free-free continuum (Cue, CloudyGrid). One thermal term on
+        # the whole grid; the nebular continuum owns it when it carries free-free
+        # (issue #2346).
+        include_freefree = radio_include_freefree
+        if include_freefree is None and nebular_backend_carries_freefree(nebular_backend):
+            include_freefree = False
+
         components.append(
             _resolve_registry_component(
                 "radio",
@@ -745,7 +767,7 @@ def build_components(
                 config=RadioSEDComponentConfig(
                     sfr_mode=radio_sfr_mode,
                     agn_radio_model=radio_agn_model,
-                    include_freefree=radio_include_freefree,
+                    include_freefree=include_freefree,
                 ),
             )
         )

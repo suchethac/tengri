@@ -1,0 +1,19 @@
+{
+  "method": "mcmc_nuts_fast",
+  "dispatched_to": "NUTS (BlackJAX)",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 28.913658417062834,
+  "wall_time_warm_s": 15.84709724993445,
+  "n_params": 8,
+  "ess_min": 29.88080730531189,
+  "s_per_ess_cold": 0.9676331071524588,
+  "s_per_ess_warm": 0.5303436780678051,
+  "rhat_max": 1.017161572300511,
+  "log_stellar_mass": 10.563129873503843,
+  "log_stellar_mass_16": 10.481835713988714,
+  "log_stellar_mass_84": 10.641030934862336,
+  "log_sfr_100myr": 1.3706401030919801,
+  "log_sfr_100myr_16": 1.3169078523891913,
+  "log_sfr_100myr_84": 1.4449618516201648
+}

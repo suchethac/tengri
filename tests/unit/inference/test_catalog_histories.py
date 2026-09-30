@@ -485,21 +485,18 @@ def test_simulate_lines_match_the_single_galaxy_measurement(fwd_table_sfh):
     from tengri.observation.line_measurement import DESI_LINES
 
     defs = tuple(d for d in DESI_LINES if d.name in ("Halpha", "OIII_5007"))
-    # The single-galaxy call needs the COMPLETE params dict: the window-LUT line
-    # path reaches compute_joint_weights, which reads params["met_logzsol"]
-    # directly and does not merge Fixed values for itself. Catalog.simulate
-    # merges them once for the whole table; here we mirror that with the fixed
-    # values from the spec, so the two sides are genuinely comparable.
-    fixed = {
-        k: jnp.asarray(v)
-        for k, v in fwd_table_sfh.spec.get_fixed_values().items()
-        if np.asarray(v).ndim == 0
-    }
+    # measure_line_fluxes's approx=True window-LUT branch now merges Fixed
+    # values in internally before reaching compute_joint_weights (#2296; the
+    # comment this replaces predates that fix and described the gap it
+    # closed). A free-only dict -- dust_tau_diff is free on this spec;
+    # sfh_t_gyr/sfh_sfr are table-SFH runtime inputs, not spec parameters at
+    # all -- is exactly what every other public surface expects; the old
+    # blanket spec.get_fixed_values() spread handed every Fixed name back as
+    # a params key the spec declared Fixed, refused on presence.
     for i in range(3):
         one = np.asarray(
             fwd_table_sfh.measure_line_fluxes(
                 {
-                    **fixed,
                     "dust_tau_diff": jnp.asarray(0.2),
                     "sfh_t_gyr": jnp.asarray(t[i]),
                     "sfh_sfr": jnp.asarray(sfr[i]),
@@ -660,9 +657,14 @@ def _delayed_history(t_univ_gyr, tau_gyr, n_t=512):
 
 
 def _parametric_prediction(par_fwd, par_sed):
-    import jax.numpy as jnp
-
-    params = {k: jnp.asarray(v) for k, v in par_fwd.spec.get_fixed_values().items()}
+    # This fixture's spec is fully pinned (every parameter Fixed, for a
+    # deterministic round-trip comparison), so free_params is empty and an
+    # empty dict is the free-only params dict (#2296): predict_photometry/
+    # predict_properties self-merge every Fixed value internally. Spreading
+    # spec.get_fixed_values() explicitly (the old idiom) hands every one of
+    # those names back in as a params key the spec declared Fixed, refused
+    # on presence regardless of the value matching the pin.
+    params = {}
     flux = np.asarray(par_fwd.predict_photometry(params))
     mass = float(
         np.asarray(par_sed.predict_properties(params, names=("stellar_mass",))["stellar_mass"])

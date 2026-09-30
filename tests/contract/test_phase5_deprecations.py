@@ -62,9 +62,11 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
     )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def params(model):
-    return {k: jnp.asarray(v) for k, v in model.spec.sample(jax.random.PRNGKey(0)).items()}
+    sampled = model.spec.sample(jax.random.PRNGKey(0))
+    # Remove fixed parameters to comply with #2296 contract: params must not contain Fixed keys
+    return {k: jnp.asarray(v) for k, v in sampled.items() if k not in model.spec.fixed_params}
 
 
 @pytest.mark.parametrize("name", DEPRECATED)
@@ -104,6 +106,10 @@ def test_the_library_does_not_warn_at_itself(model, params):
     This test auto-discovers public attributes/methods of Prediction and Posterior
     to ensure comprehensive coverage as the API evolves.
     """
+    # Verify params only contains free params
+    fixed_in_params = [k for k in params if k in model.spec.fixed_params]
+    assert not fixed_in_params, f"params contains Fixed keys: {sorted(fixed_in_params)}"
+
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
 
@@ -268,9 +274,9 @@ def test_wave_obs_uses_fixed_redshift_not_params_default(synthetic_ssp_wide, syn
         redshift=Fixed(0.1),  # ← Fixed, not Free; won't appear in params
     )
 
-    # Sample parameters — redshift is NOT in the dict
-    params_fixed_z = jnp.asarray(0.5)  # just a placeholder for free params
-    params_dict = {"sfh_dpl_log_total_mass": params_fixed_z}
+    # All parameters are Fixed, so params_dict is empty.
+    # The predict surface fills in Fixed values from the spec.
+    params_dict = {}
 
     pred = model_with_fixed_z.predict(params_dict)
 

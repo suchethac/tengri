@@ -18,7 +18,6 @@ from tengri.components.dust.attenuation import (
     conroy2010,
     kriek_conroy,
     narayanan_z,
-    power_law,
     tea,
 )
 from tests._bounds import assert_non_negative
@@ -215,13 +214,23 @@ class TestConroy2010:
         corr = jnp.corrcoef(k_c10, k_mw / k_mw_v)[0, 1]
         assert float(corr) > 0.95
 
-    def test_ir_dominated_by_power_law(self, ir_wavelength):
-        """IR region should approximate the power-law curve."""
+    def test_ir_follows_ccm89_log_law_slope(self, ir_wavelength):
+        """conroy2010 equals cardelli in IR (0.9–3 µm); log-log slope is CCM89's -1.61±0.02."""
         k_c10 = conroy2010(ir_wavelength)
-        k_pl = power_law(ir_wavelength, dust_slope=-0.7)
-        # In IR, blend ~ 1, so conroy2010 ~ power_law (modulo normalization)
-        corr = jnp.corrcoef(k_c10, k_pl)[0, 1]
-        assert float(corr) > 0.99
+        k_cardelli = cardelli(ir_wavelength)
+        # At dust_bump_strength=1.0 (default), conroy2010 IS cardelli everywhere
+        assert_allclose(k_c10, k_cardelli, rtol=1e-10)
+        # Verify CCM89's log-log slope: fit log k vs log λ over 0.9–3 µm (9000–30000 Å)
+        # Expected slope ≈ -1.61 ± 0.02 (IR power-law tail of CCM89)
+        in_range = (ir_wavelength >= 9000.0) & (ir_wavelength <= 30000.0)
+        log_k = jnp.log10(k_c10[in_range])
+        log_lambda = jnp.log10(ir_wavelength[in_range])
+        # Simple linear regression: slope = cov(log k, log λ) / var(log λ)
+        slope = jnp.cov(log_k, log_lambda)[0, 1] / jnp.var(log_lambda)
+        # CCM89 power-law tail: slope should be around -1.61
+        assert float(jnp.abs(slope) - 1.61) < 0.02, (
+            f"CCM89 IR slope {float(slope):.3f} should be -1.61±0.02"
+        )
 
     def test_smooth_transition(self):
         """Transition around 5500 A is smooth (no discontinuity)."""
@@ -245,19 +254,20 @@ class TestConroy2010:
         k_jit = jax.jit(conroy2010)(wavelength)
         assert_allclose(k_eager, k_jit, rtol=1e-12)
 
-    def test_gradient_compatible(self, wavelength):
-        """conroy2010 gradients match central FD w.r.t. Rv and dust_slope."""
+    def test_gradient_compatible(self, uv_wavelength):
+        """conroy2010 gradients match central FD w.r.t. Rv and dust_bump_strength at 2175 Å."""
 
-        def loss(rv, n):
-            return jnp.sum(conroy2010(wavelength, dust_Rv=rv, dust_slope=n))
+        # Evaluate gradient in UV where dust_bump_strength has effect (not in IR where it's zero)
+        def loss(rv, bump):
+            return jnp.sum(conroy2010(uv_wavelength, dust_Rv=rv, dust_bump_strength=bump))
 
-        g_rv, g_n = jax.grad(loss, argnums=(0, 1))(3.1, -0.7)
+        g_rv, g_bump = jax.grad(loss, argnums=(0, 1))(3.1, 1.0)
 
         def f_rv(rv: float) -> float:
-            return float(loss(rv, -0.7))
+            return float(loss(rv, 1.0))
 
-        def f_n(n: float) -> float:
-            return float(loss(3.1, n))
+        def f_bump(bump: float) -> float:
+            return float(loss(3.1, bump))
 
         np.testing.assert_allclose(
             float(g_rv),
@@ -265,11 +275,12 @@ class TestConroy2010:
             rtol=1e-3,
             err_msg="conroy2010: FD check ∂(∑k)/∂dust_Rv",
         )
+        # Gradient wrt bump_strength is nonzero in UV (where 2175 Å bump resides)
         np.testing.assert_allclose(
-            float(g_n),
-            fd_grad(f_n, -0.7),
+            float(g_bump),
+            fd_grad(f_bump, 1.0),
             rtol=1e-3,
-            err_msg="conroy2010: FD check ∂(∑k)/∂dust_slope",
+            err_msg="conroy2010: FD check ∂(∑k)/∂dust_bump_strength",
         )
 
     def test_uv_bump_present(self):
