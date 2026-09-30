@@ -135,6 +135,7 @@ _NON_SFH_PARAM_MAP = {
     "dust_Rv": ("dust_Rv", 1.0, 0.0),
     "noise_dof": ("noise_dof", 1.0, 0.0),
     "sigma_v_kms": ("sigma_v_kms", 1.0, 0.0),
+    "lsf_scale": ("lsf_scale", 1.0, 0.0),
     # neb_logZ_gas is declared as log10(Z_gas/Zsun) in _param_defs but
     # consumed downstream as absolute log10(Z); LOG10_ZSUN bridges the two
     # (same convention as met_logzsol → log_z_abs).

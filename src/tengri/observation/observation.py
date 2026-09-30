@@ -138,6 +138,117 @@ def _restband_lnu(state) -> jnp.ndarray:
     return total
 
 
+def _split_stellar_and_instrument_only_sed(
+    state, sed_spec: jnp.ndarray, igm_trans: jnp.ndarray | None
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Split an additive rest-frame SED by which LSF kernel it should receive (#2519).
+
+    :func:`~tengri.observation.spectrum.apply_lsf`'s kernel
+    :math:`\sigma_{\rm eff}=\sqrt{\sigma_v^2+\sigma_{\rm inst}^2-\sigma_{\rm
+    lib}(\lambda)^2}` is only correct for light that (a) was drawn from the
+    SSP template library, so it already carries that library's own
+    resolution :math:`\sigma_{\rm lib}` and needs it subtracted before the
+    instrument's LSF is added, and (b) shares the galaxy's stellar
+    line-of-sight velocity dispersion :math:`\sigma_v`. Nebular emission
+    (continuum and lines, ``state.derived["sed_nebular"]``) and shock
+    emission (``state.derived["sed_shock"]``) satisfy neither: both are
+    painted onto the rest-frame grid at their own intrinsic gas width
+    (``neb_eline_sigma_kms``, e.g. the ``line_sigma_kms`` argument of
+    ``NebularBackend.predict_nebular_sed``) with no dependence on the
+    stellar template library or the stellar LOSVD.
+
+    **Component -> kernel assignment** (every additive term in
+    ``state.sed_intrinsic``):
+
+    - Stellar continuum (dust-attenuated): full kernel
+      (:math:`\sigma_v,\sigma_{\rm inst},\sigma_{\rm lib}`). The only
+      component actually drawn from the SSP library and sharing the
+      stellar LOSVD.
+    - Nebular continuum + lines (``sed_nebular``): instrument-only
+      (:math:`\sigma_{\rm inst}` alone). Fixes #2519.
+    - Shock continuum + lines (``sed_shock``, MAPPINGS): instrument-only,
+      for the same reason as nebular -- painted at its own velocity width,
+      never touches the stellar library.
+    - AGN (``sed_agn``, including any composable disc/torus/polar/line
+      sub-blocks), dust IR re-emission (``sed_dust_ir``), radio
+      (``sed_radio``), X-ray (``sed_xray``): left in the stellar-kernel
+      group. None of these come from the SSP library or share
+      :math:`\sigma_v` either, but the dust adapter does not (yet)
+      publish a separately-attenuated form of ``sed_agn`` the way it does
+      for ``sed_nebular`` (its two-component variant re-publishes
+      ``sed_nebular`` post-screen but leaves ``sed_agn``/``sed_shock`` at
+      their pre-screen values; the single-screen variant attenuates
+      everything already accumulated in one multiply and republishes
+      none of them separately) -- subtracting the pre-screen array from
+      the post-screen total would introduce a real, if small, residual
+      error rather than fix one. Their continua also vary on scales of
+      thousands of Angstrom, far broader than any LSF, so which kernel
+      they get is observationally inconsequential for the continuum.
+      The one place this matters is a composable AGN's own narrow/broad
+      line sub-block (``sed_agn_lines``), which has the identical #2519
+      defect; left as a follow-up once the dust adapter publishes an
+      attenuated per-block AGN breakdown.
+
+    This follows Prospector's convention (lines added analytically, after
+    the continuum's instrumental smoothing, with no stellar-library or
+    velocity-dispersion term; ``prospect.models.sedmodel.SpecModel``)
+    rather than BAGPIPES's (lines inside the smoothed continuum, sharing
+    the stellar veldisp; ``bagpipes.models.model_galaxy``). tengri already
+    matched neither exactly before this fix (it gave lines the stellar
+    :math:`\sigma_v` like BAGPIPES, but also subtracted
+    :math:`\sigma_{\rm lib}` from them like neither code does); this
+    split makes it match Prospector.
+
+    Parameters
+    ----------
+    state : ForwardState
+        Orchestrator output; reads ``state.derived["sed_nebular"]`` and
+        ``["sed_shock"]``, each zeros on the rest-frame grid when the
+        corresponding component is absent or inactive (never ``None`` in
+        practice, since :class:`~tengri.components.nebular.component.NebularSEDComponent`
+        always publishes both).
+    sed_spec : ndarray, shape (n_wave,)
+        The full rest-frame SED already carrying the IGM transmission
+        (``sed_atten`` in :meth:`Observation.predict`) -- what
+        ``project_spectrum`` would otherwise receive whole.
+    igm_trans : ndarray, shape (n_wave,), or None
+        The same multiplicative IGM transmission already folded into
+        ``sed_spec``, applied here to the instrument-only group so the two
+        returned pieces sum back to ``sed_spec`` exactly. ``None`` when no
+        IGM component is configured.
+
+    Returns
+    -------
+    sed_stellar : ndarray, shape (n_wave,)
+        ``sed_spec`` minus ``sed_instrument_only``, by construction (never
+        computed by summing the stellar-kernel components directly, so it
+        cannot drift from ``sed_spec``).
+    sed_instrument_only : ndarray, shape (n_wave,)
+        ``(state.derived["sed_nebular"] + state.derived["sed_shock"]) *
+        igm_trans``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure array reads (``DerivedState.get`` returns
+    the Python float ``0.0`` when a field is unpopulated, never a Python
+    branch on a traced value) and arithmetic.
+
+    References
+    ----------
+    .. [1] Johnson, B. D., Leja, J., Conroy, C., & Speagle, J. S. (2021).
+           "Stellar Population Inference with Prospector."
+           ApJS, 254, 22. arXiv:2012.01426.
+    """
+    sed_nebular = jnp.asarray(state.derived.get("sed_nebular", 0.0))
+    sed_shock = jnp.asarray(state.derived.get("sed_shock", 0.0))
+    sed_instrument_only_rest = sed_nebular + sed_shock
+    sed_instrument_only = (
+        sed_instrument_only_rest if igm_trans is None else sed_instrument_only_rest * igm_trans
+    )
+    sed_stellar = sed_spec - sed_instrument_only
+    return sed_stellar, sed_instrument_only
+
+
 @dataclasses.dataclass(frozen=True)
 class Observation:
     """Unified observation configuration.
@@ -734,9 +845,10 @@ class Observation:
         lsf_sigma_lib_kms: float | None = None,
         lsf_sigma_lib_curve: tuple[jnp.ndarray, jnp.ndarray] | None = None,
         lsf_n_bins: int | None = None,
+        lsf_scale: float = 1.0,
         observables_type=None,
     ) -> dict[str, jnp.ndarray]:
-        """Project an orchestrator :class:`ForwardState` into observable channels.
+        r"""Project an orchestrator :class:`ForwardState` into observable channels.
 
         Unified projection seam matching the :class:`ObservationModel`
         Protocol in :mod:`tengri.protocols.observation`. Part of the
@@ -776,6 +888,16 @@ class Observation:
         lsf_n_bins : int, optional
             Override piecewise-constant LSF bin count. ``None`` reuses
             ``self.spectroscopy.lsf_n_bins``.
+        lsf_scale : float, default 1.0
+            Free multiplicative scale on the instrument resolution
+            :math:`\sigma_{\rm inst}(\lambda)` (#2526), applied before the
+            quadrature combination in :func:`~tengri.observation.spectrum.apply_lsf`
+            for both the stellar and instrument-only kernels of the #2519
+            split below. ``1.0`` (the parameter's ``Fixed`` default,
+            declared as ``lsf_scale`` in :mod:`tengri.parameters._shared`)
+            reproduces the un-scaled kernel bit-for-bit. Not applied on the
+            banded ``resolution_matrix`` path (see the Notes on that
+            branch below).
         observables_type : type or None
             If provided, a :class:`typing.NamedTuple` class produced by
             :func:`build_observables_class`. When ``None``, returns a dict
@@ -877,21 +999,108 @@ class Observation:
             sigma_lib = resolve_sigma_lib_kms(wo, z, sigma_lib_flat, lsf_sigma_lib_curve)
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
             conserving = self.spectroscopy.resolve_conserving(state.wave)
-            flux = project_spectrum(
-                sed_spec,
-                wave_rest,
-                wo,
-                z,
-                dl_cm,
-                resolution=resolution,
-                sigma_lib_kms=sigma_lib,
-                n_bins=n_bins,
-                sigma_v_kms=sigma_v_kms,
-                cal_coeffs=self.spectroscopy.calibration_coeffs(params),
-                cal_wave_range=self.spectroscopy.calibration_wave_range,
-                conserving=conserving,
-                resolution_matrix=self.spectroscopy.resolution_matrix,
-            )
+            cal_coeffs = self.spectroscopy.calibration_coeffs(params)
+            cal_wave_range = self.spectroscopy.calibration_wave_range
+
+            if self.spectroscopy.resolution_matrix is not None:
+                # Banded instrument-response path (DESI/PFS spectro-perfectionism,
+                # Bolton & Schlegel 2010): the matrix already IS the measured
+                # instrument LSF and ``sigma_lib_kms`` is documented as not
+                # subtracted on it (#2506); it has no per-component decomposition
+                # to route separately, so the #2519 kernel split and the #2526
+                # ``lsf_scale`` (which would require rebuilding the matrix itself)
+                # do not extend to this branch. Unchanged from the single-kernel
+                # path.
+                flux = project_spectrum(
+                    sed_spec,
+                    wave_rest,
+                    wo,
+                    z,
+                    dl_cm,
+                    resolution=resolution,
+                    sigma_lib_kms=sigma_lib,
+                    n_bins=n_bins,
+                    sigma_v_kms=sigma_v_kms,
+                    cal_coeffs=cal_coeffs,
+                    cal_wave_range=cal_wave_range,
+                    conserving=conserving,
+                    resolution_matrix=self.spectroscopy.resolution_matrix,
+                )
+            elif resolution is None:
+                # No LSF configured: apply_lsf is never called, so sigma_v,
+                # sigma_lib and lsf_scale all have zero effect and there is
+                # nothing for the #2519 split to change. Single call, same as
+                # before #2519/#2526.
+                flux = project_spectrum(
+                    sed_spec,
+                    wave_rest,
+                    wo,
+                    z,
+                    dl_cm,
+                    resolution=None,
+                    sigma_lib_kms=sigma_lib,
+                    n_bins=n_bins,
+                    sigma_v_kms=sigma_v_kms,
+                    cal_coeffs=cal_coeffs,
+                    cal_wave_range=cal_wave_range,
+                    conserving=conserving,
+                )
+            else:
+                # #2519: nebular lines/continuum and shock emission were never
+                # broadened by the SSP library and do not share the stellar
+                # velocity dispersion -- they get the instrument kernel only.
+                # See _split_stellar_and_instrument_only_sed for the full
+                # component/kernel enumeration and its justification.
+                sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
+                    state, sed_spec, igm_trans
+                )
+                # #2526: lsf_scale multiplies sigma_inst(lambda) before the
+                # quadrature combination. apply_lsf computes
+                # sigma_inst = c / (2.3548 * resolution); dividing the
+                # resolution by lsf_scale multiplies sigma_inst by lsf_scale
+                # without changing apply_lsf's signature. Applied identically
+                # to both kernels below, so it cannot re-introduce the #2519
+                # defect (neither kernel gains a sigma_lib/sigma_v term it
+                # didn't already have).
+                resolution_scaled = resolution / lsf_scale
+                flux_stellar = project_spectrum(
+                    sed_stellar,
+                    wave_rest,
+                    wo,
+                    z,
+                    dl_cm,
+                    resolution=resolution_scaled,
+                    sigma_lib_kms=sigma_lib,
+                    n_bins=n_bins,
+                    sigma_v_kms=sigma_v_kms,
+                    cal_coeffs=None,
+                    conserving=conserving,
+                )
+                flux_instrument_only = project_spectrum(
+                    sed_instrument_only,
+                    wave_rest,
+                    wo,
+                    z,
+                    dl_cm,
+                    resolution=resolution_scaled,
+                    sigma_lib_kms=0.0,
+                    n_bins=n_bins,
+                    sigma_v_kms=0.0,
+                    cal_coeffs=None,
+                    conserving=conserving,
+                )
+                # Calibration is an instrument systematic on the total observed
+                # spectrum (#2526 Notes above), not per physical component, so
+                # it is applied once on the sum -- matching project_spectrum's
+                # own convention (after LSF, before nothing else) exactly.
+                flux = flux_stellar + flux_instrument_only
+                if cal_coeffs is not None:
+                    from tengri.observation.calibration import apply_calibration
+
+                    wmin, wmax = (
+                        cal_wave_range if cal_wave_range is not None else (wo.min(), wo.max())
+                    )
+                    flux = apply_calibration(flux, wo, cal_coeffs, wmin, wmax)
             out["spec_fnu"] = flux
 
         # If observables_type is provided, populate and return the NamedTuple.

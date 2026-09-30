@@ -2,6 +2,9 @@
 
 ### Added
 
+- `lsf_scale`: a free multiplicative scale on the instrument LSF resolution
+  (default `Fixed(1.0)`, prior `Uniform(0.8, 1.2)`), applied to both the
+  stellar-continuum and emission-line spectroscopy kernels (#2526).
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 
 ### Fixed
@@ -47,14 +50,14 @@
   read one redshift.
 
 - The default Gaussian LSF path now subtracts the loaded SSP library's own
-  per-wavelength resolution instead of a flat scalar (#2518): `SSPData` gains
-  `ssp_resolution_kms`, read from FSPS's own per-node tables (MILES σ_v ≈
-  92→43 km/s, 3530–7490 Å, FWHM = 2.54 Å, Beifiori et al. 2011, A&A 531,
-  A109; C3K σ_v ≈ 42.4 km/s, R = 3000, 2750–9100 Å;
-  `SSP_LIBRARY_RESOLUTIONS["c3k"]` corrected 15.0 → 42.4 km/s). Every
-  spectroscopic path uses this curve in place of the flat
-  `Spectroscopy.sigma_lib_kms` fallback, and warns instead of silently
-  clamping wherever the instrument is sharper than the library.
+  per-wavelength resolution instead of a flat scalar, and stops applying
+  that subtraction and the galaxy's velocity dispersion to nebular/shock
+  emission lines, which keep only the instrument LSF, matching Prospector's
+  convention (#2518, #2519). `SSPData` gains `ssp_resolution_kms` from
+  FSPS's own per-node tables (MILES σ_v ≈ 92→43 km/s; C3K σ_v ≈ 42.4 km/s;
+  `SSP_LIBRARY_RESOLUTIONS["c3k"]` corrected 15.0 → 42.4 km/s), and warns
+  instead of silently clamping wherever the instrument is sharper than the
+  library.
 
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments

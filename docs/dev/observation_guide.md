@@ -286,6 +286,39 @@ Two parameters control the line-spread function convolution:
   approximating wavelength-dependent LSF convolution. More bins = more
   accurate but slower compilation.
 
+### Which kernel each SED component gets
+
+The stellar continuum and the nebular/shock emission lines are convolved
+with different kernels (#2519), because only the stellar continuum was
+drawn from the SSP template library and shares the galaxy's stellar
+velocity dispersion:
+
+- **Stellar continuum** (dust-attenuated, plus AGN/dust-IR/radio/X-ray,
+  which are bundled with it): the full kernel,
+  `sigma_eff = sqrt(sigma_v_kms^2 + sigma_inst(lambda)^2 - sigma_lib(lambda)^2)`.
+- **Nebular and shock emission lines** (continuum and lines together):
+  the instrument kernel only, `sigma_eff = sigma_inst(lambda)`. Lines are
+  painted at their own intrinsic width (`neb_eline_sigma_kms`) when the
+  rest-frame SED is built; they were never broadened by the SSP library
+  and do not share `sigma_v_kms`. This matches Prospector's convention
+  (Johnson et al. 2021, ApJS, 254, 22): lines added with their own
+  width, after the continuum's instrumental smoothing.
+
+`sigma_v_kms` (default: `Fixed(0.0)`, free prior `Uniform(0, 2000)` km/s)
+is the galaxy's stellar velocity dispersion; it reaches the stellar kernel
+only.
+
+### Free instrument-resolution scale
+
+`lsf_scale` (default: `Fixed(1.0)`, free prior `Uniform(0.8, 1.2)`,
+declared in `tengri.parameters._shared`) is a multiplicative scale on
+`sigma_inst(lambda)`, applied identically to both kernels above before
+their quadrature combination. It models a calibration uncertainty on the
+instrument's own reported resolution -- a +/-20% envelope, generous
+enough to cover typical arc-lamp/sky-line LSF calibration residuals
+without itself constraining a fit. At `lsf_scale=1` every prediction is
+identical to leaving it unset.
+
 ---
 
 ## Calibration Polynomial

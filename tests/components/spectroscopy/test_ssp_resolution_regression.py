@@ -96,6 +96,31 @@ def test_load_ssp_data_populates_curve_for_real_shipped_filenames(filename):
     assert np.all(sigma > 0.0)
 
 
+def test_curve_attached_only_when_wavelengths_match_the_library_reference_grid(tmp_path):
+    """A filename token alone is not enough to attach a library curve (#2526 Part 0).
+
+    A synthetic grid whose filename contains a library token (``c3k_a``)
+    but whose wavelength array is not that library's reference grid (e.g.
+    a BPASS grid built on its own axis, ``bpss_stars_c3k_a_chabrier.h5``,
+    1221 nodes) must not receive that library's resolution curve.
+    """
+    import h5py
+
+    path = tmp_path / "bpss_stars_c3k_a_chabrier.h5"
+    n_met, n_age, n_wave = 2, 4, 50
+    with h5py.File(path, "w") as f:
+        f["ssp_wave"] = np.linspace(1000.0, 20000.0, n_wave)  # not C3K's reference grid
+        f["ssp_flux"] = np.full((n_met, n_age, n_wave), 1e-4)
+        f["ssp_lg_age_gyr"] = np.linspace(-3.0, 1.0, n_age)
+        f["ssp_lgmet"] = np.array([-2.5, -1.8])
+        f["ssp_mass_remaining"] = np.full((n_met, n_age), 0.7)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ssp = load_ssp_data(str(path))
+    assert ssp.ssp_resolution_kms is None
+
+
 def test_bc03_still_falls_back_to_none():
     """A library absent from the FWHM table still yields None, without a
     load-time warning (#2518).

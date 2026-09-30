@@ -680,18 +680,26 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
 
         # Per-wavelength library resolution (#2518): match the library token
         # in the filename to the FSPS-derived reference table and read off
-        # (or interpolate onto ``ssp_wave``) the library's own per-node
-        # velocity dispersion. No warning here when the library has no
-        # reference table: a missing curve is simply "no correction", and
-        # every grid passes through this function regardless of whether it
-        # will ever be used spectroscopically. The correctly-scoped warning
-        # is at ``SEDModel`` build time (``_init_instrument``), which fires
-        # only when the model actually configures spectroscopy and falls
-        # back to the flat ``sigma_lib_kms`` scalar.
+        # the library's own per-node velocity dispersion, but ONLY when
+        # ``ssp_wave`` actually is that library's reference grid: the
+        # filename token alone is not sufficient (a grid built from a
+        # different library on a wavelength axis that happens to echo
+        # another library's name -- e.g. a BPASS grid whose filename
+        # contains the C3K token -- must not receive that library's
+        # curve). No warning here when the library has no reference table
+        # or its wavelength grid does not match: a missing curve is simply
+        # "no correction", and every grid passes through this function
+        # regardless of whether it will ever be used spectroscopically.
+        # The correctly-scoped warning is at ``SEDModel`` build time
+        # (``_init_instrument``), which fires only when the model actually
+        # configures spectroscopy and falls back to the flat
+        # ``sigma_lib_kms`` scalar, naming the grid.
         ssp_wave = _load_float(f["ssp_wave"], dtype=dtype)
         library_stem = fp.stem
         library_key = _detect_library_resolution_key(library_stem)
-        if library_key is not None:
+        if library_key is not None and _wave_matches_reference(
+            np.asarray(ssp_wave, dtype=float), _load_library_resolution_reference(library_key)[0]
+        ):
             ssp_resolution_kms, _ = _resolve_ssp_resolution(ssp_wave, library_key)
         else:
             ssp_resolution_kms = None
@@ -882,6 +890,29 @@ def _load_library_resolution_reference(library_key: str) -> tuple[np.ndarray, np
     return arr[:, 0], arr[:, 1]
 
 
+def _wave_matches_reference(query_wave: np.ndarray, ref_wave: np.ndarray) -> bool:
+    """Whether ``query_wave`` is a library's own reference wavelength grid.
+
+    Requires the same node count and every node equal to ``rtol=1e-6``: a
+    grid built by evolving the same library's templates on a different
+    (e.g. resampled or truncated) wavelength axis has the library's own
+    filename token but is not the grid the resolution table was measured
+    on, and must not be treated as if it were.
+
+    Parameters
+    ----------
+    query_wave, ref_wave : ndarray
+        Wavelength grids to compare [Angstrom].
+
+    Returns
+    -------
+    bool
+    """
+    return query_wave.shape == ref_wave.shape and bool(
+        np.allclose(query_wave, ref_wave, rtol=1e-6, atol=0.0)
+    )
+
+
 def _resolve_ssp_resolution(
     ssp_wave: jnp.ndarray, library_key: str
 ) -> tuple[jnp.ndarray, np.ndarray]:
@@ -919,7 +950,7 @@ def _resolve_ssp_resolution(
     ref_wave, ref_sigma_signed = _load_library_resolution_reference(library_key)
     query_wave = np.asarray(ssp_wave, dtype=float)
 
-    if query_wave.shape == ref_wave.shape and np.array_equal(query_wave, ref_wave):
+    if _wave_matches_reference(query_wave, ref_wave):
         sigma = np.abs(ref_sigma_signed)
         approximate = ref_sigma_signed < 0.0
         return jnp.asarray(sigma, dtype=jnp.result_type(float)), approximate

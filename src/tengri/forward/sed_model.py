@@ -4821,8 +4821,22 @@ class SEDModel:
             else:
                 redshift_dist = spec.get_distribution("redshift")
                 z_for_check = float(redshift_dist.bounds[0]) if redshift_dist.is_fixed else None
+                # #2526: lsf_scale multiplies sigma_inst, so the deficit
+                # (sigma_inst < sigma_lib) is worst at lsf_scale's LOWER
+                # bound. get_distribution("lsf_scale").bounds[0] is that
+                # bound whether the parameter is free (Uniform lower edge)
+                # or Fixed (bounds == (value, value)), and 1.0 (no scaling)
+                # when the parameter is not declared on this spec at all.
+                try:
+                    lsf_scale_lower = float(spec.get_distribution("lsf_scale").bounds[0])
+                except KeyError:
+                    lsf_scale_lower = 1.0
                 self._warn_if_sigma_lib_exceeds_inst(
-                    self.ssp_data.ssp_wave, curve_kms, self.ssp_data.source, z_for_check
+                    self.ssp_data.ssp_wave,
+                    curve_kms,
+                    self.ssp_data.source,
+                    z_for_check,
+                    lsf_scale_lower=lsf_scale_lower,
                 )
         else:
             self._sigma_lib_kms = getattr(spec, "sigma_lib_kms", 0.0)
@@ -4835,6 +4849,7 @@ class SEDModel:
         curve_sigma_kms: np.ndarray,
         library_name: str,
         z_for_check: float | None,
+        lsf_scale_lower: float = 1.0,
     ) -> None:
         r"""Warn (don't silently clamp) where the instrument can't resolve the library (#2518).
 
@@ -4866,6 +4881,12 @@ class SEDModel:
         z_for_check : float or None
             Redshift to map ``curve_wave_rest`` into the observed frame at.
             ``None`` skips the check (free redshift: no single z to use).
+        lsf_scale_lower : float, default 1.0
+            Lower bound of the ``lsf_scale`` prior (#2526). ``sigma_inst``
+            is evaluated at ``lsf_scale_lower * sigma_inst`` -- the smallest
+            ``lsf_scale`` can make it -- since that is where the deficit
+            against the library is largest. ``1.0`` (no free ``lsf_scale``,
+            or the default ``Fixed(1.0)``) reproduces the pre-#2526 check.
 
         Notes
         -----
@@ -4888,7 +4909,7 @@ class SEDModel:
         sigma_inst = np.asarray(
             _resolution_to_sigma_kms(np.asarray(self._lsf_resolution, dtype=float))
         )
-        sigma_inst = np.broadcast_to(sigma_inst, wave_obs.shape)
+        sigma_inst = np.broadcast_to(sigma_inst, wave_obs.shape) * lsf_scale_lower
         wave_rest = wave_obs / (1.0 + z_for_check)
 
         library_key = _detect_library_resolution_key(library_name)
@@ -4913,6 +4934,13 @@ class SEDModel:
                 if n_approx > 0
                 else ""
             )
+            lsf_scale_clause = (
+                f" Evaluated at lsf_scale={lsf_scale_lower:.3g}, the lower bound of its "
+                "free prior (#2526), the worst case since a smaller lsf_scale narrows "
+                "sigma_inst further."
+                if lsf_scale_lower != 1.0
+                else ""
+            )
             warn_measured(
                 f"{n_bad}/{deficient.size} ({frac:.1%}) spectral pixels have "
                 f"instrument resolution narrower than SSP library "
@@ -4920,14 +4948,16 @@ class SEDModel:
                 "sigma_inst^2 - sigma_lib^2 is clamped to zero there (no "
                 "broadening applied) rather than raising, which "
                 "under-broadens the model in that unresolvable regime "
-                f"(#2518).{approx_clause} Use a coarser instrument resolution "
-                "or a library with finer native resolution at these wavelengths.",
+                f"(#2518).{approx_clause}{lsf_scale_clause} Use a coarser instrument "
+                "resolution or a library with finer native resolution at these "
+                "wavelengths.",
                 UserWarning,
                 stacklevel=3,
                 deficient_pixel_count=n_bad,
                 deficient_pixel_fraction=frac,
                 deficient_and_approximate_pixel_count=n_approx,
                 redshift=z_for_check,
+                lsf_scale_lower=lsf_scale_lower,
             )
 
     @staticmethod
@@ -5191,6 +5221,24 @@ class SEDModel:
         if dist.is_fixed:
             return float(dist.bounds[0])
         return 0.0
+
+    def _get_lsf_scale(self, params):
+        """Get the instrument-LSF scale ``lsf_scale`` from params (#2526).
+
+        Mirrors :meth:`_get_sigma_v_kms` exactly: a *traceable* value when
+        ``lsf_scale`` is in the params dict (free fit), the spec's fixed
+        scalar otherwise, falling back to ``1.0`` (no scaling, bit-identical
+        to the pre-#2526 kernel) when the parameter is not declared at all.
+        """
+        if "lsf_scale" in params:
+            return params["lsf_scale"]
+        try:
+            dist = self.spec.get_distribution("lsf_scale")
+        except KeyError:
+            return 1.0
+        if dist.is_fixed:
+            return float(dist.bounds[0])
+        return 1.0
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
@@ -6358,6 +6406,16 @@ class SEDModel:
         resolution_matrix = (
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
+        # #2526: honor lsf_scale here too (resolution / lsf_scale scales
+        # sigma_inst by lsf_scale, see Observation.predict). #2519's
+        # stellar/instrument-only kernel split does NOT extend to this path:
+        # sed_obs is a SEDResult (wavelength, sed) with no per-component
+        # breakdown (unlike ForwardState.derived), so there is nothing to
+        # split without a larger rewrite of _predict_obs_sed's return
+        # contract. This is the same single-kernel spectrum every call here
+        # always produced; only the lsf_scale factor is new.
+        if resolution is not None:
+            resolution = resolution / self._get_lsf_scale(params)
 
         flux = project_spectrum(
             sed_obs.sed,
@@ -8600,6 +8658,7 @@ class SEDModel:
             lsf_sigma_lib_kms=self._sigma_lib_kms,
             lsf_sigma_lib_curve=self._sigma_lib_curve_for(self.ssp_data),
             lsf_n_bins=self._lsf_n_bins,
+            lsf_scale=self._get_lsf_scale(params),
         )["spec_fnu"]
 
     def predict_photometry_components(self, params):
@@ -9233,6 +9292,7 @@ class SEDModel:
         # comes through as a JIT runtime input from ``predict_observables_jit``.
         observation = self.observation
         sigma_v_getter = self._get_sigma_v_kms
+        lsf_scale_getter = self._get_lsf_scale
         lsf_resolution = self._lsf_resolution
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
@@ -9321,6 +9381,7 @@ class SEDModel:
                     lsf_sigma_lib_kms=sigma_lib_kms,
                     lsf_sigma_lib_curve=sigma_lib_curve,
                     lsf_n_bins=lsf_n_bins,
+                    lsf_scale=lsf_scale_getter(full),
                     observables_type=observables_type,
                 )
             if use_lut:
