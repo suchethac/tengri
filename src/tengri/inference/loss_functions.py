@@ -298,6 +298,17 @@ def _build_prediction(
                 state=feature_state,
                 fixed_values=eval_fixed,
             )
+        # ``line_flux_scaling`` (#2527): a declared calibration nuisance of the
+        # DATA channel (default ``Fixed(1.0)``, bit-identical unless a user
+        # frees it), absorbing an aperture/absolute-flux-calibration mismatch
+        # between the line-flux measurement and the rest of the SED. Applied
+        # HERE, to the array the likelihood compares against
+        # ``data_args["line_flux_obs"]`` -- never inside ``predict_line_fluxes``
+        # / ``measure_line_fluxes`` themselves, so line ratios, BPT, and every
+        # other derived property built from those methods are untouched.
+        prediction["line_fluxes"] = prediction["line_fluxes"] * params.get(
+            "line_flux_scaling", 1.0
+        )
     if has_line_ratios:
         prediction["line_ratios"] = model.predict_line_ratios(
             free_params,
@@ -502,6 +513,11 @@ def _build_data_neg_log_likelihood_fn(fitter):
             model_lf = model.predict_line_fluxes(
                 _free_params, target_wavelengths=data_args["line_flux_waves"]
             )
+            # ``line_flux_scaling`` (#2527), same as the auto-built path in
+            # ``_build_prediction``: a declared calibration nuisance of the
+            # line-flux DATA channel, applied to the array compared against
+            # the data, never inside ``predict_line_fluxes`` itself.
+            model_lf = model_lf * params.get("line_flux_scaling", 1.0)
             chi2_lines = jnp.sum(
                 standardized_residual(
                     data_args["line_flux_obs"], model_lf, data_args["line_flux_err"]
