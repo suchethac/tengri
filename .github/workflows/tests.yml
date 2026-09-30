@@ -1570,7 +1570,7 @@ jobs:
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
     # Sizes from warm working sets; see CHANGELOG.md.
     env:
-      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.2","inference-2":"0.2","inference-3":"0.65","integration":"0.5","components-unit-regression-contract-physics":"0.12","agn-wildcard-liveness":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
+      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.2","inference-2":"0.2","inference-3":"0.65","integration-all":"0.5","components-unit-regression-contract-physics-all":"0.12","agn-wildcard-liveness-all":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
     timeout-minutes: 185
     steps:
       - uses: actions/checkout@v7
