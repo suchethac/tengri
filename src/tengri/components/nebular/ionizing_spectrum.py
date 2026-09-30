@@ -14,6 +14,7 @@ table, and interpolate at inference time for rapid gradient evaluation.
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
 from tengri.components.nebular._constants import _C_AA, _H_PLANCK
 from tengri.utils.host_array import host_array
 
@@ -52,7 +53,11 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: Bump when the curve-fit algorithm, the table layout, or field set changes.
 #: One version constant per cache (disk + in-memory) to ensure a stale entry
 #: cannot be reused after an algorithm change.
-_IONSPEC_CACHE_VERSION = 1
+#: 2 (this module's LyC brief): ``gas_logqion`` now integrates via the shared
+#: :func:`tengri.components.lyc.edge_trapezoid` step model instead of a hard
+#: ``wave <= HI_LIMIT`` mask, adding the #537 partial-bin correction here for
+#: the first time -- a disk entry computed under version 1 is stale.
+_IONSPEC_CACHE_VERSION = 2
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
@@ -389,7 +394,9 @@ def _compute_segment_luminosities(
 HEII_EDGE = 1e8 / 438908.8789  # 227.84 A
 OII_EDGE = 1e8 / 283270.9  # 353.07 A
 HEI_EDGE = 1e8 / 198310.66637  # 504.26 A
-HI_LIMIT = 911.76  # Lyman limit (physical: 911.7633 A)
+# The one Lyman edge (tengri.components.lyc); local alias kept for the
+# existing HI_LIMIT call sites in this module and one test import.
+HI_LIMIT = LYMAN_LIMIT_AA
 
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
@@ -555,28 +562,26 @@ def fit_ionizing_spectrum(
     log_L = _compute_segment_luminosities(coeff, edges)
     logLratios = np.diff(log_L)
 
-    # Total Q_H: integrate photon rate over frequency.
-    # wave is increasing → nu_all is decreasing.  Both integrand and
-    # x must share the same element ordering for np.trapz.
+    # Total Q_H: integrate the ionizing photon rate via the one shared
+    # step-model primitive (tengri.components.lyc.edge_trapezoid) instead of
+    # a hard ``wave <= HI_LIMIT`` mask + plain trapezoid, so this table picks
+    # up the same #537 partial-bin Lyman correction
+    # :mod:`tengri.components.stellar.component` already applies to the same
+    # Q_H integral (module docstring of ``tengri.components.lyc``).
     #
     # Cast to float64 for the integration. SSPs may ship in float32 (e.g.
     # BC03-from-CIGALE) to save disk; ``(flux * L_SUN) / (h * nu)`` then
-    # produces intermediates ~ 1e30 and ``trapezoid`` over the ~ 1e16 Hz
-    # bandwidth integrates to ~ 1e46: well past float32's 3.4e38 max,
-    # so the running sum overflows to ``inf`` from a few terms in. Result:
-    # every (Z, age) bin in the cached table collapses to ``log10(inf) =
-    # inf``, downstream treats the SSP as wNE / dead, and Cue silently
-    # emits ~zero nebular emission (issue #458). The slope fits above
-    # are float32-safe because ``normalized = flux * 1e-18 / ref_flux``
-    # rescales each segment before fitting.
-    ionizing_mask = wave <= HI_LIMIT
-    flux_iz = flux[ionizing_mask].astype(np.float64)
-    nu_all = (_C_AA / wave[ionizing_mask]).astype(np.float64)
-    Q_total = np.abs(
-        _np_trapz(
-            (flux_iz * _LSUN) / (_H_PLANCK * nu_all),
-            x=nu_all,
-        )
+    # produces intermediates ~ 1e30 and integrating over the ~ 1e16 Hz
+    # bandwidth gives ~ 1e46: well past float32's 3.4e38 max, so the running
+    # sum overflows to ``inf`` from a few terms in. Result: every (Z, age)
+    # bin in the cached table collapses to ``log10(inf) = inf``, downstream
+    # treats the SSP as wNE / dead, and Cue silently emits ~zero nebular
+    # emission (issue #458). The slope fits above are float32-safe because
+    # ``normalized = flux * 1e-18 / ref_flux`` rescales each segment before
+    # fitting.
+    integrand = (flux * _LSUN) / (_H_PLANCK * (_C_AA / wave))
+    Q_total = float(
+        edge_trapezoid(integrand, wave, variable="nu", side="ionizing", edge_aa=HI_LIMIT)
     )
     log_qion = np.log10(max(Q_total, 1e-99))
 
