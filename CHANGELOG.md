@@ -488,8 +488,10 @@
   no explicit `grid` now prefers the packaged grid whose isochrone matches
   the SSP, warning when it falls back to a mismatched sole grid and
   refusing to guess among several mismatched ones; the resolved path is
-  logged at INFO (#2426). Cue's reproduction docs and `cue.py` now cite
-  Cloudy 22.00 (Li et al. 2025) instead of "c17+" (#2555).
+  logged at INFO (#2426). Cue's reproduction markdown, READMEs, validation scripts and
+  `cue.py` cite Cloudy 22.00 (Li et al. 2025) instead of "c17+"; three
+  code-cell labels and the rendered `docs/reproduction` copies refresh with the
+  next executing re-render (part of #2555).
 
 ### Fixed
 
