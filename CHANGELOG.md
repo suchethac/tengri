@@ -10,6 +10,16 @@
 
 ### Fixed
 
+- CI compile caches fit the GitHub Actions quota: pull request runs no longer save
+  JAX compile cache entries to the repo's shared cache (reducing PR-scoped bloat from
+  6 GB per push), and per-job `TENGRI_JAX_CACHE_MAX_GB` caps bind each job's entries
+  so their union fits GitHub's 10 GB repository cache limit (sizes from warm working
+  sets: contract 1.55, components 0.6, regression-a 1.0, regression-b1/b2 0.7/1.1,
+  regression-c 0.05, regression-d 0.65, physics 0.28, slow inference parts 1/2/3
+  and integration 0.2/0.2/0.65/0.5, components-unit-regression-contract-physics 0.12,
+  agn-wildcard-liveness 0.15, crossval 0.05, notebooks 0.25 GiB). Contract and
+  regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
+  without renaming the required checks (#2549).
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
