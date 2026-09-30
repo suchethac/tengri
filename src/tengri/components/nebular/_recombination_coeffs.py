@@ -30,6 +30,7 @@ __all__ = [
     "ALPHA_1",
     "ALPHA_B",
     "lyc_dust_escape_factor",
+    "lyc_shares",
 ]
 
 # Hydrogen recombination coefficients [m^3/s] at T_e = 10^4 K (Ferland 1980),
@@ -96,6 +97,48 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
     .. [3] CIGALE nebular module: ``pcigale/sed_modules/nebular.py``, lines
         156-162.
 
+    Per-photon LyC budget (#2539 item 1)
+    -------------------------------------
+    The ionizing-photon budget of the population this factor is applied to
+    splits into exactly THREE **additive**, non-overlapping shares, not a
+    sequential/product form:
+
+    - ``f_esc``: escapes the HII region unattenuated (observed as-is).
+    - ``f_dust``: absorbed by dust grains mixed into the HII region, heating
+      dust (never reaches an H atom).
+    - ``1 - f_esc - f_dust``: photoionizes hydrogen, ultimately re-emerging
+      as the nebular line + continuum spectrum this function's ``k`` scales.
+
+    This is read directly off this function's own structure: ``f_esc`` and
+    ``f_dust`` are combined as ``f_total = f_esc + f_dust`` *before* anything
+    else happens (one clamp, one combined quantity), not as
+    ``f_dust * (1 - f_esc)`` (dust getting a second, sequential pass at
+    whatever ``f_esc`` left behind) or any other product form. CIGALE's own
+    call sites confirm the same reading: ``nebular.py`` masks the emergent
+    stellar LyC by ``(1 - f_esc)`` alone (``self.absorbed_old/young``, lines
+    ~165-169) and separately credits dust with ``f_dust`` of the *raw*
+    ionizing luminosity (``dust.luminosity = (lum_ly_young + lum_ly_old) *
+    f_dust``, lines 191-193) -- two independent, parallel shares of the same
+    original budget, never ``f_dust`` of a fesc-depleted remainder.
+
+    The ``alpha_1 / alpha_B`` term is a SEPARATE correction, internal to the
+    ``1 - f_total`` share alone: it accounts for the fraction of case-B
+    recombinations that land directly on the ground state (rate
+    :data:`ALPHA_1`) and re-emit a further ionizing photon that is reabsorbed
+    on the spot (the standard case-B/on-the-spot approximation), rather than
+    contributing to the externally observable recombination-line spectrum
+    (rate :data:`ALPHA_B`). It does not reach ``f_esc`` or ``f_dust``: those
+    are macroscopic (HII-region-boundary) processes that already happened to
+    the photon *before* it had a chance to ionize anything, so they are not
+    revisited by the on-the-spot cascade internal to the ionized share.
+    #2539's dust-IR-budget credit accordingly multiplies the *raw* per-photon
+    ``f_dust`` directly against the credited population's LyC luminosity
+    (:func:`tengri.forward.energy_balance.log10_fdust_lyc_credit`), the same
+    additive share CIGALE's own ``dust.luminosity`` uses -- not a
+    ``k``-style, recombination-corrected quantity, because dust absorption at
+    the HII-region boundary is a one-shot process this function's internal
+    cascade never revisits.
+
     Examples
     --------
     >>> import jax.numpy as jnp
@@ -127,3 +170,77 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
     denominator = 1.0 + alpha_ratio * f_total
 
     return numerator / denominator
+
+
+def lyc_shares(
+    neb_fesc: jnp.ndarray | float, neb_fdust_frac: jnp.ndarray | float
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    r"""Split the ionizing-photon budget into its three additive shares (#2436).
+
+    Owner ruling (#2436): ``neb_fesc + f_dust <= 1`` is a precondition of the
+    additive per-photon budget this module's own docstring derives (``f_esc``
+    escapes, ``f_dust`` heats HII-region dust, ``1 - f_esc - f_dust``
+    photoionizes -- see :func:`lyc_dust_escape_factor`'s "Per-photon LyC
+    budget" section). Declaring ``f_dust`` as its own independent
+    ``Uniform(0, 1)`` parameter (the retired ``neb_fdust``) let a caller pick
+    ``neb_fesc=0.7, neb_fdust=0.7``, an impossible 1.4 of the budget, with
+    nothing to catch it before it reached :func:`lyc_dust_escape_factor`'s own
+    silent ``jnp.clip``.
+
+    ``neb_fdust_frac`` instead parametrizes the fraction of the
+    NON-escaping budget (``1 - neb_fesc``) that HII-region dust absorbs, so
+    the three shares
+
+    .. math::
+
+        f_\mathrm{esc} &= \mathtt{neb\_fesc} \\
+        f_\mathrm{dust} &= \mathtt{neb\_fdust\_frac} \, (1 - \mathtt{neb\_fesc}) \\
+        f_\mathrm{gas} &= (1 - \mathtt{neb\_fdust\_frac})(1 - \mathtt{neb\_fesc})
+
+    sum to exactly 1 for ANY ``(neb_fesc, neb_fdust_frac) \in [0, 1]^2`` --
+    the whole prior box is physical, with no clamp needed downstream. This is
+    the ONE place that splits the budget; every consumer that used to read
+    the retired absolute ``neb_fdust`` (:func:`lyc_dust_escape_factor`'s
+    ``f_dust`` callers in ``cue.py``/``cloudy_grid.py``/``cloudy_cb19.py``,
+    the #2539 HII-dust LyC credit in ``components/nebular/component.py``) now
+    calls this function first and reads the absolute ``f_dust``/``f_gas`` it
+    returns.
+
+    Parameters
+    ----------
+    neb_fesc : array_like or float
+        Ionizing photon escape fraction [dimensionless, in [0, 1]].
+    neb_fdust_frac : array_like or float
+        Fraction of the NON-escaping ionizing budget absorbed by dust inside
+        the HII region [dimensionless, in [0, 1]].
+
+    Returns
+    -------
+    f_esc, f_dust, f_gas : tuple of ndarray
+        The three additive shares of the ionizing-photon budget
+        (escape, HII-region dust absorption, photoionization), summing to 1
+        to round-off for any input in ``[0, 1]^2``.
+
+    Notes
+    -----
+    **JIT/grad-safe**: pure ``jnp`` arithmetic, no branching; the gradient
+    wrt either input is finite and nonzero everywhere on the open box.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> f_esc, f_dust, f_gas = lyc_shares(0.0, 0.0)
+    >>> float(f_esc), float(f_dust), float(f_gas)
+    (0.0, 0.0, 1.0)
+    >>> f_esc, f_dust, f_gas = lyc_shares(0.3, 0.5)
+    >>> round(float(f_dust), 4), round(float(f_gas), 4)
+    (0.35, 0.35)
+    >>> float(f_esc + f_dust + f_gas)
+    1.0
+    """
+    f_esc = jnp.asarray(neb_fesc)
+    frac = jnp.asarray(neb_fdust_frac)
+    non_escaping = 1.0 - f_esc
+    f_dust = frac * non_escaping
+    f_gas = (1.0 - frac) * non_escaping
+    return f_esc, f_dust, f_gas

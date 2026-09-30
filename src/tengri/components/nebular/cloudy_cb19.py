@@ -168,7 +168,7 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
-from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor, lyc_shares
 from tengri.components.nebular._shared import (
     _qh_bilinear,
     apply_lya_escape,
@@ -1087,7 +1087,7 @@ class CB19Backend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
@@ -1134,10 +1134,11 @@ class CB19Backend:
         neb_fesc_lya : float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]].
             Default 0.0. Applied on top of the k-factor.
-        neb_fdust : float
-            Lyman-continuum dust-absorption fraction in HII regions
-            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
-            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [dimensionless, in [0, 1]].
+            Default 0.0 (#2436). Both ``neb_fesc`` and the absolute f_dust
+            share it implies reduce the ionizing photon budget via the CIGALE
             k-factor.
         neb_log_nH : float
             Log hydrogen density log10(n_H/cm⁻³) [log10(cm^-3)]. Grid range: [1, 4].
@@ -1173,7 +1174,7 @@ class CB19Backend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc,
-        neb_fdust, neb_log_nH, neb_co, neb_dno, neb_hbfrac parameters.
+        neb_fdust_frac, neb_log_nH, neb_co, neb_dno, neb_hbfrac parameters.
 
         References
         ----------
@@ -1217,8 +1218,10 @@ class CB19Backend:
         young_ages = ssp_log_ages_yr[young_idx]
         young_weights = ssp_weights[young_idx]
 
-        # Compute k-factor once (shared by all age bins)
-        k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        # Compute k-factor once (shared by all age bins). #2436: the absolute
+        # f_dust share is derived from neb_fdust_frac via lyc_shares.
+        _, _f_dust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+        k_factor = lyc_dust_escape_factor(neb_fesc, _f_dust)
 
         def _line_contrib_one_age(
             log_age_i: float,
@@ -1314,7 +1317,7 @@ class CB19Backend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
@@ -1364,10 +1367,11 @@ class CB19Backend:
         neb_fesc_lya : float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]].
             Default 0.0.
-        neb_fdust : float
-            Lyman-continuum dust-absorption fraction in HII regions
-            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
-            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [dimensionless, in [0, 1]].
+            Default 0.0 (#2436). Both ``neb_fesc`` and the absolute f_dust
+            share it implies reduce the ionizing photon budget via the CIGALE
             k-factor.
         neb_log_nH : float
             log10(n_H / cm⁻³) [log10(cm^-3)]. Grid range [1, 4]. Default 2.0.
@@ -1411,7 +1415,7 @@ class CB19Backend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc,
-        neb_fdust, neb_log_nH, neb_co, neb_dno, neb_hbfrac parameters.
+        neb_fdust_frac, neb_log_nH, neb_co, neb_dno, neb_hbfrac parameters.
 
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
@@ -1422,7 +1426,7 @@ class CB19Backend:
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
-            neb_fdust=neb_fdust,
+            neb_fdust_frac=neb_fdust_frac,
             neb_log_nH=neb_log_nH,
             neb_co=neb_co,
             neb_dno=neb_dno,

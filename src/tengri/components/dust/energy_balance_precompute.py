@@ -78,12 +78,26 @@ class EnergyBalanceLUT(NamedTuple):
         Birth-cloud optical-depth grid nodes.
     tau_diff_grid : ndarray, shape (n_tau_diff,)
         Diffuse-ISM optical-depth grid nodes.
+    B_fesc, G_fesc : ndarray or None
+        The fesc-LINEAR-COEFFICIENT family (#2539 item 1), same shapes as
+        ``B``/``G``: the stellar absorbed integral is affine in the live
+        nebular escape fraction, ``A(fesc) = A_0 + fesc * A_1``, when
+        ``eb_include_lyc=True`` unmasks the Lyman continuum. ``B``/``G`` above
+        are then the fesc-INDEPENDENT ``A_0`` family (non-LyC everywhere, plus
+        the fesc=0 remainder of the LyC region); ``B_fesc``/``G_fesc`` are the
+        ``A_1`` coefficient (the young/birth-cloud-weighted, or -- under
+        ``lyc_absorb_all=True`` -- unweighted, LyC-only contribution). ``None``
+        when the model never needs fesc-exactness (single-component dust,
+        ``eb_include_lyc=False``, or no live photoionized nebular component):
+        ``lut_l_absorbed_stellar_log10`` then behaves exactly as before.
     """
 
     B: jnp.ndarray
     G: jnp.ndarray
     tau_bc_grid: jnp.ndarray
     tau_diff_grid: jnp.ndarray
+    B_fesc: jnp.ndarray | None = None
+    G_fesc: jnp.ndarray | None = None
 
 
 def build_energy_balance_lut(
@@ -102,6 +116,8 @@ def build_energy_balance_lut(
     eb_include_lyc: bool = False,
     tau_bc_grid: jnp.ndarray,
     tau_diff_grid: jnp.ndarray,
+    fesc_exact: bool = False,
+    lyc_absorb_all: bool = False,
 ) -> EnergyBalanceLUT:
     r"""Precompute ``B`` and ``G`` for the two-component energy balance.
 
@@ -129,14 +145,55 @@ def build_energy_balance_lut(
         ``DustSEDComponent.config.eb_include_lyc``.
     tau_bc_grid, tau_diff_grid : ndarray
         Optical-depth grid nodes (keyword-only).
+    fesc_exact : bool, optional
+        Also build the ``B_fesc``/``G_fesc`` family (#2539 item 1): the
+        stellar absorbed integral's fesc-linear coefficient, so
+        :func:`lut_l_absorbed_stellar_log10` can be exact in a live nebular
+        escape fraction instead of declining the LUT outright. Only
+        meaningful when ``eb_include_lyc=True`` (otherwise the LyC region is
+        masked out of the integral regardless of fesc, and ``B``/``G`` alone
+        are already exact); ignored otherwise.
+    lyc_absorb_all : bool, optional
+        Mirrors ``DustSEDComponent.config.lyc_absorb_all`` (#961/#2539): when
+        True, ALL stellar ages route their LyC through the gas uniformly (no
+        young/old split), so the fesc-linear ``A_1`` term is the UNWEIGHTED
+        LyC contribution of every age, and ``A_0`` excludes the LyC region
+        entirely. When False (default), only the young/birth-cloud population
+        (``t_birth_yr``/``transition_width_dex``-weighted) is credited, matching
+        ``two_component.py``'s ``lyc_factor = 1 - y_age*(1 - fesc)``.
 
     Returns
     -------
     EnergyBalanceLUT
     """
     nu = C_AA / ssp_wave  # (n_wave,)
-    mask = jnp.ones_like(ssp_wave, dtype=bool) if eb_include_lyc else (ssp_wave >= 912.0)
-    sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
+    mask_nonlyc = ssp_wave >= 912.0
+
+    sspm_fesc = None
+    if fesc_exact and eb_include_lyc:
+        # A(fesc) = A_0 + fesc * A_1 (#2539 item 1): lyc_factor(age) =
+        # 1 - y_age*(1-fesc) is affine in fesc, so the per-(met,age,wave) SSP
+        # weight in the LyC region splits into a fesc-independent piece
+        # ((1-y_age), or 0 under lyc_absorb_all=True) and a fesc-linear piece
+        # (y_age, or 1 under lyc_absorb_all=True). Outside the LyC region the
+        # weight is always 1 for A_0 and 0 for A_1 -- unaffected by fesc,
+        # matching the runtime exact integral (two_component.py §2a/§3).
+        from tengri.components.dust.two_component import _young_indicator
+
+        y_age = _young_indicator(ssp_ages_yr, t_birth_yr, transition_width_dex)  # (n_age,)
+        ones_age = jnp.ones_like(y_age)[:, None]
+        if lyc_absorb_all:
+            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, 0.0)
+            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, ones_age)
+        else:
+            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, (1.0 - y_age)[:, None])
+            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, y_age[:, None])
+        sspm = ssp_flux * weight_a0[None, :, :]  # (n_met, n_age, n_wave)
+        sspm_fesc = ssp_flux * weight_a1[None, :, :]
+    else:
+        mask = jnp.ones_like(ssp_wave, dtype=bool) if eb_include_lyc else mask_nonlyc
+        sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
+
     B = jnp.trapezoid(sspm, nu, axis=-1)  # (n_met, n_age), signed
 
     bc_params = bc_params or {}
@@ -166,16 +223,31 @@ def build_energy_balance_lut(
     # threaded as an argument so it enters the graph as a runtime input,
     # not a constant to fold.
     g_at_compiled = jax.jit(g_at)
-    G = jnp.stack(
-        [
-            jnp.stack([g_at_compiled(sspm, tb, td) for td in tau_diff_grid], axis=-1)
-            for tb in tau_bc_grid
-        ],
-        axis=-2,
-    )  # (n_met, n_age, n_tau_bc, n_tau_diff)
+
+    def _build_g(sspm_in):
+        return jnp.stack(
+            [
+                jnp.stack([g_at_compiled(sspm_in, tb, td) for td in tau_diff_grid], axis=-1)
+                for tb in tau_bc_grid
+            ],
+            axis=-2,
+        )  # (n_met, n_age, n_tau_bc, n_tau_diff)
+
+    G = _build_g(sspm)
+
+    B_fesc = None
+    G_fesc = None
+    if sspm_fesc is not None:
+        B_fesc = jnp.trapezoid(sspm_fesc, nu, axis=-1)
+        G_fesc = _build_g(sspm_fesc)
 
     return EnergyBalanceLUT(
-        B=B, G=G, tau_bc_grid=jnp.asarray(tau_bc_grid), tau_diff_grid=jnp.asarray(tau_diff_grid)
+        B=B,
+        G=G,
+        tau_bc_grid=jnp.asarray(tau_bc_grid),
+        tau_diff_grid=jnp.asarray(tau_diff_grid),
+        B_fesc=B_fesc,
+        G_fesc=G_fesc,
     )
 
 
@@ -222,8 +294,11 @@ def _interp_bracket(grid: jnp.ndarray, x: jnp.ndarray) -> tuple[jnp.ndarray, jnp
     return i0, weights
 
 
-def _lut_contract(
-    lut: EnergyBalanceLUT,
+def _contract_bg(
+    B: jnp.ndarray,
+    G: jnp.ndarray,
+    tau_bc_grid: jnp.ndarray,
+    tau_diff_grid: jnp.ndarray,
     joint_weights: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
@@ -234,9 +309,14 @@ def _lut_contract(
     O(1) (the SSP integrals are per unit mass), whereas ``mass_scale`` is
     ~1e43 and carries the whole dynamic-range problem. Keeping them separate
     lets the log form fold the scale into an exponent instead of a product.
+
+    Takes explicit ``B``/``G`` (rather than an :class:`EnergyBalanceLUT`) so
+    :func:`lut_l_absorbed_stellar_log10` can contract the fesc-linear
+    ``B_fesc``/``G_fesc`` family (#2539 item 1) through the SAME bilinear
+    interpolation, instead of duplicating it.
     """
-    i0, w_bc = _interp_bracket(lut.tau_bc_grid, tau_bc)  # (), (2,)
-    j0, w_diff = _interp_bracket(lut.tau_diff_grid, tau_diff)  # (), (2,)
+    i0, w_bc = _interp_bracket(tau_bc_grid, tau_bc)  # (), (2,)
+    j0, w_diff = _interp_bracket(tau_diff_grid, tau_diff)  # (), (2,)
 
     # Bilinear interpolation touches four nodes of ``G``, so slice those four
     # out before contracting. Contracting the whole optical-depth grid instead
@@ -244,14 +324,26 @@ def _lut_contract(
     # n_bc x n_diff multiply-adds to use n_met x n_age x 4 of them: on a
     # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
     # it dominated the whole WavePrecomp forward pass.
-    n_met, n_age = lut.B.shape
+    n_met, n_age = B.shape
     g_sub = jax.lax.dynamic_slice(
-        lut.G,
+        G,
         (jnp.zeros((), jnp.int32), jnp.zeros((), jnp.int32), i0, j0),
         (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
     )
     g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
-    return jnp.sum(joint_weights * (lut.B - g_interp))
+    return jnp.sum(joint_weights * (B - g_interp))
+
+
+def _lut_contract(
+    lut: EnergyBalanceLUT,
+    joint_weights: jnp.ndarray,
+    tau_bc: jnp.ndarray,
+    tau_diff: jnp.ndarray,
+) -> jnp.ndarray:
+    """Per-unit-mass signed absorbed luminosity of the ``A_0`` (or the only) family."""
+    return _contract_bg(
+        lut.B, lut.G, lut.tau_bc_grid, lut.tau_diff_grid, joint_weights, tau_bc, tau_diff
+    )
 
 
 def lut_l_absorbed_stellar_log10(
@@ -260,6 +352,7 @@ def lut_l_absorbed_stellar_log10(
     log10_mass_scale: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    fesc: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""log10 magnitude and sign of the stellar absorbed luminosity.
 
@@ -271,13 +364,28 @@ def lut_l_absorbed_stellar_log10(
     Parameters
     ----------
     lut : EnergyBalanceLUT
-        Precomputed ``B``/``G``.
+        Precomputed ``B``/``G`` (and, when built with ``fesc_exact=True``,
+        ``B_fesc``/``G_fesc``).
     joint_weights : ndarray, shape (n_met, n_age)
         Runtime DSPS joint (metallicity, age) weights.
     log10_mass_scale : ndarray, shape ()
         ``log10(total_mass x L_sun)`` [dex].
     tau_bc, tau_diff : ndarray, shape ()
         Runtime optical depths.
+    fesc : ndarray, shape (), optional
+        Runtime nebular escape fraction (#2539 item 1). When the LUT carries
+        the fesc-linear ``B_fesc``/``G_fesc`` family (built with
+        ``fesc_exact=True``), the exact affine combine
+        :math:`A(\mathrm{fesc}) = A_0 + \mathrm{fesc} \cdot A_1` is applied
+        BEFORE the mass scale / log10 conversion, at the O(1) per-unit-mass
+        contraction level -- a plain linear combine, not a log-domain one,
+        because both ``A_0`` and ``A_1`` contractions are already O(1)
+        (:func:`_contract_bg`'s docstring) and share the SAME grid-orientation
+        sign (both are ``sum(w*(B-G))`` over the same descending-``nu`` grid),
+        so ordinary addition reproduces the correct signed sum with no
+        overflow risk and no need for :func:`tengri.utils.scale.log10_add`.
+        Ignored (exactly reproduces the pre-#2539-item-1 answer) when ``None``
+        or when the LUT lacks the fesc family.
 
     Returns
     -------
@@ -308,6 +416,17 @@ def lut_l_absorbed_stellar_log10(
     from tengri.utils.scale import _not_computable, log10_magnitude
 
     contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+    if fesc is not None and lut.B_fesc is not None and lut.G_fesc is not None:
+        contracted_fesc = _contract_bg(
+            lut.B_fesc,
+            lut.G_fesc,
+            lut.tau_bc_grid,
+            lut.tau_diff_grid,
+            joint_weights,
+            tau_bc,
+            tau_diff,
+        )
+        contracted = contracted + jnp.asarray(fesc) * contracted_fesc
     log_relative = log10_magnitude(contracted)
     corrupt = _not_computable(log_relative)
     log_mag = jnp.where(corrupt, jnp.inf, log_relative + log10_mass_scale)

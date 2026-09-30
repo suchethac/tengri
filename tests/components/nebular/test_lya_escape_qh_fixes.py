@@ -23,13 +23,13 @@ def _get_ssp():
     return __import__("tengri").load_ssp("fsps_prsc_miles_chabrier", download=False)
 
 
-def _neb_group(backend, fesc=None, fdust=None, grid_path=None):
+def _neb_group(backend, fesc=None, fdust_frac=None, grid_path=None):
     g = {"type": backend, "all_params": Fixed(DEFAULT)}
     if backend in ("cue", "cloudy", "cb19", "mappings"):
         if fesc is not None:
             g["fesc"] = Fixed(fesc)
-        if fdust is not None:
-            g["fdust"] = Fixed(fdust)
+        if fdust_frac is not None:
+            g["fdust_frac"] = Fixed(fdust_frac)
     if backend == "cloudy":
         g["grid"] = str(grid_path)
     return g
@@ -65,7 +65,7 @@ def _dust_atten_group(kind, law="calzetti", tau_v=0.5, tau_bc=0.5, tau_diff=0.3)
     raise ValueError(f"unknown dust_kind {kind!r}")
 
 
-def build_model(neb_backend="cloudy", neb_fesc=None, neb_fdust=None, dust_kind="none"):
+def build_model(neb_backend="cloudy", neb_fesc=None, neb_fdust_frac=None, dust_kind="none"):
     """Build a minimal SEDModel for the Lyα / Q_H regression checks.
 
     Raises on any build failure except a missing CLOUDY grid file. A missing
@@ -89,7 +89,7 @@ def build_model(neb_backend="cloudy", neb_fesc=None, neb_fdust=None, dust_kind="
             "other_params": Fixed(DEFAULT),
         },
         met={"type": "delta", "all_params": Fixed(DEFAULT)},
-        neb=_neb_group(neb_backend, neb_fesc, neb_fdust, grid_path=grid_path),
+        neb=_neb_group(neb_backend, neb_fesc, neb_fdust_frac, grid_path=grid_path),
         dust_attenuation=_dust_atten_group(dust_kind),
         redshift=Fixed(0.1),
     )
@@ -144,14 +144,14 @@ class TestLyaEscapeCancellation:
         dust-free cell the original reproducer used.
         """
         model = build_model(
-            neb_backend=backend, neb_fesc=fesc, neb_fdust=fdust, dust_kind=dust_kind
+            neb_backend=backend, neb_fesc=fesc, neb_fdust_frac=fdust, dust_kind=dust_kind
         )
         fluxes = model.predict_line_fluxes({}, target_wavelengths=[1215.67, 4862.68])
         lya, hbeta = fluxes
 
         # Reference ratio from the (fesc=0, fdust=0) cell, same backend/dust_kind.
         ref_model = build_model(
-            neb_backend=backend, neb_fesc=0.0, neb_fdust=0.0, dust_kind=dust_kind
+            neb_backend=backend, neb_fesc=0.0, neb_fdust_frac=0.0, dust_kind=dust_kind
         )
         ref_fluxes = ref_model.predict_line_fluxes({}, target_wavelengths=[1215.67, 4862.68])
         ref_lya, ref_hbeta = ref_fluxes
@@ -185,13 +185,13 @@ class TestLyaEscapeCancellation:
     def test_halpha_hbeta_ratio_invariant_zero_fesc_lya(self, backend, dust_kind, fesc, fdust):
         """Hα/Hβ ratio invariant across escape/dust budgets (non-Lyα baseline)."""
         model = build_model(
-            neb_backend=backend, neb_fesc=fesc, neb_fdust=fdust, dust_kind=dust_kind
+            neb_backend=backend, neb_fesc=fesc, neb_fdust_frac=fdust, dust_kind=dust_kind
         )
         fluxes = model.predict_line_fluxes({}, target_wavelengths=[6562.79, 4862.68])
         halpha, hbeta = fluxes
 
         ref_model = build_model(
-            neb_backend=backend, neb_fesc=0.0, neb_fdust=0.0, dust_kind=dust_kind
+            neb_backend=backend, neb_fesc=0.0, neb_fdust_frac=0.0, dust_kind=dust_kind
         )
         ref_fluxes = ref_model.predict_line_fluxes({}, target_wavelengths=[6562.79, 4862.68])
         ref_halpha, ref_hbeta = ref_fluxes

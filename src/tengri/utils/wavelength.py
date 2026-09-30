@@ -187,3 +187,126 @@ def interpolate_sed_to_grid(
     # between a zero and a real value a near-vertical geometric ramp, whereas
     # the fallback interpolates it sensibly.
     return resample_template(wave_target, wave_src, sed_src, left=0.0, right=0.0)
+
+
+def lyman_edge_transmission(
+    wave: jnp.ndarray, neb_fesc: jnp.ndarray, edge_aa: float = 912.0
+) -> jnp.ndarray:
+    r"""Node-wise Lyman-continuum transmission, exact under trapezoid quadrature.
+
+    ``where(wave < edge_aa, neb_fesc, 1)`` places the Lyman-limit step at
+    whichever grid node sits just below ``edge_aa`` rather than at the
+    physical edge itself (#2447): on ``fsps_mist_c3k_a_chabrier`` the SSP
+    nodes bracketing 912 Å are 911.5716 and 913.3967 Å, so a trapezoid band
+    integral over the naively-masked spectrum ramps transmission linearly
+    across that 1.8 Å interval instead of stepping at 912 Å. This replaces
+    only the two nodes bracketing the edge with the trapezoid weights that
+    make the SAME single-panel quadrature integrate the true split --
+    ``neb_fesc`` below 912 Å, 1 above -- exactly, to round-off; every other
+    node keeps the plain step.
+
+    Generic over ``wave``: called on the rest-frame SSP grid by
+    ``NebularSEDComponent`` (``components/nebular/component.py``) for the
+    dense stellar SED, and again on the finer observed-frame photometric
+    UNION grid (SED nodes unioned with the filter table, potentially much
+    finer near 912 Å for a well-sampled real filter) by
+    ``observation.photometry._filter_integral_union``'s exact-band-flux
+    correction (#2447 residual on finely-sampled filters): the single-panel
+    exactness claimed below is a property of whichever grid is passed in,
+    not specific to the SSP spacing.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_wave,)
+        Ascending wavelength grid [Angstrom], any frame (rest or observed,
+        as long as ``edge_aa`` is expressed in the SAME frame).
+    neb_fesc : array_like, scalar
+        Lyman-continuum escape fraction, in [0, 1].
+    edge_aa : float, optional
+        Lyman-limit wavelength in the SAME frame as ``wave`` [Angstrom].
+        Default 912.0 (rest-frame).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Per-node transmission factor: ``neb_fesc`` below the edge and 1
+        above it, except at the two nodes bracketing ``edge_aa``, which
+        carry the trapezoid-exact split weights below.
+
+    Notes
+    -----
+    **JIT/grad-safe.** Pure ``jnp`` primitives, fully vectorized via boolean
+    masks and shifted-array differences (no data-dependent indexing). The two
+    bracketing-interval widths are guarded against a zero denominator
+    (``edge_aa`` outside the grid's range, never true for a real SSP grid) so
+    the unselected ``jnp.where`` branch never carries a 0/0 that would poison
+    the ``neb_fesc`` gradient.
+
+    **Derivation.** Let :math:`[\lambda_a, \lambda_b]` (width :math:`h`) be
+    the grid interval straddling the edge, :math:`s = (912 - \lambda_a)/h \in
+    [0, 1]`, and :math:`F` the spectrum, linear between grid nodes by
+    construction (the quadrature's own assumption). The exact split integral
+    of :math:`F` over :math:`[\lambda_a, \lambda_b]` (weight ``neb_fesc``
+    below 912 Å, 1 above) equals the ordinary trapezoid formula
+    :math:`(h/2)(w_a F_a + w_b F_b)` with
+
+    .. math::
+
+        w_a &= 2\left[f_{\rm esc}\left(s - \frac{s^2}{2}\right)
+               + \left(\frac{1}{2} - s + \frac{s^2}{2}\right)\right] \\
+        w_b &= 2\left[f_{\rm esc}\frac{s^2}{2} + \frac{1}{2} - \frac{s^2}{2}\right]
+
+    Node :math:`a` also closes the (fully-masked) interval to its left
+    (width :math:`h_l`, weight ``neb_fesc``) and node :math:`b` the
+    (fully-unmasked) interval to its right (width :math:`h_r`, weight 1), so
+    the single per-node factors that make the *ordinary* (unmodified)
+    trapezoid sum exact overall are
+
+    .. math::
+
+        T_a = \frac{f_{\rm esc} h_l + w_a h}{h_l + h}, \qquad
+        T_b = \frac{w_b h + h_r}{h + h_r}
+
+    Both are affine in ``neb_fesc`` (:math:`T = 1 - C(1 - f_{\rm esc})` for a
+    fesc-independent :math:`C`), so composing this array with a further
+    per-age young/old blend (``dust/two_component.py``'s
+    ``1 - y(a)(1 - lyc_transmission)``) commutes: substituting an
+    age-blended escape fraction into :math:`T_a`/:math:`T_b` gives the
+    identical result as blending :math:`T_a`/:math:`T_b` themselves, so this
+    fix is exact for that consumer too with no changes there. The SAME
+    affine property also lets a caller recover the pure LyC-band SELECTION
+    weight (independent of ``neb_fesc``) as ``1 - lyman_edge_transmission(wave,
+    0.0, edge_aa)``: at ``neb_fesc=0`` this function returns exactly
+    :math:`1 - C`, the fraction of each node's quadrature weight that falls
+    below the edge.
+    """
+    wave = jnp.asarray(wave)
+    fesc = jnp.asarray(neb_fesc)
+    below = wave < edge_aa
+
+    below_next = jnp.concatenate([below[1:], jnp.array([True])])
+    below_prev = jnp.concatenate([jnp.array([True]), below[:-1]])
+    is_a = below & (~below_next)  # last node below the edge
+    is_b = (~below) & below_prev  # first node at/above the edge
+
+    wave_prev = jnp.concatenate([wave[:1], wave[:-1]])
+    wave_next = jnp.concatenate([wave[1:], wave[-1:]])
+    h_left = wave - wave_prev
+    h_right = wave_next - wave
+
+    lam_a = jnp.sum(jnp.where(is_a, wave, 0.0))
+    h_l = jnp.sum(jnp.where(is_a, h_left, 0.0))
+    h = jnp.sum(jnp.where(is_a, h_right, 0.0))
+    h_r = jnp.sum(jnp.where(is_b, h_right, 0.0))
+
+    h_safe = jnp.where(h > 0.0, h, 1.0)
+    s = (edge_aa - lam_a) / h_safe
+    w_a = 2.0 * (fesc * (s - s * s / 2.0) + (0.5 - s + s * s / 2.0))
+    w_b = 2.0 * (fesc * s * s / 2.0 + 0.5 - s * s / 2.0)
+    left_denom = jnp.where((h_l + h) > 0.0, h_l + h, 1.0)
+    right_denom = jnp.where((h + h_r) > 0.0, h + h_r, 1.0)
+    t_a = (fesc * h_l + w_a * h) / left_denom
+    t_b = (w_b * h + h_r) / right_denom
+
+    base = jnp.where(below, fesc, jnp.ones_like(wave))
+    return jnp.where(is_a, t_a, jnp.where(is_b, t_b, base))

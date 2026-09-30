@@ -76,6 +76,20 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
     #: a component built directly with no spec to ask) keeps strict/relaxed
     #: energy balance unchanged. A static Python bool, not a traced value.
     log_l_ir_requested: bool = False
+    #: FSPS/Prospector-parity toggle (#961, #2539 item 1): include the Lyman
+    #: continuum in the energy-balance integral instead of the canonical
+    #: LyC-masked ``L_absorbed`` (default; #922). Threaded from
+    #: ``dust={'eb_include_lyc': True}`` the same way
+    #: ``DustAttenuationSEDComponentConfig.eb_include_lyc`` /
+    #: ``DustSEDComponentConfig.eb_include_lyc`` are: WG00's absorbed-energy
+    #: integral (:meth:`WG00AttenuationSEDComponent.apply`) calls the SAME
+    #: :func:`tengri.forward.energy_balance.bolometric_absorbed_log10` with
+    #: the SAME 912 Å switch point as ``single_component``, so there is one
+    #: physical choice to thread, not a second convention to invent. Before
+    #: this field existed the grammar accepted the key for ``dust_type=3``
+    #: (wg00) but ``component_factory.py`` never passed it through: a silent
+    #: no-op. Static, non-fittable.
+    eb_include_lyc: bool = False
 
 
 @dataclass(frozen=True)
@@ -198,6 +212,26 @@ class WG00AttenuationSEDComponent(TemplateThreading):
                 "erg/s/Hz",
                 "Nebular continuum folded into sed_intrinsic before the screen",
             ),
+            DerivedKey(
+                "log_L_lyc",
+                "dex",
+                "RAW (pre-fdust) LyC luminosity of the whole stellar population "
+                "(#2539 item 3), combined with lyc_fdust below into log_L_absorbed "
+                "unconditionally (not gated on eb_include_lyc, which concerns only "
+                "the screen's own LyC absorption); read via the sed_nebular edge "
+                "above for ordering. Absent when sed_intrinsic was not yet "
+                "populated when the nebular component ran.",
+            ),
+            DerivedKey(
+                "lyc_fdust",
+                "",
+                "Absolute HII-region dust-absorption share (#2539 item 2/3), "
+                "lyc_shares(neb_fesc, neb_fdust_frac)[1] (#2436), the "
+                "cross-prefix analog of lyc_transmission; combined with "
+                "log_L_lyc above via the smooth log10_add_fdust_credit. "
+                "Absent/0.0 for BakedIn or at the neb_fdust_frac Fixed(0.0) "
+                "default.",
+            ),
         )
 
     def _build_curve_fn(self) -> Any | None:
@@ -282,16 +316,43 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         attenuated = state.sed_intrinsic * attenuation
 
         # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
-        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust: #922).
-        from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
+        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust: #922), unless
+        # eb_include_lyc opts into the FSPS/Prospector convention (#2539 item
+        # 1): None disables the mask so all absorbed energy heats dust, the
+        # same expression DustAttenuationSEDComponent/DustSEDComponent use, so
+        # every dust model agrees on which convention is active.
+        from tengri.forward.energy_balance import (
+            LYMAN_CUTOFF_AA,
+            bolometric_absorbed_log10,
+            warn_if_corrupt,
+        )
         from tengri.utils.physics_constants import C_AA
         from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave
+        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_CUTOFF_AA
         # Log-space integral: ~1e43 erg/s is outside float32 (#1206).
         log_l_absorbed, _ = bolometric_absorbed_log10(
-            state.sed_intrinsic, attenuated, nu, wave=state.wave
+            state.sed_intrinsic, attenuated, nu, wave=state.wave, lyman_cutoff_aa=_eb_cutoff
         )
+
+        # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+        # The absolute f_dust share (lyc_shares(neb_fesc, neb_fdust_frac)[1],
+        # #2436) assigns a fraction of LyC photons to dust heating;
+        # NebularSEDComponent publishes the RAW (pre-fdust) LyC luminosity as
+        # log_L_lyc and that absolute share as lyc_fdust (#2539 item 3),
+        # combined here with the smooth (log1p) log10_add_fdust_credit -- see
+        # that function's docstring for why log10_add-ing the already
+        # fdust-multiplied form has a gradient defect at fdust == 0. This
+        # energy enters the dust IR budget unconditionally (not gated on
+        # eb_include_lyc).
+        from tengri.forward.energy_balance import log10_add_fdust_credit
+
+        _log_l_lyc = state.derived.get("log_L_lyc")
+        if _log_l_lyc is not None:
+            _f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+            log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _f_dust)
+
         warn_if_corrupt(log_l_absorbed, component="wg00")
         if self.config.log_l_ir_requested:
             # Total dust IR budget override (#2187-series): a STATIC branch

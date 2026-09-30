@@ -27,6 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._recombination_coeffs import lyc_shares
 from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.nebular.dig import (
@@ -36,6 +37,7 @@ from tengri.components.nebular.dig import (
 )
 from tengri.components.template_threading import TemplateThreading
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
+from tengri.forward.energy_balance import bolometric_absorbed_log10, log10_fdust_lyc_credit
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -46,6 +48,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.scale import log10_magnitude
+from tengri.utils.wavelength import lyman_edge_transmission as _lyman_edge_transmission
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 
@@ -319,10 +322,14 @@ class NebularSEDComponent(TemplateThreading):
                 "Ly-alpha escape fraction [dimensionless, in [0, 1]]",
             ),
             ParamDeclaration(
-                "neb_fdust",
+                "neb_fdust_frac",
                 Fixed(0.0),
-                "Dust-absorption fraction of ionizing photons in HII regions "
-                "[dimensionless, in [0, 1]]",
+                # #2436: fraction of the NON-escaping budget (1 - neb_fesc),
+                # not an independent absolute share -- see `lyc_shares`
+                # (`_recombination_coeffs.py`), the one place that reads
+                # (neb_fesc, neb_fdust_frac) into the three additive shares.
+                "Fraction of the non-escaping ionizing budget absorbed by "
+                "HII-region dust [dimensionless, in [0, 1]]",
             ),
         ]
 
@@ -392,7 +399,46 @@ class NebularSEDComponent(TemplateThreading):
             DerivedKey(
                 "lyc_transmission",
                 "",
-                "Stellar LyC survival fraction where(λ<912, neb_fesc, 1)",
+                "Stellar LyC survival fraction: neb_fesc below 912 A, 1 above, "
+                "trapezoid-exact at the two nodes bracketing the edge",
+            ),
+            DerivedKey(
+                "lyc_fdust",
+                "",
+                "Absolute HII-region dust-absorption share of the ionizing "
+                "budget (#2539 item 2), f_dust = lyc_shares(neb_fesc, "
+                "neb_fdust_frac)[1] (#2436): published because a dust "
+                "component's 'dust_'-prefixed params slice never carries a "
+                "'neb_'-prefixed key (slice_params_for_component, ADR-0006); "
+                "two_component reads this instead of re-deriving it from "
+                "params['neb_fdust_frac'] when lyc_absorb_all=False to "
+                "compute its own young-weighted credit.",
+            ),
+            DerivedKey(
+                "lyc_fesc",
+                "",
+                "Raw neb_fesc value (#2539 item 1), same cross-prefix reason as "
+                "lyc_fdust: two_component's WavePrecomp energy-balance LUT branch "
+                "reads this to combine its A_0 + fesc*A_1 stellar tables.",
+            ),
+            DerivedKey(
+                "log_L_lyc_dust",
+                "dex",
+                "log10(L_LyC_dust / (erg/s)): LyC energy the absolute f_dust "
+                "share (lyc_shares(neb_fesc, neb_fdust_frac)[1], #2436) assigns "
+                "to dust inside HII regions (#2539); introspection value, kept "
+                "bit-identical to the pre-item-3 credit. Absent/-inf when "
+                "f_dust == 0 (the neb_fdust_frac == 0 default) or "
+                "sed_intrinsic has not been populated yet.",
+            ),
+            DerivedKey(
+                "log_L_lyc",
+                "dex",
+                "log10(L_LyC / (erg/s)): the RAW (pre-fesc, pre-fdust) "
+                "Lyman-continuum luminosity of the whole stellar population "
+                "(#2539 item 3); dust attenuators combine this with lyc_fdust via "
+                "energy_balance.log10_add_fdust_credit to credit log_L_absorbed "
+                "with a nonzero gradient at f_dust == 0.",
             ),
         ]
         # ``sed_shock`` is owned by this component ONLY on the mutually-exclusive
@@ -643,7 +689,9 @@ class NebularSEDComponent(TemplateThreading):
             "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
-            "neb_fdust": jnp.asarray(params.get("neb_fdust", 0.0)),
+            # #2436: the fraction of the NON-escaping budget dust absorbs, not
+            # the retired absolute share -- backends convert via `lyc_shares`.
+            "neb_fdust_frac": jnp.asarray(params.get("neb_fdust_frac", 0.0)),
             # Intrinsic nebular line velocity dispersion → triweight line
             # profile width (Prospector-style). Default 100 km/s.
             "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
@@ -1032,21 +1080,55 @@ class NebularSEDComponent(TemplateThreading):
         # ``fesc`` here so the SED reflects "stellar LyC × fesc + nebular
         # ∝ (1 − fesc)" globally.
         neb_fesc = jnp.asarray(params.get("neb_fesc", 0.0))
-        lyc_mask = state.wave < 912.0
         # Publish the stellar-LyC survival fraction so the two-component dust
         # component: which rebuilds the stellar SED from the *unmasked* per-age
         # ``lnu_age`` cube: can apply the same fesc absorption. Masking only
         # ``sed_intrinsic`` here is enough for the single-screen path (it
         # attenuates ``sed_intrinsic`` directly) but is bypassed by the
         # two-component path, which previously leaked / negated the LyC below
-        # 912 Å (#824). ``where(λ<912, fesc, 1)`` -> at fesc=0 the stellar LyC is
-        # fully absorbed, matching CIGALE / FSPS / bagpipes.
-        lyc_transmission = jnp.where(lyc_mask, neb_fesc, jnp.ones_like(state.wave))
+        # 912 Å (#824). At fesc=0 the stellar LyC is fully absorbed, matching
+        # CIGALE / FSPS / bagpipes.
+        #
+        # #2447: the SSP grid has no node exactly at 912 Å (MIST/C3K brackets
+        # it at 911.5716/913.3967 Å), so a plain ``where(λ<912, fesc, 1)``
+        # node-wise mask puts the step at whichever node sits just below
+        # 912 Å, and a trapezoid band integral over the masked spectrum ramps
+        # transmission linearly across that interval instead of stepping at
+        # the physical edge -- measured -2.0651% on the issue's own model.
+        # ``_lyman_edge_transmission`` replaces only the two nodes bracketing
+        # 912 Å with the trapezoid-exact split weights (see its docstring for
+        # the derivation); every other node keeps the plain step.
+        lyc_transmission = _lyman_edge_transmission(state.wave, neb_fesc)
         derived_overrides["lyc_transmission"] = lyc_transmission
+
+        # Absolute HII-region dust-absorption share, published for the SAME
+        # cross-prefix reason as lyc_transmission above (#2539 item 2):
+        # DustSEDComponent's parameter_prefix is "dust_", so the
+        # orchestrator's slice_params_for_component (ADR-0006) NEVER hands it
+        # a "neb_"-prefixed key -- params.get("neb_fdust_frac", ...) inside a
+        # dust component silently and always returns the 0.0 default, a
+        # measured bug (two_component's lyc_absorb_all=False credit was a
+        # permanent no-op through this path). Cross-component values only
+        # travel through ``state.derived``, never through another
+        # component's params slice; this is the neb_fdust analog of
+        # lyc_transmission. #2436: neb_fdust_frac is the fraction of the
+        # NON-escaping budget, so the absolute share downstream consumers
+        # need is derived through the one shared ``lyc_shares`` helper
+        # (``_recombination_coeffs.py``), not read off the raw parameter.
+        neb_fdust_frac = jnp.asarray(params.get("neb_fdust_frac", 0.0))
+        _, neb_fdust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+        derived_overrides["lyc_fdust"] = neb_fdust
+
+        # Raw neb_fesc value, same cross-prefix reason (#2539 item 1): the
+        # two-component WavePrecomp energy-balance LUT branch needs the
+        # runtime fesc to combine its A_0 + fesc*A_1 stellar tables, and
+        # can no more read params["neb_fesc"] directly than the dust
+        # attenuators above can read params["neb_fdust_frac"].
+        derived_overrides["lyc_fesc"] = neb_fesc
 
         sed_intrinsic = state.sed_intrinsic
         if sed_intrinsic is not None:
-            sed_intrinsic = jnp.where(lyc_mask, sed_intrinsic * neb_fesc, sed_intrinsic)
+            sed_intrinsic = sed_intrinsic * lyc_transmission
 
         # ── Precomp-path Lyman-continuum mask correction (#2439, #2427) ────
         # The dense path masks sed_intrinsic below 912 Å; the LUT path needs
@@ -1118,6 +1200,83 @@ class NebularSEDComponent(TemplateThreading):
         if stellar_spec is not None and spec_eff is not None:
             spec_lyc_mask = jnp.where(spec_eff < 912.0, neb_fesc, jnp.ones_like(spec_eff))
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec * spec_lyc_mask
+
+        # ── Lyman-continuum dust absorption energy (#2539) ────────────────────
+        # neb_fdust (the absolute HII-region dust-absorption share, #2436:
+        # lyc_shares(neb_fesc, neb_fdust_frac)[1]) assigns a fraction of LyC
+        # photons to dust heating inside HII regions, not nebular emission
+        # (CIGALE: ``dust.luminosity = (lum_ly_young + lum_ly_old) * fdust``,
+        # pcigale/sed_modules/nebular.py:191-193). This energy must be credited
+        # to the dust IR budget. Compute the RAW (pre-fesc) stellar LyC
+        # luminosity below 912 Å of the population the escape/dust k-factor
+        # above was applied to -- the WHOLE stellar SED, since this component
+        # has no age structure of its own -- and publish
+        # log_L_lyc_dust = log10(neb_fdust) + log_L_lyc (dex) for dust
+        # attenuators to add into their absorbed-luminosity integral.
+        #
+        # Population match (#2539 item 2): single_component and wg00 have no
+        # birth-cloud/diffuse split, so the whole population credited here is
+        # exactly the population their screen ran the fesc/fdust mask over.
+        # two_component with lyc_absorb_all=True also routes ALL stellar LyC
+        # through the gas (two_component.py Sec. 2a), so this key matches
+        # there too. two_component with lyc_absorb_all=False (default) routes
+        # only the YOUNG/birth-cloud population's LyC through the gas; it does
+        # NOT read this key in that case, it recomputes its own young-weighted
+        # credit from its own per-age cube (see DustSEDComponent.apply), using
+        # the ``lyc_fdust`` derived key published above (#2539 item 2) since
+        # its own "dust_"-prefixed params slice never carries neb_fdust_frac.
+        _stellar_sed = state.sed_intrinsic
+        if _stellar_sed is not None:
+            from tengri.utils.physics_constants import C_AA
+
+            # Published unmasked (pre-fesc) so a consumer needing the exact
+            # 912 A edge on a FINER quadrature grid than this component's own
+            # ``state.wave`` (the photometric union grid, #2447) can redo the
+            # trapezoid-exact split there instead of re-interpolating this
+            # component's already-node-blended ``lyc_transmission`` -- see
+            # ``observation.photometry._filter_integral_union``.
+            derived_overrides["lyc_unmasked_stellar_sed"] = _stellar_sed
+
+            # LyC-ONLY luminosity: keep wave < 912 Å. This is the OPPOSITE
+            # selection from the canonical dust-EB mask (which EXCLUDES the
+            # LyC region), so the manual pre-mask below must be paired with
+            # lyman_cutoff_aa=None: passing the 912 Å cutoff here would apply
+            # the internal "keep wave >= cutoff" mask on top of values that
+            # are already zero there, zeroing the entire integrand and
+            # silently making log_L_lyc == -inf always (measured; #2539 RED).
+            # ``lyc_weight`` is the SAME trapezoid-exact split as
+            # ``lyc_transmission`` above, evaluated at fesc=0 (#2447): its
+            # docstring shows the result is exactly ``1 - C``, the RAW
+            # (fesc-independent) fraction of each node's quadrature weight
+            # that falls below the edge -- so the credit and the mask share
+            # one definition instead of the boolean ``wave < 912`` this
+            # replaces (that undefined ``lyc_mask`` name was a merge
+            # conflict between #2539 and #2447, never exercised together
+            # before this PR).
+            nu_lyc = C_AA / state.wave
+            lyc_weight = 1.0 - _lyman_edge_transmission(state.wave, jnp.zeros_like(neb_fesc))
+            lyc_intrinsic = lyc_weight * _stellar_sed
+            lyc_attenuated = jnp.zeros_like(lyc_intrinsic)
+            log_L_lyc, _ = bolometric_absorbed_log10(
+                lyc_intrinsic,
+                lyc_attenuated,
+                nu_lyc,
+                wave=state.wave,
+                lyman_cutoff_aa=None,
+            )
+            # Gradient-safe double-where log-add (#2539 item 3): value is
+            # bit-identical to -inf at neb_fdust == 0 (neb_fdust_frac == 0,
+            # the default, or neb_fesc == 1), gradient finite everywhere (see
+            # log10_fdust_lyc_credit).
+            derived_overrides["log_L_lyc_dust"] = log10_fdust_lyc_credit(log_L_lyc, neb_fdust)
+            # RAW (pre-fdust) LyC luminosity of the whole population (#2539
+            # item 3): published alongside ``lyc_fdust`` so dust attenuators
+            # can credit it into log_L_absorbed with the smooth
+            # log10_add_fdust_credit combine instead of log10_add-ing the
+            # already fdust-multiplied log_L_lyc_dust above (see that
+            # function's docstring for why the pre-multiplied form has a
+            # gradient defect at neb_fdust == 0).
+            derived_overrides["log_L_lyc"] = log_L_lyc
 
         return state.with_(
             sed_intrinsic=(sed_intrinsic + nebular_sed)
