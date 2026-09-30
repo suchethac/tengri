@@ -17,6 +17,7 @@ import jax.numpy as jnp
 # kernel here and the build-time preintegration (utils.grid_interp) share one
 # definition without a circular import. Re-exported here for back-compat.
 from tengri._cache_keys import KeyPolicy, content, derive_key
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.parameters.resolve import require_redshift
 from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 from tengri.utils.filter_convention import (
@@ -369,7 +370,13 @@ def lnu_filter_integral(
             unmasked_stellar_sed,
             lyc_transmission_ssp,
             neb_fesc,
-            912.0 * (1.0 + redshift),
+            # LYMAN_LIMIT_AA (911.76 A), not the retired bare 912.0 literal
+            # (#2447-era; L2, one Lyman edge): must match the edge
+            # ``lyc_transmission_ssp`` was itself built with
+            # (``tengri.components.nebular.component``), or this correction's
+            # own "away from the straddling panel, Delta == 0" derivation
+            # (see :func:`_lyc_photometry_correction`) breaks.
+            LYMAN_LIMIT_AA * (1.0 + redshift),
         )
     return _filter_integral_union(
         L_nu_rest, wave_obs, filter_wave, filter_trans, convention, lyc_correction_obs
@@ -691,7 +698,9 @@ def _compute_flux_density_padded(
             unmasked_stellar_sed,
             lyc_transmission_ssp,
             neb_fesc,
-            912.0 * (1.0 + redshift),
+            # LYMAN_LIMIT_AA, not the retired bare 912.0 literal -- see the
+            # matching comment in :func:`lnu_filter_integral`.
+            LYMAN_LIMIT_AA * (1.0 + redshift),
         )
     mean_lnu = _filter_integral_union(
         sed_rest, wave_obs, fw_safe, filter_trans_padded, convention, lyc_correction_obs
