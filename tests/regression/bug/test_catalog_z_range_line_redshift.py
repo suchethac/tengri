@@ -462,6 +462,16 @@ def test_non_catalog_params_override_redshift_matches_direct_build():
     loss_d = float(ctx_d.neg_log_posterior_fn(p_u, ctx_d.data_args))
     np.testing.assert_allclose(loss_o, loss_d, rtol=RTOL)
 
+    # Photometry, not just the loss: this test's loss is line-dominated, and lines
+    # do not read the build-time photometry tables (fixed-z stellar LUT, IGM band
+    # factors, ...), so the loss equality above was vacuous for them. The override
+    # must evaluate a model built at the override redshift, so its predicted
+    # photometry must equal a direct build's, and differ from the z=0.1 model's.
+    phot_o = np.asarray(f_override.model.predict_photometry(PARAMS))
+    phot_d = np.asarray(plain_08.predict_photometry(PARAMS))
+    np.testing.assert_allclose(phot_o, phot_d, rtol=RTOL)
+    assert _relative_diff(np.asarray(plain_01.predict_photometry(PARAMS)), phot_d) > VACUITY_FLOOR
+
 
 # ── Mutation-targeted guards ─────────────────────────────────────────────
 

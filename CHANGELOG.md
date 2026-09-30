@@ -12,6 +12,8 @@
 
 ### Fixed
 
+- A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged

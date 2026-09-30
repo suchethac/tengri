@@ -1002,6 +1002,44 @@ class ForwardModel:
             return self
         return ForwardModel.build(sed=new_inner, observation=self.observation)
 
+    def with_fixed_redshift(self, redshift):
+        """Return a copy of this forward model built at a different Fixed redshift.
+
+        Clones the wrapped SED via :meth:`SEDModel.with_fixed_redshift` (which
+        rebuilds every redshift-dependent table) and re-wraps it, preserving
+        the observation.
+
+        Parameters
+        ----------
+        redshift : float
+            The new constant redshift.
+
+        Returns
+        -------
+        ForwardModel
+            The rebuilt forward model, or ``self`` when the redshift is unchanged.
+
+        Raises
+        ------
+        NotImplementedError
+            For multi-population, spatial and hierarchical forwards, which
+            cannot be rebuilt here.
+        """
+        if len(self.populations) != 1 or self.populations[0].spatial is not None:
+            raise NotImplementedError(
+                "with_fixed_redshift supports a single-population, non-spatial forward model."
+            )
+        sub = self.populations[0].sed
+        inner = getattr(sub, "sed", sub)
+        if inner is not sub or not hasattr(inner, "with_fixed_redshift"):
+            raise NotImplementedError(
+                "with_fixed_redshift supports a plain SEDModel-backed forward model."
+            )
+        new_inner = inner.with_fixed_redshift(redshift)
+        if new_inner is inner:
+            return self
+        return ForwardModel.build(sed=new_inner, observation=self.observation)
+
     def fit(
         self,
         data: Any = None,

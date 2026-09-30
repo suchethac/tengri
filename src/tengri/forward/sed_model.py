@@ -5267,6 +5267,63 @@ class SEDModel:
             approx=approx,
         )
 
+    def with_fixed_redshift(self, redshift):
+        """Return a copy of this model built at a different Fixed redshift.
+
+        Every build-time table that captures the redshift (the fixed-z stellar
+        photometry LUT, IGM band factors, the nebular grid reference, the
+        dust-IR band response, the energy-balance LUT, the radio/X-ray term
+        responses, the precomputed luminosity distance, the line-catalog
+        snapping) is rebuilt by construction, so the clone is exactly the model
+        a user would have built with ``redshift=Fixed(redshift)``.
+
+        Parameters
+        ----------
+        redshift : float
+            The new constant redshift.
+
+        Returns
+        -------
+        SEDModel
+            A new model sharing ``ssp_data``, ``observation`` and build
+            settings, on the same ``approx`` policy. ``self`` when the
+            redshift already equals this model's.
+
+        Raises
+        ------
+        tengri.config.exceptions.ParameterError
+            If redshift is free in this model's spec.
+        NotImplementedError
+            If this model carries a ``catalog_z_range``: its tables are
+            z-tabulated and the redshift is a runtime input, so no rebuild is
+            needed (or meaningful).
+
+        Notes
+        -----
+        Costs one model construction, the same as :meth:`with_approx` (the
+        precompute LUT is re-run; the ``tengri_precomp`` cache persists it per
+        z-grid). **JIT-compatible**: build-time only.
+        """
+        if self._catalog_z_range is not None:
+            raise NotImplementedError(
+                "with_fixed_redshift is for fixed-z models; a catalog_z_range model "
+                "takes the redshift as a runtime input."
+            )
+        new_spec = self.spec.with_fixed_value("redshift", float(redshift))
+        if new_spec is self.spec:
+            return self
+        return SEDModel(
+            new_spec,
+            self.ssp_data,
+            observation=self.observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=self.approx_configs or None,
+        )
+
     # ── Predictions (public API) ──────────────────────────────────────
 
     def predict_sfh(self, params, n_linear=1000, grid="linear"):

@@ -2084,6 +2084,48 @@ class Parameters:
         object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
+    def with_fixed_value(self, name: str, value: float) -> Parameters:
+        """Return a copy in which the Fixed parameter ``name`` is pinned to ``value``.
+
+        Parameters
+        ----------
+        name : str
+            Name of a parameter that is currently Fixed.
+        value : float
+            The new constant.
+
+        Returns
+        -------
+        Parameters
+            New instance; the original is not modified. Unchanged (``self``)
+            when ``value`` already equals the current constant.
+
+        Raises
+        ------
+        ParameterError
+            If ``name`` is unknown or is a free parameter (a free parameter
+            has a prior, not a constant, so there is nothing to re-pin).
+
+        Notes
+        -----
+        The seam a model rebuild uses to answer "the same model at a different
+        constant" without touching the caller's spec (e.g. the ``Fitter``'s
+        ``params_override={"redshift": z}``). **JIT-compatible**: build-time only.
+        """
+        if name not in self._distributions:
+            raise ParameterError(f"Unknown parameter {name!r}.")
+        current = self._distributions[name]
+        if not current.is_fixed:
+            raise ParameterError(
+                f"Parameter {name!r} is free; with_fixed_value re-pins a Fixed parameter only."
+            )
+        if current.bounds[0] is not None and float(current.bounds[0]) == float(value):
+            return self
+        new_spec = copy.copy(self)
+        new_distributions = {**self._distributions, name: Fixed(float(value))}
+        object.__setattr__(new_spec, "_distributions", new_distributions)
+        return new_spec
+
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
         """Draw one random sample from free parameter prior distributions.
 
