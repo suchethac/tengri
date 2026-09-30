@@ -532,19 +532,10 @@ class AGNSEDComponent(TemplateThreading):
         # rescale in log space to recover the true L_bol. The factoring lives
         # in components/agn/_lbol_reference.py and is called by the composable
         # runner and the monolithic branch here.
-        _use_ref = wave.dtype == jnp.float32
-        if _use_ref:
-            # Multicolor-disc shape depends on L_bol (temperature), so evaluating
-            # the whole runner at the reference L_bol would give the WRONG disc
-            # shape. Hand the disc its TRUE L_bol for the temperature/geometry
-            # (``agn_log_lbol_shape``) while everything else: including the disc's
-            # output MAGNITUDE: stays on the reference so the runner's L_lambda
-            # arithmetic stays in float32 range. Shape-invariant blocks (torus
-            # template, power-law disc) ignore the kwarg. The disc's internals are
-            # float32-hardened (log-space) so the true-L_bol temperature computes
-            # without overflow. (#1206)
-            agn_kwargs = {**agn_kwargs, "agn_log_lbol_shape": jnp.asarray(agn_log_lbol)}
         if self.config.model == "composable":
+            # The composable runner (compose_l_nu) performs the reference
+            # factoring AND the ``agn_log_lbol_shape`` hand-off itself;
+            # injecting the kwarg here as well would duplicate its hand-off.
             L_agn, L_2500_intrinsic, L_4400_intrinsic, agn_components = agn_fn(
                 wave,
                 agn_log_lbol=agn_log_lbol,
@@ -554,6 +545,14 @@ class AGNSEDComponent(TemplateThreading):
             )
         else:
             lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, wave)
+            if use_ref:
+                # Disc shape can depend on L_bol (temperature), so evaluating a
+                # monolithic model wholly at the reference L_bol would give the
+                # WRONG shape. Hand the block its TRUE L_bol for shape
+                # (``agn_log_lbol_shape``) while the output MAGNITUDE stays on
+                # the reference so the L_lambda arithmetic stays in float32
+                # range; shape-invariant blocks ignore the kwarg. (#1206)
+                agn_kwargs = {**agn_kwargs, "agn_log_lbol_shape": jnp.asarray(agn_log_lbol)}
             L_agn_unit = agn_fn(wave, agn_log_lbol=lbol_eval, **agn_kwargs)
             L_agn = rescale(L_agn_unit, offset) if use_ref else L_agn_unit
             L_2500_intrinsic = jnp.asarray(0.0)

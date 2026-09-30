@@ -605,9 +605,7 @@ agn_torus_block, agn_attenuation_block : str
     # then rescale in log space afterward. The factoring lives in
     # components/agn/_lbol_reference.py and is shared with the AGNSEDComponent's
     # monolithic branch.
-    agn_log_lbol_eval, _use_ref, _log_scale_offset = reference_evaluation(
-        agn_log_lbol, wave
-    )
+    agn_log_lbol_eval, _use_ref, _log_scale_offset = reference_evaluation(agn_log_lbol, wave)
 
     # When evaluating at reference luminosity, hand the disc its TRUE L_bol for
     # shape (temperature) calculation so shapes are correct. Shape-invariant
@@ -1146,9 +1144,7 @@ agn_torus_block, agn_attenuation_block : str
         L_2500_final = rescale(L_2500_intrinsic, _log_scale_offset)
         L_4400_final = rescale(L_4400_intrinsic, _log_scale_offset)
         components_final = (
-            rescale(components, _log_scale_offset)
-            if components is not None
-            else None
+            rescale(components, _log_scale_offset) if components is not None else None
         )
     else:
         L_nu_final = L_nu_result

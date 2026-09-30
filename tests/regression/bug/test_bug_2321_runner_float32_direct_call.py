@@ -12,7 +12,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.components.agn.blocks.runner import compose_l_nu
 
 pytestmark = pytest.mark.regression_bug
@@ -101,8 +101,15 @@ def test_monolithic_agn_float32_finite(synthetic_ssp):
                 "all_params": Fixed(DEFAULT),
                 "tau_gyr": 1.0,
                 "age_gyr": 5.0,
+                # Free: every key the params dict below carries must be free
+                # in the build (#2296 made params dicts free-only).
+                "log_total_mass": Uniform(8.0, 12.0),
             },
-            agn={"type": "skirtor_stalevski", "all_params": Fixed(DEFAULT)},
+            agn={
+                "type": "skirtor_stalevski",
+                "all_params": Fixed(DEFAULT),
+                "log_lbol": Uniform(10.0, 13.0),
+            },
             redshift=Fixed(0.1),
         )
         params = {
@@ -112,6 +119,4 @@ def test_monolithic_agn_float32_finite(synthetic_ssp):
         state = model.predict_state(params)
 
     # Monolithic path must produce finite SED in float32
-    assert jnp.all(
-        jnp.isfinite(state.derived["sed_agn"])
-    ), "Expected finite; got infs in sed_agn"
+    assert jnp.all(jnp.isfinite(state.derived["sed_agn"])), "Expected finite; got infs in sed_agn"
