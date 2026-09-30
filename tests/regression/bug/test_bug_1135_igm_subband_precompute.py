@@ -228,8 +228,12 @@ def test_the_fold_tracks_metallicity(ssp):
     """Moving ``met_logzsol`` must move the IGM-attenuated flux the way the exact
     path does. This is what a (z, age, filter, k) table could not do.
     """
-    m_exact = _build(ssp, None, z=0.8)
-    m_lut = _build(ssp, WavePrecomp(), z=0.8)
+    # met_logzsol is swept below (#2296: a params-dict key the spec declared
+    # Fixed is refused), so it must be declared free at build time; no met=
+    # group at all defaults the whole group Fixed(DEFAULT).
+    met_free = {"met": {"logzsol": FREE}}
+    m_exact = _build(ssp, None, z=0.8, **met_free)
+    m_lut = _build(ssp, WavePrecomp(), z=0.8, **met_free)
     p = dict(m_exact.spec.sample(KEY))
     for met in (-1.5, -0.5, 0.0, 0.3):
         q = dict(p, met_logzsol=met)

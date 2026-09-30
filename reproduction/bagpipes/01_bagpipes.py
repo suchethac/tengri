@@ -18,7 +18,7 @@
 #
 # BAGPIPES (Carnall et al. 2018) is the reference code for galaxy SED
 # fitting at high redshift and rest-UV continuum work at cosmic noon.
-# This study configures tengri's public API to approximate BAGPIPES's model choices; tengri's implementation is its own, not derived from BAGPIPES's code, and residual differences are documented below.
+# This study configures tengri's public API to approximate BAGPIPES's model choices. Tengri's implementation is its own, not derived from BAGPIPES's code. Residual differences are documented below.
 #
 # Throughout the panels, a fiducial τ-delayed star formation history
 # (τ = 1 Gyr, age 5 Gyr) at solar metallicity is used with Calzetti dust
@@ -28,8 +28,8 @@
 # Stellar templates, star formation histories, attenuation curves, dust IR,
 # and IGM absorption match BAGPIPES to floating-point or to a few percent
 # at matched parameters. The dust IR shape agreement depends critically on
-# the DL07 PDR luminosity weighting — without it the warm component is ~14×
-# under-weighted. The nebular block is the principal exception: BAGPIPES
+# the DL07 PDR luminosity weighting: without it the warm component is ~14×
+# under-weighted. The nebular block is the principal exception. BAGPIPES
 # uses Cloudy v25 grids, while tengri uses Cue (Li et al. 2025), a neural
 # emulator trained on Cloudy v17. The Hα ratio difference is quantified in §9.
 #
@@ -39,7 +39,7 @@
 # %% [markdown]
 # ## Setup
 #
-# Every model on this page carries nebular emission: tengri uses Cue at
+# Every model on this page carries nebular emission. Tengri uses Cue at
 # logU = −2, Z_gas = Z☉, f_esc = 0 (`neb={"type": "cue", ...}`), and BAGPIPES
 # uses its own Cloudy v25 nebular grid at the same values. Residuals in every
 # section therefore include the Cue-vs-BAGPIPES nebular difference,
@@ -121,14 +121,14 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 # ## Common SSP grid
 #
 # BAGPIPES' BC03+MILES Kroupa templates re-shaped into the DSPS HDF5
-# layout that tengri reads — same numerical SSPs on both sides.
+# layout that tengri reads (same numerical SSPs on both sides).
 #
 # The repackaged grid is **not** in the repository: `.gitignore` excludes
 # `*.h5`, so it is rebuilt from whatever BAGPIPES is installed. The §13
 # magnitudes below moved by up to 0.007 mag when it was rebuilt under
-# BAGPIPES 1.3.6, against a committed run made from an earlier build — small,
-# but it is a published number that the committed source alone does not
-# determine. Read the version the run actually used off the printout, and
+# BAGPIPES 1.3.6 against a committed run made from an earlier build (small,
+# but a published number that the committed source alone does not
+# determine). Read the version the run actually used off the printout and
 # treat a §13 difference of this size as a template-version difference until
 # the versions are shown to match.
 
@@ -152,12 +152,11 @@ print(
 # ## §1 Stellar populations
 #
 # BC03+MILES Kroupa (Bruzual & Charlot 2003; Sánchez-Blázquez et al.
-# 2006; Kroupa 2001) at Z = Z⊙ from 1 Myr to 10 Gyr. **Single SSPs**,
-# overlaid: BAGPIPES' raw `bc03_miles_stellar_grids.fits` read directly
+# 2006; Kroupa 2001) at Z = Z⊙ from 1 Myr to 10 Gyr. The panel compares **single SSPs**: BAGPIPES' raw `bc03_miles_stellar_grids.fits` read directly
 # with no SFH module, against the same templates re-shaped into tengri's
 # HDF5. The relative residual `|tengri − BAGPIPES| / BAGPIPES` is ~1e-7,
-# the float32 round-trip through the HDF5 repackaging — both codes consume
-# identical numerics.
+# the float32 round-trip through the HDF5 repackaging (both codes consume
+# identical numerics).
 
 # %%
 from astropy.io import fits as _fits
@@ -226,16 +225,16 @@ save_fig("bagpipes_01_ssp_bc03_miles.png")
 # %% [markdown]
 # ## §2 Parametric star formation histories — delayed-τ
 #
-# tengri uses: `SFR(t) ∝ t · exp(−t/τ)`.
-# Both integrate to the same formed mass — BAGPIPES via `massformed`,
+# Tengri uses: `SFR(t) ∝ t · exp(−t/τ)`.
+# Both integrate to the same formed mass: BAGPIPES via `massformed`,
 # tengri via `log_total_mass`.
 #
-# tengri evaluates `state.derived["sfr_history"]` from a built `SEDModel`
+# Tengri evaluates `state.derived["sfr_history"]` from a built `SEDModel`
 # on the 256-point log-spaced lookback grid the SFH-convolution code uses.
 # The printed `∫SFR dt` check confirms the area integrates to
 # `10**log_total_mass`.
 #
-# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+# **Verification Status:** PARTIAL (11/33): Parametric SFH family physics
 
 # %%
 LOG_MASS_FIDUCIAL = 10.0
@@ -346,9 +345,9 @@ save_fig("bagpipes_02_sfh_delayed.png")
 #
 # Parametric SFH family comparison: delayed-τ (τ ∈ {0.3, 1, 3} Gyr),
 # constant-SFR, double power-law, and lognormal forms. Every SED uses the
-# 5 Gyr delayed-τ fiducial nucleus unchanged; the SFH parameter alone sweeps.
+# 5 Gyr delayed-τ fiducial nucleus unchanged. The SFH parameter alone sweeps.
 # Both sides carry nebular emission (logU −2). UV-to-NIR band ratios per form
-# (line pixels differ in width between the codes, so we report broadband metrics).
+# (line pixels differ in width between the codes, so broadband metrics are reported).
 
 # %%
 # Use standard cosmological age (Planck 2018).
@@ -576,7 +575,7 @@ for label, w_ref, L_ref, w_t, L_t in cases_sfh:
 #
 # BAGPIPES' non-parametric SFH is piecewise-constant SFR with log-ratios
 # between adjacent bins, with a Student-t prior pushing bins toward equality.
-# tengri implements the same shape under `sfh.type="continuity"`.
+# Tengri implements the same shape under `sfh.type="continuity"`.
 #
 # Both codes use a 7-bin grid with edges [0, 0.03, 0.1, 0.3, 1, 3, 6, 13.7] Gyr
 # lookback, with six free log-ratio parameters per bin and StudentT(μ=0, σ=0.3, df=2)
@@ -586,7 +585,7 @@ for label, w_ref, L_ref, w_t, L_t in cases_sfh:
 # youngest to oldest. The panel below reverses the BAGPIPES array so both panels
 # show the same SFH shape.
 #
-# **Verification Status:** PARTIAL (5/43) — Non-parametric continuity / Dirichlet
+# **Verification Status:** PARTIAL (5/43): Non-parametric continuity / Dirichlet
 
 # %%
 # Bin edges shared between codes. Both want them in **increasing**
@@ -668,8 +667,8 @@ save_fig("bagpipes_17_sfh_continuity_leja.png")
 # ## §4 Integrated stellar SED
 #
 # Stellar SED from the τ-delayed SFH convolved with BC03+MILES Kroupa SSPs,
-# with no dust or nebular. BAGPIPES is normalized to 10^10 M☉ formed;
-# tengri's stellar mass is reported in the annotation.
+# with no dust or nebular. BAGPIPES is normalized to 10^10 M☉ formed.
+# Tengri's stellar mass is reported in the annotation.
 
 # %%
 w_b, L_b = B.stellar_only_lnu(
@@ -748,10 +747,10 @@ if _ratios.size:
 # %% [markdown]
 # ## §5 Metallicity sensitivity (chemical enrichment, single-Z form)
 #
-# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block; tengri carries
+# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block. Tengri carries
 # the same knob via `logzsol = log10(Z / Z☉)`. Both support time-varying Z
 # (BAGPIPES `metallicity_bins`, tengri `chemical_enrichment_history`), but the
-# single-Z response is the reproducible test: sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at
+# single-Z response is the reproducible test. Sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at
 # the fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR continuum.
 #
 
@@ -813,7 +812,7 @@ save_fig("bagpipes_15_metallicity_sweep.png")
 # Extended Z/Z☉ ∈ {0.2, 0.5, 1, 1.5, 2.5} sweep with tengri/BAGPIPES ratio
 # panel and UV-to-NIR bandpass statistics. Fiducial SFH: 5 Gyr delayed-τ with
 # τ = 1 Gyr, all with nebular emission on (logU −2, matched gas metallicity).
-# UV-to-NIR bandpass ratio: median 1.002×, worst 1.371× (2/10 bands
+# UV-to-NIR bandpass ratio: median 1.002×, worst 1.371× (2 of 10 bands
 # outside 5%).
 
 # %%
@@ -897,7 +896,7 @@ V.print_filter_table(
 # at 5500 Å. The Salim+2018 curve at δ = 0 coincides exactly with Calzetti+2000
 # by construction, so the two overlap in both the panel and the ratio row.
 #
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL: Attenuation law library
 
 # %%
 from tengri.dust import list_laws
@@ -952,10 +951,10 @@ save_fig("bagpipes_04_dust_attenuation.png")
 # %% [markdown]
 # ## §7 Dust attenuation applied
 #
-# as a single screen at A_V = 1.0. tengri matches this by putting the full
+# BAGPIPES applies dust as a single screen at A_V = 1.0. Tengri matches this by putting the full
 # A_V on the diffuse component (attenuates all ages equally) and zeroing the
-# birth-cloud term: `τ_diff = A_V/1.086`, `τ_bc = 0`. tengri's `τ_bc` is
-# age-gated to stars younger than ~10 Myr, so this puts the old population
+# birth-cloud term (`τ_diff = A_V/1.086`, `τ_bc = 0`). Tengri's `τ_bc` is
+# age-gated to stars younger than ~10 Myr, which puts the old population
 # under the same single screen BAGPIPES uses.
 
 # %%
@@ -1047,14 +1046,12 @@ save_fig("bagpipes_05_dust_attenuation_applied.png")
 # %% [markdown]
 # ## §7 cont'd — Dust attenuation laws and A_V
 #
-# Extended dust parameter space: Calzetti A_V ∈ {0.3, 1, 3}; CF00 power-law
-# slope n ∈ {0.5, 0.7, 1.0} at fixed eta = 1; Salim (delta, B) pairs
-# {(−0.3, 0), (0, 1), (0.3, 3)}; Cardelli A_V=1. Two panels: left shows A_V
-# and CF00 slope modulation; right shows dust-law families with their
-# A(2175)/A_V bump normalizations (Salim only). Fiducial SFH throughout,
+# Extended dust parameter space: Calzetti A_V ∈ {0.3, 1, 3}; CF00 power-law slope n ∈ {0.5, 0.7, 1.0} at fixed eta = 1; Salim (delta, B) pairs {(−0.3, 0), (0, 1), (0.3, 3)}; and Cardelli A_V=1. Two panels show A_V
+# and CF00 slope modulation on the left and dust-law families with their
+# A(2175)/A_V bump normalizations (Salim only) on the right. Fiducial SFH throughout,
 # nebular on. A(2175)/A_V for δ = −0.3/0/+0.3: BAGPIPES 2.807/2.363/2.091,
 # tengri 2.766/2.338/2.317. UV-to-NIR bandpass ratio across both panels:
-# median 1.009×, worst 1.404× (2/10 bands outside 5%).
+# median 1.009×, worst 1.404× (2 of 10 bands outside 5%).
 
 # %%
 # Figure 1: A_V and eta variations with Calzetti + CF00
@@ -1207,18 +1204,24 @@ for delta, b in [(-0.3, 0.0), (0.0, 1.0), (0.3, 3.0)]:
     L_t = s_salim.sed_intrinsic
     _assert_comparable(L_ref, L_t, name=f"§7 cont'd {label}")
 
-    # Calculate A(2175)/A_V on both sides by evaluating the law function
-    # directly (the same approach as §6), normalized to A_V at 5500 Å —
-    # there is no per-wavelength attenuation-curve key on the built model.
+    # Calculate A(2175)/A_V on both sides, anchored at exactly 2175 and
+    # 5500 Å so the two grids' sampling drops out of the ratio: the BAGPIPES
+    # curve is a spectrum ratio on its model wavelength grid, interpolated to
+    # the two anchors; the tengri law evaluates at the anchors directly.
     w_ref_bump, A_ref_bump = B.attenuation_curve(
         dust_block={"type": "Salim", "Av": 1.0, "delta": delta, "B": b}
     )
-    a_2175_ref = np.interp(2175.0, w_ref_bump, _norm_AV(w_ref_bump, A_ref_bump))
-
-    A_t_bump = np.asarray(
-        _tengri_laws["salim_sbl18"](wave_law, dust_bump_strength=b, dust_delta=delta)
+    a_2175_ref = float(
+        np.interp(2175.0, w_ref_bump, A_ref_bump)
+        / np.interp(5500.0, w_ref_bump, A_ref_bump)
     )
-    a_2175_t = np.interp(2175.0, wave_law, _norm_AV(wave_law, A_t_bump))
+
+    _A_t_anchor = np.asarray(
+        _tengri_laws["salim_sbl18"](
+            np.array([2175.0, 5500.0]), dust_bump_strength=b, dust_delta=delta
+        )
+    )
+    a_2175_t = float(_A_t_anchor[0] / _A_t_anchor[1])
 
     print(
         f"§7 cont'd Salim δ={delta:+.1f} B={b:.0f}: "
@@ -1295,7 +1298,7 @@ V.print_filter_table(
 # ## §8 Dust IR re-emission and energy balance
 #
 # BAGPIPES re-emits absorbed stellar UV/optical through the Draine & Li
-# (2007) template family parametrized by `(qpah, umin, gamma)`; tengri uses
+# (2007) template family parametrized by `(qpah, umin, gamma)`. Tengri uses
 # its own DL07 template grid with energy balance enforced to floating point.
 #
 # At matched parameters, both DL07 SEDs agree in shape and bolometry: both
@@ -1304,7 +1307,7 @@ V.print_filter_table(
 # fraction, but PDR dust emits `R ≈ 14×` more per unit mass (DL07 Eq. 33),
 # so a 5% mass fraction carries ~40% of the luminosity.
 #
-# **Verification Status:** CROSSVAL — Dust IR emission vs BAGPIPES
+# **Verification Status:** CROSSVAL: Dust IR emission vs BAGPIPES
 
 # %%
 QPAH_FIDUCIAL = 2.5
@@ -1404,12 +1407,12 @@ save_fig("bagpipes_06_dust_ir.png")
 # ## §8 cont'd — DL07 IR grid parameters
 #
 # Draine & Li (2007) template space sweep: (q_PAH, U_min, γ) over 4 cases
-# plus the fiducial. q_PAH controls PAH mass fraction; U_min sets the minimum
-# radiation field strength; γ weights the PDR luminosity distribution. All
+# plus the fiducial. Q_PAH controls PAH mass fraction, U_min sets the minimum
+# radiation field strength, and γ weights the PDR luminosity distribution. All
 # points use the same fiducial SFH (5 Gyr delayed-τ, τ=1 Gyr), Calzetti dust
 # (A_V=1), and nebular emission (logU −2). Energy balance holds in all 5
 # cases (L_IR/L_absorbed = 1.000, residual < 1e-15). IR-band (30–300 μm)
-# ratio: median 0.963×, worst 0.963× (0/13 bands outside 5%).
+# ratio: median 0.963×, worst 0.963× (0 of 13 bands outside 5%).
 
 # %%
 dl07_cases = [
@@ -1514,12 +1517,12 @@ V.print_filter_table(
 # %% [markdown]
 # ## §9 Nebular emission
 #
-# BAGPIPES uses Cloudy v25 nebular grids parametrized by `(logU, metallicity)`;
-# tengri uses Cue (Li et al. 2025), a neural emulator on Cloudy v17. The panel
+# BAGPIPES uses Cloudy v25 nebular grids parametrized by `(logU, metallicity)`.
+# Tengri uses Cue (Li et al. 2025), a neural emulator on Cloudy v17. The panel
 # reports integrated, continuum-subtracted line luminosity (width- and
 # grid-independent).
 #
-# On a young starburst — the regime Cue is trained for — the two agree closely.
+# On a young starburst (the regime Cue is trained for), the two agree closely.
 # The Balmer lines land within 2 % (Hα 0.98×, Hβ 0.98×), [O III] 5007 within
 # 1 %, and the free-free/free-bound continuum within 3 % in line-free windows.
 # [O II] 3727 is the outlier at 0.77×: a collisionally excited line, so it is
@@ -1532,11 +1535,11 @@ V.print_filter_table(
 # metallicity or ionization parameter. Both codes hit it (2.82 vs 2.83), which
 # is what certifies that the ionizing continuum driving Cue is the right one.
 # It read **0.41** for as long as a float32 SSP grid was silently overflowing
-# the erg/s mass scale into that ionizing SED — a corruption worth
+# the erg/s mass scale into that ionizing SED: a corruption worth
 # 50 orders of magnitude that left the stellar continuum, and therefore every
 # other panel in this notebook, looking perfect.
 #
-# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
+# **Verification Status:** CROSSVAL: Cloudy grid / Cue vs FSPS baked-in
 
 # %%
 # Young 10 Myr constant-SFR fiducial — the regime where nebular
@@ -1686,13 +1689,13 @@ save_fig("bagpipes_08_nebular.png")
 # ## §9 cont'd — Nebular ionization & metallicity × escape fraction
 #
 # Expanded nebular parameter space: logU ∈ {−3, −2, −1.5}, Z_gas ∈ {0.3, 1, 2} Z☉,
-# f_esc ∈ {0, 0.5} (6 cases total). BAGPIPES via `nebular: {logU, metallicity, fesc}`;
-# tengri via free `neb_logU`, `neb_logZ_gas`, `neb_fesc` in Cue. Per-case tengri/BAGPIPES
-# line-luminosity ratios (Hα, Hβ, [O III], [O II]) shown per case.
+# f_esc ∈ {0, 0.5} (6 cases total). BAGPIPES uses `nebular: {logU, metallicity, fesc}`,
+# while tengri uses free `neb_logU`, `neb_logZ_gas`, `neb_fesc` in Cue. Per-case tengri/BAGPIPES
+# line-luminosity ratios (Hα, Hβ, [O III], [O II]) are shown for each case.
 #
 # At logU=−2, Z=1 Z☉ (matching §9): Hα 0.98×, Hβ 0.98×, [O III] 1.01×,
-# [O II] 0.77×. The Z=2 Z☉ case is the outlier — Hα/Hβ rise to 1.86×/1.82×
-# while [O III] falls to 0.22× — and f_esc=0.5 scales every line down by
+# [O II] 0.77×. The Z=2 Z☉ case is the outlier (Hα/Hβ rise to 1.86×/1.82×
+# while [O III] falls to 0.22×), and f_esc=0.5 scales every line down by
 # roughly the escape fraction (0.59–0.78×).
 
 # %%
@@ -1778,17 +1781,17 @@ for label, logu, z, fesc in neb_cases_list:
 # ## §10 Line-spread function — velocity-broadening parity
 #
 # BAGPIPES applies Gaussian velocity broadening via the `veldisp` parameter
-# (km/s), convolving in log-wavelength space. tengri's `velocity_broaden`
+# (km/s), convolving in log-wavelength space. Tengri's `velocity_broaden`
 # JIT-compiles the same convolution.
 #
 # At matched `veldisp = 150 km/s` (a typical late-type-galaxy value),
 # the broadened Hα profile has FWHM `2.355 σ_v λ / c`. BAGPIPES' default
 # spectral grid has `R_spec = 1000` (σ ≈ 127 km/s), so the effective
 # Hα width at `veldisp = 150 km/s` is σ_eff = sqrt(127² + 150²) ≈ 197 km/s,
-# FWHM ≈ 10 Å. tengri's `velocity_broaden` operates on unbinned input
+# FWHM ≈ 10 Å. Tengri's `velocity_broaden` operates on unbinned input
 # and returns the pure-Gaussian profile at σ = 150 km/s (FWHM ≈ 7.7 Å).
 #
-# **Verification Status:** CROSSVAL — Spectroscopy forward model
+# **Verification Status:** CROSSVAL: Spectroscopy forward model
 
 # %%
 VELDISP_KMS = 150.0
@@ -1874,7 +1877,7 @@ print(
 # ## §11 Panchromatic SED
 #
 # Full SED from rest-UV to far-IR: stellar + nebular + dust attenuation + DL07 IR.
-# The percent-level disagreements from §3–§6 stack; the headline is overall shape,
+# The percent-level disagreements from §3–§6 stack. The headline is overall shape,
 # not bit-for-bit agreement at individual wavelengths.
 
 # %%
@@ -1967,7 +1970,7 @@ save_fig("bagpipes_07_panchromatic.png")
 # code samples the step at slightly offset grid positions. The DLA term governs
 # Lyman-continuum opacity below 912 Å.
 #
-# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
+# **Verification Status:** CROSSVAL: Inoue+2014 IGM transmission
 
 # %%
 Z_FIDUCIAL_IGM = 4.0
@@ -2005,12 +2008,12 @@ print(
 # ## §12 cont'd — Asada+2025 CGM damping wing (tengri-only)
 #
 # Inoue+2014 captures the mean IGM but omits damping-wing absorption from neutral
-# hydrogen in the circumgalactic medium at z > 5. tengri ships an experimental
+# hydrogen in the circumgalactic medium at z > 5. Tengri ships an experimental
 # Asada+2025 CGM model (arXiv:2410.21543, accepted ApJL) via `add_cgm=True`.
 # BAGPIPES has no counterpart.
 #
 # This panel shows the CGM contribution at z = 7 with `cgm_log_nhi = 22.5`
-# (saturated-IGM regime). tengri implements the full frequency-dependent Totani+2006
+# (saturated-IGM regime). Tengri implements the full frequency-dependent Totani+2006
 # cross-section (Eq. 4 of Asada+2025) with sigmoid evolution matched to Asada+2025's
 # z = 6–8 calibration. The damping wing decays over ~50 Å rest (~400 km/s).
 
@@ -2074,13 +2077,15 @@ print(
 # ## §12b — Inoue14 IGM transmission, redshift sweep
 #
 # IGM transmission T(λ, z) via Inoue+2014 at z ∈ {1, 2, 3, 5}. Both BAGPIPES
-# and tengri implement the same piecewise formula; agreement is redward of the
+# and tengri implement the same piecewise formula. Agreement is redward of the
 # Lyman limit. Transmission window (800–1300 Å rest) shows the Lyman-series
 # opacity stack and Lyman-continuum absorption (< 912 Å) from the DLA term.
-# The median ratio is 1.000× at every redshift; the printed max deviation
-# (4.0% at z=1, rising to 610% at z=5) is a single-pixel spike at the
-# Lyman-α edge (1215.7 Å), the same edge-sampling effect as §12, not a
-# broadband disagreement.
+# The median ratio is 1.000× at every redshift. The printed max deviation
+# (0.8% at z=1, rising to 11.4% at z=5) sits at the Lyman-β edge (1025.70 Å):
+# BAGPIPES samples its tabulated transmission on a redshift grid, which
+# smooths the sharp Lyman-β step, while tengri evaluates the formula in
+# closed form. It is a single-node effect at that edge, not a broadband
+# disagreement.
 
 # %%
 from tengri import igm_transmission as _tngigm_sweep
@@ -2122,14 +2127,14 @@ V.print_window_table(
 # %% [markdown]
 # ## §13 Photometry — SDSS ugriz AB magnitudes
 #
-# BAGPIPES uses `filt_list` + `model_galaxy.photometry`; tengri uses
+# BAGPIPES uses `filt_list` + `model_galaxy.photometry`. Tengri uses
 # `tengri.Photometry`. Both use the same `∫ F_ν T dν / ∫ T dν` band-averaged
 # flux definition, so differences trace back to the SED, not the integration.
 #
 # Using the same SDSS filter set (tengri bundled), the §7 panchromatic SED
 # is convolved and placed at 10 pc.
 #
-# tengri agrees to **≤ 0.01 mag in r, i and z** and runs **0.07 mag (u) and
+# Tengri agrees to **≤ 0.01 mag in r, i and z** and runs **0.07 mag (u) and
 # 0.05 mag (g) brighter**. The excess is nebular: §13b turns the nebular block
 # off and it collapses.
 #
@@ -2197,7 +2202,7 @@ for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
 #
 # With the nebular block removed and the same convolution re-run, the
 # band-averaged residual drops from ⟨Δ⟩ = −0.023 mag to −0.009 mag, so the
-# nebular block is indeed carrying the gap — but the mean over five bands
+# nebular block is indeed carrying the gap, but the mean over five bands
 # hides the structure, so the cell prints each band.
 #
 # The **stellar + dust floor** (Δ with no nebular) is within ±0.04 mag and has
@@ -2207,14 +2212,14 @@ for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
 #
 # The **nebular-driven** part is u −0.05, g −0.05, r +0.04, z −0.01. The last
 # column shows why: for this 5 Gyr galaxy the two codes' nebular light differs
-# by 1.4–1.9× in u/g/z and by 0.4× in r — not a normalization offset but a
+# by 1.4–1.9× in u/g/z and by 0.4× in r, not a normalization offset but a
 # different *shape*. Cue is an emulator over a young-starburst ionizing
 # spectrum, and a 5 Gyr delayed-τ population sits at the soft, feeble end of
 # that domain, where its extrapolation and CLOUDY v25's tabulated grid diverge.
 #
 # It moves the photometry by only ~0.05 mag because nebular emission is a few
 # percent of an old galaxy's broadband light. On a young galaxy the same
-# disagreement would be a first-order error — and on a young galaxy (§9) the
+# disagreement would be a first-order error, and on a young galaxy (§9) the
 # two backends agree to a few percent. The regime where they differ is the one
 # where it costs least, which is fortunate rather than by construction, and
 # worth knowing before trusting Cue on a quiescent SED.
@@ -2348,7 +2353,7 @@ for _b, _f, _mf, _mn, _mfn, _mnn in zip(
 # d = 10 pc convention, so both sides keep the rest-frame SED build and
 # apply the IGM curve as an external multiplicative factor on the
 # redshifted wavelength axis. Residuals track the stellar + nebular SED
-# differences from §4 and §9; the IGM term itself is negligible here since
+# differences from §4 and §9. The IGM term itself is negligible here since
 # the SDSS bands sample rest-frame wavelengths well redward of Lyman-α at
 # this redshift. Δ mag (tengri − BAGPIPES): u −0.005, g −0.041, r +0.057,
 # i +0.017, z −0.008.
@@ -2387,7 +2392,7 @@ for _b, _f in zip(_sdss_bands, _filters):
 # Both codes complete a full SED in ~10² ms. The real tengri advantage is
 # gradients: `jax.grad` differentiates the JIT'd objective for roughly one
 # extra forward pass, where a non-JAX code needs `2 × n_params`
-# finite-difference passes — a 20× swing at ten parameters.
+# finite-difference passes, a 20× swing at ten parameters.
 #
 # The forward numbers below are not a benchmark and should not be quoted as
 # one. They move with CPU load and JAX cache warmth: three runs of this cell
@@ -2440,13 +2445,14 @@ print(f"§14 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 # %% [markdown]
 # ## tengri in BAGPIPES-mode — full-SED head-to-head
 #
-# Full forward model at once: tengri configured to emulate BAGPIPES end to end
-# (BC03+MILES SSP, τ-delayed SFH, Calzetti dust, DL07 IR, and nebular) overlaid
-# on BAGPIPES at matched parameters (§11 configuration), with the fractional
-# residual `tengri / BAGPIPES − 1` and a ±25% band below. Optical agreement is
-# reported as a normalization ratio and its robust 16–84% spread (tracking the
-# stellar continuum). Emission lines and sub-912 Å are sparse points the
-# percentile rejects as outliers; the broadband gap is quantified in §13.
+# The full forward model runs at once. Tengri, configured to emulate BAGPIPES
+# end to end (BC03+MILES SSP, τ-delayed SFH, Calzetti dust, DL07 IR, and
+# nebular), is overlaid on BAGPIPES at matched parameters (§11 configuration),
+# with the fractional residual `tengri / BAGPIPES − 1` and a ±25% band below.
+# Optical agreement is reported as a normalization ratio and its robust
+# 16–84% spread (tracking the stellar continuum). Emission lines and
+# sub-912 Å are sparse points the percentile rejects as outliers. The
+# broadband gap is quantified in §13.
 
 # %%
 import chex
@@ -2550,7 +2556,7 @@ plt.show()
 #   the bin-ordering convention is reconciled (BAGPIPES indexes
 #   oldest→youngest, tengri young→old).
 # - **§4 stellar SED.** tengri / BAGPIPES optical (3000–10000 Å):
-#   median 1.005, P5 1.003, P95 1.006 — a flat <1 % systematic at matched SFH and SSP.
+#   median 1.005, P5 1.003, P95 1.006: a flat <1 % systematic at matched SFH and SSP.
 # - **§6–§8 dust attenuation + IR.** Calzetti curves overlap; CF00 /
 #   Cardelli / Salim differ by construction. With the §7 single-screen
 #   mapping the attenuated optical matches to ~1 %, and the DL07 IR matches
@@ -2568,7 +2574,7 @@ plt.show()
 #   damping-wing shape at z = 7.
 # - **§13 SDSS photometry.** With the §7 single-screen dust, tengri
 #   matches the BAGPIPES ugriz magnitudes to ≤ 0.009 mag in r/i/z but differs
-#   −0.067 mag (u) and −0.048 mag (g) — the two bands carrying the
+#   −0.067 mag (u) and −0.048 mag (g), the two bands carrying the
 #   strongest nebular lines ([O II] 3727 in u; Hβ + [O III] 4959/5007 in g).
 #   §13b attributes this to the §9 Cue-vs-Cloudy nebular line-strength
 #   difference: the band-averaged residual drops from ⟨Δ⟩ −0.020 → −0.008 mag
@@ -2586,15 +2592,15 @@ plt.show()
 # %% [markdown]
 # ## References
 #
-# * Carnall et al. 2018, MNRAS 480, 4379 — BAGPIPES
-# * Bruzual & Charlot 2003, MNRAS 344, 1000 — BC03 SSPs
-# * Sánchez-Blázquez et al. 2006, MNRAS 371, 703 — MILES library
-# * Kroupa 2001, MNRAS 322, 231 — IMF
-# * Calzetti et al. 2000, ApJ 533, 682 — starburst attenuation
-# * Cardelli, Clayton & Mathis 1989, ApJ 345, 245 — MW extinction
-# * Charlot & Fall 2000, ApJ 539, 718 — two-component dust
-# * Salim, Boquien & Lee 2018, ApJ 859, 11 — attenuation modification
-# * Draine & Li 2007, ApJ 657, 810 — dust IR emission
-# * Inoue et al. 2014, MNRAS 442, 1805 — IGM absorption
-# * Asada et al. 2025 — CGM damping wing
-# * Li et al. 2025 — Cue nebular emulator
+# * Carnall et al. 2018, MNRAS 480, 4379: BAGPIPES
+# * Bruzual & Charlot 2003, MNRAS 344, 1000: BC03 SSPs
+# * Sánchez-Blázquez et al. 2006, MNRAS 371, 703: MILES library
+# * Kroupa 2001, MNRAS 322, 231: IMF
+# * Calzetti et al. 2000, ApJ 533, 682: starburst attenuation
+# * Cardelli, Clayton & Mathis 1989, ApJ 345, 245: MW extinction
+# * Charlot & Fall 2000, ApJ 539, 718: two-component dust
+# * Salim, Boquien & Lee 2018, ApJ 859, 11: attenuation modification
+# * Draine & Li 2007, ApJ 657, 810: dust IR emission
+# * Inoue et al. 2014, MNRAS 442, 1805: IGM absorption
+# * Asada et al. 2025: CGM damping wing
+# * Li et al. 2025: Cue nebular emulator

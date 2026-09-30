@@ -83,7 +83,14 @@ def _model(*, declare_observation: bool) -> MagicMock:
 
 
 def _fitter(model: MagicMock) -> Fitter:
-    return Fitter(model, jnp.ones(3) * 1e-18, jnp.ones(3) * 1e-19, data_type="photometry")
+    # MagicMock stub is not a real model; skip profile_mass guard checks.
+    return Fitter(
+        model,
+        jnp.ones(3) * 1e-18,
+        jnp.ones(3) * 1e-19,
+        data_type="photometry",
+        profile_mass=False,
+    )
 
 
 class TestObservationDeclaration:

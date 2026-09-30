@@ -1,0 +1,154 @@
+{
+  "gal_id": 15336,
+  "config": "III",
+  "z": 1.036,
+  "n_free": 6,
+  "n_bands": 14,
+  "filter_names": [
+    "ctio_u",
+    "hst_f435w",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f105w",
+    "hst_f125w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80"
+  ],
+  "n_warmup": 150,
+  "n_samples": 300,
+  "n_chains": 4,
+  "dense_mass_matrix": false,
+  "profile_mass": true,
+  "target_accept_rate": 0.85,
+  "max_tree_depth": null,
+  "divergences": 0,
+  "ebfmi_per_chain": [
+    1.0823471216877723,
+    1.102582871044982,
+    1.1474057357714156,
+    0.8971134608985906
+  ],
+  "ebfmi_min": 0.8971134608985906,
+  "step_size": 0.120866512615935,
+  "warmup_divergence_frac": 0.0,
+  "tree_depth_mean": 4.868333333333334,
+  "frac_max_depth": 0.0,
+  "rhat_max": 1.0042490589319912,
+  "rhat_dict": {
+    "dust_tau_bc": 1.0031419658681073,
+    "dust_tau_diff": 0.9994004563049361,
+    "met_logzsol": 1.0042490589319912,
+    "sfh_delayed_age_gyr": 1.000550448030964,
+    "sfh_delayed_log_total_mass": 0.9992656737985441,
+    "sfh_delayed_tau_gyr": 1.0024864154392872
+  },
+  "ess_min": 319.0083520635958,
+  "ess_dict": {
+    "dust_tau_bc": 356.92431879381024,
+    "dust_tau_diff": 402.4680486209268,
+    "met_logzsol": 576.0642276111436,
+    "sfh_delayed_age_gyr": 319.0083520635958,
+    "sfh_delayed_log_total_mass": 520.6175256312403,
+    "sfh_delayed_tau_gyr": 344.9661165683878
+  },
+  "wall_time_s": 2358.2756385629764,
+  "load_at_start": {
+    "load_avg_1m": 36.78076171875,
+    "n_concurrent_fits": 6,
+    "n_cpus": 24
+  },
+  "load_at_end": {
+    "load_avg_1m": 36.5576171875,
+    "n_concurrent_fits": 6,
+    "n_cpus": 24
+  },
+  "systematic_floor_frac": 0.05,
+  "systematic_floor_mean_erg": 4.860257970202021e-30,
+  "adoption_pass": true,
+  "retune_attempt": 1,
+  "best_attempt": 1,
+  "attempts": [
+    {
+      "gal_id": 15336,
+      "config": "III",
+      "z": 1.036,
+      "n_free": 6,
+      "n_bands": 14,
+      "filter_names": [
+        "ctio_u",
+        "hst_f435w",
+        "hst_f606w",
+        "hst_f775w",
+        "hst_f814w",
+        "hst_f850lp",
+        "hst_f105w",
+        "hst_f125w",
+        "hst_f160w",
+        "vista_ks",
+        "irac_36",
+        "irac_45",
+        "irac_58",
+        "irac_80"
+      ],
+      "n_warmup": 150,
+      "n_samples": 300,
+      "n_chains": 4,
+      "dense_mass_matrix": false,
+      "profile_mass": true,
+      "target_accept_rate": 0.85,
+      "max_tree_depth": null,
+      "divergences": 0,
+      "ebfmi_per_chain": [
+        1.0823471216877723,
+        1.102582871044982,
+        1.1474057357714156,
+        0.8971134608985906
+      ],
+      "ebfmi_min": 0.8971134608985906,
+      "step_size": 0.120866512615935,
+      "warmup_divergence_frac": 0.0,
+      "tree_depth_mean": 4.868333333333334,
+      "frac_max_depth": 0.0,
+      "rhat_max": 1.0042490589319912,
+      "rhat_dict": {
+        "dust_tau_bc": 1.0031419658681073,
+        "dust_tau_diff": 0.9994004563049361,
+        "met_logzsol": 1.0042490589319912,
+        "sfh_delayed_age_gyr": 1.000550448030964,
+        "sfh_delayed_log_total_mass": 0.9992656737985441,
+        "sfh_delayed_tau_gyr": 1.0024864154392872
+      },
+      "ess_min": 319.0083520635958,
+      "ess_dict": {
+        "dust_tau_bc": 356.92431879381024,
+        "dust_tau_diff": 402.4680486209268,
+        "met_logzsol": 576.0642276111436,
+        "sfh_delayed_age_gyr": 319.0083520635958,
+        "sfh_delayed_log_total_mass": 520.6175256312403,
+        "sfh_delayed_tau_gyr": 344.9661165683878
+      },
+      "wall_time_s": 2358.2756385629764,
+      "load_at_start": {
+        "load_avg_1m": 36.78076171875,
+        "n_concurrent_fits": 6,
+        "n_cpus": 24
+      },
+      "load_at_end": {
+        "load_avg_1m": 36.5576171875,
+        "n_concurrent_fits": 6,
+        "n_cpus": 24
+      },
+      "systematic_floor_frac": 0.05,
+      "systematic_floor_mean_erg": 4.860257970202021e-30,
+      "adoption_pass": true,
+      "retune_attempt": 1
+    }
+  ],
+  "retune_history": []
+}

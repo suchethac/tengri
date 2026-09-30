@@ -288,6 +288,10 @@ comp["sed_dust_ir"]     # and sed_nebular, sed_agn, sed_attenuated, sed_total, .
 
 `pred.sed.components` reuses the prediction's cached forward state (no second forward pass) and returns a plain dict of named arrays. This matters because the pull toward `predict_state` is real: the component-decomposition figures are among the best pages in the docs, and before this was written down there was no obvious compliant way to draw them. There is: the line above. Note also that `predict_state` returns a `ForwardState`, whose `derived` dict §4b.6 documents as internal — so the shortcut leads straight into an object this contract tells readers not to touch.
 
+### 4b.5b Params dicts carry free parameters only
+
+A `params` dict carries free parameters only. A key the spec declared `Fixed` is refused (#2296) at every entry point, preventing silent physics errors. Pinned values are read from `spec.get_fixed_values()` (for display or diagnostics) or `posterior.fixed_values` (after a fit). Rebuilding the model with the parameter `FREE` or with a different `Fixed` value is the remedy.
+
 ### 4b.6 Two names that are not what they look like
 
 These have each caused real, shipped bugs. Read them before touching prediction code.

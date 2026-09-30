@@ -51,9 +51,11 @@ def _model(*, approx=None, z=3.0, **extra):
 
 
 def _params(model):
-    p = {k: jnp.asarray(v) for k, v in model.spec.sample(jax.random.PRNGKey(0)).items()}
-    p.update({k: jnp.asarray(float(v)) for k, v in model.spec.get_fixed_values().items()})
-    return p
+    # Free-only (#2296): every call site below hands this straight to a
+    # public predict_* surface (predict_photometry / predict_spectrum),
+    # which merges the model's own Fixed values internally and refuses a
+    # params-dict key the spec already declared Fixed.
+    return {k: jnp.asarray(v) for k, v in model.spec.sample(jax.random.PRNGKey(0)).items()}
 
 
 def _compiled_flops(model, params):

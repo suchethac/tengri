@@ -25,6 +25,8 @@ import numpy as np
 
 from tengri.forward.population import Population
 from tengri.inference._backend_registry import DEFAULT_METHOD
+from tengri.observation.noise import DETECTED as _DETECTED
+from tengri.parameters.resolve import merge_fixed_params
 from tengri.protocols.component import ForwardState
 from tengri.protocols.derived_state import DerivedState
 
@@ -340,11 +342,6 @@ class ForwardModel:
         ``tests/contract/test_loss_ssp_threading.py``.
         """
         return self._single_inner_sed("ssp_data").ssp_data
-
-    @property
-    def hybrid(self):
-        """Hybrid kernel container delegated from the inner SED."""
-        return getattr(self._inner_sed_for_delegation(), "hybrid", None)
 
     @property
     def z_fixed(self):
@@ -897,19 +894,28 @@ class ForwardModel:
                 per_pop_states[name] = state.with_(derived=new_derived)
 
         # ── Pass 3: hand to observation.
+        # Merge Fixed values back for observation.predict() (#2296)
+        per_pop_params_full = {}
+        for pop, params in zip(self.populations, per_pop_params.values()):
+            spec = getattr(pop.sed, "spec", None)
+            if spec is not None and hasattr(spec, "get_fixed_values"):
+                per_pop_params_full[pop.name] = merge_fixed_params(spec, params)
+            else:
+                per_pop_params_full[pop.name] = dict(params)
+
         if not is_multipop:
             (only_state,) = per_pop_states.values()
-            (only_params,) = per_pop_params.values()
+            (only_params,) = per_pop_params_full.values()
             (only_pop,) = self.populations
             return _predict_observation(self.observation, only_pop.sed, only_state, only_params)
 
         if hasattr(self.observation, "predict_summed"):
-            return self.observation.predict_summed(per_pop_states, per_pop_params)
+            return self.observation.predict_summed(per_pop_states, per_pop_params_full)
 
         # Fallback: synthesize predict_summed by summing per-population
         # observation.predict outputs in linear flux, key-by-key.
         per_pop_pred = {
-            name: self.observation.predict(state, per_pop_params[name])
+            name: self.observation.predict(state, per_pop_params_full[name])
             for name, state in per_pop_states.items()
         }
         return _linear_flux_sum(per_pop_pred)
@@ -1090,6 +1096,32 @@ class ForwardModel:
                 # it out of ``ctor_kwargs`` for the surface to set (#1366).
                 data = jnp.concatenate([jnp.asarray(v.flux), jnp.asarray(v.spec_flux)])
                 noise = jnp.concatenate([jnp.asarray(v.noise), jnp.asarray(v.spec_noise)])
+                if data_mask is not None:
+                    # The mask has to follow the data it masks. ``Data.censor``
+                    # is per-photometric-band by contract, and
+                    # ``validate_against`` refuses any other length, but
+                    # ``censored_neg_log_likelihood`` applies the mask to this
+                    # concatenated vector. Extending it here was missing, so a
+                    # joint fit carrying any censored band raised
+                    # ``Incompatible shapes for broadcasting`` from inside a
+                    # ``jnp.where`` three frames below ``fit()``, and no value of
+                    # ``censor`` satisfied both ends (#2432).
+                    #
+                    # Spectral pixels are detections. A censored pixel would be a
+                    # limit on one resolution element, which no instrument
+                    # reports and ``Data`` has no vocabulary for; line limits go
+                    # through ``Data.lines``, not here.
+                    mask_arr = jnp.asarray(data_mask)
+                    data_mask = jnp.concatenate(
+                        [
+                            mask_arr,
+                            jnp.full(
+                                jnp.asarray(v.spec_flux).shape,
+                                _DETECTED,
+                                dtype=mask_arr.dtype,
+                            ),
+                        ]
+                    )
                 ctor_kwargs.setdefault("data_type", "joint")
             elif v.spec_flux is not None:
                 data, noise = v.spec_flux, v.spec_noise
@@ -1316,12 +1348,9 @@ class ForwardModel:
             elif "." not in k:
                 sliced[k] = v
 
-        full: dict[str, Any] = {}
-        spec = getattr(pop.sed, "spec", None)
-        if spec is not None and hasattr(spec, "get_fixed_values"):
-            full.update(spec.get_fixed_values())
-        full.update(sliced)
-        return full
+        # Return only free parameters; run() and predict_state() handle
+        # merging Fixed values internally (#2296)
+        return sliced
 
 
 def _predict_observation(

@@ -1,0 +1,8 @@
+2026-09-14 05:50:09,634 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.532e-30 erg/s/cm2/Hz
+2026-09-14 05:50:18,483 - __main__ - INFO - Galaxy 4171 (z=1.032): 11 detected bands
+2026-09-14 05:50:18,483 - __main__ - INFO - Config III: 11 free parameters
+2026-09-14 05:50:18,483 - __main__ - INFO - Attempt 1/2: target_accept 0.85, warmup 600, diagonal mass
+2026-09-14 05:50:37,665 - tengri.inference._registration - INFO - mcmc_nuts_fast: 1 JAX device(s) for 4 chains, so the chains run under vmap; export TENGRI_HOST_DEVICES=4 before importing tengri to pmap them.
+2026-09-14 05:50:52,930 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 10 parameters, 600 warmup, 600 samples, target_accept=0.85
+2026-09-14 05:54:45,787 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (232.9s). Step size: 0.0381. Divergent in the final warmup window: 5%
+2026-09-14 06:08:07,660 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1034.6s. Divergences: 30/2400 (1.2%). Tree depth: mean 6.7, at cap on 0% of iterations (max_num_doublings=10)

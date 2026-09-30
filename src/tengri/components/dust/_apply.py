@@ -15,6 +15,13 @@ from collections.abc import Callable, Mapping
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._params import (
+    DEFAULT_DUST_BUMP_STRENGTH,
+    DEFAULT_DUST_DELTA,
+    DEFAULT_DUST_F_OBSCURATION,
+    DEFAULT_DUST_RV,
+    DEFAULT_DUST_SLOPE,
+)
 from tengri.components.dust.laws._registry import (
     reject_unread_law_kwargs,
     resolve_dust_law,
@@ -99,12 +106,14 @@ def precompute_dust_age_mask(
 
 #: Two-component attenuation-law parameters that may be set per-component.
 #: Maps the law-function keyword to ``(flat_param_name, default)``. The
-#: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``.
+#: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``. Defaults
+#: are read off ``ATTENUATION_PARAMS`` (``components/dust/_params.py``) rather
+#: than repeated as bare literals here.
 _TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
-    ("dust_slope", "dust_slope", -0.7),
-    ("dust_bump_strength", "dust_bump_strength", 0.0),
-    ("dust_delta", "dust_delta", 0.0),
-    ("dust_Rv", "dust_Rv", 3.1),
+    ("dust_slope", "dust_slope", DEFAULT_DUST_SLOPE),
+    ("dust_bump_strength", "dust_bump_strength", DEFAULT_DUST_BUMP_STRENGTH),
+    ("dust_delta", "dust_delta", DEFAULT_DUST_DELTA),
+    ("dust_Rv", "dust_Rv", DEFAULT_DUST_RV),
 )
 
 #: User-facing per-component short name -> attenuation-law kwarg. Used by the
@@ -116,6 +125,20 @@ TWO_COMPONENT_OVERRIDE_KEYS: dict[str, str] = {
     "delta": "dust_delta",
     "Rv": "dust_Rv",
 }
+
+#: Every per-screen spelling (``dust_slope_bc``, ``dust_Rv_neb``, ...) of a
+#: tabled parameter. The "law-specific parameter" loops in
+#: :func:`resolve_bc_diff_law_params` and :func:`merge_neb_screen_live_overrides`
+#: below must exclude these, not just the bare stems in ``tabled`` -- a tabled
+#: parameter's per-screen name is not itself law-specific, and forwarding it
+#: verbatim re-emits a key no law declares (``law_kwarg_names`` never lists a
+#: ``_bc``/``_diff``/``_neb`` suffix) alongside the correctly-resolved bare
+#: stem the first loop already produced.
+_TABLED_SCREEN_SPELLINGS: frozenset[str] = frozenset(
+    f"{flat}_{screen}"
+    for _, flat, _ in _TWO_COMPONENT_LAW_PARAMS
+    for screen in ("bc", "diff", "neb")
+)
 
 
 def resolve_bc_diff_law_params(
@@ -146,14 +169,18 @@ def resolve_bc_diff_law_params(
         Flat ``dust_*`` parameter mapping (JAX scalars or floats).
     bc_overrides, diff_overrides : Mapping, optional
         Per-component law-kwarg overrides (e.g. ``{"dust_slope": -1.0}`` for the
-        FSPS birth-cloud convention). Always honored: an override *is* a
-        request, whatever the provenance of the shared parameter.
+        FSPS birth-cloud convention). Honored whenever the corresponding
+        per-screen *declared* name (``dust_slope_bc``/``_diff``) is not itself
+        live in ``params`` -- see the priority order below.
     live_shape_params : frozenset of str, optional
         Flat names a caller actually asked for, resolved from spec provenance
         by :meth:`SEDModel._requested_law_shape_params` (#1808). Names outside
         this set are left out of the returned dicts. ``None`` keeps the
         historical behavior of offering all four, for the direct callers that
-        have no spec to ask.
+        have no spec to ask. Also gates the per-screen live lookup (#2428):
+        ``f"{flat_name}_{screen}"`` (``dust_slope_bc``, ``dust_Rv_diff``, ...)
+        is read straight out of ``params`` -- not ``bc_overrides``/
+        ``diff_overrides`` -- when both present in ``params`` AND listed here.
     bc_law, diff_law : str, optional
         Registry keys of the two screens' laws. When given, each dict is
         narrowed to the keywords *that* screen's law declares, so a parameter
@@ -199,19 +226,58 @@ def resolve_bc_diff_law_params(
     default to protect, and the grammar never accepts it as a dust key. The
     narrowing below is what keeps it away from the laws that do not read it, and
     ``narayanan_z`` is the only one that does.
+
+    Per-screen declared parameters (#2428) are the HIGHEST-priority source,
+    ahead of both the static overrides and the shared spelling. For each
+    tabled parameter and screen, the resolution order is: (1) the live
+    per-screen name ``params[f"{flat_name}_{screen}"]``, read only when it is
+    both present in ``params`` and listed in ``live_shape_params`` (a
+    declared-but-untouched per-screen name still carries its Fixed registry
+    default in ``params`` on some call paths, and that default must not
+    shadow the static override or the shared value nobody asked to bypass);
+    (2) the static ``bc_overrides``/``diff_overrides`` entry; (3) the shared
+    ``dust_<x>`` value, if requested. An override *is* a request whatever the
+    shared parameter's own provenance, but a *live* per-screen name is a
+    stronger request still: it is explicit-only by design, so its mere
+    presence in ``live_shape_params`` means a caller named it by hand.
     """
     bc_overrides = bc_overrides or {}
     diff_overrides = diff_overrides or {}
     bc: dict = {}
     diff: dict = {}
+    # Process tabled parameters first (slope, bump_strength, delta, Rv)
+    tabled = {flat for _, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
     for law_kw, flat_name, default in _TWO_COMPONENT_LAW_PARAMS:
         requested = live_shape_params is None or flat_name in live_shape_params
         shared = params.get(flat_name, default) if requested else None
-        for target, overrides in ((bc, bc_overrides), (diff, diff_overrides)):
-            if law_kw in overrides:
+        for target, overrides, screen in (
+            (bc, bc_overrides, "bc"),
+            (diff, diff_overrides, "diff"),
+        ):
+            live_key = f"{flat_name}_{screen}"
+            if (
+                live_shape_params is not None
+                and live_key in params
+                and live_key in live_shape_params
+            ):
+                target[law_kw] = params[live_key]
+            elif law_kw in overrides:
                 target[law_kw] = overrides[law_kw]
             elif requested:
                 target[law_kw] = shared
+    # Process law-specific parameters (dust_c1-c4, dust_bump_x0/gamma, dust_tea_scatter)
+    # that live_shape_params may include but _TWO_COMPONENT_LAW_PARAMS does not (#2542).
+    # These parameters do NOT support per-screen spelling (only shared); a tabled
+    # parameter's own per-screen spelling (dust_slope_bc, ...) is excluded here --
+    # the loop above already resolved it onto the correct bare-stem law kwarg.
+    if live_shape_params is not None:
+        for flat_name in live_shape_params - tabled - _TABLED_SCREEN_SPELLINGS:
+            if flat_name in params:
+                # These are law-specific: map flat_name -> law_kw (usually identical)
+                law_kw = flat_name
+                # Only shared spelling supported; no per-screen variants like dust_c1_bc
+                for target in (bc, diff):
+                    target[law_kw] = params[flat_name]
     if redshift is not None:
         bc["redshift"] = redshift
         diff["redshift"] = redshift
@@ -220,6 +286,80 @@ def resolve_bc_diff_law_params(
     if diff_law is not None:
         diff = select_law_kwargs(diff_law, diff)
     return bc, diff
+
+
+def merge_neb_screen_live_overrides(
+    params: Mapping,
+    neb_overrides: Mapping,
+    live_shape_params: frozenset[str] | None,
+) -> dict:
+    """Layer live ``*_neb`` per-screen params on top of static neb overrides.
+
+    The nebular birth-cloud screen (:class:`DustSEDComponent`'s two merge
+    call sites -- a third consumer reuses the already-merged dict rather
+    than calling this again) merges its static ``neb_law_overrides`` with
+    the *live* per-screen names (``dust_slope_neb``, ``dust_Rv_neb``, ...)
+    the same way :func:`resolve_bc_diff_law_params` does for ``bc``/``diff``
+    (#2428) -- a ``params``-dict lookup gated on ``live_shape_params``,
+    taking priority over the static override.
+
+    Parameters
+    ----------
+    params : Mapping
+        Flat ``dust_*`` parameter mapping (JAX scalars or floats).
+    neb_overrides : Mapping
+        The static per-nebular-screen overrides
+        (``DustSEDComponentConfig.neb_law_overrides``), keyed by law-function
+        kwarg (e.g. ``dust_Rv``).
+    live_shape_params : frozenset of str, optional
+        Flat names a caller actually asked for, from
+        :meth:`SEDModel._requested_law_shape_params`. ``None`` means no spec
+        to ask (direct callers), in which case no live override applies and
+        ``neb_overrides`` is returned as-is.
+
+    Returns
+    -------
+    dict
+        ``neb_overrides`` merged with any live ``*_neb`` overrides, keyed by
+        the correct law-function kwarg (``dust_slope``, not ``slope`` --
+        ``law_kwarg_names`` never declares the bare stem).
+
+    Notes
+    -----
+    **JIT-compatible**: yes, only dict construction and ``Mapping``
+    membership checks on a fixed set of string keys; the values pass through
+    untouched (traced arrays stay traced).
+
+    Both nebular call sites in ``two_component.py`` used to derive the
+    law-function keyword as ``stem.replace("dust_", "")`` (e.g. ``"Rv"`` for
+    ``dust_Rv``), which no law's signature declares
+    (``law_kwarg_names('cardelli') == ('dust_Rv',)``), so
+    ``select_law_kwargs`` silently discarded every live ``*_neb`` value --
+    ``Rv_neb`` swept 2 -> 6 left the nebular lines bit-identical, and a
+    ``Fixed`` ``Rv_neb`` silently equaled the law's own default (#2428). This
+    helper is the single, tested place that keyword is derived, off the same
+    :data:`_TWO_COMPONENT_LAW_PARAMS` table :func:`resolve_bc_diff_law_params`
+    already uses for ``bc``/``diff``, so the two screens cannot drift again.
+    """
+    result = dict(neb_overrides)
+    if live_shape_params is None:
+        return result
+    tabled = {flat for _, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
+    # Process tabled parameters first (slope, bump_strength, delta, Rv)
+    for law_kw, flat_name, _default in _TWO_COMPONENT_LAW_PARAMS:
+        live_key = f"{flat_name}_neb"
+        if live_key in params and live_key in live_shape_params:
+            result[law_kw] = params[live_key]
+    # Process law-specific parameters (dust_c1-c4, dust_bump_x0/gamma, dust_tea_scatter) (#2542).
+    # These parameters do NOT support per-screen spelling (only shared); a tabled
+    # parameter's own per-screen spelling (dust_slope_neb, ...) is excluded here --
+    # the loop above already resolved it onto the correct bare-stem law kwarg.
+    for flat_name in live_shape_params - tabled - _TABLED_SCREEN_SPELLINGS:
+        if flat_name in params:
+            law_kw = flat_name
+            # Only shared spelling supported; no per-screen variants like dust_c1_neb
+            result[law_kw] = params[flat_name]
+    return result
 
 
 def apply_lyman_cutoff(
@@ -267,7 +407,7 @@ def two_component_dust(
     tau_v2: float,
     law_bc: str = "power_law",
     law_diff: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     t_birth: float = 1e7,
     transition_width: float = 0.3,
     bc_params: dict | None = None,
@@ -417,7 +557,7 @@ def two_component_dust_separable(
     tau_v2: float,
     law_bc_fn: Callable,
     law_diff_fn: Callable,
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Optimized two-component dust attenuation with factorized age-independent term.
@@ -512,7 +652,7 @@ def two_component_dust_fast(
     tau_v2: float,
     law_bc: str = "power_law",
     law_diff: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Fast dust attenuation using precomputed age weights.
@@ -578,7 +718,7 @@ def single_component_dust(
     wavelength: jnp.ndarray,
     tau_v: float,
     law: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Single-component (uniform foreground screen) dust attenuation.
@@ -649,7 +789,7 @@ def single_component_dust_fast(
     n_ages: int,
     tau_v: float,
     law: str = "power_law",
-    f_obscuration: float = 0.0,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
     r"""Single-component dust attenuation broadcast to (n_ages, n_wave).

@@ -125,18 +125,21 @@ class TestGradientCleanliness:
     """Verify gradients are finite and agree with finite differences."""
 
     def _build_loss(self, model, data, noise, spec):
-        """Build loss function in unbounded space (like Fitter does)."""
+        """Build loss function in unbounded space (like Fitter does).
+
+        Free-only (#2296): predict_photometry self-merges the spec's Fixed
+        values internally, so this must pass only the free (bounded) params
+        -- re-adding the Fixed ones here would be a refused presence
+        override, regardless of the value matching the pin.
+        """
         free_names = spec.free_params
         bounds = {n: spec.get_distribution(n).bounds for n in free_names}
-        fixed_values = spec.get_fixed_values()
 
         def loss_fn(params_unbounded):
             p = {}
             for name in free_names:
                 lo, hi = bounds[name]
                 p[name] = to_bounded(params_unbounded[name], lo, hi)
-            for name, val in fixed_values.items():
-                p[name] = val
             predicted = model.predict_photometry(p)
             return jnp.sum(((data - predicted) / noise) ** 2)
 
@@ -217,15 +220,14 @@ class TestGradientCleanliness:
 
         free_names = spec.free_params
         bounds = {n: spec.get_distribution(n).bounds for n in free_names}
-        fixed_values = spec.get_fixed_values()
 
+        # Free-only (#2296): predict_photometry self-merges the spec's Fixed
+        # values internally, so p must carry only the free (bounded) params.
         def loss_fn(params_unbounded):
             p = {}
             for name in free_names:
                 lo, hi = bounds[name]
                 p[name] = to_bounded(params_unbounded[name], lo, hi)
-            for name, val in fixed_values.items():
-                p[name] = val
             if "psd_xi" in params_unbounded:
                 p["psd_xi"] = params_unbounded["psd_xi"]
                 # ``StellarSEDComponent`` reads ``sfh_field_xi``, not ``psd_xi``;

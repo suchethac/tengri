@@ -182,3 +182,66 @@ class TestFlatDustShapeValidation:
         )
         # Should build without raising, even though calzetti doesn't read dust_Rv
         assert spec.dust_law_bc == "calzetti"
+
+
+class TestFlatPerScreenDeclaredParamValidation:
+    """Flat ``Parameters(dust_slope_bc=...)`` gets the grammar's own per-screen
+    law-read check, with the grammar's own message (#2428).
+
+    Before this fix the flat surface accepted a per-screen declared parameter
+    (``dust_slope_bc``, ...) whatever the selected screen's law was, silently
+    ignoring it exactly the class of bug ``_reject_per_screen_keys_no_law_reads``
+    exists to catch on the grammar surface -- the flat surface simply had no
+    equivalent check for the new declared-parameter spelling (only for the
+    older ``dust_law_overrides`` dict).
+    """
+
+    def test_law_mismatch_is_refused_with_grammar_message(self):
+        """calzetti reads no per-screen shape at all; dust_slope_bc must raise
+        the same wording the grammar gives for `slope_bc` under calzetti."""
+        with pytest.raises(
+            ParameterError,
+            match=r"'slope_bc' is not read by the 'dust_attenuation' birth-cloud law 'calzetti'",
+        ):
+            Parameters(
+                dust_model="two_component",
+                dust_law_bc="calzetti",
+                dust_law_diff="calzetti",
+                dust_tau_bc=Fixed(0.5),
+                dust_tau_diff=Fixed(0.2),
+                dust_slope_bc=Fixed(-0.7),
+                redshift=Fixed(0.5),
+            )
+
+    def test_single_component_refuses_per_screen_name(self):
+        """dust_model='single_component' + a per-screen prior is refused: the
+        name is not even declared there (ATTENUATION_TWO_COMPONENT_ONLY).
+
+        This pins ``ATTENUATION_TWO_COMPONENT_ONLY`` specifically, and cannot
+        fail on the pre-#2428 tree: there, ``dust_slope_bc`` was not a
+        declared parameter under any ``dust_model``, so single_component
+        refused it for an unrelated reason (the name did not exist at all,
+        not that it exists but is scoped away from this variant).
+        """
+        with pytest.raises(ValueError, match="dust_slope_bc"):
+            Parameters(
+                dust_model="single_component",
+                dust_law_bc="power_law",
+                dust_tau_v=Fixed(0.5),
+                dust_slope_bc=Fixed(-0.7),
+                redshift=Fixed(0.5),
+            )
+
+    def test_law_match_is_accepted(self):
+        """power_law DOES read dust_slope: dust_slope_bc must build cleanly."""
+        spec = Parameters(
+            dust_model="two_component",
+            dust_law_bc="power_law",
+            dust_law_diff="power_law",
+            dust_tau_bc=Fixed(0.5),
+            dust_tau_diff=Fixed(0.2),
+            dust_slope_bc=Fixed(-1.0),
+            dust_slope_diff=Fixed(-0.7),
+            redshift=Fixed(0.5),
+        )
+        assert float(spec.get_fixed_values()["dust_slope_bc"]) == pytest.approx(-1.0)

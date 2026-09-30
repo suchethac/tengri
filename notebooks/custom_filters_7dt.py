@@ -19,13 +19,13 @@
 # > ⚠️ **Experimental.** A research demonstration using experimental APIs that may change between releases.
 #
 # 7DT observes through 20 medium bands on a 25 nm grid, `m400`–`m875`, plus
-# `g`, `r`, `i`. The curves are total system response, so detector QE and optics
+# `g`, `r`, `i`. The curves are total system response, so detector quantum efficiency and optics
 # are already in them. Photometry arrives as counts in ADU with a per-band AB
 # zeropoint.
 #
-# Registration, prediction, and a fit. The 23 bands ship as `7dt_*`; the first
+# This page covers registration, prediction, and fitting. The 23 bands ship as `7dt_*`; the first
 # half registers them from files anyway, which is the path for any instrument
-# tengri does not carry.
+# that tengri does not carry.
 
 # %%
 from _setup import effective_wavelengths_um, quiet
@@ -99,8 +99,8 @@ print(delivered.read_text()[:64].replace("\n", " | "))
 # %% [markdown]
 # ## Registering
 #
-# Three routes, all resolving through `load_filter`. A registered name works
-# anywhere a built-in one does, and shadows a built-in of the same name.
+# Three routes all resolve through `load_filter`, and a registered name works
+# anywhere a built-in one does, shadowing a built-in of the same name.
 
 # %%
 # From arrays.
@@ -114,10 +114,9 @@ print(f"{fc.wave.min():.0f}-{fc.wave.max():.0f} AA, peak T = {fc.trans.max():.3f
 print(f"file route identical: {np.allclose(load_filter('demo_file').wave, fc.wave)}")
 
 # %% [markdown]
-# `$TENGRI_FILTER_DIR` is a `:`-separated directory list searched by file stem,
-# with no code call. It resolves on any machine holding the directory, where the
-# in-memory routes last one process. It carries no unit metadata, so files there
-# are read as Angstrom.
+# `$TENGRI_FILTER_DIR` is a `:`-separated directory list searched by file stem with no code
+# call, resolving on any machine holding the directory. In-memory routes last one process.
+# Files there carry no unit metadata and are read as Angstrom.
 
 # %%
 filter_dir = WORK / "curves"
@@ -133,10 +132,10 @@ print(f"by stem: {load_filter('m400_dir').wave.max():.0f} AA")
 # Tengri is Angstrom throughout. `wave_unit` takes `"AA"`, `"nm"`, `"um"` and
 # converts on registration.
 #
-# Omitted, a range check warns when a curve lies entirely between 100 Å and
-# 1340 Å, which the opacity of the ISM leaves empty of bandpasses. It does not
-# see microns: an optical curve in microns lands at 0.5–0.7 Å, where real X-ray
-# bands are, and it stays quiet past 1340 nm.
+# When `wave_unit` is omitted, a range check warns when a curve lies entirely between 100 Å and
+# 1340 Å (which the interstellar medium opacity leaves empty of bandpasses). The check does not
+# interpret microns: an optical curve in microns lands at 0.5–0.7 Å, where real X-ray
+# bands are, and it stays silent past 1340 nm.
 
 # %%
 with warnings.catch_warnings(record=True) as caught:
@@ -176,8 +175,8 @@ fig.tight_layout()
 
 # %% [markdown]
 # Peak transmission runs 0.34 at `m400` to 0.66 near 500 nm to 0.07 at `m875`.
-# That envelope is the QE. It cancels in AB photometry, where only the shape of
-# $T$ enters, and would matter for absolute count rates.
+# This envelope is the quantum efficiency, which cancels in AB photometry (where only the shape of
+# $T$ enters). It would matter for absolute count rates.
 
 # %% [markdown]
 # ## Prediction
@@ -232,8 +231,8 @@ fig.tight_layout()
 # $$m_{\rm AB} = \mathrm{ZP}_b - 2.5\log_{10} f_{\rm ADU}, \qquad
 #   \sigma_m = 1.0857\,\sigma_f / f_{\rm ADU}.$$
 #
-# There is no ADU `flux_unit`; a zeropoint is calibration, not a unit. The
-# counts below come from the model above, so the fit has a truth to miss.
+# There is no ADU `flux_unit` because a zeropoint is calibration, not a unit. The
+# counts below come from the model above, so the fit can be compared to the truth.
 
 # %%
 ZP = dict.fromkeys(FILTERS, 23.89)  # per band in practice, near-identical here
@@ -271,11 +270,11 @@ arrays = ingest_catalog(
 print(f"round trip max |dF/F|: {np.abs(arrays.flux[0] / fnu - 1.0).max():.2e}")
 
 # %% [markdown]
-# Zeropoint uncertainty is often already inside a delivered error column; adding
-# `NoiseModel(calibration_floor=...)` on top counts it twice. It is also shared
-# across every source in a band rather than drawn per source, which no per-fit
-# floor represents, and which matters when sources are fitted jointly or read as
-# a trend.
+# Zeropoint uncertainty is often already inside a delivered error column, so adding
+# `NoiseModel(calibration_floor=...)` on top counts it twice. Zeropoint uncertainty
+# is also shared across every source in a band rather than drawn per source, which
+# no per-fit floor represents. This matters when sources are fitted jointly or read
+# as a trend.
 
 # %%
 t0 = perf_counter()

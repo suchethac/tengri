@@ -141,9 +141,12 @@ def metallicity_bins_on_ssp_grid(
 ) -> jnp.ndarray:
     """Piecewise-constant metallicity history from time bins.
 
-    Assigns a constant metallicity to each age bin. Designed to pair with
-    the continuity SFH model (shared bin edges). SSP ages are mapped to
-    bins using lookback-time indexing.
+    Assigns a constant metallicity to each age bin based on lookback-time
+    bin edges. SSP ages are mapped to bins using lookback-time indexing.
+    The bin edges are a fixed z=0 lookback ladder that must be checked
+    against the cosmic age at the model's redshift; bins with edges older
+    than the universe at that redshift are unreachable and produce identically
+    inert parameters with zero gradients (see issue #2204).
 
     Parameters
     ----------

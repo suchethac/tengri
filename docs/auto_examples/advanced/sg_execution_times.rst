@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:06.290** total execution time for 6 files **from auto_examples/advanced**:
+**00:06.561** total execution time for 6 files **from auto_examples/advanced**:
 
 .. container::
 
@@ -32,13 +32,10 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``plot_fisher_degeneracy.py``)
-     - 00:05.573
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_gradient_finite_difference.py` (``plot_diag_gradient_finite_difference.py``)
+     - 00:06.561
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``plot_custom_attenuation_component.py``)
-     - 00:00.717
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_gradient_finite_difference.py` (``plot_diag_gradient_finite_difference.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_mass_conservation_sfh.py` (``plot_diag_mass_conservation_sfh.py``)
@@ -48,5 +45,8 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_waveprecomp_accuracy.py` (``plot_diag_waveprecomp_accuracy.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``plot_fisher_degeneracy.py``)
      - 00:00.000
      - 0.0

@@ -34,7 +34,7 @@ Available Attenuation Curves
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
 - **tea**: Haskell et al. (2024) TEA 3-param empirical (NIHAO-SKIRT bump-slope correlation)
 - **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (MUFASA RT)
-- **conroy2010**: Conroy+2010 mixed MW + power-law (FSPS dust_type=1)
+- **conroy2010**: Conroy+2010 CCM89 with scalable 2175 Å bump (FSPS dust_type=1)
 - **vw07_bc**: Wild+2007 birth cloud power-law (n=-1.3)
 - **vw07_diff**: Wild+2007 diffuse ISM power-law (n=-0.7)
 
@@ -69,11 +69,26 @@ References
 
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import renamed_kwarg as renamed_kwarg
+from tengri.components.dust._params import (
+    CONROY2010_BUMP_STRENGTH_DEFAULT,
+    DEFAULT_DUST_BUMP_GAMMA,
+    DEFAULT_DUST_BUMP_STRENGTH,
+    DEFAULT_DUST_BUMP_X0,
+    DEFAULT_DUST_C1,
+    DEFAULT_DUST_C2,
+    DEFAULT_DUST_C3,
+    DEFAULT_DUST_C4,
+    DEFAULT_DUST_DELTA,
+    DEFAULT_DUST_RV,
+    DEFAULT_DUST_SLOPE,
+    DEFAULT_DUST_TEA_SCATTER,
+    KRIEK_CONROY_BUMP_STRENGTH_DEFAULT,
+    TEA_DELTA_DEFAULT,
+)
 from tengri.components.dust.laws._registry import (
     _HEADLINE_LAWS as _HEADLINE_LAWS,
     DUST_LAWS as DUST_LAWS,
@@ -102,7 +117,7 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 @renamed_kwarg("n_slope", "dust_slope")
 def power_law(
     wavelength: jnp.ndarray,
-    dust_slope: float = -0.7,
+    dust_slope: float = DEFAULT_DUST_SLOPE,
 ) -> jnp.ndarray:
     r"""Power-law dust attenuation curve following Charlot & Fall (2000).
 
@@ -353,15 +368,22 @@ def reddy15(
 
         k(\lambda) = \begin{cases}
         -5.726 + 4.004 x - 0.525 x^2 + 0.029 x^3 + R_V & 0.15 \leq \lambda < 0.60 \, \mu{\rm m} \\
-        -2.672 - 0.010 x + 1.532 x^2 - 0.412 x^3 + R_V & 0.60 \leq \lambda \leq 2.85 \, \mu{\rm m}
+        -2.672 - 0.010 x + 1.532 x^2 - 0.412 x^3 - 0.0362 + R_V & 0.60 \leq \lambda \leq 2.85 \, \mu{\rm m}
         \end{cases}
 
     then normalized: :math:`k(\lambda) = k(\lambda) / R_V` with :math:`R_V = 2.505`.
     The normalization ensures :math:`k(5500 \, \text{\AA}) = 1`.
 
+    The red-branch polynomial carries an additive −0.036221981 that is not in Reddy
+    et al. (2015) Eq. 8; it makes the two published branches meet at 0.6 μm (the
+    unmodified branches differ by 0.0362 there). FSPS dust_type=6 applies the same
+    constant. For λ < 1500 Å, the blue branch value is held constant rather than
+    extrapolated.
+
     **Approximation**: The polynomial form is valid over 0.15–2.85 μm. Extrapolation
     beyond this range follows the functional form but is not empirically constrained
-    (Reddy et al. 2015, Section 3.6.1).
+    (Reddy et al. 2015, Section 3.6.1). Below 1500 Å the curve is held at its
+    1500 Å value rather than extrapolated.
 
     References
     ----------
@@ -378,10 +400,16 @@ def reddy15(
     k_low = -5.726 + 4.004 * x - 0.525 * x**2 + 0.029 * x**3
 
     # High-wavelength segment (0.60 <= lambda <= 2.85 um)
-    k_high = -2.672 - 0.010 * x + 1.532 * x**2 - 0.412 * x**3
+    # Include continuity offset -0.036221981 on the red branch
+    k_high = -2.672 - 0.010 * x + 1.532 * x**2 - 0.412 * x**3 - 0.036221981
 
     rv = 2.505
-    k_prime = jnp.where(wave_um < 0.60, k_low, k_high) + rv
+    # Hold blue branch constant at x = 1/0.15 (1500 Å) for wave_um < 0.15
+    x_anchor = 1.0 / 0.15
+    k_low_anchor = -5.726 + 4.004 * x_anchor - 0.525 * x_anchor**2 + 0.029 * x_anchor**3
+    k_low_held = jnp.where(wave_um < 0.15, k_low_anchor, k_low)
+
+    k_prime = jnp.where(wave_um < 0.60, k_low_held, k_high) + rv
     k = k_prime / rv
     # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.997113)
     # Compute k(5500): at 5500 Å (0.55 μm), use low-wavelength segment (< 0.60)
@@ -398,8 +426,8 @@ def reddy15(
 )
 def kriek_conroy(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 1.0,
-    dust_delta: float = 0.0,
+    dust_bump_strength: float = KRIEK_CONROY_BUMP_STRENGTH_DEFAULT,
+    dust_delta: float = DEFAULT_DUST_DELTA,
 ) -> jnp.ndarray:
     r"""Kriek & Conroy (2013) modified Calzetti + UV bump + slope delta.
 
@@ -753,6 +781,40 @@ def prevot_smc(
     return k_norm * ramp_factor
 
 
+def _ccm89_far_uv_ab(x: jnp.ndarray, x_cap: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""CCM89 far-UV cubic polynomial a(x), b(x), held constant beyond ``x_cap``.
+
+    Shared by :func:`cardelli` and :func:`conroy2010`, which declare different
+    domains for the SAME Cardelli, Clayton & Mathis (1989) far-UV cubic: the
+    two must never carry independent copies of this polynomial, or they could
+    silently drift apart. Evaluates the polynomial for
+    :math:`8.0 \le x \le {\tt x\_cap}` (clipping the input, not the output,
+    so the value is held constant for :math:`x > {\tt x\_cap}`).
+
+    Parameters
+    ----------
+    x : array_like, shape (n_wave,)
+        :math:`1/\lambda` [μm⁻¹].
+    x_cap : float
+        Upper bound of the polynomial's domain; the curve is held constant
+        beyond it. ``cardelli`` uses 10.0 (CCM89's own fitted range);
+        ``conroy2010`` uses 12.0 (FSPS's ``attn_curve.f90`` extrapolation).
+
+    Returns
+    -------
+    tuple of ndarray, shape (n_wave,)
+        ``(a_fuv, b_fuv)``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+    """
+    y_fuv = jnp.clip(x, 8.0, x_cap) - 8.0
+    a_fuv = -1.073 - 0.628 * y_fuv + 0.137 * y_fuv**2 - 0.070 * y_fuv**3
+    b_fuv = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
+    return a_fuv, b_fuv
+
+
 @register_dust_law(
     "cardelli",
     citation="Cardelli et al. 1989 (ApJ 345, 245) MW extinction",
@@ -760,7 +822,7 @@ def prevot_smc(
 )
 def cardelli(
     wavelength: jnp.ndarray,
-    dust_Rv: float = 3.1,
+    dust_Rv: float = DEFAULT_DUST_RV,
 ) -> jnp.ndarray:
     r"""Cardelli, Clayton & Mathis (1989) MW extinction with free R_V.
 
@@ -786,6 +848,11 @@ def cardelli(
     Uses piecewise polynomials in infrared, optical, UV, and far-UV regimes.
     Parameterized by :math:`x = 1/\lambda` [μm⁻¹] with :math:`a(x)` and :math:`b(x)`
     coefficients fitted to extinction curves.
+
+    Held constant for :math:`x > 10\,\mu\mathrm{m}^{-1}` (:math:`\lambda <
+    1000` Å): this stops at CCM89's own fitted far-UV domain, unlike
+    :func:`conroy2010`, which extrapolates the same polynomial to
+    :math:`x=12` to match FSPS's ``attn_curve.f90`` exactly.
 
     References
     ----------
@@ -828,10 +895,11 @@ def cardelli(
     a_uv = 1.752 - 0.316 * x - 0.104 / ((x - 4.67) ** 2 + 0.341) + f_a
     b_uv = -3.090 + 1.825 * x + 1.206 / ((x - 4.62) ** 2 + 0.263) + f_b
 
-    # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4)
-    y_fuv = jnp.clip(x, 8.0, 10.0) - 8.0
-    a_fuv = -1.073 - 0.628 * y_fuv + 0.137 * y_fuv**2 - 0.070 * y_fuv**3
-    b_fuv = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
+    # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4), held constant beyond x=10 --
+    # tengri stops at CCM89's own fitted domain, matching the community-standard
+    # `dust_extinction` package (CCM89's declared x_range is [0.3, 10.0]) and
+    # CCM89 (1989) itself, which fits the far-UV branch for 8 <= x <= 10 only.
+    a_fuv, b_fuv = _ccm89_far_uv_ab(x, 10.0)
 
     a = jnp.where(
         x < 1.1,
@@ -861,10 +929,10 @@ def cardelli(
 )
 def li08(
     wavelength: jnp.ndarray,
-    dust_c1: float = 6.0,
-    dust_c2: float = 4.0,
-    dust_c3: float = 2.0,
-    dust_c4: float = 0.04,
+    dust_c1: float = DEFAULT_DUST_C1,
+    dust_c2: float = DEFAULT_DUST_C2,
+    dust_c3: float = DEFAULT_DUST_C3,
+    dust_c4: float = DEFAULT_DUST_C4,
 ) -> jnp.ndarray:
     """Li et al. (2008) analytical dust attenuation/extinction curve.
 
@@ -887,13 +955,17 @@ def li08(
     wavelength : array, shape (n_wave,)
         Wavelength grid in Angstrom.
     dust_c1 : float
-        Continuum amplitude. Controls overall UV-optical shape.
+        Continuum amplitude. Controls overall UV-optical shape. Default 14.4
+        is the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
     dust_c2 : float
-        Continuum curvature. Higher values produce steeper UV rises.
+        Continuum curvature. Higher values produce steeper UV rises. Default
+        6.52 is the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
     dust_c3 : float
-        Continuum offset. Shifts the overall curve level.
+        Continuum offset. Shifts the overall curve level. Default 2.04 is
+        the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
     dust_c4 : float
-        UV bump amplitude at 2175 Angstrom. Set to 0 for bump-free.
+        UV bump amplitude at 2175 Angstrom. Set to 0 for bump-free. Default
+        0.0519 is the Li et al. (2008) Table 1 Milky Way (R_V=3.1) value.
 
     Returns
     -------
@@ -902,17 +974,16 @@ def li08(
 
     Notes
     -----
-    Approximate presets for common curves (Markov et al. 2023, 2025):
+    Templates for common curves (Li et al. 2008, Table 1):
 
-    - **MW-like**: c1~6.0, c2~4.0, c3~2.0, c4~0.04
-    - **SMC-like**: c1~5.0, c2~5.5, c3~1.5, c4~0.0
-    - **Calzetti-like**: c1~3.5, c2~2.5, c3~3.0, c4~0.0
+    - **Calzetti**: c1=44.9, c2=7.56, c3=61.2, c4=0.0
+    - **SMC**: c1=38.7, c2=3.83, c3=6.34, c4=0.0
+    - **Milky Way (R_V=3.1)**: c1=14.4, c2=6.52, c3=2.04, c4=0.0519 (the default)
+    - **LMC**: c1=4.47, c2=2.39, c3=-0.988, c4=0.0221
 
     References
     ----------
-    Li, A., Liang, S. L., Kann, D. A., et al. 2008, ApJ, 685, 1046
-    Markov, V., Gallerani, S., Pallottini, A., et al. 2023, A&A, 679, A12
-    Markov, V., Gallerani, S., Pallottini, A., et al. 2025, A&A (arXiv:2504.12378)
+    Li, A., Liang, S. L., Kann, D. A., et al. 2008, ApJ, 685, 1046, Table 1
     """
     lam = wavelength / 1e4  # Angstrom -> micron
 
@@ -949,8 +1020,8 @@ def li08(
 )
 def salim(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 0.0,
-    dust_delta: float = 0.0,
+    dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
+    dust_delta: float = DEFAULT_DUST_DELTA,
 ) -> jnp.ndarray:
     """Salim et al. (2018) modified Calzetti law (DSPS/Zacharegkas+2025 default).
 
@@ -1073,10 +1144,10 @@ def leitherer02(
 )
 def noll09(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 0.0,
-    dust_delta: float = 0.0,
-    dust_bump_x0: float = 0.2175,
-    dust_bump_gamma: float = 0.035,
+    dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
+    dust_delta: float = DEFAULT_DUST_DELTA,
+    dust_bump_x0: float = DEFAULT_DUST_BUMP_X0,
+    dust_bump_gamma: float = DEFAULT_DUST_BUMP_GAMMA,
 ) -> jnp.ndarray:
     r"""Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
 
@@ -1156,6 +1227,56 @@ def noll09(
     return jnp.clip(k / k_5500, 0.0)
 
 
+def _sbl18_rv_mod(dust_delta: float, rv_cal: float = 4.05) -> float:
+    r"""Delta-dependent R_V modifier for Salim, Boquien & Lee (2018) Eq. 4.
+
+    This computes R_V,mod(δ), the effective total-to-selective extinction ratio for
+    the modified Calzetti curve when a power-law slope modification δ is applied.
+    The formula is specific to SBL18 and must not be reused for kriek_conroy or
+    noll09, which fix R_V = R_V,Cal by their own papers and have no R_V,mod concept.
+
+    Parameters
+    ----------
+    dust_delta : float
+        Power-law slope modification exponent δ. [dimensionless]
+    rv_cal : float, optional
+        Calzetti R_V reference value. Default: 4.05 (Calzetti 2000).
+        [dimensionless]
+
+    Returns
+    -------
+    float
+        R_V,mod(δ), the delta-dependent total-to-selective extinction ratio.
+        [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+
+    The formula implements Eq. 4 of Salim, Boquien & Lee (2018):
+
+    .. math::
+
+        R_{V,\rm mod} = \frac{R_{V,\rm Cal}}{(R_{V,\rm Cal} + 1)
+        \left(\frac{4400}{5500}\right)^\delta - R_{V,\rm Cal}}
+
+    At δ = 0, this reduces to R_V,mod = R_V,Cal (the unmodified case).
+    For δ ≠ 0, R_V,mod differs from R_V,Cal and must be used to normalize the UV
+    bump term separately from the tilted base curve.
+
+    References
+    ----------
+    .. [1] S. Salim, M. Boquien, and J. C. Lee, "Dust Attenuation Curves in the
+       Local Universe: Demographics and New Laws for Star-forming Galaxies and
+       High-redshift Analogs," ApJ, 859, 11 (2018). arXiv:1804.05850.
+       https://doi.org/10.3847/1538-4357/aabf3c
+    """
+    # Eq. 4: R_V,mod = R_V,Cal / [(R_V,Cal + 1) * (4400/5500)^δ - R_V,Cal]
+    wl_ratio_pow_delta = (4400.0 / 5500.0) ** dust_delta
+    denominator = (rv_cal + 1.0) * wl_ratio_pow_delta - rv_cal
+    return rv_cal / denominator
+
+
 @register_dust_law(
     "salim_sbl18",
     citation="Salim et al. 2018 (ApJ 859, 11)",
@@ -1163,10 +1284,10 @@ def noll09(
 )
 def salim_sbl18(
     wavelength: jnp.ndarray,
-    dust_bump_strength: float = 0.0,
-    dust_delta: float = 0.0,
-    dust_bump_x0: float = 0.2175,
-    dust_bump_gamma: float = 0.035,
+    dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
+    dust_delta: float = DEFAULT_DUST_DELTA,
+    dust_bump_x0: float = DEFAULT_DUST_BUMP_X0,
+    dust_bump_gamma: float = DEFAULT_DUST_BUMP_GAMMA,
 ) -> jnp.ndarray:
     r"""Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
 
@@ -1174,9 +1295,9 @@ def salim_sbl18(
     Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
     The modification order is: **(base × power_law) + bump**.
 
-    This differs from ``noll09`` which applies: ``(base + bump) × power_law``.
-    The SBL18 order is identical to ``kriek_conroy``, but SBL18 additionally
-    uses L02 in the far-UV.
+    This differs from ``noll09`` and ``kriek_conroy``, which both apply:
+    ``(base + bump) × power_law``. The SBL18 order applies the power-law tilt
+    to the base curve only, then adds the untilted UV bump.
 
     Parameters
     ----------
@@ -1194,18 +1315,44 @@ def salim_sbl18(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Attenuation curve k(λ) = k'(λ) / R_V with R_V = 4.05. [dimensionless]
+        Normalized attenuation curve k(λ), with k(5500 Å) = 1. [dimensionless]
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, implementation is safe under ``jax.jit`` and
+    ``jax.grad`` via tracer dispatch.
 
-    The attenuation is:
+    **Normalization:** The UV bump and tilted base are normalized by different
+    divisors: R_V,Cal for the tilted base, and R_V,mod(δ) (Eq. 4) for the bump.
+    This implements Salim, Boquien & Lee (2018) Eq. 3, correcting the pre-v0.12
+    CIGALE method described in footnote 7, which used a single fixed R_V for
+    both terms.
+
+    The attenuation is built from Eq. 3 and Eq. 4. Eq. 3 gives k_mod before
+    the k(5500) normalization:
 
     .. math::
 
-        k(\lambda) = \left[k_{\rm L02+C00}(\lambda) \times \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
-        + E_b D(\lambda; \lambda_0, \gamma)\right] / R_V
+        k_{\rm mod}(\lambda) = k_{\rm L02+C00}(\lambda)
+        \left(\frac{R_{V,\rm mod}}{R_{V,\rm Cal}}\right)
+        \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
+        + E_b D(\lambda; \lambda_0, \gamma)
+
+    where the slope modification exponent is δ, and
+
+    .. math::
+
+        R_{V,\rm mod} = \frac{R_{V,\rm Cal}}{(R_{V,\rm Cal} + 1)
+        \left(\frac{4400}{5500}\right)^\delta - R_{V,\rm Cal}}
+
+    with R_V,Cal = 4.05 (Calzetti 2000). Dividing Eq. 3 by R_V,mod gives the form
+    the code evaluates, ``k' = k_base * slope / R_V,Cal + bump / R_V,mod``: the
+    R_V,mod factor on the tilted base cancels, leaving R_V,Cal as its divisor,
+    while the bump keeps R_V,mod. The result is then divided by k'(5500) so that
+    k(5500 Å) = 1.
+
+    **Validity**: R_V,mod is well-defined for δ < 0.989; the denominator in Eq. 4
+    passes through zero near δ ≈ 0.989. The declared prior Uniform(-1.0, 0.4) is safe.
 
     References
     ----------
@@ -1216,6 +1363,7 @@ def salim_sbl18(
     """
     wave_um = wavelength / 1e4
     rv = 4.05
+    rv_mod = _sbl18_rv_mod(dust_delta, rv_cal=rv)
 
     # Base k'(lambda): L02 below 0.15 um, Calzetti above
     k_base = _calzetti_l02_kprime(wavelength)
@@ -1226,11 +1374,9 @@ def salim_sbl18(
     # Power law slope modification
     slope_mod = (wave_um / 0.55) ** dust_delta
 
-    # SBL18 order: (base * slope_mod) + bump
-    k_prime = k_base * slope_mod + bump
+    # SBL18 order (Eq. 3): normalize tilted base by R_V,Cal and bump by R_V,mod(δ)
+    k_prime = k_base * slope_mod / rv + bump / rv_mod
 
-    # Normalize by fixed Rv (package convention)
-    k = k_prime / rv
     # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.999479)
     # Compute k(5500): k_base(5500) uses UV formula since 5500 Å < 0.63 μm
     wave_5500 = jnp.asarray(5500.0)
@@ -1238,9 +1384,10 @@ def salim_sbl18(
     bump_5500 = dust_bump_strength * _drude_profile(
         jnp.asarray(0.55), x0=dust_bump_x0, gamma=dust_bump_gamma
     )
-    k_prime_5500 = k_base_5500 * 1.0 + bump_5500  # slope_mod(5500) = 1 for any dust_delta
-    k_5500 = k_prime_5500 / rv
-    return jnp.clip(k / k_5500, 0.0)
+    k_prime_5500 = (
+        k_base_5500 * 1.0 / rv + bump_5500 / rv_mod
+    )  # slope_mod(5500) = 1 for any dust_delta
+    return jnp.clip(k_prime / k_prime_5500, 0.0)
 
 
 @register_dust_law(
@@ -1250,8 +1397,8 @@ def salim_sbl18(
 )
 def tea(
     wavelength: jnp.ndarray,
-    dust_delta: float = -0.2,
-    dust_tea_scatter: float = 0.0,
+    dust_delta: float = TEA_DELTA_DEFAULT,
+    dust_tea_scatter: float = DEFAULT_DUST_TEA_SCATTER,
 ) -> jnp.ndarray:
     r"""TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).
 
@@ -1442,64 +1589,217 @@ def narayanan_z(
 @register_dust_law(
     "conroy2010",
     citation="Conroy et al. 2010 (ApJ 708, 58)",
-    short_doc="Conroy+10 mixed MW + power-law (FSPS default)",
+    short_doc="Conroy+10 CCM89 with scalable 2175 Å bump (FSPS dust_type=1)",
 )
-@renamed_kwarg("n_slope", "dust_slope")
 def conroy2010(
     wavelength: jnp.ndarray,
-    dust_Rv: float = 3.1,
-    dust_slope: float = -0.7,
+    dust_Rv: float = DEFAULT_DUST_RV,
+    dust_bump_strength: float = CONROY2010_BUMP_STRENGTH_DEFAULT,
 ) -> jnp.ndarray:
-    r"""Conroy+2010 mixed MW + power-law attenuation (FSPS dust_type=1).
+    r"""Conroy+2010 CCM89 attenuation with scalable 2175 Å bump (FSPS dust_type=1).
 
-    Milky Way (Cardelli 1989) curve dominates at UV wavelengths, power-law dominates
-    in the infrared. A smooth sigmoid blend ensures differentiability.
+    Cardelli, Clayton & Mathis (1989) Milky Way extinction curve with the 2175 Å UV
+    bump amplitude scaled by a free parameter. This matches FSPS's dust_type=1 when
+    ``dust_bump_strength=1.0`` (full CCM89 bump) and allows weakening or removing the
+    bump by setting ``dust_bump_strength < 1.0``.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
     dust_Rv : float
-        Total-to-selective extinction ratio for the MW component. [dimensionless] Default: 3.1.
-    dust_slope : float
-        Power-law index for the long-wavelength component. [dimensionless] Default: -0.7.
+        Total-to-selective extinction ratio. [dimensionless] Default: 3.1.
+    dust_bump_strength : float
+        Scaling factor for the 2175 Å UV bump amplitude. 1.0 = unmodified CCM89,
+        0.0 = no bump. [dimensionless] Default: 1.0.
 
     Returns
     -------
     ndarray, shape (n_wave,)
-        Attenuation curve k(λ), normalized to k(5500 Å) = 1. [dimensionless]
+        Extinction curve A(λ)/A(V) normalized to k(5500 Å) = 1. [dimensionless]
 
     Notes
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    A smooth sigmoid transition function weights between MW (short wavelength)
-    and power-law (long wavelength) components at the V-band (5500 Å):
+    **Near-identity at full strength:** At ``dust_bump_strength=1.0`` (the default)
+    this recovers the unmodified Cardelli, Clayton & Mathis (1989) Drude/polynomial
+    coefficients, but is **not** bit-identical to :func:`cardelli`: FSPS's
+    ``attn_curve.f90`` (dust_type=1) applies the near-UV continuity correction
+    below unconditionally, including at ``dust_bump_strength=1``, where the CCM89
+    optical polynomial and near-UV Drude profile already fail to meet exactly at
+    :math:`x=3.3\,\mu\mathrm{m}^{-1}` (:math:`k_{\rm opt}(3.3) - k_{\rm uv}(3.3)
+    = -1.80\times 10^{-4}` at :math:`R_V=3.1`). :func:`cardelli` has no such
+    correction, so the two curves differ by up to :math:`\sim 2\times 10^{-4}`
+    (relative :math:`\sim 1\times 10^{-4}`) near :math:`x=3.3\,\mu\mathrm{m}^{-1}`,
+    even at ``dust_bump_strength=1.0``. This reproduces FSPS's published behavior
+    deliberately (attn_curve.f90 applies ``hack`` for every ``uvb``, not only
+    ``uvb != 1``).
+
+    The UV branch (3.3 ≤ x ≤ 8 μm⁻¹) of CCM89 is modified by scaling the two
+    Drude profile coefficients:
 
     .. math::
 
-        k(\lambda) = [w(\lambda) \, k_{\rm MW}(\lambda) + (1-w(\lambda)) \, k_{\rm PL}(\lambda)] / k_{\rm MW}(5500 \, \text{\AA})
+        a(x) = 1.752 - 0.316x - 0.104 \cdot s/((x-4.67)^2+0.341) + F_a(x)
 
-    where :math:`w(\lambda) = \sigma(\log_{10}(\lambda/5500 \, \text{\AA}) / 0.05)` is a sigmoid.
+        b(x) = -3.090 + 1.825x + 1.206 \cdot s/((x-4.62)^2+0.263) + F_b(x)
+
+    where :math:`s = {\tt dust\_bump\_strength}` scales only the Drude bump terms
+    (0.104 and 1.206), leaving the polynomial continuum and far-UV corrections unchanged.
+    At :math:`s=1`, this recovers the exact CCM89 extinction law. At :math:`s=0`,
+    the 2175 Å feature is suppressed while the overall UV slope remains CCM89-like.
+
+    **Continuity correction and its residual steps for** :math:`s \neq 1`: the
+    near-UV/optical junction correction (``hack`` in ``attn_curve.f90``) is defined
+    on the near-UV segment :math:`3.3 \le x < 5.9\,\mu\mathrm{m}^{-1}` only; the
+    adjoining mid-UV segment (:math:`5.9 \le x < 8.0\,\mu\mathrm{m}^{-1}`) carries
+    no such term in FSPS. Two residual discontinuities are therefore properties of
+    the published FSPS dust_type=1 form for :math:`s \neq 1`, reproduced here
+    deliberately rather than smoothed away:
+
+    - At :math:`x=5.9\,\mu\mathrm{m}^{-1}`: a step of size
+      :math:`(3.3/5.9)^6 \cdot \Delta \approx 0.0306\,\Delta`, where
+      :math:`\Delta = k_{\rm opt}(3.3) - k_{\rm uv}(3.3; s)` is the same
+      near-UV/optical mismatch corrected at :math:`x=3.3`.
+    - At :math:`x=8\,\mu\mathrm{m}^{-1}`: the far-UV polynomial (CCM89 Table 4)
+      carries no bump-strength scaling of its own (an implicit :math:`s=1`
+      continuation), so its junction with the scaled mid-UV segment also steps;
+      :math:`\approx 0.7\%` of :math:`k` for :math:`s=0` at :math:`R_V=3.1`.
+
+    **Far-UV domain (x > 10):** unlike :func:`cardelli`, which stops at CCM89's
+    own fitted range, this evaluates the far-UV cubic out to
+    :math:`x=12\,\mu\mathrm{m}^{-1}` (:math:`\lambda \approx 833` Å) before
+    holding it constant, matching FSPS's ``attn_curve.f90`` (``mwdindex(6)``)
+    exactly; the two curves therefore differ below 1000 Å even at bump
+    strength 1.
 
     References
     ----------
-    .. [1] C. Conroy, R. H. White, and J. S. Gunn, "Recovering the Intergalactic
+    .. [1] D. E. Cardelli, G. C. Clayton, and J. S. Mathis, "The Relationship
+       between Infrared, Optical, and Ultraviolet Extinction," ApJ, 345, 245 (1989).
+       https://doi.org/10.1086/167900
+
+    .. [2] C. Conroy, R. H. White, and J. S. Gunn, "Recovering the Intergalactic
        Dust from Galaxies with z < 1," ApJ, 708, 58 (2010).
        https://doi.org/10.1088/0004-637X/708/1/58
     """
-    k_mw = cardelli(wavelength, dust_Rv=dust_Rv)
-    k_pl = power_law(wavelength, dust_slope=dust_slope)
-    # Smooth sigmoid blend: MW dominates UV, power-law dominates IR
-    x = jnp.log10(wavelength / V_BAND_ANGSTROM)
-    blend = jax.nn.sigmoid(x / 0.05)
-    k_raw = (1.0 - blend) * k_mw + blend * k_pl
-    # Normalize to k(V-band) = 1
-    lam_v = jnp.array(V_BAND_ANGSTROM)
-    x_v = jnp.log10(lam_v / V_BAND_ANGSTROM)
-    blend_v = jax.nn.sigmoid(x_v / 0.05)
-    k_v = (1.0 - blend_v) * cardelli(lam_v[None], dust_Rv=dust_Rv)[0] + blend_v * 1.0
-    return jnp.clip(k_raw / k_v, 0.0)
+    wave_um = wavelength / 1e4
+    x = 1.0 / wave_um
+
+    # IR: 0.3 <= x <= 1.1
+    a_ir = 0.574 * x**1.61
+    b_ir = -0.527 * x**1.61
+
+    # Optical: 1.1 <= x <= 3.3
+    y = x - 1.82
+    a_opt = (
+        1.0
+        + 0.17699 * y
+        - 0.50447 * y**2
+        - 0.02427 * y**3
+        + 0.72085 * y**4
+        + 0.01979 * y**5
+        - 0.77530 * y**6
+        + 0.32999 * y**7
+    )
+    b_opt = (
+        1.41338 * y
+        + 2.28305 * y**2
+        + 1.07233 * y**3
+        - 5.38434 * y**4
+        - 0.62251 * y**5
+        + 5.30260 * y**6
+        - 2.09002 * y**7
+    )
+
+    # UV: 3.3 <= x <= 8.0 with scaled bump strength
+    # FSPS continuity hack (attn_curve.f90 lines 61-76): applies a correction term
+    # on the near-UV segment only (3.3 <= x < 5.9, tmp(mwdindex(4):mwdindex(3)))
+    # to smooth the discontinuity caused by variable UVB strength. The Drude
+    # profile's amplitude scales with dust_bump_strength, creating a step at the
+    # optical/UV boundary when bump_strength != 1.0. This correction vanishes at
+    # the boundary (x=3.3); the mid-UV segment (5.9 <= x < 8.0) carries no such
+    # term in FSPS, so a residual step of size (3.3/5.9)^6 * hack_amplitude
+    # remains at x=5.9 for bump_strength != 1.0 -- this is the published FSPS
+    # dust_type=1 form, reproduced deliberately (see Notes).
+    f_a = jnp.where(x >= 5.9, -0.04473 * (x - 5.9) ** 2 - 0.009779 * (x - 5.9) ** 3, 0.0)
+    f_b = jnp.where(x >= 5.9, 0.2130 * (x - 5.9) ** 2 + 0.1207 * (x - 5.9) ** 3, 0.0)
+    # Scale only the Drude bump terms: 0.104 and 1.206
+    a_uv = 1.752 - 0.316 * x - 0.104 * dust_bump_strength / ((x - 4.67) ** 2 + 0.341) + f_a
+    b_uv = -3.090 + 1.825 * x + 1.206 * dust_bump_strength / ((x - 4.62) ** 2 + 0.263) + f_b
+
+    # Compute the discontinuity at x=3.3 boundary
+    x_boundary = 3.3
+    y_boundary = x_boundary - 1.82
+    a_opt_boundary = (
+        1.0
+        + 0.17699 * y_boundary
+        - 0.50447 * y_boundary**2
+        - 0.02427 * y_boundary**3
+        + 0.72085 * y_boundary**4
+        + 0.01979 * y_boundary**5
+        - 0.77530 * y_boundary**6
+        + 0.32999 * y_boundary**7
+    )
+    b_opt_boundary = (
+        1.41338 * y_boundary
+        + 2.28305 * y_boundary**2
+        + 1.07233 * y_boundary**3
+        - 5.38434 * y_boundary**4
+        - 0.62251 * y_boundary**5
+        + 5.30260 * y_boundary**6
+        - 2.09002 * y_boundary**7
+    )
+    k_opt_at_boundary = a_opt_boundary + b_opt_boundary / dust_Rv
+
+    a_uv_boundary = (
+        1.752
+        - 0.316 * x_boundary
+        - 0.104 * dust_bump_strength / ((x_boundary - 4.67) ** 2 + 0.341)
+    )
+    b_uv_boundary = (
+        -3.090
+        + 1.825 * x_boundary
+        + 1.206 * dust_bump_strength / ((x_boundary - 4.62) ** 2 + 0.263)
+    )
+    k_uv_at_boundary = a_uv_boundary + b_uv_boundary / dust_Rv
+
+    # Apply hack term: smoothly correct the discontinuity from boundary to large x
+    hack_term = (x_boundary / jnp.clip(x, x_boundary, jnp.inf)) ** 6 * (
+        k_opt_at_boundary - k_uv_at_boundary
+    )
+
+    # Far-UV: 8.0 <= x <= 12.0, held constant beyond x=12 -- FSPS's
+    # attn_curve.f90 evaluates this same CCM89 cubic out to x=12 (mwdindex(6),
+    # sps_setup.f90) before holding it constant, beyond CCM89's own 8-10 fit;
+    # conroy2010 is labeled as the FSPS dust_type=1 form, so it matches FSPS
+    # exactly here rather than stopping at CCM89's fitted domain like cardelli.
+    a_fuv, b_fuv = _ccm89_far_uv_ab(x, 12.0)
+
+    a = jnp.where(
+        x < 1.1,
+        a_ir,
+        jnp.where(x < 3.3, a_opt, jnp.where(x < 8.0, a_uv, a_fuv)),
+    )
+    b = jnp.where(
+        x < 1.1,
+        b_ir,
+        jnp.where(x < 3.3, b_opt, jnp.where(x < 8.0, b_uv, b_fuv)),
+    )
+
+    k = a + b / dust_Rv
+    # Add continuity correction to the near-UV segment only (attn_curve.f90
+    # applies `hack` on tmp(mwdindex(4):mwdindex(3)), i.e. 3.3 <= x < 5.9; the
+    # mid-UV segment 5.9 <= x < 8.0 carries no such term).
+    k = k + jnp.where((x >= 3.3) & (x < 5.9), hack_term, 0.0)
+    # Normalize by k(5500) to ensure k(5500) = 1.0
+    # Compute k(5500) for the current dust_Rv and dust_bump_strength values
+    x_5500 = 1.0 / 0.55  # 5500 Å = 0.55 μm
+    a_5500 = 1.0 + 0.17699 * (x_5500 - 1.82) - 0.50447 * (x_5500 - 1.82) ** 2
+    b_5500 = 1.41338 * (x_5500 - 1.82) + 2.28305 * (x_5500 - 1.82) ** 2
+    k_5500 = a_5500 + b_5500 / dust_Rv
+    return jnp.clip(k / k_5500, 0.0)
 
 
 # ── Two-component dust model ──────────────────────────────────────
@@ -1509,6 +1809,7 @@ from tengri.components.dust._apply import (
     _TWO_COMPONENT_LAW_PARAMS as _TWO_COMPONENT_LAW_PARAMS,
     TWO_COMPONENT_OVERRIDE_KEYS as TWO_COMPONENT_OVERRIDE_KEYS,
     apply_lyman_cutoff as apply_lyman_cutoff,
+    merge_neb_screen_live_overrides as merge_neb_screen_live_overrides,
     precompute_dust_age_mask as precompute_dust_age_mask,
     precompute_dust_age_weights as precompute_dust_age_weights,
     resolve_bc_diff_law_params as resolve_bc_diff_law_params,

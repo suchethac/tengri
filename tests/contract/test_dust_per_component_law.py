@@ -146,20 +146,34 @@ class TestLawInheritance:
 
 class TestRoundTrip:
     def test_overrides_survive_to_groups(self, synthetic_ssp_wide, synthetic_tophat_obs):
-        """slope_bc / Rv_diff round-trip through spec.to_groups().
+        """bump_strength_bc / Rv_diff round-trip through spec.to_groups().
 
-        On ``conroy2010``, which reads both. The pair was ``slope_bc`` +
+        On ``conroy2010`` (issue #2522), which reads bump_strength_bc and Rv.
+        conroy2010 replaced dust_slope with dust_bump_strength (a scaling factor
+        for the 2175 Å bump, not a power-law slope). The pair was ``slope_bc`` +
         ``delta_diff`` until #2185: under the fixture's ``power_law`` no screen
         reads a ``dust_delta``, so ``delta_diff`` was a value the curve
         discarded, and the grammar now refuses it by name.
+
+        The bare-scalar spelling now carries "user_fixed" provenance
+        (#2428), so the emitted value is ``Fixed(v)`` -- the same
+        representation the ``Fixed(v)``/``Uniform(...)`` spellings of this
+        key already got -- not the bare number an earlier tree wrote (from a
+        second, now-redundant round-trip mechanism reading
+        ``dust_law_overrides`` directly). Either resolves to the identical
+        value on reparse; unwrap before comparing.
         """
         model = _build(
             synthetic_ssp_wide,
             synthetic_tophat_obs,
             law="conroy2010",
-            slope_bc=-1.0,
+            bump_strength_bc=0.5,
             Rv_diff=4.0,
         )
         groups = model.spec.to_groups()
-        assert groups["dust_attenuation"]["slope_bc"] == -1.0
-        assert groups["dust_attenuation"]["Rv_diff"] == 4.0
+
+        def _value(v):
+            return float(v.bounds[0]) if hasattr(v, "bounds") else float(v)
+
+        assert _value(groups["dust_attenuation"]["bump_strength_bc"]) == 0.5
+        assert _value(groups["dust_attenuation"]["Rv_diff"]) == 4.0

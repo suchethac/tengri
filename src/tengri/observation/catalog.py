@@ -54,7 +54,14 @@ CIGALE_TO_TENGRI: dict[str, str] = {
     "herschel.spire.500": "herschel_500",
 }
 
+#: CANDELS catalog column -> tengri filter name. A reference table: a column
+#: absent from a given catalog release is simply not looked up, so entries here
+#: are a superset rather than a contract. The two GOODS-S U bands are included
+#: because dropping them discards the bluest measurements in the catalog, which
+#: at z ~ 1 are the rest-frame ultraviolet.
 CANDELS_TO_TENGRI: dict[str, str] = {
+    "CTIO_U": "ctio_u",
+    "VIMOS_U": "vimos_u",
     "ACS_F435W": "hst_f435w",
     "ACS_F606W": "hst_f606w",
     "ACS_F775W": "hst_f775w",

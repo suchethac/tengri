@@ -36,6 +36,7 @@ import numpy as np
 
 from tengri._data_setup import find_data_str
 from tengri.utils.host_array import host_array
+from tengri.utils.wavelength import NEBULAR_CONTINUUM_WAVE_MAX
 
 logger = logging.getLogger(__name__)
 
@@ -112,12 +113,14 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 # disc/torus block selection).
 # Nebular emulator native grids ----------------------------------------------
 # Cue (Li et al. 2025) ships its continuum grid inside ``cue_weights.npz``
-# as the ``cont_wav`` array (~1840 points, 915 Å – 10⁸ Å). Without this
-# entry the master grid stays at the SSP edge (~160 µm for BC03), so the
-# rendered Cue continuum visibly cuts off in plots even though the
-# emulator's native output extends to ~10 m. CLOUDY-grid / CB19 nebular
-# backends evaluate exactly on their consumer's wave grid (no native of
-# their own) so they contribute nothing here.
+# as the ``cont_wav`` array (~1840 points, 915 Å – 1e8 Å). The native grid
+# ends at 1e8 Å (1 cm); native_wave_nebular extends it to 1e10 Å (1 m) with
+# nodes at 20 points per decade, so a model without a radio block has nodes
+# there, and interpolation onto longer grids (radio wing runs to 3e11 Å)
+# continues the continuum as optically thin free-free (#2346). CLOUDY-grid
+# / CB19 nebular backends evaluate exactly on their consumer's wave grid (no
+# native of their own) so they declare nothing here; they carry the free-free
+# tail wherever another component supplies nodes.
 _NEBULAR_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     # The npz key is ``cont_wavelength``; the ``cont_wav`` field on the
     # in-memory :class:`CueWeights` dataclass is assigned from it in
@@ -220,19 +223,50 @@ def native_wave_nebular(model: str | None) -> np.ndarray | None:
     """Native wavelength grid [Å] for a nebular emission backend.
 
     Cue (``"cue"``) ships its continuum grid (~915 Å – 10⁸ Å, 1841 points)
-    inside ``cue_weights.npz`` as the ``cont_wav`` array. Without it the
-    master grid stops at the SSP edge (~160 µm for BC03-from-CIGALE) and
-    Cue's UV-to-mm continuum visibly truncates in plots.
+    inside ``cue_weights.npz`` as the ``cont_wav`` array. Cue's native grid
+    ends at 1e8 Å (1 cm); this function extends it to 1e10 Å (1 m) with nodes
+    at 20 points per decade using analytic free-free continuation, so a model
+    without a radio block has wavelength coverage to 1 m (#2346).
 
     CLOUDY-grid and CB19 nebular backends evaluate on whatever wave grid
-    they're handed, so they contribute nothing here.
+    they're handed, so they contribute nothing here; if another component
+    (radio block, dust IR) supplies nodes above 1 cm, the free-free tail
+    continues there too.
+
+    Returns
+    -------
+    ndarray or None
+        Native nebular continuum wavelength grid [Å], or None for backends
+        with no native grid (``"cloudy"``, ``"cb19"``, unknown names, or
+        absent data files). For Cue, the grid extends from its native 1e8 Å
+        to 1 m with analytic free-free continuation nodes; interpolation onto
+        longer grids (radio wing to 3e11 Å) continues the tail via
+        :func:`interp_continuum_with_freefree_tail`.
+
+    Notes
+    -----
+    Cue's grid extension is consistent with pcigale and bagpipes, which
+    tabulate nebular continuum to 1 m and 3.6 cm respectively. The extension
+    is an analytic continuation (optically thin free-free, L_nu ∝ nu^-0.1),
+    NOT an emulator prediction (#2346).
     """
     if not model or model in ("none", "off", "ssp", "cloudy", "cb19"):
         return None
     candidates = _NEBULAR_TEMPLATES.get(model)
     if candidates is None:
         return None
-    return _first_present(candidates)
+    wave = _first_present(candidates)
+    if wave is None:
+        return None
+
+    # Extend past NEBULAR_CONTINUUM_WAVE_MAX (1e10 Å = 1 m) with free-free tail
+    # nodes at 20 points per decade, for models that don't extend that far.
+    if wave.max() < NEBULAR_CONTINUUM_WAVE_MAX:
+        n_dec = np.log10(NEBULAR_CONTINUUM_WAVE_MAX) - np.log10(wave.max())
+        n_pts = round(20 * n_dec) + 1
+        tail = np.geomspace(wave.max(), NEBULAR_CONTINUUM_WAVE_MAX, n_pts)[1:]
+        wave = np.concatenate([wave, tail])
+    return wave
 
 
 def native_wave_agn_torus(block: str | None) -> np.ndarray | None:

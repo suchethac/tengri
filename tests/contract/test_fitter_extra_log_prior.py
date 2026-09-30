@@ -101,14 +101,14 @@ def test_extra_log_prior_changes_logprior_by_exactly_the_extra_term(_fitters):
     lp_plain = float(build_logprior_fn(plain)(free_params))
     lp_hooked = float(build_logprior_fn(hooked)(free_params))
 
-    # Independently reconstruct what the extra term SHOULD be: merge fixed
-    # values exactly as build_logprior_fn's hook path does, predict_state,
-    # and evaluate _extra_term directly.
+    # Independently reconstruct what the extra term SHOULD be: predict_state
+    # handles merging fixed values internally (#2296), so we pass only
+    # free_params to it. Then construct the full dict for _extra_term.
+    state = hooked.model.predict_state(free_params)
     params = dict(free_params)
     for name, val in hooked._fixed_values.items():
         params[name] = val
     params = hooked.spec.resolve_mirrors(params)
-    state = hooked.model.predict_state(params)
     expected_extra = float(_extra_term(params, state))
 
     assert (lp_hooked - lp_plain) == pytest.approx(expected_extra, rel=1e-9, abs=1e-9)
@@ -166,7 +166,10 @@ def _reconstruct_extra_term(fitter, params_unbounded):
         fitter._fixed_values,
         fitter.spec.stochastic,
     )
-    state = fitter.model.predict_state(params)
+    # predict_state handles merging Fixed values internally (#2296),
+    # so extract only the free params for prediction
+    free_params = {k: v for k, v in params.items() if k in fitter._free_names}
+    state = fitter.model.predict_state(free_params)
     return float(_extra_term(params, state))
 
 

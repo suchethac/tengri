@@ -197,9 +197,12 @@ def build_base_likelihood(context: InferenceContext):
 
     # ── Combined calibration polynomial + eline marginalization ──
     # Most common galaxy spectroscopy configuration (Prospector-style).
-    # Sequential composition: marginalize lines → add MAP amplitudes
-    # to the prediction → run cal-marg on the line-augmented model.
-    # Supports both flat and Cloudy eline priors via the same adapter.
+    # Sequential composition: solve for MAP line amplitudes (discarding the
+    # emission-line marginal's log-determinant term), augment the model
+    # with the point estimate, then run cal-marg on the line-augmented
+    # model. This is an approximation: the line block is NOT fully
+    # marginalized. Supports both flat and Cloudy eline priors via the
+    # same adapter (CalibrationELineMarginalizedLikelihood).
     # eline_fitted + cal_marg is not yet expressible (would need a
     # mixed marginalized/fitted variant); legacy switch covers it.
     if context.calibration_marginalize and context.eline_fitted:
