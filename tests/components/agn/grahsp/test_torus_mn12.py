@@ -127,7 +127,7 @@ def test_torus_mn12_si_interpolation(fixture):
 
 
 def test_normalization_at_12um(fixture):
-    """Verify normalization at 12 µm matches formula l_torus = 2.5*l5100*fcov/12*0.510."""
+    """Verify normalization at 12 µm: L_lambda(12 um) = 2.5*l5100*fcov/12000 nm (times the cutoff)."""
     from tengri.components.agn.grahsp.torus import torus_mn12_continuum
 
     wave_nm = fixture["wave_mn12_nm"]
@@ -150,11 +150,9 @@ def test_normalization_at_12um(fixture):
                 mn12_hi=fixture["mn12_hi"],
             )
         )
-        # By MN12 formula: lambda*L_lambda(12um) = 2.5 * l5100 * fcov / 12 * 0.510
-        # GRAHSP ``activatetorus`` convention (verbatim): at 12 µm the avg/lo/hi
-        # templates equal 1, so out(12um) = l_torus * cutoff(12um), with
-        # l_torus = 2.5 * l5100 * fcov / 12 * 0.510 and NO /12000 division.
-        l_torus = 2.5 * float(p["l5100"]) * float(p["fcov"]) / 12.0 * 0.510
+        # lambda*L_lambda(12 um) = 2.5 * l5100 * fcov (Netzer relation); at 12 um the
+        # avg/lo/hi templates equal 1, so out(12 um) = l_torus / 12000 nm * cutoff(12 um).
+        l_torus = 2.5 * float(p["l5100"]) * float(p["fcov"]) / 12000.0
         cutoff_12 = 1.0 - np.exp(-((wave_nm[norm_idx] / 1000.0 / float(p["tor_cutoff_um"])) ** 2))
         np.testing.assert_allclose(out[norm_idx], l_torus * cutoff_12, rtol=1e-9)
 
@@ -236,3 +234,30 @@ def test_temperature_branch_differentiability():
         "`grad_val` is identically zero — finite is not enough, "
         "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
+
+
+@pytest.mark.parametrize("tor_temp", [0.0, 0.6, -0.6])
+@pytest.mark.parametrize("variant", ["gaussian", "mn12"])
+def test_torus_12um_luminosity_is_2p5_fcov_l5100(variant, tor_temp, fixture):
+    """lambda*L_lambda(12 um) = 2.5 * fcov * l5100 for both GRAHSP torus variants.
+
+    This is the Netzer (2013) relation quoted in the paper: (lambda L_lambda)(12 um) /
+    (lambda L_lambda)(5100 A) = 2.5 f_cov. The two variants must agree on it.
+    """
+    from tengri.components.agn.grahsp.torus import torus_dust_continuum, torus_mn12_continuum
+
+    l5100, fcov = 1.0e44, 0.4
+    wave_nm = np.union1d(np.logspace(2.5, 5.0, 400), [12000.0])
+    if variant == "gaussian":
+        out = torus_dust_continuum(
+            wave_nm=wave_nm, l5100=l5100, fcov=fcov, cool_lam_um=17.0, cool_width=0.45,
+            hot_lam_um=2.0, hot_width=0.5, hot_fcov=1.0,
+        )
+    else:
+        out = torus_mn12_continuum(
+            wave_nm=wave_nm, l5100=l5100, fcov=fcov, tor_temp=tor_temp, tor_cutoff_um=1.2,
+            mn12_wave_nm=fixture["wave_mn12_nm"], mn12_avg=fixture["mn12_avg"],
+            mn12_lo=fixture["mn12_lo"], mn12_hi=fixture["mn12_hi"],
+        )
+    at_12um = float(np.interp(12000.0, wave_nm, np.asarray(out))) * 12000.0
+    np.testing.assert_allclose(at_12um, 2.5 * fcov * l5100, rtol=1e-3)

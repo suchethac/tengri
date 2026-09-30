@@ -228,8 +228,8 @@ def torus_mn12_continuum(
        \right] \left[1 - \exp\left(-\left(\frac{\lambda}{1000\,\mathrm{nm} \cdot
            \lambda_{\rm cut}}\right)^2\right)\right]
 
-    where :math:`l_{\rm torus} = 2.5 \, \mathrm{l5100} \, f_{\rm cov} / 12.0 \times
-    0.510` (Mor & Netzer 2012 Eq. A1 at 12 µm), :math:`\Delta(\lambda, T_{\rm tor}) =
+    where :math:`l_{\rm torus} = 2.5 \, \mathrm{l5100} \, f_{\rm cov} / 12000\,\mathrm{nm}`
+    (:math:`\lambda L_\lambda(12\,\mu m) = 2.5 f_{\rm cov}\,\mathrm{l5100}`), :math:`\Delta(\lambda, T_{\rm tor}) =
     (L_{\rm hi} - \langle L_\lambda \rangle) T_{\rm tor}` for :math:`T_{\rm tor} > 0`,
     and :math:`\Delta = (L_{\rm lo} - \langle L_\lambda \rangle) |T_{\rm tor}|`
     for :math:`T_{\rm tor} < 0`.
@@ -272,16 +272,16 @@ def torus_mn12_continuum(
     JIT/grad/vmap-compatible. Uses :func:`jnp.where` for the temperature branch
     to maintain differentiability.
 
-    **Normalization convention (GRAHSP-faithful):** reproduced verbatim from
-    upstream ``activatetorus``: ``l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510``
-    and ``torus_spectrum = l_torus * (avg + dev) * cutoff``: there is **no**
-    division by 12000 nm. This differs from the empirical log-Gaussian path
-    (:func:`torus_dust_continuum`, from ``activategtorus``), which uses
-    ``l_torus = 2.5 * l5100 * fcov`` then ``/ 12000``. The two GRAHSP modules
-    therefore carry different absolute 12 µm normalizations for the same
-    ``(l5100, fcov)``; this is GRAHSP's own convention and is preserved here.
-    Since ``fcov`` is a free fit parameter, each module remains internally
-    self-consistent when fitted.
+    **Normalization:** ``l_torus = 2.5 * l5100 * fcov`` is
+    :math:`\lambda L_\lambda(12\,\mu m)`, so :math:`L_\lambda(12\,\mu m) =
+    l_{\rm torus} / 12000\,\mathrm{nm}` (the templates are :math:`L_\lambda`-shaped
+    and equal 1 at 12 µm), the same convention as the empirical log-Gaussian
+    path (:func:`torus_dust_continuum`) and the Netzer relation
+    :math:`(\lambda L_\lambda)(12\,\mu m) = 2.5 f_{\rm cov}\,\mathrm{l5100}`.
+    Upstream GRAHSP's ``activatetorus`` uses ``2.5 * l5100 * fcov / 12.0 * 0.510``
+    per nm instead, which is 510 times brighter than that relation (it treats
+    ``l5100`` as :math:`L_\lambda(510\,\mathrm{nm})`, as its Netzer disc did);
+    tengri deliberately does not reproduce this.
 
     References
     ----------
@@ -309,16 +309,8 @@ def torus_mn12_continuum(
     # Apply the templates and short-wavelength cutoff on the native grid.
     spectrum_native = (mn12_avg_arr + torus_deviation) * cutoff
 
-    # Normalization, verbatim from upstream ``activatetorus.process`` (line 83):
-    #   l_torus = 2.5 * l_agn * fcov / 12.0 * 0.510
-    # Upstream then forms ``torus_spectrum = l_torus * (avg + dev) * cutoff``
-    # directly: note there is NO division by 12000 nm here (unlike the
-    # log-Gaussian ``activategtorus`` path), because the MN12 ``avg/lo/hi``
-    # templates are already L_lambda-shaped and the /12.0*0.510 factor is
-    # folded into l_torus. We reproduce GRAHSP's convention exactly so the
-    # template torus matches its published SED; physical-unit reconciliation
-    # against the Gaussian path is handled at the component boundary.
-    l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510
+    # lambda*L_lambda(12 um) = 2.5 * fcov * l5100; the templates are 1 at 12 um.
+    l_torus = 2.5 * l5100 * fcov / 12000.0
     spectrum_native_scaled = l_torus * spectrum_native
 
     # Interpolate onto output grid (left=0, right=0 so out-of-bounds gives 0)
@@ -344,7 +336,8 @@ def torus_mn12_si(
 
        L_{\rm Si}(\lambda) = l_{\rm torus} \, \mathrm{si} \, L_{\rm Si}^{\rm template}(\lambda)
 
-    where :math:`l_{\rm torus} = 2.5 \, \mathrm{l5100} \, f_{\rm cov} / 12.0 \times 0.510`.
+    where :math:`l_{\rm torus} = 2.5 \, \mathrm{l5100} \, f_{\rm cov} / 12000\,\mathrm{nm}`,
+    the same normalization as the continuum.
 
     Parameters
     ----------
@@ -385,11 +378,8 @@ def torus_mn12_si(
     si_wave = jnp.asarray(si_wave_nm)
     si_lumin_arr = jnp.asarray(si_lumin)
 
-    # Verbatim from upstream ``activatetorus.process`` (line 96):
-    #   si_spectrum = l_torus * self.si.lumin * Si
-    # Same l_torus as the continuum, and again NO /12000, the silicate must
-    # follow the same normalization convention as its own continuum.
-    l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510
+    # Same l_torus as the continuum: the silicate is relative to the 12 um continuum.
+    l_torus = 2.5 * l5100 * fcov / 12000.0
     spectrum_native = l_torus * si_lumin_arr * si
 
     # Interpolate onto output grid

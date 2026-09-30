@@ -643,6 +643,69 @@ def make_netzer_disc_fixture():
     return len(cases), wave_nm.size
 
 
+# ---------------------------------------------------------------------------
+# 7. Mor & Netzer 2012 template torus (activatetorus.py), lambda*L_lambda(12 um) = 2.5 fcov l5100
+# ---------------------------------------------------------------------------
+
+
+def make_torus_mn12_fixture():
+    """MN12 template torus + Si feature on the native template grids.
+
+    Upstream ``activatetorus`` uses ``l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510``
+    per nm, 510 times brighter than the Netzer relation
+    ``lambda*L_lambda(12 um) = 2.5 * fcov * l5100`` that its log-Gaussian sibling
+    (``activategtorus``) satisfies. tengri uses ``l_torus = 2.5 * l5100 * fcov / 12000``
+    per nm, so the templates (which are 1 at 12 um) give the Netzer relation.
+    """
+    import h5py
+
+    with h5py.File(REPO_ROOT / "data" / "grahsp" / "grahsp_templates.h5", "r") as h:
+        g = h["torus_mn12"]
+        wave_nm = np.asarray(g["wave_nm"][:], dtype=np.float64)
+        avg = np.asarray(g["avg"][:], dtype=np.float64)
+        lo = np.asarray(g["lo"][:], dtype=np.float64)
+        hi = np.asarray(g["hi"][:], dtype=np.float64)
+        si_wave_nm = np.asarray(g["si_wave_nm"][:], dtype=np.float64)
+        si_lumin = np.asarray(g["si_lumin"][:], dtype=np.float64)
+    cases = [
+        dict(l5100=1.0e36, fcov=0.4, tor_temp=0.0, tor_cutoff_um=1.2, si=0.5),
+        dict(l5100=1.0e36, fcov=0.4, tor_temp=0.5, tor_cutoff_um=1.2, si=0.5),
+        dict(l5100=1.0e36, fcov=0.4, tor_temp=-0.5, tor_cutoff_um=1.2, si=0.5),
+        dict(l5100=2.0e36, fcov=0.5, tor_temp=0.2, tor_cutoff_um=1.7, si=-0.3),
+    ]
+    torus = np.zeros((len(cases), wave_nm.size))
+    si_spec = np.zeros((len(cases), si_wave_nm.size))
+    for i, p in enumerate(cases):
+        l_torus = 2.5 * p["l5100"] * p["fcov"] / 12000.0
+        t = p["tor_temp"]
+        dev = (hi - avg) * t if t > 0 else (lo - avg) * (-t)
+        cutoff = 1.0 - np.exp(-((wave_nm / 1000.0 / p["tor_cutoff_um"]) ** 2))
+        torus[i] = l_torus * (avg + dev) * cutoff
+        si_spec[i] = l_torus * si_lumin * p["si"]
+    np.savez(
+        FIXTURE_DIR / "torus_mn12.npz",
+        wave_mn12_nm=wave_nm,
+        wave_si_nm=si_wave_nm,
+        mn12_avg=avg,
+        mn12_lo=lo,
+        mn12_hi=hi,
+        mn12_si_lumin=si_lumin,
+        params=np.array(
+            [(p["l5100"], p["fcov"], p["tor_temp"], p["tor_cutoff_um"], p["si"]) for p in cases],
+            dtype=[
+                ("l5100", "f8"),
+                ("fcov", "f8"),
+                ("tor_temp", "f8"),
+                ("tor_cutoff_um", "f8"),
+                ("si", "f8"),
+            ],
+        ),
+        torus_spectra_native=torus,
+        si_spectra_native=si_spec,
+    )
+    return len(cases), wave_nm.size
+
+
 def main():
     n_wave_sbpl, n_cases = make_sbpl_fixture()
     print(f"  sbpl_bbb.npz: {n_cases} cases x {n_wave_sbpl} wavelengths")
@@ -656,6 +719,8 @@ def main():
     print(f"  balmer.npz: {n_cases_balmer} cases x {n_wave_balmer} wavelengths")
     n_cases_disc, n_wave_disc = make_netzer_disc_fixture()
     print(f"  netzer_disc.npz: {n_cases_disc} cases x {n_wave_disc} wavelengths")
+    n_cases_mn12, n_wave_mn12 = make_torus_mn12_fixture()
+    print(f"  torus_mn12.npz: {n_cases_mn12} cases x {n_wave_mn12} wavelengths")
 
 
 if __name__ == "__main__":

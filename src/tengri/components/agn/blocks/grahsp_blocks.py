@@ -619,10 +619,10 @@ def grahsp_mn12_torus_block(
     contribution is clipped so the total dust :math:`L_\lambda` stays
     non-negative (mirroring upstream behavior).
 
-    Note: MN12 normalisation differs from the Gaussian torus. The MN12 torus
-    uses :math:`l_{\rm torus} = 2.5 \times l5100 \times f_{\rm cov} / 12`,
-    which differs from the Gaussian torus convention (see upstream
-    grahsp/torus.py for details).
+    Normalisation: :math:`\lambda L_\lambda(12\,\mu m) = 2.5\, f_{\rm cov}\, l5100`,
+    the same as the Gaussian torus. Upstream GRAHSP's MN12 torus is 510 times
+    brighter than that relation; tengri deliberately does not reproduce this
+    (see :func:`torus_mn12_continuum`).
 
     Parameters
     ----------
