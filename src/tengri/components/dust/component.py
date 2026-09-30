@@ -32,6 +32,7 @@ import jax.numpy as jnp
 from tengri.components.dust._params import DEFAULT_DUST_ETA_BALANCE
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
 from tengri.components.dust.laws._registry import select_law_kwargs
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
@@ -468,10 +469,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # space and publish for downstream consumers (dust emission components
         # re-emit it; RadioSEDComponent uses it to set the SF radio
         # amplitude via the FIR-radio correlation). LyC photons ionize H
-        # rather than heat dust, so the canonical integral masks λ < 912 Å
-        # (#922).
+        # rather than heat dust, so the canonical integral excludes the
+        # ionizing side of the Lyman edge (#922; edge at LYMAN_LIMIT_AA,
+        # one Lyman edge -- ``tengri.components.lyc``).
         from tengri.forward.energy_balance import (
-            LYMAN_CUTOFF_AA,
             bolometric_absorbed_log10,
             warn_if_corrupt,
         )
@@ -481,7 +482,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         nu = C_AA / state.wave  # Hz
         # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
-        # (#1206). The sign only tracks grid orientation; the energy is |L|.
+        # (#1206). The sign follows L_nu_intr - L_nu_att; the energy is |L|.
 
         # Try to use the energy-balance LUT (fast path) if available.
         # The LUT was built with the stellar SED only; for single-component
@@ -499,7 +500,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # None disables the canonical LyC mask so all absorbed energy heats
         # dust. The fast-path LUT bakes the same choice at build time
         # (sed_model passes config.eb_include_lyc), so the two agree either way.
-        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_CUTOFF_AA
+        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_LIMIT_AA
 
         if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path: use precomputed LUT with degenerate two-component mapping.

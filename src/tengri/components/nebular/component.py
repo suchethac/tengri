@@ -26,7 +26,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.lyc import lyc_shares
+from tengri.components.lyc import ionizing_mask, lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
@@ -37,7 +37,7 @@ from tengri.components.nebular.dig import (
 )
 from tengri.components.template_threading import TemplateThreading
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
-from tengri.forward.energy_balance import bolometric_absorbed_log10, log10_fdust_lyc_credit
+from tengri.forward.energy_balance import bolometric_lyc_log10, log10_fdust_lyc_credit
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -48,7 +48,6 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.scale import log10_magnitude
-from tengri.utils.wavelength import lyman_edge_transmission as _lyman_edge_transmission
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 
@@ -1089,16 +1088,17 @@ class NebularSEDComponent(TemplateThreading):
         # 912 Å (#824). At fesc=0 the stellar LyC is fully absorbed, matching
         # CIGALE / FSPS / bagpipes.
         #
-        # #2447: the SSP grid has no node exactly at 912 Å (MIST/C3K brackets
-        # it at 911.5716/913.3967 Å), so a plain ``where(λ<912, fesc, 1)``
-        # node-wise mask puts the step at whichever node sits just below
-        # 912 Å, and a trapezoid band integral over the masked spectrum ramps
-        # transmission linearly across that interval instead of stepping at
-        # the physical edge -- measured -2.0651% on the issue's own model.
-        # ``_lyman_edge_transmission`` replaces only the two nodes bracketing
-        # 912 Å with the trapezoid-exact split weights (see its docstring for
-        # the derivation); every other node keeps the plain step.
-        lyc_transmission = _lyman_edge_transmission(state.wave, neb_fesc)
+        # #2447/one-Lyman-edge (module docstring of ``tengri.components.lyc``):
+        # a plain per-node ``where(ionizing_mask(wave), fesc, 1)`` step is
+        # exact PROVIDED every integral that separates or spans the edge
+        # reads it through :func:`tengri.components.lyc.edge_trapezoid`'s
+        # step-model bracket cell rather than a plain trapezoid -- the
+        # exactness now lives at the quadrature call site, not in a
+        # per-node reweighting here (the retired ``lyman_edge_transmission``
+        # blended the two nodes bracketing the edge to make an ordinary
+        # trapezoid exact; that trick is no longer needed once every
+        # consumer integrates edge-aware).
+        lyc_transmission = jnp.where(ionizing_mask(state.wave), neb_fesc, 1.0)
         derived_overrides["lyc_transmission"] = lyc_transmission
 
         # Absolute HII-region dust-absorption share, published for the SAME
@@ -1227,43 +1227,24 @@ class NebularSEDComponent(TemplateThreading):
         # its own "dust_"-prefixed params slice never carries neb_fdust_frac.
         _stellar_sed = state.sed_intrinsic
         if _stellar_sed is not None:
-            from tengri.utils.physics_constants import C_AA
-
             # Published unmasked (pre-fesc) so a consumer needing the exact
-            # 912 A edge on a FINER quadrature grid than this component's own
+            # edge on a FINER quadrature grid than this component's own
             # ``state.wave`` (the photometric union grid, #2447) can redo the
-            # trapezoid-exact split there instead of re-interpolating this
-            # component's already-node-blended ``lyc_transmission`` -- see
+            # edge-aware split there instead of re-deriving fesc from this
+            # component's own ``lyc_transmission`` -- see
             # ``observation.photometry._filter_integral_union``.
             derived_overrides["lyc_unmasked_stellar_sed"] = _stellar_sed
 
-            # LyC-ONLY luminosity: keep wave < 912 Å. This is the OPPOSITE
-            # selection from the canonical dust-EB mask (which EXCLUDES the
-            # LyC region), so the manual pre-mask below must be paired with
-            # lyman_cutoff_aa=None: passing the 912 Å cutoff here would apply
-            # the internal "keep wave >= cutoff" mask on top of values that
-            # are already zero there, zeroing the entire integrand and
-            # silently making log_L_lyc == -inf always (measured; #2539 RED).
-            # ``lyc_weight`` is the SAME trapezoid-exact split as
-            # ``lyc_transmission`` above, evaluated at fesc=0 (#2447): its
-            # docstring shows the result is exactly ``1 - C``, the RAW
-            # (fesc-independent) fraction of each node's quadrature weight
-            # that falls below the edge -- so the credit and the mask share
-            # one definition instead of the boolean ``wave < 912`` this
-            # replaces (that undefined ``lyc_mask`` name was a merge
+            # LyC-ONLY luminosity: the raw (fesc-independent) whole-population
+            # credit, ``L_LyC = edge_trapezoid(L_nu, wave, side="ionizing")``
+            # (one Lyman edge, module docstring of ``tengri.components.lyc``):
+            # the ionizing side of the SAME step model the dust-EB mask uses
+            # for its complementary "nonionizing" side, so the credit and the
+            # exclusion can never drift onto different bracket-cell
+            # conventions (that undefined ``lyc_mask`` name was a merge
             # conflict between #2539 and #2447, never exercised together
-            # before this PR).
-            nu_lyc = C_AA / state.wave
-            lyc_weight = 1.0 - _lyman_edge_transmission(state.wave, jnp.zeros_like(neb_fesc))
-            lyc_intrinsic = lyc_weight * _stellar_sed
-            lyc_attenuated = jnp.zeros_like(lyc_intrinsic)
-            log_L_lyc, _ = bolometric_absorbed_log10(
-                lyc_intrinsic,
-                lyc_attenuated,
-                nu_lyc,
-                wave=state.wave,
-                lyman_cutoff_aa=None,
-            )
+            # before that PR).
+            log_L_lyc, _ = bolometric_lyc_log10(_stellar_sed, state.wave)
             # Gradient-safe double-where log-add (#2539 item 3): value is
             # bit-identical to -inf at neb_fdust == 0 (neb_fdust_frac == 0,
             # the default, or neb_fesc == 1), gradient finite everywhere (see

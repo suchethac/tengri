@@ -30,6 +30,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.dust._params import DEFAULT_DUST_ETA_BALANCE
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
@@ -84,7 +85,7 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
     #: ``DustSEDComponentConfig.eb_include_lyc`` are: WG00's absorbed-energy
     #: integral (:meth:`WG00AttenuationSEDComponent.apply`) calls the SAME
     #: :func:`tengri.forward.energy_balance.bolometric_absorbed_log10` with
-    #: the SAME 912 Å switch point as ``single_component``, so there is one
+    #: the SAME Lyman-edge switch point as ``single_component``, so there is one
     #: physical choice to thread, not a second convention to invent. Before
     #: this field existed the grammar accepted the key for ``dust_type=3``
     #: (wg00) but ``component_factory.py`` never passed it through: a silent
@@ -316,13 +317,13 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         attenuated = state.sed_intrinsic * attenuation
 
         # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
-        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust: #922), unless
-        # eb_include_lyc opts into the FSPS/Prospector convention (#2539 item
-        # 1): None disables the mask so all absorbed energy heats dust, the
-        # same expression DustAttenuationSEDComponent/DustSEDComponent use, so
-        # every dust model agrees on which convention is active.
+        # LyC-masked (the ionizing side of the Lyman edge ionizes H, it does
+        # not heat dust: #922), unless eb_include_lyc opts into the
+        # FSPS/Prospector convention (#2539 item 1): None disables the mask
+        # so all absorbed energy heats dust, the same expression
+        # DustAttenuationSEDComponent/DustSEDComponent use, so every dust
+        # model agrees on which convention is active.
         from tengri.forward.energy_balance import (
-            LYMAN_CUTOFF_AA,
             bolometric_absorbed_log10,
             warn_if_corrupt,
         )
@@ -330,7 +331,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave
-        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_CUTOFF_AA
+        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_LIMIT_AA
         # Log-space integral: ~1e43 erg/s is outside float32 (#1206).
         log_l_absorbed, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave, lyman_cutoff_aa=_eb_cutoff

@@ -56,6 +56,7 @@ from tengri.components.dust.attenuation import (
     two_component_dust,
 )
 from tengri.components.dust.laws._registry import select_law_kwargs
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters._dust_keys import SCREEN_CHOICES
 from tengri.parameters.priors import Fixed, Uniform
@@ -1204,7 +1205,7 @@ class DustSEDComponent(TemplateThreading):
         # FSPS-parity toggle (#961): None disables the canonical LyC mask so
         # all absorbed energy heats dust. The fast-path LUT bakes the same
         # choice at build time (sed_model passes config.eb_include_lyc).
-        _eb_cutoff = None if self.config.eb_include_lyc else 912.0
+        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_LIMIT_AA
         if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path (WavePrecomp): the stellar bolometric absorption comes
             # from a precomputed (tau_bc, tau_diff) LUT contracted with the
@@ -1295,11 +1296,7 @@ class DustSEDComponent(TemplateThreading):
         # f_dust == 0 but -- unlike log10_add-ing the already
         # fdust-multiplied log_L_lyc_dust -- has a nonzero gradient there too
         # (L_absorbed is linear in fdust).
-        from tengri.forward.energy_balance import (
-            LYMAN_CUTOFF_AA,
-            bolometric_absorbed_log10,
-            log10_add_fdust_credit,
-        )
+        from tengri.forward.energy_balance import bolometric_lyc_log10, log10_add_fdust_credit
 
         # NOT params.get("neb_fdust_frac", ...): this component's
         # parameter_prefix is "dust_", so slice_params_for_component
@@ -1315,18 +1312,18 @@ class DustSEDComponent(TemplateThreading):
         if self.config.lyc_absorb_all:
             _log_l_lyc_credited = state.derived.get("log_L_lyc")
         else:
+            # Young/birth-cloud-only credit (#2539): raw (unmasked) per-age
+            # cube, weighted by the young indicator, THEN reduced through
+            # ``bolometric_lyc_log10``'s ``side="ionizing"`` edge_trapezoid --
+            # not a manual node-level ``wave < edge`` pre-mask followed by a
+            # plain trapezoid, which ramps across the bracket cell instead of
+            # holding it at the step model's rectangle (one Lyman edge,
+            # module docstring of ``tengri.components.lyc``).
             y_age_lyc = _young_indicator(
                 ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
             )
-            lnu_age_lyc_only = jnp.where(wave[None, :] < LYMAN_CUTOFF_AA, lnu_age, 0.0)
-            young_lyc_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age_lyc_only, axis=0)
-            _log_l_lyc_credited, _ = bolometric_absorbed_log10(
-                young_lyc_lnu,
-                jnp.zeros_like(young_lyc_lnu),
-                nu,
-                wave=wave,
-                lyman_cutoff_aa=None,
-            )
+            young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age, axis=0)
+            _log_l_lyc_credited, _ = bolometric_lyc_log10(young_lnu, wave)
 
         if _log_l_lyc_credited is not None:
             log_L_absorbed = log10_add_fdust_credit(log_L_absorbed, _log_l_lyc_credited, f_dust)

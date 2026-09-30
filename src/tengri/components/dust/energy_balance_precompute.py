@@ -40,8 +40,15 @@ is monotone and well behaved.
 This LUT is the precomputed factorization of the canonical energy-balance
 integral :func:`tengri.forward.energy_balance.bolometric_absorbed`: same
 signed :math:`\int (L_\nu^{\rm intr} - L_\nu^{\rm att})\, d\nu` with the same
-912 Å Lyman-continuum mask (#922). The two must agree; the contract is pinned
-by ``tests/contract/test_energy_balance_lut.py``.
+Lyman-continuum mask (#922; edge at
+:data:`tengri.components.lyc.LYMAN_LIMIT_AA`). The two must agree; the
+contract is pinned by ``tests/contract/test_energy_balance_lut.py``. Both
+``B``/``G`` (and their fesc-linear ``B_fesc``/``G_fesc`` twins) are reduced
+through :func:`tengri.components.lyc.edge_trapezoid` rather than a plain
+``jnp.trapezoid``, so the SSP grid cell straddling the edge gets the SAME
+step-model rectangle split the exact path applies (one Lyman edge, see that
+module's docstring); the per-node ``mask_nonlyc``/``weight_a0``/``weight_a1``
+region weighting below is unchanged, only the final reduction is edge-aware.
 """
 
 from __future__ import annotations
@@ -53,7 +60,7 @@ import jax.numpy as jnp
 
 from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
 from tengri.components.dust.attenuation import two_component_dust
-from tengri.utils.physics_constants import C_AA
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, ionizing_mask
 
 __all__ = [
     "EnergyBalanceLUT",
@@ -70,7 +77,7 @@ class EnergyBalanceLUT(NamedTuple):
     ----------
     B : ndarray, shape (n_met, n_age)
         Intrinsic bolometric SSP luminosity per unit mass, ``∫ SSP dν`` (signed,
-        masked to λ ≥ 912 Å). [erg/s/Hz · Hz per Lsun-flux unit]
+        masked to the non-ionizing side of LYMAN_LIMIT_AA). [erg/s/Hz · Hz per Lsun-flux unit]
     G : ndarray, shape (n_met, n_age, n_tau_bc, n_tau_diff)
         Attenuated bolometric SSP luminosity ``∫ SSP·T_a dν`` on the optical-depth
         grid.
@@ -139,7 +146,7 @@ def build_energy_balance_lut(
     lyman_cutoff_aa
         Passed verbatim to :func:`two_component_dust` for node-exact agreement.
     eb_include_lyc : bool, optional
-        FSPS-parity toggle (#961): when True, the LyC (λ < 912 Å) is kept in
+        FSPS-parity toggle (#961): when True, the LyC (ionizing side of LYMAN_LIMIT_AA) is kept in
         the absorbed-luminosity integrand (all absorbed energy heats dust)
         instead of the canonical LyC mask (#922). Must match the runtime
         ``DustSEDComponent.config.eb_include_lyc``.
@@ -166,8 +173,7 @@ def build_energy_balance_lut(
     -------
     EnergyBalanceLUT
     """
-    nu = C_AA / ssp_wave  # (n_wave,)
-    mask_nonlyc = ssp_wave >= 912.0
+    mask_nonlyc = ~ionizing_mask(ssp_wave, edge_aa=LYMAN_LIMIT_AA)
 
     sspm_fesc = None
     if fesc_exact and eb_include_lyc:
@@ -194,7 +200,16 @@ def build_energy_balance_lut(
         mask = jnp.ones_like(ssp_wave, dtype=bool) if eb_include_lyc else mask_nonlyc
         sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
 
-    B = jnp.trapezoid(sspm, nu, axis=-1)  # (n_met, n_age), signed
+    # side="all": each array (sspm / sspm_fesc) already carries its own
+    # per-region weight (mask_nonlyc / weight_a0 / weight_a1 above), so the
+    # edge-aware reduction just needs to sum everything it holds -- the
+    # bracket cell straddling LYMAN_LIMIT_AA is then split into its two
+    # rectangles using whatever weight is actually present on each side
+    # (zero on a masked-out ionizing node), which is bit-identical to
+    # selecting "nonionizing"/"ionizing" explicitly when one side is zeroed.
+    B = edge_trapezoid(
+        sspm, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1
+    )  # (n_met, n_age)
 
     bc_params = bc_params or {}
     diff_params = diff_params or {}
@@ -215,7 +230,9 @@ def build_energy_balance_lut(
             lyman_cutoff_aa=lyman_cutoff_aa,
         )  # (n_age, n_wave)
         integrand = sspm_in * transmission[None, :, :]  # (n_met, n_age, n_wave)
-        return jnp.trapezoid(integrand, nu, axis=-1)  # (n_met, n_age)
+        return edge_trapezoid(
+            integrand, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1
+        )  # (n_met, n_age)
 
     # Build-time Python loop over the (small) optical-depth grid. Eagerly,
     # the 576-node loop spends its time in per-op Python dispatch inside
@@ -238,7 +255,7 @@ def build_energy_balance_lut(
     B_fesc = None
     G_fesc = None
     if sspm_fesc is not None:
-        B_fesc = jnp.trapezoid(sspm_fesc, nu, axis=-1)
+        B_fesc = edge_trapezoid(sspm_fesc, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
         G_fesc = _build_g(sspm_fesc)
 
     return EnergyBalanceLUT(

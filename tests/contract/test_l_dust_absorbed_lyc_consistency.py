@@ -23,8 +23,9 @@ E(B-V)=0.3): unmasked integral 4.0899e43 erg/s vs masked (== the pipeline's own
 
 Both functions now build their integrand through the SAME shared helper
 (:func:`tengri.forward.energy_balance.absorbed_integrand`, masked by
-:data:`tengri.forward.energy_balance.LYMAN_CUTOFF_AA`), so the two spellings
-cannot silently disagree again.
+:data:`tengri.components.lyc.LYMAN_LIMIT_AA`) and reduce it through the
+SAME edge-aware quadrature (:func:`tengri.components.lyc.edge_trapezoid`),
+so the two spellings cannot silently disagree again.
 """
 
 from __future__ import annotations

@@ -3,7 +3,11 @@ r"""Canonical dust energy-balance integral (``L_absorbed``).
 
 Single source of truth for the bolometric absorbed luminosity that feeds
 dust IR re-emission (#922). Every exact-path computation of ``L_absorbed``
-goes through :func:`_peak_factored_trapezoid` here; the build-time LUT in
+goes through :func:`_peak_factored_trapezoid` here, which is the
+peak-factored (float32-safe) wrapper around
+:func:`tengri.components.lyc.edge_trapezoid` -- the one step-at-the-edge
+quadrature (see that module's docstring) -- rather than a hand-rolled
+trapezoid; the build-time LUT in
 :mod:`tengri.components.dust.energy_balance_precompute` is the precomputed
 factorization of the *same* integral and must agree with it.
 
@@ -17,10 +21,25 @@ paragraph used to say the opposite, naming the linear form as the path
 everything took, which is worth knowing when reading either function's guard
 semantics, see :func:`_peak_factored_trapezoid` and #1527.
 
-Physics convention: Lyman-continuum photons (:math:`\lambda < 912` Å) ionize
-hydrogen, their energy re-emerges as nebular line and continuum emission,
-not as dust heating, so they are excluded from the energy-balance integral,
-matching CIGALE [1]_.
+Physics convention: Lyman-continuum photons (:math:`\lambda <`
+:data:`tengri.components.lyc.LYMAN_LIMIT_AA`, 911.76 Å) ionize hydrogen,
+their energy re-emerges as nebular line and continuum emission, not as dust
+heating, so they are excluded from the energy-balance integral, matching
+CIGALE [1]_. The bracket grid cell straddling the edge is handled by the
+step model, not linear interpolation (#537/#2447 generalized): see
+:mod:`tengri.components.lyc`.
+
+**Sign convention** (changed alongside the edge-aware quadrature): the
+signed magnitude returned by :func:`bolometric_absorbed` /
+:func:`bolometric_absorbed_log10` now follows the sign of
+:math:`L_\nu^{\rm intr} - L_\nu^{\rm att}` itself
+(:func:`tengri.components.lyc.edge_trapezoid` integrates with a
+positive-oriented measure, ``|dx|``, regardless of whether the quadrature
+variable is ascending or descending) rather than the grid orientation of
+``nu``. Every caller either takes ``jnp.abs()`` of the result or combines
+it with another term of the SAME (consistently reoriented) sign via
+:func:`tengri.utils.scale.log10_add`, so the magnitude any caller observes
+is unchanged; only the sign's own bookkeeping convention is.
 """
 
 from __future__ import annotations
@@ -30,15 +49,7 @@ import warnings
 import jax
 import jax.numpy as jnp
 
-#: Lyman-continuum cutoff [Angstrom] (#922). Photons at shorter wavelengths
-#: ionize hydrogen rather than heat dust, so every canonical absorbed-luminosity
-#: integral in this module -- and
-#: :func:`tengri.utils.sed_quantities.compute_l_dust_absorbed`, which imports
-#: this constant and :func:`absorbed_integrand` to share the same convention --
-#: excludes them by default. Matches CIGALE (attenuation curves zeroed at
-#: lambda <= 91.2 nm) and Bagpipes (``fesc`` masking of the ionizing
-#: continuum); FSPS does not mask it.
-LYMAN_CUTOFF_AA: float = 912.0
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, ionizing_mask
 
 
 def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
@@ -108,9 +119,10 @@ def absorbed_integrand(
     wave : array_like, shape (n_wave,)
         Wavelength grid [Angstrom]; used only for the Lyman-continuum mask.
     lyman_cutoff_aa : float or None
-        Lyman-continuum cutoff [Angstrom]; energy absorbed at
-        ``wave < lyman_cutoff_aa`` is excluded (see :data:`LYMAN_CUTOFF_AA`).
-        ``None`` disables the mask (the full grid is integrated).
+        Lyman-continuum cutoff [Angstrom]; energy absorbed at ionizing
+        nodes (``wave < lyman_cutoff_aa``, :func:`tengri.components.lyc.
+        ionizing_mask`) is excluded. ``None`` disables the mask (the full
+        grid is integrated).
 
     Returns
     -------
@@ -122,17 +134,30 @@ def absorbed_integrand(
     -----
     **JIT-compatible**: yes, pure ``jnp``; ``lyman_cutoff_aa`` is a static
     Python value, so the mask branch resolves at trace time.
+
+    This per-node mask alone is NOT what makes the Lyman edge exact -- a
+    plain trapezoid over its output would reintroduce the #537/#2447
+    partial-bin ramp across the bracket cell. Every caller in this module
+    pairs it with :func:`_peak_factored_trapezoid`'s ``side="nonionizing"``
+    selection, which reads this array's ionizing-side nodes only through
+    the exact step-model rectangle (never through a linear ramp), so the
+    zeroing here is redundant-but-harmless rather than load-bearing for
+    exactness; see :mod:`tengri.components.lyc`.
     """
     absorbed_lnu = sed_intrinsic - sed_attenuated
     if lyman_cutoff_aa is not None:
-        absorbed_lnu = jnp.where(wave >= lyman_cutoff_aa, absorbed_lnu, 0.0)
+        absorbed_lnu = jnp.where(ionizing_mask(wave, edge_aa=lyman_cutoff_aa), 0.0, absorbed_lnu)
     return absorbed_lnu
 
 
 def _peak_factored_trapezoid(
-    integrand: jnp.ndarray, nu: jnp.ndarray
+    integrand: jnp.ndarray,
+    wave: jnp.ndarray,
+    *,
+    side: str = "all",
+    edge_aa: float = LYMAN_LIMIT_AA,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Integrate ``integrand/peak`` over ``nu``, returning the factored pieces.
+    """Integrate ``integrand/peak`` over frequency, returning the factored pieces.
 
     The absorbed luminosity is a product of two individually representable
     factors (an integrand of ~1e28 erg/s/Hz and a frequency span of ~1e15 Hz)
@@ -141,10 +166,31 @@ def _peak_factored_trapezoid(
     intermediate leaves float32 range; the caller re-applies ``peak``, in log
     space where it must.
 
+    The reduction itself is :func:`tengri.components.lyc.edge_trapezoid`
+    (``variable="nu"``), not a plain ``jnp.trapezoid``: the one place this
+    module's bracket-cell straddling the Lyman edge gets the step-model
+    treatment instead of a linear ramp across it (do not re-derive the
+    bracket weights here, call into :mod:`tengri.components.lyc`).
+
+    Parameters
+    ----------
+    integrand : array_like, shape (n_wave,)
+        Sampled integrand [erg/s/Hz].
+    wave : array_like, shape (n_wave,)
+        Wavelength grid, ascending [Angstrom].
+    side : {"all", "ionizing", "nonionizing"}, optional
+        Forwarded to :func:`tengri.components.lyc.edge_trapezoid`. Default
+        ``"all"``.
+    edge_aa : float, optional
+        Lyman edge [Angstrom]. Default :data:`tengri.components.lyc.LYMAN_LIMIT_AA`.
+
     Returns
     -------
     signed_norm : ndarray, shape ()
-        ``trapezoid(integrand / peak, nu)``, signed, follows grid orientation.
+        ``edge_trapezoid(integrand / peak, wave, variable="nu", side=side,
+        edge_aa=edge_aa)``, signed. Positively oriented (follows the sign of
+        ``integrand`` itself, not the grid orientation of ``nu`` -- see the
+        module docstring's "Sign convention" note).
     peak : ndarray, shape ()
         The factored-out scale (1.0 when the integrand is zero or non-finite).
     ok : ndarray, shape (), bool
@@ -187,7 +233,9 @@ def _peak_factored_trapezoid(
     peak_finite = jnp.isfinite(peak)
     usable = peak_finite & (peak > 0)
     safe_peak = jnp.where(usable, peak, 1.0)
-    signed_norm = jnp.trapezoid(integrand / safe_peak, nu)
+    signed_norm = edge_trapezoid(
+        integrand / safe_peak, wave, variable="nu", side=side, edge_aa=edge_aa
+    )
     norm_finite = jnp.isfinite(signed_norm)
     # A non-finite peak means the integrand itself carried Inf/NaN. A finite
     # positive peak with a non-finite reduction means the sum went bad on the
@@ -198,13 +246,94 @@ def _peak_factored_trapezoid(
     return signed_norm, safe_peak, usable & norm_finite, corrupt
 
 
+def _log10_signed_edge_integral(
+    integrand: jnp.ndarray, wave: jnp.ndarray, *, side: str, edge_aa: float
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Shared log10-magnitude/sign wrapper around :func:`_peak_factored_trapezoid`.
+
+    Factored out so :func:`bolometric_absorbed_log10` (``side="all"`` or
+    ``"nonionizing"``) and :func:`bolometric_lyc_log10` (``side="ionizing"``)
+    share one corrupt/zero-sentinel bookkeeping instead of each re-deriving
+    it (#1527's split, see :func:`_peak_factored_trapezoid`).
+
+    Returns
+    -------
+    log_magnitude, sign : ndarray, shape ()
+        Same contract as :func:`bolometric_absorbed_log10`'s return value.
+    """
+    from tengri.utils.scale import log10_magnitude
+
+    signed_norm, peak, ok, corrupt = _peak_factored_trapezoid(
+        integrand, wave, side=side, edge_aa=edge_aa
+    )
+    log_norm = log10_magnitude(jnp.where(ok, signed_norm, 0.0))
+    # Corrupt beats the -inf sentinel: -inf powers back to exactly 0.0, so
+    # reporting it here would say "nothing absorbed" about an input nobody can
+    # integrate. +inf survives log10_add and reaches L_ir, where it is visible.
+    # The sign of an uncomputable integral is NaN, not 0.0; 0.0 already means
+    # "no absorption" in this contract.
+    log_magnitude = jnp.where(corrupt, jnp.inf, log_norm + jnp.log10(peak))
+    sign = jnp.where(ok, jnp.sign(signed_norm), 0.0)
+    return log_magnitude, jnp.where(corrupt, jnp.nan, sign)
+
+
+def bolometric_lyc_log10(
+    sed_lnu: jnp.ndarray,
+    wave: jnp.ndarray,
+    *,
+    edge_aa: float = LYMAN_LIMIT_AA,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""log10 of the raw (pre-fesc/fdust) Lyman-continuum luminosity, ionizing side only.
+
+    .. math::
+
+        L_{\rm LyC} = \int_{\lambda < \lambda_{\rm edge}} L_\nu(\lambda)\, d\nu
+
+    the credited-population LyC luminosity #2539's dust-heating credit
+    (:func:`log10_fdust_lyc_credit`, :func:`log10_add_fdust_credit`) is built
+    from. Computed via :func:`tengri.components.lyc.edge_trapezoid` with
+    ``side="ionizing"``, so the bracket cell straddling ``edge_aa`` is held at
+    the step model's last-ionizing-node rectangle rather than ramped -- the
+    same primitive :func:`bolometric_absorbed_log10` uses for the
+    complementary ``"nonionizing"`` side, so the credit and the dust-heating
+    exclusion can never drift onto different bracket-cell conventions.
+
+    Parameters
+    ----------
+    sed_lnu : array_like, shape (n_wave,)
+        SED of the credited population [erg/s/Hz]. Typically the raw
+        (un-fesc-masked) stellar or per-age-weighted SED; the caller decides
+        which population is "credited" (#2539 item 2).
+    wave : array_like, shape (n_wave,)
+        Wavelength grid, ascending [Angstrom].
+    edge_aa : float, optional
+        Lyman edge [Angstrom]. Default :data:`tengri.components.lyc.LYMAN_LIMIT_AA`.
+
+    Returns
+    -------
+    log_magnitude, sign : ndarray, shape ()
+        Same sentinel contract as :func:`bolometric_absorbed_log10`: ``-inf``
+        when the population has no LyC luminosity, ``+inf`` for a corrupt
+        (non-finite) input, ``sign`` is ``NaN`` in that corrupt case.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, linear in ``sed_lnu``.
+
+    Absorbed/credited luminosities are ~1e43 erg/s, six decades past the
+    float32 ceiling (#1206); this log form is peak-factored the same way as
+    :func:`bolometric_absorbed_log10`.
+    """
+    return _log10_signed_edge_integral(sed_lnu, wave, side="ionizing", edge_aa=edge_aa)
+
+
 def bolometric_absorbed_log10(
     sed_intrinsic: jnp.ndarray,
     sed_attenuated: jnp.ndarray,
     nu: jnp.ndarray,
     *,
     wave: jnp.ndarray,
-    lyman_cutoff_aa: float | None = LYMAN_CUTOFF_AA,
+    lyman_cutoff_aa: float | None = LYMAN_LIMIT_AA,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""log10 of the absorbed bolometric luminosity, the float32-safe contract.
 
@@ -222,9 +351,10 @@ def bolometric_absorbed_log10(
     :func:`bolometric_absorbed`, only the output representation differs.
     Magnitude and sign are returned separately because that *is* what a
     signed quantity looks like in log space; callers that only need the
-    energy (nearly all of them, the linear form's sign merely tracks grid
-    orientation) discard the sign, while callers combining two absorbed
-    terms need it to reproduce ``|a + b|`` rather than ``|a| + |b|``.
+    energy (nearly all of them, the sign merely tracks whether the two SEDs
+    cancelled or reinforced -- see the module docstring's "Sign convention"
+    note) discard the sign, while callers combining two absorbed terms need
+    it to reproduce ``|a + b|`` rather than ``|a| + |b|``.
 
     Parameters
     ----------
@@ -233,12 +363,20 @@ def bolometric_absorbed_log10(
     sed_attenuated : array_like, shape (n_wave,)
         Dust-attenuated SED [erg/s/Hz].
     nu : array_like, shape (n_wave,)
-        Frequency grid corresponding to ``wave`` [Hz].
+        Unused (retained for call-site compatibility, #2570): every call
+        site constructs this as ``C_AA / wave``, so the integral is instead
+        computed directly from ``wave`` via
+        :func:`tengri.components.lyc.edge_trapezoid`, which needs the
+        wavelength grid (not just its frequency image) to place the
+        step-model bracket cell at ``lyman_cutoff_aa``.
     wave : array_like, shape (n_wave,)
-        Wavelength grid [Angstrom]; used only for the Lyman-continuum mask.
+        Wavelength grid [Angstrom]; used for the Lyman-continuum mask AND
+        the edge-aware quadrature.
     lyman_cutoff_aa : float or None, optional
-        Lyman-continuum cutoff [Angstrom]. ``None`` disables the mask.
-        Default 912.0.
+        Lyman-continuum cutoff [Angstrom]. ``None`` disables the mask
+        (integrates ``side="all"``); a value excludes the ionizing side
+        (``side="nonionizing"``) with the step placed exactly at that value.
+        Default :data:`tengri.components.lyc.LYMAN_LIMIT_AA` (911.76 Å).
 
     Returns
     -------
@@ -267,19 +405,11 @@ def bolometric_absorbed_log10(
     ceiling, so this log form, not :func:`bolometric_absorbed`, is what a
     pure-float32 (JAX-Metal) forward pass must consume (#1206).
     """
-    from tengri.utils.scale import log10_magnitude
-
+    del nu  # unused; see the Parameters entry above (#2570 compatibility)
     integrand = absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
-    signed_norm, peak, ok, corrupt = _peak_factored_trapezoid(integrand, nu)
-    log_norm = log10_magnitude(jnp.where(ok, signed_norm, 0.0))
-    # Corrupt beats the -inf sentinel: -inf powers back to exactly 0.0, so
-    # reporting it here would say "nothing absorbed" about an input nobody can
-    # integrate. +inf survives log10_add and reaches L_ir, where it is visible.
-    # The sign of an uncomputable integral is NaN, not 0.0; 0.0 already means
-    # "no absorption" in this contract.
-    log_magnitude = jnp.where(corrupt, jnp.inf, log_norm + jnp.log10(peak))
-    sign = jnp.where(ok, jnp.sign(signed_norm), 0.0)
-    return log_magnitude, jnp.where(corrupt, jnp.nan, sign)
+    side = "all" if lyman_cutoff_aa is None else "nonionizing"
+    edge_aa = LYMAN_LIMIT_AA if lyman_cutoff_aa is None else lyman_cutoff_aa
+    return _log10_signed_edge_integral(integrand, wave, side=side, edge_aa=edge_aa)
 
 
 def log10_fdust_lyc_credit(log_l_lyc: jnp.ndarray, f_dust: jnp.ndarray) -> jnp.ndarray:
@@ -410,7 +540,7 @@ def bolometric_absorbed(
     nu: jnp.ndarray,
     *,
     wave: jnp.ndarray,
-    lyman_cutoff_aa: float | None = LYMAN_CUTOFF_AA,
+    lyman_cutoff_aa: float | None = LYMAN_LIMIT_AA,
 ) -> jnp.ndarray:
     r"""Signed bolometric luminosity absorbed by dust, LyC-masked.
 
@@ -422,7 +552,9 @@ def bolometric_absorbed(
 
     where :math:`L_\nu^{\rm intr}` is the intrinsic (unattenuated) SED
     [erg/s/Hz], :math:`L_\nu^{\rm att}` the dust-attenuated SED [erg/s/Hz],
-    and :math:`\lambda_{\rm LyC}` the Lyman-continuum cutoff [Angstrom].
+    and :math:`\lambda_{\rm LyC}` the Lyman-continuum cutoff [Angstrom]. The
+    grid cell straddling :math:`\lambda_{\rm LyC}` is handled by the step
+    model (:mod:`tengri.components.lyc`), not linear interpolation.
 
     Parameters
     ----------
@@ -431,23 +563,25 @@ def bolometric_absorbed(
     sed_attenuated : array_like, shape (n_wave,)
         Dust-attenuated SED [erg/s/Hz].
     nu : array_like, shape (n_wave,)
-        Frequency grid corresponding to ``wave`` [Hz]. Passed to
-        ``jnp.trapezoid`` as-is, no sorting is applied, so the sign of the
-        result follows the grid orientation (descending ``nu`` for ascending
-        ``wave`` gives a negative integral for net absorption).
+        Unused (retained for call-site compatibility, #2570) -- see
+        :func:`bolometric_absorbed_log10`'s matching parameter.
     wave : array_like, shape (n_wave,)
-        Wavelength grid [Angstrom]; used only for the Lyman-continuum mask.
+        Wavelength grid [Angstrom]; used for the Lyman-continuum mask AND
+        the edge-aware quadrature.
     lyman_cutoff_aa : float or None, optional
-        Lyman-continuum cutoff [Angstrom]; energy absorbed at
-        ``wave < lyman_cutoff_aa`` is excluded (those photons ionize H, they
+        Lyman-continuum cutoff [Angstrom]; energy absorbed at the ionizing
+        side of ``lyman_cutoff_aa`` is excluded (those photons ionize H, they
         do not heat dust). ``None`` disables the mask (integrate the full
-        grid). Default 912.0.
+        grid, ``side="all"``). Default :data:`tengri.components.lyc.
+        LYMAN_LIMIT_AA` (911.76 Å).
 
     Returns
     -------
     ndarray, shape ()
-        Signed absorbed bolometric luminosity [erg/s]. Callers apply
-        ``jnp.abs`` (sign robustness against grid orientation) and any
+        Signed absorbed bolometric luminosity [erg/s]. Positively oriented
+        (follows the sign of :math:`L_\nu^{\rm intr} - L_\nu^{\rm att}`
+        itself; see the module docstring's "Sign convention" note) --
+        callers apply ``jnp.abs`` regardless, for robustness, and any
         energy-balance relaxation factor (``dust_eta_balance``) themselves.
         Non-finite *inputs* (e.g. Inf·0 artifacts from extreme-metallicity
         SSP fluxes, BUG-NSS-02 era) are clamped to 0.0, the guard the
@@ -487,8 +621,13 @@ def bolometric_absorbed(
            https://doi.org/10.1051/0004-6361/201834156
 
     """
+    del nu  # unused; see the Parameters entry above (#2570 compatibility)
     integrand = absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
-    signed_norm, peak, ok, _corrupt = _peak_factored_trapezoid(integrand, nu)
+    side = "all" if lyman_cutoff_aa is None else "nonionizing"
+    edge_aa = LYMAN_LIMIT_AA if lyman_cutoff_aa is None else lyman_cutoff_aa
+    signed_norm, peak, ok, _corrupt = _peak_factored_trapezoid(
+        integrand, wave, side=side, edge_aa=edge_aa
+    )
     # ``_corrupt`` is deliberately discarded here while
     # ``bolometric_absorbed_log10`` acts on it (#1527). This is the linear form:
     # no caller in ``src/``, and its clamp is pinned by TestFiniteGuard as the
