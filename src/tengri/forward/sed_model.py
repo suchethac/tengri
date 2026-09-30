@@ -6338,12 +6338,16 @@ class SEDModel:
 
         Self-contained projector that does **not** depend on the model having a
         spectroscopy channel or on the ``predict_observables`` cache: it builds
-        the observed-frame SED (rest SED + IGM/DLA/MW via :meth:`predict_obs_sed`)
-        and resamples it onto ``wave_obs`` with the same kernel
-        (:func:`~tengri.observation.spectrum.project_spectrum`) the configured
-        spectroscopy path uses. The instrument LSF is applied only when the
-        attached observation declares a spectroscopic resolution. Underpins the
-        ``wave_obs`` argument of :meth:`predict_spectrum` (suchethac/tengri#707).
+        the :class:`~tengri.protocols.component.ForwardState` (:meth:`predict_state`)
+        and resamples it onto ``wave_obs`` through
+        :func:`~tengri.observation.observation.project_spectrum_kernel_split`,
+        the single seam :meth:`Observation.predict` and the compiled
+        ``predict_observables`` kernel also call, so the #2519
+        stellar/instrument-only split and the #2526 ``lsf_scale`` cannot
+        drift between this path and those. The instrument LSF is applied
+        only when the attached observation declares a spectroscopic
+        resolution. Underpins the ``wave_obs`` argument of
+        :meth:`predict_spectrum` (suchethac/tengri#707).
 
         Parameters
         ----------
@@ -6361,23 +6365,33 @@ class SEDModel:
         -------
         ndarray, shape (n_pix,)
             Observed spectral flux density [erg/s/cm^2/Hz].
+
+        Notes
+        -----
+        Reads ``state.derived["igm_transmission"]`` for the line-of-sight
+        absorber, exactly as :meth:`Observation.predict` does, rather than
+        recomputing IGM/DLA transmission by hand: one calculation, read from
+        two places, cannot disagree.
         """
         del wave_chunk_size  # see Parameters note
         from tengri.cosmology import luminosity_distance
-        from tengri.observation.spectrum import project_spectrum, resolve_sigma_lib_kms
+        from tengri.observation.observation import project_spectrum_kernel_split
+        from tengri.observation.spectrum import resolve_sigma_lib_kms
 
         # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
         # dict (both of predict_spectrum's explicit-wave_obs branches route
         # here), so it has not been through Prediction's one-time
-        # refuse-then-merge. Without this, _predict_obs_sed's internal
+        # refuse-then-merge. Without this, predict_state's internal
         # free-name filter would silently drop a Fixed-key override before
         # any refusal saw it -- the same silent-ignore closed for
         # predict_obs_sed itself.
         refuse_fixed_overrides(self.spec, params)
-        sed_obs = self._predict_obs_sed(params)
+        state = self.predict_state(params)
         z = self._get_redshift(params)
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        wave_rest = sed_obs.wavelength / (1.0 + z)
+        wave_rest = state.wave
+        igm_trans = state.derived.get("igm_transmission", None)
+        sed_atten = state.sed_intrinsic if igm_trans is None else state.sed_intrinsic * igm_trans
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
@@ -6406,32 +6420,24 @@ class SEDModel:
         resolution_matrix = (
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
-        # #2526: honor lsf_scale here too (resolution / lsf_scale scales
-        # sigma_inst by lsf_scale, see Observation.predict). #2519's
-        # stellar/instrument-only kernel split does NOT extend to this path:
-        # sed_obs is a SEDResult (wavelength, sed) with no per-component
-        # breakdown (unlike ForwardState.derived), so there is nothing to
-        # split without a larger rewrite of _predict_obs_sed's return
-        # contract. This is the same single-kernel spectrum every call here
-        # always produced; only the lsf_scale factor is new.
-        if resolution is not None:
-            resolution = resolution / self._get_lsf_scale(params)
 
-        flux = project_spectrum(
-            sed_obs.sed,
+        return project_spectrum_kernel_split(
+            state,
+            sed_atten,
+            igm_trans,
             wave_rest,
             wave_obs,
             z,
             dl_cm,
             resolution=resolution,
             sigma_lib_kms=sigma_lib_kms,
-            sigma_v_kms=params.get("sigma_v_kms", 0.0),
+            sigma_v_kms=self._get_sigma_v_kms(params),
+            lsf_scale=self._get_lsf_scale(params),
             cal_coeffs=cal_coeffs,
             cal_wave_range=cal_wave_range,
             conserving=conserving,
             resolution_matrix=resolution_matrix,
         )
-        return flux
 
     def predict_magnitudes(self, params):
         """Deprecated. Use ``model.predict(params).magnitudes()``.

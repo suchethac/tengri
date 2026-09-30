@@ -38,6 +38,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from scipy.optimize import curve_fit
 
 from tengri import DEFAULT, FREE, Fixed, Observation, SEDModel, Uniform, load_ssp_data
 from tengri.components.nebular._shared import place_line_profiles_velocity
@@ -50,6 +51,7 @@ pytestmark = pytest.mark.regression_bug
 _C_KMS = 299792.458
 _FWHM_TO_SIGMA = 2.0 * np.sqrt(2.0 * np.log(2.0))  # dimensionless, ~2.3548
 _HALPHA_REST = 6564.61
+_HBETA_REST = 4861.35
 _MILES_BARE = "data/fsps_prsc_miles_chabrier.h5"
 
 
@@ -64,6 +66,26 @@ def _second_moment_kms(wave_obs: np.ndarray, flux: np.ndarray, center: float) ->
     lnwave = np.log(np.asarray(wave_obs))
     var = np.sum(f * (lnwave - np.log(center)) ** 2) / np.sum(f)
     return float(np.sqrt(var) * _C_KMS)
+
+
+def _gaussian_fit_width_kms(wave_obs: np.ndarray, flux: np.ndarray, center: float) -> float:
+    """Least-squares Gaussian fit (amplitude, sigma, continuum) to an isolated
+    line, center fixed at its known redshifted wavelength. A fit is used
+    rather than a raw second moment: a windowed moment on a real multi-line
+    spectrum is biased by any residual continuum curvature and by how much
+    of the profile's tail the window happens to capture, while a fit
+    isolates the line's own shape parameter directly.
+    """
+
+    def model(x, amp, sigma_aa, cont):
+        return cont + amp * np.exp(-0.5 * ((x - center) / sigma_aa) ** 2)
+
+    wave_obs = np.asarray(wave_obs)
+    flux = np.asarray(flux)
+    p0 = [flux.max() - flux.min(), 2.0, flux.min()]
+    popt, _ = curve_fit(model, wave_obs, flux, p0=p0)
+    sigma_aa = popt[1]
+    return float(sigma_aa / center * _C_KMS)
 
 
 def test_split_conserves_total_sed():
@@ -174,29 +196,14 @@ def _build_model_free_sigma_v(z, wave_obs, resolution, ssp, neb):
     return model
 
 
-@pytest.mark.parametrize("neb_backend", ["cue", "cloudy"])
-@pytest.mark.parametrize("sigma_inst_kms", [50.0, 150.0])
-def test_halpha_width_invariant_to_sigma_v_and_library_curve(sigma_inst_kms, neb_backend):
-    """On a real Cue- or CloudyGrid-backend spectrum, H-alpha's measured width
-    does not move with sigma_v or with the library curve (only the stellar
-    continuum does).
-
-    Contamination from nearby lines ([N II] 6548/6584) is a fixed additive
-    bias at every sigma_v/library setting (#2519 module docstring), so
-    comparing measurements against EACH OTHER, rather than against an
-    absolute formula, is immune to it: any residual sigma_v/library
-    dependence left by a regression would show up as spread across this
-    parametrization.
-    """
-    neb_factory, skip_check = _NEB_BACKENDS[neb_backend]
-    skip_check()
-    ssp = _ssp_or_skip(_MILES_BARE)
-    neb = neb_factory()
+def _hbeta_widths_across_sigma_v_and_library(ssp, neb, sigma_inst_kms):
+    """Shared setup for the H-beta formula/invariance tests below."""
     z = 0.05
-    halpha_obs = _HALPHA_REST * (1.0 + z)
-    wave_obs = jnp.linspace(halpha_obs - 9.0, halpha_obs + 9.0, 2000)
+    hbeta_obs = _HBETA_REST * (1.0 + z)
+    wave_obs = jnp.linspace(hbeta_obs - 15.0, hbeta_obs + 15.0, 2000)
     resolution = _resolution_for_sigma_inst(sigma_inst_kms)
     model = _build_model_free_sigma_v(z, wave_obs, resolution, ssp, neb)
+    sigma_gas = float(model.spec.get_distribution("neb_eline_sigma_kms").value)
     p0 = dict(model.spec.sample(jax.random.PRNGKey(1)))
     p0["sfh_dpl_log_total_mass"] = jnp.asarray(10.0)
     p0["dust_tau_bc"] = jnp.asarray(0.0)
@@ -207,23 +214,69 @@ def test_halpha_width_invariant_to_sigma_v_and_library_curve(sigma_inst_kms, neb
         p = dict(p0)
         p["sigma_v_kms"] = jnp.asarray(sigma_v)
         flux = np.asarray(model.predict_spectrum(p))
-        widths[sigma_v] = _second_moment_kms(np.asarray(wave_obs), flux, halpha_obs)
+        widths[sigma_v] = _gaussian_fit_width_kms(np.asarray(wave_obs), flux, hbeta_obs)
 
-    mean_width = float(np.mean(list(widths.values())))
-    for sigma_v, w in widths.items():
-        assert w == pytest.approx(mean_width, rel=2e-2), (sigma_v, widths)
-
-    # Library curve: MILES curve vs. the curve stripped away (flat sigma_lib
-    # fallback) must also leave H-alpha's width unchanged -- the whole point
-    # of #2519 is that sigma_lib never reaches the line kernel either way.
     model_flat = SEDModel(
         model.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0)),
         ssp._replace(ssp_resolution_kms=None),
         observation=model.observation,
     )
     flux_flat = np.asarray(model_flat.predict_spectrum({**p0, "sigma_v_kms": jnp.asarray(0.0)}))
-    width_flat = _second_moment_kms(np.asarray(wave_obs), flux_flat, halpha_obs)
-    assert width_flat == pytest.approx(widths[0.0], rel=2e-2)
+    widths["flat_curve"] = _gaussian_fit_width_kms(np.asarray(wave_obs), flux_flat, hbeta_obs)
+    return sigma_gas, widths
+
+
+@pytest.mark.parametrize("neb_backend", ["cue", "cloudy"])
+@pytest.mark.parametrize("sigma_inst_kms", [50.0, 150.0])
+def test_hbeta_width_invariant_to_sigma_v_and_library_curve(sigma_inst_kms, neb_backend):
+    """On a real Cue- or CloudyGrid-backend spectrum, H-beta's fitted width
+    does not move with sigma_v or with the library curve (only the stellar
+    continuum does) -- true regardless of the SSP grid's own wavelength
+    resolution, since that resolution is the same constant nuisance factor
+    at every sigma_v/library setting here.
+
+    H-beta 4861.35 A (rest), not H-alpha: the Cue/CloudyGrid catalog's
+    nearest line to H-alpha is [N II] 6548/6584 at only 16.6/20.0 A, close
+    enough that a fit over a window wide enough for the LSF kernel also
+    catches their wings. H-beta's nearest neighbor of comparable strength
+    ([O III] 4959) sits 98.9 A away -- verified against the model's own
+    ``state.derived["line_waves"]`` catalog -- so a +/-15 A window resolves
+    the kernel cleanly with no such contamination.
+    """
+    neb_factory, skip_check = _NEB_BACKENDS[neb_backend]
+    skip_check()
+    ssp = _ssp_or_skip(_MILES_BARE)
+    neb = neb_factory()
+    _sigma_gas, widths = _hbeta_widths_across_sigma_v_and_library(ssp, neb, sigma_inst_kms)
+
+    reference = widths[0.0]
+    for key, w in widths.items():
+        assert w == pytest.approx(reference, rel=2e-2), (key, widths)
+
+
+def test_hbeta_width_matches_instrument_only_formula():
+    """H-beta's fitted width equals sqrt(sigma_gas^2 + sigma_inst^2) to 2%.
+
+    Run at sigma_inst=150 km/s only: at sigma_inst=50 km/s the total kernel
+    (sqrt(100^2+50^2) = 112 km/s, ~1.9 A observed at H-beta) is only ~2
+    native SSP grid points wide (MILES's 0.9 A spacing near 4861 A rest),
+    below what plain interpolation onto the pixel grid can resolve to 2%
+    regardless of kernel correctness -- verified by trying both the
+    point-sampling and flux-conserving resample, which agree with each
+    other and both read ~8% high there. The wider sigma_inst=150 km/s
+    kernel (sqrt(100^2+150^2) = 180 km/s, ~3.1 A) clears that floor.
+    ``sigma_gas`` is read from the model's own ``neb_eline_sigma_kms``
+    (Fixed at build time here), not a literal, so this tracks whatever the
+    model actually painted the line at.
+    """
+    _cue_or_skip()
+    ssp = _ssp_or_skip(_MILES_BARE)
+    neb = {"type": "cue", "all_params": Fixed(DEFAULT)}
+    sigma_gas, widths = _hbeta_widths_across_sigma_v_and_library(ssp, neb, 150.0)
+
+    expected = float(np.sqrt(sigma_gas**2 + 150.0**2))
+    for key, w in widths.items():
+        assert w == pytest.approx(expected, rel=2e-2), (key, w, expected)
 
 
 def test_stellar_feature_still_gets_full_kernel_sigma_v_changes_it():
@@ -357,14 +410,8 @@ def test_mutation_line_routed_back_through_stellar_kernel_would_fail_invariance(
     """Sanity-checks the invariance test's own discriminating power: a
     version of the kernel that gives H-alpha the full (sigma_v-dependent)
     kernel instead of the instrument-only one measurably fails the same
-    assertion the real fix passes.
-
-    This is a permanent, fast in-process guard, run every time; the
-    orchestrator's own source-level mutation (routing
-    ``Observation.predict``'s line group through the stellar kernel and
-    re-running the suite) is the authoritative regression check and is done
-    by hand, not left running in CI (see the worklog for its verbatim
-    FAILED lines).
+    assertion the real fix passes. Guards against a regression that gives
+    the line group the stellar kernel again without any test noticing.
     """
     wave_rest = jnp.linspace(6500.0, 6630.0, 20000)
     sigma_gas = 100.0

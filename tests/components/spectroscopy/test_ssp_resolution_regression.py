@@ -97,7 +97,7 @@ def test_load_ssp_data_populates_curve_for_real_shipped_filenames(filename):
 
 
 def test_curve_attached_only_when_wavelengths_match_the_library_reference_grid(tmp_path):
-    """A filename token alone is not enough to attach a library curve (#2526 Part 0).
+    """A filename token alone is not enough to attach a library curve (#2518).
 
     A synthetic grid whose filename contains a library token (``c3k_a``)
     but whose wavelength array is not that library's reference grid (e.g.
