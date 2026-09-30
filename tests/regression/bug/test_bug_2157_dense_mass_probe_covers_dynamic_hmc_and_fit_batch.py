@@ -1,10 +1,25 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """#2157: dense-mass step-size stability probe covers dynamic-HMC and fit_batch.
 
-The post-adaptation density probe (_stabilize_dense_mass_step) was initially
-wired into only NUTS and HMC single-galaxy fresh-adaptation branches. This test
-suite validates that the probe now also runs after adaptation in the dynamic-HMC
-backend and in fit_batch's shared window adaptation.
+The post-adaptation stability probe (``_stabilize_dense_mass_step``) was
+initially wired into only the NUTS and HMC single-galaxy fresh-adaptation
+branches. These tests pin the two seams this fix adds: ``run_dynamic_hmc``
+and ``Fitter._fit_batch_vmap_mcmc`` (the shared window adaptation reached
+through ``fit_batch``).
+
+Wiring notes the first draft got wrong, kept here so they stay wrong-proof:
+
+- ``dynamic_hmc.py`` imports the probe at module top, so the recorder must be
+  patched into the ``dynamic_hmc`` NAMESPACE — patching ``_shared`` leaves the
+  already-imported name untouched and the recorder never fires (which is why
+  the draft could only assert ``posterior is not None``).
+- ``fitter.py`` imports the probe INSIDE ``_fit_batch_vmap_mcmc``, so there
+  patching ``_shared`` is exactly right.
+- Both positive tests assert the recorder actually FIRED with the seam's own
+  sampler name; a wiring test that passes with the recorder silent is theater.
+- The vmap seam is only reached through ``fit_batch`` with an MCMC method,
+  >=2 same-shape galaxies and a fixed-z photometry precompute; the recorder
+  assertion doubles as proof the batch actually took the vmap route.
 
 Taxonomy: regression_bug
 """
@@ -30,7 +45,7 @@ pytestmark = pytest.mark.regression_bug
 
 
 def _build_small_model(ssp=None):
-    """Build a D ≤ 30 model for fast testing."""
+    """Build a D <= 30 model for fast testing."""
     if ssp is None:
         # Build a synthetic SSP suitable for testing (no disk I/O)
         n_met, n_age = 3, 20
@@ -46,9 +61,7 @@ def _build_small_model(ssp=None):
         flux = jnp.abs(flux) + 1e-12
         ssp = SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 
-    obs = Observation(
-        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"])
-    )
+    obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]))
 
     model = SEDModel.build(
         ssp_data=ssp,
@@ -66,231 +79,120 @@ def _build_small_model(ssp=None):
     return model
 
 
+def _free_truth(model):
+    """A free-only truth dict (#2296: params dicts must not carry Fixed keys)."""
+    truth = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    truth.update(
+        {
+            "sfh_dpl_log_total_mass": jnp.array(10.0),
+            "sfh_dpl_alpha": jnp.array(0.8),
+            "dust_tau_bc": jnp.array(0.2),
+            "dust_tau_diff": jnp.array(0.1),
+        }
+    )
+    return {k: float(v) for k, v in truth.items()}
+
+
+def _mock_flux_noise(model):
+    flux = np.asarray(model.predict_photometry(_free_truth(model)))
+    return flux, flux / 10.0
+
+
+def _make_recorder(call_log):
+    def recorder(
+        kernel,
+        state,
+        ld_fn,
+        data_args,
+        step_size,
+        inv_mass_matrix,
+        max_doublings,
+        sampler_name="NUTS",
+    ):
+        call_log.append({"sampler_name": sampler_name})
+        return step_size, 0
+
+    return recorder
+
+
+_FIT_KW = dict(n_warmup=60, n_samples=20, precondition=False)
+
+
 class TestDenseProbeWiringDynamicHMC:
-    """Test that the dense-mass probe is wired into the inference pipeline."""
+    """The probe runs after dynamic-HMC's fresh adaptation iff the mass is dense."""
 
-    @pytest.mark.integration
-    def test_dynamic_hmc_probe_wired_dense_mass_true(self, monkeypatch):
-        """Probe is available and wired for dense_mass_matrix=True path."""
-        from tengri import Data
-        from tengri.inference.backends.mcmc import _shared
+    def _run(self, monkeypatch, dense):
+        from tengri import Data, ForwardModel
+        from tengri.inference.backends.mcmc import dynamic_hmc as dynamic_hmc_mod
 
         model = _build_small_model()
+        flux, noise = _mock_flux_noise(model)
 
-        # Create synthetic data
-        truth = model.spec.sample(jax.random.PRNGKey(0))
-        truth = {
-            **truth,
-            "sfh_dpl_log_total_mass": jnp.array(10.0),
-            "sfh_dpl_alpha": jnp.array(0.8),
-            "dust_tau_bc": jnp.array(0.2),
-            "dust_tau_diff": jnp.array(0.1),
-        }
-        truth_full = {**model.spec.get_fixed_values(), **{k: float(v) for k, v in truth.items()}}
-        flux = np.asarray(model.predict_photometry(truth_full))
-        noise = flux / 10.0
-
-        # Recorder to track probe calls
         call_log = []
-
-        def recorder(
-            kernel,
-            state,
-            ld_fn,
-            data_args,
-            step_size,
-            inv_mass_matrix,
-            max_doublings,
-            sampler_name="NUTS",
-        ):
-            call_log.append({"sampler_name": sampler_name})
-            # Return stable step (no backoff needed)
-            return step_size, 0
-
-        # Monkeypatch on the _shared module where it's defined and imported from
-        monkeypatch.setattr(_shared, "_stabilize_dense_mass_step", recorder)
-
-        from tengri import ForwardModel
+        monkeypatch.setattr(
+            dynamic_hmc_mod, "_stabilize_dense_mass_step", _make_recorder(call_log)
+        )
 
         forward = ForwardModel.build(sed=model)
         posterior = forward.fit(
             Data(photometry=(flux, noise)),
             key=jax.random.PRNGKey(1),
-            method="mcmc_hmc",
-            n_warmup=100,
-            n_samples=50,
-            dense_mass_matrix=True,
-            precondition=False,
+            method="mcmc_dynamic_hmc",
+            dense_mass_matrix=dense,
+            **_FIT_KW,
         )
-
-        # Probe is available even if not called in this particular path
         assert posterior is not None
+        return call_log
 
-    @pytest.mark.integration
-    def test_dynamic_hmc_probe_not_called_with_dense_mass_false(self, monkeypatch):
-        """Probe is never called during dynamic-HMC with dense_mass_matrix=False."""
-        from tengri import Data
-        from tengri.inference.backends.mcmc import _shared
-
-        model = _build_small_model()
-
-        # Create synthetic data
-        truth = model.spec.sample(jax.random.PRNGKey(0))
-        truth = {
-            **truth,
-            "sfh_dpl_log_total_mass": jnp.array(10.0),
-            "sfh_dpl_alpha": jnp.array(0.8),
-            "dust_tau_bc": jnp.array(0.2),
-            "dust_tau_diff": jnp.array(0.1),
-        }
-        truth_full = {**model.spec.get_fixed_values(), **{k: float(v) for k, v in truth.items()}}
-        flux = np.asarray(model.predict_photometry(truth_full))
-        noise = flux / 10.0
-
-        # Recorder to track probe calls
-        call_log = []
-
-        def recorder(
-            kernel,
-            state,
-            ld_fn,
-            data_args,
-            step_size,
-            inv_mass_matrix,
-            max_doublings,
-            sampler_name="NUTS",
-        ):
-            call_log.append(True)
-            return step_size, 0
-
-        # Monkeypatch on the _shared module where it's defined and imported from
-        monkeypatch.setattr(_shared, "_stabilize_dense_mass_step", recorder)
-
-        from tengri import ForwardModel
-
-        forward = ForwardModel.build(sed=model)
-        posterior = forward.fit(
-            Data(photometry=(flux, noise)),
-            key=jax.random.PRNGKey(1),
-            method="mcmc_hmc",
-            n_warmup=100,
-            n_samples=50,
-            dense_mass_matrix=False,
-            precondition=False,
+    def test_probe_fires_with_dense_mass(self, monkeypatch):
+        call_log = self._run(monkeypatch, dense=True)
+        assert call_log == [{"sampler_name": "Dynamic HMC"}], (
+            f"the dynamic-HMC seam must call the probe exactly once, got {call_log}"
         )
 
-        assert len(call_log) == 0, (
-            f"probe should never be called, was called {len(call_log)} times"
-        )
-
-
+    def test_probe_silent_with_diagonal_mass(self, monkeypatch):
+        call_log = self._run(monkeypatch, dense=False)
+        assert call_log == [], f"diagonal mass must skip the probe, got {call_log}"
 
 
 class TestDenseProbeWiringFitBatch:
-    """Additional tests validating dense-mass probe integration."""
+    """The probe runs in fit_batch's shared vmap adaptation iff the mass is dense."""
 
-    @pytest.mark.integration
-    def test_fit_through_forward_dense_mass_true(self, monkeypatch):
-        """Probe behavior validated via ForwardModel with dense_mass=True."""
-        from tengri import Data
+    def _run(self, monkeypatch, dense):
         from tengri.inference.backends.mcmc import _shared
+        from tengri.inference.fitter import Fitter
 
         model = _build_small_model()
-        truth = model.spec.sample(jax.random.PRNGKey(0))
-        truth = {
-            **truth,
-            "sfh_dpl_log_total_mass": jnp.array(10.0),
-            "sfh_dpl_alpha": jnp.array(0.8),
-            "dust_tau_bc": jnp.array(0.2),
-            "dust_tau_diff": jnp.array(0.1),
-        }
-        truth_full = {**model.spec.get_fixed_values(), **{k: float(v) for k, v in truth.items()}}
-        flux = np.asarray(model.predict_photometry(truth_full))
-        noise = flux / 10.0
+        flux, noise = _mock_flux_noise(model)
 
         call_log = []
+        # _fit_batch_vmap_mcmc imports the probe inside the method, so the
+        # _shared attribute is resolved at call time — patching it there works.
+        monkeypatch.setattr(_shared, "_stabilize_dense_mass_step", _make_recorder(call_log))
 
-        def recorder(
-            kernel,
-            state,
-            ld_fn,
-            data_args,
-            step_size,
-            inv_mass_matrix,
-            max_doublings,
-            sampler_name="NUTS",
-        ):
-            call_log.append({"sampler_name": sampler_name})
-            return step_size, 0
-
-        monkeypatch.setattr(_shared, "_stabilize_dense_mass_step", recorder)
-
-        from tengri import ForwardModel
-
-        forward = ForwardModel.build(sed=model)
-        posterior = forward.fit(
-            Data(photometry=(flux, noise)),
-            key=jax.random.PRNGKey(1),
+        fitter = Fitter(model, data=jnp.asarray(flux), noise=jnp.asarray(noise))
+        batch = [
+            {"flux_obs": jnp.asarray(flux), "noise": jnp.asarray(noise)},
+            {"flux_obs": jnp.asarray(flux) * 1.1, "noise": jnp.asarray(noise)},
+        ]
+        posteriors = fitter.fit_batch(
+            batch,
             method="mcmc_hmc",
-            n_warmup=100,
-            n_samples=50,
-            dense_mass_matrix=True,
-            precondition=False,
-        )
-        # Test passes if fit completes without error
-        assert posterior is not None
-
-    @pytest.mark.integration
-    def test_fit_through_forward_dense_mass_false(self, monkeypatch):
-        """Probe behavior validated via ForwardModel with dense_mass=False."""
-        from tengri import Data
-        from tengri.inference.backends.mcmc import _shared
-
-        model = _build_small_model()
-        truth = model.spec.sample(jax.random.PRNGKey(0))
-        truth = {
-            **truth,
-            "sfh_dpl_log_total_mass": jnp.array(10.0),
-            "sfh_dpl_alpha": jnp.array(0.8),
-            "dust_tau_bc": jnp.array(0.2),
-            "dust_tau_diff": jnp.array(0.1),
-        }
-        truth_full = {**model.spec.get_fixed_values(), **{k: float(v) for k, v in truth.items()}}
-        flux = np.asarray(model.predict_photometry(truth_full))
-        noise = flux / 10.0
-
-        call_log = []
-
-        def recorder(
-            kernel,
-            state,
-            ld_fn,
-            data_args,
-            step_size,
-            inv_mass_matrix,
-            max_doublings,
-            sampler_name="NUTS",
-        ):
-            call_log.append(True)
-            return step_size, 0
-
-        monkeypatch.setattr(_shared, "_stabilize_dense_mass_step", recorder)
-
-        from tengri import ForwardModel
-
-        forward = ForwardModel.build(sed=model)
-        posterior = forward.fit(
-            Data(photometry=(flux, noise)),
             key=jax.random.PRNGKey(1),
-            method="mcmc_hmc",
-            n_warmup=100,
-            n_samples=50,
-            dense_mass_matrix=False,
-            precondition=False,
+            verbose=False,
+            dense_mass_matrix=dense,
+            **_FIT_KW,
         )
-        # Probe should not be called with dense_mass=False
-        assert len(call_log) == 0
+        assert len(posteriors) == 2
+        return call_log
 
+    def test_probe_fires_with_dense_mass(self, monkeypatch):
+        call_log = self._run(monkeypatch, dense=True)
+        assert call_log == [{"sampler_name": "MCMC-HMC"}], (
+            "the fit_batch vmap seam must call the probe exactly once (shared "
+            f"adaptation, not per galaxy), got {call_log}"
+        )
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    def test_probe_silent_with_diagonal_mass(self, monkeypatch):
+        call_log = self._run(monkeypatch, dense=False)
+        assert call_log == [], f"diagonal mass must skip the probe, got {call_log}"
