@@ -703,6 +703,22 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
                 "which covers the photometry/spectroscopy vector only, never "
                 "LineFluxData's own mask"
             ), {}
+        # A free ``line_flux_scaling`` (#2527) multiplies the SAME line-flux
+        # block the profiled mass amplitude multiplies: the line-flux term
+        # constrains only their PRODUCT, not either alone, exactly the
+        # "two interacting amplitudes" reason the marginalized/fitted
+        # emission-line guards above already refuse. Unlike those, this is
+        # not analytically resolved here either.
+        if "line_flux_scaling" in spec.free_params:
+            return (
+                "a free 'line_flux_scaling' nuisance is declared alongside the measured "
+                "line-flux channel that profile_mass profiles: that scale and the profiled "
+                "mass amplitude both multiply the same line-flux prediction, so the line-flux "
+                "block constrains only their product -- two interacting amplitudes need their "
+                "own analysis, the same reason profile_mass refuses a marginalized or fitted "
+                "emission-line amplitude (#2354). Fix line_flux_scaling (its default) or set "
+                "profile_mass=False"
+            ), {}
     if _has_line_adjacent_channel(fitter.model):
         return "a line-ratio or spectral-index channel is configured", {}
     if fitter._calibration_marginalize:

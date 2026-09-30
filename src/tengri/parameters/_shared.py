@@ -16,7 +16,7 @@ share the same in-memory list.
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.priors import Fixed, LogNormal, Uniform
 from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
@@ -76,6 +76,26 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "sigma_v_kms must be in [0, 2000]",
         free_prior=Uniform(0.0, 2000.0, "Stellar velocity dispersion", units="km/s", default=0.0),
         units="km/s",
+    ),
+    ParamDeclaration(
+        "line_flux_scaling",
+        Fixed(1.0),
+        "Multiplicative calibration nuisance on the integrated line-flux data "
+        "channel (Observation.line_fluxes), absorbing an aperture / absolute-"
+        "flux-calibration mismatch between that channel and the rest of the "
+        "SED (#2527). Multiplies every predicted line flux of that channel "
+        "immediately before the likelihood comparison; does not change "
+        "predict_line_fluxes, line ratios, or any other derived property.",
+        lambda lo, hi: lo > 0,
+        "line_flux_scaling must be strictly positive",
+        free_prior=LogNormal(
+            mu=0.0,
+            sigma=0.05,
+            description="Line-flux channel calibration scale",
+            units="",
+            default=1.0,
+        ),
+        units="",
     ),
 )
 
