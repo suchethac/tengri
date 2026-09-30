@@ -923,6 +923,32 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
+    # GRAHSP Netzer accretion-disc multilinear interpolation parameters (Task 3).
+    # The 16-node grid spans black-hole mass, spin, and Eddington ratio.
+    ParamDeclaration(
+        "agn_grahsp_netzer_log_mbh",
+        Uniform(6.0, 9.0, default=8.0),
+        "GRAHSP Netzer disc black-hole mass log10(M_BH/Msun). "
+        "Interpolates over the grid support [6, 9] dex; "
+        "clipped to edges outside this range.",
+        units="dex(Msun)",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_netzer_spin",
+        Uniform(0.0, 0.998, default=0.0),
+        "GRAHSP Netzer disc spin parameter. "
+        "Interpolates over the grid support [0, 0.998]; "
+        "clipped to edges outside this range.",
+        units="dimensionless",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_netzer_log_mdot",
+        Uniform(-1.5228787452803376, -0.5228787452803376, default=-0.5228787452803376),
+        "GRAHSP Netzer disc Eddington ratio log10(Mdot). "
+        "Grid support [log10(0.03), log10(0.3)], with default 0.3. "
+        "Interpolates over this range; clipped to edges outside.",
+        units="dex",
+    ),
 )
 
 #: Default ``agn_log_lbol`` for standalone model functions, read from the

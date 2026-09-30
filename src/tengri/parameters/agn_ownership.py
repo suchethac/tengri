@@ -191,6 +191,9 @@ _AGN_PARTITION = {
     "agn_cigale_disk_delta": "agn.disc",  # skirtor/schartmann2005 disc slope
     "agn_grahsp_cutoff_nm": "agn.disc",
     "agn_grahsp_log_l5100": "agn.disc",
+    "agn_grahsp_netzer_log_mbh": "agn.disc",
+    "agn_grahsp_netzer_spin": "agn.disc",
+    "agn_grahsp_netzer_log_mdot": "agn.disc",
     "agn_grahsp_plbendloc_nm": "agn.disc",
     "agn_grahsp_plbendwidth": "agn.disc",
     "agn_grahsp_plslope": "agn.disc",
