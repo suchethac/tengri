@@ -350,12 +350,35 @@ def test_mix_grahsp_disc_with_simple_torus():
         agn_T_warm=300.0,
         agn_frac_hot=0.3,
         agn_torus_frac=0.5,
-        agn_attenuation_ebv=0.2,
+        agn_ebv=0.2,
     )
     chex.assert_equal_shape([out, wave_aa])
     chex.assert_tree_all_finite(out)
     # Some flux must come through after attenuation.
     assert float(out.sum()) > 0
+    # ...and the attenuation must actually ENGAGE: the runner silently
+    # swallows unknown kwargs, so under a retired or misspelled E(B-V) name
+    # this test would pass on an unattenuated spectrum. Compare against the
+    # same call without the knob.
+    out_unattenuated = composable_agn_l_nu(
+        wave_aa,
+        agn_disc_block="grahsp_sbpl",
+        agn_nlr_block="none",
+        agn_blr_block="none",
+        agn_feii_block="none",
+        agn_torus_block="two_temperature",
+        agn_attenuation_block="smc_prevot",
+        agn_log_lbol=45.0,
+        agn_grahsp_log_l5100=44.0,
+        agn_T_hot=1200.0,
+        agn_T_warm=300.0,
+        agn_frac_hot=0.3,
+        agn_torus_frac=0.5,
+    )
+    assert float(jnp.max(jnp.abs(out - out_unattenuated))) > 0.0, (
+        "agn_ebv=0.2 did not change the output; the E(B-V) knob is being "
+        "silently swallowed instead of engaging the attenuation block"
+    )
 
 
 def test_disc_only_recipe_is_pure_continuum():

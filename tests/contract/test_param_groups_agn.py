@@ -559,14 +559,18 @@ class TestAGNEbvMigration:
         )
         dist = params.get_distribution("agn_ebv")
         assert dist.bounds == (0.0, 1.0), (
-            f"agn_ebv should have the bounds specified in the migration message"
+            "agn_ebv should have the bounds specified in the migration message"
         )
 
-    def test_short_keys_stay_distinct_between_the_two_ebv_parameters(self):
-        """Each name keeps its own prefix-stripped short spelling.
+    def test_ebv_short_key_resolves_to_the_one_surviving_name(self):
+        """``'ebv'`` under ``atten`` frees ``agn_ebv`` with the given prior,
+        and the retired ``agn_attenuation_ebv`` name is absent from the spec.
 
-        ``'ebv'`` under ``atten`` is ``agn_ebv``'s short name and resolves
-        there; it is not a second spelling of ``agn_ebv``.
+        This replaces the two-name distinctness contract: there is exactly one
+        E(B-V) parameter, so the check is that the short spelling reaches it
+        and that the retired flat name no longer exists anywhere in the built
+        spec (its refusals are pinned in
+        ``tests/regression/bug/test_bug_2325_one_agn_ebv_name.py``).
         """
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -579,7 +583,8 @@ class TestAGNEbvMigration:
         )
         free_agn = {p for p in params.free_params if p.startswith("agn_")}
         assert free_agn == {"agn_ebv"}, sorted(free_agn)
-        assert params.get_distribution("agn_ebv").is_fixed
+        assert params.get_distribution("agn_ebv").bounds == (0.0, 1.0)
+        assert "agn_attenuation_ebv" not in params.all_params
 
     def test_prevot_smc_ebv_is_live_not_dead(self, synthetic_ssp_wide, synthetic_tophat_obs):
         """The freed parameter must be the LIVE one: jax.grad != 0 on a band
