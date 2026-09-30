@@ -27,7 +27,7 @@ class TestPosteriorReadsItself:
     @pytest.fixture
     def minimal_map_with_delayed_sfh(self, ssp_data_wne, simple_observation):
         """Minimal real MAP fit with delayed SFH type."""
-        from tengri import SEDModel, Fixed, DEFAULT
+        from tengri import DEFAULT, Fixed, SEDModel
         from tengri.inference.fitter import Fitter
 
         # Build a model with delayed SFH (not the default dpl)
@@ -35,7 +35,11 @@ class TestPosteriorReadsItself:
             ssp_data=ssp_data_wne,
             observation=simple_observation,
             sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
-            dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
             neb={"type": "none"},
             redshift=Fixed(0.05),
         )
@@ -84,7 +88,7 @@ class TestPosteriorReadsItself:
 
     def test_non_dpl_sfh_types_round_trip(self, ssp_data_wne, simple_observation):
         """Multiple SFH types must round-trip through to_param_spec."""
-        from tengri import SEDModel, Fixed, DEFAULT
+        from tengri import DEFAULT, Fixed, SEDModel
         from tengri.inference.fitter import Fitter
 
         for sfh_type in ["delayed", "tsnorm"]:
@@ -92,7 +96,11 @@ class TestPosteriorReadsItself:
                 ssp_data=ssp_data_wne,
                 observation=simple_observation,
                 sfh={"type": sfh_type, "all_params": Fixed(DEFAULT)},
-                dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
             )
@@ -109,3 +117,43 @@ class TestPosteriorReadsItself:
             spec = post.to_param_spec()
             groups = spec.to_groups()
             assert groups["sfh"]["type"] == sfh_type, f"SFH type mismatch for {sfh_type}"
+
+    def test_sampling_posterior_converts_to_gaussian(self, ssp_data_wne, simple_observation):
+        """Fitted samples become Gaussian priors centered on the sample mean.
+
+        This coverage used to live in ``test_posterior_arithmetic.py`` on a
+        hand-built model-less posterior; a model-less posterior now refuses to
+        reconstruct a spec (#2180), so the conversion is pinned here with the
+        model attached.
+        """
+        from tengri import DEFAULT, Fixed, SEDModel, Uniform
+        from tengri.inference.fitter import Fitter
+        from tengri.parameters.priors import Gaussian
+
+        model = SEDModel.build(
+            ssp_data=ssp_data_wne,
+            observation=simple_observation,
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(8.0, 12.0),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+        photometry = jnp.ones(3)
+        noise = jnp.ones(3) * 0.01
+        post = Fitter(model, data=photometry, noise=noise).run("map", n_steps=2)
+
+        name = "sfh_delayed_log_total_mass"
+        center = float(post.params[name])
+        post.samples = {name: center + 0.1 * jax.random.normal(jax.random.PRNGKey(0), (200,))}
+
+        d = post.to_param_spec().get_distribution(name)
+        assert isinstance(d, Gaussian)
+        assert d.mu == pytest.approx(center, abs=0.05)
