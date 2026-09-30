@@ -33,6 +33,84 @@ class TestSbplDiscBitIdentityPin:
         """Registry lookup for the sbpl disc block."""
         return AGN_BLOCKS["disc"]["grahsp_sbpl"]
 
+    # (params, float.hex of the block output at _PIN_WAVE_AA), recorded from the block
+    # BEFORE the _disc_log_l5100 extraction (parent of the Netzer-block commit).
+    _PIN_WAVE_AA = (912.0, 1216.0, 2500.0, 5100.0, 10000.0, 50000.0, 200000.0)
+    _PINNED = (
+        (
+            dict(agn_log_lbol=43.0, agn_grahsp_log_l5100=44.0, agn_grahsp_uvslope=0.0, agn_grahsp_plslope=-1.7),
+            (
+                "0x1.1bbd8ca8dd8aap+137",
+                "0x1.b6d611ed2248cp+136",
+                "0x1.6079bbfa7ee2dp+135",
+                "0x1.ccfa69b3bf884p+133",
+                "0x1.2c7a7da2d56f5p+132",
+                "0x1.0fb13afd4e5f2p+128",
+                "0x1.76e8ee6e0f574p+123",
+            ),
+        ),
+        (
+            dict(agn_log_lbol=43.0, agn_grahsp_log_l5100=45.5, agn_grahsp_uvslope=-0.5, agn_grahsp_plslope=-1.5),
+            (
+                "0x1.028a4683dad67p+142",
+                "0x1.80f523536121fp+141",
+                "0x1.39f6954fff934p+140",
+                "0x1.c78b4763e54cap+138",
+                "0x1.50748dca3e702p+137",
+                "0x1.a258162208a4ap+133",
+                "0x1.7ccf54145be30p+129",
+            ),
+        ),
+        (
+            dict(agn_log_lbol=43.0, agn_grahsp_log_l5100=42.5, agn_grahsp_uvslope=0.3, agn_grahsp_plslope=-1.9),
+            (
+                "0x1.4fb59d8c3644cp+132",
+                "0x1.066594eea240bp+132",
+                "0x1.901dd795ca801p+130",
+                "0x1.d27a243d5549cp+128",
+                "0x1.0b9ab3f33c23fp+127",
+                "0x1.5f95afe1ccf44p+122",
+                "0x1.6fb65e5e022a5p+117",
+            ),
+        ),
+        (
+            dict(agn_log_lbol=45.0, agn_grahsp_uvslope=0.2, agn_grahsp_plslope=-1.6),
+            (
+                "0x1.5082ae88f412ap+249",
+                "0x1.0f8006f81ac03p+249",
+                "0x1.dd71753d48e90p+247",
+                "0x1.5123bf4ce6d43p+246",
+                "0x1.d6c7f0e8b101fp+244",
+                "0x1.f4400f201bddfp+240",
+                "0x1.8c7ad01067114p+236",
+            ),
+        ),
+        (
+            dict(agn_log_lbol=44.0, agn_log_lbol_shape=46.0, agn_grahsp_log_l5100=44.5),
+            (
+                "0x1.1f20082f7bb6ep+132",
+                "0x1.bc122e8ede635p+131",
+                "0x1.64ae1e7c62513p+130",
+                "0x1.d27a243d554dcp+128",
+                "0x1.3010167493a5ap+127",
+                "0x1.12eeebaa52319p+123",
+                "0x1.7b61d36e81ebdp+118",
+            ),
+        ),
+    )
+
+    def test_sbpl_bit_identity_pinned_before_extraction(self, sbpl_block):
+        """sbpl output equals values recorded before the helper extraction, bit for bit.
+
+        Covers the explicit-l5100 branch, the bolometric (``agn_grahsp_log_l5100=None``)
+        branch and the float32 ``agn_log_lbol_shape`` pre-shift branch.
+        """
+        wave = jnp.asarray(self._PIN_WAVE_AA)
+        for params, hexes in self._PINNED:
+            got = np.asarray(sbpl_block(wave, **params))
+            expected = np.array([float.fromhex(h) for h in hexes])
+            np.testing.assert_array_equal(got, expected, err_msg=f"sbpl drifted at {params}")
+
     def test_sbpl_bit_identity_at_three_nodes(self, wave_nm, sbpl_block):
         """SBPL block must be bit-identical at three parameter sets before helper extraction."""
         wave_aa = wave_nm * 10.0
@@ -533,23 +611,15 @@ class TestNetzerDiscGrahsp:
         """Registry lookup for the netzer disc block."""
         return AGN_BLOCKS["disc"]["grahsp_netzer"]
 
-    def test_block_equality_netzer_default(self, wave_nm, templates, disc_block):
-        """Block at default netzer parameters matches component API (D3 part 1)."""
-        wave_aa = wave_nm * 10.0
-        params_obj = GRAHSPParams(
-            l5100=1e44,
-            disc_model="netzer",
-            disc_m="8.0",
-            disc_a="0",
-            disc_mdot="0.3",
-        )
+    _NODES = tuple(
+        (m, a, mdot)
+        for m in ("6.0", "7.0", "8.0", "9.0")
+        for a in ("0", "0.998")
+        for mdot in ("0.03", "0.3")
+    )
 
-        # Component API reference
-        sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
-        l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
-
-        # Composable runner with Netzer disc
-        l_nu_got = np.asarray(composable_agn_l_nu(
+    def _runner_l_nu(self, wave_aa, m, a, mdot):
+        return np.asarray(composable_agn_l_nu(
             jnp.asarray(wave_aa),
             agn_log_lbol=44.0,
             agn_disc_block="grahsp_netzer",
@@ -559,70 +629,104 @@ class TestNetzerDiscGrahsp:
             agn_torus_block="grahsp",
             agn_attenuation_block="grahsp_biatten",
             agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=8.0,
-            agn_grahsp_netzer_spin=0.0,
-            agn_grahsp_netzer_log_mdot=np.log10(0.3),
+            agn_grahsp_netzer_log_mbh=float(m),
+            agn_grahsp_netzer_spin=float(a),
+            agn_grahsp_netzer_log_mdot=float(np.log10(float(mdot))),
             agn_type=1,
         ))
 
-        np.testing.assert_allclose(l_nu_got, l_nu_ref, rtol=1e-5)
+    @staticmethod
+    def _component_l_nu(wave_nm, templates, m, a, mdot):
+        """Component-API L_nu, with the runner's disc anchor for the non-disc parts.
 
-    def test_block_equality_netzer_all_16_nodes(self, wave_nm, templates, disc_block):
-        """Block matches component API at all 16 GRAHSP grid nodes (D3 part 2)."""
+        The runner hands the torus/lines/FeII the disc's *measured* L_lambda at
+        5100 A, while ``evaluate_grahsp_agn`` hands them the parameter ``l5100``
+        itself. For the Netzer template these differ by the template's own
+        (log-space resampled) value at 510 nm, ``anchor = bbb(510 nm)/l5100``
+        (0.9988 at the default node), so the reference for the non-disc parts is
+        the component API at ``l5100 * anchor``. The disc itself is compared
+        at ``l5100 = 1e44`` exactly.
+        """
+        l5100 = 1e44
         wave_aa = wave_nm * 10.0
-        test_nodes = [
-            ("6.0", "0", "0.03"),
-            ("6.0", "0", "0.3"),
-            ("6.0", "0.998", "0.03"),
-            ("6.0", "0.998", "0.3"),
-            ("7.0", "0", "0.03"),
-            ("7.0", "0", "0.3"),
-            ("7.0", "0.998", "0.03"),
-            ("7.0", "0.998", "0.3"),
-            ("8.0", "0", "0.03"),
-            ("8.0", "0", "0.3"),
-            ("8.0", "0.998", "0.03"),
-            ("8.0", "0.998", "0.3"),
-            ("9.0", "0", "0.03"),
-            ("9.0", "0", "0.3"),
-            ("9.0", "0.998", "0.03"),
-            ("9.0", "0.998", "0.3"),
-        ]
 
-        for m, a, mdot in test_nodes:
-            params_obj = GRAHSPParams(
-                l5100=1e44,
-                disc_model="netzer",
-                disc_m=m,
-                disc_a=a,
-                disc_mdot=mdot,
+        def sed(l5100_value):
+            return evaluate_grahsp_agn(
+                jnp.asarray(wave_nm),
+                GRAHSPParams(
+                    l5100=l5100_value, disc_model="netzer",
+                    disc_m=m, disc_a=a, disc_mdot=mdot,
+                ),
+                templates,
             )
 
-            # Component API reference
-            sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
-            l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        full = sed(l5100)
+        anchor = float(np.interp(510.0, wave_nm, np.asarray(full.bbb))) / l5100
+        anchored = sed(l5100 * anchor)
+        # ebv = ebv_agn = 0 in GRAHSPParams defaults, so attenuation is unity.
+        non_disc = (anchored.bbb_attenuated - anchored.bbb) + anchored.torus_attenuated
+        l_lambda = np.asarray(full.bbb + non_disc)
+        return l_lambda * 0.1 * wave_aa ** 2 / C_AA
 
-            # Composable runner
-            l_nu_got = np.asarray(composable_agn_l_nu(
+    def test_block_equality_netzer_default(self, wave_nm, templates, disc_block):
+        """Runner at the default node equals the component API (rtol 1e-8, D3)."""
+        m, a, mdot = "8.0", "0", "0.3"
+        l_nu_ref = self._component_l_nu(wave_nm, templates, m, a, mdot)
+        l_nu_got = self._runner_l_nu(wave_nm * 10.0, m, a, mdot)
+        np.testing.assert_allclose(l_nu_got, l_nu_ref, rtol=1e-8)
+
+    def test_block_equality_netzer_all_16_nodes(self, wave_nm, templates, disc_block):
+        """Disc block equals the floored component disc at all 16 nodes (rtol 1e-12), and
+        the full runner chain equals the component API at all 16 nodes (rtol 1e-8)."""
+        from tengri.components.agn.grahsp.bbb import floor_disc_xray
+        from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
+
+        wave_aa = wave_nm * 10.0
+        for m, a, mdot in self._NODES:
+            idx = select_disc_model(
+                templates.disc_m, templates.disc_a, templates.disc_mdot, m=m, a=a, mdot=mdot
+            )
+            expected = np.asarray(floor_disc_xray(
+                jnp.asarray(wave_nm),
+                netzer_disc(jnp.asarray(wave_nm), 1e44, templates.disc_wave_nm,
+                            templates.disc_lumin[idx]),
+            )) * 0.1
+            got = np.asarray(disc_block(
                 jnp.asarray(wave_aa),
-                agn_log_lbol=44.0,
-                agn_disc_block="grahsp_netzer",
-                agn_nlr_block="grahsp",
-                agn_blr_block="grahsp",
-                agn_feii_block="grahsp",
-                agn_torus_block="grahsp",
-                agn_attenuation_block="grahsp_biatten",
+                12.0,
                 agn_grahsp_log_l5100=44.0,
                 agn_grahsp_netzer_log_mbh=float(m),
                 agn_grahsp_netzer_spin=float(a),
-                agn_grahsp_netzer_log_mdot=np.log10(float(mdot)),
-                agn_type=1,
+                agn_grahsp_netzer_log_mdot=float(np.log10(float(mdot))),
+                templates=templates,
             ))
-
             np.testing.assert_allclose(
-                l_nu_got, l_nu_ref, rtol=1e-5,
-                err_msg=f"Failed for netzer node (m={m}, a={a}, mdot={mdot})"
+                got, expected, rtol=1e-12, atol=0.0,
+                err_msg=f"disc block, netzer node (m={m}, a={a}, mdot={mdot})",
             )
+            np.testing.assert_allclose(
+                self._runner_l_nu(wave_aa, m, a, mdot),
+                self._component_l_nu(wave_nm, templates, m, a, mdot),
+                rtol=1e-8,
+                err_msg=f"runner, netzer node (m={m}, a={a}, mdot={mdot})",
+            )
+
+    def test_bolometric_normalisation_when_l5100_unset(self, wave_nm, templates, disc_block):
+        """With ``agn_grahsp_log_l5100=None`` the disc's bolometric integral is L_bol (rtol 1e-6)."""
+        from tengri.components.agn.grahsp.bolometric import bolometric_luminosity_bbb
+        from tengri.utils.physics_constants import L_SUN
+
+        wave_fine = np.union1d(np.logspace(1.0, 4.5, 4000), [510.0])
+        out_aa = np.asarray(disc_block(
+            jnp.asarray(wave_fine * 10.0),
+            12.0,
+            agn_grahsp_netzer_log_mbh=8.0,
+            agn_grahsp_netzer_spin=0.0,
+            agn_grahsp_netzer_log_mdot=float(np.log10(0.3)),
+            templates=templates,
+        ))
+        l_bol = float(bolometric_luminosity_bbb(jnp.asarray(wave_fine), jnp.asarray(out_aa * 10.0)))
+        np.testing.assert_allclose(l_bol, 1e12 * L_SUN, rtol=1e-6)
 
     def test_liveness_log_mbh(self, wave_nm, disc_block):
         """log_mbh parameter must move the SED by > 1e-6 relative (D4)."""

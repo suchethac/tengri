@@ -32,9 +32,7 @@ _VARIANT_BLOCK_MAPPINGS = {
 # Pending mappings: variant is declared in evaluate_grahsp_agn but the
 # composable block does not exist yet. Each entry must carry a reason string.
 # Test fails if a pending entry becomes registered (stale).
-_PENDING_MAPPINGS = {
-    ("disc_model", "netzer"): "T4: disc:grahsp_netzer not yet implemented",
-}
+_PENDING_MAPPINGS: dict[tuple[str, str], str] = {}
 
 
 def _extract_variant_literals() -> dict[str, set[str]]:
