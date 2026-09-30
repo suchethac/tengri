@@ -53,11 +53,45 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
 
 
 def _manual_absorbed(sed_intrinsic, sed_attenuated, wave, *, mask_lyc: bool) -> float:
-    nu = np.asarray(C_AA) / np.asarray(wave)
-    absorbed = np.asarray(sed_intrinsic) - np.asarray(sed_attenuated)
+    """Independent step-model integral (numpy, not calling ``tengri.components.lyc``).
+
+    The grid cell straddling the Lyman edge (``LYMAN_LIMIT_AA`` = 911.76 A,
+    not the retired bare 912.0 literal) is held at the step model's
+    rectangles rather than ramped linearly across, matching what
+    ``bolometric_absorbed_log10`` now computes via ``edge_trapezoid``:
+
+    - ``mask_lyc=True`` (``side="nonionizing"``): ordinary trapezoid over
+      every panel entirely on the non-ionizing side, plus the bracket
+      panel's non-ionizing rectangle (first non-ionizing node's value times
+      the non-ionizing portion of that panel's width).
+    - ``mask_lyc=False`` (``side="all"``): every panel is ordinary EXCEPT
+      the bracket panel, which is the SUM of both rectangles (ionizing +
+      non-ionizing) -- not the same as its ordinary trapezoid area unless
+      the two bracketing values happen to be equal, since the step model
+      never assumes the true function is linear across that one cell.
+    """
+    wave64 = np.asarray(wave, dtype=np.float64)
+    y = np.asarray(sed_intrinsic, dtype=np.float64) - np.asarray(sed_attenuated, dtype=np.float64)
+    nu64 = np.asarray(C_AA, dtype=np.float64) / wave64
+    edge = 911.76
+    nu_edge = float(np.asarray(C_AA, dtype=np.float64)) / edge
+
+    w_lo, w_hi = wave64[:-1], wave64[1:]
+    y_lo, y_hi = y[:-1], y[1:]
+    nu_lo, nu_hi = nu64[:-1], nu64[1:]
+    is_bracket = (w_lo < edge) & (w_hi >= edge)
+    fully_nonionizing = w_lo >= edge
+
+    ordinary = 0.5 * (y_lo + y_hi) * np.abs(nu_hi - nu_lo)
+    bracket_nonionizing = y_hi * np.abs(nu_hi - nu_edge)
+    bracket_ionizing = y_lo * np.abs(nu_edge - nu_lo)
+
     if mask_lyc:
-        absorbed = np.where(np.asarray(wave) >= 912.0, absorbed, 0.0)
-    return float(abs(np.trapezoid(absorbed, nu)))
+        nonion_bracket = np.where(is_bracket, bracket_nonionizing, 0.0)
+        panel = np.where(fully_nonionizing, ordinary, nonion_bracket)
+    else:
+        panel = np.where(is_bracket, bracket_ionizing + bracket_nonionizing, ordinary)
+    return float(abs(np.sum(panel)))
 
 
 class TestEnergyBalanceLycToggle:
