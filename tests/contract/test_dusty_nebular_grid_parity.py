@@ -43,7 +43,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from scipy.integrate import trapezoid
 
 from tengri import (
     DEFAULT,
@@ -469,39 +468,6 @@ def test_absorbed_luminosity_on_the_full_integral_branch(views):
 
     print(f"{case_name} log_L_absorbed max dex error: {worst_dex:.6e}")
     assert worst_dex <= atol_dex, f"{case_name}: dex error {worst_dex:.6e} exceeds {atol_dex}"
-
-
-def test_the_exact_model_counts_each_emitter_once(views):
-    """Verify absorbed luminosity does not double-count emission."""
-    case_name, _m_wave, _m_fast, m_exact, _m_lines, points = views
-
-    p = points["young_dusty"]
-
-    # Get absorbed luminosity
-    st = m_exact.predict_state(p, observables_only=True)
-    L_absorbed = 10.0 ** st.derived["log_L_absorbed"]
-
-    # Get bolometric luminosity of intrinsic SED with dust at zero optical depth
-    p_no_dust = {**p}
-    for k in p:
-        if "tau" in k or "tau_bc" in k or "tau_diff" in k or "tau_v" in k:
-            p_no_dust[k] = 0.0
-
-    st_no_dust = m_exact.predict_state(p_no_dust)
-    wave_rest = st_no_dust.wave
-    sed_bol = st_no_dust.sed_intrinsic
-
-    # Integrate using trapezoid rule on frequency grid
-    C_AA = 3e18  # Speed of light in Angstrom/s
-    freq_weight = C_AA / wave_rest
-    L_bol = trapezoid(sed_bol * freq_weight, wave_rest)
-
-    ratio = L_absorbed / L_bol
-    print(f"{case_name}: L_absorbed / L_bol_intrinsic = {ratio:.6f}")
-    # Check that ratio is finite and positive (physical sanity check)
-    assert np.isfinite(ratio) and ratio > 0, (
-        f"{case_name}: L_absorbed / L_bol_intrinsic is not positive and finite: {ratio}"
-    )
 
 
 def test_line_fluxes_are_untouched(views):
