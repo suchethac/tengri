@@ -30,6 +30,13 @@
   than a membership list, so a newly registered backend fails the test until
   someone classifies it; a membership list would have stayed green through all
   six omissions.
+- WG00 attenuation now reaches the emission-line catalog (``predict_line_fluxes``,
+  ``predict_line_ratios``, line properties, ``predict_emission_lines``); previously
+  lines passed through unattenuated under dust type wg00 while the continuum and
+  SED-measured lines were attenuated. ``_line_dust_component`` now selects the dust
+  component by capability (``hasattr(c, "attenuate_line_catalog")``) instead of name,
+  enabling wg00 to publish attenuated lines on the same surfaces as single_component
+  and two_component. The mismatch broke joint-fit consistency for dust parameters (#2541).
 - The `profile_mass` linearity guard reports which of **three** kinds it
   measured — `proportional`, `affine` or `nonlinear` — where it previously
   answered only proportional-or-not. The distinction is load-bearing:
@@ -63,6 +70,7 @@
   `Fitter.__init__` — before `self._fixed_values`/`self._params_override`
   exist — no longer silently falls back to the spec's own declared value.
 - Student-t noise Hamiltonian now includes the dof-dependent normalisation, so a free `noise_dof` is sampled under a correctly normalised density (#2525).
+- `profile_mass="auto"` no longer engages when a user-supplied likelihood owns the data (any data type; previously only the line-flux case was refused, so the mass was profiled against the Fitter's placeholder data and the user's likelihood silently replaced in the mass direction), nor when a spectral covariance is used (#2509); `PrecompBiasWarning` now covers joint photometry+spectroscopy fits per channel and states the LUT forward bias when a user likelihood owns the data (#2510).
 - **Breaking**: `delayed_bq`, `periodic` and `buat08` now evaluate CIGALE's formulas
   in time since formation (T = age − t_lookback), as `sfhdelayed`/`sfh2exp` and #549's
   `dpl`/`lognormal` do; previously they read CIGALE's forward time as lookback, giving
@@ -87,6 +95,8 @@
   working spec and merges the fixed values (#2502).
 
 - Lazy DSPS imports (deferred to function-local scope via #2276) now hold the x64 preference where the caller left it. DSPS modules run `jax.config.update("jax_enable_x64", True)` at import time, and lazy imports that execute after the user has set `JAX_ENABLE_X64=0` would silently flip x64 back on mid-run, inflating float32 dtypes to float64. Every lazy DSPS import now runs under `hold_x64_preference()`, a shared context manager that snapshots the current `jax.config.jax_enable_x64` flag at entry and restores it on exit, preserving the caller's preference regardless of whether it was set via environment variable or `jax.config.update()` call. All 10 function-local DSPS imports across `utils/cosmology.py`, `components/stellar/component.py`, `components/stellar/sps/dsps_wrapper.py`, and `observation/filters/custom.py` are wrapped (#2504).
+- CloudyGrid, CB19 and MAPPINGS nebular backends no longer divide the Lyα luminosity by the escape/dust factor; Lyα is suppressed by `neb_fesc`/`neb_fdust` like every other recombination line, through one shared helper from the P-11 fix in cue.py (#2531, #743).
+- `compute_qh`'s docstring now states its actual input unit (L☉/Hz per M☉, converted in log space for float32 safety), matching `compute_qh_log10`; a test pins the contract (#2532).
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
   (previously silently skipped there, so intrinsic galaxy velocity dispersion had
   zero effect and zero gradient on the DESI spectroscopy path). `observation/banded.py`
@@ -158,6 +168,12 @@
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
   `StellarSEDComponentConfig`. The #2204 cosmic-age reachability check now judges the
   configured ladder when provided and names the key in the error message (#2433).
+- The shipped DL07 template grids carry the published axes of Draine & Li
+  (2007): the U_min axis is the 22-node ladder (0.1, 0.15, …, 8.0, 12.0, 15.0,
+  20.0, 25.0; the files had labelled the last four columns 10, 12, 15, 20, so
+  U_min above 8 selected the neighbouring template and 25 was unreachable) and
+  the q_PAH axis carries only the seven MW3.1 nodes (no SMC/LMC2 grain models).
+  Spectra are unchanged; `dust_umin`'s prior widens to 25.0 (#2535, #2441).
 - Two AGN-NLR fallback defaults read their own parameter declarations instead of
   literals: the `gas_logn` fallbacks in `components/nebular/agn_nebular.py` read
   `declared_default(AGN_PARAMS, "agn_nlr_logn")` and the `neb_logU` fallback in

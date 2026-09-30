@@ -116,6 +116,7 @@ from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_fact
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
+    apply_lya_escape,
     compute_qh,
     compute_qh_log10,
     interp_continuum_with_freefree_tail,
@@ -765,9 +766,12 @@ class CloudyGridBackend:
             k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
                      {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
-        Ly-alpha (1215.67 A) is treated separately: its luminosity is scaled
-        by (1-neb_fesc_lya)/(1-k*fesc) relative to other lines, reflecting
-        resonant scattering that suppresses Ly-alpha escape independently.
+        All emission lines are scaled by the Case B recombination cascading
+        factor k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust).
+        Ly-alpha (1215.67 A) is treated separately: after k_factor scaling,
+        its luminosity is additionally multiplied by (1 - neb_fesc_lya) to
+        account for resonant scattering that suppresses Ly-alpha escape
+        independently of the general ionizing photon and dust budget.
 
         Parameters
         ----------
@@ -856,12 +860,9 @@ class CloudyGridBackend:
 
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
-        # Apply differential Ly-alpha escape fraction.
-        # Ly-alpha at 1215.67 A: scale by (1-fesc_lya)/k_factor to apply the
-        # Ly-alpha-specific escape on top of the k-factor already applied.
-        lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(k_factor, 1e-10)
-        total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
+        # Apply differential Ly-alpha escape fraction via the shared helper.
+        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
 

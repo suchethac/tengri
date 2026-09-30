@@ -644,6 +644,29 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
             f"data_type={fitter.data_type!r} (profile_mass requires one of "
             f"{sorted(_SUPPORTED_DATA_TYPES)})"
         ), {}
+    # User-supplied likelihood check applies to all data types: the profiled
+    # quadratic can only absorb a plain Gaussian chi-square, so what must be
+    # checked is the likelihood that owns the data, regardless of data type.
+    if getattr(fitter, "_likelihood_is_user_supplied", False):
+        return (
+            "a user-supplied likelihood owns the data, so the profiled Gaussian quadratic "
+            "(which scores the Fitter's own data/noise arrays) would silently replace it in the "
+            "mass direction"
+        ), {}
+    # Spectral covariance check: if the fit will use a MultivariateGaussianLikelihood
+    # for the spectroscopy channel, the profiled diagonal Gaussian cannot absorb it.
+    # This guard only applies to spectroscopy/joint data types, since photometry fits
+    # do not use the spectral covariance (MultivariateGaussianLikelihood is only
+    # instantiated in build_base_likelihood for spectroscopy/joint data_type).
+    if fitter.data_type in ("spectroscopy", "joint"):
+        obs = getattr(fitter.model, "observation", None)
+        if obs is not None:
+            spec_cfg = getattr(obs, "spectroscopy", None)
+            if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
+                return (
+                    "a spectral covariance makes the likelihood a full multivariate Gaussian, "
+                    "which the diagonal profiled quadratic cannot absorb"
+                ), {}
     # Guard #8, as three cases rather than one. ``Fitter._fits_lines`` is the OR
     # of three unrelated situations and only the third is a plain data channel
     # with a mass-proportional prediction, so refusing them together refused a
@@ -680,12 +703,6 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
                 "which covers the photometry/spectroscopy vector only, never "
                 "LineFluxData's own mask"
             ), {}
-        if getattr(fitter, "_likelihood_is_user_supplied", False):
-            return (
-                "a user-supplied likelihood owns the data, so the profiled quadratic cannot "
-                "verify that the measured emission-line block is scored as a plain Gaussian "
-                "chi-square over (line_flux_obs, line_flux_err)"
-            ), {}
     if _has_line_adjacent_channel(fitter.model):
         return "a line-ratio or spectral-index channel is configured", {}
     if fitter._calibration_marginalize:
@@ -698,7 +715,9 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         return "censored data (upper/lower limits) is present", {}
 
     try:
-        max_dev, tol, kind = _linearity_max_deviation(fitter, mass_name, bounds)
+        max_dev, tol, kind = _linearity_max_deviation(
+            fitter, mass_name, bounds, params_override=params_override
+        )
     except ValueError as exc:
         return str(exc), {}
 

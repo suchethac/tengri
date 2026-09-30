@@ -3,7 +3,7 @@
 continuum does, not a private ``{dust_slope, dust_bump_strength}`` dict (#2223).
 
 ``SEDModel._attenuate_line_catalog`` (the no-state fallback used when
-``dust_model`` is ``off``/``wg00``, and by the #950 ``enable_fast_nebular()``
+``dust_model`` is ``off``, and by the #950 ``enable_fast_nebular()``
 grid path, which reconstructs lines with no :class:`ForwardState`) built its
 own law kwargs from exactly two scalars, ``dust_slope`` and
 ``dust_bump_strength``, via ``emission_helpers.attenuate_emission``. Every
