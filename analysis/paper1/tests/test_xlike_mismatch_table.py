@@ -478,9 +478,7 @@ class TestReaderFacingText:
             assert len(data[key]["mismatch_sources_display"]) == len(cfg["mismatch_sources"])
 
 
-PAPER_DIR = Path(
-    os.environ.get("TENGRI_PAPER_DIR", "/Users/suchethacooray/writing-workspace/projects/tengri")
-)
+_PAPER_DIR_ENV = os.environ.get("TENGRI_PAPER_DIR")
 _WRAPPER = r"""\documentclass[twocolumn]{aastex631}
 \usepackage{booktabs}
 \begin{document}
@@ -500,12 +498,20 @@ class TestCompilesInPaperClass:
     """The tables must build under the paper's own class, with every reference resolved."""
 
     def test_pdflatex_builds_the_tables(self, tmp_path):
-        needed = [PAPER_DIR / n for n in ("aastex631.cls", "aasjournal.bst", "99-references.bib")]
+        if _PAPER_DIR_ENV is None:
+            pytest.skip(
+                "set TENGRI_PAPER_DIR to the paper checkout (aastex631.cls, aasjournal.bst, 99-references.bib) to build the tables in the paper class"
+            )
+
+        paper_dir = Path(_PAPER_DIR_ENV)
+        needed = [paper_dir / n for n in ("aastex631.cls", "aasjournal.bst", "99-references.bib")]
         if shutil.which("pdflatex") is None or shutil.which("bibtex") is None:
             pytest.skip("pdflatex/bibtex not installed")
-        missing = [str(n) for n in needed if not n.exists()]
+        missing = [n for n in needed if not n.exists()]
         if missing:
-            pytest.skip(f"paper files absent: {missing}")
+            raise FileNotFoundError(
+                f"Required paper files not found: {', '.join(str(n) for n in missing)}"
+            )
         for n in needed:
             shutil.copy(n, tmp_path / n.name)
         (tmp_path / "xlike_mismatch_table.tex").write_text(render_latex())
